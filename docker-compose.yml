@@ -1,0 +1,84 @@
+version: "3.9"
+
+x-env-common: &env-common
+  PREFECT_API_URL: "http://prefect-server:4200/api"
+  PREFECT_LOGGING_LEVEL: INFO
+  # Database connection used by the flow at runtime:
+  POSTGRES_HOST: "${POSTGRES_HOST:-db}"
+  POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+  POSTGRES_DB: "${POSTGRES_DB:-mhsaa}"
+  POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+
+services:
+  # Prefect 2 server (Orion API + UI)
+  prefect-server:
+    image: prefecthq/prefect:2-python3.11
+    command: ["prefect", "server", "start"]
+    environment:
+      PREFECT_UI_URL: "http://localhost:4200"
+    ports:
+      - "4200:4200"   # UI
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Worker that picks up flows for queue "default"
+  prefect-worker:
+    image: prefecthq/prefect:2-python3.11
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    environment:
+      <<: *env-common
+    command: ["prefect", "worker", "start", "--pool", "default-agent-pool", "--type", "process"]
+    # NOTE: This runs local/subprocess type work. Our flow code runs in the app image via "push" or in the worker itself.
+    # We'll configure the deployment to use the "process" infrastructure so the worker runs the flow code in-place.
+
+  # One-shot container to build & apply the deployment to the Prefect server.
+  prefect-init:
+    build:
+      context: ./app
+    image: mhsaa-regions:latest
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    environment:
+      <<: *env-common
+    command: ["/bin/bash", "-lc", "python /app/flow.py --register-deployment"]
+    restart: "no"
+
+  # Your flow image (also used by prefect-init build stage above)
+  app:
+    build:
+      context: ./app
+    image: mhsaa-regions:latest
+    environment:
+      <<: *env-common
+    # You can run a manual one-off execution if you want:
+    # command: ["/bin/bash", "-lc", "python /app/flow.py --run-once"]
+    # Keep this stopped normally; the worker runs on schedule.
+
+  # Local PostgreSQL for testing (disabled on VM by using profiles)
+  db:
+    image: postgres:16
+    profiles: ["local-db"]
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-mhsaa}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  dbdata:

@@ -1,0 +1,5 @@
+prefect>=2.16,<3
+requests>=2.31
+pandas>=2.2
+lxml>=5.2
+psycopg2-binary>=2.9
