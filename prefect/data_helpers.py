@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from prefect import get_run_logger
 
 from playwright.sync_api import sync_playwright
 import psycopg2
@@ -18,12 +17,15 @@ SPACE_RE = re.compile(r"\s+")
 
 def to_normal_case(s: str) -> str:
     """
-    Convert a string to normal case (title case with special handling for "Mc").
+    Convert a string to normal case (title case with special handling for "Mc" and possessives like "'s").
     """
     if not s:
         return s
     t = s.title()
     t = re.sub(r"\bMc([a-z])", lambda m: "Mc" + m.group(1).upper(), t)
+    t = re.sub(r"(['’])S\b", r"\1s", t)
+    t = re.sub(r"\bDiber", "D'Iber", t)
+    t = re.sub(r"\bSt\b(?!\.)", "St.", t)
     return t
 
 

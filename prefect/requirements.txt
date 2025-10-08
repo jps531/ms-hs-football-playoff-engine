@@ -4,3 +4,4 @@ pandas>=2.2
 lxml>=5.2
 psycopg2-binary>=2.9
 playwright>=1.47
+beautifulsoup4>=4.12.0
