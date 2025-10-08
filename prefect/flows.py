@@ -2,8 +2,8 @@ from prefect import serve
 from regions_data_pipeline import (
     regions_data_flow
 )
-from homes_data_pipeline import (
-    homes_data_flow
+from maxpreps_data_pipeline import (
+    maxpreps_data_flow
 )
 
 if __name__ == "__main__":
@@ -14,10 +14,10 @@ if __name__ == "__main__":
     regions_data_flow = regions_data_flow.to_deployment(
         "regions-data-pipeline"
     )
-    # Set up the Homes Data Pipeline
-    homes_data_flow = homes_data_flow.to_deployment(
-        "homes-data-pipeline"
+    # Set up the MaxPreps Data Pipeline
+    maxpreps_data_flow = maxpreps_data_flow.to_deployment(
+        "maxpreps-data-pipeline"
     )
 
     # Serve the flows
-    serve(regions_data_flow, homes_data_flow)
+    serve(regions_data_flow, maxpreps_data_flow)

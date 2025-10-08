@@ -7,7 +7,8 @@ from typing import Iterable, List, Tuple
 from prefect import flow, task, get_run_logger
 
 from data_classes import School
-from data_helpers import fetch_article_text, to_normal_case, SPACE_RE
+from data_helpers import to_normal_case, SPACE_RE
+from web_helpers import fetch_article_text
 from database_helpers import get_database_connection
 
 
@@ -49,13 +50,20 @@ CLASS_HDR = re.compile(r"\bClass\s+([1-7])A\b", re.IGNORECASE)
 # Helpers
 # -------------------------
 
-def clean_school_name(raw: str) -> str:
+def clean_school_name(raw: str, cls: int, region: int) -> str:
     """
     Clean the given raw school name by removing unwanted phrases and normalizing case.
     """
-    tmp = CLEAN_RE.sub("", raw)
-    tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
-    return to_normal_case(tmp)
+
+    # Special cases: Differentiate Enterprises
+    if raw == "ENTERPRISE SCHOOL":
+        return "Enterprise Lincoln"
+    elif raw == "ENTERPRISE HIGH SCHOOL":
+        return "Enterprise Clarke"
+    else:
+        tmp = CLEAN_RE.sub("", raw)
+        tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
+        return to_normal_case(tmp)
 
 
 def _find_class_sections(text: str) -> List[Tuple[int, int, int]]:
@@ -91,7 +99,7 @@ def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
             if raw_name.endswith(tail):
                 raw_name = raw_name[: -len(tail)].rstrip()
 
-        school = clean_school_name(raw_name)
+        school = clean_school_name(raw_name, cls, region)
         if school:
             rows.append((school, cls, region))
 

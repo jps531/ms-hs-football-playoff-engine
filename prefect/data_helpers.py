@@ -1,9 +1,5 @@
 from __future__ import annotations
-
 import re
-
-from playwright.sync_api import sync_playwright
-import psycopg2
 
 # -------------------------
 # Constants
@@ -28,46 +24,22 @@ def to_normal_case(s: str) -> str:
     t = re.sub(r"\bSt\b(?!\.)", "St.", t)
     return t
 
+def _norm(s: str) -> str:
+    s = s.strip()
+    s = s.replace("’", "'")
+    s = SPACE_RE.sub(" ", s).strip()
+    return s.lower()
 
-def fetch_article_text(url: str) -> str:
-    """
-    Use Playwright headless Chromium to retrieve the browser-rendered text
-    of the main article body. This captures actual on-screen spacing.
-    """
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"]
-        )
-        page = browser.new_page(user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/126.0.0.0 Safari/537.36"
-        ))
-        page.goto(url, wait_until="networkidle")
-        # try to focus on the main WordPress article content
-        loc = page.locator("article .entry-content, .entry-content, article")
-        if loc.count() == 0:
-            text = page.inner_text("body")
-        else:
-            text = loc.first.inner_text()
-        browser.close()
-
-    # normalize whitespace
-    lines = [SPACE_RE.sub(" ", ln).strip() for ln in text.splitlines()]
-    text = "\n".join(ln for ln in lines if ln)
-    return text
-
-
-
-def get_conn(DB_HOST: str, DB_PORT: int, DB_NAME: str, DB_USER: str, DB_PASSWORD: str):
-    """
-    Get a connection to the PostgreSQL database.
-    """
-    return psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-    )
+def update_school_name_for_maxpreps_search(s: str) -> str:
+    s = s.replace("Pearl River Central", "PRC")
+    s = s.replace("Cleveland Central", "Cleveland")
+    s = s.replace("Leake Central", "Carthage")
+    s = s.replace("Thomas E. Edwards", "Ruleville")
+    s = s.replace("Jefferson Co", "Jefferson County")
+    s = s.replace("J Z George", "J.Z. George")
+    s = s.replace("M. S. Palmer", "Palmer")
+    s = s.replace("H. W. Byers", "Byers")
+    s = s.replace("Leake County", "Leake")
+    s = s.replace("Enterprise Clarke", "Enterprise Bulldogs")
+    s = s.replace("Enterprise Lincoln", "Enterprise Yellowjackets")
+    return s.lower()
