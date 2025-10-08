@@ -2,25 +2,19 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
-from typing import Iterable, List
+from typing import Iterable, List, Tuple
 
-import pandas as pd
 from prefect import flow, task, get_run_logger
 
-from data_helpers import fetch_article_text, to_normal_case, get_conn, SPACE_RE
+from data_classes import School
+from data_helpers import to_normal_case, SPACE_RE
+from web_helpers import fetch_article_text
+from database_helpers import get_database_connection
 
 
 # -------------------------
 # Config
 # -------------------------
-
-# --- DATABASE CONFIG ---
-DB_HOST = os.getenv("POSTGRES_HOST", "db")
-DB_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
-DB_NAME = os.getenv("POSTGRES_DB", "mshsfootball")
-DB_USER = os.getenv("POSTGRES_USER", "postgres")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 
 # --- REGIONS SCRAPE CONFIG ---
 DEFAULT_REGIONS_SOURCE_URL = "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/"
@@ -34,6 +28,7 @@ CLEAN_PHRASES = [
     r"\bSchool\b",
     r"\bPublic\b",
     r"\bMemorial\b",
+    r"\bSecondary\b",
     r"\bHi Sch\b",
     r"\bSch\b",
     r"\bMiddle\b",
@@ -52,31 +47,23 @@ CLASS_HDR = re.compile(r"\bClass\s+([1-7])A\b", re.IGNORECASE)
 
 
 # -------------------------
-# Data Classes
-# -------------------------
-
-# --- Data class for a row in the regions table ---
-@dataclass
-class RegionRow:
-    school: str
-    class_: int
-    region: int
-
-    def as_db_tuple(self):
-        return (self.school, self.class_, self.region)
-
-
-# -------------------------
 # Helpers
 # -------------------------
 
-def clean_school_name(raw: str) -> str:
+def clean_school_name(raw: str, cls: int, region: int) -> str:
     """
     Clean the given raw school name by removing unwanted phrases and normalizing case.
     """
-    tmp = CLEAN_RE.sub("", raw)
-    tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
-    return to_normal_case(tmp)
+
+    # Special cases: Differentiate Enterprises
+    if raw == "ENTERPRISE SCHOOL":
+        return "Enterprise Lincoln"
+    elif raw == "ENTERPRISE HIGH SCHOOL":
+        return "Enterprise Clarke"
+    else:
+        tmp = CLEAN_RE.sub("", raw)
+        tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
+        return to_normal_case(tmp)
 
 
 def _find_class_sections(text: str) -> List[Tuple[int, int, int]]:
@@ -112,7 +99,7 @@ def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
             if raw_name.endswith(tail):
                 raw_name = raw_name[: -len(tail)].rstrip()
 
-        school = clean_school_name(raw_name)
+        school = clean_school_name(raw_name, cls, region)
         if school:
             rows.append((school, cls, region))
 
@@ -139,7 +126,7 @@ def scrape_regions(url: str) -> List[dict]:
     rows = parse_regions_from_text(text)
     return rows
 
-def insert_rows(rows: Iterable[RegionRow]) -> int:
+def insert_rows(rows: Iterable[School]) -> int:
     """
     Insert the given rows into the database.
     Returns the number of rows inserted.
@@ -152,10 +139,10 @@ def insert_rows(rows: Iterable[RegionRow]) -> int:
         ON CONFLICT (school, class, region) DO NOTHING
     """
     count = 0
-    with get_conn(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) as conn:
+    with get_database_connection() as conn:
         with conn.cursor() as cur:
             for row in rows:
-                cur.execute(q, row.as_db_tuple())
+                cur.execute(q, (row.school, row.class_, row.region))
                 # rowcount is 1 for inserted, 0 for no-op on conflict
                 count += cur.rowcount
     return count
@@ -166,14 +153,14 @@ def insert_rows(rows: Iterable[RegionRow]) -> int:
 # -------------------------
 
 @task(retries=2, retry_delay_seconds=10, name="Scrape Regions Data")
-def scrape_task(url: str) -> List[RegionRow]:
+def scrape_task(url: str) -> List[School]:
     """
     Task to scrape the regions data from the given URL.
     """
     logger = get_run_logger()
     logger.info("Fetching and parsing rendered text from %s", url)
     rows = [
-        RegionRow(
+        School(
             school=r["school"],
             class_=r["class"],
             region=r["region"]
@@ -185,7 +172,7 @@ def scrape_task(url: str) -> List[RegionRow]:
 
 
 @task(name="Insert Regions Data")
-def insert_task(rows: List[RegionRow]) -> int:
+def insert_task(rows: List[School]) -> int:
     """
     Task to insert the given rows into the database.
     """
