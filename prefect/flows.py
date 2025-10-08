@@ -5,6 +5,9 @@ from regions_data_pipeline import (
 from maxpreps_data_pipeline import (
     maxpreps_data_flow
 )
+from prefect.school_info_pipeline import (
+    school_info_data_flow
+)
 
 if __name__ == "__main__":
     """
@@ -18,6 +21,10 @@ if __name__ == "__main__":
     maxpreps_data_flow = maxpreps_data_flow.to_deployment(
         "maxpreps-data-pipeline"
     )
+    # Set up the Colors Data Pipeline
+    school_info_data_flow = school_info_data_flow.to_deployment(
+        "school-info-data-pipeline"
+    )
 
     # Serve the flows
-    serve(regions_data_flow, maxpreps_data_flow)
+    serve(regions_data_flow, maxpreps_data_flow, school_info_data_flow)

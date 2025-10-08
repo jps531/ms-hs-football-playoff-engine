@@ -210,7 +210,7 @@ def get_existing_schools() -> List[School]:
 # -------------------------
 
 @task(retries=2, retry_delay_seconds=10, name="Scrape MaxPreps Data")
-def scrape_task(existing_schools: List[School]) -> List[School]:
+def scrape_task(existing_schools: List[School]) -> int:
     """
     Task to scrape the MaxPreps data from the given URL.
     """
