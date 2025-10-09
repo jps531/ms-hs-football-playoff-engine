@@ -5,7 +5,7 @@ from regions_data_pipeline import (
 from maxpreps_data_pipeline import (
     maxpreps_data_flow
 )
-from prefect.school_info_pipeline import (
+from school_info_pipeline import (
     school_info_data_flow
 )
 

@@ -8,14 +8,14 @@ from prefect import flow, task, get_run_logger
 
 from data_classes import School
 from database_helpers import get_database_connection
-from web_helpers import UA, _extract_next_data, fetch_article_text
+from web_helpers import UA, _extract_next_data
 
 
 # -------------------------
 # Helpers
 # -------------------------
 
-def find_school_info_for_schools(schools: List[School], state_abbrev: str = "MS") -> List[Dict[str, Any]]:
+def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
     """
     Return a list of dicts with school info data for the given schools.
     Each dict includes: school, class, region, primary_color, secondary_color.
@@ -34,15 +34,20 @@ def find_school_info_for_schools(schools: List[School], state_abbrev: str = "MS"
         r.raise_for_status()
         data = _extract_next_data(r.text)
 
+        school_info = data.get("props", {}).get("pageProps", {}).get("schoolContext", {}).get("schoolInfo", {})
+        if not school_info:
+            logger.warning("No info found for %r at %s", school.school, url)
+            continue
+
         found_info = {
             "school": school.school,
             "class": school.class_,
             "region": school.region,
-            "latitude": data.get("pageProps", {}).get("schoolContext", {}).get("latitude") or 0.0,
-            "longitude": data.get("pageProps", {}).get("schoolContext", {}).get("longitude") or 0.0,
-            "primary_color": data.get("pageProps", {}).get("schoolContext", {}).get("color1") or "",
-            "secondary_color": data.get("pageProps", {}).get("schoolContext", {}).get("color2") or "",
-            "maxpreps_logo": data.get("pageProps", {}).get("schoolContext", {}).get("mascotUrl") or "",
+            "latitude": school_info.get("latitude") or 0.0,
+            "longitude": school_info.get("longitude") or 0.0,
+            "primary_color": school_info.get("color1") or "",
+            "secondary_color": school_info.get("color2") or "",
+            "maxpreps_logo": school_info.get("mascotUrl") or "",
         }
 
         records.append(found_info)
@@ -93,7 +98,7 @@ def get_existing_schools() -> List[School]:
     Gets the list of existing schools from the database.
     """
     q = """
-        SELECT school, class, region, city, zip, mascot, maxpreps_id, maxpreps_url, primary_color, secondary_color FROM schools
+        SELECT school, class, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color FROM schools
     """
     schools: List[School] = []
     with get_database_connection() as conn:
