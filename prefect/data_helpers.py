@@ -43,3 +43,16 @@ def update_school_name_for_maxpreps_search(s: str) -> str:
     s = s.replace("Enterprise Clarke", "Enterprise Bulldogs")
     s = s.replace("Enterprise Lincoln", "Enterprise Yellowjackets")
     return s.lower()
+
+def as_float_or_none(x):
+    """
+    Convert x to float, or return None if x is None, empty, or invalid.
+    """
+    if x is None:
+        return None
+    if isinstance(x, str) and x.strip() == "":
+        return None
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None

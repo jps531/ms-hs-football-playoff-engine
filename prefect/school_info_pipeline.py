@@ -8,6 +8,7 @@ from prefect import flow, task, get_run_logger
 
 from data_classes import School
 from database_helpers import get_database_connection
+from data_helpers import as_float_or_none
 from web_helpers import UA, _extract_next_data
 
 
@@ -61,7 +62,7 @@ def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
 
 def update_rows(school_records: Iterable[dict]) -> int:
     """
-    Update colors information for matching existing schools.
+    Update school information for matching existing schools.
     Returns the number of rows actually updated (cursor.rowcount sum).
     """
     if not school_records:
@@ -71,25 +72,30 @@ def update_rows(school_records: Iterable[dict]) -> int:
 
     # --- do the updates ---
     q = """
-        UPDATE schools
-           SET primary_color     = COALESCE(NULLIF(%s, ''), primary_color),
-                secondary_color   = COALESCE(NULLIF(%s, ''), secondary_color)
-         WHERE school = %s AND class = %s AND region = %s
+    UPDATE schools
+    SET primary_color   = COALESCE(NULLIF(%s, ''), primary_color),
+        secondary_color = COALESCE(NULLIF(%s, ''), secondary_color),
+        latitude        = COALESCE(%s, latitude),
+        longitude       = COALESCE(%s, longitude),
+        maxpreps_logo   = COALESCE(NULLIF(%s, ''), maxpreps_logo)
+    WHERE school = %s AND class = %s AND region = %s
     """
 
     updated = 0
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             for row in school_records:
+                lat = as_float_or_none(row["latitude"])
+                lon = as_float_or_none(row["longitude"])
 
-                logger.info("Updating %r (class %s, region %s) with primary color %r, secondary color %r", row["school"], row["class"], row["region"], row["primary_color"], row["secondary_color"])
+                logger.info("Updating %r (class %s, region %s) with primary color %r, secondary color %r, latitude %s, longitude %s, maxpreps_logo %r", row["school"], row["class"], row["region"], row["primary_color"], row["secondary_color"], lat, lon, row["maxpreps_logo"])
 
-                cur.execute(q, (row["primary_color"], row["secondary_color"], row["school"], row["class"], row["region"]))
+                cur.execute(q, (row["primary_color"], row["secondary_color"], lat, lon, row["maxpreps_logo"], row["school"], row["class"], row["region"]))
                 updated += cur.rowcount
 
         conn.commit()
 
-    logger.info("Updated %d school rows with colors data", updated)
+    logger.info("Updated %d school rows with school info data", updated)
     return updated
 
 
