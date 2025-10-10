@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+from typing import Dict, Optional
 
 # -------------------------
 # Constants
@@ -7,9 +8,43 @@ import re
 
 SPACE_RE = re.compile(r"\s+")
 
+
+# One source of truth: "official" -> "AHSFHS canonical"
+OFFICIAL_TO_AHSFHS: Dict[str, str] = {
+    "D'Iberville": "DIberville",
+    "St. Andrew's": "Saint Andrews Episcopal",
+    "St. Stanislaus": "Saint Stanislaus",
+    "St. Patrick": "Saint Patrick",
+    "St. Martin": "Saint Martin",
+    "Thomas E. Edwards": "Edwards",
+    "M. S. Palmer": "Palmer",
+    "J Z George": "George",
+    "H. W. Byers": "Byers",
+    "Itawamba Agricultural": "Itawamba AHS",
+    "Forrest County Agricultural": "Forrest County AHS",
+    "Amanda Elzy": "Elzy",
+}
+    
+_MONTHS = {
+    "jan": 1, "january": 1,
+    "feb": 2, "february": 2,
+    "mar": 3, "march": 3,
+    "apr": 4, "april": 4,
+    "may": 5,
+    "jun": 6, "june": 6,
+    "jul": 7, "july": 7,
+    "aug": 8, "august": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10,
+    "nov": 11, "november": 11,
+    "dec": 12, "december": 12,
+}
+
+
 # -------------------------
 # Helpers
 # -------------------------
+
 
 def to_normal_case(s: str) -> str:
     """
@@ -24,11 +59,13 @@ def to_normal_case(s: str) -> str:
     t = re.sub(r"\bSt\b(?!\.)", "St.", t)
     return t
 
+
 def _norm(s: str) -> str:
     s = s.strip()
     s = s.replace("’", "'")
     s = SPACE_RE.sub(" ", s).strip()
     return s.lower()
+
 
 def update_school_name_for_maxpreps_search(s: str) -> str:
     s = s.replace("Pearl River Central", "PRC")
@@ -44,6 +81,32 @@ def update_school_name_for_maxpreps_search(s: str) -> str:
     s = s.replace("Enterprise Lincoln", "Enterprise Yellowjackets")
     return s.lower()
 
+
+def update_school_name_for_ahsfhs_search(s: str) -> str:
+    """
+    Convert an "official" school name to the AHSFHS search name if known.
+    """
+    s = s.strip()
+
+    if s in OFFICIAL_TO_AHSFHS:
+        return OFFICIAL_TO_AHSFHS[s]
+
+    return s.replace(" ", "%20")
+
+
+def get_school_name_from_ahsfhs(s: str) -> str:
+    """
+    Convert an AHSFHS canonical name to the "official" school name if known.
+    """
+    s = s.strip()
+
+    for official_name, ahsfhs_name in OFFICIAL_TO_AHSFHS.items():
+        if s == ahsfhs_name:
+            return official_name
+
+    return s
+
+
 def as_float_or_none(x):
     """
     Convert x to float, or return None if x is None, empty, or invalid.
@@ -56,3 +119,10 @@ def as_float_or_none(x):
         return float(x)
     except (TypeError, ValueError):
         return None
+
+def _pad(n: int) -> str:
+    return f"{n:02d}"
+
+def _month_to_num(m: str) -> Optional[int]:
+    m = m.lower().rstrip(".")
+    return _MONTHS.get(m)

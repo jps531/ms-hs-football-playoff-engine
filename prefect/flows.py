@@ -8,6 +8,9 @@ from maxpreps_data_pipeline import (
 from school_info_pipeline import (
     school_info_data_flow
 )
+from ahsfhs_schedule_pipeline import (
+    ahsfhs_schedule_data_flow
+)
 
 if __name__ == "__main__":
     """
@@ -21,10 +24,14 @@ if __name__ == "__main__":
     maxpreps_data_flow = maxpreps_data_flow.to_deployment(
         "maxpreps-data-pipeline"
     )
-    # Set up the Colors Data Pipeline
+    # Set up the School Info Data Pipeline
     school_info_data_flow = school_info_data_flow.to_deployment(
         "school-info-data-pipeline"
     )
+    # Set up the AHSFHS Schedule Data Pipeline
+    ahsfhs_schedule_data_flow = ahsfhs_schedule_data_flow.to_deployment(
+        "ahsfhs-schedule-data-pipeline"
+    )
 
     # Serve the flows
-    serve(regions_data_flow, maxpreps_data_flow, school_info_data_flow)
+    serve(regions_data_flow, maxpreps_data_flow, school_info_data_flow, ahsfhs_schedule_data_flow)

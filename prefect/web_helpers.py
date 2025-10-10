@@ -1,5 +1,6 @@
 import json, re, time
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+from typing import Optional
 import requests
 from difflib import SequenceMatcher
 from bs4 import BeautifulSoup
@@ -16,6 +17,8 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
       "AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/126.0.0.0 Safari/537.36")
 
+
+AHSFHS_EXPECTED_TEXT = re.compile(r"\bDate\s+Opponent\s+Score\b", re.I)
 
 # -------------------------
 # Helpers
@@ -93,3 +96,74 @@ def _iter_dicts(obj):
     elif isinstance(obj, (list, tuple)):
         for v in obj:
             yield from _iter_dicts(v)
+
+
+def fetch_article_text_from_ahsfhs(url: str, nav_timeout_ms: int = 60000, selector_timeout_ms: int = 20000, attempts: int = 3) -> Optional[str]:
+    """
+    Robust fetcher for AHSFHS schedule pages.
+    - Avoids 'networkidle' (can hang forever).
+    - Waits for schedule header text instead.
+    - Blocks images/fonts/ads to speed up.
+    - Retries with backoff.
+    """
+    last_err = None
+    backoff = 2.0
+
+    for attempt in range(1, attempts + 1):
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True, args=[
+                    "--no-sandbox", "--disable-setuid-sandbox"
+                ])
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HSFB-Scraper Safari/537.36",
+                    java_script_enabled=True,
+                )
+
+                # Block heavy resources to avoid slow loads that postpone load events
+                def _block(route, request):
+                    rtype = request.resource_type
+                    if rtype in ("image", "media", "font", "stylesheet"):
+                        return route.abort()
+                    return route.continue_()
+
+                context.route("**/*", _block)
+
+                page = context.new_page()
+                page.set_default_navigation_timeout(nav_timeout_ms)
+                page.set_default_timeout(selector_timeout_ms)
+
+                # Navigate and wait for a stable event that will actually fire
+                page.goto(url, wait_until="domcontentloaded")
+                # Optional: ensure the main content rendered
+                # Try to detect the schedule table header text
+                page.wait_for_function(
+                    """() => document.body && /\\bDate\\s+Opponent\\s+Score\\b/i.test(document.body.innerText)""",
+                    timeout=selector_timeout_ms
+                )
+
+                html = page.content()
+                browser.close()
+                return html
+
+        except PWTimeout as e:
+            last_err = e
+        except Exception as e:
+            last_err = e
+
+        # Backoff between attempts
+        time.sleep(backoff)
+        backoff *= 1.8
+
+    # Final fallback: try simple requests (page appears mostly static text)
+    try:
+        resp = requests.get(url, timeout=20, headers={
+            "User-Agent": "Mozilla/5.0 HSFB-Scraper"
+        })
+        if resp.ok:
+            return resp.text
+    except Exception as e:
+        last_err = e
+
+    # If everything failed, surface the most recent error
+    raise RuntimeError(f"Failed to fetch {url}: {last_err}")
