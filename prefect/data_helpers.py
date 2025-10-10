@@ -1,6 +1,8 @@
 from __future__ import annotations
 import re
 from typing import Dict, Optional
+import unicodedata
+from bs4 import BeautifulSoup
 
 # -------------------------
 # Constants
@@ -120,9 +122,46 @@ def as_float_or_none(x):
     except (TypeError, ValueError):
         return None
 
+
 def _pad(n: int) -> str:
     return f"{n:02d}"
+
 
 def _month_to_num(m: str) -> Optional[int]:
     m = m.lower().rstrip(".")
     return _MONTHS.get(m)
+
+
+def _normalize_ws(t: str) -> str:
+    # Unicode normalize and tame whitespace weirdness
+    t = unicodedata.normalize("NFKC", t)
+    t = t.replace("\r\n", "\n").replace("\r", "\n").replace("\u00A0", " ")
+    # collapse 3+ newlines to 2 to avoid giant gaps
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t
+
+def to_plain_text(html: str) -> str:
+    # 1) parse HTML → text (inserts spaces between nodes)
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text(" ")
+
+    # 2) normalize unicode, convert NBSP to space, collapse whitespace
+    text = unicodedata.normalize("NFKC", text).replace("\u00A0", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def parseTextSection(text: str, start_phrase: str, end_phrase: str) -> str:
+    """
+    Extracts the section of text between start_phrase and end_phrase.
+    Handles arbitrary whitespace and newlines gracefully.
+    """
+
+    # Convert phrases into regex patterns that allow flexible whitespace
+    pattern = rf"{start_phrase}(.*?){end_phrase}"
+    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+    
+    if not match:
+        return ""
+    
+    return match.group(1).strip()

@@ -2,127 +2,89 @@ from __future__ import annotations
 
 import time
 import re
-from typing import Dict, Any, Iterable, List, Optional
+from typing import Dict, Any, Iterable, List
 
 from prefect import flow, task, get_run_logger
 
 from data_classes import School
 from database_helpers import get_database_connection
-from data_helpers import _month_to_num, _pad, get_school_name_from_ahsfhs, update_school_name_for_ahsfhs_search
+from data_helpers import _normalize_ws, parseTextSection, to_plain_text, update_school_name_for_ahsfhs_search, _month_to_num
 from web_helpers import UA, fetch_article_text_from_ahsfhs
 
+# -------------------------
+# Constants
+# -------------------------
+
+# Matches lines like:
+# "Fri., Aug. 29", "Thu., Oct. 3", "Sat, Sep 5", "Aug. 29" (weekday optional)
+DATE_LINE_RE = re.compile(
+    r"""^\s*
+        (?:(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*[.,]?\s+)?   # optional weekday
+        ([A-Za-z]{3,9})\.?,?\s+                         # month
+        (\d{1,2})\b                                     # day
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 # -------------------------
 # Helpers
 # -------------------------
 
-def parse_ahsfhs_schedule(text: str, season_year: Optional[int] = None) -> List[Dict]:
-    """
-    Extract AHSFHS schedule entries from a page's text.
 
-    Returns a list of dicts with:
-      - date (DD/MM/YYYY)
-      - location ('vs' or '@')
+def parse_ahsfhs_schedule(text: str, season_year: int) -> List[Dict]:
+    """
+    Parse AHSFHS schedule text (with lots of line breaks) into a list of dicts:
+      - date (MM/DD/YYYY)
+      - location ('vs'|'@')
       - opponent (str)
       - points_for (int|None)
       - points_against (int|None)
       - result ('W'|'L'|None)
       - region_game (bool)
+
+    OPEN dates are ignored.
     """
-    # Find the correct season block
-    season_pattern = (
-        rf"(?P<year>\d{{4}})\s+Season\s*?\n"  # "2025 Season"
-        r"(?P<body>.*?)(?:\n\d{4}\s+Season\s+Totals|\Z)"  # up to "2025 Season Totals" or end
-    )
-    flags = re.DOTALL
+    logger = get_run_logger()
+    text = to_plain_text(_normalize_ws(text))
 
-    if season_year is not None:
-        # Look for the specific season first
-        m = re.search(season_pattern, text, flags)
-        # Scan all blocks to pick matching year
-        blocks = list(re.finditer(season_pattern, text, flags))
-        target = None
-        for b in blocks:
-            if int(b.group("year")) == season_year:
-                target = b
-                break
-        if not target:
-            # Fallback: just use the first matched block
-            target = m
-    else:
-        target = re.search(season_pattern, text, flags)
+    schedule_portion = parseTextSection(text, "Opponent Score", f"{season_year} Season Totals")
 
-    if not target:
-        return []
-
-    year = int(target.group("year")) if season_year is None else int(season_year)
-    body = target.group("body")
-
-    # Remove common header line if present
-    body = re.sub(r"^\s*Date\s+Opponent\s+Score\s*\n", "", body, flags=re.IGNORECASE | re.MULTILINE)
-
-    # Line pattern for entries like:
-    # "Fri., Aug. 29 @ Northside 8 32 L"
-    # "Fri., Oct. 10 @ Crystal Springs *"
-    # "Fri., Oct. 3 OPEN"
-    line_re = re.compile(
+    # Regex for each game chunk
+    game_re = re.compile(
         r"""
-        ^(?P<dow>Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.,\s+
-        (?P<mon>[A-Za-z]{3,9})\.?\s+
+        (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.,\s+
+        (?P<mon>[A-Za-z]{3,9})\.?,?\s+
         (?P<day>\d{1,2})\s+
         (?P<loc>vs\.|@)\s+
-        (?P<opp>.*?)
-        (?:                           # optional score/result section
-            \s+(?P<pf>\d+)\s+(?P<pa>\d+)\s+(?P<res>[WL])
-        )?
-        \s*(?P<region>\*)?
-        \s*$
+        (?P<opp>[A-Za-z&.\'\- ]+?)             # opponent name
+        (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+(?P<res>[WL]))?  # optional score/result
+        (?:\s*(?P<star>\*))?                   # optional region star
+        (?=\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.|$)  # lookahead to next game or end
         """,
-        re.IGNORECASE | re.VERBOSE | re.MULTILINE,
+        re.I | re.X
     )
 
-    results: List[Dict] = []
-
-    for raw_line in body.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        # Skip OPEN lines quickly
-        if re.search(r"\bOPEN\b", line, re.IGNORECASE):
-            continue
-
-        m = line_re.match(line)
-        if not m:
-            # Not a schedule line; skip
-            continue
-
-        mon = m.group("mon")
+    games = []
+    for m in game_re.finditer(schedule_portion):
+        mon = _month_to_num(m.group("mon"))
         day = int(m.group("day"))
-        loc = m.group("loc").lower().rstrip(".")  # "vs." -> "vs"
-        opp = m.group("opp").strip()
-        pf = m.group("pf")
-        pa = m.group("pa")
-        res = m.group("res")
-        region_flag = m.group("region") is not None
+        date = f"{mon:02d}/{day:02d}/{season_year}"
 
-        mon_num = _month_to_num(mon)
-        if not mon_num:
-            # Unknown month; skip defensively
-            continue
+        opponent = m.group("opp").strip()
+        if opponent.lower() == "open":
+            continue  # skip OPEN weeks
 
-        date_str = f"{_pad(mon_num)}/{_pad(day)}/{year}"
-
-        results.append({
-            "date": date_str,
-            "location": "home" if loc == "vs" else "away",  # 'vs' or '@'
-            "opponent": get_school_name_from_ahsfhs(opp),  # cleaned opponent name
-            "points_for": int(pf) if pf is not None else None,
-            "points_against": int(pa) if pa is not None else None,
-            "result": res.upper() if res else None,
-            "region_game": bool(region_flag),
+        games.append({
+            "date": date,
+            "location": m.group("loc").lower().rstrip("."),
+            "opponent": opponent,
+            "points_for": int(m.group("pfor")) if m.group("pfor") else None,
+            "points_against": int(m.group("pagn")) if m.group("pagn") else None,
+            "result": m.group("res"),
+            "region_game": bool(m.group("star")),
         })
 
-    return results
+    return games
 
 def find_ahsfhs_schedule_for_schools(schools: List[School], year: int) -> List[Dict[str, Any]]:
     """
@@ -134,15 +96,11 @@ def find_ahsfhs_schedule_for_schools(schools: List[School], year: int) -> List[D
     for school in schools:
 
         url = f"https://www.ahsfhs.org/MISSISSIPPI/teams/gamesbyyear.asp?Team={update_school_name_for_ahsfhs_search(school.school)}&Year={year}"
-        headers = {"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"}
-
         logger.info("Searching AHSFHS for schedules %r via %s", school.school, url)
 
         text = fetch_article_text_from_ahsfhs(url)
 
-        logger.info("Fetched text for %r: %s", school.school, text)
-
-        schedule = parse_ahsfhs_schedule(text, season_year=year)
+        schedule = parse_ahsfhs_schedule(text or "", season_year=year)
 
         logger.info("Parsed schedule for %r: %s", school.school, schedule)
 
