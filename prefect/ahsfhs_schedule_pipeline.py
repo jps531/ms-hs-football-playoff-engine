@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import time
 import re
-from typing import Dict, Any, Iterable, List
+from typing import Iterable, List
+from psycopg2.extras import execute_values
 
 from prefect import flow, task, get_run_logger
 
-from data_classes import School
+from data_classes import Game, School
 from database_helpers import get_database_connection
 from data_helpers import _normalize_ws, parseTextSection, to_plain_text, update_school_name_for_ahsfhs_search, _month_to_num
 from web_helpers import UA, fetch_article_text_from_ahsfhs
@@ -31,9 +32,11 @@ DATE_LINE_RE = re.compile(
 # -------------------------
 
 
-def parse_ahsfhs_schedule(text: str, season_year: int) -> List[Dict]:
+def parse_ahsfhs_schedule(text: str, season_year: int, school_name: str) -> List[Game]:
     """
     Parse AHSFHS schedule text (with lots of line breaks) into a list of dicts:
+    Each dict has the following keys:
+      - school (str)
       - date (MM/DD/YYYY)
       - location ('vs'|'@')
       - opponent (str)
@@ -41,10 +44,11 @@ def parse_ahsfhs_schedule(text: str, season_year: int) -> List[Dict]:
       - points_against (int|None)
       - result ('W'|'L'|None)
       - region_game (bool)
+      - season (int)
+      - round (str|None)
 
     OPEN dates are ignored.
     """
-    logger = get_run_logger()
     text = to_plain_text(_normalize_ws(text))
 
     schedule_portion = parseTextSection(text, "Opponent Score", f"{season_year} Season Totals")
@@ -58,13 +62,18 @@ def parse_ahsfhs_schedule(text: str, season_year: int) -> List[Dict]:
         (?P<loc>vs\.|@)\s+
         (?P<opp>[A-Za-z&.\'\- ]+?)             # opponent name
         (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+(?P<res>[WL]))?  # optional score/result
+        (?:\s+(?P<round>                                # optional playoff round
+            (?:1st|2nd|3rd)\s+Round\s+Playoffs |
+            Semi-finals\s+Playoffs |
+            Championship\s+Game
+        ))?
         (?:\s*(?P<star>\*))?                   # optional region star
         (?=\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.|$)  # lookahead to next game or end
         """,
         re.I | re.X
     )
 
-    games = []
+    games: List[Game] = []
     for m in game_re.finditer(schedule_portion):
         mon = _month_to_num(m.group("mon"))
         day = int(m.group("day"))
@@ -74,24 +83,32 @@ def parse_ahsfhs_schedule(text: str, season_year: int) -> List[Dict]:
         if opponent.lower() == "open":
             continue  # skip OPEN weeks
 
-        games.append({
+        round_text = m.group("round")
+        if round_text:
+            round_text = " ".join(round_text.strip().split())  # normalize spacing
+
+        games.append(Game.from_db_tuple({
+            "school": school_name,
             "date": date,
-            "location": m.group("loc").lower().rstrip("."),
+            "location": "home" if m.group("loc").lower().rstrip(".") == "vs" else "away" if m.group("loc").lower().rstrip(".") == "@" else "neutral",
             "opponent": opponent,
             "points_for": int(m.group("pfor")) if m.group("pfor") else None,
             "points_against": int(m.group("pagn")) if m.group("pagn") else None,
-            "result": m.group("res"),
+            "result": m.group("res") if m.group("res") else "W" if int(m.group("pfor")) > int(m.group("pagn")) else "L" if m.group("pagn") and m.group("pfor") else None,
             "region_game": bool(m.group("star")),
-        })
+            "season": season_year,
+            "round": round_text or None,
+            "kickoff_time": "",  # AHSFHS does not provide kickoff times
+        }))
 
     return games
 
-def find_ahsfhs_schedule_for_schools(schools: List[School], year: int) -> List[Dict[str, Any]]:
+def find_ahsfhs_schedule_for_schools(schools: List[School], year: int) -> List[Game]:
     """
     Return a list of dicts with ashsfhs schedule data for the given schools.
     """
     logger = get_run_logger()
-    records: List[Dict[str, Any]] = []
+    records: List[Game] = []
 
     for school in schools:
 
@@ -100,76 +117,61 @@ def find_ahsfhs_schedule_for_schools(schools: List[School], year: int) -> List[D
 
         text = fetch_article_text_from_ahsfhs(url)
 
-        schedule = parse_ahsfhs_schedule(text or "", season_year=year)
+        schedule = parse_ahsfhs_schedule(text or "", season_year=year, school_name=school.school)
+        
+        records.extend(schedule)
 
         logger.info("Parsed schedule for %r: %s", school.school, schedule)
 
-        # r = requests.get(url, headers=headers, timeout=25)
-        # r.raise_for_status()
-        # data = _extract_next_data(r.text)
-
-        #school_info = data.get("props", {}).get("pageProps", {}).get("schoolContext", {}).get("schoolInfo", {})
-        # if not school_info:
-        #     logger.warning("No info found for %r at %s", school.school, url)
-        #     continue
-
-        # found_info = {
-        #     "school": school.school,
-        #     "class": school.class_,
-        #     "region": school.region,
-        #     "latitude": school_info.get("latitude") or 0.0,
-        #     "longitude": school_info.get("longitude") or 0.0,
-        #     "primary_color": school_info.get("color1") or "",
-        #     "secondary_color": school_info.get("color2") or "",
-        #     "maxpreps_logo": school_info.get("mascotUrl") or "",
-        # }
-
-        # records.append(found_info)
-
-        # logger.info("Found info for %r: %s", school.school, found_info)
-
-        # Be polite to MaxPreps
+        # Be polite to AHSFHS
         time.sleep(0.3)
 
     return records
 
-def insert_rows(school_records: Iterable[dict]) -> int:
+def insert_rows(game_records: Iterable[Game]) -> int:
     """
     Insert all found schedule data.
     Returns the number of rows actually inserted (cursor.rowcount sum).
     """
-    if not school_records:
+    if not game_records:
         return 0
 
     logger = get_run_logger()
 
     # --- do the updates ---
-    q = """
-    UPDATE schools
-    SET primary_color   = COALESCE(NULLIF(%s, ''), primary_color),
-        secondary_color = COALESCE(NULLIF(%s, ''), secondary_color),
-        latitude        = COALESCE(%s, latitude),
-        longitude       = COALESCE(%s, longitude),
-        maxpreps_logo   = COALESCE(NULLIF(%s, ''), maxpreps_logo)
-    WHERE school = %s AND class = %s AND region = %s
+    sql = """
+    INSERT INTO games
+    (school, date, location, opponent, points_for, points_against, result, region_game, season, "round", kickoff_time)
+    VALUES %s
+    ON CONFLICT (school, date) DO UPDATE SET
+    location        = COALESCE(NULLIF(EXCLUDED.location,''),        games.location),
+    opponent        = COALESCE(NULLIF(EXCLUDED.opponent,''),        games.opponent),
+    points_for      = COALESCE(EXCLUDED.points_for,                 games.points_for),
+    points_against  = COALESCE(EXCLUDED.points_against,             games.points_against),
+    result          = COALESCE(NULLIF(EXCLUDED.result,''),          games.result),
+    region_game     = COALESCE(EXCLUDED.region_game,                games.region_game),
+    season          = COALESCE(EXCLUDED.season,                     games.season),
+    "round"         = COALESCE(NULLIF(EXCLUDED."round",''),         games."round"),
+    kickoff_time    = COALESCE(EXCLUDED.kickoff_time,               games.kickoff_time)
+    WHERE
+        games.location        IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.location,''), games.location)
+    OR games.opponent        IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.opponent,''), games.opponent)
+    OR games.points_for      IS DISTINCT FROM COALESCE(EXCLUDED.points_for, games.points_for)
+    OR games.points_against  IS DISTINCT FROM COALESCE(EXCLUDED.points_against, games.points_against)
+    OR games.result          IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.result,''), games.result)
+    OR games.region_game     IS DISTINCT FROM COALESCE(EXCLUDED.region_game, games.region_game)
+    OR games.season          IS DISTINCT FROM COALESCE(EXCLUDED.season, games.season)
+    OR games."round"         IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED."round",''), games."round")
+    OR games.kickoff_time    IS DISTINCT FROM COALESCE(EXCLUDED.kickoff_time, games.kickoff_time);
     """
 
-    updated = 0
-    # with get_database_connection() as conn:
-    #     with conn.cursor() as cur:
-    #         for row in school_records:
-    #             lat = as_float_or_none(row["latitude"])
-    #             lon = as_float_or_none(row["longitude"])
+    logger.info("Inserting/Updating %d game records into games table", len(list(game_records)))
 
-    #             logger.info("Updating %r (class %s, region %s) with primary color %r, secondary color %r, latitude %s, longitude %s, maxpreps_logo %r", row["school"], row["class"], row["region"], row["primary_color"], row["secondary_color"], lat, lon, row["maxpreps_logo"])
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, (game_records.as_db_tuple() for game_records in game_records))
 
-    #             cur.execute(q, (row["primary_color"], row["secondary_color"], lat, lon, row["maxpreps_logo"], row["school"], row["class"], row["region"]))
-    #             updated += cur.rowcount
-
-    #     conn.commit()
-
-    # logger.info("Updated %d school rows with school info data", updated)
-    return updated
+    return len(list(game_records))
 
 
 def get_existing_schools() -> List[School]:
@@ -200,11 +202,10 @@ def scrape_task(existing_schools: List[School], year: int) -> int:
     Task to scrape schedule data from AHSFHS.
     """
     logger = get_run_logger()
-    school_records = find_ahsfhs_schedule_for_schools(existing_schools, year)
-    logger.info("Found AHSFHS Schedules for %d schools", len(school_records))
-    logger.info("Found AHSFHS Schedules for the following schools: %s", school_records)
-    updated_count = insert_rows(school_records)
-    logger.info("Updated %d schools", updated_count)
+    game_records = find_ahsfhs_schedule_for_schools(existing_schools, year)
+    logger.info("Found AHSFHS Schedules for %d games", len(game_records))
+    updated_count = insert_rows(game_records)
+    logger.info("Inserted/Updated %d games", updated_count)
     return updated_count
 
 

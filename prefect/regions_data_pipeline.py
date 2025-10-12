@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from typing import Iterable, List, Tuple
+from psycopg2.extras import execute_values
 
 from prefect import flow, task, get_run_logger
 
@@ -133,19 +134,18 @@ def insert_rows(rows: Iterable[School]) -> int:
     """
     if not rows:
         return 0
-    q = """
+    sql = """
         INSERT INTO schools (school, class, region)
         VALUES (%s, %s, %s)
-        ON CONFLICT (school, class, region) DO NOTHING
+        ON CONFLICT (school) DO UPDATE SET
+        class  = COALESCE(EXCLUDED.class,  schools.class),
+        region = COALESCE(EXCLUDED.region, schools.region);
     """
-    count = 0
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            for row in rows:
-                cur.execute(q, (row.school, row.class_, row.region))
-                # rowcount is 1 for inserted, 0 for no-op on conflict
-                count += cur.rowcount
-    return count
+            execute_values(cur, sql, (row.as_db_tuple() for row in rows))
+            conn.commit()
+    return len(list(rows))
 
 
 # -------------------------

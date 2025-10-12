@@ -5,6 +5,7 @@ import time
 import requests
 from typing import Dict, Any, Iterable, List, Mapping, Optional, Union
 from urllib.parse import quote_plus
+from psycopg2.extras import execute_values
 
 from prefect import flow, task, get_run_logger
 
@@ -161,7 +162,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
     logger = get_run_logger()
 
     # --- do the updates ---
-    q = """
+    sql = """
         UPDATE schools
            SET city     = COALESCE(NULLIF(%s, ''), city),
                 zip      = COALESCE(NULLIF(%s, ''), zip),
@@ -171,20 +172,13 @@ def update_rows(school_records: Iterable[dict]) -> int:
          WHERE school = %s AND class = %s AND region = %s
     """
 
-    updated = 0
+    logger.info("Updating %d school records into schools table", len(list(school_records)))
+
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            for row in school_records:
-
-                logger.info("Updating %r (class %s, region %s) with MaxPreps ID %r, URL %r, city %r, zip %r, mascot %r", row["school"], row["class"], row["region"], row["maxpreps_id"], row["maxpreps_url"], row["city"], row["zip"], row["mascot"])
-
-                cur.execute(q, (row["city"], row["zip"], row["mascot"], row["maxpreps_id"], row["maxpreps_url"], row["school"], row["class"], row["region"]))
-                updated += cur.rowcount
-
-        conn.commit()
-
-    logger.info("Updated %d school rows with MaxPreps data", updated)
-    return updated
+            execute_values(cur, sql, ((row["city"], row["zip"], row["mascot"], row["maxpreps_id"], row["maxpreps_url"], row["school"], row["class"], row["region"]) for row in school_records))
+            conn.commit()
+    return len(list(school_records))
 
 
 def get_existing_schools() -> List[School]:

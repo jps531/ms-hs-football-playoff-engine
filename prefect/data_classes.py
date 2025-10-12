@@ -60,3 +60,49 @@ class School:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
+
+
+# --- Data class for a row in the game table ---
+@dataclass
+class Game:
+    school: str
+    date: str
+    location: str = "neutral"
+    opponent: str = ""
+    points_for: int = 0
+    points_against: int = 0
+    result: str = ""
+    region_game: bool = False
+    season: int = 0
+    round: str = ""
+    kickoff_time: str = ""  # ISO 8601 format, e.g., "2023-09-01T19:00:00Z"
+
+    def as_db_tuple(self):
+        return (self.school, self.date, self.location, self.opponent, self.points_for, self.points_against, self.result, self.region_game, self.season, self.round)
+
+
+    @classmethod
+    def from_db_tuple(cls, row: Iterable):
+        """
+        Create a Game object from a database row tuple or sequence.
+        Accepts rows with 3 or 13 columns.
+        """
+        # Convert row-like objects (sqlite Row, psycopg2 row, etc.) to tuple
+        row = tuple(row)
+        if len(row) == 11:
+            school, date, location, opponent, points_for, points_against, result, region_game, season, round, kickoff_time = row[:11]
+            return cls(
+                school=school,
+                date=date,
+                location=location,
+                opponent=opponent,
+                points_for=points_for,
+                points_against=points_against,
+                result=result,
+                region_game=region_game,
+                season=season,
+                round=round,
+                kickoff_time=kickoff_time,
+            )
+        else:
+            raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
