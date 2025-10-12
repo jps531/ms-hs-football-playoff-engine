@@ -120,8 +120,8 @@ def _get_field(r: Union["School", Mapping[str, Any]], attr: str, alt_key: str = 
 def find_records_for_schools(rows: Iterable[Union["School", Mapping[str, Any]]]) -> List[dict]:
     """
     rows: iterable of School dataclass instances or dicts with keys:
-          school, class_/class, region
-    Returns: [{'school', 'class', 'region', 'city'}...]
+          school, season, class_/class, region
+    Returns: [{'school', 'season', 'class', 'region', 'city'}...]
     """
     out: List[dict] = []
     logger = get_run_logger()
@@ -130,6 +130,7 @@ def find_records_for_schools(rows: Iterable[Union["School", Mapping[str, Any]]])
 
     for r in rows_list:
         school_name = _get_field(r, "school")
+        season = _get_field(r, "season")
         cls = _get_field(r, "class_", "class")
         region = _get_field(r, "region")
 
@@ -142,9 +143,9 @@ def find_records_for_schools(rows: Iterable[Union["School", Mapping[str, Any]]])
         if not record:
             logger.warning("No MaxPreps match for %r; skipping", school_name)
             continue
-    
-        out.append({"school": school_name, "class": cls, "region": region, "city": record.get("city") or "", "zip": record.get("zip") or "", "mascot": record.get("mascot") or "", "maxpreps_id": record.get("maxpreps_id") or "", "maxpreps_url": record.get("maxpreps_url") or "", "primary_color": "", "secondary_color": ""})
-        logger.info("Found record for %s: %s", school_name, record)
+
+        out.append({"school": school_name, "season": season, "class": cls, "region": region, "city": record.get("city") or "", "zip": record.get("zip") or "", "mascot": record.get("mascot") or "", "maxpreps_id": record.get("maxpreps_id") or "", "maxpreps_url": record.get("maxpreps_url") or "", "primary_color": "", "secondary_color": ""})
+        logger.info("Found record for %s (%s): %s", school_name, season, record)
 
         time.sleep(0.3)  # polite rate limit
 
@@ -169,14 +170,14 @@ def update_rows(school_records: Iterable[dict]) -> int:
                 mascot   = COALESCE(NULLIF(%s, ''), mascot),
                 maxpreps_id  = COALESCE(NULLIF(%s, ''), maxpreps_id),
                 maxpreps_url = COALESCE(NULLIF(%s, ''), maxpreps_url)
-         WHERE school = %s AND class = %s AND region = %s
+         WHERE school = %s AND season = %s AND class = %s AND region = %s
     """
 
     logger.info("Updating %d school records into schools table", len(list(school_records)))
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            execute_values(cur, sql, ((row["city"], row["zip"], row["mascot"], row["maxpreps_id"], row["maxpreps_url"], row["school"], row["class"], row["region"]) for row in school_records))
+            execute_values(cur, sql, ((row["city"], row["zip"], row["mascot"], row["maxpreps_id"], row["maxpreps_url"], row["school"], row["season"],row["class"], row["region"]) for row in school_records))
             conn.commit()
     return len(list(school_records))
 
@@ -186,7 +187,7 @@ def get_existing_schools() -> List[School]:
     Gets the list of existing schools from the database.
     """
     q = """
-        SELECT school, class, region FROM schools
+        SELECT DISTINCT school, season, class, region FROM schools
     """
     schools: List[School] = []
     with get_database_connection() as conn:

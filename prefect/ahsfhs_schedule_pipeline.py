@@ -174,17 +174,18 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     return len(list(game_records))
 
 
-def get_existing_schools() -> List[School]:
+def get_existing_schools(season: int) -> List[School]:
     """
     Gets the list of existing schools from the database.
     """
     q = """
-        SELECT school, class, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color FROM schools
+        SELECT school, season, class, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color FROM schools
+        WHERE season = %s
     """
     schools: List[School] = []
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(q)
+            cur.execute(q, (season,))
             for row in cur.fetchall():
                 schools.append(School.from_db_tuple(row))
     logger = get_run_logger()
@@ -210,10 +211,10 @@ def scrape_task(existing_schools: List[School], year: int) -> int:
 
 
 @flow(name="AHSFHS Schedule Data Flow")
-def ahsfhs_schedule_data_flow(year: int = 2025) -> int:
+def ahsfhs_schedule_data_flow(season: int = 2025) -> int:
     """
     Flow to scrape and update school rows with AHSFHS schedule data.
     """
-    existing_schools = get_existing_schools()
-    updated_count = scrape_task(existing_schools, year)
+    existing_schools = get_existing_schools(season)
+    updated_count = scrape_task(existing_schools, season)
     return updated_count

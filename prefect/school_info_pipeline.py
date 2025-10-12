@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Dict, Any, Iterable, List
 import requests
+from psycopg2.extras import execute_values
 
 from prefect import flow, task, get_run_logger
 
@@ -19,7 +20,7 @@ from web_helpers import UA, _extract_next_data
 def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
     """
     Return a list of dicts with school info data for the given schools.
-    Each dict includes: school, class, region, primary_color, secondary_color.
+    Each dict includes: school, season, class, region, primary_color, secondary_color.
     """
     logger = get_run_logger()
     records: List[Dict[str, Any]] = []
@@ -42,6 +43,7 @@ def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
 
         found_info = {
             "school": school.school,
+            "season": school.season,
             "class": school.class_,
             "region": school.region,
             "latitude": school_info.get("latitude") or 0.0,
@@ -71,32 +73,23 @@ def update_rows(school_records: Iterable[dict]) -> int:
     logger = get_run_logger()
 
     # --- do the updates ---
-    q = """
+    sql = """
     UPDATE schools
     SET primary_color   = COALESCE(NULLIF(%s, ''), primary_color),
         secondary_color = COALESCE(NULLIF(%s, ''), secondary_color),
         latitude        = COALESCE(%s, latitude),
         longitude       = COALESCE(%s, longitude),
         maxpreps_logo   = COALESCE(NULLIF(%s, ''), maxpreps_logo)
-    WHERE school = %s AND class = %s AND region = %s
+    WHERE school = %s AND season = %s AND class = %s AND region = %s
     """
 
-    updated = 0
+    logger.info("Updating %d school records into schools table", len(list(school_records)))
+
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            for row in school_records:
-                lat = as_float_or_none(row["latitude"])
-                lon = as_float_or_none(row["longitude"])
-
-                logger.info("Updating %r (class %s, region %s) with primary color %r, secondary color %r, latitude %s, longitude %s, maxpreps_logo %r", row["school"], row["class"], row["region"], row["primary_color"], row["secondary_color"], lat, lon, row["maxpreps_logo"])
-
-                cur.execute(q, (row["primary_color"], row["secondary_color"], lat, lon, row["maxpreps_logo"], row["school"], row["class"], row["region"]))
-                updated += cur.rowcount
-
-        conn.commit()
-
-    logger.info("Updated %d school rows with school info data", updated)
-    return updated
+            execute_values(cur, sql, ((row["primary_color"], row["secondary_color"], as_float_or_none(row["latitude"]), as_float_or_none(row["longitude"]), row["maxpreps_logo"], row["season"], row["school"], row["class"], row["region"]) for row in school_records))
+            conn.commit()
+    return len(list(school_records))
 
 
 def get_existing_schools() -> List[School]:
@@ -104,7 +97,7 @@ def get_existing_schools() -> List[School]:
     Gets the list of existing schools from the database.
     """
     q = """
-        SELECT school, class, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color FROM schools
+        SELECT school, season, class, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color FROM schools
     """
     schools: List[School] = []
     with get_database_connection() as conn:

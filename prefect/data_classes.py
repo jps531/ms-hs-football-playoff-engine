@@ -11,6 +11,7 @@ from typing import Iterable
 @dataclass
 class School:
     school: str
+    season: int
     class_: int
     region: int
     city: str = ""
@@ -26,25 +27,26 @@ class School:
 
 
     def as_db_tuple(self):
-        return (self.school, self.class_, self.region, self.city, self.zip, self.latitude, self.longitude, self.mascot, self.maxpreps_id, self.maxpreps_url, self.maxpreps_logo, self.primary_color, self.secondary_color)
+        return (self.school, self.season, self.class_, self.region, self.city, self.zip, self.latitude, self.longitude, self.mascot, self.maxpreps_id, self.maxpreps_url, self.maxpreps_logo, self.primary_color, self.secondary_color)
     
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
         """
         Create a School object from a database row tuple or sequence.
-        Accepts rows with 3 or 13 columns.
+        Accepts rows with 4 or 14 columns.
         """
         # Convert row-like objects (sqlite Row, psycopg2 row, etc.) to tuple
         row = tuple(row)
 
-        if len(row) == 3:
-            school, class_, region = row
-            return cls(school=school, class_=class_, region=region)
-        elif len(row) >= 12:
-            school, class_, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color = row[:13]
+        if len(row) == 4:
+            school, season, class_, region = row
+            return cls(school=school, season=season, class_=class_, region=region)
+        elif len(row) >= 14:
+            school, season, class_, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color = row[:14]
             return cls(
                 school=school,
+                season=season,
                 class_=class_,
                 region=region,
                 city=city or "",

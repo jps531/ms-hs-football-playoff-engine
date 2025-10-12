@@ -17,10 +17,6 @@ from database_helpers import get_database_connection
 # Config
 # -------------------------
 
-# --- REGIONS SCRAPE CONFIG ---
-DEFAULT_REGIONS_SOURCE_URL = "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/"
-REGIONS_SOURCE_URL = os.getenv("REGIONS_SOURCE_URL", DEFAULT_REGIONS_SOURCE_URL)
-
 
 # --- REGIONS CLEANING CONFIG ---
 CLEAN_PHRASES = [
@@ -32,6 +28,7 @@ CLEAN_PHRASES = [
     r"\bSecondary\b",
     r"\bHi Sch\b",
     r"\bSch\b",
+    r"\bDist\b",
     r"\bMiddle\b",
     r"\bSenior\b",
     r"\bJr Sr\b",
@@ -135,15 +132,15 @@ def insert_rows(rows: Iterable[School]) -> int:
     if not rows:
         return 0
     sql = """
-        INSERT INTO schools (school, class, region)
-        VALUES (%s, %s, %s)
+        INSERT INTO schools (school, season, class, region)
+        VALUES (%s, %s, %s, %s)
         ON CONFLICT (school) DO UPDATE SET
         class  = COALESCE(EXCLUDED.class,  schools.class),
         region = COALESCE(EXCLUDED.region, schools.region);
     """
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            execute_values(cur, sql, (row.as_db_tuple() for row in rows))
+            execute_values(cur, sql, ((row.school, row.season, row.class_, row.region) for row in rows))
             conn.commit()
     return len(list(rows))
 
@@ -153,7 +150,7 @@ def insert_rows(rows: Iterable[School]) -> int:
 # -------------------------
 
 @task(retries=2, retry_delay_seconds=10, name="Scrape Regions Data")
-def scrape_task(url: str) -> List[School]:
+def scrape_task(url: str, season: int) -> List[School]:
     """
     Task to scrape the regions data from the given URL.
     """
@@ -163,7 +160,8 @@ def scrape_task(url: str) -> List[School]:
         School(
             school=r["school"],
             class_=r["class"],
-            region=r["region"]
+            region=r["region"],
+            season=season
         )
         for r in scrape_regions(url)
     ]
@@ -183,10 +181,22 @@ def insert_task(rows: List[School]) -> int:
 
 
 @flow(name="Regions Data Flow")
-def regions_data_flow() -> int:
+def regions_data_flow(season: int = 2025) -> int:
     """
     Flow to scrape and insert regions data.
     """
-    rows = scrape_task(REGIONS_SOURCE_URL)
+    regions_source_url = ""
+    match season:
+        case 2025:
+            regions_source_url = "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/"
+        case 2023:
+            regions_source_url = "https://www.misshsaa.com/2022/11/03/2023-25-football-regions/"
+        case 2021:
+            regions_source_url = "https://www.misshsaa.com/2020/10/29/2021-23-football-regions/"
+        case 2019:
+            regions_source_url = "https://www.misshsaa.com/2018/10/31/2019-21-football-regions/"
+        case _:
+            raise ValueError(f"No regions URL configured for season {season}") 
+    rows = scrape_task(regions_source_url, season)
     inserted = insert_task(rows)
     return inserted
