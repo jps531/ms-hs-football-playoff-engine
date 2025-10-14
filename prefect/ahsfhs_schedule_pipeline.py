@@ -32,13 +32,14 @@ DATE_LINE_RE = re.compile(
 # -------------------------
 
 
-def parse_ahsfhs_schedule(text: str, season_year: int, school_name: str) -> List[Game]:
+def parse_ahsfhs_schedule(text: str, season_year: int, school_name: str, url: str) -> List[Game]:
     """
     Parse AHSFHS schedule text (with lots of line breaks) into a list of dicts:
     Each dict has the following keys:
       - school (str)
       - date (MM/DD/YYYY)
       - location ('vs'|'@')
+      - location_id (NULL for this step)
       - opponent (str)
       - points_for (int|None)
       - points_against (int|None)
@@ -46,6 +47,10 @@ def parse_ahsfhs_schedule(text: str, season_year: int, school_name: str) -> List
       - region_game (bool)
       - season (int)
       - round (str|None)
+      - final (bool)
+      - game_status (str)
+      - kickoff_time (NULL for this step)
+      - source (AHSFHS URL in this case)
 
     OPEN dates are ignored.
     """
@@ -91,6 +96,7 @@ def parse_ahsfhs_schedule(text: str, season_year: int, school_name: str) -> List
             "school": school_name,
             "date": date,
             "location": "home" if m.group("loc").lower().rstrip(".") == "vs" else "away" if m.group("loc").lower().rstrip(".") == "@" else "neutral",
+            "location_id": None, # AHSFHS does not provided advanced location information
             "opponent": opponent,
             "points_for": int(m.group("pfor")) if m.group("pfor") else None,
             "points_against": int(m.group("pagn")) if m.group("pagn") else None,
@@ -98,7 +104,12 @@ def parse_ahsfhs_schedule(text: str, season_year: int, school_name: str) -> List
             "region_game": bool(m.group("star")),
             "season": season_year,
             "round": round_text or None,
-            "kickoff_time": "",  # AHSFHS does not provide kickoff times
+            "final": True if m.group("res") else False,
+            "game_status": "Final" if m.group("res") else "", # AHSFHS games are either final or have not happened yet
+            "kickoff_time": None,  # AHSFHS does not provide kickoff times
+            "source": url,
+            
+
         }))
 
     return games
@@ -117,7 +128,7 @@ def find_ahsfhs_schedule_for_schools(schools: List[School], year: int) -> List[G
 
         text = fetch_article_text_from_ahsfhs(url)
 
-        schedule = parse_ahsfhs_schedule(text or "", season_year=year, school_name=school.school)
+        schedule = parse_ahsfhs_schedule(text or "", season_year=year, school_name=school.school, url=url)
         
         records.extend(schedule)
 
@@ -141,24 +152,32 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     # --- do the updates ---
     sql = """
     INSERT INTO games
-    (school, date, location, opponent, points_for, points_against, result, region_game, season, "round", kickoff_time)
+    (school, date, location, location_id, opponent, points_for, points_against, result, final, game_status, source, region_game, season, "round", kickoff_time)
     VALUES %s
     ON CONFLICT (school, date) DO UPDATE SET
     location        = COALESCE(NULLIF(EXCLUDED.location,''),        games.location),
+    location_id     = COALESCE(EXCLUDED.location_id,                games.location_id),
     opponent        = COALESCE(NULLIF(EXCLUDED.opponent,''),        games.opponent),
     points_for      = COALESCE(EXCLUDED.points_for,                 games.points_for),
     points_against  = COALESCE(EXCLUDED.points_against,             games.points_against),
     result          = COALESCE(NULLIF(EXCLUDED.result,''),          games.result),
+    final           = COALESCE(EXCLUDED.final,                      games.final),
+    game_status     = COALESCE(EXCLUDED.game_status,                games.game_status),
+    source          = COALESCE(EXCLUDED.source,                     games.source),
     region_game     = COALESCE(EXCLUDED.region_game,                games.region_game),
     season          = COALESCE(EXCLUDED.season,                     games.season),
     "round"         = COALESCE(NULLIF(EXCLUDED."round",''),         games."round"),
     kickoff_time    = COALESCE(EXCLUDED.kickoff_time,               games.kickoff_time)
     WHERE
         games.location        IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.location,''), games.location)
+    OR games.location_id     IS DISTINCT FROM COALESCE(EXCLUDED.location_id, games.location_id)
     OR games.opponent        IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.opponent,''), games.opponent)
     OR games.points_for      IS DISTINCT FROM COALESCE(EXCLUDED.points_for, games.points_for)
     OR games.points_against  IS DISTINCT FROM COALESCE(EXCLUDED.points_against, games.points_against)
     OR games.result          IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.result,''), games.result)
+    OR games.final           IS DISTINCT FROM COALESCE(EXCLUDED.final, games.final)
+    OR games.game_status     IS DISTINCT FROM COALESCE(EXCLUDED.game_status, games.game_status)
+    OR games.source          IS DISTINCT FROM COALESCE(EXCLUDED.source, games.source)
     OR games.region_game     IS DISTINCT FROM COALESCE(EXCLUDED.region_game, games.region_game)
     OR games.season          IS DISTINCT FROM COALESCE(EXCLUDED.season, games.season)
     OR games."round"         IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED."round",''), games."round")

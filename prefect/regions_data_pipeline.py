@@ -186,17 +186,16 @@ def regions_data_flow(season: int = 2025) -> int:
     Flow to scrape and insert regions data.
     """
     regions_source_url = ""
-    match season:
-        case 2025:
+    if (season == 2025):
             regions_source_url = "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/"
-        case 2023:
-            regions_source_url = "https://www.misshsaa.com/2022/11/03/2023-25-football-regions/"
-        case 2021:
-            regions_source_url = "https://www.misshsaa.com/2020/10/29/2021-23-football-regions/"
-        case 2019:
-            regions_source_url = "https://www.misshsaa.com/2018/10/31/2019-21-football-regions/"
-        case _:
-            raise ValueError(f"No regions URL configured for season {season}") 
+    elif (season == 2023):
+        regions_source_url = "https://www.misshsaa.com/2022/11/03/2023-25-football-regions/"
+    elif (season == 2021):
+        regions_source_url = "https://www.misshsaa.com/2020/10/29/2021-23-football-regions/"
+    elif (season == 2019):
+        regions_source_url = "https://www.misshsaa.com/2018/10/31/2019-21-football-regions/"
+    else:
+        raise ValueError(f"No regions URL configured for season {season}") 
     rows = scrape_task(regions_source_url, season)
     inserted = insert_task(rows)
     return inserted

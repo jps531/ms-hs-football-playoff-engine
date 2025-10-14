@@ -104,7 +104,7 @@ def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> O
     return record
 
 
-def _get_field(r: Union["School", Mapping[str, Any]], attr: str, alt_key: str = None):
+def _get_field(r: Union["School", Mapping[str, Any]], attr: str, alt_key: str | None = None):
     """Fetch attr from dataclass or mapping; falls back to alt_key for 'class' vs 'class_'."""
     if hasattr(r, attr):
         return getattr(r, attr)

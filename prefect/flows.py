@@ -34,4 +34,4 @@ if __name__ == "__main__":
     )
 
     # Serve the flows
-    serve(regions_data_flow, maxpreps_data_flow, school_info_data_flow, ahsfhs_schedule_data_flow)
+    serve(regions_data_flow, maxpreps_data_flow, school_info_data_flow, ahsfhs_schedule_data_flow) # type: ignore
