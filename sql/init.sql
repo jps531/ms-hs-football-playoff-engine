@@ -17,6 +17,17 @@ CREATE TABLE IF NOT EXISTS schools (
 );
 
 
+CREATE TABLE IF NOT EXISTS locations (
+  id              SERIAL PRIMARY KEY,
+  name            TEXT NOT NULL,
+  city            TEXT,
+  home_team       TEXT,
+  latitude        REAL,
+  longitude       REAL,
+  UNIQUE(name, city, home_team)
+);
+
+
 CREATE TABLE IF NOT EXISTS games (
   school          TEXT NOT NULL,
   date            TEXT NOT NULL,
@@ -26,25 +37,14 @@ CREATE TABLE IF NOT EXISTS games (
   points_for      INTEGER,
   points_against  INTEGER,
   result          TEXT CHECK (result IN ('W', 'L', 'T')),
-  final           BOOLEAN NOT NULL DEFAULT 0,
+  final           BOOLEAN NOT NULL DEFAULT FALSE,
   game_status     TEXT,
   source          TEXT,
-  region_game     BOOLEAN NOT NULL DEFAULT 0,
+  region_game     BOOLEAN NOT NULL DEFAULT FALSE,
   season          INTEGER NOT NULL,
   round           TEXT,
   kickoff_time    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (school) REFERENCES schools(school) ON DELETE CASCADE,
+  FOREIGN KEY (school, season) REFERENCES schools(school, season),
   FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
   PRIMARY KEY (school, date)
-);
-
-
-CREATE TABLE IF NOT EXISTS locations (
-  id              SERIAL PRIMARY KEY,
-  name            TEXT NOT NULL,
-  city            TEXT,
-  home_team      TEXT,
-  latitude        REAL,
-  longitude       REAL,
-  UNIQUE(name, city, home_team)
 );

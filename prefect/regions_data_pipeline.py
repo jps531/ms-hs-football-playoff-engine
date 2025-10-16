@@ -6,7 +6,7 @@ from psycopg2.extras import execute_values
 from prefect import flow, task, get_run_logger
 
 from data_classes import School
-from data_helpers import clean_school_name, to_normal_case, SPACE_RE
+from data_helpers import clean_school_name, SPACE_RE
 from web_helpers import fetch_article_text
 from database_helpers import get_database_connection
 
@@ -23,7 +23,7 @@ CLASS_HDR = re.compile(r"\bClass\s+([1-7])A\b", re.IGNORECASE)
 # -------------------------
 
 
-@task(name="Find Class Sections")
+@task(task_run_name="Find Class Sections")
 def _find_class_sections(text: str) -> List[Tuple[int, int, int]]:
     """Find each 'Class {N}A' header and return (class_num, start, end)."""
     matches = list(CLASS_HDR.finditer(text))
@@ -36,7 +36,7 @@ def _find_class_sections(text: str) -> List[Tuple[int, int, int]]:
     return sections
 
 
-@task(name="Parse Class Section: {cls}")
+@task(task_run_name="Parse Class Section: {cls}")
 def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
     """
     Parse a single Class section into (school, class, region) tuples.
@@ -66,7 +66,7 @@ def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
     return rows
 
 
-@task(name="Parse Regions from Text")
+@task(task_run_name="Parse Regions from Text")
 def parse_regions_from_text(text: str) -> List[dict]:
     """Parse all class sections into dictionaries."""
     out: List[dict] = []
@@ -81,15 +81,15 @@ def parse_regions_from_text(text: str) -> List[dict]:
     return out
 
 
-@task(name="Scrape Regions Data")
-def scrape_regions(url: str) -> List[dict]:
+@task(task_run_name="Fetch Regions Task")
+def fetch_regions(url: str) -> List[dict]:
     """End-to-end: fetch, parse, clean."""
     text = fetch_article_text(url)
     rows = parse_regions_from_text(text)
     return rows
 
 
-@task(name="Insert Regions Data")
+@task(task_run_name="Insert Regions Data")
 def insert_rows(rows: Iterable[School]) -> int:
     """
     Insert the given rows into the database.
@@ -99,25 +99,28 @@ def insert_rows(rows: Iterable[School]) -> int:
         return 0
     sql = """
         INSERT INTO schools (school, season, class, region)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (school) DO UPDATE SET
-        class  = COALESCE(EXCLUDED.class,  schools.class),
-        region = COALESCE(EXCLUDED.region, schools.region);
+        VALUES %s
+        ON CONFLICT (school, season) DO UPDATE SET
+            class  = COALESCE(EXCLUDED.class,  schools.class),
+            region = COALESCE(EXCLUDED.region, schools.region)
     """
+    rows_data = [(r.school, r.season, r.class_, r.region) for r in rows]
+
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            execute_values(cur, sql, ((row.school, row.season, row.class_, row.region) for row in rows))
-            conn.commit()
+            execute_values(cur, sql, rows_data, template="(%s,%s,%s,%s)")
+        conn.commit()
     return len(list(rows))
 
 
-@task(retries=2, retry_delay_seconds=10, name="Scrape Regions Data")
+@task(retries=2, retry_delay_seconds=10, task_run_name="Scrape Regions Data")
 def scrape_task(url: str, season: int) -> List[School]:
     """
     Task to scrape the regions data from the given URL.
     """
     logger = get_run_logger()
     logger.info("Fetching and parsing rendered text from %s", url)
+    text = fetch_article_text(url)
     rows = [
         School(
             school=r["school"],
@@ -125,21 +128,10 @@ def scrape_task(url: str, season: int) -> List[School]:
             region=r["region"],
             season=season
         )
-        for r in scrape_regions(url)
+        for r in parse_regions_from_text(text)
     ]
     logger.info("Parsed %d schools", len(rows))
     return rows
-
-
-@task(name="Insert Regions Data")
-def insert_task(rows: List[School]) -> int:
-    """
-    Task to insert the given rows into the database.
-    """
-    logger = get_run_logger()
-    inserted = insert_rows(rows)
-    logger.info("Inserted %d new rows into schools", inserted)
-    return inserted
 
 
 @flow(name="Regions Data Flow")
@@ -147,6 +139,7 @@ def regions_data_flow(season: int = 2025) -> int:
     """
     Flow to scrape and insert regions data.
     """
+    logger = get_run_logger()
     regions_source_url = ""
     if (season == 2025):
             regions_source_url = "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/"
@@ -159,5 +152,6 @@ def regions_data_flow(season: int = 2025) -> int:
     else:
         raise ValueError(f"No regions URL configured for season {season}") 
     rows = scrape_task(regions_source_url, season)
-    inserted = insert_task(rows)
+    inserted = insert_rows(rows)
+    logger.info("Inserted %d new rows into schools", inserted)
     return inserted

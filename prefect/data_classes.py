@@ -89,10 +89,10 @@ class School:
 class Game:
     school: str
     date: str
+    season: int
     location_id: int | None
     points_for: int | None
     points_against: int | None
-    season: int | None
     round: str | None
     kickoff_time: str | None  # ISO 8601 format, e.g., "2023-09-01T19:00:00Z"
     opponent: str | None
@@ -107,48 +107,70 @@ class Game:
         return (
             self.school,
             self.date,
-            self.location,
+            self.season,
             self.location_id,
-            self.opponent,
             self.points_for,
             self.points_against,
-            self.result,
-            self.final,
-            self.game_status,
-            self.source,
-            self.region_game,
-            self.season,
             self.round,
             self.kickoff_time,
+            self.opponent,
+            self.result,
+            self.game_status,
+            self.source,
+            self.location,
+            self.region_game,
+            self.final,
         )
 
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
         """
-        Create a Game object from a database row tuple or sequence.
-        Accepts rows with 15 columns.
+        Create a Game object from a DB row (tuple, list, or dict).
+        Accepts rows with 15 expected columns or dicts with named fields.
         """
-        # Convert row-like objects (sqlite Row, psycopg2 row, etc.) to tuple
+        # Handle dict-like objects (e.g., psycopg2.extras.RealDictRow)
+        if isinstance(row, dict):
+            return cls(
+                school=row.get("school") or "",
+                date=row.get("date") or "",
+                season=row.get("season") or 0,
+                location=row.get("location") or "neutral",
+                location_id=row.get("location_id"),
+                points_for=row.get("points_for"),
+                points_against=row.get("points_against"),
+                round=row.get("round"),
+                kickoff_time=row.get("kickoff_time"),
+                opponent=row.get("opponent"),
+                result=row.get("result"),
+                game_status=row.get("game_status"),
+                source=row.get("source"),
+                region_game=bool(row.get("region_game")),
+                final=bool(row.get("final")),
+            )
+
+        # Otherwise assume a positional tuple/list
         row = tuple(row)
         if len(row) == 15:
-            school, date, location, opponent, points_for, points_against, result, region_game, season, round, kickoff_time, location_id, game_status, source, final = row[:15]
+            (school, date, season, location_id, points_for, points_against,
+            round, kickoff_time, opponent, result, game_status, source,
+            location, region_game, final) = row
             return cls(
                 school=school,
                 date=date,
+                season=season,
                 location=location or "neutral",
                 location_id=location_id,
                 points_for=points_for,
                 points_against=points_against,
-                season=season,
                 round=round,
                 kickoff_time=kickoff_time,
                 opponent=opponent,
                 result=result,
                 game_status=game_status,
                 source=source,
-                region_game=bool(region_game) if region_game is not None else False,
-                final=bool(final) if final is not None else False,
+                region_game=bool(region_game),
+                final=bool(final),
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")

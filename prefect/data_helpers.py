@@ -4,7 +4,7 @@ import re, unicodedata
 from typing import Any, Dict, Mapping, Optional, Union
 from bs4 import BeautifulSoup
 
-from data_classes import School
+from data_classes import Game, School
 
 
 # -------------------------
@@ -17,17 +17,21 @@ SPACE_RE = re.compile(r"\s+")
 # One source of truth: "official" -> "AHSFHS canonical"
 OFFICIAL_TO_AHSFHS: Dict[str, str] = {
     "D'Iberville": "DIberville",
-    "St. Andrew's": "Saint Andrews Episcopal",
+    "St. Andrew’s": "Saint Andrews Episcopal",
+    "O’Bannon": "OBannon",
     "St. Stanislaus": "Saint Stanislaus",
     "St. Patrick": "Saint Patrick",
     "St. Martin": "Saint Martin",
-    "Thomas E. Edwards": "Edwards",
+    "Thomas E. Edwards": "Thomas Edwards",
     "M. S. Palmer": "Palmer",
     "J Z George": "George",
     "H. W. Byers": "Byers",
     "Itawamba Agricultural": "Itawamba AHS",
     "Forrest County Agricultural": "Forrest County AHS",
     "Amanda Elzy": "Elzy",
+    "Tupelo Christian": "Tupelo Christian Prep",
+    "Jim Hill": "Hill",
+    "French Camp": "French Camp Academy",
 }
     
 _MONTHS = {
@@ -103,7 +107,6 @@ def update_school_name_for_maxpreps_search(s: str) -> str:
     s = s.replace("Cleveland Central", "Cleveland")
     s = s.replace("Leake Central", "Carthage")
     s = s.replace("Thomas E. Edwards", "Ruleville")
-    s = s.replace("Jefferson Co", "Jefferson County")
     s = s.replace("J Z George", "J.Z. George")
     s = s.replace("M. S. Palmer", "Palmer")
     s = s.replace("H. W. Byers", "Byers")
@@ -214,11 +217,38 @@ def clean_school_name(raw: str) -> str:
     """
 
     # Special cases: Differentiate Enterprises
-    if raw == "ENTERPRISE SCHOOL":
+    if raw.lower() == "enterprise school":
         return "Enterprise Lincoln"
-    elif raw == "ENTERPRISE HIGH SCHOOL":
+    elif raw.lower() == "enterprise high school":
         return "Enterprise Clarke"
+    elif raw.lower() == "jefferson co high":
+        return "Jefferson County"
+    elif raw.lower() == "franklin high school":
+        return "Franklin County"
     else:
         tmp = CLEAN_RE.sub("", raw)
         tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
         return to_normal_case(tmp)
+    
+
+def as_game_tuple(g: "Game"):
+    """
+    Convert a game dict to a tuple for DB insertion.
+    """
+    return (
+        g.school,
+        g.date,
+        g.season,
+        g.location_id,
+        g.points_for,
+        g.points_against,
+        g.round,
+        g.kickoff_time,
+        g.opponent,
+        g.result,
+        g.game_status,
+        g.source,
+        g.location,
+        g.region_game,
+        g.final,
+    )

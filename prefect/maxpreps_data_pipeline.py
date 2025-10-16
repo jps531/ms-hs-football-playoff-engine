@@ -3,7 +3,7 @@ from __future__ import annotations
 import re, time, requests
 from typing import Dict, Any, Iterable, List, Mapping, Optional, Union
 from urllib.parse import quote_plus
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_batch
 from prefect import flow, task, get_run_logger
 
 from data_classes import School
@@ -17,7 +17,7 @@ from web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
 # -------------------------
 
 
-@task(name="Find MaxPreps School Record for {school_name}")
+@task(task_run_name="Find MaxPreps School Record for {school_name}")
 def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> Optional[Dict]:
     """
     Return the best matching school record from MaxPreps search for the given name.
@@ -102,7 +102,7 @@ def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> O
     return record
 
 
-@task(name="Find MaxPreps Records for Schools")
+@task(task_run_name="Find MaxPreps Records for Schools")
 def find_records_for_schools(rows: Iterable[Union["School", Mapping[str, Any]]]) -> List[dict]:
     """
     rows: iterable of School dataclass instances or dicts with keys:
@@ -137,7 +137,7 @@ def find_records_for_schools(rows: Iterable[Union["School", Mapping[str, Any]]])
 
     return out
 
-
+@task(task_run_name="Insert Updated MaxPreps Info Data")
 def update_rows(school_records: Iterable[dict]) -> int:
     """
     Update MaxPreps information for matching existing schools.
@@ -151,21 +151,38 @@ def update_rows(school_records: Iterable[dict]) -> int:
     # --- do the updates ---
     sql = """
         UPDATE schools
-           SET city     = COALESCE(NULLIF(%s, ''), city),
-                zip      = COALESCE(NULLIF(%s, ''), zip),
-                mascot   = COALESCE(NULLIF(%s, ''), mascot),
-                maxpreps_id  = COALESCE(NULLIF(%s, ''), maxpreps_id),
-                maxpreps_url = COALESCE(NULLIF(%s, ''), maxpreps_url)
-         WHERE school = %s AND season = %s AND class = %s AND region = %s
+        SET city         = COALESCE(NULLIF(%s, ''), city),
+            zip          = COALESCE(NULLIF(%s, ''), zip),
+            mascot       = COALESCE(NULLIF(%s, ''), mascot),
+            maxpreps_id  = COALESCE(NULLIF(%s, ''), maxpreps_id),
+            maxpreps_url = COALESCE(NULLIF(%s, ''), maxpreps_url)
+        WHERE school = %s AND season = %s AND class = %s AND region = %s
     """
 
-    logger.info("Updating %d school records into schools table", len(list(school_records)))
+    # If school_records might be a generator, materialize it ONCE
+    records = list(school_records)
+    logger.info("Updating %d school records in schools table", len(records))
+
+    rows_data = [
+        (
+            r["city"],
+            r["zip"],
+            r["mascot"],
+            r["maxpreps_id"],
+            r["maxpreps_url"],
+            r["school"],   # <-- order matches the WHERE clause
+            r["season"],
+            r["class"],
+            r["region"],
+        )
+        for r in records
+    ]
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            execute_values(cur, sql, ((row["city"], row["zip"], row["mascot"], row["maxpreps_id"], row["maxpreps_url"], row["school"], row["season"],row["class"], row["region"]) for row in school_records))
-            conn.commit()
-    return len(list(school_records))
+            execute_batch(cur, sql, rows_data, page_size=200)
+        conn.commit()
+    return len(records)
 
 
 def get_existing_schools() -> List[School]:
@@ -190,7 +207,7 @@ def get_existing_schools() -> List[School]:
 # Prefect tasks & flow
 # -------------------------
 
-@task(retries=2, retry_delay_seconds=10, name="Scrape MaxPreps Data")
+@task(retries=2, retry_delay_seconds=10, task_run_name="Scrape MaxPreps Data")
 def scrape_task(existing_schools: List[School]) -> int:
     """
     Task to scrape the MaxPreps data from the given URL.

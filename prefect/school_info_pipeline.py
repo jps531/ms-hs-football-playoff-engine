@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time, requests
 from typing import Dict, Any, Iterable, List
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_batch
 from prefect import flow, task, get_run_logger
 
 from data_classes import School
@@ -15,7 +15,42 @@ from web_helpers import UA, _extract_next_data
 # Helpers
 # -------------------------
 
-@task(name="Find School Info for Schools")
+@task(task_run_name="Find MaxPreps School Info for {school_name}")
+def find_maxpreps_school_record(school: School, school_name) -> Dict[str, Any] | None:
+    """
+    Return the best matching school record from MaxPreps search for the given name.
+    """
+
+    logger = get_run_logger()
+
+    url = school.maxpreps_url
+    headers = {"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"}
+
+    logger.info("Searching MaxPreps for school %r via %s", school.school, url)
+
+    r = requests.get(url, headers=headers, timeout=25)
+    r.raise_for_status()
+    data = _extract_next_data(r.text)
+
+    school_info = data.get("props", {}).get("pageProps", {}).get("schoolContext", {}).get("schoolInfo", {})
+    if not school_info:
+        logger.warning("No info found for %r at %s", school.school, url)
+        return None
+
+    return {
+        "school": school.school,
+        "season": school.season,
+        "class": school.class_,
+        "region": school.region,
+        "latitude": school_info.get("latitude") or 0.0,
+        "longitude": school_info.get("longitude") or 0.0,
+        "primary_color": school_info.get("color1") or "",
+        "secondary_color": school_info.get("color2") or "",
+        "maxpreps_logo": school_info.get("mascotUrl") or "",
+    }
+
+
+@task(task_run_name="Find School Info for Schools")
 def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
     """
     Return a list of dicts with school info data for the given schools.
@@ -26,35 +61,10 @@ def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
 
     for school in schools:
 
-        url = school.maxpreps_url
-        headers = {"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"}
-
-        logger.info("Searching MaxPreps for school %r via %s", school.school, url)
-
-        r = requests.get(url, headers=headers, timeout=25)
-        r.raise_for_status()
-        data = _extract_next_data(r.text)
-
-        school_info = data.get("props", {}).get("pageProps", {}).get("schoolContext", {}).get("schoolInfo", {})
-        if not school_info:
-            logger.warning("No info found for %r at %s", school.school, url)
-            continue
-
-        found_info = {
-            "school": school.school,
-            "season": school.season,
-            "class": school.class_,
-            "region": school.region,
-            "latitude": school_info.get("latitude") or 0.0,
-            "longitude": school_info.get("longitude") or 0.0,
-            "primary_color": school_info.get("color1") or "",
-            "secondary_color": school_info.get("color2") or "",
-            "maxpreps_logo": school_info.get("mascotUrl") or "",
-        }
-
-        records.append(found_info)
-
-        logger.info("Found info for %r: %s", school.school, found_info)
+        found_info = find_maxpreps_school_record(school, school.school)
+        if found_info:
+            logger.info("Found info for %r: %s", school.school, found_info)
+            records.append(found_info)
 
         # Be polite to MaxPreps
         time.sleep(0.3)
@@ -62,7 +72,7 @@ def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
     return records
 
 
-@task(name="Update School Info Data")
+@task(task_run_name="Update School Info Data")
 def update_rows(school_records: Iterable[dict]) -> int:
     """
     Update school information for matching existing schools.
@@ -75,25 +85,40 @@ def update_rows(school_records: Iterable[dict]) -> int:
 
     # --- do the updates ---
     sql = """
-    UPDATE schools
-    SET primary_color   = COALESCE(NULLIF(%s, ''), primary_color),
-        secondary_color = COALESCE(NULLIF(%s, ''), secondary_color),
-        latitude        = COALESCE(%s, latitude),
-        longitude       = COALESCE(%s, longitude),
-        maxpreps_logo   = COALESCE(NULLIF(%s, ''), maxpreps_logo)
-    WHERE school = %s AND season = %s AND class = %s AND region = %s
+        UPDATE schools
+        SET primary_color   = COALESCE(NULLIF(%s, ''), primary_color),
+            secondary_color = COALESCE(NULLIF(%s, ''), secondary_color),
+            latitude        = COALESCE(%s, latitude),
+            longitude       = COALESCE(%s, longitude),
+            maxpreps_logo   = COALESCE(NULLIF(%s, ''), maxpreps_logo)
+        WHERE school = %s AND season = %s AND class = %s AND region = %s
     """
 
-    logger.info("Updating %d school records into schools table", len(list(school_records)))
+    logger.info("Updating %d school records in schools table", len(list(school_records)))
+
+    rows_data = [
+        (
+            row["primary_color"],
+            row["secondary_color"],
+            as_float_or_none(row["latitude"]),
+            as_float_or_none(row["longitude"]),
+            row["maxpreps_logo"],
+            row["school"],       # <-- note: order must match the WHERE clause
+            row["season"],
+            row["class"],
+            row["region"],
+        )
+        for row in school_records
+    ]
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            execute_values(cur, sql, ((row["primary_color"], row["secondary_color"], as_float_or_none(row["latitude"]), as_float_or_none(row["longitude"]), row["maxpreps_logo"], row["season"], row["school"], row["class"], row["region"]) for row in school_records))
-            conn.commit()
+            execute_batch(cur, sql, rows_data, page_size=100)
+        conn.commit()
     return len(list(school_records))
 
 
-@task(name="Get Existing Schools")
+@task(task_run_name="Get Existing Schools")
 def get_existing_schools() -> List[School]:
     """
     Gets the list of existing schools from the database.
@@ -116,7 +141,7 @@ def get_existing_schools() -> List[School]:
 # Prefect tasks & flow
 # -------------------------
 
-@task(retries=2, retry_delay_seconds=10, name="Scrape School Info Data")
+@task(retries=2, retry_delay_seconds=10, task_run_name="Scrape School Info Data")
 def scrape_task(existing_schools: List[School]) -> int:
     """
     Task to scrape school info data from MaxPreps.
