@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import time
+import time, requests
 from typing import Dict, Any, Iterable, List
-import requests
 from psycopg2.extras import execute_values
-
 from prefect import flow, task, get_run_logger
 
 from data_classes import School
@@ -17,6 +15,7 @@ from web_helpers import UA, _extract_next_data
 # Helpers
 # -------------------------
 
+@task(name="Find School Info for Schools")
 def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
     """
     Return a list of dicts with school info data for the given schools.
@@ -62,6 +61,8 @@ def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
 
     return records
 
+
+@task(name="Update School Info Data")
 def update_rows(school_records: Iterable[dict]) -> int:
     """
     Update school information for matching existing schools.
@@ -92,6 +93,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
     return len(list(school_records))
 
 
+@task(name="Get Existing Schools")
 def get_existing_schools() -> List[School]:
     """
     Gets the list of existing schools from the database.

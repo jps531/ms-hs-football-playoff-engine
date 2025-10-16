@@ -1,7 +1,6 @@
-import json, re, time
+import json, re, time, requests
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 from typing import Optional
-import requests
 from difflib import SequenceMatcher
 from bs4 import BeautifulSoup
 

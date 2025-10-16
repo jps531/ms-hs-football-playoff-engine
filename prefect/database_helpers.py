@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import os
-
-import psycopg2
+import os, psycopg2
 
 # --- DATABASE CONFIG ---
 DB_HOST = os.getenv("POSTGRES_HOST", "db")

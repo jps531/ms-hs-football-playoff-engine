@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import os
 import re
 from typing import Iterable, List, Tuple
 from psycopg2.extras import execute_values
-
 from prefect import flow, task, get_run_logger
 
 from data_classes import School
-from data_helpers import to_normal_case, SPACE_RE
+from data_helpers import clean_school_name, to_normal_case, SPACE_RE
 from web_helpers import fetch_article_text
 from database_helpers import get_database_connection
 
@@ -17,53 +15,15 @@ from database_helpers import get_database_connection
 # Config
 # -------------------------
 
-
-# --- REGIONS CLEANING CONFIG ---
-CLEAN_PHRASES = [
-    r"\bHigh School\b",
-    r"\bHigh\b",
-    r"\bSchool\b",
-    r"\bPublic\b",
-    r"\bMemorial\b",
-    r"\bSecondary\b",
-    r"\bHi Sch\b",
-    r"\bSch\b",
-    r"\bDist\b",
-    r"\bMiddle\b",
-    r"\bSenior\b",
-    r"\bJr Sr\b",
-    r"\bJr\s*[/\\-]?\s*Sr\b",
-    r"\(5-12\)",
-    r"\(9-12\)",
-    r"\bAttendance Center\b",
-    r"\bName\b",
-    r"\bClass\b",
-    r"\bRegion\b",
-]
-CLEAN_RE = re.compile("|".join(CLEAN_PHRASES), flags=re.IGNORECASE)
 CLASS_HDR = re.compile(r"\bClass\s+([1-7])A\b", re.IGNORECASE)
 
 
 # -------------------------
-# Helpers
+# Prefect tasks & flow
 # -------------------------
 
-def clean_school_name(raw: str, cls: int, region: int) -> str:
-    """
-    Clean the given raw school name by removing unwanted phrases and normalizing case.
-    """
 
-    # Special cases: Differentiate Enterprises
-    if raw == "ENTERPRISE SCHOOL":
-        return "Enterprise Lincoln"
-    elif raw == "ENTERPRISE HIGH SCHOOL":
-        return "Enterprise Clarke"
-    else:
-        tmp = CLEAN_RE.sub("", raw)
-        tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
-        return to_normal_case(tmp)
-
-
+@task(name="Find Class Sections")
 def _find_class_sections(text: str) -> List[Tuple[int, int, int]]:
     """Find each 'Class {N}A' header and return (class_num, start, end)."""
     matches = list(CLASS_HDR.finditer(text))
@@ -76,6 +36,7 @@ def _find_class_sections(text: str) -> List[Tuple[int, int, int]]:
     return sections
 
 
+@task(name="Parse Class Section: {cls}")
 def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
     """
     Parse a single Class section into (school, class, region) tuples.
@@ -97,7 +58,7 @@ def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
             if raw_name.endswith(tail):
                 raw_name = raw_name[: -len(tail)].rstrip()
 
-        school = clean_school_name(raw_name, cls, region)
+        school = clean_school_name(raw_name)
         if school:
             rows.append((school, cls, region))
 
@@ -105,6 +66,7 @@ def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
     return rows
 
 
+@task(name="Parse Regions from Text")
 def parse_regions_from_text(text: str) -> List[dict]:
     """Parse all class sections into dictionaries."""
     out: List[dict] = []
@@ -118,12 +80,16 @@ def parse_regions_from_text(text: str) -> List[dict]:
             })
     return out
 
+
+@task(name="Scrape Regions Data")
 def scrape_regions(url: str) -> List[dict]:
     """End-to-end: fetch, parse, clean."""
     text = fetch_article_text(url)
     rows = parse_regions_from_text(text)
     return rows
 
+
+@task(name="Insert Regions Data")
 def insert_rows(rows: Iterable[School]) -> int:
     """
     Insert the given rows into the database.
@@ -144,10 +110,6 @@ def insert_rows(rows: Iterable[School]) -> int:
             conn.commit()
     return len(list(rows))
 
-
-# -------------------------
-# Prefect tasks & flow
-# -------------------------
 
 @task(retries=2, retry_delay_seconds=10, name="Scrape Regions Data")
 def scrape_task(url: str, season: int) -> List[School]:

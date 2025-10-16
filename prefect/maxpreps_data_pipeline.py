@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-import re
-import time
-import requests
+import re, time, requests
 from typing import Dict, Any, Iterable, List, Mapping, Optional, Union
 from urllib.parse import quote_plus
 from psycopg2.extras import execute_values
-
 from prefect import flow, task, get_run_logger
 
 from data_classes import School
-from data_helpers import SPACE_RE, _norm, update_school_name_for_maxpreps_search
+from data_helpers import _get_field, _norm, update_school_name_for_maxpreps_search
 from database_helpers import get_database_connection
 from web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
 
@@ -20,6 +17,7 @@ from web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
 # -------------------------
 
 
+@task(name="Find MaxPreps School Record for {school_name}")
 def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> Optional[Dict]:
     """
     Return the best matching school record from MaxPreps search for the given name.
@@ -104,19 +102,7 @@ def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> O
     return record
 
 
-def _get_field(r: Union["School", Mapping[str, Any]], attr: str, alt_key: str | None = None):
-    """Fetch attr from dataclass or mapping; falls back to alt_key for 'class' vs 'class_'."""
-    if hasattr(r, attr):
-        return getattr(r, attr)
-    if isinstance(r, Mapping):
-        if attr in r:
-            return r[attr]
-        if alt_key and alt_key in r:
-            return r[alt_key]
-    return None
-
-
-# Batch helper for your DB rows
+@task(name="Find MaxPreps Records for Schools")
 def find_records_for_schools(rows: Iterable[Union["School", Mapping[str, Any]]]) -> List[dict]:
     """
     rows: iterable of School dataclass instances or dicts with keys:

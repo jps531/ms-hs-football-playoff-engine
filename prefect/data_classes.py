@@ -152,3 +152,43 @@ class Game:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
+        
+
+# --- Data class for a row in the location table ---
+@dataclass
+class Location:
+    id: int | None
+    name: str
+    city: str
+    home_team: str
+    latitude: float
+    longitude: float
+
+    def as_db_tuple(self):
+        return (
+            self.name,
+            self.city,
+            self.home_team,
+            self.latitude,
+            self.longitude,
+        )
+
+    @classmethod
+    def from_db_tuple(cls, row: Iterable):
+        """
+        Create a Location object from a database row tuple or sequence.
+        Accepts rows with 5 columns.
+        """
+        row = tuple(row)
+        if len(row) == 5:
+            name, city, home_team, latitude, longitude = row
+            return cls(
+                id=None,
+                name=name,
+                city=city,
+                home_team=home_team,
+                latitude=latitude,
+                longitude=longitude,
+            )
+        else:
+            raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")

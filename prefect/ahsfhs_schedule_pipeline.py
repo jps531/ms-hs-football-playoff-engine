@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import time
-import re
+import time, re
 from typing import Iterable, List
 from psycopg2.extras import execute_values
-
 from prefect import flow, task, get_run_logger
 
 from data_classes import Game, School
@@ -12,9 +10,11 @@ from database_helpers import get_database_connection
 from data_helpers import _normalize_ws, parseTextSection, to_plain_text, update_school_name_for_ahsfhs_search, _month_to_num
 from web_helpers import UA, fetch_article_text_from_ahsfhs
 
+
 # -------------------------
 # Constants
 # -------------------------
+
 
 # Matches lines like:
 # "Fri., Aug. 29", "Thu., Oct. 3", "Sat, Sep 5", "Aug. 29" (weekday optional)
@@ -27,11 +27,13 @@ DATE_LINE_RE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+
 # -------------------------
-# Helpers
+# Prefect tasks & flow
 # -------------------------
 
 
+@task(name="Fetch AHSFHS Schedule Data for {school_name} for {year}")
 def parse_ahsfhs_schedule(text: str, season_year: int, school_name: str, url: str) -> List[Game]:
     """
     Parse AHSFHS schedule text (with lots of line breaks) into a list of dicts:
@@ -114,6 +116,8 @@ def parse_ahsfhs_schedule(text: str, season_year: int, school_name: str, url: st
 
     return games
 
+
+@task(name="Find AHSFHS Schedule for Schools from {year}")
 def find_ahsfhs_schedule_for_schools(schools: List[School], year: int) -> List[Game]:
     """
     Return a list of dicts with ashsfhs schedule data for the given schools.
@@ -139,6 +143,8 @@ def find_ahsfhs_schedule_for_schools(schools: List[School], year: int) -> List[G
 
     return records
 
+
+@task(name="Insert/Update AHSFHS Game Records")
 def insert_rows(game_records: Iterable[Game]) -> int:
     """
     Insert all found schedule data.
@@ -193,6 +199,7 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     return len(list(game_records))
 
 
+@task(name="Get Existing Schools for AHSFHS Schedule Scrape")
 def get_existing_schools(season: int) -> List[School]:
     """
     Gets the list of existing schools from the database.
@@ -212,11 +219,7 @@ def get_existing_schools(season: int) -> List[School]:
     return schools
 
 
-# -------------------------
-# Prefect tasks & flow
-# -------------------------
-
-@task(retries=2, retry_delay_seconds=10, name="Scrape AHSFHS Schedule Data")
+@task(retries=2, retry_delay_seconds=10, name="Scrape AHSFHS Schedule Data for {year}")
 def scrape_task(existing_schools: List[School], year: int) -> int:
     """
     Task to scrape schedule data from AHSFHS.

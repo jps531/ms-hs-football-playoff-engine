@@ -1,8 +1,11 @@
 from __future__ import annotations
-import re
-from typing import Dict, Optional
-import unicodedata
+
+import re, unicodedata
+from typing import Any, Dict, Mapping, Optional, Union
 from bs4 import BeautifulSoup
+
+from data_classes import School
+
 
 # -------------------------
 # Constants
@@ -41,6 +44,32 @@ _MONTHS = {
     "nov": 11, "november": 11,
     "dec": 12, "december": 12,
 }
+
+
+# --- REGIONS CLEANING CONFIG ---
+CLEAN_PHRASES = [
+    r"\bHigh School\b",
+    r"\bHigh\b",
+    r"\bSchool\b",
+    r"\bPublic\b",
+    r"\bMemorial\b",
+    r"\bSecondary\b",
+    r"\bHi Sch\b",
+    r"\bSch\b",
+    r"\bDist\b",
+    r"\bMiddle\b",
+    r"\bSenior\b",
+    r"\bJr Sr\b",
+    r"\bJr\s*[/\\-]?\s*Sr\b",
+    r"\(5-12\)",
+    r"\(9-12\)",
+    r"\bAttendance Center\b",
+    r"\bName\b",
+    r"\bClass\b",
+    r"\bRegion\b",
+]
+
+CLEAN_RE = re.compile("|".join(CLEAN_PHRASES), flags=re.IGNORECASE)
 
 
 # -------------------------
@@ -165,3 +194,31 @@ def parseTextSection(text: str, start_phrase: str, end_phrase: str) -> str:
         return ""
     
     return match.group(1).strip()
+
+
+def _get_field(r: Union["School", Mapping[str, Any]], attr: str, alt_key: str | None = None):
+    """Fetch attr from dataclass or mapping; falls back to alt_key for 'class' vs 'class_'."""
+    if hasattr(r, attr):
+        return getattr(r, attr)
+    if isinstance(r, Mapping):
+        if attr in r:
+            return r[attr]
+        if alt_key and alt_key in r:
+            return r[alt_key]
+    return None
+
+
+def clean_school_name(raw: str) -> str:
+    """
+    Clean the given raw school name by removing unwanted phrases and normalizing case.
+    """
+
+    # Special cases: Differentiate Enterprises
+    if raw == "ENTERPRISE SCHOOL":
+        return "Enterprise Lincoln"
+    elif raw == "ENTERPRISE HIGH SCHOOL":
+        return "Enterprise Clarke"
+    else:
+        tmp = CLEAN_RE.sub("", raw)
+        tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
+        return to_normal_case(tmp)

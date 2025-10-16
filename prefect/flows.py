@@ -1,4 +1,5 @@
 from prefect import serve
+
 from regions_data_pipeline import (
     regions_data_flow
 )
