@@ -12,6 +12,9 @@ from school_info_pipeline import (
 from ahsfhs_schedule_pipeline import (
     ahsfhs_schedule_data_flow
 )
+from playoff_bracket_pipeline import (
+    playoff_bracket_pipeline
+)
 
 if __name__ == "__main__":
     """
@@ -33,6 +36,10 @@ if __name__ == "__main__":
     ahsfhs_schedule_data_flow = ahsfhs_schedule_data_flow.to_deployment(
         "ahsfhs-schedule-data-pipeline"
     )
+    # Set up the Playoff Bracket Pipeline
+    playoff_bracket_pipeline = playoff_bracket_pipeline.to_deployment(
+        "playoff-bracket-pipeline"
+    )
 
     # Serve the flows
-    serve(regions_data_flow, maxpreps_data_flow, school_info_data_flow, ahsfhs_schedule_data_flow) # type: ignore
+    serve(regions_data_flow, maxpreps_data_flow, school_info_data_flow, ahsfhs_schedule_data_flow, playoff_bracket_pipeline) # type: ignore

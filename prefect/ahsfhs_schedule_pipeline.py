@@ -7,7 +7,7 @@ from prefect import flow, task, get_run_logger
 
 from data_classes import Game, School
 from database_helpers import get_database_connection
-from data_helpers import _normalize_ws, as_game_tuple, parseTextSection, to_plain_text, update_school_name_for_ahsfhs_search, _month_to_num
+from data_helpers import _normalize_ws, get_school_name_from_ahsfhs, parseTextSection, to_plain_text, update_school_name_for_ahsfhs_search, _month_to_num
 from web_helpers import UA, fetch_article_text_from_ahsfhs
 
 
@@ -69,15 +69,16 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
         (?P<mon>[A-Za-z]{3,9})\.?,?\s+
         (?P<day>\d{1,2})\s+
         (?P<loc>vs\.|@)\s+
-        (?P<opp>[A-Za-z&.\'\- ]+?)             # opponent name
-        (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+(?P<res>[WL]))?  # optional score/result
-        (?:\s+(?P<round>                                # optional playoff round
+        (?P<opp>[A-Za-z0-9&.'\- ]+?)      
+        (?:\s*(?P<star1>\*))?             
+        (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+(?P<res>(?:[WL])|\#(?:Won|Lost)))?  
+        (?:\s+(?P<round>
             (?:1st|2nd|3rd)\s+Round\s+Playoffs |
-            Semi-finals\s+Playoffs |
+            Semi-?finals\s+Playoffs |
             Championship\s+Game
         ))?
-        (?:\s*(?P<star>\*))?                   # optional region star
-        (?=\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.|$)  # lookahead to next game or end
+        (?:\s*(?P<star2>\*))?             
+        (?=\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.|$)
         """,
         re.I | re.X
     )
@@ -88,13 +89,40 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
         day = int(m.group("day"))
         date = f"{mon:02d}/{day:02d}/{season}"
 
-        opponent = m.group("opp").strip()
+        opponent = get_school_name_from_ahsfhs(m.group("opp").strip())
         if opponent.lower() == "open":
             continue  # skip OPEN weeks
+
+        raw_res = m.group("res")
+        result = None
+
+        if raw_res:
+            # Strip "#" and normalize to uppercase for comparison
+            tag = raw_res.lstrip("#").upper()  # "W", "L", "WON", or "LOST"
+
+            # Forfeit cases
+            if tag in {"WON", "LOST"}:
+                # mark as Forfeit game
+                result = "W" if tag == "WON" else "L"
+                game_status = "Final - Forfeit"
+            else:
+                # Regular W/L result
+                result = tag
+                game_status = "Final"
+        else:
+            # No result: determine if the game has happened yet or not
+            if m.group("pfor") and m.group("pagn"):
+                result = "W" if int(m.group("pfor")) > int(m.group("pagn")) else "L"
+                game_status = "Final"
+            else:
+                result = None
+                game_status = ""
 
         round_text = m.group("round")
         if round_text:
             round_text = " ".join(round_text.strip().split())  # normalize spacing
+
+        region = bool(m.group("star1") or m.group("star2"))
 
         games.append(Game.from_db_tuple({
             "school": school_name,
@@ -106,11 +134,11 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
             "round": round_text or None,
             "kickoff_time": None,  # AHSFHS does not provide kickoff times
             "opponent": opponent,
-            "result": m.group("res") if m.group("res") else "W" if m.group("pagn") and m.group("pfor") and (int(m.group("pfor")) > int(m.group("pagn"))) else "L" if m.group("pagn") and m.group("pfor") else None,
-            "game_status": "Final" if m.group("res") else "", # AHSFHS games are either final or have not happened yet
+            "result": result,
+            "game_status": game_status,
             "source": url,
             "location": "home" if m.group("loc").lower().rstrip(".") == "vs" else "away" if m.group("loc").lower().rstrip(".") == "@" else "neutral",
-            "region_game": bool(m.group("star")),
+            "region_game": region,
             "final": True if m.group("res") else False,
         }))
 

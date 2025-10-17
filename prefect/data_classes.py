@@ -214,3 +214,143 @@ class Location:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
+        
+# --- Data class for a row in the bracket table ---
+@dataclass
+class Bracket:
+    name: str
+    season: int
+    class_: int
+    source: str | None
+
+    def as_db_tuple(self):
+        return (
+            self.name,
+            self.season,
+            self.class_,
+            self.source,
+        )
+    
+    @classmethod
+    def from_db_tuple(cls, row: Iterable):
+        """
+        Create a Bracket object from a database row tuple or sequence.
+        Accepts rows with 4 columns.
+        """
+        row = tuple(row)
+        if len(row) == 4:
+            name, season, class_, source = row
+            return cls(
+                name=name,
+                season=season,
+                class_=class_,
+                source=source,
+            )
+        else:
+            raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
+        
+# --- Data Class for a row in the bracket_teams table ---
+@dataclass
+class BracketTeam:
+    bracket_id: int
+    school: str
+    season: int
+    seed: int
+    region: int
+
+    def as_db_tuple(self):
+        return (
+            self.bracket_id,
+            self.school,
+            self.season,
+            self.seed,
+            self.region,
+        )
+    
+    @classmethod
+    def from_db_tuple(cls, row: Iterable):
+        """
+        Create a BracketTeam object from a database row tuple or sequence.
+        Accepts rows with 5 columns.
+        """
+        row = tuple(row)
+        if len(row) == 5:
+            bracket_id, school, season, seed, region = row
+            return cls(
+                bracket_id=bracket_id,
+                school=school,
+                season=season,
+                seed=seed,
+                region=region,
+            )
+        else:
+            raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
+
+
+# --- Data class for a row in the bracket_games table ---
+@dataclass
+class BracketGame:
+    bracket_id: int
+    round: str
+    game_number: int
+    home: str | None
+    away: str | None
+    home_region: int | None
+    home_seed: int | None
+    away_region: int | None
+    away_seed: int | None
+    next_game_id: int | None
+
+    def as_db_tuple(self):
+        return (
+            self.bracket_id,
+            self.round,
+            self.game_number,
+            self.home,
+            self.away,
+            self.home_region,
+            self.home_seed,
+            self.away_region,
+            self.away_seed,
+            self.next_game_id,
+        )
+    
+    @classmethod
+    def from_db_tuple(cls, row: Iterable):
+        """
+        Create a BracketGame object from a database row tuple or sequence.
+        Accepts rows with 3 or 10 columns.
+        """
+        row = tuple(row)
+        if len(row) == 3:
+            bracket_id, round, game_number = row
+            return cls(
+                bracket_id=bracket_id,
+                round=round,
+                game_number=game_number,
+                home=None,
+                away=None,
+                home_region=None,
+                home_seed=None,
+                away_region=None,
+                away_seed=None,
+                next_game_id=None,
+            )
+        elif len(row) == 10:
+            (bracket_id, round, game_number, home, away,
+            home_region, home_seed, away_region, away_seed,
+            next_game_id) = row
+            return cls(
+                bracket_id=bracket_id,
+                round=round,
+                game_number=game_number,
+                home=home,
+                away=away,
+                home_region=home_region,
+                home_seed=home_seed,
+                away_region=away_region,
+                away_seed=away_seed,
+                next_game_id=next_game_id,
+            )
+        else:
+            raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")

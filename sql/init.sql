@@ -48,3 +48,40 @@ CREATE TABLE IF NOT EXISTS games (
   FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
   PRIMARY KEY (school, date)
 );
+
+CREATE TABLE IF NOT EXISTS brackets (
+  id              BIGSERIAL PRIMARY KEY,
+  name            TEXT NOT NULL,
+  season          INTEGER NOT NULL,
+  class           INTEGER NOT NULL,
+  source          TEXT
+);
+
+CREATE TABLE IF NOT EXISTS bracket_teams (
+  bracket_id      BIGINT NOT NULL,
+  school          TEXT NOT NULL,
+  season          INTEGER NOT NULL,
+  seed            INTEGER NOT NULL,
+  region          INTEGER NOT NULL,
+  FOREIGN KEY (bracket_id) REFERENCES brackets(id) ON DELETE CASCADE,
+  FOREIGN KEY (school, season) REFERENCES schools(school, season),
+  PRIMARY KEY (bracket_id, school)
+);
+
+CREATE TABLE IF NOT EXISTS bracket_games (
+  id              BIGSERIAL PRIMARY KEY,
+  bracket_id      BIGINT NOT NULL,
+  round           TEXT NOT NULL,
+  game_number     INTEGER NOT NULL,
+  home            TEXT,
+  away            TEXT,
+  home_region     INTEGER,
+  home_seed       INTEGER,
+  away_region     INTEGER,
+  away_seed       INTEGER,
+  next_game_id    BIGINT,
+  FOREIGN KEY (bracket_id) REFERENCES brackets(id) ON DELETE CASCADE,
+  FOREIGN KEY (home) REFERENCES schools(school),
+  FOREIGN KEY (away) REFERENCES schools(school),
+  UNIQUE (bracket_id, round, game_number)
+);

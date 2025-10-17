@@ -229,26 +229,3 @@ def clean_school_name(raw: str) -> str:
         tmp = CLEAN_RE.sub("", raw)
         tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
         return to_normal_case(tmp)
-    
-
-def as_game_tuple(g: "Game"):
-    """
-    Convert a game dict to a tuple for DB insertion.
-    """
-    return (
-        g.school,
-        g.date,
-        g.season,
-        g.location_id,
-        g.points_for,
-        g.points_against,
-        g.round,
-        g.kickoff_time,
-        g.opponent,
-        g.result,
-        g.game_status,
-        g.source,
-        g.location,
-        g.region_game,
-        g.final,
-    )
