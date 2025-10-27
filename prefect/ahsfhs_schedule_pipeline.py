@@ -50,6 +50,7 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
       - season (int)
       - round (str|None)
       - final (bool)
+      - overtime (int)
       - game_status (str)
       - kickoff_time (NULL for this step)
       - source (AHSFHS URL in this case)
@@ -71,7 +72,10 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
         (?P<loc>vs\.|@)\s+
         (?P<opp>[A-Za-z0-9&.'\- ]+?)      
         (?:\s*(?P<star1>\*))?             
-        (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+(?P<res>(?:[WL])|\#(?:Won|Lost)))?  
+        (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+
+            (?P<res>(?:[WL])|\#(?:Won|Lost))
+            (?:\s*\((?P<ot>\d*)OT\))?
+        )?
         (?:\s+(?P<round>
             (?:1st|2nd|3rd)\s+Round\s+Playoffs |
             Semi-?finals\s+Playoffs |
@@ -98,12 +102,22 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
 
         if raw_res:
             # Strip "#" and normalize to uppercase for comparison
-            tag = raw_res.lstrip("#").upper()  # "W", "L", "WON", or "LOST"
+            tag = raw_res.lstrip("#").upper()
+            
+            ot_group = m.group("ot")
+
+            # Normalize overtime to integer
+            if ot_group is None:
+                overtime = 0
+            elif ot_group == "":
+                overtime = 1
+            else:
+                overtime = int(ot_group)
 
             # Forfeit cases
             if tag in {"WON", "LOST"}:
                 # mark as Forfeit game
-                result = "W" if tag == "WON" else "L"
+                result = "W" if tag.startswith("W") else "L"
                 game_status = "Final - Forfeit"
             else:
                 # Regular W/L result
@@ -117,6 +131,8 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
             else:
                 result = None
                 game_status = ""
+
+            overtime = 0
 
         round_text = m.group("round")
         if round_text:
@@ -140,6 +156,7 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
             "location": "home" if m.group("loc").lower().rstrip(".") == "vs" else "away" if m.group("loc").lower().rstrip(".") == "@" else "neutral",
             "region_game": region,
             "final": True if m.group("res") else False,
+            "overtime": overtime,
         }))
 
     logger.info("Parsed schedule for %r: %s", school_name, games)
@@ -189,7 +206,7 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     # --- do the updates ---
     sql = """
     INSERT INTO games
-    (school, date, season, location_id, points_for, points_against, "round", kickoff_time, opponent, result, game_status, source, location, region_game, final)
+    (school, date, season, location_id, points_for, points_against, "round", kickoff_time, opponent, result, game_status, source, location, region_game, final, overtime)
     VALUES %s
     ON CONFLICT (school, date) DO UPDATE SET
     location        = COALESCE(NULLIF(EXCLUDED.location,''),        games.location),
@@ -199,6 +216,7 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     points_against  = COALESCE(EXCLUDED.points_against,             games.points_against),
     result          = COALESCE(NULLIF(EXCLUDED.result,''),          games.result),
     final           = COALESCE(EXCLUDED.final,                      games.final),
+    overtime        = COALESCE(EXCLUDED.overtime,                   games.overtime),
     game_status     = COALESCE(EXCLUDED.game_status,                games.game_status),
     source          = COALESCE(EXCLUDED.source,                     games.source),
     region_game     = COALESCE(EXCLUDED.region_game,                games.region_game),
@@ -213,6 +231,7 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     OR games.points_against  IS DISTINCT FROM COALESCE(EXCLUDED.points_against, games.points_against)
     OR games.result          IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.result,''), games.result)
     OR games.final           IS DISTINCT FROM COALESCE(EXCLUDED.final, games.final)
+    OR games.overtime        IS DISTINCT FROM COALESCE(EXCLUDED.overtime, games.overtime)
     OR games.game_status     IS DISTINCT FROM COALESCE(EXCLUDED.game_status, games.game_status)
     OR games.source          IS DISTINCT FROM COALESCE(EXCLUDED.source, games.source)
     OR games.region_game     IS DISTINCT FROM COALESCE(EXCLUDED.region_game, games.region_game)
@@ -221,7 +240,7 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     OR games.kickoff_time    IS DISTINCT FROM COALESCE(EXCLUDED.kickoff_time, games.kickoff_time);
     """
 
-    template = "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+    template = "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s)"
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:

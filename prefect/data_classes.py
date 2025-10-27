@@ -102,6 +102,7 @@ class Game:
     location: str = "neutral"
     region_game: bool = False
     final: bool = False
+    overtime: int = 0
 
     def as_db_tuple(self):
         return (
@@ -120,6 +121,7 @@ class Game:
             self.location,
             self.region_game,
             self.final,
+            self.overtime,
         )
 
 
@@ -127,7 +129,7 @@ class Game:
     def from_db_tuple(cls, row: Iterable):
         """
         Create a Game object from a DB row (tuple, list, or dict).
-        Accepts rows with 15 expected columns or dicts with named fields.
+        Accepts rows with 16 expected columns or dicts with named fields.
         """
         # Handle dict-like objects (e.g., psycopg2.extras.RealDictRow)
         if isinstance(row, dict):
@@ -147,14 +149,15 @@ class Game:
                 source=row.get("source"),
                 region_game=bool(row.get("region_game")),
                 final=bool(row.get("final")),
+                overtime=row.get("overtime") or 0,
             )
 
         # Otherwise assume a positional tuple/list
         row = tuple(row)
-        if len(row) == 15:
+        if len(row) == 16:
             (school, date, season, location_id, points_for, points_against,
             round, kickoff_time, opponent, result, game_status, source,
-            location, region_game, final) = row
+            location, region_game, final, overtime) = row
             return cls(
                 school=school,
                 date=date,
@@ -171,6 +174,7 @@ class Game:
                 source=source,
                 region_game=bool(region_game),
                 final=bool(final),
+                overtime=overtime,
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")

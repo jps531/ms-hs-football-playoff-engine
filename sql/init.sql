@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS games (
   season          INTEGER NOT NULL,
   round           TEXT,
   kickoff_time    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  overtime        INTEGER DEFAULT 0,
   FOREIGN KEY (school, season) REFERENCES schools(school, season),
   FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
   PRIMARY KEY (school, date)
