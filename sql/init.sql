@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS bracket_games (
   bracket_id      BIGINT NOT NULL,
   round           TEXT NOT NULL,
   game_number     INTEGER NOT NULL,
+  season          INTEGER NOT NULL,
   home            TEXT,
   away            TEXT,
   home_region     INTEGER,
@@ -82,7 +83,7 @@ CREATE TABLE IF NOT EXISTS bracket_games (
   away_seed       INTEGER,
   next_game_id    BIGINT,
   FOREIGN KEY (bracket_id) REFERENCES brackets(id) ON DELETE CASCADE,
-  FOREIGN KEY (home) REFERENCES schools(school),
-  FOREIGN KEY (away) REFERENCES schools(school),
+  FOREIGN KEY (home, season) REFERENCES schools(school, season),
+  FOREIGN KEY (away, season) REFERENCES schools(school, season),
   UNIQUE (bracket_id, round, game_number)
 );
