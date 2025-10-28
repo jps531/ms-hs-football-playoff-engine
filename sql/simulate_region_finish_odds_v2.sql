@@ -33,54 +33,41 @@ BEGIN
   WHERE s.class = p_class AND s.region = p_region AND s.season = p_season;
 
   -------------------------------------------------------------------
-  -- Completed region games (final=TRUE). We keep both result & scores.
+  -- Completed region games (final=TRUE) for this division (both sides
+  -- exist in games); normalize to single row (a<b).
   -------------------------------------------------------------------
-  CREATE TEMP TABLE _completed ON COMMIT DROP AS
-  SELECT
-    g.school,
-    g.opponent,
-    g.result,
-    g.points_for,
-    g.points_against
-  FROM games g
-  JOIN _div_schools ds ON ds.school = g.school AND ds.season = g.season
-  WHERE g.final = TRUE AND g.region_game = TRUE;
-
-  -- Precompute completed W/L/T and points-allowed per team
-  CREATE TEMP TABLE _base_region_totals ON COMMIT DROP AS
-  SELECT s.school,
-         COUNT(*) FILTER (WHERE c.result='W') AS w,
-         COUNT(*) FILTER (WHERE c.result='L') AS l,
-         COUNT(*) FILTER (WHERE c.result='T') AS t,
-         COALESCE(SUM(c.points_against),0)    AS pa
-  FROM _div_schools s
-  LEFT JOIN _completed c ON c.school = s.school
-  GROUP BY s.school;
-
-  -- Completed head-to-head table with *both* normalized result points and differentials
-  -- h2h_pts: W=1, T=0.5, L=0 (for Step 1 combined record math)
-  -- h2h_pd : (points_for - points_against) signed (used for Step 3 cap later)
-  CREATE TEMP TABLE _h2h_completed ON COMMIT DROP AS
-  SELECT a.school AS a, b.school AS b,
-         COALESCE(SUM(
-           CASE WHEN c.school=a.school AND c.opponent=b.school THEN
-                    CASE c.result WHEN 'W' THEN 1 WHEN 'T' THEN 0.5 ELSE 0 END
-                WHEN c.school=b.school AND c.opponent=a.school THEN
-                    CASE c.result WHEN 'L' THEN 1 WHEN 'T' THEN 0.5 ELSE 0 END
-                ELSE 0 END
-         ), 0)::NUMERIC AS a_vs_b_pts,
-         COALESCE(SUM(
-           CASE WHEN c.school=a.school AND c.opponent=b.school THEN (c.points_for - c.points_against)
-                WHEN c.school=b.school AND c.opponent=a.school THEN (c.points_against - c.points_for)
-                ELSE 0 END
-         ), 0)::INT AS a_vs_b_pd
-  FROM _div_schools a
-  CROSS JOIN _div_schools b
-  LEFT JOIN _completed c
-         ON (c.school=a.school AND c.opponent=b.school)
-         OR (c.school=b.school AND c.opponent=a.school)
-  WHERE a.school <> b.school
-  GROUP BY a.school, b.school;
+  CREATE TEMP TABLE _completed_pairs ON COMMIT DROP AS
+  WITH comp AS (
+    SELECT g.school, g.opponent, g.result, g.points_for, g.points_against
+    FROM games g
+    JOIN _div_schools d1 ON d1.school = g.school   AND d1.season = g.season
+    JOIN _div_schools d2 ON d2.school = g.opponent AND d2.season = g.season
+    WHERE g.final = TRUE AND g.region_game = TRUE
+  ),
+  norm AS (
+    SELECT
+      LEAST(school, opponent)  AS a,
+      GREATEST(school, opponent) AS b,
+      -- result from a's perspective: +1 a beat b, 0 tie, -1 a lost to b
+      MAX(
+        CASE
+          WHEN school = LEAST(school,opponent) AND result='W' THEN  1
+          WHEN school = GREATEST(school,opponent) AND result='L' THEN  1
+          WHEN result='T' THEN 0
+          ELSE -1
+        END
+      ) AS res_a,
+      -- point diff from a's perspective
+      MAX(
+        CASE
+          WHEN school = LEAST(school,opponent) THEN (points_for - points_against)
+          ELSE (points_against - points_for)
+        END
+      ) AS pd_a
+    FROM comp
+    GROUP BY LEAST(school, opponent), GREATEST(school, opponent)
+  )
+  SELECT a, b, res_a, pd_a FROM norm;
 
   -------------------------------------------------------------------
   -- Remaining region games to simulate (unique pairs a<b)
@@ -89,16 +76,73 @@ BEGIN
   WITH candidates AS (
     SELECT
       LEAST(g.school, g.opponent)  AS a,
-      GREATEST(g.school, g.opponent) AS b,
-      g.date
+      GREATEST(g.school, g.opponent) AS b
     FROM games g
     JOIN _div_schools ds1 ON ds1.school = g.school   AND ds1.season = g.season
     JOIN _div_schools ds2 ON ds2.school = g.opponent AND ds2.season = g.season
     WHERE g.final = FALSE AND g.region_game = TRUE
   )
-  SELECT a, b, MIN(date) AS first_date
-  FROM candidates
-  GROUP BY a, b;
+  SELECT DISTINCT a, b FROM candidates;
+
+  -------------------------------------------------------------------
+  -- Completed per-team totals (wins/losses/ties, points allowed)
+  -------------------------------------------------------------------
+  CREATE TEMP TABLE _base_region_totals ON COMMIT DROP AS
+  WITH expl AS (
+    SELECT
+      cp.a, cp.b, cp.res_a,
+      -- who is winner? res_a: +1 means a beat b, -1 means b beat a, 0 tie
+      CASE WHEN cp.res_a =  1 THEN cp.a
+           WHEN cp.res_a = -1 THEN cp.b
+           ELSE NULL END AS winner,
+      CASE WHEN cp.res_a =  1 THEN cp.b
+           WHEN cp.res_a = -1 THEN cp.a
+           ELSE NULL END AS loser,
+      cp.pd_a
+    FROM _completed_pairs cp
+  ),
+  rows AS (
+    -- explode to two rows per completed matchup for per-team aggregation
+    SELECT a AS school,
+           CASE res_a WHEN  1 THEN 1 WHEN -1 THEN 0 ELSE 0 END AS w,
+           CASE res_a WHEN -1 THEN 1 WHEN  1 THEN 0 ELSE 0 END AS l,
+           CASE res_a WHEN  0 THEN 1 ELSE 0 END AS t,
+           -- points allowed: if a beat b with pd_a, then a allowed (b_pts)
+           -- but we only have differential; recover PA by:
+           -- we can’t exactly recover both PF/PA from pd alone; for PA sums
+           -- we’ll defer to original completed rows if you need precision.
+           -- For Step 5 we need PA on all region games; we’ll rebuild it later
+           0 AS pa_stub
+    FROM expl
+    UNION ALL
+    SELECT b AS school,
+           CASE res_a WHEN -1 THEN 1 WHEN  1 THEN 0 ELSE 0 END AS w,
+           CASE res_a WHEN  1 THEN 1 WHEN -1 THEN 0 ELSE 0 END AS l,
+           CASE res_a WHEN  0 THEN 1 ELSE 0 END AS t,
+           0 AS pa_stub
+    FROM expl
+  )
+  SELECT s.school,
+         COALESCE(SUM(r.w),0) AS w,
+         COALESCE(SUM(r.l),0) AS l,
+         COALESCE(SUM(r.t),0) AS t,
+         0::INT               AS pa  -- will fill from original completed later (see Step 5 compute path)
+  FROM _div_schools s
+  LEFT JOIN rows r ON r.school = s.school
+  GROUP BY s.school;
+
+  -- For accurate PA from completed games, get it directly:
+  CREATE TEMP TABLE _completed_raw ON COMMIT DROP AS
+  SELECT g.school, SUM(g.points_against)::INT AS pa
+  FROM games g
+  JOIN _div_schools ds ON ds.school = g.school AND ds.season = g.season
+  WHERE g.final = TRUE AND g.region_game = TRUE
+  GROUP BY g.school;
+
+  UPDATE _base_region_totals t
+  SET pa = COALESCE(cr.pa, 0)
+  FROM _completed_raw cr
+  WHERE cr.school = t.school;
 
   -------------------------------------------------------------------
   -- Aggregate odds counters
@@ -115,79 +159,75 @@ BEGIN
   -- Reusable working tables (TRUNCATE each trial)
   -------------------------------------------------------------------
   CREATE TEMP TABLE _trial_totals   (school TEXT, w INT, l INT, t INT, pa INT) ON COMMIT DROP;
-  CREATE TEMP TABLE _trial_results  (a TEXT, b TEXT, a_win INT, margin INT, a_pts INT, b_pts INT) ON COMMIT DROP;
-  CREATE TEMP TABLE _trial_h2h      (a TEXT, b TEXT, a_vs_b_pts NUMERIC, a_vs_b_pd INT) ON COMMIT DROP;
+  CREATE TEMP TABLE _trial_results  (a TEXT, b TEXT, a_win INT, a_pts INT, b_pts INT) ON COMMIT DROP;
+  CREATE TEMP TABLE _h2h_all        (a TEXT, b TEXT, res_a INT, pd_a INT) ON COMMIT DROP;
 
-  -- base + rankings
   CREATE TEMP TABLE _trial_base     (school TEXT, w INT, l INT, t INT, pa INT, gp INT, win_pct NUMERIC) ON COMMIT DROP;
   CREATE TEMP TABLE _trial_sorted   (school TEXT, w INT, l INT, t INT, pa INT, win_pct NUMERIC, base_bucket INT) ON COMMIT DROP;
 
-  -- tie-group metrics
-  CREATE TEMP TABLE _trial_h2h_group    (school TEXT, base_bucket INT, h2h_pts NUMERIC) ON COMMIT DROP;
-  CREATE TEMP TABLE _trial_h2h_pd_cap   (school TEXT, base_bucket INT, h2h_pd_capped INT) ON COMMIT DROP;
+  CREATE TEMP TABLE _trial_h2h_group  (school TEXT, base_bucket INT, h2h_pts NUMERIC) ON COMMIT DROP;
+  CREATE TEMP TABLE _trial_h2h_pd_cap (school TEXT, base_bucket INT, h2h_pd_capped INT) ON COMMIT DROP;
 
-  -- Step 2 / Step 4 arrays (lexicographic)
-  CREATE TEMP TABLE _trial_step2_arr (school TEXT, base_bucket INT, step2_arr INT[]) ON COMMIT DROP;
-  CREATE TEMP TABLE _trial_step4_arr (school TEXT, base_bucket INT, step4_arr INT[]) ON COMMIT DROP;
+  CREATE TEMP TABLE _outside          (tie_school TEXT, base_bucket INT, opp TEXT, opp_rank INT) ON COMMIT DROP;
+  CREATE TEMP TABLE _trial_step2_arr  (school TEXT, base_bucket INT, step2_arr INT[]) ON COMMIT DROP;
+  CREATE TEMP TABLE _trial_step4_arr  (school TEXT, base_bucket INT, step4_arr INT[]) ON COMMIT DROP;
 
-  -- final rank materialization per trial
   CREATE TEMP TABLE _trial_ranked   (
     school TEXT, w INT, l INT, t INT, pa INT, win_pct NUMERIC, base_bucket INT,
     h2h_pts NUMERIC, h2h_pd_capped INT, step2_arr INT[], step4_arr INT[],
     bucket_size INT
   ) ON COMMIT DROP;
 
-  CREATE TEMP TABLE _bucket_sizes  (base_bucket INT, sz INT) ON COMMIT DROP;
-  CREATE TEMP TABLE _bucket_offsets(base_bucket INT, start_place INT) ON COMMIT DROP;
-  CREATE TEMP TABLE _trial_places  (school TEXT, first_slot INT, last_slot INT, grp_sz INT) ON COMMIT DROP;
-  CREATE TEMP TABLE _outside (tie_school TEXT, base_bucket INT, opp TEXT, opp_rank INT) ON COMMIT DROP;
-
+  CREATE TEMP TABLE _bucket_sizes   (base_bucket INT, sz INT) ON COMMIT DROP;
+  CREATE TEMP TABLE _bucket_offsets (base_bucket INT, start_place INT) ON COMMIT DROP;
+  CREATE TEMP TABLE _trial_places   (school TEXT, first_slot INT, last_slot INT, grp_sz INT) ON COMMIT DROP;
 
   -------------------------------------------------------------------
   -- Monte Carlo
   -------------------------------------------------------------------
   FOR t IN 1..p_trials LOOP
-    TRUNCATE _trial_totals, _trial_results, _trial_h2h,
+    TRUNCATE _trial_totals, _trial_results, _h2h_all,
              _trial_base, _trial_sorted,
              _trial_h2h_group, _trial_h2h_pd_cap,
-             _trial_step2_arr, _trial_step4_arr,
-             _trial_ranked, _bucket_sizes, _bucket_offsets, _trial_places, _outside;
+             _outside, _trial_step2_arr, _trial_step4_arr,
+             _trial_ranked, _bucket_sizes, _bucket_offsets, _trial_places;
 
-    -- Seed totals with completed counts/points-allowed
+    -- seed totals from completed
     INSERT INTO _trial_totals
     SELECT school, w, l, t, pa FROM _base_region_totals;
 
-    -----------------------------------------------------------------
-    -- Simulate remaining games with scores
-    --  - winner: fair coin
-    --  - margin: {3,7,10,14} with probs {0.4,0.3,0.2,0.1}
-    --  - loser points L: 10..30 uniform; winner points = L + margin
-    -----------------------------------------------------------------
-    INSERT INTO _trial_results (a, b, a_win, margin, a_pts, b_pts)
-    SELECT
-      rp.a, rp.b,
-      CASE WHEN random() < 0.5 THEN 1 ELSE 0 END AS a_win,
-      CASE
-        WHEN r1 < 0.4 THEN 3
-        WHEN r1 < 0.7 THEN 7
-        WHEN r1 < 0.9 THEN 10
-        ELSE 14
-      END AS margin,
-      NULL::INT, NULL::INT
-    FROM _remaining_pairs rp
-    CROSS JOIN LATERAL (SELECT random() AS r1) p;
+    -- simulate remaining region games with transparent score model
+    -- winner: fair coin; margin from {3,7,10,14} with probs {0.4,0.3,0.2,0.1};
+    -- loser points 10..30; winner = loser + margin
+    INSERT INTO _trial_results (a, b, a_win, a_pts, b_pts)
+    SELECT rp.a, rp.b,
+           CASE WHEN random() < 0.5 THEN 1 ELSE 0 END,
+           NULL::INT, NULL::INT
+    FROM _remaining_pairs rp;
 
-    -- set points using a second random draw
+    -- assign points
     UPDATE _trial_results tr
-    SET a_pts = CASE WHEN a_win=1 THEN (lpts.l + tr.margin) ELSE lpts.l END,
-        b_pts = CASE WHEN a_win=1 THEN lpts.l ELSE (lpts.l + tr.margin) END
+    SET a_pts = CASE WHEN a_win=1 THEN (lp.l + m.margin) ELSE lp.l END,
+        b_pts = CASE WHEN a_win=1 THEN lp.l ELSE (lp.l + m.margin) END
     FROM (
       SELECT a, b, 10 + FLOOR(random()*21)::INT AS l
       FROM _remaining_pairs
-    ) AS lpts
-    WHERE tr.a = lpts.a AND tr.b = lpts.b;
+    ) lp
+    JOIN (
+      SELECT a, b,
+        CASE
+          WHEN r < 0.4 THEN 3
+          WHEN r < 0.7 THEN 7
+          WHEN r < 0.9 THEN 10
+          ELSE 14
+        END AS margin
+      FROM (
+        SELECT a, b, random() AS r FROM _remaining_pairs
+      ) x
+    ) m ON m.a = lp.a AND m.b = lp.b
+    WHERE tr.a = lp.a AND tr.b = lp.b;
 
-    -- Update W/L and points allowed
+    -- update per-team totals (W/L/PA)
     UPDATE _trial_totals tt
     SET w = w + tr.a_win,
         l = l + (1 - tr.a_win),
@@ -202,30 +242,27 @@ BEGIN
     FROM _trial_results tr
     WHERE tt.school = tr.b;
 
-    -----------------------------------------------------------------
-    -- Build H2H map for this trial (completed + simulated)
-    -----------------------------------------------------------------
-    INSERT INTO _trial_h2h (a, b, a_vs_b_pts, a_vs_b_pd)
-    SELECT hc.a, hc.b, hc.a_vs_b_pts, hc.a_vs_b_pd
-    FROM _h2h_completed hc;
+    -- unified H2H table: start with completed pairs, then add simulated
+    INSERT INTO _h2h_all (a, b, res_a, pd_a)
+    SELECT a, b, res_a, pd_a FROM _completed_pairs;
 
-    -- add simulated A wins
-    UPDATE _trial_h2h h
-    SET a_vs_b_pts = a_vs_b_pts + 1,
-        a_vs_b_pd  = a_vs_b_pd  + (tr.a_pts - tr.b_pts)
+    -- add simulated to existing rows
+    UPDATE _h2h_all h
+    SET res_a = COALESCE(h.res_a,0) + CASE WHEN tr.a_win=1 THEN  1 ELSE -1 END,
+        pd_a  = COALESCE(h.pd_a,0)  + (tr.a_pts - tr.b_pts)
     FROM _trial_results tr
-    WHERE h.a = tr.a AND h.b = tr.b AND tr.a_win=1;
+    WHERE h.a = tr.a AND h.b = tr.b;
 
-    -- add simulated B wins
-    UPDATE _trial_h2h h
-    SET a_vs_b_pts = a_vs_b_pts + 1,
-        a_vs_b_pd  = a_vs_b_pd  + (tr.b_pts - tr.a_pts)
+    -- insert purely simulated pairs (no completed)
+    INSERT INTO _h2h_all (a,b,res_a,pd_a)
+    SELECT tr.a, tr.b,
+           CASE WHEN tr.a_win=1 THEN  1 ELSE -1 END,
+           (tr.a_pts - tr.b_pts)
     FROM _trial_results tr
-    WHERE h.a = tr.b AND h.b = tr.a AND tr.a_win=0;
+    LEFT JOIN _h2h_all h ON h.a=tr.a AND h.b=tr.b
+    WHERE h.a IS NULL;
 
-    -----------------------------------------------------------------
-    -- Base standings & buckets (by region win%)
-    -----------------------------------------------------------------
+    -- base standings & buckets
     INSERT INTO _trial_base
     SELECT s.school,
            tt.w, tt.l, tt.t, tt.pa,
@@ -241,104 +278,104 @@ BEGIN
            DENSE_RANK() OVER (ORDER BY win_pct DESC, l ASC, school)
     FROM _trial_base;
 
+    -- STEP 1: H2H among tied teams (W=1, T=.5, L=0) via normalized pairs
+    INSERT INTO _trial_h2h_group (school, base_bucket, h2h_pts)
+    SELECT
+      ts.school,
+      ts.base_bucket,
+      COALESCE(SUM(
+        CASE
+          WHEN h.a = ts.school AND h.b = other.school THEN
+            CASE h.res_a WHEN  1 THEN 1.0 WHEN 0 THEN 0.5 ELSE 0.0 END
+          WHEN h.a = other.school AND h.b = ts.school THEN
+            CASE h.res_a WHEN  1 THEN 0.0 WHEN 0 THEN 0.5 ELSE 1.0 END
+          ELSE 0.0
+        END
+      ), 0.0) AS h2h_pts
+    FROM _trial_sorted ts
+    JOIN _trial_sorted other
+      ON other.base_bucket = ts.base_bucket AND other.school <> ts.school
+    LEFT JOIN _h2h_all h
+      ON (h.a = ts.school AND h.b = other.school)
+      OR (h.a = other.school AND h.b = ts.school)
+    GROUP BY ts.school, ts.base_bucket;
+
+    -- STEP 3: capped PD (±12) among tied teams using normalized pairs
+    INSERT INTO _trial_h2h_pd_cap (school, base_bucket, h2h_pd_capped)
+    SELECT
+      ts.school,
+      ts.base_bucket,
+      COALESCE(SUM(
+        CASE
+          WHEN h.a = ts.school AND h.b = other.school THEN
+            GREATEST(LEAST(h.pd_a, 12), -12)
+          WHEN h.a = other.school AND h.b = ts.school THEN
+            GREATEST(LEAST(-h.pd_a, 12), -12)
+          ELSE 0
+        END
+      ), 0) AS h2h_pd_capped
+    FROM _trial_sorted ts
+    JOIN _trial_sorted other
+      ON other.base_bucket = ts.base_bucket AND other.school <> ts.school
+    LEFT JOIN _h2h_all h
+      ON (h.a = ts.school AND h.b = other.school)
+      OR (h.a = other.school AND h.b = ts.school)
+    GROUP BY ts.school, ts.base_bucket;
+
+    -- Build ordered list of outside opponents (for Steps 2 & 4)
     INSERT INTO _outside (tie_school, base_bucket, opp, opp_rank)
     SELECT
-      a.school               AS tie_school,
+      a.school AS tie_school,
       a.base_bucket,
-      b.school               AS opp,
+      b.school AS opp,
       DENSE_RANK() OVER (ORDER BY b.win_pct DESC, b.l ASC, b.school) AS opp_rank
     FROM _trial_sorted a
     JOIN _trial_sorted b ON b.school <> a.school
     WHERE b.base_bucket <> a.base_bucket;
 
-    -----------------------------------------------------------------
-    -- Step 1: H2H among tie group (combined record)
-    -----------------------------------------------------------------
-    INSERT INTO _trial_h2h_group (school, base_bucket, h2h_pts)
-    SELECT ts.school, ts.base_bucket,
-           COALESCE(SUM(h.a_vs_b_pts), 0)
-    FROM _trial_sorted ts
-    JOIN _trial_sorted other
-      ON other.base_bucket = ts.base_bucket AND other.school <> ts.school
-    LEFT JOIN _trial_h2h h
-      ON h.a = ts.school AND h.b = other.school
-    GROUP BY ts.school, ts.base_bucket;
-
-    -- ---------------------------------------------
-    -- Step 2: results vs highest-ranked outside opponents (lexicographic)
-    -- W=2, T=1, L=0, NULL if no game
-    -- ---------------------------------------------
+    -- STEP 2: results vs those higher-ranked outside opponents (lexicographic)
     INSERT INTO _trial_step2_arr (school, base_bucket, step2_arr)
     SELECT
       o.tie_school AS school,
       ts.base_bucket,
       ARRAY_AGG(
         CASE
-          WHEN c.school=o.tie_school AND c.opponent=o.opp THEN
-            CASE c.result WHEN 'W' THEN 2 WHEN 'T' THEN 1 WHEN 'L' THEN 0 END
-          WHEN c.school=o.opp AND c.opponent=o.tie_school THEN
-            CASE c.result WHEN 'W' THEN 0 WHEN 'T' THEN 1 WHEN 'L' THEN 2 END
-          WHEN tr.a=o.tie_school AND tr.b=o.opp THEN
-            CASE WHEN tr.a_win=1 THEN 2 ELSE 0 END
-          WHEN tr.a=o.opp AND tr.b=o.tie_school THEN
-            CASE WHEN tr.a_win=1 THEN 0 ELSE 2 END
+          WHEN h.a=o.tie_school AND h.b=o.opp THEN
+            CASE h.res_a WHEN  1 THEN 2 WHEN 0 THEN 1 ELSE 0 END
+          WHEN h.a=o.opp AND h.b=o.tie_school THEN
+            CASE h.res_a WHEN  1 THEN 0 WHEN 0 THEN 1 ELSE 2 END
           ELSE NULL
         END
         ORDER BY o.opp_rank
       ) AS step2_arr
     FROM _outside o
     JOIN _trial_sorted ts ON ts.school = o.tie_school
-    LEFT JOIN _completed c
-      ON (c.school=o.tie_school AND c.opponent=o.opp)
-      OR (c.school=o.opp       AND c.opponent=o.tie_school)
-    LEFT JOIN _trial_results tr
-      ON (tr.a=o.tie_school AND tr.b=o.opp)
-      OR (tr.a=o.opp       AND tr.b=o.tie_school)
+    LEFT JOIN _h2h_all h
+      ON (h.a=o.tie_school AND h.b=o.opp)
+      OR (h.a=o.opp AND h.b=o.tie_school)
     GROUP BY o.tie_school, ts.base_bucket;
 
-    -----------------------------------------------------------------
-    -- Step 3: capped PD (±12) among tied teams only
-    -----------------------------------------------------------------
-    INSERT INTO _trial_h2h_pd_cap (school, base_bucket, h2h_pd_capped)
-    SELECT ts.school, ts.base_bucket,
-           COALESCE(SUM(GREATEST(LEAST(h.a_vs_b_pd, 12), -12)), 0)
-    FROM _trial_sorted ts
-    JOIN _trial_sorted other
-      ON other.base_bucket = ts.base_bucket AND other.school <> ts.school
-    LEFT JOIN _trial_h2h h
-      ON h.a = ts.school AND h.b = other.school
-    GROUP BY ts.school, ts.base_bucket;
-
-    -- ---------------------------------------------
-    -- Step 4: point differential vs those same outside opponents (lexicographic, uncapped)
-    -- ---------------------------------------------
+    -- STEP 4: PD vs those higher-ranked outside opponents (lexicographic, uncapped)
     INSERT INTO _trial_step4_arr (school, base_bucket, step4_arr)
     SELECT
       o.tie_school AS school,
       ts.base_bucket,
       ARRAY_AGG(
         CASE
-          WHEN c.school=o.tie_school AND c.opponent=o.opp THEN (c.points_for - c.points_against)
-          WHEN c.school=o.opp       AND c.opponent=o.tie_school THEN (c.points_against - c.points_for)
-          WHEN tr.a=o.tie_school AND tr.b=o.opp THEN (tr.a_pts - tr.b_pts)
-          WHEN tr.a=o.opp       AND tr.b=o.tie_school THEN (tr.b_pts - tr.a_pts)
+          WHEN h.a=o.tie_school AND h.b=o.opp THEN  h.pd_a
+          WHEN h.a=o.opp       AND h.b=o.tie_school THEN -h.pd_a
           ELSE NULL
         END
         ORDER BY o.opp_rank
       ) AS step4_arr
     FROM _outside o
     JOIN _trial_sorted ts ON ts.school = o.tie_school
-    LEFT JOIN _completed c
-      ON (c.school=o.tie_school AND c.opponent=o.opp)
-      OR (c.school=o.opp       AND c.opponent=o.tie_school)
-    LEFT JOIN _trial_results tr
-      ON (tr.a=o.tie_school AND tr.b=o.opp)
-      OR (tr.a=o.opp       AND tr.b=o.tie_school)
+    LEFT JOIN _h2h_all h
+      ON (h.a=o.tie_school AND h.b=o.opp)
+      OR (h.a=o.opp       AND h.b=o.tie_school)
     GROUP BY o.tie_school, ts.base_bucket;
 
-    -----------------------------------------------------------------
-    -- Gather everything for ranking
-    -----------------------------------------------------------------
+    -- Gather features for ranking inside buckets
     INSERT INTO _trial_ranked
     SELECT
       ts.school, ts.w, ts.l, ts.t, ts.pa, ts.win_pct, ts.base_bucket,
@@ -353,9 +390,7 @@ BEGIN
     LEFT JOIN _trial_step2_arr  s2 USING (school, base_bucket)
     LEFT JOIN _trial_step4_arr  s4 USING (school, base_bucket);
 
-    -----------------------------------------------------------------
-    -- Map buckets to absolute place ranges and split ties evenly
-    -----------------------------------------------------------------
+    -- Map buckets to absolute place ranges
     INSERT INTO _bucket_sizes
     SELECT base_bucket, COUNT(*) FROM _trial_ranked GROUP BY base_bucket;
 
@@ -365,6 +400,7 @@ BEGIN
                  ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0)
     FROM _bucket_sizes;
 
+    -- Split any remaining ties evenly across their covered slots
     WITH numbered AS (
       SELECT
         tr.school, tr.base_bucket, tr.h2h_pts, tr.h2h_pd_capped,
@@ -379,7 +415,9 @@ BEGIN
                    tr.pa ASC,
                    tr.school
         ) AS row_in_bucket,
-        COUNT(*) OVER (PARTITION BY tr.base_bucket, tr.h2h_pts, tr.step2_arr, tr.h2h_pd_capped, tr.step4_arr, tr.pa) AS grp_sz
+        COUNT(*) OVER (
+          PARTITION BY tr.base_bucket, tr.h2h_pts, tr.step2_arr, tr.h2h_pd_capped, tr.step4_arr, tr.pa
+        ) AS grp_sz
       FROM _trial_ranked tr
       JOIN _bucket_offsets bo USING (base_bucket)
     )
@@ -391,7 +429,7 @@ BEGIN
     FROM numbered
     GROUP BY school, start_place;
 
-    -- Credit playoff/places (1..4)
+    -- Credit 1..4 slots
     UPDATE _odds o
     SET first_ct  = first_ct  + CASE WHEN tp.first_slot <= 1 AND 1 <= tp.last_slot THEN 1 ELSE 0 END,
         second_ct = second_ct + CASE WHEN tp.first_slot <= 2 AND 2 <= tp.last_slot THEN 1 ELSE 0 END,
@@ -480,6 +518,5 @@ BEGIN
     (final_odds_playoffs <= 0.001) AS eliminated
   FROM renorm
   ORDER BY region, final_odds_playoffs DESC, school;
-
 END;
 $$;

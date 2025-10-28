@@ -1,0 +1,715 @@
+=== Region 1-1A ===
+Region 1-1A
+
+1 Seed:
+87% Biggersville
+12% Tupelo Christian
+
+2 Seed:
+50% Smithville
+25% Tupelo Christian
+12% Biggersville
+12% Thrasher
+
+3 Seed:
+49% Tupelo Christian
+38% Smithville
+14% Thrasher
+
+4 Seed:
+74% Thrasher
+14% Tupelo Christian
+12% Smithville
+
+Eliminated:
+None
+
+=== Region 2-1A ===
+Region 2-1A
+
+1 Seed:
+74% Falkner
+14% H. W. Byers
+12% Potts Camp
+
+2 Seed:
+50% Potts Camp
+49% H. W. Byers
+1% Falkner
+
+3 Seed:
+38% Potts Camp
+25% Ashland
+25% Falkner
+12% H. W. Byers
+
+4 Seed:
+75% Ashland
+25% H. W. Byers
+
+Eliminated:
+None
+
+=== Region 3-1A ===
+Region 3-1A
+
+1 Seed:
+50% Calhoun City
+50% West Lowndes
+
+2 Seed:
+50% Calhoun City
+50% West Lowndes
+
+3 Seed:
+50% Okolona
+50% Vardaman
+
+4 Seed:
+50% Okolona
+50% Vardaman
+
+Eliminated:
+None
+
+=== Region 4-1A ===
+Region 4-1A
+
+1 Seed:
+50% Leflore County
+50% West Tallahatchie
+
+2 Seed:
+50% Leflore County
+50% West Tallahatchie
+
+3 Seed:
+50% Coffeeville
+50% French Camp
+
+4 Seed:
+50% Coffeeville
+50% French Camp
+
+Eliminated:
+None
+
+=== Region 5-1A ===
+Region 5-1A
+
+1 Seed:
+100% Nanih Waiya
+
+2 Seed:
+63% Leake County
+25% Noxapater
+12% Ethel
+
+3 Seed:
+45% Ethel
+38% Leake County
+17% Noxapater
+
+4 Seed:
+45% Noxapater
+38% Sebastopol
+17% Ethel
+
+Eliminated:
+McAdams
+
+=== Region 6-1A ===
+Region 6-1A
+
+1 Seed:
+75% Simmons
+25% South Delta
+
+2 Seed:
+75% South Delta
+25% Simmons
+
+3 Seed:
+62% Shaw
+25% West Bolivar
+12% Riverside
+
+4 Seed:
+62% West Bolivar
+25% Shaw
+12% Riverside
+
+Eliminated:
+None
+
+=== Region 7-1A ===
+Region 7-1A
+
+1 Seed:
+50% Bogue Chitto
+50% Salem
+
+2 Seed:
+50% Bogue Chitto
+50% Salem
+
+3 Seed:
+50% Mount Olive
+50% West Lincoln
+
+4 Seed:
+50% Mount Olive
+50% West Lincoln
+
+Eliminated:
+None
+
+=== Region 8-1A ===
+Region 8-1A
+
+1 Seed:
+75% Taylorsville
+25% Lumberton
+
+2 Seed:
+73% Stringer
+25% Taylorsville
+2% Lumberton
+
+3 Seed:
+73% Lumberton
+27% Stringer
+
+4 Seed:
+100% Richton
+
+Eliminated:
+Resurrection
+
+=== Region 1-2A ===
+Region 1-2A
+
+1 Seed:
+88% Baldwyn
+12% Hamilton
+
+2 Seed:
+50% Hatley
+25% Hamilton
+12% Baldwyn
+12% Walnut
+
+3 Seed:
+49% Hamilton
+38% Hatley
+14% Walnut
+
+4 Seed:
+74% Walnut
+14% Hamilton
+12% Hatley
+
+Eliminated:
+None
+
+=== Region 2-2A ===
+Region 2-2A
+
+1 Seed:
+100% Water Valley
+
+2 Seed:
+100% Myrtle
+
+3 Seed:
+56% Strayhorn
+44% East Union
+
+4 Seed:
+56% East Union
+31% Bruce
+12% Strayhorn
+
+Eliminated:
+None
+
+=== Region 3-2A ===
+Region 3-2A
+
+1 Seed:
+100% Charleston
+
+2 Seed:
+100% Northside
+
+3 Seed:
+50% J Z George
+50% Leland
+
+4 Seed:
+50% J Z George
+50% Leland
+
+Eliminated:
+M. S. Palmer
+
+=== Region 4-2A ===
+Region 4-2A
+
+1 Seed:
+100% East Webster
+
+2 Seed:
+79% Kemper County
+21% Philadelphia
+
+3 Seed:
+50% Velma Jackson
+29% Philadelphia
+21% Kemper County
+
+4 Seed:
+50% Velma Jackson
+50% Philadelphia
+
+Eliminated:
+Eupora
+
+=== Region 5-2A ===
+Region 5-2A
+
+1 Seed:
+75% Lake
+12% Pelahatchie
+12% Scott Central
+
+2 Seed:
+50% Scott Central
+50% Pelahatchie
+
+3 Seed:
+38% Pelahatchie
+37% Scott Central
+25% Lake
+
+4 Seed:
+100% Newton
+
+Eliminated:
+Puckett
+
+=== Region 6-2A ===
+Region 6-2A
+
+1 Seed:
+50% Heidelberg
+50% Clarkdale
+
+2 Seed:
+50% Clarkdale
+50% Heidelberg
+
+3 Seed:
+100% Bay Springs
+
+4 Seed:
+50% Mize
+50% Enterprise Clarke
+
+Eliminated:
+None
+
+=== Region 7-2A ===
+Region 7-2A
+
+1 Seed:
+100% Wesson
+
+2 Seed:
+50% Amite County
+50% Loyd Star
+
+3 Seed:
+50% Amite County
+50% Loyd Star
+
+4 Seed:
+50% Enterprise Lincoln
+50% Wilkinson County
+
+Eliminated:
+None
+
+=== Region 8-2A ===
+Region 8-2A
+
+1 Seed:
+50% East Marion
+50% North Forrest
+
+2 Seed:
+50% Collins
+50% North Forrest
+
+3 Seed:
+50% Collins
+25% East Marion
+25% Perry Central
+
+4 Seed:
+50% Sacred Heart
+25% East Marion
+25% Perry Central
+
+Eliminated:
+None
+
+=== Region 1-3A ===
+Region 1-3A
+
+1 Seed:
+75% Kossuth
+25% Booneville
+
+2 Seed:
+50% Booneville
+25% Kossuth
+25% Alcorn Central
+
+3 Seed:
+38% Belmont
+25% Alcorn Central
+25% Booneville
+12% Mantachie
+
+4 Seed:
+38% Mantachie
+38% Alcorn Central
+25% Belmont
+
+Eliminated:
+None
+
+=== Region 2-3A ===
+Region 2-3A
+
+1 Seed:
+75% Coahoma County
+25% Independence
+
+2 Seed:
+71% North Panola
+25% Coahoma County
+4% Independence
+
+3 Seed:
+71% Independence
+25% Holly Springs
+4% North Panola
+
+4 Seed:
+75% Holly Springs
+25% North Panola
+
+Eliminated:
+None
+
+=== Region 3-3A ===
+Region 3-3A
+
+1 Seed:
+100% Humphreys County
+
+2 Seed:
+50% Thomas E. Edwards
+50% Yazoo County
+
+3 Seed:
+50% Thomas E. Edwards
+50% Yazoo County
+
+4 Seed:
+100% O’Bannon
+
+Eliminated:
+Amanda Elzy
+
+=== Region 4-3A ===
+Region 4-3A
+
+1 Seed:
+50% Aberdeen
+25% Noxubee County
+25% Winona
+
+2 Seed:
+75% Winona
+25% Noxubee County
+
+3 Seed:
+50% Choctaw County
+50% Noxubee County
+
+4 Seed:
+50% Aberdeen
+50% Choctaw County
+
+Eliminated:
+Nettleton
+
+=== Region 5-3A ===
+Region 5-3A
+
+1 Seed:
+100% Union
+
+2 Seed:
+100% Quitman
+
+3 Seed:
+100% Southeast Lauderdale
+
+4 Seed:
+100% Pisgah
+
+Eliminated:
+St. Andrew’s
+
+=== Region 6-3A ===
+Region 6-3A
+
+1 Seed:
+100% Raleigh
+
+2 Seed:
+50% Magee
+50% Seminary
+
+3 Seed:
+50% Magee
+50% Seminary
+
+4 Seed:
+100% Jefferson Davis County
+
+Eliminated:
+McLaurin
+
+=== Region 7-3A ===
+Region 7-3A
+
+1 Seed:
+50% Franklin County
+25% Hazlehurst
+25% Jefferson County
+
+2 Seed:
+50% Hazlehurst
+44% Franklin County
+6% Jefferson County
+
+3 Seed:
+69% Jefferson County
+25% Hazlehurst
+6% Franklin County
+
+4 Seed:
+100% Port Gibson
+
+Eliminated:
+Crystal Springs
+
+=== Region 8-3A ===
+Region 8-3A
+
+1 Seed:
+100% West Marion
+
+2 Seed:
+50% Presbyterian Christian
+50% Tylertown
+
+3 Seed:
+50% Presbyterian Christian
+50% Tylertown
+
+4 Seed:
+100% St. Patrick
+
+Eliminated:
+St. Stanislaus
+
+=== Region 1-4A ===
+Region 1-4A
+
+1 Seed:
+71% Corinth
+29% New Albany
+
+2 Seed:
+38% North Pontotoc
+33% New Albany
+29% Corinth
+
+3 Seed:
+38% New Albany
+33% North Pontotoc
+29% Tishomingo County
+
+4 Seed:
+71% Tishomingo County
+29% North Pontotoc
+
+Eliminated:
+South Pontotoc
+
+=== Region 2-4A ===
+Region 2-4A
+
+1 Seed:
+100% Itawamba Agricultural
+
+2 Seed:
+100% Shannon
+
+3 Seed:
+100% Houston
+
+4 Seed:
+100% Amory
+
+Eliminated:
+Mooreville
+
+=== Region 3-4A ===
+Region 3-4A
+
+1 Seed:
+73% Clarksdale
+27% Rosa Fort
+
+2 Seed:
+71% Senatobia
+27% Clarksdale
+2% Rosa Fort
+
+3 Seed:
+71% Rosa Fort
+25% Ripley
+4% Senatobia
+
+4 Seed:
+75% Ripley
+25% Senatobia
+
+Eliminated:
+Byhalia
+
+=== Region 4-4A ===
+Region 4-4A
+
+1 Seed:
+81% Louisville
+19% Kosciusko
+
+2 Seed:
+81% Kosciusko
+15% Louisville
+4% Greenwood
+
+3 Seed:
+96% Greenwood
+4% Louisville
+
+4 Seed:
+50% Gentry
+50% Yazoo City
+
+Eliminated:
+None
+
+=== Region 5-4A ===
+Region 5-4A
+
+1 Seed:
+100% Leake Central
+
+2 Seed:
+100% Newton County
+
+3 Seed:
+50% Choctaw Central
+50% West Lauderdale
+
+4 Seed:
+50% Choctaw Central
+50% West Lauderdale
+
+Eliminated:
+Northeast Lauderdale
+
+=== Region 6-4A ===
+Region 6-4A
+
+1 Seed:
+50% Forest
+50% Morton
+
+2 Seed:
+50% Forest
+50% Morton
+
+3 Seed:
+75% Mendenhall
+25% Raymond
+
+4 Seed:
+75% Richland
+25% Mendenhall
+
+Eliminated:
+None
+
+=== Region 7-4A ===
+Region 7-4A
+
+1 Seed:
+62% Columbia
+37% Poplarville
+
+2 Seed:
+37% Poplarville
+37% Columbia
+25% McComb
+
+3 Seed:
+37% McComb
+37% South Pike
+25% Poplarville
+
+4 Seed:
+62% South Pike
+37% McComb
+
+Eliminated:
+Lawrence County
+
+=== Region 8-4A ===
+Region 8-4A
+
+1 Seed:
+100% Pass Christian
+
+2 Seed:
+50% Forrest County Agricultural
+50% Greene County
+
+3 Seed:
+50% Forrest County Agricultural
+50% Greene County
+
+4 Seed:
+100% Moss Point
+
+Eliminated:
+Bay

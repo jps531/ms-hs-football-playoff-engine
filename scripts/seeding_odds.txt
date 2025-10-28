@@ -1,0 +1,21 @@
+Region 6-3A
+
+1 Seed:
+100% Raleigh
+
+2 Seed:
+50% Magee
+50% Seminary
+
+3 Seed:
+50% Magee
+50% Seminary
+
+4 Seed:
+100% Jefferson Davis County
+
+5 Seed (Out):
+100% McLaurin
+
+Eliminated:
+McLaurin
