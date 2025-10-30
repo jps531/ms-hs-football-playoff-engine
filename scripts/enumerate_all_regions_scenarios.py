@@ -28,9 +28,9 @@ except Exception as e:
 
 try:
     # Import the enumeration function from your main simulator module
-    from simulate_region_finish_odds_enum_with_scenarios import enumerate_region
+    from simulate_region_finish import enumerate_region
 except Exception as e:
-    print("ERROR: Could not import enumerate_region from simulate_region_finish_odds_enum_with_scenarios.py")
+    print("ERROR: Could not import enumerate_region from simulate_region_finish.py")
     print("Make sure that file is in the same directory or on your PYTHONPATH.")
     raise
 

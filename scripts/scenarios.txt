@@ -1,24 +1,64 @@
-Region 6-3A
+Region 1-4A
 
 1 Seed:
-100% Raleigh
+65% Corinth
+  - Corinth Win over New Albany
+  OR
+  - New Albany Win over Corinth by < 8 points
+    AND North Pontotoc Win over Tishomingo County
+
+35% New Albany
+  - New Albany Win over Corinth
+    AND Tishomingo County Win over North Pontotoc
+  OR
+  - New Albany Win over Corinth by ≥ 8 points
 
 2 Seed:
-50% Magee
-  - Magee Win over Seminary
+40% New Albany
+  - Corinth Win over New Albany
+    AND Tishomingo County Win over North Pontotoc
+  OR
+  - New Albany Win over Corinth by < 8 points
 
-50% Seminary
-  - Seminary Win over Magee
+35% Corinth
+  - New Albany Win over Corinth
+    AND Tishomingo County Win over North Pontotoc
+  OR
+  - New Albany Win over Corinth by ≥ 8 points
+
+25% North Pontotoc
+  - Corinth Win over New Albany
+    AND North Pontotoc Win over Tishomingo County
 
 3 Seed:
-50% Magee
-  - Seminary Win over Magee
+40% North Pontotoc
+  - New Albany Win over Corinth
+    AND North Pontotoc Win over Tishomingo County
+  OR
+  - Tishomingo County Win over North Pontotoc by < 8 points
 
-50% Seminary
-  - Magee Win over Seminary
+35% Tishomingo County
+  - New Albany Win over Corinth
+    AND Tishomingo County Win over North Pontotoc
+  OR
+  - Tishomingo County Win over North Pontotoc by ≥ 8 points
+
+25% New Albany
+  - Corinth Win over New Albany
+    AND North Pontotoc Win over Tishomingo County
 
 4 Seed:
-100% Jefferson Davis County
+65% Tishomingo County
+  - Corinth Win over New Albany
+    AND Tishomingo County Win over North Pontotoc by < 8 points
+  OR
+  - North Pontotoc Win over Tishomingo County
+
+35% North Pontotoc
+  - New Albany Win over Corinth
+    AND Tishomingo County Win over North Pontotoc
+  OR
+  - Tishomingo County Win over North Pontotoc by ≥ 8 points
 
 Eliminated:
-McLaurin
+South Pontotoc
