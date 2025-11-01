@@ -11,4 +11,17 @@ A web application that calculates standings and playoff scenarios for Mississipp
 2. Do a "Quick Run" of the **Regions Data Pipeline**
 3. Do a "Quick Run" of the **MaxPreps Data Pipeline**
 4. Do a "Quick Run" of the **School Info Data Pipeline**
-5. 4. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline**
+5. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline**
+
+## Debugging
+
+Run all region scenarios:
+
+`python enumerate_all_regions_scenarios.py --season 2025 --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball"`
+
+Run a specific region scenario:
+
+`python simulate_region_finish.py \                                                                 
+  --class 1 --region 8 --season 2025 \
+  --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball" \
+  --out-scenarios "scenarios.txt"`

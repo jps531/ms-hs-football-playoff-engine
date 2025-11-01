@@ -39,7 +39,7 @@ Step 6 – Coin flip:
 """
 
 from __future__ import annotations
-import argparse, json, math, os
+import argparse, json, math, os, re
 from itertools import product
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -90,52 +90,60 @@ def fetch_division(conn, clazz: int, region: int, season: int) -> List[str]:
 def fetch_completed_pairs(conn, teams: List[str], season: int) -> List[CompletedGame]:
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT school, opponent, result, points_for, points_against "
+            "SELECT school, opponent, date, result, points_for, points_against "
             "FROM games "
             "WHERE season=%s AND final=TRUE AND region_game=TRUE "
-            "AND school = ANY(%s) AND opponent = ANY(%s)",
+            "  AND school = ANY(%s) AND opponent = ANY(%s)",
             (season, teams, teams),
         )
         rows = cur.fetchall()
 
-    # Aggregate completed meetings per pair (a,b) **counting each game once**
-    tmp: Dict[Tuple[str, str], Dict[str, int]] = {}
-    for school, opp, result, pf, pa in rows:
-        a, b, _ = normalize_pair(school, opp)
+    # Deduplicate by *game* key (a,b,date) where a<b (lexicographic).
+    # Prefer the row where school==a (lex-first) if it exists; otherwise use the b-row inverted.
+    by_game: Dict[Tuple[str, str, str], Dict[str, int] | Tuple[str, ...]] = {}
 
-        # Process **only** the lexicographically-first school's row for this game.
-        # This avoids double-counting when both (A vs B) and (B vs A) rows exist.
-        if school != a:
-            continue
+    for school, opp, date, result, pf, pa in rows:
+        a, b, _sign = normalize_pair(school, opp)  # a<b
+        gkey = (a, b, date)
 
-        d = tmp.setdefault((a, b), {"res_a": 0, "pd_a": 0, "pa_a": 0, "pa_b": 0})
+        # Compute contributions from the perspective of team 'a' (lex-first)
+        if school == a:
+            # from a's row directly
+            res_a = 1 if result == 'W' else (-1 if result == 'L' else 0)
+            pd_a  = (pf - pa) if (pf is not None and pa is not None) else 0
+            pa_a  = (pa or 0)
+            pa_b  = (pf or 0)
 
-        # Result contribution for Step 1, from A’s perspective.
-        # (Assumes result is from the row's school's perspective.)
-        if result == 'W':
-            d["res_a"] += 1     # A (school==a) beat B
-        elif result == 'L':
-            d["res_a"] -= 1     # A lost to B
+            # Always prefer the a-row: overwrite any prior b-row for this (a,b,date)
+            by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 1}
+
         else:
-            # Allow 'T' or other tie markers to count as split
-            d["res_a"] += 0
+            # row is from b's perspective; invert to 'a'
+            res_a = -1 if result == 'W' else (1 if result == 'L' else 0)
+            pd_a  = (-(pf - pa)) if (pf is not None and pa is not None) else 0
+            pa_a  = (pf or 0)  # a allowed b's points_for
+            pa_b  = (pa or 0)  # b allowed a's points_for
 
-        # Margins + PA for Steps 3 & 5 (all from A’s perspective, counted once)
-        if pf is not None and pa is not None:
-            # A’s point differential vs B for this game
-            d["pd_a"] += (pf - pa)
+            prev = by_game.get(gkey)
+            # Only store if we don't already have an a-row for this game
+            if not prev or (isinstance(prev, dict) and not prev.get("has_a")):
+                by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 0}
 
-            # Points allowed by A and B in this game:
-            #  - A allowed 'pa' (its points_against)
-            #  - B allowed 'pf' (A’s points_for)
-            d["pa_a"] += pa
-            d["pa_b"] += pf
+    # Now aggregate per pair (a,b) across dates (in case there were multiple meetings)
+    pair_totals: Dict[Tuple[str, str], Dict[str, int]] = {}
+    for (a, b, _date), vals in by_game.items():
+        d = pair_totals.setdefault((a, b), {"res_a": 0, "pd_a": 0, "pa_a": 0, "pa_b": 0})
+        d["res_a"] += vals["res_a"] # type: ignore
+        d["pd_a"]  += vals["pd_a"] # type: ignore
+        d["pa_a"]  += vals["pa_a"] # type: ignore
+        d["pa_b"]  += vals["pa_b"] # type: ignore
 
     out: List[CompletedGame] = []
-    for (a, b), v in tmp.items():
-        # Final head-to-head sign for the season between a and b
-        res_a = 1 if v["res_a"] > 0 else (-1 if v["res_a"] < 0 else 0)
-        out.append(CompletedGame(a, b, res_a, v["pd_a"], v["pa_a"], v["pa_b"]))
+    for (a, b), v in pair_totals.items():
+        # Collapse res_a to {-1, 0, +1} for the season series (win/loss/split from 'a' pov)
+        res_a_sign = 1 if v["res_a"] > 0 else (-1 if v["res_a"] < 0 else 0)
+        out.append(CompletedGame(a, b, res_a_sign, v["pd_a"], v["pa_a"], v["pa_b"]))
+
     return out
 
 def fetch_remaining_pairs(conn, teams: List[str], season: int) -> List[RemainingGame]:
@@ -636,41 +644,79 @@ def unique_intra_bucket_games(buckets,remaining):
 
 
 # ---------- Boolean minimization helpers (for readable scenarios) ----------
-def minimize_minterms(minterms):
-    """Simplify minterms by absorption/combination. Logic unchanged from previous versions."""
-    terms={frozenset(m.items()) for m in minterms}
-    changed=True
+def minimize_minterms(minterms, allow_combine=True):
+    """
+    Simplify minterms by absorption (always) and optionally by one-variable combination.
+    With allow_combine=True, we combine only when the differing variable's matchup
+    is ALSO represented by another variable in BOTH terms (so we don't erase that matchup).
+    """
+    terms = {frozenset(m.items()) for m in minterms}
+
+    def _matchup_of(var: str) -> str:
+        # Normalize “A>B_GE8” and “A>B” to a canonical matchup key "A>B" (lexicographic).
+        if "_GE" in var:
+            base, _ = var.split("_GE", 1)
+        else:
+            base = var
+        a, b = base.split(">", 1)
+        aa, bb = (a, b) if a <= b else (b, a)
+        return f"{aa}>{bb}"
+
+    changed = True
     while changed:
-        before=len(terms)
-        # absorption
-        to_remove=set()
-        lst=list(terms)
-        for i,a in enumerate(lst):
-            for j,b in enumerate(lst):
-                if i!=j and a.issuperset(b):
+        before = len(terms)
+
+        # --- Absorption: remove supersets
+        to_remove = set()
+        lst = list(terms)
+        for i, a in enumerate(lst):
+            for j, b in enumerate(lst):
+                if i != j and a.issuperset(b):
                     to_remove.add(a)
         if to_remove:
-            terms=terms - to_remove
-        # combine (one-variable differences)
-        lst=list(terms); n=len(lst); merged=set(); used=[False]*n
-        for i in range(n):
-            for j in range(i+1,n):
-                a=lst[i]; b=lst[j]
-                da=dict(a); db=dict(b)
-                keys=set(da.keys())|set(db.keys())
-                diffs=[k for k in keys if da.get(k,None)!=db.get(k,None)]
-                if len(diffs)==1:
-                    k=diffs[0]
-                    if k in da and k in db:
-                        new=dict(da); new.pop(k,None)
-                        merged.add(frozenset(new.items()))
-                        used[i]=used[j]=True
-        out=set()
-        for idx,t in enumerate(lst):
-            if not used[idx]: out.add(t)
-        out |= merged
-        terms=out
-        changed=(len(terms)!=before)
+            terms -= to_remove
+
+        if allow_combine:
+            # --- Combine: merge pairs that differ by exactly one variable,
+            # but only if each term also has another var for that same matchup.
+            lst = list(terms)
+            n = len(lst)
+            merged = set()
+            used = [False] * n
+
+            # Per-term matchup counts
+            from collections import Counter
+            term_matchup_counts = [
+                Counter(_matchup_of(k) for k in dict(t).keys())
+                for t in lst
+            ]
+
+            for i in range(n):
+                for j in range(i + 1, n):
+                    a = lst[i]; b = lst[j]
+                    da = dict(a); db = dict(b)
+                    keys = set(da.keys()) | set(db.keys())
+                    diffs = [k for k in keys if da.get(k) != db.get(k)]
+                    if len(diffs) == 1:
+                        k = diffs[0]
+                        mk = _matchup_of(k)
+
+                        # Require another variable from the same matchup in BOTH terms
+                        if term_matchup_counts[i][mk] >= 2 and term_matchup_counts[j][mk] >= 2:
+                            new = dict(da)
+                            new.pop(k, None)
+                            merged.add(frozenset(new.items()))
+                            used[i] = used[j] = True
+
+            out = set()
+            for idx, t in enumerate(lst):
+                if not used[idx]:
+                    out.add(t)
+            out |= merged
+            terms = out
+
+        changed = (len(terms) != before)
+
     return [dict(t) for t in terms]
 
 
@@ -776,12 +822,12 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             teams, completed, remaining, mask_for_dir,
                             margins=baseline_margins, base_margin_default=7, pa_win=pa_for_winner,
                         )
-                        baseline_seed_pos = {t: baseline_order.index(t) + 1 for t in teams}
 
                         print(f"[DEBUG THRESH] Pair {a} vs {b}, dir winner={winner}: baseline order = {baseline_order}")
 
-                        # Scan margins 1..12 for the same-direction winner
-                        found = None
+                        # --- inside enumerate_region(), where you currently compute `found` ---
+                        # Scan margins 1..12 for the same-direction winner and collect *all* change points
+                        orders_by_m = []
                         for m in range(1, 13):
                             test_margins = dict(base_margins)
                             test_margins[(a, b)] = m
@@ -789,18 +835,20 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                                 teams, completed, remaining, mask_for_dir,
                                 margins=test_margins, base_margin_default=7, pa_win=pa_for_winner,
                             )
-                            test_seed_pos = {t: test_order.index(t) + 1 for t in teams}
-                            if any(baseline_seed_pos[t] != test_seed_pos[t] for t in teams):
-                                found = m
-                                print(f"[DEBUG THRESH] Pair {a} vs {b}, dir winner={winner}: "
-                                      f"test=({winner} by {m}) -> threshold={found}: order = {test_order}")
-                                break
+                            # store a tuple for stable comparison
+                            orders_by_m.append(tuple(test_order))
 
-                        thresholds_dir[((a, b), winner)] = found
+                        change_points = []
+                        for m in range(2, 13):
+                            if orders_by_m[m-1] != orders_by_m[m-2]:
+                                # boundary between (m-1) and m
+                                change_points.append(m)
+
+                        # Save *all* thresholds (may be empty)
+                        thresholds_dir[((a, b), winner)] = change_points
 
                         # Helpful debug
-                        print(f"[DEBUG THRESH] Pair {a} vs {b}, dir winner={winner}: "
-                            f"baseline=({winner} by 7) -> threshold={found}")
+                        print(f"[DEBUG THRESH] Pair {a} vs {b}, dir winner={winner}: thresholds={change_points}")
 
             # 4) If no thresholds for this mask, resolve once; else split by thresholds that match the mask’s winners
             #    i.e., for each intra-bucket matchup we use the threshold for the *actual* winner in this mask
@@ -819,18 +867,21 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                 for team, (lo_seed, hi_seed) in slots.items():
                     scenario_minterms.setdefault(team, {}).setdefault(lo_seed, []).append(dict(var_assignment))
             else:
-                # Gather only the active thresholds (matching mask winners)
-                active_pairs = []
+                # --- Build interval sets per active pair (for the mask's actual winner) ---
+                # thresholds like [5, 8] => intervals [1,5), [5,8), [8,13)
+                interval_specs = []  # list of [ ((a,b), winner, [(lo,hi), ...]) ]
                 for rem_game in intra_bucket_games:
                     a, b = rem_game.a, rem_game.b
                     idx = rem_idx[(a, b)]
                     mask_winner = a if ((outcome_mask >> idx) & 1) == 1 else b
-                    t = thresholds_dir.get(((a, b), mask_winner))
-                    if t is not None:
-                        active_pairs.append(((a, b), mask_winner, t))
+                    tlist = thresholds_dir.get(((a, b), mask_winner))
+                    if tlist:
+                        bounds = [1] + sorted(tlist) + [13]
+                        intervals = [(bounds[i], bounds[i+1]) for i in range(len(bounds)-1)]
+                        interval_specs.append(((a, b), mask_winner, intervals))
 
-                if not active_pairs:
-                    # No active thresholds: resolve once with base_margins
+                if not interval_specs:
+                    # No intervals to branch on: resolve once with base_margins
                     final_order = resolve_standings_for_mask(
                         teams, completed, remaining, outcome_mask,
                         margins=base_margins, base_margin_default=7, pa_win=pa_for_winner,
@@ -844,30 +895,30 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     for team, (lo_seed, hi_seed) in slots.items():
                         scenario_minterms.setdefault(team, {}).setdefault(lo_seed, []).append(dict(var_assignment))
                 else:
-                    # Split only on the thresholds relevant to the mask’s winners
-                    # Build cartesian product of {<t, ≥t} for these active thresholds
+                    # Cartesian product across all intervals from all active pairs
                     from itertools import product
-                    for branch_bits in product([0, 1], repeat=len(active_pairs)):
+                    for interval_combo in product(*[spec[2] for spec in interval_specs]):
                         branch_margins = dict(base_margins)
                         branch_assignment = dict(var_assignment)
                         branch_weight = 1.0
 
-                        for ((a, b), winner, t), bit in zip(active_pairs, branch_bits):
+                        for ((a, b), winner, intervals_for_pair), (lo, hi) in zip(interval_specs, interval_combo):
+                            # Choose a representative margin in [lo,hi): we’ll use 'lo' deterministically
+                            chosen_m = lo
+                            branch_margins[(a, b)] = chosen_m
 
-                            # Use the ACTUAL winner’s orientation for the variable name
+                            # Encode the interval for phrasing:
+                            #   GE lo  -> True
+                            #   GE hi  -> False (meaning < hi)  (only if hi <= 12)
                             opp = b if winner == a else a
-                            var_margin_flag = f"{winner}>{opp}_GE{t}"
+                            ge_lo_key = f"{winner}>{opp}_GE{lo}"
+                            branch_assignment[ge_lo_key] = True
+                            if hi <= 12:
+                                ge_hi_key = f"{winner}>{opp}_GE{hi}"
+                                branch_assignment[ge_hi_key] = False
 
-                            if bit == 1:
-                                # ≥ t branch
-                                branch_margins[(a, b)] = t
-                                branch_assignment[var_margin_flag] = True
-                                branch_weight *= (13 - t) / 12.0
-                            else:
-                                # < t branch
-                                branch_margins[(a, b)] = max(1, t - 1)
-                                branch_assignment[var_margin_flag] = False
-                                branch_weight *= (t - 1) / 12.0
+                            # Probability = length of interval / 12
+                            branch_weight *= (hi - lo) / 12.0
 
                         # Resolve this branch
                         final_order = resolve_standings_for_mask(
@@ -950,42 +1001,84 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
             f.write("\n".join(lines) + "\n")
         print(f"Wrote seeding odds text: {out_path}")
 
+    def _normalize_clause_text(s: str) -> str:
+        """
+        Presentation-only cleanup:
+        - 'by ≥ 1 and < k points' -> 'by < k points'
+        - 'by ≥ 1 points' -> (drop; becomes base win)
+        - 'by < 13 points' -> (drop; base win covers all wins)
+        - 'by ≥ 1 and < 13 points' -> (drop; base win)
+        Also trims extra whitespace after edits.
+        """
+        # ≥1 and <k  -> <k
+        s = re.sub(r" by ≥ 1 and < (\d+) points", r" by < \1 points", s)
+
+        # ≥1 only -> drop margin entirely (base win)
+        s = re.sub(r" by ≥ 1 points", "", s)
+
+        # <13 -> base win
+        s = re.sub(r" by < 13 points", "", s)
+
+        # ≥1 and <13 -> base win
+        s = re.sub(r" by ≥ 1 and < 13 points", "", s)
+
+        return " ".join(s.split())
+
     # ----- Optional scenarios text output (unchanged logic; clearer helpers) -----
     if out_scenarios:
         def var_phrase(var: str, val: bool, base_lookup: dict) -> str:
             """
-            Turn a variable into a human phrase.
-            - base_lookup contains base booleans like "A>B": True/False.
-            - Handles when margin flags are stored in the opposite orientation of the base var.
+            Human phrase for a boolean variable.
+            Supports:
+            - base winner:  "A>B"
+            - threshold flags: "A>B_GE7" (True => ≥7, False => <7)
+            Also collapses paired flags (GE lo == True and GE hi == False) into:
+            "A Win over B by ≥ lo and < hi points"
             """
+            def winner_loser_for_base(base: str, vlookup: dict, fallback_val: Optional[bool]) -> Tuple[str, str]:
+                a, b = base.split(">", 1)
+                base_val = vlookup.get(base)
+                if base_val is None:
+                    flip = f"{b}>{a}"
+                    flip_val = vlookup.get(flip)
+                    if flip_val is not None:
+                        # flip_val True means (b beats a)
+                        return ((b, a) if flip_val else (a, b))
+                    # last resort: assume fallback orientation
+                    return ((a, b) if (fallback_val is True) else (b, a))
+                else:
+                    return ((a, b) if base_val else (b, a))
+
             if "_GE" in var:
                 base, ge = var.split("_GE", 1)
-                a, b = base.split(">", 1)
+                try:
+                    thr = int(ge)
+                except Exception:
+                    thr = None
 
-                # Try exact base first
-                base_val = base_lookup.get(base)
-                if base_val is None:
-                    # Try flipped orientation
-                    flip = f"{b}>{a}"
-                    flip_val = base_lookup.get(flip)
-                    if flip_val is not None:
-                        # flip_val == True means (b beats a)
-                        # flip_val == False means (a beats b)
-                        winner, loser = (b, a) if flip_val else (a, b)
-                    else:
-                        # Last-resort fallback (should be rare after minimization)
-                        # assume lexicographic "a>b" True implies a wins; else b wins
-                        winner, loser = (a, b) if val else (b, a)
+                # Try to detect an interval using the paired hi flag:
+                if thr is not None and val is True:
+                    # look for a "GE hi" False for the same base (means "< hi")
+                    hi_candidates = []
+                    for k, v in base_lookup.items():
+                        if k.startswith(base + "_GE"):
+                            try:
+                                kthr = int(k.split("_GE", 1)[1])
+                            except Exception:
+                                continue
+                            if kthr > thr and v is False:
+                                hi_candidates.append(kthr)
+                    if hi_candidates:
+                        hi = min(hi_candidates)
+                        w, l = winner_loser_for_base(base, base_lookup, True)
+                        return f"{w} Win over {l} by ≥ {thr} and < {hi} points"
+
+                # Otherwise render single-threshold clause
+                w, l = winner_loser_for_base(base, base_lookup, val)
+                if val:
+                    return f"{w} Win over {l} by ≥ {ge} points"
                 else:
-                    # base_val == True means (a beats b)
-                    # base_val == False means (b beats a)
-                    winner, loser = (a, b) if base_val else (b, a)
-
-                return (
-                    f"{winner} Win over {loser} by ≥ {ge} points"
-                    if val else
-                    f"{winner} Win over {loser} by < {ge} points"
-                )
+                    return f"{w} Win over {l} by < {ge} points"
 
             # Base (non-margin) phrasing
             a, b = var.split(">", 1)
@@ -1045,7 +1138,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
         for team, seed_map in scenario_minterms.items():
             for seed_num, minterms in seed_map.items():
                 mins = [dict(m) for m in minterms]
-                mins = minimize_minterms(mins)  # simplify
+                mins = minimize_minterms(mins, allow_combine=True)  # simplify
                 minimized[seed_num][team] = mins
 
         lines = [f"Region {region}-{clazz}A", ""]
@@ -1075,50 +1168,98 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             return f"{b}>{a}"
                         return base
 
-                    # Collect margin flags keyed by BOTH orientations for safety
-                    margin_map = {}
-                    base_pairs = []
+                    # Build matchup -> {
+                    #   "base": [(var,val), ...]  # usually 0 or 1
+                    #   "ge_true": set[int],      # thresholds with GEk == True
+                    #   "ge_false": set[int],     # thresholds with GEk == False (meaning "< k")
+                    # }
+                    matchups = defaultdict(lambda: {"base": [], "ge_true": set(), "ge_false": set(), "orient": None})
+                    def canon_key(a,b):
+                        aa, bb = (a, b) if a <= b else (b, a)
+                        return f"{aa}>{bb}"
+
                     for var, val in minterm_dict.items():
                         if "_GE" in var:
-                            base, _ = var.split("_GE", 1)
-                            margin_map[base] = (var, val)
-                            margin_map[flip_base(base)] = (var, val)  # allow reversed lookup
+                            base, ge = var.split("_GE", 1)
+                            a, b = base.split(">", 1)
+                            key = canon_key(a, b)
+                            # Track the *printed* orientation (winner>loser) based on the base winner in this minterm
+                            base_val = minterm_dict.get(base)
+                            if base_val is None:
+                                flip = f"{b}>{a}"
+                                flip_val = minterm_dict.get(flip)
+                                if flip_val is not None:
+                                    winner, loser = (b, a) if flip_val else (a, b)
+                                else:
+                                    # fallback: keep "a>b" orientation; we'll still word it correctly below
+                                    winner, loser = a, b
+                            else:
+                                winner, loser = (a, b) if base_val else (b, a)
+                            matchups[key]["orient"] = (winner, loser) # type: ignore
+
+                            thr = int(ge)
+                            if val:
+                                matchups[key]["ge_true"].add(thr) # type: ignore
+                            else:
+                                matchups[key]["ge_false"].add(thr) # type: ignore
                         else:
-                            base_pairs.append((var, val))
+                            a, b = var.split(">", 1)
+                            key = canon_key(a, b)
+                            matchups[key]["base"].append((var, val)) # type: ignore
+                            # If we haven’t set an orientation yet, set it now from the base
+                            if matchups[key]["orient"] is None:
+                                winner, loser = (a, b) if val else (b, a)
+                                matchups[key]["orient"] = (winner, loser) # type: ignore
 
                     clauses = []
-                    # If a margin flag exists for this matchup (in either orientation), skip the base clause
-                    for var, val in base_pairs:
-                        if var not in margin_map:
-                            clauses.append(var_phrase(var, val, minterm_dict))
-                    # Then add the single margin-qualified clause for each matchup
-                    used = set()
-                    for key, (mvar, mval) in margin_map.items():
-                        if mvar in used:
-                            continue
-                        clauses.append(var_phrase(mvar, mval, minterm_dict))
-                        used.add(mvar)# --- Stable clause ordering: by matchup priority, then comparator rank ---
-                    
-                    # Build a lookup: "A>B" -> position in boolean_game_vars
-                    matchup_index = {name: i for i, (name, _, _) in enumerate(boolean_game_vars)}
 
-                    def clause_sort_key(c: str):
-                        parsed = extract_pair(c)  # (a, b, kind, thr) or None
+                    # Emit one clause per matchup
+                    for key, info in matchups.items():
+                        (winner, loser) = info["orient"] # type: ignore
+                        # If we have any margin flags for this matchup, we prefer to render a single interval clause
+                        if info["ge_true"] or info["ge_false"]:
+                            # Lower bound = max(GE t that are True), default 1
+                            lo = max(info["ge_true"]) if info["ge_true"] else 1
+                            # Upper bound = min(GE t that are False), default 13 (open end)
+                            hi = min(info["ge_false"]) if info["ge_false"] else 13
+                            # Normalize nonsense (just in case)
+                            lo = max(1, lo)
+                            hi = max(lo+0, hi)
+
+                            # Apply housecleaning:
+                            # - If [1,13): that's just a plain win, so don't render any margin wording.
+                            # - If [1, k): render as "by < k points" (drop the ≥ 1 part).
+                            # - If [L, 13): render as "by ≥ L points" (only if L > 1).
+                            # - Else [L, k): "by ≥ L and < k points", but drop "≥ L" if L == 1.
+                            if lo == 1 and hi == 13:
+                                # fully open -> base win clause
+                                clauses.append(_normalize_clause_text(f"{winner} Win over {loser}"))
+                            elif lo == 1:
+                                clauses.append(_normalize_clause_text(f"{winner} Win over {loser} by < {hi} points"))
+                            elif hi == 13:
+                                clauses.append(_normalize_clause_text(f"{winner} Win over {loser} by ≥ {lo} points"))
+                            else:
+                                clauses.append(_normalize_clause_text(f"{winner} Win over {loser} by ≥ {lo} and < {hi} points"))
+                        else:
+                            # No margin flags recorded; emit the base clause (dedup later)
+                            # Prefer the base that matches the orientation, if present
+                            clauses.append(_normalize_clause_text(f"{winner} Win over {loser}"))
+
+                    # Order deterministically by matchup position and comparator rank (base first)
+                    matchup_index = {name: i for i, (name, _, _) in enumerate(boolean_game_vars)}
+                    def classify_clause(c: str):
+                        parsed = extract_pair(c)
                         if not parsed:
-                            # Non-game clause (shouldn't happen here), push to end deterministically
                             return (10**6, 99, c)
                         a, b, kind, thr = parsed
                         base = f"{a}>{b}"
-                        # normalize to lexicographic base (matches how you create var names)
                         aa, bb, _ = normalize_pair(a, b)
                         lex_base = f"{aa}>{bb}"
-                        # prefer exact base if present in boolean_game_vars, else its flipped lex base
                         idx = matchup_index.get(base, matchup_index.get(lex_base, 10**6))
-                        # comparator rank: base first (0), then ge (1), then lt (2)
                         comp_rank = 0 if kind == 'base' else (1 if kind == 'ge' else 2)
                         return (idx, comp_rank, c)
 
-                    clauses.sort(key=clause_sort_key)
+                    clauses = sorted(set(clauses), key=classify_clause)
                     return clauses
 
                 def block_sort_key(block_clauses: List[str]):
@@ -1147,34 +1288,267 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     while len(sig) < 2:
                         sig.append((10**6, 99))
                     return (*sig[0], *sig[1], len(block_clauses), " | ".join(ordered))
+                
+                def absorb_or_blocks(blocks: List[List[str]]) -> List[List[str]]:
+                    """Drop any block whose set of clauses is a strict superset of another block."""
+                    sets = [frozenset(b) for b in blocks]
+                    keep = [True] * len(blocks)
+                    for i in range(len(blocks)):
+                        if not keep[i]:
+                            continue
+                        for j in range(len(blocks)):
+                            if i == j or not keep[j]:
+                                continue
+                            # If i is a strict superset of j, drop i
+                            if sets[i] > sets[j]:
+                                keep[i] = False
+                                break
+                    return [blk for k, blk in enumerate(blocks) if keep[k]]
+                
+                def is_complement(p1, p2):
+                    """
+                    True iff p1 and p2 are logical complements for the *same underlying matchup key*.
+                    - BASE: (A>B, base) vs (B>A, base)  -> complements
+                    - MARGIN: same direction + same threshold, 'ge' vs 'lt' -> complements
+                    Everything else returns False.
+                    """
+                    if p1 is None or p2 is None:
+                        return False
+                    a1, b1, k1, t1 = p1
+                    a2, b2, k2, t2 = p2
+
+                    # Base complements (opposite directions)
+                    if k1 == 'base' and k2 == 'base':
+                        return (a1 == b2) and (b1 == a2)
+
+                    # Margin complements: same direction & threshold, ge vs lt
+                    if (a1 == a2) and (b1 == b2) and (t1 == t2) and {k1, k2} == {'ge', 'lt'}:
+                        return True
+
+                    return False
+
+
+                def reduce_tautology_blocks(blocks, extract_pair_fn, is_complement_fn):
+                    """
+                    Given a list of OR-blocks (each a List[str] of clauses), perform:
+                    - Pairwise tautology reduction: if blocks i and j differ by exactly two clauses
+                        that are complements (Y vs ¬Y), replace both with their intersection S.
+                    - Then re-run superset absorption.
+
+                    Returns a new list of blocks.
+                    """
+                    # Work on sets for easy comparisons
+                    block_sets = [frozenset(b) for b in blocks]
+                    changed = True
+
+                    while changed:
+                        changed = False
+                        n = len(block_sets)
+                        to_remove = set()
+                        to_add = []
+
+                        # ---- Tautology reduction: (S ∪ {Y}) OR (S ∪ {¬Y}) -> S
+                        for i in range(n):
+                            if i in to_remove: 
+                                continue
+                            for j in range(i + 1, n):
+                                if j in to_remove:
+                                    continue
+                                si = block_sets[i]
+                                sj = block_sets[j]
+                                inter = si & sj
+                                diff_i = list(si - sj)
+                                diff_j = list(sj - si)
+                                if len(diff_i) == 1 and len(diff_j) == 1:
+                                    p_i = extract_pair_fn(diff_i[0])
+                                    p_j = extract_pair_fn(diff_j[0])
+                                    if is_complement_fn(p_i, p_j):
+                                        # Replace both with intersection
+                                        to_remove.add(i); to_remove.add(j)
+                                        to_add.append(frozenset(inter))
+                                        changed = True
+
+                        if changed:
+                            # rebuild list: drop removed, add newly created S blocks
+                            block_sets = [s for idx, s in enumerate(block_sets) if idx not in to_remove]
+                            # avoid duplicates
+                            existing = set(block_sets)
+                            for s in to_add:
+                                if s not in existing:
+                                    block_sets.append(s)
+                                    existing.add(s)
+
+                        # ---- Superset absorption: drop any block that strictly contains another
+                        # (Do this every pass so we keep things minimal.)
+                        keep = [True] * len(block_sets)
+                        for i in range(len(block_sets)):
+                            if not keep[i]: 
+                                continue
+                            for j in range(len(block_sets)):
+                                if i == j or not keep[j]:
+                                    continue
+                                if block_sets[i] > block_sets[j]:  # strict superset
+                                    keep[i] = False
+                                    changed = True
+                                    break
+                        if changed:
+                            block_sets = [s for k, s in enumerate(block_sets) if keep[k]]
+
+                    # Convert back to lists and sort clauses deterministically
+                    out_blocks = [sorted(list(s)) for s in block_sets]
+                    return out_blocks
 
                 prepared = [(m, clauses_for_m(m)) for m in candidate_minterms]
                 prepared.sort(key=lambda t: block_sort_key(t[1]))
 
-                seen_pairs = set()
+                # --- NEW: tautology reduction + absorption across OR blocks ---
+                blocks_only = [c for _, c in prepared]
+                blocks_only = reduce_tautology_blocks(blocks_only, extract_pair, is_complement)
+
+                # Rebuild `prepared` with the reduced blocks; we don’t need minterms any more for printing
+                prepared = [(None, b) for b in blocks_only]
+
+                def _canon_matchup(a, b):
+                    aa, bb = (a, b) if a <= b else (b, a)
+                    return (aa, bb)
+
+                def _interval_of_clause(c):
+                    """Return (key=(aa,bb), dir='a>b'| 'b>a', interval) where interval is:
+                    - None for base (no margin), meaning 'any win' for that direction
+                    - (lo,hi) for 'a>b' with bounds per our phrasing rules
+                    """
+                    p = extract_pair(c)
+                    if not p:
+                        return None
+                    a, b, kind, thr = p
+                    key = _canon_matchup(a, b)
+                    if kind == 'base':
+                        # direction decided by text
+                        dir_ = 'a>b' if f"{a} Win over {b}" in c else 'b>a'
+                        return (key, dir_, None)
+                    # margin kinds: map to intervals we printed in clauses_for_m
+                    # We only ever print: "< k", "≥ L", or "≥ L and < k"
+                    # Parse them back:
+                    if " by < " in c:
+                        # a beats b by < k
+                        k = int(c.split(" by < ", 1)[1].split()[0])
+                        return (key, 'a>b', (1, k))
+                    if " by ≥ " in c and " and < " in c:
+                        rest = c.split(" by ≥ ", 1)[1]
+                        L = int(rest.split(" and < ", 1)[0])
+                        k = int(rest.split(" and < ", 1)[1].split()[0])
+                        return (key, 'a>b', (L, k))
+                    if " by ≥ " in c:
+                        L = int(c.split(" by ≥ ", 1)[1].split()[0])
+                        return (key, 'a>b', (L, 13))
+                    return None
+
+                def _coverage_collapse_blocks(blocks):
+                    """
+                    If a set of OR-blocks that share the same 'pivot' clauses (all *other* games)
+                    collectively covers *all* outcomes for some matchup M, then drop M from those blocks.
+
+                    Coverage rules:
+                    - Having a 'b>a' base clause covers the whole 'b wins' side.
+                    - Having 'a>b' intervals whose union is [1,13) covers the whole 'a wins' side.
+                    - If both sides are fully covered across the group, remove that matchup from all blocks.
+                    """
+                    # Group blocks by their pivot (block with clauses of matchup removed)
+                    from collections import defaultdict
+
+                    # Build per-block parsed forms
+                    parsed_blocks = []
+                    for blk in blocks:
+                        parsed = [_interval_of_clause(c) for c in blk]
+                        parsed_blocks.append(list(zip(blk, parsed)))
+
+                    # For every unordered matchup, try collapsing
+                    # Build list of all matchups appearing anywhere
+                    all_matchups = set()
+                    for blk in parsed_blocks:
+                        for (_c, p) in blk:
+                            if p:
+                                all_matchups.add(p[0])
+
+                    # Process each matchup independently
+                    for mkey in all_matchups:
+                        # Group blocks by 'pivot' (i.e., clauses NOT about this matchup)
+                        groups = defaultdict(list)
+                        for blk in parsed_blocks:
+                            pivot = tuple(sorted(c for (c, p) in blk if not p or p[0] != mkey))
+                            groups[pivot].append(blk)
+
+                        def union_intervals(intervals):
+                            if not intervals:
+                                return []
+                            xs = sorted(intervals)
+                            out = [list(xs[0])]
+                            for lo, hi in xs[1:]:
+                                if lo <= out[-1][1]:
+                                    out[-1][1] = max(out[-1][1], hi)
+                                else:
+                                    out.append([lo, hi])
+                            return [tuple(t) for t in out]
+
+                        # For each pivot group, check if coverage is full
+                        for pivot, gblks in groups.items():
+                            # Collect coverage over this matchup across these blocks
+                            a_side = []  # intervals of 'a>b' (in [1,13))
+                            b_covers = False  # any 'b>a' base present?
+                            for blk in gblks:
+                                for (c, p) in blk:
+                                    if not p or p[0] != mkey:
+                                        continue
+                                    _key, dir_, interval = p
+                                    if dir_ == 'b>a':
+                                        # base covers all 'b wins'
+                                        b_covers = True
+                                    elif dir_ == 'a>b':
+                                        if interval is None:
+                                            # base 'a wins' -> covers [1,13)
+                                            a_side = [(1, 13)]
+                                        else:
+                                            a_side.append(interval)
+
+                            # Normalize/union a-side intervals
+                            a_side = union_intervals(a_side)
+                            a_full = (len(a_side) == 1 and a_side[0] == (1, 13))
+
+                            if a_full and b_covers:
+                                # Full coverage: remove all clauses for this matchup from all blocks in the group
+                                for blk in gblks:
+                                    blk[:] = [(c, p) for (c, p) in blk if not p or p[0] != mkey]
+
+                    # Reconstruct and dedupe blocks
+                    out_blocks = []
+                    seen = set()
+                    for blk in parsed_blocks:
+                        text_blk = tuple(sorted(c for (c, _p) in blk))
+                        if text_blk not in seen:
+                            seen.add(text_blk)
+                            out_blocks.append(list(text_blk))
+                    return out_blocks
+                
+                # --- NEW: tautology reduction + absorption across OR blocks ---
+                blocks_only = [c for _, c in prepared]
+                blocks_only = reduce_tautology_blocks(blocks_only, extract_pair, is_complement)
+
+                # --- NEW: coverage collapse across blocks that partition a matchup ---
+                blocks_only = _coverage_collapse_blocks(blocks_only)
+
+                # After: blocks_only = _coverage_collapse_blocks(blocks_only)
+                blocks_only = [[_normalize_clause_text(c) for c in blk] for blk in blocks_only]
+
+                # remove any now-empty strings and dedupe
+                blocks_only = [sorted({c for c in blk if c}) for blk in blocks_only if any(c for c in blk)]
+
+                # Rebuild `prepared` with the reduced blocks; we don’t need minterms any more for printing
+                prepared = [(None, b) for b in blocks_only]
+
                 printed_any_block = False
                 for _, clauses in prepared:
-                    # Remove clauses that contradict any clause we’ve already printed
-                    cleaned = []
-                    for c in clauses:
-                        parsed = extract_pair(c)
-                        if parsed is None:
-                            cleaned.append(c)
-                            continue
-                        if any(is_opposite(parsed, prev) for prev in seen_pairs):
-                            continue
-                        cleaned.append(c)
-                    clauses = cleaned
                     if not clauses:
                         continue
-
-                    # Mark these clause pairs as seen
-                    for c in clauses:
-                        parsed = extract_pair(c)
-                        if parsed:
-                            seen_pairs.add(parsed)
-
-                    # Emit one OR-block
                     if printed_any_block:
                         lines.append("  OR")
                     lines.append(f"  - {clauses[0]}")
