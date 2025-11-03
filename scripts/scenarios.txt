@@ -1,42 +1,40 @@
-Region 4-4A
+Region 1-3A
 
 1 Seed:
-50% Louisville
-  - Louisville Win over Greenwood
-
-50% Kosciusko
-  - Greenwood Win over Louisville by < 9 points
-    AND Yazoo City Win over Gentry
-  OR
-  - Greenwood Win over Louisville by ≥ 9 points
-  OR
-  - Gentry Win over Yazoo City
+100% Kossuth
 
 2 Seed:
-50% Kosciusko
-  - Louisville Win over Greenwood
-
-33% Louisville
-  - Greenwood Win over Louisville by < 9 points
-
-17% Greenwood
-  - Greenwood Win over Louisville by ≥ 9 points
+100% Booneville
 
 3 Seed:
-83% Greenwood
-  - Louisville Win over Greenwood
+67% Belmont
+  - Kossuth Win over Alcorn Central
+    AND Mantachie Win over Belmont by < 9 points
   OR
-  - Greenwood Win over Louisville by < 9 points
+  - Belmont Win over Mantachie
 
-17% Louisville
-  - Greenwood Win over Louisville by ≥ 9 points
+25% Alcorn Central
+  - Alcorn Central Win over Kossuth
+    AND Mantachie Win over Belmont
+
+8% Mantachie
+  - Kossuth Win over Alcorn Central
+    AND Mantachie Win over Belmont by ≥ 9 points
 
 4 Seed:
-50% Gentry
-  - Gentry Win over Yazoo City
+50% Alcorn Central
+  - Belmont Win over Mantachie
 
-50% Yazoo City
-  - Yazoo City Win over Gentry
+42% Mantachie
+  - Alcorn Central Win over Kossuth
+    AND Mantachie Win over Belmont
+  OR
+  - Kossuth Win over Alcorn Central
+    AND Mantachie Win over Belmont by < 9 points
+
+8% Belmont
+  - Kossuth Win over Alcorn Central
+    AND Mantachie Win over Belmont by ≥ 9 points
 
 Eliminated:
 None

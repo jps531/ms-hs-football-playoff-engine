@@ -464,9 +464,7 @@ def resolve_bucket(
 
     print(f"[DEBUG] resolve_bucket: completed={completed}")
     print(f"[DEBUG] resolve_bucket: remaining={remaining}")
-    print(f"[DEBUG] resolve_bucket: outcome_mask={outcome_mask}")
     print(f"[DEBUG] resolve_bucket: margins={margins}")
-    print(f"[DEBUG] resolve_bucket: base_margin_default={base_margin_default}")
 
     # Precompute inputs used by steps
     h2h_pts, h2h_pd_cap, _ = build_h2h_maps(
@@ -642,6 +640,249 @@ def unique_intra_bucket_games(buckets,remaining):
                 seen.add(key); out.append(rem_game)
     return out
 
+
+
+def consolidate_opposites_and_remove_bases(candidate_minterms: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
+    """
+    1. Consolidate dictionaries that are identical except for one key whose
+       boolean values are opposite — removing that differing key.
+    2. Remove any base keys (e.g., 'A>B') when a GE variant (e.g., 'A>B_GE1') exists.
+    """
+    # --- Step 1: consolidate opposite pairs ---
+    consolidated = []
+    used = set()
+
+    for i, d1 in enumerate(candidate_minterms):
+        if i in used:
+            continue
+        merged = False
+        for j, d2 in enumerate(candidate_minterms[i+1:], start=i+1):
+            if j in used:
+                continue
+            if set(d1.keys()) != set(d2.keys()):
+                continue
+            differing = [k for k in d1 if d1[k] != d2[k]]
+            if len(differing) == 1:
+                new_dict = {k: v for k, v in d1.items() if k != differing[0]}
+                consolidated.append(new_dict)
+                used.update({i, j})
+                merged = True
+                break
+        if not merged:
+            consolidated.append(d1)
+
+    # --- Step 2: remove base keys when GE variants exist ---
+    cleaned = []
+    for d in consolidated:
+        ge_bases = {k.split('_GE')[0] for k in d if '_GE' in k}
+        new_d = {k: v for k, v in d.items() if k.split('_GE')[0] not in ge_bases or '_GE' in k}
+        cleaned.append(new_d)
+
+    return cleaned
+
+
+def _parse_ge_key(k: str) -> Optional[Tuple[str, int]]:
+    if "_GE" not in k:
+        return None
+    base, _, tail = k.partition("_GE")
+    try:
+        t = int(tail)
+    except ValueError:
+        return None
+    return base, t
+
+def _signature_without_family(d: Dict[str, bool], base: str) -> Tuple[Tuple[str, bool], ...]:
+    items = []
+    for k, v in d.items():
+        parsed = _parse_ge_key(k)
+        if (parsed and parsed[0] == base) or (k == base):
+            continue
+        items.append((k, v))
+    items.sort()
+    return tuple(items)
+
+def _interval_for_family(d: Dict[str, bool], base: str) -> Tuple[float, float]:
+    lo = -math.inf
+    hi = math.inf
+    for k, v in d.items():
+        parsed = _parse_ge_key(k)
+        if not parsed:
+            continue
+        b, t = parsed
+        if b != base:
+            continue
+        if v is True:
+            lo = max(lo, t)
+        else:
+            hi = min(hi, t)
+    return lo, hi  # [lo, hi)
+
+# ---------- pass 1: merge opposite-only pairs within the same dict set ----------
+def consolidate_opposites(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
+    out, used = [], set()
+    for i, d1 in enumerate(dicts):
+        if i in used:
+            continue
+        merged = False
+        for j in range(i + 1, len(dicts)):
+            if j in used:
+                continue
+            d2 = dicts[j]
+            if set(d1.keys()) != set(d2.keys()):
+                continue
+            dif = [k for k in d1 if d1[k] != d2[k]]
+            if len(dif) == 1:
+                kdiff = dif[0]
+                nd = {k: v for k, v in d1.items() if k != kdiff}
+                out.append(nd)
+                used.update({i, j})
+                merged = True
+                break
+        if not merged:
+            out.append(d1)
+    return out
+
+# ---------- pass 2: cross-dict GE union -> base True when range is [win_threshold, +inf) ----------
+def merge_ge_intervals_to_base_safe(dicts: List[Dict[str, bool]], win_threshold:int = 1) -> List[Dict[str, bool]]:
+    groups = defaultdict(list)           # (sig, base) -> [(idx, dict, (lo,hi))]
+    base_presence = defaultdict(bool)    # (sig, base) -> any dict has explicit base key
+
+    for idx, d in enumerate(dicts):
+        bases_in_d = {parsed[0] for k in d for parsed in (_parse_ge_key(k),) if parsed}
+        explicit_bases = {k for k in d if "_GE" not in k}
+        all_bases = bases_in_d | explicit_bases
+        for base in all_bases:
+            sig = _signature_without_family(d, base)
+            if base in d:
+                base_presence[(sig, base)] = True
+        for base in bases_in_d:
+            sig = _signature_without_family(d, base)
+            lo, hi = _interval_for_family(d, base)
+            if lo < hi:
+                groups[(sig, base)].append((idx, d, (lo, hi)))
+
+    to_remove = set()
+    replacements = []
+
+    for (sig, base), entries in groups.items():
+        if len(entries) < 2:
+            continue
+        if base_presence.get((sig, base), False):
+            continue
+
+        intervals = [iv for _, _, iv in entries]
+        intervals.sort()
+        # merge
+        merged = []
+        cur_lo, cur_hi = intervals[0]
+        for lo, hi in intervals[1:]:
+            if lo <= cur_hi:
+                cur_hi = max(cur_hi, hi)
+            else:
+                merged.append((cur_lo, cur_hi))
+                cur_lo, cur_hi = lo, hi
+        merged.append((cur_lo, cur_hi))
+
+        # collapse only if union == [win_threshold, +inf)
+        if len(merged) == 1 and merged[0][0] <= win_threshold and merged[0][1] == math.inf:
+            to_remove.update(idx for idx, _, _ in entries)
+            collapsed = dict(sig)
+            collapsed[base] = True
+            replacements.append(collapsed)
+
+    out = [d for i, d in enumerate(dicts) if i not in to_remove]
+    # de-dupe replacements
+    seen = set()
+    for d in replacements:
+        key = tuple(sorted(d.items()))
+        if key not in seen:
+            seen.add(key)
+            out.append(d)
+    return out
+
+# ---------- pass 3: intra-dict base removal when any GE variant exists ----------
+def remove_base_if_ge_present(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
+    cleaned = []
+    for d in dicts:
+        ge_bases = {k.split('_GE')[0] for k in d if '_GE' in k}
+        cleaned.append({k: v for k, v in d.items() if (k not in ge_bases) or ('_GE' in k)})
+    return cleaned
+
+# ---------- pass 4: full-partition drop of base family when wins covered & explicit loss present ----------
+def merge_full_partition_remove_base(dicts: List[Dict[str, bool]], win_threshold: int = 1) -> List[Dict[str, bool]]:
+    groups = defaultdict(list)
+    ge_intervals = defaultdict(list)
+    has_base_true = defaultdict(bool)
+    has_base_false = defaultdict(bool)
+
+    for idx, d in enumerate(dicts):
+        bases_in_ge = {parsed[0] for k in d for parsed in (_parse_ge_key(k),) if parsed}
+        explicit_bases = {k for k in d if "_GE" not in k and isinstance(d[k], bool)}
+        all_bases = bases_in_ge | explicit_bases
+        for base in all_bases:
+            sig = _signature_without_family(d, base)
+            groups[(sig, base)].append(idx)
+            if base in bases_in_ge:
+                lo, hi = _interval_for_family(d, base)
+                if lo < hi:
+                    ge_intervals[(sig, base)].append((lo, hi))
+            if base in d:
+                has_base_true[(sig, base)] |= (d[base] is True)
+                has_base_false[(sig, base)] |= (d[base] is False)
+
+    to_remove = set()
+    replacements = []
+
+    for (sig, base), idxs in groups.items():
+        if not has_base_false.get((sig, base), False):
+            continue
+
+        intervals = list(ge_intervals.get((sig, base), []))
+        if has_base_true.get((sig, base), False):
+            intervals.append((win_threshold, math.inf))
+        if not intervals:
+            continue
+
+        intervals.sort()
+        merged = []
+        cur_lo, cur_hi = intervals[0]
+        for lo, hi in intervals[1:]:
+            if lo <= cur_hi:
+                cur_hi = max(cur_hi, hi)
+            else:
+                merged.append((cur_lo, cur_hi))
+                cur_lo, cur_hi = lo, hi
+        merged.append((cur_lo, cur_hi))
+
+        if len(merged) == 1 and merged[0][0] <= win_threshold and merged[0][1] == math.inf:
+            to_remove.update(idxs)
+            collapsed = dict(sig)  # drop base family entirely
+            replacements.append(collapsed)
+
+    out = [d for i, d in enumerate(dicts) if i not in to_remove]
+    seen = set()
+    for d in replacements:
+        key = tuple(sorted(d.items()))
+        if key not in seen:
+            seen.add(key)
+            out.append(d)
+    return out
+
+# ---------- one-shot orchestrator ----------
+def consolidate_all(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
+    step0 = consolidate_opposites_and_remove_bases(dicts)
+    step1 = consolidate_opposites(step0)
+    step2 = merge_ge_intervals_to_base_safe(step1, win_threshold=1)
+    step3 = remove_base_if_ge_present(step2)
+    step4 = merge_full_partition_remove_base(step3, win_threshold=1)
+    # final de-dupe
+    seen, out = set(), []
+    for d in step4:
+        key = tuple(sorted(d.items()))
+        if key not in seen:
+            seen.add(key)
+            out.append(d)
+    return out
 
 # ---------- Boolean minimization helpers (for readable scenarios) ----------
 def minimize_minterms(minterms, allow_combine=True):
@@ -1159,6 +1400,9 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
 
                 # Render minterms into consolidated clause blocks
                 candidate_minterms = minimized.get(seed_num, {}).get(team, [])
+                candidate_minterms = consolidate_all(candidate_minterms)
+
+                print(f"[DEBUG SCEN] Team {team}, seed {seed_num}, candidate minterms after consolidation: {candidate_minterms}")
 
                 def clauses_for_m(minterm_dict):
                     # Prefer margin-qualified clauses where present; avoid duplicates.
@@ -1167,6 +1411,9 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             a, b = base.split(">", 1)
                             return f"{b}>{a}"
                         return base
+                    
+                    print("[DEBUG SCEN] Minterm team:", team, "(seed:", seed_num, ")")
+                    print("[DEBUG SCEN] Minterm dict:", minterm_dict)
 
                     # Build matchup -> {
                     #   "base": [(var,val), ...]  # usually 0 or 1

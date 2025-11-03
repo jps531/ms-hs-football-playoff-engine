@@ -26,103 +26,76 @@ None
 Region 2-1A
 
 1 Seed:
-74% Falkner
-  - Falkner Win over H. W. Byers
-    AND H. W. Byers Win over Ashland
-    AND Potts Camp Win over Falkner
-  OR
-  - Falkner Win over Potts Camp
-    AND H. W. Byers Win over Ashland
-    AND H. W. Byers Win over Falkner by < 12 points
-  OR
-  - Ashland Win over H. W. Byers
-    AND Falkner Win over H. W. Byers
-  OR
-  - Ashland Win over H. W. Byers
-    AND Falkner Win over Potts Camp
-  OR
-  - Falkner Win over H. W. Byers
-    AND Falkner Win over Potts Camp
-
-14% H. W. Byers
+73% Falkner
   - H. W. Byers Win over Ashland
-    AND H. W. Byers Win over Falkner
-    AND Potts Camp Win over Falkner
+    AND Potts Camp Win over Falkner by < 12 points
   OR
   - Falkner Win over Potts Camp
-    AND H. W. Byers Win over Ashland
-    AND H. W. Byers Win over Falkner by ≥ 12 points
 
-12% Potts Camp
+27% Potts Camp
   - Ashland Win over H. W. Byers
-    AND H. W. Byers Win over Falkner
     AND Potts Camp Win over Falkner
+  OR
+  - H. W. Byers Win over Ashland
+    AND Potts Camp Win over Falkner by ≥ 12 points
 
 2 Seed:
-50% Potts Camp
-  - Ashland Win over H. W. Byers
-    AND Falkner Win over H. W. Byers
+71% H. W. Byers
+  - Falkner Win over Potts Camp
+    AND H. W. Byers Win over Ashland
   OR
   - H. W. Byers Win over Ashland
-    AND Potts Camp Win over Falkner
-
-49% H. W. Byers
-  - Falkner Win over H. W. Byers
+    AND Potts Camp Win over Falkner by < 12 points
+  OR
+  - Ashland Win over H. W. Byers by < 12 points
     AND Falkner Win over Potts Camp
-    AND H. W. Byers Win over Ashland
-  OR
-  - Falkner Win over Potts Camp
-    AND H. W. Byers Win over Ashland
-    AND H. W. Byers Win over Falkner by < 12 points
-  OR
-  - Ashland Win over H. W. Byers
-    AND H. W. Byers Win over Falkner
 
-1% Falkner
-  - Falkner Win over Potts Camp
-    AND H. W. Byers Win over Ashland
-    AND H. W. Byers Win over Falkner by ≥ 12 points
+27% Falkner
+  - Ashland Win over H. W. Byers
+    AND Potts Camp Win over Falkner
+  OR
+  - H. W. Byers Win over Ashland
+    AND Potts Camp Win over Falkner by ≥ 12 points
+
+2% Potts Camp
+  - Ashland Win over H. W. Byers by ≥ 12 points
+    AND Falkner Win over Potts Camp
 
 3 Seed:
-38% Potts Camp
-  - Ashland Win over H. W. Byers
-    AND Falkner Win over Potts Camp
-    AND H. W. Byers Win over Falkner
-  OR
+71% Potts Camp
   - Falkner Win over Potts Camp
     AND H. W. Byers Win over Ashland
+  OR
+  - H. W. Byers Win over Ashland
+    AND Potts Camp Win over Falkner by < 12 points
+  OR
+  - Ashland Win over H. W. Byers by < 12 points
+    AND Falkner Win over Potts Camp
 
-25% Ashland
+27% Ashland
   - Ashland Win over H. W. Byers
-    AND Falkner Win over H. W. Byers
-
-25% Falkner
-  - H. W. Byers Win over Falkner
     AND Potts Camp Win over Falkner
+  OR
+  - Ashland Win over H. W. Byers by ≥ 12 points
+    AND Falkner Win over Potts Camp
 
-12% H. W. Byers
-  - Falkner Win over H. W. Byers
-    AND H. W. Byers Win over Ashland
-    AND Potts Camp Win over Falkner
+2% H. W. Byers
+  - H. W. Byers Win over Ashland
+    AND Potts Camp Win over Falkner by ≥ 12 points
 
 4 Seed:
-75% Ashland
+73% Ashland
+  - Ashland Win over H. W. Byers by < 12 points
+    AND Falkner Win over Potts Camp
+  OR
   - H. W. Byers Win over Ashland
-    AND H. W. Byers Win over Falkner
+
+27% H. W. Byers
+  - Ashland Win over H. W. Byers
     AND Potts Camp Win over Falkner
   OR
-  - Ashland Win over H. W. Byers
-    AND H. W. Byers Win over Falkner
-  OR
-  - Falkner Win over H. W. Byers
-    AND H. W. Byers Win over Ashland
-  OR
-  - Falkner Win over Potts Camp
-    AND H. W. Byers Win over Ashland
-
-25% H. W. Byers
-  - Ashland Win over H. W. Byers
-    AND Falkner Win over H. W. Byers
+  - Ashland Win over H. W. Byers by ≥ 12 points
+    AND Falkner Win over Potts Camp
 
 Eliminated:
 None
@@ -199,164 +172,72 @@ Region 5-1A
 100% Nanih Waiya
 
 2 Seed:
-62% Leake County
-  - Ethel Win over Noxapater
-    AND McAdams Win over Nanih Waiya
-    AND Noxapater Win over Leake County
-    AND Sebastopol Win over Ethel
+65% Leake County
+  - Ethel Win over Sebastopol
+    AND Noxapater Win over Leake County by < 8 points
   OR
   - Leake County Win over Noxapater
-    AND McAdams Win over Nanih Waiya
-    AND Noxapater Win over Ethel
-    AND Sebastopol Win over Ethel
-  OR
-  - Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-    AND Nanih Waiya Win over McAdams
-    AND Noxapater Win over Ethel by < 4 points
-  OR
-  - Ethel Win over Noxapater
-    AND Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-  OR
-  - Ethel Win over Noxapater
-    AND Leake County Win over Noxapater
-    AND McAdams Win over Nanih Waiya
-  OR
-  - Ethel Win over Noxapater
-    AND Nanih Waiya Win over McAdams
-    AND Sebastopol Win over Ethel
-  OR
-  - Leake County Win over Noxapater
-    AND Nanih Waiya Win over McAdams
-    AND Sebastopol Win over Ethel
-  OR
-  - Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-    AND Noxapater Win over Ethel by ≥ 4 points
-  OR
-  - Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-    AND McAdams Win over Nanih Waiya
 
-25% Noxapater
-  - Nanih Waiya Win over McAdams
-    AND Noxapater Win over Ethel
-    AND Noxapater Win over Leake County
+35% Noxapater
+  - Noxapater Win over Leake County
     AND Sebastopol Win over Ethel
   OR
   - Ethel Win over Sebastopol
-    AND Noxapater Win over Ethel
-    AND Noxapater Win over Leake County
-  OR
-  - McAdams Win over Nanih Waiya
-    AND Noxapater Win over Ethel
-    AND Noxapater Win over Leake County
-
-12% Ethel
-  - Ethel Win over Noxapater
-    AND Ethel Win over Sebastopol
-    AND Noxapater Win over Leake County
+    AND Noxapater Win over Leake County by ≥ 8 points
 
 3 Seed:
-41% Ethel
-  - Ethel Win over Noxapater
-    AND McAdams Win over Nanih Waiya
-    AND Noxapater Win over Leake County
-    AND Sebastopol Win over Ethel
-  OR
-  - Ethel Win over Noxapater
-    AND Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-  OR
-  - Ethel Win over Noxapater
-    AND Leake County Win over Noxapater
-    AND McAdams Win over Nanih Waiya
-  OR
-  - Ethel Win over Noxapater
-    AND Nanih Waiya Win over McAdams
+35% Leake County
+  - Noxapater Win over Leake County
     AND Sebastopol Win over Ethel
   OR
   - Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-    AND Noxapater Win over Ethel by < 4 points
+    AND Noxapater Win over Leake County by ≥ 8 points
 
-38% Leake County
-  - McAdams Win over Nanih Waiya
-    AND Noxapater Win over Ethel
-    AND Noxapater Win over Leake County
-    AND Sebastopol Win over Ethel
-  OR
-  - Ethel Win over Noxapater
-    AND Ethel Win over Sebastopol
-    AND Noxapater Win over Leake County
-  OR
+29% Ethel
   - Ethel Win over Sebastopol
-    AND McAdams Win over Nanih Waiya
-    AND Noxapater Win over Leake County
+    AND Leake County Win over Noxapater
   OR
-  - Nanih Waiya Win over McAdams
-    AND Noxapater Win over Ethel
-    AND Noxapater Win over Leake County
-
-22% Noxapater
   - Leake County Win over Noxapater
-    AND Noxapater Win over Ethel
-    AND Sebastopol Win over Ethel
-  OR
+    AND Sebastopol Win over Ethel by < 3 points
+
+27% Noxapater
   - Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-    AND Noxapater Win over Ethel by ≥ 4 points
+    AND Noxapater Win over Leake County by < 8 points
+  OR
+  - Leake County Win over Noxapater
+    AND Sebastopol Win over Ethel by ≥ 3 and < 5 points
+  OR
+  - Leake County Win over Noxapater
+    AND Sebastopol Win over Ethel by ≥ 5 and < 9 points
+
+8% Sebastopol
+  - Leake County Win over Noxapater
+    AND Sebastopol Win over Ethel by ≥ 9 points
 
 4 Seed:
-41% Noxapater
-  - Ethel Win over Noxapater
-    AND McAdams Win over Nanih Waiya
-    AND Noxapater Win over Leake County
-    AND Sebastopol Win over Ethel
-  OR
-  - Ethel Win over Noxapater
-    AND Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-  OR
-  - Ethel Win over Noxapater
-    AND Ethel Win over Sebastopol
-    AND McAdams Win over Nanih Waiya
-  OR
-  - Ethel Win over Noxapater
-    AND Nanih Waiya Win over McAdams
-    AND Noxapater Win over Leake County
-  OR
+38% Noxapater
   - Ethel Win over Sebastopol
     AND Leake County Win over Noxapater
-    AND Noxapater Win over Ethel by < 4 points
-
-38% Sebastopol
-  - McAdams Win over Nanih Waiya
-    AND Noxapater Win over Ethel
-    AND Noxapater Win over Leake County
-    AND Sebastopol Win over Ethel
   OR
-  - Ethel Win over Noxapater
-    AND Leake County Win over Noxapater
+  - Leake County Win over Noxapater
+    AND Sebastopol Win over Ethel by ≥ 9 points
+  OR
+  - Leake County Win over Noxapater
+    AND Sebastopol Win over Ethel by < 3 points
+
+33% Sebastopol
+  - Noxapater Win over Leake County
     AND Sebastopol Win over Ethel
   OR
   - Leake County Win over Noxapater
-    AND McAdams Win over Nanih Waiya
-    AND Sebastopol Win over Ethel
-  OR
-  - Nanih Waiya Win over McAdams
-    AND Noxapater Win over Ethel
-    AND Sebastopol Win over Ethel
+    AND Sebastopol Win over Ethel by ≥ 5 and < 9 points
 
-22% Ethel
+29% Ethel
   - Ethel Win over Sebastopol
-    AND Noxapater Win over Ethel
     AND Noxapater Win over Leake County
   OR
-  - Ethel Win over Sebastopol
-    AND Leake County Win over Noxapater
-    AND Noxapater Win over Ethel by ≥ 4 points
+  - Leake County Win over Noxapater
+    AND Sebastopol Win over Ethel by ≥ 3 and < 5 points
 
 Eliminated:
 McAdams
@@ -364,89 +245,32 @@ McAdams
 Region 6-1A
 
 1 Seed:
-75% Simmons
-  - Shaw Win over Riverside
-    AND Simmons Win over Riverside
-    AND Simmons Win over West Bolivar
-  OR
-  - Riverside Win over Shaw
-    AND Simmons Win over West Bolivar
-  OR
-  - Riverside Win over Simmons
-    AND Simmons Win over West Bolivar
-  OR
-  - Simmons Win over Riverside
-    AND West Bolivar Win over Simmons
-
-25% South Delta
-  - Riverside Win over Simmons
-    AND West Bolivar Win over Simmons
+100% Simmons
 
 2 Seed:
-75% South Delta
-  - Shaw Win over Riverside
-    AND Simmons Win over Riverside
-    AND Simmons Win over West Bolivar
-  OR
-  - Riverside Win over Shaw
-    AND Simmons Win over West Bolivar
-  OR
-  - Riverside Win over Simmons
-    AND Simmons Win over West Bolivar
-  OR
-  - Simmons Win over Riverside
-    AND West Bolivar Win over Simmons
-
-25% Simmons
-  - Riverside Win over Simmons
-    AND West Bolivar Win over Simmons
+100% South Delta
 
 3 Seed:
-62% Shaw
+50% Shaw
   - Shaw Win over Riverside
-    AND Simmons Win over Riverside
-    AND West Bolivar Win over Simmons
-  OR
-  - Simmons Win over Riverside
-    AND Simmons Win over West Bolivar
-  OR
-  - Riverside Win over Simmons
-    AND Shaw Win over Riverside
 
-25% West Bolivar
+50% West Bolivar
   - Riverside Win over Shaw
-    AND West Bolivar Win over Simmons
-
-12% Riverside
-  - Riverside Win over Shaw
-    AND Riverside Win over Simmons
-    AND Simmons Win over West Bolivar
 
 4 Seed:
-62% West Bolivar
+50% West Bolivar
   - Shaw Win over Riverside
-    AND Simmons Win over Riverside
-    AND West Bolivar Win over Simmons
-  OR
-  - Simmons Win over Riverside
-    AND Simmons Win over West Bolivar
-  OR
-  - Riverside Win over Simmons
-    AND Shaw Win over Riverside
 
-25% Shaw
+33% Riverside
   - Riverside Win over Shaw
-    AND Riverside Win over Simmons
-    AND Simmons Win over West Bolivar
+    AND West Bolivar Win over Simmons
   OR
-  - Riverside Win over Shaw
-    AND Simmons Win over Riverside
-    AND West Bolivar Win over Simmons
+  - Riverside Win over Shaw by ≥ 9 points
+    AND Simmons Win over West Bolivar
 
-12% Riverside
-  - Riverside Win over Shaw
-    AND Riverside Win over Simmons
-    AND West Bolivar Win over Simmons
+17% Shaw
+  - Riverside Win over Shaw by < 9 points
+    AND Simmons Win over West Bolivar
 
 Eliminated:
 None
@@ -488,10 +312,10 @@ Region 8-1A
 
 1 Seed:
 73% Taylorsville
+  - Taylorsville Win over Lumberton
+  OR
   - Lumberton Win over Taylorsville by < 12 points
     AND Stringer Win over Resurrection
-  OR
-  - Taylorsville Win over Lumberton
 
 27% Lumberton
   - Lumberton Win over Taylorsville
@@ -502,10 +326,10 @@ Region 8-1A
 
 2 Seed:
 73% Stringer
+  - Taylorsville Win over Lumberton
+  OR
   - Lumberton Win over Taylorsville by < 12 points
     AND Stringer Win over Resurrection
-  OR
-  - Taylorsville Win over Lumberton
 
 27% Taylorsville
   - Lumberton Win over Taylorsville
@@ -516,10 +340,10 @@ Region 8-1A
 
 3 Seed:
 73% Lumberton
+  - Taylorsville Win over Lumberton
+  OR
   - Lumberton Win over Taylorsville by < 12 points
     AND Stringer Win over Resurrection
-  OR
-  - Taylorsville Win over Lumberton
 
 27% Stringer
   - Lumberton Win over Taylorsville
@@ -537,108 +361,24 @@ Resurrection
 Region 1-2A
 
 1 Seed:
-88% Baldwyn
-  - Hamilton Win over Walnut
-    AND Hatley Win over Hamilton
-    AND Walnut Win over Baldwyn
-  OR
-  - Walnut Win over Baldwyn
-    AND Walnut Win over Hamilton
-  OR
-  - Baldwyn Win over Walnut
-
-12% Hamilton
-  - Hamilton Win over Hatley
-    AND Hamilton Win over Walnut
-    AND Walnut Win over Baldwyn
+100% Baldwyn
 
 2 Seed:
+50% Hamilton
+  - Hamilton Win over Hatley
+
 50% Hatley
   - Hatley Win over Hamilton
-    AND Walnut Win over Baldwyn
-    AND Walnut Win over Hamilton
-  OR
-  - Hamilton Win over Walnut
-    AND Hatley Win over Hamilton
-  OR
-  - Baldwyn Win over Walnut
-    AND Hatley Win over Hamilton
-
-25% Hamilton
-  - Baldwyn Win over Walnut
-    AND Hamilton Win over Hatley
-
-12% Baldwyn
-  - Hamilton Win over Hatley
-    AND Hamilton Win over Walnut
-    AND Walnut Win over Baldwyn
-
-12% Walnut
-  - Hamilton Win over Hatley
-    AND Walnut Win over Baldwyn
-    AND Walnut Win over Hamilton
 
 3 Seed:
-49% Hamilton
-  - Baldwyn Win over Walnut
-    AND Hatley Win over Hamilton
-    AND Walnut Win over Hamilton by < 12 points
-  OR
-  - Hamilton Win over Hatley
-    AND Walnut Win over Baldwyn
-    AND Walnut Win over Hamilton
-  OR
-  - Hamilton Win over Walnut
-    AND Hatley Win over Hamilton
-
-38% Hatley
-  - Baldwyn Win over Walnut
-    AND Hamilton Win over Hatley
-  OR
-  - Hamilton Win over Hatley
-    AND Hamilton Win over Walnut
-
-14% Walnut
-  - Baldwyn Win over Walnut
-    AND Hatley Win over Hamilton
-    AND Walnut Win over Hamilton by ≥ 12 points
-  OR
+50% Hamilton
   - Hatley Win over Hamilton
-    AND Walnut Win over Baldwyn
-    AND Walnut Win over Hamilton
+
+50% Hatley
+  - Hamilton Win over Hatley
 
 4 Seed:
-74% Walnut
-  - Baldwyn Win over Walnut
-    AND Hatley Win over Hamilton
-    AND Walnut Win over Hamilton by < 12 points
-  OR
-  - Hamilton Win over Walnut
-    AND Hatley Win over Hamilton
-    AND Walnut Win over Baldwyn
-  OR
-  - Baldwyn Win over Walnut
-    AND Hamilton Win over Hatley
-  OR
-  - Baldwyn Win over Walnut
-    AND Hamilton Win over Walnut
-  OR
-  - Hamilton Win over Hatley
-    AND Hamilton Win over Walnut
-
-14% Hamilton
-  - Baldwyn Win over Walnut
-    AND Hatley Win over Hamilton
-    AND Walnut Win over Hamilton by ≥ 12 points
-  OR
-  - Hatley Win over Hamilton
-    AND Walnut Win over Baldwyn
-    AND Walnut Win over Hamilton
-
-12% Hatley
-  - Hamilton Win over Hatley
-    AND Walnut Win over Baldwyn
-    AND Walnut Win over Hamilton
+100% Walnut
 
 Eliminated:
 None
@@ -653,10 +393,10 @@ Region 2-2A
 
 3 Seed:
 54% Strayhorn
+  - Strayhorn Win over Bruce
+  OR
   - Bruce Win over Strayhorn by < 3 points
     AND Water Valley Win over East Union
-  OR
-  - Strayhorn Win over Bruce
 
 38% East Union
   - Bruce Win over Strayhorn
@@ -674,13 +414,13 @@ Region 2-2A
 
 4 Seed:
 62% East Union
+  - Strayhorn Win over Bruce
+  OR
   - Bruce Win over Strayhorn by ≥ 9 points
     AND Water Valley Win over East Union
   OR
   - Bruce Win over Strayhorn by < 3 points
     AND Water Valley Win over East Union
-  OR
-  - Strayhorn Win over Bruce
 
 33% Bruce
   - Bruce Win over Strayhorn
@@ -750,12 +490,7 @@ Region 4-2A
   - Kemper County Win over Philadelphia
 
 50% Velma Jackson
-  - Eupora Win over East Webster
-    AND Philadelphia Win over Kemper County by < 7 points
-  OR
-  - Philadelphia Win over Kemper County by ≥ 7 points
-  OR
-  - East Webster Win over Eupora
+  - Philadelphia Win over Kemper County
 
 Eliminated:
 Eupora
@@ -763,84 +498,40 @@ Eupora
 Region 5-2A
 
 1 Seed:
-71% Lake
-  - Lake Win over Pelahatchie
-    AND Puckett Win over Pelahatchie
-    AND Scott Central Win over Lake
-  OR
+58% Lake
   - Lake Win over Scott Central
-    AND Pelahatchie Win over Lake
-    AND Puckett Win over Pelahatchie
-  OR
-  - Lake Win over Scott Central
-    AND Pelahatchie Win over Lake by < 9 points
-    AND Pelahatchie Win over Puckett
-  OR
-  - Lake Win over Pelahatchie
-    AND Lake Win over Scott Central
-  OR
-  - Lake Win over Pelahatchie
-    AND Pelahatchie Win over Puckett
-
-17% Pelahatchie
-  - Pelahatchie Win over Lake
-    AND Pelahatchie Win over Puckett
-    AND Scott Central Win over Lake
-  OR
-  - Lake Win over Scott Central
-    AND Pelahatchie Win over Lake by ≥ 9 points
-    AND Pelahatchie Win over Puckett
-
-12% Scott Central
-  - Pelahatchie Win over Lake
-    AND Puckett Win over Pelahatchie
-    AND Scott Central Win over Lake
-
-2 Seed:
-50% Scott Central
-  - Lake Win over Pelahatchie
-    AND Puckett Win over Pelahatchie
   OR
   - Pelahatchie Win over Puckett
+    AND Scott Central Win over Lake by < 5 points
+
+42% Scott Central
+  - Puckett Win over Pelahatchie
     AND Scott Central Win over Lake
-
-46% Pelahatchie
-  - Lake Win over Pelahatchie
-    AND Lake Win over Scott Central
-    AND Pelahatchie Win over Puckett
   OR
-  - Lake Win over Scott Central
-    AND Pelahatchie Win over Lake by < 9 points
-    AND Pelahatchie Win over Puckett
-  OR
-  - Pelahatchie Win over Lake
-    AND Puckett Win over Pelahatchie
+  - Pelahatchie Win over Puckett
+    AND Scott Central Win over Lake by ≥ 5 points
 
-4% Lake
+2 Seed:
+50% Pelahatchie
   - Lake Win over Scott Central
-    AND Pelahatchie Win over Lake by ≥ 9 points
-    AND Pelahatchie Win over Puckett
+
+42% Lake
+  - Puckett Win over Pelahatchie
+    AND Scott Central Win over Lake
+  OR
+  - Pelahatchie Win over Puckett
+    AND Scott Central Win over Lake by ≥ 5 points
+
+8% Scott Central
+  - Pelahatchie Win over Puckett
+    AND Scott Central Win over Lake by < 5 points
 
 3 Seed:
-38% Pelahatchie
-  - Lake Win over Pelahatchie
-    AND Pelahatchie Win over Puckett
-    AND Scott Central Win over Lake
-  OR
-  - Lake Win over Pelahatchie
-    AND Puckett Win over Pelahatchie
+50% Pelahatchie
+  - Scott Central Win over Lake
 
-38% Scott Central
+50% Scott Central
   - Lake Win over Scott Central
-    AND Pelahatchie Win over Lake
-    AND Puckett Win over Pelahatchie
-  OR
-  - Lake Win over Scott Central
-    AND Pelahatchie Win over Puckett
-
-25% Lake
-  - Pelahatchie Win over Lake
-    AND Scott Central Win over Lake
 
 4 Seed:
 100% Newton
@@ -871,9 +562,10 @@ Region 6-2A
 
 3 Seed:
 75% Bay Springs
-  - Clarkdale Win over Heidelberg
-  OR
   - Enterprise Clarke Win over Mize
+    AND Heidelberg Win over Clarkdale
+  OR
+  - Clarkdale Win over Heidelberg
 
 25% Mize
   - Heidelberg Win over Clarkdale
@@ -969,95 +661,40 @@ None
 Region 1-3A
 
 1 Seed:
-75% Kossuth
-  - Belmont Win over Mantachie
-    AND Booneville Win over Alcorn Central
-    AND Kossuth Win over Alcorn Central
-  OR
-  - Alcorn Central Win over Booneville
-    AND Alcorn Central Win over Kossuth
-  OR
-  - Alcorn Central Win over Booneville
-    AND Belmont Win over Mantachie
-  OR
-  - Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont
-
-25% Booneville
-  - Alcorn Central Win over Kossuth
-    AND Booneville Win over Alcorn Central
+100% Kossuth
 
 2 Seed:
-50% Booneville
-  - Booneville Win over Alcorn Central
-    AND Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont
-  OR
-  - Alcorn Central Win over Booneville
-    AND Kossuth Win over Alcorn Central
-  OR
-  - Belmont Win over Mantachie
-    AND Kossuth Win over Alcorn Central
-
-25% Alcorn Central
-  - Alcorn Central Win over Booneville
-    AND Alcorn Central Win over Kossuth
-
-25% Kossuth
-  - Alcorn Central Win over Kossuth
-    AND Booneville Win over Alcorn Central
+100% Booneville
 
 3 Seed:
-38% Belmont
-  - Alcorn Central Win over Kossuth
-    AND Belmont Win over Mantachie
-    AND Booneville Win over Alcorn Central
+67% Belmont
+  - Kossuth Win over Alcorn Central
+    AND Mantachie Win over Belmont by < 9 points
   OR
   - Belmont Win over Mantachie
-    AND Kossuth Win over Alcorn Central
 
 25% Alcorn Central
-  - Alcorn Central Win over Booneville
-    AND Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont
-  OR
   - Alcorn Central Win over Kossuth
-    AND Booneville Win over Alcorn Central
     AND Mantachie Win over Belmont
 
-25% Booneville
-  - Alcorn Central Win over Booneville
-    AND Alcorn Central Win over Kossuth
-
-12% Mantachie
-  - Booneville Win over Alcorn Central
-    AND Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont
+8% Mantachie
+  - Kossuth Win over Alcorn Central
+    AND Mantachie Win over Belmont by ≥ 9 points
 
 4 Seed:
-38% Alcorn Central
-  - Alcorn Central Win over Kossuth
-    AND Belmont Win over Mantachie
-    AND Booneville Win over Alcorn Central
-  OR
+50% Alcorn Central
   - Belmont Win over Mantachie
-    AND Kossuth Win over Alcorn Central
 
-38% Mantachie
-  - Alcorn Central Win over Booneville
-    AND Mantachie Win over Belmont
-  OR
+42% Mantachie
   - Alcorn Central Win over Kossuth
     AND Mantachie Win over Belmont
-
-25% Belmont
-  - Alcorn Central Win over Booneville
-    AND Alcorn Central Win over Kossuth
-    AND Belmont Win over Mantachie
   OR
-  - Booneville Win over Alcorn Central
-    AND Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont
+  - Kossuth Win over Alcorn Central
+    AND Mantachie Win over Belmont by < 9 points
+
+8% Belmont
+  - Kossuth Win over Alcorn Central
+    AND Mantachie Win over Belmont by ≥ 9 points
 
 Eliminated:
 None
@@ -1066,10 +703,10 @@ Region 2-3A
 
 1 Seed:
 67% Coahoma County
+  - Coahoma County Win over Independence
+  OR
   - Independence Win over Coahoma County by < 9 points
     AND North Panola Win over Holly Springs
-  OR
-  - Coahoma County Win over Independence
 
 33% Independence
   - Holly Springs Win over North Panola
@@ -1080,10 +717,11 @@ Region 2-3A
 
 2 Seed:
 42% Independence
+  - Coahoma County Win over Independence
+    AND Holly Springs Win over North Panola
+  OR
   - Independence Win over Coahoma County by < 9 points
     AND North Panola Win over Holly Springs
-  OR
-  - Coahoma County Win over Independence
 
 33% Coahoma County
   - Holly Springs Win over North Panola
@@ -1098,10 +736,11 @@ Region 2-3A
 
 3 Seed:
 42% North Panola
+  - Independence Win over Coahoma County
+    AND North Panola Win over Holly Springs
+  OR
   - Coahoma County Win over Independence
     AND Holly Springs Win over North Panola by < 9 points
-  OR
-  - North Panola Win over Holly Springs
 
 33% Holly Springs
   - Holly Springs Win over North Panola
@@ -1172,9 +811,10 @@ Region 4-3A
 
 2 Seed:
 75% Winona
-  - Aberdeen Win over Noxubee County
-  OR
   - Nettleton Win over Winona
+    AND Noxubee County Win over Aberdeen
+  OR
+  - Aberdeen Win over Noxubee County
 
 25% Noxubee County
   - Noxubee County Win over Aberdeen
@@ -1247,6 +887,7 @@ Region 7-3A
 
 25% Hazlehurst
   - Hazlehurst Win over Crystal Springs
+    AND Jefferson County Win over Franklin County
 
 25% Jefferson County
   - Crystal Springs Win over Hazlehurst
@@ -1331,10 +972,11 @@ Region 1-4A
 
 2 Seed:
 40% New Albany
+  - Corinth Win over New Albany
+    AND Tishomingo County Win over North Pontotoc
+  OR
   - New Albany Win over Corinth by < 8 points
     AND North Pontotoc Win over Tishomingo County
-  OR
-  - Corinth Win over New Albany
 
 35% Corinth
   - New Albany Win over Corinth
@@ -1349,10 +991,11 @@ Region 1-4A
 
 3 Seed:
 40% North Pontotoc
+  - New Albany Win over Corinth
+    AND North Pontotoc Win over Tishomingo County
+  OR
   - Corinth Win over New Albany
     AND Tishomingo County Win over North Pontotoc by < 8 points
-  OR
-  - North Pontotoc Win over Tishomingo County
 
 35% Tishomingo County
   - New Albany Win over Corinth
@@ -1403,10 +1046,10 @@ Region 3-4A
 
 1 Seed:
 62% Clarksdale
+  - Clarksdale Win over Rosa Fort
+  OR
   - Rosa Fort Win over Clarksdale by < 7 points
     AND Senatobia Win over Ripley
-  OR
-  - Clarksdale Win over Rosa Fort
 
 25% Rosa Fort
   - Ripley Win over Senatobia
@@ -1465,9 +1108,10 @@ Region 3-4A
 
 4 Seed:
 75% Ripley
-  - Clarksdale Win over Rosa Fort
+  - Rosa Fort Win over Clarksdale
+    AND Senatobia Win over Ripley
   OR
-  - Senatobia Win over Ripley
+  - Clarksdale Win over Rosa Fort
 
 25% Senatobia
   - Ripley Win over Senatobia
@@ -1483,12 +1127,7 @@ Region 4-4A
   - Louisville Win over Greenwood
 
 50% Kosciusko
-  - Greenwood Win over Louisville by < 9 points
-    AND Yazoo City Win over Gentry
-  OR
-  - Greenwood Win over Louisville by ≥ 9 points
-  OR
-  - Gentry Win over Yazoo City
+  - Greenwood Win over Louisville
 
 2 Seed:
 50% Kosciusko
@@ -1549,97 +1188,25 @@ Region 6-4A
 1 Seed:
 50% Forest
   - Forest Win over Morton
-    AND Raymond Win over Mendenhall
-    AND Raymond Win over Morton
-  OR
-  - Forest Win over Morton
-    AND Mendenhall Win over Raymond
-  OR
-  - Forest Win over Morton
-    AND Morton Win over Raymond
 
 50% Morton
   - Morton Win over Forest
-    AND Raymond Win over Mendenhall
-    AND Raymond Win over Morton
-  OR
-  - Mendenhall Win over Raymond
-    AND Morton Win over Forest
-  OR
-  - Morton Win over Forest
-    AND Morton Win over Raymond
 
 2 Seed:
 50% Forest
   - Morton Win over Forest
-    AND Raymond Win over Mendenhall
-    AND Raymond Win over Morton
-  OR
-  - Mendenhall Win over Raymond
-    AND Morton Win over Forest
-  OR
-  - Morton Win over Forest
-    AND Morton Win over Raymond
 
 50% Morton
   - Forest Win over Morton
-    AND Raymond Win over Mendenhall
-    AND Raymond Win over Morton
-  OR
-  - Forest Win over Morton
-    AND Mendenhall Win over Raymond
-  OR
-  - Forest Win over Morton
-    AND Morton Win over Raymond
 
 3 Seed:
-75% Mendenhall
-  - Mendenhall Win over Raymond
-    AND Morton Win over Forest
-    AND Raymond Win over Morton
-  OR
-  - Morton Win over Forest
-    AND Morton Win over Raymond
-    AND Raymond Win over Mendenhall
-  OR
-  - Forest Win over Morton
-    AND Mendenhall Win over Raymond
-  OR
-  - Forest Win over Morton
-    AND Morton Win over Raymond
-  OR
-  - Mendenhall Win over Raymond
-    AND Morton Win over Raymond
-
-25% Raymond
-  - Raymond Win over Mendenhall
-    AND Raymond Win over Morton
+100% Mendenhall
 
 4 Seed:
-75% Richland
-  - Mendenhall Win over Raymond
-    AND Morton Win over Forest
-    AND Raymond Win over Morton
-  OR
-  - Morton Win over Forest
-    AND Morton Win over Raymond
-    AND Raymond Win over Mendenhall
-  OR
-  - Forest Win over Morton
-    AND Mendenhall Win over Raymond
-  OR
-  - Forest Win over Morton
-    AND Morton Win over Raymond
-  OR
-  - Mendenhall Win over Raymond
-    AND Morton Win over Raymond
-
-25% Mendenhall
-  - Raymond Win over Mendenhall
-    AND Raymond Win over Morton
+100% Richland
 
 Eliminated:
-None
+Raymond
 
 Region 7-4A
 
@@ -1666,10 +1233,11 @@ Region 7-4A
     AND Poplarville Win over Columbia by ≥ 7 points
 
 38% Poplarville
+  - Columbia Win over Poplarville
+    AND South Pike Win over McComb
+  OR
   - McComb Win over South Pike
     AND Poplarville Win over Columbia by < 7 points
-  OR
-  - Columbia Win over Poplarville
 
 25% McComb
   - Columbia Win over Poplarville
@@ -1677,10 +1245,11 @@ Region 7-4A
 
 3 Seed:
 38% McComb
+  - McComb Win over South Pike
+    AND Poplarville Win over Columbia
+  OR
   - Columbia Win over Poplarville
     AND South Pike Win over McComb by < 7 points
-  OR
-  - McComb Win over South Pike
 
 38% South Pike
   - Poplarville Win over Columbia
