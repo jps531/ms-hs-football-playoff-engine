@@ -196,11 +196,11 @@ Region 4-5A
   - Purvis Win over Vancleave
 
 38% Vancleave
-  - East Central Win over Stone
-    AND Northeast Jones Win over Wayne County
-    AND Vancleave Win over Purvis
-  OR
   - Stone Win over East Central
+    AND Vancleave Win over Purvis
+    AND Wayne County Win over Northeast Jones
+  OR
+  - Northeast Jones Win over Wayne County
     AND Vancleave Win over Purvis
 
 12% East Central
@@ -210,19 +210,19 @@ Region 4-5A
 
 4 Seed:
 38% Northeast Jones
-  - East Central Win over Stone
-    AND Northeast Jones Win over Wayne County
-    AND Purvis Win over Vancleave
-  OR
   - Purvis Win over Vancleave
     AND Stone Win over East Central
+    AND Wayne County Win over Northeast Jones
+  OR
+  - Northeast Jones Win over Wayne County
+    AND Purvis Win over Vancleave
 
 38% Purvis
-  - East Central Win over Stone
-    AND Northeast Jones Win over Wayne County
-    AND Vancleave Win over Purvis
-  OR
   - Stone Win over East Central
+    AND Vancleave Win over Purvis
+    AND Wayne County Win over Northeast Jones
+  OR
+  - Northeast Jones Win over Wayne County
     AND Vancleave Win over Purvis
 
 12% East Central
@@ -248,10 +248,10 @@ Region 1-6A
 
 3 Seed:
 75% Grenada
-  - Saltillo Win over Grenada
-    AND South Panola Win over Center Hill
+  - Center Hill Win over South Panola
+    AND Grenada Win over Saltillo
   OR
-  - Grenada Win over Saltillo
+  - South Panola Win over Center Hill
 
 25% Center Hill
   - Center Hill Win over South Panola
@@ -259,10 +259,10 @@ Region 1-6A
 
 4 Seed:
 75% Center Hill
-  - Saltillo Win over Grenada
-    AND South Panola Win over Center Hill
+  - Center Hill Win over South Panola
+    AND Grenada Win over Saltillo
   OR
-  - Grenada Win over Saltillo
+  - South Panola Win over Center Hill
 
 25% Saltillo
   - Center Hill Win over South Panola
@@ -301,10 +301,9 @@ Region 3-6A
 
 1 Seed:
 71% Hattiesburg
-  - Terry Win over Hattiesburg by < 11 points
-    AND West Jones Win over Jim Hill
-  OR
   - Hattiesburg Win over Terry
+  OR
+  - West Jones Win over Jim Hill
 
 29% Terry
   - Jim Hill Win over West Jones
@@ -342,7 +341,10 @@ Region 3-6A
   - Jim Hill Win over West Jones
     AND Terry Win over Hattiesburg
   OR
-  - Terry Win over Hattiesburg by ≥ 7 points
+  - Terry Win over Hattiesburg by ≥ 11 points
+    AND West Jones Win over Jim Hill
+  OR
+  - Terry Win over Hattiesburg by ≥ 7 and < 11 points
     AND West Jones Win over Jim Hill
 
 4 Seed:
@@ -373,10 +375,19 @@ Region 4-6A
 
 3 Seed:
 75% Hancock
-  - Long Beach Win over Hancock
+  - Gautier Win over Pascagoula
+    AND Hancock Win over Long Beach
+  OR
+  - Gautier Win over Pascagoula
+    AND Long Beach Win over Hancock
     AND Picayune Win over Pearl River Central
   OR
   - Hancock Win over Long Beach
+    AND Pascagoula Win over Gautier
+    AND Pearl River Central Win over Picayune
+  OR
+  - Pascagoula Win over Gautier
+    AND Picayune Win over Pearl River Central
 
 25% Pearl River Central
   - Long Beach Win over Hancock
@@ -384,10 +395,19 @@ Region 4-6A
 
 4 Seed:
 75% Pearl River Central
-  - Long Beach Win over Hancock
+  - Gautier Win over Pascagoula
+    AND Hancock Win over Long Beach
+  OR
+  - Gautier Win over Pascagoula
+    AND Long Beach Win over Hancock
     AND Picayune Win over Pearl River Central
   OR
   - Hancock Win over Long Beach
+    AND Pascagoula Win over Gautier
+    AND Pearl River Central Win over Picayune
+  OR
+  - Pascagoula Win over Gautier
+    AND Picayune Win over Pearl River Central
 
 25% Hancock
   - Long Beach Win over Hancock
@@ -422,10 +442,10 @@ Region 1-7A
 38% Hernando
   - Desoto Central Win over Tupelo
     AND Hernando Win over Southaven
+    AND Horn Lake Win over Lewisburg
   OR
   - Hernando Win over Southaven
     AND Lewisburg Win over Horn Lake
-    AND Tupelo Win over Desoto Central
 
 38% Horn Lake
   - Desoto Central Win over Tupelo
@@ -446,10 +466,10 @@ Region 1-7A
 38% Horn Lake
   - Desoto Central Win over Tupelo
     AND Hernando Win over Southaven
+    AND Horn Lake Win over Lewisburg
   OR
   - Hernando Win over Southaven
     AND Lewisburg Win over Horn Lake
-    AND Tupelo Win over Desoto Central
 
 12% Hernando
   - Hernando Win over Southaven
@@ -497,10 +517,17 @@ Region 3-7A
 1 Seed:
 51% Petal
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by < 4 points
-    AND Pearl Win over Oak Grove by ≥ 3 and < 9 points
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
   OR
   - Petal Win over Northwest Rankin
+  OR
+  - Brandon Win over Meridian
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
 
 30% Oak Grove
   - Brandon Win over Meridian
@@ -508,8 +535,36 @@ Region 3-7A
     AND Pearl Win over Oak Grove by < 3 points
   OR
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by ≥ 3 points
-    AND Pearl Win over Oak Grove by ≥ 3 and < 6 points
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
   OR
   - Northwest Rankin Win over Petal
     AND Oak Grove Win over Pearl
@@ -520,13 +575,25 @@ Region 3-7A
     AND Pearl Win over Oak Grove
   OR
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by ≥ 4 points
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
     AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
 
 4% Pearl
   - Brandon Win over Meridian
     AND Northwest Rankin Win over Petal
-    AND Pearl Win over Oak Grove by ≥ 9 points
+    AND Pearl Win over Oak Grove by ≥ 10 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
 
 2 Seed:
 41% Pearl
@@ -544,7 +611,11 @@ Region 3-7A
 26% Oak Grove
   - Brandon Win over Meridian
     AND Northwest Rankin Win over Petal by < 3 points
-    AND Pearl Win over Oak Grove by ≥ 3 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
   OR
   - Oak Grove Win over Pearl
     AND Petal Win over Northwest Rankin
@@ -555,8 +626,13 @@ Region 3-7A
     AND Oak Grove Win over Pearl
   OR
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by ≥ 4 points
-    AND Pearl Win over Oak Grove
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
 
 14% Petal
   - Brandon Win over Meridian
@@ -564,8 +640,16 @@ Region 3-7A
     AND Oak Grove Win over Pearl
   OR
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by < 4 points
-    AND Pearl Win over Oak Grove
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Pearl Win over Oak Grove by < 3 points
+  OR
+  - Brandon Win over Meridian
+    AND Pearl Win over Oak Grove by ≥ 10 points
+  OR
+  - Brandon Win over Meridian
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
 
 3 Seed:
 38% Brandon
@@ -585,25 +669,43 @@ Region 3-7A
     AND Pearl Win over Oak Grove
   OR
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by ≥ 5 points
-    AND Pearl Win over Oak Grove
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
 
 28% Oak Grove
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal
-    AND Pearl Win over Oak Grove by ≥ 6 and < 10 points
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
   OR
   - Pearl Win over Oak Grove
     AND Petal Win over Northwest Rankin
+  OR
+  - Brandon Win over Meridian
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
 
 2% Northwest Rankin
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by < 4 points
-    AND Pearl Win over Oak Grove
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Pearl Win over Oak Grove by < 3 points
+  OR
+  - Brandon Win over Meridian
+    AND Pearl Win over Oak Grove by ≥ 10 points
 
 2% Pearl
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
     AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
 
 4 Seed:
@@ -613,11 +715,18 @@ Region 3-7A
     AND Petal Win over Northwest Rankin
   OR
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by < 4 points
-    AND Pearl Win over Oak Grove by ≥ 4 and < 10 points
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
   OR
   - Brandon Win over Meridian
     AND Oak Grove Win over Pearl
+  OR
+  - Brandon Win over Meridian
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
 
 38% Brandon
   - Meridian Win over Brandon
@@ -637,22 +746,53 @@ Region 3-7A
     AND Pearl Win over Oak Grove
   OR
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by ≥ 3 points
-    AND Pearl Win over Oak Grove by ≥ 6 and < 10 points
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
 
 4% Pearl
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal
-    AND Pearl Win over Oak Grove by < 4 points
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
   OR
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by ≥ 3 and < 6 points
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
     AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
 
 3% Petal
   - Brandon Win over Meridian
-    AND Northwest Rankin Win over Petal by ≥ 5 points
-    AND Pearl Win over Oak Grove by ≥ 4 and < 9 points
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
 
 Eliminated:
 Meridian

@@ -1,40 +1,164 @@
-Region 1-3A
+Region 3-7A
 
 1 Seed:
-100% Kossuth
+51% Petal
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 4 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 9 points
+  OR
+  - Petal Win over Northwest Rankin
+
+30% Oak Grove
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove by < 3 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 6 points
+  OR
+  - Northwest Rankin Win over Petal
+    AND Oak Grove Win over Pearl
+
+15% Northwest Rankin
+  - Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+
+4% Pearl
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove by ≥ 9 points
 
 2 Seed:
-100% Booneville
+41% Pearl
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+  OR
+  - Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove
+  OR
+  - Pearl Win over Oak Grove
+    AND Petal Win over Northwest Rankin
+
+26% Oak Grove
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 6 points
+  OR
+  - Oak Grove Win over Pearl
+    AND Petal Win over Northwest Rankin
+
+20% Northwest Rankin
+  - Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal
+    AND Oak Grove Win over Pearl
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 points
+    AND Pearl Win over Oak Grove
+
+14% Petal
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Oak Grove Win over Pearl
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 4 points
+    AND Pearl Win over Oak Grove
 
 3 Seed:
-67% Belmont
-  - Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont by < 9 points
+38% Brandon
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Oak Grove Win over Pearl
   OR
-  - Belmont Win over Mantachie
+  - Oak Grove Win over Pearl
+    AND Petal Win over Northwest Rankin
 
-25% Alcorn Central
-  - Alcorn Central Win over Kossuth
-    AND Mantachie Win over Belmont
+31% Petal
+  - Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 points
+    AND Pearl Win over Oak Grove
 
-8% Mantachie
-  - Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont by ≥ 9 points
+28% Oak Grove
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove by ≥ 6 and < 10 points
+  OR
+  - Pearl Win over Oak Grove
+    AND Petal Win over Northwest Rankin
+
+2% Northwest Rankin
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 4 points
+    AND Pearl Win over Oak Grove
+
+2% Pearl
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
 
 4 Seed:
-50% Alcorn Central
-  - Belmont Win over Mantachie
-
-42% Mantachie
-  - Alcorn Central Win over Kossuth
-    AND Mantachie Win over Belmont
+39% Northwest Rankin
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Oak Grove Win over Pearl
   OR
-  - Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont by < 9 points
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 4 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 10 points
+  OR
+  - Oak Grove Win over Pearl
+    AND Petal Win over Northwest Rankin
 
-8% Belmont
-  - Kossuth Win over Alcorn Central
-    AND Mantachie Win over Belmont by ≥ 9 points
+38% Brandon
+  - Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal
+    AND Oak Grove Win over Pearl
+  OR
+  - Pearl Win over Oak Grove
+    AND Petal Win over Northwest Rankin
+
+17% Oak Grove
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove by ≥ 10 points
+  OR
+  - Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 10 points
+
+4% Pearl
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal
+    AND Pearl Win over Oak Grove by < 4 points
+  OR
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+
+3% Petal
+  - Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 9 points
 
 Eliminated:
-None
+Meridian

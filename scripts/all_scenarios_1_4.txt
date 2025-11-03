@@ -1,0 +1,544 @@
+Region 1-1A
+
+1 Seed:
+100% Biggersville
+
+2 Seed:
+100% Tupelo Christian
+
+3 Seed:
+100% Smithville
+
+4 Seed:
+100% Thrasher
+
+Eliminated:
+None
+
+Region 2-1A
+
+1 Seed:
+100% Falkner
+
+2 Seed:
+100% H. W. Byers
+
+3 Seed:
+100% Potts Camp
+
+4 Seed:
+100% Ashland
+
+Eliminated:
+None
+
+Region 3-1A
+
+1 Seed:
+100% Calhoun City
+
+2 Seed:
+100% West Lowndes
+
+3 Seed:
+100% Vardaman
+
+4 Seed:
+100% Okolona
+
+Eliminated:
+None
+
+Region 4-1A
+
+1 Seed:
+100% Leflore County
+
+2 Seed:
+100% West Tallahatchie
+
+3 Seed:
+100% French Camp
+
+4 Seed:
+100% Coffeeville
+
+Eliminated:
+None
+
+Region 5-1A
+
+1 Seed:
+100% Nanih Waiya
+
+2 Seed:
+100% Leake County
+
+3 Seed:
+100% Ethel
+
+4 Seed:
+100% Noxapater
+
+Eliminated:
+McAdams
+Sebastopol
+
+Region 6-1A
+
+1 Seed:
+100% Simmons
+
+2 Seed:
+100% South Delta
+
+3 Seed:
+100% Shaw
+
+4 Seed:
+100% West Bolivar
+
+Eliminated:
+Riverside
+
+Region 7-1A
+
+1 Seed:
+100% Bogue Chitto
+
+2 Seed:
+100% Salem
+
+3 Seed:
+100% Mount Olive
+
+4 Seed:
+100% West Lincoln
+
+Eliminated:
+None
+
+Region 8-1A
+
+1 Seed:
+100% Taylorsville
+
+2 Seed:
+100% Stringer
+
+3 Seed:
+100% Lumberton
+
+4 Seed:
+100% Richton
+
+Eliminated:
+Resurrection
+
+Region 1-2A
+
+1 Seed:
+100% Baldwyn
+
+2 Seed:
+100% Hamilton
+
+3 Seed:
+100% Hatley
+
+4 Seed:
+100% Walnut
+
+Eliminated:
+None
+
+Region 2-2A
+
+1 Seed:
+100% Water Valley
+
+2 Seed:
+100% Myrtle
+
+3 Seed:
+100% Strayhorn
+
+4 Seed:
+100% East Union
+
+Eliminated:
+Bruce
+
+Region 3-2A
+
+1 Seed:
+100% Charleston
+
+2 Seed:
+100% Northside
+
+3 Seed:
+100% Leland
+
+4 Seed:
+100% J Z George
+
+Eliminated:
+M. S. Palmer
+
+Region 4-2A
+
+1 Seed:
+100% East Webster
+
+2 Seed:
+100% Kemper County
+
+3 Seed:
+100% Velma Jackson
+
+4 Seed:
+100% Philadelphia
+
+Eliminated:
+Eupora
+
+Region 5-2A
+
+1 Seed:
+100% Lake
+
+2 Seed:
+100% Pelahatchie
+
+3 Seed:
+100% Scott Central
+
+4 Seed:
+100% Newton
+
+Eliminated:
+Puckett
+
+Region 6-2A
+
+1 Seed:
+100% Heidelberg
+
+2 Seed:
+100% Clarkdale
+
+3 Seed:
+100% Bay Springs
+
+4 Seed:
+100% Mize
+
+Eliminated:
+Enterprise Clarke
+
+Region 7-2A
+
+1 Seed:
+100% Wesson
+
+2 Seed:
+100% Loyd Star
+
+3 Seed:
+100% Amite County
+
+4 Seed:
+100% Wilkinson County
+
+Eliminated:
+Enterprise Lincoln
+
+Region 8-2A
+
+1 Seed:
+100% North Forrest
+
+2 Seed:
+100% East Marion
+
+3 Seed:
+100% Collins
+
+4 Seed:
+100% Perry Central
+
+Eliminated:
+Sacred Heart
+
+Region 1-3A
+
+1 Seed:
+100% Kossuth
+
+2 Seed:
+100% Booneville
+
+3 Seed:
+100% Belmont
+
+4 Seed:
+100% Alcorn Central
+
+Eliminated:
+Mantachie
+
+Region 2-3A
+
+1 Seed:
+100% Coahoma County
+
+2 Seed:
+100% North Panola
+
+3 Seed:
+100% Independence
+
+4 Seed:
+100% Holly Springs
+
+Eliminated:
+None
+
+Region 3-3A
+
+1 Seed:
+100% Humphreys County
+
+2 Seed:
+100% Yazoo County
+
+3 Seed:
+100% Thomas E. Edwards
+
+4 Seed:
+100% O’Bannon
+
+Eliminated:
+Amanda Elzy
+
+Region 4-3A
+
+1 Seed:
+100% Winona
+
+2 Seed:
+100% Aberdeen
+
+3 Seed:
+100% Noxubee County
+
+4 Seed:
+100% Choctaw County
+
+Eliminated:
+Nettleton
+
+Region 5-3A
+
+1 Seed:
+100% Union
+
+2 Seed:
+100% Quitman
+
+3 Seed:
+100% Southeast Lauderdale
+
+4 Seed:
+100% Pisgah
+
+Eliminated:
+St. Andrew’s
+
+Region 6-3A
+
+1 Seed:
+100% Raleigh
+
+2 Seed:
+100% Seminary
+
+3 Seed:
+100% Magee
+
+4 Seed:
+100% Jefferson Davis County
+
+Eliminated:
+McLaurin
+
+Region 7-3A
+
+1 Seed:
+100% Franklin County
+
+2 Seed:
+100% Hazlehurst
+
+3 Seed:
+100% Jefferson County
+
+4 Seed:
+100% Port Gibson
+
+Eliminated:
+Crystal Springs
+
+Region 8-3A
+
+1 Seed:
+100% West Marion
+
+2 Seed:
+100% Tylertown
+
+3 Seed:
+100% Presbyterian Christian
+
+4 Seed:
+100% St. Patrick
+
+Eliminated:
+St. Stanislaus
+
+Region 1-4A
+
+1 Seed:
+100% Corinth
+
+2 Seed:
+100% North Pontotoc
+
+3 Seed:
+100% New Albany
+
+4 Seed:
+100% Tishomingo County
+
+Eliminated:
+South Pontotoc
+
+Region 2-4A
+
+1 Seed:
+100% Itawamba Agricultural
+
+2 Seed:
+100% Shannon
+
+3 Seed:
+100% Houston
+
+4 Seed:
+100% Amory
+
+Eliminated:
+Mooreville
+
+Region 3-4A
+
+1 Seed:
+100% Clarksdale
+
+2 Seed:
+100% Senatobia
+
+3 Seed:
+100% Rosa Fort
+
+4 Seed:
+100% Ripley
+
+Eliminated:
+Byhalia
+
+Region 4-4A
+
+1 Seed:
+100% Louisville
+
+2 Seed:
+100% Kosciusko
+
+3 Seed:
+100% Greenwood
+
+4 Seed:
+100% Yazoo City
+
+Eliminated:
+Gentry
+
+Region 5-4A
+
+1 Seed:
+100% Leake Central
+
+2 Seed:
+100% Newton County
+
+3 Seed:
+100% West Lauderdale
+
+4 Seed:
+100% Choctaw Central
+
+Eliminated:
+Northeast Lauderdale
+
+Region 6-4A
+
+1 Seed:
+100% Forest
+
+2 Seed:
+100% Morton
+
+3 Seed:
+100% Mendenhall
+
+4 Seed:
+100% Richland
+
+Eliminated:
+Raymond
+
+Region 7-4A
+
+1 Seed:
+100% Columbia
+
+2 Seed:
+100% McComb
+
+3 Seed:
+100% Poplarville
+
+4 Seed:
+100% South Pike
+
+Eliminated:
+Lawrence County
+
+Region 8-4A
+
+1 Seed:
+100% Pass Christian
+
+2 Seed:
+100% Greene County
+
+3 Seed:
+100% Forrest County Agricultural
+
+4 Seed:
+100% Moss Point
+
+Eliminated:
+Bay

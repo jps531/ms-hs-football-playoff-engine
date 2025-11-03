@@ -43,7 +43,7 @@ import argparse, json, math, os, re
 from itertools import product
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any, Iterable
 
 try:
     import psycopg
@@ -458,14 +458,6 @@ def resolve_bucket(
     if len(bucket) == 1:
         return bucket[:]
 
-    if debug and len(bucket) > 2:
-        print("[DEBUG TIE] ===== Resolve bucket =====")
-        print(f"Bucket teams: {bucket}")
-
-    print(f"[DEBUG] resolve_bucket: completed={completed}")
-    print(f"[DEBUG] resolve_bucket: remaining={remaining}")
-    print(f"[DEBUG] resolve_bucket: margins={margins}")
-
     # Precompute inputs used by steps
     h2h_pts, h2h_pd_cap, _ = build_h2h_maps(
         completed, remaining, outcome_mask, margins, base_margin_default
@@ -485,8 +477,6 @@ def resolve_bucket(
             if s == o:
                 continue
             step3[s] += h2h_pd_cap.get((s, o), 0)
-
-    print(f"[DEBUG] resolve_bucket: bucket={bucket}, step1={step1}, step3={step3}")
 
     # Step 2 / Step 4 arrays vs outside
     step2, step4 = step2_step4_arrays(
@@ -538,10 +528,8 @@ def resolve_bucket(
                 continue
             if len(g) == 2:
                 # Restart from Step 1 for this pair using DIRECT pairwise metrics
-                if debug and len(bucket) > 2:
-                    print(f"[DEBUG TIE] {step_label}: reduced to pair {g} -> restart from Step 1")
                 ordered = _resolve_pair_using_steps(g, step2, step4, wl_totals, completed, remaining,
-                                                    outcome_mask, margins, base_margin_default, debug=debug)
+                                                    outcome_mask, margins, base_margin_default, debug=False)
                 next_groups.append(ordered)
                 continue
             # Size >= 3: partition by this step (no team name in key)
@@ -551,10 +539,8 @@ def resolve_bucket(
             # If any part shrinks to 2, resolve that pair immediately per rule
             for part in parts:
                 if len(part) == 2:
-                    if debug and  len(bucket) > 2:
-                        print(f"[DEBUG TIE] {step_label}: subgroup {part} -> restart chain")
                     ordered = _resolve_pair_using_steps(part, step2, step4, wl_totals, completed, remaining,
-                                                        outcome_mask, margins, base_margin_default, debug=debug)
+                                                        outcome_mask, margins, base_margin_default, debug=False)
                     next_groups.append(ordered)
                 else:
                     next_groups.append(part)
@@ -613,8 +599,6 @@ def resolve_standings_for_mask(teams,completed,remaining,outcome_mask,margins,ba
     """
     wl_totals=standings_from_mask(teams,completed,remaining,outcome_mask,pa_win,margins,base_margin_default)
     base_order=base_bucket_order(teams,wl_totals)
-    print(f"[DEBUG] Outcome mask INSIDE: base order = {base_order}")
-    print(f"[DEBUG] Outcome mask INSIDE: tie_bucket_groups(teams,wl_totals) = {tie_bucket_groups(teams,wl_totals)}")
     final=[]
     coinflip_events: List[List[str]] = []  # collected Step 6 reports, not used further
     for bucket in tie_bucket_groups(teams,wl_totals):
@@ -868,13 +852,261 @@ def merge_full_partition_remove_base(dicts: List[Dict[str, bool]], win_threshold
             out.append(d)
     return out
 
+def remove_base_if_ge_present_in_dicts(dicts: list[dict[str, bool]]) -> list[dict[str, bool]]:
+    """
+    Within each dict, if both `x>y` and one or more `x>y_GEz` keys exist,
+    remove the base key `x>y` (redundant with the GE-qualified entries).
+    """
+    cleaned = []
+    for d in dicts:
+        # Collect bases that appear as GE families
+        ge_bases = {k.split('_GE')[0] for k in d if '_GE' in k}
+        # Keep all items except base keys that belong to those families
+        new_d = {k: v for k, v in d.items() if not (k in ge_bases)}
+        cleaned.append(new_d)
+    return cleaned
+
+def _flip_base_key(base: str) -> str:
+    if ">" in base:
+        a, b = base.split(">", 1)
+        return f"{b}>{a}"
+    return base
+
+def _remove_base_if_ge_present_in_atom(atom: Dict[str, bool]) -> Dict[str, bool]:
+    """
+    Within one scenario dict, if any x>y_GE* key exists, remove BOTH base keys:
+      - x>y
+      - y>x    (the opposite base that often appears as False)
+    """
+    ge_bases = {k.split("_GE", 1)[0] for k in atom if "_GE" in k}
+    if not ge_bases:
+        return atom
+    to_drop = set()
+    for base in ge_bases:
+        to_drop.add(base)
+        to_drop.add(_flip_base_key(base))
+    return {k: v for k, v in atom.items() if k not in to_drop}
+
+# --- NEW unified GE merge: collapses to base True or a finite band ---
+def merge_ge_union_unified(dicts: List[Dict[str, bool]], win_threshold: int = 1) -> List[Dict[str, bool]]:
+    """
+    For each (signature w/o family, base):
+      * collect all GE intervals across dicts that have that GE family
+      * if any dict in the group has explicit base key, skip (to avoid mixing)
+      * if the union is a single interval:
+          - if [L, +inf) with L <= win_threshold -> collapse to {base: True}
+          - elif [L, U) with finite U -> collapse to {base_GEL: True, base_GEU: False}
+    Replace all dicts in that group with the collapsed one.
+    """
+    groups = defaultdict(list)         # (sig, base) -> [(idx, dict, (lo, hi))]
+    base_presence = defaultdict(bool)  # (sig, base) -> any explicit base key present
+
+    for idx, d in enumerate(dicts):
+        ge_bases = {parsed[0] for k in d for parsed in (_parse_ge_key(k),) if parsed}
+        explicit_bases = {k for k in d if "_GE" not in k and isinstance(d[k], bool)}
+
+        for base in (ge_bases | explicit_bases):
+            sig = _signature_without_family(d, base)
+            if base in d:  # explicit base key
+                base_presence[(sig, base)] = True
+
+        for base in ge_bases:
+            sig = _signature_without_family(d, base)
+            lo, hi = _interval_for_family(d, base)
+            if lo < hi:
+                groups[(sig, base)].append((idx, d, (lo, hi)))
+
+    to_remove = set()
+    replacements = []
+
+    for (sig, base), entries in groups.items():
+        if len(entries) < 2:
+            continue  # need at least 2 dicts contributing to a merge
+        if base_presence.get((sig, base), False):
+            continue  # do not mix with explicit base keys
+
+        # merge intervals across dicts
+        intervals = [iv for _, _, iv in entries]
+        intervals.sort()
+        merged = []
+        cur_lo, cur_hi = intervals[0]
+        for lo, hi in intervals[1:]:
+            if lo <= cur_hi:  # overlap or touch
+                cur_hi = max(cur_hi, hi)
+            else:
+                merged.append((cur_lo, cur_hi))
+                cur_lo, cur_hi = lo, hi
+        merged.append((cur_lo, cur_hi))
+
+        if len(merged) != 1:
+            continue  # discontinuous; don't collapse
+
+        L, R = merged[0]
+        collapsed = dict(sig)
+
+        if R == math.inf and L <= win_threshold:
+            # unconditional “win by any margin”
+            collapsed[base] = True
+        elif R != math.inf and L != -math.inf:
+            # finite band [L, R)
+            collapsed[f"{base}_GE{int(L)}"] = True
+            collapsed[f"{base}_GE{int(R)}"] = False
+        else:
+            continue  # bands like (-inf, U) or [L, +inf) with L > win_threshold: skip here
+
+        # replace the group's dicts with the collapsed one
+        to_remove.update(idx for idx, _, _ in entries)
+        replacements.append(collapsed)
+
+    # build output with de-duped replacements
+    out = [d for i, d in enumerate(dicts) if i not in to_remove]
+    seen = set()
+    for d in replacements:
+        key = tuple(sorted(d.items()))
+        if key not in seen:
+            seen.add(key)
+            out.append(d)
+    return out
+
+# --- NEW: collapse ALL GE families per signature in one shot ---
+def merge_ge_union_by_signature(
+    dicts: List[Dict[str, bool]],
+    win_threshold: int = 1,
+    aggressive_upper: bool = True,
+) -> List[Dict[str, bool]]:
+    """
+    For each signature (same non-GE keys/values), consider all bases that appear as GE families.
+    For each base, union its GE intervals across the signature's dicts, then:
+      - If union is one interval [L, +inf) and L <= win_threshold -> {base: True}
+      - If union is one finite interval [L, U)                   -> {base_GEL: True, base_GEU: False}
+      - If aggressive_upper and union includes any +inf tail     -> {base_GELmin: True}
+        (This matches your desire to collapse multiple pieces into just GE_Lmin when one piece goes to +inf.)
+    Skip a base if any dict in the signature has the explicit base key; we don't mix base with GE.
+    Replace all dicts in a signature iff at least one base collapses; otherwise leave signature untouched.
+    """
+    # Group dict indices by their "signature without family" per base,
+    # but we also need a pure signature grouping to merge multiple bases at once.
+    # Build a canonical "pure signature" (i.e., remove ALL GE keys and ALL base keys).
+    def pure_signature(d: Dict[str, bool]) -> Tuple[Tuple[str, bool], ...]:
+        items = [(k, v) for k, v in d.items() if "_GE" not in k and not isinstance(v, dict) and isinstance(v, bool)]
+        # keep ONLY non-base boolean keys in the signature (i.e., A>B True/False etc.)
+        # GE keys are excluded; base keys remain here because they are part of "other" logic.
+        # However, to avoid mixing with bases we’ll avoid collapsing any base that appears explicitly below.
+        items.sort()
+        return tuple(items)
+
+    # Build per-signature collections
+    sig_to_indices = defaultdict(list)
+    for i, d in enumerate(dicts):
+        sig_to_indices[pure_signature(d)].append(i)
+
+    to_remove = set()
+    replacements = []
+
+    for sig, idxs in sig_to_indices.items():
+        # Collect all bases & their intervals within this signature group
+        bases = set()
+        base_explicit_present = defaultdict(bool)
+        base_intervals = defaultdict(list)  # base -> list of (lo, hi)
+
+        for i in idxs:
+            d = dicts[i]
+            # GE families present in this dict
+            ge_bases = {parsed[0] for k in d for parsed in (_parse_ge_key(k),) if parsed}
+            # explicit base presence
+            for k in d:
+                if "_GE" not in k and isinstance(d[k], bool):
+                    base_explicit_present[k] |= True
+            for base in ge_bases:
+                bases.add(base)
+                lo, hi = _interval_for_family(d, base)
+                if lo < hi:
+                    base_intervals[base].append((lo, hi))
+
+        # Try to collapse each base independently
+        any_collapsed = False
+        collapsed_parts: Dict[str, Dict[str, bool]] = {}  # base -> {collapsed keys...}
+
+        for base in bases:
+            # guard: don't mix with explicit base key in this signature
+            if base_explicit_present.get(base, False):
+                continue
+
+            intervals = base_intervals.get(base, [])
+            if not intervals:
+                continue
+
+            # Merge intervals
+            intervals.sort()
+            merged = []
+            cur_lo, cur_hi = intervals[0]
+            for lo, hi in intervals[1:]:
+                if lo <= cur_hi:
+                    cur_hi = max(cur_hi, hi)
+                else:
+                    merged.append((cur_lo, cur_hi))
+                    cur_lo, cur_hi = lo, hi
+            merged.append((cur_lo, cur_hi))
+
+            # Decide collapse
+            part: Dict[str, bool] = {}
+            if len(merged) == 1:
+                L, R = merged[0]
+                if R == math.inf and L <= win_threshold:
+                    part[base] = True
+                elif R != math.inf and L != -math.inf:
+                    part[f"{base}_GE{int(L)}"] = True
+                    part[f"{base}_GE{int(R)}"] = False
+                elif R == math.inf and aggressive_upper:
+                    # e.g., [L, +inf) with L > win_threshold -> keep as GE_L True
+                    part[f"{base}_GE{int(L)}"] = True
+            else:
+                # multiple pieces
+                if aggressive_upper and any(r == math.inf for _, r in merged):
+                    # find minimal finite L among all pieces
+                    Lmin = min(L for (L, _) in merged if L != -math.inf)
+                    part[f"{base}_GE{int(Lmin)}"] = True
+                else:
+                    # can't nicely collapse this base in this signature
+                    part = {}
+
+            if part:
+                collapsed_parts[base] = part
+                any_collapsed = True
+
+        if not any_collapsed:
+            continue  # leave this signature group as-is
+
+        # Build one collapsed dict for the signature:
+        collapsed = dict(sig)  # start from the shared non-GE keys (sig already only has non-GE keys)
+        for base in sorted(collapsed_parts.keys()):
+            collapsed.update(collapsed_parts[base])
+
+        # Remove all dicts in this signature group and add the collapsed one
+        to_remove.update(idxs)
+        replacements.append(collapsed)
+
+    # output
+    out = [d for i, d in enumerate(dicts) if i not in to_remove]
+    # de-dupe
+    seen = set()
+    for d in replacements:
+        key = tuple(sorted(d.items()))
+        if key not in seen:
+            seen.add(key)
+            out.append(d)
+    return out
+
 # ---------- one-shot orchestrator ----------
 def consolidate_all(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
-    step0 = consolidate_opposites_and_remove_bases(dicts)
-    step1 = consolidate_opposites(step0)
-    step2 = merge_ge_intervals_to_base_safe(step1, win_threshold=1)
-    step3 = remove_base_if_ge_present(step2)
-    step4 = merge_full_partition_remove_base(step3, win_threshold=1)
+    step05  = remove_base_if_ge_present_in_dicts(dicts)
+    step0  = consolidate_opposites_and_remove_bases(step05)
+    step1  = consolidate_opposites(step0)
+    step2  = merge_ge_intervals_to_base_safe(step1, win_threshold=1)  # collapses to base True when union [1,+inf)
+    step3  = remove_base_if_ge_present(step2)                         # strip base if any GE of same base exists
+    step3u = merge_ge_union_by_signature(step3)                            # <-- unified finite/unbounded GE merge
+    step4  = merge_full_partition_remove_base(step3u, win_threshold=1)
+
     # final de-dupe
     seen, out = set(), []
     for d in step4:
@@ -883,6 +1115,344 @@ def consolidate_all(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
             seen.add(key)
             out.append(d)
     return out
+
+# ---------- basic helpers ----------
+def _is_ge_key(k: str) -> bool:
+    return "_GE" in k and ">" in k
+
+def _parse_ge(k: str) -> Tuple[str, int]:
+    base, _, thr = k.partition("_GE")
+    return base, int(thr)
+
+def _flip(base: str) -> str:
+    a, b = base.split(">", 1)
+    return f"{b}>{a}"
+
+def _canon_pair(base: str) -> Tuple[str, str]:
+    a, b = base.split(">", 1)
+    return a, b
+
+def _non_ge_signature(m: Dict[str, bool]) -> Tuple[Tuple[str, bool], ...]:
+    items = [(k, v) for k, v in m.items() if ">" in k and not _is_ge_key(k)]
+    items.sort()
+    return tuple(items)
+
+def _interval_for_base(m: Dict[str, bool], base: str) -> Tuple[float, float, str]:
+    """
+    Return (lo, hi, winner) for this matchup in this minterm:
+      winner is the orientation 'A>B' or 'B>A' (who wins).
+      If base True or GE for base present => winner is base (A>B).
+      If opposite base False present => winner is B>A.
+    """
+    lo = -math.inf
+    hi = math.inf
+    a, b = _canon_pair(base)
+    winner = None
+
+    # base outcome decides winner if present
+    if base in m:
+        winner = base if m[base] else _flip(base)
+    elif _flip(base) in m:
+        winner = _flip(base) if m[_flip(base)] else base
+
+    # GE thresholds specify margins for 'base' orientation only
+    has_ge = False
+    for k, v in m.items():
+        if _is_ge_key(k):
+            bname, t = _parse_ge(k)
+            if bname == base:
+                has_ge = True
+                if v: lo = max(lo, t)
+                else: hi = min(hi, t)
+
+    if has_ge and winner is None:
+        winner = base  # GE implies base orientation wins
+
+    # If winner is the flipped orientation, GE margins don't apply (we print just the loss)
+    if winner == _flip(base):
+        return (1, 1, winner)
+
+    # Normalize band
+    if has_ge:
+        if lo >= hi:  # empty
+            return (1, 1, winner or base)
+        return (max(1, lo), hi, winner or base)
+
+    # No GE; if base True => [1, +inf); if unknown, treat as none
+    if winner == base:
+        return (1, math.inf, base)
+    return (1, 1, winner or base)
+
+def _remove_base_if_ge_present_in_atom(atom: Dict[str, bool]) -> Dict[str, bool]:
+    ge_bases = {k.split("_GE", 1)[0] for k in atom if "_GE" in k}
+    if not ge_bases:
+        return atom
+    to_drop = set()
+    for base in ge_bases:
+        to_drop.add(base)
+        to_drop.add(_flip(base))
+    return {k: v for k, v in atom.items() if k not in to_drop}
+
+# ---------- GLOBAL partitions for airtightness ----------
+def _collect_global_cuts(all_minterms: Iterable[Dict[str, bool]]) -> Dict[str, List[int]]:
+    """
+    For each base, collect all cut thresholds (from any minterm, across the whole input).
+    """
+    cuts: Dict[str, set] = defaultdict(set)
+    for m in all_minterms:
+        for k, v in m.items():
+            if _is_ge_key(k):
+                base, t = _parse_ge(k)
+                cuts[base].add(int(t))
+            elif ">" in k and v is True:
+                # base True implies [1, +inf), ensure we include 1 as a starting cut
+                cuts[k].add(1)
+    # Always include 1 if there is any information for that base
+    out = {}
+    for base, s in cuts.items():
+        s.add(1)
+        out[base] = sorted(s)
+    return out
+
+def _global_partitions_for_base(base: str, global_cuts: Dict[str, List[int]], bands_from_input: List[Tuple[float, float]]) -> List[Tuple[int, int]]:
+    """
+    Build airtight partitions for `base` using GLOBAL cuts. Keep only pieces covered by input bands.
+    """
+    if base not in global_cuts:
+        # No cuts observed anywhere: no partitioning
+        return []
+    cuts = list(global_cuts[base])
+    cuts.sort()
+    parts: List[Tuple[int, int]] = []
+
+    # detect if any input band has +inf tail
+    has_tail = any(hi == math.inf for (lo, hi) in bands_from_input)
+
+    for a, b in zip(cuts, cuts[1:] + [None]):
+        if b is None:
+            if has_tail:
+                parts.append((a, math.inf))
+            break
+        # keep this piece if covered by any band from input
+        covered = any((lo <= a) and (b <= hi) for (lo, hi) in bands_from_input)
+        if covered:
+            parts.append((a, b))
+    return parts
+
+# ---------- Expand scenarios by signature using GLOBAL cuts ----------
+def _expand_signature_atoms_global(signature_group: List[Dict[str, bool]], global_cuts: Dict[str, List[int]]) -> List[Dict[str, bool]]:
+    if not signature_group:
+        return []
+    fixed = dict(_non_ge_signature(signature_group[0]))
+
+    # Determine all bases talked about in this signature
+    bases = set()
+    for m in signature_group:
+        for k in m:
+            if _is_ge_key(k):
+                base, _ = _parse_ge(k); bases.add(base)
+            elif ">" in k:
+                bases.add(k)
+
+    # Build input bands per base (who wins in this signature matters)
+    partitions: Dict[str, List[Tuple[int, int]]] = {}
+    for base in sorted(bases):
+        # Only consider bands for the winner side in this signature
+        bands: List[Tuple[float, float]] = []
+        for m in signature_group:
+            lo, hi, winner = _interval_for_base(m, base)
+            if winner == base and lo < hi:
+                bands.append((lo, hi))
+        if not bands:
+            # no wins for this orientation in this signature; skip
+            continue
+        parts = _global_partitions_for_base(base, global_cuts, bands)
+        if parts:
+            partitions[base] = parts
+
+    if not partitions:
+        # No GE bands for winner sides; just return fixed base outcomes
+        return [fixed.copy()]
+
+    # Cartesian product of all base partitions
+    base_names = sorted(partitions.keys())
+    all_parts = [partitions[b] for b in base_names]
+
+    atoms: List[Dict[str, bool]] = []
+    for combo in product(*all_parts):
+        m = dict(fixed)
+        for bname, (L, U) in zip(base_names, combo):
+            if U == math.inf and L <= 1:
+                m[bname] = True
+            else:
+                if L > 1: m[f"{bname}_GE{L}"] = True
+                if U != math.inf: m[f"{bname}_GE{U}"] = False
+        atoms.append(_remove_base_if_ge_present_in_atom(m))
+    return atoms
+
+# ---------- Rendering in chosen game order ----------
+def _render_clause_lines_ordered(atom: Dict[str, bool], games_order: List[str]) -> List[str]:
+    lines: List[str] = []
+    for base in games_order:
+        a, b = _canon_pair(base)
+        lo, hi, winner = _interval_for_base(atom, base)
+        if winner == _flip(base):
+            # b beats a
+            lines.append(f"{b} Win over {a}")
+        elif winner == base:
+            lo = max(1, lo)
+            if hi == math.inf:
+                if lo <= 1:
+                    lines.append(f"{a} Win over {b}")
+                else:
+                    lines.append(f"{a} Win over {b} by ≥ {lo} points")
+            else:
+                if lo <= 1:
+                    lines.append(f"{a} Win over {b} by < {hi} points")
+                else:
+                    lines.append(f"{a} Win over {b} by ≥ {lo} and < {hi} points")
+        else:
+            # no info for this game in this atom (shouldn't happen if inputs are complete)
+            continue
+    return lines
+
+# ---------- Scenario sort key for logical progression ----------
+def _band_sort_key(base: str, atom: Dict[str, bool], loser_first: bool = True) -> Tuple[int, int, int]:
+    """
+    For one game, return a tuple to sort scenarios:
+      winner_group: 0 for (loser-first) winner (B>A), 1 for (A>B)
+      granularity:  0 for 'any', 1 for bounded [1,k), 2+ for higher lower-bounds in ascending L
+      hi_rank:      secondary by hi (inf last)
+    """
+    a, b = _canon_pair(base)
+    lo, hi, winner = _interval_for_base(atom, base)
+
+    # winner group
+    if loser_first:
+        wg = 0 if winner == _flip(base) else 1
+    else:
+        wg = 0 if winner == base else 1
+
+    # margin granularity rank within the winner group
+    if winner == _flip(base):
+        # losses: treat as 'any' (no margin)
+        return (wg, 0, 0)
+
+    # winner == base
+    if hi == math.inf and lo <= 1:
+        gran = 0  # any margin
+        hir = 10**9
+    elif lo <= 1 and hi != math.inf:
+        gran = 1  # < k
+        hir = hi
+    else:
+        gran = 2 + int(lo)  # ≥ L (and possibly < hi), higher L later
+        hir = hi if hi != math.inf else 10**9
+    return (wg, gran, hir)
+
+def _scenario_sort_key(atom: Dict[str, bool], games_order: List[str]) -> Tuple:
+    # Lexicographic by games in order, using the per-game band keys
+    key = []
+    for base in games_order:
+        key.extend(_band_sort_key(base, atom, loser_first=True))
+    return tuple(key)
+
+# ---------- Main API ----------
+def scenarios_text_from_team_seed_ordered(
+    team_seed_map: Dict[str, Dict[int, Any]],
+    games_order: List[str],  # e.g. ["Brandon>Meridian","Northwest Rankin>Petal","Pearl>Oak Grove"]
+    start_letter: str = "A",
+    seed_order: Optional[List[int]] = [1,2,3,4]
+) -> str:
+    # Ingest all minterms, build global cuts
+    raw_minterms: List[Dict[str,bool]] = []
+    for team, seed_map in team_seed_map.items():
+        for seed, scen_dist in seed_map.items():
+            if scen_dist is None: continue
+            if isinstance(scen_dist, dict):
+                for k in scen_dist.keys():
+                    if isinstance(k, dict): raw_minterms.append(k)
+            elif isinstance(scen_dist, (list, tuple, set)):
+                raw_minterms.extend(list(scen_dist))
+
+    global_cuts = _collect_global_cuts(raw_minterms)
+
+    # Group inputs by non-GE signature and expand with GLOBAL partitions
+    sig_to_minterms = defaultdict(list)
+    for m in raw_minterms:
+        sig_to_minterms[_non_ge_signature(m)].append(m)
+
+    atoms: List[Dict[str,bool]] = []
+    for _, group in sig_to_minterms.items():
+        atoms.extend(_expand_signature_atoms_global(group, global_cuts))
+
+    # Build reverse index for seed lookup
+    entries: List[Tuple[str,int,Dict[str,bool]]] = []
+    for team, seed_map in team_seed_map.items():
+        for seed, scen_dist in seed_map.items():
+            if scen_dist is None: continue
+            if isinstance(scen_dist, dict):
+                for k in scen_dist.keys():
+                    if isinstance(k, dict): entries.append((team, seed, k))
+            elif isinstance(scen_dist, (list, tuple, set)):
+                for k in scen_dist:
+                    entries.append((team, seed, k))
+
+    def _atom_satisfies(atom: Dict[str, bool], broad: Dict[str, bool]) -> bool:
+        # Clean both sides of redundant base when GE present
+        a_clean = _remove_base_if_ge_present_in_atom(dict(atom))
+        b_clean = _remove_base_if_ge_present_in_atom(dict(broad))
+
+        # GE keys must match exactly if present in broad
+        for k, v in b_clean.items():
+            if _is_ge_key(k):
+                if a_clean.get(k) is not v:
+                    return False
+        # Base keys in broad: check via winner from atom
+        for k, v in b_clean.items():
+            if ">" in k and not _is_ge_key(k):
+                lo, hi, winner = _interval_for_base(a_clean, k)
+                if v is True and winner != k:
+                    return False
+                if v is False and winner != _flip(k):
+                    return False
+        return True
+
+    def atom_seed_lines(atom: Dict[str,bool]) -> Dict[int,str]:
+        res: Dict[int,str] = {}
+        cand = defaultdict(list)  # seed -> [(specificity, team)]
+        for team, seed, broad in entries:
+            if _atom_satisfies(atom, broad):
+                cand[seed].append((len(broad), team))
+        for s, lst in cand.items():
+            lst.sort(key=lambda x: (-x[0], x[1]))  # most specific first
+            res[s] = lst[0][1]
+        return res
+
+    # Sort scenarios in the requested progression
+    atoms.sort(key=lambda m: _scenario_sort_key(m, games_order))
+
+    # Render
+    letters = [chr(c) for c in range(ord(start_letter), ord('Z') + 1)]
+    blocks: List[str] = []
+    for idx, atom in enumerate(atoms):
+        label = letters[idx] if idx < len(letters) else f"Z{idx-len(letters)+1}"
+        clauses = _render_clause_lines_ordered(atom, games_order)
+        head = clauses[0] if clauses else "(no clauses)"
+        tail = [f"    AND {c}" for c in clauses[1:]]
+        seeds_map = atom_seed_lines(atom)
+
+        # seed printing order
+        ordered_seeds = sorted(seeds_map) if seed_order is None else [s for s in seed_order if s in seeds_map]
+
+        block = [f"Scenario {label}", head, *tail]
+        if ordered_seeds:
+            block.append(":")
+            for s in ordered_seeds:
+                block.append(f"{s} Seed: {seeds_map[s]}")
+        blocks.append("\n".join(block))
+
+    return "\n\n".join(blocks)
 
 # ---------- Boolean minimization helpers (for readable scenarios) ----------
 def minimize_minterms(minterms, allow_combine=True):
@@ -1033,8 +1603,6 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
             )
             tie_buckets = tie_bucket_groups(teams, wl_totals)
 
-            print(f"[DEBUG] Outcome mask {outcome_mask:0{num_remaining}b}: tie buckets = {tie_buckets}")
-
             # Remaining games where both teams are in the same tie bucket
             intra_bucket_games = unique_intra_bucket_games(tie_buckets, remaining)
 
@@ -1063,8 +1631,6 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             teams, completed, remaining, mask_for_dir,
                             margins=baseline_margins, base_margin_default=7, pa_win=pa_for_winner,
                         )
-
-                        print(f"[DEBUG THRESH] Pair {a} vs {b}, dir winner={winner}: baseline order = {baseline_order}")
 
                         # --- inside enumerate_region(), where you currently compute `found` ---
                         # Scan margins 1..12 for the same-direction winner and collect *all* change points
@@ -1379,8 +1945,12 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
         for team, seed_map in scenario_minterms.items():
             for seed_num, minterms in seed_map.items():
                 mins = [dict(m) for m in minterms]
-                mins = minimize_minterms(mins, allow_combine=True)  # simplify
+                #mins = minimize_minterms(mins, allow_combine=True)  # simplify
                 minimized[seed_num][team] = mins
+
+        scenarios_text = scenarios_text_from_team_seed_ordered(scenario_minterms, ["Brandon>Meridian", "Northwest Rankin>Petal", "Pearl>Oak Grove"])
+
+        print(scenarios_text)
 
         lines = [f"Region {region}-{clazz}A", ""]
         prob_index = {1: 1, 2: 2, 3: 3, 4: 4}
@@ -1815,7 +2385,10 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
         out_path = out_scenarios
         with open(out_path, "w") as f:
             f.write("\n".join(lines) + "\n")
+        with open('scenarios_letter.txt', "w") as f:
+            f.write(scenarios_text)
         print(f"Wrote scenarios text: {out_path}")
+        print(f"Wrote scenarios_letter.txt text: scenarios_letter.txt")
 
 
 # --------------------------- CLI ---------------------------

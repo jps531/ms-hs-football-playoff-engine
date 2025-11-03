@@ -1,0 +1,489 @@
+Scenario A
+Meridian Win over Brandon
+    AND Petal Win over Northwest Rankin
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Petal
+2 Seed: Oak Grove
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario B
+Meridian Win over Brandon
+    AND Petal Win over Northwest Rankin
+    AND Pearl Win over Oak Grove
+:
+1 Seed: Petal
+2 Seed: Pearl
+3 Seed: Oak Grove
+4 Seed: Brandon
+
+Scenario C
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Brandon
+
+Scenario D
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove
+:
+1 Seed: Northwest Rankin
+2 Seed: Pearl
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario E
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Brandon
+
+Scenario F
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove
+:
+1 Seed: Northwest Rankin
+2 Seed: Pearl
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario G
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Brandon
+
+Scenario H
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove
+:
+1 Seed: Northwest Rankin
+2 Seed: Pearl
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario I
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Brandon
+
+Scenario J
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove
+:
+1 Seed: Northwest Rankin
+2 Seed: Pearl
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario K
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Brandon
+
+Scenario L
+Meridian Win over Brandon
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove
+:
+1 Seed: Northwest Rankin
+2 Seed: Pearl
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario M
+Brandon Win over Meridian
+    AND Petal Win over Northwest Rankin
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Petal
+2 Seed: Oak Grove
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario N
+Brandon Win over Meridian
+    AND Petal Win over Northwest Rankin
+    AND Pearl Win over Oak Grove
+:
+1 Seed: Petal
+2 Seed: Pearl
+3 Seed: Oak Grove
+4 Seed: Brandon
+
+Scenario O
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario P
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by < 3 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario Q
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario R
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario S
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario T
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario U
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by < 3 points
+    AND Pearl Win over Oak Grove by ≥ 10 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario V
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario W
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by < 3 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario X
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Northwest Rankin
+4 Seed: Pearl
+
+Scenario Y
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Northwest Rankin
+4 Seed: Pearl
+
+Scenario Z
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+:
+1 Seed: Petal
+2 Seed: Pearl
+3 Seed: Oak Grove
+4 Seed: Northwest Rankin
+
+Scenario Z1
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
+:
+1 Seed: Pearl
+2 Seed: Petal
+3 Seed: Northwest Rankin
+4 Seed: Oak Grove
+
+Scenario Z2
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 3 and < 4 points
+    AND Pearl Win over Oak Grove by ≥ 10 points
+:
+1 Seed: Pearl
+2 Seed: Petal
+3 Seed: Northwest Rankin
+4 Seed: Oak Grove
+
+Scenario Z3
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario Z4
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by < 3 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario Z5
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Pearl
+
+Scenario Z6
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Pearl
+
+Scenario Z7
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+:
+1 Seed: Northwest Rankin
+2 Seed: Pearl
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario Z8
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
+:
+1 Seed: Pearl
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario Z9
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 4 and < 5 points
+    AND Pearl Win over Oak Grove by ≥ 10 points
+:
+1 Seed: Pearl
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario Z10
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario Z11
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by < 3 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario Z12
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Pearl
+
+Scenario Z13
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Pearl
+
+Scenario Z14
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+:
+1 Seed: Northwest Rankin
+2 Seed: Pearl
+3 Seed: Oak Grove
+4 Seed: Petal
+
+Scenario Z15
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
+:
+1 Seed: Pearl
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario Z16
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 5 and < 6 points
+    AND Pearl Win over Oak Grove by ≥ 10 points
+:
+1 Seed: Pearl
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario Z17
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Oak Grove Win over Pearl
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario Z18
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by < 3 points
+:
+1 Seed: Oak Grove
+2 Seed: Petal
+3 Seed: Brandon
+4 Seed: Northwest Rankin
+
+Scenario Z19
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 3 and < 4 points
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Pearl
+
+Scenario Z20
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 4 and < 6 points
+:
+1 Seed: Oak Grove
+2 Seed: Northwest Rankin
+3 Seed: Pearl
+4 Seed: Petal
+
+Scenario Z21
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 6 and < 9 points
+:
+1 Seed: Northwest Rankin
+2 Seed: Pearl
+3 Seed: Oak Grove
+4 Seed: Petal
+
+Scenario Z22
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 9 and < 10 points
+:
+1 Seed: Pearl
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Oak Grove
+
+Scenario Z23
+Brandon Win over Meridian
+    AND Northwest Rankin Win over Petal by ≥ 6 points
+    AND Pearl Win over Oak Grove by ≥ 10 points
+:
+1 Seed: Pearl
+2 Seed: Northwest Rankin
+3 Seed: Petal
+4 Seed: Oak Grove

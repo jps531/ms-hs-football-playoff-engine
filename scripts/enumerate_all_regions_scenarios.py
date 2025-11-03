@@ -38,9 +38,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, required=True)
     ap.add_argument("--dsn", type=str, default=os.getenv("PG_DSN", ""))
-    ap.add_argument("--classes", type=str, default="1-4",
+    ap.add_argument("--classes", type=str, default="5-7",
                     help="Class range, e.g. '1-4' or '2-3' (inclusive).")
-    ap.add_argument("--regions", type=str, default="1-8",
+    ap.add_argument("--regions", type=str, default="1-4",
                     help="Region range, e.g. '1-8' or '3-6' (inclusive).")
     ap.add_argument("--outfile", type=str, default="all_scenarios.txt")
     args = ap.parse_args()
