@@ -1,0 +1,290 @@
+{
+  "1": {
+    "Petal": [
+      {
+        "Northwest Rankin>Petal": false
+      },
+      {
+        "Brandon>Meridian": true,
+        "Northwest Rankin>Petal_GE4": false,
+        "Northwest Rankin>Petal_GE1": true,
+        "Pearl>Oak Grove_GE9": false,
+        "Pearl>Oak Grove_GE3": true
+      }
+    ],
+    "Pearl": [
+      {
+        "Pearl>Oak Grove_GE9": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      }
+    ],
+    "Oak Grove": [
+      {
+        "Pearl>Oak Grove_GE1": true,
+        "Pearl>Oak Grove_GE3": false,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Pearl>Oak Grove_GE6": false,
+        "Northwest Rankin>Petal_GE3": true,
+        "Pearl>Oak Grove_GE3": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": true
+      }
+    ],
+    "Northwest Rankin": [
+      {
+        "Pearl>Oak Grove_GE6": true,
+        "Northwest Rankin>Petal_GE4": true,
+        "Pearl>Oak Grove_GE9": false,
+        "Brandon>Meridian": true
+      },
+      {
+        "Northwest Rankin>Petal": true,
+        "Oak Grove>Pearl": false,
+        "Brandon>Meridian": false
+      }
+    ]
+  },
+  "3": {
+    "Petal": [
+      {
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": false
+      },
+      {
+        "Northwest Rankin>Petal_GE4": true,
+        "Pearl>Oak Grove": true,
+        "Northwest Rankin>Petal_GE5": false,
+        "Oak Grove>Pearl": false,
+        "Brandon>Meridian": true
+      },
+      {
+        "Northwest Rankin>Petal_GE5": true,
+        "Pearl>Oak Grove_GE1": true,
+        "Brandon>Meridian": true
+      }
+    ],
+    "Pearl": [
+      {
+        "Pearl>Oak Grove_GE6": false,
+        "Pearl>Oak Grove_GE4": true,
+        "Northwest Rankin>Petal_GE1": true,
+        "Brandon>Meridian": true
+      }
+    ],
+    "Oak Grove": [
+      {
+        "Pearl>Oak Grove_GE6": true,
+        "Northwest Rankin>Petal_GE1": true,
+        "Pearl>Oak Grove_GE10": false,
+        "Brandon>Meridian": true
+      },
+      {
+        "Northwest Rankin>Petal": false,
+        "Oak Grove>Pearl": false
+      }
+    ],
+    "Brandon": [
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": false
+      }
+    ],
+    "Northwest Rankin": [
+      {
+        "Northwest Rankin>Petal_GE4": false,
+        "Northwest Rankin>Petal_GE1": true,
+        "Pearl>Oak Grove_GE1": true,
+        "Brandon>Meridian": true
+      }
+    ]
+  },
+  "2": {
+    "Petal": [
+      {
+        "Northwest Rankin>Petal_GE4": false,
+        "Northwest Rankin>Petal_GE1": true,
+        "Pearl>Oak Grove_GE1": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      }
+    ],
+    "Pearl": [
+      {
+        "Pearl>Oak Grove_GE6": true,
+        "Pearl>Oak Grove_GE9": false,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Northwest Rankin>Petal": true,
+        "Oak Grove>Pearl": false,
+        "Brandon>Meridian": false
+      },
+      {
+        "Northwest Rankin>Petal": false,
+        "Oak Grove>Pearl": false
+      }
+    ],
+    "Oak Grove": [
+      {
+        "Brandon>Meridian": true,
+        "Northwest Rankin>Petal_GE3": false,
+        "Northwest Rankin>Petal_GE1": true,
+        "Pearl>Oak Grove_GE6": false,
+        "Pearl>Oak Grove_GE3": true
+      },
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": false
+      }
+    ],
+    "Northwest Rankin": [
+      {
+        "Northwest Rankin>Petal_GE4": true,
+        "Pearl>Oak Grove_GE1": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": false
+      }
+    ]
+  },
+  "4": {
+    "Petal": [
+      {
+        "Pearl>Oak Grove_GE9": false,
+        "Pearl>Oak Grove_GE4": true,
+        "Northwest Rankin>Petal_GE5": true,
+        "Brandon>Meridian": true
+      }
+    ],
+    "Pearl": [
+      {
+        "Pearl>Oak Grove_GE4": false,
+        "Pearl>Oak Grove_GE1": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Northwest Rankin>Petal_GE6": false,
+        "Pearl>Oak Grove_GE4": true,
+        "Pearl>Oak Grove_GE6": false,
+        "Northwest Rankin>Petal_GE3": true,
+        "Brandon>Meridian": true
+      }
+    ],
+    "Oak Grove": [
+      {
+        "Pearl>Oak Grove_GE6": true,
+        "Northwest Rankin>Petal_GE3": true,
+        "Pearl>Oak Grove_GE10": false,
+        "Brandon>Meridian": true
+      },
+      {
+        "Northwest Rankin>Petal": true,
+        "Oak Grove>Pearl": false,
+        "Brandon>Meridian": false
+      },
+      {
+        "Pearl>Oak Grove_GE10": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      }
+    ],
+    "Brandon": [
+      {
+        "Northwest Rankin>Petal": false,
+        "Oak Grove>Pearl": false
+      },
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": false
+      }
+    ],
+    "Northwest Rankin": [
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Pearl>Oak Grove_GE4": true,
+        "Northwest Rankin>Petal_GE4": false,
+        "Northwest Rankin>Petal_GE1": true,
+        "Pearl>Oak Grove_GE10": false,
+        "Brandon>Meridian": true
+      },
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": false
+      }
+    ]
+  },
+  "5": {
+    "Pearl": [
+      {
+        "Oak Grove>Pearl": true
+      }
+    ],
+    "Brandon": [
+      {
+        "Northwest Rankin>Petal": true,
+        "Oak Grove>Pearl": false,
+        "Brandon>Meridian": false
+      },
+      {
+        "Northwest Rankin>Petal": true,
+        "Pearl>Oak Grove": true,
+        "Oak Grove>Pearl": false,
+        "Brandon>Meridian": true
+      }
+    ],
+    "Northwest Rankin": [
+      {
+        "Northwest Rankin>Petal": false,
+        "Oak Grove>Pearl": false
+      }
+    ]
+  },
+  "6": {
+    "Meridian": [
+      {
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": false
+      },
+      {
+        "Northwest Rankin>Petal": false
+      },
+      {
+        "Oak Grove>Pearl": true,
+        "Northwest Rankin>Petal": true,
+        "Brandon>Meridian": true
+      },
+      {
+        "Northwest Rankin>Petal": true,
+        "Pearl>Oak Grove": true,
+        "Oak Grove>Pearl": false,
+        "Brandon>Meridian": true
+      }
+    ]
+  }
+}
