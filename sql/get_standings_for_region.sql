@@ -1,7 +1,7 @@
 -- DROP FUNCTION public.get_standings_for_region(int4, int4, int4);
 
 CREATE OR REPLACE FUNCTION public.get_standings_for_region(p_class integer, p_region integer, p_season integer DEFAULT 2025)
- RETURNS TABLE(school text, class integer, region integer, season integer, wins integer, losses integer, ties integer, region_wins integer, region_losses integer, region_ties integer, coin_flip_needed boolean)
+ RETURNS TABLE(school text, class integer, region integer, season integer, wins integer, losses integer, ties integer, region_wins integer, region_losses integer, region_ties integer)
  LANGUAGE sql
  STABLE
 AS $function$
@@ -164,8 +164,7 @@ SELECT
   COALESCE(ties,0)           AS ties,
   COALESCE(region_wins,0)    AS region_wins,
   COALESCE(region_losses,0)  AS region_losses,
-  COALESCE(region_ties,0)    AS region_ties,
-  (tie_group_size > 1)       AS coin_flip_needed
+  COALESCE(region_ties,0)    AS region_ties
 FROM ranked
 ORDER BY order_rank;
 $function$

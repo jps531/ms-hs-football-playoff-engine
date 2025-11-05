@@ -1,56 +1,21 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Playoff Odds & Scenario Enumerator (clarified comments + explicit Step labels + sequential tie resolution)
-
-Key bugfix in this version:
-- Step partitions no longer (incorrectly) include the team name in the partition *key*.
-  That was splitting equal-step groups into singletons (alphabetical), preventing later
-  steps (e.g., Step 3) from ever deciding the order. Now, grouping uses ONLY the step
-  metric; alphabetical order is applied *within* equal-key groups for determinism.
-
-This script deterministically enumerates all remaining region-game outcomes and, for each
-outcome, applies the official tiebreaker chain to produce final seeds (1–4). It also
-aggregates probabilities (assuming 50/50 per remaining game by default, or weighted if
-you pass explicit weights) and emits human-readable explanations for each seed path.
-
-TIEBREAKER STEPS (where implemented in code)
--------------------------------------------
-Step 1 – Head-to-head among tied teams:
-    Implemented in build_h2h_maps() -> h2h_points, applied in resolve_bucket() sequential step #1.
-
-Step 2 – Results vs highest-ranked/seeded outside teams (lexicographic):
-    Implemented in step2_step4_arrays() -> `step2`, applied in resolve_bucket() sequential step #2.
-
-Step 3 – Point differential among tied teams (capped at ±12):
-    Implemented in build_h2h_maps() -> capped_pd_map, applied in resolve_bucket() sequential step #3.
-
-Step 4 – Point differential vs highest-ranked/seeded outside teams (lexicographic, capped ±12):
-    Implemented in step2_step4_arrays() -> `step4` (capped), applied in resolve_bucket() sequential step #4.
-
-Step 5 – Fewest points allowed in all region games:
-    Accumulated in standings_from_mask() as `pa`, applied in resolve_bucket() sequential step #5.
-
-Step 6 – Coin flip:
-    We detect when teams remain fully tied after Steps 1–5. In resolve_bucket(), we collect
-    such ties in `coin_flip_collector` (if provided). For determinism we still break ties by
-    alphabetical order **without changing odds math** (no behavioral change), but now the code
-    explicitly marks where a true coin flip would be required.
-"""
-
 from __future__ import annotations
-import argparse, json, math, os, re
-from itertools import product
+
+import math
+
+from prefect import flow, get_run_logger, task
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional, Any, Iterable
+from typing import Dict, List, Tuple, Optional
 
-try:
-    import psycopg
-except Exception:
-    psycopg = None
+from database_helpers import get_database_connection
+
+
+# -------------------------
+# Helpers & Functions
+# -------------------------
 
 def pct_str(x: float) -> str:
+    """Format a float as a percentage string with no more than 2 significant digits."""
     val = x * 100.0
     if abs(val - round(val)) < 1e-9:
         return f"{int(round(val))}%"
@@ -78,85 +43,6 @@ class RemainingGame:
 
 def normalize_pair(x: str, y: str) -> Tuple[str, str, int]:
     return (x, y, +1) if x <= y else (y, x, -1)
-
-def fetch_division(conn, clazz: int, region: int, season: int) -> List[str]:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT school FROM schools WHERE class=%s AND region=%s AND season=%s ORDER BY school",
-            (clazz, region, season),
-        )
-        return [r[0] for r in cur.fetchall()]
-
-def fetch_completed_pairs(conn, teams: List[str], season: int) -> List[CompletedGame]:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT school, opponent, date, result, points_for, points_against "
-            "FROM games "
-            "WHERE season=%s AND final=TRUE AND region_game=TRUE "
-            "  AND school = ANY(%s) AND opponent = ANY(%s)",
-            (season, teams, teams),
-        )
-        rows = cur.fetchall()
-
-    # Deduplicate by *game* key (a,b,date) where a<b (lexicographic).
-    # Prefer the row where school==a (lex-first) if it exists; otherwise use the b-row inverted.
-    by_game: Dict[Tuple[str, str, str], Dict[str, int] | Tuple[str, ...]] = {}
-
-    for school, opp, date, result, pf, pa in rows:
-        a, b, _sign = normalize_pair(school, opp)  # a<b
-        gkey = (a, b, date)
-
-        # Compute contributions from the perspective of team 'a' (lex-first)
-        if school == a:
-            # from a's row directly
-            res_a = 1 if result == 'W' else (-1 if result == 'L' else 0)
-            pd_a  = (pf - pa) if (pf is not None and pa is not None) else 0
-            pa_a  = (pa or 0)
-            pa_b  = (pf or 0)
-
-            # Always prefer the a-row: overwrite any prior b-row for this (a,b,date)
-            by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 1}
-
-        else:
-            # row is from b's perspective; invert to 'a'
-            res_a = -1 if result == 'W' else (1 if result == 'L' else 0)
-            pd_a  = (-(pf - pa)) if (pf is not None and pa is not None) else 0
-            pa_a  = (pf or 0)  # a allowed b's points_for
-            pa_b  = (pa or 0)  # b allowed a's points_for
-
-            prev = by_game.get(gkey)
-            # Only store if we don't already have an a-row for this game
-            if not prev or (isinstance(prev, dict) and not prev.get("has_a")):
-                by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 0}
-
-    # Now aggregate per pair (a,b) across dates (in case there were multiple meetings)
-    pair_totals: Dict[Tuple[str, str], Dict[str, int]] = {}
-    for (a, b, _date), vals in by_game.items():
-        d = pair_totals.setdefault((a, b), {"res_a": 0, "pd_a": 0, "pa_a": 0, "pa_b": 0})
-        d["res_a"] += vals["res_a"] # type: ignore
-        d["pd_a"]  += vals["pd_a"] # type: ignore
-        d["pa_a"]  += vals["pa_a"] # type: ignore
-        d["pa_b"]  += vals["pa_b"] # type: ignore
-
-    out: List[CompletedGame] = []
-    for (a, b), v in pair_totals.items():
-        # Collapse res_a to {-1, 0, +1} for the season series (win/loss/split from 'a' pov)
-        res_a_sign = 1 if v["res_a"] > 0 else (-1 if v["res_a"] < 0 else 0)
-        out.append(CompletedGame(a, b, res_a_sign, v["pd_a"], v["pa_a"], v["pa_b"]))
-
-    return out
-
-def fetch_remaining_pairs(conn, teams: List[str], season: int) -> List[RemainingGame]:
-    with conn.cursor() as cur:
-        cur.execute(
-            "WITH cand AS ("
-            "  SELECT LEAST(school,opponent) a, GREATEST(school,opponent) b FROM games "
-            "  WHERE season=%s AND final=FALSE AND region_game=TRUE "
-            "    AND school = ANY(%s) AND opponent = ANY(%s)"
-            ") SELECT DISTINCT a,b FROM cand",
-            (season, teams, teams),
-        )
-        return [RemainingGame(a,b) for a,b in cur.fetchall()]
 
 
 # --------------------------- Aggregation for Steps 1 & 5 ---------------------------
@@ -1178,8 +1064,144 @@ def minimize_minterms(minterms, allow_combine=True):
     return [dict(t) for t in terms]
 
 
+# -------------------------
+# Prefect tasks & flow
+# -------------------------
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Region Teams for {region}-{clazz}A")
+def fetch_region_teams(clazz: int, region: int, season: int) -> List[str]:
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT school FROM schools WHERE class=%s AND region=%s AND season=%s ORDER BY school",
+                (clazz, region, season),
+            )
+            return [r[0] for r in cur.fetchall()]
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Completed Region Games for {teams}")
+def fetch_completed_pairs(teams: List[str], season: int) -> List[CompletedGame]:
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT school, opponent, date, result, points_for, points_against "
+                "FROM games "
+                "WHERE season=%s AND final=TRUE AND region_game=TRUE "
+                "  AND school = ANY(%s) AND opponent = ANY(%s)",
+                (season, teams, teams),
+            )
+            rows = cur.fetchall()
+
+    # Deduplicate by *game* key (a,b,date) where a<b (lexicographic).
+    # Prefer the row where school==a (lex-first) if it exists; otherwise use the b-row inverted.
+    by_game: Dict[Tuple[str, str, str], Dict[str, int] | Tuple[str, ...]] = {}
+
+    for school, opp, date, result, pf, pa in rows:
+        a, b, _sign = normalize_pair(school, opp)  # a<b
+        gkey = (a, b, date)
+
+        # Compute contributions from the perspective of team 'a' (lex-first)
+        if school == a:
+            # from a's row directly
+            res_a = 1 if result == 'W' else (-1 if result == 'L' else 0)
+            pd_a  = (pf - pa) if (pf is not None and pa is not None) else 0
+            pa_a  = (pa or 0)
+            pa_b  = (pf or 0)
+
+            # Always prefer the a-row: overwrite any prior b-row for this (a,b,date)
+            by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 1}
+
+        else:
+            # row is from b's perspective; invert to 'a'
+            res_a = -1 if result == 'W' else (1 if result == 'L' else 0)
+            pd_a  = (-(pf - pa)) if (pf is not None and pa is not None) else 0
+            pa_a  = (pf or 0)  # a allowed b's points_for
+            pa_b  = (pa or 0)  # b allowed a's points_for
+
+            prev = by_game.get(gkey)
+            # Only store if we don't already have an a-row for this game
+            if not prev or (isinstance(prev, dict) and not prev.get("has_a")):
+                by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 0}
+
+    # Now aggregate per pair (a,b) across dates (in case there were multiple meetings)
+    pair_totals: Dict[Tuple[str, str], Dict[str, int]] = {}
+    for (a, b, _date), vals in by_game.items():
+        d = pair_totals.setdefault((a, b), {"res_a": 0, "pd_a": 0, "pa_a": 0, "pa_b": 0})
+        d["res_a"] += vals["res_a"] # type: ignore
+        d["pd_a"]  += vals["pd_a"] # type: ignore
+        d["pa_a"]  += vals["pa_a"] # type: ignore
+        d["pa_b"]  += vals["pa_b"] # type: ignore
+
+    out: List[CompletedGame] = []
+    for (a, b), v in pair_totals.items():
+        # Collapse res_a to {-1, 0, +1} for the season series (win/loss/split from 'a' pov)
+        res_a_sign = 1 if v["res_a"] > 0 else (-1 if v["res_a"] < 0 else 0)
+        out.append(CompletedGame(a, b, res_a_sign, v["pd_a"], v["pa_a"], v["pa_b"]))
+
+    return out
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Remaining Region Games for {teams}")
+def fetch_remaining_pairs(teams: List[str], season: int) -> List[RemainingGame]:
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "WITH cand AS ("
+                "  SELECT LEAST(school,opponent) a, GREATEST(school,opponent) b FROM games "
+                "  WHERE season=%s AND final=FALSE AND region_game=TRUE "
+                "    AND school = ANY(%s) AND opponent = ANY(%s)"
+                ") SELECT DISTINCT a,b FROM cand",
+                (season, teams, teams),
+            )
+            return [RemainingGame(a,b) for a,b in cur.fetchall()]
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Region Standings for {region}-{clazz}A")
+def fetch_region_standings(clazz: int, region: int, season: int) -> List[str]:
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT school, class, region, season, wins, losses, ties, region_wins, region_losses, region_ties FROM get_standings_for_region(%s, %s)",
+                (clazz, region),
+            )
+            return [r for r in cur.fetchall()]
+
+
+@task(task_run_name="Write {season} Region Standings for {region}-{clazz}A")
+def write_region_standings(results, clazz, region, season):
+
+    # --- do the updates ---
+    sql = """
+        INSERT INTO region_standings (school, season, class, region)
+                VALUES %s
+                ON CONFLICT (school, season) DO UPDATE SET
+                    class  = COALESCE(EXCLUDED.class,  region_standings.class),
+                    region = COALESCE(EXCLUDED.region, region_standings.region),
+                    wins   = EXCLUDED.wins,
+                    losses = EXCLUDED.losses,
+                    ties   = EXCLUDED.ties,
+                    region_wins   = EXCLUDED.region_wins,
+                    region_losses = EXCLUDED.region_losses,
+                    region_ties   = EXCLUDED.region_ties,
+                    odds_1st      = EXCLUDED.odds_1st,
+                    odds_2nd      = EXCLUDED.odds_2nd,
+                    odds_3rd      = EXCLUDED.odds_3rd,
+                    odds_4th      = EXCLUDED.odds_4th,
+                    scenarios_1st = EXCLUDED.scenarios_1st,
+                    scenarios_2nd = EXCLUDED.scenarios_2nd,
+                    scenarios_3rd = EXCLUDED.scenarios_3rd,
+                    scenarios_4th = EXCLUDED.scenarios_4th,
+                    odds_playoffs = EXCLUDED.odds_playoffs,
+                    clinched      = EXCLUDED.clinched,
+                    eliminated    = EXCLUDED.eliminated,
+                    coin_flip_needed = EXCLUDED.coin_flip_needed
+        ;
+    """
+
 # ---------- Main enumeration + outputs ----------
-def get_region_finish_scenarios(conn, clazz, region, season, debug=False):
+@task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
+def get_region_finish_scenarios(clazz, region, season, debug=False):
     """
     Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
     and aggregate seeding odds + human-readable scenario explanations.
@@ -1191,12 +1213,15 @@ def get_region_finish_scenarios(conn, clazz, region, season, debug=False):
       that changes ordering, weighting <threshold vs ≥threshold branches appropriately.
     - We tally 1st..4th odds across all branches; playoffs = sum of those four odds.
     """
+
+    logger = get_run_logger()
+
     # ----- Fetch inputs -----
-    teams = fetch_division(conn, clazz, region, season)
+    teams = fetch_region_teams(clazz, region, season)
     if not teams:
         raise SystemExit("No teams found.")
-    completed = fetch_completed_pairs(conn, teams, season)   # fixed results already known
-    remaining = fetch_remaining_pairs(conn, teams, season)  # undecided region games
+    completed = fetch_completed_pairs(teams, season)   # fixed results already known
+    remaining = fetch_remaining_pairs(teams, season)  # undecided region games
     num_remaining = len(remaining)
 
     # ----- Accumulators for odds -----
@@ -1301,7 +1326,7 @@ def get_region_finish_scenarios(conn, clazz, region, season, debug=False):
                         thresholds_dir[((a, b), winner)] = change_points
 
                         # Helpful debug
-                        print(f"[DEBUG THRESH] Pair {a} vs {b}, dir winner={winner}: thresholds={change_points}")
+                        logger.debug(f"[DEBUG THRESH] Pair {a} vs {b}, dir winner={winner}: thresholds={change_points}")
 
             # 4) If no thresholds for this mask, resolve once; else split by thresholds that match the mask’s winners
             #    i.e., for each intra-bucket matchup we use the threshold for the *actual* winner in this mask
@@ -1403,13 +1428,6 @@ def get_region_finish_scenarios(conn, clazz, region, season, debug=False):
         final_playoffs = 1.0 if clinched else (0.0 if eliminated else p_playoffs)
         results.append((school, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated))
 
-    # Write results to CSV
-    with open("odds.csv", "w") as f:
-        f.write("school,odds_1st,odds_2nd,odds_3rd,odds_4th,odds_playoffs,final_odds_playoffs,clinched,eliminated\n")
-        for row in sorted(results, key=lambda r: (-r[6], r[0])):
-            f.write("{},{:.6f},{:.6f},{:.6f},{:.6f},{:.6f},{:.6f},{},{}\n".format(*row))
-    print(f"Wrote odds to odds.csv")
-
     def simplify_matchups(dicts):
         simplified = []
         for d in dicts:
@@ -1446,26 +1464,38 @@ def get_region_finish_scenarios(conn, clazz, region, season, debug=False):
                 {k: d[k] for k in sorted(d)}
                 for d in sorted(minimized_mins, key=lambda x: len(x))
             ]
-            print(f"Team {team} Seed {seed_num}: {sorted_mins}")
             minimized[seed_num][team] = sorted_mins
+
+    region_standings = fetch_region_standings(clazz, region, season)
+
+    logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
+    logger.info("Region standings: %s", region_standings)
+    logger.info("Results: %s", results)
+    logger.info("Minimized scenarios: %s", minimized)
+
+    #write_region_standings(results, clazz, region, season)
 
     return minimized
 
 
-# --------------------------- CLI ---------------------------
-
-def main():
-    ap=argparse.ArgumentParser()
-    ap.add_argument("--class", dest="clazz", type=int, required=True)
-    ap.add_argument("--region", type=int, required=True)
-    ap.add_argument("--season", type=int, required=True)
-    ap.add_argument("--dsn", type=str, default=os.getenv("PG_DSN",""))
-    ap.add_argument("--debug", action="store_true")
-    args=ap.parse_args()
-    if not psycopg: raise SystemExit("Please install psycopg: pip install 'psycopg[binary]'")
-    if not args.dsn: raise SystemExit("Provide --dsn or PG_DSN")
-    with psycopg.connect(args.dsn) as conn:
-        get_region_finish_scenarios(conn, args.clazz, args.region, args.season, debug=args.debug)
-
-if __name__ == "__main__":
-    main()
+@flow(name="Region Scenarios Data Flow")
+def region_scenarios_data_flow(season: int = 2025, clazz: int | None = None, region: int | None = None) -> dict[str, object]:
+    """
+    Region Scenarios Data Flow
+    """
+    logger = get_run_logger()
+    logger.info("Running region scenarios data flow for season %d, class %d, region %d", season, clazz, region)
+    scenario_dicts = {}
+    if clazz is None or region is None:
+        for clazz in [1, 2, 3, 4]:
+            scenario_dicts[clazz] = {}
+            for region in [1, 2, 3, 4, 5, 6, 7, 8]:
+                scenario_dicts[clazz][region] = get_region_finish_scenarios(clazz, region, season)
+        for clazz in [5, 6, 7]:
+            scenario_dicts[clazz] = {}
+            for region in [1, 2, 3, 4]:
+                scenario_dicts[clazz][region] = get_region_finish_scenarios(clazz, region, season)
+    elif clazz is not None and region is not None:
+        scenario_dicts[clazz][region] = get_region_finish_scenarios(clazz, region, season)
+    # logger.info("Finished region scenarios data flow for season %d, class %d, region %d: %s", season, clazz, region, scenario_dicts)
+    return scenario_dicts

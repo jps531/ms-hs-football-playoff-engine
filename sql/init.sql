@@ -50,6 +50,35 @@ CREATE TABLE IF NOT EXISTS games (
   PRIMARY KEY (school, date)
 );
 
+
+CREATE TABLE IF NOT EXISTS region_standings (
+  school          TEXT NOT NULL,
+  season          INTEGER NOT NULL,
+  class           INTEGER NOT NULL,
+  region          INTEGER NOT NULL,
+  wins            INTEGER NOT NULL DEFAULT 0,
+  losses          INTEGER NOT NULL DEFAULT 0,
+  ties            INTEGER NOT NULL DEFAULT 0,
+  region_wins     INTEGER NOT NULL DEFAULT 0,
+  region_losses   INTEGER NOT NULL DEFAULT 0,
+  region_ties     INTEGER NOT NULL DEFAULT 0,
+  odds_1st        REAL NOT NULL DEFAULT 0.0,
+  odds_2nd        REAL NOT NULL DEFAULT 0.0,
+  odds_3rd        REAL NOT NULL DEFAULT 0.0,
+  odds_4th        REAL NOT NULL DEFAULT 0.0,
+  scenarios_1st   JSONB NOT NULL DEFAULT '{}'::JSONB,
+  scenarios_2nd   JSONB NOT NULL DEFAULT '{}'::JSONB,
+  scenarios_3rd   JSONB NOT NULL DEFAULT '{}'::JSONB,
+  scenarios_4th   JSONB NOT NULL DEFAULT '{}'::JSONB,
+  odds_playoffs   REAL NOT NULL DEFAULT 0.0,
+  clinched        BOOLEAN NOT NULL DEFAULT FALSE,
+  eliminated      BOOLEAN NOT NULL DEFAULT FALSE,
+  coin_flip_needed BOOLEAN NOT NULL DEFAULT FALSE,
+  UNIQUE (school, season),
+  FOREIGN KEY (school, season) REFERENCES schools(school, season)
+);
+
+
 CREATE TABLE IF NOT EXISTS brackets (
   id              BIGSERIAL PRIMARY KEY,
   name            TEXT NOT NULL,
@@ -57,6 +86,7 @@ CREATE TABLE IF NOT EXISTS brackets (
   class           INTEGER NOT NULL,
   source          TEXT
 );
+
 
 CREATE TABLE IF NOT EXISTS bracket_teams (
   bracket_id      BIGINT NOT NULL,
@@ -68,6 +98,7 @@ CREATE TABLE IF NOT EXISTS bracket_teams (
   FOREIGN KEY (school, season) REFERENCES schools(school, season),
   PRIMARY KEY (bracket_id, school)
 );
+
 
 CREATE TABLE IF NOT EXISTS bracket_games (
   id              BIGSERIAL PRIMARY KEY,
