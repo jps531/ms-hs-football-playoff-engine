@@ -282,7 +282,6 @@ def scrape_task(existing_schools: List[School], season: int) -> int:
     logger.info("Inserted/Updated %d games", updated_count)
     return updated_count
 
-
 @flow(name="AHSFHS Schedule Data Flow")
 def ahsfhs_schedule_data_flow(season: int = 2025) -> int:
     """

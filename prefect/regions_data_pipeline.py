@@ -133,7 +133,6 @@ def scrape_task(url: str, season: int) -> List[School]:
     logger.info("Parsed %d schools", len(rows))
     return rows
 
-
 @flow(name="Regions Data Flow")
 def regions_data_flow(season: int = 2025) -> int:
     """

@@ -6,6 +6,8 @@ from prefect import flow, get_run_logger, task
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
+from psycopg2.extras import execute_values, Json
+
 
 from database_helpers import get_database_connection
 
@@ -23,6 +25,31 @@ def pct_str(x: float) -> str:
 
 
 # --------------------------- Data Models ---------------------------
+
+@dataclass(frozen=True)
+class Standings:
+    school: str
+    class_: int
+    region: int
+    season: int
+    wins: int
+    losses: int
+    ties: int
+    region_wins: int
+    region_losses: int
+    region_ties: int
+
+@dataclass(frozen=True)
+class Odds:
+    school: str
+    p1: float
+    p2: float
+    p3: float
+    p4: float
+    p_playoffs: float
+    final_playoffs: float
+    clinched: bool
+    eliminated: bool
 
 @dataclass(frozen=True)
 class CompletedGame:
@@ -1158,22 +1185,64 @@ def fetch_remaining_pairs(teams: List[str], season: int) -> List[RemainingGame]:
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Region Standings for {region}-{clazz}A")
-def fetch_region_standings(clazz: int, region: int, season: int) -> List[str]:
+def fetch_region_standings(clazz: int, region: int, season: int) -> List[Standings]:
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT school, class, region, season, wins, losses, ties, region_wins, region_losses, region_ties FROM get_standings_for_region(%s, %s)",
                 (clazz, region),
             )
-            return [r for r in cur.fetchall()]
+            return [Standings(*r) for r in cur.fetchall()]
 
 
 @task(task_run_name="Write {season} Region Standings for {region}-{clazz}A")
-def write_region_standings(results, clazz, region, season):
+def write_region_standings(standings: List[Standings], odds: dict[str, Odds], scenarios: defaultdict, clazz: int, region: int, season: int):
+
+    def seed_scenarios_for(scenarios, school):
+        # Ensure the school exists
+        m = scenarios.setdefault(school, {})
+        # Normalize inner keys to ints if they came in as strings
+        if m and not all(isinstance(k, int) for k in m.keys()):
+            scenarios[school] = {int(k): v for k, v in m.items()}
+            m = scenarios[school]
+        # Fill any missing seeds with empty lists
+        for k in (1, 2, 3, 4):
+            m.setdefault(k, [])
+        return m
+
+    data_by_school = []
+    for team in standings:
+        seed_scenarios = seed_scenarios_for(scenarios, team.school)
+        if team.school not in scenarios:
+            scenarios[team.school] = {1: [], 2: [], 3: [], 4: []}
+        data_by_school.append((
+                team.school,
+                season,
+                clazz,
+                region,
+                team.wins,
+                team.losses,
+                team.ties,
+                team.region_wins,
+                team.region_losses,
+                team.region_ties,
+                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p1,
+                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p2,
+                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p3,
+                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p4,
+                Json(seed_scenarios[1]),
+                Json(seed_scenarios[2]),
+                Json(seed_scenarios[3]),
+                Json(seed_scenarios[4]),
+                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p_playoffs,
+                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).clinched,
+                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).eliminated,
+                False
+            ))
 
     # --- do the updates ---
     sql = """
-        INSERT INTO region_standings (school, season, class, region)
+        INSERT INTO region_standings (school, season, class, region, wins, losses, ties, region_wins, region_losses, region_ties, odds_1st, odds_2nd, odds_3rd, odds_4th, scenarios_1st, scenarios_2nd, scenarios_3rd, scenarios_4th, odds_playoffs, clinched, eliminated, coin_flip_needed)
                 VALUES %s
                 ON CONFLICT (school, season) DO UPDATE SET
                     class  = COALESCE(EXCLUDED.class,  region_standings.class),
@@ -1198,6 +1267,15 @@ def write_region_standings(results, clazz, region, season):
                     coin_flip_needed = EXCLUDED.coin_flip_needed
         ;
     """
+
+    template = "(" + ", ".join(["%s"] * 22) + ")"
+
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, data_by_school, template=template, page_size=500)
+        conn.commit()
+
+    return len(data_by_school)
 
 # ---------- Main enumeration + outputs ----------
 @task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
@@ -1415,8 +1493,8 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
         # Each mask contributes weight 1; branch weights within a mask sum to 1.
         denom = float(1 << num_remaining)
 
-    # ----- Compile/emit odds CSV (same format as before) -----
-    results = []
+    # ----- Compute final odds -----
+    odds: dict[str, Odds] = {}
     for school in teams:
         p1 = first_counts[school]  / denom
         p2 = second_counts[school] / denom
@@ -1426,7 +1504,7 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
         clinched = p_playoffs >= 0.999
         eliminated = p_playoffs <= 0.001
         final_playoffs = 1.0 if clinched else (0.0 if eliminated else p_playoffs)
-        results.append((school, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated))
+        odds[school] = Odds(school, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated)
 
     def simplify_matchups(dicts):
         simplified = []
@@ -1453,7 +1531,8 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
         return simplified
 
 
-    minimized = defaultdict(dict)
+    # ----- Post-process scenario minterms into minimized scenarios -----
+    minimized_scenarios = defaultdict(dict)
     for team, seed_map in scenario_minterms.items():
         for seed_num, minterms in seed_map.items():
             mins = [dict(m) for m in minterms]
@@ -1464,18 +1543,19 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
                 {k: d[k] for k in sorted(d)}
                 for d in sorted(minimized_mins, key=lambda x: len(x))
             ]
-            minimized[seed_num][team] = sorted_mins
+            minimized_scenarios[team][seed_num] = sorted_mins
 
+    # ----- Fetch current standings -----
     region_standings = fetch_region_standings(clazz, region, season)
 
     logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
     logger.info("Region standings: %s", region_standings)
-    logger.info("Results: %s", results)
-    logger.info("Minimized scenarios: %s", minimized)
+    logger.info("Odds: %s", odds)
+    logger.info("Minimized scenarios: %s", minimized_scenarios)
 
-    #write_region_standings(results, clazz, region, season)
+    write_region_standings(region_standings, odds, minimized_scenarios, clazz, region, season)
 
-    return minimized
+    return minimized_scenarios
 
 
 @flow(name="Region Scenarios Data Flow")
@@ -1497,5 +1577,4 @@ def region_scenarios_data_flow(season: int = 2025, clazz: int | None = None, reg
                 scenario_dicts[clazz][region] = get_region_finish_scenarios(clazz, region, season)
     elif clazz is not None and region is not None:
         scenario_dicts[clazz][region] = get_region_finish_scenarios(clazz, region, season)
-    # logger.info("Finished region scenarios data flow for season %d, class %d, region %d: %s", season, clazz, region, scenario_dicts)
     return scenario_dicts

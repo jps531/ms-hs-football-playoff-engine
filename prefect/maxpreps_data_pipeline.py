@@ -220,7 +220,6 @@ def scrape_task(existing_schools: List[School]) -> int:
     logger.info("Updated %d schools", updated_count)
     return updated_count
 
-
 @flow(name="MaxPreps Data Flow")
 def maxpreps_data_flow() -> int:
     """
