@@ -4,6 +4,7 @@ import time, re
 from typing import Iterable, List
 from psycopg2.extras import execute_values
 from prefect import flow, task, get_run_logger
+from datetime import datetime
 
 from data_classes import Game, School
 from database_helpers import get_database_connection
@@ -82,6 +83,7 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
             Championship\s+Game
         ))?
         (?:\s*(?P<star2>\*))?             
+        (?:\s+Playoffs\b)? 
         (?=\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.|$)
         """,
         re.I | re.X
@@ -140,9 +142,9 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
 
         region = bool(m.group("star1") or m.group("star2"))
 
-        games.append(Game.from_db_tuple({
+        game = Game.from_db_tuple({
             "school": school_name,
-            "date": date,
+            "date": datetime.strptime(date, "%m/%d/%Y").date(),
             "season": season,
             "location_id": None, # AHSFHS does not provided advanced location information,
             "points_for": int(m.group("pfor")) if m.group("pfor") else None,
@@ -157,7 +159,10 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
             "region_game": region,
             "final": True if m.group("res") else False,
             "overtime": overtime,
-        }))
+        })
+
+        if game is not None:
+            games.append(game)
 
     logger.info("Parsed schedule for %r: %s", school_name, games)
 
@@ -205,42 +210,71 @@ def insert_rows(game_records: Iterable[Game]) -> int:
 
     # --- do the updates ---
     sql = """
+    WITH incoming_raw AS (
+        SELECT *
+        FROM (VALUES %s) AS v(
+            school, date, season, location_id, points_for, points_against,
+            "round", kickoff_time, opponent, result, game_status, source,
+            location, region_game, final, overtime
+        )
+    ),
+    incoming AS (
+        SELECT
+            school::text          AS school,
+            date::date            AS date,
+            season::integer       AS season,
+            location_id::integer  AS location_id,
+            points_for::integer   AS points_for,
+            points_against::integer AS points_against,
+            "round"::text         AS "round",
+            kickoff_time::timestamptz AS kickoff_time,
+            opponent::text        AS opponent,
+            result::text          AS result,
+            game_status::text     AS game_status,
+            source::text          AS source,
+            location::text        AS location,
+            region_game::boolean  AS region_game,
+            final::boolean        AS final,
+            overtime::integer     AS overtime
+        FROM incoming_raw
+    ),
+    deleted AS (
+        DELETE FROM games g
+        USING incoming i
+        WHERE g.school = i.school
+        AND g.date BETWEEN i.date - INTERVAL '3 days'
+                        AND i.date + INTERVAL '3 days'
+        RETURNING g.*
+    )
     INSERT INTO games
-    (school, date, season, location_id, points_for, points_against, "round", kickoff_time, opponent, result, game_status, source, location, region_game, final, overtime)
-    VALUES %s
+        (school, date, season, location_id, points_for, points_against,
+        "round", kickoff_time, opponent, result, game_status, source,
+        location, region_game, final, overtime)
+    SELECT
+        i.school, i.date, i.season, i.location_id, i.points_for, i.points_against,
+        i."round", i.kickoff_time, i.opponent, i.result, i.game_status, i.source,
+        i.location, i.region_game, i.final, i.overtime
+    FROM incoming i
     ON CONFLICT (school, date) DO UPDATE SET
-    location        = COALESCE(NULLIF(EXCLUDED.location,''),        games.location),
-    location_id     = COALESCE(EXCLUDED.location_id,                games.location_id),
-    opponent        = COALESCE(NULLIF(EXCLUDED.opponent,''),        games.opponent),
-    points_for      = COALESCE(EXCLUDED.points_for,                 games.points_for),
-    points_against  = COALESCE(EXCLUDED.points_against,             games.points_against),
-    result          = COALESCE(NULLIF(EXCLUDED.result,''),          games.result),
-    final           = COALESCE(EXCLUDED.final,                      games.final),
-    overtime        = COALESCE(EXCLUDED.overtime,                   games.overtime),
-    game_status     = COALESCE(EXCLUDED.game_status,                games.game_status),
-    source          = COALESCE(EXCLUDED.source,                     games.source),
-    region_game     = COALESCE(EXCLUDED.region_game,                games.region_game),
-    season          = COALESCE(EXCLUDED.season,                     games.season),
-    "round"         = COALESCE(NULLIF(EXCLUDED."round",''),         games."round"),
-    kickoff_time    = COALESCE(EXCLUDED.kickoff_time,               games.kickoff_time)
-    WHERE
-        games.location        IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.location,''), games.location)
-    OR games.location_id     IS DISTINCT FROM COALESCE(EXCLUDED.location_id, games.location_id)
-    OR games.opponent        IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.opponent,''), games.opponent)
-    OR games.points_for      IS DISTINCT FROM COALESCE(EXCLUDED.points_for, games.points_for)
-    OR games.points_against  IS DISTINCT FROM COALESCE(EXCLUDED.points_against, games.points_against)
-    OR games.result          IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED.result,''), games.result)
-    OR games.final           IS DISTINCT FROM COALESCE(EXCLUDED.final, games.final)
-    OR games.overtime        IS DISTINCT FROM COALESCE(EXCLUDED.overtime, games.overtime)
-    OR games.game_status     IS DISTINCT FROM COALESCE(EXCLUDED.game_status, games.game_status)
-    OR games.source          IS DISTINCT FROM COALESCE(EXCLUDED.source, games.source)
-    OR games.region_game     IS DISTINCT FROM COALESCE(EXCLUDED.region_game, games.region_game)
-    OR games.season          IS DISTINCT FROM COALESCE(EXCLUDED.season, games.season)
-    OR games."round"         IS DISTINCT FROM COALESCE(NULLIF(EXCLUDED."round",''), games."round")
-    OR games.kickoff_time    IS DISTINCT FROM COALESCE(EXCLUDED.kickoff_time, games.kickoff_time);
+        location        = COALESCE(NULLIF(EXCLUDED.location,''),        games.location),
+        location_id     = COALESCE(EXCLUDED.location_id,                games.location_id),
+        opponent        = COALESCE(NULLIF(EXCLUDED.opponent,''),        games.opponent),
+        points_for      = COALESCE(EXCLUDED.points_for,                 games.points_for),
+        points_against  = COALESCE(EXCLUDED.points_against,             games.points_against),
+        result          = COALESCE(NULLIF(EXCLUDED.result,''),          games.result),
+        final           = COALESCE(EXCLUDED.final,                      games.final),
+        overtime        = COALESCE(EXCLUDED.overtime,                   games.overtime),
+        game_status     = COALESCE(EXCLUDED.game_status,                games.game_status),
+        source          = COALESCE(EXCLUDED.source,                     games.source),
+        region_game     = COALESCE(EXCLUDED.region_game,                games.region_game),
+        season          = COALESCE(EXCLUDED.season,                     games.season),
+        "round"         = COALESCE(NULLIF(EXCLUDED."round",''),         games."round"),
+        kickoff_time    = COALESCE(EXCLUDED.kickoff_time,               games.kickoff_time)
+        -- you can keep / drop the big IS DISTINCT FROM WHERE clause if you want
+    ;
     """
 
-    template = "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s)"
+    template = "(" + ", ".join(["%s"] * 16) + ")"
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:

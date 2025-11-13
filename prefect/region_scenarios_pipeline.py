@@ -1230,6 +1230,10 @@ def write_region_standings(standings: List[Standings], odds: dict[str, Odds], sc
                 odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p2,
                 odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p3,
                 odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p4,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
                 Json(seed_scenarios[1]),
                 Json(seed_scenarios[2]),
                 Json(seed_scenarios[3]),
@@ -1237,12 +1241,31 @@ def write_region_standings(standings: List[Standings], odds: dict[str, Odds], sc
                 odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p_playoffs,
                 odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).clinched,
                 odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).eliminated,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
                 False
             ))
 
     # --- do the updates ---
     sql = """
-        INSERT INTO region_standings (school, season, class, region, wins, losses, ties, region_wins, region_losses, region_ties, odds_1st, odds_2nd, odds_3rd, odds_4th, scenarios_1st, scenarios_2nd, scenarios_3rd, scenarios_4th, odds_playoffs, clinched, eliminated, coin_flip_needed)
+        INSERT INTO region_standings (school, season, class, region, wins, losses, ties, region_wins, region_losses, region_ties, odds_1st, odds_2nd, odds_3rd, odds_4th, odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted, scenarios_1st, scenarios_2nd, scenarios_3rd, scenarios_4th, odds_playoffs, clinched, eliminated, odds_second_round, odds_third_round, odds_semifinals, odds_finals, odds_champion, odds_playoffs_weighted, odds_second_round_weighted, odds_third_round_weighted, odds_semifinals_weighted, odds_finals_weighted, odds_champion_weighted, odds_first_round_home, odds_second_round_home, odds_third_round_home, odds_semifinals_home, odds_first_round_home_weighted, odds_second_round_home_weighted, odds_third_round_home_weighted, odds_semifinals_home_weighted, coin_flip_needed)
                 VALUES %s
                 ON CONFLICT (school, season) DO UPDATE SET
                     class  = COALESCE(EXCLUDED.class,  region_standings.class),
@@ -1257,6 +1280,10 @@ def write_region_standings(standings: List[Standings], odds: dict[str, Odds], sc
                     odds_2nd      = EXCLUDED.odds_2nd,
                     odds_3rd      = EXCLUDED.odds_3rd,
                     odds_4th      = EXCLUDED.odds_4th,
+                    odds_1st_weighted = EXCLUDED.odds_1st_weighted,
+                    odds_2nd_weighted = EXCLUDED.odds_2nd_weighted,
+                    odds_3rd_weighted = EXCLUDED.odds_3rd_weighted,
+                    odds_4th_weighted = EXCLUDED.odds_4th_weighted,
                     scenarios_1st = EXCLUDED.scenarios_1st,
                     scenarios_2nd = EXCLUDED.scenarios_2nd,
                     scenarios_3rd = EXCLUDED.scenarios_3rd,
@@ -1264,11 +1291,30 @@ def write_region_standings(standings: List[Standings], odds: dict[str, Odds], sc
                     odds_playoffs = EXCLUDED.odds_playoffs,
                     clinched      = EXCLUDED.clinched,
                     eliminated    = EXCLUDED.eliminated,
+                    odds_second_round = EXCLUDED.odds_second_round,
+                    odds_third_round  = EXCLUDED.odds_third_round,
+                    odds_semifinals   = EXCLUDED.odds_semifinals,
+                    odds_finals       = EXCLUDED.odds_finals,
+                    odds_champion     = EXCLUDED.odds_champion,
+                    odds_playoffs_weighted = EXCLUDED.odds_playoffs_weighted,
+                    odds_second_round_weighted = EXCLUDED.odds_second_round_weighted,
+                    odds_third_round_weighted  = EXCLUDED.odds_third_round_weighted,
+                    odds_semifinals_weighted   = EXCLUDED.odds_semifinals_weighted,
+                    odds_finals_weighted       = EXCLUDED.odds_finals_weighted,
+                    odds_champion_weighted     = EXCLUDED.odds_champion_weighted,
+                    odds_first_round_home = EXCLUDED.odds_first_round_home,
+                    odds_second_round_home = EXCLUDED.odds_second_round_home,
+                    odds_third_round_home = EXCLUDED.odds_third_round_home,
+                    odds_semifinals_home = EXCLUDED.odds_semifinals_home,
+                    odds_first_round_home_weighted = EXCLUDED.odds_first_round_home_weighted,
+                    odds_second_round_home_weighted = EXCLUDED.odds_second_round_home_weighted,
+                    odds_third_round_home_weighted = EXCLUDED.odds_third_round_home_weighted,
+                    odds_semifinals_home_weighted = EXCLUDED.odds_semifinals_home_weighted,
                     coin_flip_needed = EXCLUDED.coin_flip_needed
         ;
     """
 
-    template = "(" + ", ".join(["%s"] * 22) + ")"
+    template = "(" + ", ".join(["%s"] * 45) + ")"
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:

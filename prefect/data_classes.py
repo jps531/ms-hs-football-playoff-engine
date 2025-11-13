@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
+from datetime import date
 
 # -------------------------
 # Data Classes
@@ -88,7 +89,7 @@ class School:
 @dataclass
 class Game:
     school: str
-    date: str
+    date: date
     season: int
     location_id: int | None
     points_for: int | None
@@ -133,9 +134,13 @@ class Game:
         """
         # Handle dict-like objects (e.g., psycopg2.extras.RealDictRow)
         if isinstance(row, dict):
+
+            game_date = row.get("date")
+            if not game_date:
+                raise ValueError("Game row missing required 'date' field")
             return cls(
                 school=row.get("school") or "",
-                date=row.get("date") or "",
+                date=game_date,
                 season=row.get("season") or 0,
                 location=row.get("location") or "neutral",
                 location_id=row.get("location_id"),
