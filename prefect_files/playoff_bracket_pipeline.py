@@ -4,7 +4,7 @@ import requests
 from typing import List
 from prefect import flow, task, get_run_logger
 
-from data_classes import BracketGame
+from prefect_files.data_classes import BracketGame
 from web_helpers import UA, _extract_next_data, fetch_article_text
 
 

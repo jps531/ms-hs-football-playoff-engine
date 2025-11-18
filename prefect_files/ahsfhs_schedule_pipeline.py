@@ -6,7 +6,7 @@ from psycopg2.extras import execute_values
 from prefect import flow, task, get_run_logger
 from datetime import datetime
 
-from data_classes import Game, School
+from prefect_files.data_classes import Game, School
 from database_helpers import get_database_connection
 from data_helpers import _normalize_ws, get_school_name_from_ahsfhs, parseTextSection, to_plain_text, update_school_name_for_ahsfhs_search, _month_to_num
 from web_helpers import UA, fetch_article_text_from_ahsfhs

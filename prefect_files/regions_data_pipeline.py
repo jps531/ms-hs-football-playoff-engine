@@ -5,7 +5,7 @@ from typing import Iterable, List, Tuple
 from psycopg2.extras import execute_values
 from prefect import flow, task, get_run_logger
 
-from data_classes import School
+from prefect_files.data_classes import School
 from data_helpers import clean_school_name, SPACE_RE
 from web_helpers import fetch_article_text
 from database_helpers import get_database_connection

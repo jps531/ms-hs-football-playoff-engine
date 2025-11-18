@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re, unicodedata
-from typing import Any, Dict, Mapping, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 from bs4 import BeautifulSoup
 
-from data_classes import Game, School
+from prefect_files.data_classes import RawCompletedGame, CompletedGame, School
 
 
 # -------------------------
@@ -229,3 +229,64 @@ def clean_school_name(raw: str) -> str:
         tmp = CLEAN_RE.sub("", raw)
         tmp = SPACE_RE.sub(" ", tmp).strip(" ,.-\u2013\u2014\t\r\n")
         return to_normal_case(tmp)
+    
+
+def normalize_pair(x: str, y: str) -> Tuple[str, str, int]:
+    """
+    Given two team names x and y, return a tuple (a, b, sign) where a <= b (lexicographically) and sign is +1 if x==a else -1.
+    """
+    return (x, y, +1) if x <= y else (y, x, -1)
+    
+
+def get_completed_games(raw_results: List[RawCompletedGame]) -> List[CompletedGame]:
+    """
+    Convert raw results dicts into CompletedGame dataclass instances.
+    """
+
+    # Deduplicate by *game* key (a,b,date) where a<b (lexicographic).
+    # Prefer the row where school==a (lex-first) if it exists; otherwise use the b-row inverted.
+    by_game: Dict[Tuple[str, str, str], Dict[str, int] | Tuple[str, ...]] = {}
+
+    for result in raw_results:
+        a, b, _sign = normalize_pair(result["school"], result["opponent"])  # a<b
+        gkey = (a, b, result["date"])
+
+        # Compute contributions from the perspective of team 'a' (lex-first)
+        if result["school"] == a:
+            # from a's row directly
+            res_a = 1 if result["result"] == 'W' else (-1 if result["result"] == 'L' else 0)
+            pd_a  = (result["points_for"] - result["points_against"]) if (result["points_for"] is not None and result["points_against"] is not None) else 0
+            pa_a  = (result["points_against"] or 0)
+            pa_b  = (result["points_for"] or 0)
+
+            # Always prefer the a-row: overwrite any prior b-row for this (a,b,date)
+            by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 1}
+
+        else:
+            # row is from b's perspective; invert to 'a'
+            res_a = -1 if result == 'W' else (1 if result == 'L' else 0)
+            pd_a  = (-(result["points_for"] - result["points_against"])) if (result["points_for"] is not None and result["points_against"] is not None) else 0
+            pa_a  = (result["points_for"] or 0)  # a allowed b's points_for
+            pa_b  = (result["points_against"] or 0)  # b allowed a's points_for
+
+            prev = by_game.get(gkey)
+            # Only store if we don't already have an a-row for this game
+            if not prev or (isinstance(prev, dict) and not prev.get("has_a")):
+                by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 0}
+
+    # Now aggregate per pair (a,b) across dates (in case there were multiple meetings)
+    pair_totals: Dict[Tuple[str, str], Dict[str, int]] = {}
+    for (a, b, _date), vals in by_game.items():
+        d = pair_totals.setdefault((a, b), {"res_a": 0, "pd_a": 0, "pa_a": 0, "pa_b": 0})
+        d["res_a"] += vals["res_a"] # type: ignore
+        d["pd_a"]  += vals["pd_a"] # type: ignore
+        d["pa_a"]  += vals["pa_a"] # type: ignore
+        d["pa_b"]  += vals["pa_b"] # type: ignore
+
+    out: List[CompletedGame] = []
+    for (a, b), v in pair_totals.items():
+        # Collapse res_a to {-1, 0, +1} for the season series (win/loss/split from 'a' pov)
+        res_a_sign = 1 if v["res_a"] > 0 else (-1 if v["res_a"] < 0 else 0)
+        out.append(CompletedGame(a, b, res_a_sign, v["pd_a"], v["pa_a"], v["pa_b"]))
+
+    return out

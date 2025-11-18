@@ -5,7 +5,7 @@ from typing import Dict, Any, Iterable, List
 from psycopg2.extras import execute_batch
 from prefect import flow, task, get_run_logger
 
-from data_classes import School
+from prefect_files.data_classes import School
 from database_helpers import get_database_connection
 from data_helpers import as_float_or_none
 from web_helpers import UA, _extract_next_data

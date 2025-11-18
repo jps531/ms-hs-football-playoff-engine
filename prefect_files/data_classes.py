@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, TypedDict
 from datetime import date
 
 # -------------------------
@@ -363,3 +363,24 @@ class BracketGame:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
+        
+
+# --- Data class for raw results of completed games used in tiebreakers ---
+class RawCompletedGame(TypedDict):
+    school: str
+    opponent: str
+    date: str
+    result: str
+    points_for: int
+    points_against: int
+
+
+# --- Data class for completed games used in tiebreakers ---
+@dataclass(frozen=True)
+class CompletedGame:
+    a: str  # team (lexicographically first)
+    b: str  # team (lexicographically second)
+    res_a: int  # head-to-head result in completed set (+1 a beat b, -1 b beat a, 0 split)
+    pd_a: int   # raw point differential for a vs b across completed meetings (will be capped when used)
+    pa_a: int   # points allowed by team a in those meetings
+    pa_b: int   # points allowed by team b in those meetings

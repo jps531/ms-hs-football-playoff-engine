@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-import math
+from multiprocessing.util import debug
+import math, re
 
 from prefect import flow, get_run_logger, task
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, cast
 from psycopg2.extras import execute_values, Json
 
 
 from database_helpers import get_database_connection
+from prefect_files.data_classes import CompletedGame, RawCompletedGame
+from data_helpers import get_completed_games
 
 
 # -------------------------
@@ -50,15 +53,6 @@ class Odds:
     final_playoffs: float
     clinched: bool
     eliminated: bool
-
-@dataclass(frozen=True)
-class CompletedGame:
-    a: str  # team (lexicographically first)
-    b: str  # team (lexicographically second)
-    res_a: int  # head-to-head result in completed set (+1 a beat b, -1 b beat a, 0 split)
-    pd_a: int   # raw point differential for a vs b across completed meetings (will be capped when used)
-    pa_a: int   # points allowed by team a in those meetings
-    pa_b: int   # points allowed by team b in those meetings
 
 @dataclass(frozen=True)
 class RemainingGame:
@@ -995,15 +989,82 @@ def merge_ge_union_by_signature(
             out.append(d)
     return out
 
+def final_consolidation(minimized_scenarios):
+    consolidated = minimized_scenarios
+
+    # --- Pass 1: find keys that appear with both True and False somewhere ---
+    values_by_key = {}
+    for d in consolidated:
+        for k, v in d.items():
+            values_by_key.setdefault(k, set()).add(v)
+
+    # Keys that have both True and False anywhere in the list
+    contradictory_keys = {k for k, vals in values_by_key.items() if len(vals) > 1}
+
+    # --- Pass 2: drop contradictory keys and empty dicts, dedupe remaining dicts ---
+    result = []
+    seen = set()  # to dedupe dicts
+
+    for d in consolidated:
+        # Remove contradictory keys from this dict
+        new_d = {k: v for k, v in d.items() if k not in contradictory_keys}
+
+        if new_d:
+            # Use a sorted tuple of items as a hashable representation
+            sig = tuple(sorted(new_d.items()))
+            if sig not in seen:
+                seen.add(sig)
+                result.append(new_d)
+
+    return result
+
 # ---------- one-shot orchestrator ----------
-def consolidate_all(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
+def consolidate_all(dicts: List[Dict[str, bool]], clazz, region) -> List[Dict[str, bool]]:
+
+    debug = clazz == 7 and region == 3
+
+    if debug:
+        print("=== Starting full consolidation ===")
+        print(f"Initial dicts ({len(dicts)}):")
+        for d in dicts:
+            print(f"  {d}")
+
     step05  = remove_base_if_ge_present_in_dicts(dicts)
+    if debug:
+        print(f"After remove_base_if_ge_present_in_dicts ({len(step05)}):")
+        for d in step05:
+            print(f"  {d}")
     step0  = consolidate_opposites_and_remove_bases(step05)
+    if debug:
+        print(f"After consolidate_opposites_and_remove_bases ({len(step0)}):")
+        for d in step0:
+            print(f"  {d}")
     step1  = consolidate_opposites(step0)
+    if debug:
+        print(f"After consolidate_opposites ({len(step1)}):")
+        for d in step1:
+            print(f"  {d}")
     step2  = merge_ge_intervals_to_base_safe(step1, win_threshold=1)  # collapses to base True when union [1,+inf)
+    if debug:
+        print(f"After merge_ge_intervals_to_base_safe ({len(step2)}):")
+        for d in step2:
+            print(f"  {d}")
     step3  = remove_base_if_ge_present(step2)                         # strip base if any GE of same base exists
+    if debug:
+        print(f"After remove_base_if_ge_present ({len(step3)}):")
+        for d in step3:
+            print(f"  {d}")
     step3u = merge_ge_union_by_signature(step3)                            # <-- unified finite/unbounded GE merge
+    if debug:
+        print(f"After merge_ge_union_by_signature ({len(step3u)}):")
+        for d in step3u:
+            print(f"  {d}")
     step4  = merge_full_partition_remove_base(step3u, win_threshold=1)
+    if debug:
+        print(f"After merge_full_partition_remove_base ({len(step4)}):")
+        for d in step4:
+            print(f"  {d}")
+    #step5  = final_consolidation(step4)
 
     # final de-dupe
     seen, out = set(), []
@@ -1120,53 +1181,23 @@ def fetch_completed_pairs(teams: List[str], season: int) -> List[CompletedGame]:
             )
             rows = cur.fetchall()
 
-    # Deduplicate by *game* key (a,b,date) where a<b (lexicographic).
-    # Prefer the row where school==a (lex-first) if it exists; otherwise use the b-row inverted.
-    by_game: Dict[Tuple[str, str, str], Dict[str, int] | Tuple[str, ...]] = {}
+    results: List[RawCompletedGame] = [
+        {
+            "school": s,
+            "opponent": o,
+            "date": d,
+            "result": r,
+            "points_for": pf,
+            "points_against": pa,
+        }
+        for (s, o, d, r, pf, pa) in rows
+    ]
 
-    for school, opp, date, result, pf, pa in rows:
-        a, b, _sign = normalize_pair(school, opp)  # a<b
-        gkey = (a, b, date)
+    logger = get_run_logger()
+    logger.info(f"Fetched rows for completed region games: {results}")
+    logger.info(f"Completed Games: {get_completed_games(results)}")
 
-        # Compute contributions from the perspective of team 'a' (lex-first)
-        if school == a:
-            # from a's row directly
-            res_a = 1 if result == 'W' else (-1 if result == 'L' else 0)
-            pd_a  = (pf - pa) if (pf is not None and pa is not None) else 0
-            pa_a  = (pa or 0)
-            pa_b  = (pf or 0)
-
-            # Always prefer the a-row: overwrite any prior b-row for this (a,b,date)
-            by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 1}
-
-        else:
-            # row is from b's perspective; invert to 'a'
-            res_a = -1 if result == 'W' else (1 if result == 'L' else 0)
-            pd_a  = (-(pf - pa)) if (pf is not None and pa is not None) else 0
-            pa_a  = (pf or 0)  # a allowed b's points_for
-            pa_b  = (pa or 0)  # b allowed a's points_for
-
-            prev = by_game.get(gkey)
-            # Only store if we don't already have an a-row for this game
-            if not prev or (isinstance(prev, dict) and not prev.get("has_a")):
-                by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 0}
-
-    # Now aggregate per pair (a,b) across dates (in case there were multiple meetings)
-    pair_totals: Dict[Tuple[str, str], Dict[str, int]] = {}
-    for (a, b, _date), vals in by_game.items():
-        d = pair_totals.setdefault((a, b), {"res_a": 0, "pd_a": 0, "pa_a": 0, "pa_b": 0})
-        d["res_a"] += vals["res_a"] # type: ignore
-        d["pd_a"]  += vals["pd_a"] # type: ignore
-        d["pa_a"]  += vals["pa_a"] # type: ignore
-        d["pa_b"]  += vals["pa_b"] # type: ignore
-
-    out: List[CompletedGame] = []
-    for (a, b), v in pair_totals.items():
-        # Collapse res_a to {-1, 0, +1} for the season series (win/loss/split from 'a' pov)
-        res_a_sign = 1 if v["res_a"] > 0 else (-1 if v["res_a"] < 0 else 0)
-        out.append(CompletedGame(a, b, res_a_sign, v["pd_a"], v["pa_a"], v["pa_b"]))
-
-    return out
+    return get_completed_games(results)
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Remaining Region Games for {teams}")
@@ -1582,7 +1613,7 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
     for team, seed_map in scenario_minterms.items():
         for seed_num, minterms in seed_map.items():
             mins = [dict(m) for m in minterms]
-            consolidated_scenarios = consolidate_all(mins)
+            consolidated_scenarios = consolidate_all(mins, clazz, region)
             simplified_scenarios = simplify_matchups(consolidated_scenarios)
             minimized_mins = minimize_minterms(simplified_scenarios, allow_combine=True)  # simplify
             sorted_mins = [
@@ -1590,6 +1621,8 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
                 for d in sorted(minimized_mins, key=lambda x: len(x))
             ]
             minimized_scenarios[team][seed_num] = sorted_mins
+
+    
 
     # ----- Fetch current standings -----
     region_standings = fetch_region_standings(clazz, region, season)
