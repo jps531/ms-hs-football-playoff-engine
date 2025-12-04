@@ -383,4 +383,11 @@ class CompletedGame:
     res_a: int  # head-to-head result in completed set (+1 a beat b, -1 b beat a, 0 split)
     pd_a: int   # raw point differential for a vs b across completed meetings (will be capped when used)
     pa_a: int   # points allowed by team a in those meetings
-    pa_b: int   # points allowed by team b in those meetings
+    pa_b: int   # points allowed by team b in those 
+    
+
+# --- Data class for remaining games used in tiebreakers ---
+@dataclass(frozen=True)
+class RemainingGame:
+    a: str  # team (lexicographically first)
+    b: str  # team (lexicographically second)

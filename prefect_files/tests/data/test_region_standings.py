@@ -1,6 +1,6 @@
 
 from typing import List, TypedDict
-from prefect_files.data_classes import CompletedGame, RawCompletedGame
+from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame
 
 
 # Raw completed game results for Class 7A Region 3 in the 2025 season
@@ -181,4 +181,11 @@ expected_3_7a_completed_games: List[CompletedGame] = [
 	CompletedGame("Meridian", "Petal", -1, -28, 14, 42),
 	CompletedGame("Northwest Rankin", "Pearl", 1, 4, 33, 29),
 	CompletedGame("Petal", "Pearl", -1, -7, 14, 21)
+]
+
+# Expected RemainingGames instances for Class 7A Region 3 in the 2025 season
+expected_3_7a_remaining_games: List[RemainingGame] = [
+  RemainingGame("Brandon", "Meridian"),
+	RemainingGame("Oak Grove", "Pearl"),
+	RemainingGame("Northwest Rankin", "Petal")
 ]

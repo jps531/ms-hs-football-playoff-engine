@@ -11,7 +11,7 @@ from psycopg2.extras import execute_values, Json
 
 
 from database_helpers import get_database_connection
-from prefect_files.data_classes import CompletedGame, RawCompletedGame
+from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame
 from data_helpers import get_completed_games
 
 
@@ -53,11 +53,6 @@ class Odds:
     final_playoffs: float
     clinched: bool
     eliminated: bool
-
-@dataclass(frozen=True)
-class RemainingGame:
-    a: str  # team (lexicographically first)
-    b: str  # team (lexicographically second)
 
 
 # --------------------------- Fetch Helpers ---------------------------
@@ -1397,6 +1392,8 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
     for idx, rem_game in enumerate(remaining):
         var_name = f"{rem_game.a}>{rem_game.b}"
         boolean_game_vars.append((var_name, rem_game.a, rem_game.b))
+
+    logger.info(f"Boolean Game Vars: {boolean_game_vars}")
 
     # ----- If no remaining games, resolve once and tally -----
     if num_remaining == 0:
