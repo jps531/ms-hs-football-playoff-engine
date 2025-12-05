@@ -6,9 +6,9 @@ from psycopg2.extras import execute_values
 from prefect import flow, task, get_run_logger
 
 from prefect_files.data_classes import School
-from data_helpers import clean_school_name, SPACE_RE
+from prefect_files.data_helpers import clean_school_name, SPACE_RE
 from web_helpers import fetch_article_text
-from database_helpers import get_database_connection
+from prefect_files.database_helpers import get_database_connection
 
 
 # -------------------------

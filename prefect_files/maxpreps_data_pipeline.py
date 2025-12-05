@@ -7,8 +7,8 @@ from psycopg2.extras import execute_batch
 from prefect import flow, task, get_run_logger
 
 from prefect_files.data_classes import School
-from data_helpers import _get_field, _norm, update_school_name_for_maxpreps_search
-from database_helpers import get_database_connection
+from prefect_files.data_helpers import _get_field, _norm, update_school_name_for_maxpreps_search
+from prefect_files.database_helpers import get_database_connection
 from web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
 
 

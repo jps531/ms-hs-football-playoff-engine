@@ -1,7 +1,18 @@
 
 from typing import List, TypedDict
-from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame
+from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame, StandingsOdds
 
+# ----------- Test Data for Class 7A Region 3 (2025 season) ----------
+
+# Teams in Class 7A Region 3 for the 2025 season
+teams_3_7a: List[str] = [
+		"Meridian",
+		"Oak Grove",
+		"Pearl",
+		"Petal",
+		"Brandon",
+		"Northwest Rankin"
+]
 
 # Raw completed game results for Class 7A Region 3 in the 2025 season
 raw_3_7a_region_results: List[RawCompletedGame] = [
@@ -189,3 +200,21 @@ expected_3_7a_remaining_games: List[RemainingGame] = [
 	RemainingGame("Oak Grove", "Pearl"),
 	RemainingGame("Northwest Rankin", "Petal")
 ]
+
+# Expected First Counts for Class 7A Region 3 in the 2025 season
+expected_3_7a_first_counts: dict[str, int] = {}
+
+# Expected Second Counts for Class 7A Region 3 in the 2025 season
+expected_3_7a_second_counts: dict[str, int] = {}
+
+# Expected Third Counts for Class 7A Region 3 in the 2025 season
+expected_3_7a_third_counts: dict[str, int] = {}
+
+# Expected Fourth Counts for Class 7A Region 3 in the 2025 season
+expected_3_7a_fourth_counts: dict[str, int] = {}
+
+# Expected Minimized Scenarios for Class 7A Region 3 in the 2025 season
+expected_3_7a_minimized_scenarios: dict[str, dict[int, List[dict[str, bool]]]] = {}
+
+# Expected Odds for Class 7A Region 3 in the 2025 season
+expected_3_7a_odds: dict[str, StandingsOdds] = {}

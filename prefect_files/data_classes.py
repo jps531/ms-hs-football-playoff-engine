@@ -391,3 +391,17 @@ class CompletedGame:
 class RemainingGame:
     a: str  # team (lexicographically first)
     b: str  # team (lexicographically second)
+
+
+# --- Data class for standings odds results ---
+@dataclass(frozen=True)
+class StandingsOdds:
+    school: str
+    p1: float
+    p2: float
+    p3: float
+    p4: float
+    p_playoffs: float
+    final_playoffs: float
+    clinched: bool
+    eliminated: bool

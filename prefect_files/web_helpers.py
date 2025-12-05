@@ -4,7 +4,7 @@ from typing import Optional
 from difflib import SequenceMatcher
 from bs4 import BeautifulSoup
 
-from data_helpers import SPACE_RE
+from prefect_files.data_helpers import SPACE_RE
 
 # -------------------------
 # Constants

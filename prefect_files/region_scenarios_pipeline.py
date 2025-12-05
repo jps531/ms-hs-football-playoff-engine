@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from multiprocessing.util import debug
 import math, re
 
@@ -10,9 +11,10 @@ from typing import Dict, List, Tuple, Optional, cast
 from psycopg2.extras import execute_values, Json
 
 
-from database_helpers import get_database_connection
-from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame
-from data_helpers import get_completed_games
+from prefect_files.database_helpers import get_database_connection
+from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame, StandingsOdds
+from prefect_files.data_helpers import get_completed_games
+from prefect.exceptions import MissingContextError
 
 
 # -------------------------
@@ -41,18 +43,6 @@ class Standings:
     region_wins: int
     region_losses: int
     region_ties: int
-
-@dataclass(frozen=True)
-class Odds:
-    school: str
-    p1: float
-    p2: float
-    p3: float
-    p4: float
-    p_playoffs: float
-    final_playoffs: float
-    clinched: bool
-    eliminated: bool
 
 
 # --------------------------- Fetch Helpers ---------------------------
@@ -510,7 +500,7 @@ def resolve_standings_for_mask(teams,completed,remaining,outcome_mask,margins,ba
     # NOTE: coinflip_events is available here if you want to surface it in outputs.
     return final
 
-def rank_to_slots(order):
+def rank_to_slots(order) -> Dict[str,Tuple[int,int]]:
     """Convert strict order into seed slots (lo, hi)."""
     return {s:(i,i) for i,s in enumerate(order,start=1)}
 
@@ -1222,7 +1212,7 @@ def fetch_region_standings(clazz: int, region: int, season: int) -> List[Standin
 
 
 @task(task_run_name="Write {season} Region Standings for {region}-{clazz}A")
-def write_region_standings(standings: List[Standings], odds: dict[str, Odds], scenarios: defaultdict, clazz: int, region: int, season: int):
+def write_region_standings(standings: List[Standings], odds: dict[str, StandingsOdds], scenarios: defaultdict, clazz: int, region: int, season: int):
 
     def seed_scenarios_for(scenarios, school):
         # Ensure the school exists
@@ -1252,10 +1242,10 @@ def write_region_standings(standings: List[Standings], odds: dict[str, Odds], sc
                 team.region_wins,
                 team.region_losses,
                 team.region_ties,
-                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p1,
-                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p2,
-                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p3,
-                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p4,
+                odds.get(team.school, StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)).p1,
+                odds.get(team.school, StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)).p2,
+                odds.get(team.school, StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)).p3,
+                odds.get(team.school, StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)).p4,
                 0.0,
                 0.0,
                 0.0,
@@ -1264,9 +1254,9 @@ def write_region_standings(standings: List[Standings], odds: dict[str, Odds], sc
                 Json(seed_scenarios[2]),
                 Json(seed_scenarios[3]),
                 Json(seed_scenarios[4]),
-                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).p_playoffs,
-                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).clinched,
-                odds.get(team.school, Odds("", 0, 0, 0, 0, 0, 0, False, False)).eliminated,
+                odds.get(team.school, StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)).p_playoffs,
+                odds.get(team.school, StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)).clinched,
+                odds.get(team.school, StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)).eliminated,
                 0.0,
                 0.0,
                 0.0,
@@ -1349,39 +1339,33 @@ def write_region_standings(standings: List[Standings], odds: dict[str, Odds], sc
 
     return len(data_by_school)
 
-# ---------- Main enumeration + outputs ----------
-@task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
-def get_region_finish_scenarios(clazz, region, season, debug=False):
-    """
-    Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
-    and aggregate seeding odds + human-readable scenario explanations.
+# ----------- Helper functions for scenario generation ----------
 
-    Notes
-    -----
-    - Each undecided region game is treated as a boolean variable (first-listed team wins or not).
-    - For each outcome mask (2^R), we optionally split by any Step-3 knife-edge (±12 cap)
-      that changes ordering, weighting <threshold vs ≥threshold branches appropriately.
-    - We tally 1st..4th odds across all branches; playoffs = sum of those four odds.
+def determine_scenarios(clazz: int, region: int, teams: List[str], completed: List[CompletedGame], remaining: List[RemainingGame], debug=False):
+    """
+    Determine all possible seeding scenarios for the given teams,
+    based on completed and remaining games.
     """
 
-    logger = get_run_logger()
+    try:
+        logger = get_run_logger()
+    except MissingContextError:
+        # We’re not in a Prefect flow/task context (e.g., running unit tests)
+        logger = logging.getLogger("region_scenarios_pipeline")
+        # Optional: avoid noisy logs in tests
+        if not logger.handlers:
+            logger.addHandler(logging.NullHandler())
 
-    # ----- Fetch inputs -----
-    teams = fetch_region_teams(clazz, region, season)
-    if not teams:
-        raise SystemExit("No teams found.")
-    completed = fetch_completed_pairs(teams, season)   # fixed results already known
-    remaining = fetch_remaining_pairs(teams, season)  # undecided region games
     num_remaining = len(remaining)
 
     # ----- Accumulators for odds -----
-    first_counts  = Counter()
-    second_counts = Counter()
-    third_counts  = Counter()
-    fourth_counts = Counter()
+    first_counts: Counter[str] = Counter()
+    second_counts: Counter[str] = Counter()
+    third_counts: Counter[str] = Counter()
+    fourth_counts: Counter[str] = Counter()
 
     # team -> seed -> list of minterm dicts (for explanations)
-    scenario_minterms = {}
+    scenario_minterms: dict[str, dict[int, List[dict[str, bool]]]] = {}
 
     # Simulation knobs
     pa_for_winner = 14  # Step 5: PA credited to the winner of a simulated game
@@ -1567,19 +1551,6 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
         # Each mask contributes weight 1; branch weights within a mask sum to 1.
         denom = float(1 << num_remaining)
 
-    # ----- Compute final odds -----
-    odds: dict[str, Odds] = {}
-    for school in teams:
-        p1 = first_counts[school]  / denom
-        p2 = second_counts[school] / denom
-        p3 = third_counts[school]  / denom
-        p4 = fourth_counts[school] / denom
-        p_playoffs = p1 + p2 + p3 + p4
-        clinched = p_playoffs >= 0.999
-        eliminated = p_playoffs <= 0.001
-        final_playoffs = 1.0 if clinched else (0.0 if eliminated else p_playoffs)
-        odds[school] = Odds(school, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated)
-
     def simplify_matchups(dicts):
         simplified = []
         for d in dicts:
@@ -1604,22 +1575,73 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
 
         return simplified
 
-
     # ----- Post-process scenario minterms into minimized scenarios -----
-    minimized_scenarios = defaultdict(dict)
+    minimized_scenarios: defaultdict[str, dict[int, List[dict[str, bool]]]] = defaultdict(dict)
     for team, seed_map in scenario_minterms.items():
         for seed_num, minterms in seed_map.items():
             mins = [dict(m) for m in minterms]
             consolidated_scenarios = consolidate_all(mins, clazz, region)
             simplified_scenarios = simplify_matchups(consolidated_scenarios)
             minimized_mins = minimize_minterms(simplified_scenarios, allow_combine=True)  # simplify
-            sorted_mins = [
+            sorted_mins: List[dict[str, bool]] = [
                 {k: d[k] for k in sorted(d)}
                 for d in sorted(minimized_mins, key=lambda x: len(x))
             ]
             minimized_scenarios[team][seed_num] = sorted_mins
 
-    
+    return first_counts, second_counts, third_counts, fourth_counts, denom, minimized_scenarios
+
+
+def determine_odds(teams, first_counts, second_counts, third_counts, fourth_counts, denom):
+    """
+    Determine final odds from accumulated counts.
+    """
+     # ----- Compute final odds -----
+    odds: dict[str, StandingsOdds] = {}
+    for school in teams:
+        p1 = first_counts[school]  / denom
+        p2 = second_counts[school] / denom
+        p3 = third_counts[school]  / denom
+        p4 = fourth_counts[school] / denom
+        p_playoffs = p1 + p2 + p3 + p4
+        clinched = p_playoffs >= 0.999
+        eliminated = p_playoffs <= 0.001
+        final_playoffs = 1.0 if clinched else (0.0 if eliminated else p_playoffs)
+        odds[school] = StandingsOdds(school, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated)
+    return odds
+
+
+# ---------- Main enumeration + outputs ----------
+@task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
+def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=False):
+    """
+    Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
+    and aggregate seeding odds + human-readable scenario explanations.
+
+    Notes
+    -----
+    - Each undecided region game is treated as a boolean variable (first-listed team wins or not).
+    - For each outcome mask (2^R), we optionally split by any Step-3 knife-edge (±12 cap)
+      that changes ordering, weighting <threshold vs ≥threshold branches appropriately.
+    - We tally 1st..4th odds across all branches; playoffs = sum of those four odds.
+    """
+
+    logger = get_run_logger()
+
+    # ----- Fetch inputs -----
+    teams = fetch_region_teams(clazz, region, season)
+    if not teams:
+        raise SystemExit("No teams found.")
+    completed = fetch_completed_pairs(teams, season)   # fixed results already known
+    remaining = fetch_remaining_pairs(teams, season)  # undecided region games
+
+    # ----- Determine scenarios -----
+    first_counts, second_counts, third_counts, fourth_counts, denom, minimized_scenarios = determine_scenarios(
+        clazz, region, teams, completed, remaining, debug=debug
+    )
+
+    # ----- Determine odds -----
+    odds = determine_odds(teams, first_counts, second_counts, third_counts, fourth_counts, denom)
 
     # ----- Fetch current standings -----
     region_standings = fetch_region_standings(clazz, region, season)
@@ -1635,7 +1657,7 @@ def get_region_finish_scenarios(clazz, region, season, debug=False):
 
 
 @flow(name="Region Scenarios Data Flow")
-def region_scenarios_data_flow(season: int = 2025, clazz: int | None = None, region: int | None = None) -> dict[str, object]:
+def region_scenarios_data_flow(season: int = 2025, clazz: Optional[int] = None, region: Optional[int] = None) -> dict[str, object]:
     """
     Region Scenarios Data Flow
     """
