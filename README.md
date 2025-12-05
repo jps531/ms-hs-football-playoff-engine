@@ -25,3 +25,12 @@ Run a specific region scenario:
   --class 1 --region 8 --season 2025 \
   --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball" \
   --out-scenarios "scenarios.txt"`
+
+## Testing
+
+Run the following tests:
+
+`source .venv/bin/activate`
+`cd prefect_files`
+`pip install -r requirements.txt`
+`pytest -vv`
