@@ -1,7 +1,7 @@
 # Dockerfile for Prefect Worker that runs flows
 ARG ENVIRONMENT=local
 ARG PREFECT_VERSION=2.17.1
-ARG PYTHON_VERSION=3.11
+ARG PYTHON_VERSION=3.13
 
 FROM prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
 
@@ -15,16 +15,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Workdir for installing deps
 WORKDIR /app
 
-# Python deps (now includes playwright)
-COPY ./prefect/requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Chromium browser for Playwright (and its extra deps)
-# NOTE: This downloads browser binaries into the image so the worker can run headless Chromium.
-RUN playwright install --with-deps chromium
+# Python deps — install from pyproject.toml (no dev extras needed in image)
+COPY pyproject.toml /app/
+COPY prefect_files/ /app/prefect_files/
+RUN pip install --no-cache-dir . \
+  && playwright install --with-deps chromium
 
 # Copy your flows into the image where you run them
-COPY ./prefect/ /opt/prefect/flows/pipelines
+COPY prefect_files/ /opt/prefect/flows/pipelines
 
 # Copy env file for flows (as you had)
 ARG ENVIRONMENT=local

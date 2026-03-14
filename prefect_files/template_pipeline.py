@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from prefect import flow, get_run_logger
 
-
 # -------------------------
 # Prefect tasks & flow
 # -------------------------

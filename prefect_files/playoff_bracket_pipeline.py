@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import requests
-from typing import List
-from prefect import flow, task, get_run_logger
+from prefect import flow, get_run_logger, task
+from web_helpers import UA, _extract_next_data
 
 from prefect_files.data_classes import BracketGame
-from web_helpers import UA, _extract_next_data, fetch_article_text
-
 
 # -------------------------
 # Prefect tasks & flow
@@ -20,10 +18,11 @@ def find_five_round_playoff_bracket(season: int, classification: int, bracket_so
     """
 
     logger = get_run_logger()
-    logger.info("Searching for Playoff Bracket for %d season and class %dA via %s", season, classification, bracket_source_url)
+    logger.info(
+        "Searching for Playoff Bracket for %d season and class %dA via %s", season, classification, bracket_source_url
+    )
 
-    records: List[BracketGame] = []\
-
+    records: list[BracketGame] = []  # noqa: F841
     headers = {"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"}
     r = requests.get(bracket_source_url, headers=headers, timeout=25)
     r.raise_for_status()
@@ -32,19 +31,23 @@ def find_five_round_playoff_bracket(season: int, classification: int, bracket_so
     logger.info("Fetched next data: %s: ", next_data)
 
     return 0
-    #return records
+    # return records
 
 
-@task(retries=2, retry_delay_seconds=10, task_run_name="Scrape Playoff Bracket Data for {season} and class {classification}A")
+@task(
+    retries=2,
+    retry_delay_seconds=10,
+    task_run_name="Scrape Playoff Bracket Data for {season} and class {classification}A",
+)
 def scrape_task(season: int, classification: int, bracket_source_url: str) -> int:
     """
     Task to scrape playoff bracket data from MaxPreps.
     """
-    logger = get_run_logger()
-    if (classification < 5):
-        bracket = find_five_round_playoff_bracket(season, classification, bracket_source_url)
+    logger = get_run_logger()  # noqa: F841
+    if classification < 5:
+        bracket = find_five_round_playoff_bracket(season, classification, bracket_source_url)  # noqa: F841
     else:
-        #bracket = find_four_round_playoff_bracket(season, bracket_source_url)
+        # bracket = find_four_round_playoff_bracket(season, bracket_source_url)
         pass
     # updated_count = insert_rows(game_records)
     # logger.info("Inserted/Updated %d games", updated_count)
@@ -59,23 +62,23 @@ def playoff_bracket_pipeline(season: int = 2025, classification: int = 1) -> int
     """
 
     bracket_source_url = ""
-    if (season == 2025):
-        if (classification == 1):
+    if season == 2025:
+        if classification == 1:
             bracket_source_url = "https://www.maxpreps.com/tournament/d29BDHbl6UaiAIB71roQdw/l6EQSsvf5kG4ACUcN16pHQ/football-25/2025-football-championships-1a.htm"
-        elif (classification == 2):
+        elif classification == 2:
             bracket_source_url = "https://www.maxpreps.com/tournament/d29BDHbl6UaiAIB71roQdw/kZCo6i2Rm0aYreD4mKU-bg/football-25/2025-football-championships-2a.htm"
-        elif (classification == 3):
+        elif classification == 3:
             bracket_source_url = "https://www.maxpreps.com/tournament/d29BDHbl6UaiAIB71roQdw/r5umHZgKuE6RZXfT9vG1dw/football-25/2025-football-championships-3a.htm"
-        elif (classification == 4):
+        elif classification == 4:
             bracket_source_url = "https://www.maxpreps.com/tournament/d29BDHbl6UaiAIB71roQdw/X1oXjBneDkGWd1-3ngKVHg/football-25/2025-football-championships-4a.htm"
-        elif (classification == 5):
+        elif classification == 5:
             bracket_source_url = "https://www.maxpreps.com/tournament/d29BDHbl6UaiAIB71roQdw/wcaiYBb-XEuK4bMoyhbQ5g/football-25/2025-football-championships-5a.htm"
-        elif (classification == 6):
+        elif classification == 6:
             bracket_source_url = "https://www.maxpreps.com/tournament/d29BDHbl6UaiAIB71roQdw/SjH6IinlpEq0IUJfwqBScw/football-25/2025-football-championships-6a.htm"
-        elif (classification == 7):
+        elif classification == 7:
             bracket_source_url = "https://www.maxpreps.com/tournament/d29BDHbl6UaiAIB71roQdw/O1r6nJCY0EWCmN-qWhorIw/football-25/2025-football-championships-7a.htm"
     else:
-        raise ValueError(f"No bracket URL configured for season {season} and class {classification}A") 
+        raise ValueError(f"No bracket URL configured for season {season} and class {classification}A")
 
     updated_count = scrape_task(season, classification, bracket_source_url)
     return updated_count

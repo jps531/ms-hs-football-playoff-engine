@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Playoff Odds & Scenario Enumerator (clarified comments + explicit Step labels + sequential tie resolution)
 
@@ -39,47 +38,44 @@ Step 6 – Coin flip:
 """
 
 from __future__ import annotations
-import argparse, json, math, os, re
-from itertools import product
+
+import argparse
+import math
+import os
+import re
+import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional, Any, Iterable
+from collections.abc import Callable, Iterable
+from itertools import product
+from typing import Any
+
+# Ensure the project root is on the path when running from scripts/ directly
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     import psycopg
 except Exception:
     psycopg = None
 
-def pct_str(x: float) -> str:
-    val = x * 100.0
-    if abs(val - round(val)) < 1e-9:
-        return f"{int(round(val))}%"
-    return f"{val:.0f}%".rstrip('0').rstrip('.')
-
-
-# --------------------------- Data Models ---------------------------
-
-@dataclass(frozen=True)
-class CompletedGame:
-    a: str  # team (lexicographically first)
-    b: str  # team (lexicographically second)
-    res_a: int  # head-to-head result in completed set (+1 a beat b, -1 b beat a, 0 split)
-    pd_a: int   # raw point differential for a vs b across completed meetings (will be capped when used)
-    pa_a: int   # points allowed by team a in those meetings
-    pa_b: int   # points allowed by team b in those meetings
-
-@dataclass(frozen=True)
-class RemainingGame:
-    a: str  # team (lexicographically first)
-    b: str  # team (lexicographically second)
-
+from prefect_files.data_classes import CompletedGame, RemainingGame
+from prefect_files.data_helpers import get_completed_games, normalize_pair
+from prefect_files.scenarios import (
+    consolidate_all,
+    minimize_minterms,
+    pct_str,
+)
+from prefect_files.tiebreakers import (
+    rank_to_slots,
+    resolve_standings_for_mask,
+    standings_from_mask,
+    tie_bucket_groups,
+    unique_intra_bucket_games,
+)
 
 # --------------------------- Fetch Helpers ---------------------------
 
-def normalize_pair(x: str, y: str) -> Tuple[str, str, int]:
-    return (x, y, +1) if x <= y else (y, x, -1)
 
-def fetch_division(conn, clazz: int, region: int, season: int) -> List[str]:
+def fetch_division(conn, clazz: int, region: int, season: int) -> list[str]:
     with conn.cursor() as cur:
         cur.execute(
             "SELECT school FROM schools WHERE class=%s AND region=%s AND season=%s ORDER BY school",
@@ -87,7 +83,8 @@ def fetch_division(conn, clazz: int, region: int, season: int) -> List[str]:
         )
         return [r[0] for r in cur.fetchall()]
 
-def fetch_completed_pairs(conn, teams: List[str], season: int) -> List[CompletedGame]:
+
+def fetch_completed_pairs(conn, teams: list[str], season: int) -> list[CompletedGame]:
     with conn.cursor() as cur:
         cur.execute(
             "SELECT school, opponent, date, result, points_for, points_against "
@@ -98,55 +95,21 @@ def fetch_completed_pairs(conn, teams: List[str], season: int) -> List[Completed
         )
         rows = cur.fetchall()
 
-    # Deduplicate by *game* key (a,b,date) where a<b (lexicographic).
-    # Prefer the row where school==a (lex-first) if it exists; otherwise use the b-row inverted.
-    by_game: Dict[Tuple[str, str, str], Dict[str, int] | Tuple[str, ...]] = {}
+    raw_results = [
+        {
+            "school": school,
+            "opponent": opp,
+            "date": str(date),
+            "result": result,
+            "points_for": pf,
+            "points_against": pa,
+        }
+        for school, opp, date, result, pf, pa in rows
+    ]
+    return get_completed_games(raw_results)
 
-    for school, opp, date, result, pf, pa in rows:
-        a, b, _sign = normalize_pair(school, opp)  # a<b
-        gkey = (a, b, date)
 
-        # Compute contributions from the perspective of team 'a' (lex-first)
-        if school == a:
-            # from a's row directly
-            res_a = 1 if result == 'W' else (-1 if result == 'L' else 0)
-            pd_a  = (pf - pa) if (pf is not None and pa is not None) else 0
-            pa_a  = (pa or 0)
-            pa_b  = (pf or 0)
-
-            # Always prefer the a-row: overwrite any prior b-row for this (a,b,date)
-            by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 1}
-
-        else:
-            # row is from b's perspective; invert to 'a'
-            res_a = -1 if result == 'W' else (1 if result == 'L' else 0)
-            pd_a  = (-(pf - pa)) if (pf is not None and pa is not None) else 0
-            pa_a  = (pf or 0)  # a allowed b's points_for
-            pa_b  = (pa or 0)  # b allowed a's points_for
-
-            prev = by_game.get(gkey)
-            # Only store if we don't already have an a-row for this game
-            if not prev or (isinstance(prev, dict) and not prev.get("has_a")):
-                by_game[gkey] = {"res_a": res_a, "pd_a": pd_a, "pa_a": pa_a, "pa_b": pa_b, "has_a": 0}
-
-    # Now aggregate per pair (a,b) across dates (in case there were multiple meetings)
-    pair_totals: Dict[Tuple[str, str], Dict[str, int]] = {}
-    for (a, b, _date), vals in by_game.items():
-        d = pair_totals.setdefault((a, b), {"res_a": 0, "pd_a": 0, "pa_a": 0, "pa_b": 0})
-        d["res_a"] += vals["res_a"] # type: ignore
-        d["pd_a"]  += vals["pd_a"] # type: ignore
-        d["pa_a"]  += vals["pa_a"] # type: ignore
-        d["pa_b"]  += vals["pa_b"] # type: ignore
-
-    out: List[CompletedGame] = []
-    for (a, b), v in pair_totals.items():
-        # Collapse res_a to {-1, 0, +1} for the season series (win/loss/split from 'a' pov)
-        res_a_sign = 1 if v["res_a"] > 0 else (-1 if v["res_a"] < 0 else 0)
-        out.append(CompletedGame(a, b, res_a_sign, v["pd_a"], v["pa_a"], v["pa_b"]))
-
-    return out
-
-def fetch_remaining_pairs(conn, teams: List[str], season: int) -> List[RemainingGame]:
+def fetch_remaining_pairs(conn, teams: list[str], season: int) -> list[RemainingGame]:
     with conn.cursor() as cur:
         cur.execute(
             "WITH cand AS ("
@@ -156,988 +119,36 @@ def fetch_remaining_pairs(conn, teams: List[str], season: int) -> List[Remaining
             ") SELECT DISTINCT a,b FROM cand",
             (season, teams, teams),
         )
-        return [RemainingGame(a,b) for a,b in cur.fetchall()]
+        return [RemainingGame(a, b) for a, b in cur.fetchall()]
 
-
-# --------------------------- Aggregation for Steps 1 & 5 ---------------------------
-
-def standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default=7):
-    """Compute W/L/T and PA for all teams for a given outcome mask.
-    Implements: Step 5 (PA accumulation).
-    """
-    wl_totals = {t: {"w":0, "l":0, "t":0, "pa":0} for t in teams}
-    # Completed region games
-    for comp_game in completed:
-        if comp_game.res_a == 1:
-            wl_totals[comp_game.a]["w"] += 1; wl_totals[comp_game.b]["l"] += 1
-        elif comp_game.res_a == -1:
-            wl_totals[comp_game.b]["w"] += 1; wl_totals[comp_game.a]["l"] += 1
-        else:
-            wl_totals[comp_game.a]["t"] += 1; wl_totals[comp_game.b]["t"] += 1
-        # Step 5 – PA from completed games
-        wl_totals[comp_game.a]["pa"] += comp_game.pa_a; wl_totals[comp_game.b]["pa"] += comp_game.pa_b
-    # Remaining region games (winner/loser by mask; PA includes margin for loser)
-    for i, rem_game in enumerate(remaining):
-        bit = (outcome_mask >> i) & 1
-        winner, loser = (rem_game.a, rem_game.b) if bit==1 else (rem_game.b, rem_game.a)
-        m = margins.get((rem_game.a, rem_game.b), base_margin_default)
-        wl_totals[winner]["w"] += 1; wl_totals[loser]["l"] += 1
-        wl_totals[winner]["pa"] += pa_win; wl_totals[loser]["pa"] += pa_win + m
-    return wl_totals
-
-
-# --------------------------- Maps for Steps 1 & 3 ---------------------------
-
-def build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_default=7):
-    """Build maps used by tiebreakers:
-       - Step 1: h2h_points (win=1, tie=0.5) among tied teams
-       - Step 3: capped head-to-head point differential (±12 per game)
-       Also returns pd_uncap for diagnostics.
-    """
-    h2h_points = defaultdict(float)
-    capped_pd_map = defaultdict(int)
-    pd_uncap = defaultdict(int)
-    # Completed H2H
-    for comp_game in completed:
-        # Step 1: H2H points tally
-        if comp_game.res_a==1: h2h_points[(comp_game.a,comp_game.b)]+=1.0
-        elif comp_game.res_a==-1: h2h_points[(comp_game.b,comp_game.a)]+=1.0
-        else:
-            h2h_points[(comp_game.a,comp_game.b)]+=0.5; h2h_points[(comp_game.b,comp_game.a)]+=0.5
-        # Step 3: ±12 capped PD
-        cap_a = max(-12, min(12, comp_game.pd_a))
-        capped_pd_map[(comp_game.a,comp_game.b)]+=cap_a; capped_pd_map[(comp_game.b,comp_game.a)]-=cap_a
-        # Raw margin (not used in sort, but kept for reference)
-        pd_uncap[(comp_game.a,comp_game.b)]+=comp_game.pd_a; pd_uncap[(comp_game.b,comp_game.a)]-=comp_game.pd_a
-    # Remaining H2H (driven by mask & margins)
-    for i, rem_game in enumerate(remaining):
-        bit=(outcome_mask>>i)&1; m=margins.get((rem_game.a,rem_game.b),base_margin_default)
-        if bit==1:
-            h2h_points[(rem_game.a,rem_game.b)]+=1.0
-            capped_pd_map[(rem_game.a,rem_game.b)]+=min(m,12); capped_pd_map[(rem_game.b,rem_game.a)]-=min(m,12)
-            pd_uncap[(rem_game.a,rem_game.b)]+=m; pd_uncap[(rem_game.b,rem_game.a)]-=m
-        else:
-            h2h_points[(rem_game.b,rem_game.a)]+=1.0
-            capped_pd_map[(rem_game.a,rem_game.b)]-=min(m,12); capped_pd_map[(rem_game.b,rem_game.a)]+=min(m,12)
-            pd_uncap[(rem_game.a,rem_game.b)]-=m; pd_uncap[(rem_game.b,rem_game.a)]+=m
-    return h2h_points, capped_pd_map, pd_uncap
-
-
-# --------------------------- Steps 2 & 4 arrays ---------------------------
-
-def step2_step4_arrays(
-    teams,
-    bucket,
-    base_order,
-    completed,
-    remaining,
-    outcome_mask,
-    margins,
-    base_margin_default=7,
-):
-    """
-    Compute Step 2 and Step 4 arrays for each tied team.
-
-    Step 2 (results vs outside teams):
-      2 = win, 1 = tie, 0 = loss, None = no game
-
-    Step 4 (point differential vs outside teams):
-      Uses capped per-game differential of ±12.
-      - For completed games, cap the differential at ±12.
-      - For remaining games, use the simulated margin (from `margins` or `base_margin_default`),
-        then cap at ±12.
-    """
-    bucket_set = set(bucket)
-    outside = [s for s in base_order if s not in bucket_set]
-
-    comp_idx = {(cg.a, cg.b): cg for cg in completed}
-    rem_idx  = {(rg.a, rg.b): i  for i, rg in enumerate(remaining)}
-
-    def res_vs(team, opp):
-        a, b, _ = normalize_pair(team, opp)
-        comp_game = comp_idx.get((a, b))
-        if comp_game is not None:
-            if comp_game.res_a == 1:
-                return 2 if team == a else 0
-            if comp_game.res_a == -1:
-                return 0 if team == a else 2
-            return 1  # split/“tie” in our encoding
-        idx = rem_idx.get((a, b))
-        if idx is None:
-            return None
-        bit = (outcome_mask >> idx) & 1
-        winner = a if bit == 1 else b
-        return 2 if team == winner else 0
-
-    def pd_vs(team, opp):
-        """Capped PD vs outside (±12)."""
-        a, b, _ = normalize_pair(team, opp)
-        comp_game = comp_idx.get((a, b))
-        if comp_game is not None:
-            # comp_game.pd_a is the raw differential from a's POV; cap to ±12
-            raw = comp_game.pd_a if team == a else -comp_game.pd_a
-            return max(-12, min(12, raw))
-
-        idx = rem_idx.get((a, b))
-        if idx is None:
-            return None
-
-        # For remaining games, use simulated margin and cap to ±12
-        bit = (outcome_mask >> idx) & 1
-        m = margins.get((a, b), base_margin_default)
-        m_capped = max(-12, min(12, m))
-        if bit == 1:  # a defeats b by m
-            return m_capped if team == a else -m_capped
-        else:        # b defeats a by m
-            return -m_capped if team == a else m_capped
-
-    step2 = {s: [res_vs(s, o) for o in outside] for s in bucket}
-    step4 = {s: [pd_vs(s,  o) for o in outside] for s in bucket}
-    return step2, step4
-
-
-# --------------------------- Sequential Tie Resolution ---------------------------
-
-def _key_step2(step2_row):
-    """
-    Canonical, lexicographic key for Step 2 vectors:
-    - Higher result is better (2>1>0), None sorts last (worst).
-    We invert to negative so 'smaller' tuple means 'better' in Python sort.
-    """
-    return tuple(-(x if x is not None else -10**9) for x in step2_row)
-
-def _key_step4(step4_row):
-    """
-    Canonical, lexicographic key for Step 4 vectors:
-    - Higher PD is better; None sorts last (worst).
-    We invert to negative so 'smaller' tuple means 'better'.
-    """
-    return tuple(-(x if x is not None else -10**9) for x in step4_row)
-
-def _partition_by(items, key_func):
-    """
-    Partition 'items' (list of team names) by the key computed from key_func(team).
-    Returns list of groups (each group is a list of team names) in deterministic order.
-    Determinism rule: alphabetical order *within* each equal-key group.
-    """
-    from collections import defaultdict
-    buckets = defaultdict(list)
-    for t in items:
-        buckets[key_func(t)].append(t)
-    out = []
-    for k in sorted(buckets.keys()):
-        out.append(sorted(buckets[k]))  # alphabetical within equal key
-    return out
-
-def _pair_h2h_points(a: str, b: str, completed, remaining, outcome_mask, margins, base_margin_default=7) -> Tuple[float,float]:
-    """
-    Direct head-to-head points for the specific pair (a,b), NOT aggregated vs everyone.
-    Returns (pts_a, pts_b) where win=1, tie/split=0.5 each.
-    """
-    pts_a = 0.0
-    pts_b = 0.0
-    comp_idx = {(cg.a, cg.b): cg for cg in completed}
-    rem_idx  = {(rg.a, rg.b): i  for i, rg in enumerate(remaining)}
-
-    # Completed meetings
-    cg = comp_idx.get(normalize_pair(a,b)[:2])
-    if cg is not None:
-        if cg.res_a == 1:
-            if a == cg.a: pts_a += 1.0
-            else: pts_b += 1.0
-        elif cg.res_a == -1:
-            if a == cg.a: pts_b += 1.0
-            else: pts_a += 1.0
-        else:
-            pts_a += 0.5; pts_b += 0.5
-
-    # Remaining single game between them (region schedules are typically one game)
-    idx = rem_idx.get(normalize_pair(a,b)[:2])
-    if idx is not None:
-        bit = (outcome_mask >> idx) & 1
-        winner = remaining[idx].a if bit == 1 else remaining[idx].b
-        if winner == a: pts_a += 1.0
-        else: pts_b += 1.0
-
-    return pts_a, pts_b
-
-def _pair_h2h_pd_capped(a: str, b: str, completed, remaining, outcome_mask, margins, base_margin_default=7) -> int:
-    """
-    Direct head-to-head capped point differential (±12 per game) for the specific pair (a,b).
-    Positive means advantage to 'a'.
-    """
-    pd = 0
-    comp_idx = {(cg.a, cg.b): cg for cg in completed}
-    rem_idx  = {(rg.a, rg.b): i  for i, rg in enumerate(remaining)}
-
-    cg = comp_idx.get(normalize_pair(a,b)[:2])
-    if cg is not None:
-        raw = cg.pd_a if a == cg.a else -cg.pd_a
-        pd += max(-12, min(12, raw))
-
-    idx = rem_idx.get(normalize_pair(a,b)[:2])
-    if idx is not None:
-        bit = (outcome_mask >> idx) & 1
-        m = margins.get((remaining[idx].a, remaining[idx].b), base_margin_default)
-        m_capped = max(-12, min(12, m))
-        if bit == 1:
-            # remaining[idx].a defeats remaining[idx].b
-            if a == remaining[idx].a: pd += m_capped
-            else: pd -= m_capped
-        else:
-            # remaining[idx].b defeats remaining[idx].a
-            if a == remaining[idx].a: pd -= m_capped
-            else: pd += m_capped
-
-    return pd
-
-def _resolve_pair_using_steps(
-    pair, step2, step4, wl_totals, completed, remaining, outcome_mask, margins, base_margin_default=7, debug=False
-):
-    """
-    Resolve a 2-team tie by restarting the chain from Step 1, per rule:
-      Step 1 -> Step 2 -> Step 3 -> Step 4 -> Step 5 -> alphabetical.
-    Returns the ordered list [winner, loser].
-    """
-    a, b = pair
-    if debug:
-        print(f"[DEBUG TIE]   Resolving pair {a} vs {b} from Step 1")
-
-    # Step 1: direct head-to-head points for the pair
-    pts_a, pts_b = _pair_h2h_points(a, b, completed, remaining, outcome_mask, margins, base_margin_default)
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step1 H2H points: {a}:{pts_a}  {b}:{pts_b}")
-    if pts_a != pts_b:
-        return [a, b] if pts_a > pts_b else [b, a]
-
-    # Step 2: results vs outside (lexicographic, more is better)
-    k2_a = _key_step2(step2[a])
-    k2_b = _key_step2(step2[b])
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step2 keys: {a}:{k2_a}  {b}:{k2_b}")
-    if k2_a != k2_b:
-        return [a, b] if k2_a < k2_b else [b, a]  # smaller (more negative) is better
-
-    # Step 3: direct capped H2H PD (±12; more is better)
-    pd_ab = _pair_h2h_pd_capped(a, b, completed, remaining, outcome_mask, margins, base_margin_default)
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step3 H2H PD (±12): {a} vs {b} -> {pd_ab}")
-    if pd_ab != 0:
-        return [a, b] if pd_ab > 0 else [b, a]
-
-    # Step 4: PD vs outside (lexicographic, more is better)
-    k4_a = _key_step4(step4[a])
-    k4_b = _key_step4(step4[b])
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step4 keys: {a}:{k4_a}  {b}:{k4_b}")
-    if k4_a != k4_b:
-        return [a, b] if k4_a < k4_b else [b, a]
-
-    # Step 5: fewest points allowed (lower is better)
-    pa_a = wl_totals[a]["pa"]
-    pa_b = wl_totals[b]["pa"]
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step5 PA: {a}:{pa_a}  {b}:{pa_b}")
-    if pa_a != pa_b:
-        return [a, b] if pa_a < pa_b else [b, a]
-
-    # Step 6: coin flip (reportable upstream if desired), fallback to alphabetical
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step6 coin flip needed -> alphabetical")
-    return sorted([a, b])
-
-def resolve_bucket(
-    bucket, teams, wl_totals, base_order, completed, remaining,
-    outcome_mask, margins, base_margin_default=7, coin_flip_collector: Optional[List[List[str]]]=None, debug=False
-):
-    """
-    Apply Steps 1–6 to order a single tie bucket, SEQUENTIALLY.
-    - After any step partitions a 3+ tie down to a size-2 subgroup, that subgroup
-      is re-resolved starting from Step 1 (head-to-head), as required.
-    """
-    if len(bucket) == 1:
-        return bucket[:]
-
-    # Precompute inputs used by steps
-    h2h_pts, h2h_pd_cap, _ = build_h2h_maps(
-        completed, remaining, outcome_mask, margins, base_margin_default
-    )
-    # Step 1 tally across the bucket
-    step1 = {s: 0.0 for s in bucket}
-    for s in bucket:
-        for o in bucket:
-            if s == o:
-                continue
-            step1[s] += h2h_pts.get((s, o), 0.0)
-
-    # Step 3 (capped H2H PD) across the bucket
-    step3 = {s: 0 for s in bucket}
-    for s in bucket:
-        for o in bucket:
-            if s == o:
-                continue
-            step3[s] += h2h_pd_cap.get((s, o), 0)
-
-    # Step 2 / Step 4 arrays vs outside
-    step2, step4 = step2_step4_arrays(
-        teams, bucket, base_order, completed, remaining,
-        outcome_mask, margins, base_margin_default
-    )
-
-    if debug and len(bucket) > 2:
-        print(f"Step1 H2H totals: {step1}")
-        print(f"Step3 H2H PD (cap ±12): {step3}")
-        print(f"Step2 keys: {{"
-              + ", ".join(f"{t}: {_key_step2(step2[t])}" for t in bucket)
-              + " }}")
-        print(f"Step4 keys: {{"
-              + ", ".join(f"{t}: {_key_step4(step4[t])}" for t in bucket)
-              + " }}")
-
-    # Work list of groups to resolve, sequentially through steps
-    pending_groups = [sorted(bucket)]
-    resolved_order: List[str] = []
-
-    def push_coinflip(groups):
-        if coin_flip_collector is not None:
-            for g in groups:
-                if len(g) > 1:
-                    coin_flip_collector.append(sorted(g))
-
-    # Step 1: partition by Step 1 score (DO NOT include team in key; sort alpha inside groups)
-    next_groups = []
-    for g in pending_groups:
-        parts = _partition_by(g, key_func=lambda t: -step1[t])
-        if debug and len(bucket) > 2:
-            print(f"[DEBUG TIE] -> After Step1 partition: {parts}")
-        next_groups.extend(parts)
-    pending_groups = next_groups
-
-    # Apply Step 2, Step 3, Step 4, Step 5 in sequence.
-    # After each step, if a part has size==2, restart chain for that pair immediately.
-    for step_label, key_builder in [
-        ("Step2", lambda t: _key_step2(step2[t])),     # higher is better -> smaller tuple after negation
-        ("Step3", lambda t: -step3[t]),                # higher PD better
-        ("Step4", lambda t: _key_step4(step4[t])),     # higher PD better -> smaller tuple after negation
-        ("Step5", lambda t: wl_totals[t]["pa"]),       # fewer PA better
-    ]:
-        next_groups = []
-        for g in pending_groups:
-            if len(g) == 1:
-                next_groups.append(g)
-                continue
-            if len(g) == 2:
-                # Restart from Step 1 for this pair using DIRECT pairwise metrics
-                ordered = _resolve_pair_using_steps(g, step2, step4, wl_totals, completed, remaining,
-                                                    outcome_mask, margins, base_margin_default, debug=False)
-                next_groups.append(ordered)
-                continue
-            # Size >= 3: partition by this step (no team name in key)
-            parts = _partition_by(g, key_func=lambda t: key_builder(t))
-            if debug and  len(bucket) > 2:
-                print(f"[DEBUG TIE] -> After {step_label} partition: {parts}")
-            # If any part shrinks to 2, resolve that pair immediately per rule
-            for part in parts:
-                if len(part) == 2:
-                    ordered = _resolve_pair_using_steps(part, step2, step4, wl_totals, completed, remaining,
-                                                        outcome_mask, margins, base_margin_default, debug=False)
-                    next_groups.append(ordered)
-                else:
-                    next_groups.append(part)
-        pending_groups = next_groups
-
-    # After Step 5, any remaining multi-team ties would go to Step 6 (coin flip).
-    # We keep deterministic output (alphabetical) but expose who'd need a flip.
-    unresolved_multi = [g for g in pending_groups if len(g) > 1]
-    if unresolved_multi:
-        push_coinflip(unresolved_multi)
-
-    # Stitch final order (each group is already ordered)
-    for g in pending_groups:
-        resolved_order.extend(g)
-
-    if debug and len(bucket) > 2:
-        print(f"Final resolved order for bucket: {resolved_order}")
-        print("[DEBUG TIE] ===== End bucket =====")
-
-    return resolved_order
-
-
-# --------------------------- Region Resolution ---------------------------
-
-def base_bucket_order(teams,wl_totals):
-    """Pre-order to form buckets BEFORE Steps 1–6:
-       sort by region winning %, then fewest losses, then name.
-    """
-    def key(s):
-        w,l,t=wl_totals[s]["w"],wl_totals[s]["l"],wl_totals[s]["t"]
-        gp=w+l+t; wp=(w+0.5*t)/gp if gp>0 else 0.0
-        return (-wp, l, s)
-    return sorted(teams, key=key)
-
-def tie_bucket_groups(teams,wl_totals):
-    """Groups teams with identical (rounded) win% and losses into tie buckets,
-       preserving base_bucket_order across buckets.
-    """
-    buckets=defaultdict(list)
-    for s in teams:
-        w,l,t=wl_totals[s]["w"],wl_totals[s]["l"],wl_totals[s]["t"]
-        gp=w+l+t; wp=(w+0.5*t)/gp if gp>0 else 0.0
-        buckets[(round(wp,6),l)].append(s)
-    order=base_bucket_order(teams,wl_totals); seen=set(); out=[]
-    for s in order:
-        if s in seen: continue
-        w,l,t=wl_totals[s]["w"],wl_totals[s]["l"],wl_totals[s]["t"]
-        gp=w+l+t; wp=(w+0.5*t)/gp if gp>0 else 0.0
-        group=buckets[(round(wp,6),l)]
-        out.append(sorted(group)); seen.update(group)
-    return out
-
-def resolve_standings_for_mask(teams,completed,remaining,outcome_mask,margins,base_margin_default=7,pa_win=14, debug=False):
-    """Resolve ordering/ties for a full region under a single mask.
-    Calls resolve_bucket() on each tie bucket in base order.
-    """
-    wl_totals=standings_from_mask(teams,completed,remaining,outcome_mask,pa_win,margins,base_margin_default)
-    base_order=base_bucket_order(teams,wl_totals)
-    final=[]
-    coinflip_events: List[List[str]] = []  # collected Step 6 reports, not used further
-    for bucket in tie_bucket_groups(teams,wl_totals):
-        final.extend(resolve_bucket(bucket,teams,wl_totals,base_order,completed,remaining,
-                                    outcome_mask,margins,base_margin_default,
-                                    coin_flip_collector=coinflip_events, debug=debug))
-    # NOTE: coinflip_events is available here if you want to surface it in outputs.
-    return final
-
-def rank_to_slots(order):
-    """Convert strict order into seed slots (lo, hi)."""
-    return {s:(i,i) for i,s in enumerate(order,start=1)}
-
-def unique_intra_bucket_games(buckets,remaining):
-    """Return remaining games where both teams appear in the same non-singleton bucket.
-       Used for Step-3 knife-edge threshold detection.
-    """
-    inb=set().union(*(set(b) for b in buckets if len(b)>1)); seen=set(); out=[]
-    for rem_game in remaining:
-        if rem_game.a in inb and rem_game.b in inb:
-            key=(rem_game.a,rem_game.b)
-            if key not in seen:
-                seen.add(key); out.append(rem_game)
-    return out
-
-
-
-def consolidate_opposites_and_remove_bases(candidate_minterms: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
-    """
-    1. Consolidate dictionaries that are identical except for one key whose
-       boolean values are opposite — removing that differing key.
-    2. Remove any base keys (e.g., 'A>B') when a GE variant (e.g., 'A>B_GE1') exists.
-    """
-    # --- Step 1: consolidate opposite pairs ---
-    consolidated = []
-    used = set()
-
-    for i, d1 in enumerate(candidate_minterms):
-        if i in used:
-            continue
-        merged = False
-        for j, d2 in enumerate(candidate_minterms[i+1:], start=i+1):
-            if j in used:
-                continue
-            if set(d1.keys()) != set(d2.keys()):
-                continue
-            differing = [k for k in d1 if d1[k] != d2[k]]
-            if len(differing) == 1:
-                new_dict = {k: v for k, v in d1.items() if k != differing[0]}
-                consolidated.append(new_dict)
-                used.update({i, j})
-                merged = True
-                break
-        if not merged:
-            consolidated.append(d1)
-
-    # --- Step 2: remove base keys when GE variants exist ---
-    cleaned = []
-    for d in consolidated:
-        ge_bases = {k.split('_GE')[0] for k in d if '_GE' in k}
-        new_d = {k: v for k, v in d.items() if k.split('_GE')[0] not in ge_bases or '_GE' in k}
-        cleaned.append(new_d)
-
-    return cleaned
-
-
-def _parse_ge_key(k: str) -> Optional[Tuple[str, int]]:
-    if "_GE" not in k:
-        return None
-    base, _, tail = k.partition("_GE")
-    try:
-        t = int(tail)
-    except ValueError:
-        return None
-    return base, t
-
-def _signature_without_family(d: Dict[str, bool], base: str) -> Tuple[Tuple[str, bool], ...]:
-    items = []
-    for k, v in d.items():
-        parsed = _parse_ge_key(k)
-        if (parsed and parsed[0] == base) or (k == base):
-            continue
-        items.append((k, v))
-    items.sort()
-    return tuple(items)
-
-def _interval_for_family(d: Dict[str, bool], base: str) -> Tuple[float, float]:
-    lo = -math.inf
-    hi = math.inf
-    for k, v in d.items():
-        parsed = _parse_ge_key(k)
-        if not parsed:
-            continue
-        b, t = parsed
-        if b != base:
-            continue
-        if v is True:
-            lo = max(lo, t)
-        else:
-            hi = min(hi, t)
-    return lo, hi  # [lo, hi)
-
-# ---------- pass 1: merge opposite-only pairs within the same dict set ----------
-def consolidate_opposites(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
-    out, used = [], set()
-    for i, d1 in enumerate(dicts):
-        if i in used:
-            continue
-        merged = False
-        for j in range(i + 1, len(dicts)):
-            if j in used:
-                continue
-            d2 = dicts[j]
-            if set(d1.keys()) != set(d2.keys()):
-                continue
-            dif = [k for k in d1 if d1[k] != d2[k]]
-            if len(dif) == 1:
-                kdiff = dif[0]
-                nd = {k: v for k, v in d1.items() if k != kdiff}
-                out.append(nd)
-                used.update({i, j})
-                merged = True
-                break
-        if not merged:
-            out.append(d1)
-    return out
-
-# ---------- pass 2: cross-dict GE union -> base True when range is [win_threshold, +inf) ----------
-def merge_ge_intervals_to_base_safe(dicts: List[Dict[str, bool]], win_threshold:int = 1) -> List[Dict[str, bool]]:
-    groups = defaultdict(list)           # (sig, base) -> [(idx, dict, (lo,hi))]
-    base_presence = defaultdict(bool)    # (sig, base) -> any dict has explicit base key
-
-    for idx, d in enumerate(dicts):
-        bases_in_d = {parsed[0] for k in d for parsed in (_parse_ge_key(k),) if parsed}
-        explicit_bases = {k for k in d if "_GE" not in k}
-        all_bases = bases_in_d | explicit_bases
-        for base in all_bases:
-            sig = _signature_without_family(d, base)
-            if base in d:
-                base_presence[(sig, base)] = True
-        for base in bases_in_d:
-            sig = _signature_without_family(d, base)
-            lo, hi = _interval_for_family(d, base)
-            if lo < hi:
-                groups[(sig, base)].append((idx, d, (lo, hi)))
-
-    to_remove = set()
-    replacements = []
-
-    for (sig, base), entries in groups.items():
-        if len(entries) < 2:
-            continue
-        if base_presence.get((sig, base), False):
-            continue
-
-        intervals = [iv for _, _, iv in entries]
-        intervals.sort()
-        # merge
-        merged = []
-        cur_lo, cur_hi = intervals[0]
-        for lo, hi in intervals[1:]:
-            if lo <= cur_hi:
-                cur_hi = max(cur_hi, hi)
-            else:
-                merged.append((cur_lo, cur_hi))
-                cur_lo, cur_hi = lo, hi
-        merged.append((cur_lo, cur_hi))
-
-        # collapse only if union == [win_threshold, +inf)
-        if len(merged) == 1 and merged[0][0] <= win_threshold and merged[0][1] == math.inf:
-            to_remove.update(idx for idx, _, _ in entries)
-            collapsed = dict(sig)
-            collapsed[base] = True
-            replacements.append(collapsed)
-
-    out = [d for i, d in enumerate(dicts) if i not in to_remove]
-    # de-dupe replacements
-    seen = set()
-    for d in replacements:
-        key = tuple(sorted(d.items()))
-        if key not in seen:
-            seen.add(key)
-            out.append(d)
-    return out
-
-# ---------- pass 3: intra-dict base removal when any GE variant exists ----------
-def remove_base_if_ge_present(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
-    cleaned = []
-    for d in dicts:
-        ge_bases = {k.split('_GE')[0] for k in d if '_GE' in k}
-        cleaned.append({k: v for k, v in d.items() if (k not in ge_bases) or ('_GE' in k)})
-    return cleaned
-
-# ---------- pass 4: full-partition drop of base family when wins covered & explicit loss present ----------
-def merge_full_partition_remove_base(dicts: List[Dict[str, bool]], win_threshold: int = 1) -> List[Dict[str, bool]]:
-    groups = defaultdict(list)
-    ge_intervals = defaultdict(list)
-    has_base_true = defaultdict(bool)
-    has_base_false = defaultdict(bool)
-
-    for idx, d in enumerate(dicts):
-        bases_in_ge = {parsed[0] for k in d for parsed in (_parse_ge_key(k),) if parsed}
-        explicit_bases = {k for k in d if "_GE" not in k and isinstance(d[k], bool)}
-        all_bases = bases_in_ge | explicit_bases
-        for base in all_bases:
-            sig = _signature_without_family(d, base)
-            groups[(sig, base)].append(idx)
-            if base in bases_in_ge:
-                lo, hi = _interval_for_family(d, base)
-                if lo < hi:
-                    ge_intervals[(sig, base)].append((lo, hi))
-            if base in d:
-                has_base_true[(sig, base)] |= (d[base] is True)
-                has_base_false[(sig, base)] |= (d[base] is False)
-
-    to_remove = set()
-    replacements = []
-
-    for (sig, base), idxs in groups.items():
-        if not has_base_false.get((sig, base), False):
-            continue
-
-        intervals = list(ge_intervals.get((sig, base), []))
-        if has_base_true.get((sig, base), False):
-            intervals.append((win_threshold, math.inf))
-        if not intervals:
-            continue
-
-        intervals.sort()
-        merged = []
-        cur_lo, cur_hi = intervals[0]
-        for lo, hi in intervals[1:]:
-            if lo <= cur_hi:
-                cur_hi = max(cur_hi, hi)
-            else:
-                merged.append((cur_lo, cur_hi))
-                cur_lo, cur_hi = lo, hi
-        merged.append((cur_lo, cur_hi))
-
-        if len(merged) == 1 and merged[0][0] <= win_threshold and merged[0][1] == math.inf:
-            to_remove.update(idxs)
-            collapsed = dict(sig)  # drop base family entirely
-            replacements.append(collapsed)
-
-    out = [d for i, d in enumerate(dicts) if i not in to_remove]
-    seen = set()
-    for d in replacements:
-        key = tuple(sorted(d.items()))
-        if key not in seen:
-            seen.add(key)
-            out.append(d)
-    return out
-
-def remove_base_if_ge_present_in_dicts(dicts: list[dict[str, bool]]) -> list[dict[str, bool]]:
-    """
-    Within each dict, if both `x>y` and one or more `x>y_GEz` keys exist,
-    remove the base key `x>y` (redundant with the GE-qualified entries).
-    """
-    cleaned = []
-    for d in dicts:
-        # Collect bases that appear as GE families
-        ge_bases = {k.split('_GE')[0] for k in d if '_GE' in k}
-        # Keep all items except base keys that belong to those families
-        new_d = {k: v for k, v in d.items() if not (k in ge_bases)}
-        cleaned.append(new_d)
-    return cleaned
-
-def _flip_base_key(base: str) -> str:
-    if ">" in base:
-        a, b = base.split(">", 1)
-        return f"{b}>{a}"
-    return base
-
-def _remove_base_if_ge_present_in_atom(atom: Dict[str, bool]) -> Dict[str, bool]:
-    """
-    Within one scenario dict, if any x>y_GE* key exists, remove BOTH base keys:
-      - x>y
-      - y>x    (the opposite base that often appears as False)
-    """
-    ge_bases = {k.split("_GE", 1)[0] for k in atom if "_GE" in k}
-    if not ge_bases:
-        return atom
-    to_drop = set()
-    for base in ge_bases:
-        to_drop.add(base)
-        to_drop.add(_flip_base_key(base))
-    return {k: v for k, v in atom.items() if k not in to_drop}
-
-# --- NEW unified GE merge: collapses to base True or a finite band ---
-def merge_ge_union_unified(dicts: List[Dict[str, bool]], win_threshold: int = 1) -> List[Dict[str, bool]]:
-    """
-    For each (signature w/o family, base):
-      * collect all GE intervals across dicts that have that GE family
-      * if any dict in the group has explicit base key, skip (to avoid mixing)
-      * if the union is a single interval:
-          - if [L, +inf) with L <= win_threshold -> collapse to {base: True}
-          - elif [L, U) with finite U -> collapse to {base_GEL: True, base_GEU: False}
-    Replace all dicts in that group with the collapsed one.
-    """
-    groups = defaultdict(list)         # (sig, base) -> [(idx, dict, (lo, hi))]
-    base_presence = defaultdict(bool)  # (sig, base) -> any explicit base key present
-
-    for idx, d in enumerate(dicts):
-        ge_bases = {parsed[0] for k in d for parsed in (_parse_ge_key(k),) if parsed}
-        explicit_bases = {k for k in d if "_GE" not in k and isinstance(d[k], bool)}
-
-        for base in (ge_bases | explicit_bases):
-            sig = _signature_without_family(d, base)
-            if base in d:  # explicit base key
-                base_presence[(sig, base)] = True
-
-        for base in ge_bases:
-            sig = _signature_without_family(d, base)
-            lo, hi = _interval_for_family(d, base)
-            if lo < hi:
-                groups[(sig, base)].append((idx, d, (lo, hi)))
-
-    to_remove = set()
-    replacements = []
-
-    for (sig, base), entries in groups.items():
-        if len(entries) < 2:
-            continue  # need at least 2 dicts contributing to a merge
-        if base_presence.get((sig, base), False):
-            continue  # do not mix with explicit base keys
-
-        # merge intervals across dicts
-        intervals = [iv for _, _, iv in entries]
-        intervals.sort()
-        merged = []
-        cur_lo, cur_hi = intervals[0]
-        for lo, hi in intervals[1:]:
-            if lo <= cur_hi:  # overlap or touch
-                cur_hi = max(cur_hi, hi)
-            else:
-                merged.append((cur_lo, cur_hi))
-                cur_lo, cur_hi = lo, hi
-        merged.append((cur_lo, cur_hi))
-
-        if len(merged) != 1:
-            continue  # discontinuous; don't collapse
-
-        L, R = merged[0]
-        collapsed = dict(sig)
-
-        if R == math.inf and L <= win_threshold:
-            # unconditional “win by any margin”
-            collapsed[base] = True
-        elif R != math.inf and L != -math.inf:
-            # finite band [L, R)
-            collapsed[f"{base}_GE{int(L)}"] = True
-            collapsed[f"{base}_GE{int(R)}"] = False
-        else:
-            continue  # bands like (-inf, U) or [L, +inf) with L > win_threshold: skip here
-
-        # replace the group's dicts with the collapsed one
-        to_remove.update(idx for idx, _, _ in entries)
-        replacements.append(collapsed)
-
-    # build output with de-duped replacements
-    out = [d for i, d in enumerate(dicts) if i not in to_remove]
-    seen = set()
-    for d in replacements:
-        key = tuple(sorted(d.items()))
-        if key not in seen:
-            seen.add(key)
-            out.append(d)
-    return out
-
-# --- NEW: collapse ALL GE families per signature in one shot ---
-def merge_ge_union_by_signature(
-    dicts: List[Dict[str, bool]],
-    win_threshold: int = 1,
-    aggressive_upper: bool = True,
-) -> List[Dict[str, bool]]:
-    """
-    For each signature (same non-GE keys/values), consider all bases that appear as GE families.
-    For each base, union its GE intervals across the signature's dicts, then:
-      - If union is one interval [L, +inf) and L <= win_threshold -> {base: True}
-      - If union is one finite interval [L, U)                   -> {base_GEL: True, base_GEU: False}
-      - If aggressive_upper and union includes any +inf tail     -> {base_GELmin: True}
-        (This matches your desire to collapse multiple pieces into just GE_Lmin when one piece goes to +inf.)
-    Skip a base if any dict in the signature has the explicit base key; we don't mix base with GE.
-    Replace all dicts in a signature iff at least one base collapses; otherwise leave signature untouched.
-    """
-    # Group dict indices by their "signature without family" per base,
-    # but we also need a pure signature grouping to merge multiple bases at once.
-    # Build a canonical "pure signature" (i.e., remove ALL GE keys and ALL base keys).
-    def pure_signature(d: Dict[str, bool]) -> Tuple[Tuple[str, bool], ...]:
-        items = [(k, v) for k, v in d.items() if "_GE" not in k and not isinstance(v, dict) and isinstance(v, bool)]
-        # keep ONLY non-base boolean keys in the signature (i.e., A>B True/False etc.)
-        # GE keys are excluded; base keys remain here because they are part of "other" logic.
-        # However, to avoid mixing with bases we’ll avoid collapsing any base that appears explicitly below.
-        items.sort()
-        return tuple(items)
-
-    # Build per-signature collections
-    sig_to_indices = defaultdict(list)
-    for i, d in enumerate(dicts):
-        sig_to_indices[pure_signature(d)].append(i)
-
-    to_remove = set()
-    replacements = []
-
-    for sig, idxs in sig_to_indices.items():
-        # Collect all bases & their intervals within this signature group
-        bases = set()
-        base_explicit_present = defaultdict(bool)
-        base_intervals = defaultdict(list)  # base -> list of (lo, hi)
-
-        for i in idxs:
-            d = dicts[i]
-            # GE families present in this dict
-            ge_bases = {parsed[0] for k in d for parsed in (_parse_ge_key(k),) if parsed}
-            # explicit base presence
-            for k in d:
-                if "_GE" not in k and isinstance(d[k], bool):
-                    base_explicit_present[k] |= True
-            for base in ge_bases:
-                bases.add(base)
-                lo, hi = _interval_for_family(d, base)
-                if lo < hi:
-                    base_intervals[base].append((lo, hi))
-
-        # Try to collapse each base independently
-        any_collapsed = False
-        collapsed_parts: Dict[str, Dict[str, bool]] = {}  # base -> {collapsed keys...}
-
-        for base in bases:
-            # guard: don't mix with explicit base key in this signature
-            if base_explicit_present.get(base, False):
-                continue
-
-            intervals = base_intervals.get(base, [])
-            if not intervals:
-                continue
-
-            # Merge intervals
-            intervals.sort()
-            merged = []
-            cur_lo, cur_hi = intervals[0]
-            for lo, hi in intervals[1:]:
-                if lo <= cur_hi:
-                    cur_hi = max(cur_hi, hi)
-                else:
-                    merged.append((cur_lo, cur_hi))
-                    cur_lo, cur_hi = lo, hi
-            merged.append((cur_lo, cur_hi))
-
-            # Decide collapse
-            part: Dict[str, bool] = {}
-            if len(merged) == 1:
-                L, R = merged[0]
-                if R == math.inf and L <= win_threshold:
-                    part[base] = True
-                elif R != math.inf and L != -math.inf:
-                    part[f"{base}_GE{int(L)}"] = True
-                    part[f"{base}_GE{int(R)}"] = False
-                elif R == math.inf and aggressive_upper:
-                    # e.g., [L, +inf) with L > win_threshold -> keep as GE_L True
-                    part[f"{base}_GE{int(L)}"] = True
-            else:
-                # multiple pieces
-                if aggressive_upper and any(r == math.inf for _, r in merged):
-                    # find minimal finite L among all pieces
-                    Lmin = min(L for (L, _) in merged if L != -math.inf)
-                    part[f"{base}_GE{int(Lmin)}"] = True
-                else:
-                    # can't nicely collapse this base in this signature
-                    part = {}
-
-            if part:
-                collapsed_parts[base] = part
-                any_collapsed = True
-
-        if not any_collapsed:
-            continue  # leave this signature group as-is
-
-        # Build one collapsed dict for the signature:
-        collapsed = dict(sig)  # start from the shared non-GE keys (sig already only has non-GE keys)
-        for base in sorted(collapsed_parts.keys()):
-            collapsed.update(collapsed_parts[base])
-
-        # Remove all dicts in this signature group and add the collapsed one
-        to_remove.update(idxs)
-        replacements.append(collapsed)
-
-    # output
-    out = [d for i, d in enumerate(dicts) if i not in to_remove]
-    # de-dupe
-    seen = set()
-    for d in replacements:
-        key = tuple(sorted(d.items()))
-        if key not in seen:
-            seen.add(key)
-            out.append(d)
-    return out
-
-# ---------- one-shot orchestrator ----------
-def consolidate_all(dicts: List[Dict[str, bool]]) -> List[Dict[str, bool]]:
-    step05  = remove_base_if_ge_present_in_dicts(dicts)
-    step0  = consolidate_opposites_and_remove_bases(step05)
-    step1  = consolidate_opposites(step0)
-    step2  = merge_ge_intervals_to_base_safe(step1, win_threshold=1)  # collapses to base True when union [1,+inf)
-    step3  = remove_base_if_ge_present(step2)                         # strip base if any GE of same base exists
-    step3u = merge_ge_union_by_signature(step3)                            # <-- unified finite/unbounded GE merge
-    step4  = merge_full_partition_remove_base(step3u, win_threshold=1)
-
-    # final de-dupe
-    seen, out = set(), []
-    for d in step4:
-        key = tuple(sorted(d.items()))
-        if key not in seen:
-            seen.add(key)
-            out.append(d)
-    return out
 
 # ---------- basic helpers ----------
 def _is_ge_key(k: str) -> bool:
     return "_GE" in k and ">" in k
 
-def _parse_ge(k: str) -> Tuple[str, int]:
+
+def _parse_ge(k: str) -> tuple[str, int]:
     base, _, thr = k.partition("_GE")
     return base, int(thr)
+
 
 def _flip(base: str) -> str:
     a, b = base.split(">", 1)
     return f"{b}>{a}"
 
-def _canon_pair(base: str) -> Tuple[str, str]:
+
+def _canon_pair(base: str) -> tuple[str, str]:
     a, b = base.split(">", 1)
     return a, b
 
-def _non_ge_signature(m: Dict[str, bool]) -> Tuple[Tuple[str, bool], ...]:
+
+def _non_ge_signature(m: dict[str, bool]) -> tuple[tuple[str, bool], ...]:
     items = [(k, v) for k, v in m.items() if ">" in k and not _is_ge_key(k)]
     items.sort()
     return tuple(items)
 
-def _interval_for_base(m: Dict[str, bool], base: str) -> Tuple[float, float, str]:
+
+def _interval_for_base(m: dict[str, bool], base: str) -> tuple[float, float, str]:
     """
     Return (lo, hi, winner) for this matchup in this minterm:
       winner is the orientation 'A>B' or 'B>A' (who wins).
@@ -1162,8 +173,10 @@ def _interval_for_base(m: Dict[str, bool], base: str) -> Tuple[float, float, str
             bname, t = _parse_ge(k)
             if bname == base:
                 has_ge = True
-                if v: lo = max(lo, t)
-                else: hi = min(hi, t)
+                if v:
+                    lo = max(lo, t)
+                else:
+                    hi = min(hi, t)
 
     if has_ge and winner is None:
         winner = base  # GE implies base orientation wins
@@ -1183,7 +196,8 @@ def _interval_for_base(m: Dict[str, bool], base: str) -> Tuple[float, float, str
         return (1, math.inf, base)
     return (1, 1, winner or base)
 
-def _remove_base_if_ge_present_in_atom(atom: Dict[str, bool]) -> Dict[str, bool]:
+
+def _remove_base_if_ge_present_in_atom(atom: dict[str, bool]) -> dict[str, bool]:
     ge_bases = {k.split("_GE", 1)[0] for k in atom if "_GE" in k}
     if not ge_bases:
         return atom
@@ -1193,12 +207,13 @@ def _remove_base_if_ge_present_in_atom(atom: Dict[str, bool]) -> Dict[str, bool]
         to_drop.add(_flip(base))
     return {k: v for k, v in atom.items() if k not in to_drop}
 
+
 # ---------- GLOBAL partitions for airtightness ----------
-def _collect_global_cuts(all_minterms: Iterable[Dict[str, bool]]) -> Dict[str, List[int]]:
+def _collect_global_cuts(all_minterms: Iterable[dict[str, bool]]) -> dict[str, list[int]]:
     """
     For each base, collect all cut thresholds (from any minterm, across the whole input).
     """
-    cuts: Dict[str, set] = defaultdict(set)
+    cuts: dict[str, set] = defaultdict(set)
     for m in all_minterms:
         for k, v in m.items():
             if _is_ge_key(k):
@@ -1214,7 +229,10 @@ def _collect_global_cuts(all_minterms: Iterable[Dict[str, bool]]) -> Dict[str, L
         out[base] = sorted(s)
     return out
 
-def _global_partitions_for_base(base: str, global_cuts: Dict[str, List[int]], bands_from_input: List[Tuple[float, float]]) -> List[Tuple[int, int]]:
+
+def _global_partitions_for_base(
+    base: str, global_cuts: dict[str, list[int]], bands_from_input: list[tuple[float, float]]
+) -> list[tuple[int, int]]:
     """
     Build airtight partitions for `base` using GLOBAL cuts. Keep only pieces covered by input bands.
     """
@@ -1223,7 +241,7 @@ def _global_partitions_for_base(base: str, global_cuts: Dict[str, List[int]], ba
         return []
     cuts = list(global_cuts[base])
     cuts.sort()
-    parts: List[Tuple[int, int]] = []
+    parts: list[tuple[int, int]] = []
 
     # detect if any input band has +inf tail
     has_tail = any(hi == math.inf for (lo, hi) in bands_from_input)
@@ -1239,8 +257,11 @@ def _global_partitions_for_base(base: str, global_cuts: Dict[str, List[int]], ba
             parts.append((a, b))
     return parts
 
+
 # ---------- Expand scenarios by signature using GLOBAL cuts ----------
-def _expand_signature_atoms_global(signature_group: List[Dict[str, bool]], global_cuts: Dict[str, List[int]]) -> List[Dict[str, bool]]:
+def _expand_signature_atoms_global(
+    signature_group: list[dict[str, bool]], global_cuts: dict[str, list[int]]
+) -> list[dict[str, bool]]:
     if not signature_group:
         return []
     fixed = dict(_non_ge_signature(signature_group[0]))
@@ -1250,15 +271,16 @@ def _expand_signature_atoms_global(signature_group: List[Dict[str, bool]], globa
     for m in signature_group:
         for k in m:
             if _is_ge_key(k):
-                base, _ = _parse_ge(k); bases.add(base)
+                base, _ = _parse_ge(k)
+                bases.add(base)
             elif ">" in k:
                 bases.add(k)
 
     # Build input bands per base (who wins in this signature matters)
-    partitions: Dict[str, List[Tuple[int, int]]] = {}
+    partitions: dict[str, list[tuple[int, int]]] = {}
     for base in sorted(bases):
         # Only consider bands for the winner side in this signature
-        bands: List[Tuple[float, float]] = []
+        bands: list[tuple[float, float]] = []
         for m in signature_group:
             lo, hi, winner = _interval_for_base(m, base)
             if winner == base and lo < hi:
@@ -1278,21 +300,24 @@ def _expand_signature_atoms_global(signature_group: List[Dict[str, bool]], globa
     base_names = sorted(partitions.keys())
     all_parts = [partitions[b] for b in base_names]
 
-    atoms: List[Dict[str, bool]] = []
+    atoms: list[dict[str, bool]] = []
     for combo in product(*all_parts):
         m = dict(fixed)
         for bname, (L, U) in zip(base_names, combo):
             if U == math.inf and L <= 1:
                 m[bname] = True
             else:
-                if L > 1: m[f"{bname}_GE{L}"] = True
-                if U != math.inf: m[f"{bname}_GE{U}"] = False
+                if L > 1:
+                    m[f"{bname}_GE{L}"] = True
+                if U != math.inf:
+                    m[f"{bname}_GE{U}"] = False
         atoms.append(_remove_base_if_ge_present_in_atom(m))
     return atoms
 
+
 # ---------- Rendering in chosen game order ----------
-def _render_clause_lines_ordered(atom: Dict[str, bool], games_order: List[str]) -> List[str]:
-    lines: List[str] = []
+def _render_clause_lines_ordered(atom: dict[str, bool], games_order: list[str]) -> list[str]:
+    lines: list[str] = []
     for base in games_order:
         a, b = _canon_pair(base)
         lo, hi, winner = _interval_for_base(atom, base)
@@ -1316,8 +341,9 @@ def _render_clause_lines_ordered(atom: Dict[str, bool], games_order: List[str]) 
             continue
     return lines
 
+
 # ---------- Scenario sort key for logical progression ----------
-def _band_sort_key(base: str, atom: Dict[str, bool], loser_first: bool = True) -> Tuple[int, int, int]:
+def _band_sort_key(base: str, atom: dict[str, bool], loser_first: bool = True) -> tuple[int, int, int]:
     """
     For one game, return a tuple to sort scenarios:
       winner_group: 0 for (loser-first) winner (B>A), 1 for (A>B)
@@ -1350,20 +376,22 @@ def _band_sort_key(base: str, atom: Dict[str, bool], loser_first: bool = True) -
         hir = hi if hi != math.inf else 10**9
     return (wg, gran, hir)
 
-def _scenario_sort_key(atom: Dict[str, bool], games_order: List[str]) -> Tuple:
+
+def _scenario_sort_key(atom: dict[str, bool], games_order: list[str]) -> tuple:
     # Lexicographic by games in order, using the per-game band keys
     key = []
     for base in games_order:
         key.extend(_band_sort_key(base, atom, loser_first=True))
     return tuple(key)
 
-def _bands_for_atom(atom: Dict[str, bool], games_order: List[str]) -> Dict[str, Tuple[int, int, str]]:
+
+def _bands_for_atom(atom: dict[str, bool], games_order: list[str]) -> dict[str, tuple[int, int, str]]:
     """
     For each base in games_order, return (L, U, winner) where:
       - winner is 'A>B' or 'B>A'
       - L, U are integers; U can be math.inf
     """
-    out: Dict[str, Tuple[int,int,str]] = {}
+    out: dict[str, tuple[int, int, str]] = {}
     for base in games_order:
         lo, hi, winner = _interval_for_base(atom, base)
         # normalize
@@ -1372,11 +400,12 @@ def _bands_for_atom(atom: Dict[str, bool], games_order: List[str]) -> Dict[str, 
         out[base] = (L, U, winner)
     return out
 
-def _bands_to_atom(bands: Dict[str, Tuple[int, int, str]]) -> Dict[str, bool]:
+
+def _bands_to_atom(bands: dict[str, tuple[int, int, str]]) -> dict[str, bool]:
     """
     Rebuild an atom dict from (L,U,winner) per base.
     """
-    atom: Dict[str, bool] = {}
+    atom: dict[str, bool] = {}
     for base, (L, U, winner) in bands.items():
         if winner == base:  # A>B
             if U == math.inf and L <= 1:
@@ -1390,7 +419,8 @@ def _bands_to_atom(bands: Dict[str, Tuple[int, int, str]]) -> Dict[str, bool]:
             atom[_flip(base)] = True  # record as base in flipped orientation
     return _remove_base_if_ge_present_in_atom(atom)
 
-def _touching(a: Tuple[int,int], b: Tuple[int,int]) -> bool:
+
+def _touching(a: tuple[int, int], b: tuple[int, int]) -> bool:
     """Return True if two half-open bands [La,Ua) and [Lb,Ub) touch or overlap."""
     La, Ua = a
     Lb, Ub = b
@@ -1402,30 +432,38 @@ def _touching(a: Tuple[int,int], b: Tuple[int,int]) -> bool:
     # overlap or just touching at boundary
     return (La <= Lb <= (Aend if Aend != math.inf else 10**12)) or (Lb <= La <= (Bend if Bend != math.inf else 10**12))
 
-def _seed_signature(seeds: Dict[int, str]) -> Tuple[Tuple[int, str], ...]:
+
+def _seed_signature(seeds: dict[int, str]) -> tuple[tuple[int, str], ...]:
     """Stable comparable form of a seed map."""
     return tuple(sorted(seeds.items()))
 
+
 def _fmt_band(L: int, U: int) -> str:
-    if U == math.inf and L <= 1: return "any"
-    if U == math.inf:            return f"[{L}, +∞)"
-    if L <= 1:                   return f"[1, {U})"
+    if U == math.inf and L <= 1:
+        return "any"
+    if U == math.inf:
+        return f"[{L}, +∞)"
+    if L <= 1:
+        return f"[1, {U})"
     return f"[{L}, {U})"
 
-def _fmt_bands(bands: Dict[str, Tuple[int,int,str]], games_order: List[str]) -> str:
+
+def _fmt_bands(bands: dict[str, tuple[int, int, str]], games_order: list[str]) -> str:
     parts = []
     for base in games_order:
-        if base not in bands: continue
+        if base not in bands:
+            continue
         L, U, W = bands[base]
-        parts.append(f"{W}: {_fmt_band(L,U)}")
+        parts.append(f"{W}: {_fmt_band(L, U)}")
     return " | ".join(parts)
 
+
 def _try_merge_neighbor(
-    a_bands: Dict[str, Tuple[int,int,str]],
-    b_bands: Dict[str, Tuple[int,int,str]],
+    a_bands: dict[str, tuple[int, int, str]],
+    b_bands: dict[str, tuple[int, int, str]],
     same_seeds: bool,
-    games_order: List[str],
-) -> Tuple[bool, Dict[str, Tuple[int,int,str]]]:
+    games_order: list[str],
+) -> tuple[bool, dict[str, tuple[int, int, str]]]:
     """
     Attempt to merge two neighboring scenarios.
     Conditions:
@@ -1468,14 +506,15 @@ def _try_merge_neighbor(
     merged[base] = (L, U, W)
     return True, merged
 
+
 def _consolidate_neighboring_atoms(
-    atoms_sorted: List[Dict[str,bool]],
-    games_order: List[str],
-    seed_lookup_fn: Callable[[Dict[str,bool]], Dict[int,str]],
+    atoms_sorted: list[dict[str, bool]],
+    games_order: list[str],
+    seed_lookup_fn: Callable[[dict[str, bool]], dict[int, str]],
     *,
     debug: bool = False,
-    debug_fn: Callable[[str, Dict[str, Any]], None] = None,
-) -> List[Tuple[Dict[str,bool], Dict[int,str]]]:
+    debug_fn: Callable[[str, dict[str, Any]], None] = None,
+) -> list[tuple[dict[str, bool], dict[int, str]]]:
     """
     Merge neighboring scenarios that:
       - have identical seed outcomes, and
@@ -1490,17 +529,18 @@ def _consolidate_neighboring_atoms(
       - 'merge_stop': when a merge chain stops (reason included)
       - 'emit': when a merged block is emitted
     """
-    def emit(ev: str, payload: Dict[str, Any]):
+
+    def emit(ev: str, payload: dict[str, Any]):
         if debug and debug_fn:
             debug_fn(ev, payload)
 
-    merged: List[Tuple[Dict[str,bool], Dict[int,str]]] = []
+    merged: list[tuple[dict[str, bool], dict[int, str]]] = []
     i = 0
     while i < len(atoms_sorted):
         a = atoms_sorted[i]
         a_bands = _bands_for_atom(a, games_order)
-        a_seeds = seed_lookup_fn(a)              # cached/carry-forward seeds
-        a_sig   = _seed_signature(a_seeds)
+        a_seeds = seed_lookup_fn(a)  # cached/carry-forward seeds
+        a_sig = _seed_signature(a_seeds)
 
         j = i + 1
         cur_bands = a_bands
@@ -1509,63 +549,85 @@ def _consolidate_neighboring_atoms(
             b = atoms_sorted[j]
             b_bands = _bands_for_atom(b, games_order)
             b_seeds = seed_lookup_fn(b)
-            b_sig   = _seed_signature(b_seeds)
+            b_sig = _seed_signature(b_seeds)
 
-            emit('compare', {
-                "left_index": i, "right_index": j,
-                "left_bands": _fmt_bands(cur_bands, games_order),
-                "right_bands": _fmt_bands(b_bands, games_order),
-                "left_seeds": a_seeds, "right_seeds": b_seeds,
-                "left_seed_sig": a_sig, "right_seed_sig": b_sig,
-            })
+            emit(
+                "compare",
+                {
+                    "left_index": i,
+                    "right_index": j,
+                    "left_bands": _fmt_bands(cur_bands, games_order),
+                    "right_bands": _fmt_bands(b_bands, games_order),
+                    "left_seeds": a_seeds,
+                    "right_seeds": b_seeds,
+                    "left_seed_sig": a_sig,
+                    "right_seed_sig": b_sig,
+                },
+            )
 
-            same_seeds = (a_sig == b_sig)
+            same_seeds = a_sig == b_sig
             ok, merged_bands = _try_merge_neighbor(cur_bands, b_bands, same_seeds, games_order)
             if not ok:
-                emit('merge_stop', {
-                    "left_index": i, "stop_at_index": j,
-                    "reason": "seed_mismatch" if not same_seeds else "bands_not_touching_or_multi_diff",
-                    "left_bands": _fmt_bands(cur_bands, games_order),
-                    "stop_bands": _fmt_bands(b_bands, games_order),
-                    "left_seeds": a_seeds, "stop_seeds": b_seeds,
-                })
+                emit(
+                    "merge_stop",
+                    {
+                        "left_index": i,
+                        "stop_at_index": j,
+                        "reason": "seed_mismatch" if not same_seeds else "bands_not_touching_or_multi_diff",
+                        "left_bands": _fmt_bands(cur_bands, games_order),
+                        "stop_bands": _fmt_bands(b_bands, games_order),
+                        "left_seeds": a_seeds,
+                        "stop_seeds": b_seeds,
+                    },
+                )
                 break
 
-            emit('merge_ok', {
-                "left_index": i, "merged_through_index": j,
-                "prev_bands": _fmt_bands(cur_bands, games_order),
-                "with_bands": _fmt_bands(b_bands, games_order),
-                "new_bands": _fmt_bands(merged_bands, games_order),
-                "seeds_carried": a_seeds,   # carried, not recomputed
-            })
+            emit(
+                "merge_ok",
+                {
+                    "left_index": i,
+                    "merged_through_index": j,
+                    "prev_bands": _fmt_bands(cur_bands, games_order),
+                    "with_bands": _fmt_bands(b_bands, games_order),
+                    "new_bands": _fmt_bands(merged_bands, games_order),
+                    "seeds_carried": a_seeds,  # carried, not recomputed
+                },
+            )
             cur_bands = merged_bands
             j += 1
 
         merged_atom = _bands_to_atom(cur_bands)
         merged.append((merged_atom, a_seeds))
-        emit('emit', {
-            "run_start": i, "run_end_exclusive": j,
-            "final_bands": _fmt_bands(cur_bands, games_order),
-            "seeds": a_seeds,
-        })
+        emit(
+            "emit",
+            {
+                "run_start": i,
+                "run_end_exclusive": j,
+                "final_bands": _fmt_bands(cur_bands, games_order),
+                "seeds": a_seeds,
+            },
+        )
         i = j
     return merged
 
+
 # ---------- Main API ----------
 def scenarios_text_from_team_seed_ordered(
-    team_seed_map: Dict[str, Dict[int, Any]],
-    games_order: List[str],  # e.g. ["Brandon>Meridian","Northwest Rankin>Petal","Pearl>Oak Grove"]
+    team_seed_map: dict[str, dict[int, Any]],
+    games_order: list[str],  # e.g. ["Brandon>Meridian","Northwest Rankin>Petal","Pearl>Oak Grove"]
     start_letter: str = "A",
-    seed_order: Optional[List[int]] = [1,2,3,4]
+    seed_order: list[int] | None = [1, 2, 3, 4],
 ) -> str:
     # Ingest all minterms, build global cuts
-    raw_minterms: List[Dict[str,bool]] = []
+    raw_minterms: list[dict[str, bool]] = []
     for team, seed_map in team_seed_map.items():
         for seed, scen_dist in seed_map.items():
-            if scen_dist is None: continue
+            if scen_dist is None:
+                continue
             if isinstance(scen_dist, dict):
                 for k in scen_dist.keys():
-                    if isinstance(k, dict): raw_minterms.append(k)
+                    if isinstance(k, dict):
+                        raw_minterms.append(k)
             elif isinstance(scen_dist, (list, tuple, set)):
                 raw_minterms.extend(list(scen_dist))
 
@@ -1576,23 +638,25 @@ def scenarios_text_from_team_seed_ordered(
     for m in raw_minterms:
         sig_to_minterms[_non_ge_signature(m)].append(m)
 
-    atoms: List[Dict[str,bool]] = []
+    atoms: list[dict[str, bool]] = []
     for _, group in sig_to_minterms.items():
         atoms.extend(_expand_signature_atoms_global(group, global_cuts))
 
     # Build reverse index for seed lookup
-    entries: List[Tuple[str,int,Dict[str,bool]]] = []
+    entries: list[tuple[str, int, dict[str, bool]]] = []
     for team, seed_map in team_seed_map.items():
         for seed, scen_dist in seed_map.items():
-            if scen_dist is None: continue
+            if scen_dist is None:
+                continue
             if isinstance(scen_dist, dict):
                 for k in scen_dist.keys():
-                    if isinstance(k, dict): entries.append((team, seed, k))
+                    if isinstance(k, dict):
+                        entries.append((team, seed, k))
             elif isinstance(scen_dist, (list, tuple, set)):
                 for k in scen_dist:
                     entries.append((team, seed, k))
 
-    def _atom_satisfies(atom: Dict[str, bool], broad: Dict[str, bool]) -> bool:
+    def _atom_satisfies(atom: dict[str, bool], broad: dict[str, bool]) -> bool:
         # Clean both sides of redundant base when GE present
         a_clean = _remove_base_if_ge_present_in_atom(dict(atom))
         b_clean = _remove_base_if_ge_present_in_atom(dict(broad))
@@ -1612,23 +676,11 @@ def scenarios_text_from_team_seed_ordered(
                     return False
         return True
 
-    def atom_seed_lines(atom: Dict[str,bool]) -> Dict[int,str]:
-        res: Dict[int,str] = {}
-        cand = defaultdict(list)  # seed -> [(specificity, team)]
-        for team, seed, broad in entries:
-            if _atom_satisfies(atom, broad):
-                cand[seed].append((len(broad), team))
-        for s, lst in cand.items():
-            lst.sort(key=lambda x: (-x[0], x[1]))  # most specific first
-            res[s] = lst[0][1]
-        return res
-
     # Sort scenarios in the requested progression
     atoms.sort(key=lambda m: _scenario_sort_key(m, games_order))
 
-    # Prepare seed lookup (as you already have)
-    def atom_seed_lines(atom: Dict[str,bool]) -> Dict[int,str]:
-        res: Dict[int,str] = {}
+    def atom_seed_lines(atom: dict[str, bool]) -> dict[int, str]:
+        res: dict[int, str] = {}
         cand = defaultdict(list)
         for team, seed, broad in entries:
             if _atom_satisfies(atom, broad):
@@ -1639,35 +691,35 @@ def scenarios_text_from_team_seed_ordered(
         return res
 
     # --- DEBUG HOOK EXAMPLE ---
-    def dbg(ev: str, d: Dict[str, Any]):
+    def dbg(ev: str, d: dict[str, Any]):
         # Minimal, readable debug. Customize to taste.
-        if ev == 'compare':
-            print(f"[COMPARE] L{d['left_index']} vs R{d['right_index']} | seeds equal? {d['left_seed_sig']==d['right_seed_sig']}")
+        if ev == "compare":
+            print(
+                f"[COMPARE] L{d['left_index']} vs R{d['right_index']} | seeds equal? {d['left_seed_sig'] == d['right_seed_sig']}"
+            )
             print(f"          L bands: {d['left_bands']}")
             print(f"          R bands: {d['right_bands']}")
-        elif ev == 'merge_ok':
+        elif ev == "merge_ok":
             print(f"[MERGE-OK] run@{d['left_index']} absorbed up to {d['merged_through_index']}")
             print(f"          prev: {d['prev_bands']}")
             print(f"          with: {d['with_bands']}")
             print(f"          ->   {d['new_bands']}")
             print(f"          seeds carried: {d['seeds_carried']}")
-        elif ev == 'merge_stop':
+        elif ev == "merge_stop":
             print(f"[MERGE-STOP] reason={d['reason']} at neighbor index {d['stop_at_index']}")
             print(f"            cur: {d['left_bands']}")
             print(f"            nxt: {d['stop_bands']}")
-        elif ev == 'emit':
+        elif ev == "emit":
             print(f"[EMIT] run {d['run_start']}..{d['run_end_exclusive']} -> {d['final_bands']} | seeds={d['seeds']}")
 
     # Consolidate neighbors with debug ON
-    atoms_with_seeds = _consolidate_neighboring_atoms(
-        atoms, games_order, atom_seed_lines, debug=True, debug_fn=dbg
-    )
+    atoms_with_seeds = _consolidate_neighboring_atoms(atoms, games_order, atom_seed_lines, debug=True, debug_fn=dbg)
 
     # Render
-    letters = [chr(c) for c in range(ord(start_letter), ord('Z') + 1)]
-    blocks: List[str] = []
+    letters = [chr(c) for c in range(ord(start_letter), ord("Z") + 1)]
+    blocks: list[str] = []
     for idx, (atom, seeds_map) in enumerate(atoms_with_seeds):
-        label = letters[idx] if idx < len(letters) else f"Z{idx-len(letters)+1}"
+        label = letters[idx] if idx < len(letters) else f"Z{idx - len(letters) + 1}"
         clauses = _render_clause_lines_ordered(atom, games_order)
         head = clauses[0] if clauses else "(no clauses)"
         tail = [f"    AND {c}" for c in clauses[1:]]
@@ -1681,85 +733,11 @@ def scenarios_text_from_team_seed_ordered(
         blocks.append("\n".join(block))
     return "\n\n".join(blocks)
 
-# ---------- Boolean minimization helpers (for readable scenarios) ----------
-def minimize_minterms(minterms, allow_combine=True):
-    """
-    Simplify minterms by absorption (always) and optionally by one-variable combination.
-    With allow_combine=True, we combine only when the differing variable's matchup
-    is ALSO represented by another variable in BOTH terms (so we don't erase that matchup).
-    """
-    terms = {frozenset(m.items()) for m in minterms}
-
-    def _matchup_of(var: str) -> str:
-        # Normalize “A>B_GE8” and “A>B” to a canonical matchup key "A>B" (lexicographic).
-        if "_GE" in var:
-            base, _ = var.split("_GE", 1)
-        else:
-            base = var
-        a, b = base.split(">", 1)
-        aa, bb = (a, b) if a <= b else (b, a)
-        return f"{aa}>{bb}"
-
-    changed = True
-    while changed:
-        before = len(terms)
-
-        # --- Absorption: remove supersets
-        to_remove = set()
-        lst = list(terms)
-        for i, a in enumerate(lst):
-            for j, b in enumerate(lst):
-                if i != j and a.issuperset(b):
-                    to_remove.add(a)
-        if to_remove:
-            terms -= to_remove
-
-        if allow_combine:
-            # --- Combine: merge pairs that differ by exactly one variable,
-            # but only if each term also has another var for that same matchup.
-            lst = list(terms)
-            n = len(lst)
-            merged = set()
-            used = [False] * n
-
-            # Per-term matchup counts
-            from collections import Counter
-            term_matchup_counts = [
-                Counter(_matchup_of(k) for k in dict(t).keys())
-                for t in lst
-            ]
-
-            for i in range(n):
-                for j in range(i + 1, n):
-                    a = lst[i]; b = lst[j]
-                    da = dict(a); db = dict(b)
-                    keys = set(da.keys()) | set(db.keys())
-                    diffs = [k for k in keys if da.get(k) != db.get(k)]
-                    if len(diffs) == 1:
-                        k = diffs[0]
-                        mk = _matchup_of(k)
-
-                        # Require another variable from the same matchup in BOTH terms
-                        if term_matchup_counts[i][mk] >= 2 and term_matchup_counts[j][mk] >= 2:
-                            new = dict(da)
-                            new.pop(k, None)
-                            merged.add(frozenset(new.items()))
-                            used[i] = used[j] = True
-
-            out = set()
-            for idx, t in enumerate(lst):
-                if not used[idx]:
-                    out.add(t)
-            out |= merged
-            terms = out
-
-        changed = (len(terms) != before)
-
-    return [dict(t) for t in terms]
-
 
 # ---------- Main enumeration + outputs ----------
-def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=None, out_seeding=None, out_scenarios=None, debug=False):
+def enumerate_region(
+    conn, clazz, region, season, out_csv=None, explain_json=None, out_seeding=None, out_scenarios=None, debug=False
+):
     """
     Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
     and aggregate seeding odds + human-readable scenario explanations.
@@ -1775,15 +753,15 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
     teams = fetch_division(conn, clazz, region, season)
     if not teams:
         raise SystemExit("No teams found.")
-    completed = fetch_completed_pairs(conn, teams, season)   # fixed results already known
-    print(f"Completed games:", completed)
+    completed = fetch_completed_pairs(conn, teams, season)  # fixed results already known
+    print("Completed games:", completed)
     remaining = fetch_remaining_pairs(conn, teams, season)  # undecided region games
     num_remaining = len(remaining)
 
     # ----- Accumulators for odds -----
-    first_counts  = Counter()
+    first_counts = Counter()
     second_counts = Counter()
-    third_counts  = Counter()
+    third_counts = Counter()
     fourth_counts = Counter()
 
     # team -> seed -> list of minterm dicts (for explanations)
@@ -1802,15 +780,25 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
     # ----- If no remaining games, resolve once and tally -----
     if num_remaining == 0:
         final_order = resolve_standings_for_mask(
-            teams, completed, remaining, 0,
-            margins={}, base_margin_default=7, pa_win=pa_for_winner, debug=debug,
+            teams,
+            completed,
+            remaining,
+            0,
+            margins={},
+            base_margin_default=7,
+            pa_win=pa_for_winner,
+            debug=debug,
         )
         slots = rank_to_slots(final_order)
         for team, (lo_seed, hi_seed) in slots.items():
-            if 1 >= lo_seed and 1 <= hi_seed: first_counts[team]  += 1
-            if 2 >= lo_seed and 2 <= hi_seed: second_counts[team] += 1
-            if 3 >= lo_seed and 3 <= hi_seed: third_counts[team]  += 1
-            if 4 >= lo_seed and 4 <= hi_seed: fourth_counts[team] += 1
+            if 1 >= lo_seed and 1 <= hi_seed:
+                first_counts[team] += 1
+            if 2 >= lo_seed and 2 <= hi_seed:
+                second_counts[team] += 1
+            if 3 >= lo_seed and 3 <= hi_seed:
+                third_counts[team] += 1
+            if 4 >= lo_seed and 4 <= hi_seed:
+                fourth_counts[team] += 1
         denom = 1.0
 
     # ----- Otherwise enumerate all masks (2^R) -----
@@ -1818,15 +806,20 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
         total_masks = 1 << num_remaining
         for outcome_mask in range(total_masks):
             # 1) Decode this mask into a base assignment dict for explanations
-            var_assignment = { }
+            var_assignment = {}
             for bit_index, (var_name, team_a, team_b) in enumerate(boolean_game_vars):
                 bit_value = (outcome_mask >> bit_index) & 1
                 var_assignment[var_name] = bool(bit_value)
 
             # 2) Compute standings with default margins to locate tie buckets
             wl_totals = standings_from_mask(
-                teams, completed, remaining, outcome_mask,
-                pa_for_winner, base_margins, base_margin_default=7,
+                teams,
+                completed,
+                remaining,
+                outcome_mask,
+                pa_for_winner,
+                base_margins,
+                base_margin_default=7,
             )
             tie_buckets = tie_bucket_groups(teams, wl_totals)
 
@@ -1851,14 +844,6 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                         want_bit = 1 if winner == a else 0
                         mask_for_dir = outcome_mask if current_bit == want_bit else (outcome_mask ^ (1 << idx))
 
-                        # Baseline: same-direction winner with margin=7
-                        baseline_margins = dict(base_margins)
-                        baseline_margins[(a, b)] = 7
-                        baseline_order = resolve_standings_for_mask(
-                            teams, completed, remaining, mask_for_dir,
-                            margins=baseline_margins, base_margin_default=7, pa_win=pa_for_winner,
-                        )
-
                         # --- inside enumerate_region(), where you currently compute `found` ---
                         # Scan margins 1..12 for the same-direction winner and collect *all* change points
                         orders_by_m = []
@@ -1866,15 +851,20 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             test_margins = dict(base_margins)
                             test_margins[(a, b)] = m
                             test_order = resolve_standings_for_mask(
-                                teams, completed, remaining, mask_for_dir,
-                                margins=test_margins, base_margin_default=7, pa_win=pa_for_winner,
+                                teams,
+                                completed,
+                                remaining,
+                                mask_for_dir,
+                                margins=test_margins,
+                                base_margin_default=7,
+                                pa_win=pa_for_winner,
                             )
                             # store a tuple for stable comparison
                             orders_by_m.append(tuple(test_order))
 
                         change_points = []
                         for m in range(2, 13):
-                            if orders_by_m[m-1] != orders_by_m[m-2]:
+                            if orders_by_m[m - 1] != orders_by_m[m - 2]:
                                 # boundary between (m-1) and m
                                 change_points.append(m)
 
@@ -1889,15 +879,24 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
             if not intra_bucket_games:
                 # (unchanged: resolve once)
                 final_order = resolve_standings_for_mask(
-                    teams, completed, remaining, outcome_mask,
-                    margins=base_margins, base_margin_default=7, pa_win=pa_for_winner,
+                    teams,
+                    completed,
+                    remaining,
+                    outcome_mask,
+                    margins=base_margins,
+                    base_margin_default=7,
+                    pa_win=pa_for_winner,
                 )
                 slots = rank_to_slots(final_order)
                 for team, (lo_seed, hi_seed) in slots.items():
-                    if 1 >= lo_seed and 1 <= hi_seed: first_counts[team]  += 1
-                    if 2 >= lo_seed and 2 <= hi_seed: second_counts[team] += 1
-                    if 3 >= lo_seed and 3 <= hi_seed: third_counts[team]  += 1
-                    if 4 >= lo_seed and 4 <= hi_seed: fourth_counts[team] += 1
+                    if 1 >= lo_seed and 1 <= hi_seed:
+                        first_counts[team] += 1
+                    if 2 >= lo_seed and 2 <= hi_seed:
+                        second_counts[team] += 1
+                    if 3 >= lo_seed and 3 <= hi_seed:
+                        third_counts[team] += 1
+                    if 4 >= lo_seed and 4 <= hi_seed:
+                        fourth_counts[team] += 1
                 for team, (lo_seed, hi_seed) in slots.items():
                     scenario_minterms.setdefault(team, {}).setdefault(lo_seed, []).append(dict(var_assignment))
             else:
@@ -1911,26 +910,36 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     tlist = thresholds_dir.get(((a, b), mask_winner))
                     if tlist:
                         bounds = [1] + sorted(tlist) + [13]
-                        intervals = [(bounds[i], bounds[i+1]) for i in range(len(bounds)-1)]
+                        intervals = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1)]
                         interval_specs.append(((a, b), mask_winner, intervals))
 
                 if not interval_specs:
                     # No intervals to branch on: resolve once with base_margins
                     final_order = resolve_standings_for_mask(
-                        teams, completed, remaining, outcome_mask,
-                        margins=base_margins, base_margin_default=7, pa_win=pa_for_winner,
+                        teams,
+                        completed,
+                        remaining,
+                        outcome_mask,
+                        margins=base_margins,
+                        base_margin_default=7,
+                        pa_win=pa_for_winner,
                     )
                     slots = rank_to_slots(final_order)
                     for team, (lo_seed, hi_seed) in slots.items():
-                        if 1 >= lo_seed and 1 <= hi_seed: first_counts[team]  += 1
-                        if 2 >= lo_seed and 2 <= hi_seed: second_counts[team] += 1
-                        if 3 >= lo_seed and 3 <= hi_seed: third_counts[team]  += 1
-                        if 4 >= lo_seed and 4 <= hi_seed: fourth_counts[team] += 1
+                        if 1 >= lo_seed and 1 <= hi_seed:
+                            first_counts[team] += 1
+                        if 2 >= lo_seed and 2 <= hi_seed:
+                            second_counts[team] += 1
+                        if 3 >= lo_seed and 3 <= hi_seed:
+                            third_counts[team] += 1
+                        if 4 >= lo_seed and 4 <= hi_seed:
+                            fourth_counts[team] += 1
                     for team, (lo_seed, hi_seed) in slots.items():
                         scenario_minterms.setdefault(team, {}).setdefault(lo_seed, []).append(dict(var_assignment))
                 else:
                     # Cartesian product across all intervals from all active pairs
                     from itertools import product
+
                     for interval_combo in product(*[spec[2] for spec in interval_specs]):
                         branch_margins = dict(base_margins)
                         branch_assignment = dict(var_assignment)
@@ -1956,15 +965,24 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
 
                         # Resolve this branch
                         final_order = resolve_standings_for_mask(
-                            teams, completed, remaining, outcome_mask,
-                            margins=branch_margins, base_margin_default=7, pa_win=pa_for_winner,
+                            teams,
+                            completed,
+                            remaining,
+                            outcome_mask,
+                            margins=branch_margins,
+                            base_margin_default=7,
+                            pa_win=pa_for_winner,
                         )
                         slots = rank_to_slots(final_order)
                         for team, (lo_seed, hi_seed) in slots.items():
-                            if 1 >= lo_seed and 1 <= hi_seed: first_counts[team]  += branch_weight  # type: ignore
-                            if 2 >= lo_seed and 2 <= hi_seed: second_counts[team] += branch_weight  # type: ignore
-                            if 3 >= lo_seed and 3 <= hi_seed: third_counts[team]  += branch_weight  # type: ignore
-                            if 4 >= lo_seed and 4 <= hi_seed: fourth_counts[team] += branch_weight  # type: ignore
+                            if 1 >= lo_seed and 1 <= hi_seed:
+                                first_counts[team] += branch_weight  # type: ignore
+                            if 2 >= lo_seed and 2 <= hi_seed:
+                                second_counts[team] += branch_weight  # type: ignore
+                            if 3 >= lo_seed and 3 <= hi_seed:
+                                third_counts[team] += branch_weight  # type: ignore
+                            if 4 >= lo_seed and 4 <= hi_seed:
+                                fourth_counts[team] += branch_weight  # type: ignore
                         for team, (lo_seed, hi_seed) in slots.items():
                             scenario_minterms.setdefault(team, {}).setdefault(lo_seed, []).append(branch_assignment)
 
@@ -1974,9 +992,9 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
     # ----- Compile/emit odds CSV (same format as before) -----
     results = []
     for school in teams:
-        p1 = first_counts[school]  / denom
+        p1 = first_counts[school] / denom
         p2 = second_counts[school] / denom
-        p3 = third_counts[school]  / denom
+        p3 = third_counts[school] / denom
         p4 = fourth_counts[school] / denom
         p_playoffs = p1 + p2 + p3 + p4
         clinched = p_playoffs >= 0.999
@@ -1991,7 +1009,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
     # ----- Optional seeding-odds text output -----
     if out_seeding:
         by_seed = {1: [], 2: [], 3: [], 4: [], "out": []}
-        for (school, o1, o2, o3, o4, op, fop, clinched, eliminated) in results:
+        for school, o1, o2, o3, o4, op, fop, clinched, eliminated in results:
             by_seed[1].append((school, o1))
             by_seed[2].append((school, o2))
             by_seed[3].append((school, o3))
@@ -2060,6 +1078,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
 
     # ----- Optional scenarios text output (unchanged logic; clearer helpers) -----
     if out_scenarios:
+
         def var_phrase(var: str, val: bool, base_lookup: dict) -> str:
             """
             Human phrase for a boolean variable.
@@ -2069,7 +1088,8 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
             Also collapses paired flags (GE lo == True and GE hi == False) into:
             "A Win over B by ≥ lo and < hi points"
             """
-            def winner_loser_for_base(base: str, vlookup: dict, fallback_val: Optional[bool]) -> Tuple[str, str]:
+
+            def winner_loser_for_base(base: str, vlookup: dict, fallback_val: bool | None) -> tuple[str, str]:
                 a, b = base.split(">", 1)
                 base_val = vlookup.get(base)
                 if base_val is None:
@@ -2077,11 +1097,11 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     flip_val = vlookup.get(flip)
                     if flip_val is not None:
                         # flip_val True means (b beats a)
-                        return ((b, a) if flip_val else (a, b))
+                        return (b, a) if flip_val else (a, b)
                     # last resort: assume fallback orientation
-                    return ((a, b) if (fallback_val is True) else (b, a))
+                    return (a, b) if (fallback_val is True) else (b, a)
                 else:
-                    return ((a, b) if base_val else (b, a))
+                    return (a, b) if base_val else (b, a)
 
             if "_GE" in var:
                 base, ge = var.split("_GE", 1)
@@ -2133,7 +1153,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     thr = int(thr_part.split()[0])
                 except Exception:
                     thr = None
-                return (a, b, 'ge', thr)
+                return (a, b, "ge", thr)
             elif " by < " in right:
                 opp_part, thr_part = right.split(" by < ", 1)
                 b = opp_part.strip()
@@ -2141,10 +1161,10 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     thr = int(thr_part.split()[0])
                 except Exception:
                     thr = None
-                return (a, b, 'lt', thr)
+                return (a, b, "lt", thr)
             else:
                 b = right.split(" by")[0].strip()
-                return (a, b, 'base', None)
+                return (a, b, "base", None)
 
         def is_opposite(p1, p2):
             """
@@ -2159,12 +1179,12 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
             a2, b2, k2, t2 = p2
             # Opposite directions
             if a1 == b2 and b1 == a2:
-                if k1 == 'base' and k2 == 'base':
+                if k1 == "base" and k2 == "base":
                     return True
-                if k1 == k2 and t1 == t2 and k1 in ('ge', 'lt'):
+                if k1 == k2 and t1 == t2 and k1 in ("ge", "lt"):
                     return True
             # Same direction, complementary threshold comparators
-            if a1 == a2 and b1 == b2 and t1 == t2 and {k1, k2} == {'ge', 'lt'}:
+            if a1 == a2 and b1 == b2 and t1 == t2 and {k1, k2} == {"ge", "lt"}:
                 return True
             return False
 
@@ -2175,7 +1195,9 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                 mins = minimize_minterms(mins, allow_combine=True)  # simplify
                 minimized[seed_num][team] = mins
 
-        scenarios_text = scenarios_text_from_team_seed_ordered(scenario_minterms, ["Brandon>Meridian", "Northwest Rankin>Petal", "Pearl>Oak Grove"])
+        scenarios_text = scenarios_text_from_team_seed_ordered(
+            scenario_minterms, ["Brandon>Meridian", "Northwest Rankin>Petal", "Pearl>Oak Grove"]
+        )
 
         print(scenarios_text)
 
@@ -2199,7 +1221,9 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                 candidate_minterms = minimized.get(seed_num, {}).get(team, [])
                 candidate_minterms = consolidate_all(candidate_minterms)
 
-                print(f"[DEBUG SCEN] Team {team}, seed {seed_num}, candidate minterms after consolidation: {candidate_minterms}")
+                print(
+                    f"[DEBUG SCEN] Team {team}, seed {seed_num}, candidate minterms after consolidation: {candidate_minterms}"
+                )
 
                 def clauses_for_m(minterm_dict):
                     # Prefer margin-qualified clauses where present; avoid duplicates.
@@ -2208,7 +1232,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             a, b = base.split(">", 1)
                             return f"{b}>{a}"
                         return base
-                    
+
                     print("[DEBUG SCEN] Minterm team:", team, "(seed:", seed_num, ")")
                     print("[DEBUG SCEN] Minterm dict:", minterm_dict)
 
@@ -2218,7 +1242,8 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     #   "ge_false": set[int],     # thresholds with GEk == False (meaning "< k")
                     # }
                     matchups = defaultdict(lambda: {"base": [], "ge_true": set(), "ge_false": set(), "orient": None})
-                    def canon_key(a,b):
+
+                    def canon_key(a, b):
                         aa, bb = (a, b) if a <= b else (b, a)
                         return f"{aa}>{bb}"
 
@@ -2239,27 +1264,27 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                                     winner, loser = a, b
                             else:
                                 winner, loser = (a, b) if base_val else (b, a)
-                            matchups[key]["orient"] = (winner, loser) # type: ignore
+                            matchups[key]["orient"] = (winner, loser)  # type: ignore
 
                             thr = int(ge)
                             if val:
-                                matchups[key]["ge_true"].add(thr) # type: ignore
+                                matchups[key]["ge_true"].add(thr)  # type: ignore
                             else:
-                                matchups[key]["ge_false"].add(thr) # type: ignore
+                                matchups[key]["ge_false"].add(thr)  # type: ignore
                         else:
                             a, b = var.split(">", 1)
                             key = canon_key(a, b)
-                            matchups[key]["base"].append((var, val)) # type: ignore
+                            matchups[key]["base"].append((var, val))  # type: ignore
                             # If we haven’t set an orientation yet, set it now from the base
                             if matchups[key]["orient"] is None:
                                 winner, loser = (a, b) if val else (b, a)
-                                matchups[key]["orient"] = (winner, loser) # type: ignore
+                                matchups[key]["orient"] = (winner, loser)  # type: ignore
 
                     clauses = []
 
                     # Emit one clause per matchup
                     for key, info in matchups.items():
-                        (winner, loser) = info["orient"] # type: ignore
+                        (winner, loser) = info["orient"]  # type: ignore
                         # If we have any margin flags for this matchup, we prefer to render a single interval clause
                         if info["ge_true"] or info["ge_false"]:
                             # Lower bound = max(GE t that are True), default 1
@@ -2268,7 +1293,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             hi = min(info["ge_false"]) if info["ge_false"] else 13
                             # Normalize nonsense (just in case)
                             lo = max(1, lo)
-                            hi = max(lo+0, hi)
+                            hi = max(lo + 0, hi)
 
                             # Apply housecleaning:
                             # - If [1,13): that's just a plain win, so don't render any margin wording.
@@ -2283,7 +1308,9 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             elif hi == 13:
                                 clauses.append(_normalize_clause_text(f"{winner} Win over {loser} by ≥ {lo} points"))
                             else:
-                                clauses.append(_normalize_clause_text(f"{winner} Win over {loser} by ≥ {lo} and < {hi} points"))
+                                clauses.append(
+                                    _normalize_clause_text(f"{winner} Win over {loser} by ≥ {lo} and < {hi} points")
+                                )
                         else:
                             # No margin flags recorded; emit the base clause (dedup later)
                             # Prefer the base that matches the orientation, if present
@@ -2291,6 +1318,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
 
                     # Order deterministically by matchup position and comparator rank (base first)
                     matchup_index = {name: i for i, (name, _, _) in enumerate(boolean_game_vars)}
+
                     def classify_clause(c: str):
                         parsed = extract_pair(c)
                         if not parsed:
@@ -2300,13 +1328,13 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                         aa, bb, _ = normalize_pair(a, b)
                         lex_base = f"{aa}>{bb}"
                         idx = matchup_index.get(base, matchup_index.get(lex_base, 10**6))
-                        comp_rank = 0 if kind == 'base' else (1 if kind == 'ge' else 2)
+                        comp_rank = 0 if kind == "base" else (1 if kind == "ge" else 2)
                         return (idx, comp_rank, c)
 
                     clauses = sorted(set(clauses), key=classify_clause)
                     return clauses
 
-                def block_sort_key(block_clauses: List[str]):
+                def block_sort_key(block_clauses: list[str]):
                     # Sort blocks by: (a) presence & comparator of the Corinth–New Albany clause,
                     # then (b) presence/comparator of the next matchup in boolean order,
                     # then (c) total clause count (shorter first), then (d) the text itself.
@@ -2321,7 +1349,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                         aa, bb, _ = normalize_pair(a, b)
                         lex_base = f"{aa}>{bb}"
                         idx = matchup_index.get(base, matchup_index.get(lex_base, 10**6))
-                        comp_rank = 0 if kind == 'base' else (1 if kind == 'ge' else 2)
+                        comp_rank = 0 if kind == "base" else (1 if kind == "ge" else 2)
                         # We also want base (no margin) variants to come before margin variants for the same matchup
                         return (idx, comp_rank, c)
 
@@ -2332,8 +1360,8 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     while len(sig) < 2:
                         sig.append((10**6, 99))
                     return (*sig[0], *sig[1], len(block_clauses), " | ".join(ordered))
-                
-                def absorb_or_blocks(blocks: List[List[str]]) -> List[List[str]]:
+
+                def absorb_or_blocks(blocks: list[list[str]]) -> list[list[str]]:
                     """Drop any block whose set of clauses is a strict superset of another block."""
                     sets = [frozenset(b) for b in blocks]
                     keep = [True] * len(blocks)
@@ -2348,7 +1376,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                                 keep[i] = False
                                 break
                     return [blk for k, blk in enumerate(blocks) if keep[k]]
-                
+
                 def is_complement(p1, p2):
                     """
                     True iff p1 and p2 are logical complements for the *same underlying matchup key*.
@@ -2362,15 +1390,14 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     a2, b2, k2, t2 = p2
 
                     # Base complements (opposite directions)
-                    if k1 == 'base' and k2 == 'base':
+                    if k1 == "base" and k2 == "base":
                         return (a1 == b2) and (b1 == a2)
 
                     # Margin complements: same direction & threshold, ge vs lt
-                    if (a1 == a2) and (b1 == b2) and (t1 == t2) and {k1, k2} == {'ge', 'lt'}:
+                    if (a1 == a2) and (b1 == b2) and (t1 == t2) and {k1, k2} == {"ge", "lt"}:
                         return True
 
                     return False
-
 
                 def reduce_tautology_blocks(blocks, extract_pair_fn, is_complement_fn):
                     """
@@ -2393,7 +1420,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
 
                         # ---- Tautology reduction: (S ∪ {Y}) OR (S ∪ {¬Y}) -> S
                         for i in range(n):
-                            if i in to_remove: 
+                            if i in to_remove:
                                 continue
                             for j in range(i + 1, n):
                                 if j in to_remove:
@@ -2408,7 +1435,8 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                                     p_j = extract_pair_fn(diff_j[0])
                                     if is_complement_fn(p_i, p_j):
                                         # Replace both with intersection
-                                        to_remove.add(i); to_remove.add(j)
+                                        to_remove.add(i)
+                                        to_remove.add(j)
                                         to_add.append(frozenset(inter))
                                         changed = True
 
@@ -2426,7 +1454,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                         # (Do this every pass so we keep things minimal.)
                         keep = [True] * len(block_sets)
                         for i in range(len(block_sets)):
-                            if not keep[i]: 
+                            if not keep[i]:
                                 continue
                             for j in range(len(block_sets)):
                                 if i == j or not keep[j]:
@@ -2466,9 +1494,9 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                         return None
                     a, b, kind, thr = p
                     key = _canon_matchup(a, b)
-                    if kind == 'base':
+                    if kind == "base":
                         # direction decided by text
-                        dir_ = 'a>b' if f"{a} Win over {b}" in c else 'b>a'
+                        dir_ = "a>b" if f"{a} Win over {b}" in c else "b>a"
                         return (key, dir_, None)
                     # margin kinds: map to intervals we printed in clauses_for_m
                     # We only ever print: "< k", "≥ L", or "≥ L and < k"
@@ -2476,15 +1504,15 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     if " by < " in c:
                         # a beats b by < k
                         k = int(c.split(" by < ", 1)[1].split()[0])
-                        return (key, 'a>b', (1, k))
+                        return (key, "a>b", (1, k))
                     if " by ≥ " in c and " and < " in c:
                         rest = c.split(" by ≥ ", 1)[1]
                         L = int(rest.split(" and < ", 1)[0])
                         k = int(rest.split(" and < ", 1)[1].split()[0])
-                        return (key, 'a>b', (L, k))
+                        return (key, "a>b", (L, k))
                     if " by ≥ " in c:
                         L = int(c.split(" by ≥ ", 1)[1].split()[0])
-                        return (key, 'a>b', (L, 13))
+                        return (key, "a>b", (L, 13))
                     return None
 
                 def _coverage_collapse_blocks(blocks):
@@ -2510,7 +1538,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                     # Build list of all matchups appearing anywhere
                     all_matchups = set()
                     for blk in parsed_blocks:
-                        for (_c, p) in blk:
+                        for _c, p in blk:
                             if p:
                                 all_matchups.add(p[0])
 
@@ -2540,14 +1568,14 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             a_side = []  # intervals of 'a>b' (in [1,13))
                             b_covers = False  # any 'b>a' base present?
                             for blk in gblks:
-                                for (c, p) in blk:
+                                for c, p in blk:
                                     if not p or p[0] != mkey:
                                         continue
                                     _key, dir_, interval = p
-                                    if dir_ == 'b>a':
+                                    if dir_ == "b>a":
                                         # base covers all 'b wins'
                                         b_covers = True
-                                    elif dir_ == 'a>b':
+                                    elif dir_ == "a>b":
                                         if interval is None:
                                             # base 'a wins' -> covers [1,13)
                                             a_side = [(1, 13)]
@@ -2556,7 +1584,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
 
                             # Normalize/union a-side intervals
                             a_side = union_intervals(a_side)
-                            a_full = (len(a_side) == 1 and a_side[0] == (1, 13))
+                            a_full = len(a_side) == 1 and a_side[0] == (1, 13)
 
                             if a_full and b_covers:
                                 # Full coverage: remove all clauses for this matchup from all blocks in the group
@@ -2572,7 +1600,7 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
                             seen.add(text_blk)
                             out_blocks.append(list(text_blk))
                     return out_blocks
-                
+
                 # --- NEW: tautology reduction + absorption across OR blocks ---
                 blocks_only = [c for _, c in prepared]
                 blocks_only = reduce_tautology_blocks(blocks_only, extract_pair, is_complement)
@@ -2612,35 +1640,44 @@ def enumerate_region(conn, clazz, region, season, out_csv=None, explain_json=Non
         out_path = out_scenarios
         with open(out_path, "w") as f:
             f.write("\n".join(lines) + "\n")
-        with open('scenarios_letter.txt', "w") as f:
+        with open("scenarios_letter.txt", "w") as f:
             f.write(scenarios_text)
         print(f"Wrote scenarios text: {out_path}")
-        print(f"Wrote scenarios_letter.txt text: scenarios_letter.txt")
+        print("Wrote scenarios_letter.txt text: scenarios_letter.txt")
 
 
 # --------------------------- CLI ---------------------------
 
+
 def main():
-    ap=argparse.ArgumentParser()
+    ap = argparse.ArgumentParser()
     ap.add_argument("--class", dest="clazz", type=int, required=True)
     ap.add_argument("--region", type=int, required=True)
     ap.add_argument("--season", type=int, required=True)
-    ap.add_argument("--dsn", type=str, default=os.getenv("PG_DSN",""))
+    ap.add_argument("--dsn", type=str, default=os.getenv("PG_DSN", ""))
     ap.add_argument("--out-csv", type=str)
     ap.add_argument("--explain-json", type=str)
     ap.add_argument("--out-seeding", type=str)
     ap.add_argument("--out-scenarios", type=str)
     ap.add_argument("--debug", action="store_true")
-    args=ap.parse_args()
-    if not psycopg: raise SystemExit("Please install psycopg: pip install 'psycopg[binary]'")
-    if not args.dsn: raise SystemExit("Provide --dsn or PG_DSN")
+    args = ap.parse_args()
+    if not psycopg:
+        raise SystemExit("Please install psycopg: pip install 'psycopg[binary]'")
+    if not args.dsn:
+        raise SystemExit("Provide --dsn or PG_DSN")
     with psycopg.connect(args.dsn) as conn:
-        enumerate_region(conn, args.clazz, args.region, args.season,
-                         out_csv=args.out_csv,
-                         explain_json=args.explain_json,
-                         out_seeding=args.out_seeding,
-                         out_scenarios=args.out_scenarios,
-                         debug=args.debug)
+        enumerate_region(
+            conn,
+            args.clazz,
+            args.region,
+            args.season,
+            out_csv=args.out_csv,
+            explain_json=args.explain_json,
+            out_seeding=args.out_seeding,
+            out_scenarios=args.out_scenarios,
+            debug=args.debug,
+        )
+
 
 if __name__ == "__main__":
     main()

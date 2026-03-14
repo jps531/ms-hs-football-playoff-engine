@@ -26,11 +26,32 @@ Run a specific region scenario:
   --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball" \
   --out-scenarios "scenarios.txt"`
 
+## Development Setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management and [ruff](https://docs.astral.sh/ruff/) for linting/formatting.
+
+Install dependencies (creates `.venv` automatically):
+
+```
+uv sync --dev
+```
+
+### Linting
+
+```
+uv run ruff check .          # lint
+uv run ruff check --fix .    # auto-fix safe issues
+uv run ruff format .         # format (black-compatible)
+```
+
 ## Testing
 
-Run the following tests:
+```
+uv run pytest
+```
 
-`source .venv/bin/activate`
-`cd prefect_files`
-`pip install -r requirements.txt`
-`pytest -vv`
+Or with verbose output:
+
+```
+uv run pytest -vv
+```

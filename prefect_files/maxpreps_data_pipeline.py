@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-import re, time, requests
-from typing import Dict, Any, Iterable, List, Mapping, Optional, Union
+import re
+import time
+from collections.abc import Iterable, Mapping
+from typing import Any
 from urllib.parse import quote_plus
+
+import requests
+from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_batch
-from prefect import flow, task, get_run_logger
+from web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
 
 from prefect_files.data_classes import School
 from prefect_files.data_helpers import _get_field, _norm, update_school_name_for_maxpreps_search
 from prefect_files.database_helpers import get_database_connection
-from web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
-
 
 # -------------------------
 # Helpers
@@ -18,7 +21,7 @@ from web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
 
 
 @task(task_run_name="Find MaxPreps School Record for {school_name}")
-def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> Optional[Dict]:
+def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> dict | None:
     """
     Return the best matching school record from MaxPreps search for the given name.
     The record includes: name, city, zip, mascot, canonicalUrl, schoolId, state.
@@ -42,7 +45,7 @@ def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> O
 
     # Prefer the structured list provided by the page
     page_props = (data or {}).get("props", {}).get("pageProps", {})
-    results: List[Dict] = page_props.get("initialSchoolResults", []) or []
+    results: list[dict] = page_props.get("initialSchoolResults", []) or []
 
     # Filter to requested state (case-insensitive)
     state_up = (state_abbrev or "").upper()
@@ -52,12 +55,12 @@ def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> O
         logger.info("No initialSchoolResults for state=%s; falling back to generic scrape", state_abbrev)
         # Fallback: walk the JSON for canonical school hrefs if needed
         # (kept small: returns None if nothing is found)
-        href_candidates: List[Dict] = []
+        href_candidates: list[dict] = []
         for node in _iter_dicts(data):
             href = node.get("href") or node.get("url")
             title = node.get("title") or node.get("name") or node.get("text")
             subtitle = node.get("subtitle") or node.get("description") or ""
-            if not href or not isinstance(href, str): 
+            if not href or not isinstance(href, str):
                 continue
             # pattern like "/ms/<city>/<slug>/" (canonical school page)
             if not re.match(r"^/[a-z]{2}/[^/]+/[^/]+/?$", href, re.I):
@@ -84,7 +87,7 @@ def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> O
         }
 
     # Choose the best candidate by fuzzy name match
-    def score(row: Dict) -> float:
+    def score(row: dict) -> float:
         return _ratio(_norm(row.get("name", "")), q_norm)
 
     best_row = max(candidates, key=score)
@@ -98,18 +101,25 @@ def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> O
         "maxpreps_url": best_row.get("canonicalUrl"),
         "maxpreps_id": best_row.get("schoolId"),
     }
-    logger.info("Resolved %r → %s (%s, %s, %s)", school_name, record["maxpreps_url"], record["city"], record["zip"], record["mascot"])
+    logger.info(
+        "Resolved %r → %s (%s, %s, %s)",
+        school_name,
+        record["maxpreps_url"],
+        record["city"],
+        record["zip"],
+        record["mascot"],
+    )
     return record
 
 
 @task(task_run_name="Find MaxPreps Records for Schools")
-def find_records_for_schools(rows: Iterable[Union["School", Mapping[str, Any]]]) -> List[dict]:
+def find_records_for_schools(rows: Iterable[School | Mapping[str, Any]]) -> list[dict]:
     """
     rows: iterable of School dataclass instances or dicts with keys:
           school, season, class_/class, region
     Returns: [{'school', 'season', 'class', 'region', 'city'}...]
     """
-    out: List[dict] = []
+    out: list[dict] = []
     logger = get_run_logger()
     rows_list = list(rows)
     logger.info("Finding MaxPreps URLs for %d schools", len(rows_list))
@@ -130,12 +140,27 @@ def find_records_for_schools(rows: Iterable[Union["School", Mapping[str, Any]]])
             logger.warning("No MaxPreps match for %r; skipping", school_name)
             continue
 
-        out.append({"school": school_name, "season": season, "class": cls, "region": region, "city": record.get("city") or "", "zip": record.get("zip") or "", "mascot": record.get("mascot") or "", "maxpreps_id": record.get("maxpreps_id") or "", "maxpreps_url": record.get("maxpreps_url") or "", "primary_color": "", "secondary_color": ""})
+        out.append(
+            {
+                "school": school_name,
+                "season": season,
+                "class": cls,
+                "region": region,
+                "city": record.get("city") or "",
+                "zip": record.get("zip") or "",
+                "mascot": record.get("mascot") or "",
+                "maxpreps_id": record.get("maxpreps_id") or "",
+                "maxpreps_url": record.get("maxpreps_url") or "",
+                "primary_color": "",
+                "secondary_color": "",
+            }
+        )
         logger.info("Found record for %s (%s): %s", school_name, season, record)
 
         time.sleep(0.3)  # polite rate limit
 
     return out
+
 
 @task(task_run_name="Insert Updated MaxPreps Info Data")
 def update_rows(school_records: Iterable[dict]) -> int:
@@ -170,7 +195,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
             r["mascot"],
             r["maxpreps_id"],
             r["maxpreps_url"],
-            r["school"],   # <-- order matches the WHERE clause
+            r["school"],  # <-- order matches the WHERE clause
             r["season"],
             r["class"],
             r["region"],
@@ -185,14 +210,14 @@ def update_rows(school_records: Iterable[dict]) -> int:
     return len(records)
 
 
-def get_existing_schools() -> List[School]:
+def get_existing_schools() -> list[School]:
     """
     Gets the list of existing schools from the database.
     """
     q = """
         SELECT DISTINCT school, season, class, region FROM schools
     """
-    schools: List[School] = []
+    schools: list[School] = []
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(q)
@@ -207,8 +232,9 @@ def get_existing_schools() -> List[School]:
 # Prefect tasks & flow
 # -------------------------
 
+
 @task(retries=2, retry_delay_seconds=10, task_run_name="Scrape MaxPreps Data")
-def scrape_task(existing_schools: List[School]) -> int:
+def scrape_task(existing_schools: list[School]) -> int:
     """
     Task to scrape the MaxPreps data from the given URL.
     """
@@ -219,6 +245,7 @@ def scrape_task(existing_schools: List[School]) -> int:
     updated_count = update_rows(school_records)
     logger.info("Updated %d schools", updated_count)
     return updated_count
+
 
 @flow(name="MaxPreps Data Flow")
 def maxpreps_data_flow() -> int:

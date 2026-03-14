@@ -1,12 +1,33 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, TypedDict
 from datetime import date
+from typing import TypedDict
+
+# -------------------------
+# Standings (region W/L/T record used by scenario engine)
+# -------------------------
+
+
+@dataclass(frozen=True)
+class Standings:
+    school: str
+    class_: int
+    region: int
+    season: int
+    wins: int
+    losses: int
+    ties: int
+    region_wins: int
+    region_losses: int
+    region_ties: int
+
 
 # -------------------------
 # Data Classes
 # -------------------------
+
 
 # --- Data class for a row in the school table ---
 @dataclass
@@ -26,10 +47,9 @@ class School:
     primary_color: str = ""
     secondary_color: str = ""
 
-
     def as_db_tuple(self):
         return (
-            self.school, 
+            self.school,
             self.season,
             self.class_,
             self.region,
@@ -42,9 +62,8 @@ class School:
             self.maxpreps_url,
             self.maxpreps_logo,
             self.primary_color,
-            self.secondary_color
+            self.secondary_color,
         )
-    
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
@@ -57,14 +76,24 @@ class School:
 
         if len(row) == 4:
             school, season, class_, region = row
-            return cls(
-                school=school,
-                season=season,
-                class_=class_,
-                region=region
-            )
+            return cls(school=school, season=season, class_=class_, region=region)
         elif len(row) >= 14:
-            school, season, class_, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color = row[:14]
+            (
+                school,
+                season,
+                class_,
+                region,
+                city,
+                zip,
+                latitude,
+                longitude,
+                mascot,
+                maxpreps_id,
+                maxpreps_url,
+                maxpreps_logo,
+                primary_color,
+                secondary_color,
+            ) = row[:14]
             return cls(
                 school=school,
                 season=season,
@@ -125,7 +154,6 @@ class Game:
             self.overtime,
         )
 
-
     @classmethod
     def from_db_tuple(cls, row: Iterable):
         """
@@ -134,7 +162,6 @@ class Game:
         """
         # Handle dict-like objects (e.g., psycopg2.extras.RealDictRow)
         if isinstance(row, dict):
-
             game_date = row.get("date")
             if not game_date:
                 raise ValueError("Game row missing required 'date' field")
@@ -160,9 +187,24 @@ class Game:
         # Otherwise assume a positional tuple/list
         row = tuple(row)
         if len(row) == 16:
-            (school, date, season, location_id, points_for, points_against,
-            round, kickoff_time, opponent, result, game_status, source,
-            location, region_game, final, overtime) = row
+            (
+                school,
+                date,
+                season,
+                location_id,
+                points_for,
+                points_against,
+                round_,
+                kickoff_time,
+                opponent,
+                result,
+                game_status,
+                source,
+                location,
+                region_game,
+                final,
+                overtime,
+            ) = row
             return cls(
                 school=school,
                 date=date,
@@ -171,7 +213,7 @@ class Game:
                 location_id=location_id,
                 points_for=points_for,
                 points_against=points_against,
-                round=round,
+                round=round_,
                 kickoff_time=kickoff_time,
                 opponent=opponent,
                 result=result,
@@ -183,7 +225,7 @@ class Game:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
-        
+
 
 # --- Data class for a row in the location table ---
 @dataclass
@@ -223,7 +265,8 @@ class Location:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
-        
+
+
 # --- Data class for a row in the bracket table ---
 @dataclass
 class Bracket:
@@ -239,7 +282,7 @@ class Bracket:
             self.class_,
             self.source,
         )
-    
+
     @classmethod
     def from_db_tuple(cls, row: Iterable):
         """
@@ -257,7 +300,8 @@ class Bracket:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
-        
+
+
 # --- Data Class for a row in the bracket_teams table ---
 @dataclass
 class BracketTeam:
@@ -275,7 +319,7 @@ class BracketTeam:
             self.seed,
             self.region,
         )
-    
+
     @classmethod
     def from_db_tuple(cls, row: Iterable):
         """
@@ -323,7 +367,7 @@ class BracketGame:
             self.away_seed,
             self.next_game_id,
         )
-    
+
     @classmethod
     def from_db_tuple(cls, row: Iterable):
         """
@@ -332,10 +376,10 @@ class BracketGame:
         """
         row = tuple(row)
         if len(row) == 3:
-            bracket_id, round, game_number = row
+            bracket_id, round_, game_number = row
             return cls(
                 bracket_id=bracket_id,
-                round=round,
+                round=round_,
                 game_number=game_number,
                 home=None,
                 away=None,
@@ -346,12 +390,21 @@ class BracketGame:
                 next_game_id=None,
             )
         elif len(row) == 10:
-            (bracket_id, round, game_number, home, away,
-            home_region, home_seed, away_region, away_seed,
-            next_game_id) = row
+            (
+                bracket_id,
+                round_,
+                game_number,
+                home,
+                away,
+                home_region,
+                home_seed,
+                away_region,
+                away_seed,
+                next_game_id,
+            ) = row
             return cls(
                 bracket_id=bracket_id,
-                round=round,
+                round=round_,
                 game_number=game_number,
                 home=home,
                 away=away,
@@ -363,7 +416,7 @@ class BracketGame:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
-        
+
 
 # --- Data class for raw results of completed games used in tiebreakers ---
 class RawCompletedGame(TypedDict):
@@ -381,10 +434,10 @@ class CompletedGame:
     a: str  # team (lexicographically first)
     b: str  # team (lexicographically second)
     res_a: int  # head-to-head result in completed set (+1 a beat b, -1 b beat a, 0 split)
-    pd_a: int   # raw point differential for a vs b across completed meetings (will be capped when used)
-    pa_a: int   # points allowed by team a in those meetings
-    pa_b: int   # points allowed by team b in those 
-    
+    pd_a: int  # raw point differential for a vs b across completed meetings (will be capped when used)
+    pa_a: int  # points allowed by team a in those meetings
+    pa_b: int  # points allowed by team b in those
+
 
 # --- Data class for remaining games used in tiebreakers ---
 @dataclass(frozen=True)

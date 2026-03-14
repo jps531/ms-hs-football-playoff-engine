@@ -1,8 +1,12 @@
-import json, re, time, requests
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-from typing import Optional
+import json
+import re
+import time
 from difflib import SequenceMatcher
+
+import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import TimeoutError as PWTimeout
+from playwright.sync_api import sync_playwright
 
 from prefect_files.data_helpers import SPACE_RE
 
@@ -12,9 +16,7 @@ from prefect_files.data_helpers import SPACE_RE
 
 
 # --- WEB REQUEST CONFIG ---
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-      "AppleWebKit/537.36 (KHTML, like Gecko) "
-      "Chrome/126.0.0.0 Safari/537.36")
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 
 AHSFHS_EXPECTED_TEXT = re.compile(r"\bDate\s+Opponent\s+Score\b", re.I)
@@ -30,15 +32,14 @@ def fetch_article_text(url: str) -> str:
     of the main article body. This captures actual on-screen spacing.
     """
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"]
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        page = browser.new_page(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/126.0.0.0 Safari/537.36"
+            )
         )
-        page = browser.new_page(user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/126.0.0.0 Safari/537.36"
-        ))
         page.goto(url, wait_until="networkidle")
         # try to focus on the main WordPress article content
         loc = page.locator("article .entry-content, .entry-content, article")
@@ -69,10 +70,10 @@ def _probe_exists(url: str, timeout=10) -> bool:
         return r.status_code == 200
     except requests.RequestException:
         return False
-    
+
 
 def _ensure_trailing_slash(u: str) -> str:
-  return u if u.endswith("/") else (u + "/")
+    return u if u.endswith("/") else (u + "/")
 
 
 def _ratio(a: str, b: str) -> float:
@@ -97,7 +98,9 @@ def _iter_dicts(obj):
             yield from _iter_dicts(v)
 
 
-def fetch_article_text_from_ahsfhs(url: str, nav_timeout_ms: int = 60000, selector_timeout_ms: int = 20000, attempts: int = 3) -> Optional[str]:
+def fetch_article_text_from_ahsfhs(
+    url: str, nav_timeout_ms: int = 60000, selector_timeout_ms: int = 20000, attempts: int = 3
+) -> str | None:
     """
     Robust fetcher for AHSFHS schedule pages.
     - Avoids 'networkidle' (can hang forever).
@@ -108,12 +111,10 @@ def fetch_article_text_from_ahsfhs(url: str, nav_timeout_ms: int = 60000, select
     last_err = None
     backoff = 2.0
 
-    for attempt in range(1, attempts + 1):
+    for _attempt in range(1, attempts + 1):
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True, args=[
-                    "--no-sandbox", "--disable-setuid-sandbox"
-                ])
+                browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
                 context = browser.new_context(
                     user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HSFB-Scraper Safari/537.36",
                     java_script_enabled=True,
@@ -138,7 +139,7 @@ def fetch_article_text_from_ahsfhs(url: str, nav_timeout_ms: int = 60000, select
                 # Try to detect the schedule table header text
                 page.wait_for_function(
                     """() => document.body && /\\bDate\\s+Opponent\\s+Score\\b/i.test(document.body.innerText)""",
-                    timeout=selector_timeout_ms
+                    timeout=selector_timeout_ms,
                 )
 
                 html = page.content()
@@ -156,9 +157,7 @@ def fetch_article_text_from_ahsfhs(url: str, nav_timeout_ms: int = 60000, select
 
     # Final fallback: try simple requests (page appears mostly static text)
     try:
-        resp = requests.get(url, timeout=20, headers={
-            "User-Agent": "Mozilla/5.0 HSFB-Scraper"
-        })
+        resp = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0 HSFB-Scraper"})
         if resp.ok:
             return resp.text
     except Exception as e:

@@ -1,22 +1,25 @@
 from __future__ import annotations
 
-import time, requests
-from typing import Dict, Any, Iterable, List
-from psycopg2.extras import execute_batch
-from prefect import flow, task, get_run_logger
+import time
+from collections.abc import Iterable
+from typing import Any
 
-from prefect_files.data_classes import School
-from prefect_files.database_helpers import get_database_connection
-from prefect_files.data_helpers import as_float_or_none
+import requests
+from prefect import flow, get_run_logger, task
+from psycopg2.extras import execute_batch
 from web_helpers import UA, _extract_next_data
 
+from prefect_files.data_classes import School
+from prefect_files.data_helpers import as_float_or_none
+from prefect_files.database_helpers import get_database_connection
 
 # -------------------------
 # Helpers
 # -------------------------
 
+
 @task(task_run_name="Find MaxPreps School Info for {school_name}")
-def find_maxpreps_school_record(school: School, school_name) -> Dict[str, Any] | None:
+def find_maxpreps_school_record(school: School, school_name) -> dict[str, Any] | None:
     """
     Return the best matching school record from MaxPreps search for the given name.
     """
@@ -51,16 +54,15 @@ def find_maxpreps_school_record(school: School, school_name) -> Dict[str, Any] |
 
 
 @task(task_run_name="Find School Info for Schools")
-def find_school_info_for_schools(schools: List[School]) -> List[Dict[str, Any]]:
+def find_school_info_for_schools(schools: list[School]) -> list[dict[str, Any]]:
     """
     Return a list of dicts with school info data for the given schools.
     Each dict includes: school, season, class, region, primary_color, secondary_color.
     """
     logger = get_run_logger()
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
 
     for school in schools:
-
         found_info = find_maxpreps_school_record(school, school.school)
         if found_info:
             logger.info("Found info for %r: %s", school.school, found_info)
@@ -103,7 +105,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
             as_float_or_none(row["latitude"]),
             as_float_or_none(row["longitude"]),
             row["maxpreps_logo"],
-            row["school"],       # <-- note: order must match the WHERE clause
+            row["school"],  # <-- note: order must match the WHERE clause
             row["season"],
             row["class"],
             row["region"],
@@ -119,14 +121,14 @@ def update_rows(school_records: Iterable[dict]) -> int:
 
 
 @task(task_run_name="Get Existing Schools")
-def get_existing_schools() -> List[School]:
+def get_existing_schools() -> list[School]:
     """
     Gets the list of existing schools from the database.
     """
     q = """
         SELECT school, season, class, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color FROM schools
     """
-    schools: List[School] = []
+    schools: list[School] = []
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(q)
@@ -141,8 +143,9 @@ def get_existing_schools() -> List[School]:
 # Prefect tasks & flow
 # -------------------------
 
+
 @task(retries=2, retry_delay_seconds=10, task_run_name="Scrape School Info Data")
-def scrape_task(existing_schools: List[School]) -> int:
+def scrape_task(existing_schools: list[School]) -> int:
     """
     Task to scrape school info data from MaxPreps.
     """
@@ -153,6 +156,7 @@ def scrape_task(existing_schools: List[School]) -> int:
     updated_count = update_rows(school_records)
     logger.info("Updated %d schools", updated_count)
     return updated_count
+
 
 @flow(name="School Info Data Flow")
 def school_info_data_flow() -> int:

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Generate a single all_scenarios.txt for all regions across classes.
 
@@ -14,6 +13,7 @@ Usage:
     --dsn "postgresql://USER:PASS@HOST:PORT/DB" \
     --outfile all_scenarios.txt
 """
+
 import argparse
 import os
 import sys
@@ -22,26 +22,25 @@ from pathlib import Path
 
 try:
     import psycopg
-except Exception as e:
+except Exception:
     print("Please install psycopg: pip install 'psycopg[binary]'")
     raise
 
 try:
     # Import the enumeration function from your main simulator module
     from simulate_region_finish import enumerate_region
-except Exception as e:
+except Exception:
     print("ERROR: Could not import enumerate_region from simulate_region_finish.py")
     print("Make sure that file is in the same directory or on your PYTHONPATH.")
     raise
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, required=True)
     ap.add_argument("--dsn", type=str, default=os.getenv("PG_DSN", ""))
-    ap.add_argument("--classes", type=str, default="5-7",
-                    help="Class range, e.g. '1-4' or '2-3' (inclusive).")
-    ap.add_argument("--regions", type=str, default="1-4",
-                    help="Region range, e.g. '1-8' or '3-6' (inclusive).")
+    ap.add_argument("--classes", type=str, default="5-7", help="Class range, e.g. '1-4' or '2-3' (inclusive).")
+    ap.add_argument("--regions", type=str, default="1-4", help="Region range, e.g. '1-8' or '3-6' (inclusive).")
     ap.add_argument("--outfile", type=str, default="all_scenarios.txt")
     args = ap.parse_args()
 
@@ -56,7 +55,7 @@ def main():
             return range(int(lo), int(hi) + 1)
         else:
             v = int(s)
-            return range(v, v+1)
+            return range(v, v + 1)
 
     class_range = parse_range(args.classes)
     region_range = parse_range(args.regions)
@@ -85,7 +84,7 @@ def main():
                         out_scenarios=temp_name,
                     )
                     # Append to combined file with a separating newline
-                    with open(temp_name, "r") as f_in, open(out_path, "a") as f_out:
+                    with open(temp_name) as f_in, open(out_path, "a") as f_out:
                         content = f_in.read().rstrip()
                         if content:
                             # Ensure clear section separation
@@ -100,6 +99,7 @@ def main():
                         pass
 
     print(f"Wrote combined scenarios to: {out_path}")
+
 
 if __name__ == "__main__":
     main()

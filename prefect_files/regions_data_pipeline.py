@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Tuple
+from collections.abc import Iterable
+
+from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_values
-from prefect import flow, task, get_run_logger
+from web_helpers import fetch_article_text
 
 from prefect_files.data_classes import School
-from prefect_files.data_helpers import clean_school_name, SPACE_RE
-from web_helpers import fetch_article_text
+from prefect_files.data_helpers import SPACE_RE, clean_school_name
 from prefect_files.database_helpers import get_database_connection
-
 
 # -------------------------
 # Config
@@ -24,10 +24,10 @@ CLASS_HDR = re.compile(r"\bClass\s+([1-7])A\b", re.IGNORECASE)
 
 
 @task(task_run_name="Find Class Sections")
-def _find_class_sections(text: str) -> List[Tuple[int, int, int]]:
+def _find_class_sections(text: str) -> list[tuple[int, int, int]]:
     """Find each 'Class {N}A' header and return (class_num, start, end)."""
     matches = list(CLASS_HDR.finditer(text))
-    sections: List[Tuple[int, int, int]] = []
+    sections: list[tuple[int, int, int]] = []
     for i, m in enumerate(matches):
         cls = int(m.group(1))
         start = m.end()
@@ -37,12 +37,12 @@ def _find_class_sections(text: str) -> List[Tuple[int, int, int]]:
 
 
 @task(task_run_name="Parse Class Section: {cls}")
-def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
+def _parse_section(text: str, cls: int) -> list[tuple[str, int, int]]:
     """
     Parse a single Class section into (school, class, region) tuples.
     Each line looks like: 'SCHOOL NAME {class} {region}'.
     """
-    rows: List[Tuple[str, int, int]] = []
+    rows: list[tuple[str, int, int]] = []
     s = SPACE_RE.sub(" ", text.replace("\n", " ")).strip()
     pattern = re.compile(rf"(.+?)\s{cls}\s([1-8])(?=\s|$)")
     pos = 0
@@ -67,22 +67,24 @@ def _parse_section(text: str, cls: int) -> List[Tuple[str, int, int]]:
 
 
 @task(task_run_name="Parse Regions from Text")
-def parse_regions_from_text(text: str) -> List[dict]:
+def parse_regions_from_text(text: str) -> list[dict]:
     """Parse all class sections into dictionaries."""
-    out: List[dict] = []
+    out: list[dict] = []
     for cls, start, end in _find_class_sections(text):
         section = text[start:end]
         for school, class_num, region in _parse_section(section, cls):
-            out.append({
-                "school": school,
-                "class": class_num,
-                "region": region,
-            })
+            out.append(
+                {
+                    "school": school,
+                    "class": class_num,
+                    "region": region,
+                }
+            )
     return out
 
 
 @task(task_run_name="Fetch Regions Task")
-def fetch_regions(url: str) -> List[dict]:
+def fetch_regions(url: str) -> list[dict]:
     """End-to-end: fetch, parse, clean."""
     text = fetch_article_text(url)
     rows = parse_regions_from_text(text)
@@ -114,7 +116,7 @@ def insert_rows(rows: Iterable[School]) -> int:
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Scrape Regions Data")
-def scrape_task(url: str, season: int) -> List[School]:
+def scrape_task(url: str, season: int) -> list[School]:
     """
     Task to scrape the regions data from the given URL.
     """
@@ -122,16 +124,12 @@ def scrape_task(url: str, season: int) -> List[School]:
     logger.info("Fetching and parsing rendered text from %s", url)
     text = fetch_article_text(url)
     rows = [
-        School(
-            school=r["school"],
-            class_=r["class"],
-            region=r["region"],
-            season=season
-        )
+        School(school=r["school"], class_=r["class"], region=r["region"], season=season)
         for r in parse_regions_from_text(text)
     ]
     logger.info("Parsed %d schools", len(rows))
     return rows
+
 
 @flow(name="Regions Data Flow")
 def regions_data_flow(season: int = 2025) -> int:
@@ -140,16 +138,16 @@ def regions_data_flow(season: int = 2025) -> int:
     """
     logger = get_run_logger()
     regions_source_url = ""
-    if (season == 2025):
-            regions_source_url = "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/"
-    elif (season == 2023):
+    if season == 2025:
+        regions_source_url = "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/"
+    elif season == 2023:
         regions_source_url = "https://www.misshsaa.com/2022/11/03/2023-25-football-regions/"
-    elif (season == 2021):
+    elif season == 2021:
         regions_source_url = "https://www.misshsaa.com/2020/10/29/2021-23-football-regions/"
-    elif (season == 2019):
+    elif season == 2019:
         regions_source_url = "https://www.misshsaa.com/2018/10/31/2019-21-football-regions/"
     else:
-        raise ValueError(f"No regions URL configured for season {season}") 
+        raise ValueError(f"No regions URL configured for season {season}")
     rows = scrape_task(regions_source_url, season)
     inserted = insert_rows(rows)
     logger.info("Inserted %d new rows into schools", inserted)
