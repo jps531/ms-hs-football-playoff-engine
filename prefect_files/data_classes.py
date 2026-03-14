@@ -1,4 +1,8 @@
-from __future__ import annotations
+"""Dataclasses shared across the playoff engine.
+
+Includes raw and processed game representations, standings odds, and
+DB-mapped objects for schools, locations, brackets, and bracket games.
+"""
 
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -12,6 +16,8 @@ from typing import TypedDict
 
 @dataclass(frozen=True)
 class Standings:
+    """Region W/L/T record for a single school, as returned by the DB stored proc."""
+
     school: str
     class_: int
     region: int
@@ -32,6 +38,8 @@ class Standings:
 # --- Data class for a row in the school table ---
 @dataclass
 class School:
+    """DB-mapped dataclass for a row in the ``schools`` table."""
+
     school: str
     season: int
     class_: int
@@ -48,6 +56,7 @@ class School:
     secondary_color: str = ""
 
     def as_db_tuple(self):
+        """Return a positional tuple suitable for INSERT/UPDATE queries."""
         return (
             self.school,
             self.season,
@@ -67,9 +76,17 @@ class School:
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
-        """
-        Create a School object from a database row tuple or sequence.
-        Accepts rows with 4 or 14 columns.
+        """Create a School object from a database row tuple or sequence.
+
+        Args:
+            row: An iterable of column values.  Accepts rows with 4 columns
+                (school, season, class_, region) or 14 columns (all fields).
+
+        Returns:
+            A School instance populated from the row.
+
+        Raises:
+            ValueError: If the row has an unexpected number of columns.
         """
         # Convert row-like objects (sqlite Row, psycopg2 row, etc.) to tuple
         row = tuple(row)
@@ -117,6 +134,8 @@ class School:
 # --- Data class for a row in the game table ---
 @dataclass
 class Game:
+    """DB-mapped dataclass for a row in the ``games`` table."""
+
     school: str
     date: date
     season: int
@@ -135,6 +154,7 @@ class Game:
     overtime: int = 0
 
     def as_db_tuple(self):
+        """Return a positional tuple suitable for INSERT/UPDATE queries."""
         return (
             self.school,
             self.date,
@@ -156,9 +176,18 @@ class Game:
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
-        """
-        Create a Game object from a DB row (tuple, list, or dict).
-        Accepts rows with 16 expected columns or dicts with named fields.
+        """Create a Game object from a DB row (tuple, list, or dict).
+
+        Args:
+            row: Either a dict with named fields (e.g., psycopg2 RealDictRow)
+                or a positional tuple/list with 16 columns.
+
+        Returns:
+            A Game instance populated from the row.
+
+        Raises:
+            ValueError: If a dict row is missing the required ``date`` field,
+                or a tuple row has an unexpected number of columns.
         """
         # Handle dict-like objects (e.g., psycopg2.extras.RealDictRow)
         if isinstance(row, dict):
@@ -230,6 +259,8 @@ class Game:
 # --- Data class for a row in the location table ---
 @dataclass
 class Location:
+    """DB-mapped dataclass for a row in the ``locations`` table."""
+
     id: int | None
     name: str
     city: str
@@ -238,6 +269,7 @@ class Location:
     longitude: float
 
     def as_db_tuple(self):
+        """Return a positional tuple suitable for INSERT/UPDATE queries."""
         return (
             self.name,
             self.city,
@@ -248,9 +280,17 @@ class Location:
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
-        """
-        Create a Location object from a database row tuple or sequence.
-        Accepts rows with 5 columns.
+        """Create a Location object from a database row tuple or sequence.
+
+        Args:
+            row: An iterable of 5 column values
+                (name, city, home_team, latitude, longitude).
+
+        Returns:
+            A Location instance with ``id=None`` (id is assigned by the DB).
+
+        Raises:
+            ValueError: If the row does not have exactly 5 columns.
         """
         row = tuple(row)
         if len(row) == 5:
@@ -270,12 +310,15 @@ class Location:
 # --- Data class for a row in the bracket table ---
 @dataclass
 class Bracket:
+    """DB-mapped dataclass for a row in the ``brackets`` table."""
+
     name: str
     season: int
     class_: int
     source: str | None
 
     def as_db_tuple(self):
+        """Return a positional tuple suitable for INSERT/UPDATE queries."""
         return (
             self.name,
             self.season,
@@ -285,9 +328,17 @@ class Bracket:
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
-        """
-        Create a Bracket object from a database row tuple or sequence.
-        Accepts rows with 4 columns.
+        """Create a Bracket object from a database row tuple or sequence.
+
+        Args:
+            row: An iterable of 4 column values
+                (name, season, class_, source).
+
+        Returns:
+            A Bracket instance populated from the row.
+
+        Raises:
+            ValueError: If the row does not have exactly 4 columns.
         """
         row = tuple(row)
         if len(row) == 4:
@@ -305,6 +356,8 @@ class Bracket:
 # --- Data Class for a row in the bracket_teams table ---
 @dataclass
 class BracketTeam:
+    """DB-mapped dataclass for a row in the ``bracket_teams`` table."""
+
     bracket_id: int
     school: str
     season: int
@@ -312,6 +365,7 @@ class BracketTeam:
     region: int
 
     def as_db_tuple(self):
+        """Return a positional tuple suitable for INSERT/UPDATE queries."""
         return (
             self.bracket_id,
             self.school,
@@ -322,9 +376,17 @@ class BracketTeam:
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
-        """
-        Create a BracketTeam object from a database row tuple or sequence.
-        Accepts rows with 5 columns.
+        """Create a BracketTeam object from a database row tuple or sequence.
+
+        Args:
+            row: An iterable of 5 column values
+                (bracket_id, school, season, seed, region).
+
+        Returns:
+            A BracketTeam instance populated from the row.
+
+        Raises:
+            ValueError: If the row does not have exactly 5 columns.
         """
         row = tuple(row)
         if len(row) == 5:
@@ -343,6 +405,8 @@ class BracketTeam:
 # --- Data class for a row in the bracket_games table ---
 @dataclass
 class BracketGame:
+    """DB-mapped dataclass for a row in the ``bracket_games`` table."""
+
     bracket_id: int
     round: str
     game_number: int
@@ -355,6 +419,7 @@ class BracketGame:
     next_game_id: int | None
 
     def as_db_tuple(self):
+        """Return a positional tuple suitable for INSERT/UPDATE queries."""
         return (
             self.bracket_id,
             self.round,
@@ -370,9 +435,18 @@ class BracketGame:
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
-        """
-        Create a BracketGame object from a database row tuple or sequence.
-        Accepts rows with 3 or 10 columns.
+        """Create a BracketGame object from a database row tuple or sequence.
+
+        Args:
+            row: An iterable of column values.  Accepts rows with 3 columns
+                (bracket_id, round, game_number) — all matchup fields default
+                to None — or 10 columns (all fields).
+
+        Returns:
+            A BracketGame instance populated from the row.
+
+        Raises:
+            ValueError: If the row has an unexpected number of columns.
         """
         row = tuple(row)
         if len(row) == 3:
@@ -420,6 +494,12 @@ class BracketGame:
 
 # --- Data class for raw results of completed games used in tiebreakers ---
 class RawCompletedGame(TypedDict):
+    """Raw game result dict as returned directly from a DB query row.
+
+    Used as the input format for ``get_completed_games()`` before normalization
+    into CompletedGame instances.
+    """
+
     school: str
     opponent: str
     date: str
@@ -431,17 +511,26 @@ class RawCompletedGame(TypedDict):
 # --- Data class for completed games used in tiebreakers ---
 @dataclass(frozen=True)
 class CompletedGame:
+    """Normalized completed-game record used by the tiebreaker engine.
+
+    Fields are always stored from the perspective of the lexicographically
+    first team (``a``).  These field names have caused bugs when confused, so
+    the per-field meanings are documented carefully below.
+    """
+
     a: str  # team (lexicographically first)
     b: str  # team (lexicographically second)
     res_a: int  # head-to-head result in completed set (+1 a beat b, -1 b beat a, 0 split)
     pd_a: int  # raw point differential for a vs b across completed meetings (will be capped when used)
-    pa_a: int  # points allowed by team a in those meetings
-    pa_b: int  # points allowed by team b in those
+    pa_a: int  # points allowed by team a in those meetings (i.e., points scored BY b against a)
+    pa_b: int  # points allowed by team b in those meetings (i.e., points scored BY a against b)
 
 
 # --- Data class for remaining games used in tiebreakers ---
 @dataclass(frozen=True)
 class RemainingGame:
+    """An unplayed region game, stored with teams in lexicographic order."""
+
     a: str  # team (lexicographically first)
     b: str  # team (lexicographically second)
 
@@ -449,12 +538,18 @@ class RemainingGame:
 # --- Data class for standings odds results ---
 @dataclass(frozen=True)
 class StandingsOdds:
+    """Per-team seeding probability results produced by ``determine_odds()``.
+
+    Probability fields represent the fraction of enumerated outcomes in which
+    the team achieves each seeding position.
+    """
+
     school: str
-    p1: float
-    p2: float
-    p3: float
-    p4: float
-    p_playoffs: float
-    final_playoffs: float
-    clinched: bool
-    eliminated: bool
+    p1: float  # probability of finishing 1st in the region
+    p2: float  # probability of finishing 2nd in the region
+    p3: float  # probability of finishing 3rd in the region
+    p4: float  # probability of finishing 4th in the region
+    p_playoffs: float  # raw sum p1+p2+p3+p4 (may equal p_playoffs if no rounding)
+    final_playoffs: float  # 1.0 if clinched, 0.0 if eliminated, else p_playoffs
+    clinched: bool  # True when p_playoffs >= 0.999
+    eliminated: bool  # True when p_playoffs <= 0.001

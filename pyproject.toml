@@ -1,7 +1,7 @@
 [project]
 name = "ms-hs-football-playoff-engine"
 version = "0.1.0"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "prefect>=2.16,<3",
     "requests>=2.31",
@@ -15,15 +15,18 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "matplotlib>=3.10.8",
     "pytest>=8.0",
+    "pytest-cov>=7.0.0",
     "ruff>=0.9",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["prefect_files/tests"]
+addopts = "--cov=prefect_files --cov-branch --cov-report=term-missing"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
@@ -41,3 +44,24 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["prefect_files"]
+
+[tool.coverage.run]
+branch = true
+source = ["prefect_files"]
+
+[tool.coverage.report]
+# Exclude Prefect pipeline files — these require a live DB/Prefect and are
+# not unit-testable in isolation. Coverage numbers reflect pure logic only.
+omit = [
+    "prefect_files/ahsfhs_schedule_pipeline.py",
+    "prefect_files/database_helpers.py",
+    "prefect_files/flows.py",
+    "prefect_files/maxpreps_data_pipeline.py",
+    "prefect_files/playoff_bracket_pipeline.py",
+    "prefect_files/region_scenarios_pipeline.py",
+    "prefect_files/regions_data_pipeline.py",
+    "prefect_files/school_info_pipeline.py",
+    "prefect_files/template_pipeline.py",
+    "prefect_files/web_helpers.py",
+    "prefect_files/tests/*",
+]

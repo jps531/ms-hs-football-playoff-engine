@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Prefect tasks and flow for scraping the MHSAA playoff bracket.
+
+Fetches bracket data from MaxPreps for each class, parses round/game
+assignments, and writes results to the ``brackets`` and ``bracket_games``
+tables. Note: insert logic is currently stubbed out pending implementation.
+"""
 
 import requests
 from prefect import flow, get_run_logger, task

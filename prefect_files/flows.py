@@ -1,3 +1,4 @@
+"""Prefect deployment entry point. Registers all data pipeline flows for deployment."""
 import asyncio
 
 from prefect import serve

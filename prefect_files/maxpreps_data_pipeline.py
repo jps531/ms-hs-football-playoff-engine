@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Prefect tasks and flow for scraping win/loss records from MaxPreps.
+
+Searches the MaxPreps website for each known school, resolves the best fuzzy
+name match, and updates city, zip, mascot, MaxPreps ID, and URL fields in the
+``schools`` table.
+"""
 
 import re
 import time
@@ -211,9 +216,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
 
 
 def get_existing_schools() -> list[School]:
-    """
-    Gets the list of existing schools from the database.
-    """
+    """Fetch the distinct list of all schools from the database."""
     q = """
         SELECT DISTINCT school, season, class, region FROM schools
     """

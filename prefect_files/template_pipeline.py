@@ -1,4 +1,4 @@
-from __future__ import annotations
+"""Minimal Prefect flow template. Copy this file to create a new pipeline."""
 
 from prefect import flow, get_run_logger
 

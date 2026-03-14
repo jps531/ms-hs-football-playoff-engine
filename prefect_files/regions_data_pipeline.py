@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Prefect tasks and flow for scraping region/class assignments from the MHSAA website.
+
+Fetches the MHSAA football regions article for the given season, parses each
+class section for school-to-region mappings, and writes results to the
+``schools`` (``regions``) table via INSERT ... ON CONFLICT UPDATE.
+"""
 
 import re
 from collections.abc import Iterable

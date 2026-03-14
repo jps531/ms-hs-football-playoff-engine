@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Helper functions for school name normalization, game result parsing, and pair normalization.
+
+Used by both the Prefect pipeline and the pure-logic modules. Contains name
+mapping constants, HTML-to-text utilities, and ``get_completed_games()`` for
+converting raw DB rows into CompletedGame instances.
+"""
 
 import re
 import unicodedata
@@ -96,8 +101,17 @@ CLEAN_RE = re.compile("|".join(CLEAN_PHRASES), flags=re.IGNORECASE)
 
 
 def to_normal_case(s: str) -> str:
-    """
-    Convert a string to normal case (title case with special handling for "Mc" and possessives like "'s").
+    """Convert a string to title case with special-case handling.
+
+    Applies Python's str.title() then fixes common patterns: ``Mc``-prefixed
+    surnames, possessive ``'s`` capitalization, ``D'Iber`` for D'Iberville,
+    and bare ``St`` -> ``St.``.
+
+    Args:
+        s: Raw string to normalize.
+
+    Returns:
+        Title-cased string with the special-case corrections applied.
     """
     if not s:
         return s
@@ -110,6 +124,7 @@ def to_normal_case(s: str) -> str:
 
 
 def _norm(s: str) -> str:
+    """Normalize a string for fuzzy matching: strip, replace curly quotes, collapse whitespace, lowercase."""
     s = s.strip()
     s = s.replace("’", "'")
     s = SPACE_RE.sub(" ", s).strip()
@@ -117,6 +132,18 @@ def _norm(s: str) -> str:
 
 
 def update_school_name_for_maxpreps_search(s: str) -> str:
+    """Translate an official school name to the best MaxPreps search query.
+
+    Several schools are listed under a different name on MaxPreps (e.g.,
+    "Pearl River Central" searches better as "PRC").  Returns the name
+    lowercased for URL inclusion.
+
+    Args:
+        s: Official MHSAA school name.
+
+    Returns:
+        A lowercase search string suitable for appending to a MaxPreps URL.
+    """
     s = s.replace("Pearl River Central", "PRC")
     s = s.replace("Cleveland Central", "Cleveland")
     s = s.replace("Leake Central", "Carthage")
@@ -131,8 +158,17 @@ def update_school_name_for_maxpreps_search(s: str) -> str:
 
 
 def update_school_name_for_ahsfhs_search(s: str) -> str:
-    """
-    Convert an "official" school name to the AHSFHS search name if known.
+    """Convert an official school name to the AHSFHS website search term.
+
+    Looks up the name in ``OFFICIAL_TO_AHSFHS``; if found, returns the AHSFHS
+    canonical name.  Otherwise URL-encodes spaces for use in a query string.
+
+    Args:
+        s: Official MHSAA school name.
+
+    Returns:
+        The AHSFHS search name or the original name with spaces replaced by
+        ``%20``.
     """
     s = s.strip()
 
@@ -143,8 +179,17 @@ def update_school_name_for_ahsfhs_search(s: str) -> str:
 
 
 def get_school_name_from_ahsfhs(s: str) -> str:
-    """
-    Convert an AHSFHS canonical name to the "official" school name if known.
+    """Convert an AHSFHS canonical school name to the official MHSAA name.
+
+    Performs a reverse lookup in ``OFFICIAL_TO_AHSFHS``.  If the AHSFHS name
+    is not found, the original string is returned unchanged.
+
+    Args:
+        s: School name as it appears on the AHSFHS website.
+
+    Returns:
+        The corresponding official MHSAA school name, or the original string
+        if no mapping exists.
     """
     s = s.strip()
 
@@ -156,8 +201,14 @@ def get_school_name_from_ahsfhs(s: str) -> str:
 
 
 def as_float_or_none(x):
-    """
-    Convert x to float, or return None if x is None, empty, or invalid.
+    """Convert a value to float, returning None for missing or invalid inputs.
+
+    Args:
+        x: Any value to attempt conversion.
+
+    Returns:
+        A float if conversion succeeds, or None if x is None, an empty string,
+        or otherwise cannot be converted.
     """
     if x is None:
         return None
@@ -170,15 +221,18 @@ def as_float_or_none(x):
 
 
 def _pad(n: int) -> str:
+    """Zero-pad an integer to at least 2 digits."""
     return f"{n:02d}"
 
 
 def _month_to_num(m: str) -> int | None:
+    """Convert a month name or abbreviation to its 1-based integer number."""
     m = m.lower().rstrip(".")
     return _MONTHS.get(m)
 
 
 def _normalize_ws(t: str) -> str:
+    """Normalize unicode and whitespace in a raw HTML/text string."""
     # Unicode normalize and tame whitespace weirdness
     t = unicodedata.normalize("NFKC", t)
     t = t.replace("\r\n", "\n").replace("\r", "\n").replace("\u00a0", " ")
@@ -188,6 +242,17 @@ def _normalize_ws(t: str) -> str:
 
 
 def to_plain_text(html: str) -> str:
+    """Convert an HTML string to normalized plain text.
+
+    Strips all tags via BeautifulSoup, then collapses unicode whitespace
+    (including non-breaking spaces) and runs of whitespace into single spaces.
+
+    Args:
+        html: Raw HTML string.
+
+    Returns:
+        Plain text with all tags removed and whitespace normalized.
+    """
     # 1) parse HTML → text (inserts spaces between nodes)
     soup = BeautifulSoup(html, "html.parser")
     text = soup.get_text(" ")
@@ -199,9 +264,21 @@ def to_plain_text(html: str) -> str:
 
 
 def parse_text_section(text: str, start_phrase: str, end_phrase: str) -> str:
-    """
-    Extracts the section of text between start_phrase and end_phrase.
+    """Extract the text between two phrase boundaries.
+
+    Uses a non-greedy regex so the shortest matching span is returned.
     Handles arbitrary whitespace and newlines gracefully.
+
+    Args:
+        text: The full text to search within.
+        start_phrase: Literal string marking the beginning of the desired
+            section (not included in the output).
+        end_phrase: Literal string marking the end of the desired section
+            (not included in the output).
+
+    Returns:
+        The extracted section text (stripped), or an empty string if the
+        bounding phrases are not both found.
     """
 
     # Convert phrases into regex patterns that allow flexible whitespace
@@ -215,7 +292,20 @@ def parse_text_section(text: str, start_phrase: str, end_phrase: str) -> str:
 
 
 def _get_field(r: School | Mapping[str, Any], attr: str, alt_key: str | None = None):
-    """Fetch attr from dataclass or mapping; falls back to alt_key for 'class' vs 'class_'."""
+    """Fetch a named field from a dataclass instance or a Mapping.
+
+    Tries ``getattr`` first (dataclass path), then key lookup on the Mapping.
+    Falls back to ``alt_key`` to handle ``class`` / ``class_`` naming
+    discrepancies between dict rows and the School dataclass.
+
+    Args:
+        r: A School dataclass instance or a dict-like Mapping.
+        attr: Primary attribute/key name to fetch.
+        alt_key: Fallback key name tried when ``attr`` is absent in a Mapping.
+
+    Returns:
+        The field value, or None if neither ``attr`` nor ``alt_key`` is found.
+    """
     if hasattr(r, attr):
         return getattr(r, attr)
     if isinstance(r, Mapping):
@@ -227,8 +317,17 @@ def _get_field(r: School | Mapping[str, Any], attr: str, alt_key: str | None = N
 
 
 def clean_school_name(raw: str) -> str:
-    """
-    Clean the given raw school name by removing unwanted phrases and normalizing case.
+    """Clean a raw school name by removing boilerplate phrases and normalizing case.
+
+    Handles several hard-coded special cases (Enterprise schools, Jefferson Co,
+    Franklin) before stripping phrases defined in ``CLEAN_PHRASES`` and
+    applying ``to_normal_case``.
+
+    Args:
+        raw: Raw school name string (e.g., from a scraped MHSAA page).
+
+    Returns:
+        A cleaned, title-cased school name string.
     """
 
     # Special cases: Differentiate Enterprises
@@ -247,15 +346,39 @@ def clean_school_name(raw: str) -> str:
 
 
 def normalize_pair(x: str, y: str) -> tuple[str, str, int]:
-    """
-    Given two team names x and y, return a tuple (a, b, sign) where a <= b (lexicographically) and sign is +1 if x==a else -1.
+    """Normalize a team pair into lexicographic order with a direction sign.
+
+    Ensures all game lookups use a consistent canonical key regardless of which
+    team was listed first in the source data.
+
+    Args:
+        x: First team name.
+        y: Second team name.
+
+    Returns:
+        A 3-tuple ``(a, b, sign)`` where ``a <= b`` lexicographically and
+        ``sign`` is ``+1`` if ``x == a`` (no swap) or ``-1`` if the teams
+        were swapped.
     """
     return (x, y, +1) if x <= y else (y, x, -1)
 
 
 def get_completed_games(raw_results: list[RawCompletedGame]) -> list[CompletedGame]:
-    """
-    Convert raw results dicts into CompletedGame dataclass instances.
+    """Convert raw game-result dicts into normalized CompletedGame instances.
+
+    Deduplicates by canonical game key (a, b, date) where ``a < b``
+    lexicographically.  When both the a-row and b-row are present for the same
+    game, the a-row is preferred.  Aggregates multiple meetings between the
+    same pair across dates, collapsing ``res_a`` to ``{-1, 0, +1}``.
+
+    Args:
+        raw_results: List of RawCompletedGame dicts as returned from a DB
+            query (each row is from one team's perspective).
+
+    Returns:
+        A list of CompletedGame instances, one per unique (a, b) pair, with
+        all fields expressed from the perspective of the lexicographically
+        first team.
     """
 
     # Deduplicate by *game* key (a,b,date) where a<b (lexicographic).

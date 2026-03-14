@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Prefect tasks and flow for scraping school metadata from MaxPreps.
+
+Visits each school's MaxPreps profile page, extracts latitude, longitude,
+team colors, and logo URL from the ``__NEXT_DATA__`` JSON blob, and updates
+those fields in the ``schools`` table.
+"""
 
 import time
 from collections.abc import Iterable

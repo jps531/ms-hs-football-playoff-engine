@@ -1,7 +1,7 @@
 # Dockerfile for Prefect Worker that runs flows
 ARG ENVIRONMENT=local
 ARG PREFECT_VERSION=2.17.1
-ARG PYTHON_VERSION=3.13
+ARG PYTHON_VERSION=3.11
 
 FROM prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
 

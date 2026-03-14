@@ -46,6 +46,8 @@ uv run ruff format .         # format (black-compatible)
 
 ## Testing
 
+Run the test suite (coverage is enabled by default via `pyproject.toml`):
+
 ```
 uv run pytest
 ```
@@ -55,3 +57,16 @@ Or with verbose output:
 ```
 uv run pytest -vv
 ```
+
+Coverage is measured with branch analysis and reported in the terminal after every run. The report excludes Prefect pipeline files (which require a live DB/Prefect environment) and focuses on the pure-logic modules: `tiebreakers.py`, `scenarios.py`, `data_helpers.py`, and `data_classes.py`.
+
+To generate a browsable HTML report:
+
+```
+uv run pytest --cov-report=html
+open htmlcov/index.html
+```
+
+### Coverage gaps
+
+Known tiebreaker paths not yet exercised by the Region 3-7A test data are documented in [`prefect_files/tests/COVERAGE_GAPS.md`](prefect_files/tests/COVERAGE_GAPS.md). Each gap requires synthetic game data to test exhaustively.

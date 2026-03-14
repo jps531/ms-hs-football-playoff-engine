@@ -1,4 +1,8 @@
-from __future__ import annotations
+"""Prefect tasks and flow for scraping game schedule data from the AHSFHS website.
+
+Fetches each school's season schedule, parses game dates/results/regions,
+and writes records to the ``games`` table via INSERT ... ON CONFLICT UPDATE.
+"""
 
 import re
 import time

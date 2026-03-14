@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Pure tiebreaker logic for MHSAA region standings.
+
+Implements the 7-step tiebreaker sequence (H2H record -> vs-outside record ->
+H2H capped PD -> capped PD vs outside -> fewest PA vs outside -> fewest PA all
+games -> coin flip). No Prefect or database dependencies.
+"""
 
 from collections import defaultdict
 
@@ -11,7 +16,25 @@ from prefect_files.data_helpers import normalize_pair
 
 def standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default=7):
     """Compute W/L/T and PA for all teams for a given outcome mask.
-    Implements: Step 5 (PA accumulation).
+
+    Implements Step 5 (PA accumulation) by tallying completed game results and
+    projecting remaining game results from the bitmask.
+
+    Args:
+        teams: List of all team names in the region.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        pa_win: Points assumed scored against the winner in a remaining game
+            (used for Steps 5/6 PA tiebreaker projection).
+        margins: Dict keyed by (team_a, team_b) storing the winning margin
+            (always positive); used for Step 3/4 PD calculations.
+        base_margin_default: Assumed winning margin when a game's margin is not
+            in `margins`.
+
+    Returns:
+        A dict mapping each team name to a sub-dict with keys
+        ``{"w", "l", "t", "pa"}``.
     """
     wl_totals = {t: {"w": 0, "l": 0, "t": 0, "pa": 0} for t in teams}
     # Completed region games
@@ -46,10 +69,25 @@ def standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margi
 
 
 def build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_default=7):
-    """Build maps used by tiebreakers:
-    - Step 1: h2h_points (win=1, tie=0.5) among tied teams
-    - Step 3: capped head-to-head point differential (±12 per game)
-    Also returns pd_uncap for diagnostics.
+    """Build head-to-head maps used by tiebreaker Steps 1 and 3.
+
+    Constructs three defaultdicts indexed by (team_a, team_b):
+    - Step 1: h2h_points (win=1, tie=0.5) among tied teams.
+    - Step 3: capped head-to-head point differential (±12 per game).
+    - pd_uncap for diagnostics (raw, uncapped differential).
+
+    Args:
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        margins: Dict keyed by (team_a, team_b) storing the winning margin
+            (always positive).
+        base_margin_default: Assumed winning margin when a game's margin is not
+            in `margins`.
+
+    Returns:
+        A 3-tuple ``(h2h_points, capped_pd_map, pd_uncap)`` where each is a
+        defaultdict keyed by (team_a, team_b).
     """
     h2h_points = defaultdict(float)
     capped_pd_map = defaultdict(int)
@@ -105,17 +143,30 @@ def step2_step4_arrays(
     margins,
     base_margin_default=7,
 ):
-    """
-    Compute Step 2 and Step 4 arrays for each tied team.
+    """Compute Step 2 and Step 4 arrays for each tied team.
 
-    Step 2 (results vs outside teams):
-      2 = win, 1 = tie, 0 = loss, None = no game
+    Step 2 (results vs outside teams): 2 = win, 1 = tie, 0 = loss, None = no game.
+    Step 4 (point differential vs outside teams): uses capped per-game
+    differential of ±12.  For completed games the actual differential is capped;
+    for remaining games the simulated margin (from `margins` or
+    `base_margin_default`) is used and then capped.
 
-    Step 4 (point differential vs outside teams):
-      Uses capped per-game differential of ±12.
-      - For completed games, cap the differential at ±12.
-      - For remaining games, use the simulated margin (from `margins` or `base_margin_default`),
-        then cap at ±12.
+    Args:
+        _teams: Full list of region teams (unused directly; kept for signature
+            consistency).
+        bucket: The subset of teams currently being tiebroken.
+        base_order: The pre-sorted region order used to enumerate outside teams.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        margins: Dict keyed by (team_a, team_b) storing the winning margin
+            (always positive).
+        base_margin_default: Assumed winning margin when a game's margin is not
+            in `margins`.
+
+    Returns:
+        A 2-tuple ``(step2, step4)`` where each is a dict mapping team name to
+        a list of values (one entry per outside opponent in base_order).
     """
     bucket_set = set(bucket)
     outside = [s for s in base_order if s not in bucket_set]
@@ -124,6 +175,7 @@ def step2_step4_arrays(
     rem_idx = {(rg.a, rg.b): i for i, rg in enumerate(remaining)}
 
     def res_vs(team, opp):
+        """Return the encoded result (2/1/0/None) for team vs opp."""
         a, b, _ = normalize_pair(team, opp)
         comp_game = comp_idx.get((a, b))
         if comp_game is not None:
@@ -168,28 +220,51 @@ def step2_step4_arrays(
 
 
 def _key_step2(step2_row):
-    """
-    Canonical, lexicographic key for Step 2 vectors:
-    - Higher result is better (2>1>0), None sorts last (worst).
-    We invert to negative so 'smaller' tuple means 'better' in Python sort.
+    """Return a sortable key for a Step 2 result vector.
+
+    Higher result is better (2>1>0), None sorts last (worst). Values are
+    negated so that a lexicographically smaller tuple represents a better
+    record in Python's default ascending sort.
+
+    Args:
+        step2_row: List of encoded results (2, 1, 0, or None) vs outside teams.
+
+    Returns:
+        A tuple of negated integers suitable for lexicographic comparison.
     """
     return tuple(-(x if x is not None else -(10**9)) for x in step2_row)
 
 
 def _key_step4(step4_row):
-    """
-    Canonical, lexicographic key for Step 4 vectors:
-    - Higher PD is better; None sorts last (worst).
-    We invert to negative so 'smaller' tuple means 'better'.
+    """Return a sortable key for a Step 4 point-differential vector.
+
+    Higher PD is better; None sorts last (worst). Values are negated so that a
+    lexicographically smaller tuple represents a better differential in Python's
+    default ascending sort.
+
+    Args:
+        step4_row: List of capped (±12) point differentials vs outside teams,
+            or None when no game was played.
+
+    Returns:
+        A tuple of negated integers suitable for lexicographic comparison.
     """
     return tuple(-(x if x is not None else -(10**9)) for x in step4_row)
 
 
 def _partition_by(items, key_func):
-    """
-    Partition 'items' (list of team names) by the key computed from key_func(team).
-    Returns list of groups (each group is a list of team names) in deterministic order.
-    Determinism rule: alphabetical order *within* each equal-key group.
+    """Partition a list of teams into groups with equal keys.
+
+    Groups are returned in ascending key order; teams within each group are
+    sorted alphabetically for determinism.
+
+    Args:
+        items: List of team names to partition.
+        key_func: Callable that maps a team name to a comparable key.
+
+    Returns:
+        A list of groups (each group is a sorted list of team names), ordered
+        by ascending key value.
     """
     buckets: dict = defaultdict(list)
     for t in items:
@@ -208,9 +283,22 @@ def _partition_by(items, key_func):
 def _pair_h2h_points(
     a: str, b: str, completed, remaining, outcome_mask, _margins, _base_margin_default=7
 ) -> tuple[float, float]:
-    """
-    Direct head-to-head points for the specific pair (a,b), NOT aggregated vs everyone.
-    Returns (pts_a, pts_b) where win=1, tie/split=0.5 each.
+    """Compute direct head-to-head points for a specific two-team matchup.
+
+    Points are NOT aggregated across all opponents — only the game(s) between
+    a and b are considered (win=1, tie/split=0.5 each).
+
+    Args:
+        a: First team name.
+        b: Second team name.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        _margins: Unused; present for signature consistency with other helpers.
+        _base_margin_default: Unused; present for signature consistency.
+
+    Returns:
+        A 2-tuple ``(pts_a, pts_b)`` of H2H points earned by each team.
     """
     pts_a = 0.0
     pts_b = 0.0
@@ -246,9 +334,25 @@ def _pair_h2h_points(
 
 
 def _pair_h2h_pd_capped(a: str, b: str, completed, remaining, outcome_mask, margins, base_margin_default=7) -> int:
-    """
-    Direct head-to-head capped point differential (±12 per game) for the specific pair (a,b).
-    Positive means advantage to 'a'.
+    """Compute direct head-to-head capped point differential for a specific pair.
+
+    Only game(s) between a and b are considered, with each game's differential
+    capped at ±12. Positive return value indicates advantage to a.
+
+    Args:
+        a: First team name.
+        b: Second team name.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        margins: Dict keyed by (team_a, team_b) storing the winning margin
+            (always positive).
+        base_margin_default: Assumed winning margin when a game's margin is not
+            in `margins`.
+
+    Returns:
+        The sum of per-game capped (±12) point differentials from a's
+        perspective.  Positive means a has the advantage.
     """
     pd = 0
     comp_idx = {(cg.a, cg.b): cg for cg in completed}
@@ -275,10 +379,28 @@ def _pair_h2h_pd_capped(a: str, b: str, completed, remaining, outcome_mask, marg
 def _resolve_pair_using_steps(
     pair, step2, step4, wl_totals, completed, remaining, outcome_mask, margins, base_margin_default=7, debug=False
 ):
-    """
-    Resolve a 2-team tie by restarting the chain from Step 1, per rule:
-      Step 1 -> Step 2 -> Step 3 -> Step 4 -> Step 5 -> alphabetical.
-    Returns the ordered list [winner, loser].
+    """Resolve a 2-team tie by restarting the tiebreaker chain from Step 1.
+
+    Per MHSAA rules, when a larger tie group is reduced to exactly two teams
+    the full chain is restarted: Step 1 -> Step 2 -> Step 3 -> Step 4 ->
+    Step 5 -> alphabetical (coin flip proxy).
+
+    Args:
+        pair: 2-element list ``[team_a, team_b]`` to resolve.
+        step2: Precomputed Step 2 result arrays (from ``step2_step4_arrays``).
+        step4: Precomputed Step 4 PD arrays (from ``step2_step4_arrays``).
+        wl_totals: Per-team W/L/T/PA totals (from ``standings_from_mask``).
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        margins: Dict keyed by (team_a, team_b) storing the winning margin
+            (always positive).
+        base_margin_default: Assumed winning margin when a game's margin is not
+            in `margins`.
+        debug: If True, print step-by-step resolution details to stdout.
+
+    Returns:
+        An ordered 2-element list ``[winner, loser]``.
     """
     a, b = pair
     if debug:
@@ -346,10 +468,31 @@ def resolve_bucket(
     coin_flip_collector: list[list[str]] | None = None,
     debug=False,
 ):
-    """
-    Apply Steps 1–6 to order a single tie bucket, SEQUENTIALLY.
-    - After any step partitions a 3+ tie down to a size-2 subgroup, that subgroup
-      is re-resolved starting from Step 1 (head-to-head), as required.
+    """Apply tiebreaker Steps 1-6 to order a single tied group of teams.
+
+    Steps are applied sequentially.  After any step reduces a 3+ tie to a
+    2-team subgroup, that subgroup is re-resolved from Step 1 (head-to-head),
+    as required by MHSAA rules.  Any group still tied after Step 5 is recorded
+    in `coin_flip_collector` and sorted alphabetically as a coin-flip proxy.
+
+    Args:
+        bucket: List of team names that are currently tied (same win%).
+        teams: Full list of all region teams.
+        wl_totals: Per-team W/L/T/PA totals (from ``standings_from_mask``).
+        base_order: The pre-sorted region order used to enumerate outside teams.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        margins: Dict keyed by (team_a, team_b) storing the winning margin
+            (always positive).
+        base_margin_default: Assumed winning margin when a game's margin is not
+            in `margins`.
+        coin_flip_collector: Optional list that accumulates groups of teams that
+            remain tied after all 5 deterministic steps (Step 6 coin flip).
+        debug: If True, print step-by-step resolution details to stdout.
+
+    Returns:
+        An ordered list of team names (highest seed first) for this bucket.
     """
     if len(bucket) == 1:
         return bucket[:]
@@ -385,6 +528,7 @@ def resolve_bucket(
     resolved_order: list[str] = []
 
     def push_coinflip(groups):
+        """Append multi-team groups to the coin_flip_collector if present."""
         if coin_flip_collector is not None:
             for g in groups:
                 if len(g) > 1:
@@ -469,11 +613,21 @@ def resolve_bucket(
 
 
 def base_bucket_order(teams, wl_totals):
-    """Pre-order to form buckets BEFORE Steps 1–6:
-    sort by region winning %, then fewest losses, then name.
+    """Sort all region teams before tiebreaker Steps 1-6 are applied.
+
+    Primary sort key is region winning percentage (descending), secondary is
+    fewest losses, tertiary is alphabetical name.
+
+    Args:
+        teams: List of all team names in the region.
+        wl_totals: Per-team W/L/T/PA totals (from ``standings_from_mask``).
+
+    Returns:
+        A sorted list of team names in base seeding order.
     """
 
     def key(s):
+        """Sort key: (-win_pct, losses, name) so best record sorts first."""
         w, l, t = wl_totals[s]["w"], wl_totals[s]["l"], wl_totals[s]["t"]
         gp = w + l + t
         wp = (w + 0.5 * t) / gp if gp > 0 else 0.0
@@ -483,8 +637,18 @@ def base_bucket_order(teams, wl_totals):
 
 
 def tie_bucket_groups(teams, wl_totals):
-    """Groups teams with identical (rounded) win% and losses into tie buckets,
-    preserving base_bucket_order across buckets.
+    """Group teams with identical win% and loss count into tie buckets.
+
+    Bucket boundaries are determined by (rounded win%, losses).  The returned
+    list of groups preserves the ordering established by ``base_bucket_order``.
+
+    Args:
+        teams: List of all team names in the region.
+        wl_totals: Per-team W/L/T/PA totals (from ``standings_from_mask``).
+
+    Returns:
+        A list of groups (each group is a sorted list of team names that are
+        tied with each other), in base seeding order across groups.
     """
     buckets: dict = defaultdict(list)
     for s in teams:
@@ -510,8 +674,25 @@ def tie_bucket_groups(teams, wl_totals):
 def resolve_standings_for_mask(
     teams, completed, remaining, outcome_mask, margins, base_margin_default=7, pa_win=14, debug=False
 ):
-    """Resolve ordering/ties for a full region under a single mask.
-    Calls resolve_bucket() on each tie bucket in base order.
+    """Resolve the full region seeding order for a single outcome mask.
+
+    Computes W/L/T totals, groups teams into tie buckets, then calls
+    ``resolve_bucket`` on each bucket in base seeding order.
+
+    Args:
+        teams: List of all team names in the region.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        margins: Dict keyed by (team_a, team_b) storing the winning margin
+            (always positive).
+        base_margin_default: Assumed winning margin when a game's margin is not
+            in `margins`.
+        pa_win: Points assumed scored against the winner in a remaining game.
+        debug: If True, print step-by-step resolution details to stdout.
+
+    Returns:
+        An ordered list of all team names (seed 1 first through seed N last).
     """
     wl_totals = standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default)
     base_order = base_bucket_order(teams, wl_totals)
@@ -537,13 +718,34 @@ def resolve_standings_for_mask(
 
 
 def rank_to_slots(order) -> dict[str, tuple[int, int]]:
-    """Convert strict order into seed slots (lo, hi)."""
+    """Convert a strict seeding order into (lo, hi) seed slot pairs.
+
+    Since the order is strict (no ties at this point), every team maps to a
+    degenerate slot where lo == hi == their 1-based rank.
+
+    Args:
+        order: Ordered list of team names, seed 1 first.
+
+    Returns:
+        A dict mapping each team name to ``(seed, seed)``.
+    """
     return {s: (i, i) for i, s in enumerate(order, start=1)}
 
 
 def unique_intra_bucket_games(buckets, remaining):
-    """Return remaining games where both teams appear in the same non-singleton bucket.
-    Used for Step-3 knife-edge threshold detection.
+    """Return remaining games where both teams are in the same non-singleton bucket.
+
+    These are the games whose margin of victory can shift the Step-3 (capped
+    PD) tiebreaker outcome, and therefore require knife-edge threshold
+    detection when enumerating scenarios.
+
+    Args:
+        buckets: List of tie bucket groups (from ``tie_bucket_groups``).
+        remaining: List of RemainingGame instances for unplayed region games.
+
+    Returns:
+        A deduplicated list of RemainingGame instances where both teams belong
+        to the same multi-team tie bucket.
     """
     inb = set().union(*(set(b) for b in buckets if len(b) > 1))
     seen: set = set()

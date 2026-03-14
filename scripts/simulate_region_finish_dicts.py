@@ -115,7 +115,12 @@ def fetch_completed_pairs(conn, teams: list[str], season: int) -> list[Completed
         # Compute contributions from the perspective of team 'a' (lex-first)
         if school == a:
             # from a's row directly
-            res_a = 1 if result == "W" else (-1 if result == "L" else 0)
+            if result == "W":
+                res_a = 1
+            elif result == "L":
+                res_a = -1
+            else:
+                res_a = 0
             pd_a = (pf - pa) if (pf is not None and pa is not None) else 0
             pa_a = pa or 0
             pa_b = pf or 0
@@ -125,7 +130,12 @@ def fetch_completed_pairs(conn, teams: list[str], season: int) -> list[Completed
 
         else:
             # row is from b's perspective; invert to 'a'
-            res_a = -1 if result == "W" else (1 if result == "L" else 0)
+            if result == "W":
+                res_a = -1
+            elif result == "L":
+                res_a = 1
+            else:
+                res_a = 0
             pd_a = (-(pf - pa)) if (pf is not None and pa is not None) else 0
             pa_a = pf or 0  # a allowed b's points_for
             pa_b = pa or 0  # b allowed a's points_for
@@ -147,7 +157,12 @@ def fetch_completed_pairs(conn, teams: list[str], season: int) -> list[Completed
     out: list[CompletedGame] = []
     for (a, b), v in pair_totals.items():
         # Collapse res_a to {-1, 0, +1} for the season series (win/loss/split from 'a' pov)
-        res_a_sign = 1 if v["res_a"] > 0 else (-1 if v["res_a"] < 0 else 0)
+        if v["res_a"] > 0:
+            res_a_sign = 1
+        elif v["res_a"] < 0:
+            res_a_sign = -1
+        else:
+            res_a_sign = 0
         out.append(CompletedGame(a, b, res_a_sign, v["pd_a"], v["pa_a"], v["pa_b"]))
 
     return out
@@ -252,7 +267,6 @@ def build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_defa
 
 
 def step2_step4_arrays(
-    teams,
     bucket,
     base_order,
     completed,
@@ -360,9 +374,7 @@ def _partition_by(items, key_func):
     return out
 
 
-def _pair_h2h_points(
-    a: str, b: str, completed, remaining, outcome_mask, margins, base_margin_default=7
-) -> tuple[float, float]:
+def _pair_h2h_points(a: str, b: str, completed, remaining, outcome_mask) -> tuple[float, float]:
     """
     Direct head-to-head points for the specific pair (a,b), NOT aggregated vs everyone.
     Returns (pts_a, pts_b) where win=1, tie/split=0.5 each.
@@ -450,7 +462,7 @@ def _resolve_pair_using_steps(
         print(f"[DEBUG TIE]   Resolving pair {a} vs {b} from Step 1")
 
     # Step 1: direct head-to-head points for the pair
-    pts_a, pts_b = _pair_h2h_points(a, b, completed, remaining, outcome_mask, margins, base_margin_default)
+    pts_a, pts_b = _pair_h2h_points(a, b, completed, remaining, outcome_mask)
     if debug:
         print(f"[DEBUG TIE]     Pair Step1 H2H points: {a}:{pts_a}  {b}:{pts_b}")
     if pts_a != pts_b:
@@ -495,7 +507,6 @@ def _resolve_pair_using_steps(
 
 def resolve_bucket(
     bucket,
-    teams,
     wl_totals,
     base_order,
     completed,
@@ -517,7 +528,7 @@ def resolve_bucket(
     # Precompute inputs used by steps
     h2h_pts, h2h_pd_cap, _ = build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_default)
     # Step 1 tally across the bucket
-    step1 = {s: 0.0 for s in bucket}
+    step1 = dict.fromkeys(bucket, 0.0)
     for s in bucket:
         for o in bucket:
             if s == o:
@@ -525,7 +536,7 @@ def resolve_bucket(
             step1[s] += h2h_pts.get((s, o), 0.0)
 
     # Step 3 (capped H2H PD) across the bucket
-    step3 = {s: 0 for s in bucket}
+    step3 = dict.fromkeys(bucket, 0)
     for s in bucket:
         for o in bucket:
             if s == o:
@@ -534,7 +545,7 @@ def resolve_bucket(
 
     # Step 2 / Step 4 arrays vs outside
     step2, step4 = step2_step4_arrays(
-        teams, bucket, base_order, completed, remaining, outcome_mask, margins, base_margin_default
+        bucket, base_order, completed, remaining, outcome_mask, margins, base_margin_default
     )
 
     if debug and len(bucket) > 2:
@@ -688,7 +699,6 @@ def resolve_standings_for_mask(
         final.extend(
             resolve_bucket(
                 bucket,
-                teams,
                 wl_totals,
                 base_order,
                 completed,
@@ -1159,8 +1169,8 @@ def merge_ge_union_by_signature(
                 # multiple pieces
                 if aggressive_upper and any(r == math.inf for _, r in merged):
                     # find minimal finite L among all pieces
-                    Lmin = min(L for (L, _) in merged if L != -math.inf)
-                    part[f"{base}_GE{int(Lmin)}"] = True
+                    l_min = min(L for (L, _) in merged if L != -math.inf)
+                    part[f"{base}_GE{int(l_min)}"] = True
                 else:
                     # can't nicely collapse this base in this signature
                     part = {}
@@ -1552,7 +1562,12 @@ def get_region_finish_scenarios(conn, clazz, region, season, debug=False):
         p_playoffs = p1 + p2 + p3 + p4
         clinched = p_playoffs >= 0.999
         eliminated = p_playoffs <= 0.001
-        final_playoffs = 1.0 if clinched else (0.0 if eliminated else p_playoffs)
+        if clinched:
+            final_playoffs = 1.0
+        elif eliminated:
+            final_playoffs = 0.0
+        else:
+            final_playoffs = p_playoffs
         results.append((school, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated))
 
     # Write results to CSV

@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Scenario enumeration and boolean minimization for region standings.
+
+Enumerates all 2^R outcome combinations for remaining games, resolves standings
+for each using margin-sensitive GE key thresholds, and minimizes the resulting
+minterms per team per seed. No Prefect or database dependencies.
+"""
 
 import logging
 import math
@@ -23,7 +28,14 @@ from prefect_files.tiebreakers import (
 
 
 def pct_str(x: float) -> str:
-    """Format a float as a percentage string with no more than 2 significant digits."""
+    """Format a float as a percentage string with no more than 2 significant digits.
+
+    Args:
+        x: A probability in the range [0, 1].
+
+    Returns:
+        A string like ``"50%"`` or ``"33%"``.
+    """
     val = x * 100.0
     if abs(val - round(val)) < 1e-9:
         return f"{int(round(val))}%"
@@ -36,10 +48,19 @@ def pct_str(x: float) -> str:
 
 
 def consolidate_opposites_and_remove_bases(candidate_minterms: list[dict[str, bool]]) -> list[dict[str, bool]]:
-    """
-    1. Consolidate dictionaries that are identical except for one key whose
-       boolean values are opposite — removing that differing key.
-    2. Remove any base keys (e.g., 'A>B') when a GE variant (e.g., 'A>B_GE1') exists.
+    """Consolidate opposite-valued pairs and strip redundant base keys.
+
+    Performs two passes:
+    1. For any two dicts that differ in exactly one key's boolean value, merge
+       them by dropping that key (Quine-McCluskey single-variable absorption).
+    2. Within each resulting dict, remove any base key (e.g., ``"A>B"``) when a
+       GE-qualified variant (e.g., ``"A>B_GE1"``) is also present.
+
+    Args:
+        candidate_minterms: List of boolean variable assignment dicts.
+
+    Returns:
+        A simplified list of dicts with redundant entries removed.
     """
     consolidated = []
     used = set()
@@ -73,6 +94,15 @@ def consolidate_opposites_and_remove_bases(candidate_minterms: list[dict[str, bo
 
 
 def _parse_ge_key(k: str) -> tuple[str, int] | None:
+    """Parse a GE-qualified key string into its base name and threshold.
+
+    Args:
+        k: A key string such as ``"A>B_GE3"``.
+
+    Returns:
+        A ``(base, threshold)`` tuple (e.g., ``("A>B", 3)``), or None if the
+        key does not contain ``"_GE"`` or the threshold is not an integer.
+    """
     if "_GE" not in k:
         return None
     base, _, tail = k.partition("_GE")
@@ -84,6 +114,20 @@ def _parse_ge_key(k: str) -> tuple[str, int] | None:
 
 
 def _signature_without_family(d: dict[str, bool], base: str) -> tuple[tuple[str, bool], ...]:
+    """Return the sorted key-value signature of a dict, excluding a GE family.
+
+    Strips all keys belonging to the named `base` family (both the bare base
+    key and any ``base_GEn`` variants) so that dicts sharing the same family
+    can be compared for merging.
+
+    Args:
+        d: A boolean assignment dict.
+        base: The base matchup string whose entire family should be excluded
+            (e.g., ``"A>B"`` strips ``"A>B"``, ``"A>B_GE1"``, etc.).
+
+    Returns:
+        A sorted tuple of ``(key, value)`` pairs with the family excluded.
+    """
     items = []
     for k, v in d.items():
         parsed = _parse_ge_key(k)
@@ -95,6 +139,19 @@ def _signature_without_family(d: dict[str, bool], base: str) -> tuple[tuple[str,
 
 
 def _interval_for_family(d: dict[str, bool], base: str) -> tuple[float, float]:
+    """Derive the margin interval [lo, hi) encoded by GE keys for a base family.
+
+    A ``base_GEt: True`` entry constrains the margin to ``>= t`` (raises lo),
+    and a ``base_GEt: False`` entry constrains it to ``< t`` (lowers hi).
+
+    Args:
+        d: A boolean assignment dict potentially containing GE-qualified keys.
+        base: The base matchup string (e.g., ``"A>B"``).
+
+    Returns:
+        A ``(lo, hi)`` tuple representing the half-open interval [lo, hi).
+        Defaults to ``(-inf, inf)`` when no GE keys are present for this base.
+    """
     lo = -math.inf
     hi = math.inf
     for k, v in d.items():
@@ -112,6 +169,18 @@ def _interval_for_family(d: dict[str, bool], base: str) -> tuple[float, float]:
 
 
 def consolidate_opposites(dicts: list[dict[str, bool]]) -> list[dict[str, bool]]:
+    """Merge pairs of dicts that differ in exactly one key's boolean value.
+
+    For each pair of dicts with the same key set that differ in only one key,
+    the differing key is dropped, producing a single merged dict.  Each input
+    dict participates in at most one merge.
+
+    Args:
+        dicts: List of boolean assignment dicts.
+
+    Returns:
+        A simplified list with merged entries replacing absorbed pairs.
+    """
     out, used = [], set()
     for i, d1 in enumerate(dicts):
         if i in used:
@@ -137,6 +206,21 @@ def consolidate_opposites(dicts: list[dict[str, bool]]) -> list[dict[str, bool]]
 
 
 def merge_ge_intervals_to_base_safe(dicts: list[dict[str, bool]], win_threshold: int = 1) -> list[dict[str, bool]]:
+    """Collapse GE intervals into a bare base key when they span the full range.
+
+    For each (signature, base) group, if the union of GE intervals covers
+    ``[win_threshold, +inf)`` and no explicit bare base key is present in that
+    group, all member dicts are replaced by a single dict with ``base: True``.
+    Groups that include a bare base key are left unchanged to avoid mixing.
+
+    Args:
+        dicts: List of boolean assignment dicts (may include GE-qualified keys).
+        win_threshold: The minimum margin threshold considered a win (default 1).
+
+    Returns:
+        A simplified list where qualifying GE families have been collapsed to
+        bare base keys.
+    """
     groups = defaultdict(list)
     base_presence = defaultdict(bool)
 
@@ -192,6 +276,18 @@ def merge_ge_intervals_to_base_safe(dicts: list[dict[str, bool]], win_threshold:
 
 
 def remove_base_if_ge_present(dicts: list[dict[str, bool]]) -> list[dict[str, bool]]:
+    """Strip bare base keys from dicts that also contain GE-qualified variants.
+
+    Within each dict, if a GE-qualified key (e.g., ``"A>B_GE3"``) is present,
+    any bare base key with the same matchup (e.g., ``"A>B"``) is removed as
+    redundant.
+
+    Args:
+        dicts: List of boolean assignment dicts.
+
+    Returns:
+        A list of cleaned dicts with redundant bare base keys removed.
+    """
     cleaned = []
     for d in dicts:
         ge_bases = {k.split("_GE")[0] for k in d if "_GE" in k}
@@ -200,6 +296,20 @@ def remove_base_if_ge_present(dicts: list[dict[str, bool]]) -> list[dict[str, bo
 
 
 def merge_full_partition_remove_base(dicts: list[dict[str, bool]], win_threshold: int = 1) -> list[dict[str, bool]]:
+    """Collapse a full win/loss partition into a signature with no base key.
+
+    When the union of GE intervals for a family covers ``[win_threshold, +inf)``
+    AND a ``base: False`` entry also exists in the same signature group, all
+    member dicts are replaced by a single dict containing only the non-family
+    keys (the bare base key is dropped entirely).
+
+    Args:
+        dicts: List of boolean assignment dicts.
+        win_threshold: The minimum margin threshold considered a win (default 1).
+
+    Returns:
+        A simplified list where qualifying full partitions have been collapsed.
+    """
     groups = defaultdict(list)
     ge_intervals = defaultdict(list)
     has_base_true = defaultdict(bool)
@@ -259,9 +369,16 @@ def merge_full_partition_remove_base(dicts: list[dict[str, bool]], win_threshold
 
 
 def remove_base_if_ge_present_in_dicts(dicts: list[dict[str, bool]]) -> list[dict[str, bool]]:
-    """
-    Within each dict, if both `x>y` and one or more `x>y_GEz` keys exist,
-    remove the base key `x>y` (redundant with the GE-qualified entries).
+    """Remove bare base keys from dicts that also contain GE-qualified variants.
+
+    Within each dict, if both ``x>y`` and one or more ``x>y_GEz`` keys exist,
+    the base key ``x>y`` is removed as redundant with the GE-qualified entries.
+
+    Args:
+        dicts: List of boolean assignment dicts.
+
+    Returns:
+        A list of cleaned dicts with redundant bare base keys removed.
     """
     cleaned = []
     for d in dicts:
@@ -272,6 +389,15 @@ def remove_base_if_ge_present_in_dicts(dicts: list[dict[str, bool]]) -> list[dic
 
 
 def _flip_base_key(base: str) -> str:
+    """Reverse the direction of a matchup key (e.g., ``"A>B"`` -> ``"B>A"``).
+
+    Args:
+        base: A matchup string such as ``"A>B"``.
+
+    Returns:
+        The reversed matchup string ``"B>A"``, or the original string
+        unchanged if it contains no ``">"``.
+    """
     if ">" in base:
         a, b = base.split(">", 1)
         return f"{b}>{a}"
@@ -279,14 +405,23 @@ def _flip_base_key(base: str) -> str:
 
 
 def merge_ge_union_unified(dicts: list[dict[str, bool]], win_threshold: int = 1) -> list[dict[str, bool]]:
-    """
-    For each (signature w/o family, base):
-      * collect all GE intervals across dicts that have that GE family
-      * if any dict in the group has explicit base key, skip (to avoid mixing)
-      * if the union is a single interval:
-          - if [L, +inf) with L <= win_threshold -> collapse to {base: True}
-          - elif [L, U) with finite U -> collapse to {base_GEL: True, base_GEU: False}
-    Replace all dicts in that group with the collapsed one.
+    """Unify GE intervals across dicts sharing the same non-family signature.
+
+    For each (signature without family, base) group:
+    - Collect all GE intervals across dicts that have that GE family.
+    - Skip groups where any dict has an explicit bare base key (to avoid mixing).
+    - If the union of intervals is a single contiguous interval:
+        - ``[L, +inf)`` with ``L <= win_threshold`` -> collapse to ``{base: True}``
+        - ``[L, U)`` with finite U -> collapse to
+          ``{base_GEL: True, base_GEU: False}``
+    All dicts in the group are replaced by the collapsed dict.
+
+    Args:
+        dicts: List of boolean assignment dicts.
+        win_threshold: The minimum margin threshold considered a win (default 1).
+
+    Returns:
+        A simplified list with qualifying GE families unified.
     """
     groups = defaultdict(list)
     base_presence = defaultdict(bool)
@@ -359,12 +494,27 @@ def merge_ge_union_by_signature(
     win_threshold: int = 1,
     aggressive_upper: bool = True,
 ) -> list[dict[str, bool]]:
-    """
-    For each signature (same non-GE keys/values), consider all bases that appear as GE families.
-    For each base, union its GE intervals across the signature's dicts, then collapse.
+    """Merge GE intervals per base across all dicts sharing the same pure signature.
+
+    Groups dicts by their non-GE key-value pairs (the "pure signature").  For
+    each base that appears as a GE family within a group, the GE intervals are
+    unioned and collapsed.  When ``aggressive_upper=True``, open-ended intervals
+    (those extending to +inf) are also collapsed even when the union has
+    multiple pieces, using the minimum lower bound.
+
+    Args:
+        dicts: List of boolean assignment dicts.
+        win_threshold: The minimum margin threshold considered a win (default 1).
+        aggressive_upper: If True, emit a ``base_GEL: True`` key for any GE
+            family whose union includes a piece reaching ``+inf``, using the
+            smallest such lower bound.
+
+    Returns:
+        A simplified list with qualifying GE families collapsed per signature.
     """
 
     def pure_signature(d: dict[str, bool]) -> tuple[tuple[str, bool], ...]:
+        """Return sorted non-GE key-value pairs as a hashable grouping key."""
         items = [(k, v) for k, v in d.items() if "_GE" not in k and not isinstance(v, dict) and isinstance(v, bool)]
         items.sort()
         return tuple(items)
@@ -456,6 +606,18 @@ def merge_ge_union_by_signature(
 
 
 def final_consolidation(minimized_scenarios):
+    """Remove keys that appear with contradictory values across all dicts.
+
+    Identifies every key that takes both True and False values across the
+    scenario list, then strips those keys from all dicts.  Duplicate dicts
+    produced by the stripping are deduplicated.
+
+    Args:
+        minimized_scenarios: List of boolean assignment dicts.
+
+    Returns:
+        A deduplicated list of dicts with contradictory keys removed.
+    """
     consolidated = minimized_scenarios
 
     values_by_key = {}
@@ -478,7 +640,25 @@ def final_consolidation(minimized_scenarios):
 
 
 def consolidate_all(dicts: list[dict[str, bool]], debug: bool = False) -> list[dict[str, bool]]:
-    """Run all consolidation passes over a list of scenario minterms."""
+    """Run the full consolidation pipeline over a list of scenario minterms.
+
+    Applies all simplification passes in sequence:
+    1. ``remove_base_if_ge_present_in_dicts``
+    2. ``consolidate_opposites_and_remove_bases``
+    3. ``consolidate_opposites``
+    4. ``merge_ge_intervals_to_base_safe``
+    5. ``remove_base_if_ge_present``
+    6. ``merge_ge_union_by_signature``
+    7. ``merge_full_partition_remove_base``
+    8. Deduplication
+
+    Args:
+        dicts: List of raw boolean assignment dicts (scenario minterms).
+        debug: If True, print the dict list after each pass to stdout.
+
+    Returns:
+        A deduplicated, maximally simplified list of scenario minterms.
+    """
     if debug:
         print("=== Starting full consolidation ===")
         print(f"Initial dicts ({len(dicts)}):")
@@ -537,14 +717,27 @@ def consolidate_all(dicts: list[dict[str, bool]], debug: bool = False) -> list[d
 
 
 def minimize_minterms(minterms, allow_combine=True):
-    """
-    Simplify minterms by absorption (always) and optionally by one-variable combination.
-    With allow_combine=True, we combine only when the differing variable's matchup
-    is ALSO represented by another variable in BOTH terms (so we don't erase that matchup).
+    """Simplify minterms via absorption and optional one-variable combination.
+
+    Absorption: if minterm A is a superset of minterm B, remove A (B already
+    covers all of A's cases).  Combination: if two minterms differ in exactly
+    one variable and that variable's matchup appears in at least two places in
+    both terms, the variable can be dropped from the merged term without losing
+    information about that matchup.
+
+    Args:
+        minterms: List of boolean assignment dicts representing scenario
+            conditions.
+        allow_combine: If True, also apply one-variable combination (in
+            addition to absorption).  Set to False to limit to absorption only.
+
+    Returns:
+        A list of simplified minterm dicts.
     """
     terms = {frozenset(m.items()) for m in minterms}
 
     def _matchup_of(var: str) -> str:
+        """Return the canonical (lex-ordered) matchup string for a variable key."""
         if "_GE" in var:
             base, _ = var.split("_GE", 1)
         else:
@@ -616,9 +809,26 @@ def determine_scenarios(
     remaining: list[RemainingGame],
     debug: bool = False,
 ):
-    """
-    Determine all possible seeding scenarios for the given teams,
-    based on completed and remaining games.
+    """Enumerate all seeding scenarios for a region and compute seed-count totals.
+
+    Iterates over all 2^R outcome masks for remaining games.  For each mask,
+    resolves the full region standings (including margin-sensitive GE threshold
+    detection for intra-bucket games), accumulates per-team per-seed counts,
+    and records the boolean minterm conditions.  After enumeration, minterms
+    are consolidated and minimized.
+
+    Args:
+        teams: List of all team names in the region.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        debug: If True, pass debug=True to consolidation and print diagnostics.
+
+    Returns:
+        A 6-tuple ``(first_counts, second_counts, third_counts, fourth_counts,
+        denom, minimized_scenarios)`` where the first four are Counters keyed
+        by team name, denom is the total number of equally-likely outcomes
+        (float), and minimized_scenarios is a nested dict
+        ``{team: {seed: [minterm_dicts]}}``.
     """
     try:
         logger = get_run_logger()
@@ -823,6 +1033,7 @@ def determine_scenarios(
         denom = float(1 << num_remaining)
 
     def simplify_matchups(dicts):
+        """Remove bare matchup keys that also appear as GE-qualified variants."""
         simplified = []
         for d in dicts:
             keys = set(d.keys())
@@ -853,7 +1064,23 @@ def determine_scenarios(
 
 
 def determine_odds(teams, first_counts, second_counts, third_counts, fourth_counts, denom):
-    """Determine final odds from accumulated counts."""
+    """Convert accumulated seed counts into probability odds for each team.
+
+    Computes per-team probabilities for finishing 1st through 4th, combined
+    playoff odds, and clinch/elimination flags.
+
+    Args:
+        teams: List of all team names in the region.
+        first_counts: Counter mapping team -> weighted count of 1st-seed outcomes.
+        second_counts: Counter mapping team -> weighted count of 2nd-seed outcomes.
+        third_counts: Counter mapping team -> weighted count of 3rd-seed outcomes.
+        fourth_counts: Counter mapping team -> weighted count of 4th-seed outcomes.
+        denom: Total number of equally-weighted outcomes (divisor for
+            probabilities).
+
+    Returns:
+        A dict mapping each team name to a StandingsOdds instance.
+    """
     odds: dict[str, StandingsOdds] = {}
     for school in teams:
         p1 = first_counts[school] / denom

@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Prefect tasks and flow for computing region standings scenarios.
+
+Reads completed and remaining games from the DB, calls ``determine_scenarios()``
+and ``determine_odds()`` from ``scenarios.py``, and writes results to the
+``region_standings`` table.
+"""
 
 from collections import defaultdict
 
@@ -17,6 +22,7 @@ from prefect_files.scenarios import determine_odds, determine_scenarios
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Region Teams for {region}-{clazz}A")
 def fetch_region_teams(clazz: int, region: int, season: int) -> list[str]:
+    """Fetch alphabetically sorted school names for a given class/region/season."""
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -28,6 +34,7 @@ def fetch_region_teams(clazz: int, region: int, season: int) -> list[str]:
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Completed Region Games for {teams}")
 def fetch_completed_pairs(teams: list[str], season: int) -> list[CompletedGame]:
+    """Fetch and normalize all finalized region games among the given teams."""
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -61,6 +68,7 @@ def fetch_completed_pairs(teams: list[str], season: int) -> list[CompletedGame]:
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Remaining Region Games for {teams}")
 def fetch_remaining_pairs(teams: list[str], season: int) -> list[RemainingGame]:
+    """Fetch all unfinished region game pairs (deduplicated, in canonical order) for the given teams."""
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -76,6 +84,7 @@ def fetch_remaining_pairs(teams: list[str], season: int) -> list[RemainingGame]:
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Region Standings for {region}-{clazz}A")
 def fetch_region_standings(clazz: int, region: int, season: int) -> list[Standings]:
+    """Fetch current overall and region W/L/T records via the ``get_standings_for_region`` stored proc."""
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -95,7 +104,26 @@ def write_region_standings(
     region: int,
     season: int,
 ):
+    """Upsert standings, odds, and scenario data into the ``region_standings`` table.
+
+    Constructs one row per school and performs an INSERT ... ON CONFLICT UPDATE
+    so that re-running the flow is idempotent.  Many weighted/bracket/home-game
+    odds columns are written as 0.0 placeholders pending future implementation.
+
+    Args:
+        standings: List of Standings instances from ``fetch_region_standings``.
+        odds: Dict mapping school name to StandingsOdds (from ``determine_odds``).
+        scenarios: Nested defaultdict ``{school: {seed: [minterm_dicts]}}``
+            from ``determine_scenarios``.
+        clazz: MHSAA classification (1-7).
+        region: Region number within the class.
+        season: Football season year.
+
+    Returns:
+        The number of rows written to the database.
+    """
     def seed_scenarios_for(scenarios, school):
+        """Return the seed->minterms map for a school, ensuring all four seeds exist."""
         m = scenarios.setdefault(school, {})
         if m and not all(isinstance(k, int) for k in m.keys()):
             scenarios[school] = {int(k): v for k, v in m.items()}

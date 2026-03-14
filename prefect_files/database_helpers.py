@@ -1,4 +1,9 @@
-from __future__ import annotations
+"""Database connection helpers.
+
+Provides a psycopg2 connection factory used by scripts and pipelines.
+Connection parameters are read from environment variables with sensible
+Docker-compose defaults.
+"""
 
 import os
 
@@ -13,8 +18,17 @@ DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 
 
 def get_conn(db_host: str, db_port: int, db_name: str, db_user: str, db_password: str):
-    """
-    Get a connection to the PostgreSQL database.
+    """Open and return a psycopg2 connection to the specified PostgreSQL database.
+
+    Args:
+        db_host: Hostname or IP of the PostgreSQL server.
+        db_port: Port number the server is listening on.
+        db_name: Name of the database to connect to.
+        db_user: Database user name.
+        db_password: Database user password.
+
+    Returns:
+        An open psycopg2 connection object.
     """
     return psycopg2.connect(
         host=db_host,
@@ -26,8 +40,14 @@ def get_conn(db_host: str, db_port: int, db_name: str, db_user: str, db_password
 
 
 def get_database_connection():
-    """
-    Get a connection to the PostgreSQL database specified in the environment variables.
+    """Open a psycopg2 connection using environment-variable configuration.
+
+    Reads ``POSTGRES_HOST``, ``POSTGRES_PORT``, ``POSTGRES_DB``,
+    ``POSTGRES_USER``, and ``POSTGRES_PASSWORD`` from the environment,
+    falling back to Docker-compose defaults.
+
+    Returns:
+        An open psycopg2 connection object.
     """
     conn = get_conn(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
     return conn
