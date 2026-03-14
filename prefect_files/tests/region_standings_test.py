@@ -1,3 +1,5 @@
+"""Unit tests for Region 3-7A (2025 season) standings, scenario enumeration, and odds calculation."""
+
 from prefect_files.data_helpers import get_completed_games
 from prefect_files.scenarios import determine_odds, determine_scenarios
 from prefect_files.tests.data.test_region_standings import (
@@ -40,6 +42,7 @@ def _normalize_scenarios(scenarios: dict) -> dict:
 
 
 def test_get_completed_games_3_7a():
+    """CompletedGame objects match expected pre-final-week data for Region 3-7A."""
     actual = get_completed_games(raw_3_7a_region_results)
     assert sorted(actual, key=lambda g: (g.a, g.b)) == sorted(
         expected_3_7a_completed_games, key=lambda g: (g.a, g.b)
@@ -47,6 +50,7 @@ def test_get_completed_games_3_7a():
 
 
 def test_determine_scenarios_3_7a():
+    """Scenario seed counts match expected values for Region 3-7A (pre-final-week)."""
     first_counts, second_counts, third_counts, fourth_counts, _, minimized_scenarios = (
         determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
     )
@@ -58,6 +62,7 @@ def test_determine_scenarios_3_7a():
 
 
 def test_determine_odds_3_7a():
+    """Playoff odds match expected values for Region 3-7A (pre-final-week)."""
     first_counts, second_counts, third_counts, fourth_counts, denom, _ = (
         determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
     )
@@ -72,6 +77,7 @@ def test_determine_odds_3_7a():
 
 
 def test_get_completed_games_3_7a_full():
+    """CompletedGame objects match expected full-season data for Region 3-7A."""
     actual = get_completed_games(raw_3_7a_region_results_full)
     assert sorted(actual, key=lambda g: (g.a, g.b)) == sorted(
         expected_3_7a_completed_games_full, key=lambda g: (g.a, g.b)
@@ -79,6 +85,7 @@ def test_get_completed_games_3_7a_full():
 
 
 def test_determine_scenarios_3_7a_full():
+    """Scenario seed counts match expected values for Region 3-7A (full season, 0 remaining)."""
     first_counts, second_counts, third_counts, fourth_counts, denom, minimized_scenarios = (
         determine_scenarios(teams_3_7a, expected_3_7a_completed_games_full, expected_3_7a_remaining_games_full)
     )
@@ -91,6 +98,7 @@ def test_determine_scenarios_3_7a_full():
 
 
 def test_determine_odds_3_7a_full():
+    """Playoff odds match expected values for Region 3-7A (full season, 0 remaining)."""
     first_counts, second_counts, third_counts, fourth_counts, denom, _ = (
         determine_scenarios(teams_3_7a, expected_3_7a_completed_games_full, expected_3_7a_remaining_games_full)
     )

@@ -36,6 +36,13 @@ except Exception:
 
 
 def main():
+    """Parse CLI arguments and run enumerate_region() for every (class, region) combination.
+
+    Reads class and region ranges from ``--classes`` and ``--regions`` flags, connects to
+    PostgreSQL, and writes a single combined scenarios file with all regions appended in
+    order.  A temporary file is used per region so that partial failures do not corrupt the
+    combined output.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, required=True)
     ap.add_argument("--dsn", type=str, default=os.getenv("PG_DSN", ""))
@@ -50,6 +57,16 @@ def main():
 
     # Parse ranges
     def parse_range(s):
+        """Convert a dash-separated inclusive range string (e.g. ``'1-4'``) to a ``range``.
+
+        A bare integer (e.g. ``'3'``) is treated as a single-element range.
+
+        Args:
+            s: Range string in the form ``'lo-hi'`` or a single integer string.
+
+        Returns:
+            A ``range`` object covering ``[lo, hi]`` inclusive.
+        """
         if "-" in s:
             lo, hi = s.split("-", 1)
             return range(int(lo), int(hi) + 1)
@@ -78,8 +95,6 @@ def main():
                         clazz,
                         region,
                         args.season,
-                        out_csv=None,
-                        explain_json=None,
                         out_seeding=None,
                         out_scenarios=temp_name,
                     )

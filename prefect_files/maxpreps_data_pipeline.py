@@ -93,6 +93,7 @@ def find_maxpreps_school_record(school_name: str, state_abbrev: str = "MS") -> d
 
     # Choose the best candidate by fuzzy name match
     def score(row: dict) -> float:
+        """Return fuzzy name-match ratio for a candidate row."""
         return _ratio(_norm(row.get("name", "")), q_norm)
 
     best_row = max(candidates, key=score)

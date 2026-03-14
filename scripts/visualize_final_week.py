@@ -93,7 +93,21 @@ _GAME_NWR = 2
 
 
 def _seedings_for(bm: int, nm: int, om: int) -> tuple[str, ...]:
-    """Return the top-4 seeding tuple for given signed margins."""
+    """Return the top-4 seeding tuple for the given signed winning margins.
+
+    Encodes each game's result as a win-mask bit and an absolute margin, then
+    delegates to ``resolve_standings_for_mask`` to apply the full tiebreaker chain.
+    Positive margin means the first-listed team (a-team) wins; negative means the
+    second-listed team (b-team) wins.
+
+    Args:
+        bm: Signed margin for Brandon (a) vs Meridian (b).  Positive = Brandon wins.
+        nm: Signed margin for Northwest Rankin (a) vs Petal (b).  Positive = NWR wins.
+        om: Signed margin for Oak Grove (a) vs Pearl (b).  Positive = Oak Grove wins.
+
+    Returns:
+        A tuple of the top-4 school names in seed order (1st through 4th).
+    """
     mask = 0
     margs: dict[tuple[str, str], int] = {}
 

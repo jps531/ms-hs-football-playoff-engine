@@ -67,6 +67,16 @@ uv run pytest --cov-report=html
 open htmlcov/index.html
 ```
 
+### Docstring coverage
+
+Check that all public functions and modules have docstrings:
+
+```
+uv run docstr-coverage prefect_files scripts
+```
+
+The report excludes pipeline files (same omit list as test coverage) and skips magic methods and `__init__`. Current baseline: 100%.
+
 ### Coverage gaps
 
 Known tiebreaker paths not yet exercised by the Region 3-7A test data are documented in [`prefect_files/tests/COVERAGE_GAPS.md`](prefect_files/tests/COVERAGE_GAPS.md). Each gap requires synthetic game data to test exhaustively.

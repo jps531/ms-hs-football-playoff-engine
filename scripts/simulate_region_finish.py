@@ -37,17 +37,15 @@ Step 6 – Coin flip:
     explicitly marks where a true coin flip would be required.
 """
 
-from __future__ import annotations
-
 import argparse
 import math
 import os
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from collections.abc import Callable, Iterable
 from itertools import product
-from typing import Any
+from typing import Any, cast
 
 # Ensure the project root is on the path when running from scripts/ directly
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -57,7 +55,7 @@ try:
 except Exception:
     psycopg = None
 
-from prefect_files.data_classes import CompletedGame, RemainingGame
+from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame
 from prefect_files.data_helpers import get_completed_games, normalize_pair
 from prefect_files.scenarios import (
     consolidate_all,
@@ -72,10 +70,27 @@ from prefect_files.tiebreakers import (
     unique_intra_bucket_games,
 )
 
+# --------------------------- String constants ---------------------------
+
+_BY_GE = " by ≥ "
+_BY_LT = " by < "
+_AND_LT = " and < "
+
 # --------------------------- Fetch Helpers ---------------------------
 
 
 def fetch_division(conn, clazz: int, region: int, season: int) -> list[str]:
+    """Fetch the list of school names for a given class, region, and season.
+
+    Args:
+        conn: An open psycopg connection.
+        clazz: MHSAA classification number (e.g. 7 for 7A).
+        region: Region number within the class (e.g. 3).
+        season: Four-digit season year (e.g. 2025).
+
+    Returns:
+        School names sorted alphabetically.
+    """
     with conn.cursor() as cur:
         cur.execute(
             "SELECT school FROM schools WHERE class=%s AND region=%s AND season=%s ORDER BY school",
@@ -85,6 +100,21 @@ def fetch_division(conn, clazz: int, region: int, season: int) -> list[str]:
 
 
 def fetch_completed_pairs(conn, teams: list[str], season: int) -> list[CompletedGame]:
+    """Fetch finalized region-game results for a set of teams and convert to CompletedGame objects.
+
+    Queries the ``games`` table for rows where both the school and opponent are in
+    ``teams``, the game is marked ``final=TRUE``, and it is a region game.  Rows are
+    returned in raw dict form and then normalized via ``get_completed_games()``.
+
+    Args:
+        conn: An open psycopg connection.
+        teams: School names whose intra-group games should be fetched.
+        season: Four-digit season year.
+
+    Returns:
+        Deduplicated, canonically ordered ``CompletedGame`` objects for all played
+        region matchups among ``teams``.
+    """
     with conn.cursor() as cur:
         cur.execute(
             "SELECT school, opponent, date, result, points_for, points_against "
@@ -95,21 +125,38 @@ def fetch_completed_pairs(conn, teams: list[str], season: int) -> list[Completed
         )
         rows = cur.fetchall()
 
-    raw_results = [
-        {
-            "school": school,
-            "opponent": opp,
-            "date": str(date),
-            "result": result,
-            "points_for": pf,
-            "points_against": pa,
-        }
-        for school, opp, date, result, pf, pa in rows
-    ]
+    raw_results = cast(
+        list[RawCompletedGame],
+        [
+            {
+                "school": school,
+                "opponent": opp,
+                "date": str(date),
+                "result": result,
+                "points_for": pf,
+                "points_against": pa,
+            }
+            for school, opp, date, result, pf, pa in rows
+        ],
+    )
     return get_completed_games(raw_results)
 
 
 def fetch_remaining_pairs(conn, teams: list[str], season: int) -> list[RemainingGame]:
+    """Fetch unplayed region matchups among ``teams`` for ``season``.
+
+    Uses a CTE to deduplicate (a, b) pairs — each unplayed game appears once with
+    the school names in lexicographic order — then wraps each pair in a
+    ``RemainingGame``.
+
+    Args:
+        conn: An open psycopg connection.
+        teams: School names to consider; only intra-group games are returned.
+        season: Four-digit season year.
+
+    Returns:
+        One ``RemainingGame`` per distinct unplayed intra-region matchup.
+    """
     with conn.cursor() as cur:
         cur.execute(
             "WITH cand AS ("
@@ -124,40 +171,57 @@ def fetch_remaining_pairs(conn, teams: list[str], season: int) -> list[Remaining
 
 # ---------- basic helpers ----------
 def _is_ge_key(k: str) -> bool:
+    """Return True if ``k`` is a margin-threshold key of the form ``'A>B_GEn'``."""
     return "_GE" in k and ">" in k
 
 
 def _parse_ge(k: str) -> tuple[str, int]:
+    """Split a GE key ``'A>B_GEn'`` into ``('A>B', n)``."""
     base, _, thr = k.partition("_GE")
     return base, int(thr)
 
 
 def _flip(base: str) -> str:
+    """Return the reversed orientation of a base key ``'A>B'`` → ``'B>A'``."""
     a, b = base.split(">", 1)
     return f"{b}>{a}"
 
 
 def _canon_pair(base: str) -> tuple[str, str]:
+    """Split a base key ``'A>B'`` into the ``(a, b)`` team-name tuple."""
     a, b = base.split(">", 1)
     return a, b
 
 
 def _non_ge_signature(m: dict[str, bool]) -> tuple[tuple[str, bool], ...]:
+    """Return a sorted, hashable tuple of all non-GE game-outcome items from minterm ``m``.
+
+    Used to group minterms that share the same win/loss pattern before expanding their
+    margin bands.
+    """
     items = [(k, v) for k, v in m.items() if ">" in k and not _is_ge_key(k)]
     items.sort()
     return tuple(items)
 
 
 def _interval_for_base(m: dict[str, bool], base: str) -> tuple[float, float, str]:
-    """
-    Return (lo, hi, winner) for this matchup in this minterm:
-      winner is the orientation 'A>B' or 'B>A' (who wins).
-      If base True or GE for base present => winner is base (A>B).
-      If opposite base False present => winner is B>A.
+    """Extract the half-open margin interval and winner orientation for one matchup.
+
+    Reads all base and GE keys in minterm ``m`` that pertain to ``base`` (e.g.
+    ``'A>B'``), infers who wins, and returns the implied point-differential interval
+    ``[lo, hi)`` in the winner's direction.
+
+    Args:
+        m: Minterm dict mapping variable names to boolean values.
+        base: Base orientation key of the form ``'A>B'``.
+
+    Returns:
+        A three-tuple ``(lo, hi, winner)`` where ``lo`` and ``hi`` are the bounds of
+        the margin interval (``math.inf`` for an open upper bound) and ``winner`` is
+        the orientation string (``base`` or its flip) indicating which team wins.
     """
     lo = -math.inf
     hi = math.inf
-    a, b = _canon_pair(base)
     winner = None
 
     # base outcome decides winner if present
@@ -183,6 +247,7 @@ def _interval_for_base(m: dict[str, bool], base: str) -> tuple[float, float, str
 
     # If winner is the flipped orientation, GE margins don't apply (we print just the loss)
     if winner == _flip(base):
+        assert winner is not None
         return (1, 1, winner)
 
     # Normalize band
@@ -198,6 +263,7 @@ def _interval_for_base(m: dict[str, bool], base: str) -> tuple[float, float, str
 
 
 def _remove_base_if_ge_present_in_atom(atom: dict[str, bool]) -> dict[str, bool]:
+    """Drop redundant base/flip keys from an atom when GE keys already encode the outcome."""
     ge_bases = {k.split("_GE", 1)[0] for k in atom if "_GE" in k}
     if not ge_bases:
         return atom
@@ -210,8 +276,18 @@ def _remove_base_if_ge_present_in_atom(atom: dict[str, bool]) -> dict[str, bool]
 
 # ---------- GLOBAL partitions for airtightness ----------
 def _collect_global_cuts(all_minterms: Iterable[dict[str, bool]]) -> dict[str, list[int]]:
-    """
-    For each base, collect all cut thresholds (from any minterm, across the whole input).
+    """Collect every distinct margin-threshold cut for each base across all minterms.
+
+    Scans every minterm for GE keys (e.g. ``'A>B_GE5'``) and plain win keys (implying
+    a cut at 1) so that later partitioning can produce airtight, non-overlapping bands
+    that cover the full input space.
+
+    Args:
+        all_minterms: Iterable of minterm dicts (variable name → boolean value).
+
+    Returns:
+        A dict mapping each base orientation string to a sorted list of integer cut
+        thresholds (always includes 1 when any information exists for that base).
     """
     cuts: dict[str, set] = defaultdict(set)
     for m in all_minterms:
@@ -232,16 +308,31 @@ def _collect_global_cuts(all_minterms: Iterable[dict[str, bool]]) -> dict[str, l
 
 def _global_partitions_for_base(
     base: str, global_cuts: dict[str, list[int]], bands_from_input: list[tuple[float, float]]
-) -> list[tuple[int, int]]:
-    """
-    Build airtight partitions for `base` using GLOBAL cuts. Keep only pieces covered by input bands.
+) -> list[tuple[int, float]]:
+    """Build airtight margin-interval partitions for one base using globally collected cuts.
+
+    Slices the margin axis at every threshold seen across all minterms and retains only
+    the pieces that are actually covered by at least one band from the current signature
+    group.  This guarantees the resulting atoms are non-overlapping and jointly exhaustive
+    over the input space.
+
+    Args:
+        base: Base orientation key (e.g. ``'A>B'``) to partition.
+        global_cuts: Mapping from base key to sorted list of cut thresholds, as returned
+            by ``_collect_global_cuts()``.
+        bands_from_input: Half-open ``(lo, hi)`` intervals already observed for ``base``
+            in the current signature group (used to filter irrelevant pieces).
+
+    Returns:
+        A list of ``(lo, hi)`` tuples representing the retained partitions, where ``hi``
+        may be ``math.inf`` for the open-ended tail.
     """
     if base not in global_cuts:
         # No cuts observed anywhere: no partitioning
         return []
     cuts = list(global_cuts[base])
     cuts.sort()
-    parts: list[tuple[int, int]] = []
+    parts: list[tuple[int, float]] = []
 
     # detect if any input band has +inf tail
     has_tail = any(hi == math.inf for (lo, hi) in bands_from_input)
@@ -262,6 +353,22 @@ def _global_partitions_for_base(
 def _expand_signature_atoms_global(
     signature_group: list[dict[str, bool]], global_cuts: dict[str, list[int]]
 ) -> list[dict[str, bool]]:
+    """Expand a group of minterms that share the same win/loss signature into fine-grained atoms.
+
+    For each base whose winner direction appears in the group, computes globally-cut
+    partitions and takes the Cartesian product to produce one atom per distinct
+    margin-band combination.  Atoms that have no GE information simply reproduce the
+    fixed win/loss assignment unchanged.
+
+    Args:
+        signature_group: Minterms that all share the same non-GE outcome pattern.
+        global_cuts: Threshold cuts per base, from ``_collect_global_cuts()``.
+
+    Returns:
+        A list of expanded atom dicts with GE keys encoding specific margin bands.
+        May be a single-element list (the fixed assignment) if no relevant partitions
+        exist.
+    """
     if not signature_group:
         return []
     fixed = dict(_non_ge_signature(signature_group[0]))
@@ -277,7 +384,7 @@ def _expand_signature_atoms_global(
                 bases.add(k)
 
     # Build input bands per base (who wins in this signature matters)
-    partitions: dict[str, list[tuple[int, int]]] = {}
+    partitions: dict[str, list[tuple[int, float]]] = {}
     for base in sorted(bases):
         # Only consider bands for the winner side in this signature
         bands: list[tuple[float, float]] = []
@@ -317,6 +424,20 @@ def _expand_signature_atoms_global(
 
 # ---------- Rendering in chosen game order ----------
 def _render_clause_lines_ordered(atom: dict[str, bool], games_order: list[str]) -> list[str]:
+    """Render one atom as human-readable clause lines in the specified game order.
+
+    For each base in ``games_order``, emits a single natural-language line such as
+    ``"Brandon Win over Meridian by ≥ 5 points"`` or ``"Meridian Win over Brandon"``.
+    Games with no data in the atom are silently skipped.
+
+    Args:
+        atom: Minterm dict encoding outcomes (and optional margin bands) for each game.
+        games_order: Base orientation strings defining the print order (e.g.
+            ``['Brandon>Meridian', 'Oak Grove>Pearl']``).
+
+    Returns:
+        One clause string per game present in the atom.
+    """
     lines: list[str] = []
     for base in games_order:
         a, b = _canon_pair(base)
@@ -343,14 +464,22 @@ def _render_clause_lines_ordered(atom: dict[str, bool], games_order: list[str]) 
 
 
 # ---------- Scenario sort key for logical progression ----------
-def _band_sort_key(base: str, atom: dict[str, bool], loser_first: bool = True) -> tuple[int, int, int]:
+def _band_sort_key(base: str, atom: dict[str, bool], loser_first: bool = True) -> tuple[int, int, int | float]:
+    """Produce a three-element sort key for one game within an atom.
+
+    Used to impose a logical progression over scenarios: losses (or wins, depending on
+    ``loser_first``) appear first, then wins are ordered from least-specific (any margin)
+    through increasingly tight lower-bound intervals.
+
+    Args:
+        base: Base orientation key ``'A>B'`` for the game being keyed.
+        atom: Minterm dict for this scenario.
+        loser_first: If ``True`` (default), the B>A (flip) winner group is ranked 0
+            so losses appear before wins in the sort.
+
+    Returns:
+        A ``(winner_group, granularity, hi_rank)`` tuple suitable for use as a sort key.
     """
-    For one game, return a tuple to sort scenarios:
-      winner_group: 0 for (loser-first) winner (B>A), 1 for (A>B)
-      granularity:  0 for 'any', 1 for bounded [1,k), 2+ for higher lower-bounds in ascending L
-      hi_rank:      secondary by hi (inf last)
-    """
-    a, b = _canon_pair(base)
     lo, hi, winner = _interval_for_base(atom, base)
 
     # winner group
@@ -378,6 +507,7 @@ def _band_sort_key(base: str, atom: dict[str, bool], loser_first: bool = True) -
 
 
 def _scenario_sort_key(atom: dict[str, bool], games_order: list[str]) -> tuple:
+    """Return a composite sort key for an atom by concatenating per-game band keys in order."""
     # Lexicographic by games in order, using the per-game band keys
     key = []
     for base in games_order:
@@ -385,25 +515,41 @@ def _scenario_sort_key(atom: dict[str, bool], games_order: list[str]) -> tuple:
     return tuple(key)
 
 
-def _bands_for_atom(atom: dict[str, bool], games_order: list[str]) -> dict[str, tuple[int, int, str]]:
+def _bands_for_atom(atom: dict[str, bool], games_order: list[str]) -> dict[str, tuple[int, float, str]]:
+    """Extract normalized ``(lo, hi, winner)`` bands from an atom for each game.
+
+    Args:
+        atom: Minterm dict encoding outcomes and optional GE margin keys.
+        games_order: Base orientation strings to extract, in the desired iteration order.
+
+    Returns:
+        A dict mapping each base key to a ``(lo, hi, winner)`` triple where ``lo`` is an
+        ``int`` ≥ 1, ``hi`` is an ``int`` or ``math.inf``, and ``winner`` is the base
+        key or its flip indicating which team wins.
     """
-    For each base in games_order, return (L, U, winner) where:
-      - winner is 'A>B' or 'B>A'
-      - L, U are integers; U can be math.inf
-    """
-    out: dict[str, tuple[int, int, str]] = {}
+    out: dict[str, tuple[int, float, str]] = {}
     for base in games_order:
         lo, hi, winner = _interval_for_base(atom, base)
         # normalize
-        L = max(1, int(lo)) if lo != -math.inf else 1
-        U = hi
-        out[base] = (L, U, winner)
+        lo_band = max(1, int(lo)) if lo != -math.inf else 1
+        hi_band = hi
+        out[base] = (lo_band, hi_band, winner)
     return out
 
 
-def _bands_to_atom(bands: dict[str, tuple[int, int, str]]) -> dict[str, bool]:
-    """
-    Rebuild an atom dict from (L,U,winner) per base.
+def _bands_to_atom(bands: dict[str, tuple[int, float, str]]) -> dict[str, bool]:
+    """Rebuild a minterm atom dict from ``(lo, hi, winner)`` bands.
+
+    Encodes each band back into the variable-name convention used throughout:
+    plain win keys (``'A>B': True``), GE-true keys (margin ≥ lo), and GE-false
+    keys (margin < hi).  Redundant base keys are dropped when GE keys are present.
+
+    Args:
+        bands: Mapping from base key to ``(lo, hi, winner)`` as produced by
+            ``_bands_for_atom()``.
+
+    Returns:
+        A minterm dict suitable for further processing or rendering.
     """
     atom: dict[str, bool] = {}
     for base, (L, U, winner) in bands.items():
@@ -420,17 +566,19 @@ def _bands_to_atom(bands: dict[str, tuple[int, int, str]]) -> dict[str, bool]:
     return _remove_base_if_ge_present_in_atom(atom)
 
 
-def _touching(a: tuple[int, int], b: tuple[int, int]) -> bool:
-    """Return True if two half-open bands [La,Ua) and [Lb,Ub) touch or overlap."""
-    La, Ua = a
-    Lb, Ub = b
+def _touching(a: tuple[int, float], b: tuple[int, float]) -> bool:
+    """Return True if two half-open bands [lo_a,hi_a) and [lo_b,hi_b) touch or overlap."""
+    lo_a, hi_a = a
+    lo_b, hi_b = b
     # treat math.inf as a very large number for comparison
-    Aend = Ua
-    Bend = Ub
-    if Aend == math.inf and Lb == math.inf:  # degenerate, won’t happen
+    a_end = hi_a
+    b_end = hi_b
+    if a_end == math.inf and lo_b == math.inf:  # degenerate, won’t happen
         return False
     # overlap or just touching at boundary
-    return (La <= Lb <= (Aend if Aend != math.inf else 10**12)) or (Lb <= La <= (Bend if Bend != math.inf else 10**12))
+    a_end_safe = a_end if a_end != math.inf else 10**12
+    b_end_safe = b_end if b_end != math.inf else 10**12
+    return (lo_a <= lo_b <= a_end_safe) or (lo_b <= lo_a <= b_end_safe)
 
 
 def _seed_signature(seeds: dict[int, str]) -> tuple[tuple[int, str], ...]:
@@ -438,50 +586,63 @@ def _seed_signature(seeds: dict[int, str]) -> tuple[tuple[int, str], ...]:
     return tuple(sorted(seeds.items()))
 
 
-def _fmt_band(L: int, U: int) -> str:
-    if U == math.inf and L <= 1:
+def _fmt_band(lo: int, hi: float) -> str:
+    """Format a single half-open margin interval as a compact debug string (e.g. ``'[5, 8)'``)."""
+    if hi == math.inf and lo <= 1:
         return "any"
-    if U == math.inf:
-        return f"[{L}, +∞)"
-    if L <= 1:
-        return f"[1, {U})"
-    return f"[{L}, {U})"
+    if hi == math.inf:
+        return f"[{lo}, +∞)"
+    if lo <= 1:
+        return f"[1, {hi})"
+    return f"[{lo}, {hi})"
 
 
-def _fmt_bands(bands: dict[str, tuple[int, int, str]], games_order: list[str]) -> str:
+def _fmt_bands(bands: dict[str, tuple[int, float, str]], games_order: list[str]) -> str:
+    """Format a full set of bands as a pipe-separated debug string in game order."""
     parts = []
     for base in games_order:
         if base not in bands:
             continue
-        L, U, W = bands[base]
-        parts.append(f"{W}: {_fmt_band(L, U)}")
+        lo, hi, winner = bands[base]
+        parts.append(f"{winner}: {_fmt_band(lo, hi)}")
     return " | ".join(parts)
 
 
 def _try_merge_neighbor(
-    a_bands: dict[str, tuple[int, int, str]],
-    b_bands: dict[str, tuple[int, int, str]],
+    a_bands: dict[str, tuple[int, float, str]],
+    b_bands: dict[str, tuple[int, float, str]],
     same_seeds: bool,
     games_order: list[str],
-) -> tuple[bool, dict[str, tuple[int, int, str]]]:
-    """
-    Attempt to merge two neighboring scenarios.
-    Conditions:
-      * seed outcomes identical
-      * for every game: same winner
-      * bands equal for all but ONE game; that one game's bands must touch
-    Returns (merged?, merged_bands_or_a_bands)
+) -> tuple[bool, dict[str, tuple[int, float, str]]]:
+    """Attempt to merge two adjacent scenario band-sets into one covering band-set.
+
+    A merge succeeds when both scenarios produce identical seed outcomes, all games have
+    the same winner, bands are equal for every game except exactly one, and that one
+    game's bands touch or overlap.  On success the two bands are collapsed into a single
+    covering interval.
+
+    Args:
+        a_bands: Band-set for the left scenario (base for the merged result).
+        b_bands: Band-set for the right (neighbor) scenario.
+        same_seeds: Pre-computed flag indicating whether the two scenarios yield the
+            same seed assignments.
+        games_order: Canonical game ordering used to iterate bands consistently.
+
+    Returns:
+        A ``(merged, result_bands)`` tuple.  If ``merged`` is ``True``, ``result_bands``
+        is the newly merged band-set; otherwise ``result_bands`` is ``a_bands``
+        unchanged.
     """
     if not same_seeds:
         return False, a_bands
 
     diffs = []
     for base in games_order:
-        La, Ua, Wa = a_bands[base]
-        Lb, Ub, Wb = b_bands[base]
-        if Wa != Wb:
+        lo_a, hi_a, winner_a = a_bands[base]
+        lo_b, hi_b, winner_b = b_bands[base]
+        if winner_a != winner_b:
             return False, a_bands
-        if (La, Ua) != (Lb, Ub):
+        if (lo_a, hi_a) != (lo_b, hi_b):
             diffs.append(base)
             if len(diffs) > 1:
                 return False, a_bands
@@ -492,18 +653,18 @@ def _try_merge_neighbor(
 
     # exactly one differing base
     base = diffs[0]
-    La, Ua, W = a_bands[base]
-    Lb, Ub, _ = b_bands[base]
-    if not _touching((La, Ua), (Lb, Ub)):
+    lo_a, hi_a, winner = a_bands[base]
+    lo_b, hi_b, _ = b_bands[base]
+    if not _touching((lo_a, hi_a), (lo_b, hi_b)):
         return False, a_bands
 
-    # make a single covering band [minL, maxU)
-    L = min(La, Lb)
-    U = Ua if Ua == math.inf or (Ub != math.inf and Ua >= Ub) else Ub
-    if Ua == math.inf or Ub == math.inf:
-        U = math.inf
+    # make a single covering band [min_lo, max_hi)
+    lo_merged = min(lo_a, lo_b)
+    hi_merged = hi_a if hi_a == math.inf or (hi_b != math.inf and hi_a >= hi_b) else hi_b
+    if hi_a == math.inf or hi_b == math.inf:
+        hi_merged = math.inf
     merged = dict(a_bands)
-    merged[base] = (L, U, W)
+    merged[base] = (lo_merged, hi_merged, winner)
     return True, merged
 
 
@@ -513,7 +674,7 @@ def _consolidate_neighboring_atoms(
     seed_lookup_fn: Callable[[dict[str, bool]], dict[int, str]],
     *,
     debug: bool = False,
-    debug_fn: Callable[[str, dict[str, Any]], None] = None,
+    debug_fn: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> list[tuple[dict[str, bool], dict[int, str]]]:
     """
     Merge neighboring scenarios that:
@@ -531,6 +692,7 @@ def _consolidate_neighboring_atoms(
     """
 
     def emit(ev: str, payload: dict[str, Any]):
+        """Fire a debug event if debug mode is active."""
         if debug and debug_fn:
             debug_fn(ev, payload)
 
@@ -618,6 +780,22 @@ def scenarios_text_from_team_seed_ordered(
     start_letter: str = "A",
     seed_order: list[int] | None = [1, 2, 3, 4],
 ) -> str:
+    """Render human-readable scenario blocks for each team/seed combination.
+
+    Expands minterms into globally-consistent margin partitions, merges
+    neighboring atoms with identical seed outcomes, and formats the result as
+    labelled letter-blocks (e.g. "Scenario A: Brandon wins …").
+
+    Args:
+        team_seed_map: Nested map of team → seed number → minterm collection.
+        games_order: Ordered list of ``"A>B"`` matchup strings used for sorting
+            and rendering clauses.
+        start_letter: Letter to begin block labelling from (default ``"A"``).
+        seed_order: Seed numbers to include; ``None`` means include all.
+
+    Returns:
+        Formatted multi-line string with one labelled block per merged scenario.
+    """
     # Ingest all minterms, build global cuts
     raw_minterms: list[dict[str, bool]] = []
     for team, seed_map in team_seed_map.items():
@@ -639,7 +817,7 @@ def scenarios_text_from_team_seed_ordered(
         sig_to_minterms[_non_ge_signature(m)].append(m)
 
     atoms: list[dict[str, bool]] = []
-    for _, group in sig_to_minterms.items():
+    for group in sig_to_minterms.values():
         atoms.extend(_expand_signature_atoms_global(group, global_cuts))
 
     # Build reverse index for seed lookup
@@ -657,19 +835,19 @@ def scenarios_text_from_team_seed_ordered(
                     entries.append((team, seed, k))
 
     def _atom_satisfies(atom: dict[str, bool], broad: dict[str, bool]) -> bool:
+        """Return True if ``atom`` is consistent with the broader minterm ``broad``."""
         # Clean both sides of redundant base when GE present
         a_clean = _remove_base_if_ge_present_in_atom(dict(atom))
         b_clean = _remove_base_if_ge_present_in_atom(dict(broad))
 
         # GE keys must match exactly if present in broad
         for k, v in b_clean.items():
-            if _is_ge_key(k):
-                if a_clean.get(k) is not v:
-                    return False
+            if _is_ge_key(k) and a_clean.get(k) is not v:
+                return False
         # Base keys in broad: check via winner from atom
         for k, v in b_clean.items():
             if ">" in k and not _is_ge_key(k):
-                lo, hi, winner = _interval_for_base(a_clean, k)
+                _lo, _hi, winner = _interval_for_base(a_clean, k)
                 if v is True and winner != k:
                     return False
                 if v is False and winner != _flip(k):
@@ -680,6 +858,7 @@ def scenarios_text_from_team_seed_ordered(
     atoms.sort(key=lambda m: _scenario_sort_key(m, games_order))
 
     def atom_seed_lines(atom: dict[str, bool]) -> dict[int, str]:
+        """Return the winning team for each seed number under this atom."""
         res: dict[int, str] = {}
         cand = defaultdict(list)
         for team, seed, broad in entries:
@@ -692,6 +871,7 @@ def scenarios_text_from_team_seed_ordered(
 
     # --- DEBUG HOOK EXAMPLE ---
     def dbg(ev: str, d: dict[str, Any]):
+        """Print a minimal debug summary for consolidation events."""
         # Minimal, readable debug. Customize to taste.
         if ev == "compare":
             print(
@@ -735,19 +915,28 @@ def scenarios_text_from_team_seed_ordered(
 
 
 # ---------- Main enumeration + outputs ----------
-def enumerate_region(
-    conn, clazz, region, season, out_csv=None, explain_json=None, out_seeding=None, out_scenarios=None, debug=False
-):
-    """
-    Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
-    and aggregate seeding odds + human-readable scenario explanations.
+def enumerate_region(conn, clazz, region, season, out_seeding=None, out_scenarios=None, debug=False):
+    """Enumerate all remaining outcomes for a region, apply tiebreakers, and write odds and scenarios.
 
-    Notes
-    -----
-    - Each undecided region game is treated as a boolean variable (first-listed team wins or not).
-    - For each outcome mask (2^R), we optionally split by any Step-3 knife-edge (±12 cap)
-      that changes ordering, weighting <threshold vs ≥threshold branches appropriately.
-    - We tally 1st..4th odds across all branches; playoffs = sum of those four odds.
+    Each undecided region game is treated as a boolean variable (first-listed team wins or
+    not).  For each of the 2^R outcome masks, the function optionally detects Step-3 knife-
+    edge margins (±12 cap) that change the standings order and splits those masks into
+    weighted sub-branches.  First-through-fourth-place tallies are accumulated across all
+    branches and converted to probabilities.
+
+    Args:
+        conn: An open psycopg connection used to fetch division, completed, and remaining games.
+        clazz: MHSAA classification number (e.g. 7 for 7A).
+        region: Region number within the class.
+        season: Four-digit season year.
+        out_seeding: Optional file path; if provided, a plain-text seeding-odds report is
+            written there.
+        out_scenarios: Optional file path; if provided, a human-readable scenario-by-scenario
+            breakdown is written there (and ``scenarios_letter.txt`` is also written).
+        debug: If ``True``, passes debug flags into the tiebreaker resolution layer.
+
+    Raises:
+        SystemExit: If no teams are found for the given class/region/season.
     """
     # ----- Fetch inputs -----
     teams = fetch_division(conn, clazz, region, season)
@@ -759,10 +948,11 @@ def enumerate_region(
     num_remaining = len(remaining)
 
     # ----- Accumulators for odds -----
-    first_counts = Counter()
-    second_counts = Counter()
-    third_counts = Counter()
-    fourth_counts = Counter()
+    # defaultdict(float) rather than Counter so branch_weight (float) accumulates without type errors
+    first_counts: dict[str, float] = defaultdict(float)
+    second_counts: dict[str, float] = defaultdict(float)
+    third_counts: dict[str, float] = defaultdict(float)
+    fourth_counts: dict[str, float] = defaultdict(float)
 
     # team -> seed -> list of minterm dicts (for explanations)
     scenario_minterms = {}
@@ -976,13 +1166,13 @@ def enumerate_region(
                         slots = rank_to_slots(final_order)
                         for team, (lo_seed, hi_seed) in slots.items():
                             if 1 >= lo_seed and 1 <= hi_seed:
-                                first_counts[team] += branch_weight  # type: ignore
+                                first_counts[team] += branch_weight
                             if 2 >= lo_seed and 2 <= hi_seed:
-                                second_counts[team] += branch_weight  # type: ignore
+                                second_counts[team] += branch_weight
                             if 3 >= lo_seed and 3 <= hi_seed:
-                                third_counts[team] += branch_weight  # type: ignore
+                                third_counts[team] += branch_weight
                             if 4 >= lo_seed and 4 <= hi_seed:
-                                fourth_counts[team] += branch_weight  # type: ignore
+                                fourth_counts[team] += branch_weight
                         for team, (lo_seed, hi_seed) in slots.items():
                             scenario_minterms.setdefault(team, {}).setdefault(lo_seed, []).append(branch_assignment)
 
@@ -999,7 +1189,12 @@ def enumerate_region(
         p_playoffs = p1 + p2 + p3 + p4
         clinched = p_playoffs >= 0.999
         eliminated = p_playoffs <= 0.001
-        final_playoffs = 1.0 if clinched else (0.0 if eliminated else p_playoffs)
+        if clinched:
+            final_playoffs = 1.0
+        elif eliminated:
+            final_playoffs = 0.0
+        else:
+            final_playoffs = p_playoffs
         results.append((school, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated))
 
     print("school,odds_1st,odds_2nd,odds_3rd,odds_4th,odds_playoffs,final_odds_playoffs,clinched,eliminated")
@@ -1066,77 +1261,18 @@ def enumerate_region(
         s = re.sub(r" by ≥ 1 and < (\d+) points", r" by < \1 points", s)
 
         # ≥1 only -> drop margin entirely (base win)
-        s = re.sub(r" by ≥ 1 points", "", s)
+        s = s.replace(" by ≥ 1 points", "")
 
         # <13 -> base win
-        s = re.sub(r" by < 13 points", "", s)
+        s = s.replace(" by < 13 points", "")
 
         # ≥1 and <13 -> base win
-        s = re.sub(r" by ≥ 1 and < 13 points", "", s)
+        s = s.replace(" by ≥ 1 and < 13 points", "")
 
         return " ".join(s.split())
 
     # ----- Optional scenarios text output (unchanged logic; clearer helpers) -----
     if out_scenarios:
-
-        def var_phrase(var: str, val: bool, base_lookup: dict) -> str:
-            """
-            Human phrase for a boolean variable.
-            Supports:
-            - base winner:  "A>B"
-            - threshold flags: "A>B_GE7" (True => ≥7, False => <7)
-            Also collapses paired flags (GE lo == True and GE hi == False) into:
-            "A Win over B by ≥ lo and < hi points"
-            """
-
-            def winner_loser_for_base(base: str, vlookup: dict, fallback_val: bool | None) -> tuple[str, str]:
-                a, b = base.split(">", 1)
-                base_val = vlookup.get(base)
-                if base_val is None:
-                    flip = f"{b}>{a}"
-                    flip_val = vlookup.get(flip)
-                    if flip_val is not None:
-                        # flip_val True means (b beats a)
-                        return (b, a) if flip_val else (a, b)
-                    # last resort: assume fallback orientation
-                    return (a, b) if (fallback_val is True) else (b, a)
-                else:
-                    return (a, b) if base_val else (b, a)
-
-            if "_GE" in var:
-                base, ge = var.split("_GE", 1)
-                try:
-                    thr = int(ge)
-                except Exception:
-                    thr = None
-
-                # Try to detect an interval using the paired hi flag:
-                if thr is not None and val is True:
-                    # look for a "GE hi" False for the same base (means "< hi")
-                    hi_candidates = []
-                    for k, v in base_lookup.items():
-                        if k.startswith(base + "_GE"):
-                            try:
-                                kthr = int(k.split("_GE", 1)[1])
-                            except Exception:
-                                continue
-                            if kthr > thr and v is False:
-                                hi_candidates.append(kthr)
-                    if hi_candidates:
-                        hi = min(hi_candidates)
-                        w, l = winner_loser_for_base(base, base_lookup, True)
-                        return f"{w} Win over {l} by ≥ {thr} and < {hi} points"
-
-                # Otherwise render single-threshold clause
-                w, l = winner_loser_for_base(base, base_lookup, val)
-                if val:
-                    return f"{w} Win over {l} by ≥ {ge} points"
-                else:
-                    return f"{w} Win over {l} by < {ge} points"
-
-            # Base (non-margin) phrasing
-            a, b = var.split(">", 1)
-            return f"{a} Win over {b}" if val else f"{b} Win over {a}"
 
         def extract_pair(clause: str):
             """Parse a human clause into a structured tuple: (a, b, kind, thr) where
@@ -1146,16 +1282,16 @@ def enumerate_region(
             left, right = clause.split(" Win over ", 1)
             a = left.strip()
             # Margin-qualified?
-            if " by ≥ " in right:
-                opp_part, thr_part = right.split(" by ≥ ", 1)
+            if _BY_GE in right:
+                opp_part, thr_part = right.split(_BY_GE, 1)
                 b = opp_part.strip()
                 try:
                     thr = int(thr_part.split()[0])
                 except Exception:
                     thr = None
                 return (a, b, "ge", thr)
-            elif " by < " in right:
-                opp_part, thr_part = right.split(" by < ", 1)
+            elif _BY_LT in right:
+                opp_part, thr_part = right.split(_BY_LT, 1)
                 b = opp_part.strip()
                 try:
                     thr = int(thr_part.split()[0])
@@ -1165,28 +1301,6 @@ def enumerate_region(
             else:
                 b = right.split(" by")[0].strip()
                 return (a, b, "base", None)
-
-        def is_opposite(p1, p2):
-            """
-            Two clauses are 'opposites' if:
-              (1) directions flip (A>B vs B>A) and both are base; OR
-              (2) directions flip and both margin-qualified with SAME comparator and threshold; OR
-              (3) same direction, same threshold, but complementary comparators (≥ vs <).
-            """
-            if p1 is None or p2 is None:
-                return False
-            a1, b1, k1, t1 = p1
-            a2, b2, k2, t2 = p2
-            # Opposite directions
-            if a1 == b2 and b1 == a2:
-                if k1 == "base" and k2 == "base":
-                    return True
-                if k1 == k2 and t1 == t2 and k1 in ("ge", "lt"):
-                    return True
-            # Same direction, complementary threshold comparators
-            if a1 == a2 and b1 == b2 and t1 == t2 and {k1, k2} == {"ge", "lt"}:
-                return True
-            return False
 
         minimized = defaultdict(dict)
         for team, seed_map in scenario_minterms.items():
@@ -1226,13 +1340,7 @@ def enumerate_region(
                 )
 
                 def clauses_for_m(minterm_dict):
-                    # Prefer margin-qualified clauses where present; avoid duplicates.
-                    def flip_base(base: str) -> str:
-                        if ">" in base:
-                            a, b = base.split(">", 1)
-                            return f"{b}>{a}"
-                        return base
-
+                    """Convert a single minterm dict into a sorted list of human-readable clauses."""
                     print("[DEBUG SCEN] Minterm team:", team, "(seed:", seed_num, ")")
                     print("[DEBUG SCEN] Minterm dict:", minterm_dict)
 
@@ -1241,9 +1349,12 @@ def enumerate_region(
                     #   "ge_true": set[int],      # thresholds with GEk == True
                     #   "ge_false": set[int],     # thresholds with GEk == False (meaning "< k")
                     # }
-                    matchups = defaultdict(lambda: {"base": [], "ge_true": set(), "ge_false": set(), "orient": None})
+                    matchups: defaultdict[str, dict[str, Any]] = defaultdict(
+                        lambda: {"base": [], "ge_true": set(), "ge_false": set(), "orient": None}
+                    )
 
                     def canon_key(a, b):
+                        """Return the canonical ``'lesser>greater'`` matchup key."""
                         aa, bb = (a, b) if a <= b else (b, a)
                         return f"{aa}>{bb}"
 
@@ -1264,27 +1375,27 @@ def enumerate_region(
                                     winner, loser = a, b
                             else:
                                 winner, loser = (a, b) if base_val else (b, a)
-                            matchups[key]["orient"] = (winner, loser)  # type: ignore
+                            matchups[key]["orient"] = (winner, loser)
 
                             thr = int(ge)
                             if val:
-                                matchups[key]["ge_true"].add(thr)  # type: ignore
+                                matchups[key]["ge_true"].add(thr)
                             else:
-                                matchups[key]["ge_false"].add(thr)  # type: ignore
+                                matchups[key]["ge_false"].add(thr)
                         else:
                             a, b = var.split(">", 1)
                             key = canon_key(a, b)
-                            matchups[key]["base"].append((var, val))  # type: ignore
+                            matchups[key]["base"].append((var, val))
                             # If we haven’t set an orientation yet, set it now from the base
                             if matchups[key]["orient"] is None:
                                 winner, loser = (a, b) if val else (b, a)
-                                matchups[key]["orient"] = (winner, loser)  # type: ignore
+                                matchups[key]["orient"] = (winner, loser)
 
                     clauses = []
 
                     # Emit one clause per matchup
                     for key, info in matchups.items():
-                        (winner, loser) = info["orient"]  # type: ignore
+                        (winner, loser) = info["orient"]
                         # If we have any margin flags for this matchup, we prefer to render a single interval clause
                         if info["ge_true"] or info["ge_false"]:
                             # Lower bound = max(GE t that are True), default 1
@@ -1320,36 +1431,49 @@ def enumerate_region(
                     matchup_index = {name: i for i, (name, _, _) in enumerate(boolean_game_vars)}
 
                     def classify_clause(c: str):
+                        """Return a sort key: (matchup_index, comparator_rank, clause_text)."""
                         parsed = extract_pair(c)
                         if not parsed:
                             return (10**6, 99, c)
-                        a, b, kind, thr = parsed
+                        a, b, kind, _thr = parsed
                         base = f"{a}>{b}"
                         aa, bb, _ = normalize_pair(a, b)
                         lex_base = f"{aa}>{bb}"
                         idx = matchup_index.get(base, matchup_index.get(lex_base, 10**6))
-                        comp_rank = 0 if kind == "base" else (1 if kind == "ge" else 2)
+                        if kind == "base":
+                            comp_rank = 0
+                        elif kind == "ge":
+                            comp_rank = 1
+                        else:
+                            comp_rank = 2
                         return (idx, comp_rank, c)
 
                     clauses = sorted(set(clauses), key=classify_clause)
                     return clauses
 
                 def block_sort_key(block_clauses: list[str]):
-                    # Sort blocks by: (a) presence & comparator of the Corinth–New Albany clause,
+                    """Return a sort key for a scenario block based on matchup order and comparator rank."""
+                    # Sort blocks by: (a) presence & comparator of the first matchup clause,
                     # then (b) presence/comparator of the next matchup in boolean order,
                     # then (c) total clause count (shorter first), then (d) the text itself.
                     matchup_index = {name: i for i, (name, _, _) in enumerate(boolean_game_vars)}
 
                     def classify_clause(c: str):
+                        """Return a sort key: (matchup_index, comparator_rank, clause_text)."""
                         parsed = extract_pair(c)
                         if not parsed:
                             return (10**6, 99, c)  # push unknowns last, deterministically
-                        a, b, kind, thr = parsed
+                        a, b, kind, _thr = parsed
                         base = f"{a}>{b}"
                         aa, bb, _ = normalize_pair(a, b)
                         lex_base = f"{aa}>{bb}"
                         idx = matchup_index.get(base, matchup_index.get(lex_base, 10**6))
-                        comp_rank = 0 if kind == "base" else (1 if kind == "ge" else 2)
+                        if kind == "base":
+                            comp_rank = 0
+                        elif kind == "ge":
+                            comp_rank = 1
+                        else:
+                            comp_rank = 2
                         # We also want base (no margin) variants to come before margin variants for the same matchup
                         return (idx, comp_rank, c)
 
@@ -1360,22 +1484,6 @@ def enumerate_region(
                     while len(sig) < 2:
                         sig.append((10**6, 99))
                     return (*sig[0], *sig[1], len(block_clauses), " | ".join(ordered))
-
-                def absorb_or_blocks(blocks: list[list[str]]) -> list[list[str]]:
-                    """Drop any block whose set of clauses is a strict superset of another block."""
-                    sets = [frozenset(b) for b in blocks]
-                    keep = [True] * len(blocks)
-                    for i in range(len(blocks)):
-                        if not keep[i]:
-                            continue
-                        for j in range(len(blocks)):
-                            if i == j or not keep[j]:
-                                continue
-                            # If i is a strict superset of j, drop i
-                            if sets[i] > sets[j]:
-                                keep[i] = False
-                                break
-                    return [blk for k, blk in enumerate(blocks) if keep[k]]
 
                 def is_complement(p1, p2):
                     """
@@ -1467,11 +1575,11 @@ def enumerate_region(
                             block_sets = [s for k, s in enumerate(block_sets) if keep[k]]
 
                     # Convert back to lists and sort clauses deterministically
-                    out_blocks = [sorted(list(s)) for s in block_sets]
+                    out_blocks = [sorted(s) for s in block_sets]
                     return out_blocks
 
                 prepared = [(m, clauses_for_m(m)) for m in candidate_minterms]
-                prepared.sort(key=lambda t: block_sort_key(t[1]))
+                prepared.sort(key=lambda t, _key=block_sort_key: _key(t[1]))
 
                 # --- NEW: tautology reduction + absorption across OR blocks ---
                 blocks_only = [c for _, c in prepared]
@@ -1481,6 +1589,7 @@ def enumerate_region(
                 prepared = [(None, b) for b in blocks_only]
 
                 def _canon_matchup(a, b):
+                    """Return the canonical (lesser, greater) team pair."""
                     aa, bb = (a, b) if a <= b else (b, a)
                     return (aa, bb)
 
@@ -1492,7 +1601,7 @@ def enumerate_region(
                     p = extract_pair(c)
                     if not p:
                         return None
-                    a, b, kind, thr = p
+                    a, b, kind, _thr = p
                     key = _canon_matchup(a, b)
                     if kind == "base":
                         # direction decided by text
@@ -1501,18 +1610,18 @@ def enumerate_region(
                     # margin kinds: map to intervals we printed in clauses_for_m
                     # We only ever print: "< k", "≥ L", or "≥ L and < k"
                     # Parse them back:
-                    if " by < " in c:
+                    if _BY_LT in c:
                         # a beats b by < k
-                        k = int(c.split(" by < ", 1)[1].split()[0])
+                        k = int(c.split(_BY_LT, 1)[1].split()[0])
                         return (key, "a>b", (1, k))
-                    if " by ≥ " in c and " and < " in c:
-                        rest = c.split(" by ≥ ", 1)[1]
-                        L = int(rest.split(" and < ", 1)[0])
-                        k = int(rest.split(" and < ", 1)[1].split()[0])
-                        return (key, "a>b", (L, k))
-                    if " by ≥ " in c:
-                        L = int(c.split(" by ≥ ", 1)[1].split()[0])
-                        return (key, "a>b", (L, 13))
+                    if _BY_GE in c and _AND_LT in c:
+                        rest = c.split(_BY_GE, 1)[1]
+                        lo_bound = int(rest.split(_AND_LT, 1)[0])
+                        k = int(rest.split(_AND_LT, 1)[1].split()[0])
+                        return (key, "a>b", (lo_bound, k))
+                    if _BY_GE in c:
+                        lo_bound = int(c.split(_BY_GE, 1)[1].split()[0])
+                        return (key, "a>b", (lo_bound, 13))
                     return None
 
                 def _coverage_collapse_blocks(blocks):
@@ -1551,6 +1660,7 @@ def enumerate_region(
                             groups[pivot].append(blk)
 
                         def union_intervals(intervals):
+                            """Merge a list of (lo, hi) intervals into a minimal covering set."""
                             if not intervals:
                                 return []
                             xs = sorted(intervals)
@@ -1612,7 +1722,7 @@ def enumerate_region(
                 blocks_only = [[_normalize_clause_text(c) for c in blk] for blk in blocks_only]
 
                 # remove any now-empty strings and dedupe
-                blocks_only = [sorted({c for c in blk if c}) for blk in blocks_only if any(c for c in blk)]
+                blocks_only = [sorted({c for c in blk if c}) for blk in blocks_only if any(blk)]
 
                 # Rebuild `prepared` with the reduced blocks; we don’t need minterms any more for printing
                 prepared = [(None, b) for b in blocks_only]
@@ -1650,13 +1760,16 @@ def enumerate_region(
 
 
 def main():
+    """Parse CLI arguments and invoke ``enumerate_region()`` for a single class/region/season.
+
+    Reads connection details from ``--dsn`` or the ``PG_DSN`` environment variable.
+    Exits with an error message if psycopg is not installed or no DSN is provided.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--class", dest="clazz", type=int, required=True)
     ap.add_argument("--region", type=int, required=True)
     ap.add_argument("--season", type=int, required=True)
     ap.add_argument("--dsn", type=str, default=os.getenv("PG_DSN", ""))
-    ap.add_argument("--out-csv", type=str)
-    ap.add_argument("--explain-json", type=str)
     ap.add_argument("--out-seeding", type=str)
     ap.add_argument("--out-scenarios", type=str)
     ap.add_argument("--debug", action="store_true")
@@ -1671,8 +1784,6 @@ def main():
             args.clazz,
             args.region,
             args.season,
-            out_csv=args.out_csv,
-            explain_json=args.explain_json,
             out_seeding=args.out_seeding,
             out_scenarios=args.out_scenarios,
             debug=args.debug,

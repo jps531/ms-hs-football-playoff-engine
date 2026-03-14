@@ -38,3 +38,27 @@ next-env.d.ts
 # vscode
 .vscode
 .vscode/*
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ruff
+.ruff_cache/
+
+# claude
+.claude
+
+# local env files (explicit, in addition to .env*.local pattern above)
+.env.local
+
+# generated script outputs
+scripts/*.txt
+scripts/*.png
+scripts/*.csv

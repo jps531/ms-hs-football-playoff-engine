@@ -143,6 +143,7 @@ def fetch_article_text_from_ahsfhs(
 
                 # Block heavy resources to avoid slow loads that postpone load events
                 def _block(route, request):
+                    """Abort heavy resource types to speed up page load."""
                     rtype = request.resource_type
                     if rtype in ("image", "media", "font", "stylesheet"):
                         return route.abort()
