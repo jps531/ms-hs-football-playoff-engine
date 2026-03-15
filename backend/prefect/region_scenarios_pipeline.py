@@ -10,10 +10,22 @@ from collections import defaultdict
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import Json, execute_values
 
-from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame, Standings, StandingsOdds
-from prefect_files.data_helpers import get_completed_games
-from prefect_files.database_helpers import get_database_connection
-from prefect_files.scenarios import determine_odds, determine_scenarios
+from backend.helpers.data_classes import (
+    BracketOdds,
+    CompletedGame,
+    RawCompletedGame,
+    RemainingGame,
+    Standings,
+    StandingsOdds,
+)
+from backend.helpers.data_helpers import get_completed_games
+from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.scenarios import (
+    compute_bracket_odds,
+    compute_first_round_home_odds,
+    determine_odds,
+    determine_scenarios,
+)
 
 # -------------------------
 # Prefect Tasks
@@ -95,6 +107,60 @@ def fetch_region_standings(clazz: int, region: int, season: int) -> list[Standin
             return [Standings(*r) for r in cur.fetchall()]
 
 
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Num Rounds for {clazz}A")
+def fetch_num_rounds(clazz: int, season: int) -> int:
+    """Fetch the total number of playoff rounds for this class/season from ``playoff_formats``.
+
+    Args:
+        clazz: MHSAA classification (1–7).
+        season: Football season year.
+
+    Returns:
+        Total playoff rounds (4 for 5A–7A, 5 for 1A–4A).
+
+    Raises:
+        ValueError: If no format row is found for the given class and season.
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT num_rounds FROM playoff_formats WHERE season = %s AND class = %s",
+                (season, clazz),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise ValueError(f"No playoff_formats entry for season={season}, class={clazz}")
+            return row[0]
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} First-Round Home Seeds for {region}-{clazz}A")
+def fetch_first_round_home_seeds(clazz: int, region: int, season: int) -> frozenset[int]:
+    """Fetch the seed numbers for which a team in this region hosts their round-1 game.
+
+    Queries ``playoff_format_slots`` for slots where ``home_region`` matches
+    this region in the given season/class format.
+
+    Args:
+        clazz: MHSAA classification (1–7).
+        region: Region number within the class.
+        season: Football season year.
+
+    Returns:
+        A frozenset of seed numbers (subset of {1, 2, 3, 4}) that are
+        designated as the home team in round 1 for this region.
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT pfs.home_seed "
+                "FROM playoff_format_slots pfs "
+                "JOIN playoff_formats pf ON pf.id = pfs.format_id "
+                "WHERE pf.season = %s AND pf.class = %s AND pfs.home_region = %s",
+                (season, clazz, region),
+            )
+            return frozenset(row[0] for row in cur.fetchall())
+
+
 @task(task_run_name="Write {season} Region Standings for {region}-{clazz}A")
 def write_region_standings(
     standings: list[Standings],
@@ -103,12 +169,16 @@ def write_region_standings(
     clazz: int,
     region: int,
     season: int,
+    coinflip_teams: set[str] | None = None,
+    first_round_home_odds: dict[str, float] | None = None,
+    bracket_odds: dict[str, BracketOdds] | None = None,
 ):
     """Upsert standings, odds, and scenario data into the ``region_standings`` table.
 
     Constructs one row per school and performs an INSERT ... ON CONFLICT UPDATE
-    so that re-running the flow is idempotent.  Many weighted/bracket/home-game
-    odds columns are written as 0.0 placeholders pending future implementation.
+    so that re-running the flow is idempotent.  Weighted and home-game columns
+    for rounds beyond the first are written as 0.0 placeholders pending future
+    implementation.
 
     Args:
         standings: List of Standings instances from ``fetch_region_standings``.
@@ -118,10 +188,21 @@ def write_region_standings(
         clazz: MHSAA classification (1-7).
         region: Region number within the class.
         season: Football season year.
+        coinflip_teams: Set of team names that required a coin flip in at least
+            one outcome scenario.  Defaults to empty set if not provided.
+        first_round_home_odds: Dict mapping school name to probability of
+            hosting their round-1 game.  Defaults to all zeros if not provided.
+        bracket_odds: Dict mapping school name to ``BracketOdds`` (from
+            ``compute_bracket_odds``).  Defaults to all zeros if not provided.
 
     Returns:
         The number of rows written to the database.
     """
+    coinflip_teams = coinflip_teams or set()
+    first_round_home_odds = first_round_home_odds or {}
+    bracket_odds = bracket_odds or {}
+    _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
+
     def seed_scenarios_for(scenarios, school):
         """Return the seed->minterms map for a school, ensuring all four seeds exist."""
         m = scenarios.setdefault(school, {})
@@ -138,6 +219,7 @@ def write_region_standings(
     for team in standings:
         seed_scenarios = seed_scenarios_for(scenarios, team.school)
         o = odds.get(team.school, _empty_odds)
+        b = bracket_odds.get(team.school, _empty_bracket)
         data_by_school.append(
             (
                 team.school,
@@ -165,26 +247,26 @@ def write_region_standings(
                 o.p_playoffs,
                 o.clinched,
                 o.eliminated,
-                0.0,  # odds_second_round
-                0.0,  # odds_third_round
-                0.0,  # odds_semifinals
-                0.0,  # odds_finals
-                0.0,  # odds_champion
+                b.second_round,
+                b.quarterfinals,
+                b.semifinals,
+                b.finals,
+                b.champion,
                 0.0,  # odds_playoffs_weighted
                 0.0,  # odds_second_round_weighted
-                0.0,  # odds_third_round_weighted
+                0.0,  # odds_quarterfinals_weighted
                 0.0,  # odds_semifinals_weighted
                 0.0,  # odds_finals_weighted
                 0.0,  # odds_champion_weighted
-                0.0,  # odds_first_round_home
+                first_round_home_odds.get(team.school, 0.0),  # odds_first_round_home
                 0.0,  # odds_second_round_home
-                0.0,  # odds_third_round_home
+                0.0,  # odds_quarterfinals_home
                 0.0,  # odds_semifinals_home
                 0.0,  # odds_first_round_home_weighted
                 0.0,  # odds_second_round_home_weighted
-                0.0,  # odds_third_round_home_weighted
+                0.0,  # odds_quarterfinals_home_weighted
                 0.0,  # odds_semifinals_home_weighted
-                False,  # coin_flip_needed
+                team.school in coinflip_teams,  # coin_flip_needed
             )
         )
 
@@ -196,12 +278,12 @@ def write_region_standings(
             odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted,
             scenarios_1st, scenarios_2nd, scenarios_3rd, scenarios_4th,
             odds_playoffs, clinched, eliminated,
-            odds_second_round, odds_third_round, odds_semifinals, odds_finals, odds_champion,
-            odds_playoffs_weighted, odds_second_round_weighted, odds_third_round_weighted,
+            odds_second_round, odds_quarterfinals, odds_semifinals, odds_finals, odds_champion,
+            odds_playoffs_weighted, odds_second_round_weighted, odds_quarterfinals_weighted,
             odds_semifinals_weighted, odds_finals_weighted, odds_champion_weighted,
-            odds_first_round_home, odds_second_round_home, odds_third_round_home, odds_semifinals_home,
+            odds_first_round_home, odds_second_round_home, odds_quarterfinals_home, odds_semifinals_home,
             odds_first_round_home_weighted, odds_second_round_home_weighted,
-            odds_third_round_home_weighted, odds_semifinals_home_weighted,
+            odds_quarterfinals_home_weighted, odds_semifinals_home_weighted,
             coin_flip_needed
         )
         VALUES %s
@@ -230,23 +312,23 @@ def write_region_standings(
             clinched      = EXCLUDED.clinched,
             eliminated    = EXCLUDED.eliminated,
             odds_second_round = EXCLUDED.odds_second_round,
-            odds_third_round  = EXCLUDED.odds_third_round,
+            odds_quarterfinals  = EXCLUDED.odds_quarterfinals,
             odds_semifinals   = EXCLUDED.odds_semifinals,
             odds_finals       = EXCLUDED.odds_finals,
             odds_champion     = EXCLUDED.odds_champion,
             odds_playoffs_weighted = EXCLUDED.odds_playoffs_weighted,
             odds_second_round_weighted = EXCLUDED.odds_second_round_weighted,
-            odds_third_round_weighted  = EXCLUDED.odds_third_round_weighted,
+            odds_quarterfinals_weighted  = EXCLUDED.odds_quarterfinals_weighted,
             odds_semifinals_weighted   = EXCLUDED.odds_semifinals_weighted,
             odds_finals_weighted       = EXCLUDED.odds_finals_weighted,
             odds_champion_weighted     = EXCLUDED.odds_champion_weighted,
             odds_first_round_home = EXCLUDED.odds_first_round_home,
             odds_second_round_home = EXCLUDED.odds_second_round_home,
-            odds_third_round_home = EXCLUDED.odds_third_round_home,
+            odds_quarterfinals_home = EXCLUDED.odds_quarterfinals_home,
             odds_semifinals_home = EXCLUDED.odds_semifinals_home,
             odds_first_round_home_weighted = EXCLUDED.odds_first_round_home_weighted,
             odds_second_round_home_weighted = EXCLUDED.odds_second_round_home_weighted,
-            odds_third_round_home_weighted = EXCLUDED.odds_third_round_home_weighted,
+            odds_quarterfinals_home_weighted = EXCLUDED.odds_quarterfinals_home_weighted,
             odds_semifinals_home_weighted = EXCLUDED.odds_semifinals_home_weighted,
             coin_flip_needed = EXCLUDED.coin_flip_needed
         ;
@@ -280,22 +362,36 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
     completed = fetch_completed_pairs(teams, season)
     remaining = fetch_remaining_pairs(teams, season)
 
-    first_counts, second_counts, third_counts, fourth_counts, denom, minimized_scenarios = determine_scenarios(
-        teams, completed, remaining, debug=debug
-    )
+    r = determine_scenarios(teams, completed, remaining, debug=debug)
 
-    odds = determine_odds(teams, first_counts, second_counts, third_counts, fourth_counts, denom)
+    odds = determine_odds(teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
+
+    num_rounds = fetch_num_rounds(clazz, season)
+    bracket = compute_bracket_odds(num_rounds, odds)
+
+    home_seeds = fetch_first_round_home_seeds(clazz, region, season)
+    first_round_home = compute_first_round_home_odds(home_seeds, odds)
 
     region_standings = fetch_region_standings(clazz, region, season)
 
     logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
     logger.info("Region standings: %s", region_standings)
     logger.info("Odds: %s", odds)
-    logger.info("Minimized scenarios: %s", minimized_scenarios)
+    logger.info("Minimized scenarios: %s", r.minimized_scenarios)
 
-    write_region_standings(region_standings, odds, minimized_scenarios, clazz, region, season)
+    write_region_standings(
+        region_standings,
+        odds,
+        r.minimized_scenarios,
+        clazz,
+        region,
+        season,
+        r.coinflip_teams,
+        first_round_home,
+        bracket,
+    )
 
-    return minimized_scenarios
+    return r.minimized_scenarios
 
 
 @flow(name="Region Scenarios Data Flow")

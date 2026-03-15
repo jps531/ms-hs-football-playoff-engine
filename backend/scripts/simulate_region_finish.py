@@ -48,21 +48,21 @@ from itertools import product
 from typing import Any, cast
 
 # Ensure the project root is on the path when running from scripts/ directly
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 try:
     import psycopg
 except Exception:
     psycopg = None
 
-from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame
-from prefect_files.data_helpers import get_completed_games, normalize_pair
-from prefect_files.scenarios import (
+from backend.helpers.data_classes import CompletedGame, RawCompletedGame, RemainingGame
+from backend.helpers.data_helpers import get_completed_games, normalize_pair
+from backend.helpers.scenarios import (
     consolidate_all,
     minimize_minterms,
     pct_str,
 )
-from prefect_files.tiebreakers import (
+from backend.helpers.tiebreakers import (
     rank_to_slots,
     resolve_standings_for_mask,
     standings_from_mask,

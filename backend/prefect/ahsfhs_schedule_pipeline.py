@@ -13,8 +13,8 @@ from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_values
 from web_helpers import fetch_article_text_from_ahsfhs
 
-from prefect_files.data_classes import Game, School
-from prefect_files.data_helpers import (
+from backend.helpers.data_classes import Game, School
+from backend.helpers.data_helpers import (
     _month_to_num,
     _normalize_ws,
     get_school_name_from_ahsfhs,
@@ -22,7 +22,7 @@ from prefect_files.data_helpers import (
     to_plain_text,
     update_school_name_for_ahsfhs_search,
 )
-from prefect_files.database_helpers import get_database_connection
+from backend.helpers.database_helpers import get_database_connection
 
 # -------------------------
 # Constants
@@ -83,7 +83,7 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
         (?P<mon>[A-Z]{3,9})\.?,?\s+
         (?P<day>\d{1,2})\s+
         (?P<loc>vs\.|@)\s+
-        (?P<opp>[A-Z0-9&.'\- ]+)
+        (?P<opp>[A-Z&.'\- ]+)
         (?:\s*(?P<star1>\*))?
         (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+
             (?P<res>[WL]|\#(?:Won|Lost))

@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
-from prefect_files.data_helpers import SPACE_RE
+from backend.helpers.data_helpers import SPACE_RE
 
 # -------------------------
 # Constants

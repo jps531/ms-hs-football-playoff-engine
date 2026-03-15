@@ -1,0 +1,47 @@
+# Dockerfile for Prefect Worker that runs flows
+ARG ENVIRONMENT=local
+ARG PREFECT_VERSION=2.17.1
+ARG PYTHON_VERSION=3.11
+
+FROM prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
+
+# System libs that Chromium needs (lean set)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
+    libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 \
+    libasound2 fonts-liberation fonts-dejavu-core ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# Workdir for installing deps
+WORKDIR /app
+
+# Install all dependencies from pyproject.toml, then uninstall the package
+# itself. This keeps deps in site-packages but leaves prefect_files out of
+# site-packages, so Prefect's to_deployment() can resolve flow files relative
+# to CWD (required — raises ValueError if the module resolves to site-packages).
+COPY pyproject.toml /app/
+# Stub out the package so pip can resolve metadata without copying source.
+# This layer only re-runs when pyproject.toml changes, not on every code edit.
+RUN mkdir -p /app/backend && touch /app/backend/__init__.py \
+    && pip install --no-cache-dir . \
+    && pip uninstall --yes ms-hs-football-playoff-engine \
+    && playwright install --with-deps chromium
+
+# Copy flows as a backend/ subdir under CWD so that
+# `from backend.xxx import yyy` resolves to local files, not site-packages.
+COPY backend/ /opt/prefect/flows/pipelines/backend/
+
+# Copy env file for flows (as you had)
+ARG ENVIRONMENT=local
+COPY .env.${ENVIRONMENT} /opt/prefect/flows/.env
+
+# PYTHONPATH=/opt/prefect/flows/pipelines lets `from backend.xxx import`
+# resolve to the local subdirectory.
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/prefect/flows/pipelines
+
+WORKDIR /opt/prefect/flows/pipelines
+
+# Default command (same as before)
+CMD ["python", "backend/prefect/flows.py"]

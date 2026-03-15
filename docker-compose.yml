@@ -12,6 +12,7 @@ x-env-common: &env-common
   PREFECT_VERSION: "${PREFECT_VERSION:-2.17.1}"
   PYTHON_VERSION: "${PYTHON_VERSION:-3.11}"
   POSTGRES_VERSION: "${POSTGRES_VERSION:-17}"
+  PYTHONPATH: "${PYTHONPATH:-/opt/prefect/flows/pipelines}"
 
 services:
   prefect-server:
@@ -36,7 +37,7 @@ services:
   prefect-worker:
     build:
       context: .
-      dockerfile: prefect_files/Dockerfile.prefect
+      dockerfile: backend/prefect/Dockerfile.prefect
       args:
         - ENVIRONMENT=${ENVIRONMENT}
         - PREFECT_VERSION=${PREFECT_VERSION}

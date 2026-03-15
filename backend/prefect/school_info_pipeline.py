@@ -14,9 +14,9 @@ from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_batch
 from web_helpers import UA, _extract_next_data
 
-from prefect_files.data_classes import School
-from prefect_files.data_helpers import as_float_or_none
-from prefect_files.database_helpers import get_database_connection
+from backend.helpers.data_classes import School
+from backend.helpers.data_helpers import as_float_or_none
+from backend.helpers.database_helpers import get_database_connection
 
 # -------------------------
 # Helpers

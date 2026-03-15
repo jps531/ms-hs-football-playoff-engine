@@ -4,10 +4,63 @@ Includes raw and processed game representations, standings odds, and
 DB-mapped objects for schools, locations, brackets, and bracket games.
 """
 
-from collections.abc import Iterable
+from collections import Counter, defaultdict
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from typing import TypedDict
+
+# -------------------------
+# Win probability interface
+# -------------------------
+
+#: Injectable win probability function type.
+#: Called as ``win_prob_fn(team_a, team_b, date_str)`` where ``team_a`` is the
+#: lexicographically-first team (per RemainingGame convention).  Returns the
+#: probability that ``team_a`` beats ``team_b`` on the given date.
+WinProbFn = Callable[[str, str, str | None], float]
+
+
+def equal_win_prob(_team_a: str, _team_b: str, _date_str: str | None = None) -> float:
+    """Return 0.5 for every matchup (equal-probability default).
+
+    Args:
+        _team_a: Lexicographically-first team name (unused).
+        _team_b: Lexicographically-second team name (unused).
+        _date_str: Optional game date (unused in this implementation).
+
+    Returns:
+        Always ``0.5``.
+    """
+    return 0.5
+
+
+# -------------------------
+# Scenario results container
+# -------------------------
+
+
+@dataclass
+class ScenarioResults:
+    """Return value of ``determine_scenarios()``.
+
+    Bundles both unweighted (equal-probability) and win-probability-weighted
+    seed counts so callers can compute odds under either assumption without
+    re-running enumeration.
+    """
+
+    first_counts: Counter
+    second_counts: Counter
+    third_counts: Counter
+    fourth_counts: Counter
+    denom: float
+    minimized_scenarios: defaultdict
+    coinflip_teams: set[str]
+    first_counts_weighted: Counter
+    second_counts_weighted: Counter
+    third_counts_weighted: Counter
+    fourth_counts_weighted: Counter
+    denom_weighted: float
 
 # -------------------------
 # Standings (region W/L/T record used by scenario engine)
@@ -533,6 +586,23 @@ class RemainingGame:
 
     a: str  # team (lexicographically first)
     b: str  # team (lexicographically second)
+
+
+# --- Data class for bracket advancement odds ---
+@dataclass(frozen=True)
+class BracketOdds:
+    """Per-team probability of advancing to each successive playoff round.
+
+    Computed under equal win probability (50/50) from ``compute_bracket_odds()``.
+    ``quarterfinals`` is 0.0 for classes with only 4 playoff rounds (5A–7A).
+    """
+
+    school: str
+    second_round: float   # P(playing in round 2)
+    quarterfinals: float    # P(playing in round 3); 0.0 for 4-round brackets
+    semifinals: float     # P(playing in the N/S championship round)
+    finals: float         # P(playing in the state championship)
+    champion: float       # P(winning the state championship)
 
 
 # --- Data class for standings odds results ---

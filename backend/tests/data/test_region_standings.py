@@ -1,6 +1,6 @@
 """Static test fixtures for Region 3-7A (2025 season) standings and scenario tests."""
 
-from prefect_files.data_classes import CompletedGame, RawCompletedGame, RemainingGame, StandingsOdds
+from backend.helpers.data_classes import CompletedGame, RawCompletedGame, RemainingGame, StandingsOdds
 
 # ----------- Test Data for Class 7A Region 3 (2025 season) ----------
 

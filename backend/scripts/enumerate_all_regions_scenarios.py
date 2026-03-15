@@ -4,7 +4,7 @@ Generate a single all_scenarios.txt for all regions across classes.
 
 Requirements:
 - psycopg (pip install 'psycopg[binary]')
-- The module simulate_region_finish_odds_enum_with_scenarios.py must be importable
+- The module enumerate_all_regions_scenarios.py must be importable
   (in the same directory or on PYTHONPATH). It should expose enumerate_region().
 
 Usage:
@@ -19,6 +19,12 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+
+# Add repo root and this scripts directory to sys.path so bare imports work.
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(os.path.dirname(_SCRIPTS_DIR))
+sys.path.insert(0, _REPO_ROOT)
+sys.path.insert(0, _SCRIPTS_DIR)
 
 try:
     import psycopg

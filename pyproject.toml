@@ -23,8 +23,12 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["prefect_files/tests"]
-addopts = "--cov=prefect_files --cov-branch --cov-report=term-missing"
+testpaths = ["backend/tests"]
+addopts = "--cov=backend --cov-branch --cov-report=term-missing"
+filterwarnings = [
+    "ignore::PendingDeprecationWarning:prefect._vendor.starlette.formparsers",
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]
 
 [tool.ruff]
 target-version = "py311"
@@ -44,33 +48,32 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["prefect_files"]
+known-first-party = ["backend"]
 
 [tool.docstr-coverage]
 # Exclude pipeline files (require live DB/Prefect) and tests from docstring coverage.
 # Paths are passed as CLI args: uv run docstr-coverage prefect_files scripts
-exclude = "prefect_files/(ahsfhs_schedule_pipeline|database_helpers|flows|maxpreps_data_pipeline|playoff_bracket_pipeline|region_scenarios_pipeline|regions_data_pipeline|school_info_pipeline|template_pipeline|web_helpers)\\.py|prefect_files/tests"
+exclude = "backend/prefect/(ahsfhs_schedule_pipeline|database_helpers|flows|maxpreps_data_pipeline|playoff_bracket_pipeline|region_scenarios_pipeline|regions_data_pipeline|school_info_pipeline|template_pipeline|web_helpers)\\.py|backend/tests"
 skip_magic = true
 skip_init = true
 verbose = 2
 
 [tool.coverage.run]
 branch = true
-source = ["prefect_files"]
+source = ["backend"]
 
 [tool.coverage.report]
 # Exclude Prefect pipeline files — these require a live DB/Prefect and are
 # not unit-testable in isolation. Coverage numbers reflect pure logic only.
 omit = [
-    "prefect_files/ahsfhs_schedule_pipeline.py",
-    "prefect_files/database_helpers.py",
-    "prefect_files/flows.py",
-    "prefect_files/maxpreps_data_pipeline.py",
-    "prefect_files/playoff_bracket_pipeline.py",
-    "prefect_files/region_scenarios_pipeline.py",
-    "prefect_files/regions_data_pipeline.py",
-    "prefect_files/school_info_pipeline.py",
-    "prefect_files/template_pipeline.py",
-    "prefect_files/web_helpers.py",
-    "prefect_files/tests/*",
+    "backend/prefect/ahsfhs_schedule_pipeline.py",
+    "backend/helpers/database_helpers.py",
+    "backend/prefect/flows.py",
+    "backend/prefect/maxpreps_data_pipeline.py",
+    "backend/prefect/region_scenarios_pipeline.py",
+    "backend/prefect/regions_data_pipeline.py",
+    "backend/prefect/school_info_pipeline.py",
+    "backend/prefect/template_pipeline.py",
+    "backend/helpers/web_helpers.py",
+    "backend/tests/*",
 ]

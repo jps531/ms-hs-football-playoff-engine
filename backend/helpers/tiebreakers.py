@@ -7,7 +7,7 @@ games -> coin flip). No Prefect or database dependencies.
 
 from collections import defaultdict
 
-from prefect_files.data_helpers import normalize_pair
+from backend.helpers.data_helpers import normalize_pair
 
 # -------------------------
 # Step 5 accumulation + W/L/T
@@ -672,7 +672,15 @@ def tie_bucket_groups(teams, wl_totals):
 
 
 def resolve_standings_for_mask(
-    teams, completed, remaining, outcome_mask, margins, base_margin_default=7, pa_win=14, debug=False
+    teams,
+    completed,
+    remaining,
+    outcome_mask,
+    margins,
+    base_margin_default=7,
+    pa_win=14,
+    coin_flip_collector: list[list[str]] | None = None,
+    debug=False,
 ):
     """Resolve the full region seeding order for a single outcome mask.
 
@@ -689,6 +697,8 @@ def resolve_standings_for_mask(
         base_margin_default: Assumed winning margin when a game's margin is not
             in `margins`.
         pa_win: Points assumed scored against the winner in a remaining game.
+        coin_flip_collector: If provided, groups of teams that required a coin
+            flip to break a tie are appended to this list.
         debug: If True, print step-by-step resolution details to stdout.
 
     Returns:
@@ -697,7 +707,7 @@ def resolve_standings_for_mask(
     wl_totals = standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default)
     base_order = base_bucket_order(teams, wl_totals)
     final = []
-    coinflip_events: list[list[str]] = []
+    coinflip_events: list[list[str]] = [] if coin_flip_collector is None else coin_flip_collector
     for bucket in tie_bucket_groups(teams, wl_totals):
         final.extend(
             resolve_bucket(

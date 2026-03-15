@@ -12,7 +12,7 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
-from prefect_files.data_classes import CompletedGame, RawCompletedGame, School
+from backend.helpers.data_classes import CompletedGame, RawCompletedGame, School
 
 # -------------------------
 # Constants

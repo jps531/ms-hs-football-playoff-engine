@@ -1,8 +1,8 @@
 """Unit tests for Region 3-7A (2025 season) standings, scenario enumeration, and odds calculation."""
 
-from prefect_files.data_helpers import get_completed_games
-from prefect_files.scenarios import determine_odds, determine_scenarios
-from prefect_files.tests.data.test_region_standings import (
+from backend.helpers.data_helpers import get_completed_games
+from backend.helpers.scenarios import determine_odds, determine_scenarios
+from backend.tests.data.test_region_standings import (
     expected_3_7a_completed_games,
     expected_3_7a_completed_games_full,
     expected_3_7a_first_counts,
@@ -51,22 +51,18 @@ def test_get_completed_games_3_7a():
 
 def test_determine_scenarios_3_7a():
     """Scenario seed counts match expected values for Region 3-7A (pre-final-week)."""
-    first_counts, second_counts, third_counts, fourth_counts, _, minimized_scenarios = (
-        determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
-    )
-    assert first_counts == expected_3_7a_first_counts
-    assert second_counts == expected_3_7a_second_counts
-    assert third_counts == expected_3_7a_third_counts
-    assert fourth_counts == expected_3_7a_fourth_counts
-    assert _normalize_scenarios(minimized_scenarios) == _normalize_scenarios(expected_3_7a_minimized_scenarios)
+    r = determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
+    assert r.first_counts == expected_3_7a_first_counts
+    assert r.second_counts == expected_3_7a_second_counts
+    assert r.third_counts == expected_3_7a_third_counts
+    assert r.fourth_counts == expected_3_7a_fourth_counts
+    assert _normalize_scenarios(r.minimized_scenarios) == _normalize_scenarios(expected_3_7a_minimized_scenarios)
 
 
 def test_determine_odds_3_7a():
     """Playoff odds match expected values for Region 3-7A (pre-final-week)."""
-    first_counts, second_counts, third_counts, fourth_counts, denom, _ = (
-        determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
-    )
-    odds = determine_odds(teams_3_7a, first_counts, second_counts, third_counts, fourth_counts, denom)
+    r = determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
+    odds = determine_odds(teams_3_7a, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
     assert odds == expected_3_7a_odds
 
 
@@ -86,32 +82,26 @@ def test_get_completed_games_3_7a_full():
 
 def test_determine_scenarios_3_7a_full():
     """Scenario seed counts match expected values for Region 3-7A (full season, 0 remaining)."""
-    first_counts, second_counts, third_counts, fourth_counts, denom, minimized_scenarios = (
-        determine_scenarios(teams_3_7a, expected_3_7a_completed_games_full, expected_3_7a_remaining_games_full)
-    )
-    assert denom == 1  # NOSONAR — denom is an exact integer count, not a computed float
-    assert first_counts == expected_3_7a_first_counts_full
-    assert second_counts == expected_3_7a_second_counts_full
-    assert third_counts == expected_3_7a_third_counts_full
-    assert fourth_counts == expected_3_7a_fourth_counts_full
-    assert _normalize_scenarios(minimized_scenarios) == _normalize_scenarios(expected_3_7a_minimized_scenarios_full)
+    r = determine_scenarios(teams_3_7a, expected_3_7a_completed_games_full, expected_3_7a_remaining_games_full)
+    assert r.denom == 1  # NOSONAR — denom is an exact integer count, not a computed float
+    assert r.first_counts == expected_3_7a_first_counts_full
+    assert r.second_counts == expected_3_7a_second_counts_full
+    assert r.third_counts == expected_3_7a_third_counts_full
+    assert r.fourth_counts == expected_3_7a_fourth_counts_full
+    assert _normalize_scenarios(r.minimized_scenarios) == _normalize_scenarios(expected_3_7a_minimized_scenarios_full)
 
 
 def test_determine_odds_3_7a_full():
     """Playoff odds match expected values for Region 3-7A (full season, 0 remaining)."""
-    first_counts, second_counts, third_counts, fourth_counts, denom, _ = (
-        determine_scenarios(teams_3_7a, expected_3_7a_completed_games_full, expected_3_7a_remaining_games_full)
-    )
-    odds = determine_odds(teams_3_7a, first_counts, second_counts, third_counts, fourth_counts, denom)
+    r = determine_scenarios(teams_3_7a, expected_3_7a_completed_games_full, expected_3_7a_remaining_games_full)
+    odds = determine_odds(teams_3_7a, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
     assert odds == expected_3_7a_odds_full
 
 
 def test_final_seed_order_3_7a():
     """Ground-truth smoke test: full-season standings must match known 2025 playoff seeds."""
-    first_counts, second_counts, third_counts, fourth_counts, denom, _ = (
-        determine_scenarios(teams_3_7a, expected_3_7a_completed_games_full, expected_3_7a_remaining_games_full)
-    )
-    odds = determine_odds(teams_3_7a, first_counts, second_counts, third_counts, fourth_counts, denom)
+    r = determine_scenarios(teams_3_7a, expected_3_7a_completed_games_full, expected_3_7a_remaining_games_full)
+    odds = determine_odds(teams_3_7a, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
 
     seed_1 = max(teams_3_7a, key=lambda t: odds[t].p1)
     seed_2 = max(teams_3_7a, key=lambda t: odds[t].p2)

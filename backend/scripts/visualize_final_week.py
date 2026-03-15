@@ -22,23 +22,23 @@ from __future__ import annotations
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import BoundaryNorm, ListedColormap
 
-from prefect_files.tests.data.test_region_standings import (
+from backend.tests.data.test_region_standings import (
     expected_3_7a_completed_games as completed,
 )
-from prefect_files.tests.data.test_region_standings import (
+from backend.tests.data.test_region_standings import (
     expected_3_7a_remaining_games as remaining,
 )
-from prefect_files.tests.data.test_region_standings import (
+from backend.tests.data.test_region_standings import (
     teams_3_7a as teams,
 )
-from prefect_files.tiebreakers import resolve_standings_for_mask
+from backend.helpers.tiebreakers import resolve_standings_for_mask
 
 # ---------------------------------------------------------------------------
 # Constants

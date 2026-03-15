@@ -17,11 +17,11 @@ A web application that calculates standings and playoff scenarios for Mississipp
 
 Run all region scenarios:
 
-`python enumerate_all_regions_scenarios.py --season 2025 --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball"`
+`python backend/scripts/enumerate_all_regions_scenarios.py --season 2025 --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball"`
 
 Run a specific region scenario:
 
-`python simulate_region_finish.py \                                                                 
+`python backend/scripts/simulate_region_finish.py \
   --class 1 --region 8 --season 2025 \
   --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball" \
   --out-scenarios "scenarios.txt"`
@@ -72,11 +72,11 @@ open htmlcov/index.html
 Check that all public functions and modules have docstrings:
 
 ```
-uv run docstr-coverage prefect_files scripts
+uv run docstr-coverage backend
 ```
 
 The report excludes pipeline files (same omit list as test coverage) and skips magic methods and `__init__`. Current baseline: 100%.
 
 ### Coverage gaps
 
-Known tiebreaker paths not yet exercised by the Region 3-7A test data are documented in [`prefect_files/tests/COVERAGE_GAPS.md`](prefect_files/tests/COVERAGE_GAPS.md). Each gap requires synthetic game data to test exhaustively.
+Known tiebreaker paths not yet exercised by the Region 3-7A test data are documented in [`docs/COVERAGE_GAPS.md`](docs/COVERAGE_GAPS.md). Each gap requires synthetic game data to test exhaustively.
