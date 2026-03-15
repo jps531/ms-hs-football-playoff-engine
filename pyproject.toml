@@ -66,14 +66,9 @@ source = ["backend"]
 # Exclude Prefect pipeline files — these require a live DB/Prefect and are
 # not unit-testable in isolation. Coverage numbers reflect pure logic only.
 omit = [
-    "backend/prefect/ahsfhs_schedule_pipeline.py",
+    "**/__init__.py",
+    "backend/prefect/*",
     "backend/helpers/database_helpers.py",
-    "backend/prefect/flows.py",
-    "backend/prefect/maxpreps_data_pipeline.py",
-    "backend/prefect/region_scenarios_pipeline.py",
-    "backend/prefect/regions_data_pipeline.py",
-    "backend/prefect/school_info_pipeline.py",
-    "backend/prefect/template_pipeline.py",
     "backend/helpers/web_helpers.py",
     "backend/tests/*",
 ]

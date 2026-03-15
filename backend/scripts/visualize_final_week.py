@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import BoundaryNorm, ListedColormap
 
+from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.tests.data.test_region_standings import (
     expected_3_7a_completed_games as completed,
 )
@@ -38,7 +39,6 @@ from backend.tests.data.test_region_standings import (
 from backend.tests.data.test_region_standings import (
     teams_3_7a as teams,
 )
-from backend.helpers.tiebreakers import resolve_standings_for_mask
 
 # ---------------------------------------------------------------------------
 # Constants

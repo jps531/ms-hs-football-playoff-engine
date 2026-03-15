@@ -6,9 +6,10 @@
 |---|---|---|
 | `scenarios.py` | 94% | ↑ from 11% (added pure helper + consolidation unit tests) |
 | `tiebreakers.py` | 76% | ↑ from 59% (ground truth tests across all 44 regions) |
+| `scripts/simulate_region_finish.py` | 76% | New — 216 tests added across 5 groups |
 | `data_helpers.py` | 43% | Flat — uncovered lines are scraping/DB fetch paths, not unit-testable |
 | `data_classes.py` | 70% | Flat — uncovered dataclass methods not exercised by current test paths |
-| **Total** | **82%** | ↑ from ~32% |
+| **Total** | **79%** | ↑ from ~32% |
 
 ---
 
@@ -31,6 +32,14 @@ Added in groups 1, 2, and 4 to cover:
 - `compute_bracket_odds()` — 4-round and 5-round brackets, all probability fields
 - `compute_first_round_home_odds()` — all home-seed combinations
 
+### `simulate_region_finish.py` tests (`simulate_region_finish_test.py`)
+Added in 5 groups covering 216 tests:
+- **Group 1** — atom/minterm helpers: `extract_pair`, `is_complement`, `_build_complement_map`, `_make_atom_str`, `canonical_atoms_for_remaining`, `boolean_game_vars`
+- **Group 2** — rendering pipeline: `_render_clause_lines_ordered`, `_render_scenario_block_ordered`, `scenarios_text_from_team_seed_ordered` (letter-block format)
+- **Group 3** — Region 3-7A integration: `enumerate_region_pure` and `enumerate_region` with real fixture data
+- **Group 4** — missing branches in already-covered helpers: `_interval_for_base`, `_touching`, `_try_merge_neighbor`, `_band_sort_key`, `_global_partitions_for_base`, `_expand_signature_atoms_global`
+- **Group 5** — legacy seed-percentage rendering: `_canon_matchup`, `_classify_clause`, `clauses_for_m`, `_block_sort_key`, `_interval_of_clause`, `_union_intervals`, `_coverage_collapse_blocks`, `scenarios_text_dict_format`
+
 ---
 
 ## Remaining gaps
@@ -52,6 +61,36 @@ so `intra_bucket_games` is always empty and the margin probe loop never runs.
 - A case where margin doesn't change standings (no threshold) and one where it does
   (produces GE keys).
 - A case where `interval_specs` is empty even with intra-bucket games (all thresholds empty).
+
+---
+
+### `simulate_region_finish.py` — testable but uncovered paths
+
+#### `_reduce_tautology_blocks` (lines 782–841)
+**Why not covered:** Pure function never called by any currently-tested path.
+**Test needed:** Two complementary OR-block pairs that form a tautology (A covers full [0,∞)
+and B covers full [0,∞) via complement intervals) so the function absorbs the superset block.
+
+#### `_coverage_collapse_blocks` — margin-interval branch (line 1076)
+**Why not covered:** The collapse fires for `[0, ∞)` intervals but the non-trivial finite
+interval branch (`lo > 0` or `hi < ∞`) is not exercised.
+**Test needed:** Two blocks where winner A covers e.g. margin ≥ 3 and winner B covers margin
+< 3 (complementary finite intervals) to trigger the finite-interval collapse path.
+
+#### `scenarios_text_from_team_seed_ordered` — `None` scen_dist (lines 1126, 1146)
+**Why not covered:** All 3-7A fixture outcomes produce non-None distributions.
+**Test needed:** A fixture where a seeding outcome is structurally impossible so
+`scen_dist` is `None` for that seed position.
+
+#### `scenarios_text_from_team_seed_ordered` — empty seeds branch (lines 1203–1207)
+**Why not covered:** 3-7A always has at least one scenario per team.
+**Test needed:** A call with a `seed_order` list containing a team that appears in no
+scenario, so the inner `if not blocks:` guard fires and the seed entry is skipped.
+
+#### `enumerate_region_pure` — mask-loop with no intra-bucket games (lines 1330–1371, 1373–1393)
+**Why not covered:** All tested masks have at least one remaining game.
+**Test needed:** A fixture with only completed games (no remaining) so the mask loop
+iterates but `intra_bucket_games` is empty and the GE-probe branch never fires.
 
 ---
 
@@ -90,6 +129,12 @@ are excluded from Steps 1 and 3 but included in Steps 2, 4, and 5.
 **Test needed:** A region with all games remaining or a fully circular result set to exercise
 `resolve_bucket()` with the full team list from the very first step.
 
+#### Debug print branches (lines 407–450, 522–525, 542, 575, 604–605)
+**Why not covered:** `tiebreakers.py` still contains `if debug:` print blocks that are
+never triggered by any test (no test passes `debug=True`).
+**Options:** Either add `debug=True` fixture tests to cover these branches, or remove the
+debug prints (as was done in `simulate_region_finish.py`).
+
 ---
 
 ## Not unit-testable (by design)
@@ -98,6 +143,9 @@ are excluded from Steps 1 and 3 but included in Steps 2, 4, and 5.
 |---|---|
 | `data_helpers.py` scraping functions | Require live HTTP responses or BeautifulSoup fixtures |
 | `data_helpers.py` DB fetch path (`get_completed_games` DB branch) | Requires a live PostgreSQL connection |
+| `scripts/simulate_region_finish.py` psycopg fallback (lines 56–57) | Import guard for optional psycopg v3 |
+| `scripts/simulate_region_finish.py` DB fetch functions (lines 95–143) | Require a live PostgreSQL connection |
+| `scripts/simulate_region_finish.py` `enumerate_region` body + `main` (lines 1539–1730) | Require live DB + CLI invocation |
 | Prefect pipeline files (`region_scenarios_pipeline.py`, etc.) | Require Prefect runtime + live DB; excluded from coverage config |
 
 ---

@@ -37,7 +37,7 @@ services:
   prefect-worker:
     build:
       context: .
-      dockerfile: backend/prefect/Dockerfile.prefect
+      dockerfile: Dockerfile.prefect
       args:
         - ENVIRONMENT=${ENVIRONMENT}
         - PREFECT_VERSION=${PREFECT_VERSION}
