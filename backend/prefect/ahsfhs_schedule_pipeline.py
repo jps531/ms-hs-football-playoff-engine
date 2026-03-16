@@ -311,8 +311,13 @@ def get_existing_schools(season: int) -> list[School]:
     Gets the list of existing schools from the database.
     """
     q = """
-        SELECT school, season, class, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color FROM schools
-        WHERE season = %s
+        SELECT ss.school, ss.season, ss.class, ss.region,
+               s.city, s.zip, s.latitude, s.longitude, s.mascot,
+               s.maxpreps_id, s.maxpreps_url, s.maxpreps_logo,
+               s.primary_color, s.secondary_color
+        FROM school_seasons ss
+        JOIN schools s USING (school)
+        WHERE ss.season = %s
     """
     schools: list[School] = []
     with get_database_connection() as conn:

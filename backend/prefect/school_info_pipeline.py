@@ -98,7 +98,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
             latitude        = COALESCE(%s, latitude),
             longitude       = COALESCE(%s, longitude),
             maxpreps_logo   = COALESCE(NULLIF(%s, ''), maxpreps_logo)
-        WHERE school = %s AND season = %s AND class = %s AND region = %s
+        WHERE school = %s
     """
 
     logger.info("Updating %d school records in schools table", len(list(school_records)))
@@ -110,10 +110,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
             as_float_or_none(row["latitude"]),
             as_float_or_none(row["longitude"]),
             row["maxpreps_logo"],
-            row["school"],  # <-- note: order must match the WHERE clause
-            row["season"],
-            row["class"],
-            row["region"],
+            row["school"],
         )
         for row in school_records
     ]
@@ -131,7 +128,12 @@ def get_existing_schools() -> list[School]:
     Gets the list of existing schools from the database.
     """
     q = """
-        SELECT school, season, class, region, city, zip, latitude, longitude, mascot, maxpreps_id, maxpreps_url, maxpreps_logo, primary_color, secondary_color FROM schools
+        SELECT ss.school, ss.season, ss.class, ss.region,
+               s.city, s.zip, s.latitude, s.longitude, s.mascot,
+               s.maxpreps_id, s.maxpreps_url, s.maxpreps_logo,
+               s.primary_color, s.secondary_color
+        FROM school_seasons ss
+        JOIN schools s USING (school)
     """
     schools: list[School] = []
     with get_database_connection() as conn:

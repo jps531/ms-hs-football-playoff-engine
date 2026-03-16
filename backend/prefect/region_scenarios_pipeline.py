@@ -10,9 +10,15 @@ from collections import defaultdict
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import Json, execute_values
 
+from backend.helpers.bracket_home_odds import (
+    compute_quarterfinal_home_odds,
+    compute_second_round_home_odds,
+    compute_semifinal_home_odds,
+)
 from backend.helpers.data_classes import (
     BracketOdds,
     CompletedGame,
+    FormatSlot,
     RawCompletedGame,
     RemainingGame,
     Standings,
@@ -38,7 +44,7 @@ def fetch_region_teams(clazz: int, region: int, season: int) -> list[str]:
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT school FROM schools WHERE class=%s AND region=%s AND season=%s ORDER BY school",
+                "SELECT school FROM school_seasons WHERE class=%s AND region=%s AND season=%s ORDER BY school",
                 (clazz, region, season),
             )
             return [r[0] for r in cur.fetchall()]
@@ -161,6 +167,31 @@ def fetch_first_round_home_seeds(clazz: int, region: int, season: int) -> frozen
             return frozenset(row[0] for row in cur.fetchall())
 
 
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Format Slots for {clazz}A")
+def fetch_all_format_slots(clazz: int, season: int) -> list[FormatSlot]:
+    """Fetch all first-round playoff format slots for this class/season.
+
+    Args:
+        clazz: MHSAA classification (1–7).
+        season: Football season year.
+
+    Returns:
+        List of FormatSlot instances sorted by slot number.
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT pfs.slot, pfs.home_region, pfs.home_seed, "
+                "       pfs.away_region, pfs.away_seed, pfs.north_south "
+                "FROM playoff_format_slots pfs "
+                "JOIN playoff_formats pf ON pf.id = pfs.format_id "
+                "WHERE pf.season = %s AND pf.class = %s "
+                "ORDER BY pfs.slot",
+                (season, clazz),
+            )
+            return [FormatSlot(*row) for row in cur.fetchall()]
+
+
 @task(task_run_name="Write {season} Region Standings for {region}-{clazz}A")
 def write_region_standings(
     standings: list[Standings],
@@ -172,13 +203,15 @@ def write_region_standings(
     coinflip_teams: set[str] | None = None,
     first_round_home_odds: dict[str, float] | None = None,
     bracket_odds: dict[str, BracketOdds] | None = None,
+    second_round_home_odds: dict[str, float] | None = None,
+    quarterfinals_home_odds: dict[str, float] | None = None,
+    semifinals_home_odds: dict[str, float] | None = None,
 ):
     """Upsert standings, odds, and scenario data into the ``region_standings`` table.
 
     Constructs one row per school and performs an INSERT ... ON CONFLICT UPDATE
-    so that re-running the flow is idempotent.  Weighted and home-game columns
-    for rounds beyond the first are written as 0.0 placeholders pending future
-    implementation.
+    so that re-running the flow is idempotent.  Weighted odds columns are
+    written as 0.0 placeholders pending future implementation.
 
     Args:
         standings: List of Standings instances from ``fetch_region_standings``.
@@ -194,6 +227,12 @@ def write_region_standings(
             hosting their round-1 game.  Defaults to all zeros if not provided.
         bracket_odds: Dict mapping school name to ``BracketOdds`` (from
             ``compute_bracket_odds``).  Defaults to all zeros if not provided.
+        second_round_home_odds: Dict mapping school name to marginal P(hosting
+            round 2).  1A-4A only; pass empty dict or omit for 5A-7A.
+        quarterfinals_home_odds: Dict mapping school name to marginal P(hosting
+            the quarterfinal).  Defaults to all zeros if not provided.
+        semifinals_home_odds: Dict mapping school name to marginal P(hosting
+            the semifinal).  Defaults to all zeros if not provided.
 
     Returns:
         The number of rows written to the database.
@@ -201,6 +240,9 @@ def write_region_standings(
     coinflip_teams = coinflip_teams or set()
     first_round_home_odds = first_round_home_odds or {}
     bracket_odds = bracket_odds or {}
+    second_round_home_odds = second_round_home_odds or {}
+    quarterfinals_home_odds = quarterfinals_home_odds or {}
+    semifinals_home_odds = semifinals_home_odds or {}
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
 
     def seed_scenarios_for(scenarios, school):
@@ -259,9 +301,9 @@ def write_region_standings(
                 0.0,  # odds_finals_weighted
                 0.0,  # odds_champion_weighted
                 first_round_home_odds.get(team.school, 0.0),  # odds_first_round_home
-                0.0,  # odds_second_round_home
-                0.0,  # odds_quarterfinals_home
-                0.0,  # odds_semifinals_home
+                second_round_home_odds.get(team.school, 0.0),  # odds_second_round_home
+                quarterfinals_home_odds.get(team.school, 0.0),  # odds_quarterfinals_home
+                semifinals_home_odds.get(team.school, 0.0),  # odds_semifinals_home
                 0.0,  # odds_first_round_home_weighted
                 0.0,  # odds_second_round_home_weighted
                 0.0,  # odds_quarterfinals_home_weighted
@@ -372,6 +414,11 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
     home_seeds = fetch_first_round_home_seeds(clazz, region, season)
     first_round_home = compute_first_round_home_odds(home_seeds, odds)
 
+    slots = fetch_all_format_slots(clazz, season)
+    second_round_home = compute_second_round_home_odds(region, odds, slots) if clazz <= 4 else {}
+    quarterfinals_home = compute_quarterfinal_home_odds(region, odds, slots, season)
+    semifinals_home = compute_semifinal_home_odds(region, odds, slots, season)
+
     region_standings = fetch_region_standings(clazz, region, season)
 
     logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
@@ -389,6 +436,9 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
         r.coinflip_teams,
         first_round_home,
         bracket,
+        second_round_home,
+        quarterfinals_home,
+        semifinals_home,
     )
 
     return r.minimized_scenarios

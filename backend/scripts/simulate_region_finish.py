@@ -94,7 +94,7 @@ def fetch_division(conn, clazz: int, region: int, season: int) -> list[str]:
     """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT school FROM schools WHERE class=%s AND region=%s AND season=%s ORDER BY school",
+            "SELECT school FROM school_seasons WHERE class=%s AND region=%s AND season=%s ORDER BY school",
             (clazz, region, season),
         )
         return [r[0] for r in cur.fetchall()]

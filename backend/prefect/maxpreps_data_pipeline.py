@@ -187,7 +187,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
             mascot       = COALESCE(NULLIF(%s, ''), mascot),
             maxpreps_id  = COALESCE(NULLIF(%s, ''), maxpreps_id),
             maxpreps_url = COALESCE(NULLIF(%s, ''), maxpreps_url)
-        WHERE school = %s AND season = %s AND class = %s AND region = %s
+        WHERE school = %s
     """
 
     # If school_records might be a generator, materialize it ONCE
@@ -201,10 +201,7 @@ def update_rows(school_records: Iterable[dict]) -> int:
             r["mascot"],
             r["maxpreps_id"],
             r["maxpreps_url"],
-            r["school"],  # <-- order matches the WHERE clause
-            r["season"],
-            r["class"],
-            r["region"],
+            r["school"],
         )
         for r in records
     ]
@@ -219,7 +216,8 @@ def update_rows(school_records: Iterable[dict]) -> int:
 def get_existing_schools() -> list[School]:
     """Fetch the distinct list of all schools from the database."""
     q = """
-        SELECT DISTINCT school, season, class, region FROM schools
+        SELECT ss.school, ss.season, ss.class, ss.region
+        FROM school_seasons ss
     """
     schools: list[School] = []
     with get_database_connection() as conn:

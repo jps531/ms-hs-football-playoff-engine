@@ -100,24 +100,34 @@ def fetch_regions(url: str) -> list[dict]:
 def insert_rows(rows: Iterable[School]) -> int:
     """
     Insert the given rows into the database.
+    Upserts into schools (static identity) then school_seasons (class/region).
     Returns the number of rows inserted.
     """
-    if not rows:
+    rows_data = list(rows)
+    if not rows_data:
         return 0
-    sql = """
-        INSERT INTO schools (school, season, class, region)
+
+    schools_sql = """
+        INSERT INTO schools (school)
+        VALUES %s
+        ON CONFLICT (school) DO NOTHING
+    """
+    seasons_sql = """
+        INSERT INTO school_seasons (school, season, class, region)
         VALUES %s
         ON CONFLICT (school, season) DO UPDATE SET
-            class  = COALESCE(EXCLUDED.class,  schools.class),
-            region = COALESCE(EXCLUDED.region, schools.region)
+            class  = COALESCE(EXCLUDED.class,  school_seasons.class),
+            region = COALESCE(EXCLUDED.region, school_seasons.region)
     """
-    rows_data = [(r.school, r.season, r.class_, r.region) for r in rows]
+    schools_data = [(r.school,) for r in rows_data]
+    seasons_data = [(r.school, r.season, r.class_, r.region) for r in rows_data]
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            execute_values(cur, sql, rows_data, template="(%s,%s,%s,%s)")
+            execute_values(cur, schools_sql, schools_data, template="(%s)")
+            execute_values(cur, seasons_sql, seasons_data, template="(%s,%s,%s,%s)")
         conn.commit()
-    return len(list(rows))
+    return len(rows_data)
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Scrape Regions Data")

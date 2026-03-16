@@ -88,10 +88,16 @@ class Standings:
 # -------------------------
 
 
-# --- Data class for a row in the school table ---
+# --- Data class for a school (joined view of schools + school_seasons) ---
 @dataclass
 class School:
-    """DB-mapped dataclass for a row in the ``schools`` table."""
+    """In-memory representation of a school for a given season.
+
+    Maps to a JOIN of the ``schools`` table (static identity metadata) and
+    the ``school_seasons`` table (per-season class/region assignment).
+    When writing to the database, use ``as_schools_tuple()`` for the
+    ``schools`` table and ``as_school_seasons_tuple()`` for ``school_seasons``.
+    """
 
     school: str
     season: int
@@ -108,13 +114,10 @@ class School:
     primary_color: str = ""
     secondary_color: str = ""
 
-    def as_db_tuple(self):
-        """Return a positional tuple suitable for INSERT/UPDATE queries."""
+    def as_schools_tuple(self):
+        """Positional tuple for the ``schools`` table (static fields only)."""
         return (
             self.school,
-            self.season,
-            self.class_,
-            self.region,
             self.city,
             self.zip,
             self.latitude,
@@ -127,13 +130,18 @@ class School:
             self.secondary_color,
         )
 
+    def as_school_seasons_tuple(self):
+        """Positional tuple for the ``school_seasons`` table."""
+        return (self.school, self.season, self.class_, self.region)
+
     @classmethod
     def from_db_tuple(cls, row: Iterable):
         """Create a School object from a database row tuple or sequence.
 
         Args:
-            row: An iterable of column values.  Accepts rows with 4 columns
-                (school, season, class_, region) or 14 columns (all fields).
+            row: An iterable of column values. Accepts rows with 4 columns
+                (school, season, class_, region) or 14 columns (all fields,
+                as returned by a JOIN of schools + school_seasons).
 
         Returns:
             A School instance populated from the row.
@@ -453,6 +461,28 @@ class BracketTeam:
             )
         else:
             raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
+
+
+# --- Data class for a row in the playoff_format_slots table ---
+@dataclass(frozen=True)
+class FormatSlot:
+    """DB-mapped dataclass for a row in the ``playoff_format_slots`` table.
+
+    Attributes:
+        slot:        1-based slot number within the class/season format.
+        home_region: Region number of the designated home team.
+        home_seed:   Seed of the home team (1 = best).
+        away_region: Region number of the designated away team.
+        away_seed:   Seed of the away team.
+        north_south: ``'N'`` or ``'S'`` — which bracket half this slot belongs to.
+    """
+
+    slot: int
+    home_region: int
+    home_seed: int
+    away_region: int
+    away_seed: int
+    north_south: str
 
 
 # --- Data class for a row in the bracket_games table ---

@@ -6,11 +6,11 @@ CREATE OR REPLACE FUNCTION public.get_standings_for_region(p_class integer, p_re
  STABLE
 AS $function$
 WITH division_schools AS (
-  SELECT s.school, s.class, s.region, s.season
-  FROM schools s
-  WHERE s.class  = p_class
-    AND s.region = p_region
-    AND s.season = p_season
+  SELECT ss.school, ss.class, ss.region, ss.season
+  FROM school_seasons ss
+  WHERE ss.class  = p_class
+    AND ss.region = p_region
+    AND ss.season = p_season
 ),
 region_records AS (
   SELECT
