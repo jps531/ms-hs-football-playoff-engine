@@ -8,11 +8,10 @@ converting raw DB rows into CompletedGame instances.
 import re
 import unicodedata
 from collections.abc import Mapping
-from typing import Any
 
 from bs4 import BeautifulSoup
 
-from backend.helpers.data_classes import CompletedGame, RawCompletedGame, School
+from backend.helpers.data_classes import CompletedGame, RawCompletedGame
 
 # -------------------------
 # Constants
@@ -291,7 +290,7 @@ def parse_text_section(text: str, start_phrase: str, end_phrase: str) -> str:
     return match.group(1).strip()
 
 
-def _get_field(r: School | Mapping[str, Any], attr: str, alt_key: str | None = None):
+def _get_field(r: object, attr: str, alt_key: str | None = None):
     """Fetch a named field from a dataclass instance or a Mapping.
 
     Tries ``getattr`` first (dataclass path), then key lookup on the Mapping.
