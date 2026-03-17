@@ -35,7 +35,7 @@ from backend.scripts.simulate_region_finish import (
     extract_pair,
     scenarios_text_from_team_seed_ordered,
 )
-from backend.tests.data.test_region_standings import (
+from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_completed_games,
     expected_3_7a_completed_games_full,
     expected_3_7a_first_counts,
@@ -378,7 +378,6 @@ class TestScenariosTextFromTeamSeedOrdered:
         """The winning team's name appears in the rendered text."""
         text = scenarios_text_from_team_seed_ordered(self._minimal_map(), ["A>B"])
         assert "A Win over B" in text
-
 
 
 # ---------------------------------------------------------------------------

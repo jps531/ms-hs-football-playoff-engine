@@ -2,7 +2,7 @@
 
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenarios import determine_odds, determine_scenarios
-from backend.tests.data.test_region_standings import (
+from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_completed_games,
     expected_3_7a_completed_games_full,
     expected_3_7a_first_counts,
@@ -28,10 +28,7 @@ from backend.tests.data.test_region_standings import (
 def _normalize_scenarios(scenarios: dict) -> dict:
     """Sort scenario atom lists so comparison is order-independent."""
     return {
-        team: {
-            seed: sorted([tuple(sorted(atom.items())) for atom in atoms])
-            for seed, atoms in seed_map.items()
-        }
+        team: {seed: sorted([tuple(sorted(atom.items())) for atom in atoms]) for seed, atoms in seed_map.items()}
         for team, seed_map in scenarios.items()
     }
 
@@ -44,9 +41,7 @@ def _normalize_scenarios(scenarios: dict) -> dict:
 def test_get_completed_games_3_7a():
     """CompletedGame objects match expected pre-final-week data for Region 3-7A."""
     actual = get_completed_games(raw_3_7a_region_results)
-    assert sorted(actual, key=lambda g: (g.a, g.b)) == sorted(
-        expected_3_7a_completed_games, key=lambda g: (g.a, g.b)
-    )
+    assert sorted(actual, key=lambda g: (g.a, g.b)) == sorted(expected_3_7a_completed_games, key=lambda g: (g.a, g.b))
 
 
 def test_determine_scenarios_3_7a():
