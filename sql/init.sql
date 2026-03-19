@@ -152,6 +152,32 @@ CREATE TABLE IF NOT EXISTS region_standings (
 
 
 -- ---------------------------------------------------------------------------
+-- Pre-computed region scenario data
+-- ---------------------------------------------------------------------------
+-- One row per season/class/region. Updated by the Prefect pipeline after each
+-- game-result batch. Stores all three artefacts needed to render scenario text
+-- at request time without re-running the tiebreaker engine or boolean minimizer:
+--   remaining_games    — ordered list of {a, b} game pairs; required to
+--                        deserialize MarginCondition.satisfied_by at render time.
+--   scenario_atoms     — minimized_scenarios dict (team → seed → condition-atom
+--                        lists); source of truth for per-team "seed X if…" views.
+--   complete_scenarios — output of enumerate_division_scenarios() (scenario_num,
+--                        sub_label, game_winners, conditions_atom, seeding);
+--                        source of truth for "Scenario N: … → 1. Team …" views.
+
+CREATE TABLE IF NOT EXISTS region_scenarios (
+  season              INT          NOT NULL,
+  class               VARCHAR(10)  NOT NULL,
+  region              INT          NOT NULL,
+  computed_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  remaining_games     JSONB        NOT NULL,
+  scenario_atoms      JSONB        NOT NULL,
+  complete_scenarios  JSONB        NOT NULL,
+  PRIMARY KEY (season, class, region)
+);
+
+
+-- ---------------------------------------------------------------------------
 -- Playoff bracket format template
 -- ---------------------------------------------------------------------------
 -- One row per season/class combination.  The bracket tree is implicit from
@@ -483,6 +509,27 @@ COMMENT ON COLUMN region_standings.odds_quarterfinals_home_weighted IS
   'Weighted version of odds_quarterfinals_home. Not yet implemented.';
 COMMENT ON COLUMN region_standings.odds_semifinals_home_weighted IS
   'Weighted version of odds_semifinals_home. Not yet implemented.';
+
+
+-- region_scenarios
+
+COMMENT ON TABLE region_scenarios IS
+  'Pre-computed scenario data for each season/class/region, updated by the Prefect '
+  'pipeline after each game-result batch. Avoids re-running the tiebreaker engine '
+  'and boolean minimizer on every frontend request.';
+
+COMMENT ON COLUMN region_scenarios.remaining_games IS
+  'Ordered JSON array of {a, b} game-pair objects for the remaining region games. '
+  'Required to deserialize MarginCondition.satisfied_by correctly at render time.';
+
+COMMENT ON COLUMN region_scenarios.scenario_atoms IS
+  'Serialized minimized_scenarios dict: team → seed → list of condition-atom lists. '
+  'Source of truth for the per-team "seed X if…" text view.';
+
+COMMENT ON COLUMN region_scenarios.complete_scenarios IS
+  'Serialized output of enumerate_division_scenarios(): list of scenario dicts '
+  'with scenario_num, sub_label, game_winners, conditions_atom, and seeding. '
+  'Source of truth for the "Scenario N: … → 1. Team …" complete-seedings view.';
 
 
 -- playoff_formats

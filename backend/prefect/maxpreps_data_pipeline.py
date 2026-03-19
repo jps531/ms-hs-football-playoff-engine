@@ -14,11 +14,11 @@ from urllib.parse import quote_plus
 import requests
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_batch
-from web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
 
 from backend.helpers.data_classes import School
 from backend.helpers.data_helpers import _get_field, _norm, update_school_name_for_maxpreps_search
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.web_helpers import UA, _extract_next_data, _iter_dicts, _ratio
 
 # -------------------------
 # Helpers

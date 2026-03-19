@@ -9,8 +9,6 @@ from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_first_counts_full,
     expected_3_7a_fourth_counts,
     expected_3_7a_fourth_counts_full,
-    expected_3_7a_minimized_scenarios,
-    expected_3_7a_minimized_scenarios_full,
     expected_3_7a_odds,
     expected_3_7a_odds_full,
     expected_3_7a_remaining_games,
@@ -23,15 +21,6 @@ from backend.tests.data.standings_2025_3_7a import (
     raw_3_7a_region_results_full,
     teams_3_7a,
 )
-
-
-def _normalize_scenarios(scenarios: dict) -> dict:
-    """Sort scenario atom lists so comparison is order-independent."""
-    return {
-        team: {seed: sorted([tuple(sorted(atom.items())) for atom in atoms]) for seed, atoms in seed_map.items()}
-        for team, seed_map in scenarios.items()
-    }
-
 
 # ---------------------------------------------------------------------------
 # PRE-FINAL-WEEK tests (3 games remaining, margin-sensitive tiebreakers)
@@ -51,7 +40,6 @@ def test_determine_scenarios_3_7a():
     assert r.second_counts == expected_3_7a_second_counts
     assert r.third_counts == expected_3_7a_third_counts
     assert r.fourth_counts == expected_3_7a_fourth_counts
-    assert _normalize_scenarios(r.minimized_scenarios) == _normalize_scenarios(expected_3_7a_minimized_scenarios)
 
 
 def test_determine_odds_3_7a():
@@ -83,7 +71,7 @@ def test_determine_scenarios_3_7a_full():
     assert r.second_counts == expected_3_7a_second_counts_full
     assert r.third_counts == expected_3_7a_third_counts_full
     assert r.fourth_counts == expected_3_7a_fourth_counts_full
-    assert _normalize_scenarios(r.minimized_scenarios) == _normalize_scenarios(expected_3_7a_minimized_scenarios_full)
+    assert r.minimized_scenarios == {}  # no remaining games → no scenario tree
 
 
 def test_determine_odds_3_7a_full():

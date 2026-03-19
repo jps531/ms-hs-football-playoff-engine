@@ -10,11 +10,11 @@ from collections.abc import Iterable
 
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_values
-from web_helpers import fetch_article_text
 
 from backend.helpers.data_classes import School
 from backend.helpers.data_helpers import SPACE_RE, clean_school_name
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.web_helpers import fetch_article_text
 
 # -------------------------
 # Config

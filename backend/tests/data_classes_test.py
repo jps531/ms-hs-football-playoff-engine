@@ -2,7 +2,8 @@
 
 Covers the DB-mapped dataclass serialization/deserialization methods
 (as_db_tuple, from_db_tuple) for School, Game, Location, Bracket,
-BracketTeam, and BracketGame, plus the equal_win_prob default function.
+BracketTeam, and BracketGame, plus the equal_win_prob default function,
+and the GameResult / MarginCondition scenario condition types.
 """
 
 from datetime import date
@@ -14,7 +15,10 @@ from backend.helpers.data_classes import (
     BracketGame,
     BracketTeam,
     Game,
+    GameResult,
     Location,
+    MarginCondition,
+    RemainingGame,
     School,
     equal_win_prob,
 )
@@ -25,6 +29,7 @@ from backend.helpers.data_classes import (
 
 
 def test_equal_win_prob_always_returns_half() -> None:
+    """equal_win_prob returns 0.5 regardless of team names or date."""
     assert equal_win_prob("TeamA", "TeamB") == pytest.approx(0.5)
     assert equal_win_prob("TeamA", "TeamB", "2025-10-01") == pytest.approx(0.5)
 
@@ -52,6 +57,7 @@ _SCHOOL_FULL = School(
 
 
 def test_school_as_schools_tuple() -> None:
+    """as_schools_tuple returns the correct 11-field tuple for the schools table."""
     t = _SCHOOL_FULL.as_schools_tuple()
     assert t == (
         "Greenwood",
@@ -69,10 +75,12 @@ def test_school_as_schools_tuple() -> None:
 
 
 def test_school_as_school_seasons_tuple() -> None:
+    """as_school_seasons_tuple returns (school, season, class_, region)."""
     assert _SCHOOL_FULL.as_school_seasons_tuple() == ("Greenwood", 2025, 5, 3)
 
 
 def test_school_from_db_tuple_4col() -> None:
+    """from_db_tuple with 4 columns populates identity fields; optional fields default."""
     s = School.from_db_tuple(("Greenwood", 2025, 5, 3))
     assert s.school == "Greenwood"
     assert s.season == 2025
@@ -82,6 +90,7 @@ def test_school_from_db_tuple_4col() -> None:
 
 
 def test_school_from_db_tuple_14col() -> None:
+    """from_db_tuple with 14 columns populates all fields including metadata."""
     row = (
         "Greenwood", 2025, 5, 3,
         "Greenwood", "38930", 33.5162, -90.1793,
@@ -96,6 +105,7 @@ def test_school_from_db_tuple_14col() -> None:
 
 
 def test_school_from_db_tuple_14col_null_fields_become_defaults() -> None:
+    """None values in optional columns fall back to empty string / 0.0 defaults."""
     row = ("Greenwood", 2025, 5, 3, None, None, None, None, None, None, None, None, None, None)
     s = School.from_db_tuple(row)
     assert s.city == ""
@@ -104,6 +114,7 @@ def test_school_from_db_tuple_14col_null_fields_become_defaults() -> None:
 
 
 def test_school_from_db_tuple_bad_length_raises() -> None:
+    """from_db_tuple raises ValueError for unexpected row lengths."""
     with pytest.raises(ValueError):
         School.from_db_tuple(("Greenwood", 2025, 5))
 
@@ -135,6 +146,7 @@ _GAME_FULL = Game(
 
 
 def test_game_as_db_tuple() -> None:
+    """as_db_tuple returns the correct 16-field tuple for the games table."""
     t = _GAME_FULL.as_db_tuple()
     assert t == (
         "Greenwood",
@@ -157,6 +169,7 @@ def test_game_as_db_tuple() -> None:
 
 
 def test_game_from_db_tuple_dict_path() -> None:
+    """from_db_tuple with a dict row populates all fields correctly."""
     row = {
         "school": "Greenwood",
         "date": _GAME_DATE,
@@ -183,18 +196,21 @@ def test_game_from_db_tuple_dict_path() -> None:
 
 
 def test_game_from_db_tuple_dict_missing_date_raises() -> None:
+    """from_db_tuple raises ValueError when the dict row is missing the required 'date' field."""
     row = {"school": "Greenwood"}  # missing 'date'
     with pytest.raises(ValueError):
         Game.from_db_tuple(row)
 
 
 def test_game_from_db_tuple_dict_null_location_defaults_to_neutral() -> None:
+    """None location in a dict row falls back to 'neutral'."""
     row = {"school": "Greenwood", "date": _GAME_DATE, "location": None}
     g = Game.from_db_tuple(row)
     assert g.location == "neutral"
 
 
 def test_game_from_db_tuple_16col_tuple() -> None:
+    """from_db_tuple with a 16-column positional tuple populates all fields correctly."""
     row = (
         "Greenwood", _GAME_DATE, 2025, 42, 28, 14,
         "Regular", "2025-10-03T19:00:00Z", "Starkville", "W",
@@ -207,6 +223,7 @@ def test_game_from_db_tuple_16col_tuple() -> None:
 
 
 def test_game_from_db_tuple_16col_null_location_defaults_to_neutral() -> None:
+    """None location in a tuple row falls back to 'neutral'."""
     row = (
         "Greenwood", _GAME_DATE, 2025, None, None, None,
         None, None, None, None, None, None, None, False, False, 0,
@@ -216,6 +233,7 @@ def test_game_from_db_tuple_16col_null_location_defaults_to_neutral() -> None:
 
 
 def test_game_from_db_tuple_bad_length_raises() -> None:
+    """from_db_tuple raises ValueError for tuple rows with unexpected column counts."""
     with pytest.raises(ValueError):
         Game.from_db_tuple((1, 2, 3))
 
@@ -235,12 +253,14 @@ _LOCATION = Location(
 
 
 def test_location_as_db_tuple() -> None:
+    """as_db_tuple returns a 5-field tuple excluding the DB-assigned id."""
     t = _LOCATION.as_db_tuple()
     # id is excluded from the tuple (assigned by DB)
     assert t == ("Williams-Nosef Stadium", "Greenwood", "Greenwood", 33.5162, -90.1793)
 
 
 def test_location_from_db_tuple_5col() -> None:
+    """from_db_tuple with 5 columns populates all fields; id is set to None."""
     row = ("Williams-Nosef Stadium", "Greenwood", "Greenwood", 33.5162, -90.1793)
     loc = Location.from_db_tuple(row)
     assert loc.id is None
@@ -249,6 +269,7 @@ def test_location_from_db_tuple_5col() -> None:
 
 
 def test_location_from_db_tuple_bad_length_raises() -> None:
+    """from_db_tuple raises ValueError for rows that don't have exactly 5 columns."""
     with pytest.raises(ValueError):
         Location.from_db_tuple(("Stadium",))
 
@@ -261,10 +282,12 @@ _BRACKET = Bracket(name="2025 5A Bracket", season=2025, class_=5, source="mhsaa"
 
 
 def test_bracket_as_db_tuple() -> None:
+    """as_db_tuple returns a 4-field tuple for the brackets table."""
     assert _BRACKET.as_db_tuple() == ("2025 5A Bracket", 2025, 5, "mhsaa")
 
 
 def test_bracket_from_db_tuple_4col() -> None:
+    """from_db_tuple with 4 columns populates all Bracket fields."""
     b = Bracket.from_db_tuple(("2025 5A Bracket", 2025, 5, "mhsaa"))
     assert b.name == "2025 5A Bracket"
     assert b.season == 2025
@@ -273,6 +296,7 @@ def test_bracket_from_db_tuple_4col() -> None:
 
 
 def test_bracket_from_db_tuple_bad_length_raises() -> None:
+    """from_db_tuple raises ValueError for rows that don't have exactly 4 columns."""
     with pytest.raises(ValueError):
         Bracket.from_db_tuple(("name", 2025))
 
@@ -285,10 +309,12 @@ _BRACKET_TEAM = BracketTeam(bracket_id=7, school="Greenwood", season=2025, seed=
 
 
 def test_bracket_team_as_db_tuple() -> None:
+    """as_db_tuple returns a 5-field tuple for the bracket_teams table."""
     assert _BRACKET_TEAM.as_db_tuple() == (7, "Greenwood", 2025, 1, 3)
 
 
 def test_bracket_team_from_db_tuple_5col() -> None:
+    """from_db_tuple with 5 columns populates all BracketTeam fields."""
     bt = BracketTeam.from_db_tuple((7, "Greenwood", 2025, 1, 3))
     assert bt.bracket_id == 7
     assert bt.school == "Greenwood"
@@ -296,6 +322,7 @@ def test_bracket_team_from_db_tuple_5col() -> None:
 
 
 def test_bracket_team_from_db_tuple_bad_length_raises() -> None:
+    """from_db_tuple raises ValueError for rows that don't have exactly 5 columns."""
     with pytest.raises(ValueError):
         BracketTeam.from_db_tuple((7, "Greenwood", 2025))
 
@@ -319,11 +346,13 @@ _BRACKET_GAME_FULL = BracketGame(
 
 
 def test_bracket_game_as_db_tuple() -> None:
+    """as_db_tuple returns a 10-field tuple for the bracket_games table."""
     t = _BRACKET_GAME_FULL.as_db_tuple()
     assert t == (7, "quarterfinals", 1, "Greenwood", "Starkville", 3, 1, 2, 2, 99)
 
 
 def test_bracket_game_from_db_tuple_3col() -> None:
+    """from_db_tuple with 3 columns sets matchup fields to None."""
     bg = BracketGame.from_db_tuple((7, "quarterfinals", 1))
     assert bg.bracket_id == 7
     assert bg.round == "quarterfinals"
@@ -335,6 +364,7 @@ def test_bracket_game_from_db_tuple_3col() -> None:
 
 
 def test_bracket_game_from_db_tuple_10col() -> None:
+    """from_db_tuple with 10 columns populates all BracketGame fields including matchup."""
     row = (7, "quarterfinals", 1, "Greenwood", "Starkville", 3, 1, 2, 2, 99)
     bg = BracketGame.from_db_tuple(row)
     assert bg.home == "Greenwood"
@@ -344,5 +374,228 @@ def test_bracket_game_from_db_tuple_10col() -> None:
 
 
 def test_bracket_game_from_db_tuple_bad_length_raises() -> None:
+    """from_db_tuple raises ValueError for rows with neither 3 nor 10 columns."""
     with pytest.raises(ValueError):
         BracketGame.from_db_tuple((7, "quarterfinals", 1, "extra"))
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures for GameResult / MarginCondition tests
+# ---------------------------------------------------------------------------
+
+_REMAINING = [
+    RemainingGame("Brandon", "Meridian"),   # bit 0: Brandon wins if bit set
+    RemainingGame("Oak Grove", "Pearl"),    # bit 1
+    RemainingGame("Northwest Rankin", "Petal"),  # bit 2
+]
+
+# outcome_mask=0b101 → Brandon wins (bit 0), Pearl wins (bit 1=0), NWR wins (bit 2)
+_MASK_BRN_NWR = 0b101
+_MARGINS_BRN_NWR = {
+    ("Brandon", "Meridian"): 7,
+    ("Oak Grove", "Pearl"): 3,      # Pearl wins by 3
+    ("Northwest Rankin", "Petal"): 5,
+}
+
+
+# ---------------------------------------------------------------------------
+# GameResult
+# ---------------------------------------------------------------------------
+
+
+def test_game_result_winner_no_margin_constraint() -> None:
+    """satisfied_by returns True when the winner won, with no margin constraint."""
+    gr = GameResult("Brandon", "Meridian")
+    assert gr.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_game_result_loser_returns_false() -> None:
+    """satisfied_by returns False when the named winner actually lost."""
+    gr = GameResult("Meridian", "Brandon")
+    assert not gr.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_game_result_pearl_wins_loser_perspective() -> None:
+    """satisfied_by returns True when the game pair is stored in reversed (b, a) order."""
+    # Pearl won (Oak Grove lost) — bit 1 is 0
+    gr = GameResult("Pearl", "Oak Grove")
+    assert gr.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_game_result_min_margin_satisfied() -> None:
+    """satisfied_by returns True when the actual margin equals the minimum required."""
+    gr = GameResult("Brandon", "Meridian", min_margin=7)
+    assert gr.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_game_result_min_margin_not_met() -> None:
+    """satisfied_by returns False when the actual margin falls short of min_margin."""
+    gr = GameResult("Brandon", "Meridian", min_margin=8)
+    assert not gr.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_game_result_max_margin_satisfied() -> None:
+    """satisfied_by returns True when the actual margin is within the exclusive upper bound."""
+    # Brandon wins by 7; max_margin=8 means ≤7 passes (exclusive upper)
+    gr = GameResult("Brandon", "Meridian", min_margin=1, max_margin=8)
+    assert gr.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_game_result_max_margin_exceeded() -> None:
+    """satisfied_by returns False when the actual margin equals the exclusive upper bound."""
+    # Brandon wins by 7; max_margin=7 means must be ≤6 — fails
+    gr = GameResult("Brandon", "Meridian", min_margin=1, max_margin=7)
+    assert not gr.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_game_result_str_no_margin() -> None:
+    """__str__ without a margin constraint produces 'winner>loser'."""
+    assert str(GameResult("Brandon", "Meridian")) == "Brandon>Meridian"
+
+
+def test_game_result_str_min_only() -> None:
+    """__str__ with only min_margin produces 'by N+' notation."""
+    assert str(GameResult("Brandon", "Meridian", min_margin=4)) == "Brandon>Meridian by 4+"
+
+
+def test_game_result_str_range() -> None:
+    """__str__ with both min and max_margin produces an inclusive range 'by N–M'."""
+    assert str(GameResult("Brandon", "Meridian", min_margin=4, max_margin=9)) == "Brandon>Meridian by 4–8"
+
+
+# ---------------------------------------------------------------------------
+# MarginCondition
+# ---------------------------------------------------------------------------
+
+
+def test_margin_condition_single_game_ge() -> None:
+    """satisfied_by returns True for a single-game >= condition that is met exactly."""
+    # NWR wins by 5 >= 5 → True
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"),),
+        sub=(),
+        op=">=",
+        threshold=5,
+    )
+    assert mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_margin_condition_single_game_ge_fails() -> None:
+    """satisfied_by returns False when the single-game margin falls short of the threshold."""
+    # NWR wins by 5 >= 6 → False
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"),),
+        sub=(),
+        op=">=",
+        threshold=6,
+    )
+    assert not mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_margin_condition_sum_two_games() -> None:
+    """satisfied_by returns True when the sum of two game margins meets the threshold."""
+    # NWR(5) + Pearl(3) = 8 >= 8 → True
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"), ("Oak Grove", "Pearl")),
+        sub=(),
+        op=">=",
+        threshold=8,
+    )
+    assert mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_margin_condition_sum_two_games_fails() -> None:
+    """satisfied_by returns False when the sum of two game margins falls short of the threshold."""
+    # NWR(5) + Pearl(3) = 8 >= 9 → False
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"), ("Oak Grove", "Pearl")),
+        sub=(),
+        op=">=",
+        threshold=9,
+    )
+    assert not mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_margin_condition_difference() -> None:
+    """satisfied_by returns True for a difference condition (add minus sub > threshold)."""
+    # NWR(5) - Pearl(3) = 2 > 1 → True
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"),),
+        sub=(("Oak Grove", "Pearl"),),
+        op=">",
+        threshold=1,
+    )
+    assert mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_margin_condition_lt() -> None:
+    """satisfied_by returns True for a strict less-than condition."""
+    # NWR(5) < 6 → True
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"),),
+        sub=(),
+        op="<",
+        threshold=6,
+    )
+    assert mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_margin_condition_le_boundary() -> None:
+    """satisfied_by returns True when the margin exactly equals the <= threshold."""
+    # NWR(5) <= 5 → True
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"),),
+        sub=(),
+        op="<=",
+        threshold=5,
+    )
+    assert mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_margin_condition_str() -> None:
+    """__str__ renders add-only conditions as a sum expression."""
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"), ("Oak Grove", "Pearl")),
+        sub=(),
+        op=">=",
+        threshold=10,
+    )
+    assert str(mc) == "Northwest RankinvPetal_margin + Oak GrovevPearl_margin >= 10"
+
+
+def test_margin_condition_str_with_sub() -> None:
+    """__str__ renders add-minus-sub conditions with a subtraction term."""
+    mc = MarginCondition(
+        add=(("Northwest Rankin", "Petal"),),
+        sub=(("Oak Grove", "Pearl"),),
+        op=">",
+        threshold=0,
+    )
+    assert str(mc) == "Northwest RankinvPetal_margin - Oak GrovevPearl_margin > 0"
+
+
+def test_game_result_satisfied_by_pair_not_in_remaining() -> None:
+    """Returns False when neither (winner, loser) nor (loser, winner) is in remaining."""
+    gr = GameResult("Petal", "Oak Grove")  # this game is not in _REMAINING
+    assert gr.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING) is False
+
+
+def test_margin_condition_satisfied_by_reversed_pair() -> None:
+    """_margin() fallback: pair passed in reversed order is still resolved correctly."""
+    # ("Pearl", "Oak Grove") is reversed relative to the RemainingGame("Oak Grove", "Pearl") key
+    mc = MarginCondition(add=(("Pearl", "Oak Grove"),), sub=(), op=">=", threshold=1)
+    assert mc.satisfied_by(0, _MARGINS_BRN_NWR, _REMAINING) is True  # Pearl's margin = 3 >= 1
+
+
+def test_margin_condition_satisfied_by_missing_pair_raises() -> None:
+    """KeyError raised when the pair is absent from remaining games entirely."""
+    mc = MarginCondition(add=(("Petal", "Oak Grove"),), sub=(), op=">=", threshold=1)
+    with pytest.raises(KeyError):
+        mc.satisfied_by(0, _MARGINS_BRN_NWR, _REMAINING)
+
+
+def test_margin_condition_satisfied_by_unknown_op_raises() -> None:
+    """ValueError raised for an unrecognised operator."""
+    mc = MarginCondition(add=(("Brandon", "Meridian"),), sub=(), op="!=", threshold=0)
+    with pytest.raises(ValueError, match="Unknown operator"):
+        mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)

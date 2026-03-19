@@ -40,6 +40,7 @@ SEASON = 2025
 
 
 def _slots(clazz: int) -> list[FormatSlot]:
+    """Return the correct FormatSlot list for the given class."""
     return SLOTS_5A_7A_2025 if clazz >= 5 else SLOTS_1A_4A_2025
 
 

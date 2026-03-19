@@ -1083,7 +1083,8 @@ def determine_scenarios(
         denom = float(1 << num_remaining)
 
     def simplify_matchups(dicts):
-        """Remove bare matchup keys that also appear as GE-qualified variants."""
+        """Remove bare matchup keys that also appear as GE-qualified variants or
+        as a logically equivalent complementary bare key (A>B=False when B>A=True)."""
         simplified = []
         for d in dicts:
             keys = set(d.keys())
@@ -1095,6 +1096,15 @@ def determine_scenarios(
                     a, b = base.split(">", 1)
                     has_margin_variant.add(f"{b}>{a}")
             new_d = {k: v for k, v in d.items() if not (("_GE" not in k) and (k in has_margin_variant))}
+            # Also drop A>B=False when B>A=True is present (logically identical, redundant)
+            to_drop = set()
+            for k, v in new_d.items():
+                if "_GE" not in k and ">" in k and not v:
+                    a, b = k.split(">", 1)
+                    flipped = f"{b}>{a}"
+                    if new_d.get(flipped) is True:
+                        to_drop.add(k)
+            new_d = {k: v for k, v in new_d.items() if k not in to_drop}
             simplified.append(new_d)
         return simplified
 

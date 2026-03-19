@@ -7,24 +7,55 @@ A web application that calculates standings and playoff scenarios for Mississipp
 
 ## Setting Up Your Environment
 
+### Once per season (pre-season setup)
+
+Run these in order — each depends on the previous step's data being in the database.
+
 1. Navigate to [the Local Prefect UI](http://localhost:4200/deployments)
-2. Do a "Quick Run" of the **Regions Data Pipeline**
-3. Do a "Quick Run" of the **MaxPreps Data Pipeline**
-4. Do a "Quick Run" of the **School Info Data Pipeline**
-5. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline**
+2. Do a "Quick Run" of the **Regions Data Pipeline** — populates `school_seasons` (class/region assignments)
+3. Do a "Quick Run" of the **MaxPreps Data Pipeline** — populates `schools` (metadata) and seeds `games` rows for the schedule
+4. Do a "Quick Run" of the **School Info Data Pipeline** — fills in school identity details (colors, mascot, etc.)
 
-## Debugging
+Re-run these if MHSAA reclassifies schools (every two years) or if the playoff format changes.
 
-Run all region scenarios:
+### Once per week (during the season)
 
-`python backend/scripts/enumerate_all_regions_scenarios.py --season 2025 --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball"`
+1. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** — fetches the latest scores and marks games `final=TRUE`
+2. Do a "Quick Run" of the **Region Scenarios Pipeline** — reads the updated game results, runs the tiebreaker engine, and writes pre-computed standings odds and scenario data to `region_standings` and `region_scenarios`
 
-Run a specific region scenario:
+The frontend reads from these tables at request time — no tiebreaker computation happens on the frontend.
 
-`python backend/scripts/simulate_region_finish.py \
-  --class 1 --region 8 --season 2025 \
-  --dsn "postgresql://postgres:postgres@0.0.0.0:5432/mshsfootball" \
-  --out-scenarios "scenarios.txt"`
+To render scenario text, call `read_region_scenarios(conn, season, clazz, region)` to load the pre-computed data, then pass it to one of the two render functions:
+
+- **`render_scenarios(data["complete_scenarios"])`** — outputs the full division view, one scenario per distinct seeding outcome:
+  ```
+  Scenario 1: Petal beats Northwest Rankin AND Pearl beats Oak Grove
+  1. Petal
+  2. Pearl
+  3. Oak Grove
+  4. Brandon
+  Eliminated: Meridian, Northwest Rankin
+
+  Scenario 4a: Pearl beats Oak Grove AND Pearl's margin and Oak Grove's margin combined total exactly 10
+  1. Oak Grove
+  ...
+  ```
+
+- **`render_team_scenarios(team, data["scenario_atoms"])`** — outputs the per-team view, grouped by seed the team can achieve:
+  ```
+  Pearl
+
+  #1 seed if:
+  1. Petal beats Northwest Rankin AND Pearl beats Oak Grove by 8 or more
+  2. ...
+
+  #2 seed if:
+  1. Pearl beats Oak Grove
+  2. ...
+
+  Eliminated if:
+  1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
+  ```
 
 ## Development Setup
 

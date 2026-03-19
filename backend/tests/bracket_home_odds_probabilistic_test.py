@@ -136,6 +136,7 @@ def _slot_results_fn(
     """
 
     def fn(home_region: int, home_seed: int, away_region: int, away_seed: int) -> float:
+        """Return fixed P(home wins) for known slot matchups, 0.5 otherwise."""
         return slot_results.get((home_region, home_seed, away_region, away_seed), 0.5)
 
     return fn
@@ -200,6 +201,7 @@ def _sum_marginals(
     slots,
     season: int,
 ) -> float:
+    """Sum marginal hosting probabilities across all given regions using the provided compute function."""
     total = 0.0
     for region in regions:
         result = fn(region, all_odds[region], slots, season)
@@ -484,6 +486,7 @@ def test_stronger_seed1_win_prob_increases_qf_hosting_marginal() -> None:
 
     # Strong seed 1: P(R1 win) = 0.9
     def strong_s1(_hr: int, _hs: int, _ar: int, _as: int) -> float:
+        """Return 0.9 P(home wins) when home seed is better, 0.1 when worse."""
         if _hs < _as:
             return 0.9
         if _hs > _as:
@@ -505,6 +508,7 @@ def test_stronger_seed4_win_prob_decreases_seed1_qf_hosting_marginal() -> None:
 
     # Inverted: worse seed wins more often (seed 4 upsets seed 1)
     def upset_prone(_hr: int, _hs: int, _ar: int, _as: int) -> float:
+        """Return 0.1 P(home wins) when home seed is better (upset-favoring matchup prob)."""
         if _hs < _as:
             return 0.1
         if _hs > _as:

@@ -26,6 +26,12 @@ from backend.helpers.data_classes import (
 )
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.scenario_serializers import (
+    serialize_complete_scenarios,
+    serialize_remaining_games,
+    serialize_scenario_atoms,
+)
+from backend.helpers.scenario_viewer import enumerate_division_scenarios
 from backend.helpers.scenarios import (
     compute_bracket_odds,
     compute_first_round_home_odds,
@@ -390,6 +396,50 @@ def write_region_standings(
 # -------------------------
 
 
+@task(retries=2, retry_delay_seconds=10, task_run_name="Write {season} Region Scenarios for {region}-{clazz}A")
+def write_region_scenarios(
+    clazz: int,
+    region: int,
+    season: int,
+    remaining: list[RemainingGame],
+    scenario_atoms: dict,
+    complete_scenarios: list[dict],
+) -> None:
+    """Serialize and upsert pre-computed scenario data into ``region_scenarios``.
+
+    Called once per pipeline run after ``determine_scenarios()`` and
+    ``enumerate_division_scenarios()`` complete.  The frontend reads this table
+    to render both display formats without re-running the tiebreaker engine.
+    """
+    logger = get_run_logger()
+    logger.info(
+        "Writing region scenarios for season %d, class %d, region %d (%d complete scenarios)",
+        season,
+        clazz,
+        region,
+        len(complete_scenarios),
+    )
+
+    remaining_json = Json(serialize_remaining_games(remaining))
+    atoms_json = Json(serialize_scenario_atoms(scenario_atoms))
+    scenarios_json = Json(serialize_complete_scenarios(complete_scenarios))
+
+    sql = """
+        INSERT INTO region_scenarios
+            (season, class, region, computed_at, remaining_games, scenario_atoms, complete_scenarios)
+        VALUES (%s, %s, %s, NOW(), %s, %s, %s)
+        ON CONFLICT (season, class, region) DO UPDATE SET
+            computed_at        = EXCLUDED.computed_at,
+            remaining_games    = EXCLUDED.remaining_games,
+            scenario_atoms     = EXCLUDED.scenario_atoms,
+            complete_scenarios = EXCLUDED.complete_scenarios
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (season, str(clazz), region, remaining_json, atoms_json, scenarios_json))
+        conn.commit()
+
+
 @task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
 def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=False):
     """
@@ -440,6 +490,9 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
         quarterfinals_home,
         semifinals_home,
     )
+
+    complete_scenarios = enumerate_division_scenarios(teams, completed, remaining, scenario_atoms=r.minimized_scenarios)
+    write_region_scenarios(clazz, region, season, remaining, r.minimized_scenarios, complete_scenarios)
 
     return r.minimized_scenarios
 

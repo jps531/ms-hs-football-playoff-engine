@@ -62,6 +62,7 @@ class ScenarioResults:
     fourth_counts_weighted: Counter
     denom_weighted: float
 
+
 # -------------------------
 # Standings (region W/L/T record used by scenario engine)
 # -------------------------
@@ -618,6 +619,118 @@ class RemainingGame:
     b: str  # team (lexicographically second)
 
 
+# --- Data class for a possible game result ---
+@dataclass(frozen=True)
+class GameResult:
+    """A per-game win condition with an optional margin range.
+
+    Asserts that ``winner`` beat ``loser`` by a margin in [min_margin, max_margin).
+    ``max_margin=None`` means no upper bound (any margin >= min_margin).
+
+    Example: GameResult("NWR", "Petal", min_margin=4) means NWR beat Petal by 4+.
+    Example: GameResult("NWR", "Petal", min_margin=1, max_margin=4) means NWR won by 1–3.
+    """
+
+    winner: str
+    loser: str
+    min_margin: int = 1
+    max_margin: int | None = None  # exclusive upper bound; None = unbounded
+
+    def satisfied_by(self, outcome_mask: int, margins: dict, remaining: list) -> bool:
+        """Return True if this game result holds under (outcome_mask, margins).
+
+        Args:
+            outcome_mask: Bitmask; bit i=1 means remaining[i].a won.
+            margins: Dict mapping (a, b) → winning margin (always positive).
+            remaining: List of RemainingGame in bit order.
+        """
+        game_idx = {(rg.a, rg.b): i for i, rg in enumerate(remaining)}
+        pair = (self.winner, self.loser) if (self.winner, self.loser) in game_idx else (self.loser, self.winner)
+        if pair not in game_idx:
+            return False
+        i = game_idx[pair]
+        a_wins = bool((outcome_mask >> i) & 1)
+        actual_winner = pair[0] if a_wins else pair[1]
+        if actual_winner != self.winner:
+            return False
+        m = margins[pair]
+        if m < self.min_margin:
+            return False
+        if self.max_margin is not None and m >= self.max_margin:
+            return False
+        return True
+
+    def __str__(self) -> str:
+        """Return a compact human-readable representation of this game result."""
+        base = f"{self.winner}>{self.loser}"
+        if self.min_margin == 1 and self.max_margin is None:
+            return base
+        if self.max_margin is None:
+            return f"{base} by {self.min_margin}+"
+        return f"{base} by {self.min_margin}–{self.max_margin - 1}"
+
+
+# --- Data class for a margin condition for a possible game result ---
+@dataclass(frozen=True)
+class MarginCondition:
+    """A linear inequality over margins from multiple games.
+
+    Computes: sum(margins[add_pairs]) - sum(margins[sub_pairs]) <op> threshold
+
+    ``add`` and ``sub`` are each a list of (team_a, team_b) game pairs (in
+    lexicographic order, matching RemainingGame keys).  The margin value for each
+    pair is the absolute winning margin for that game (always positive).
+
+    Example: MarginCondition(add=[("NWR","Petal"),("Pearl","OG")], sub=[], ">=", 10)
+      means NWR_margin + Pearl_margin >= 10.
+
+    Supported ops: ">", ">=", "<", "<="
+    """
+
+    add: tuple[tuple[str, str], ...]
+    sub: tuple[tuple[str, str], ...]
+    op: str  # ">", ">=", "<", "<="
+    threshold: int
+
+    def satisfied_by(self, _outcome_mask: int, margins: dict, remaining: list) -> bool:
+        """Return True if the linear combination satisfies the inequality."""
+        game_pairs = {(rg.a, rg.b) for rg in remaining}
+
+        def _margin(pair: tuple[str, str]) -> int:
+            """Return the margin for a game pair, trying reversed order as a fallback."""
+            if pair in game_pairs:
+                return margins[pair]
+            # Try reversed pair (callers may pass in either order)
+            rev = (pair[1], pair[0])
+            if rev in game_pairs:
+                return margins[rev]
+            raise KeyError(f"Game pair {pair} not found in remaining games")
+
+        value = sum(_margin(p) for p in self.add) - sum(_margin(p) for p in self.sub)
+        if self.op == ">":
+            return value > self.threshold
+        if self.op == ">=":
+            return value >= self.threshold
+        if self.op == "<":
+            return value < self.threshold
+        if self.op == "<=":
+            return value <= self.threshold
+        if self.op == "==":
+            return value == self.threshold
+        raise ValueError(f"Unknown operator: {self.op!r}")
+
+    def __str__(self) -> str:
+        """Return a compact human-readable representation of this margin condition."""
+        def fmt(pairs):
+            """Format a sequence of game pairs as a sum expression."""
+            return " + ".join(f"{a}v{b}_margin" for a, b in pairs)
+
+        lhs = fmt(self.add)
+        if self.sub:
+            lhs += " - " + fmt(self.sub)
+        return f"{lhs} {self.op} {self.threshold}"
+
+
 # --- Data class for bracket advancement odds ---
 @dataclass(frozen=True)
 class BracketOdds:
@@ -628,11 +741,11 @@ class BracketOdds:
     """
 
     school: str
-    second_round: float   # P(playing in round 2)
-    quarterfinals: float    # P(playing in round 3); 0.0 for 4-round brackets
-    semifinals: float     # P(playing in the N/S championship round)
-    finals: float         # P(playing in the state championship)
-    champion: float       # P(winning the state championship)
+    second_round: float  # P(playing in round 2)
+    quarterfinals: float  # P(playing in round 3); 0.0 for 4-round brackets
+    semifinals: float  # P(playing in the N/S championship round)
+    finals: float  # P(playing in the state championship)
+    champion: float  # P(winning the state championship)
 
 
 # --- Data class for standings odds results ---
