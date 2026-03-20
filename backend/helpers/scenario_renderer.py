@@ -167,3 +167,131 @@ def render_team_scenarios(
         lines.append("")
 
     return "\n".join(lines).rstrip()
+
+
+# ---------------------------------------------------------------------------
+# Structured dict renderers (for frontend / API consumption)
+# ---------------------------------------------------------------------------
+
+_SEED_FIELD_NAMES = ["one_seed", "two_seed", "three_seed", "four_seed"]
+
+
+def division_scenarios_as_dict(
+    scenarios: list[dict],
+    playoff_seeds: int = 4,
+) -> dict[str, dict]:
+    """Return division scenarios as a structured dict keyed by scenario label.
+
+    Converts the raw scenario list from ``enumerate_division_scenarios`` into a
+    frontend-friendly mapping where each entry has a human-readable title and
+    named seed/eliminated fields.
+
+    Args:
+        scenarios: List of scenario dicts from ``enumerate_division_scenarios``.
+        playoff_seeds: Number of playoff seeds (default 4).
+
+    Returns:
+        ``dict[scenario_key → entry]`` where ``scenario_key`` is e.g. ``"1"``,
+        ``"2"``, ``"4a"``, ``"4b"``, and each entry is::
+
+            {
+                "title": str,          # human-readable conditions
+                "one_seed": str,       # team finishing 1st
+                "two_seed": str,       # team finishing 2nd
+                "three_seed": str,     # team finishing 3rd
+                "four_seed": str,      # team finishing 4th
+                "eliminated": list[str],   # teams outside the top seeds
+            }
+    """
+    result: dict[str, dict] = {}
+    seed_fields = _SEED_FIELD_NAMES[:playoff_seeds]
+    for sc in scenarios:
+        key = str(sc["scenario_num"]) + sc["sub_label"]
+        if sc["conditions_atom"] is not None:
+            title = _render_atom(sc["conditions_atom"])
+        else:
+            title = " AND ".join(f"{w} beats {l}" for w, l in sc["game_winners"])
+        seeding = sc["seeding"]
+        entry: dict = {"title": title}
+        for i, field in enumerate(seed_fields):
+            entry[field] = seeding[i] if i < len(seeding) else None
+        entry["eliminated"] = list(seeding[playoff_seeds:])
+        result[key] = entry
+    return result
+
+
+def team_scenarios_as_dict(
+    scenarios: dict,
+    playoff_seeds: int = 4,
+    odds: dict | None = None,
+    weighted_odds: dict | None = None,
+) -> dict[str, dict]:
+    """Return per-team scenarios as a structured dict for frontend consumption.
+
+    Converts the atoms dict from ``build_scenario_atoms`` into a mapping where
+    each team's entry has integer seed keys (1–N) for seeding scenarios and an
+    optional ``"eliminated"`` key for elimination scenarios.
+
+    Args:
+        scenarios: Atoms dict from ``build_scenario_atoms``
+            (``team → seed → list[atom]``).
+        playoff_seeds: Number of playoff seeds (default 4).
+        odds: Optional mapping of team name → ``StandingsOdds`` (equal win
+            probability).  When provided, ``odds`` is populated per entry.
+        weighted_odds: Optional mapping of team name → ``StandingsOdds``
+            computed with a win-probability function.  When provided,
+            ``weighted_odds`` is populated per entry.
+
+    Returns:
+        ``dict[team → dict[seed_key → entry]]`` where seed keys are integers
+        1–``playoff_seeds`` for seeding scenarios and the string
+        ``"eliminated"`` for elimination scenarios.  Each entry is::
+
+            {
+                "odds": float | None,           # equal-probability odds
+                "weighted_odds": float | None,  # win-probability-weighted odds
+                "scenarios": list[str],         # human-readable condition strings
+            }
+
+        Fully eliminated teams have only an ``"eliminated"`` key with an empty
+        ``scenarios`` list.
+    """
+    result: dict[str, dict] = {}
+    for team, seed_map in scenarios.items():
+        team_odds = odds.get(team) if odds else None
+        team_weighted = weighted_odds.get(team) if weighted_odds else None
+        team_entry: dict = {}
+
+        playoff_seed_entries = {
+            seed: atoms for seed, atoms in seed_map.items() if seed <= playoff_seeds
+        }
+        eliminated_atoms = [
+            atom
+            for seed, atoms in seed_map.items()
+            if seed > playoff_seeds
+            for atom in atoms
+        ]
+
+        for seed in sorted(playoff_seed_entries):
+            team_entry[seed] = {
+                "odds": getattr(team_odds, f"p{seed}") if team_odds else None,
+                "weighted_odds": getattr(team_weighted, f"p{seed}") if team_weighted else None,
+                "scenarios": [_render_atom(atom) for atom in playoff_seed_entries[seed]],
+            }
+
+        if not playoff_seed_entries:
+            # Fully eliminated — no conditions needed
+            team_entry["eliminated"] = {
+                "odds": (1.0 - team_odds.p_playoffs) if team_odds else None,
+                "weighted_odds": (1.0 - team_weighted.p_playoffs) if team_weighted else None,
+                "scenarios": [],
+            }
+        elif eliminated_atoms:
+            team_entry["eliminated"] = {
+                "odds": (1.0 - team_odds.p_playoffs) if team_odds else None,
+                "weighted_odds": (1.0 - team_weighted.p_playoffs) if team_weighted else None,
+                "scenarios": [_render_atom(atom) for atom in eliminated_atoms],
+            }
+
+        result[team] = team_entry
+    return result
