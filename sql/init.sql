@@ -119,10 +119,6 @@ CREATE TABLE IF NOT EXISTS region_standings (
   odds_2nd_weighted REAL NOT NULL DEFAULT 0.0,
   odds_3rd_weighted REAL NOT NULL DEFAULT 0.0,
   odds_4th_weighted REAL NOT NULL DEFAULT 0.0,
-  scenarios_1st   JSONB NOT NULL DEFAULT '{}'::JSONB,
-  scenarios_2nd   JSONB NOT NULL DEFAULT '{}'::JSONB,
-  scenarios_3rd   JSONB NOT NULL DEFAULT '{}'::JSONB,
-  scenarios_4th   JSONB NOT NULL DEFAULT '{}'::JSONB,
   odds_playoffs   REAL NOT NULL DEFAULT 0.0,
   clinched        BOOLEAN NOT NULL DEFAULT FALSE,
   eliminated      BOOLEAN NOT NULL DEFAULT FALSE,
@@ -444,16 +440,6 @@ COMMENT ON COLUMN region_standings.odds_3rd_weighted IS
   'Weighted version of odds_3rd. Not yet implemented.';
 COMMENT ON COLUMN region_standings.odds_4th_weighted IS
   'Weighted version of odds_4th. Not yet implemented.';
-
-COMMENT ON COLUMN region_standings.scenarios_1st IS
-  'JSONB mapping of game-outcome bitmask strings to lists of opponent names, '
-  'representing the exact remaining-game combinations that produce a 1st-place finish.';
-COMMENT ON COLUMN region_standings.scenarios_2nd IS
-  'Same structure as scenarios_1st, for 2nd-place finishes.';
-COMMENT ON COLUMN region_standings.scenarios_3rd IS
-  'Same structure as scenarios_1st, for 3rd-place finishes.';
-COMMENT ON COLUMN region_standings.scenarios_4th IS
-  'Same structure as scenarios_1st, for 4th-place finishes.';
 
 COMMENT ON COLUMN region_standings.odds_playoffs IS
   'Probability of finishing in the top 4 (making the playoffs). '

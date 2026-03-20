@@ -71,7 +71,6 @@ def test_determine_scenarios_3_7a_full():
     assert r.second_counts == expected_3_7a_second_counts_full
     assert r.third_counts == expected_3_7a_third_counts_full
     assert r.fourth_counts == expected_3_7a_fourth_counts_full
-    assert r.minimized_scenarios == {}  # no remaining games → no scenario tree
 
 
 def test_determine_odds_3_7a_full():

@@ -5,8 +5,6 @@ and ``determine_odds()`` from ``scenarios.py``, and writes results to the
 ``region_standings`` table.
 """
 
-from collections import defaultdict
-
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import Json, execute_values
 
@@ -31,7 +29,7 @@ from backend.helpers.scenario_serializers import (
     serialize_remaining_games,
     serialize_scenario_atoms,
 )
-from backend.helpers.scenario_viewer import enumerate_division_scenarios
+from backend.helpers.scenario_viewer import build_scenario_atoms, enumerate_division_scenarios
 from backend.helpers.scenarios import (
     compute_bracket_odds,
     compute_first_round_home_odds,
@@ -202,7 +200,6 @@ def fetch_all_format_slots(clazz: int, season: int) -> list[FormatSlot]:
 def write_region_standings(
     standings: list[Standings],
     odds: dict[str, StandingsOdds],
-    scenarios: defaultdict,
     clazz: int,
     region: int,
     season: int,
@@ -213,7 +210,7 @@ def write_region_standings(
     quarterfinals_home_odds: dict[str, float] | None = None,
     semifinals_home_odds: dict[str, float] | None = None,
 ):
-    """Upsert standings, odds, and scenario data into the ``region_standings`` table.
+    """Upsert standings and odds into the ``region_standings`` table.
 
     Constructs one row per school and performs an INSERT ... ON CONFLICT UPDATE
     so that re-running the flow is idempotent.  Weighted odds columns are
@@ -222,8 +219,6 @@ def write_region_standings(
     Args:
         standings: List of Standings instances from ``fetch_region_standings``.
         odds: Dict mapping school name to StandingsOdds (from ``determine_odds``).
-        scenarios: Nested defaultdict ``{school: {seed: [minterm_dicts]}}``
-            from ``determine_scenarios``.
         clazz: MHSAA classification (1-7).
         region: Region number within the class.
         season: Football season year.
@@ -251,21 +246,10 @@ def write_region_standings(
     semifinals_home_odds = semifinals_home_odds or {}
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
 
-    def seed_scenarios_for(scenarios, school):
-        """Return the seed->minterms map for a school, ensuring all four seeds exist."""
-        m = scenarios.setdefault(school, {})
-        if m and not all(isinstance(k, int) for k in m.keys()):
-            scenarios[school] = {int(k): v for k, v in m.items()}
-            m = scenarios[school]
-        for k in (1, 2, 3, 4):
-            m.setdefault(k, [])
-        return m
-
     _empty_odds = StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)
 
     data_by_school = []
     for team in standings:
-        seed_scenarios = seed_scenarios_for(scenarios, team.school)
         o = odds.get(team.school, _empty_odds)
         b = bracket_odds.get(team.school, _empty_bracket)
         data_by_school.append(
@@ -288,10 +272,6 @@ def write_region_standings(
                 0.0,  # odds_2nd_weighted
                 0.0,  # odds_3rd_weighted
                 0.0,  # odds_4th_weighted
-                Json(seed_scenarios[1]),
-                Json(seed_scenarios[2]),
-                Json(seed_scenarios[3]),
-                Json(seed_scenarios[4]),
                 o.p_playoffs,
                 o.clinched,
                 o.eliminated,
@@ -324,7 +304,6 @@ def write_region_standings(
             wins, losses, ties, region_wins, region_losses, region_ties,
             odds_1st, odds_2nd, odds_3rd, odds_4th,
             odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted,
-            scenarios_1st, scenarios_2nd, scenarios_3rd, scenarios_4th,
             odds_playoffs, clinched, eliminated,
             odds_second_round, odds_quarterfinals, odds_semifinals, odds_finals, odds_champion,
             odds_playoffs_weighted, odds_second_round_weighted, odds_quarterfinals_weighted,
@@ -352,10 +331,6 @@ def write_region_standings(
             odds_2nd_weighted = EXCLUDED.odds_2nd_weighted,
             odds_3rd_weighted = EXCLUDED.odds_3rd_weighted,
             odds_4th_weighted = EXCLUDED.odds_4th_weighted,
-            scenarios_1st = EXCLUDED.scenarios_1st,
-            scenarios_2nd = EXCLUDED.scenarios_2nd,
-            scenarios_3rd = EXCLUDED.scenarios_3rd,
-            scenarios_4th = EXCLUDED.scenarios_4th,
             odds_playoffs = EXCLUDED.odds_playoffs,
             clinched      = EXCLUDED.clinched,
             eliminated    = EXCLUDED.eliminated,
@@ -382,7 +357,7 @@ def write_region_standings(
         ;
     """
 
-    template = "(" + ", ".join(["%s"] * 45) + ")"
+    template = "(" + ", ".join(["%s"] * 41) + ")"
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             execute_values(cur, sql, data_by_school, template=template, page_size=500)
@@ -474,12 +449,9 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
     logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
     logger.info("Region standings: %s", region_standings)
     logger.info("Odds: %s", odds)
-    logger.info("Minimized scenarios: %s", r.minimized_scenarios)
-
     write_region_standings(
         region_standings,
         odds,
-        r.minimized_scenarios,
         clazz,
         region,
         season,
@@ -491,10 +463,11 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
         semifinals_home,
     )
 
-    complete_scenarios = enumerate_division_scenarios(teams, completed, remaining, scenario_atoms=r.minimized_scenarios)
-    write_region_scenarios(clazz, region, season, remaining, r.minimized_scenarios, complete_scenarios)
+    scenario_atoms = build_scenario_atoms(teams, completed, remaining)
+    complete_scenarios = enumerate_division_scenarios(teams, completed, remaining, scenario_atoms=scenario_atoms)
+    write_region_scenarios(clazz, region, season, remaining, scenario_atoms, complete_scenarios)
 
-    return r.minimized_scenarios
+    return scenario_atoms
 
 
 @flow(name="Region Scenarios Data Flow")

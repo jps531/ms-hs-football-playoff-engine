@@ -93,20 +93,33 @@ def render_team_scenarios(
 ) -> str:
     """Return a human-readable string of playoff scenarios for a team.
 
-    Each seed ≤ playoff_seeds gets its own numbered section.
-    All seeds > playoff_seeds are collapsed into a single "Eliminated if:" section.
+    Special cases:
+    - If the team has no playoff-seed atoms at all: "Eliminated."
+    - If the team has exactly one playoff seed and no eliminated atoms: "Clinched #N seed."
+    - Otherwise: list only the seeds that are present, plus "Eliminated if:" when applicable.
     """
     seed_map = scenarios.get(team, {})
 
+    playoff_seed_entries = {
+        seed: atoms for seed, atoms in seed_map.items() if seed <= playoff_seeds
+    }
+    eliminated_atoms: list[list] = [
+        atom for seed, atoms in seed_map.items() if seed > playoff_seeds for atom in atoms
+    ]
+
+    # Fully eliminated — never makes the playoffs
+    if not playoff_seed_entries:
+        return f"{team}\n\nEliminated."
+
+    # Clinched — only one possible playoff seed and cannot be eliminated
+    if len(playoff_seed_entries) == 1 and not eliminated_atoms:
+        (seed,) = playoff_seed_entries
+        return f"{team}\n\nClinched #{seed} seed."
+
+    # General case — list only present seeds and eliminated section
     sections: list[tuple[str, list[list]]] = []
-    eliminated_atoms: list[list] = []
-
-    for seed in sorted(seed_map):
-        if seed <= playoff_seeds:
-            sections.append((f"#{seed} seed if:", seed_map[seed]))
-        else:
-            eliminated_atoms.extend(seed_map[seed])
-
+    for seed in sorted(playoff_seed_entries):
+        sections.append((f"#{seed} seed if:", playoff_seed_entries[seed]))
     if eliminated_atoms:
         sections.append(("Eliminated if:", eliminated_atoms))
 

@@ -23,6 +23,8 @@ Re-run these if MHSAA reclassifies schools (every two years) or if the playoff f
 1. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** — fetches the latest scores and marks games `final=TRUE`
 2. Do a "Quick Run" of the **Region Scenarios Pipeline** — reads the updated game results, runs the tiebreaker engine, and writes pre-computed standings odds and scenario data to `region_standings` and `region_scenarios`
 
+### Frontend Helper Functions
+
 The frontend reads from these tables at request time — no tiebreaker computation happens on the frontend.
 
 To render scenario text, call `read_region_scenarios(conn, season, clazz, region)` to load the pre-computed data, then pass it to one of the two render functions:
@@ -56,6 +58,34 @@ To render scenario text, call `read_region_scenarios(conn, season, clazz, region
   Eliminated if:
   1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
   ```
+
+To resolve seeding for a specific set of game results (e.g. a user entering scores for remaining games), call `resolve_with_results(teams, completed, remaining, results, margins)` from `backend/helpers/tiebreakers.py`:
+
+- **`results`** — dict mapping `(team1, team2)` → winner name; teams may be in either order
+- **`margins`** — optional dict mapping `(team1, team2)` → winning margin (positive int); omit if scores aren't known yet
+
+Returns `(seeding, messages)`:
+- **`seeding`** — list of team names in seed order (seed 1 first)
+- **`messages`** — list of human-readable strings for any games where the margin was not provided but would affect the tiebreaker outcome; empty if all ties are resolved without margin data
+
+```python
+seeding, messages = resolve_with_results(
+    teams,
+    completed_games,
+    remaining_games,
+    results={("Oak Grove", "Pearl"): "Oak Grove", ("Northwest Rankin", "Petal"): "Northwest Rankin", ("Brandon", "Meridian"): "Brandon"},
+    margins={("Oak Grove", "Pearl"): 21, ("Northwest Rankin", "Petal"): 6},
+)
+# seeding → ["Oak Grove", "Petal", "Brandon", "Northwest Rankin", "Pearl", "Meridian"]
+# messages → []
+```
+
+If margins are omitted and any tied teams played each other in a remaining game whose margin would change the seeding, `messages` will describe which teams are affected:
+
+```python
+seeding, messages = resolve_with_results(teams, completed, remaining, results)
+# messages → ["Point differential needed for Pearl over Oak Grove: margin affects seeding of Northwest Rankin, Oak Grove, Pearl, Petal."]
+```
 
 ## Development Setup
 

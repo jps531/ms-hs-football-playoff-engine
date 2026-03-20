@@ -767,3 +767,106 @@ def unique_intra_bucket_games(buckets, remaining):
                 seen.add(key)
                 out.append(rem_game)
     return out
+
+
+# -------------------------
+# User-facing result resolution
+# -------------------------
+
+
+def resolve_with_results(
+    teams: list,
+    completed: list,
+    remaining: list,
+    results: dict,
+    margins: dict | None = None,
+) -> tuple[list[str], list[str]]:
+    """Resolve seeding for a specific set of W/L results for remaining games.
+
+    Converts human-readable W/L results (winner name per game) into a seeding
+    list, and reports any games where a point differential is needed to break
+    ties but was not provided.
+
+    Args:
+        teams: List of all team names in the region.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        results: Dict mapping (team1, team2) -> winner_name. Teams may be in
+            any order; the winner must be one of the two participants.
+        margins: Optional dict mapping (team1, team2) -> winning margin
+            (positive int). Teams may be in any order. When omitted, a default
+            margin of 7 is used. A warning message is returned for any
+            intra-bucket game whose margin would change the seeding.
+
+    Returns:
+        A 2-tuple (seeding, messages) where:
+        - seeding: list of team names in seed order (seed 1 first).
+        - messages: list of human-readable strings describing games where the
+          point differential was not provided but would affect the tiebreaker.
+          Empty when all tied games are already resolved without margin data.
+
+    Raises:
+        ValueError: If a result is missing for any remaining game, or if the
+            provided winner name is not a participant in that game.
+    """
+    margins = margins or {}
+
+    # Normalize all keys to canonical (a, b) lexicographic order
+    norm_results: dict[tuple[str, str], str] = {}
+    for (t1, t2), winner in results.items():
+        a, b, _ = normalize_pair(t1, t2)
+        norm_results[(a, b)] = winner
+
+    norm_margins: dict[tuple[str, str], int] = {}
+    for (t1, t2), margin in margins.items():
+        a, b, _ = normalize_pair(t1, t2)
+        norm_margins[(a, b)] = margin
+
+    # Build outcome_mask: bit i = 1 if remaining[i].a wins
+    outcome_mask = 0
+    for i, rem in enumerate(remaining):
+        key = (rem.a, rem.b)
+        winner = norm_results.get(key)
+        if winner is None:
+            raise ValueError(f"No result provided for game: {rem.a} vs {rem.b}")
+        if winner == rem.a:
+            outcome_mask |= (1 << i)
+        elif winner != rem.b:
+            raise ValueError(
+                f"Result winner '{winner}' is not a participant in {rem.a} vs {rem.b}"
+            )
+
+    # Compute seeding using the provided (or default) margins
+    seeding = resolve_standings_for_mask(teams, completed, remaining, outcome_mask, norm_margins)
+
+    # Detect intra-bucket games missing margins that would affect seeding
+    messages = []
+    wl_totals = standings_from_mask(teams, completed, remaining, outcome_mask, pa_win=14, margins=norm_margins)
+    buckets = tie_bucket_groups(teams, wl_totals)
+    intra = unique_intra_bucket_games(buckets, remaining)
+
+    for rem_game in intra:
+        key = (rem_game.a, rem_game.b)
+        if key in norm_margins:
+            continue
+        # Test margins 1–12 to see whether the seeding would change
+        seedings_by_margin = {
+            m: resolve_standings_for_mask(
+                teams, completed, remaining, outcome_mask, {**norm_margins, key: m}
+            )
+            for m in range(1, 13)
+        }
+        if len({tuple(s) for s in seedings_by_margin.values()}) > 1:
+            all_positions: dict[str, set] = {t: set() for t in teams}
+            for s in seedings_by_margin.values():
+                for idx, name in enumerate(s):
+                    all_positions[name].add(idx + 1)
+            affected = sorted(t for t, pos in all_positions.items() if len(pos) > 1)
+            winner_name = norm_results[key]
+            loser_name = rem_game.b if winner_name == rem_game.a else rem_game.a
+            messages.append(
+                f"Point differential needed for {winner_name} over {loser_name}: "
+                f"margin affects seeding of {', '.join(affected)}."
+            )
+
+    return seeding, messages

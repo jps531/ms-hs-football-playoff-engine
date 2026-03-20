@@ -79,7 +79,7 @@ def deserialize_atom(data: list[dict]) -> list:
 
 
 def serialize_scenario_atoms(scenario_atoms: dict) -> dict:
-    """Serialize the full minimized_scenarios dict to a JSON-safe structure.
+    """Serialize the scenario_atoms dict to a JSON-safe structure.
 
     JSON object keys must be strings, so integer seed keys are converted to
     strings (``1`` → ``"1"``).  Deserializing reverses this.

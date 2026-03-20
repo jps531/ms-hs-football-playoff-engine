@@ -58,7 +58,7 @@ def read_region_scenarios(conn, season: int, clazz: int | str, region: int) -> d
 
     Returns a dict with keys:
     - ``remaining_games``    — list of RemainingGame instances
-    - ``scenario_atoms``     — deserialized minimized_scenarios dict
+    - ``scenario_atoms``     — deserialized scenario_atoms dict
                                (team → seed (int) → list of atom lists)
     - ``complete_scenarios`` — deserialized list of scenario dicts
                                (output format of enumerate_division_scenarios)

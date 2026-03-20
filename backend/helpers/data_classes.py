@@ -4,7 +4,7 @@ Includes raw and processed game representations, standings odds, and
 DB-mapped objects for schools, locations, brackets, and bracket games.
 """
 
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -54,7 +54,6 @@ class ScenarioResults:
     third_counts: Counter
     fourth_counts: Counter
     denom: float
-    minimized_scenarios: defaultdict
     coinflip_teams: set[str]
     first_counts_weighted: Counter
     second_counts_weighted: Counter
