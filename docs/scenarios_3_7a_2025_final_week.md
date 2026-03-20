@@ -149,34 +149,36 @@ Eliminated: Pearl, Meridian
 
 Margin conditions in Scenario 4 sub-scenarios refer to the winning margins in the Pearl–Oak Grove and Northwest Rankin–Petal games.
 
+Percentages represent the probability of each outcome assuming 50/50 win probability for each remaining game.
+
 ```
 Meridian
 
-Eliminated.
+Eliminated. (100.0%)
 ```
 
 ```
 Oak Grove
 
-#1 seed if:
+#1 seed if: (29.7%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–4 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 4–8 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 5–9 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 
-#2 seed if:
+#2 seed if: (25.5%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 3–5 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 4–5 AND Northwest Rankin beats Petal by 1–2 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 
-#3 seed if:
+#3 seed if: (28.0%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 6–8 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 7–9 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 
-#4 seed if:
+#4 seed if: (16.8%)
 1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4–10 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4–9 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
@@ -186,54 +188,54 @@ Oak Grove
 ```
 Pearl
 
-#1 seed if:
+#1 seed if: (4.2%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 7–9 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4–9 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 
-#2 seed if:
+#2 seed if: (40.6%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6–8 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4–10 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 5. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 
-#3 seed if:
+#3 seed if: (1.6%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 5–9 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 4–5 AND Northwest Rankin beats Petal by 1–2 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 
-#4 seed if:
+#4 seed if: (3.6%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 1–4 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 4–8 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 3–5 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 
-Eliminated if:
+Eliminated if: (50.0%)
 1. Oak Grove beats Pearl
 ```
 
 ```
 Petal
 
-#1 seed if:
+#1 seed if: (51.3%)
 1. Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 3–5 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 4–5 AND Northwest Rankin beats Petal by 1–2 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6–8 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 
-#2 seed if:
+#2 seed if: (14.3%)
 1. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–4 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 7–9 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 
-#3 seed if:
+#3 seed if: (31.1%)
 1. Meridian beats Brandon AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 4–8 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4–10 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4–9 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 
-#4 seed if:
+#4 seed if: (3.3%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 5–9 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
@@ -242,45 +244,45 @@ Petal
 ```
 Brandon
 
-#3 seed if:
+#3 seed if: (37.5%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 
-#4 seed if:
+#4 seed if: (37.5%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 2. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 
-Eliminated if:
+Eliminated if: (25.0%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal
 ```
 
 ```
 Northwest Rankin
 
-#1 seed if:
+#1 seed if: (14.8%)
 1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4–10 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 
-#2 seed if:
+#2 seed if: (19.5%)
 1. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 4–8 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 5–9 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4–9 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 
-#3 seed if:
+#3 seed if: (1.8%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 1–4 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 3–5 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 
-#4 seed if:
+#4 seed if: (38.8%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 4–5 AND Northwest Rankin beats Petal by 1–2 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6–8 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 5. Brandon beats Meridian AND Pearl beats Oak Grove by 7–9 AND Northwest Rankin beats Petal by 1–3 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 
-Eliminated if:
+Eliminated if: (25.0%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 ```

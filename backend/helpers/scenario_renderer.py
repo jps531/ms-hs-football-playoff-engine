@@ -90,6 +90,8 @@ def render_team_scenarios(
     team: str,
     scenarios: dict[str, dict[int, list[list]]],
     playoff_seeds: int = 4,
+    odds: dict | None = None,
+    weighted_odds: dict | None = None,
 ) -> str:
     """Return a human-readable string of playoff scenarios for a team.
 
@@ -97,8 +99,22 @@ def render_team_scenarios(
     - If the team has no playoff-seed atoms at all: "Eliminated."
     - If the team has exactly one playoff seed and no eliminated atoms: "Clinched #N seed."
     - Otherwise: list only the seeds that are present, plus "Eliminated if:" when applicable.
+
+    Args:
+        team: Team name to render.
+        scenarios: Mapping of team -> seed -> list of condition atoms.
+        playoff_seeds: Number of playoff seeds (default 4).
+        odds: Optional mapping of team name -> StandingsOdds (equal win probability);
+            when provided, per-seed and elimination probabilities are appended to
+            each section header as "(XX.X%)".
+        weighted_odds: Optional mapping of team name -> StandingsOdds computed with
+            a win-probability function; when provided, weighted probabilities are
+            appended as "(XX.X% Weighted)". When both ``odds`` and ``weighted_odds``
+            are given, both values appear as "(XX.X% \u2013 XX.X% Weighted)".
     """
     seed_map = scenarios.get(team, {})
+    team_odds = odds.get(team) if odds else None
+    team_weighted = weighted_odds.get(team) if weighted_odds else None
 
     playoff_seed_entries = {
         seed: atoms for seed, atoms in seed_map.items() if seed <= playoff_seeds
@@ -107,21 +123,41 @@ def render_team_scenarios(
         atom for seed, atoms in seed_map.items() if seed > playoff_seeds for atom in atoms
     ]
 
+    def _odds_suffix(p_unweighted: float | None, p_weighted: float | None) -> str:
+        """Format an odds suffix from zero, one, or both probability values."""
+        if p_unweighted is None and p_weighted is None:
+            return ""
+        if p_unweighted is not None and p_weighted is not None:
+            return f" ({p_unweighted * 100:.1f}% \u2013 {p_weighted * 100:.1f}% Weighted)"
+        if p_weighted is not None:
+            return f" ({p_weighted * 100:.1f}% Weighted)"
+        return f" ({p_unweighted * 100:.1f}%)"  # type: ignore[operator]
+
+    def _seed_suffix(seed: int) -> str:
+        p_u = getattr(team_odds, f"p{seed}") if team_odds else None
+        p_w = getattr(team_weighted, f"p{seed}") if team_weighted else None
+        return _odds_suffix(p_u, p_w)
+
+    def _elim_suffix() -> str:
+        p_u = (1.0 - team_odds.p_playoffs) if team_odds else None
+        p_w = (1.0 - team_weighted.p_playoffs) if team_weighted else None
+        return _odds_suffix(p_u, p_w)
+
     # Fully eliminated — never makes the playoffs
     if not playoff_seed_entries:
-        return f"{team}\n\nEliminated."
+        return f"{team}\n\nEliminated.{_elim_suffix()}"
 
     # Clinched — only one possible playoff seed and cannot be eliminated
     if len(playoff_seed_entries) == 1 and not eliminated_atoms:
         (seed,) = playoff_seed_entries
-        return f"{team}\n\nClinched #{seed} seed."
+        return f"{team}\n\nClinched #{seed} seed.{_seed_suffix(seed)}"
 
     # General case — list only present seeds and eliminated section
     sections: list[tuple[str, list[list]]] = []
     for seed in sorted(playoff_seed_entries):
-        sections.append((f"#{seed} seed if:", playoff_seed_entries[seed]))
+        sections.append((f"#{seed} seed if:{_seed_suffix(seed)}", playoff_seed_entries[seed]))
     if eliminated_atoms:
-        sections.append(("Eliminated if:", eliminated_atoms))
+        sections.append((f"Eliminated if:{_elim_suffix()}", eliminated_atoms))
 
     lines = [team, ""]
     for label, atoms in sections:
