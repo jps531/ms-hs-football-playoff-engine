@@ -49,6 +49,7 @@ from backend.helpers.bracket_home_odds import (
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
     equal_matchup_prob,
+    marginal_home_odds,
 )
 from backend.helpers.data_classes import StandingsOdds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
@@ -612,3 +613,33 @@ def test_1a4a_seed1_r2_hosting_exceeds_seed3() -> None:
     r1 = compute_second_round_home_odds(region, s1_odds, SLOTS_1A_4A_2025)
     r3 = compute_second_round_home_odds(region, s3_odds, SLOTS_1A_4A_2025)
     assert r1["R1s1"] > r3["R1s3"]
+
+
+# ---------------------------------------------------------------------------
+# marginal_home_odds
+# ---------------------------------------------------------------------------
+
+
+def test_marginal_home_odds_basic() -> None:
+    """Marginal = conditional × advancement."""
+    assert marginal_home_odds(0.75, 0.5) == pytest.approx(0.375)
+
+
+def test_marginal_home_odds_zero_advancement() -> None:
+    """Zero advancement produces zero marginal (team cannot reach the round)."""
+    assert marginal_home_odds(1.0, 0.0) == pytest.approx(0.0)
+
+
+def test_marginal_home_odds_full_certainty() -> None:
+    """Both 100% → marginal is 100%."""
+    assert marginal_home_odds(1.0, 1.0) == pytest.approx(1.0)
+
+
+def test_marginal_home_odds_zero_conditional() -> None:
+    """Zero conditional (team never hosts when they reach) → zero marginal."""
+    assert marginal_home_odds(0.0, 0.5) == pytest.approx(0.0)
+
+
+def test_marginal_home_odds_taylorsville_qf() -> None:
+    """Spot-check against Taylorsville 2025 QF: 25% reach × 37.5% host = 9.375%."""
+    assert marginal_home_odds(0.375, 0.25) == pytest.approx(0.09375)

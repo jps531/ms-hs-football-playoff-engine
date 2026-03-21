@@ -344,6 +344,7 @@ def test_render_team_scenarios_with_odds(team, expected):
 
 # Shared fixture helpers — build once per module via module-scoped helpers
 def _div_dict():
+    """Build a ``division_scenarios_as_dict`` result for the Region 3-7A fixture."""
     atoms = build_scenario_atoms(
         teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
     )
@@ -426,6 +427,7 @@ def test_division_scenarios_dict_scenario_6():
 # ---------------------------------------------------------------------------
 
 def _team_dict(with_odds=False):
+    """Build a ``team_scenarios_as_dict`` result for the Region 3-7A fixture."""
     atoms = build_scenario_atoms(
         teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
     )

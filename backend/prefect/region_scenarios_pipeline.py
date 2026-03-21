@@ -5,10 +5,13 @@ and ``determine_odds()`` from ``scenarios.py``, and writes results to the
 ``region_standings`` table.
 """
 
+from dataclasses import dataclass as _dataclass
+
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import Json, execute_values
 
 from backend.helpers.bracket_home_odds import (
+    compute_bracket_advancement_odds,
     compute_quarterfinal_home_odds,
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
@@ -36,6 +39,26 @@ from backend.helpers.scenarios import (
     determine_odds,
     determine_scenarios,
 )
+
+# -------------------------
+# Local helpers
+# -------------------------
+
+
+@_dataclass
+class HomeOdds:
+    """Conditional home-game odds for all applicable playoff rounds.
+
+    Each field holds a dict mapping school name to the conditional probability
+    P(hosts round | reaches round).  ``second_round`` is empty for 5A–7A
+    classes (which have no second round).
+    """
+
+    first_round: dict[str, float]
+    second_round: dict[str, float]
+    quarterfinals: dict[str, float]
+    semifinals: dict[str, float]
+
 
 # -------------------------
 # Prefect Tasks
@@ -204,17 +227,20 @@ def write_region_standings(
     region: int,
     season: int,
     coinflip_teams: set[str] | None = None,
-    first_round_home_odds: dict[str, float] | None = None,
     bracket_odds: dict[str, BracketOdds] | None = None,
-    second_round_home_odds: dict[str, float] | None = None,
-    quarterfinals_home_odds: dict[str, float] | None = None,
-    semifinals_home_odds: dict[str, float] | None = None,
+    bracket_odds_weighted: dict[str, BracketOdds] | None = None,
+    home_odds: HomeOdds | None = None,
+    home_odds_weighted: HomeOdds | None = None,
 ):
     """Upsert standings and odds into the ``region_standings`` table.
 
     Constructs one row per school and performs an INSERT ... ON CONFLICT UPDATE
-    so that re-running the flow is idempotent.  Weighted odds columns are
-    written as 0.0 placeholders pending future implementation.
+    so that re-running the flow is idempotent.
+
+    Home-odds parameters are **conditional** probabilities: P(hosts round |
+    reaches round).  The marginal P(hosts round) can be recovered at query
+    time by multiplying the stored ``odds_*_home`` value by the matching
+    ``odds_*`` advancement probability.
 
     Args:
         standings: List of Standings instances from ``fetch_region_standings``.
@@ -224,27 +250,27 @@ def write_region_standings(
         season: Football season year.
         coinflip_teams: Set of team names that required a coin flip in at least
             one outcome scenario.  Defaults to empty set if not provided.
-        first_round_home_odds: Dict mapping school name to probability of
-            hosting their round-1 game.  Defaults to all zeros if not provided.
-        bracket_odds: Dict mapping school name to ``BracketOdds`` (from
-            ``compute_bracket_odds``).  Defaults to all zeros if not provided.
-        second_round_home_odds: Dict mapping school name to marginal P(hosting
-            round 2).  1A-4A only; pass empty dict or omit for 5A-7A.
-        quarterfinals_home_odds: Dict mapping school name to marginal P(hosting
-            the quarterfinal).  Defaults to all zeros if not provided.
-        semifinals_home_odds: Dict mapping school name to marginal P(hosting
-            the semifinal).  Defaults to all zeros if not provided.
+        bracket_odds: Dict mapping school name to ``BracketOdds`` (50/50
+            advancement probabilities).  Defaults to all zeros if not provided.
+        bracket_odds_weighted: Weighted advancement probabilities (same
+            structure as ``bracket_odds``).  Defaults to all zeros.
+        home_odds: Conditional home-game odds (50/50) for all applicable
+            rounds.  Defaults to all zeros if not provided.
+        home_odds_weighted: Weighted conditional home-game odds.  Defaults to
+            all zeros if not provided.
 
     Returns:
         The number of rows written to the database.
     """
     coinflip_teams = coinflip_teams or set()
-    first_round_home_odds = first_round_home_odds or {}
     bracket_odds = bracket_odds or {}
-    second_round_home_odds = second_round_home_odds or {}
-    quarterfinals_home_odds = quarterfinals_home_odds or {}
-    semifinals_home_odds = semifinals_home_odds or {}
+    bracket_odds_weighted = bracket_odds_weighted or {}
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
+    _empty_home = HomeOdds(
+        first_round={}, second_round={}, quarterfinals={}, semifinals={}
+    )
+    ho = home_odds or _empty_home
+    how = home_odds_weighted or _empty_home
 
     _empty_odds = StandingsOdds("", 0, 0, 0, 0, 0, 0, False, False)
 
@@ -252,6 +278,7 @@ def write_region_standings(
     for team in standings:
         o = odds.get(team.school, _empty_odds)
         b = bracket_odds.get(team.school, _empty_bracket)
+        bw = bracket_odds_weighted.get(team.school, _empty_bracket)
         data_by_school.append(
             (
                 team.school,
@@ -268,7 +295,7 @@ def write_region_standings(
                 o.p2,
                 o.p3,
                 o.p4,
-                0.0,  # odds_1st_weighted (not yet calculated)
+                0.0,  # odds_1st_weighted (seeding weights not yet implemented)
                 0.0,  # odds_2nd_weighted
                 0.0,  # odds_3rd_weighted
                 0.0,  # odds_4th_weighted
@@ -280,20 +307,20 @@ def write_region_standings(
                 b.semifinals,
                 b.finals,
                 b.champion,
-                0.0,  # odds_playoffs_weighted
-                0.0,  # odds_second_round_weighted
-                0.0,  # odds_quarterfinals_weighted
-                0.0,  # odds_semifinals_weighted
-                0.0,  # odds_finals_weighted
-                0.0,  # odds_champion_weighted
-                first_round_home_odds.get(team.school, 0.0),  # odds_first_round_home
-                second_round_home_odds.get(team.school, 0.0),  # odds_second_round_home
-                quarterfinals_home_odds.get(team.school, 0.0),  # odds_quarterfinals_home
-                semifinals_home_odds.get(team.school, 0.0),  # odds_semifinals_home
-                0.0,  # odds_first_round_home_weighted
-                0.0,  # odds_second_round_home_weighted
-                0.0,  # odds_quarterfinals_home_weighted
-                0.0,  # odds_semifinals_home_weighted
+                bw.second_round,   # odds_playoffs_weighted (= p_playoffs × win odds)
+                bw.second_round,   # odds_second_round_weighted
+                bw.quarterfinals,  # odds_quarterfinals_weighted
+                bw.semifinals,     # odds_semifinals_weighted
+                bw.finals,         # odds_finals_weighted
+                bw.champion,       # odds_champion_weighted
+                ho.first_round.get(team.school, 0.0),    # odds_first_round_home
+                ho.second_round.get(team.school, 0.0),   # odds_second_round_home
+                ho.quarterfinals.get(team.school, 0.0),  # odds_quarterfinals_home
+                ho.semifinals.get(team.school, 0.0),     # odds_semifinals_home
+                how.first_round.get(team.school, 0.0),    # odds_first_round_home_weighted
+                how.second_round.get(team.school, 0.0),   # odds_second_round_home_weighted
+                how.quarterfinals.get(team.school, 0.0),  # odds_quarterfinals_home_weighted
+                how.semifinals.get(team.school, 0.0),     # odds_semifinals_home_weighted
                 team.school in coinflip_teams,  # coin_flip_needed
             )
         )
@@ -437,12 +464,64 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
     bracket = compute_bracket_odds(num_rounds, odds)
 
     home_seeds = fetch_first_round_home_seeds(clazz, region, season)
-    first_round_home = compute_first_round_home_odds(home_seeds, odds)
+    first_round_home_marginal = compute_first_round_home_odds(home_seeds, odds)
 
     slots = fetch_all_format_slots(clazz, season)
-    second_round_home = compute_second_round_home_odds(region, odds, slots) if clazz <= 4 else {}
-    quarterfinals_home = compute_quarterfinal_home_odds(region, odds, slots, season)
-    semifinals_home = compute_semifinal_home_odds(region, odds, slots, season)
+    second_round_home_marginal = (
+        compute_second_round_home_odds(region, odds, slots) if clazz <= 4 else {}
+    )
+    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season)
+    semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season)
+
+    # Weighted bracket advancement odds (win_prob_fn not yet wired from DB;
+    # defaults to equal_matchup_prob, giving the same values as `bracket`).
+    bracket_weighted = compute_bracket_advancement_odds(region, odds, slots)
+
+    # Convert marginal home odds to conditional: P(hosts | reaches).
+    # If a team cannot reach a round (advancement == 0) store 0.0.
+    _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
+
+    def _safe_cond(marginal: float, advancement: float) -> float:
+        """Return marginal / advancement, or 0.0 when advancement is zero."""
+        return marginal / advancement if advancement > 0 else 0.0
+
+    first_round_home_cond = {
+        school: _safe_cond(m, odds[school].p_playoffs if school in odds else 0.0)
+        for school, m in first_round_home_marginal.items()
+    }
+    second_round_home_cond = {
+        school: _safe_cond(m, bracket.get(school, _empty_bracket).second_round)
+        for school, m in second_round_home_marginal.items()
+    } if clazz <= 4 else {}
+    quarterfinals_home_cond = {
+        school: _safe_cond(m, bracket.get(school, _empty_bracket).quarterfinals)
+        for school, m in quarterfinals_home_marginal.items()
+    }
+    semifinals_home_cond = {
+        school: _safe_cond(m, bracket.get(school, _empty_bracket).semifinals)
+        for school, m in semifinals_home_marginal.items()
+    }
+
+    # Weighted conditional home odds (same win_prob_fn caveat as bracket_weighted).
+    second_round_home_marginal_w = (
+        compute_second_round_home_odds(region, odds, slots) if clazz <= 4 else {}
+    )
+    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds, slots, season)
+    semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds, slots, season)
+
+    first_round_home_cond_w = first_round_home_cond  # same until win_prob_fn is wired
+    second_round_home_cond_w = {
+        school: _safe_cond(m, bracket_weighted.get(school, _empty_bracket).second_round)
+        for school, m in second_round_home_marginal_w.items()
+    } if clazz <= 4 else {}
+    quarterfinals_home_cond_w = {
+        school: _safe_cond(m, bracket_weighted.get(school, _empty_bracket).quarterfinals)
+        for school, m in quarterfinals_home_marginal_w.items()
+    }
+    semifinals_home_cond_w = {
+        school: _safe_cond(m, bracket_weighted.get(school, _empty_bracket).semifinals)
+        for school, m in semifinals_home_marginal_w.items()
+    }
 
     region_standings = fetch_region_standings(clazz, region, season)
 
@@ -456,11 +535,20 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
         region,
         season,
         r.coinflip_teams,
-        first_round_home,
         bracket,
-        second_round_home,
-        quarterfinals_home,
-        semifinals_home,
+        bracket_weighted,
+        HomeOdds(
+            first_round=first_round_home_cond,
+            second_round=second_round_home_cond,
+            quarterfinals=quarterfinals_home_cond,
+            semifinals=semifinals_home_cond,
+        ),
+        HomeOdds(
+            first_round=first_round_home_cond_w,
+            second_round=second_round_home_cond_w,
+            quarterfinals=quarterfinals_home_cond_w,
+            semifinals=semifinals_home_cond_w,
+        ),
     )
 
     scenario_atoms = build_scenario_atoms(teams, completed, remaining)

@@ -54,7 +54,7 @@ For 1A-4A (8 teams per bracket half, slots 1-8 North / 9-16 South):
 
 from collections.abc import Callable
 
-from backend.helpers.data_classes import FormatSlot, StandingsOdds
+from backend.helpers.data_classes import BracketOdds, FormatSlot, StandingsOdds
 
 # ---------------------------------------------------------------------------
 # Win-probability type
@@ -79,12 +79,22 @@ def equal_matchup_prob(
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers — bracket structure
+# Public bracket-navigation helpers
+# (also used by home_game_scenarios.py)
 # ---------------------------------------------------------------------------
 
 
-def _half_slots_for_region(region: int, slots: list[FormatSlot]) -> list[FormatSlot]:
-    """Return all slots in the same bracket half as *region*, sorted by slot number."""
+def half_slots_for_region(region: int, slots: list[FormatSlot]) -> list[FormatSlot]:
+    """Return all slots in the same bracket half as *region*, sorted by slot number.
+
+    Args:
+        region: Region number to look up.
+        slots:  Full list of ``FormatSlot`` objects for the class/season.
+
+    Returns:
+        Sorted list of ``FormatSlot`` objects belonging to the same
+        North/South bracket half as *region*, or an empty list if not found.
+    """
     half: str | None = None
     for s in slots:
         if s.home_region == region or s.away_region == region:
@@ -95,8 +105,17 @@ def _half_slots_for_region(region: int, slots: list[FormatSlot]) -> list[FormatS
     return sorted((s for s in slots if s.north_south == half), key=lambda s: s.slot)
 
 
-def _slot_index_for(region: int, seed: int, half_slots: list[FormatSlot]) -> int | None:
-    """Return the 0-based index into *half_slots* where *(region, seed)* appears."""
+def slot_index_for(region: int, seed: int, half_slots: list[FormatSlot]) -> int | None:
+    """Return the 0-based index into *half_slots* where *(region, seed)* appears.
+
+    Args:
+        region:     Region number of the team.
+        seed:       Region seed of the team (1 = best).
+        half_slots: Slots for one bracket half, sorted by slot number.
+
+    Returns:
+        0-based index, or ``None`` if the team is not found in *half_slots*.
+    """
     for i, s in enumerate(half_slots):
         if (s.home_region == region and s.home_seed == seed) or (
             s.away_region == region and s.away_seed == seed
@@ -105,8 +124,8 @@ def _slot_index_for(region: int, seed: int, half_slots: list[FormatSlot]) -> int
     return None
 
 
-def _opponent_slot_indices(team_idx: int, round_offset: int) -> list[int]:
-    """Return indices into the bracket half for the opponent pool at *round_offset* rounds ahead.
+def opponent_slot_indices(team_idx: int, round_offset: int) -> list[int]:
+    """Return indices into the bracket half for the opponent pool *round_offset* rounds ahead.
 
     Uses the binary tournament structure: adjacent slot pairs feed the same
     next-round game, pairs of those games feed the round after, etc.
@@ -125,21 +144,50 @@ def _opponent_slot_indices(team_idx: int, round_offset: int) -> list[int]:
     return list(range(start, start + group_size))
 
 
-def _opponent_slots(
+def opponent_slots(
     team_idx: int, round_offset: int, half_slots: list[FormatSlot]
 ) -> list[FormatSlot]:
-    """Return the slots from which the team's opponent arrives *round_offset* rounds ahead."""
-    return [half_slots[i] for i in _opponent_slot_indices(team_idx, round_offset)]
+    """Return the slots from which the team's opponent arrives *round_offset* rounds ahead.
+
+    Args:
+        team_idx:     0-based index of the team's slot within its bracket half.
+        round_offset: How many rounds ahead to look (1 = next round, 2 = two rounds, ...).
+        half_slots:   Slots for one bracket half, sorted by slot number.
+
+    Returns:
+        List of ``FormatSlot`` objects from which the opponent emerges.
+    """
+    return [half_slots[i] for i in opponent_slot_indices(team_idx, round_offset)]
+
+
+def was_home_r1(region: int, seed: int, slot: FormatSlot) -> bool:
+    """Return True if *(region, seed)* occupies the home position in *slot*.
+
+    Args:
+        region: Region number of the team.
+        seed:   Region seed of the team (1 = best).
+        slot:   The first-round ``FormatSlot`` for this team's game.
+
+    Returns:
+        ``True`` if the team is the designated home team in *slot*.
+    """
+    return slot.home_region == region and slot.home_seed == seed
+
+
+# ---------------------------------------------------------------------------
+# Private aliases kept for internal use within this module
+# ---------------------------------------------------------------------------
+
+_half_slots_for_region = half_slots_for_region
+_slot_index_for = slot_index_for
+_opponent_slot_indices = opponent_slot_indices
+_opponent_slots = opponent_slots
+_was_home_r1 = was_home_r1
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers — win probability
 # ---------------------------------------------------------------------------
-
-
-def _was_home_r1(region: int, seed: int, slot: FormatSlot) -> bool:
-    """Return True if *(region, seed)* occupies the home position in *slot*."""
-    return slot.home_region == region and slot.home_seed == seed
 
 
 def _p_team_r1_win(
@@ -709,3 +757,91 @@ def compute_semifinal_home_odds(
             p_home += p_seed * p_reach * p_sf_home
         result[school] = p_home
     return result
+
+
+def compute_bracket_advancement_odds(
+    region: int,
+    region_odds: dict[str, StandingsOdds],
+    slots: list[FormatSlot],
+    win_prob_fn: MatchupProbFn = equal_matchup_prob,
+) -> dict[str, BracketOdds]:
+    """Compute each team's probability of advancing to successive playoff rounds.
+
+    Unlike ``compute_bracket_odds`` (which uses a simple geometric formula and
+    requires no slot data), this function traverses the actual bracket structure
+    via ``_p_team_reach``, allowing a custom ``win_prob_fn`` to be applied.
+    When called with the default ``equal_matchup_prob`` the results are
+    numerically identical to ``compute_bracket_odds``.
+
+    ``finals`` and ``champion`` are cross-half games whose matchup structure is
+    not captured in the per-region slot data.  They are computed from the
+    semifinal probability using equal (0.5) win probability regardless of
+    ``win_prob_fn``.
+
+    Args:
+        region:       Region number for the teams in *region_odds*.
+        region_odds:  Dict mapping team name to ``StandingsOdds``.
+        slots:        All first-round format slots for this class (all regions).
+        win_prob_fn:  Win-probability function.  Defaults to ``equal_matchup_prob``
+                      (0.5 for every game).
+
+    Returns:
+        Dict mapping team name to ``BracketOdds`` with per-round advancement
+        probabilities.
+    """
+    half_slots = _half_slots_for_region(region, slots)
+    is_1a_4a = len(half_slots) == 8
+    qf_offset = 2 if is_1a_4a else 1
+    sf_offset = 3 if is_1a_4a else 2
+
+    result: dict[str, BracketOdds] = {}
+    for school, o in region_odds.items():
+        p_r2 = 0.0
+        p_qf = 0.0
+        p_sf = 0.0
+        for seed, p_seed in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)):
+            if p_seed <= 0.0:
+                continue
+            idx = _slot_index_for(region, seed, half_slots)
+            if idx is None:
+                continue
+            if is_1a_4a:
+                p_r2 += p_seed * _p_team_r1_win(
+                    region, seed, half_slots[idx], win_prob_fn
+                )
+            p_qf += p_seed * _p_team_reach(
+                region, seed, idx, qf_offset, half_slots, win_prob_fn
+            )
+            p_sf += p_seed * _p_team_reach(
+                region, seed, idx, sf_offset, half_slots, win_prob_fn
+            )
+        result[school] = BracketOdds(
+            school=school,
+            second_round=p_r2 if is_1a_4a else 0.0,
+            quarterfinals=p_qf,
+            semifinals=p_sf,
+            finals=p_sf * 0.5,
+            champion=p_sf * 0.25,
+        )
+    return result
+
+
+def marginal_home_odds(conditional: float, advancement: float) -> float:
+    """Return the marginal probability of hosting a playoff round.
+
+    Marginal = P(reaches round) × P(hosts | reaches round).
+
+    This is the complement of ``_safe_cond`` used when storing odds: the DB
+    stores the two components separately (advancement in ``odds_*`` and
+    conditional in ``odds_*_home``), and this function reconstructs the
+    combined probability for display or further calculation.
+
+    Args:
+        conditional:  P(hosts round | reaches round) — the stored
+                      ``odds_*_home`` value.
+        advancement:  P(reaches round) — the stored ``odds_*`` value.
+
+    Returns:
+        P(reaches round AND hosts round) in [0.0, 1.0].
+    """
+    return conditional * advancement

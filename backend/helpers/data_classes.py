@@ -765,3 +765,176 @@ class StandingsOdds:
     final_playoffs: float  # 1.0 if clinched, 0.0 if eliminated, else p_playoffs
     clinched: bool  # True when p_playoffs >= 0.999
     eliminated: bool  # True when p_playoffs <= 0.001
+
+
+# --- Data classes for playoff home-game scenarios ---
+
+@dataclass(frozen=True)
+class HomeGameCondition:
+    """A single condition within a playoff home-game scenario.
+
+    Represents either a requirement that a specific team advances to a given
+    round ("advances") or that the target team achieves a specific seed before
+    the bracket is set ("seed_required").
+
+    Attributes:
+        kind:       ``"advances"`` — the named team must win through to
+                    ``round_name``; or ``"seed_required"`` — the target team
+                    must have finished with the given seed (used when the
+                    playoff bracket is not yet set).
+        round_name: The round being advanced to (e.g. ``"Quarterfinals"``).
+                    ``None`` for ``kind="seed_required"``.
+        region:     The team's region number.  ``None`` means the condition
+                    refers to the target team itself (whose region is already
+                    known from context).
+        seed:       The team's region seed (1 = best).
+        team_name:  Resolved school name when known; ``None`` means the
+                    renderer should display ``"Region {region} #{seed} Seed"``.
+    """
+
+    kind: str
+    round_name: str | None
+    region: int | None
+    seed: int | None
+    team_name: str | None
+
+
+@dataclass(frozen=True)
+class HomeGameScenario:
+    """One path leading to a specific hosting outcome for a playoff round.
+
+    All conditions in ``conditions`` must hold simultaneously (AND logic).
+    Multiple ``HomeGameScenario`` objects within a ``RoundHomeScenarios``
+    list represent alternative paths (OR logic) — any single path suffices
+    to achieve the hosting outcome.
+
+    Attributes:
+        conditions:  Ordered list of conditions that must all be true.  An
+                     empty list means the outcome is unconditional (e.g. the
+                     team is always the designated home team in round 1).
+        explanation: Human-readable reason for the hosting outcome, e.g.
+                     ``"Higher seed (#1 vs #3)"`` or
+                     ``"Region tiebreak — odd year: lower region# hosts"``.
+                     ``None`` when no further explanation is needed.
+    """
+
+    conditions: tuple[HomeGameCondition, ...]
+    explanation: str | None
+
+
+@dataclass(frozen=True)
+class MatchupEntry:
+    """One possible playoff matchup for a team in a specific round.
+
+    Represents a unique ``(opponent, home/away)`` outcome.  Under equal win
+    probability ``p_conditional`` values sum to ``1.0`` across all entries in
+    a round.  Entries are sorted home-first, then by ``(opponent_region,
+    opponent_seed)``.
+
+    Attributes:
+        opponent:                   School name, or ``"Region X #Y Seed"`` when
+                                    the bracket is not fully resolved.
+        opponent_region:            The opponent's region number.
+        opponent_seed:              The opponent's region seed (1 = best).
+        home:                       ``True`` when the given team is the
+                                    designated home team.
+        p_conditional:              P(this matchup | team reaches round) under
+                                    equal win probabilities; ``None`` if not
+                                    provided.
+        p_conditional_weighted:     Weighted equivalent; ``None`` if not
+                                    provided.
+        p_marginal:                 P(team reaches round AND this matchup) =
+                                    ``p_conditional`` × ``p_reach``; ``None``
+                                    if either component is absent.
+        p_marginal_weighted:        Weighted equivalent.
+        explanation:                Human-readable reason for the home/away
+                                    designation, e.g.
+                                    ``"Higher seed (#1) hosts"``.
+    """
+
+    opponent: str
+    opponent_region: int
+    opponent_seed: int
+    home: bool
+    p_conditional: float | None
+    p_conditional_weighted: float | None
+    p_marginal: float | None
+    p_marginal_weighted: float | None
+    explanation: str | None
+
+
+@dataclass(frozen=True)
+class RoundMatchups:
+    """All possible matchups for one team in one playoff round.
+
+    Combines the same round-level advancement/hosting odds as
+    ``RoundHomeScenarios`` with a per-matchup breakdown of possible opponents
+    and home/away status.
+
+    Attributes:
+        round_name:                  Human-readable round label, e.g.
+                                     ``"First Round"``, ``"Quarterfinals"``.
+        p_reach:                     P(team reaches this round) under equal win
+                                     probabilities; ``None`` if not provided.
+        p_host_conditional:          P(hosts | reaches) under equal win probs;
+                                     ``None`` if not provided.
+        p_host_marginal:             P(reaches AND hosts); ``None`` if not
+                                     provided.
+        p_reach_weighted:            Weighted equivalent of ``p_reach``.
+        p_host_conditional_weighted: Weighted equivalent of
+                                     ``p_host_conditional``.
+        p_host_marginal_weighted:    Weighted equivalent of ``p_host_marginal``.
+        entries:                     All possible ``(opponent, home/away)``
+                                     combinations, sorted home-first then by
+                                     ``(opponent_region, opponent_seed)``.
+    """
+
+    round_name: str
+    p_reach: float | None
+    p_host_conditional: float | None
+    p_host_marginal: float | None
+    p_reach_weighted: float | None
+    p_host_conditional_weighted: float | None
+    p_host_marginal_weighted: float | None
+    entries: tuple[MatchupEntry, ...]
+
+
+@dataclass(frozen=True)
+class RoundHomeScenarios:
+    """All home-game scenarios for one team in one playoff round.
+
+    ``will_host`` and ``will_not_host`` together cover every path in which
+    the team reaches the round.  Each list entry is an independent OR-branch;
+    conditions within a single entry are AND-ed together.
+
+    Attributes:
+        round_name:                  Human-readable round label, e.g.
+                                     ``"First Round"``, ``"Second Round"``
+                                     (1A–4A only), ``"Quarterfinals"``, or
+                                     ``"Semifinals"``.
+        will_host:                   Scenarios under which the team is the home
+                                     team.
+        will_not_host:               Scenarios under which the team is the away
+                                     team.
+        p_reach:                     P(team reaches this round) under equal win
+                                     probabilities; ``None`` if not provided.
+        p_host_conditional:          P(hosts | reaches) under equal win probs;
+                                     ``None`` if not provided.
+        p_host_marginal:             P(reaches AND hosts) = p_reach ×
+                                     p_host_conditional under equal win probs;
+                                     ``None`` if not provided.
+        p_reach_weighted:            Same as ``p_reach`` but computed with a
+                                     weighted win-probability function.
+        p_host_conditional_weighted: Same as ``p_host_conditional`` weighted.
+        p_host_marginal_weighted:    Same as ``p_host_marginal`` weighted.
+    """
+
+    round_name: str
+    will_host: tuple[HomeGameScenario, ...]
+    will_not_host: tuple[HomeGameScenario, ...]
+    p_reach: float | None
+    p_host_conditional: float | None
+    p_host_marginal: float | None
+    p_reach_weighted: float | None
+    p_host_conditional_weighted: float | None
+    p_host_marginal_weighted: float | None

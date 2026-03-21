@@ -1,6 +1,13 @@
 """Render playoff scenario atoms as human-readable text."""
 
-from backend.helpers.data_classes import GameResult, MarginCondition
+from backend.helpers.data_classes import (
+    GameResult,
+    HomeGameCondition,
+    HomeGameScenario,
+    MarginCondition,
+    RoundHomeScenarios,
+    RoundMatchups,
+)
 
 
 def _render_game_result(cond: GameResult) -> str:
@@ -134,11 +141,13 @@ def render_team_scenarios(
         return f" ({p_unweighted * 100:.1f}%)"  # type: ignore[operator]
 
     def _seed_suffix(seed: int) -> str:
+        """Return the formatted odds suffix for the given seed position."""
         p_u = getattr(team_odds, f"p{seed}") if team_odds else None
         p_w = getattr(team_weighted, f"p{seed}") if team_weighted else None
         return _odds_suffix(p_u, p_w)
 
     def _elim_suffix() -> str:
+        """Return the formatted odds suffix for the eliminated outcome."""
         p_u = (1.0 - team_odds.p_playoffs) if team_odds else None
         p_w = (1.0 - team_weighted.p_playoffs) if team_weighted else None
         return _odds_suffix(p_u, p_w)
@@ -294,4 +303,386 @@ def team_scenarios_as_dict(
             }
 
         result[team] = team_entry
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Playoff home-game scenario renderers
+# ---------------------------------------------------------------------------
+
+
+def _render_condition_label(cond: HomeGameCondition) -> str:
+    """Render a single ``HomeGameCondition`` as a plain-English phrase.
+
+    Args:
+        cond: The condition to render.
+
+    Returns:
+        A short phrase such as ``"Taylorsville advances to Quarterfinals"``
+        or ``"Region 2 #3 Seed advances to Second Round"``.
+    """
+    if cond.kind == "seed_required":
+        label = cond.team_name or f"Region {cond.region} #{cond.seed} Seed"
+        return f"{label} finishes as the #{cond.seed} seed"
+    # kind == "advances"
+    if cond.region is None:
+        # Refers to the target team itself; caller should substitute name
+        return f"Team advances to {cond.round_name}"
+    label = cond.team_name or f"Region {cond.region} #{cond.seed} Seed"
+    return f"{label} advances to {cond.round_name}"
+
+
+def _render_home_scenario_block(
+    scenarios: tuple[HomeGameScenario, ...],
+    team_name: str,
+) -> list[str]:
+    """Render a list of ``HomeGameScenario`` objects as numbered condition lines.
+
+    Each scenario is an AND-joined set of conditions.  Multiple scenarios are
+    separated by a blank line (OR logic).  The explanation for a scenario is
+    shown as an indented note after the final condition line.
+
+    The condition that refers to the target team itself (``region is None``)
+    has its generic ``"Team"`` placeholder replaced by *team_name*.
+
+    Args:
+        scenarios:  Tuple of home-game scenarios (all with the same outcome).
+        team_name:  The school name of the target team.
+
+    Returns:
+        List of lines ready to be joined with ``"\\n"``.
+    """
+    lines: list[str] = []
+    for i, sc in enumerate(scenarios):
+        if i > 0:
+            lines.append("")  # blank separator between OR paths
+        conds = sc.conditions
+        if not conds:
+            # Unconditional — no bullets needed
+            if sc.explanation:
+                lines.append(f"   [{sc.explanation}]")
+        else:
+            for j, cond in enumerate(conds, 1):
+                raw = _render_condition_label(cond)
+                # Substitute placeholder for target team
+                raw = raw.replace("Team advances", f"{team_name} advances")
+                raw = raw.replace("Team finishes", f"{team_name} finishes")
+                if j == len(conds) and sc.explanation:
+                    lines.append(f"{j}. {raw}")
+                    lines.append(f"   [{sc.explanation}]")
+                else:
+                    lines.append(f"{j}. {raw}")
+    return lines
+
+
+def _odds_pct(p: float | None, p_w: float | None) -> str:
+    """Format probability values as a parenthetical percentage suffix.
+
+    Args:
+        p:   Unweighted probability (0–1), or ``None``.
+        p_w: Weighted probability (0–1), or ``None``.
+
+    Returns:
+        Empty string when both are ``None``; otherwise a formatted suffix
+        such as ``" (62.5%)"`` or ``" (62.5% – 68.0% Weighted)"``.
+    """
+    if p is None and p_w is None:
+        return ""
+    if p is not None and p_w is not None:
+        return f" ({p * 100:.1f}% \u2013 {p_w * 100:.1f}% Weighted)"
+    if p_w is not None:
+        return f" ({p_w * 100:.1f}% Weighted)"
+    return f" ({p * 100:.1f}%)"  # type: ignore[operator]
+
+
+def render_team_home_scenarios(
+    team: str,
+    home_scenarios: list[RoundHomeScenarios],
+) -> str:
+    """Return a human-readable string of playoff home-game scenarios for a team.
+
+    For each round the output shows a ``"Will Host <Round>"`` block and / or a
+    ``"Will Not Host <Round>"`` block, each containing numbered conditions
+    (AND logic within a block; blank-line-separated groups = OR logic across
+    alternative paths).
+
+    When the hosting outcome is unconditional (e.g. the team is always the
+    designated home team in the first round) the block header includes
+    ``"(100.0%)"`` and no numbered conditions are shown.
+
+    Probability suffixes (``p_host`` / ``p_host_weighted``) are taken from
+    the ``RoundHomeScenarios`` objects themselves; pass them in via
+    ``enumerate_home_game_scenarios``'s ``p_host_by_round`` /
+    ``p_host_weighted_by_round`` arguments.
+
+    Args:
+        team:           School name of the target team.
+        home_scenarios: List of ``RoundHomeScenarios`` as returned by
+                        ``enumerate_home_game_scenarios``.
+
+    Returns:
+        Multi-line string suitable for printing to a terminal or text file.
+    """
+    lines: list[str] = [team, ""]
+
+    for rnd in home_scenarios:
+        p = rnd.p_host_marginal
+        p_w = rnd.p_host_marginal_weighted
+
+        # Will Host block
+        if rnd.will_host:
+            header = f"Will Host {rnd.round_name}{_odds_pct(p, p_w)}:"
+            if len(rnd.will_host) == 1 and not rnd.will_host[0].conditions:
+                # Unconditional host — fold the explanation into the header
+                expl = rnd.will_host[0].explanation
+                if expl:
+                    lines.append(f"{header}  [{expl}]")
+                else:
+                    lines.append(header)
+            else:
+                lines.append(header)
+                lines.extend(_render_home_scenario_block(rnd.will_host, team))
+            lines.append("")
+
+        # Will Not Host block
+        if rnd.will_not_host:
+            not_p = (1.0 - p) if p is not None else None
+            not_p_w = (1.0 - p_w) if p_w is not None else None
+            header = f"Will Not Host {rnd.round_name}{_odds_pct(not_p, not_p_w)}:"
+            if len(rnd.will_not_host) == 1 and not rnd.will_not_host[0].conditions:
+                expl = rnd.will_not_host[0].explanation
+                if expl:
+                    lines.append(f"{header}  [{expl}]")
+                else:
+                    lines.append(header)
+            else:
+                lines.append(header)
+                lines.extend(_render_home_scenario_block(rnd.will_not_host, team))
+            lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def team_home_scenarios_as_dict(
+    team: str,
+    home_scenarios: list[RoundHomeScenarios],
+) -> dict[str, dict]:
+    """Return playoff home-game scenarios as a structured dict for API / frontend use.
+
+    The returned dict is keyed by a snake_case round name:
+    ``"first_round"``, ``"second_round"`` (1A–4A only), ``"quarterfinals"``,
+    ``"semifinals"``.
+
+    Each round entry has the shape::
+
+        {
+            "p_reach": float | None,
+            "p_host_conditional": float | None,
+            "p_host_marginal": float | None,
+            "p_reach_weighted": float | None,
+            "p_host_conditional_weighted": float | None,
+            "p_host_marginal_weighted": float | None,
+            "will_host": [
+                {
+                    "conditions": [
+                        {
+                            "kind": "advances" | "seed_required",
+                            "round": str | None,
+                            "region": int | None,
+                            "seed": int | None,
+                            "team": str | None,
+                        },
+                        ...
+                    ],
+                    "explanation": str | None,
+                },
+                ...
+            ],
+            "will_not_host": [ ... ],
+        }
+
+    Args:
+        team:           School name of the target team.  Used to resolve
+                        ``region=None`` conditions to the team's own name.
+        home_scenarios: List of ``RoundHomeScenarios`` as returned by
+                        ``enumerate_home_game_scenarios``.
+
+    Returns:
+        Structured dict ready for JSON serialisation.
+    """
+
+    def _cond_dict(cond: HomeGameCondition, team_name: str) -> dict:
+        """Serialise a single ``HomeGameCondition`` to a plain dict."""
+        label = cond.team_name
+        if label is None and cond.region is None:
+            label = team_name  # target team itself
+        elif label is None:
+            label = f"Region {cond.region} #{cond.seed} Seed"
+        return {
+            "kind": cond.kind,
+            "round": cond.round_name,
+            "region": cond.region,
+            "seed": cond.seed,
+            "team": label,
+        }
+
+    def _scenario_dict(sc: HomeGameScenario, team_name: str) -> dict:
+        """Serialise a single ``HomeGameScenario`` to a plain dict."""
+        return {
+            "conditions": [_cond_dict(c, team_name) for c in sc.conditions],
+            "explanation": sc.explanation,
+        }
+
+    _ROUND_KEY = {
+        "First Round": "first_round",
+        "Second Round": "second_round",
+        "Quarterfinals": "quarterfinals",
+        "Semifinals": "semifinals",
+    }
+
+    result: dict[str, dict] = {}
+    for rnd in home_scenarios:
+        key = _ROUND_KEY.get(rnd.round_name, rnd.round_name.lower().replace(" ", "_"))
+        result[key] = {
+            "p_reach": rnd.p_reach,
+            "p_host_conditional": rnd.p_host_conditional,
+            "p_host_marginal": rnd.p_host_marginal,
+            "p_reach_weighted": rnd.p_reach_weighted,
+            "p_host_conditional_weighted": rnd.p_host_conditional_weighted,
+            "p_host_marginal_weighted": rnd.p_host_marginal_weighted,
+            "will_host": [_scenario_dict(sc, team) for sc in rnd.will_host],
+            "will_not_host": [_scenario_dict(sc, team) for sc in rnd.will_not_host],
+        }
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Matchup renderers (opponent-centric view)
+# ---------------------------------------------------------------------------
+
+_ROUND_KEY_MATCHUP = {
+    "First Round": "first_round",
+    "Second Round": "second_round",
+    "Quarterfinals": "quarterfinals",
+    "Semifinals": "semifinals",
+}
+
+
+def render_team_matchups(
+    team: str,
+    round_matchups: list[RoundMatchups],
+) -> str:
+    """Return a human-readable string of all possible playoff matchups for a team.
+
+    Each round lists every possible ``(opponent, home/away)`` combination on a
+    separate line in the form::
+
+        Away at Home (XX.X%)
+
+    where the percentage is the per-matchup conditional probability
+    (``p_conditional``) — i.e. given the team reaches this round, the chance
+    they face this specific opponent as home or away.  Home matchups are listed
+    before away matchups within each round.
+
+    A round header shows the team's probability of reaching the round when
+    ``p_reach`` is available.
+
+    Args:
+        team:           School name of the target team.
+        round_matchups: List of ``RoundMatchups`` from ``enumerate_team_matchups``.
+
+    Returns:
+        Multi-line string suitable for printing or writing to a text file.
+    """
+    lines: list[str] = [team, ""]
+
+    for rnd in round_matchups:
+        reach_suffix = _odds_pct(rnd.p_reach, rnd.p_reach_weighted)
+        lines.append(f"{rnd.round_name}{reach_suffix}:")
+
+        for entry in rnd.entries:
+            p_suffix = _odds_pct(entry.p_conditional, entry.p_conditional_weighted)
+            if entry.home:
+                away_label = f"Region {entry.opponent_region} #{entry.opponent_seed} {entry.opponent}"
+                line = f"  {away_label} at {team}{p_suffix}"
+            else:
+                home_label = f"Region {entry.opponent_region} #{entry.opponent_seed} {entry.opponent}"
+                line = f"  {team} at {home_label}{p_suffix}"
+            if entry.explanation:
+                line += f"  [{entry.explanation}]"
+            lines.append(line)
+
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def team_matchups_as_dict(
+    round_matchups: list[RoundMatchups],
+) -> dict[str, dict]:
+    """Return per-matchup playoff scenarios as a structured dict for API / frontend use.
+
+    The returned dict is keyed by a snake_case round name:
+    ``"first_round"``, ``"second_round"`` (1A–4A only), ``"quarterfinals"``,
+    ``"semifinals"``.
+
+    Each round entry has the shape::
+
+        {
+            "p_reach": float | None,
+            "p_host_conditional": float | None,
+            "p_host_marginal": float | None,
+            "p_reach_weighted": float | None,
+            "p_host_conditional_weighted": float | None,
+            "p_host_marginal_weighted": float | None,
+            "matchups": [
+                {
+                    "opponent": str,
+                    "opponent_region": int,
+                    "opponent_seed": int,
+                    "home": bool,
+                    "p_conditional": float | None,
+                    "p_conditional_weighted": float | None,
+                    "p_marginal": float | None,
+                    "p_marginal_weighted": float | None,
+                    "explanation": str | None,
+                },
+                ...
+            ],
+        }
+
+    Matchups within a round are sorted home-first, then by
+    ``(opponent_region, opponent_seed)``.
+
+    Args:
+        round_matchups: List of ``RoundMatchups`` from ``enumerate_team_matchups``.
+
+    Returns:
+        Structured dict ready for JSON serialisation.
+    """
+    result: dict[str, dict] = {}
+    for rnd in round_matchups:
+        key = _ROUND_KEY_MATCHUP.get(rnd.round_name, rnd.round_name.lower().replace(" ", "_"))
+        result[key] = {
+            "p_reach": rnd.p_reach,
+            "p_host_conditional": rnd.p_host_conditional,
+            "p_host_marginal": rnd.p_host_marginal,
+            "p_reach_weighted": rnd.p_reach_weighted,
+            "p_host_conditional_weighted": rnd.p_host_conditional_weighted,
+            "p_host_marginal_weighted": rnd.p_host_marginal_weighted,
+            "matchups": [
+                {
+                    "opponent": e.opponent,
+                    "opponent_region": e.opponent_region,
+                    "opponent_seed": e.opponent_seed,
+                    "home": e.home,
+                    "p_conditional": e.p_conditional,
+                    "p_conditional_weighted": e.p_conditional_weighted,
+                    "p_marginal": e.p_marginal,
+                    "p_marginal_weighted": e.p_marginal_weighted,
+                    "explanation": e.explanation,
+                }
+                for e in rnd.entries
+            ],
+        }
     return result

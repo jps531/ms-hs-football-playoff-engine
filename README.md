@@ -25,66 +25,195 @@ Re-run these if MHSAA reclassifies schools (every two years) or if the playoff f
 
 ### Frontend Helper Functions
 
-The frontend reads from these tables at request time — no tiebreaker computation happens on the frontend.
+The frontend reads from pre-computed data — no tiebreaker computation happens at request time. All dict-producing functions live in `backend/helpers/scenario_renderer.py`.
 
-To render scenario text, call `read_region_scenarios(conn, season, clazz, region)` to load the pre-computed data, then pass it to one of the two render functions:
+#### Loading pre-computed region data
 
-- **`render_scenarios(data["complete_scenarios"])`** — outputs the full division view, one scenario per distinct seeding outcome:
-  ```
-  Scenario 1: Petal beats Northwest Rankin AND Pearl beats Oak Grove
-  1. Petal
-  2. Pearl
-  3. Oak Grove
-  4. Brandon
-  Eliminated: Meridian, Northwest Rankin
+```python
+from backend.helpers.database_helpers import read_region_scenarios
 
-  Scenario 4a: Pearl beats Oak Grove AND Pearl's margin and Oak Grove's margin combined total exactly 10
-  1. Oak Grove
-  ...
-  ```
+data = read_region_scenarios(conn, season=2025, clazz=7, region=3)
+# data["scenario_atoms"]    → per-team seeding condition atoms
+# data["complete_scenarios"] → full division scenario list
+# data["remaining_games"]   → unplayed games for this region
+```
 
-- **`render_team_scenarios(team, data["scenario_atoms"])`** — outputs the per-team view, grouped by seed the team can achieve:
-  ```
-  Pearl
+---
 
-  #1 seed if:
-  1. Petal beats Northwest Rankin AND Pearl beats Oak Grove by 8 or more
-  2. ...
+#### `division_scenarios_as_dict(scenarios, playoff_seeds=4)`
 
-  #2 seed if:
-  1. Pearl beats Oak Grove
-  2. ...
+All possible seeding outcomes for a division, keyed by scenario label. Use this for a "what if" table showing every possible final seeding.
 
-  Eliminated if:
-  1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
-  ```
+```python
+from backend.helpers.scenario_renderer import division_scenarios_as_dict
 
-To resolve seeding for a specific set of game results (e.g. a user entering scores for remaining games), call `resolve_with_results(teams, completed, remaining, results, margins)` from `backend/helpers/tiebreakers.py`:
+d = division_scenarios_as_dict(data["complete_scenarios"])
+# {
+#   "1":  {"title": "Petal beats NWR AND Pearl beats OG", "one_seed": "Petal", "two_seed": "Pearl", "three_seed": "Oak Grove", "four_seed": "Brandon", "eliminated": ["Meridian", "Northwest Rankin"]},
+#   "4a": {"title": "Pearl beats OG AND combined margin == 10", "one_seed": "Oak Grove", ...},
+#   ...
+# }
+```
 
-- **`results`** — dict mapping `(team1, team2)` → winner name; teams may be in either order
-- **`margins`** — optional dict mapping `(team1, team2)` → winning margin (positive int); omit if scores aren't known yet
+Each entry:
+
+| Key | Type | Description |
+|---|---|---|
+| `title` | `str` | Human-readable AND-joined condition string |
+| `one_seed` | `str` | Team finishing 1st |
+| `two_seed` | `str` | Team finishing 2nd |
+| `three_seed` | `str` | Team finishing 3rd |
+| `four_seed` | `str` | Team finishing 4th |
+| `eliminated` | `list[str]` | Teams finishing outside the top seeds |
+
+---
+
+#### `team_scenarios_as_dict(scenarios, playoff_seeds=4, odds=None, weighted_odds=None)`
+
+Per-team seeding scenarios, keyed by team name then seed. Use this to render a per-team card showing what each team needs to achieve each seed.
+
+```python
+from backend.helpers.scenario_renderer import team_scenarios_as_dict
+
+d = team_scenarios_as_dict(
+    data["scenario_atoms"],
+    odds=standings_odds_by_team,           # dict[team → StandingsOdds], optional
+    weighted_odds=weighted_odds_by_team,   # dict[team → StandingsOdds], optional
+)
+# {
+#   "Pearl": {
+#     1: {"odds": 0.25, "weighted_odds": 0.31, "scenarios": ["Petal beats NWR AND Pearl beats OG by 8+", ...]},
+#     2: {"odds": 0.50, "weighted_odds": 0.48, "scenarios": ["Pearl beats OG", ...]},
+#     "eliminated": {"odds": 0.25, "weighted_odds": 0.21, "scenarios": ["OG beats Pearl AND NWR beats Petal"]},
+#   },
+#   ...
+# }
+```
+
+Each seed entry (integer keys `1`–`playoff_seeds` and the string `"eliminated"`):
+
+| Key | Type | Description |
+|---|---|---|
+| `odds` | `float \| None` | Equal-probability chance of this outcome |
+| `weighted_odds` | `float \| None` | Win-probability-weighted chance |
+| `scenarios` | `list[str]` | Condition strings; empty list for a clinched/eliminated team |
+
+---
+
+#### `team_home_scenarios_as_dict(team, home_scenarios)`
+
+Condition-list view of when a team will host vs. travel in each playoff round. Use this to show the "if X advances and Y advances, Team hosts" logic.
+
+```python
+from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
+from backend.helpers.scenario_renderer import team_home_scenarios_as_dict
+
+rounds = enumerate_home_game_scenarios(
+    region=8, seed=1, slots=slots, season=2025,
+    p_reach_by_round=..., p_host_conditional_by_round=..., p_host_marginal_by_round=...,
+    team_lookup=team_lookup,
+)
+d = team_home_scenarios_as_dict("Taylorsville", rounds)
+```
+
+Top-level keys: `"first_round"`, `"second_round"` (1A–4A only), `"quarterfinals"`, `"semifinals"`.
+
+Each round entry:
+
+| Key | Type | Description |
+|---|---|---|
+| `p_reach` | `float \| None` | P(team reaches this round) |
+| `p_host_conditional` | `float \| None` | P(hosts \| reaches) |
+| `p_host_marginal` | `float \| None` | P(reaches AND hosts) |
+| `p_reach_weighted` | `float \| None` | Weighted equivalent of `p_reach` |
+| `p_host_conditional_weighted` | `float \| None` | Weighted equivalent |
+| `p_host_marginal_weighted` | `float \| None` | Weighted equivalent |
+| `will_host` | `list[scenario]` | Paths that lead to the team hosting |
+| `will_not_host` | `list[scenario]` | Paths that lead to the team travelling |
+
+Each scenario in `will_host` / `will_not_host`:
+
+```python
+{
+    "conditions": [
+        {
+            "kind": "advances" | "seed_required",
+            "round": str | None,      # e.g. "Quarterfinals"
+            "region": int | None,
+            "seed": int | None,
+            "team": str | None,       # resolved school name, or None
+        },
+        ...
+    ],
+    "explanation": str | None,    # e.g. "Higher seed (#1) hosts"
+}
+```
+
+Multiple conditions within a scenario are AND-joined. Multiple scenarios within `will_host` or `will_not_host` are OR-joined (any one path suffices). See [`docs/taylorsville_home_scenarios_2025.md`](docs/taylorsville_home_scenarios_2025.md) for a full worked example.
+
+---
+
+#### `team_matchups_as_dict(round_matchups)`
+
+Opponent-centric view of every possible playoff matchup — one entry per `(opponent, home/away)` combination. Use this to render a list like "Region 7 #4 West Lincoln at Taylorsville (100%)". Unlike `team_home_scenarios_as_dict`, this view is flat (no nested condition lists) and includes per-matchup probabilities.
+
+```python
+from backend.helpers.home_game_scenarios import enumerate_team_matchups
+from backend.helpers.scenario_renderer import team_matchups_as_dict
+
+rounds = enumerate_team_matchups(
+    region=8, seed=1, slots=slots, season=2025,
+    p_reach_by_round=..., p_host_conditional_by_round=..., p_host_marginal_by_round=...,
+    team_lookup=team_lookup,
+)
+d = team_matchups_as_dict(rounds)
+```
+
+Top-level keys: `"first_round"`, `"second_round"` (1A–4A only), `"quarterfinals"`, `"semifinals"`.
+
+Each round entry has the same six round-level odds fields as `team_home_scenarios_as_dict`, plus:
+
+| Key | Type | Description |
+|---|---|---|
+| `matchups` | `list[matchup]` | All `(opponent, home/away)` combos, home-first then by `(region, seed)` |
+
+Each matchup:
+
+| Key | Type | Description |
+|---|---|---|
+| `opponent` | `str` | School name, or `"Region X #Y Seed"` if lookup unavailable |
+| `opponent_region` | `int` | Opponent's region number |
+| `opponent_seed` | `int` | Opponent's seed (1 = best) |
+| `home` | `bool` | `True` if the given team is the home team |
+| `p_conditional` | `float \| None` | P(this matchup \| team reaches round) — values sum to 1.0 per round |
+| `p_conditional_weighted` | `float \| None` | Weighted equivalent (placeholder for `WinProbFn`) |
+| `p_marginal` | `float \| None` | P(reaches AND this matchup) = `p_conditional × p_reach` |
+| `p_marginal_weighted` | `float \| None` | Weighted equivalent |
+| `explanation` | `str \| None` | Rule reason, e.g. `"Higher seed (#1) hosts"` |
+
+> **Note on split entries:** The same opponent may appear twice in a round (once with `home=True`, once `home=False`) when the home-team determination depends on which path the opponent took through an earlier round. Their `p_conditional` values sum to the total probability of facing that opponent. See the Leake County example in [`docs/taylorsville_home_scenarios_2025.md`](docs/taylorsville_home_scenarios_2025.md).
+
+---
+
+#### `resolve_with_results(teams, completed, remaining, results, margins=None)`
+
+Resolve the final seeding for a specific set of hypothetical game results (e.g. a user entering scores). From `backend/helpers/tiebreakers.py`.
+
+- **`results`** — `dict[(team1, team2) → winner]`; teams may be in either order
+- **`margins`** — optional `dict[(team1, team2) → int]`; omit if scores are unknown
 
 Returns `(seeding, messages)`:
-- **`seeding`** — list of team names in seed order (seed 1 first)
-- **`messages`** — list of human-readable strings for any games where the margin was not provided but would affect the tiebreaker outcome; empty if all ties are resolved without margin data
+- **`seeding`** — `list[str]` of team names in seed order (seed 1 first)
+- **`messages`** — `list[str]` describing any games where a margin would change the outcome; empty when all tiebreakers are margin-independent
 
 ```python
 seeding, messages = resolve_with_results(
-    teams,
-    completed_games,
-    remaining_games,
-    results={("Oak Grove", "Pearl"): "Oak Grove", ("Northwest Rankin", "Petal"): "Northwest Rankin", ("Brandon", "Meridian"): "Brandon"},
+    teams, completed_games, remaining_games,
+    results={("Oak Grove", "Pearl"): "Oak Grove", ("Northwest Rankin", "Petal"): "Northwest Rankin"},
     margins={("Oak Grove", "Pearl"): 21, ("Northwest Rankin", "Petal"): 6},
 )
-# seeding → ["Oak Grove", "Petal", "Brandon", "Northwest Rankin", "Pearl", "Meridian"]
+# seeding  → ["Oak Grove", "Petal", "Brandon", "Northwest Rankin", "Pearl", "Meridian"]
 # messages → []
-```
-
-If margins are omitted and any tied teams played each other in a remaining game whose margin would change the seeding, `messages` will describe which teams are affected:
-
-```python
-seeding, messages = resolve_with_results(teams, completed, remaining, results)
-# messages → ["Point differential needed for Pearl over Oak Grove: margin affects seeding of Northwest Rankin, Oak Grove, Pearl, Petal."]
 ```
 
 ## Development Setup
