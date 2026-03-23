@@ -82,7 +82,7 @@ Lake
 
 #2 seed if: (41.7%)
 1. Puckett beats Pelahatchie AND Scott Central beats Lake
-2. Pelahatchie beats Puckett AND Scott Central beats Lake by 5 or more"""
+2. Scott Central beats Lake by 5 or more"""
 
 NEWTON_EXPECTED = "Newton\n\nClinched #4 seed. (100.0%)"
 
@@ -102,7 +102,7 @@ Scott Central
 
 #1 seed if: (41.7%)
 1. Puckett beats Pelahatchie AND Scott Central beats Lake
-2. Pelahatchie beats Puckett AND Scott Central beats Lake by 5 or more
+2. Scott Central beats Lake by 5 or more
 
 #2 seed if: (8.3%)
 1. Pelahatchie beats Puckett AND Scott Central beats Lake by 1\u20134
@@ -352,17 +352,19 @@ def test_scenario_2a_conditions_atom():
 
 
 def test_scenario_2b_conditions_atom():
-    """Scenario 2b: SC beats Lake by 5 or more AND Pelahatchie beats Puckett unconstrained."""
+    """Scenario 2b conditions_atom: standalone 'SC beats Lake by 5+' — no Pelahatchie clause.
+
+    Rule 3 simplification: the Pelahatchie/Puckett result is irrelevant when SC wins by 5+,
+    so conditions_atom contains only the one sufficient game condition.
+    """
     sc2b = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
     ca = sc2b["conditions_atom"]
-    sc_gr = next(gr for gr in ca if isinstance(gr, GameResult) and gr.winner == "Scott Central")
+    assert len(ca) == 1, "conditions_atom should have exactly one condition after Rule 3 simplification"
+    sc_gr = ca[0]
+    assert sc_gr.winner == "Scott Central"
     assert sc_gr.loser == "Lake"
     assert sc_gr.min_margin == 5
-    assert sc_gr.max_margin is None  # "by 5 or more"
-    pel_gr = next(gr for gr in ca if isinstance(gr, GameResult) and gr.winner == "Pelahatchie")
-    assert pel_gr.loser == "Puckett"
-    assert pel_gr.min_margin == 1
-    assert pel_gr.max_margin is None
+    assert sc_gr.max_margin is None
 
 
 # ---------------------------------------------------------------------------
@@ -415,8 +417,8 @@ def test_div_dict_scenario2a_title():
 
 
 def test_div_dict_scenario2b_title():
-    """Scenario 2b: Pelahatchie wins AND SC wins by 5 or more."""
-    assert _DIV_DICT["2b"]["title"] == "Pelahatchie beats Puckett AND Scott Central beats Lake by 5 or more"
+    """Scenario 2b: SC wins by 5 or more (standalone — Pelahatchie/Puckett result not mentioned)."""
+    assert _DIV_DICT["2b"]["title"] == "Scott Central beats Lake by 5 or more"
 
 
 def test_div_dict_scenario3_title():

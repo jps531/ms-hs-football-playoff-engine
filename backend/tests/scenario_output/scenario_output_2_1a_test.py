@@ -110,7 +110,7 @@ H. W. Byers
 
 #4 seed if: (27.1%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
-2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 12 or more"""
+2. Ashland beats H. W. Byers by 12 or more"""
 
 POTTS_CAMP_EXPECTED = """\
 Potts Camp
@@ -133,7 +133,7 @@ Ashland
 
 #3 seed if: (27.1%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
-2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 12 or more
+2. Ashland beats H. W. Byers by 12 or more
 
 #4 seed if: (72.9%)
 1. H. W. Byers beats Ashland

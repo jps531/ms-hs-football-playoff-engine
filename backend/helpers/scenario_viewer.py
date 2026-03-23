@@ -358,9 +358,11 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
     from backend.helpers.data_classes import GameResult, MarginCondition
 
     def _pair(c: GameResult) -> tuple:
+        """Return a canonical (sorted) team-pair key for a GameResult."""
         return tuple(sorted([c.winner, c.loser]))
 
     def _mc_key(mc: MarginCondition):
+        """Return a hashable identity key for a MarginCondition."""
         return (mc.add, mc.sub, mc.op, mc.threshold)
 
     def _try_merge(a: list, b: list) -> list | None:
@@ -446,6 +448,59 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
 
         return None
 
+    def _try_rule3(a: list, b: list) -> list | None:
+        """Rule 3 — Complementary lifting.
+
+        If a = [X_a, G(lo, None)] and b = [X_b, G(hi, None)] where:
+          - X_a and X_b are unconstrained, opposite outcomes of the same game,
+          - G is the same game in both atoms (same winner/loser),
+          - lo < hi  (a has the weaker margin constraint),
+        then b can be replaced with the standalone atom [G(hi, None)].
+
+        Correctness: (X_a ∧ G_lo+) ∨ (X_b ∧ G_hi+) = G_hi+ ∨ (X_a ∧ G_lo+).
+        The simpler form makes it clear that G winning by hi+ is sufficient
+        regardless of which team wins the X game.
+        """
+        gr_a = {_pair(c): c for c in a if isinstance(c, GameResult)}
+        gr_b = {_pair(c): c for c in b if isinstance(c, GameResult)}
+
+        if set(gr_a) != set(gr_b):
+            return None
+        # No MarginConditions in either atom (not needed for current use cases)
+        if any(not isinstance(c, GameResult) for c in a):
+            return None
+        if any(not isinstance(c, GameResult) for c in b):
+            return None
+
+        diff = [p for p in gr_a if gr_a[p] != gr_b[p]]
+        if len(diff) != 2:
+            return None
+
+        for p_comp, p_tight in [(diff[0], diff[1]), (diff[1], diff[0])]:
+            ca_c, cb_c = gr_a[p_comp], gr_b[p_comp]
+            ca_t, cb_t = gr_a[p_tight], gr_b[p_tight]
+
+            # Complementary game: opposite winners, both unconstrained
+            if ca_c.loser != cb_c.winner:
+                continue
+            if ca_c.min_margin != 1 or ca_c.max_margin is not None:
+                continue
+            if cb_c.min_margin != 1 or cb_c.max_margin is not None:
+                continue
+
+            # Tightening game: same winner/loser, a is wider (lower min), b is tighter
+            if ca_t.winner != cb_t.winner or ca_t.loser != cb_t.loser:
+                continue
+            if ca_t.min_margin >= cb_t.min_margin:
+                continue  # a is not the wider one
+            # a must fully cover b's range (a extends to None, or a's max > b's min)
+            if ca_t.max_margin is not None and ca_t.max_margin <= cb_t.min_margin:
+                continue
+
+            return [cb_t]  # b simplified to just the tighter game condition
+
+        return None
+
     # Iterative minimisation
     changed = True
     while changed:
@@ -473,6 +528,23 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
             if not found_pair:
                 new_atoms.append(atoms[i])
         atoms = new_atoms
+
+    # Rule 3: complementary lifting — separate pass, runs after Rules 1/2
+    # Iterates until stable since one application may expose another.
+    r3_changed = True
+    while r3_changed:
+        r3_changed = False
+        for i in range(len(atoms)):
+            for j in range(len(atoms)):
+                if i == j:
+                    continue
+                new_b = _try_rule3(atoms[i], atoms[j])
+                if new_b is not None:
+                    atoms = [new_b if k == j else atom for k, atom in enumerate(atoms)]
+                    r3_changed = True
+                    break
+            if r3_changed:
+                break
 
     return atoms
 
@@ -602,16 +674,37 @@ def build_scenario_atoms(
     for (mask, top4) in groups:
         teams_in_any_top4[mask].update(top4)
 
+    # Pre-compute masks where each team can be eliminated (appears in some but not all top4s)
+    team_sometimes_elim_masks: dict[str, set[int]] = {}
+    for (mask, top4) in groups:
+        for team in teams:
+            if team not in top4:
+                team_sometimes_elim_masks.setdefault(team, set()).add(mask)
+
+    elim_seed = playoff_seeds + 1
+
     for team in teams:
-        elim_masks = [m for m in range(1 << R) if team not in teams_in_any_top4[m]]
-        if not elim_masks:
+        always_elim_masks = [m for m in range(1 << R) if team not in teams_in_any_top4[m]]
+        sometimes_elim_only_masks = team_sometimes_elim_masks.get(team, set()) - set(always_elim_masks)
+
+        if not always_elim_masks and not sometimes_elim_only_masks:
             continue
-        # Also check for masks where team is sometimes eliminated (constrained)
-        # — handle via unconstrained merging only for masks where always eliminated
-        game_winners = _common_game_winners(elim_masks, remaining)
-        atom = [GameResult(w, l, 1, None) for w, l in game_winners]
-        elim_seed = playoff_seeds + 1
-        result.setdefault(team, {}).setdefault(elim_seed, []).append(atom)
+
+        # Unconstrained atom: masks where the team is always eliminated regardless of margin
+        if always_elim_masks:
+            game_winners = _common_game_winners(always_elim_masks, remaining)
+            atom = [GameResult(w, l, 1, None) for w, l in game_winners]
+            result.setdefault(team, {}).setdefault(elim_seed, []).append(atom)
+
+        # Constrained atoms: masks where team is eliminated only for specific margin ranges
+        for mask in sometimes_elim_only_masks:
+            absent_margins: list[dict] = []
+            for (mk, top4), margin_list in groups.items():
+                if mk == mask and team not in top4:
+                    absent_margins.extend(margin_list)
+            if absent_margins:
+                atom = _derive_atom(mask, absent_margins, remaining, pairs)
+                result.setdefault(team, {}).setdefault(elim_seed, []).append(atom)
 
     # --- Step 6: Boolean minimisation — collapse redundant margin ranges and
     #             drop game conditions that don't affect the seeding outcome ---
