@@ -327,6 +327,156 @@ def _predict_valid_set_2d(
     return valid
 
 
+def _simplify_atom_list(atoms: list[list]) -> list[list]:
+    """Minimise a list of atoms using two boolean-simplification rules.
+
+    Applies the two rules iteratively until no further reduction is possible.
+
+    Rule 1 — Margin collapse:
+        Two atoms that are identical in every condition except that one game's
+        ``GameResult`` has adjacent or overlapping margin ranges (and the same
+        winner) are merged into a single atom whose margin range is the union of
+        the two.  After enough iterations, ranges that together span [1, 12]
+        collapse to an unconstrained ``GameResult`` (``min_margin=1``,
+        ``max_margin=None``).
+
+    Rule 2 — Game elimination:
+        Two atoms that are identical except that one game appears with opposite
+        winners in the two atoms, and no ``MarginCondition`` in either atom
+        references that game pair, are merged by dropping that game condition
+        entirely.  If this leaves an empty condition list the result is
+        ``[[]]`` — an unconditional atom that subsumes all others.
+
+    Args:
+        atoms: List of atoms, each atom being a list of ``GameResult`` /
+               ``MarginCondition`` objects.
+
+    Returns:
+        A simplified list of atoms.  May be shorter than the input.
+        Returns ``[[]]`` if any atom collapses to unconditional.
+    """
+    from backend.helpers.data_classes import GameResult, MarginCondition
+
+    def _pair(c: GameResult) -> tuple:
+        return tuple(sorted([c.winner, c.loser]))
+
+    def _mc_key(mc: MarginCondition):
+        return (mc.add, mc.sub, mc.op, mc.threshold)
+
+    def _try_merge(a: list, b: list) -> list | None:
+        """Return a merged atom if a and b can be simplified in one step, else None."""
+        gr_a: dict[tuple, GameResult] = {}
+        gr_b: dict[tuple, GameResult] = {}
+        mc_a: list = []
+        mc_b: list = []
+        order: list = []  # ('gr', pair) or ('mc', index) — preserves atom-a structure
+
+        for c in a:
+            if isinstance(c, GameResult):
+                p = _pair(c)
+                gr_a[p] = c
+                order.append(("gr", p))
+            else:
+                mc_a.append(c)
+                order.append(("mc", len(mc_a) - 1))
+
+        for c in b:
+            if isinstance(c, GameResult):
+                gr_b[_pair(c)] = c
+            else:
+                mc_b.append(c)
+
+        # MarginConditions must be identical in both atoms
+        if len(mc_a) != len(mc_b) or any(_mc_key(x) != _mc_key(y) for x, y in zip(mc_a, mc_b)):
+            return None
+
+        # Same set of game pairs required
+        if set(gr_a) != set(gr_b):
+            return None
+
+        diff = [p for p in gr_a if gr_a[p] != gr_b[p]]
+        if len(diff) != 1:
+            return None  # 0 = already identical; 2+ = can't reduce in one step
+
+        p = diff[0]
+        ca, cb = gr_a[p], gr_b[p]
+
+        # --- Rule 1: same winner, adjacent / overlapping margin ranges ---
+        if ca.winner == cb.winner:
+            lo = min(ca.min_margin, cb.min_margin)
+            a_hi = ca.max_margin  # exclusive upper bound; None = unbounded
+            b_hi = cb.max_margin
+            # Sort ranges by start so we can check adjacency
+            if ca.min_margin <= cb.min_margin:
+                first_hi, second_lo = a_hi, cb.min_margin
+            else:
+                first_hi, second_lo = b_hi, ca.min_margin
+            # Ranges must be adjacent or overlapping (no gap)
+            if first_hi is not None and second_lo > first_hi:
+                return None
+            hi = None if (a_hi is None or b_hi is None) else max(a_hi, b_hi)
+            merged_gr = GameResult(ca.winner, ca.loser, lo, hi)
+            result = []
+            for kind, val in order:
+                if kind == "gr" and val == p:
+                    result.append(merged_gr)
+                elif kind == "gr":
+                    result.append(gr_a[val])
+                else:
+                    result.append(mc_a[val])
+            return result
+
+        # --- Rule 2: opposite winners, no MarginCondition references this game ---
+        # Both conditions must be fully unconstrained (min=1, max=None) — i.e. together
+        # they cover ALL outcomes of this game.  A margin qualifier on either side means
+        # one range of outcomes is still excluded, so the game cannot be dropped.
+        if ca.loser == cb.winner:
+            if ca.min_margin != 1 or ca.max_margin is not None:
+                return None
+            if cb.min_margin != 1 or cb.max_margin is not None:
+                return None
+            for mc in mc_a:
+                if p in mc.add or p in mc.sub:
+                    return None
+            return [
+                (gr_a[val] if kind == "gr" else mc_a[val])
+                for kind, val in order
+                if not (kind == "gr" and val == p)
+            ]
+
+        return None
+
+    # Iterative minimisation
+    changed = True
+    while changed:
+        changed = False
+        # Short-circuit: an unconditional atom subsumes everything
+        if any(len(atom) == 0 for atom in atoms):
+            return [[]]
+        new_atoms: list[list] = []
+        used: set[int] = set()
+        for i in range(len(atoms)):
+            if i in used:
+                continue
+            found_pair = False
+            for j in range(i + 1, len(atoms)):
+                if j in used:
+                    continue
+                merged = _try_merge(atoms[i], atoms[j])
+                if merged is not None:
+                    new_atoms.append(merged)
+                    used.add(i)
+                    used.add(j)
+                    changed = True
+                    found_pair = True
+                    break
+            if not found_pair:
+                new_atoms.append(atoms[i])
+        atoms = new_atoms
+
+    return atoms
+
+
 def _valid_merge_groups(unc_masks: list[int], num_games: int) -> list[list[int]]:
     """Partition unconstrained masks into maximal valid merge groups.
 
@@ -463,6 +613,12 @@ def build_scenario_atoms(
         elim_seed = playoff_seeds + 1
         result.setdefault(team, {}).setdefault(elim_seed, []).append(atom)
 
+    # --- Step 6: Boolean minimisation — collapse redundant margin ranges and
+    #             drop game conditions that don't affect the seeding outcome ---
+    for team in result:
+        for seed in result[team]:
+            result[team][seed] = _simplify_atom_list(result[team][seed])
+
     return result
 
 
@@ -527,6 +683,15 @@ def enumerate_division_scenarios(
     for (mask, _) in mask_seeding_margins:
         mask_seeding_count[mask] += 1
     margin_sensitive = {m for m, cnt in mask_seeding_count.items() if cnt > 1}
+
+    # Auto-build atoms when margin-sensitive sub-scenarios need conditions_atom populated.
+    if margin_sensitive and scenario_atoms is None:
+        scenario_atoms = build_scenario_atoms(
+            teams, completed, remaining,
+            pa_win=pa_win,
+            base_margin_default=base_margin_default,
+            playoff_seeds=playoff_seeds,
+        )
 
     # Separate into non-margin-sensitive (group by seeding) and margin-sensitive
     non_ms: dict[tuple, list[int]] = defaultdict(list)  # seeding -> [masks]

@@ -258,8 +258,9 @@ def test_render_eliminated_teams_shown():
             assert "Meridian" in line
 
 
-def test_render_without_atoms_uses_game_winners():
-    """Without scenario_atoms, render uses plain game winners (no margin conditions)."""
+def test_render_without_explicit_atoms_auto_computes():
+    """Without explicit scenario_atoms, enumerate_division_scenarios auto-builds atoms for
+    margin-sensitive scenarios so conditions_atom is populated and margin text appears."""
     output = render_division_scenarios(
         teams_3_7a,
         expected_3_7a_completed_games,
@@ -268,10 +269,8 @@ def test_render_without_atoms_uses_game_winners():
     )
     # Should still have 17 scenarios (Scenario 1–6 with 4a–4l for the margin-sensitive mask)
     assert output.count("Scenario 4") == 12  # exactly 4a through 4l
-    # No "exactly" or "or more" phrases (no margin condition text)
-    assert "or more" not in output
-    assert "or less" not in output
-    assert "exactly" not in output
+    # Margin condition text IS present — atoms are auto-computed even without explicit atoms arg
+    assert "or more" in output
 
 
 # ---------------------------------------------------------------------------
