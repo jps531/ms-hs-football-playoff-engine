@@ -448,6 +448,36 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
 
         return None
 
+    def _subsumes(a: list, b: list) -> bool:
+        """Return True if atom *a* subsumes atom *b* (b can be dropped when a exists).
+
+        a subsumes b when every assignment satisfying b also satisfies a.  This
+        holds when:
+          - Every game pair in a also appears in b with the same winner.
+          - a's margin range for that game is a superset of (weaker than) b's range:
+            a.min_margin <= b.min_margin and (a.max_margin is None or a.max_margin >= b.max_margin).
+          - b may have additional conditions that a does not (making b strictly tighter).
+          - a has no MarginConditions (not needed for current use cases).
+        """
+        if not a:  # unconditional atom subsumes everything
+            return True
+        if any(not isinstance(c, GameResult) for c in a):
+            return False  # MarginConditions in a: skip
+        gr_a = {_pair(c): c for c in a}
+        gr_b = {_pair(c): c for c in b if isinstance(c, GameResult)}
+        if not set(gr_a).issubset(set(gr_b)):
+            return False
+        for p in gr_a:
+            ca, cb = gr_a[p], gr_b[p]
+            if ca.winner != cb.winner:
+                return False
+            if ca.min_margin > cb.min_margin:
+                return False
+            if ca.max_margin is not None:
+                if cb.max_margin is None or ca.max_margin < cb.max_margin:
+                    return False
+        return True
+
     def _try_rule3(a: list, b: list) -> list | None:
         """Rule 3 — Complementary lifting.
 
@@ -528,6 +558,17 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
             if not found_pair:
                 new_atoms.append(atoms[i])
         atoms = new_atoms
+
+    # Subsumption: remove any atom strictly subsumed by a simpler atom.
+    # One pass is sufficient; subsumption only removes atoms, never adds them.
+    dominated = {
+        j
+        for i in range(len(atoms))
+        for j in range(len(atoms))
+        if i != j and _subsumes(atoms[i], atoms[j])
+    }
+    if dominated:
+        atoms = [atom for k, atom in enumerate(atoms) if k not in dominated]
 
     # Rule 3: complementary lifting — separate pass, runs after Rules 1/2
     # Iterates until stable since one application may expose another.
@@ -690,9 +731,10 @@ def build_scenario_atoms(
         if not always_elim_masks and not sometimes_elim_only_masks:
             continue
 
-        # Unconstrained atom: masks where the team is always eliminated regardless of margin
-        if always_elim_masks:
-            game_winners = _common_game_winners(always_elim_masks, remaining)
+        # Unconstrained atoms: one full-condition atom per always-elim mask.
+        # Boolean minimisation (step 6) will collapse them to the minimal DNF.
+        for mask in always_elim_masks:
+            game_winners = _game_winners_for_mask(mask, remaining)
             atom = [GameResult(w, l, 1, None) for w, l in game_winners]
             result.setdefault(team, {}).setdefault(elim_seed, []).append(atom)
 
