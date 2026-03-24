@@ -364,13 +364,13 @@ def test_velma_jackson_never_margin_sensitive():
 
 
 def test_div_dict_keys():
-    """division_scenarios_as_dict produces keys '1a','1b','2a','2b','3'."""
-    assert set(_DIV_DICT.keys()) == {"1a", "1b", "2a", "2b", "3"}
+    """division_scenarios_as_dict produces keys '1a','1b','2' (2a/2b deduplicated as identical to 1a/1b; old 3→2)."""
+    assert set(_DIV_DICT.keys()) == {"1a", "1b", "2"}
 
 
-def test_div_dict_scenario3_title():
-    """Scenario 3 title is 'Kemper County beats Philadelphia'."""
-    assert _DIV_DICT["3"]["title"] == "Kemper County beats Philadelphia"
+def test_div_dict_scenario2_title():
+    """Scenario 2 (was 3) title is 'Kemper County beats Philadelphia'."""
+    assert _DIV_DICT["2"]["title"] == "Kemper County beats Philadelphia"
 
 
 def test_div_dict_scenario1a_title():
@@ -378,14 +378,14 @@ def test_div_dict_scenario1a_title():
     assert _DIV_DICT["1a"]["title"] == "Philadelphia beats Kemper County by 1\u20136"
 
 
-def test_div_dict_scenario2b_title():
-    """Scenario 2b title is the conditions_atom: Philly wins by 7 or more."""
-    assert _DIV_DICT["2b"]["title"] == "Philadelphia beats Kemper County by 7 or more"
+def test_div_dict_scenario1b_title():
+    """Scenario 1b title: Philly wins by 7 or more (was also 2b; deduplicated)."""
+    assert _DIV_DICT["1b"]["title"] == "Philadelphia beats Kemper County by 7 or more"
 
 
-def test_div_dict_scenario3_seeds():
-    """Scenario 3 seeds: EW #1, KC #2, VJ #3, Philly #4."""
-    sc = _DIV_DICT["3"]
+def test_div_dict_scenario2_seeds():
+    """Scenario 2 (was 3) seeds: EW #1, KC #2, VJ #3, Philly #4."""
+    sc = _DIV_DICT["2"]
     assert sc["one_seed"] == "East Webster"
     assert sc["two_seed"] == "Kemper County"
     assert sc["three_seed"] == "Velma Jackson"

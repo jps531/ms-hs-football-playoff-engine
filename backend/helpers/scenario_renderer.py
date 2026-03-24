@@ -212,15 +212,34 @@ def division_scenarios_as_dict(
                 "eliminated": list[str],   # teams outside the top seeds
             }
     """
-    result: dict[str, dict] = {}
     seed_fields = _SEED_FIELD_NAMES[:playoff_seeds]
+
+    # Pass 1: build entries (deduplicating identical title+seeding), preserving
+    # the original scenario_num grouping so sub-labels stay together.
+    seen_display: set[tuple] = set()
+    deduped: list[tuple[int, str, str, tuple]] = []  # (orig_num, sub_label, title, seeding)
     for sc in scenarios:
-        key = str(sc["scenario_num"]) + sc["sub_label"]
         if sc["conditions_atom"] is not None:
             title = _render_atom(sc["conditions_atom"])
         else:
             title = " AND ".join(f"{w} beats {l}" for w, l in sc["game_winners"])
         seeding = sc["seeding"]
+        display_key = (title, seeding)
+        if display_key in seen_display:
+            continue
+        seen_display.add(display_key)
+        deduped.append((sc["scenario_num"], sc["sub_label"], title, seeding))
+
+    # Pass 2: re-number sequentially so gaps left by dedup don't appear in keys.
+    # Groups of sub-scenarios (same orig_num) get the same new number.
+    result: dict[str, dict] = {}
+    new_num = 0
+    prev_orig_num: int | None = None
+    for orig_num, sub_label, title, seeding in deduped:
+        if orig_num != prev_orig_num:
+            new_num += 1
+            prev_orig_num = orig_num
+        key = str(new_num) + sub_label
         entry: dict = {"title": title}
         for i, field in enumerate(seed_fields):
             entry[field] = seeding[i] if i < len(seeding) else None

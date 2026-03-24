@@ -333,8 +333,8 @@ def test_scenario_3_group_conditions_atoms():
 
 
 def test_div_dict_keys():
-    """Dict has exactly the 14 expected keys."""
-    assert set(_DIV_DICT.keys()) == {"1", "2a", "2b", "3a", "3b", "3c", "3d", "4", "5a", "5b", "6a", "6b", "6c", "6d"}
+    """Dict has 8 keys after deduplication (5a/5b/6a-6d merged with 3a/3b/3c/3d which share conditions+seeding)."""
+    assert set(_DIV_DICT.keys()) == {"1", "2a", "2b", "3a", "3b", "3c", "3d", "4"}
 
 
 def test_div_dict_entry_shape():

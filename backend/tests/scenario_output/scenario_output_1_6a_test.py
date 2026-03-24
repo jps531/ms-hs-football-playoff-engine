@@ -423,8 +423,8 @@ def test_atoms_saltillo_eliminated_atom1():
 
 
 def test_div_dict_scenario_keys():
-    """Division scenarios dict has exactly 6 keys: 1a, 1b, 2, 3a, 3b, 4."""
-    assert set(_DIV_DICT.keys()) == {"1a", "1b", "2", "3a", "3b", "4"}
+    """Division scenarios dict has exactly 4 keys: 1a, 1b, 2, 3 (3a/3b/old-4 renumbered after dedup)."""
+    assert set(_DIV_DICT.keys()) == {"1a", "1b", "2", "3"}
 
 
 def test_div_dict_scenario2_title():
@@ -441,9 +441,9 @@ def test_div_dict_scenario2_seeds():
     assert s["four_seed"] == "Center Hill"
 
 
-def test_div_dict_scenario4_seeds():
-    """Scenario 4: SP #1, LC #2, CH #3, SAL #4."""
-    s = _DIV_DICT["4"]
+def test_div_dict_scenario3_seeds():
+    """Scenario 3 (was 4): SP #1, LC #2, CH #3, SAL #4."""
+    s = _DIV_DICT["3"]
     assert s["one_seed"] == "South Panola"
     assert s["two_seed"] == "Lake Cormorant"
     assert s["three_seed"] == "Center Hill"
@@ -469,18 +469,6 @@ def test_div_dict_scenario1b_seeds():
     assert s["four_seed"] == "Center Hill"
 
 
-def test_div_dict_1a_equals_3a():
-    """Scenarios 1a and 3a are identical in title and all seeds (LC/OB irrelevant)."""
-    assert _DIV_DICT["1a"]["title"] == _DIV_DICT["3a"]["title"]
-    for field in ("one_seed", "two_seed", "three_seed", "four_seed"):
-        assert _DIV_DICT["1a"][field] == _DIV_DICT["3a"][field]
-
-
-def test_div_dict_1b_equals_3b():
-    """Scenarios 1b and 3b are identical in title and all seeds (LC/OB irrelevant)."""
-    assert _DIV_DICT["1b"]["title"] == _DIV_DICT["3b"]["title"]
-    for field in ("one_seed", "two_seed", "three_seed", "four_seed"):
-        assert _DIV_DICT["1b"][field] == _DIV_DICT["3b"][field]
 
 
 def test_div_dict_sp_always_one():

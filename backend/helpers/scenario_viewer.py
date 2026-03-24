@@ -995,24 +995,7 @@ def enumerate_division_scenarios(
                     }
                 )
 
-    # Deduplicate: if two scenarios have the same conditions AND same seeding,
-    # keep only the first. This happens when multiple teams' atoms independently
-    # produce identical condition/outcome descriptions (e.g. in Region 2-7A,
-    # both Clinton's and MC's atoms generate "Clinton beats MC by 8+" → same
-    # seeding, creating scenario 3a≡4a and 3b≡4b).
-    def _conditions_key(atom):
-        if atom is None:
-            return None
-        return tuple((gr.winner, gr.loser, gr.min_margin, gr.max_margin) for gr in atom)
-
-    seen: set = set()
-    deduped = []
-    for s in scenarios:
-        key = (_conditions_key(s["conditions_atom"]), s["seeding"])
-        if key not in seen:
-            seen.add(key)
-            deduped.append(s)
-    return deduped
+    return scenarios
 
 
 # ---------------------------------------------------------------------------
