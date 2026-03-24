@@ -59,7 +59,6 @@ def determine_scenarios(
     teams: list[str],
     completed: list[CompletedGame],
     remaining: list[RemainingGame],
-    debug: bool = False,
     win_prob_fn: WinProbFn | None = None,
 ) -> ScenarioResults:
     """Enumerate all seeding scenarios for a region and compute seed-count totals.
@@ -77,7 +76,6 @@ def determine_scenarios(
         teams: List of all team names in the region.
         completed: List of CompletedGame instances for finished region games.
         remaining: List of RemainingGame instances for unplayed region games.
-        debug: Reserved for future use (currently unused).
         win_prob_fn: Optional callable ``(team_a, team_b, date) -> float``
             returning the probability that ``team_a`` beats ``team_b``.
             Defaults to ``equal_win_prob`` (50/50).
@@ -122,7 +120,6 @@ def determine_scenarios(
             base_margin_default=7,
             pa_win=pa_for_winner,
             coin_flip_collector=all_coinflip_events,
-            debug=debug,
         )
         slots = rank_to_slots(final_order)
         for team, (lo_seed, hi_seed) in slots.items():

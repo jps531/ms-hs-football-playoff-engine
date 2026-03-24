@@ -377,7 +377,7 @@ def _pair_h2h_pd_capped(a: str, b: str, completed, remaining, outcome_mask, marg
 
 
 def _resolve_pair_using_steps(
-    pair, step2, step4, wl_totals, completed, remaining, outcome_mask, margins, base_margin_default=7, debug=False
+    pair, step2, step4, wl_totals, completed, remaining, outcome_mask, margins, base_margin_default=7
 ):
     """Resolve a 2-team tie by restarting the tiebreaker chain from Step 1.
 
@@ -397,56 +397,41 @@ def _resolve_pair_using_steps(
             (always positive).
         base_margin_default: Assumed winning margin when a game's margin is not
             in `margins`.
-        debug: If True, print step-by-step resolution details to stdout.
 
     Returns:
         An ordered 2-element list ``[winner, loser]``.
     """
     a, b = pair
-    if debug:
-        print(f"[DEBUG TIE]   Resolving pair {a} vs {b} from Step 1")
 
     # Step 1: direct head-to-head points for the pair
     pts_a, pts_b = _pair_h2h_points(a, b, completed, remaining, outcome_mask, margins, base_margin_default)
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step1 H2H points: {a}:{pts_a}  {b}:{pts_b}")
     if pts_a != pts_b:
         return [a, b] if pts_a > pts_b else [b, a]
 
     # Step 2: results vs outside (lexicographic, more is better)
     k2_a = _key_step2(step2[a])
     k2_b = _key_step2(step2[b])
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step2 keys: {a}:{k2_a}  {b}:{k2_b}")
     if k2_a != k2_b:
         return [a, b] if k2_a < k2_b else [b, a]  # smaller (more negative) is better
 
     # Step 3: direct capped H2H PD (±12; more is better)
     pd_ab = _pair_h2h_pd_capped(a, b, completed, remaining, outcome_mask, margins, base_margin_default)
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step3 H2H PD (±12): {a} vs {b} -> {pd_ab}")
     if pd_ab != 0:
         return [a, b] if pd_ab > 0 else [b, a]
 
     # Step 4: PD vs outside (lexicographic, more is better)
     k4_a = _key_step4(step4[a])
     k4_b = _key_step4(step4[b])
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step4 keys: {a}:{k4_a}  {b}:{k4_b}")
     if k4_a != k4_b:
         return [a, b] if k4_a < k4_b else [b, a]
 
     # Step 5: fewest points allowed (lower is better)
     pa_a = wl_totals[a]["pa"]
     pa_b = wl_totals[b]["pa"]
-    if debug:
-        print(f"[DEBUG TIE]     Pair Step5 PA: {a}:{pa_a}  {b}:{pa_b}")
     if pa_a != pa_b:
         return [a, b] if pa_a < pa_b else [b, a]
 
     # Step 6: coin flip (reportable upstream if desired), fallback to alphabetical
-    if debug:
-        print("[DEBUG TIE]     Pair Step6 coin flip needed -> alphabetical")
     return sorted([a, b])
 
 
@@ -466,7 +451,6 @@ def resolve_bucket(
     margins,
     base_margin_default=7,
     coin_flip_collector: list[list[str]] | None = None,
-    debug=False,
 ):
     """Apply tiebreaker Steps 1-6 to order a single tied group of teams.
 
@@ -489,7 +473,6 @@ def resolve_bucket(
             in `margins`.
         coin_flip_collector: Optional list that accumulates groups of teams that
             remain tied after all 5 deterministic steps (Step 6 coin flip).
-        debug: If True, print step-by-step resolution details to stdout.
 
     Returns:
         An ordered list of team names (highest seed first) for this bucket.
@@ -518,12 +501,6 @@ def resolve_bucket(
         teams, bucket, base_order, completed, remaining, outcome_mask, margins, base_margin_default
     )
 
-    if debug and len(bucket) > 2:
-        print(f"Step1 H2H totals: {step1}")
-        print(f"Step3 H2H PD (cap ±12): {step3}")
-        print("Step2 keys: {" + ", ".join(f"{t}: {_key_step2(step2[t])}" for t in bucket) + " }}")
-        print("Step4 keys: {" + ", ".join(f"{t}: {_key_step4(step4[t])}" for t in bucket) + " }}")
-
     pending_groups = [sorted(bucket)]
     resolved_order: list[str] = []
 
@@ -538,8 +515,6 @@ def resolve_bucket(
     next_groups = []
     for g in pending_groups:
         parts = _partition_by(g, key_func=lambda t: -step1[t])
-        if debug and len(bucket) > 2:
-            print(f"[DEBUG TIE] -> After Step1 partition: {parts}")
         next_groups.extend(parts)
     pending_groups = next_groups
 
@@ -566,13 +541,10 @@ def resolve_bucket(
                     outcome_mask,
                     margins,
                     base_margin_default,
-                    debug=False,
                 )
                 next_groups.append(ordered)
                 continue
             parts = _partition_by(g, key_func=lambda t: key_builder(t))
-            if debug and len(bucket) > 2:
-                print(f"[DEBUG TIE] -> After {step_label} partition: {parts}")
             for part in parts:
                 if len(part) == 2:
                     ordered = _resolve_pair_using_steps(
@@ -585,7 +557,6 @@ def resolve_bucket(
                         outcome_mask,
                         margins,
                         base_margin_default,
-                        debug=False,
                     )
                     next_groups.append(ordered)
                 else:
@@ -599,10 +570,6 @@ def resolve_bucket(
 
     for g in pending_groups:
         resolved_order.extend(g)
-
-    if debug and len(bucket) > 2:
-        print(f"Final resolved order for bucket: {resolved_order}")
-        print("[DEBUG TIE] ===== End bucket =====")
 
     return resolved_order
 
@@ -680,7 +647,6 @@ def resolve_standings_for_mask(
     base_margin_default=7,
     pa_win=14,
     coin_flip_collector: list[list[str]] | None = None,
-    debug=False,
 ):
     """Resolve the full region seeding order for a single outcome mask.
 
@@ -699,7 +665,6 @@ def resolve_standings_for_mask(
         pa_win: Points assumed scored against the winner in a remaining game.
         coin_flip_collector: If provided, groups of teams that required a coin
             flip to break a tie are appended to this list.
-        debug: If True, print step-by-step resolution details to stdout.
 
     Returns:
         An ordered list of all team names (seed 1 first through seed N last).
@@ -721,7 +686,6 @@ def resolve_standings_for_mask(
                 margins,
                 base_margin_default,
                 coin_flip_collector=coinflip_events,
-                debug=debug,
             )
         )
     return final

@@ -1,139 +1,188 @@
 # Test Coverage Gaps
 
-## Current state (2026-03-14)
+## Current state (2026-03-24)
 
-| Module | Coverage | Trend |
+| Module | Coverage | Notes |
 |---|---|---|
-| `scenarios.py` | 94% | ↑ from 11% (added pure helper + consolidation unit tests) |
-| `tiebreakers.py` | 76% | ↑ from 59% (ground truth tests across all 44 regions) |
-| `scripts/simulate_region_finish.py` | 76% | New — 216 tests added across 5 groups |
-| `data_helpers.py` | 43% | Flat — uncovered lines are scraping/DB fetch paths, not unit-testable |
-| `data_classes.py` | 70% | Flat — uncovered dataclass methods not exercised by current test paths |
-| **Total** | **79%** | ↑ from ~32% |
+| `data_classes.py` | **100%** | All dataclasses fully exercised |
+| `data_helpers.py` | **100%** | All pure helpers covered |
+| `scenarios.py` | **100%** | Scenario enumeration + consolidation fully covered |
+| `scenario_serializers.py` | **100%** | |
+| `scenario_renderer.py` | **91%** | Home game rendering + weighted odds untested |
+| `scenario_viewer.py` | **92%** | Edge cases in atom derivation; some structural paths |
+| `tiebreakers.py` | **86%** | Biggest gap: pair tiebreaker Steps 2–5 never exercised |
+| `home_game_scenarios.py` | **96%** | Minor edge cases |
+| `bracket_home_odds.py` | **86%** | Some class-size branches |
+| **Total (unit-testable)** | **~93%** | |
+
+All scenario output tests are "one week out" (one remaining game per team). No mid-season tests exist yet.
 
 ---
 
-## What's covered
+## tiebreakers.py — most significant gaps
 
-### Ground truth tests (`ground_truth_2025_test.py`)
-All 44 MHSAA regions × classes for the complete 2025 season are parametrized and passing.
-Covers the full `determine_scenarios` → `determine_odds` pipeline with zero remaining games.
+### Pair tiebreaker Steps 2–5 never executed (lines 357–376, 417–450)
 
-### Pure helper unit tests (`scenarios_helpers_test.py`)
-Added in groups 1, 2, and 4 to cover:
-- `pct_str()` — round and non-round percentage formatting
-- `_parse_ge_key()` — valid key, missing `_GE`, non-integer threshold
-- `_flip_base_key()` — matchup key with and without `>`
-- `final_consolidation()` — contradictory key removal and deduplication
-- `consolidate_all(debug=True)` — debug print branches
-- `merge_full_partition_remove_base()` — overlapping/non-overlapping interval merging, contradictory GE bounds, base_true/false tracking
-- `merge_ge_union_unified()` — adjacent-interval collapse, finite range collapse, skip conditions
-- `merge_ge_union_by_signature()` — aggressive_upper paths, contradictory bounds skip, explicit-key skip
-- `compute_bracket_odds()` — 4-round and 5-round brackets, all probability fields
-- `compute_first_round_home_odds()` — all home-seed combinations
+**What it is:** `_resolve_pair_using_steps` restarts the full tiebreaker chain for a 2-team tie.
+Step 1 = direct H2H result. Steps 2–5 = records vs outside opponents, H2H capped PD,
+PD vs outside, fewest PA.
 
-### `simulate_region_finish.py` tests (`simulate_region_finish_test.py`)
-Added in 5 groups covering 216 tests:
-- **Group 1** — atom/minterm helpers: `extract_pair`, `is_complement`, `_build_complement_map`, `_make_atom_str`, `canonical_atoms_for_remaining`, `boolean_game_vars`
-- **Group 2** — rendering pipeline: `_render_clause_lines_ordered`, `_render_scenario_block_ordered`, `scenarios_text_from_team_seed_ordered` (letter-block format)
-- **Group 3** — Region 3-7A integration: `enumerate_region_pure` and `enumerate_region` with real fixture data
-- **Group 4** — missing branches in already-covered helpers: `_interval_for_base`, `_touching`, `_try_merge_neighbor`, `_band_sort_key`, `_global_partitions_for_base`, `_expand_signature_atoms_global`
-- **Group 5** — legacy seed-percentage rendering: `_canon_matchup`, `_classify_clause`, `clauses_for_m`, `_block_sort_key`, `_interval_of_clause`, `_union_intervals`, `_coverage_collapse_blocks`, `scenarios_text_dict_format`
+**Why not covered:** In every existing test, every pair sent to `_resolve_pair_using_steps`
+has already played each other, so Step 1 resolves it immediately. Steps 2–5 and the entire
+`_pair_h2h_pd_capped` function (357–376) are dead code from a test perspective.
+
+**What would cover it:** A mid-season test (2+ games remaining) where two leading teams are
+tied and have **not yet played each other**. Step 1 scores 0–0, falling through to Steps 2–5.
+This is the single highest-value gap to close.
 
 ---
 
-## Remaining gaps
+### No-opponent cases in step arrays (lines 189, 203)
 
-### Group 3 — Margin-sensitive tiebreaker path (`scenarios.py` lines 766–996)
+**What it is:** `res_vs` and `pd_vs` return `None` when a bucket team has no game (completed
+or remaining) against a specific outside opponent.
 
-**What it is:** When `determine_scenarios` is called with remaining games AND tied teams
-exist, the algorithm probes each possible margin (1–12) for intra-bucket games to detect
-GE thresholds. This produces the margin-keyed scenario minterms (`"A>B_GE3": True`, etc.)
-that the consolidation helpers then simplify.
+**Why not covered:** Region 3-7A is a complete round-robin; every team has played or will
+play every other team. In regions with fewer cross-divisional matchups this fires.
 
-**Why not covered:** The ground truth tests all pass `remaining=[]` (full season data),
-so `intra_bucket_games` is always empty and the margin probe loop never runs.
-
-**Tests needed:**
-- A mid-season fixture for a region where 2+ teams are tied in W/L record with at least
-  one game remaining between them — so `tie_bucket_groups()` returns a non-empty bucket
-  and `unique_intra_bucket_games()` returns games.
-- A case where margin doesn't change standings (no threshold) and one where it does
-  (produces GE keys).
-- A case where `interval_specs` is empty even with intra-bucket games (all thresholds empty).
+**What would cover it:** A mid-season fixture where a tied team has an outside opponent they
+haven't played and won't play — or a region that doesn't play a full round-robin.
 
 ---
 
-### `simulate_region_finish.py` — testable but uncovered paths
+### Tied/drawn game results (lines 49–50, 103–104, 186, 314, 321–322)
 
-#### `_reduce_tautology_blocks` (lines 782–841)
-**Why not covered:** Pure function never called by any currently-tested path.
-**Test needed:** Two complementary OR-block pairs that form a tautology (A covers full [0,∞)
-and B covers full [0,∞) via complement intervals) so the function absorbs the superset block.
+**What it is:** When `res_a == 0` (game ends in a draw), both teams get 0.5 H2H points,
+`T` increments in W/L standings, and `res_vs` returns `1` (split).
 
-#### `_coverage_collapse_blocks` — margin-interval branch (line 1076)
-**Why not covered:** The collapse fires for `[0, ∞)` intervals but the non-trivial finite
-interval branch (`lo > 0` or `hi < ∞`) is not exercised.
-**Test needed:** Two blocks where winner A covers e.g. margin ≥ 3 and winner B covers margin
-< 3 (complementary finite intervals) to trigger the finite-interval collapse path.
+**Why not covered:** All 2025 region games had decisive W/L outcomes. Not season-timing
+related — requires a real or synthetic drawn game.
 
-#### `scenarios_text_from_team_seed_ordered` — `None` scen_dist (lines 1126, 1146)
-**Why not covered:** All 3-7A fixture outcomes produce non-None distributions.
-**Test needed:** A fixture where a seeding outcome is structurally impossible so
-`scen_dist` is `None` for that seed position.
-
-#### `scenarios_text_from_team_seed_ordered` — empty seeds branch (lines 1203–1207)
-**Why not covered:** 3-7A always has at least one scenario per team.
-**Test needed:** A call with a `seed_order` list containing a team that appears in no
-scenario, so the inner `if not blocks:` guard fires and the seed entry is skipped.
-
-#### `enumerate_region_pure` — mask-loop with no intra-bucket games (lines 1330–1371, 1373–1393)
-**Why not covered:** All tested masks have at least one remaining game.
-**Test needed:** A fixture with only completed games (no remaining) so the mask loop
-iterates but `intra_bucket_games` is empty and the GE-probe branch never fires.
+**What would cover it:** A synthetic fixture with one tied game, verifying that:
+- `standings_from_mask` accumulates `T` correctly
+- H2H points split as 0.5/0.5
+- Downstream tiebreaker steps treat the split correctly
 
 ---
 
-### `tiebreakers.py` — specific step paths
+---
 
-#### Step 6 — Fewest PA across all region games
-**Why not covered:** PD (Steps 3 or 5) always breaks ties before Step 6 in 2025 data.
-**Test needed:** Two teams with identical H2H, outside record, capped PD, and PA vs outside
-so that total points allowed is the deciding factor.
+## scenario_viewer.py — edge cases and structural paths
 
-#### Step 7 — Coin flip
-**Why not covered:** No pair of teams remains perfectly tied through all six steps in any
-2025 region.
-**Test needed:** A 2-team region where every numeric tiebreaker is equal, so `coin_flip_collector`
-is populated and `coin_flip_needed` would be set.
+### Constrained elimination via margin ranges (lines 847–854)
 
-#### Step 3 restart after team elimination (3+ way tie)
-**What it is:** SCENARIO_RULES.md rule 3b/3b-i — when one team is eliminated from a
-3-way bucket at Step 3 and the remaining two have identical capped PD, tiebreaking
-**restarts at Step 1** for just those two.
-**Test needed:** A 3-team tie where Team A breaks away at Step 3, leaving B and C with
-identical capped PD forcing a restart.
+**What it is:** `sometimes_elim_only_masks` — teams that are eliminated only for certain
+margin combinations, not all. These get constrained elimination atoms with explicit margin ranges.
 
-#### Tie games (`res_a = 0`)
-**Why not covered:** All 2025 region games had decisive W/L outcomes.
-**Test needed:** At least one tied game in a fixture to verify 0.5 H2H point accumulation
-and the `T` column in W/L standings.
+**Why not covered:** In one-game-remaining regions, elimination is usually unconditional
+(you lose and you're out) or tied to a specific win/loss. The margin-conditional elimination
+path needs a region where a team is in the mix for 4th seed but margin of a specific game
+determines whether they make it.
 
-#### Incomplete schedule (teams that never played each other)
-**Why not covered:** Region 3-7A is a complete round-robin.
-**Test needed:** A region where at least one pair has no H2H game, confirming those pairs
-are excluded from Steps 1 and 3 but included in Steps 2, 4, and 5.
+**What would cover it:** A mid-season fixture with 2+ remaining games where a team's
+elimination is margin-sensitive.
 
-#### 5- or 6-way tie
-**Why not covered:** All 2025 regions had at least some W/L separation.
-**Test needed:** A region with all games remaining or a fully circular result set to exercise
-`resolve_bucket()` with the full team list from the very first step.
+---
 
-#### Debug print branches (lines 407–450, 522–525, 542, 575, 604–605)
-**Why not covered:** `tiebreakers.py` still contains `if debug:` print blocks that are
-never triggered by any test (no test passes `debug=True`).
-**Options:** Either add `debug=True` fixture tests to cover these branches, or remove the
-debug prints (as was done in `simulate_region_finish.py`).
+### `_find_combined_atom` MarginCondition intersection (lines 109–114)
+
+**What it is:** When two atoms for the same seeding outcome both contain `MarginCondition`
+objects, their constraints are intersected (keeping the tighter bound).
+
+**Why not covered:** In all tested regions, combined atoms only merge `GameResult` conditions,
+not `MarginCondition`s.
+
+**What would cover it:** A scenario where a team can achieve a seed via two different
+margin-conditional paths that overlap.
+
+---
+
+### `_split_non_rectangular_atom` non-contiguous bail-out (lines 237–241)
+
+**What it is:** The `valid_split = False` path fires when the valid margin set for a 2-game
+scenario can't be decomposed into contiguous rectangular sub-atoms.
+
+**Why not covered:** All current non-rectangular valid sets happen to decompose cleanly.
+This is a defensive fallback — low priority to cover.
+
+---
+
+### `_derive_atom` fallback paths (lines 391–397, 406–415)
+
+The unconstrained-atom shortcut (391–397) fires when any combination of margins in a
+2-game scenario produces the same seeding — meaning per-game bounds are fully redundant.
+The hard fallback (406–415) fires when joint constraints can't describe the valid set
+AND non-rectangular splitting fails. Both are defensive; unlikely to trigger in practice.
+
+---
+
+### `scenario_atoms=False` path in `enumerate_division_scenarios` (line 983→988)
+
+When `scenario_atoms=False` is passed, `conditions_atom` is set to `None` for all scenarios.
+No test calls `enumerate_division_scenarios` with this flag. A one-line test change would cover it.
+
+---
+
+### "Eliminated:" line in `render_scenarios_text` (lines 1048–1051)
+
+This branch renders the eliminated team list in the division scenarios text output. It's not
+currently hit — likely because `render_scenarios_text` isn't being called with enough teams,
+or the call is going through a different path. Worth investigating.
+
+---
+
+## scenario_renderer.py — feature gaps
+
+### Weighted odds rendering (lines 138, 140, 411, 413)
+
+The combined `(p_unweighted – p_weighted Weighted)` and weighted-only formats in
+`render_team_scenarios` and `render_team_home_scenarios` are untested. **Blocked on
+Priority 5 implementation** — the weighted odds fields are not yet computed.
+
+---
+
+### Home game scenario rendering (lines 344–345, 381–382, 460, 476, 539, 630)
+
+`render_team_home_scenarios` and `_render_home_scenario_block` have no tests at all.
+This includes:
+- `_render_condition_label` with `kind="seed_required"` (344–345)
+- Unconditional home blocks with an explanation string (381–382, 460)
+- Will-Not-Host block structure (476, 539)
+
+Not season-timing related — separate feature area.
+
+---
+
+### `_render_margin_condition` edge cases (lines 66, 73, 77–79)
+
+Specific math patterns in margin condition rendering:
+- `>=` or `>` op with `t < 0` (line 66): sub-team's margin doesn't exceed add-team's by more than N
+- `>=` or `>` op with `t == 0` (line 73): add-team's margin is at least as large
+- Multi-term fallback with `+`/`−` format (lines 77–79): conditions with more than one team in `add` or `sub`
+
+These would require synthetic `MarginCondition` objects with specific threshold/sign combinations.
+
+---
+
+### Fallback renderer for unknown condition type (line 88)
+
+`return str(cond)` in `_render_condition`. Defensive — won't appear in normal operation.
+
+---
+
+## Would "earlier in season" tests cover these gaps?
+
+| Gap | Covered by mid-season tests? |
+|-----|------------------------------|
+| Pair tiebreaker Steps 2–5 (357–376, 417–450) | **Yes — directly.** Teams tied with no H2H yet → Step 1 = 0-0 → falls through |
+| No-opponent cases (189, 203) | **Yes.** More games remaining → more teams without completed H2H games |
+| Constrained elimination atoms (847–854) | **Likely yes.** More games remaining → margin-sensitive elimination more common |
+| MarginCondition intersection in combined atoms (109–114) | **Maybe.** More complex atom structures increase likelihood |
+| Tied/drawn game results | **No.** Requires a drawn game regardless of timing |
+| Weighted odds rendering | **No.** Blocked on Priority 5 |
+| Home game rendering | **No.** Separate feature |
+| Margin condition rendering edge cases | **No.** Requires synthetic conditions |
+| Defensive fallbacks | **No.** By design, these don't fire naturally |
 
 ---
 
@@ -141,12 +190,10 @@ debug prints (as was done in `simulate_region_finish.py`).
 
 | Module / path | Reason |
 |---|---|
-| `data_helpers.py` scraping functions | Require live HTTP responses or BeautifulSoup fixtures |
-| `data_helpers.py` DB fetch path (`get_completed_games` DB branch) | Requires a live PostgreSQL connection |
-| `scripts/simulate_region_finish.py` psycopg fallback (lines 56–57) | Import guard for optional psycopg v3 |
-| `scripts/simulate_region_finish.py` DB fetch functions (lines 95–143) | Require a live PostgreSQL connection |
-| `scripts/simulate_region_finish.py` `enumerate_region` body + `main` (lines 1539–1730) | Require live DB + CLI invocation |
-| Prefect pipeline files (`region_scenarios_pipeline.py`, etc.) | Require Prefect runtime + live DB; excluded from coverage config |
+| `data_helpers.py` scraping functions | Require live HTTP responses |
+| `data_helpers.py` DB fetch path | Requires live PostgreSQL connection |
+| `prefect/` pipeline files | Require Prefect runtime + live DB; excluded from coverage config |
+| `scripts/simulate_region_finish.py` DB fetch + `main` | Require live DB + CLI invocation |
 
 ---
 
@@ -154,17 +201,15 @@ debug prints (as was done in `simulate_region_finish.py`).
 
 | Tiebreaker step | Covered? | Notes |
 |---|---|---|
-| Step 1 — H2H record | ✅ | Multiple 2- and 3-team ties resolved here across 44 regions |
+| Step 1 — H2H record | ✅ | Multiple 2- and 3-team ties across all test regions |
 | Step 2 — vs highest-ranked outside | ✅ | Used in several outcome branches |
 | Step 3 — H2H capped PD | ✅ | GE threshold branches confirm this fires |
 | Step 4 — capped PD vs outside | ✅ | Used in some branches |
-| Step 5 — fewest PA vs outside | ✅ | PA accumulation from `standings_from_mask` tested |
-| Step 6 — fewest PA all games | ❌ | See gap above |
-| Step 7 — coin flip | ❌ | See gap above |
-| Margin-sensitive GE branches | ✅ | Unit tests directly exercise consolidation helpers |
-| Zero remaining games path | ✅ | All 44 ground truth tests |
-| Non-zero remaining games path | ❌ | Group 3 gap — needs mid-season synthetic fixture |
+| Step 5 — fewest PA (all region games) | ✅ | PA accumulation from `standings_from_mask` tested |
+| Step 6 — coin flip | ❌ | No pair remains tied through all five steps in any test region |
+| Pair Steps 2–5 restart | ❌ | All pairs resolved at Step 1 (they've played each other) |
+| Tied/drawn game (`res_a = 0`) | ❌ | No drawn games in 2025 data |
+| No H2H game between tied teams | ❌ | All test regions are complete round-robins at final week |
+| Margin-sensitive GE thresholds | ✅ | Region 1-6A, 4-3A, 2-1A, 2-7A scenario output tests |
 | `clinched` / `eliminated` detection | ✅ | Multiple regions exercise both flags |
-| Step 3 restart after 3-way tie elimination | ❌ | See gap above |
-| Tie game (`res_a = 0`) | ❌ | See gap above |
-| Incomplete schedule (missing H2H pair) | ❌ | See gap above |
+| `sensitive_boundary_games` detection | ✅ | Verified via Region 1-6A GRE bug fix |

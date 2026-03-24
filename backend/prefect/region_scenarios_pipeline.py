@@ -443,7 +443,7 @@ def write_region_scenarios(
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
-def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=False):
+def get_region_finish_scenarios(clazz: int, region: int, season: int):
     """
     Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
     and aggregate seeding odds + human-readable scenario explanations.
@@ -456,7 +456,7 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int, debug=Fals
     completed = fetch_completed_pairs(teams, season)
     remaining = fetch_remaining_pairs(teams, season)
 
-    r = determine_scenarios(teams, completed, remaining, debug=debug)
+    r = determine_scenarios(teams, completed, remaining)
 
     odds = determine_odds(teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
 
