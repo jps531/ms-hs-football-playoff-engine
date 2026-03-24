@@ -88,12 +88,12 @@ _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
 FALKNER_EXPECTED = """\
 Falkner
 
-#1 seed if: (72.9%)
+#1 seed if: (73.1%)
 1. Falkner beats Potts Camp
 2. Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland
 3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more
 
-#2 seed if: (27.1%)
+#2 seed if: (26.9%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311"""
 
@@ -115,11 +115,11 @@ H. W. Byers
 POTTS_CAMP_EXPECTED = """\
 Potts Camp
 
-#1 seed if: (27.1%)
+#1 seed if: (26.9%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311
 
-#2 seed if: (2.1%)
+#2 seed if: (2.3%)
 1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more
 2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 12 or more
 
@@ -516,9 +516,9 @@ def test_team_dict_weighted_odds_none():
 
 
 def test_team_dict_falkner_odds():
-    """Falkner: 72.9% to be #1, 27.1% to be #2."""
-    assert _TEAM_DICT["Falkner"][1]["odds"] == pytest.approx(35 / 48)
-    assert _TEAM_DICT["Falkner"][2]["odds"] == pytest.approx(13 / 48)
+    """Falkner: 73.1% to be #1, 26.9% to be #2."""
+    assert _TEAM_DICT["Falkner"][1]["odds"] == pytest.approx(421 / 576)
+    assert _TEAM_DICT["Falkner"][2]["odds"] == pytest.approx(155 / 576)
 
 
 def test_team_dict_hwb_odds():
@@ -529,10 +529,10 @@ def test_team_dict_hwb_odds():
 
 
 def test_team_dict_potts_camp_odds():
-    """Potts Camp: 27.1% #1, 2.1% #2, 70.8% #3."""
-    assert _TEAM_DICT["Potts Camp"][1]["odds"] == pytest.approx(13 / 48)
-    assert _TEAM_DICT["Potts Camp"][2]["odds"] == pytest.approx(1 / 48)
-    assert _TEAM_DICT["Potts Camp"][3]["odds"] == pytest.approx(34 / 48)
+    """Potts Camp: 26.9% #1, 2.3% #2, 70.8% #3."""
+    assert _TEAM_DICT["Potts Camp"][1]["odds"] == pytest.approx(155 / 576)
+    assert _TEAM_DICT["Potts Camp"][2]["odds"] == pytest.approx(13 / 576)
+    assert _TEAM_DICT["Potts Camp"][3]["odds"] == pytest.approx(17 / 24)
 
 
 def test_team_dict_ashland_odds():

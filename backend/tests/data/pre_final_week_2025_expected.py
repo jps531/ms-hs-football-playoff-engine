@@ -72,21 +72,21 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Falkner / H. W. Byers / Potts Camp / Ashland
     (1, 2): {
         "denom": 4,
-        "first_counts": Counter({"Falkner": 2.9166666666666665, "Potts Camp": 1.0833333333333333}),
+        "first_counts": Counter({"Falkner": 2.9236111111111347, "Potts Camp": 1.0763888888888862}),
         "second_counts": Counter(
-            {"H. W. Byers": 2.833333333333333, "Falkner": 1.0833333333333333, "Potts Camp": 0.08333333333333333}
+            {"H. W. Byers": 2.8333333333333544, "Falkner": 1.0763888888888862, "Potts Camp": 0.0902777777777778}
         ),
         "third_counts": Counter(
-            {"Potts Camp": 2.833333333333333, "Ashland": 1.0833333333333333, "H. W. Byers": 0.08333333333333333}
+            {"Potts Camp": 2.8333333333333544, "Ashland": 1.0833333333333306, "H. W. Byers": 0.08333333333333336}
         ),
-        "fourth_counts": Counter({"Ashland": 2.9166666666666665, "H. W. Byers": 1.0833333333333333}),
+        "fourth_counts": Counter({"Ashland": 2.91666666666669, "H. W. Byers": 1.0833333333333306}),
         "odds": {
             "Ashland": StandingsOdds(
                 school="Ashland",
                 p1=0.0,
                 p2=0.0,
                 p3=0.2708333333333333,
-                p4=0.7291666666666666,
+                p4=0.7291666666666673,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -94,8 +94,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Falkner": StandingsOdds(
                 school="Falkner",
-                p1=0.7291666666666666,
-                p2=0.2708333333333333,
+                p1=0.730902777777784,
+                p2=0.269097222222222,
                 p3=0.0,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -106,7 +106,7 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "H. W. Byers": StandingsOdds(
                 school="H. W. Byers",
                 p1=0.0,
-                p2=0.7083333333333333,
+                p2=0.7083333333333339,
                 p3=0.020833333333333332,
                 p4=0.2708333333333333,
                 p_playoffs=1.0,
@@ -116,11 +116,11 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Potts Camp": StandingsOdds(
                 school="Potts Camp",
-                p1=0.2708333333333333,
-                p2=0.020833333333333332,
-                p3=0.7083333333333333,
+                p1=0.269097222222222,
+                p2=0.022569444444444,
+                p3=0.7083333333333339,
                 p4=0.0,
-                p_playoffs=0.9999999999999999,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -1740,14 +1740,14 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Clarksdale / Senatobia / Rosa Fort / Ripley
     (4, 3): {
         "denom": 4,
-        "first_counts": Counter({"Clarksdale": 2.5, "Rosa Fort": 1, "Senatobia": 0.5}),
+        "first_counts": Counter({"Clarksdale": 2.5000000000000115, "Rosa Fort": 0.9999999999999974, "Senatobia": 0.49999999999999917}),
         "second_counts": Counter(
-            {"Senatobia": 2.4166666666666665, "Clarksdale": 1.3333333333333333, "Rosa Fort": 0.25}
+            {"Senatobia": 2.4444444444444544, "Clarksdale": 1.3333333333333297, "Rosa Fort": 0.2222222222222223}
         ),
         "third_counts": Counter(
-            {"Rosa Fort": 2.75, "Ripley": 1, "Clarksdale": 0.16666666666666666, "Senatobia": 0.08333333333333333}
+            {"Rosa Fort": 2.777777777777797, "Ripley": 0.9999999999999974, "Clarksdale": 0.1666666666666667, "Senatobia": 0.055555555555555566}
         ),
-        "fourth_counts": Counter({"Ripley": 3.0, "Senatobia": 1}),
+        "fourth_counts": Counter({"Ripley": 3.0000000000000258, "Senatobia": 0.9999999999999974}),
         "odds": {
             "Byhalia": StandingsOdds(
                 school="Byhalia",
@@ -1762,11 +1762,11 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Clarksdale": StandingsOdds(
                 school="Clarksdale",
-                p1=0.625,
-                p2=0.3333333333333333,
+                p1=0.625000000000003,
+                p2=0.3333333333333324,
                 p3=0.041666666666666664,
                 p4=0.0,
-                p_playoffs=0.9999999999999999,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -1775,8 +1775,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Ripley",
                 p1=0.0,
                 p2=0.0,
-                p3=0.25,
-                p4=0.75,
+                p3=0.249999999999999,
+                p4=0.750000000000006,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -1784,9 +1784,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Rosa Fort": StandingsOdds(
                 school="Rosa Fort",
-                p1=0.25,
-                p2=0.0625,
-                p3=0.6875,
+                p1=0.249999999999999,
+                p2=0.055555555555556,
+                p3=0.694444444444449,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -1796,9 +1796,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Senatobia": StandingsOdds(
                 school="Senatobia",
                 p1=0.125,
-                p2=0.6041666666666666,
-                p3=0.020833333333333332,
-                p4=0.25,
+                p2=0.6111111111111114,
+                p3=0.013888888888889,
+                p4=0.249999999999999,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -2478,17 +2478,17 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: South Panola / Lake Cormorant / Grenada / Center Hill
     (6, 1): {
         "denom": 8,
-        "first_counts": Counter({"South Panola": 8}),
-        "second_counts": Counter({"Lake Cormorant": 8}),
-        "third_counts": Counter({"Grenada": 6, "Center Hill": 2}),
-        "fourth_counts": Counter({"Center Hill": 6, "Saltillo": 2}),
+        "first_counts": Counter({"South Panola": 7.999999999997066}),
+        "second_counts": Counter({"Lake Cormorant": 7.999999999997066}),
+        "third_counts": Counter({"Grenada": 5.9166666666652725, "Center Hill": 2.0833333333333828}),
+        "fourth_counts": Counter({"Center Hill": 5.9166666666652725, "Grenada": 0.08333333333333336, "Saltillo": 2.0000000000000475}),
         "odds": {
             "Center Hill": StandingsOdds(
                 school="Center Hill",
                 p1=0.0,
                 p2=0.0,
-                p3=0.25,
-                p4=0.75,
+                p3=0.260416666666673,
+                p4=0.739583333333159,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -2498,8 +2498,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Grenada",
                 p1=0.0,
                 p2=0.0,
-                p3=0.75,
-                p4=0.0,
+                p3=0.739583333333159,
+                p4=0.010416666666667,
                 p_playoffs=0.75,
                 final_playoffs=0.75,
                 clinched=False,
@@ -2508,10 +2508,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Lake Cormorant": StandingsOdds(
                 school="Lake Cormorant",
                 p1=0.0,
-                p2=1.0,
+                p2=0.999999999999633,
                 p3=0.0,
                 p4=0.0,
-                p_playoffs=1.0,
+                p_playoffs=0.999999999999633,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -2532,19 +2532,19 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 p1=0.0,
                 p2=0.0,
                 p3=0.0,
-                p4=0.25,
-                p_playoffs=0.25,
-                final_playoffs=0.25,
+                p4=0.250000000000006,
+                p_playoffs=0.250000000000006,
+                final_playoffs=0.250000000000006,
                 clinched=False,
                 eliminated=False,
             ),
             "South Panola": StandingsOdds(
                 school="South Panola",
-                p1=1.0,
+                p1=0.999999999999633,
                 p2=0.0,
                 p3=0.0,
                 p4=0.0,
-                p_playoffs=1.0,
+                p_playoffs=0.999999999999633,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -2958,36 +2958,36 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
         "denom": 8,
         "first_counts": Counter(
             {
-                "Petal": 4.104166666666667,
-                "Oak Grove": 2.375,
-                "Northwest Rankin": 1.1874999999999998,
-                "Pearl": 0.33333333333333337,
+                "Petal": 4.083333333333362,
+                "Oak Grove": 2.201388888888888,
+                "Northwest Rankin": 1.4652777777777737,
+                "Pearl": 0.25000000000000006,
             }
         ),
         "second_counts": Counter(
             {
-                "Pearl": 3.2500000000000004,
-                "Oak Grove": 2.0416666666666665,
-                "Northwest Rankin": 1.5624999999999998,
-                "Petal": 1.1458333333333333,
+                "Pearl": 3.333333333333341,
+                "Oak Grove": 2.2152777777777777,
+                "Northwest Rankin": 1.2847222222222212,
+                "Petal": 1.1666666666666667,
             }
         ),
         "third_counts": Counter(
             {
-                "Brandon": 3,
-                "Petal": 2.4861111111111125,
-                "Oak Grove": 2.243055555555556,
-                "Northwest Rankin": 0.14583333333333334,
-                "Pearl": 0.125,
+                "Brandon": 2.9999999999999956,
+                "Petal": 2.298611111111116,
+                "Oak Grove": 2.3055555555555634,
+                "Northwest Rankin": 0.1666666666666667,
+                "Pearl": 0.22916666666666674,
             }
         ),
         "fourth_counts": Counter(
             {
-                "Northwest Rankin": 3.1041666666666665,
-                "Brandon": 3,
-                "Oak Grove": 1.3402777777777775,
-                "Pearl": 0.29166666666666674,
-                "Petal": 0.2638888888888889,
+                "Northwest Rankin": 3.0833333333333313,
+                "Brandon": 3.000000000000001,
+                "Oak Grove": 1.2777777777777743,
+                "Petal": 0.45138888888888823,
+                "Pearl": 0.18750000000000006,
             }
         ),
         "odds": {
@@ -3015,10 +3015,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Northwest Rankin": StandingsOdds(
                 school="Northwest Rankin",
-                p1=0.14843749999999997,
-                p2=0.19531249999999997,
-                p3=0.018229166666666668,
-                p4=0.3880208333333333,
+                p1=0.18315972222222171,
+                p2=0.16059027777777765,
+                p3=0.020833333333333332,
+                p4=0.38541666666666663,
                 p_playoffs=0.75,
                 final_playoffs=0.75,
                 clinched=False,
@@ -3026,33 +3026,33 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Oak Grove": StandingsOdds(
                 school="Oak Grove",
-                p1=0.296875,
-                p2=0.2552083333333333,
-                p3=0.2803819444444445,
-                p4=0.16753472222222218,
-                p_playoffs=0.9999999999999999,
+                p1=0.27517361111111103,
+                p2=0.27690972222222217,
+                p3=0.28819444444444545,
+                p4=0.15972222222222178,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
             ),
             "Pearl": StandingsOdds(
                 school="Pearl",
-                p1=0.04166666666666667,
-                p2=0.40625000000000006,
-                p3=0.015625,
-                p4=0.03645833333333334,
-                p_playoffs=0.5000000000000001,
-                final_playoffs=0.5000000000000001,
+                p1=0.03125,
+                p2=0.41666666666666674,
+                p3=0.028645833333333343,
+                p4=0.023437500000000007,
+                p_playoffs=0.5,
+                final_playoffs=0.5,
                 clinched=False,
                 eliminated=False,
             ),
             "Petal": StandingsOdds(
                 school="Petal",
-                p1=0.5130208333333334,
-                p2=0.14322916666666666,
-                p3=0.31076388888888906,
-                p4=0.03298611111111111,
-                p_playoffs=1.0000000000000002,
+                p1=0.5104166666666702,
+                p2=0.14583333333333334,
+                p3=0.28732638888888952,
+                p4=0.05642361111111103,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,

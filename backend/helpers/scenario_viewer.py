@@ -185,23 +185,106 @@ def _eval_mc(mc, margins: dict) -> bool:
     return True
 
 
+def _split_non_rectangular_atom(
+    mask: int,
+    valid_margins_list: list[dict],
+    remaining,
+    pairs: list[tuple[str, str]],
+    lows: list[int],
+    highs: list[int],
+    base_atom: list,
+) -> list[list] | None:
+    """Split a non-rectangular valid margin set into multiple rectangular atoms.
+
+    Iterates over all pairs of game indices.  For the first pair whose joint 2-D
+    margin distribution is non-rectangular, groups the first game's margin values
+    by the set of valid second-game margins they allow, and returns one atom per
+    group.  Both groups must form contiguous ranges for the split to succeed.
+
+    Returns a list of atoms (each a list of GameResult objects) on success,
+    or None when no valid split is found.
+    """
+    from backend.helpers.data_classes import GameResult
+
+    R = len(remaining)
+
+    for i0 in range(R):
+        for i1 in range(i0 + 1, R):
+            valid_2d = {
+                (m[pairs[i0]], m[pairs[i1]])
+                for m in valid_margins_list
+            }
+            prod_2d = (highs[i0] - lows[i0] + 1) * (highs[i1] - lows[i1] + 1)
+            if len(valid_2d) == prod_2d:
+                continue  # Rectangular for this pair — try the next
+
+            # Group i0 margin values by the frozenset of valid i1 margins
+            game1_by_game0: dict[int, frozenset] = {
+                s: frozenset(p for (s2, p) in valid_2d if s2 == s)
+                for s in range(lows[i0], highs[i0] + 1)
+            }
+            range_to_game0: dict[frozenset, list[int]] = {}
+            for s, p_set in game1_by_game0.items():
+                range_to_game0.setdefault(p_set, []).append(s)
+
+            sub_atoms: list[list] = []
+            valid_split = True
+            for p_set, s_list in range_to_game0.items():
+                s_sorted = sorted(s_list)
+                p_sorted = sorted(p_set)
+                # Both groups must be contiguous integer ranges
+                if s_sorted != list(range(s_sorted[0], s_sorted[-1] + 1)):
+                    valid_split = False
+                    break
+                if p_sorted != list(range(p_sorted[0], p_sorted[-1] + 1)):
+                    valid_split = False
+                    break
+
+                s_lo, s_hi = s_sorted[0], s_sorted[-1]
+                p_lo, p_hi = p_sorted[0], p_sorted[-1]
+
+                sub_atom = list(base_atom)
+
+                a_wins_0 = bool((mask >> i0) & 1)
+                winner_0 = remaining[i0].a if a_wins_0 else remaining[i0].b
+                loser_0 = remaining[i0].b if a_wins_0 else remaining[i0].a
+                max_s = s_hi + 1 if s_hi < 12 else None
+                sub_atom[i0] = GameResult(winner_0, loser_0, min_margin=s_lo, max_margin=max_s)
+
+                a_wins_1 = bool((mask >> i1) & 1)
+                winner_1 = remaining[i1].a if a_wins_1 else remaining[i1].b
+                loser_1 = remaining[i1].b if a_wins_1 else remaining[i1].a
+                max_p = p_hi + 1 if p_hi < 12 else None
+                sub_atom[i1] = GameResult(winner_1, loser_1, min_margin=p_lo, max_margin=max_p)
+
+                sub_atoms.append(sub_atom)
+
+            if valid_split and len(sub_atoms) > 1:
+                return sub_atoms
+
+    return None
+
+
 def _derive_atom(
     mask: int,
     valid_margins_list: list[dict],
     remaining: list[RemainingGame],
     pairs: list[tuple[str, str]],
-) -> list:
-    """Derive a human-readable atom (GameResult + MarginCondition list) for a (mask, seeding) group.
+) -> list[list]:
+    """Derive human-readable atoms (GameResult + MarginCondition lists) for a (mask, seeding) group.
 
     Algorithm:
     1. Compute per-game margin ranges ``[lo_i, hi_i]`` from the valid margin set.
     2. Build a ``GameResult`` for each game using the derived range.
+    2b. If the valid set is non-rectangular (product of per-game ranges > count),
+        split into multiple rectangular sub-atoms via ``_split_non_rectangular_atom``.
     3. Find margin-sensitive game indices (range is a proper subset of ``[1,12]``).
     4. If exactly 2 margin-sensitive games, try to add sum/diff ``MarginCondition``
        objects that tighten the description and verify they reproduce the valid set.
     5. Fall back to per-game ranges only if joint constraints cannot be verified.
 
-    Returns a list of ``GameResult`` and (optionally) ``MarginCondition`` objects.
+    Returns a list of atoms, each atom being a list of ``GameResult`` and
+    (optionally) ``MarginCondition`` objects.
     """
     from backend.helpers.data_classes import GameResult, MarginCondition
 
@@ -227,12 +310,25 @@ def _derive_atom(
         max_m = hi + 1 if hi < 12 else None
         atom.append(GameResult(winner, loser, min_margin=lo, max_margin=max_m))
 
+    # --- Step 2b: compute non-rectangularity for later use ---
+    product_of_ranges = 1
+    for lo, hi in zip(lows, highs):
+        product_of_ranges *= hi - lo + 1
+    non_rectangular = len(valid_margins_list) < product_of_ranges
+
     # --- Step 3: find margin-sensitive game indices ---
     sens_indices = [i for i in range(R) if not (lows[i] == 1 and highs[i] == 12)]
 
     if len(sens_indices) != 2:
-        # Joint constraints only attempted for exactly 2 sensitive games
-        return atom
+        # Joint constraints only attempted for exactly 2 sensitive games.
+        # For non-rectangular sets here, try to split into exact sub-atoms.
+        if non_rectangular:
+            split = _split_non_rectangular_atom(
+                mask, valid_margins_list, remaining, pairs, lows, highs, atom
+            )
+            if split is not None:
+                return split
+        return [atom]
 
     i0, i1 = sens_indices
     pair0, pair1 = pairs[i0], pairs[i1]
@@ -284,7 +380,7 @@ def _derive_atom(
 
     if not margin_conds:
         # No joint constraints needed — per-game ranges fully describe the set
-        return atom
+        return [atom]
 
     # --- Step 5: verify constraints reproduce the valid set ---
     # First, try [1,12]×[1,12] bounds — if joint constraints alone are sufficient,
@@ -298,16 +394,25 @@ def _derive_atom(
             winner = rg.a if a_wins else rg.b
             loser = rg.b if a_wins else rg.a
             unconstrained_atom.append(GameResult(winner, loser, 1, None))
-        return unconstrained_atom + margin_conds
+        return [unconstrained_atom + margin_conds]
 
     predicted = _predict_valid_set_2d(lo0, hi0, lo1, hi1, margin_conds, pair0, pair1)
 
     if predicted == valid_2d:
-        return atom + margin_conds
+        return [atom + margin_conds]
+
+    # Joint constraints couldn't describe the valid set exactly.
+    # For non-rectangular valid sets, try splitting into multiple exact sub-atoms.
+    if non_rectangular:
+        split = _split_non_rectangular_atom(
+            mask, valid_margins_list, remaining, pairs, lows, highs, atom
+        )
+        if split is not None:
+            return split
 
     # Fallback: per-game ranges only (always a superset; _find_combined_atom
     # uses sample_margins to select the right atom anyway)
-    return atom
+    return [atom]
 
 
 def _predict_valid_set_2d(
@@ -705,9 +810,9 @@ def build_scenario_atoms(
     for (mask, top4), valid_margins_list in groups.items():
         if (mask, top4) in unconstrained_keys:
             continue
-        atom = _derive_atom(mask, valid_margins_list, remaining, pairs)
-        for seed_idx, team in enumerate(top4):
-            result.setdefault(team, {}).setdefault(seed_idx + 1, []).append(atom)
+        for atom in _derive_atom(mask, valid_margins_list, remaining, pairs):
+            for seed_idx, team in enumerate(top4):
+                result.setdefault(team, {}).setdefault(seed_idx + 1, []).append(atom)
 
     # --- Step 5: Eliminated atoms (seed > playoff_seeds) via cross-mask merging ---
     # A team is "always eliminated" under mask M if it appears in NO top-N group for M.
@@ -745,8 +850,8 @@ def build_scenario_atoms(
                 if mk == mask and team not in top4:
                     absent_margins.extend(margin_list)
             if absent_margins:
-                atom = _derive_atom(mask, absent_margins, remaining, pairs)
-                result.setdefault(team, {}).setdefault(elim_seed, []).append(atom)
+                for atom in _derive_atom(mask, absent_margins, remaining, pairs):
+                    result.setdefault(team, {}).setdefault(elim_seed, []).append(atom)
 
     # --- Step 6: Boolean minimisation — collapse redundant margin ranges and
     #             drop game conditions that don't affect the seeding outcome ---
@@ -890,7 +995,24 @@ def enumerate_division_scenarios(
                     }
                 )
 
-    return scenarios
+    # Deduplicate: if two scenarios have the same conditions AND same seeding,
+    # keep only the first. This happens when multiple teams' atoms independently
+    # produce identical condition/outcome descriptions (e.g. in Region 2-7A,
+    # both Clinton's and MC's atoms generate "Clinton beats MC by 8+" → same
+    # seeding, creating scenario 3a≡4a and 3b≡4b).
+    def _conditions_key(atom):
+        if atom is None:
+            return None
+        return tuple((gr.winner, gr.loser, gr.min_margin, gr.max_margin) for gr in atom)
+
+    seen: set = set()
+    deduped = []
+    for s in scenarios:
+        key = (_conditions_key(s["conditions_atom"]), s["seeding"])
+        if key not in seen:
+            seen.add(key)
+            deduped.append(s)
+    return deduped
 
 
 # ---------------------------------------------------------------------------

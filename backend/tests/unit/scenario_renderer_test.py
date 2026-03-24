@@ -157,25 +157,25 @@ Eliminated."""
 PETAL_WITH_ODDS_EXPECTED = """\
 Petal
 
-#1 seed if: (51.3%)
+#1 seed if: (51.0%)
 1. Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 
-#2 seed if: (14.3%)
+#2 seed if: (14.6%)
 1. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 
-#3 seed if: (31.1%)
+#3 seed if: (28.7%)
 1. Meridian beats Brandon AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 
-#4 seed if: (3.3%)
+#4 seed if: (5.6%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1"""
@@ -183,24 +183,24 @@ Petal
 PEARL_WITH_ODDS_EXPECTED = """\
 Pearl
 
-#1 seed if: (4.2%)
+#1 seed if: (3.1%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 
-#2 seed if: (40.6%)
+#2 seed if: (41.7%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 5. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 
-#3 seed if: (1.6%)
+#3 seed if: (2.9%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 
-#4 seed if: (3.6%)
+#4 seed if: (2.3%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
@@ -211,25 +211,25 @@ Eliminated if: (50.0%)
 OAK_GROVE_WITH_ODDS_EXPECTED = """\
 Oak Grove
 
-#1 seed if: (29.7%)
+#1 seed if: (27.5%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 
-#2 seed if: (25.5%)
+#2 seed if: (27.7%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 
-#3 seed if: (28.0%)
+#3 seed if: (28.8%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 
-#4 seed if: (16.8%)
+#4 seed if: (16.0%)
 1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
@@ -238,24 +238,24 @@ Oak Grove
 NORTHWEST_RANKIN_WITH_ODDS_EXPECTED = """\
 Northwest Rankin
 
-#1 seed if: (14.8%)
+#1 seed if: (18.3%)
 1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 
-#2 seed if: (19.5%)
+#2 seed if: (16.1%)
 1. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
 
-#3 seed if: (1.8%)
+#3 seed if: (2.1%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
 2. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
 
-#4 seed if: (38.8%)
+#4 seed if: (38.5%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
@@ -497,11 +497,11 @@ def test_team_scenarios_dict_with_odds_no_weighted():
     """With odds= provided, per-seed odds are floats and weighted_odds is None."""
     d = _team_dict(with_odds=True)
     petal = d["Petal"]
-    assert petal[1]["odds"] == pytest.approx(0.5130208333333334)
+    assert petal[1]["odds"] == pytest.approx(0.510416666666674)
     assert petal[1]["weighted_odds"] is None
-    assert petal[2]["odds"] == pytest.approx(0.14322916666666666)
-    assert petal[3]["odds"] == pytest.approx(0.31076388888888884)
-    assert petal[4]["odds"] == pytest.approx(0.032986111111111116)
+    assert petal[2]["odds"] == pytest.approx(0.14583333333333334)
+    assert petal[3]["odds"] == pytest.approx(0.28732638888888845)
+    assert petal[4]["odds"] == pytest.approx(0.05642361111111103)
 
 
 def test_team_scenarios_dict_with_odds_eliminated_section():

@@ -24,6 +24,7 @@ from backend.helpers.data_classes import (
 from backend.helpers.tiebreakers import (
     rank_to_slots,
     resolve_standings_for_mask,
+    sensitive_boundary_games,
     standings_from_mask,
     tie_bucket_groups,
     unique_intra_bucket_games,
@@ -162,44 +163,15 @@ def determine_scenarios(
             )
             tie_buckets = tie_bucket_groups(teams, wl_totals)
             intra_bucket_games = unique_intra_bucket_games(tie_buckets, remaining)
-            rem_idx = {(rg.a, rg.b): i for i, rg in enumerate(remaining)}
-
-            thresholds_dir = {}
             if intra_bucket_games:
-                for rem_game in intra_bucket_games:
-                    a, b = rem_game.a, rem_game.b
-                    idx = rem_idx[(a, b)]
-                    for winner in (a, b):
-                        current_bit = (outcome_mask >> idx) & 1
-                        want_bit = 1 if winner == a else 0
-                        mask_for_dir = outcome_mask if current_bit == want_bit else (outcome_mask ^ (1 << idx))
-
-                        orders_by_m = []
-                        for m in range(1, 13):
-                            test_margins = dict(base_margins)
-                            test_margins[(a, b)] = m
-                            test_order = resolve_standings_for_mask(
-                                teams,
-                                completed,
-                                remaining,
-                                mask_for_dir,
-                                margins=test_margins,
-                                base_margin_default=7,
-                                pa_win=pa_for_winner,
-                            )
-                            orders_by_m.append(tuple(test_order))
-
-                        change_points = []
-                        for m in range(2, 13):
-                            if orders_by_m[m - 1] != orders_by_m[m - 2]:
-                                change_points.append(m)
-
-                        thresholds_dir[((a, b), winner)] = change_points
-                        logger.debug(
-                            "[DEBUG THRESH] Pair %s vs %s, dir winner=%s: thresholds=%s",
-                            a, b, winner, change_points,
-                        )
-
+                # Also include boundary games (bucket team vs. outside team) whose
+                # margin is sensitive to the tiebreaker outcome under 12^N enumeration.
+                boundary = sensitive_boundary_games(
+                    tie_buckets, remaining, intra_bucket_games,
+                    teams, completed, outcome_mask, base_margins, pa_for_winner,
+                )
+                if boundary:
+                    intra_bucket_games = intra_bucket_games + boundary
             if not intra_bucket_games:
                 final_order = resolve_standings_for_mask(
                     teams,
@@ -226,24 +198,26 @@ def determine_scenarios(
                         fourth_counts[team] += 1
                         fourth_counts_weighted[team] += mask_weight  # type: ignore
             else:
-                interval_specs = []
-                for rem_game in intra_bucket_games:
-                    a, b = rem_game.a, rem_game.b
-                    idx = rem_idx[(a, b)]
-                    mask_winner = a if ((outcome_mask >> idx) & 1) == 1 else b
-                    tlist = thresholds_dir.get(((a, b), mask_winner))
-                    if tlist:
-                        bounds = [1] + sorted(tlist) + [13]
-                        intervals = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1)]
-                        interval_specs.append(((a, b), mask_winner, intervals))
-
-                if not interval_specs:
+                # Enumerate all 12^N margin combinations for intra-bucket games.
+                # This correctly captures multi-game threshold interactions that the
+                # old one-game-at-a-time isolation approach could miss (e.g. a
+                # tiebreaker that only flips when Game A wins by 12+ AND Game B wins
+                # by 1–6 simultaneously).
+                intra_pairs = [(rg.a, rg.b) for rg in intra_bucket_games]
+                n_intra = len(intra_pairs)
+                total_combos = 12 ** n_intra
+                for margin_combo in product(range(1, 13), repeat=n_intra):
+                    branch_margins = dict(base_margins)
+                    for (a, b), m in zip(intra_pairs, margin_combo):
+                        branch_margins[(a, b)] = m
+                    branch_weight = 1.0 / total_combos
+                    effective_weight = mask_weight * branch_weight
                     final_order = resolve_standings_for_mask(
                         teams,
                         completed,
                         remaining,
                         outcome_mask,
-                        margins=base_margins,
+                        margins=branch_margins,
                         base_margin_default=7,
                         pa_win=pa_for_winner,
                         coin_flip_collector=all_coinflip_events,
@@ -251,52 +225,17 @@ def determine_scenarios(
                     slots = rank_to_slots(final_order)
                     for team, (lo_seed, hi_seed) in slots.items():
                         if 1 >= lo_seed and 1 <= hi_seed:
-                            first_counts[team] += 1
-                            first_counts_weighted[team] += mask_weight  # type: ignore
+                            first_counts[team] += branch_weight  # type: ignore
+                            first_counts_weighted[team] += effective_weight  # type: ignore
                         if 2 >= lo_seed and 2 <= hi_seed:
-                            second_counts[team] += 1
-                            second_counts_weighted[team] += mask_weight  # type: ignore
+                            second_counts[team] += branch_weight  # type: ignore
+                            second_counts_weighted[team] += effective_weight  # type: ignore
                         if 3 >= lo_seed and 3 <= hi_seed:
-                            third_counts[team] += 1
-                            third_counts_weighted[team] += mask_weight  # type: ignore
+                            third_counts[team] += branch_weight  # type: ignore
+                            third_counts_weighted[team] += effective_weight  # type: ignore
                         if 4 >= lo_seed and 4 <= hi_seed:
-                            fourth_counts[team] += 1
-                            fourth_counts_weighted[team] += mask_weight  # type: ignore
-                else:
-                    for interval_combo in product(*[spec[2] for spec in interval_specs]):
-                        branch_margins = dict(base_margins)
-                        branch_weight = 1.0
-
-                        for ((a, b), winner, intervals_for_pair), (lo, hi) in zip(interval_specs, interval_combo):
-                            chosen_m = lo
-                            branch_margins[(a, b)] = chosen_m
-                            branch_weight *= (hi - lo) / 12.0
-
-                        final_order = resolve_standings_for_mask(
-                            teams,
-                            completed,
-                            remaining,
-                            outcome_mask,
-                            margins=branch_margins,
-                            base_margin_default=7,
-                            pa_win=pa_for_winner,
-                            coin_flip_collector=all_coinflip_events,
-                        )
-                        slots = rank_to_slots(final_order)
-                        effective_weight = mask_weight * branch_weight
-                        for team, (lo_seed, hi_seed) in slots.items():
-                            if 1 >= lo_seed and 1 <= hi_seed:
-                                first_counts[team] += branch_weight  # type: ignore
-                                first_counts_weighted[team] += effective_weight  # type: ignore
-                            if 2 >= lo_seed and 2 <= hi_seed:
-                                second_counts[team] += branch_weight  # type: ignore
-                                second_counts_weighted[team] += effective_weight  # type: ignore
-                            if 3 >= lo_seed and 3 <= hi_seed:
-                                third_counts[team] += branch_weight  # type: ignore
-                                third_counts_weighted[team] += effective_weight  # type: ignore
-                            if 4 >= lo_seed and 4 <= hi_seed:
-                                fourth_counts[team] += branch_weight  # type: ignore
-                                fourth_counts_weighted[team] += effective_weight  # type: ignore
+                            fourth_counts[team] += branch_weight  # type: ignore
+                            fourth_counts_weighted[team] += effective_weight  # type: ignore
 
         denom = float(1 << num_remaining)
 

@@ -101,8 +101,8 @@ Ripley
 1. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
 
 #4 seed if: (75.0%)
-1. Clarksdale beats Rosa Fort
-2. Rosa Fort beats Clarksdale AND Senatobia beats Ripley"""
+1. Senatobia beats Ripley
+2. Clarksdale beats Rosa Fort AND Ripley beats Senatobia"""
 
 ROSA_FORT_EXPECTED = """\
 Rosa Fort
@@ -110,13 +110,15 @@ Rosa Fort
 #1 seed if: (25.0%)
 1. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
 
-#2 seed if: (6.2%)
+#2 seed if: (5.6%)
 1. Rosa Fort beats Clarksdale by 11 or more AND Senatobia beats Ripley
 2. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more
 
-#3 seed if: (68.8%)
-1. Clarksdale beats Rosa Fort
-2. Rosa Fort beats Clarksdale by 1\u201310 AND Senatobia beats Ripley"""
+#3 seed if: (69.4%)
+1. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
+2. Rosa Fort beats Clarksdale by 1\u201310 AND Senatobia beats Ripley
+3. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311
+4. Clarksdale beats Rosa Fort by 9 or more"""
 
 SENATOBIA_EXPECTED = """\
 Senatobia
@@ -124,11 +126,13 @@ Senatobia
 #1 seed if: (12.5%)
 1. Rosa Fort beats Clarksdale by 7 or more AND Senatobia beats Ripley
 
-#2 seed if: (60.4%)
-1. Clarksdale beats Rosa Fort
+#2 seed if: (61.1%)
+1. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
 2. Rosa Fort beats Clarksdale by 1\u20136 AND Senatobia beats Ripley
+3. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311
+4. Clarksdale beats Rosa Fort by 9 or more
 
-#3 seed if: (2.1%)
+#3 seed if: (1.4%)
 1. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more
 
 #4 seed if: (25.0%)
@@ -301,33 +305,33 @@ def test_atoms_ripley_seed3_atom():
 
 
 def test_atoms_ripley_seed4_count():
-    """Ripley seed-4 has exactly two atoms: CLA wins (any), or RF wins + SEN wins."""
+    """Ripley seed-4 has exactly two atoms: SEN wins (any), or CLA wins + RIP wins."""
     assert len(_ATOMS["Ripley"][4]) == 2
 
 
 def test_atoms_ripley_seed4_atom0():
-    """Ripley seed-4 first atom: CLA beats RF (any margin — covers both SEN-wins and RIP-wins cases)."""
+    """Ripley seed-4 first atom: SEN beats RIP (any margin — covers both CLA-wins and RF-wins cases)."""
     atom = _ATOMS["Ripley"][4][0]
     assert len(atom) == 1
     gr = atom[0]
-    assert gr.winner == "Clarksdale"
-    assert gr.loser == "Rosa Fort"
+    assert gr.winner == "Senatobia"
+    assert gr.loser == "Ripley"
     assert gr.min_margin == 1
     assert gr.max_margin is None
 
 
 def test_atoms_ripley_seed4_atom1():
-    """Ripley seed-4 second atom: RF beats CLA AND SEN beats RIP (mask 0; RIP finishes 1-3)."""
+    """Ripley seed-4 second atom: CLA beats RF AND RIP beats SEN (mask 3; RIP finishes 2-2 but in bottom half)."""
     atom = _ATOMS["Ripley"][4][1]
     assert len(atom) == 2
     gr0 = atom[0]
-    assert gr0.winner == "Rosa Fort"
-    assert gr0.loser == "Clarksdale"
+    assert gr0.winner == "Clarksdale"
+    assert gr0.loser == "Rosa Fort"
     assert gr0.min_margin == 1
     assert gr0.max_margin is None
     gr1 = atom[1]
-    assert gr1.winner == "Senatobia"
-    assert gr1.loser == "Ripley"
+    assert gr1.winner == "Ripley"
+    assert gr1.loser == "Senatobia"
     assert gr1.min_margin == 1
     assert gr1.max_margin is None
 
@@ -396,19 +400,24 @@ def test_atoms_rosa_fort_seed2_atom1():
 
 
 def test_atoms_rosa_fort_seed3_count():
-    """Rosa Fort seed-3 has exactly two atoms."""
-    assert len(_ATOMS["Rosa Fort"][3]) == 2
+    """Rosa Fort seed-3 has exactly four atoms."""
+    assert len(_ATOMS["Rosa Fort"][3]) == 4
 
 
 def test_atoms_rosa_fort_seed3_atom0():
-    """Rosa Fort seed-3 first atom: CLA beats RF any margin (covers masks 1 and most of mask 3)."""
+    """Rosa Fort seed-3 first atom: CLA beats RF AND SEN beats RIP (mask 1 — CLA is 4-0, RF is #3)."""
     atom = _ATOMS["Rosa Fort"][3][0]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Clarksdale"
-    assert gr.loser == "Rosa Fort"
-    assert gr.min_margin == 1
-    assert gr.max_margin is None
+    assert len(atom) == 2
+    gr0 = atom[0]
+    assert gr0.winner == "Clarksdale"
+    assert gr0.loser == "Rosa Fort"
+    assert gr0.min_margin == 1
+    assert gr0.max_margin is None
+    gr1 = atom[1]
+    assert gr1.winner == "Senatobia"
+    assert gr1.loser == "Ripley"
+    assert gr1.min_margin == 1
+    assert gr1.max_margin is None
 
 
 def test_atoms_rosa_fort_seed3_atom1():
@@ -454,19 +463,24 @@ def test_atoms_senatobia_seed1_atom():
 
 
 def test_atoms_senatobia_seed2_count():
-    """Senatobia seed-2 has exactly two atoms."""
-    assert len(_ATOMS["Senatobia"][2]) == 2
+    """Senatobia seed-2 has exactly four atoms."""
+    assert len(_ATOMS["Senatobia"][2]) == 4
 
 
 def test_atoms_senatobia_seed2_atom0():
-    """Senatobia seed-2 first atom: CLA beats RF any margin (covers masks 1 and most of mask 3)."""
+    """Senatobia seed-2 first atom: CLA beats RF AND SEN beats RIP (mask 1 — SEN finishes 3-1 as #2)."""
     atom = _ATOMS["Senatobia"][2][0]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Clarksdale"
-    assert gr.loser == "Rosa Fort"
-    assert gr.min_margin == 1
-    assert gr.max_margin is None
+    assert len(atom) == 2
+    gr0 = atom[0]
+    assert gr0.winner == "Clarksdale"
+    assert gr0.loser == "Rosa Fort"
+    assert gr0.min_margin == 1
+    assert gr0.max_margin is None
+    gr1 = atom[1]
+    assert gr1.winner == "Senatobia"
+    assert gr1.loser == "Ripley"
+    assert gr1.min_margin == 1
+    assert gr1.max_margin is None
 
 
 def test_atoms_senatobia_seed2_atom1():
@@ -574,8 +588,8 @@ def test_div_dict_scenario4a_title():
 
 
 def test_div_dict_scenario4b_title():
-    """Scenario 4b: CLA beats RF (simplified — covers all other mask-3 sub-cases)."""
-    assert _DIV_DICT["4b"]["title"] == "Clarksdale beats Rosa Fort"
+    """Scenario 4b: CLA by 1-8 AND RIP by 1-11 (SEN wins H2H PD tiebreaker over RF)."""
+    assert _DIV_DICT["4b"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311"
 
 
 def test_div_dict_scenario1a_seeds():
@@ -733,23 +747,23 @@ def test_odds_ripley():
 
 
 def test_odds_rosa_fort():
-    """Rosa Fort: clinched; p1=1/4, p2=1/16, p3=11/16 — never #4."""
+    """Rosa Fort: clinched; p1=1/4, p2=1/18, p3=25/36 — never #4."""
     o = _ODDS["Rosa Fort"]
     assert o.clinched is True
     assert o.p1 == pytest.approx(0.25)
-    assert o.p2 == pytest.approx(0.0625)
-    assert o.p3 == pytest.approx(0.6875)
+    assert o.p2 == pytest.approx(1 / 18)
+    assert o.p3 == pytest.approx(25 / 36)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_senatobia():
-    """Senatobia: clinched; p1=1/8, p2=29/48, p3=1/48, p4=1/4."""  # NOSONAR
+    """Senatobia: clinched; p1=1/8, p2=11/18, p3=1/72, p4=1/4."""  # NOSONAR
     o = _ODDS["Senatobia"]
     assert o.clinched is True
     assert o.p1 == pytest.approx(0.125)
-    assert o.p2 == pytest.approx(29 / 48)
-    assert o.p3 == pytest.approx(1 / 48)
+    assert o.p2 == pytest.approx(11 / 18)
+    assert o.p3 == pytest.approx(1 / 72)
     assert o.p4 == pytest.approx(0.25)
     assert o.p_playoffs == pytest.approx(1.0)
 

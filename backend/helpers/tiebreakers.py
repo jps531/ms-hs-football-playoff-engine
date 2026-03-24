@@ -746,8 +746,9 @@ def unique_intra_bucket_games(buckets, remaining):
     """Return remaining games where both teams are in the same non-singleton bucket.
 
     These are the games whose margin of victory can shift the Step-3 (capped
-    PD) tiebreaker outcome, and therefore require knife-edge threshold
-    detection when enumerating scenarios.
+    H2H PD) tiebreaker outcome.  Callers that also need to capture Step-4
+    sensitivity (PD vs outside opponents) should supplement this list with
+    ``sensitive_boundary_games``.
 
     Args:
         buckets: List of tie bucket groups (from ``tie_bucket_groups``).
@@ -767,6 +768,72 @@ def unique_intra_bucket_games(buckets, remaining):
                 seen.add(key)
                 out.append(rem_game)
     return out
+
+
+def sensitive_boundary_games(buckets, remaining, intra_games, teams, completed, outcome_mask, base_margins, pa_win):
+    """Return remaining boundary games whose margin affects any bucket tiebreaker.
+
+    A *boundary game* is a remaining game where exactly one team is in a
+    multi-team tie bucket and the other is not.  Such games can affect Step-4
+    (PD vs outside opponents) tiebreakers when combined with an intra-bucket
+    game at its margin cap (12).
+
+    The sensitivity check is: hold all intra-bucket game margins at 12 (the
+    cap where Step-3 H2H PD differences are maximised), then vary the boundary
+    game margin from 1 to 12.  If the full seeding order changes, the boundary
+    game is sensitive and must be included in the 12^N enumeration.
+
+    Args:
+        buckets: Tie bucket groups for this mask (from ``tie_bucket_groups``).
+        remaining: All remaining games.
+        intra_games: Games already identified as intra-bucket (from
+            ``unique_intra_bucket_games``).
+        teams: Full list of team names in the region.
+        completed: Completed region games.
+        outcome_mask: The binary outcome mask for this scenario.
+        base_margins: Base margins dict keyed by ``(team_a, team_b)``.
+        pa_win: Points-advantage awarded to the winner.
+
+    Returns:
+        List of additional RemainingGame instances (boundary games) whose
+        margins are sensitive and should be included in the 12^N enumeration.
+    """
+    inb = set().union(*(set(b) for b in buckets if len(b) > 1))
+    intra_keys = {(rg.a, rg.b) for rg in intra_games}
+
+    # Build margins at the intra-game cap
+    capped_margins = dict(base_margins)
+    for rg in intra_games:
+        capped_margins[(rg.a, rg.b)] = 12
+
+    result = []
+    seen: set = set()
+    for rg in remaining:
+        key = (rg.a, rg.b)
+        if key in intra_keys or key in seen:
+            continue
+        # Exactly one team in a multi-team bucket
+        if (rg.a in inb) == (rg.b in inb):
+            continue
+        seen.add(key)
+        # Sensitivity check: vary this game's margin from 1 to 12 at capped intra margins
+        margins_lo = dict(capped_margins)
+        margins_lo[key] = 1
+        margins_hi = dict(capped_margins)
+        margins_hi[key] = 12
+        order_lo = resolve_standings_for_mask(
+            teams, completed, remaining, outcome_mask,
+            margins=margins_lo, base_margin_default=7, pa_win=pa_win,
+            coin_flip_collector=[],
+        )
+        order_hi = resolve_standings_for_mask(
+            teams, completed, remaining, outcome_mask,
+            margins=margins_hi, base_margin_default=7, pa_win=pa_win,
+            coin_flip_collector=[],
+        )
+        if order_lo != order_hi:
+            result.append(rg)
+    return result
 
 
 # -------------------------
