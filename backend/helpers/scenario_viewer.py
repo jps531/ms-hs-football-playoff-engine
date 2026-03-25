@@ -262,6 +262,49 @@ def _split_non_rectangular_atom(
             if valid_split and len(sub_atoms) > 1:
                 return sub_atoms
 
+            # Forward grouping failed — try reverse: group i1 values by i0 frozenset
+            game0_by_game1: dict[int, frozenset] = {
+                p: frozenset(s for (s, p2) in valid_2d if p2 == p)
+                for p in range(lows[i1], highs[i1] + 1)
+            }
+            range_to_game1: dict[frozenset, list[int]] = {}
+            for p, s_set in game0_by_game1.items():
+                range_to_game1.setdefault(s_set, []).append(p)
+
+            sub_atoms_rev: list[list] = []
+            valid_split_rev = True
+            for s_set, p_list in range_to_game1.items():
+                p_sorted = sorted(p_list)
+                s_sorted = sorted(s_set)
+                if p_sorted != list(range(p_sorted[0], p_sorted[-1] + 1)):
+                    valid_split_rev = False
+                    break
+                if s_sorted != list(range(s_sorted[0], s_sorted[-1] + 1)):
+                    valid_split_rev = False
+                    break
+
+                p_lo, p_hi = p_sorted[0], p_sorted[-1]
+                s_lo, s_hi = s_sorted[0], s_sorted[-1]
+
+                sub_atom = list(base_atom)
+
+                a_wins_0 = bool((mask >> i0) & 1)
+                winner_0 = remaining[i0].a if a_wins_0 else remaining[i0].b
+                loser_0 = remaining[i0].b if a_wins_0 else remaining[i0].a
+                max_s = s_hi + 1 if s_hi < 12 else None
+                sub_atom[i0] = GameResult(winner_0, loser_0, min_margin=s_lo, max_margin=max_s)
+
+                a_wins_1 = bool((mask >> i1) & 1)
+                winner_1 = remaining[i1].a if a_wins_1 else remaining[i1].b
+                loser_1 = remaining[i1].b if a_wins_1 else remaining[i1].a
+                max_p = p_hi + 1 if p_hi < 12 else None
+                sub_atom[i1] = GameResult(winner_1, loser_1, min_margin=p_lo, max_margin=max_p)
+
+                sub_atoms_rev.append(sub_atom)
+
+            if valid_split_rev and len(sub_atoms_rev) > 1:
+                return sub_atoms_rev
+
     return None
 
 
@@ -586,15 +629,19 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
     def _try_rule3(a: list, b: list) -> list | None:
         """Rule 3 — Complementary lifting.
 
-        If a = [X_a, G(lo, None)] and b = [X_b, G(hi, None)] where:
-          - X_a and X_b are unconstrained, opposite outcomes of the same game,
-          - G is the same game in both atoms (same winner/loser),
-          - lo < hi  (a has the weaker margin constraint),
-        then b can be replaced with the standalone atom [G(hi, None)].
+        If atoms a and b share identical conditions except for two game pairs —
+        one complementary (X_a / X_b, opposite unconstrained winners) and one
+        tightening (G(lo) in a, G(hi) in b with lo < hi) — then b can be
+        replaced with [G(hi)] plus all shared (non-diff) conditions.
 
-        Correctness: (X_a ∧ G_lo+) ∨ (X_b ∧ G_hi+) = G_hi+ ∨ (X_a ∧ G_lo+).
-        The simpler form makes it clear that G winning by hi+ is sufficient
-        regardless of which team wins the X game.
+        Correctness: for any shared conditions R,
+          (X_a ∧ G_lo+ ∧ R) ∨ (X_b ∧ G_hi+ ∧ R)
+          = R ∧ ((X_a ∧ G_lo+) ∨ (X_b ∧ G_hi+))
+          = R ∧ (G_hi+ ∨ (X_a ∧ G_lo+))
+          = (G_hi+ ∧ R) ∨ (X_a ∧ G_lo+ ∧ R)
+
+        The simplified form makes it clear that G winning by hi+ (plus the
+        shared conditions R) is sufficient regardless of which team wins X.
         """
         gr_a = {_pair(c): c for c in a if isinstance(c, GameResult)}
         gr_b = {_pair(c): c for c in b if isinstance(c, GameResult)}
@@ -632,7 +679,10 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
             if ca_t.max_margin is not None and ca_t.max_margin <= cb_t.min_margin:
                 continue
 
-            return [cb_t]  # b simplified to just the tighter game condition
+            # Preserve shared (non-diff) conditions so the simplified atom
+            # remains tight: (G_hi+ ∧ R) rather than just G_hi+.
+            shared = [gr_a[p] for p in gr_a if p not in {p_comp, p_tight}]
+            return [cb_t] + shared
 
         return None
 

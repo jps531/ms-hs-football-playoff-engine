@@ -1,6 +1,6 @@
 # Test Coverage Gaps
 
-## Current state (2026-03-24)
+## Current state (2026-03-25)
 
 | Module | Coverage | Notes |
 |---|---|---|
@@ -9,13 +9,13 @@
 | `scenarios.py` | **100%** | Scenario enumeration + consolidation fully covered |
 | `scenario_serializers.py` | **100%** | |
 | `scenario_renderer.py` | **91%** | Home game rendering + weighted odds untested |
-| `scenario_viewer.py` | **92%** | Edge cases in atom derivation; some structural paths |
+| `scenario_viewer.py` | **95%** | MarginCondition intersection + some fallback paths remain |
 | `tiebreakers.py` | **86%** | Biggest gap: pair tiebreaker Steps 2–5 never exercised |
 | `home_game_scenarios.py` | **96%** | Minor edge cases |
 | `bracket_home_odds.py` | **86%** | Some class-size branches |
-| **Total (unit-testable)** | **~93%** | |
+| **Total (unit-testable)** | **~94%** | |
 
-All scenario output tests are "one week out" (one remaining game per team). No mid-season tests exist yet.
+One mid-season test exists: `scenario_output_4_4a_midseason_test.py` (Region 4-4A at 2025-10-17 cutoff, 4 remaining games, 20 division scenarios). This added 3pp to `scenario_viewer.py` and 1pp overall.
 
 ---
 
@@ -69,18 +69,20 @@ related — requires a real or synthetic drawn game.
 
 ## scenario_viewer.py — edge cases and structural paths
 
-### Constrained elimination via margin ranges (lines 847–854)
+### Constrained elimination via margin ranges (lines 859–854)
 
 **What it is:** `sometimes_elim_only_masks` — teams that are eliminated only for certain
 margin combinations, not all. These get constrained elimination atoms with explicit margin ranges.
 
-**Why not covered:** In one-game-remaining regions, elimination is usually unconditional
-(you lose and you're out) or tied to a specific win/loss. The margin-conditional elimination
-path needs a region where a team is in the mix for 4th seed but margin of a specific game
-determines whether they make it.
+**Why not covered:** The 4-4A midseason test exercises Greenwood in a similar position
+(margin-sensitive seeding), but the specific `sometimes_elim_only_masks` branch (lines
+859→854) still fires only for teams where elimination is margin-conditional. The 4-4A
+fixture doesn't produce this exact case — Greenwood's elimination-in-some-masks is
+handled via seeding atoms, not the elimination atom path.
 
-**What would cover it:** A mid-season fixture with 2+ remaining games where a team's
-elimination is margin-sensitive.
+**What would cover it:** A mid-season fixture with 2+ remaining games where a team is
+literally eliminated only when a specific game is lost by a large margin (not just
+"doesn't make playoffs" but "constrained elimination atom").
 
 ---
 
@@ -97,13 +99,15 @@ margin-conditional paths that overlap.
 
 ---
 
-### `_split_non_rectangular_atom` non-contiguous bail-out (lines 237–241)
+### `_split_non_rectangular_atom` non-contiguous bail-out (lines 240–241)
 
 **What it is:** The `valid_split = False` path fires when the valid margin set for a 2-game
-scenario can't be decomposed into contiguous rectangular sub-atoms.
+scenario can't be decomposed into contiguous rectangular sub-atoms — specifically when the
+i1 range (second game) is non-contiguous.
 
-**Why not covered:** All current non-rectangular valid sets happen to decompose cleanly.
-This is a defensive fallback — low priority to cover.
+**Why not covered:** The 4-4A midseason test covers lines 237–238 (i0 non-contiguous
+bail-out) and lines 262–265 (loop returning None), but lines 240–241 (i1 non-contiguous
+check) remain uncovered. All tested non-rectangular valid sets fail at the i0 check first.
 
 ---
 
@@ -176,13 +180,39 @@ These would require synthetic `MarginCondition` objects with specific threshold/
 |-----|------------------------------|
 | Pair tiebreaker Steps 2–5 (357–376, 417–450) | **Yes — directly.** Teams tied with no H2H yet → Step 1 = 0-0 → falls through |
 | No-opponent cases (189, 203) | **Yes.** More games remaining → more teams without completed H2H games |
-| Constrained elimination atoms (847–854) | **Likely yes.** More games remaining → margin-sensitive elimination more common |
+| Constrained elimination atoms (859→854) | **Maybe.** 4-4A midseason test did NOT cover it — need a specific "margin-conditional elimination" fixture |
 | MarginCondition intersection in combined atoms (109–114) | **Maybe.** More complex atom structures increase likelihood |
+| `_split_non_rectangular_atom` i0 bail-out (237–238) | ✅ **Covered** by 4-4A midseason test |
+| `_subsumes` return True path (582–584) | ✅ **Covered** by 4-4A midseason test |
+| `_simplify_atom_list` subsumption removal (683) | ✅ **Covered** by 4-4A midseason test |
+| `_try_rule3` firing (641–642) | ✅ **Covered** by 4-4A midseason test (also fixed bug here) |
+| `_derive_atom` non-rectangular → split path (329–331) | ✅ **Covered** by 4-4A midseason test |
+| `_split_non_rectangular_atom` i1 bail-out (240–241) | **Unlikely.** i0 check fires first in all tested cases |
 | Tied/drawn game results | **No.** Requires a drawn game regardless of timing |
 | Weighted odds rendering | **No.** Blocked on Priority 5 |
 | Home game rendering | **No.** Separate feature |
 | Margin condition rendering edge cases | **No.** Requires synthetic conditions |
 | Defensive fallbacks | **No.** By design, these don't fire naturally |
+
+---
+
+## Bugs found and fixed via test coverage work
+
+### `_try_rule3` dropped shared conditions (scenario_viewer.py ~line 635)
+
+**Found:** While writing the 4-4A midseason test. The Kosciusko #3 render showed
+"Yazoo City beats Kosciusko by 11 or more" as a standalone atom — which is over-broad
+(it's not sufficient; other conditions also required).
+
+**Root cause:** `_try_rule3` (Rule 3 — Complementary Lifting) correctly identifies the
+pattern `(X_a ∧ G_lo+ ∧ R) ∨ (X_b ∧ G_hi+ ∧ R)` but was returning only `[cb_t]`
+(just `G_hi+`), dropping the shared conditions `R`.
+
+**Fix:** Preserved `shared = [gr_a[p] for p in gr_a if p not in {p_comp, p_tight}]`
+and returned `[cb_t] + shared` instead of `[cb_t]`.
+
+**Effect:** KOS #3 atom now reads "Yazoo City beats Kosciusko by 11 or more AND Yazoo City
+beats Gentry AND Louisville beats Greenwood" (correct). YZ #2 fixed identically.
 
 ---
 
