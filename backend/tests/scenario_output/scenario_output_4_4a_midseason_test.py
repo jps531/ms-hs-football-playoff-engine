@@ -30,7 +30,7 @@ Contrast with ``scenario_output_4_4a_test.py`` (one week remaining):
   - 4 remaining games here vs 2 there → 16 masks vs 4 masks
   - Louisville leads 3-0 rather than being tied at 3-1
   - All five outcomes are achievable for Greenwood (seeds 1–4 AND eliminated)
-  - 20 distinct division scenarios (vs 6 in the one-week-out test)
+  - 21 distinct division scenarios (vs 6 in the one-week-out test)
 
 Coverage this test specifically exercises that the one-week-out test does not:
   - ``sometimes_elim_only_masks`` branch in ``build_scenario_atoms`` (lines 847–854):
@@ -242,8 +242,8 @@ def test_atoms_kosciusko_seed4_atom():
 
 
 def test_div_dict_scenario_count():
-    """There are 20 distinct division scenarios at two weeks out."""
-    assert len(_DIV_DICT) == 20
+    """There are 21 distinct division scenarios at two weeks out (scenario 3 split into two)."""
+    assert len(_DIV_DICT) == 21
 
 
 def test_div_dict_louisville_wins_always_seed1():
@@ -256,8 +256,8 @@ def test_div_dict_louisville_wins_always_seed1():
 
 
 def test_div_dict_scenario3_title():
-    """Scenario 3 is the simplest: Kosciusko beats Yazoo City AND Yazoo City beats Gentry."""
-    assert _DIV_DICT["3"]["title"] == "Kosciusko beats Yazoo City AND Yazoo City beats Gentry"
+    """Scenario 3: Greenwood beats Gentry AND KOS beats YZ AND YZ beats Gentry AND LOU beats GRE."""
+    assert _DIV_DICT["3"]["title"] == "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood"
 
 
 def test_div_dict_scenario3_seeds():
@@ -496,10 +496,15 @@ _EXPECTED_RENDER = {
         "\n"
         "#3 seed if: (27.3%)\n"
         "1. Gentry beats Greenwood AND Gentry beats Yazoo City\n"
-        "2. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20138 AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by exactly 11 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u20139 AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by 12 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7\u201310 AND Louisville beats Greenwood\n"
+        "2. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood\n"
+        "3. Gentry beats Greenwood by 6 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20133 AND Louisville beats Greenwood\n"
+        "4. Gentry beats Greenwood by 7 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4\u20135 AND Louisville beats Greenwood\n"
+        "5. Gentry beats Greenwood by 8 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 6 AND Louisville beats Greenwood\n"
+        "6. Gentry beats Greenwood by 8\u201311 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 7 AND Louisville beats Greenwood\n"
+        "7. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood\n"
+        "8. Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood\n"
+        "9. Gentry beats Greenwood by exactly 11 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u20139 AND Louisville beats Greenwood\n"
+        "10. Gentry beats Greenwood by 12 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7\u201310 AND Louisville beats Greenwood\n"
         "\n"
         "#4 seed if: (32.9%)\n"
         "1. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
@@ -552,8 +557,15 @@ _EXPECTED_RENDER = {
         "#4 seed if: (30.4%)\n"
         "1. Gentry beats Greenwood AND Gentry beats Yazoo City\n"
         "2. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7 or more AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20138 AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 10 or more AND Louisville beats Greenwood\n"
+        "3. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood\n"
+        "4. Gentry beats Greenwood by 6 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20133 AND Louisville beats Greenwood\n"
+        "5. Gentry beats Greenwood by 7 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4\u20135 AND Louisville beats Greenwood\n"
+        "6. Gentry beats Greenwood by 8 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 6 AND Louisville beats Greenwood\n"
+        "7. Gentry beats Greenwood by 8\u201311 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 7 AND Louisville beats Greenwood\n"
+        "8. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood\n"
+        "9. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 10 AND Louisville beats Greenwood\n"
+        "10. Gentry beats Greenwood by 8\u20139 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 11 AND Louisville beats Greenwood\n"
+        "11. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood\n"
         "\n"
         "Eliminated if: (6.9%)\n"
         "1. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
@@ -574,17 +586,24 @@ _EXPECTED_RENDER = {
         "5. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "6. Gentry beats Greenwood by 1\u20133 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "7. Gentry beats Greenwood by exactly 4 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20136 AND Louisville beats Greenwood\n"
-        "8. Gentry beats Greenwood by exactly 6 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4 or more AND Louisville beats Greenwood\n"
-        "9. Gentry beats Greenwood by exactly 7 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 6\u201311 AND Louisville beats Greenwood\n"
-        "10. Gentry beats Greenwood by exactly 8 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u201310 AND Louisville beats Greenwood\n"
-        "11. Gentry beats Greenwood by 4\u20135 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood\n"
-        "12. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood\n"
-        "13. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20138 AND Louisville beats Greenwood\n"
-        "14. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 10 or more AND Louisville beats Greenwood\n"
-        "15. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "16. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "17. Gentry beats Greenwood by exactly 11 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u20139 AND Louisville beats Greenwood\n"
-        "18. Gentry beats Greenwood by 12 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7\u201310 AND Louisville beats Greenwood\n"
+        "8. Gentry beats Greenwood by exactly 5 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20136 AND Louisville beats Greenwood\n"
+        "9. Gentry beats Greenwood by exactly 6 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4 or more AND Louisville beats Greenwood\n"
+        "10. Gentry beats Greenwood by exactly 7 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 6\u201311 AND Louisville beats Greenwood\n"
+        "11. Gentry beats Greenwood by exactly 8 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u201310 AND Louisville beats Greenwood\n"
+        "12. Gentry beats Greenwood by 4\u20135 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood\n"
+        "13. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9\u201310 AND Louisville beats Greenwood\n"
+        "14. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood\n"
+        "15. Gentry beats Greenwood by 6 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20133 AND Louisville beats Greenwood\n"
+        "16. Gentry beats Greenwood by 7 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4\u20135 AND Louisville beats Greenwood\n"
+        "17. Gentry beats Greenwood by 8 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 6 AND Louisville beats Greenwood\n"
+        "18. Gentry beats Greenwood by 8\u201311 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 7 AND Louisville beats Greenwood\n"
+        "19. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood\n"
+        "20. Gentry beats Greenwood by 8\u20139 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 11 AND Louisville beats Greenwood\n"
+        "21. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood\n"
+        "22. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
+        "23. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
+        "24. Gentry beats Greenwood by exactly 11 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u20139 AND Louisville beats Greenwood\n"
+        "25. Gentry beats Greenwood by 12 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7\u201310 AND Louisville beats Greenwood\n"
         "\n"
         "#3 seed if: (13.5%)\n"
         "1. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
@@ -604,17 +623,24 @@ _EXPECTED_RENDER = {
         "4. Gentry beats Greenwood AND Greenwood beats Louisville\n"
         "5. Gentry beats Greenwood by 1\u20133 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "6. Gentry beats Greenwood by exactly 4 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20136 AND Louisville beats Greenwood\n"
-        "7. Gentry beats Greenwood by exactly 6 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4 or more AND Louisville beats Greenwood\n"
-        "8. Gentry beats Greenwood by exactly 7 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 6\u201311 AND Louisville beats Greenwood\n"
-        "9. Gentry beats Greenwood by exactly 8 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u201310 AND Louisville beats Greenwood\n"
-        "10. Gentry beats Greenwood by 4\u20135 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood\n"
-        "11. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood\n"
-        "12. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20138 AND Louisville beats Greenwood\n"
-        "13. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 10 or more AND Louisville beats Greenwood\n"
-        "14. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "15. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "16. Gentry beats Greenwood by exactly 11 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u20139 AND Louisville beats Greenwood\n"
-        "17. Gentry beats Greenwood by 12 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7\u201310 AND Louisville beats Greenwood\n"
+        "7. Gentry beats Greenwood by exactly 5 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20136 AND Louisville beats Greenwood\n"
+        "8. Gentry beats Greenwood by exactly 6 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4 or more AND Louisville beats Greenwood\n"
+        "9. Gentry beats Greenwood by exactly 7 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 6\u201311 AND Louisville beats Greenwood\n"
+        "10. Gentry beats Greenwood by exactly 8 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u201310 AND Louisville beats Greenwood\n"
+        "11. Gentry beats Greenwood by 4\u20135 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood\n"
+        "12. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9\u201310 AND Louisville beats Greenwood\n"
+        "13. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood\n"
+        "14. Gentry beats Greenwood by 6 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20133 AND Louisville beats Greenwood\n"
+        "15. Gentry beats Greenwood by 7 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4\u20135 AND Louisville beats Greenwood\n"
+        "16. Gentry beats Greenwood by 8 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 6 AND Louisville beats Greenwood\n"
+        "17. Gentry beats Greenwood by 8\u201311 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 7 AND Louisville beats Greenwood\n"
+        "18. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood\n"
+        "19. Gentry beats Greenwood by 8\u20139 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 11 AND Louisville beats Greenwood\n"
+        "20. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood\n"
+        "21. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
+        "22. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
+        "23. Gentry beats Greenwood by exactly 11 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u20139 AND Louisville beats Greenwood\n"
+        "24. Gentry beats Greenwood by 12 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7\u201310 AND Louisville beats Greenwood\n"
         "\n"
         "#2 seed if: (20.8%)\n"
         "1. Greenwood beats Gentry AND Yazoo City beats Kosciusko AND Greenwood beats Louisville\n"
@@ -633,9 +659,11 @@ _EXPECTED_RENDER = {
         "#3 seed if: (15.2%)\n"
         "1. Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Greenwood beats Louisville\n"
         "2. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 10 or more AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
+        "3. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 10 AND Louisville beats Greenwood\n"
+        "4. Gentry beats Greenwood by 8\u20139 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 11 AND Louisville beats Greenwood\n"
+        "5. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood\n"
+        "6. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
+        "7. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
         "\n"
         "#4 seed if: (24.2%)\n"
         "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry\n"
@@ -653,7 +681,11 @@ _EXPECTED_RENDER = {
         "\n"
         "Eliminated if: (53.3%)\n"
         "1. Gentry beats Yazoo City\n"
-        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20138 AND Louisville beats Greenwood"
+        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20134 AND Louisville beats Greenwood\n"
+        "3. Gentry beats Greenwood by 2 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 5 AND Louisville beats Greenwood\n"
+        "4. Gentry beats Greenwood by 4 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 6 AND Louisville beats Greenwood\n"
+        "5. Gentry beats Greenwood by 6\u201311 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 7 AND Louisville beats Greenwood\n"
+        "6. Gentry beats Greenwood by 8\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood"
     ),
 }
 
@@ -697,9 +729,9 @@ _EXPECTED_SCENARIOS = {
             "Louisville", "Yazoo City", "Kosciusko", "Greenwood", ["Gentry"]),
     "2":   ("Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood",
             "Louisville", "Yazoo City", "Kosciusko", "Gentry", ["Greenwood"]),
-    "3":   ("Kosciusko beats Yazoo City AND Yazoo City beats Gentry",
+    "3":   ("Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood",
             "Louisville", "Kosciusko", "Greenwood", "Yazoo City", ["Gentry"]),
-    "4a":  ("Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20138 AND Louisville beats Greenwood",
+    "4a":  ("Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood",
             "Louisville", "Kosciusko", "Gentry", "Greenwood", ["Yazoo City"]),
     "4b":  ("Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood",
             "Louisville", "Kosciusko", "Gentry", "Yazoo City", ["Greenwood"]),
@@ -707,9 +739,9 @@ _EXPECTED_SCENARIOS = {
             "Louisville", "Kosciusko", "Greenwood", "Gentry", ["Yazoo City"]),
     "4d":  ("Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 5 or more AND Louisville beats Greenwood",
             "Louisville", "Kosciusko", "Greenwood", "Yazoo City", ["Gentry"]),
-    "4e":  ("Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood",
+    "4e":  ("Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9\u201310 AND Louisville beats Greenwood",
             "Louisville", "Kosciusko", "Yazoo City", "Gentry", ["Greenwood"]),
-    "4f":  ("Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 10 or more AND Louisville beats Greenwood",
+    "4f":  ("Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood",
             "Louisville", "Kosciusko", "Yazoo City", "Greenwood", ["Gentry"]),
     "5":   ("Greenwood beats Gentry AND Gentry beats Yazoo City AND Louisville beats Greenwood",
             "Louisville", "Kosciusko", "Greenwood", "Gentry", ["Yazoo City"]),
@@ -723,11 +755,13 @@ _EXPECTED_SCENARIOS = {
             "Kosciusko", "Greenwood", "Louisville", "Yazoo City", ["Gentry"]),
     "9b":  ("Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville by 1\u20138",
             "Kosciusko", "Louisville", "Greenwood", "Yazoo City", ["Gentry"]),
-    "10":  ("Greenwood beats Gentry AND Yazoo City beats Kosciusko AND Gentry beats Yazoo City AND Greenwood beats Louisville",
+    "10":  ("Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville",
+            "Louisville", "Kosciusko", "Greenwood", "Yazoo City", ["Gentry"]),
+    "11":  ("Greenwood beats Gentry AND Yazoo City beats Kosciusko AND Gentry beats Yazoo City AND Greenwood beats Louisville",
             "Greenwood", "Louisville", "Kosciusko", "Gentry", ["Yazoo City"]),
-    "11a": ("Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 9 or more",
+    "12a": ("Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 9 or more",
             "Kosciusko", "Greenwood", "Louisville", "Gentry", ["Yazoo City"]),
-    "11b": ("Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 1\u20138",
+    "12b": ("Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 1\u20138",
             "Kosciusko", "Louisville", "Greenwood", "Gentry", ["Yazoo City"]),
 }
 
@@ -761,5 +795,6 @@ def test_scenario_8():  _check_scenario("8")
 def test_scenario_9a(): _check_scenario("9a")
 def test_scenario_9b(): _check_scenario("9b")
 def test_scenario_10(): _check_scenario("10")
-def test_scenario_11a(): _check_scenario("11a")
-def test_scenario_11b(): _check_scenario("11b")
+def test_scenario_11(): _check_scenario("11")
+def test_scenario_12a(): _check_scenario("12a")
+def test_scenario_12b(): _check_scenario("12b")

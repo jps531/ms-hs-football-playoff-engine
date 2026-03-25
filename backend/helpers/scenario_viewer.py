@@ -997,9 +997,10 @@ def enumerate_division_scenarios(
     entries = []
 
     for seeding, masks in non_ms.items():
-        min_mask = min(masks)
-        game_winners = _common_game_winners(masks, remaining)
-        entries.append((min_mask, "single", seeding, masks, game_winners))
+        for group in _valid_merge_groups(masks, R):
+            min_mask = min(group)
+            game_winners = _common_game_winners(group, remaining)
+            entries.append((min_mask, "single", seeding, group, game_winners))
 
     for mask, sub_list in ms.items():
         entries.append((mask, "multi", None, mask, sub_list))

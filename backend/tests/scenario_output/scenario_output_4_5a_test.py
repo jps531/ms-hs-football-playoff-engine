@@ -19,10 +19,9 @@ All three remaining games are on 2025-11-06:
 Known 2025 seeds: Stone / Wayne County / Purvis / Northeast Jones
 Eliminated: East Central, Vancleave
 
-Scenario structure (5 total, no margin sensitivity):
-  1: Vancleave beats Purvis
+Scenario structure (6 total, no margin sensitivity):
+  1: Vancleave beats Purvis AND Stone beats East Central
      → Stone #1, WC #2, Vancleave #3, Purvis #4 (NJ and EC eliminated)
-     NJ/WC and EC/Stone results are irrelevant — boolean minimization drops both.
   2: WC beats NJ AND Purvis beats VAN AND Stone beats EC
      → Stone #1, WC #2, Purvis #3, NJ #4 (VAN and EC eliminated)
   3: NJ beats WC AND Purvis beats VAN (actual result; Stone/EC irrelevant)
@@ -32,7 +31,8 @@ Scenario structure (5 total, no margin sensitivity):
   5: WC beats NJ AND Purvis beats VAN AND EC beats Stone
      → Stone #1, WC #2, Purvis #3, EC #4 (VAN and NJ eliminated)
 
-Note: scenarios 2 and 3 produce identical seedings from different game outcomes.
+Note: scenarios 1 and 5 produce identical top-4 seedings from different game outcomes.
+Scenarios 2 and 3 also produce identical seedings from different game outcomes.
 
 Bit ordering: Northeast Jones/Wayne County is bit 0; Purvis/Vancleave is bit 1;
 East Central/Stone is bit 2.
@@ -492,13 +492,13 @@ def test_nj_wc_absent_from_vancleave_seed3_atom0():
 
 
 def test_div_dict_scenario_keys():
-    """Division scenarios dict has exactly keys 1, 2, 3, 4, 5 (no margin sensitivity)."""
-    assert set(_DIV_DICT.keys()) == {"1", "2", "3", "4", "5"}
+    """Division scenarios dict has exactly keys 1–6 (no margin sensitivity; scenario 1 split by Stone/EC result)."""
+    assert set(_DIV_DICT.keys()) == {"1", "2", "3", "4", "5", "6"}
 
 
 def test_div_dict_scenario1_title():
-    """Scenario 1: Vancleave beats Purvis (NJ/WC and EC/Stone results irrelevant)."""
-    assert _DIV_DICT["1"]["title"] == "Vancleave beats Purvis"
+    """Scenario 1: Vancleave beats Purvis AND Stone beats East Central."""
+    assert _DIV_DICT["1"]["title"] == "Vancleave beats Purvis AND Stone beats East Central"
 
 
 def test_div_dict_scenario2_title():
@@ -523,9 +523,17 @@ def test_div_dict_scenario4_title():
 
 
 def test_div_dict_scenario5_title():
-    """Scenario 5: WC beats NJ AND Purvis beats VAN AND EC beats Stone."""
+    """Scenario 5: NJ beats WC AND Vancleave beats Purvis AND EC beats Stone → Stone/WC/VAN/Purvis."""
     assert (
         _DIV_DICT["5"]["title"]
+        == "Northeast Jones beats Wayne County AND Vancleave beats Purvis AND East Central beats Stone"
+    )
+
+
+def test_div_dict_scenario6_title():
+    """Scenario 6: WC beats NJ AND Purvis beats VAN AND EC beats Stone → Stone/WC/Purvis/EC."""
+    assert (
+        _DIV_DICT["6"]["title"]
         == "Wayne County beats Northeast Jones AND Purvis beats Vancleave AND East Central beats Stone"
     )
 
@@ -575,8 +583,19 @@ def test_div_dict_scenario4_seeds():
 
 
 def test_div_dict_scenario5_seeds():
-    """Scenario 5: Stone #1, WC #2, Purvis #3, EC #4."""
+    """Scenario 5: Stone #1, WC #2, Vancleave #3, Purvis #4 (NJ and EC eliminated)."""
     s = _DIV_DICT["5"]
+    assert s["one_seed"] == "Stone"
+    assert s["two_seed"] == "Wayne County"
+    assert s["three_seed"] == "Vancleave"
+    assert s["four_seed"] == "Purvis"
+    assert "Northeast Jones" in s["eliminated"]
+    assert "East Central" in s["eliminated"]
+
+
+def test_div_dict_scenario6_seeds():
+    """Scenario 6: Stone #1, WC #2, Purvis #3, EC #4."""
+    s = _DIV_DICT["6"]
     assert s["one_seed"] == "Stone"
     assert s["two_seed"] == "Wayne County"
     assert s["three_seed"] == "Purvis"
