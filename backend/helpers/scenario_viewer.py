@@ -742,6 +742,104 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
             if r3_changed:
                 break
 
+    def _try_rule4(a: list, b: list) -> tuple[list, list] | None:
+        """Rule 4 — Range-containment splitting.
+
+        Applies when atoms a and b differ in exactly two game pairs:
+          - p_comp: opposite unconstrained winners (a has X_a, b has X_b)
+          - p_tight: same winner in both, both starting at min_margin=1,
+            but a's range is strictly contained in b's (a.max_margin < b.max_margin,
+            where None represents ∞)
+
+        Rewrites:
+          (X_a ∧ G[1..M) ∧ R) ∨ (X_b ∧ G[1..N) ∧ R)  [M < N]
+        as the equivalent:
+          (G[1..M) ∧ R) ∨ (X_b ∧ G[M..N) ∧ R)
+
+        Returns (new_a, new_b) on success, None otherwise.
+        """
+        gr_a = {_pair(c): c for c in a if isinstance(c, GameResult)}
+        gr_b = {_pair(c): c for c in b if isinstance(c, GameResult)}
+
+        if set(gr_a) != set(gr_b):
+            return None
+        if any(not isinstance(c, GameResult) for c in a):
+            return None
+        if any(not isinstance(c, GameResult) for c in b):
+            return None
+
+        diff = [p for p in gr_a if gr_a[p] != gr_b[p]]
+        if len(diff) != 2:
+            return None
+
+        for p_comp, p_tight in [(diff[0], diff[1]), (diff[1], diff[0])]:
+            ca_c, cb_c = gr_a[p_comp], gr_b[p_comp]
+            ca_t, cb_t = gr_a[p_tight], gr_b[p_tight]
+
+            # p_comp: opposite unconstrained winners
+            if ca_c.loser != cb_c.winner:
+                continue
+            if ca_c.min_margin != 1 or ca_c.max_margin is not None:
+                continue
+            if cb_c.min_margin != 1 or cb_c.max_margin is not None:
+                continue
+
+            # p_tight: same winner, both start at 1, a's range strictly contained in b's
+            if ca_t.winner != cb_t.winner or ca_t.loser != cb_t.loser:
+                continue
+            if ca_t.min_margin != 1 or cb_t.min_margin != 1:
+                continue
+            if ca_t.max_margin is None:
+                continue  # a is unbounded — not strictly narrower
+            # a.max_margin < b.max_margin (None = ∞)
+            if cb_t.max_margin is not None and ca_t.max_margin >= cb_t.max_margin:
+                continue
+
+            shared = [gr_a[p] for p in gr_a if p not in {p_comp, p_tight}]
+
+            # new_a: drop p_comp (X result irrelevant when margin is in the narrow range)
+            new_a = [ca_t] + shared
+
+            # new_b: keep X_b, narrow p_tight to [a.max_margin, b.max_margin)
+            new_tight = GameResult(cb_t.winner, cb_t.loser, ca_t.max_margin, cb_t.max_margin)
+            new_b = [cb_c, new_tight] + shared
+
+            return (new_a, new_b)
+
+        return None
+
+    # Rule 4: range-containment splitting — separate pass, runs after Rule 3.
+    # Iterates over all ordered (i, j) pairs so both narrow-in-a and narrow-in-b
+    # orientations are tried.
+    r4_changed = True
+    while r4_changed:
+        r4_changed = False
+        for i in range(len(atoms)):
+            for j in range(len(atoms)):
+                if i == j:
+                    continue
+                result = _try_rule4(atoms[i], atoms[j])
+                if result is not None:
+                    new_a, new_b = result
+                    atoms = [
+                        (new_a if k == i else (new_b if k == j else atom))
+                        for k, atom in enumerate(atoms)
+                    ]
+                    r4_changed = True
+                    break
+            if r4_changed:
+                break
+
+    # Final subsumption pass — Rule 4 may expose new subsumptions.
+    dominated = {
+        j
+        for i in range(len(atoms))
+        for j in range(len(atoms))
+        if i != j and _subsumes(atoms[i], atoms[j])
+    }
+    if dominated:
+        atoms = [atom for k, atom in enumerate(atoms) if k not in dominated]
+
     return atoms
 
 
@@ -778,6 +876,59 @@ def _valid_merge_groups(unc_masks: list[int], num_games: int) -> list[list[int]]
 
 
 # ---------------------------------------------------------------------------
+# Atom sort
+# ---------------------------------------------------------------------------
+
+
+def _sort_atom_list(atoms: list[list], remaining: list[RemainingGame]) -> list[list]:
+    """Return *atoms* sorted for deterministic, human-friendly display order.
+
+    Sort key (all ascending):
+
+    1. **Game count** — number of ``GameResult`` objects.  Fewer conditions
+       (broader statements) appear first, e.g. "Louisville beats Greenwood"
+       before a four-condition margin atom.
+    2. **Constrained flag** — atoms where every ``GameResult`` has
+       ``min_margin=1`` and ``max_margin=None`` (no margin restriction) sort
+       before atoms that carry any margin constraint.
+    3. **Winner-pattern tuple** — for each game in ``remaining`` order, encodes
+       0 (team-a wins), 1 (team-b wins), or 2 (game absent from this atom).
+       Groups atoms with identical game-winner patterns adjacent so that
+       margin variants of the same outcome cluster together.
+    4. **Min-margin tuple** — minimum margin values across ``GameResult``
+       objects in ``remaining`` order; puts tighter lower-bound constraints
+       later within a winner-pattern group.
+    """
+    from backend.helpers.data_classes import MarginCondition
+
+    pairs = [(rg.a, rg.b) for rg in remaining]
+
+    def _key(atom: list):
+        game_results = [c for c in atom if isinstance(c, GameResult)]
+        n_games = len(game_results)
+        is_constrained = any(
+            c.max_margin is not None or c.min_margin > 1 for c in game_results
+        ) or any(isinstance(c, MarginCondition) for c in atom)
+        winner_pattern = []
+        for a, b in pairs:
+            gr = next(
+                (
+                    c for c in game_results
+                    if (c.winner == a and c.loser == b) or (c.winner == b and c.loser == a)
+                ),
+                None,
+            )
+            if gr is None:
+                winner_pattern.append(2)
+            else:
+                winner_pattern.append(0 if gr.winner == a else 1)
+        min_margins = tuple(c.min_margin for c in game_results)
+        return (n_games, is_constrained, tuple(winner_pattern), min_margins)
+
+    return sorted(atoms, key=_key)
+
+
+# ---------------------------------------------------------------------------
 # Atom builder
 # ---------------------------------------------------------------------------
 
@@ -801,8 +952,12 @@ def build_scenario_atoms(
     3. For groups with exactly 2 margin-sensitive games, detecting binding sum/diff
        constraints and adding ``MarginCondition`` objects when they tighten the
        description and can be verified to reproduce the exact valid set.
-    4. Unconstrained groups (covering all 12^R margins for a mask) are merged
-       across masks — games whose winner varies across masks are omitted.
+    4. For each (team, seed) pair, any mask where team T holds seed S for *all*
+       12^R margin combinations is an "always-at-seed" mask.  These masks are
+       merged via ``_valid_merge_groups`` into compact game-winner atoms (e.g.
+       "Louisville beats Greenwood" collapses 8 masks into one atom).  Constrained
+       atoms from Step 3 are only emitted for teams whose (team, seed) is not
+       already covered by an always-at-seed atom.
 
     Args:
         teams: List of all team names in the region.
@@ -838,30 +993,58 @@ def build_scenario_atoms(
             key = (mask, tuple(order[:playoff_seeds]))
             groups.setdefault(key, []).append(margins)
 
-    # --- Step 2: Identify unconstrained groups (cover all 12^R margins for mask) ---
-    unconstrained_keys: set[tuple] = {k for k, ml in groups.items() if len(ml) == total_combos}
-
-    # Collect unconstrained masks per (team, seed) across ALL top-N orderings
-    team_seed_unc_masks: dict[tuple, list[int]] = {}
-    for (mask, top4) in unconstrained_keys:
+    # --- Step 2: Identify always-at-seed masks per (team, seed) ---
+    # A mask "always puts team T at seed S" when T holds seed S for every one of
+    # the total_combos margin combinations — regardless of how the other seeds
+    # shake out.  This is a strictly weaker condition than the old "unconstrained
+    # full-seeding" check, which required the *entire* top-N ordering to be
+    # identical for all margins.  The new check lets us emit a single compact
+    # game-winner atom for, e.g., Louisville #1 whenever Louisville beats
+    # Greenwood — even when the #2/#3/#4 positions still vary with margins.
+    mask_team_seed_margins: dict[tuple, int] = {}
+    for (mask, top4), ml in groups.items():
         for seed_idx, team in enumerate(top4):
-            team_seed_unc_masks.setdefault((team, seed_idx + 1), []).append(mask)
+            key = (mask, team, seed_idx + 1)
+            mask_team_seed_margins[key] = mask_team_seed_margins.get(key, 0) + len(ml)
+
+    always_at_seed: dict[tuple, list[int]] = {}  # (team, seed) -> list of masks
+    for mask in range(1 << R):
+        for team in teams:
+            for seed in range(1, playoff_seeds + 1):
+                if mask_team_seed_margins.get((mask, team, seed), 0) == total_combos:
+                    always_at_seed.setdefault((team, seed), []).append(mask)
+
+    # Fast lookup used in Step 4 to skip adding constrained atoms for teams
+    # whose seed is already fully covered by an always-at-seed atom.
+    always_covered: dict[tuple, set[int]] = {
+        (team, seed): set(masks) for (team, seed), masks in always_at_seed.items()
+    }
 
     result: dict[str, dict[int, list]] = {}
 
-    # --- Step 3: Unconstrained atoms — partition into valid merge groups ---
-    for (team, seed), masks in team_seed_unc_masks.items():
+    # --- Step 3: Always-at-seed atoms — partition into valid merge groups ---
+    # _valid_merge_groups finds maximal compact game-winner conditions; e.g. all
+    # 8 masks where Louisville beats Greenwood collapse to one atom.
+    for (team, seed), masks in always_at_seed.items():
         for group in _valid_merge_groups(masks, R):
             game_winners = _common_game_winners(group, remaining)
             atom: list = [GameResult(w, l, 1, None) for w, l in game_winners]
             result.setdefault(team, {}).setdefault(seed, []).append(atom)
 
     # --- Step 4: Constrained atoms — derive ranges + joint constraints per group ---
+    # For each (mask, top4) group that is not already fully covered, derive margin
+    # atoms and add them only for the teams that still need them (i.e. those whose
+    # (team, seed) is NOT already handled by an always-at-seed atom above).
     for (mask, top4), valid_margins_list in groups.items():
-        if (mask, top4) in unconstrained_keys:
+        uncovered_positions = [
+            (seed_idx, team)
+            for seed_idx, team in enumerate(top4)
+            if mask not in always_covered.get((team, seed_idx + 1), set())
+        ]
+        if not uncovered_positions:
             continue
         for atom in _derive_atom(mask, valid_margins_list, remaining, pairs):
-            for seed_idx, team in enumerate(top4):
+            for seed_idx, team in uncovered_positions:
                 result.setdefault(team, {}).setdefault(seed_idx + 1, []).append(atom)
 
     # --- Step 5: Eliminated atoms (seed > playoff_seeds) via cross-mask merging ---
@@ -903,11 +1086,14 @@ def build_scenario_atoms(
                 for atom in _derive_atom(mask, absent_margins, remaining, pairs):
                     result.setdefault(team, {}).setdefault(elim_seed, []).append(atom)
 
-    # --- Step 6: Boolean minimisation — collapse redundant margin ranges and
-    #             drop game conditions that don't affect the seeding outcome ---
+    # --- Step 6: Boolean minimisation then deterministic sort ---
+    # First collapse redundant margin ranges and drop irrelevant game conditions,
+    # then sort atoms into a stable, human-friendly order (see _sort_atom_list).
     for team in result:
         for seed in result[team]:
-            result[team][seed] = _simplify_atom_list(result[team][seed])
+            result[team][seed] = _sort_atom_list(
+                _simplify_atom_list(result[team][seed]), remaining
+            )
 
     return result
 

@@ -104,15 +104,15 @@ Madison Central
 1. Clinton beats Madison Central by 1\u20137 AND Oxford beats Starkville
 
 Eliminated if: (35.4%)
-1. Clinton beats Madison Central AND Starkville beats Oxford
-2. Clinton beats Madison Central by 8 or more"""
+1. Clinton beats Madison Central by 8 or more
+2. Clinton beats Madison Central AND Starkville beats Oxford"""
 
 CLINTON_EXPECTED = """\
 Clinton
 
 #4 seed if: (35.4%)
-1. Clinton beats Madison Central AND Starkville beats Oxford
-2. Clinton beats Madison Central by 8 or more
+1. Clinton beats Madison Central by 8 or more
+2. Clinton beats Madison Central AND Starkville beats Oxford
 
 Eliminated if: (64.6%)
 1. Madison Central beats Clinton
@@ -264,8 +264,19 @@ def test_atoms_mc_eliminated_count():
 
 
 def test_atoms_mc_eliminated_atom0():
-    """MC elimination first atom: Clinton beats MC AND Starkville beats Oxford (Clinton wins H2H vs MC)."""
+    """MC elimination first atom: Clinton beats MC by 8+ (Clinton wins 3-way H2H PD even if OXF beats STV)."""
     atom = _ATOMS["Madison Central"][5][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert gr.winner == "Clinton"
+    assert gr.loser == "Madison Central"
+    assert gr.min_margin == 8
+    assert gr.max_margin is None
+
+
+def test_atoms_mc_eliminated_atom1():
+    """MC elimination second atom: Clinton beats MC AND Starkville beats Oxford (Clinton wins H2H vs MC)."""
+    atom = _ATOMS["Madison Central"][5][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "Clinton"
@@ -277,17 +288,6 @@ def test_atoms_mc_eliminated_atom0():
     assert gr1.loser == "Oxford"
     assert gr1.min_margin == 1
     assert gr1.max_margin is None
-
-
-def test_atoms_mc_eliminated_atom1():
-    """MC elimination second atom: Clinton beats MC by 8+ (Clinton wins 3-way H2H PD even if OXF beats STV)."""
-    atom = _ATOMS["Madison Central"][5][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Clinton"
-    assert gr.loser == "Madison Central"
-    assert gr.min_margin == 8
-    assert gr.max_margin is None
 
 
 # ---------------------------------------------------------------------------
@@ -301,8 +301,19 @@ def test_atoms_clinton_seed4_count():
 
 
 def test_atoms_clinton_seed4_atom0():
-    """Clinton seed-4 first atom: Clinton beats MC AND Starkville beats Oxford (Clinton wins H2H)."""
+    """Clinton seed-4 first atom: Clinton beats MC by 8+ (any OXF/STV result — Clinton wins H2H PD)."""
     atom = _ATOMS["Clinton"][4][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert gr.winner == "Clinton"
+    assert gr.loser == "Madison Central"
+    assert gr.min_margin == 8
+    assert gr.max_margin is None
+
+
+def test_atoms_clinton_seed4_atom1():
+    """Clinton seed-4 second atom: Clinton beats MC AND Starkville beats Oxford (Clinton wins H2H)."""
+    atom = _ATOMS["Clinton"][4][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "Clinton"
@@ -314,17 +325,6 @@ def test_atoms_clinton_seed4_atom0():
     assert gr1.loser == "Oxford"
     assert gr1.min_margin == 1
     assert gr1.max_margin is None
-
-
-def test_atoms_clinton_seed4_atom1():
-    """Clinton seed-4 second atom: Clinton beats MC by 8+ (any OXF/STV result — Clinton wins H2H PD)."""
-    atom = _ATOMS["Clinton"][4][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Clinton"
-    assert gr.loser == "Madison Central"
-    assert gr.min_margin == 8
-    assert gr.max_margin is None
 
 
 def test_atoms_clinton_eliminated_count():

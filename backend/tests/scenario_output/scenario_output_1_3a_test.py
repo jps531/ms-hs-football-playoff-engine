@@ -104,8 +104,8 @@ Mantachie
 1. Mantachie beats Belmont by 9 or more AND Kossuth beats Alcorn Central
 
 #4 seed if: (41.7%)
-1. Mantachie beats Belmont AND Alcorn Central beats Kossuth
-2. Mantachie beats Belmont by 1\u20138 AND Kossuth beats Alcorn Central
+1. Mantachie beats Belmont by 1\u20138
+2. Alcorn Central beats Kossuth AND Mantachie beats Belmont by 9 or more
 
 Eliminated if: (50.0%)
 1. Belmont beats Mantachie"""
@@ -304,27 +304,27 @@ def test_atoms_man_seed4_count():
 
 
 def test_atoms_man_seed4_first_atom():
-    """First MAN seed-4 atom: MAN beats BEL (any) AND AC beats KOS (any)."""
+    """First MAN seed-4 atom: MAN beats BEL by 1–8 (KOS/AC game absent — irrelevant for this range)."""
     atom = _ATOMS["Mantachie"][4][0]
+    assert len(atom) == 1
+    gr_man = atom[0]
+    assert isinstance(gr_man, GameResult)
+    assert gr_man.winner == "Mantachie"
+    assert gr_man.loser == "Belmont"
+    assert gr_man.min_margin == 1
+    assert gr_man.max_margin == 9  # exclusive upper bound: margins 1–8
+
+
+def test_atoms_man_seed4_second_atom():
+    """Second MAN seed-4 atom: AC beats KOS AND MAN beats BEL by 9 or more."""
+    atom = _ATOMS["Mantachie"][4][1]
     assert len(atom) == 2
     gr_man = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Mantachie")
     gr_ac = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Alcorn Central")
     assert gr_man.loser == "Belmont"
-    assert gr_man.min_margin == 1
+    assert gr_man.min_margin == 9
     assert gr_man.max_margin is None
     assert gr_ac.loser == "Kossuth"
-
-
-def test_atoms_man_seed4_second_atom():
-    """Second MAN seed-4 atom: MAN beats BEL by 1–8 AND KOS beats AC (three-way PD)."""
-    atom = _ATOMS["Mantachie"][4][1]
-    assert len(atom) == 2
-    gr_man = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Mantachie")
-    gr_kos = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Kossuth")
-    assert gr_man.loser == "Belmont"
-    assert gr_man.min_margin == 1
-    assert gr_man.max_margin == 9  # exclusive upper bound: margins 1–8
-    assert gr_kos.loser == "Alcorn Central"
 
 
 def test_atoms_man_seed5_count():

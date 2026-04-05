@@ -90,15 +90,15 @@ Hattiesburg
 2. Terry beats Hattiesburg by 1\u201310 AND West Jones beats Jim Hill
 
 #2 seed if: (29.2%)
-1. Terry beats Hattiesburg AND Jim Hill beats West Jones
-2. Terry beats Hattiesburg by 11 or more"""
+1. Terry beats Hattiesburg by 11 or more
+2. Terry beats Hattiesburg AND Jim Hill beats West Jones"""
 
 TERRY_EXPECTED = """\
 Terry
 
 #1 seed if: (29.2%)
-1. Terry beats Hattiesburg AND Jim Hill beats West Jones
-2. Terry beats Hattiesburg by 11 or more
+1. Terry beats Hattiesburg by 11 or more
+2. Terry beats Hattiesburg AND Jim Hill beats West Jones
 
 #2 seed if: (8.3%)
 1. Terry beats Hattiesburg by 7\u201310 AND West Jones beats Jim Hill
@@ -115,8 +115,8 @@ West Jones
 2. Terry beats Hattiesburg by 1\u20136 AND West Jones beats Jim Hill
 
 #3 seed if: (37.5%)
-1. Terry beats Hattiesburg AND Jim Hill beats West Jones
-2. Terry beats Hattiesburg by 7 or more"""
+1. Terry beats Hattiesburg by 7 or more
+2. Terry beats Hattiesburg AND Jim Hill beats West Jones"""
 
 FOREST_HILL_EXPECTED = """\
 Forest Hill
@@ -125,8 +125,8 @@ Forest Hill
 1. Forest Hill beats George County by 9 or more AND West Jones beats Jim Hill
 
 Eliminated if: (91.7%)
-1. George County beats Forest Hill AND West Jones beats Jim Hill
-2. Jim Hill beats West Jones
+1. Jim Hill beats West Jones
+2. George County beats Forest Hill AND West Jones beats Jim Hill
 3. Forest Hill beats George County by 1\u20138 AND West Jones beats Jim Hill"""
 
 GEORGE_COUNTY_EXPECTED = """\
@@ -137,8 +137,8 @@ George County
 2. Forest Hill beats George County by 1\u20138 AND West Jones beats Jim Hill
 
 Eliminated if: (33.3%)
-1. Forest Hill beats George County AND Jim Hill beats West Jones
-2. Forest Hill beats George County by 9 or more"""
+1. Forest Hill beats George County by 9 or more
+2. Forest Hill beats George County AND Jim Hill beats West Jones"""
 
 JIM_HILL_EXPECTED = """\
 Jim Hill
@@ -238,19 +238,8 @@ def test_atoms_hat_seed2_count():
 
 
 def test_atoms_hat_seed2_atom0():
-    """HAT seed-2 atom 0: Terry beats HAT (any margin) AND Jim Hill beats WJ."""
+    """HAT seed-2 atom 0: Terry beats HAT by 11 or more. JH/WJ game absent."""
     atom = _ATOMS["Hattiesburg"][2][0]
-    assert len(atom) == 2
-    winners = {gr.winner for gr in atom}
-    assert "Terry" in winners
-    assert "Jim Hill" in winners
-    gr_ter = next(g for g in atom if g.winner == "Terry")
-    assert gr_ter.max_margin is None  # any margin
-
-
-def test_atoms_hat_seed2_atom1():
-    """HAT seed-2 atom 1: Terry beats HAT by 11 or more. JH/WJ game absent."""
-    atom = _ATOMS["Hattiesburg"][2][1]
     assert len(atom) == 1
     gr = atom[0]
     assert gr.winner == "Terry"
@@ -259,9 +248,20 @@ def test_atoms_hat_seed2_atom1():
     assert gr.max_margin is None
 
 
-def test_atoms_hat_seed2_atom1_jh_wj_absent():
-    """JH/WJ game is absent from HAT seed-2 atom 1 (TER by 11+ always gives HAT #2)."""
+def test_atoms_hat_seed2_atom1():
+    """HAT seed-2 atom 1: Terry beats HAT (any margin) AND Jim Hill beats WJ."""
     atom = _ATOMS["Hattiesburg"][2][1]
+    assert len(atom) == 2
+    winners = {gr.winner for gr in atom}
+    assert "Terry" in winners
+    assert "Jim Hill" in winners
+    gr_ter = next(g for g in atom if g.winner == "Terry")
+    assert gr_ter.max_margin is None  # any margin
+
+
+def test_atoms_hat_seed2_atom1_jh_wj_absent():
+    """JH/WJ game is absent from HAT seed-2 atom 0 (TER by 11+ always gives HAT #2)."""
+    atom = _ATOMS["Hattiesburg"][2][0]
     pairs = {(gr.winner, gr.loser) for gr in atom}
     assert ("Jim Hill", "West Jones") not in pairs
     assert ("West Jones", "Jim Hill") not in pairs
@@ -278,8 +278,8 @@ def test_atoms_terry_seed1_count():
 
 
 def test_atoms_terry_seed1_atom1():
-    """TER seed-1 atom 1: Terry beats HAT by 11 or more. JH/WJ game absent."""
-    atom = _ATOMS["Terry"][1][1]
+    """TER seed-1 atom 0: Terry beats HAT by 11 or more. JH/WJ game absent."""
+    atom = _ATOMS["Terry"][1][0]
     assert len(atom) == 1
     gr = atom[0]
     assert gr.winner == "Terry"
@@ -363,8 +363,8 @@ def test_atoms_wj_seed3_count():
 
 
 def test_atoms_wj_seed3_atom1():
-    """WJ seed-3 atom 1: Terry beats HAT by 7 or more. FH/GC and JH/WJ absent."""
-    atom = _ATOMS["West Jones"][3][1]
+    """WJ seed-3 atom 0: Terry beats HAT by 7 or more. FH/GC and JH/WJ absent."""
+    atom = _ATOMS["West Jones"][3][0]
     assert len(atom) == 1
     gr = atom[0]
     assert gr.winner == "Terry"
@@ -374,8 +374,8 @@ def test_atoms_wj_seed3_atom1():
 
 
 def test_atoms_wj_seed3_atom1_only_hat_ter():
-    """JH/WJ game absent from WJ seed-3 atom 1 (TER by 7+ always gives WJ #3)."""
-    atom = _ATOMS["West Jones"][3][1]
+    """JH/WJ game absent from WJ seed-3 atom 0 (TER by 7+ always gives WJ #3)."""
+    atom = _ATOMS["West Jones"][3][0]
     assert len(atom) == 1  # only the HAT/TER condition
 
 
@@ -422,22 +422,22 @@ def test_atoms_fh_eliminated_count():
 
 
 def test_atoms_fh_eliminated_atom0():
-    """FH eliminated atom 0: George County beats FH AND West Jones beats JH."""
+    """FH eliminated atom 0: Jim Hill beats West Jones (any FH/GC result → FH eliminated)."""
     atom = _ATOMS["Forest Hill"][5][0]
-    assert len(atom) == 2
-    winners = {gr.winner for gr in atom}
-    assert "George County" in winners
-    assert "West Jones" in winners
-
-
-def test_atoms_fh_eliminated_atom1():
-    """FH eliminated atom 1: Jim Hill beats West Jones (any FH/GC result → FH eliminated)."""
-    atom = _ATOMS["Forest Hill"][5][1]
     assert len(atom) == 1
     gr = atom[0]
     assert gr.winner == "Jim Hill"
     assert gr.loser == "West Jones"
     assert gr.max_margin is None
+
+
+def test_atoms_fh_eliminated_atom1():
+    """FH eliminated atom 1: George County beats FH AND West Jones beats JH."""
+    atom = _ATOMS["Forest Hill"][5][1]
+    assert len(atom) == 2
+    winners = {gr.winner for gr in atom}
+    assert "George County" in winners
+    assert "West Jones" in winners
 
 
 def test_atoms_fh_eliminated_atom2():
@@ -489,8 +489,8 @@ def test_atoms_gc_eliminated_count():
 
 
 def test_atoms_gc_eliminated_atom1():
-    """GC eliminated atom 1: Forest Hill beats GC by 9 or more. JH/WJ game absent."""
-    atom = _ATOMS["George County"][5][1]
+    """GC eliminated atom 0: Forest Hill beats GC by 9 or more. JH/WJ game absent."""
+    atom = _ATOMS["George County"][5][0]
     assert len(atom) == 1
     gr = atom[0]
     assert gr.winner == "Forest Hill"
@@ -500,8 +500,8 @@ def test_atoms_gc_eliminated_atom1():
 
 
 def test_atoms_gc_eliminated_atom1_jh_wj_absent():
-    """JH/WJ absent from GC eliminated atom 1 (FH by 9+ eliminates GC regardless of JH/WJ)."""
-    atom = _ATOMS["George County"][5][1]
+    """JH/WJ absent from GC eliminated atom 0 (FH by 9+ eliminates GC regardless of JH/WJ)."""
+    atom = _ATOMS["George County"][5][0]
     assert len(atom) == 1
 
 

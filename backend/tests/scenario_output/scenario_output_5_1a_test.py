@@ -73,15 +73,15 @@ Leake County
 2. Ethel beats Sebastopol AND Noxapater beats Leake County by 1\u20137
 
 #3 seed if: (35.4%)
-1. Sebastopol beats Ethel AND Noxapater beats Leake County
-2. Noxapater beats Leake County by 8 or more"""
+1. Noxapater beats Leake County by 8 or more
+2. Sebastopol beats Ethel AND Noxapater beats Leake County"""
 
 NOXAPATER_EXPECTED = """\
 Noxapater
 
 #2 seed if: (35.4%)
-1. Sebastopol beats Ethel AND Noxapater beats Leake County
-2. Noxapater beats Leake County by 8 or more
+1. Noxapater beats Leake County by 8 or more
+2. Sebastopol beats Ethel AND Noxapater beats Leake County
 
 #3 seed if: (27.1%)
 1. Ethel beats Sebastopol AND Noxapater beats Leake County by 1\u20137
@@ -104,8 +104,8 @@ Ethel
 2. Sebastopol beats Ethel by 3\u20134 AND Leake County beats Noxapater
 
 Eliminated if: (41.7%)
-1. Sebastopol beats Ethel AND Noxapater beats Leake County
-2. Sebastopol beats Ethel by 5 or more"""
+1. Sebastopol beats Ethel by 5 or more
+2. Sebastopol beats Ethel AND Noxapater beats Leake County"""
 
 SEBASTOPOL_EXPECTED = """\
 Sebastopol
@@ -114,8 +114,8 @@ Sebastopol
 1. Sebastopol beats Ethel by 9 or more AND Leake County beats Noxapater
 
 #4 seed if: (33.3%)
-1. Sebastopol beats Ethel AND Noxapater beats Leake County
-2. Sebastopol beats Ethel by 5\u20138
+1. Sebastopol beats Ethel by 5\u20138
+2. Sebastopol beats Ethel AND Noxapater beats Leake County
 
 Eliminated if: (58.3%)
 1. Ethel beats Sebastopol

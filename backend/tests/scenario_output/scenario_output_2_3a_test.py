@@ -79,15 +79,15 @@ Coahoma County
 2. Independence beats Coahoma County by 1\u20138 AND North Panola beats Holly Springs
 
 #2 seed if: (33.3%)
-1. Independence beats Coahoma County AND Holly Springs beats North Panola
-2. Independence beats Coahoma County by 9 or more"""
+1. Independence beats Coahoma County by 9 or more
+2. Independence beats Coahoma County AND Holly Springs beats North Panola"""
 
 HOLLY_SPRINGS_EXPECTED = """\
 Holly Springs
 
 #3 seed if: (33.3%)
-1. Independence beats Coahoma County AND Holly Springs beats North Panola
-2. Holly Springs beats North Panola by 9 or more
+1. Holly Springs beats North Panola by 9 or more
+2. Independence beats Coahoma County AND Holly Springs beats North Panola
 
 #4 seed if: (66.7%)
 1. North Panola beats Holly Springs
@@ -97,12 +97,12 @@ INDEPENDENCE_EXPECTED = """\
 Independence
 
 #1 seed if: (33.3%)
-1. Independence beats Coahoma County AND Holly Springs beats North Panola
-2. Independence beats Coahoma County by 9 or more
+1. Independence beats Coahoma County by 9 or more
+2. Independence beats Coahoma County AND Holly Springs beats North Panola
 
 #2 seed if: (41.7%)
-1. Independence beats Coahoma County by 1\u20138 AND North Panola beats Holly Springs
-2. Coahoma County beats Independence AND Holly Springs beats North Panola
+1. Coahoma County beats Independence AND Holly Springs beats North Panola
+2. Independence beats Coahoma County by 1\u20138 AND North Panola beats Holly Springs
 
 #3 seed if: (25.0%)
 1. Coahoma County beats Independence AND North Panola beats Holly Springs"""
@@ -118,8 +118,8 @@ North Panola
 2. Coahoma County beats Independence AND Holly Springs beats North Panola by 1\u20138
 
 #4 seed if: (33.3%)
-1. Independence beats Coahoma County AND Holly Springs beats North Panola
-2. Holly Springs beats North Panola by 9 or more"""
+1. Holly Springs beats North Panola by 9 or more
+2. Independence beats Coahoma County AND Holly Springs beats North Panola"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — seed key structure
@@ -198,8 +198,20 @@ def test_atoms_cc_seed2_count():
 
 
 def test_atoms_cc_seed2_first_atom():
-    """First CC seed-2 atom: IND wins (any) AND HS wins (any) — both unconstrained."""
+    """First CC seed-2 atom: standalone IND by 9+ (Rule 3 lifted the HS/NP condition)."""
     atom = _ATOMS["Coahoma County"][2][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert isinstance(gr, GameResult)
+    assert gr.winner == "Independence"
+    assert gr.loser == "Coahoma County"
+    assert gr.min_margin == 9
+    assert gr.max_margin is None
+
+
+def test_atoms_cc_seed2_second_atom_standalone():
+    """Second CC seed-2 atom: IND wins (any) AND HS wins (any) — both unconstrained."""
+    atom = _ATOMS["Coahoma County"][2][1]
     assert len(atom) == 2
     gr_ind = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Independence")
     gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
@@ -209,18 +221,6 @@ def test_atoms_cc_seed2_first_atom():
     assert gr_hs.loser == "North Panola"
     assert gr_hs.min_margin == 1
     assert gr_hs.max_margin is None
-
-
-def test_atoms_cc_seed2_second_atom_standalone():
-    """Second CC seed-2 atom: standalone IND by 9+ (Rule 3 lifted the HS/NP condition)."""
-    atom = _ATOMS["Coahoma County"][2][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert isinstance(gr, GameResult)
-    assert gr.winner == "Independence"
-    assert gr.loser == "Coahoma County"
-    assert gr.min_margin == 9
-    assert gr.max_margin is None
 
 
 # ---------------------------------------------------------------------------
@@ -234,20 +234,8 @@ def test_atoms_hs_seed3_count():
 
 
 def test_atoms_hs_seed3_first_atom():
-    """First HS seed-3 atom: IND wins (any) AND HS wins (any) — both unconstrained."""
+    """First HS seed-3 atom: standalone HS by 9+ (Rule 3 lifted the CC/IND condition)."""
     atom = _ATOMS["Holly Springs"][3][0]
-    assert len(atom) == 2
-    gr_ind = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Independence")
-    gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
-    assert gr_ind.loser == "Coahoma County"
-    assert gr_hs.loser == "North Panola"
-    assert gr_hs.min_margin == 1
-    assert gr_hs.max_margin is None
-
-
-def test_atoms_hs_seed3_second_atom_standalone():
-    """Second HS seed-3 atom: standalone HS by 9+ (Rule 3 lifted the CC/IND condition)."""
-    atom = _ATOMS["Holly Springs"][3][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -255,6 +243,18 @@ def test_atoms_hs_seed3_second_atom_standalone():
     assert gr.loser == "North Panola"
     assert gr.min_margin == 9
     assert gr.max_margin is None
+
+
+def test_atoms_hs_seed3_second_atom_standalone():
+    """Second HS seed-3 atom: IND wins (any) AND HS wins (any) — both unconstrained."""
+    atom = _ATOMS["Holly Springs"][3][1]
+    assert len(atom) == 2
+    gr_ind = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Independence")
+    gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
+    assert gr_ind.loser == "Coahoma County"
+    assert gr_hs.loser == "North Panola"
+    assert gr_hs.min_margin == 1
+    assert gr_hs.max_margin is None
 
 
 def test_atoms_hs_seed4_count():
@@ -298,18 +298,8 @@ def test_atoms_ind_seed1_count():
 
 
 def test_atoms_ind_seed1_first_atom():
-    """First IND seed-1 atom: IND wins (any) AND HS wins (any) — both unconstrained."""
+    """First IND seed-1 atom: standalone IND by 9+ (Rule 3 lifted the HS/NP condition)."""
     atom = _ATOMS["Independence"][1][0]
-    assert len(atom) == 2
-    gr_ind = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Independence")
-    gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
-    assert gr_ind.loser == "Coahoma County"
-    assert gr_hs.loser == "North Panola"
-
-
-def test_atoms_ind_seed1_second_atom_standalone():
-    """Second IND seed-1 atom: standalone IND by 9+ (Rule 3 lifted the HS/NP condition)."""
-    atom = _ATOMS["Independence"][1][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -319,14 +309,34 @@ def test_atoms_ind_seed1_second_atom_standalone():
     assert gr.max_margin is None
 
 
+def test_atoms_ind_seed1_second_atom_standalone():
+    """Second IND seed-1 atom: IND wins (any) AND HS wins (any) — both unconstrained."""
+    atom = _ATOMS["Independence"][1][1]
+    assert len(atom) == 2
+    gr_ind = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Independence")
+    gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
+    assert gr_ind.loser == "Coahoma County"
+    assert gr_hs.loser == "North Panola"
+
+
 def test_atoms_ind_seed2_count():
     """IND seed-2 has two alternative atoms."""
     assert len(_ATOMS["Independence"][2]) == 2
 
 
 def test_atoms_ind_seed2_first_atom():
-    """First IND seed-2 atom: IND beats CC by 1–8 AND NP beats HS."""
+    """First IND seed-2 atom: CC wins (any) AND HS wins (any) — both unconstrained."""
     atom = _ATOMS["Independence"][2][0]
+    assert len(atom) == 2
+    gr_cc = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Coahoma County")
+    gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
+    assert gr_cc.loser == "Independence"
+    assert gr_hs.loser == "North Panola"
+
+
+def test_atoms_ind_seed2_second_atom():
+    """Second IND seed-2 atom: IND beats CC by 1–8 AND NP beats HS."""
+    atom = _ATOMS["Independence"][2][1]
     assert len(atom) == 2
     gr_ind = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Independence")
     gr_np = next(c for c in atom if isinstance(c, GameResult) and c.winner == "North Panola")
@@ -334,16 +344,6 @@ def test_atoms_ind_seed2_first_atom():
     assert gr_ind.min_margin == 1
     assert gr_ind.max_margin == 9  # exclusive upper bound: margins 1–8
     assert gr_np.loser == "Holly Springs"
-
-
-def test_atoms_ind_seed2_second_atom():
-    """Second IND seed-2 atom: CC wins (any) AND HS wins (any) — both unconstrained."""
-    atom = _ATOMS["Independence"][2][1]
-    assert len(atom) == 2
-    gr_cc = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Coahoma County")
-    gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
-    assert gr_cc.loser == "Independence"
-    assert gr_hs.loser == "North Panola"
 
 
 def test_atoms_ind_seed3_count():
@@ -414,18 +414,8 @@ def test_atoms_np_seed4_count():
 
 
 def test_atoms_np_seed4_first_atom():
-    """First NP seed-4 atom: IND wins (any) AND HS wins (any) — both unconstrained."""
+    """First NP seed-4 atom: standalone HS by 9+ (Rule 3 lifted the CC/IND condition)."""
     atom = _ATOMS["North Panola"][4][0]
-    assert len(atom) == 2
-    gr_ind = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Independence")
-    gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
-    assert gr_ind.loser == "Coahoma County"
-    assert gr_hs.loser == "North Panola"
-
-
-def test_atoms_np_seed4_second_atom_standalone():
-    """Second NP seed-4 atom: standalone HS by 9+ (Rule 3 lifted the CC/IND condition)."""
-    atom = _ATOMS["North Panola"][4][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -433,6 +423,16 @@ def test_atoms_np_seed4_second_atom_standalone():
     assert gr.loser == "North Panola"
     assert gr.min_margin == 9
     assert gr.max_margin is None
+
+
+def test_atoms_np_seed4_second_atom_standalone():
+    """Second NP seed-4 atom: IND wins (any) AND HS wins (any) — both unconstrained."""
+    atom = _ATOMS["North Panola"][4][1]
+    assert len(atom) == 2
+    gr_ind = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Independence")
+    gr_hs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Holly Springs")
+    assert gr_ind.loser == "Coahoma County"
+    assert gr_hs.loser == "North Panola"
 
 
 # ---------------------------------------------------------------------------

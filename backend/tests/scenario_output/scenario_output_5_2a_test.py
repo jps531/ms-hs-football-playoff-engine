@@ -81,8 +81,8 @@ Lake
 2. Pelahatchie beats Puckett AND Scott Central beats Lake by 1\u20134
 
 #2 seed if: (41.7%)
-1. Puckett beats Pelahatchie AND Scott Central beats Lake
-2. Scott Central beats Lake by 5 or more"""
+1. Scott Central beats Lake by 5 or more
+2. Puckett beats Pelahatchie AND Scott Central beats Lake"""
 
 NEWTON_EXPECTED = "Newton\n\nClinched #4 seed. (100.0%)"
 
@@ -101,8 +101,8 @@ SCOTT_CENTRAL_EXPECTED = """\
 Scott Central
 
 #1 seed if: (41.7%)
-1. Puckett beats Pelahatchie AND Scott Central beats Lake
-2. Scott Central beats Lake by 5 or more
+1. Scott Central beats Lake by 5 or more
+2. Puckett beats Pelahatchie AND Scott Central beats Lake
 
 #2 seed if: (8.3%)
 1. Pelahatchie beats Puckett AND Scott Central beats Lake by 1\u20134

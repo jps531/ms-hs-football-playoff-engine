@@ -79,8 +79,8 @@ Franklin County
 1. Franklin County beats Jefferson County
 
 #2 seed if: (39.6%)
-1. Jefferson County beats Franklin County AND Crystal Springs beats Hazlehurst
-2. Jefferson County beats Franklin County by 1\u20137 AND Hazlehurst beats Crystal Springs
+1. Jefferson County beats Franklin County by 1\u20137
+2. Crystal Springs beats Hazlehurst AND Jefferson County beats Franklin County by 8 or more
 
 #3 seed if: (10.4%)
 1. Jefferson County beats Franklin County by 8 or more AND Hazlehurst beats Crystal Springs"""
@@ -183,31 +183,29 @@ def test_atoms_fc_seed2_count():
 
 
 def test_atoms_fc_seed2_first_atom():
-    """First FC seed-2 atom: JC wins (any margin) AND CS wins (any margin)."""
+    """First FC seed-2 atom: JC beats FC by 1–7 (CS/HAZ game absent — irrelevant for this range)."""
     atom = _ATOMS["Franklin County"][2][0]
+    assert len(atom) == 1
+    gr_jc = atom[0]
+    assert isinstance(gr_jc, GameResult)
+    assert gr_jc.winner == "Jefferson County"
+    assert gr_jc.loser == "Franklin County"
+    assert gr_jc.min_margin == 1
+    assert gr_jc.max_margin == 8  # exclusive upper bound: margins 1–7
+
+
+def test_atoms_fc_seed2_second_atom_margin_sensitive():
+    """Second FC seed-2 atom: CS beats HAZ (any margin) AND JC beats FC by 8 or more."""
+    atom = _ATOMS["Franklin County"][2][1]
     assert len(atom) == 2
     gr_jc = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Jefferson County")
     gr_cs = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Crystal Springs")
     assert gr_jc.loser == "Franklin County"
-    assert gr_jc.min_margin == 1
+    assert gr_jc.min_margin == 8
     assert gr_jc.max_margin is None
     assert gr_cs.loser == "Hazlehurst"
     assert gr_cs.min_margin == 1
     assert gr_cs.max_margin is None
-
-
-def test_atoms_fc_seed2_second_atom_margin_sensitive():
-    """Second FC seed-2 atom: JC wins by 1–7 AND HAZ wins (margin-sensitive)."""
-    atom = _ATOMS["Franklin County"][2][1]
-    assert len(atom) == 2
-    gr_jc = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Jefferson County")
-    gr_haz = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Hazlehurst")
-    assert gr_jc.loser == "Franklin County"
-    assert gr_jc.min_margin == 1
-    assert gr_jc.max_margin == 8  # exclusive upper bound: margins 1–7
-    assert gr_haz.loser == "Crystal Springs"
-    assert gr_haz.min_margin == 1
-    assert gr_haz.max_margin is None
 
 
 def test_atoms_fc_seed3_count():

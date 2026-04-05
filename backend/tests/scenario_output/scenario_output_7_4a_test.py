@@ -83,8 +83,8 @@ Columbia
 2. Poplarville beats Columbia by 1\u20136 AND McComb beats South Pike
 
 #2 seed if: (37.5%)
-1. Poplarville beats Columbia AND South Pike beats McComb
-2. Poplarville beats Columbia by 7 or more"""
+1. Poplarville beats Columbia by 7 or more
+2. Poplarville beats Columbia AND South Pike beats McComb"""
 
 MCCOMB_EXPECTED = """\
 McComb
@@ -93,19 +93,19 @@ McComb
 1. Columbia beats Poplarville AND McComb beats South Pike
 
 #3 seed if: (37.5%)
-1. Columbia beats Poplarville AND South Pike beats McComb by 1\u20136
-2. Poplarville beats Columbia AND McComb beats South Pike
+1. Poplarville beats Columbia AND McComb beats South Pike
+2. Columbia beats Poplarville AND South Pike beats McComb by 1\u20136
 
 #4 seed if: (37.5%)
-1. Poplarville beats Columbia AND South Pike beats McComb
-2. South Pike beats McComb by 7 or more"""
+1. South Pike beats McComb by 7 or more
+2. Poplarville beats Columbia AND South Pike beats McComb"""
 
 POPLARVILLE_EXPECTED = """\
 Poplarville
 
 #1 seed if: (37.5%)
-1. Poplarville beats Columbia AND South Pike beats McComb
-2. Poplarville beats Columbia by 7 or more
+1. Poplarville beats Columbia by 7 or more
+2. Poplarville beats Columbia AND South Pike beats McComb
 
 #2 seed if: (37.5%)
 1. Columbia beats Poplarville AND South Pike beats McComb
@@ -118,8 +118,8 @@ SOUTH_PIKE_EXPECTED = """\
 South Pike
 
 #3 seed if: (37.5%)
-1. Poplarville beats Columbia AND South Pike beats McComb
-2. South Pike beats McComb by 7 or more
+1. South Pike beats McComb by 7 or more
+2. Poplarville beats Columbia AND South Pike beats McComb
 
 #4 seed if: (62.5%)
 1. McComb beats South Pike
@@ -205,20 +205,8 @@ def test_atoms_col_seed2_count():
 
 
 def test_atoms_col_seed2_first_atom():
-    """First COL seed-2 atom: POP wins (any) AND SP wins (any) — both unconstrained."""
+    """First COL seed-2 atom: standalone POP by 7+ (Rule 3 lifted MCB/SP condition)."""
     atom = _ATOMS["Columbia"][2][0]
-    assert len(atom) == 2
-    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
-    gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
-    assert gr_pop.loser == "Columbia"
-    assert gr_pop.min_margin == 1
-    assert gr_pop.max_margin is None
-    assert gr_sp.loser == "McComb"
-
-
-def test_atoms_col_seed2_second_atom_standalone():
-    """Second COL seed-2 atom: standalone POP by 7+ (Rule 3 lifted MCB/SP condition)."""
-    atom = _ATOMS["Columbia"][2][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -226,6 +214,18 @@ def test_atoms_col_seed2_second_atom_standalone():
     assert gr.loser == "Columbia"
     assert gr.min_margin == 7
     assert gr.max_margin is None
+
+
+def test_atoms_col_seed2_second_atom_standalone():
+    """Second COL seed-2 atom: POP wins (any) AND SP wins (any) — both unconstrained."""
+    atom = _ATOMS["Columbia"][2][1]
+    assert len(atom) == 2
+    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
+    gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
+    assert gr_pop.loser == "Columbia"
+    assert gr_pop.min_margin == 1
+    assert gr_pop.max_margin is None
+    assert gr_sp.loser == "McComb"
 
 
 # ---------------------------------------------------------------------------
@@ -254,8 +254,18 @@ def test_atoms_mcb_seed3_count():
 
 
 def test_atoms_mcb_seed3_first_atom():
-    """First MCB seed-3 atom: COL wins (any) AND SP wins by 1–6 (three-way PD)."""
+    """First MCB seed-3 atom: POP wins (any) AND MCB wins (any) — both unconstrained."""
     atom = _ATOMS["McComb"][3][0]
+    assert len(atom) == 2
+    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
+    gr_mcb = next(c for c in atom if isinstance(c, GameResult) and c.winner == "McComb")
+    assert gr_pop.loser == "Columbia"
+    assert gr_mcb.loser == "South Pike"
+
+
+def test_atoms_mcb_seed3_second_atom():
+    """Second MCB seed-3 atom: COL wins (any) AND SP wins by 1–6 (three-way PD)."""
+    atom = _ATOMS["McComb"][3][1]
     assert len(atom) == 2
     gr_col = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Columbia")
     gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
@@ -265,34 +275,14 @@ def test_atoms_mcb_seed3_first_atom():
     assert gr_sp.max_margin == 7  # exclusive upper bound: margins 1–6
 
 
-def test_atoms_mcb_seed3_second_atom():
-    """Second MCB seed-3 atom: POP wins (any) AND MCB wins (any) — both unconstrained."""
-    atom = _ATOMS["McComb"][3][1]
-    assert len(atom) == 2
-    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
-    gr_mcb = next(c for c in atom if isinstance(c, GameResult) and c.winner == "McComb")
-    assert gr_pop.loser == "Columbia"
-    assert gr_mcb.loser == "South Pike"
-
-
 def test_atoms_mcb_seed4_count():
     """McComb seed-4 has two alternative atoms."""
     assert len(_ATOMS["McComb"][4]) == 2
 
 
 def test_atoms_mcb_seed4_first_atom():
-    """First MCB seed-4 atom: POP wins (any) AND SP wins (any) — both unconstrained."""
+    """First MCB seed-4 atom: standalone SP by 7+ (Rule 3 lifted COL/POP condition)."""
     atom = _ATOMS["McComb"][4][0]
-    assert len(atom) == 2
-    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
-    gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
-    assert gr_pop.loser == "Columbia"
-    assert gr_sp.loser == "McComb"
-
-
-def test_atoms_mcb_seed4_second_atom_standalone():
-    """Second MCB seed-4 atom: standalone SP by 7+ (Rule 3 lifted COL/POP condition)."""
-    atom = _ATOMS["McComb"][4][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -300,6 +290,16 @@ def test_atoms_mcb_seed4_second_atom_standalone():
     assert gr.loser == "McComb"
     assert gr.min_margin == 7
     assert gr.max_margin is None
+
+
+def test_atoms_mcb_seed4_second_atom_standalone():
+    """Second MCB seed-4 atom: POP wins (any) AND SP wins (any) — both unconstrained."""
+    atom = _ATOMS["McComb"][4][1]
+    assert len(atom) == 2
+    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
+    gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
+    assert gr_pop.loser == "Columbia"
+    assert gr_sp.loser == "McComb"
 
 
 # ---------------------------------------------------------------------------
@@ -313,18 +313,8 @@ def test_atoms_pop_seed1_count():
 
 
 def test_atoms_pop_seed1_first_atom():
-    """First POP seed-1 atom: POP wins (any) AND SP wins (any) — both unconstrained."""
+    """First POP seed-1 atom: standalone POP by 7+ (Rule 3 lifted MCB/SP condition)."""
     atom = _ATOMS["Poplarville"][1][0]
-    assert len(atom) == 2
-    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
-    gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
-    assert gr_pop.loser == "Columbia"
-    assert gr_sp.loser == "McComb"
-
-
-def test_atoms_pop_seed1_second_atom_standalone():
-    """Second POP seed-1 atom: standalone POP by 7+ (Rule 3 lifted MCB/SP condition)."""
-    atom = _ATOMS["Poplarville"][1][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -332,6 +322,16 @@ def test_atoms_pop_seed1_second_atom_standalone():
     assert gr.loser == "Columbia"
     assert gr.min_margin == 7
     assert gr.max_margin is None
+
+
+def test_atoms_pop_seed1_second_atom_standalone():
+    """Second POP seed-1 atom: POP wins (any) AND SP wins (any) — both unconstrained."""
+    atom = _ATOMS["Poplarville"][1][1]
+    assert len(atom) == 2
+    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
+    gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
+    assert gr_pop.loser == "Columbia"
+    assert gr_sp.loser == "McComb"
 
 
 def test_atoms_pop_seed2_count():
@@ -387,18 +387,8 @@ def test_atoms_sp_seed3_count():
 
 
 def test_atoms_sp_seed3_first_atom():
-    """First SP seed-3 atom: POP wins (any) AND SP wins (any) — both unconstrained."""
+    """First SP seed-3 atom: standalone SP by 7+ (Rule 3 lifted COL/POP condition)."""
     atom = _ATOMS["South Pike"][3][0]
-    assert len(atom) == 2
-    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
-    gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
-    assert gr_pop.loser == "Columbia"
-    assert gr_sp.loser == "McComb"
-
-
-def test_atoms_sp_seed3_second_atom_standalone():
-    """Second SP seed-3 atom: standalone SP by 7+ (Rule 3 lifted COL/POP condition)."""
-    atom = _ATOMS["South Pike"][3][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -406,6 +396,16 @@ def test_atoms_sp_seed3_second_atom_standalone():
     assert gr.loser == "McComb"
     assert gr.min_margin == 7
     assert gr.max_margin is None
+
+
+def test_atoms_sp_seed3_second_atom_standalone():
+    """Second SP seed-3 atom: POP wins (any) AND SP wins (any) — both unconstrained."""
+    atom = _ATOMS["South Pike"][3][1]
+    assert len(atom) == 2
+    gr_pop = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Poplarville")
+    gr_sp = next(c for c in atom if isinstance(c, GameResult) and c.winner == "South Pike")
+    assert gr_pop.loser == "Columbia"
+    assert gr_sp.loser == "McComb"
 
 
 def test_atoms_sp_seed4_count():

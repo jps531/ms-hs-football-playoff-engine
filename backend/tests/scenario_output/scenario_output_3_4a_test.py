@@ -88,8 +88,8 @@ Clarksdale
 2. Rosa Fort beats Clarksdale by 1\u20136 AND Senatobia beats Ripley
 
 #2 seed if: (33.3%)
-1. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
-2. Rosa Fort beats Clarksdale by 7\u201310
+1. Rosa Fort beats Clarksdale by 7\u201310
+2. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
 
 #3 seed if: (4.2%)
 1. Rosa Fort beats Clarksdale by 11 or more AND Senatobia beats Ripley"""
@@ -111,14 +111,14 @@ Rosa Fort
 1. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
 
 #2 seed if: (5.6%)
-1. Rosa Fort beats Clarksdale by 11 or more AND Senatobia beats Ripley
-2. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more
+1. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more
+2. Rosa Fort beats Clarksdale by 11 or more AND Senatobia beats Ripley
 
 #3 seed if: (69.4%)
-1. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
-2. Rosa Fort beats Clarksdale by 1\u201310 AND Senatobia beats Ripley
+1. Clarksdale beats Rosa Fort by 9 or more
+2. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
 3. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311
-4. Clarksdale beats Rosa Fort by 9 or more"""
+4. Rosa Fort beats Clarksdale by 1\u201310 AND Senatobia beats Ripley"""
 
 SENATOBIA_EXPECTED = """\
 Senatobia
@@ -127,10 +127,10 @@ Senatobia
 1. Rosa Fort beats Clarksdale by 7 or more AND Senatobia beats Ripley
 
 #2 seed if: (61.1%)
-1. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
-2. Rosa Fort beats Clarksdale by 1\u20136 AND Senatobia beats Ripley
+1. Clarksdale beats Rosa Fort by 9 or more
+2. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
 3. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311
-4. Clarksdale beats Rosa Fort by 9 or more
+4. Rosa Fort beats Clarksdale by 1\u20136 AND Senatobia beats Ripley
 
 #3 seed if: (1.4%)
 1. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more
@@ -231,8 +231,19 @@ def test_atoms_clarksdale_seed2_count():
 
 
 def test_atoms_clarksdale_seed2_atom0():
-    """Clarksdale seed-2 first atom: RF beats CLA AND RIP beats SEN (RF goes to #1 via H2H)."""
+    """Clarksdale seed-2 first atom: RF beats CLA by 7-10 (SEN leads H2H PD, becomes #1)."""
     atom = _ATOMS["Clarksdale"][2][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert gr.winner == "Rosa Fort"
+    assert gr.loser == "Clarksdale"
+    assert gr.min_margin == 7
+    assert gr.max_margin == 11  # exclusive; covers margins 7-10
+
+
+def test_atoms_clarksdale_seed2_atom1():
+    """Clarksdale seed-2 second atom: RF beats CLA AND RIP beats SEN (RF goes to #1 via H2H)."""
+    atom = _ATOMS["Clarksdale"][2][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "Rosa Fort"
@@ -244,17 +255,6 @@ def test_atoms_clarksdale_seed2_atom0():
     assert gr1.loser == "Senatobia"
     assert gr1.min_margin == 1
     assert gr1.max_margin is None
-
-
-def test_atoms_clarksdale_seed2_atom1():
-    """Clarksdale seed-2 second atom: RF beats CLA by 7-10 (SEN leads H2H PD, becomes #1)."""
-    atom = _ATOMS["Clarksdale"][2][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Rosa Fort"
-    assert gr.loser == "Clarksdale"
-    assert gr.min_margin == 7
-    assert gr.max_margin == 11  # exclusive; covers margins 7-10
 
 
 def test_atoms_clarksdale_seed3_count():
@@ -368,24 +368,8 @@ def test_atoms_rosa_fort_seed2_count():
 
 
 def test_atoms_rosa_fort_seed2_atom0():
-    """Rosa Fort seed-2 first atom: RF beats CLA by 11+ AND SEN beats RIP (RF wins H2H PD step)."""
+    """Rosa Fort seed-2 first atom: CLA wins by 1-8 AND RIP wins by 12+ (scenario 4a; RF gets #2 via step 3)."""
     atom = _ATOMS["Rosa Fort"][2][0]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Rosa Fort"
-    assert gr0.loser == "Clarksdale"
-    assert gr0.min_margin == 11
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Senatobia"
-    assert gr1.loser == "Ripley"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
-
-
-def test_atoms_rosa_fort_seed2_atom1():
-    """Rosa Fort seed-2 second atom: CLA wins by 1-8 AND RIP wins by 12+ (scenario 4a; RF gets #2 via step 3)."""
-    atom = _ATOMS["Rosa Fort"][2][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "Clarksdale"
@@ -399,19 +383,14 @@ def test_atoms_rosa_fort_seed2_atom1():
     assert gr1.max_margin is None
 
 
-def test_atoms_rosa_fort_seed3_count():
-    """Rosa Fort seed-3 has exactly four atoms."""
-    assert len(_ATOMS["Rosa Fort"][3]) == 4
-
-
-def test_atoms_rosa_fort_seed3_atom0():
-    """Rosa Fort seed-3 first atom: CLA beats RF AND SEN beats RIP (mask 1 — CLA is 4-0, RF is #3)."""
-    atom = _ATOMS["Rosa Fort"][3][0]
+def test_atoms_rosa_fort_seed2_atom1():
+    """Rosa Fort seed-2 second atom: RF beats CLA by 11+ AND SEN beats RIP (RF wins H2H PD step)."""
+    atom = _ATOMS["Rosa Fort"][2][1]
     assert len(atom) == 2
     gr0 = atom[0]
-    assert gr0.winner == "Clarksdale"
-    assert gr0.loser == "Rosa Fort"
-    assert gr0.min_margin == 1
+    assert gr0.winner == "Rosa Fort"
+    assert gr0.loser == "Clarksdale"
+    assert gr0.min_margin == 11
     assert gr0.max_margin is None
     gr1 = atom[1]
     assert gr1.winner == "Senatobia"
@@ -420,15 +399,31 @@ def test_atoms_rosa_fort_seed3_atom0():
     assert gr1.max_margin is None
 
 
+def test_atoms_rosa_fort_seed3_count():
+    """Rosa Fort seed-3 has exactly four atoms."""
+    assert len(_ATOMS["Rosa Fort"][3]) == 4
+
+
+def test_atoms_rosa_fort_seed3_atom0():
+    """Rosa Fort seed-3 first atom: CLA beats RF by 9+ (standalone margin — most favoring condition)."""
+    atom = _ATOMS["Rosa Fort"][3][0]
+    assert len(atom) == 1
+    gr0 = atom[0]
+    assert gr0.winner == "Clarksdale"
+    assert gr0.loser == "Rosa Fort"
+    assert gr0.min_margin == 9
+    assert gr0.max_margin is None
+
+
 def test_atoms_rosa_fort_seed3_atom1():
-    """Rosa Fort seed-3 second atom: RF beats CLA by 1-10 AND SEN beats RIP (mask 0 sub-scenarios 1a/1b)."""
+    """Rosa Fort seed-3 second atom: CLA beats RF AND SEN beats RIP (mask 1 — CLA is 4-0, RF is #3)."""
     atom = _ATOMS["Rosa Fort"][3][1]
     assert len(atom) == 2
     gr0 = atom[0]
-    assert gr0.winner == "Rosa Fort"
-    assert gr0.loser == "Clarksdale"
+    assert gr0.winner == "Clarksdale"
+    assert gr0.loser == "Rosa Fort"
     assert gr0.min_margin == 1
-    assert gr0.max_margin == 11  # exclusive; covers margins 1-10
+    assert gr0.max_margin is None
     gr1 = atom[1]
     assert gr1.winner == "Senatobia"
     assert gr1.loser == "Ripley"
@@ -468,30 +463,25 @@ def test_atoms_senatobia_seed2_count():
 
 
 def test_atoms_senatobia_seed2_atom0():
-    """Senatobia seed-2 first atom: CLA beats RF AND SEN beats RIP (mask 1 — SEN finishes 3-1 as #2)."""
+    """Senatobia seed-2 first atom: CLA beats RF by 9+ (standalone margin — absorbed unconstrained condition)."""
     atom = _ATOMS["Senatobia"][2][0]
+    assert len(atom) == 1
+    gr0 = atom[0]
+    assert gr0.winner == "Clarksdale"
+    assert gr0.loser == "Rosa Fort"
+    assert gr0.min_margin == 9
+    assert gr0.max_margin is None
+
+
+def test_atoms_senatobia_seed2_atom1():
+    """Senatobia seed-2 second atom: CLA beats RF AND SEN beats RIP (mask 1 — SEN finishes 3-1 as #2)."""
+    atom = _ATOMS["Senatobia"][2][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "Clarksdale"
     assert gr0.loser == "Rosa Fort"
     assert gr0.min_margin == 1
     assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Senatobia"
-    assert gr1.loser == "Ripley"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
-
-
-def test_atoms_senatobia_seed2_atom1():
-    """Senatobia seed-2 second atom: RF beats CLA by 1-6 AND SEN beats RIP (mask 0 sub-scenario 1a)."""
-    atom = _ATOMS["Senatobia"][2][1]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Rosa Fort"
-    assert gr0.loser == "Clarksdale"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin == 7  # exclusive; covers margins 1-6
     gr1 = atom[1]
     assert gr1.winner == "Senatobia"
     assert gr1.loser == "Ripley"

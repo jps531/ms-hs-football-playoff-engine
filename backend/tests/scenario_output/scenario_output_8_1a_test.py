@@ -66,8 +66,8 @@ LUMBERTON_EXPECTED = """\
 Lumberton
 
 #1 seed if: (27.1%)
-1. Resurrection beats Stringer AND Lumberton beats Taylorsville
-2. Lumberton beats Taylorsville by 12 or more
+1. Lumberton beats Taylorsville by 12 or more
+2. Resurrection beats Stringer AND Lumberton beats Taylorsville
 
 #3 seed if: (72.9%)
 1. Taylorsville beats Lumberton
@@ -85,8 +85,8 @@ Stringer
 2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1\u201311
 
 #3 seed if: (27.1%)
-1. Resurrection beats Stringer AND Lumberton beats Taylorsville
-2. Lumberton beats Taylorsville by 12 or more"""
+1. Lumberton beats Taylorsville by 12 or more
+2. Resurrection beats Stringer AND Lumberton beats Taylorsville"""
 
 TAYLORSVILLE_EXPECTED = """\
 Taylorsville
@@ -96,8 +96,8 @@ Taylorsville
 2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1\u201311
 
 #2 seed if: (27.1%)
-1. Resurrection beats Stringer AND Lumberton beats Taylorsville
-2. Lumberton beats Taylorsville by 12 or more"""
+1. Lumberton beats Taylorsville by 12 or more
+2. Resurrection beats Stringer AND Lumberton beats Taylorsville"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — structure
@@ -142,15 +142,16 @@ def test_atoms_resurrection_eliminated():
 
 
 def test_atoms_lumberton_seed1_margin_condition():
-    """Lumberton's second seed-1 atom is a standalone 'wins by 12+' condition (no Stringer clause).
+    """Lumberton's first seed-1 atom is a standalone 'wins by 12+' condition (no Stringer clause).
 
     Rule 3 simplification: [Resurrection+Lumb(any)] ∨ [Stringer+Lumb(12+)]
     becomes [Resurrection+Lumb(any)] ∨ [Lumb(12+)], dropping the Stringer game
     since 'Lumberton wins by 12+' is sufficient regardless of the Stringer result.
+    Sorts first because it is shorter (1 game vs 2 games).
     """
-    second_atom = _ATOMS["Lumberton"][1][1]
-    assert len(second_atom) == 1, "second atom should have exactly one condition after Rule 3 simplification"
-    margin_result = second_atom[0]
+    first_atom = _ATOMS["Lumberton"][1][0]
+    assert len(first_atom) == 1, "first atom should have exactly one condition after Rule 3 simplification"
+    margin_result = first_atom[0]
     assert isinstance(margin_result, GameResult)
     assert margin_result.winner == "Lumberton"
     assert margin_result.loser == "Taylorsville"
@@ -426,11 +427,11 @@ def test_team_dict_taylorsville_seed1_scenario_strings():
 
 
 def test_team_dict_taylorsville_seed2_scenario_strings():
-    """Taylorsville seed-2 has two scenario strings — Resurrection upsets and Lumberton wins big."""
+    """Taylorsville seed-2 has two scenario strings — Lumberton wins big (first, shorter) then Resurrection upsets."""
     scenarios = _TEAM_DICT["Taylorsville"][2]["scenarios"]
     assert len(scenarios) == 2
-    assert scenarios[0] == "Resurrection beats Stringer AND Lumberton beats Taylorsville"
-    assert scenarios[1] == "Lumberton beats Taylorsville by 12 or more"
+    assert scenarios[0] == "Lumberton beats Taylorsville by 12 or more"
+    assert scenarios[1] == "Resurrection beats Stringer AND Lumberton beats Taylorsville"
 
 
 def test_team_dict_weighted_odds_all_none():

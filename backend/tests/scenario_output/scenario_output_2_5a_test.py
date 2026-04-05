@@ -122,25 +122,25 @@ Lanier
 
 #2 seed if: (42.7%)
 1. Cleveland Central beats Provine AND Lanier beats Vicksburg
-2. Provine beats Cleveland Central AND Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20139
-3. Cleveland Central beats Provine AND Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20138
+2. Vicksburg beats Lanier by 1\u20138 AND Holmes County Central beats Florence
+3. Provine beats Cleveland Central AND Vicksburg beats Lanier by exactly 9 AND Holmes County Central beats Florence
 
 #3 seed if: (32.3%)
-1. Florence beats Holmes County Central AND Vicksburg beats Lanier
-2. Vicksburg beats Lanier by 10 or more
+1. Vicksburg beats Lanier by 10 or more
+2. Florence beats Holmes County Central AND Vicksburg beats Lanier
 3. Cleveland Central beats Provine AND Holmes County Central beats Florence AND Vicksburg beats Lanier by 9 or more"""
 
 VICKSBURG_EXPECTED = """\
 Vicksburg
 
 #2 seed if: (32.3%)
-1. Florence beats Holmes County Central AND Vicksburg beats Lanier
-2. Vicksburg beats Lanier by 10 or more
+1. Vicksburg beats Lanier by 10 or more
+2. Florence beats Holmes County Central AND Vicksburg beats Lanier
 3. Cleveland Central beats Provine AND Holmes County Central beats Florence AND Vicksburg beats Lanier by 9 or more
 
 #3 seed if: (17.7%)
-1. Provine beats Cleveland Central AND Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20139
-2. Cleveland Central beats Provine AND Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20138
+1. Vicksburg beats Lanier by 1\u20138 AND Holmes County Central beats Florence
+2. Provine beats Cleveland Central AND Vicksburg beats Lanier by exactly 9 AND Holmes County Central beats Florence
 
 #4 seed if: (25.0%)
 1. Holmes County Central beats Florence AND Lanier beats Vicksburg
@@ -422,27 +422,28 @@ def test_atoms_lanier_seed2_atom0():
 
 
 def test_atoms_lanier_seed2_atom1_margin():
-    """Lanier seed-2 atom 1: VB beats Lanier by 1–9 (max_margin=10) when Provine wins."""
+    """Lanier seed-2 atom 1: VB beats Lanier by 1–8 (max_margin=9); CC/PRO game absent."""
     atom = _ATOMS["Lanier"][2][1]
     gr_vb = next(g for g in atom if isinstance(g, GameResult) and g.winner == "Vicksburg")
     assert gr_vb.loser == "Lanier"
     assert gr_vb.min_margin == 1
-    assert gr_vb.max_margin == 10
-    # Provine beats CC in this atom
-    gr_pro = next(g for g in atom if isinstance(g, GameResult) and g.winner == "Provine")
-    assert gr_pro.loser == "Cleveland Central"
+    assert gr_vb.max_margin == 9
+    # CC/Provine game is absent — irrelevant when VB wins by 1–8
+    pairs = {(g.winner, g.loser) for g in atom if isinstance(g, GameResult)}
+    assert ("Cleveland Central", "Provine") not in pairs
+    assert ("Provine", "Cleveland Central") not in pairs
 
 
 def test_atoms_lanier_seed2_atom2_margin():
-    """Lanier seed-2 atom 2: VB beats Lanier by 1–8 (max_margin=9) when CC wins."""
+    """Lanier seed-2 atom 2: Provine beats CC AND VB beats Lanier by exactly 9 (min=9, max=10)."""
     atom = _ATOMS["Lanier"][2][2]
     gr_vb = next(g for g in atom if isinstance(g, GameResult) and g.winner == "Vicksburg")
     assert gr_vb.loser == "Lanier"
-    assert gr_vb.min_margin == 1
-    assert gr_vb.max_margin == 9
-    # Cleveland Central beats Provine in this atom
-    gr_cc = next(g for g in atom if isinstance(g, GameResult) and g.winner == "Cleveland Central")
-    assert gr_cc.loser == "Provine"
+    assert gr_vb.min_margin == 9
+    assert gr_vb.max_margin == 10  # exclusive upper bound: exactly 9
+    # Provine beats CC in this atom
+    gr_pro = next(g for g in atom if isinstance(g, GameResult) and g.winner == "Provine")
+    assert gr_pro.loser == "Cleveland Central"
 
 
 def test_atoms_lanier_seed3_count():
@@ -451,17 +452,8 @@ def test_atoms_lanier_seed3_count():
 
 
 def test_atoms_lanier_seed3_atom0():
-    """Lanier seed-3 atom 0: Florence beats HCC AND Vicksburg beats Lanier (any margin)."""
+    """Lanier seed-3 atom 0: Vicksburg beats Lanier by 10 or more (min_margin=10)."""
     atom = _ATOMS["Lanier"][3][0]
-    assert len(atom) == 2
-    winners = {gr.winner for gr in atom if isinstance(gr, GameResult)}
-    assert "Florence" in winners
-    assert "Vicksburg" in winners
-
-
-def test_atoms_lanier_seed3_atom1_margin():
-    """Lanier seed-3 atom 1: Vicksburg beats Lanier by 10 or more (min_margin=10)."""
-    atom = _ATOMS["Lanier"][3][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -469,6 +461,15 @@ def test_atoms_lanier_seed3_atom1_margin():
     assert gr.loser == "Lanier"
     assert gr.min_margin == 10
     assert gr.max_margin is None
+
+
+def test_atoms_lanier_seed3_atom1_margin():
+    """Lanier seed-3 atom 1: Florence beats HCC AND Vicksburg beats Lanier (any margin)."""
+    atom = _ATOMS["Lanier"][3][1]
+    assert len(atom) == 2
+    winners = {gr.winner for gr in atom if isinstance(gr, GameResult)}
+    assert "Florence" in winners
+    assert "Vicksburg" in winners
 
 
 def test_atoms_lanier_seed3_atom2_margin():
@@ -491,14 +492,12 @@ def test_atoms_vicksburg_seed2_count():
 
 
 def test_atoms_vicksburg_seed2_atom1_margin():
-    """Vicksburg seed-2 atom 1: VB beats Lanier by 10 or more."""
+    """Vicksburg seed-2 atom 1: Florence beats HCC AND Vicksburg beats Lanier (any margin)."""
     atom = _ATOMS["Vicksburg"][2][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Vicksburg"
-    assert gr.loser == "Lanier"
-    assert gr.min_margin == 10
-    assert gr.max_margin is None
+    assert len(atom) == 2
+    winners = {gr.winner for gr in atom if isinstance(gr, GameResult)}
+    assert "Florence" in winners
+    assert "Vicksburg" in winners
 
 
 def test_atoms_vicksburg_seed2_atom2_margin():
@@ -515,19 +514,23 @@ def test_atoms_vicksburg_seed3_count():
 
 
 def test_atoms_vicksburg_seed3_atom0_margin():
-    """Vicksburg seed-3 atom 0: Provine beats CC AND HCC beats FLO AND VB by 1–9."""
+    """Vicksburg seed-3 atom 0: VB by 1–8 AND HCC beats FLO; CC/PRO game absent."""
     atom = _ATOMS["Vicksburg"][3][0]
     gr_vb = next(g for g in atom if isinstance(g, GameResult) and g.winner == "Vicksburg")
     assert gr_vb.min_margin == 1
-    assert gr_vb.max_margin == 10
+    assert gr_vb.max_margin == 9
+    # CC/Provine game is absent — irrelevant when VB wins by 1–8
+    pairs = {(g.winner, g.loser) for g in atom if isinstance(g, GameResult)}
+    assert ("Cleveland Central", "Provine") not in pairs
+    assert ("Provine", "Cleveland Central") not in pairs
 
 
 def test_atoms_vicksburg_seed3_atom1_margin():
-    """Vicksburg seed-3 atom 1: CC beats Provine AND HCC beats FLO AND VB by 1–8."""
+    """Vicksburg seed-3 atom 1: Provine beats CC AND VB by exactly 9 (min=9, max=10)."""
     atom = _ATOMS["Vicksburg"][3][1]
     gr_vb = next(g for g in atom if isinstance(g, GameResult) and g.winner == "Vicksburg")
-    assert gr_vb.min_margin == 1
-    assert gr_vb.max_margin == 9
+    assert gr_vb.min_margin == 9
+    assert gr_vb.max_margin == 10  # exclusive upper bound: exactly 9
 
 
 def test_atoms_vicksburg_seed4_atom():
@@ -562,15 +565,18 @@ def test_atoms_vicksburg_eliminated_atom():
 
 
 def test_div_dict_scenario_keys():
-    """Division scenarios dict has exactly 9 keys: 1a, 1b, 2a, 2b, 3, 4, 5, 6, 7."""
-    assert set(_DIV_DICT.keys()) == {"1a", "1b", "2a", "2b", "3", "4", "5", "6", "7"}
+    """Division scenarios dict has exactly 8 keys: 1a, 1b, 2b, 3, 4, 5, 6, 7.
+
+    Note: previously had a '2a' key whose scenario (CC wins AND VB by 1–8) is now
+    merged into '1a' (VB by 1–8, CC/PRO irrelevant) after Rule-4 simplification.
+    """
+    assert set(_DIV_DICT.keys()) == {"1a", "1b", "2b", "3", "4", "5", "6", "7"}
 
 
 def test_div_dict_scenario1a_title():
-    """Scenario 1a: Provine beats CC AND HCC beats FLO AND VB beats Lanier by 1–9."""
+    """Scenario 1a: HCC beats FLO AND VB beats Lanier by 1–8 (CC/PRO irrelevant)."""
     assert _DIV_DICT["1a"]["title"] == (
-        "Provine beats Cleveland Central AND Holmes County Central beats Florence "
-        "AND Vicksburg beats Lanier by 1\u20139"
+        "Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20138"
     )
 
 
@@ -578,14 +584,6 @@ def test_div_dict_scenario1b_title():
     """Scenario 1b: HCC beats FLO AND VB beats Lanier by 10 or more."""
     assert _DIV_DICT["1b"]["title"] == (
         "Holmes County Central beats Florence AND Vicksburg beats Lanier by 10 or more"
-    )
-
-
-def test_div_dict_scenario2a_title():
-    """Scenario 2a: CC beats Provine AND HCC beats FLO AND VB beats Lanier by 1–8."""
-    assert _DIV_DICT["2a"]["title"] == (
-        "Cleveland Central beats Provine AND Holmes County Central beats Florence "
-        "AND Vicksburg beats Lanier by 1\u20138"
     )
 
 
@@ -636,14 +634,6 @@ def test_div_dict_scenario7_seeds():
     assert s["two_seed"] == "Lanier"
     assert s["three_seed"] == "Florence"
     assert s["four_seed"] == "Holmes County Central"
-
-
-def test_div_dict_1a_2a_identical_top4():
-    """Scenarios 1a and 2a produce the same top-4 seedings (different conditions, same result)."""
-    assert _DIV_DICT["1a"]["one_seed"] == _DIV_DICT["2a"]["one_seed"]
-    assert _DIV_DICT["1a"]["two_seed"] == _DIV_DICT["2a"]["two_seed"]
-    assert _DIV_DICT["1a"]["three_seed"] == _DIV_DICT["2a"]["three_seed"]
-    assert _DIV_DICT["1a"]["four_seed"] == _DIV_DICT["2a"]["four_seed"]
 
 
 def test_div_dict_1b_2b_identical_top4():

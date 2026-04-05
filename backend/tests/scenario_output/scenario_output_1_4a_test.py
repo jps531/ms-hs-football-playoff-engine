@@ -90,15 +90,15 @@ Corinth
 2. New Albany beats Corinth by 1\u20137 AND North Pontotoc beats Tishomingo County
 
 #2 seed if: (35.4%)
-1. New Albany beats Corinth AND Tishomingo County beats North Pontotoc
-2. New Albany beats Corinth by 8 or more"""
+1. New Albany beats Corinth by 8 or more
+2. New Albany beats Corinth AND Tishomingo County beats North Pontotoc"""
 
 NEW_ALBANY_EXPECTED = """\
 New Albany
 
 #1 seed if: (35.4%)
-1. New Albany beats Corinth AND Tishomingo County beats North Pontotoc
-2. New Albany beats Corinth by 8 or more
+1. New Albany beats Corinth by 8 or more
+2. New Albany beats Corinth AND Tishomingo County beats North Pontotoc
 
 #2 seed if: (39.6%)
 1. Corinth beats New Albany AND Tishomingo County beats North Pontotoc
@@ -114,19 +114,19 @@ North Pontotoc
 1. Corinth beats New Albany AND North Pontotoc beats Tishomingo County
 
 #3 seed if: (39.6%)
-1. Corinth beats New Albany AND Tishomingo County beats North Pontotoc by 1\u20137
-2. New Albany beats Corinth AND North Pontotoc beats Tishomingo County
+1. New Albany beats Corinth AND North Pontotoc beats Tishomingo County
+2. Corinth beats New Albany AND Tishomingo County beats North Pontotoc by 1\u20137
 
 #4 seed if: (35.4%)
-1. New Albany beats Corinth AND Tishomingo County beats North Pontotoc
-2. Tishomingo County beats North Pontotoc by 8 or more"""
+1. Tishomingo County beats North Pontotoc by 8 or more
+2. New Albany beats Corinth AND Tishomingo County beats North Pontotoc"""
 
 TISHOMINGO_COUNTY_EXPECTED = """\
 Tishomingo County
 
 #3 seed if: (35.4%)
-1. New Albany beats Corinth AND Tishomingo County beats North Pontotoc
-2. Tishomingo County beats North Pontotoc by 8 or more
+1. Tishomingo County beats North Pontotoc by 8 or more
+2. New Albany beats Corinth AND Tishomingo County beats North Pontotoc
 
 #4 seed if: (64.6%)
 1. North Pontotoc beats Tishomingo County
@@ -221,8 +221,19 @@ def test_atoms_corinth_seed2_count():
 
 
 def test_atoms_corinth_seed2_atom0():
-    """Corinth seed-2 first atom: NA beats COR any AND TC beats NP any (mask 0; NA goes to #1)."""
+    """Corinth seed-2 first atom: NA beats COR by 8+ (NA wins H2H PD in 3-way, becomes #1)."""
     atom = _ATOMS["Corinth"][2][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert gr.winner == "New Albany"
+    assert gr.loser == "Corinth"
+    assert gr.min_margin == 8
+    assert gr.max_margin is None
+
+
+def test_atoms_corinth_seed2_atom1():
+    """Corinth seed-2 second atom: NA beats COR any AND TC beats NP any (mask 0; NA goes to #1)."""
+    atom = _ATOMS["Corinth"][2][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "New Albany"
@@ -234,17 +245,6 @@ def test_atoms_corinth_seed2_atom0():
     assert gr1.loser == "North Pontotoc"
     assert gr1.min_margin == 1
     assert gr1.max_margin is None
-
-
-def test_atoms_corinth_seed2_atom1():
-    """Corinth seed-2 second atom: NA beats COR by 8+ (NA wins H2H PD in 3-way, becomes #1)."""
-    atom = _ATOMS["Corinth"][2][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "New Albany"
-    assert gr.loser == "Corinth"
-    assert gr.min_margin == 8
-    assert gr.max_margin is None
 
 
 # ---------------------------------------------------------------------------
@@ -258,8 +258,19 @@ def test_atoms_new_albany_seed1_count():
 
 
 def test_atoms_new_albany_seed1_atom0():
-    """New Albany seed-1 first atom: NA beats COR any AND TC beats NP any (mask 0)."""
+    """New Albany seed-1 first atom: NA beats COR by 8+ (wins H2H PD in 3-way tie in mask 2)."""
     atom = _ATOMS["New Albany"][1][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert gr.winner == "New Albany"
+    assert gr.loser == "Corinth"
+    assert gr.min_margin == 8
+    assert gr.max_margin is None
+
+
+def test_atoms_new_albany_seed1_atom1():
+    """New Albany seed-1 second atom: NA beats COR any AND TC beats NP any (mask 0)."""
+    atom = _ATOMS["New Albany"][1][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "New Albany"
@@ -271,17 +282,6 @@ def test_atoms_new_albany_seed1_atom0():
     assert gr1.loser == "North Pontotoc"
     assert gr1.min_margin == 1
     assert gr1.max_margin is None
-
-
-def test_atoms_new_albany_seed1_atom1():
-    """New Albany seed-1 second atom: NA beats COR by 8+ (wins H2H PD in 3-way tie in mask 2)."""
-    atom = _ATOMS["New Albany"][1][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "New Albany"
-    assert gr.loser == "Corinth"
-    assert gr.min_margin == 8
-    assert gr.max_margin is None
 
 
 def test_atoms_new_albany_seed2_count():
@@ -374,24 +374,8 @@ def test_atoms_north_pontotoc_seed3_count():
 
 
 def test_atoms_north_pontotoc_seed3_atom0():
-    """North Pontotoc seed-3 first atom: COR beats NA AND TC beats NP by 1-7 (scenario 2a)."""
+    """North Pontotoc seed-3 first atom: NA beats COR AND NP beats TC (unconditional #3)."""
     atom = _ATOMS["North Pontotoc"][3][0]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Corinth"
-    assert gr0.loser == "New Albany"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Tishomingo County"
-    assert gr1.loser == "North Pontotoc"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin == 8  # exclusive; covers margins 1-7
-
-
-def test_atoms_north_pontotoc_seed3_atom1():
-    """North Pontotoc seed-3 second atom: NA beats COR AND NP beats TC (mask 2; NP #3 regardless)."""
-    atom = _ATOMS["North Pontotoc"][3][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "New Albany"
@@ -405,14 +389,41 @@ def test_atoms_north_pontotoc_seed3_atom1():
     assert gr1.max_margin is None
 
 
+def test_atoms_north_pontotoc_seed3_atom1():
+    """North Pontotoc seed-3 second atom: COR beats NA AND TC beats NP by 1-7 (scenario 2a)."""
+    atom = _ATOMS["North Pontotoc"][3][1]
+    assert len(atom) == 2
+    gr0 = atom[0]
+    assert gr0.winner == "Corinth"
+    assert gr0.loser == "New Albany"
+    assert gr0.min_margin == 1
+    assert gr0.max_margin is None
+    gr1 = atom[1]
+    assert gr1.winner == "Tishomingo County"
+    assert gr1.loser == "North Pontotoc"
+    assert gr1.min_margin == 1
+    assert gr1.max_margin == 8  # exclusive; covers margins 1-7
+
+
 def test_atoms_north_pontotoc_seed4_count():
     """North Pontotoc seed-4 has exactly two atoms."""
     assert len(_ATOMS["North Pontotoc"][4]) == 2
 
 
 def test_atoms_north_pontotoc_seed4_atom0():
-    """North Pontotoc seed-4 first atom: NA beats COR any AND TC beats NP any (mask 0)."""
+    """North Pontotoc seed-4 first atom: TC beats NP by 8+ (TC wins H2H PD in 3-way, NP drops to #4)."""
     atom = _ATOMS["North Pontotoc"][4][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert gr.winner == "Tishomingo County"
+    assert gr.loser == "North Pontotoc"
+    assert gr.min_margin == 8
+    assert gr.max_margin is None
+
+
+def test_atoms_north_pontotoc_seed4_atom1():
+    """North Pontotoc seed-4 second atom: NA beats COR any AND TC beats NP any (mask 0)."""
+    atom = _ATOMS["North Pontotoc"][4][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "New Albany"
@@ -424,17 +435,6 @@ def test_atoms_north_pontotoc_seed4_atom0():
     assert gr1.loser == "North Pontotoc"
     assert gr1.min_margin == 1
     assert gr1.max_margin is None
-
-
-def test_atoms_north_pontotoc_seed4_atom1():
-    """North Pontotoc seed-4 second atom: TC beats NP by 8+ (TC wins H2H PD in 3-way, NP drops to #4)."""
-    atom = _ATOMS["North Pontotoc"][4][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Tishomingo County"
-    assert gr.loser == "North Pontotoc"
-    assert gr.min_margin == 8
-    assert gr.max_margin is None
 
 
 # ---------------------------------------------------------------------------
@@ -448,8 +448,19 @@ def test_atoms_tishomingo_county_seed3_count():
 
 
 def test_atoms_tishomingo_county_seed3_atom0():
-    """Tishomingo County seed-3 first atom: NA beats COR any AND TC beats NP any (mask 0)."""
+    """Tishomingo County seed-3 first atom: TC beats NP by 8+ (wins H2H PD tiebreaker in mask 1)."""
     atom = _ATOMS["Tishomingo County"][3][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert gr.winner == "Tishomingo County"
+    assert gr.loser == "North Pontotoc"
+    assert gr.min_margin == 8
+    assert gr.max_margin is None
+
+
+def test_atoms_tishomingo_county_seed3_atom1():
+    """Tishomingo County seed-3 second atom: NA beats COR any AND TC beats NP any (mask 0)."""
+    atom = _ATOMS["Tishomingo County"][3][1]
     assert len(atom) == 2
     gr0 = atom[0]
     assert gr0.winner == "New Albany"
@@ -461,17 +472,6 @@ def test_atoms_tishomingo_county_seed3_atom0():
     assert gr1.loser == "North Pontotoc"
     assert gr1.min_margin == 1
     assert gr1.max_margin is None
-
-
-def test_atoms_tishomingo_county_seed3_atom1():
-    """Tishomingo County seed-3 second atom: TC beats NP by 8+ (wins H2H PD tiebreaker in mask 1)."""
-    atom = _ATOMS["Tishomingo County"][3][1]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Tishomingo County"
-    assert gr.loser == "North Pontotoc"
-    assert gr.min_margin == 8
-    assert gr.max_margin is None
 
 
 def test_atoms_tishomingo_county_seed4_count():

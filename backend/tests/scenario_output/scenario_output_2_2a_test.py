@@ -76,8 +76,8 @@ Bruce
 1. Bruce beats Strayhorn by 9 or more AND Water Valley beats East Union
 
 #4 seed if: (33.3%)
-1. Bruce beats Strayhorn AND East Union beats Water Valley
-2. Bruce beats Strayhorn by 5\u20138
+1. Bruce beats Strayhorn by 5\u20138
+2. Bruce beats Strayhorn AND East Union beats Water Valley
 
 Eliminated if: (58.3%)
 1. Strayhorn beats Bruce
@@ -87,8 +87,8 @@ EAST_UNION_EXPECTED = """\
 East Union
 
 #3 seed if: (37.5%)
-1. Bruce beats Strayhorn AND East Union beats Water Valley
-2. Bruce beats Strayhorn by 3\u20138
+1. Bruce beats Strayhorn by 3\u20138
+2. Bruce beats Strayhorn AND East Union beats Water Valley
 
 #4 seed if: (62.5%)
 1. Strayhorn beats Bruce
@@ -106,8 +106,8 @@ Strayhorn
 1. Bruce beats Strayhorn by 3\u20134 AND Water Valley beats East Union
 
 Eliminated if: (41.7%)
-1. Bruce beats Strayhorn AND East Union beats Water Valley
-2. Bruce beats Strayhorn by 5 or more"""
+1. Bruce beats Strayhorn by 5 or more
+2. Bruce beats Strayhorn AND East Union beats Water Valley"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — seed key structure
@@ -180,17 +180,8 @@ def test_atoms_bruce_seed4_count():
 
 
 def test_atoms_bruce_seed4_first_atom():
-    """First Bruce seed-4 atom: Bruce wins (any) AND East Union wins."""
+    """First Bruce seed-4 atom: standalone Bruce wins by 5–8 (Rule 3 lifted WV condition)."""
     atom = _ATOMS["Bruce"][4][0]
-    gr_bruce = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Bruce")
-    gr_eu = next(c for c in atom if isinstance(c, GameResult) and c.winner == "East Union")
-    assert gr_bruce.min_margin == 1 and gr_bruce.max_margin is None
-    assert gr_eu.loser == "Water Valley"
-
-
-def test_atoms_bruce_seed4_second_atom_standalone():
-    """Second Bruce seed-4 atom: standalone Bruce wins by 5–8 (Rule 3 lifted WV condition)."""
-    atom = _ATOMS["Bruce"][4][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -198,6 +189,15 @@ def test_atoms_bruce_seed4_second_atom_standalone():
     assert gr.loser == "Strayhorn"
     assert gr.min_margin == 5
     assert gr.max_margin == 9  # exclusive upper bound: margins 5–8
+
+
+def test_atoms_bruce_seed4_second_atom_standalone():
+    """Second Bruce seed-4 atom: Bruce wins (any) AND East Union wins."""
+    atom = _ATOMS["Bruce"][4][1]
+    gr_bruce = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Bruce")
+    gr_eu = next(c for c in atom if isinstance(c, GameResult) and c.winner == "East Union")
+    assert gr_bruce.min_margin == 1 and gr_bruce.max_margin is None
+    assert gr_eu.loser == "Water Valley"
 
 
 def test_atoms_bruce_seed5_count():
@@ -239,17 +239,8 @@ def test_atoms_east_union_seed3_count():
 
 
 def test_atoms_east_union_seed3_first_atom():
-    """First EU seed-3 atom: Bruce wins (any) AND East Union wins."""
+    """First EU seed-3 atom: standalone Bruce wins by 3–8 (WV condition lifted by Rule 3)."""
     atom = _ATOMS["East Union"][3][0]
-    gr_bruce = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Bruce")
-    gr_eu = next(c for c in atom if isinstance(c, GameResult) and c.winner == "East Union")
-    assert gr_bruce.min_margin == 1 and gr_bruce.max_margin is None
-    assert gr_eu.loser == "Water Valley"
-
-
-def test_atoms_east_union_seed3_second_atom_standalone():
-    """Second EU seed-3 atom: standalone Bruce wins by 3–8 (WV condition lifted by Rule 3)."""
-    atom = _ATOMS["East Union"][3][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -257,6 +248,15 @@ def test_atoms_east_union_seed3_second_atom_standalone():
     assert gr.loser == "Strayhorn"
     assert gr.min_margin == 3
     assert gr.max_margin == 9  # exclusive upper bound: margins 3–8
+
+
+def test_atoms_east_union_seed3_second_atom_standalone():
+    """Second EU seed-3 atom: Bruce wins (any) AND East Union wins."""
+    atom = _ATOMS["East Union"][3][1]
+    gr_bruce = next(c for c in atom if isinstance(c, GameResult) and c.winner == "Bruce")
+    gr_eu = next(c for c in atom if isinstance(c, GameResult) and c.winner == "East Union")
+    assert gr_bruce.min_margin == 1 and gr_bruce.max_margin is None
+    assert gr_eu.loser == "Water Valley"
 
 
 def test_atoms_east_union_seed4_count():

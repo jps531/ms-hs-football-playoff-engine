@@ -102,15 +102,15 @@ H. W. Byers
 
 #2 seed if: (70.8%)
 1. Falkner beats Potts Camp AND H. W. Byers beats Ashland
-2. Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland
-3. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311
+2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311
+3. Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland
 
 #3 seed if: (2.1%)
 1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland
 
 #4 seed if: (27.1%)
-1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
-2. Ashland beats H. W. Byers by 12 or more"""
+1. Ashland beats H. W. Byers by 12 or more
+2. Potts Camp beats Falkner AND Ashland beats H. W. Byers"""
 
 POTTS_CAMP_EXPECTED = """\
 Potts Camp
@@ -120,20 +120,20 @@ Potts Camp
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311
 
 #2 seed if: (2.3%)
-1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more
-2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 12 or more
+1. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 12 or more
+2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more
 
 #3 seed if: (70.8%)
 1. Falkner beats Potts Camp AND H. W. Byers beats Ashland
-2. Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland
-3. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311"""
+2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311
+3. Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland"""
 
 ASHLAND_EXPECTED = """\
 Ashland
 
 #3 seed if: (27.1%)
-1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
-2. Ashland beats H. W. Byers by 12 or more
+1. Ashland beats H. W. Byers by 12 or more
+2. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 
 #4 seed if: (72.9%)
 1. H. W. Byers beats Ashland
