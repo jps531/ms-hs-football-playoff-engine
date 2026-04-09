@@ -476,24 +476,31 @@ def _predict_valid_set_2d(
 
 
 def _simplify_atom_list(atoms: list[list]) -> list[list]:
-    """Minimise a list of atoms using two boolean-simplification rules.
+    """Minimise a list of atoms using four boolean-simplification rules.
 
-    Applies the two rules iteratively until no further reduction is possible.
+    All rules run in an outer stability loop that repeats until no rule fires,
+    so applications of later rules can expose new opportunities for earlier ones.
 
     Rule 1 — Margin collapse:
-        Two atoms that are identical in every condition except that one game's
-        ``GameResult`` has adjacent or overlapping margin ranges (and the same
-        winner) are merged into a single atom whose margin range is the union of
-        the two.  After enough iterations, ranges that together span [1, 12]
-        collapse to an unconstrained ``GameResult`` (``min_margin=1``,
-        ``max_margin=None``).
+        Two atoms identical in every condition except that one game's
+        ``GameResult`` has adjacent or overlapping margin ranges (same winner)
+        are merged into a single atom whose range is the union of the two.
+        Ranges that together span [1, 12] collapse to an unconstrained
+        ``GameResult`` (``min_margin=1``, ``max_margin=None``).
 
     Rule 2 — Game elimination:
-        Two atoms that are identical except that one game appears with opposite
-        winners in the two atoms, and no ``MarginCondition`` in either atom
-        references that game pair, are merged by dropping that game condition
-        entirely.  If this leaves an empty condition list the result is
-        ``[[]]`` — an unconditional atom that subsumes all others.
+        Two atoms identical except one game appears with opposite unconstrained
+        winners are merged by dropping that game condition entirely.
+
+    Rule 3 — Complementary lifting:
+        ``(X_a ∧ G[lo+] ∧ R) ∨ (X_b ∧ G[hi+] ∧ R)`` where lo < hi rewrites
+        b to ``G[hi+] ∧ R``, dropping X_b since G[hi+] already implies the
+        result regardless of which team wins X.
+
+    Rule 4 — Range-containment splitting:
+        ``(X_a ∧ G[lo..M) ∧ R) ∨ (X_b ∧ G[lo..N) ∧ R)`` where M < N rewrites
+        to ``(G[lo..M) ∧ R) ∨ (X_b ∧ G[M..N) ∧ R)``.  Both ranges must share
+        the same lower bound ``lo``; X result is irrelevant for the narrow range.
 
     Args:
         atoms: List of atoms, each atom being a list of ``GameResult`` /
@@ -784,11 +791,11 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
             if cb_c.min_margin != 1 or cb_c.max_margin is not None:
                 continue
 
-            # p_tight: same winner, both start at 1, a's range strictly contained in b's
+            # p_tight: same winner, same lower bound, a's range strictly narrower
             if ca_t.winner != cb_t.winner or ca_t.loser != cb_t.loser:
                 continue
-            if ca_t.min_margin != 1 or cb_t.min_margin != 1:
-                continue
+            if ca_t.min_margin != cb_t.min_margin:
+                continue  # lower bounds must match
             if ca_t.max_margin is None:
                 continue  # a is unbounded — not strictly narrower
             # a.max_margin < b.max_margin (None = ∞)
@@ -808,37 +815,90 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
 
         return None
 
-    # Rule 4: range-containment splitting — separate pass, runs after Rule 3.
-    # Iterates over all ordered (i, j) pairs so both narrow-in-a and narrow-in-b
-    # orientations are tried.
-    r4_changed = True
-    while r4_changed:
-        r4_changed = False
-        for i in range(len(atoms)):
-            for j in range(len(atoms)):
-                if i == j:
-                    continue
-                result = _try_rule4(atoms[i], atoms[j])
-                if result is not None:
-                    new_a, new_b = result
-                    atoms = [
-                        (new_a if k == i else (new_b if k == j else atom))
-                        for k, atom in enumerate(atoms)
-                    ]
-                    r4_changed = True
-                    break
-            if r4_changed:
-                break
+    # ---------------------------------------------------------------------------
+    # Outer stability loop — repeats until no rule fires in a full pass.
+    # Later rules can expose new opportunities for earlier ones.
+    # ---------------------------------------------------------------------------
+    globally_changed = True
+    while globally_changed:
+        globally_changed = False
 
-    # Final subsumption pass — Rule 4 may expose new subsumptions.
-    dominated = {
-        j
-        for i in range(len(atoms))
-        for j in range(len(atoms))
-        if i != j and _subsumes(atoms[i], atoms[j])
-    }
-    if dominated:
-        atoms = [atom for k, atom in enumerate(atoms) if k not in dominated]
+        # Rules 1/2: iterative merge until stable
+        r12_changed = True
+        while r12_changed:
+            r12_changed = False
+            if any(len(atom) == 0 for atom in atoms):
+                return [[]]
+            new_atoms: list[list] = []
+            used: set[int] = set()
+            for i in range(len(atoms)):
+                if i in used:
+                    continue
+                found_pair = False
+                for j in range(i + 1, len(atoms)):
+                    if j in used:
+                        continue
+                    merged = _try_merge(atoms[i], atoms[j])
+                    if merged is not None:
+                        new_atoms.append(merged)
+                        used.add(i)
+                        used.add(j)
+                        r12_changed = True
+                        globally_changed = True
+                        found_pair = True
+                        break
+                if not found_pair:
+                    new_atoms.append(atoms[i])
+            atoms = new_atoms
+
+        # Subsumption: remove atoms strictly subsumed by a simpler atom
+        dominated = {
+            j
+            for i in range(len(atoms))
+            for j in range(len(atoms))
+            if i != j and _subsumes(atoms[i], atoms[j])
+        }
+        if dominated:
+            atoms = [atom for k, atom in enumerate(atoms) if k not in dominated]
+            globally_changed = True
+
+        # Rule 3: complementary lifting
+        r3_changed = True
+        while r3_changed:
+            r3_changed = False
+            for i in range(len(atoms)):
+                for j in range(len(atoms)):
+                    if i == j:
+                        continue
+                    new_b = _try_rule3(atoms[i], atoms[j])
+                    if new_b is not None:
+                        atoms = [new_b if k == j else atom for k, atom in enumerate(atoms)]
+                        r3_changed = True
+                        globally_changed = True
+                        break
+                if r3_changed:
+                    break
+
+        # Rule 4: range-containment splitting — try all ordered pairs
+        r4_changed = True
+        while r4_changed:
+            r4_changed = False
+            for i in range(len(atoms)):
+                for j in range(len(atoms)):
+                    if i == j:
+                        continue
+                    result = _try_rule4(atoms[i], atoms[j])
+                    if result is not None:
+                        new_a, new_b = result
+                        atoms = [
+                            (new_a if k == i else (new_b if k == j else atom))
+                            for k, atom in enumerate(atoms)
+                        ]
+                        r4_changed = True
+                        globally_changed = True
+                        break
+                if r4_changed:
+                    break
 
     return atoms
 
