@@ -172,7 +172,6 @@ def _find_combined_atom(
 # ---------------------------------------------------------------------------
 
 
-
 def _eval_mc(mc, margins: dict) -> bool:
     """Evaluate a MarginCondition against a margins dict keyed by (team_a, team_b) pairs."""
     val = sum(margins[p] for p in mc.add) - sum(margins[p] for p in mc.sub)
@@ -210,18 +209,14 @@ def _split_non_rectangular_atom(
 
     for i0 in range(R):
         for i1 in range(i0 + 1, R):
-            valid_2d = {
-                (m[pairs[i0]], m[pairs[i1]])
-                for m in valid_margins_list
-            }
+            valid_2d = {(m[pairs[i0]], m[pairs[i1]]) for m in valid_margins_list}
             prod_2d = (highs[i0] - lows[i0] + 1) * (highs[i1] - lows[i1] + 1)
             if len(valid_2d) == prod_2d:
                 continue  # Rectangular for this pair — try the next
 
             # Group i0 margin values by the frozenset of valid i1 margins
             game1_by_game0: dict[int, frozenset] = {
-                s: frozenset(p for (s2, p) in valid_2d if s2 == s)
-                for s in range(lows[i0], highs[i0] + 1)
+                s: frozenset(p for (s2, p) in valid_2d if s2 == s) for s in range(lows[i0], highs[i0] + 1)
             }
             range_to_game0: dict[frozenset, list[int]] = {}
             for s, p_set in game1_by_game0.items():
@@ -264,8 +259,7 @@ def _split_non_rectangular_atom(
 
             # Forward grouping failed — try reverse: group i1 values by i0 frozenset
             game0_by_game1: dict[int, frozenset] = {
-                p: frozenset(s for (s, p2) in valid_2d if p2 == p)
-                for p in range(lows[i1], highs[i1] + 1)
+                p: frozenset(s for (s, p2) in valid_2d if p2 == p) for p in range(lows[i1], highs[i1] + 1)
             }
             range_to_game1: dict[frozenset, list[int]] = {}
             for p, s_set in game0_by_game1.items():
@@ -308,11 +302,43 @@ def _split_non_rectangular_atom(
     return None
 
 
+def _is_margin_sensitive_mask(
+    teams,
+    completed,
+    remaining,
+    mask: int,
+    pairs: list[tuple],
+    pa_win: int,
+    base_margin_default: int,
+    playoff_seeds: int,
+) -> bool:
+    """Return True if the mask's top-N seeding varies with winning margins.
+
+    Evaluates ``resolve_standings_for_mask`` at all 2^R corners of the margin
+    hypercube (each game margin is either 1 or 12).  All tiebreaker comparison
+    functions (Steps 3-5) are linear in each margin variable, so extreme values
+    are attained at vertices of the hyperrectangle.  If every vertex produces the
+    same top-N seeding, the seeding is identical for all interior margins as well.
+    """
+    R = len(remaining)
+    reference: tuple | None = None
+    for corner in product((1, 12), repeat=R):
+        margins = {pairs[i]: corner[i] for i in range(R)}
+        order = resolve_standings_for_mask(teams, completed, remaining, mask, margins, base_margin_default, pa_win)
+        top_n = tuple(order[:playoff_seeds])
+        if reference is None:
+            reference = top_n
+        elif top_n != reference:
+            return True
+    return False
+
+
 def _derive_atom(
     mask: int,
     valid_margins_list: list[dict],
     remaining: list[RemainingGame],
     pairs: list[tuple[str, str]],
+    all_margins_valid: bool = False,
 ) -> list[list]:
     """Derive human-readable atoms (GameResult + MarginCondition lists) for a (mask, seeding) group.
 
@@ -334,6 +360,17 @@ def _derive_atom(
     R = len(remaining)
 
     # --- Step 1: per-game ranges ---
+    if all_margins_valid:
+        # Every margin combination is valid — no range computation needed.
+        # Build a single unconstrained atom (min_margin=1, max_margin=None for each game).
+        atom: list = []
+        for i, rg in enumerate(remaining):
+            a_wins = bool((mask >> i) & 1)
+            winner = rg.a if a_wins else rg.b
+            loser = rg.b if a_wins else rg.a
+            atom.append(GameResult(winner, loser, min_margin=1, max_margin=None))
+        return [atom]
+
     lows = [12] * R
     highs = [1] * R
     for margins in valid_margins_list:
@@ -366,9 +403,7 @@ def _derive_atom(
         # Joint constraints only attempted for exactly 2 sensitive games.
         # For non-rectangular sets here, try to split into exact sub-atoms.
         if non_rectangular:
-            split = _split_non_rectangular_atom(
-                mask, valid_margins_list, remaining, pairs, lows, highs, atom
-            )
+            split = _split_non_rectangular_atom(mask, valid_margins_list, remaining, pairs, lows, highs, atom)
             if split is not None:
                 return split
         return [atom]
@@ -377,10 +412,7 @@ def _derive_atom(
     pair0, pair1 = pairs[i0], pairs[i1]
 
     # Project to 2-D valid set
-    valid_2d: set[tuple[int, int]] = {
-        (margins[pair0], margins[pair1])
-        for margins in valid_margins_list
-    }
+    valid_2d: set[tuple[int, int]] = {(margins[pair0], margins[pair1]) for margins in valid_margins_list}
 
     # --- Step 4: detect binding sum / diff constraints ---
     sums = [v0 + v1 for v0, v1 in valid_2d]
@@ -447,9 +479,7 @@ def _derive_atom(
     # Joint constraints couldn't describe the valid set exactly.
     # For non-rectangular valid sets, try splitting into multiple exact sub-atoms.
     if non_rectangular:
-        split = _split_non_rectangular_atom(
-            mask, valid_margins_list, remaining, pairs, lows, highs, atom
-        )
+        split = _split_non_rectangular_atom(mask, valid_margins_list, remaining, pairs, lows, highs, atom)
         if split is not None:
             return split
 
@@ -459,8 +489,10 @@ def _derive_atom(
 
 
 def _predict_valid_set_2d(
-    lo0: int, hi0: int,
-    lo1: int, hi1: int,
+    lo0: int,
+    hi0: int,
+    lo1: int,
+    hi1: int,
     margin_conds: list,
     pair0: tuple[str, str],
     pair1: tuple[str, str],
@@ -596,9 +628,7 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
                 if p in mc.add or p in mc.sub:
                     return None
             return [
-                (gr_a[val] if kind == "gr" else mc_a[val])
-                for kind, val in order
-                if not (kind == "gr" and val == p)
+                (gr_a[val] if kind == "gr" else mc_a[val]) for kind, val in order if not (kind == "gr" and val == p)
             ]
 
         return None
@@ -723,12 +753,7 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
 
     # Subsumption: remove any atom strictly subsumed by a simpler atom.
     # One pass is sufficient; subsumption only removes atoms, never adds them.
-    dominated = {
-        j
-        for i in range(len(atoms))
-        for j in range(len(atoms))
-        if i != j and _subsumes(atoms[i], atoms[j])
-    }
+    dominated = {j for i in range(len(atoms)) for j in range(len(atoms)) if i != j and _subsumes(atoms[i], atoms[j])}
     if dominated:
         atoms = [atom for k, atom in enumerate(atoms) if k not in dominated]
 
@@ -853,10 +878,7 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
 
         # Subsumption: remove atoms strictly subsumed by a simpler atom
         dominated = {
-            j
-            for i in range(len(atoms))
-            for j in range(len(atoms))
-            if i != j and _subsumes(atoms[i], atoms[j])
+            j for i in range(len(atoms)) for j in range(len(atoms)) if i != j and _subsumes(atoms[i], atoms[j])
         }
         if dominated:
             atoms = [atom for k, atom in enumerate(atoms) if k not in dominated]
@@ -890,10 +912,7 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
                     result = _try_rule4(atoms[i], atoms[j])
                     if result is not None:
                         new_a, new_b = result
-                        atoms = [
-                            (new_a if k == i else (new_b if k == j else atom))
-                            for k, atom in enumerate(atoms)
-                        ]
+                        atoms = [(new_a if k == i else (new_b if k == j else atom)) for k, atom in enumerate(atoms)]
                         r4_changed = True
                         globally_changed = True
                         break
@@ -966,16 +985,13 @@ def _sort_atom_list(atoms: list[list], remaining: list[RemainingGame]) -> list[l
     def _key(atom: list):
         game_results = [c for c in atom if isinstance(c, GameResult)]
         n_games = len(game_results)
-        is_constrained = any(
-            c.max_margin is not None or c.min_margin > 1 for c in game_results
-        ) or any(isinstance(c, MarginCondition) for c in atom)
+        is_constrained = any(c.max_margin is not None or c.min_margin > 1 for c in game_results) or any(
+            isinstance(c, MarginCondition) for c in atom
+        )
         winner_pattern = []
         for a, b in pairs:
             gr = next(
-                (
-                    c for c in game_results
-                    if (c.winner == a and c.loser == b) or (c.winner == b and c.loser == a)
-                ),
+                (c for c in game_results if (c.winner == a and c.loser == b) or (c.winner == b and c.loser == a)),
                 None,
             )
             if gr is None:
@@ -1039,19 +1055,33 @@ def build_scenario_atoms(
         return {}
 
     pairs = [(rg.a, rg.b) for rg in remaining]
-    total_combos = 12 ** R
+    total_combos = 12**R
 
     # --- Step 1: Group by (mask, top-N seeding) ---
-    groups: dict[tuple, list[dict]] = {}
+    # Short-circuit: if a mask is not margin-sensitive (all 2^R corner evaluations
+    # produce the same top-N seeding), skip the full 12^R margin enumeration and
+    # record the key in non_sensitive_keys instead.  Sensitive masks are stored in
+    # groups with their actual margin lists.
+    groups: dict[tuple, list[dict]] = {}  # sensitive masks only
+    non_sensitive_keys: set[tuple] = set()  # (mask, top_n) for non-sensitive masks
 
     for mask in range(1 << R):
-        for margin_combo in product(range(1, 13), repeat=R):
-            margins = {pairs[i]: margin_combo[i] for i in range(R)}
+        if not _is_margin_sensitive_mask(
+            teams, completed, remaining, mask, pairs, pa_win, base_margin_default, playoff_seeds
+        ):
+            ref_margins = {pairs[i]: 1 for i in range(R)}
             order = resolve_standings_for_mask(
-                teams, completed, remaining, mask, margins, base_margin_default, pa_win
+                teams, completed, remaining, mask, ref_margins, base_margin_default, pa_win
             )
-            key = (mask, tuple(order[:playoff_seeds]))
-            groups.setdefault(key, []).append(margins)
+            non_sensitive_keys.add((mask, tuple(order[:playoff_seeds])))
+        else:
+            for margin_combo in product(range(1, 13), repeat=R):
+                margins = {pairs[i]: margin_combo[i] for i in range(R)}
+                order = resolve_standings_for_mask(
+                    teams, completed, remaining, mask, margins, base_margin_default, pa_win
+                )
+                key = (mask, tuple(order[:playoff_seeds]))
+                groups.setdefault(key, []).append(margins)
 
     # --- Step 2: Identify always-at-seed masks per (team, seed) ---
     # A mask "always puts team T at seed S" when T holds seed S for every one of
@@ -1062,6 +1092,12 @@ def build_scenario_atoms(
     # game-winner atom for, e.g., Louisville #1 whenever Louisville beats
     # Greenwood — even when the #2/#3/#4 positions still vary with margins.
     mask_team_seed_margins: dict[tuple, int] = {}
+    # Non-sensitive masks: all total_combos margins produce the same seeding
+    for mask, top4 in non_sensitive_keys:
+        for seed_idx, team in enumerate(top4):
+            key = (mask, team, seed_idx + 1)
+            mask_team_seed_margins[key] = mask_team_seed_margins.get(key, 0) + total_combos
+    # Sensitive masks: count actual margin lists
     for (mask, top4), ml in groups.items():
         for seed_idx, team in enumerate(top4):
             key = (mask, team, seed_idx + 1)
@@ -1076,9 +1112,7 @@ def build_scenario_atoms(
 
     # Fast lookup used in Step 4 to skip adding constrained atoms for teams
     # whose seed is already fully covered by an always-at-seed atom.
-    always_covered: dict[tuple, set[int]] = {
-        (team, seed): set(masks) for (team, seed), masks in always_at_seed.items()
-    }
+    always_covered: dict[tuple, set[int]] = {(team, seed): set(masks) for (team, seed), masks in always_at_seed.items()}
 
     result: dict[str, dict[int, list]] = {}
 
@@ -1110,12 +1144,16 @@ def build_scenario_atoms(
     # --- Step 5: Eliminated atoms (seed > playoff_seeds) via cross-mask merging ---
     # A team is "always eliminated" under mask M if it appears in NO top-N group for M.
     teams_in_any_top4: dict[int, set[str]] = {mask: set() for mask in range(1 << R)}
-    for (mask, top4) in groups:
+    for mask, top4 in non_sensitive_keys:
+        teams_in_any_top4[mask].update(top4)
+    for mask, top4 in groups:
         teams_in_any_top4[mask].update(top4)
 
     # Pre-compute masks where each team can be eliminated (appears in some but not all top4s)
+    # Non-sensitive masks: seeding is fixed for all margins, so a team is either always
+    # in top-N or never — they never appear in sometimes_elim_only_masks.
     team_sometimes_elim_masks: dict[str, set[int]] = {}
-    for (mask, top4) in groups:
+    for mask, top4 in groups:
         for team in teams:
             if team not in top4:
                 team_sometimes_elim_masks.setdefault(team, set()).add(mask)
@@ -1151,9 +1189,7 @@ def build_scenario_atoms(
     # then sort atoms into a stable, human-friendly order (see _sort_atom_list).
     for team in result:
         for seed in result[team]:
-            result[team][seed] = _sort_atom_list(
-                _simplify_atom_list(result[team][seed]), remaining
-            )
+            result[team][seed] = _sort_atom_list(_simplify_atom_list(result[team][seed]), remaining)
 
     return result
 
@@ -1190,9 +1226,7 @@ def enumerate_division_scenarios(
     pairs = [(rg.a, rg.b) for rg in remaining]
 
     if R == 0:
-        order = resolve_standings_for_mask(
-            teams, completed, remaining, 0, {}, base_margin_default, pa_win
-        )
+        order = resolve_standings_for_mask(teams, completed, remaining, 0, {}, base_margin_default, pa_win)
         return [
             {
                 "scenario_num": 1,
@@ -1204,26 +1238,40 @@ def enumerate_division_scenarios(
         ]
 
     # (mask, seeding_tuple) → list of margin dicts for that combination
+    # Non-sensitive masks are recorded with an empty list (all margins are equivalent).
     mask_seeding_margins: dict[tuple, list[dict]] = defaultdict(list)
+    non_sensitive_masks: set[int] = set()
 
     for mask in range(1 << R):
-        for margin_combo in product(_MARGIN_RANGE, repeat=R):
-            margins = {pairs[i]: margin_combo[i] for i in range(R)}
+        if not _is_margin_sensitive_mask(
+            teams, completed, remaining, mask, pairs, pa_win, base_margin_default, playoff_seeds
+        ):
+            ref_margins = {pairs[i]: 1 for i in range(R)}
             order = resolve_standings_for_mask(
-                teams, completed, remaining, mask, margins, base_margin_default, pa_win
+                teams, completed, remaining, mask, ref_margins, base_margin_default, pa_win
             )
-            mask_seeding_margins[(mask, tuple(order))].append(margins)
+            mask_seeding_margins[(mask, tuple(order))]  # touch key so it exists
+            non_sensitive_masks.add(mask)
+        else:
+            for margin_combo in product(_MARGIN_RANGE, repeat=R):
+                margins = {pairs[i]: margin_combo[i] for i in range(R)}
+                order = resolve_standings_for_mask(
+                    teams, completed, remaining, mask, margins, base_margin_default, pa_win
+                )
+                mask_seeding_margins[(mask, tuple(order))].append(margins)
 
     # Which masks produce more than one distinct seeding? (margin-sensitive)
     mask_seeding_count: dict[int, int] = defaultdict(int)
-    for (mask, _) in mask_seeding_margins:
+    for mask, _ in mask_seeding_margins:
         mask_seeding_count[mask] += 1
-    margin_sensitive = {m for m, cnt in mask_seeding_count.items() if cnt > 1}
+    margin_sensitive = {m for m, cnt in mask_seeding_count.items() if cnt > 1 and m not in non_sensitive_masks}
 
     # Auto-build atoms when margin-sensitive sub-scenarios need conditions_atom populated.
     if margin_sensitive and scenario_atoms is None:
         scenario_atoms = build_scenario_atoms(
-            teams, completed, remaining,
+            teams,
+            completed,
+            remaining,
             pa_win=pa_win,
             base_margin_default=base_margin_default,
             playoff_seeds=playoff_seeds,
@@ -1231,7 +1279,7 @@ def enumerate_division_scenarios(
 
     # Separate into non-margin-sensitive (group by seeding) and margin-sensitive
     non_ms: dict[tuple, list[int]] = defaultdict(list)  # seeding -> [masks]
-    ms: dict[int, list[tuple]] = defaultdict(list)       # mask -> [(seeding, margins_list)]
+    ms: dict[int, list[tuple]] = defaultdict(list)  # mask -> [(seeding, margins_list)]
 
     for (mask, seeding), margins_list in mask_seeding_margins.items():
         if mask in margin_sensitive:
@@ -1279,8 +1327,12 @@ def enumerate_division_scenarios(
                 conditions_atom = None
                 if scenario_atoms:
                     conditions_atom = _find_combined_atom(
-                        seeding, playoff_seeds, mask, margins_list[0],
-                        scenario_atoms, remaining,
+                        seeding,
+                        playoff_seeds,
+                        mask,
+                        margins_list[0],
+                        scenario_atoms,
+                        remaining,
                     )
                 scenarios.append(
                     {
