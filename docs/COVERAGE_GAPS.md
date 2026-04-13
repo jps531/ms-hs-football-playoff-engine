@@ -1,6 +1,6 @@
 # Test Coverage Gaps
 
-## Current state (2026-04-08)
+## Current state (2026-04-13)
 
 | Module | Coverage | Notes |
 |---|---|---|
@@ -8,216 +8,260 @@
 | `data_helpers.py` | **100%** | |
 | `scenarios.py` | **100%** | |
 | `scenario_serializers.py` | **100%** | |
-| `scenario_renderer.py` | **91%** | Home game rendering + weighted odds untested |
-| `scenario_viewer.py` | **92%** | Dropped from 95% — outer stability loop + Rule 4 added new uncovered paths |
-| `tiebreakers.py` | **86%** | Pair tiebreaker Steps 2–5 still the dominant gap |
-| `home_game_scenarios.py` | **96%** | Minor edge cases |
-| `bracket_home_odds.py` | **86%** | Some class-size branches |
-| **Total** | **93%** | 2559 tests passing |
+| `tiebreakers.py` | **100%** | |
+| `scenario_renderer.py` | **91%** | Weighted odds + home-game renderers untested |
+| `scenario_viewer.py` | **93%** | Outer stability loop second pass + several edge cases |
+| `home_game_scenarios.py` | **96%** | Even-year tiebreaks + dedup guards |
+| `bracket_home_odds.py` | **86%** | Several cross-region and equal-seed branches; `compute_bracket_advancement_odds` uncovered |
+| **Total** | **95%** | 2700 tests passing |
 
-Test files: 24 scenario output tests (including 1 midseason fixture for Region 4-4A).
-
----
-
-## What changed since 2026-03-25
-
-### Added
-- **Generalized Rule 4** in `_simplify_atom_list`: range-containment splitting with shared lower bounds. Exercises new code paths in the outer loop's Rule 4 section.
-- **Outer stability loop**: wraps all rules in `while globally_changed:` so later-rule results can re-expose earlier opportunities.
-
-### Removed
-- **Rule 5** (single-atom range narrowing): removed because multi-condition atoms with margin qualifiers were harder for coaches/fans to read than just "Team X beats Team Y."
-
-### Net coverage effect
-`scenario_viewer.py` dropped 3pp (95% → 92%) because the outer stability loop's **second-pass paths** are new uncovered code. The outer loop's first pass always fires (every call goes through it), but the `globally_changed = True` re-iteration only fires when R3 or R4 exposes a new R1/2 or subsumption opportunity — no current test creates that chain.
+Test files: 31 test files including synthetic coin-flip fixture, precomputed-path coverage, and full-season R=0 tests.
 
 ---
 
 ## scenario_viewer.py — gap catalogue
 
-### NEW: Outer stability loop second pass (lines 831, 836, 840, 843–849, 850→834, 862–863, 875–880)
+### `_find_combined_atom` — MarginCondition intersection (lines 120, 142→123, 145, 147, 171)
 
-The outer `while globally_changed:` loop runs at least once per call. The second pass only fires when R3 or R4 produces an atom list where R1/2 can now merge more atoms, or subsumption now eliminates one. No current test creates this chain (R4 → new R1/2 opportunity, or R3 → new subsumption).
-
-**What would cover it:** A region where Rule 4 splits one atom into two, and the two resulting pieces happen to be adjacent-range mergeable by Rule 1/2. Likely requires 3+ margin-sensitive games in play simultaneously. A 5A–7A region with 4 games remaining is the best candidate.
+Fires when two atoms for the same seeding both contain `MarginCondition` objects and their margin ranges must be tightened by intersection. No test generates a combined atom with two intersecting `MarginCondition` paths.
 
 ---
 
-### NEW: `_derive_atom` unconstrained shortcut (lines 434–440)
+### `_find_combined_atom` — no-match return (line 217)
 
-When joint margin constraints alone (ignoring per-game bounds) exactly describe the valid 2D set, the per-game bounds are dropped and unconstrained `GameResult` objects are returned. No current region produces this shape.
-
-**What would cover it:** A tiebreaker where the winning margin of game A plus game B must equal exactly N, and that sum constraint alone (with no individual game floor) describes all valid outcomes. Unusual but possible with specific H2H PD scenarios.
+`return None` fires when no stored atom matches the sample margins for a sub-scenario. Defensive — every tested sub-scenario always finds a matching atom.
 
 ---
 
-### NEW: `_try_rule3` non-overlapping guard (line 687)
+### `_split_non_rectangular_atom` — reverse direction (lines 270–271, 309–310, 312–313, 334→244, 337)
 
-`if ca_t.max_margin is not None and ca_t.max_margin <= cb_t.min_margin: continue` — guards against a spurious Rule 3 match where atom a's margin range doesn't actually overlap atom b's. Not yet triggered.
-
----
-
-### Carried over: Reverse-direction splitting in `_split_non_rectangular_atom` (lines 280–284, 305→212)
-
-The forward direction (game0-keyed grouping) is covered. The reverse direction (game1-keyed) bails at lines 280–281 or 283–284 for non-contiguous cases, or succeeds at line 305. All tested non-rectangular cases exhaust the forward direction — the reverse path is structurally reachable but not yet triggered.
+The forward direction (game0-keyed grouping) is covered. The reverse path (game1-keyed grouping) is structurally reachable but never triggered — all tested non-rectangular cases are exhausted by the forward direction.
 
 ---
 
-### Carried over: `_find_combined_atom` MarginCondition intersection (lines 109–114)
+### `_derive_atom` — all-margins-valid shortcut (lines 404–410)
 
-Fires when two atoms for the same seeding both contain `MarginCondition` objects (requiring tightening by intersection). The `_derive_atom` unconstrained shortcut (above) would eventually produce these — still no test generates a combined atom with two MarginCondition paths to intersect.
-
----
-
-### Carried over: `_find_combined_atom` no-match return (line 138)
-
-`return None` fires when no atom in the stored list matches the sample margins for a given sub-scenario. Has never triggered — every sub-scenario always finds a matching atom. Defensive.
+When every one of the 12^R margin combinations is valid for a given mask+seeding (i.e. the team is always at this seed regardless of margin), per-game ranges are skipped and a single unconstrainted atom is returned. In all tested margin-sensitive regions, at least one margin combination prevents each team-seed pair, so this fast path is never reached.
 
 ---
 
-### Carried over: Constrained elimination atoms (line 1145→1140)
+### `_derive_atom` — unconstrained per-game fallback (lines 504–510)
 
-`sometimes_elim_only_masks` — teams eliminated only for specific margin combinations. Covered structurally (the path exists in 4-4A), but the specific branch `if absent_margins:` at line 1145 isn't confirmed hit. A mid-season region where one team is eliminated only when a specific game is lost by a large margin would nail this.
-
----
-
-### Carried over: `render_scenarios_text` eliminated line (line 1345→1348)
-
-The `if eliminated:` block in `render_scenarios_text` writes "Eliminated: X, Y" per scenario. `render_scenarios_text` is not called directly in any test — only `division_scenarios_as_dict` and `render_team_scenarios` are tested. Any test calling `render_scenarios_text` on a region with eliminated teams covers this.
-
-**One-liner to cover it:** `render_scenarios_text(teams, completed, remaining)` on any existing 5-6 team fixture where some teams get eliminated.
+When joint margin constraints alone (ignoring per-game bounds) exactly describe the valid 2D set, per-game bounds are dropped and unconstrained `GameResult` objects are returned. No tested region produces this shape.
 
 ---
 
-### Carried over: `build_scenario_atoms` R=0 early exit (line 1039)
+### Rule 1/2 merge edge cases (lines 526, 651, 665, 670, 684)
 
-`if R == 0: return {}` — fires when no games remain. Never called with R=0. A post-season test (all games already played, cutoff = after last game) covers this trivially.
-
----
-
-### Carried over: Rule 1/2 merge edge cases (lines 570, 583, 596–597, 604)
-
-- **Line 570**: Rule 1 processes atoms where `ca.min_margin > cb.min_margin` — i.e., the atom with the higher lower bound is listed first. All tested merges happen to process atoms in ascending lower-bound order.
-- **Line 583**: Rule 1 merge path when a `MarginCondition` is also present — never triggered because no atom currently has both a margin-restricted `GameResult` AND a `MarginCondition`.
-- **Lines 596–597**: Rule 2 scan for `MarginCondition` references to the game being dropped — never triggered.
-- **Line 604**: `return None` at end of `_try_merge` — fires when the two atoms share a game pair but neither Rule 1 nor Rule 2 applies (e.g., different winners and not complementary unconstrained). Defensive.
+- **Line 526**: Rule 1 processes atoms where `ca.min_margin > cb.min_margin` (reverse lower-bound order). All tested merges process atoms in ascending order.
+- **Line 651**: Rule 1 merge path when a `MarginCondition` is also present — not yet triggered.
+- **Lines 665, 670**: Rule 2 scan for `MarginCondition` references to the game being dropped — not yet triggered.
+- **Line 684**: `return None` at end of `_try_merge` — defensive; fires when neither R1 nor R2 applies.
 
 ---
 
-## tiebreakers.py — gap catalogue (unchanged)
+### `_try_rule3` — non-overlapping guard (line 753)
 
-### Pair tiebreaker Steps 2–5 (lines 357–376, 412–435)
-
-`_resolve_pair_using_steps` with Step 1 returning 0–0 (teams have no H2H result yet). All current tests resolve pairs at Step 1 because the final-week fixture has every pair already having played each other. This is still the single highest-value gap.
-
-**What would cover it:** A mid-season test where two leading teams are tied in region record and have **not yet played each other**. Step 1 scores 0–0, falling through to Step 2 (record vs common outside opponents) and beyond.
+`if ca_t.max_margin is not None and ca_t.max_margin <= cb_t.min_margin: continue` — guards against a spurious Rule 3 match where atom a's range doesn't overlap atom b's range. Not yet triggered.
 
 ---
 
-### No-opponent cases in step arrays (lines 186, 189, 203)
+### `_try_rule4` — structural rejects (lines 859, 864)
 
-`res_vs` and `pd_vs` return `None` when a bucket team has played no game (completed or remaining) against a specific outside opponent. All current test regions are complete round-robins, so every team has at least a scheduled game against every other.
+Inside Rule 4 (range-containment splitting):
+- **Line 859**: `if ca_t.min_margin != cb_t.min_margin: continue` — lower bounds must match; atoms with differing lower bounds are not Rule-4 candidates.
+- **Line 864**: `if cb_t.max_margin is not None and ca_t.max_margin >= cb_t.max_margin: continue` — a's range must be strictly narrower than b's; equal or wider ranges are rejected.
 
-**What would cover it:** A region that doesn't play a full round-robin, OR a mid-season test early enough that some cross-divisional games haven't been scheduled yet.
+These guards fire when the candidate pair (p_comp, p_tight) assignment fails the Rule 4 preconditions and the loop tries the reversed assignment. Not yet triggered in tested regions.
 
 ---
 
-### Tied/drawn game results (lines 49–50, 103–104, 314, 321–322)
+### Constrained elimination atoms — `absent_margins` False branch (line 1437→1432)
 
-Not season-timing related — requires a real or synthetic game ending in a draw (uncommon in high school football but legal). Would need a hand-crafted fixture.
+In Step 5, `sometimes_elim_only_masks` collects masks where a team is eliminated only for specific margin ranges. The inner `if absent_margins:` guard is structurally present but the False branch (no margin-specific conditions found) has not been triggered.
+
+---
+
+### Outer stability loop — second pass (lines 892, 897, 901, 904–910, 911→895, 920–921, 933–936, 938)
+
+The outer `while globally_changed:` loop runs at least once. A second pass fires only when Rule 3 or Rule 4 produces an atom list where Rule 1/2 can now merge additional atoms, or subsumption can now eliminate one. No tested region creates this chain.
+
+**What would cover it:** A region where Rule 4 splits an atom into two pieces that are adjacent-range-mergeable by Rule 1/2. Likely requires 3+ margin-sensitive games simultaneously (5A–7A with 4 games remaining is the best candidate).
+
+---
+
+### `build_scenario_atoms` Step 4 — all-covered `continue` (line 1386)
+
+`if not uncovered_positions: continue` — fires when all seed positions in a mask's full seeding are already accounted for by always-at-seed masks and no per-game-range atoms are needed. In all tested regions there is always at least one uncovered position remaining.
+
+---
+
+### Coin flip under margin-sensitive mask (lines 1132, 1299, 1528)
+
+`if flip_collector and mask not in coin_flips:` inside the full-enumeration loop — fires when a coin flip arises under a margin-sensitive mask (i.e. the same mask produces different orderings for different margins, but one of those orderings ends in a coin flip). This appears in `enumerate_outcomes` (line 1132), `build_scenario_atoms` (line 1299), and `enumerate_division_scenarios` (line 1528). No natural or synthetic fixture produces this combination.
+
+---
+
+### Coin-flip metadata — flip outside playoff range (lines 1307→1305, 1540→1534)
+
+The `if relevant:` False branch fires when `_relevant_flip_groups` returns an empty list — i.e., a coin flip exists but all flipped teams are outside the playoff cutoff (e.g., a coin flip between seeds 3 and 4 in a `playoff_seeds=2` region). Coverable with a synthetic below-cutoff coin-flip fixture.
+
+---
+
+### `enumerate_division_scenarios` — duplicate-mask guard (line 1538)
+
+`continue` inside the coin-flip metadata loop when a non-sensitive mask has already been processed. A non-sensitive mask has exactly one seeding, so this guard is structurally unreachable for coin-flip masks (which are always non-sensitive in practice). Not unit-testable by design.
+
+---
+
+### `enumerate_division_scenarios` — margin-sensitive without `scenario_atoms` (line 1640→1649)
+
+The `if scenario_atoms:` False branch inside the margin-sensitive scenario path. Fires when `enumerate_division_scenarios` is called without a pre-built atoms dict and has margin-sensitive scenarios to emit — in this case `conditions_atom` is left as `None`. Not yet covered by the current test suite.
+
+---
+
+## scenario_renderer.py — gap catalogue
+
+### `_winner_label` — non-GameResult loop iteration (line 32→31)
+
+The `isinstance(cond, GameResult)` False branch fires when a non-GameResult condition (e.g. `MarginCondition`) appears in the atom iteration before the matching `GameResult` is found. Since atoms are constructed with `GameResult` conditions first, the matching result is always found before non-`GameResult` conditions are reached, so this branch never triggers.
+
+---
+
+### `_render_margin_condition` — edge cases (lines 67, 74, 78–80)
+
+- **Line 67**: `cond.op == "=="` with two add operands — combined total equals exactly N. No tested atom produces this shape.
+- **Line 74**: `t == 0` in the 1-add/1-sub case — the two winning margins are equal. No tested atom produces this condition.
+- **Lines 78–80**: General fallback for patterns with more than 2 operands (more than one add+sub term). Not produced by the current atom-building logic.
+
+---
+
+### `_render_condition` — unknown type fallback (line 91)
+
+`return str(cond)` fires when the condition is none of `GameResult`, `MarginCondition`, or `CoinFlipResult`. Defensive; never triggered in practice.
+
+---
+
+### Weighted odds rendering (lines 141, 143)
+
+- **Line 141**: Both unweighted and weighted odds provided — renders `"(XX.X% – XX.X% Weighted)"`.
+- **Line 143**: Only weighted odds provided — renders `"(XX.X% Weighted)"`.
+
+The `weighted_odds` parameter of `render_team_scenarios` is never passed in any current test; blocked on the weighted odds computation feature.
+
+---
+
+### Home-game renderer (lines 347–348, 384–385, 414, 416, 463, 479, 542, 633→635)
+
+The home-game rendering family (`render_team_home_scenarios`, `team_home_scenarios_as_dict`, `render_team_matchups`, `team_matchups_as_dict`) has no tests. Specific uncovered paths:
+
+- **Lines 347–348**: `kind == "seed_required"` branch in `_render_condition_label` — renders a team's finishing seed rather than an advancement condition.
+- **Lines 384–385**: Unconditional host with an explanation note in `render_team_home_scenarios`.
+- **Lines 414, 416**: Both-odds and weighted-only paths in `_odds_pct`.
+- **Lines 463, 479**: Unconditional host/not-host with explanation in `render_team_home_scenarios`.
+- **Line 542**: `elif label is None: label = f"Region..."` fallback in `team_home_scenarios_as_dict._cond_dict`.
+- **Lines 633→635**: `entry.explanation` True branch in `render_team_matchups` — no tested matchup entry carries an explanation string.
+
+---
+
+## home_game_scenarios.py — gap catalogue
+
+### `_explain_r2` — same-region and equal-seed branches (lines 143–144, 149–150)
+
+- **Lines 143–144**: Same-region second-round explanation (`"Same-region game — higher seed (#N) hosts"`). Same-region R2 matchups do not arise under the current bracket structure.
+- **Lines 149–150**: Equal-seed cross-region R2 tiebreak (`"Equal seed (#N) — lower region# hosts"`). No tested region produces a second-round matchup with equal cross-region seeds.
+
+---
+
+### Even-year tiebreak returns in `_explain_qf` and `_explain_sf` (lines 198–199, 231–232)
+
+- **Lines 198–199**: Even-year QF tiebreak — `host_region = max(region1, region2)` (`"...even year, higher region# hosts"`).
+- **Lines 231–232**: Even-year SF tiebreak — same pattern.
+
+All tested home-game fixture data uses an odd-year season; even-year paths are not exercised.
+
+---
+
+### SF dedup `continue` guards (lines 643, 920)
+
+- **Line 643**: `continue` in `_build_sf_scenarios` when a `(region, seed)` opponent pair has already been processed in the slot iteration. Fires only when the same opponent slot appears twice due to bracket structure — not triggered in tested regions.
+- **Line 920**: Same guard in `_matchup_raw_sf`.
+
+---
+
+## bracket_home_odds.py — gap catalogue
+
+### `_p_team_reach` zero-wins shortcut (line 238)
+
+`if num_wins == 0: return 1.0` — fired when a team has already reached a round (zero additional wins needed). All callers pass `num_wins ≥ 1` in the tested paths.
+
+---
+
+### Equal-seed coin-flip / non-tiebreak paths (lines 332, 386)
+
+- **Line 332**: `p += p_opp_r1 * 0.5` in `_p_home_in_r2` — equal seeds in R2; the R2 home rule is silent on equal cross-region seeds, so a 50/50 coin flip is applied. No tested bracket has two R2 opponents of equal seed.
+- **Line 386**: `p += w * 0.5` in `_p_host_seed_rule` when `use_region_tiebreak=False` and seeds are equal — the R2-specific coin-flip path. Same root cause as line 332.
+
+---
+
+### `r2_home_team` edge cases (lines 516, 521)
+
+- **Line 516**: `return (region1, seed1) if seed1 < seed2 else (region2, seed2)` — same-region R2 branch. Same-region R2 matchups do not arise under the current bracket structure.
+- **Line 521**: `return (region1, seed1) if region1 < region2 else (region2, seed2)` — equal-seed cross-region tiebreak (lower region# hosts). No tested R2 matchup involves equal cross-region seeds.
+
+---
+
+### Even-year tiebreak in `qf_home_team` and `sf_home_team` (lines 570, 608)
+
+- **Line 570**: `return (region1, seed1) if region1 > region2 else (region2, seed2)` in `qf_home_team` — even-year tiebreak (higher region# hosts).
+- **Line 608**: Same pattern in `sf_home_team`.
+
+All tested home-game season data uses an odd year; even-year code paths are not exercised.
+
+---
+
+### `idx is None` guard in compute functions (lines 648, 699, 749)
+
+`if idx is None: continue` — fires when `_slot_index_for` cannot locate a (region, seed) pair in the half-slot list. Protective guard; all tested regions have complete slot assignments.
+
+---
+
+### `compute_bracket_advancement_odds` — entirely uncovered (lines 792–826)
+
+This function traverses the actual bracket structure via `_p_team_reach` to compute per-round advancement probabilities with a custom `win_prob_fn`. The simpler `compute_bracket_odds` is used in all current tests. `compute_bracket_advancement_odds` is the correct function to use when a non-uniform win-probability function is needed, but no test exercises this path.
+
+**What would cover it:** Call `compute_bracket_advancement_odds` with the equal-probability default for any region/slot combination and assert results match `compute_bracket_odds`.
 
 ---
 
 ## Proposed new tests — prioritized
 
-### Priority 1: Post-season (R=0) test ⭐ **Trivially easy**
+### Priority 1: Below-cutoff coin-flip fixture ⭐⭐ **Medium**
 
-Pick any existing region fixture; set the cutoff to after the last game. `build_scenario_atoms` returns `{}` immediately (line 1039 covered), `render_team_scenarios` falls back to "Clinched #N" or "Eliminated" for every team. Also call `render_scenarios_text` to cover the eliminated rendering line (1345→1348).
+Create a synthetic 4-team region with `playoff_seeds=2` where the coin flip happens between teams finishing at seeds 3 and 4 (both outside the playoff cutoff). This would cover:
+- Lines 1307→1305 and 1540→1534: the `if relevant:` False branch in both `build_scenario_atoms` and `enumerate_division_scenarios` coin-flip metadata loops.
 
-**Gaps closed:** line 1039 (`build_scenario_atoms` R=0 exit), line 1345→1348 (`render_scenarios_text` eliminated block).
-
----
-
-### Priority 2: Mid-season with no H2H yet between tied teams ⭐⭐ **High value**
-
-A region at round 1–2 of the season. Two or more teams are tied in region record and their head-to-head game is still scheduled as a remaining game. Step 1 of `_resolve_pair_using_steps` returns 0–0, falling through to Steps 2–5.
-
-Candidate regions: any 4-team 2A–4A region after round 2 (some H2H games played, others still remaining). This is exactly the "pair tiebreaker Steps 2–5" gap.
-
-**Gaps closed:** tiebreakers.py lines 357–376, 412–435 (pair Steps 2–5). Likely also lines 186, 189 (no-opponent cases).
-
-**Suggested fixtures from the 2025 data:** Look for regions where the cutoff is before the H2H matchup between the top two teams.
+**Fixture sketch:** Alpha/Beta beat Gamma/Delta (2-0). Delta and Gamma also play each other, so one of Delta/Gamma ends up at 1-1; the other at 0-2. Within the {Delta, Gamma} pair that ties at 1-1... actually this doesn't produce a coin flip at seeds 3-4. A simpler approach: all four teams end at 1-1 with coin flips between the lower pair only.
 
 ---
 
-### Priority 3: 1 or 2 known final-week results (partial final weekend)
+### Priority 2: `compute_bracket_advancement_odds` test ⭐ **Easy**
 
-Set the cutoff between the semifinal and final weekend game. Some elimination results are already determined; others are pending. This exercises:
-- `build_scenario_atoms` with R=1 or R=2 (smaller outcome space)
-- Scenarios where some teams are already clinched/eliminated before all games finish
-- The "constrained elimination atoms" path (line 1145) if a team is eliminated only for certain margins in the remaining game
-
-**Gaps closed:** Possibly line 1145 (constrained elimination), confirms correctness at the in-season seam.
+Call `compute_bracket_advancement_odds(region, region_odds, slots)` with default equal probability for an existing tested region and assert the results match `compute_bracket_odds`. Covers lines 792–826 in one short test.
 
 ---
 
-### Priority 4: 5A–7A region with 4 games remaining
+### Priority 3: 5A–7A region with 4 games remaining ⭐⭐⭐ **High effort, high reward**
 
-2^4 = 16 win/loss masks, 12^4 = 20,736 margin combos per mask. Larger atom lists make it more likely that:
-- Rule 4 fires AND the result is further reducible by R1/2 (outer stability loop second pass)
-- The `_split_non_rectangular_atom` reverse direction (lines 280–284) is needed
-- The constrained elimination path (line 1145) fires
+2^4 = 16 masks × 12^4 = 20,736 margin combos. Larger atom lists make it more likely that Rule 4 fires AND the result is further reducible by Rule 1/2 (outer stability loop second pass). Also the most likely trigger for `_split_non_rectangular_atom` reverse direction and `_try_rule4` lower-bound guards.
 
-**Gaps closed:** Likely closes outer stability loop second pass (lines 843–849, 862–863, 875–880). Also validates correctness at higher fan-out.
-
-**Caveat:** Computationally expensive. 16 × 20,736 = ~330K evaluations. Feasible (the 4-4A midseason test at R=4 was already written and runs fine).
+**Caveat:** Computationally expensive but tractable (the 4-4A midseason test at R=4 already runs fine).
 
 ---
 
-### Priority 5: 1A–4A region with 0 games played
+### Priority 4: Even-year home-game fixture ⭐ **Easy**
 
-**NOT recommended as written.** For a 5-team round-robin, R=10 games remaining → 12^10 ≈ 6 × 10^10 margin combinations per mask. Completely infeasible.
-
-**Better alternative:** Test at round 1 (1 game played, 9 remaining) — still too expensive. Test at round 3 (3 games played, 7 remaining) — still R=7, 12^7 ≈ 35M per mask. Practically, R ≤ 4 is the safe limit.
-
-**What to do instead:** The mid-season tests at R=3 or R=4 (Priorities 2 and 4) cover the intent of "early season with no H2H" while staying computationally tractable.
-
----
-
-### Priority 6: Random score differentials for final-week games
-
-Write a property test that picks random margins for each remaining game and verifies that the scenario engine places each team in the seed predicted by the tiebreaker logic. This is a correctness/regression test, not a coverage driver.
-
-**Suggested approach:** For a region with known final standings, randomize margins while preserving the same winner/loser, and assert that the seeding is unchanged. Then intentionally cross a margin threshold (e.g., set margin to 11 vs 12 for a region with a threshold at 12) and assert the seeding flips correctly.
-
-**Gaps closed:** None new, but high confidence value for margin threshold correctness.
-
----
-
-### Recommended additions (not in user's list)
-
-**`render_scenarios_text` call in an existing test:** One line addition to any existing test. Covers line 1345→1348 immediately.
-
-**Synthetic tied-game fixture:** A hand-crafted fixture with one game ending in a draw. Covers tiebreakers.py lines 49–50, 103–104, 314, 321–322. Unlikely in real data but important for completeness.
-
----
-
-## Tiebreaker step coverage summary
-
-| Tiebreaker step | Covered? | Notes |
-|---|---|---|
-| Step 1 — H2H record | ✅ | Multiple 2- and 3-team ties |
-| Step 2 — vs highest-ranked outside | ✅ | Used in several branches |
-| Step 3 — H2H capped PD | ✅ | GE threshold branches confirm this fires |
-| Step 4 — capped PD vs outside | ✅ | Used in some branches |
-| Step 5 — fewest PA (all region games) | ✅ | PA accumulation tested |
-| Step 6 — coin flip | ❌ | No pair tied through all five steps |
-| Pair Steps 2–5 restart | ❌ | All pairs resolved at Step 1 (played each other) |
-| Tied/drawn game (`res_a = 0`) | ❌ | No drawn games in any test region |
-| No H2H game between tied teams | ❌ | All test regions are complete round-robins at final week |
-| Margin-sensitive GE thresholds | ✅ | Multiple scenario output tests |
-| `clinched` / `eliminated` detection | ✅ | Multiple regions |
-| `sensitive_boundary_games` detection | ✅ | Verified via Region 1-6A GRE bug fix |
+Pass `season=2024` (or another even year) to any home-game test that currently uses an odd year. Covers the even-year tiebreak branches in `_explain_qf`, `_explain_sf`, `qf_home_team`, and `sf_home_team` (lines 198–199, 231–232, 570, 608). Two lines of change to an existing test.
 
 ---
 
@@ -229,5 +273,5 @@ Write a property test that picks random margins for each remaining game and veri
 | `data_helpers.py` DB fetch path | Requires live PostgreSQL connection |
 | `prefect/` pipeline files | Require Prefect runtime + live DB |
 | `scripts/simulate_region_finish.py` DB fetch + `main` | Require live DB + CLI invocation |
-| Weighted odds rendering | Blocked on Priority 5 (fields not yet computed) |
-| Home game rendering | Separate feature area, no tests yet |
+| Weighted odds rendering (lines 141, 143) | `weighted_odds` computation not yet implemented |
+| `enumerate_division_scenarios` duplicate-mask guard (line 1538) | Non-sensitive masks have exactly one seeding — structurally unreachable |

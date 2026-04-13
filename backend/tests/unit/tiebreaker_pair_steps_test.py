@@ -1,13 +1,11 @@
 """Direct unit tests for tiebreaker internals.
 
 Covers:
-- Pair tiebreaker Steps 2–5 (_resolve_pair_using_steps and helpers) — these
-  are only reachable when two teams have equal H2H records, which doesn't arise
-  naturally in any current round-robin region fixture.
 - standings_from_mask and build_h2h_maps tie-game branches.
 - step2_step4_arrays None-return branches (no game vs outside opponent).
 - unique_intra_bucket_games and sensitive_boundary_games.
 - resolve_with_results (public API for human-readable results entry).
+- resolve_standings_for_mask coin_flip_collector population.
 
 All tests use a 4-team "diamond" setup unless noted:
     Teams: Alpha, Beta, Gamma, Delta
@@ -17,10 +15,9 @@ All tests use a 4-team "diamond" setup unless noted:
 
 from backend.helpers.data_classes import CompletedGame, RemainingGame
 from backend.helpers.tiebreakers import (
-    _pair_h2h_pd_capped,
-    _pair_h2h_points,
-    _resolve_pair_using_steps,
+    base_bucket_order,
     build_h2h_maps,
+    resolve_bucket,
     resolve_standings_for_mask,
     resolve_with_results,
     sensitive_boundary_games,
@@ -63,195 +60,6 @@ def _make_wl_totals(**overrides):
     for team, vals in overrides.items():
         base[team].update(vals)
     return base
-
-
-# ---------------------------------------------------------------------------
-# _pair_h2h_points — completed-game branches
-# ---------------------------------------------------------------------------
-
-
-def test_pair_h2h_points_a_loses_in_completed():
-    """b wins the completed H2H game → pts_b=1.0, pts_a=0.0  (line 314 branch)."""
-    # Beta (b) beat Alpha (a): res_a = -1 from Alpha's perspective.
-    completed = [CompletedGame(a="Alpha", b="Beta", res_a=-1, pd_a=-7, pa_a=21, pa_b=14)]
-    pts_a, pts_b = _pair_h2h_points("Alpha", "Beta", completed, _NO_REMAINING, 0, {})
-    assert pts_a == 0
-    assert pts_b == 1
-
-
-def test_pair_h2h_points_tie_in_completed():
-    """res_a == 0 (split/tie) → both teams get 0.5  (lines 321–322 branch)."""
-    completed = [CompletedGame(a="Alpha", b="Beta", res_a=0, pd_a=0, pa_a=14, pa_b=14)]
-    pts_a, pts_b = _pair_h2h_points("Alpha", "Beta", completed, _NO_REMAINING, 0, {})
-    assert pts_a == pts_b
-    assert pts_a * 2 == 1
-
-
-# ---------------------------------------------------------------------------
-# _pair_h2h_pd_capped — entire function (lines 357–376)
-# ---------------------------------------------------------------------------
-
-
-def test_pair_h2h_pd_capped_a_wins_completed():
-    """PD computed from a completed game where a won by 7 → returns +7."""
-    completed = [CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=7, pa_a=14, pa_b=21)]
-    pd = _pair_h2h_pd_capped("Alpha", "Beta", completed, _NO_REMAINING, 0, {})
-    assert pd == 7
-
-
-def test_pair_h2h_pd_capped_b_wins_completed():
-    """PD from b's perspective flips sign → returns -7."""
-    completed = [CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=7, pa_a=14, pa_b=21)]
-    pd = _pair_h2h_pd_capped("Beta", "Alpha", completed, _NO_REMAINING, 0, {})
-    assert pd == -7
-
-
-def test_pair_h2h_pd_capped_clamps_at_12():
-    """PD is capped at 12 even if the raw margin is larger."""
-    completed = [CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=35, pa_a=7, pa_b=42)]
-    pd = _pair_h2h_pd_capped("Alpha", "Beta", completed, _NO_REMAINING, 0, {})
-    assert pd == 12
-
-
-def test_pair_h2h_pd_capped_remaining_game():
-    """PD from a remaining game uses the margins dict and mask bit."""
-    remaining = [RemainingGame(a="Alpha", b="Beta")]
-    # mask bit 0 = 1 → Alpha (a) wins by 5
-    pd = _pair_h2h_pd_capped("Alpha", "Beta", [], remaining, 1, {("Alpha", "Beta"): 5})
-    assert pd == 5
-
-
-# ---------------------------------------------------------------------------
-# _resolve_pair_using_steps — Step 2 decides (lines 412–415)
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_pair_step2_resolves():
-    """Step 2 (record vs outside teams) separates the pair when Step 1 is tied.
-
-    Alpha beats both outside teams; Beta loses to one outside team.
-    Step 2 key for Alpha is better → Alpha wins.
-    """
-    # Alpha beat Gamma and Delta; Beta only beat Delta (lost to Gamma).
-    completed = [
-        CompletedGame(a="Alpha", b="Delta", res_a=1, pd_a=7, pa_a=14, pa_b=21),
-        CompletedGame(a="Alpha", b="Gamma", res_a=1, pd_a=7, pa_a=14, pa_b=21),
-        CompletedGame(a="Beta", b="Delta", res_a=1, pd_a=7, pa_a=14, pa_b=21),
-        CompletedGame(a="Beta", b="Gamma", res_a=-1, pd_a=-7, pa_a=21, pa_b=14),
-    ]
-    base_order = ["Alpha", "Beta", "Delta", "Gamma"]
-    pair = ["Alpha", "Beta"]
-    step2, step4 = step2_step4_arrays(_TEAMS, pair, base_order, completed, _NO_REMAINING, 0, {})
-    wl_totals = _make_wl_totals(Beta={"w": 1, "l": 1, "t": 0, "pa": 35})
-
-    result = _resolve_pair_using_steps(pair, step2, step4, wl_totals, completed, _NO_REMAINING, 0, {})
-    assert result == ["Alpha", "Beta"]
-
-
-# ---------------------------------------------------------------------------
-# _resolve_pair_using_steps — Step 3 decides (lines 418–420)
-# Step 3 is H2H capped PD between the pair.
-# Requires them to have a completed game between them.
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_pair_step3_resolves():
-    """Step 3 (H2H capped PD) decides when Steps 1 and 2 are tied.
-
-    Both teams have identical outside records (Step 2 tie) and no H2H win/loss
-    (res_a=0 → Step 1 tie).  Alpha has a positive capped PD in their mutual game
-    (pd_a=7) → Step 3 resolves in Alpha's favour.
-    """
-    # res_a=0 means points-wise tie (no H2H winner for Step 1); pd_a=7 gives
-    # Alpha a +7 capped PD that only Step 3 sees.
-    completed_step3 = _BASE_COMPLETED + [
-        CompletedGame(a="Alpha", b="Beta", res_a=0, pd_a=7, pa_a=14, pa_b=21),
-    ]
-    base_order = ["Alpha", "Beta", "Delta", "Gamma"]
-    pair = ["Alpha", "Beta"]
-    step2, step4 = step2_step4_arrays(
-        _TEAMS, pair, base_order, completed_step3, _NO_REMAINING, 0, {}
-    )
-    wl_totals = _make_wl_totals()
-
-    result = _resolve_pair_using_steps(
-        pair, step2, step4, wl_totals, completed_step3, _NO_REMAINING, 0, {}
-    )
-    assert result == ["Alpha", "Beta"]
-
-
-# ---------------------------------------------------------------------------
-# _resolve_pair_using_steps — Step 4 decides (lines 422–426)
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_pair_step4_resolves():
-    """Step 4 (capped PD vs outside) decides when Steps 1–3 are tied.
-
-    Both teams have no H2H game (Step 1 tie, Step 3 tie).
-    Alpha has larger winning margins vs outside teams (better Step 4 key).
-    """
-    completed = [
-        CompletedGame(a="Alpha", b="Delta", res_a=1, pd_a=10, pa_a=7, pa_b=17),
-        CompletedGame(a="Alpha", b="Gamma", res_a=1, pd_a=10, pa_a=7, pa_b=17),
-        CompletedGame(a="Beta", b="Delta", res_a=1, pd_a=3, pa_a=14, pa_b=17),
-        CompletedGame(a="Beta", b="Gamma", res_a=1, pd_a=3, pa_a=14, pa_b=17),
-    ]
-    base_order = ["Alpha", "Beta", "Delta", "Gamma"]
-    pair = ["Alpha", "Beta"]
-    step2, step4 = step2_step4_arrays(_TEAMS, pair, base_order, completed, _NO_REMAINING, 0, {})
-    wl_totals = _make_wl_totals(Alpha={"w": 2, "l": 0, "t": 0, "pa": 14}, Beta={"w": 2, "l": 0, "t": 0, "pa": 28})
-
-    result = _resolve_pair_using_steps(pair, step2, step4, wl_totals, completed, _NO_REMAINING, 0, {})
-    assert result == ["Alpha", "Beta"]
-
-
-# ---------------------------------------------------------------------------
-# _resolve_pair_using_steps — Step 5 decides (lines 428–432)
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_pair_step5_resolves():
-    """Step 5 (fewest points allowed) decides when Steps 1–4 are tied.
-
-    Both teams have identical outside records and identical PD vs outside.
-    Alpha allowed fewer points → Alpha wins Step 5.
-    """
-    # Identical outside-game results and margins → Steps 2 and 4 tie.
-    # No H2H between Alpha and Beta → Steps 1 and 3 tie.
-    # Alpha's PA is lower → Step 5 resolves.
-    wl_totals = _make_wl_totals(
-        Alpha={"w": 2, "l": 0, "t": 0, "pa": 20},
-        Beta={"w": 2, "l": 0, "t": 0, "pa": 28},
-    )
-    base_order = ["Alpha", "Beta", "Delta", "Gamma"]
-    pair = ["Alpha", "Beta"]
-    step2, step4 = step2_step4_arrays(_TEAMS, pair, base_order, _BASE_COMPLETED, _NO_REMAINING, 0, {})
-
-    result = _resolve_pair_using_steps(pair, step2, step4, wl_totals, _BASE_COMPLETED, _NO_REMAINING, 0, {})
-    assert result == ["Alpha", "Beta"]
-
-
-# ---------------------------------------------------------------------------
-# _resolve_pair_using_steps — coin flip / alphabetical fallback (line 435)
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_pair_coin_flip_alphabetical():
-    """Step 6 coin flip falls back to alphabetical when all prior steps tie.
-
-    Both teams have identical records, identical outside results, identical PD,
-    and identical PA.  The function returns sorted order (alphabetical proxy).
-    """
-    # Completely symmetric: same outside opponents, same margins, same PA.
-    wl_totals = _make_wl_totals()  # Alpha and Beta both have pa=28
-    base_order = ["Alpha", "Beta", "Delta", "Gamma"]
-    pair = ["Alpha", "Beta"]
-    step2, step4 = step2_step4_arrays(_TEAMS, pair, base_order, _BASE_COMPLETED, _NO_REMAINING, 0, {})
-
-    result = _resolve_pair_using_steps(pair, step2, step4, wl_totals, _BASE_COMPLETED, _NO_REMAINING, 0, {})
-    # Alphabetical fallback: Alpha < Beta
-    assert result == ["Alpha", "Beta"]
 
 
 # ---------------------------------------------------------------------------
@@ -500,44 +308,6 @@ def test_resolve_with_results_with_margins():
 
 
 # ---------------------------------------------------------------------------
-# _pair_h2h_points — lex-second team loses branch (line 314)
-#
-# Line 314 fires when `a` is lex-second in the stored CompletedGame (i.e.
-# cg.a != a) AND cg.res_a == 1 (meaning cg.a won, so a lost).
-# Call as _pair_h2h_points("Beta", "Alpha", ...) where Alpha (lex-first) won.
-# ---------------------------------------------------------------------------
-
-
-def test_pair_h2h_points_a_is_lex_second_and_loses():
-    """pts_b gets the win point when a is lex-second and the stored winner is cg.a.
-
-    cg.a="Alpha", cg.b="Beta", res_a=1 → Alpha won.
-    Calling with a="Beta" means a is the loser (line 314 path).
-    """
-    completed = [CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=7, pa_a=14, pa_b=21)]
-    # Call with "Beta" as `a` — Beta is lex-second, Alpha (cg.a) won → pts_b += 1.0
-    pts_a, pts_b = _pair_h2h_points("Beta", "Alpha", completed, _NO_REMAINING, 0, {})
-    assert pts_a == 0   # Beta lost
-    assert pts_b == 1   # Alpha won
-
-
-# ---------------------------------------------------------------------------
-# _pair_h2h_pd_capped — remaining-game b-wins path (line 374)
-#
-# Line 374 fires when bit == 0 (remaining[i].b wins).  The existing test used
-# mask=1 (bit=1, a wins).  We need mask=0 so b wins.
-# ---------------------------------------------------------------------------
-
-
-def test_pair_h2h_pd_capped_remaining_game_b_wins():
-    """PD is negative for `a` when b wins the remaining game (bit == 0, line 374)."""
-    remaining = [RemainingGame(a="Alpha", b="Beta")]
-    # mask=0 → bit 0 == 0 → Beta (b) wins by 5 → pd for Alpha = -5
-    pd = _pair_h2h_pd_capped("Alpha", "Beta", [], remaining, 0, {("Alpha", "Beta"): 5})
-    assert pd == -5
-
-
-# ---------------------------------------------------------------------------
 # push_coinflip body (lines 509, 511) — coin_flip_collector populated
 #
 # Fires when resolve_standings_for_mask is called with a non-None
@@ -569,6 +339,43 @@ def test_resolve_standings_for_mask_coin_flip_collector_populated():
     groups = [sorted(g) for g in collector]
     assert ["Alpha", "Beta"] in groups
     assert ["Delta", "Gamma"] in groups
+
+
+# ---------------------------------------------------------------------------
+# push_coinflip — coin_flip_collector is None path (line 351→exit)
+#
+# Fires when push_coinflip is called but coin_flip_collector was not passed
+# (defaults to None).  The function must silently do nothing.  Use the same
+# symmetric fixture — buckets exhaust Steps 1–5 → push_coinflip fires — but
+# omit coin_flip_collector so the `is not None` guard takes the False branch.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_bucket_no_collector_runs_silently():
+    """resolve_bucket returns a valid ordering when coin_flip_collector=None.
+
+    resolve_standings_for_mask always passes a non-None list to resolve_bucket,
+    so push_coinflip's `is None` branch is only reachable by calling
+    resolve_bucket directly without a collector.
+
+    The symmetric Alpha/Beta bucket exhausts all 5 deterministic steps → Step 6
+    fires push_coinflip.  With coin_flip_collector=None (the default) the
+    function silently skips collection and returns an alphabetical result.
+    """
+    teams = ["Alpha", "Beta", "Delta", "Gamma"]
+    remaining: list[RemainingGame] = []
+    wl_totals = standings_from_mask(teams, _BASE_COMPLETED, remaining, 0, pa_win=14, margins={})
+    base_order = base_bucket_order(teams, wl_totals)
+
+    result = resolve_bucket(
+        ["Alpha", "Beta"],
+        teams, wl_totals, base_order, _BASE_COMPLETED, remaining,
+        outcome_mask=0, margins={}
+        # coin_flip_collector omitted → defaults to None
+    )
+
+    assert set(result) == {"Alpha", "Beta"}
+    assert len(result) == 2
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,13 @@ from backend.helpers.data_classes import BracketOdds, StandingsOdds
 from backend.helpers.scenarios import (
     compute_bracket_odds,
     compute_first_round_home_odds,
+    determine_scenarios,
     pct_str,
+)
+from backend.tests.data.standings_2025_3_7a import (
+    expected_3_7a_completed_games_full,
+    expected_3_7a_remaining_games_full,
+    teams_3_7a,
 )
 
 # ---------------------------------------------------------------------------
@@ -162,3 +168,68 @@ class TestComputeFirstRoundHomeOdds:
         odds = {"TeamA": _make_full_odds("TeamA", 0.0, 0.0, 0.0, 0.0)}
         result = compute_first_round_home_odds(frozenset({1, 2}), odds)
         assert result["TeamA"] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# determine_scenarios — num_remaining == 0 path
+# ---------------------------------------------------------------------------
+
+
+class TestDetermineScenariosFullSeason:
+    """Tests for determine_scenarios when the season is already complete (R=0).
+
+    Exercises the num_remaining == 0 branch (lines 192–212 of scenarios.py):
+    a single resolve_standings_for_mask call with mask=0 and denom=1.0.
+    """
+
+    # 3-7A final standings: Oak Grove #1, Petal #2, Brandon #3, Northwest Rankin #4.
+    # Meridian and Pearl are eliminated (outside top 4).
+
+    def _result(self):
+        """Run determine_scenarios on the 3-7A full-season fixture."""
+        return determine_scenarios(
+            teams_3_7a,
+            expected_3_7a_completed_games_full,
+            expected_3_7a_remaining_games_full,
+        )
+
+    def test_denom_is_one(self):
+        """With no remaining games the denominator is exactly 1."""
+        assert self._result().denom == 1.0
+
+    def test_each_team_has_exactly_one_seed_count(self):
+        """Every team's seed counts sum to 1.0 across all four seed buckets."""
+        r = self._result()
+        for team in teams_3_7a:
+            total = (
+                r.first_counts[team]
+                + r.second_counts[team]
+                + r.third_counts[team]
+                + r.fourth_counts[team]
+            )
+            # Playoff teams land in exactly one seed; eliminated teams land nowhere.
+            assert total == pytest.approx(0.0) or total == pytest.approx(1.0), (
+                f"{team}: seed counts sum to {total}"
+            )
+
+    def test_seed_counts_match_final_standings(self):
+        """Seed counts reflect the known 3-7A final standings."""
+        r = self._result()
+        assert r.first_counts["Oak Grove"] == pytest.approx(1.0)
+        assert r.second_counts["Petal"] == pytest.approx(1.0)
+        assert r.third_counts["Brandon"] == pytest.approx(1.0)
+        assert r.fourth_counts["Northwest Rankin"] == pytest.approx(1.0)
+
+    def test_eliminated_teams_have_zero_seed_counts(self):
+        """Teams outside the top 4 contribute nothing to any seed count."""
+        r = self._result()
+        for team in ("Meridian", "Pearl"):
+            assert r.first_counts[team] == pytest.approx(0.0)
+            assert r.second_counts[team] == pytest.approx(0.0)
+            assert r.third_counts[team] == pytest.approx(0.0)
+            assert r.fourth_counts[team] == pytest.approx(0.0)
+
+    def test_no_coin_flips(self):
+        """A fully-determined final season has no coin flip events."""
+        r = self._result()
+        assert r.coinflip_teams == set()

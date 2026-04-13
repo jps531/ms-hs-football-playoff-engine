@@ -990,3 +990,16 @@ def test_render_scenarios_includes_eliminated_line():
     assert "Eliminated:" in text
     eliminated_team = list(_4_4A["eliminated"])[0]
     assert eliminated_team in text
+
+
+def test_render_scenarios_no_eliminated_line_when_all_advance():
+    """render_scenarios omits 'Eliminated:' when playoff_seeds >= all teams.
+
+    Covers the False branch of `if eliminated:` (line 1709→1712): when every
+    team in the seeding fits within the playoff cutoff, the eliminated list is
+    empty and no 'Eliminated:' line is written.
+    """
+    # 4-4A has 5 teams; setting playoff_seeds=5 means everyone advances.
+    scenarios = enumerate_division_scenarios(_4_4A_TEAMS, _4_4A_COMPLETED_FULL, _4_4A_REMAINING_ZERO)
+    text = render_scenarios(scenarios, playoff_seeds=5)
+    assert "Eliminated:" not in text
