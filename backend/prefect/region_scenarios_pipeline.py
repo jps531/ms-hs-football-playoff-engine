@@ -32,7 +32,11 @@ from backend.helpers.scenario_serializers import (
     serialize_remaining_games,
     serialize_scenario_atoms,
 )
-from backend.helpers.scenario_viewer import build_scenario_atoms, enumerate_division_scenarios
+from backend.helpers.scenario_viewer import (
+    build_scenario_atoms,
+    enumerate_division_scenarios,
+    enumerate_outcomes,
+)
 from backend.helpers.scenarios import (
     compute_bracket_odds,
     compute_first_round_home_odds,
@@ -406,27 +410,37 @@ def write_region_scenarios(
     remaining: list[RemainingGame],
     scenario_atoms: dict,
     complete_scenarios: list[dict],
+    r_remaining: int,
+    margin_sensitive: bool,
+    margin_compute_status: str,
+    margin_computed_at_now: bool = False,
 ) -> None:
-    """Serialize and upsert pre-computed scenario data into ``region_scenarios``.
+    """Serialize and upsert pre-computed scenario data into ``region_scenarios``
+    and update ``region_computation_state`` accordingly.
 
-    Called once per pipeline run after ``determine_scenarios()`` and
-    ``enumerate_division_scenarios()`` complete.  The frontend reads this table
-    to render both display formats without re-running the tiebreaker engine.
+    Args:
+        clazz: MHSAA classification (1-7).
+        region: Region number within the class.
+        season: Football season year.
+        remaining: Unplayed region game pairs.
+        scenario_atoms: Per-team per-seed condition atoms.
+        complete_scenarios: Full seeding scenario list.
+        r_remaining: Number of remaining games (stored in state table).
+        margin_sensitive: Whether this write reflects full margin-sensitive data.
+        margin_compute_status: Lifecycle state for ``region_computation_state``.
+        margin_computed_at_now: When True, sets ``margin_computed_at = NOW()``.
     """
     logger = get_run_logger()
     logger.info(
-        "Writing region scenarios for season %d, class %d, region %d (%d complete scenarios)",
-        season,
-        clazz,
-        region,
-        len(complete_scenarios),
+        "Writing region scenarios for season %d, class %d, region %d (%d complete scenarios, margin_sensitive=%s)",
+        season, clazz, region, len(complete_scenarios), margin_sensitive,
     )
 
     remaining_json = Json(serialize_remaining_games(remaining))
     atoms_json = Json(serialize_scenario_atoms(scenario_atoms))
     scenarios_json = Json(serialize_complete_scenarios(complete_scenarios))
 
-    sql = """
+    scenarios_sql = """
         INSERT INTO region_scenarios
             (season, class, region, computed_at, remaining_games, scenario_atoms, complete_scenarios)
         VALUES (%s, %s, %s, NOW(), %s, %s, %s)
@@ -436,10 +450,78 @@ def write_region_scenarios(
             scenario_atoms     = EXCLUDED.scenario_atoms,
             complete_scenarios = EXCLUDED.complete_scenarios
     """
+
+    state_sql = """
+        INSERT INTO region_computation_state
+            (season, class, region, r_remaining, margin_sensitive, margin_compute_status,
+             computed_at, margin_computed_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+        ON CONFLICT (season, class, region) DO UPDATE SET
+            r_remaining           = EXCLUDED.r_remaining,
+            margin_sensitive      = EXCLUDED.margin_sensitive,
+            margin_compute_status = EXCLUDED.margin_compute_status,
+            computed_at           = EXCLUDED.computed_at,
+            margin_computed_at    = COALESCE(EXCLUDED.margin_computed_at,
+                                             region_computation_state.margin_computed_at)
+    """
+    margin_computed_at = "NOW()" if margin_computed_at_now else None
+
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (season, str(clazz), region, remaining_json, atoms_json, scenarios_json))
+            cur.execute(scenarios_sql, (season, str(clazz), region, remaining_json, atoms_json, scenarios_json))
+            cur.execute(state_sql, (season, clazz, region, r_remaining, margin_sensitive,
+                                    margin_compute_status, margin_computed_at))
         conn.commit()
+
+
+@task(task_run_name="Upgrade {season} Region Scenarios (margin-sensitive) for {region}-{clazz}A")
+def upgrade_region_scenarios(
+    clazz: int,
+    region: int,
+    season: int,
+    teams: list[str],
+    completed: list[CompletedGame],
+    remaining: list[RemainingGame],
+    pa_win: int = 14,
+    base_margin_default: int = 7,
+) -> None:
+    """Run full margin-sensitive computation and upgrade stored scenario data.
+
+    Called as a background task for R=5–6 regions after the initial win/loss-only
+    write.  Updates ``region_scenarios`` with margin-sensitive atoms and flips
+    ``region_computation_state`` to ``complete``.
+    """
+    logger = get_run_logger()
+    logger.info(
+        "Upgrading region %d-%dA season %d to margin-sensitive scenarios",
+        region, clazz, season,
+    )
+
+    precomputed = enumerate_outcomes(teams, completed, remaining, pa_win=pa_win,
+                                     base_margin_default=base_margin_default)
+    scenario_atoms = build_scenario_atoms(teams, completed, remaining,
+                                          pa_win=pa_win, base_margin_default=base_margin_default,
+                                          precomputed=precomputed)
+    complete_scenarios = enumerate_division_scenarios(teams, completed, remaining,
+                                                      scenario_atoms=scenario_atoms,
+                                                      pa_win=pa_win,
+                                                      base_margin_default=base_margin_default,
+                                                      precomputed=precomputed)
+
+    write_region_scenarios(
+        clazz, region, season, remaining, scenario_atoms, complete_scenarios,
+        r_remaining=len(remaining),
+        margin_sensitive=True,
+        margin_compute_status="complete",
+        margin_computed_at_now=True,
+    )
+    logger.info("Upgrade complete for region %d-%dA season %d", region, clazz, season)
+
+
+# R thresholds for margin computation mode
+_R_ALWAYS_MARGIN = 4   # R ≤ this: always full margin, synchronous
+_R_BACKGROUND_MAX = 6  # R ≤ this (and > _R_ALWAYS_MARGIN): win/loss first, upgrade in background
+                        # R > this: win/loss only, permanently
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
@@ -551,9 +633,51 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
         ),
     )
 
-    scenario_atoms = build_scenario_atoms(teams, completed, remaining)
-    complete_scenarios = enumerate_division_scenarios(teams, completed, remaining, scenario_atoms=scenario_atoms)
-    write_region_scenarios(clazz, region, season, remaining, scenario_atoms, complete_scenarios)
+    R = len(remaining)
+
+    if R <= _R_ALWAYS_MARGIN:
+        # Full margin-sensitive computation synchronously.
+        precomputed = enumerate_outcomes(teams, completed, remaining)
+        scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed)
+        complete_scenarios = enumerate_division_scenarios(
+            teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed
+        )
+        write_region_scenarios(
+            clazz, region, season, remaining, scenario_atoms, complete_scenarios,
+            r_remaining=R,
+            margin_sensitive=True,
+            margin_compute_status="not_needed",
+        )
+    elif R <= _R_BACKGROUND_MAX:
+        # Win/loss-only first for fast initial display; schedule margin upgrade.
+        precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
+        scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed_wl)
+        complete_scenarios = enumerate_division_scenarios(
+            teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
+        )
+        write_region_scenarios(
+            clazz, region, season, remaining, scenario_atoms, complete_scenarios,
+            r_remaining=R,
+            margin_sensitive=False,
+            margin_compute_status="pending",
+        )
+        # Submit background upgrade — runs full margin enumeration asynchronously.
+        upgrade_region_scenarios.submit(
+            clazz, region, season, teams, completed, remaining,
+        )
+    else:
+        # R ≥ 7: win/loss-only permanently.
+        precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
+        scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed_wl)
+        complete_scenarios = enumerate_division_scenarios(
+            teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
+        )
+        write_region_scenarios(
+            clazz, region, season, remaining, scenario_atoms, complete_scenarios,
+            r_remaining=R,
+            margin_sensitive=False,
+            margin_compute_status="skipped",
+        )
 
     return scenario_atoms
 

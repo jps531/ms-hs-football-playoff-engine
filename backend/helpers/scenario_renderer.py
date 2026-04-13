@@ -1,6 +1,7 @@
 """Render playoff scenario atoms as human-readable text."""
 
 from backend.helpers.data_classes import (
+    CoinFlipResult,
     GameResult,
     HomeGameCondition,
     HomeGameScenario,
@@ -85,6 +86,8 @@ def _render_condition(cond, atom: list) -> str:
         return _render_game_result(cond)
     if isinstance(cond, MarginCondition):
         return _render_margin_condition(cond, atom)
+    if isinstance(cond, CoinFlipResult):
+        return f"{cond.winner} wins coin flip vs {cond.loser}"
     return str(cond)
 
 

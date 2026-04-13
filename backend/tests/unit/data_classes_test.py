@@ -552,6 +552,25 @@ def test_margin_condition_le_boundary() -> None:
     assert mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
 
 
+def test_margin_condition_eq_boundary() -> None:
+    """satisfied_by returns True when margin exactly equals the == threshold."""
+    # NWR(5) == 5 → True; NWR(5) == 6 → False
+    mc_true = MarginCondition(
+        add=(("Northwest Rankin", "Petal"),),
+        sub=(),
+        op="==",
+        threshold=5,
+    )
+    mc_false = MarginCondition(
+        add=(("Northwest Rankin", "Petal"),),
+        sub=(),
+        op="==",
+        threshold=6,
+    )
+    assert mc_true.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+    assert not mc_false.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
 def test_margin_condition_str() -> None:
     """__str__ renders add-only conditions as a sum expression."""
     mc = MarginCondition(
@@ -599,3 +618,25 @@ def test_margin_condition_satisfied_by_unknown_op_raises() -> None:
     mc = MarginCondition(add=(("Brandon", "Meridian"),), sub=(), op="!=", threshold=0)
     with pytest.raises(ValueError, match="Unknown operator"):
         mc.satisfied_by(_MASK_BRN_NWR, _MARGINS_BRN_NWR, _REMAINING)
+
+
+# ---------------------------------------------------------------------------
+# CoinFlipResult
+# ---------------------------------------------------------------------------
+
+
+def test_coin_flip_result_satisfied_by_always_true() -> None:
+    """CoinFlipResult.satisfied_by always returns True regardless of arguments."""
+    from backend.helpers.data_classes import CoinFlipResult
+
+    cfr = CoinFlipResult(winner="Alpha", loser="Beta")
+    assert cfr.satisfied_by(0, {}, []) is True
+    assert cfr.satisfied_by(0xFF, {"x": 1}, _REMAINING) is True
+
+
+def test_coin_flip_result_str() -> None:
+    """CoinFlipResult.__str__ returns the expected human-readable phrase."""
+    from backend.helpers.data_classes import CoinFlipResult
+
+    cfr = CoinFlipResult(winner="Alpha", loser="Beta")
+    assert str(cfr) == "Alpha wins coin flip vs Beta"

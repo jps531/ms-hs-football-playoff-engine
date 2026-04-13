@@ -454,10 +454,11 @@ def resolve_bucket(
 ):
     """Apply tiebreaker Steps 1-6 to order a single tied group of teams.
 
-    Steps are applied sequentially.  After any step reduces a 3+ tie to a
-    2-team subgroup, that subgroup is re-resolved from Step 1 (head-to-head),
-    as required by MHSAA rules.  Any group still tied after Step 5 is recorded
-    in `coin_flip_collector` and sorted alphabetically as a coin-flip proxy.
+    Steps are applied sequentially.  After any step splits a group — whether
+    a 3+ tie into sub-groups or a larger tie reduced to a 2-team sub-group —
+    each sub-group restarts from Step 1 (head-to-head), as required by MHSAA
+    rules.  A group still tied after all 5 deterministic steps is a coin flip:
+    recorded in ``coin_flip_collector`` and sorted alphabetically as a proxy.
 
     Args:
         bucket: List of team names that are currently tied (same win%).
@@ -470,7 +471,7 @@ def resolve_bucket(
         margins: Dict keyed by (team_a, team_b) storing the winning margin
             (always positive).
         base_margin_default: Assumed winning margin when a game's margin is not
-            in `margins`.
+            in ``margins``.
         coin_flip_collector: Optional list that accumulates groups of teams that
             remain tied after all 5 deterministic steps (Step 6 coin flip).
 
@@ -501,8 +502,9 @@ def resolve_bucket(
         teams, bucket, base_order, completed, remaining, outcome_mask, margins, base_margin_default
     )
 
-    pending_groups = [sorted(bucket)]
-    resolved_order: list[str] = []
+    # ``pending`` is a list of groups still needing resolution.  Each entry is
+    # either a singleton [team] (already placed) or a multi-team tied group.
+    pending: list[list[str]] = [sorted(bucket)]
 
     def push_coinflip(groups):
         """Append multi-team groups to the coin_flip_collector if present."""
@@ -511,67 +513,44 @@ def resolve_bucket(
                 if len(g) > 1:
                     coin_flip_collector.append(sorted(g))
 
-    # Step 1: partition by Step 1 score
-    next_groups = []
-    for g in pending_groups:
-        parts = _partition_by(g, key_func=lambda t: -step1[t])
-        next_groups.extend(parts)
-    pending_groups = next_groups
-
-    # Steps 2–5 in sequence; size-2 groups restart from Step 1 immediately
-    for step_label, key_builder in [
-        ("Step2", lambda t: _key_step2(step2[t])),
-        ("Step3", lambda t: -step3[t]),
-        ("Step4", lambda t: _key_step4(step4[t])),
-        ("Step5", lambda t: wl_totals[t]["pa"]),
+    # Steps 1–5: apply each key in sequence.  When a step splits a group, each
+    # resulting sub-group restarts from Step 1 via a recursive call; the
+    # resolved sub-sequence is broken into singletons so it is not re-processed.
+    for key_builder in [
+        lambda t: -step1[t],
+        lambda t: _key_step2(step2[t]),
+        lambda t: -step3[t],
+        lambda t: _key_step4(step4[t]),
+        lambda t: wl_totals[t]["pa"],
     ]:
-        next_groups = []
-        for g in pending_groups:
-            if len(g) == 1:
-                next_groups.append(g)
+        next_pending: list[list[str]] = []
+        for g in pending:
+            if len(g) <= 1:
+                next_pending.append(g)
                 continue
-            if len(g) == 2:
-                ordered = _resolve_pair_using_steps(
-                    g,
-                    step2,
-                    step4,
-                    wl_totals,
-                    completed,
-                    remaining,
-                    outcome_mask,
-                    margins,
-                    base_margin_default,
-                )
-                next_groups.append(ordered)
-                continue
-            parts = _partition_by(g, key_func=lambda t: key_builder(t))
-            for part in parts:
-                if len(part) == 2:
-                    ordered = _resolve_pair_using_steps(
-                        part,
-                        step2,
-                        step4,
-                        wl_totals,
-                        completed,
-                        remaining,
-                        outcome_mask,
-                        margins,
-                        base_margin_default,
-                    )
-                    next_groups.append(ordered)
-                else:
-                    next_groups.append(part)
-        pending_groups = next_groups
+            parts = _partition_by(g, key_func=key_builder)
+            if len(parts) == 1:
+                # No progress from this step — keep for the next one
+                next_pending.append(g)
+            else:
+                # Split: each sub-group restarts from Step 1 (recursive call).
+                # Flatten the resolved sub-sequence into singletons so the
+                # outer loop does not re-process it.
+                for part in parts:
+                    if len(part) == 1:
+                        next_pending.append(part)
+                    else:
+                        resolved = resolve_bucket(
+                            part, teams, wl_totals, base_order, completed, remaining,
+                            outcome_mask, margins, base_margin_default, coin_flip_collector,
+                        )
+                        next_pending.extend([[t] for t in resolved])
+        pending = next_pending
 
-    # Step 6: coin flip for anything still tied
-    unresolved_multi = [g for g in pending_groups if len(g) > 1]
-    if unresolved_multi:
-        push_coinflip(unresolved_multi)
+    # Step 6: any group that survived all 5 steps unresolved is a coin flip.
+    push_coinflip([g for g in pending if len(g) > 1])
 
-    for g in pending_groups:
-        resolved_order.extend(g)
-
-    return resolved_order
+    return [t for g in pending for t in g]
 
 
 # -------------------------

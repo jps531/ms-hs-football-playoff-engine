@@ -2,10 +2,18 @@
 
 from itertools import product
 
-from backend.helpers.data_classes import GameResult, MarginCondition
+from backend.helpers.data_classes import GameResult, MarginCondition, RemainingGame
+from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_renderer import _render_margin_condition
-from backend.helpers.scenario_viewer import enumerate_division_scenarios, render_division_scenarios
+from backend.helpers.scenario_viewer import (
+    build_scenario_atoms,
+    enumerate_division_scenarios,
+    enumerate_outcomes,
+    render_division_scenarios,
+    render_scenarios,
+)
 from backend.helpers.tiebreakers import resolve_standings_for_mask
+from backend.tests.data.results_2025_ground_truth import REGION_RESULTS_2025, expand_results, teams_from_games
 from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_completed_games,
     expected_3_7a_completed_games_full,
@@ -23,6 +31,12 @@ _PA_WIN = 14
 _BASE_MARGIN_DEFAULT = 7
 _REMAINING = expected_3_7a_remaining_games
 _PAIRS = [(rg.a, rg.b) for rg in _REMAINING]
+
+# Computed once at module level — reused by multiple tests to avoid redundant builds.
+_ATOMS_3_7A = build_scenario_atoms(teams_3_7a, expected_3_7a_completed_games, _REMAINING)
+_SCENARIOS_3_7A = enumerate_division_scenarios(
+    teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms=_ATOMS_3_7A
+)
 
 
 def _all_outcome_branches():
@@ -365,14 +379,7 @@ def test_4c_has_exact_diff_condition():
     point for 4c falls there and no diff condition appears from the hand-crafted atoms.
     The algorithmic atoms always carry the diff constraint explicitly.
     """
-    from backend.helpers.scenario_viewer import build_scenario_atoms
-    atoms = build_scenario_atoms(teams_3_7a, expected_3_7a_completed_games, _REMAINING)
-    scenarios = enumerate_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games,
-        _REMAINING,
-        scenario_atoms=atoms,
-    )
+    scenarios = _SCENARIOS_3_7A
     sc_4c = next(sc for sc in scenarios if sc["scenario_num"] == 4 and sc["sub_label"] == "c")
     atom = sc_4c["conditions_atom"]
     eq_conds = [c for c in atom if isinstance(c, MarginCondition) and c.op == "=="]
@@ -389,14 +396,7 @@ def test_4i_has_exact_sum_condition():
 
     Uses build_scenario_atoms (algorithmic) for the same reason as test_4c above.
     """
-    from backend.helpers.scenario_viewer import build_scenario_atoms
-    atoms = build_scenario_atoms(teams_3_7a, expected_3_7a_completed_games, _REMAINING)
-    scenarios = enumerate_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games,
-        _REMAINING,
-        scenario_atoms=atoms,
-    )
+    scenarios = _SCENARIOS_3_7A
     sc_4i = next(sc for sc in scenarios if sc["scenario_num"] == 4 and sc["sub_label"] == "i")
     atom = sc_4i["conditions_atom"]
     eq_conds = [c for c in atom if isinstance(c, MarginCondition) and c.op == "=="]
@@ -536,11 +536,8 @@ def test_render_division_scenarios_full_output():
     scenario change, the test fails.  Update _EXPECTED_3_7A_RENDER when the
     output is intentionally changed.
     """
-    from backend.helpers.scenario_viewer import build_scenario_atoms
-
-    atoms = build_scenario_atoms(teams_3_7a, expected_3_7a_completed_games, _REMAINING)
     result = render_division_scenarios(
-        teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms=atoms
+        teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms=_ATOMS_3_7A
     )
     assert result == _EXPECTED_3_7A_RENDER, (
         f"\n--- EXPECTED ---\n{_EXPECTED_3_7A_RENDER}\n--- ACTUAL ---\n{result}"
@@ -557,7 +554,6 @@ def test_render_division_scenarios_full_output():
 # ---------------------------------------------------------------------------
 
 
-from backend.helpers.scenario_viewer import build_scenario_atoms, render_scenarios  # noqa: E402
 
 
 class TestBuildScenarioAtoms37A:
@@ -565,16 +561,11 @@ class TestBuildScenarioAtoms37A:
 
     def _build(self):
         """Return build_scenario_atoms output for the 3-7A pre-final-week fixture."""
-        return build_scenario_atoms(
-            teams_3_7a, expected_3_7a_completed_games, _REMAINING
-        )
+        return _ATOMS_3_7A
 
     def _scenarios(self):
         """Return enumerate_division_scenarios output built from algorithmic atoms."""
-        atoms = self._build()
-        return enumerate_division_scenarios(
-            teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms=atoms
-        )
+        return _SCENARIOS_3_7A
 
     def test_produces_17_scenarios(self):
         """build_scenario_atoms atoms yield exactly 17 distinct scenarios."""
@@ -690,10 +681,7 @@ def test_division_scenario_atom_soundness():
     """
     from collections import defaultdict
 
-    atoms = build_scenario_atoms(teams_3_7a, expected_3_7a_completed_games, _REMAINING)
-    scenarios = enumerate_division_scenarios(
-        teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms=atoms
-    )
+    scenarios = _SCENARIOS_3_7A
 
     def _scenario_mask(sc):
         """Return the outcome mask implied by a scenario's game_winners list."""
@@ -746,7 +734,7 @@ def test_per_team_atoms_consistent_with_division_scenarios():
     at seed k in a division scenario but has no per-team atom covering that
     outcome, the two formats are inconsistent.
     """
-    atoms = build_scenario_atoms(teams_3_7a, expected_3_7a_completed_games, _REMAINING)
+    atoms = _ATOMS_3_7A
 
     failures = []
     for mask, margins in _all_outcome_branches():
@@ -774,3 +762,231 @@ def test_per_team_atoms_consistent_with_division_scenarios():
         f"{len(failures)} per-team / division inconsistencies:\n"
         + "\n".join(failures[:5])
     )
+
+
+# ---------------------------------------------------------------------------
+# enumerate_outcomes / precomputed path regression tests
+#
+# Uses Region 4-4A midseason (R=4) — has both margin-sensitive and
+# non-sensitive masks plus constrained elimination atoms.
+# ---------------------------------------------------------------------------
+
+_4_4A = REGION_RESULTS_2025[(4, 4)]
+_4_4A_CUTOFF = "2025-10-17"
+_4_4A_ALL = _4_4A["games"]
+_4_4A_TEAMS = teams_from_games(_4_4A_ALL)
+_4_4A_COMPLETED = get_completed_games(
+    expand_results([g for g in _4_4A_ALL if g["date"] <= _4_4A_CUTOFF])
+)
+_4_4A_REMAINING = [
+    RemainingGame(*sorted([g["winner"], g["loser"]]))
+    for g in _4_4A_ALL
+    if g["date"] > _4_4A_CUTOFF
+]
+
+# Compute both paths once at module level for efficiency.
+_ATOMS_DIRECT = build_scenario_atoms(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING)
+_SCENARIOS_DIRECT = enumerate_division_scenarios(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING)
+
+_PRECOMPUTED = enumerate_outcomes(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING)
+_ATOMS_PRE = build_scenario_atoms(
+    _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=_PRECOMPUTED
+)
+_SCENARIOS_PRE = enumerate_division_scenarios(
+    _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING,
+    scenario_atoms=_ATOMS_PRE, precomputed=_PRECOMPUTED,
+)
+
+
+def test_precomputed_atoms_teams_match():
+    """Precomputed path produces atoms for the same set of teams."""
+    assert set(_ATOMS_PRE.keys()) == set(_ATOMS_DIRECT.keys())
+
+
+def test_precomputed_atoms_seeds_match():
+    """Precomputed path produces atoms for the same seeds per team."""
+    for team in _ATOMS_DIRECT:
+        assert set(_ATOMS_PRE[team].keys()) == set(_ATOMS_DIRECT[team].keys()), \
+            f"{team}: seed keys differ"
+
+
+def test_precomputed_atoms_count_match():
+    """Precomputed path produces the same number of atoms per (team, seed)."""
+    for team in _ATOMS_DIRECT:
+        for seed in _ATOMS_DIRECT[team]:
+            assert len(_ATOMS_PRE[team][seed]) == len(_ATOMS_DIRECT[team][seed]), \
+                f"{team} seed {seed}: atom count differs"
+
+
+def test_precomputed_scenarios_count_match():
+    """Precomputed path produces the same number of division scenarios."""
+    assert len(_SCENARIOS_PRE) == len(_SCENARIOS_DIRECT)
+
+
+def test_precomputed_scenarios_seedings_match():
+    """Precomputed path produces identical seedings in the same order."""
+    for i, (pre, direct) in enumerate(zip(_SCENARIOS_PRE, _SCENARIOS_DIRECT)):
+        assert pre["seeding"] == direct["seeding"], \
+            f"Scenario {i}: seeding differs — pre={pre['seeding']} direct={direct['seeding']}"
+        assert pre["scenario_num"] == direct["scenario_num"], \
+            f"Scenario {i}: scenario_num differs"
+        assert pre["sub_label"] == direct["sub_label"], \
+            f"Scenario {i}: sub_label differs"
+        assert pre["game_winners"] == direct["game_winners"], \
+            f"Scenario {i}: game_winners differs"
+
+
+def test_precomputed_non_sensitive_masks_nonempty():
+    """enumerate_outcomes identifies at least some non-sensitive masks for R=4."""
+    assert len(_PRECOMPUTED.non_sensitive_masks) > 0
+
+
+def test_precomputed_r_and_pairs():
+    """enumerate_outcomes metadata matches remaining game structure."""
+    assert _PRECOMPUTED.R == 4
+    assert _PRECOMPUTED.total_combos == 12**4
+    assert len(_PRECOMPUTED.pairs) == 4
+
+
+def test_ignore_margins_seedings_subset():
+    """Win/loss-only mode produces a seeding for every mask (2^R keys in groups)."""
+    wl_outcomes = enumerate_outcomes(
+        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True
+    )
+    # One seeding per mask — all masks are non-sensitive in ignore_margins mode.
+    assert len(wl_outcomes.non_sensitive_masks) == 1 << 4
+    assert len(wl_outcomes.groups) == 1 << 4
+
+
+def test_ignore_margins_atoms_cover_all_teams():
+    """Win/loss-only atoms are produced for every team (no margin conditions)."""
+    wl_outcomes = enumerate_outcomes(
+        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True
+    )
+    wl_atoms = build_scenario_atoms(
+        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=wl_outcomes
+    )
+    # Every team that appears in the full atoms should also appear in win/loss-only atoms.
+    assert set(wl_atoms.keys()) == set(_ATOMS_DIRECT.keys())
+
+
+def test_ignore_margins_no_margin_conditions():
+    """Win/loss-only atoms contain no MarginCondition objects."""
+    from backend.helpers.data_classes import MarginCondition as MC
+    wl_outcomes = enumerate_outcomes(
+        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True
+    )
+    wl_atoms = build_scenario_atoms(
+        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=wl_outcomes
+    )
+    for team, seed_map in wl_atoms.items():
+        for seed, atom_list in seed_map.items():
+            for atom in atom_list:
+                for cond in atom:
+                    assert not isinstance(cond, MC), \
+                        f"{team} seed {seed}: unexpected MarginCondition in win/loss-only atom"
+
+
+# ---------------------------------------------------------------------------
+# Auto-build-atoms path: precomputed without scenario_atoms
+# ---------------------------------------------------------------------------
+
+
+def test_enumerate_division_scenarios_auto_build_atoms_count():
+    """enumerate_division_scenarios auto-builds atoms when given precomputed but no scenario_atoms.
+
+    Covers lines 1396–1405: when margin_sensitive is non-empty and scenario_atoms is None,
+    build_scenario_atoms is called internally using the shared precomputed EnumeratedOutcomes.
+    The result must have the same number of scenarios as the explicit-atoms path.
+    """
+    scenarios_auto = enumerate_division_scenarios(
+        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=_PRECOMPUTED
+    )
+    assert len(scenarios_auto) == len(_SCENARIOS_DIRECT)
+
+
+def test_enumerate_division_scenarios_auto_build_atoms_seedings_match():
+    """Auto-built atoms produce identical seedings and scenario numbers as the direct path."""
+    scenarios_auto = enumerate_division_scenarios(
+        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=_PRECOMPUTED
+    )
+    for i, (auto, direct) in enumerate(zip(scenarios_auto, _SCENARIOS_DIRECT)):
+        assert auto["seeding"] == direct["seeding"], \
+            f"Scenario {i}: seeding differs — auto={auto['seeding']} direct={direct['seeding']}"
+        assert auto["scenario_num"] == direct["scenario_num"], \
+            f"Scenario {i}: scenario_num differs"
+        assert auto["sub_label"] == direct["sub_label"], \
+            f"Scenario {i}: sub_label differs"
+        assert auto["game_winners"] == direct["game_winners"], \
+            f"Scenario {i}: game_winners differs"
+
+
+def test_enumerate_division_scenarios_auto_build_atoms_conditions_populated():
+    """Margin-sensitive scenarios in the auto-build path have conditions_atom populated."""
+    scenarios_auto = enumerate_division_scenarios(
+        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=_PRECOMPUTED
+    )
+    ms_scenarios = [sc for sc in scenarios_auto if sc["sub_label"] != ""]
+    assert len(ms_scenarios) > 0, "Expected at least one margin-sensitive sub-scenario in 4-4A"
+    for sc in ms_scenarios:
+        assert sc["conditions_atom"] is not None, \
+            f"Scenario {sc['scenario_num']}{sc['sub_label']}: conditions_atom is None in auto-build path"
+
+
+# ---------------------------------------------------------------------------
+# R=0 early exit — post-season fixture (all games complete)
+# ---------------------------------------------------------------------------
+
+# Use 4-4A with cutoff after the last game — R=0.
+_4_4A_FINAL_CUTOFF = "2025-11-01"
+_4_4A_COMPLETED_FULL = get_completed_games(
+    expand_results([g for g in _4_4A_ALL if g["date"] <= _4_4A_FINAL_CUTOFF])
+)
+_4_4A_REMAINING_ZERO = [
+    RemainingGame(*sorted([g["winner"], g["loser"]]))
+    for g in _4_4A_ALL
+    if g["date"] > _4_4A_FINAL_CUTOFF
+]
+
+
+def test_build_scenario_atoms_r0_returns_empty():
+    """build_scenario_atoms returns {} when no games remain (R=0 early exit)."""
+    atoms = build_scenario_atoms(_4_4A_TEAMS, _4_4A_COMPLETED_FULL, _4_4A_REMAINING_ZERO)
+    assert atoms == {}
+
+
+def test_enumerate_division_scenarios_r0_returns_single_scenario():
+    """enumerate_division_scenarios returns exactly one scenario when R=0."""
+    scenarios = enumerate_division_scenarios(_4_4A_TEAMS, _4_4A_COMPLETED_FULL, _4_4A_REMAINING_ZERO)
+    assert len(scenarios) == 1
+    sc = scenarios[0]
+    assert sc["scenario_num"] == 1
+    assert sc["sub_label"] == ""
+    assert sc["game_winners"] == []
+    assert sc["conditions_atom"] is None
+
+
+def test_enumerate_division_scenarios_r0_seeding_matches_ground_truth():
+    """R=0 scenario seeding matches 2025 4-4A final seeds."""
+    scenarios = enumerate_division_scenarios(_4_4A_TEAMS, _4_4A_COMPLETED_FULL, _4_4A_REMAINING_ZERO)
+    seeding = scenarios[0]["seeding"]
+    expected = _4_4A["seeds"]
+    assert seeding[0] == expected[1]
+    assert seeding[1] == expected[2]
+    assert seeding[2] == expected[3]
+    assert seeding[3] == expected[4]
+
+
+# ---------------------------------------------------------------------------
+# render_scenarios eliminated block — 6-team region with eliminated teams
+# ---------------------------------------------------------------------------
+
+
+def test_render_scenarios_includes_eliminated_line():
+    """render_scenarios writes 'Eliminated: X, Y' when teams finish outside top 4."""
+    # 4-4A has 5 teams; post-season R=0 means one team is always eliminated.
+    scenarios = enumerate_division_scenarios(_4_4A_TEAMS, _4_4A_COMPLETED_FULL, _4_4A_REMAINING_ZERO)
+    text = render_scenarios(scenarios, playoff_seeds=4)
+    assert "Eliminated:" in text
+    eliminated_team = list(_4_4A["eliminated"])[0]
+    assert eliminated_team in text

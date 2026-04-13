@@ -15,6 +15,24 @@ from backend.tests.data.standings_2025_3_7a import (
     teams_3_7a,
 )
 
+# Computed once at module level — reused by all tests to avoid redundant builds.
+_ATOMS_3_7A = build_scenario_atoms(
+    teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
+)
+_SCENARIOS_3_7A = enumerate_division_scenarios(
+    teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games,
+    scenario_atoms=_ATOMS_3_7A,
+)
+_r_3_7a = determine_scenarios(
+    teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
+)
+_ODDS_3_7A = determine_odds(
+    teams_3_7a,
+    _r_3_7a.first_counts, _r_3_7a.second_counts,
+    _r_3_7a.third_counts, _r_3_7a.fourth_counts,
+    _r_3_7a.denom,
+)
+
 # ---------------------------------------------------------------------------
 # Expected output strings — algorithmic output from build_scenario_atoms
 # ---------------------------------------------------------------------------
@@ -303,10 +321,7 @@ Eliminated. (100.0%)"""
 )
 def test_render_team_scenarios(team, expected):
     """render_team_scenarios output from build_scenario_atoms matches expected string for each team."""
-    atoms = build_scenario_atoms(
-        teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
-    )
-    result = render_team_scenarios(team, atoms)
+    result = render_team_scenarios(team, _ATOMS_3_7A)
     assert result == expected, (
         f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
     )
@@ -325,14 +340,7 @@ def test_render_team_scenarios(team, expected):
 )
 def test_render_team_scenarios_with_odds(team, expected):
     """render_team_scenarios with odds appends per-seed and elimination probabilities."""
-    atoms = build_scenario_atoms(
-        teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
-    )
-    r = determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
-    odds = determine_odds(
-        teams_3_7a, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom
-    )
-    result = render_team_scenarios(team, atoms, odds=odds)
+    result = render_team_scenarios(team, _ATOMS_3_7A, odds=_ODDS_3_7A)
     assert result == expected, (
         f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
     )
@@ -342,19 +350,9 @@ def test_render_team_scenarios_with_odds(team, expected):
 # division_scenarios_as_dict
 # ---------------------------------------------------------------------------
 
-# Shared fixture helpers — build once per module via module-scoped helpers
 def _div_dict():
     """Build a ``division_scenarios_as_dict`` result for the Region 3-7A fixture."""
-    atoms = build_scenario_atoms(
-        teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
-    )
-    scenarios = enumerate_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games,
-        expected_3_7a_remaining_games,
-        scenario_atoms=atoms,
-    )
-    return division_scenarios_as_dict(scenarios)
+    return division_scenarios_as_dict(_SCENARIOS_3_7A)
 
 
 def test_division_scenarios_dict_keys():
@@ -428,18 +426,9 @@ def test_division_scenarios_dict_scenario_6():
 
 def _team_dict(with_odds=False):
     """Build a ``team_scenarios_as_dict`` result for the Region 3-7A fixture."""
-    atoms = build_scenario_atoms(
-        teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
-    )
     if not with_odds:
-        return team_scenarios_as_dict(atoms)
-    r = determine_scenarios(
-        teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
-    )
-    odds = determine_odds(
-        teams_3_7a, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom
-    )
-    return team_scenarios_as_dict(atoms, odds=odds)
+        return team_scenarios_as_dict(_ATOMS_3_7A)
+    return team_scenarios_as_dict(_ATOMS_3_7A, odds=_ODDS_3_7A)
 
 
 def test_team_scenarios_dict_all_teams_present():

@@ -7,7 +7,7 @@ per-seed counts. No Prefect or database dependencies.
 
 import logging
 from collections import Counter
-from itertools import product
+from itertools import permutations, product
 
 from prefect import get_run_logger
 from prefect.exceptions import MissingContextError
@@ -53,6 +53,85 @@ def pct_str(x: float) -> str:
 # -------------------------
 # Scenario enumeration
 # -------------------------
+
+
+def _accumulate_slots(
+    final_order: list[str],
+    flip_groups: list[list[str]],
+    unweighted: float,
+    weighted: float,
+    first_counts: Counter,
+    second_counts: Counter,
+    third_counts: Counter,
+    fourth_counts: Counter,
+    first_counts_weighted: Counter,
+    second_counts_weighted: Counter,
+    third_counts_weighted: Counter,
+    fourth_counts_weighted: Counter,
+) -> None:
+    """Accumulate seed counts into counters, distributing evenly over coin-flip permutations.
+
+    When ``flip_groups`` is empty the full ``unweighted`` / ``weighted`` amounts are
+    credited to the single ordering returned by the resolver.  When one or more coin-flip
+    groups are present, the weight is split equally across all permutations of each
+    independent group (cartesian product across groups), so every flip outcome gets its
+    fair share rather than 100% going to the alphabetically-first proxy ordering.
+
+    Args:
+        final_order: The ordered team list returned by ``resolve_standings_for_mask``.
+        flip_groups: Tied groups that were resolved by coin flip (from the collector).
+        unweighted: Unweighted credit for this (mask, margin-combo) branch.
+        weighted: Win-probability-weighted credit for this branch.
+        first_counts … fourth_counts_weighted: Counters to update in-place.
+    """
+    if not flip_groups:
+        slots = rank_to_slots(final_order)
+        for team, (lo, hi) in slots.items():
+            if lo <= 1 <= hi:
+                first_counts[team] += unweighted
+                first_counts_weighted[team] += weighted
+            if lo <= 2 <= hi:
+                second_counts[team] += unweighted
+                second_counts_weighted[team] += weighted
+            if lo <= 3 <= hi:
+                third_counts[team] += unweighted
+                third_counts_weighted[team] += weighted
+            if lo <= 4 <= hi:
+                fourth_counts[team] += unweighted
+                fourth_counts_weighted[team] += weighted
+        return
+
+    # Build all orderings by permuting each flip group independently.
+    orderings: list[list[str]] = [list(final_order)]
+    for group in flip_groups:
+        expanded: list[list[str]] = []
+        for current in orderings:
+            positions = [current.index(t) for t in group]
+            for perm in permutations(group):
+                new = list(current)
+                for pos, team in zip(positions, perm):
+                    new[pos] = team
+                expanded.append(new)
+        orderings = expanded
+
+    n = len(orderings)
+    u_share = unweighted / n
+    w_share = weighted / n
+    for ordering in orderings:
+        slots = rank_to_slots(ordering)
+        for team, (lo, hi) in slots.items():
+            if lo <= 1 <= hi:
+                first_counts[team] += u_share
+                first_counts_weighted[team] += w_share
+            if lo <= 2 <= hi:
+                second_counts[team] += u_share
+                second_counts_weighted[team] += w_share
+            if lo <= 3 <= hi:
+                third_counts[team] += u_share
+                third_counts_weighted[team] += w_share
+            if lo <= 4 <= hi:
+                fourth_counts[team] += u_share
+                fourth_counts_weighted[team] += w_share
 
 
 def determine_scenarios(
@@ -111,6 +190,7 @@ def determine_scenarios(
     all_coinflip_events: list[list[str]] = []
 
     if num_remaining == 0:
+        local_flips: list[list[str]] = []
         final_order = resolve_standings_for_mask(
             teams,
             completed,
@@ -119,22 +199,15 @@ def determine_scenarios(
             margins={},
             base_margin_default=7,
             pa_win=pa_for_winner,
-            coin_flip_collector=all_coinflip_events,
+            coin_flip_collector=local_flips,
         )
-        slots = rank_to_slots(final_order)
-        for team, (lo_seed, hi_seed) in slots.items():
-            if 1 >= lo_seed and 1 <= hi_seed:
-                first_counts[team] += 1
-                first_counts_weighted[team] += 1
-            if 2 >= lo_seed and 2 <= hi_seed:
-                second_counts[team] += 1
-                second_counts_weighted[team] += 1
-            if 3 >= lo_seed and 3 <= hi_seed:
-                third_counts[team] += 1
-                third_counts_weighted[team] += 1
-            if 4 >= lo_seed and 4 <= hi_seed:
-                fourth_counts[team] += 1
-                fourth_counts_weighted[team] += 1
+        all_coinflip_events.extend(local_flips)
+        _accumulate_slots(
+            final_order, local_flips, 1.0, 1.0,
+            first_counts, second_counts, third_counts, fourth_counts,
+            first_counts_weighted, second_counts_weighted,
+            third_counts_weighted, fourth_counts_weighted,
+        )
         denom = 1.0
         denom_weighted = 1.0
 
@@ -170,6 +243,7 @@ def determine_scenarios(
                 if boundary:
                     intra_bucket_games = intra_bucket_games + boundary
             if not intra_bucket_games:
+                local_flips = []
                 final_order = resolve_standings_for_mask(
                     teams,
                     completed,
@@ -178,22 +252,15 @@ def determine_scenarios(
                     margins=base_margins,
                     base_margin_default=7,
                     pa_win=pa_for_winner,
-                    coin_flip_collector=all_coinflip_events,
+                    coin_flip_collector=local_flips,
                 )
-                slots = rank_to_slots(final_order)
-                for team, (lo_seed, hi_seed) in slots.items():
-                    if 1 >= lo_seed and 1 <= hi_seed:
-                        first_counts[team] += 1
-                        first_counts_weighted[team] += mask_weight  # type: ignore
-                    if 2 >= lo_seed and 2 <= hi_seed:
-                        second_counts[team] += 1
-                        second_counts_weighted[team] += mask_weight  # type: ignore
-                    if 3 >= lo_seed and 3 <= hi_seed:
-                        third_counts[team] += 1
-                        third_counts_weighted[team] += mask_weight  # type: ignore
-                    if 4 >= lo_seed and 4 <= hi_seed:
-                        fourth_counts[team] += 1
-                        fourth_counts_weighted[team] += mask_weight  # type: ignore
+                all_coinflip_events.extend(local_flips)
+                _accumulate_slots(
+                    final_order, local_flips, 1.0, mask_weight,
+                    first_counts, second_counts, third_counts, fourth_counts,
+                    first_counts_weighted, second_counts_weighted,
+                    third_counts_weighted, fourth_counts_weighted,
+                )
             else:
                 # Enumerate all 12^N margin combinations for intra-bucket games.
                 # This correctly captures multi-game threshold interactions that the
@@ -209,6 +276,7 @@ def determine_scenarios(
                         branch_margins[(a, b)] = m
                     branch_weight = 1.0 / total_combos
                     effective_weight = mask_weight * branch_weight
+                    local_flips = []
                     final_order = resolve_standings_for_mask(
                         teams,
                         completed,
@@ -217,22 +285,15 @@ def determine_scenarios(
                         margins=branch_margins,
                         base_margin_default=7,
                         pa_win=pa_for_winner,
-                        coin_flip_collector=all_coinflip_events,
+                        coin_flip_collector=local_flips,
                     )
-                    slots = rank_to_slots(final_order)
-                    for team, (lo_seed, hi_seed) in slots.items():
-                        if 1 >= lo_seed and 1 <= hi_seed:
-                            first_counts[team] += branch_weight  # type: ignore
-                            first_counts_weighted[team] += effective_weight  # type: ignore
-                        if 2 >= lo_seed and 2 <= hi_seed:
-                            second_counts[team] += branch_weight  # type: ignore
-                            second_counts_weighted[team] += effective_weight  # type: ignore
-                        if 3 >= lo_seed and 3 <= hi_seed:
-                            third_counts[team] += branch_weight  # type: ignore
-                            third_counts_weighted[team] += effective_weight  # type: ignore
-                        if 4 >= lo_seed and 4 <= hi_seed:
-                            fourth_counts[team] += branch_weight  # type: ignore
-                            fourth_counts_weighted[team] += effective_weight  # type: ignore
+                    all_coinflip_events.extend(local_flips)
+                    _accumulate_slots(
+                        final_order, local_flips, branch_weight, effective_weight,
+                        first_counts, second_counts, third_counts, fourth_counts,
+                        first_counts_weighted, second_counts_weighted,
+                        third_counts_weighted, fourth_counts_weighted,
+                    )
 
         denom = float(1 << num_remaining)
 

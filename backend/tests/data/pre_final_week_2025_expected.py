@@ -2230,16 +2230,21 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Cutoff: 2025-10-31
     # Actual seeds: Cleveland Central / Lanier / Holmes County Central / Vicksburg
     (5, 2): {
+        # second/third counts for Lanier and Vicksburg reflect the corrected tiebreaker
+        # that restarts at H2H after any sub-group split (MHSAA rule).  The Lanier/Vicksburg
+        # margin boundary that affects seed 2 vs 3 is now correctly at 9+ (not 9 vs 10+),
+        # because at margin=9 the H2H sub-group restart gives the win to Vicksburg (who beat
+        # Lanier in the remaining game), not Lanier via Step 4 PD vs outside.
         "denom": 8,
         "first_counts": Counter({"Cleveland Central": 6.0, "Lanier": 2}),
         "second_counts": Counter(
-            {"Lanier": 3.4166666666666665, "Vicksburg": 2.583333333333333, "Cleveland Central": 1, "Florence": 1}
+            {"Lanier": 10 / 3, "Vicksburg": 8 / 3, "Cleveland Central": 1, "Florence": 1}
         ),
         "third_counts": Counter(
             {
-                "Lanier": 2.583333333333333,
+                "Lanier": 8 / 3,
                 "Holmes County Central": 2,
-                "Vicksburg": 1.4166666666666665,
+                "Vicksburg": 4 / 3,
                 "Cleveland Central": 1,
                 "Florence": 1,
             }
@@ -2282,10 +2287,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Lanier": StandingsOdds(
                 school="Lanier",
                 p1=0.25,
-                p2=0.4270833333333333,
-                p3=0.32291666666666663,
+                p2=5 / 12,
+                p3=1 / 3,
                 p4=0.0,
-                p_playoffs=0.9999999999999999,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -2304,8 +2309,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Vicksburg": StandingsOdds(
                 school="Vicksburg",
                 p1=0.0,
-                p2=0.32291666666666663,
-                p3=0.17708333333333331,
+                p2=1 / 3,
+                p3=1 / 6,
                 p4=0.25,
                 p_playoffs=0.75,
                 final_playoffs=0.75,

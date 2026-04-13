@@ -730,6 +730,34 @@ class MarginCondition:
         return f"{lhs} {self.op} {self.threshold}"
 
 
+# --- Data class for a coin-flip tiebreaker result ---
+@dataclass(frozen=True)
+class CoinFlipResult:
+    """A coin-flip tiebreaker condition: winner is placed ahead of loser.
+
+    Used in scenario atoms when two (or more) teams are completely tied through
+    all deterministic tiebreaker steps (H2H, vs-outside record, H2H PD, PD vs
+    outside, fewest PA) and a literal coin flip is required.
+
+    Unlike GameResult, this condition is not associated with any remaining game;
+    it represents an off-field resolution.  It has no margin component and
+    carries no bit-mask semantics.  ``satisfied_by`` always returns True because
+    it is injected only into the specific atom that represents the winner
+    receiving the higher seed.
+    """
+
+    winner: str
+    loser: str
+
+    def satisfied_by(self, _outcome_mask: int, _margins: dict, _remaining: list) -> bool:
+        """Always returns True — coin flip result is baked into the atom itself."""
+        return True
+
+    def __str__(self) -> str:
+        """Return a compact human-readable representation."""
+        return f"{self.winner} wins coin flip vs {self.loser}"
+
+
 # --- Data class for bracket advancement odds ---
 @dataclass(frozen=True)
 class BracketOdds:

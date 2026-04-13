@@ -31,14 +31,8 @@ _CUTOFF = "2025-10-17"
 _ALL_GAMES = _FIXTURE["games"]
 
 _TEAMS = teams_from_games(_ALL_GAMES)
-_COMPLETED = get_completed_games(
-    expand_results([g for g in _ALL_GAMES if g["date"] <= _CUTOFF])
-)
-_REMAINING = [
-    RemainingGame(*sorted([g["winner"], g["loser"]]))
-    for g in _ALL_GAMES
-    if g["date"] > _CUTOFF
-]
+_COMPLETED = get_completed_games(expand_results([g for g in _ALL_GAMES if g["date"] <= _CUTOFF]))
+_REMAINING = [RemainingGame(*sorted([g["winner"], g["loser"]])) for g in _ALL_GAMES if g["date"] > _CUTOFF]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -46,6 +40,7 @@ _REMAINING = [
 
 
 def _run(teams, completed, remaining, label: str, runs: int = 3) -> None:
+    "Runs the scenario for benchmarking."
     R = len(remaining)
     masks = 1 << R
     evals = masks * (12**R)
@@ -60,7 +55,7 @@ def _run(teams, completed, remaining, label: str, runs: int = 3) -> None:
     avg = sum(times) / len(times)
     print(
         f"  {label:<30}  R={R}  masks={masks:>4}  evals={evals:>12,}"
-        f"  best={best:.3f}s  avg={avg:.3f}s  evals/s={evals/avg:,.0f}"
+        f"  best={best:.3f}s  avg={avg:.3f}s  evals/s={evals / avg:,.0f}"
     )
 
 
@@ -78,9 +73,7 @@ if __name__ == "__main__":
     _run(_TEAMS, _COMPLETED, _REMAINING, "4-4A midseason (R=4)", runs=3)
 
     print()
-    print(
-        "Extrapolated estimates (from R=4 avg):"
-    )
+    print("Extrapolated estimates (from R=4 avg):")
     r4_avg = None  # will be computed inline below — just a note for Phase 2 comparison
 
     # Re-run once to capture timing for extrapolation
@@ -98,9 +91,9 @@ if __name__ == "__main__":
         if est_sec < 120:
             est_str = f"{est_sec:.1f}s"
         elif est_sec < 3600:
-            est_str = f"{est_sec/60:.1f}min"
+            est_str = f"{est_sec / 60:.1f}min"
         else:
-            est_str = f"{est_sec/3600:.1f}hr"
+            est_str = f"{est_sec / 3600:.1f}hr"
         print(f"  R={R}  masks={masks:>4}  evals={evals:>14,}  estimated ~{est_str}")
 
     print()

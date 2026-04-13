@@ -174,6 +174,42 @@ CREATE TABLE IF NOT EXISTS region_scenarios (
 
 
 -- ---------------------------------------------------------------------------
+-- Region computation state
+-- ---------------------------------------------------------------------------
+-- One row per season/class/region. Tracks the margin-sensitivity mode and
+-- pipeline status for each region's scenario computation.
+--
+-- Two-phase computation tiers:
+--   R ≤ 4  — always margin-sensitive; computed synchronously; status = 'not_needed'
+--   R = 5–6 — win/loss-only first (margin_sensitive=FALSE, status='pending'),
+--              then upgraded in the background (status='running' → 'complete',
+--              margin_sensitive flips to TRUE once the upgrade lands)
+--   R ≥ 7  — win/loss-only permanently; status = 'skipped'
+--
+-- The frontend uses margin_sensitive + margin_compute_status to decide whether
+-- to show a "refining scenarios…" indicator.
+
+CREATE TABLE IF NOT EXISTS region_computation_state (
+  season                  INTEGER NOT NULL,
+  class                   INTEGER NOT NULL,
+  region                  INTEGER NOT NULL,
+  r_remaining             INTEGER NOT NULL,
+  margin_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,
+  margin_compute_status   TEXT    NOT NULL DEFAULT 'not_needed'
+                          CHECK (margin_compute_status IN (
+                            'not_needed',  -- R ≤ 4: always synchronous, no background job
+                            'pending',     -- R 5-6: win/loss data stored, background job queued
+                            'running',     -- R 5-6: background margin computation in progress
+                            'complete',    -- R 5-6: margin-sensitive data has been stored
+                            'skipped'      -- R ≥ 7: margin sensitivity permanently disabled
+                          )),
+  computed_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  margin_computed_at      TIMESTAMPTZ,        -- NULL until margin-sensitive computation completes
+  PRIMARY KEY (season, class, region)
+);
+
+
+-- ---------------------------------------------------------------------------
 -- Playoff bracket format template
 -- ---------------------------------------------------------------------------
 -- One row per season/class combination.  The bracket tree is implicit from
@@ -517,6 +553,31 @@ COMMENT ON COLUMN region_scenarios.complete_scenarios IS
   'with scenario_num, sub_label, game_winners, conditions_atom, and seeding. '
   'Source of truth for the "Scenario N: … → 1. Team …" complete-seedings view.';
 
+
+-- region_computation_state
+
+COMMENT ON TABLE region_computation_state IS
+  'Tracks the margin-sensitivity mode and background-job status for each region. '
+  'One row per season/class/region. Updated by the Prefect pipeline after each '
+  'game-result batch. Used by the frontend to decide whether to show a '
+  '"refining scenarios…" indicator while the background upgrade runs.';
+
+COMMENT ON COLUMN region_computation_state.r_remaining IS
+  'Number of unplayed region games at the time of last computation. '
+  'Determines which tier applies: ≤4 synchronous, 5-6 two-phase, ≥7 win/loss-only.';
+COMMENT ON COLUMN region_computation_state.margin_sensitive IS
+  'TRUE if the currently stored scenario_atoms and odds reflect full margin-sensitive '
+  'computation. FALSE when only win/loss enumeration has been run (initial phase for R=5-6, '
+  'or permanently for R≥7).';
+COMMENT ON COLUMN region_computation_state.margin_compute_status IS
+  'Pipeline lifecycle state. See table comment for the full state machine. '
+  'not_needed: R≤4, always synchronous. '
+  'pending/running/complete: R=5-6 two-phase upgrade lifecycle. '
+  'skipped: R≥7, win/loss-only permanently.';
+COMMENT ON COLUMN region_computation_state.computed_at IS
+  'Timestamp of the most recent computation (win/loss or margin-sensitive).';
+COMMENT ON COLUMN region_computation_state.margin_computed_at IS
+  'Timestamp when the margin-sensitive upgrade completed. NULL until complete.';
 
 -- playoff_formats
 
