@@ -10,46 +10,16 @@
 | `scenario_serializers.py` | **100%** | |
 | `tiebreakers.py` | **100%** | |
 | `scenario_renderer.py` | **91%** | Weighted odds + home-game renderers untested |
-| `scenario_viewer.py` | **93%** | Outer stability loop second pass + several edge cases |
+| `scenario_viewer.py` | **96%** | Outer stability loop second pass + several edge cases |
 | `home_game_scenarios.py` | **100%** | |
 | `bracket_home_odds.py` | **100%** | |
-| **Total** | **96%** | 2749 tests passing |
+| **Total** | **98%** | 2760 tests passing |
 
 Test files: 31 test files including synthetic coin-flip fixture, precomputed-path coverage, and full-season R=0 tests.
 
 ---
 
 ## scenario_viewer.py — gap catalogue
-
-### `_find_combined_atom` — MarginCondition intersection (lines 120, 142→123, 145, 147, 171)
-
-Fires when two atoms for the same seeding both contain `MarginCondition` objects and their margin ranges must be tightened by intersection. No test generates a combined atom with two intersecting `MarginCondition` paths.
-
----
-
-### `_find_combined_atom` — no-match return (line 217)
-
-`return None` fires when no stored atom matches the sample margins for a sub-scenario. Defensive — every tested sub-scenario always finds a matching atom.
-
----
-
-### `_split_non_rectangular_atom` — reverse direction (lines 270–271, 309–310, 312–313, 334→244, 337)
-
-The forward direction (game0-keyed grouping) is covered. The reverse path (game1-keyed grouping) is structurally reachable but never triggered — all tested non-rectangular cases are exhausted by the forward direction.
-
----
-
-### `_derive_atom` — all-margins-valid shortcut (lines 404–410)
-
-When every one of the 12^R margin combinations is valid for a given mask+seeding (i.e. the team is always at this seed regardless of margin), per-game ranges are skipped and a single unconstrainted atom is returned. In all tested margin-sensitive regions, at least one margin combination prevents each team-seed pair, so this fast path is never reached.
-
----
-
-### `_derive_atom` — unconstrained per-game fallback (lines 504–510)
-
-When joint margin constraints alone (ignoring per-game bounds) exactly describe the valid 2D set, per-game bounds are dropped and unconstrained `GameResult` objects are returned. No tested region produces this shape.
-
----
 
 ### Rule 1/2 merge edge cases (lines 526, 651, 665, 670, 684)
 
@@ -162,7 +132,7 @@ The home-game rendering family (`render_team_home_scenarios`, `team_home_scenari
 
 ### Priority 1: 5A–7A region with 4 games remaining ⭐⭐⭐ **High effort, high reward**
 
-2^4 = 16 masks × 12^4 = 20,736 margin combos. Larger atom lists make it more likely that Rule 4 fires AND the result is further reducible by Rule 1/2 (outer stability loop second pass). Also the most likely trigger for `_split_non_rectangular_atom` reverse direction and `_try_rule4` lower-bound guards.
+2^4 = 16 masks × 12^4 = 20,736 margin combos. Larger atom lists make it more likely that Rule 4 fires AND the result is further reducible by Rule 1/2 (outer stability loop second pass). Also the most likely trigger for `_try_rule4` lower-bound guards.
 
 **Caveat:** Computationally expensive but tractable (the 4-4A midseason test at R=4 already runs fine).
 

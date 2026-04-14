@@ -6,6 +6,9 @@ from backend.helpers.data_classes import GameResult, MarginCondition, RemainingG
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_renderer import _render_margin_condition
 from backend.helpers.scenario_viewer import (
+    _derive_atom,
+    _find_combined_atom,
+    _split_non_rectangular_atom,
     build_scenario_atoms,
     enumerate_division_scenarios,
     enumerate_outcomes,
@@ -663,6 +666,210 @@ class TestBuildScenarioAtoms37A:
                         f"NWR seed-1 atom has point-sample GameResult: {cond}. "
                         "Expected a margin range."
                     )
+
+
+# ---------------------------------------------------------------------------
+# Synthetic unit tests — _find_combined_atom, _split_non_rectangular_atom,
+# _derive_atom (coverage-gap fill)
+# ---------------------------------------------------------------------------
+
+_SYNTH_REMAINING = [RemainingGame("A", "B"), RemainingGame("C", "D")]
+_SYNTH_PAIRS = [("A", "B"), ("C", "D")]
+_AB = ("A", "B")
+_CD = ("C", "D")
+_SYNTH_MASK = 0b11  # A wins game 0 (AB), C wins game 1 (CD)
+
+
+class TestFindCombinedAtom:
+    """Synthetic tests for _find_combined_atom — MarginCondition paths and None returns."""
+
+    def _call(self, scenario_atoms, sample_margins, seeding, playoff_seeds=2):
+        """Invoke _find_combined_atom with synthetic remaining games and mask."""
+        return _find_combined_atom(
+            seeding=seeding,
+            playoff_seeds=playoff_seeds,
+            mask=_SYNTH_MASK,
+            sample_margins=sample_margins,
+            scenario_atoms=scenario_atoms,
+            remaining=_SYNTH_REMAINING,
+        )
+
+    def test_ge_intersection_keeps_tightest(self):
+        """Two '>=' atoms on same key — merged result keeps the higher (tighter) threshold."""
+        atoms = {
+            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=5)]]},
+            "C": {2: [[GameResult("C", "D", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=3)]]},
+        }
+        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "C", "B", "D"))
+        assert result is not None
+        mc = [c for c in result if isinstance(c, MarginCondition)]
+        assert len(mc) == 1
+        assert mc[0].op == ">=" and mc[0].threshold == 5
+
+    def test_lt_op_converted_to_le(self):
+        """op='<' threshold N is normalised to '<=' threshold N-1 (line 144-145)."""
+        atoms = {
+            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op="<", threshold=10)]]},
+        }
+        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "B", "C", "D"))
+        assert result is not None
+        mc = [c for c in result if isinstance(c, MarginCondition)]
+        assert len(mc) == 1
+        assert mc[0].op == "<=" and mc[0].threshold == 9
+
+    def test_gt_op_converted_to_ge(self):
+        """op='>' threshold N is normalised to '>=' threshold N+1 (line 146-147)."""
+        atoms = {
+            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op=">", threshold=5)]]},
+        }
+        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "B", "C", "D"))
+        assert result is not None
+        mc = [c for c in result if isinstance(c, MarginCondition)]
+        assert len(mc) == 1
+        assert mc[0].op == ">=" and mc[0].threshold == 6
+
+    def test_eq_op_collapses_to_eq(self):
+        """op='==' contributes both ge and le directions; reconstructed as op='==' (lines 151-152)."""
+        atoms = {
+            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op="==", threshold=7)]]},
+        }
+        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "B", "C", "D"))
+        assert result is not None
+        mc = [c for c in result if isinstance(c, MarginCondition)]
+        assert len(mc) == 1
+        assert mc[0].op == "==" and mc[0].threshold == 7
+
+    def test_returns_none_when_all_atoms_unsatisfied(self):
+        """Returns None when every playoff-seeded team has no matching atom (line 171)."""
+        # Both atoms require margin >= 10, but sample margin is only 7
+        atoms = {
+            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=10)]]},
+            "C": {2: [[GameResult("C", "D", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=10)]]},
+        }
+        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "C", "B", "D"))
+        assert result is None
+
+    def test_skips_team_with_no_matching_atom_uses_others(self):
+        """Skips (line 120 continue) a team whose atom is unsatisfied; uses remaining teams' atoms."""
+        # A's atom: requires >= 10 (not satisfied with margin=7) → skipped
+        # C's atom: requires >= 3 (satisfied) → used
+        atoms = {
+            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=10)]]},
+            "C": {2: [[GameResult("C", "D", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=3)]]},
+        }
+        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "C", "B", "D"))
+        assert result is not None
+        mc = [c for c in result if isinstance(c, MarginCondition)]
+        assert len(mc) == 1 and mc[0].threshold == 3
+
+
+class TestSplitNonRectangularAtom:
+    """Synthetic tests for _split_non_rectangular_atom — reverse direction paths."""
+
+    _base = [GameResult("A", "B", 1, None), GameResult("C", "D", 1, None)]
+
+    def _call(self, valid_margins_list, lows, highs):
+        """Invoke _split_non_rectangular_atom with synthetic remaining games and base atom."""
+        return _split_non_rectangular_atom(
+            _SYNTH_MASK,
+            valid_margins_list,
+            _SYNTH_REMAINING,
+            _SYNTH_PAIRS,
+            lows,
+            highs,
+            self._base,
+        )
+
+    def test_reverse_direction_succeeds(self):
+        """Forward fails (game0 non-contiguous for same game1 set); reverse succeeds (line 334).
+
+        valid_2d = {(1,2),(2,1),(2,2),(3,2)}
+        Forward: frozenset({2}) → game0=[1,3] non-contiguous → fails at line 267-268.
+        Reverse: frozenset({2}) → game1=[1]; frozenset({1,2,3}) → game1=[2] — both contiguous.
+        """
+        valid = [
+            {_AB: 1, _CD: 2}, {_AB: 2, _CD: 1},
+            {_AB: 2, _CD: 2}, {_AB: 3, _CD: 2},
+        ]
+        result = self._call(valid, lows=[1, 1], highs=[3, 2])
+        assert result is not None
+        assert len(result) == 2
+
+    def test_forward_and_reverse_game0_noncont_returns_none(self):
+        """Forward fails (game0 non-contiguous); reverse fails (game0 frozenset non-contiguous).
+
+        valid_2d = {(1,1),(1,2),(3,1),(3,2)}
+        Forward: frozenset({1,2}) → game0=[1,3] non-contiguous → fails at line 267-268.
+        Reverse: frozenset({1,3}) → game1=[1,2] (contiguous), but s_sorted=[1,3]
+                 non-contiguous → fails at line 312-313.
+        Returns None (line 337).
+        """
+        valid = [
+            {_AB: 1, _CD: 1}, {_AB: 1, _CD: 2},
+            {_AB: 3, _CD: 1}, {_AB: 3, _CD: 2},
+        ]
+        result = self._call(valid, lows=[1, 1], highs=[3, 2])
+        assert result is None
+
+    def test_forward_and_reverse_game1_noncont_returns_none(self):
+        """Forward fails (game1 frozenset non-contiguous); reverse fails (game1 list non-contiguous).
+
+        valid_2d = {(1,1),(1,3),(2,1),(2,3)}
+        Forward: frozenset({1,3}) → game0=[1,2] (contiguous), but p_sorted=[1,3]
+                 non-contiguous → fails at line 270-271.
+        Reverse: frozenset({1,2}) → game1=[1,3] non-contiguous → fails at line 309-310.
+        Returns None (line 337).
+        """
+        valid = [
+            {_AB: 1, _CD: 1}, {_AB: 1, _CD: 3},
+            {_AB: 2, _CD: 1}, {_AB: 2, _CD: 3},
+        ]
+        result = self._call(valid, lows=[1, 1], highs=[2, 3])
+        assert result is None
+
+
+class TestDeriveAtom:
+    """Synthetic tests for _derive_atom — all-margins-valid and unconstrained fallback paths."""
+
+    def test_all_margins_valid_returns_unconstrained_atom(self):
+        """all_margins_valid=True skips margin iteration and returns one unconstrained atom (lines 404-410)."""
+        result = _derive_atom(
+            mask=_SYNTH_MASK,
+            valid_margins_list=[],  # not consulted when all_margins_valid=True
+            remaining=_SYNTH_REMAINING,
+            pairs=_SYNTH_PAIRS,
+            all_margins_valid=True,
+        )
+        assert len(result) == 1
+        atom = result[0]
+        grs = [c for c in atom if isinstance(c, GameResult)]
+        assert len(grs) == 2
+        assert all(gr.min_margin == 1 and gr.max_margin is None for gr in grs)
+        assert not any(isinstance(c, MarginCondition) for c in atom)
+
+    def test_unconstrained_per_game_fallback(self):
+        """Joint constraints alone reproduce valid_2d → per-game bounds dropped (lines 504-510).
+
+        valid_2d = {(1,1),(1,2),(2,1)} = all (v0,v1) in [1,12]² with v0+v1 <= 3.
+        predicted_full([1,12]×[1,12], sum<=3) equals valid_2d, so the unconstrained
+        GameResult path fires and the atom has max_margin=None for both games.
+        """
+        valid = [
+            {_AB: 1, _CD: 1}, {_AB: 1, _CD: 2}, {_AB: 2, _CD: 1},
+        ]
+        result = _derive_atom(
+            mask=_SYNTH_MASK,
+            valid_margins_list=valid,
+            remaining=_SYNTH_REMAINING,
+            pairs=_SYNTH_PAIRS,
+        )
+        assert len(result) == 1
+        atom = result[0]
+        grs = [c for c in atom if isinstance(c, GameResult)]
+        assert all(gr.max_margin is None for gr in grs), "GameResults should be unconstrained"
+        mcs = [c for c in atom if isinstance(c, MarginCondition)]
+        assert len(mcs) == 1
+        assert mcs[0].op == "<=" and mcs[0].threshold == 3
 
 
 # ---------------------------------------------------------------------------
