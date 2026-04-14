@@ -109,7 +109,7 @@ if not _SF_PARAMS:
 @pytest.mark.parametrize("clazz,home_region,home_seed,away_region,away_seed", _R2_PARAMS)
 def test_r2_home_team_2025(clazz, home_region, home_seed, away_region, away_seed):
     """r2_home_team must return the actual 2025 R2 home team for every game."""
-    result = r2_home_team(home_region, home_seed, away_region, away_seed)
+    result = r2_home_team(home_region, home_seed, away_region, away_seed, season=2025)
     assert result == (home_region, home_seed), (
         f"{clazz}A R2: expected R{home_region}s{home_seed} to host R{away_region}s{away_seed}, "
         f"but got R{result[0]}s{result[1]}"

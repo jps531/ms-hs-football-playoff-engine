@@ -136,6 +136,7 @@ def _explain_r2(
     team_seed: int,
     opp_region: int,
     opp_seed: int,
+    season: int,
 ) -> str:
     """Return the explanation for a second-round home outcome."""
 
@@ -145,9 +146,13 @@ def _explain_r2(
     if team_seed != opp_seed:
         winner_seed = min(team_seed, opp_seed)
         return f"Higher seed (#{winner_seed}) hosts"
-    # equal cross-region seed — lower region# tiebreak (see r2_home_team docstring)
-    host_region = min(team_region, opp_region)
-    return f"Equal seed (#{team_seed}) — lower region# hosts (Region {host_region})"
+    # equal cross-region seed — odd/even year tiebreak (same as QF/SF)
+    odd_year = season % 2 == 1
+    if odd_year:
+        host_region = min(team_region, opp_region)
+        return f"Equal seed (#{team_seed}) — region tiebreak: odd year, lower region# hosts (Region {host_region})"
+    host_region = max(team_region, opp_region)
+    return f"Equal seed (#{team_seed}) — region tiebreak: even year, higher region# hosts (Region {host_region})"
 
 
 def _explain_qf(
@@ -296,6 +301,7 @@ def _enumerate_r2(
     seed: int,
     half_slots: list[FormatSlot],
     slot_idx: int,
+    season: int,
     round_name: str,
     odds: _RoundOdds,
     team_lookup: dict[tuple[int, int], str] | None,
@@ -335,9 +341,9 @@ def _enumerate_r2(
     team_cond = _advances(None, None, None, round_name)
 
     for opp_r, opp_s in candidates:
-        home_r, home_s = r2_home_team(region, seed, opp_r, opp_s)
+        home_r, home_s = r2_home_team(region, seed, opp_r, opp_s, season)
         is_home = home_r == region and home_s == seed
-        explanation = _explain_r2(region, seed, opp_r, opp_s)
+        explanation = _explain_r2(region, seed, opp_r, opp_s, season)
         opp_name = _team_label(opp_r, opp_s, team_lookup)
         opp_cond = _advances(opp_name, opp_r, opp_s, round_name)
         scenario = HomeGameScenario(
@@ -757,7 +763,7 @@ def enumerate_home_game_scenarios(
         # --- Second Round (1A-4A only) ---
         r2_name = round_names[1]  # "Second Round"
         results.append(
-            _enumerate_r2(region, seed, half_slots, slot_idx, r2_name, _odds(r2_name), team_lookup)
+            _enumerate_r2(region, seed, half_slots, slot_idx, season, r2_name, _odds(r2_name), team_lookup)
         )
 
     # --- Quarterfinals ---
@@ -810,6 +816,7 @@ def _matchup_raw_r2(
     seed: int,
     half_slots: list[FormatSlot],
     slot_idx: int,
+    season: int,
 ) -> list[tuple[int, int, bool, str | None]]:
     """Raw matchup entries for the second round (1A-4A only).  Two entries."""
     adj_slot = opponent_slots(slot_idx, round_offset=1, half_slots=half_slots)[0]
@@ -818,9 +825,9 @@ def _matchup_raw_r2(
         (adj_slot.home_region, adj_slot.home_seed),
         (adj_slot.away_region, adj_slot.away_seed),
     ):
-        home_r, home_s = r2_home_team(region, seed, opp_r, opp_s)
+        home_r, home_s = r2_home_team(region, seed, opp_r, opp_s, season)
         is_home = home_r == region and home_s == seed
-        result.append((opp_r, opp_s, is_home, _explain_r2(region, seed, opp_r, opp_s)))
+        result.append((opp_r, opp_s, is_home, _explain_r2(region, seed, opp_r, opp_s, season)))
     return result
 
 
@@ -1054,7 +1061,7 @@ def enumerate_team_matchups(
 
     if is_1a_4a:
         r2_name = round_names[1]
-        results.append(_build_round(r2_name, _matchup_raw_r2(region, seed, half_slots, slot_idx)))
+        results.append(_build_round(r2_name, _matchup_raw_r2(region, seed, half_slots, slot_idx, season)))
 
     qf_name = round_names[2] if is_1a_4a else round_names[1]
     results.append(_build_round(qf_name, _matchup_raw_qf(region, seed, half_slots, slot_idx, season, is_1a_4a)))

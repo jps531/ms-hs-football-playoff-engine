@@ -550,7 +550,7 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
 
     slots = fetch_all_format_slots(clazz, season)
     second_round_home_marginal = (
-        compute_second_round_home_odds(region, odds, slots) if clazz <= 4 else {}
+        compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
     )
     quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season)
     semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season)
@@ -586,7 +586,7 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
 
     # Weighted conditional home odds (same win_prob_fn caveat as bracket_weighted).
     second_round_home_marginal_w = (
-        compute_second_round_home_odds(region, odds, slots) if clazz <= 4 else {}
+        compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
     )
     quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds, slots, season)
     semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds, slots, season)

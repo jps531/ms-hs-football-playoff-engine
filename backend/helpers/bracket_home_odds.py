@@ -4,7 +4,8 @@
 (and the second round for 1A-4A, where the same higher-seed-hosts rule applies).
 This module handles the remaining rounds:
 
-* **Second round (1A-4A only)**: higher seed hosts.
+* **Second round (1A-4A only)**: higher seed hosts.  Equal cross-region seeds use the same
+  odd/even year tiebreak as QF/SF (odd years: lower region# hosts; even years: higher region#).
 * **Quarterfinals**: if both teams are from the same region, the higher seed
   (lower number) always hosts (golden rule, supersedes all other steps).
   Otherwise: fewer home games played hosts; equal home games → higher seed
@@ -300,18 +301,22 @@ def _p_team_reach(
 
 def _p_home_in_r2(
     team_seed: int,
+    team_region: int,
     r2_opp_slot: FormatSlot,
+    season: int,
     win_prob_fn: MatchupProbFn,
 ) -> float:
     """P(team was home in R2) given R2 opponent is the winner of *r2_opp_slot*.
 
-    R2 rule: higher seed (lower number) hosts; equal seeds are a coin flip.
+    R2 rule: higher seed (lower number) hosts.  Equal cross-region seeds use
+    the odd/even year region-number tiebreak (same as QF/SF).
     Each possible R2 opponent is weighted by their R1 win probability.
 
     Args:
         team_seed:    Team's region seed (1 = best).
-        team_region:  Team's region number (used for equal-seed coin-flip edge case).
+        team_region:  Team's region number.
         r2_opp_slot:  The slot whose winner the team faces in R2.
+        season:       Football season year (used for odd/even tiebreak).
         win_prob_fn:  Win-probability function.
 
     Returns:
@@ -321,15 +326,20 @@ def _p_home_in_r2(
         r2_opp_slot.home_region, r2_opp_slot.home_seed,
         r2_opp_slot.away_region, r2_opp_slot.away_seed,
     )
+    odd_year = season % 2 == 1
     p = 0.0
-    for opp_seed, p_opp_r1 in (
-        (r2_opp_slot.home_seed, p_adj_home_r1),
-        (r2_opp_slot.away_seed, 1.0 - p_adj_home_r1),
+    for opp_region, opp_seed, p_opp_r1 in (
+        (r2_opp_slot.home_region, r2_opp_slot.home_seed, p_adj_home_r1),
+        (r2_opp_slot.away_region, r2_opp_slot.away_seed, 1.0 - p_adj_home_r1),
     ):
         if team_seed < opp_seed:
             p += p_opp_r1
         elif team_seed == opp_seed:
-            p += p_opp_r1 * 0.5  # coin flip; R2 rule is silent on equal seeds
+            # equal cross-region seed: odd year → lower region# hosts; even → higher
+            if odd_year:
+                p += p_opp_r1 if team_region < opp_region else 0.0
+            else:
+                p += p_opp_r1 if team_region > opp_region else 0.0
     return p
 
 
@@ -376,14 +386,11 @@ def _p_host_seed_rule(
                     p += w
             elif team_seed < opp_seed:
                 p += w
-            elif team_seed == opp_seed:
-                if use_region_tiebreak:
-                    if odd_year:
-                        p += w if team_region < opp_region else 0.0
-                    else:
-                        p += w if team_region > opp_region else 0.0
+            elif team_seed == opp_seed and use_region_tiebreak:
+                if odd_year:
+                    p += w if team_region < opp_region else 0.0
                 else:
-                    p += w * 0.5
+                    p += w if team_region > opp_region else 0.0
     return p
 
 
@@ -394,6 +401,7 @@ def _p_host_qf_given_seed(
     half_slots: list[FormatSlot],
     qf_offset: int,
     odd_year: bool,
+    season: int,
     win_prob_fn: MatchupProbFn,
 ) -> float:
     """P(team hosts QF | team reaches QF at *team_seed*).
@@ -432,7 +440,7 @@ def _p_host_qf_given_seed(
 
     if qf_offset >= 2:
         r2_opp_slot = _opponent_slots(team_slot_idx, 1, half_slots)[0]
-        p_team_h2 = _p_home_in_r2(team_seed, r2_opp_slot, win_prob_fn)
+        p_team_h2 = _p_home_in_r2(team_seed, team_region, r2_opp_slot, season, win_prob_fn)
     else:
         p_team_h2 = 0.0
 
@@ -454,7 +462,7 @@ def _p_host_qf_given_seed(
             opp_h1 = 1 if opp_r1_home else 0
 
             if qf_offset >= 2:
-                p_opp_h2 = _p_home_in_r2(opp_seed, opp_r2_partner, win_prob_fn)
+                p_opp_h2 = _p_home_in_r2(opp_seed, opp_region, opp_r2_partner, season, win_prob_fn)
                 p_cand_reach = _p_team_reach(opp_region, opp_seed, opp_slot_idx, qf_offset, half_slots, win_prob_fn)
             else:
                 p_opp_h2 = 0.0
@@ -495,19 +503,20 @@ def _p_host_qf_given_seed(
 def r2_home_team(
     region1: int, seed1: int,
     region2: int, seed2: int,
+    season: int,
 ) -> tuple[int, int]:
     """Return ``(region, seed)`` of the second-round home team.
 
     Golden rule: same-region opponents → higher seed (lower number) hosts.
-    Cross-region: higher seed hosts.  Equal seeds across regions → lower
-    region number hosts (bracket design makes this case effectively unreachable
-    in the current MHSAA format).
+    Cross-region: higher seed hosts.  Equal cross-region seeds use the same
+    odd/even year region-number tiebreak as QF/SF.
 
     Args:
         region1: Region number of the first team.
         seed1:   Region seed of the first team (1 = best).
         region2: Region number of the second team.
         seed2:   Region seed of the second team.
+        season:  Football season year (used for odd/even tiebreak).
 
     Returns:
         ``(region, seed)`` tuple identifying the home team.
@@ -518,7 +527,11 @@ def r2_home_team(
         return (region1, seed1)
     if seed2 < seed1:
         return (region2, seed2)
-    return (region1, seed1) if region1 < region2 else (region2, seed2)
+    # equal cross-region seed — odd/even year tiebreak (same as QF/SF)
+    odd_year = season % 2 == 1
+    if odd_year:
+        return (region1, seed1) if region1 < region2 else (region2, seed2)
+    return (region1, seed1) if region1 > region2 else (region2, seed2)
 
 
 def qf_home_team(
@@ -617,19 +630,21 @@ def compute_second_round_home_odds(
     region: int,
     region_odds: dict[str, StandingsOdds],
     slots: list[FormatSlot],
+    season: int,
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their second-round game.
 
     Applies to 1A-4A only (5A-7A teams go straight to the quarterfinal).
 
-    Rule: higher seed hosts.  No explicit tiebreak for equal seeds; treated as
-    a coin flip (0.5).
+    Rule: higher seed hosts.  Equal cross-region seeds use the odd/even year
+    region-number tiebreak (same as QF/SF).
 
     Args:
         region:       Region number for the teams in *region_odds*.
         region_odds:  Dict mapping team name to ``StandingsOdds``.
         slots:        All first-round format slots for this class (all regions).
+        season:       Football season year (used for odd/even tiebreak).
         win_prob_fn:  Optional win-probability function.  Defaults to 0.5 for
                       every game.
 
@@ -637,6 +652,7 @@ def compute_second_round_home_odds(
         Dict mapping team name to marginal P(hosting round 2) in [0.0, 1.0].
     """
     half_slots = _half_slots_for_region(region, slots)
+    odd_year = season % 2 == 1
     result: dict[str, float] = {}
     for school, o in region_odds.items():
         p_home = 0.0
@@ -650,8 +666,8 @@ def compute_second_round_home_odds(
             opp_indices = _opponent_slot_indices(idx, round_offset=1)
             p_r2_home = _p_host_seed_rule(
                 seed, region, opp_indices, opp_num_wins=1,
-                half_slots=half_slots, odd_year=False,
-                use_region_tiebreak=False, win_prob_fn=win_prob_fn,
+                half_slots=half_slots, odd_year=odd_year,
+                use_region_tiebreak=True, win_prob_fn=win_prob_fn,
             )
             p_home += p_seed * p_r1 * p_r2_home
         result[school] = p_home
@@ -699,7 +715,7 @@ def compute_quarterfinal_home_odds(
                 continue
             p_reach = _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn)
             p_qf_home = _p_host_qf_given_seed(
-                seed, region, idx, half_slots, qf_offset, odd_year, win_prob_fn
+                seed, region, idx, half_slots, qf_offset, odd_year, season, win_prob_fn
             )
             p_home += p_seed * p_reach * p_qf_home
         result[school] = p_home

@@ -11,9 +11,9 @@
 | `tiebreakers.py` | **100%** | |
 | `scenario_renderer.py` | **91%** | Weighted odds + home-game renderers untested |
 | `scenario_viewer.py` | **93%** | Outer stability loop second pass + several edge cases |
-| `home_game_scenarios.py` | **97%** | Same-region R2/R2-equal-seed explanations + dedup guards |
-| `bracket_home_odds.py` | **95%** | Several cross-region and equal-seed branches |
-| **Total** | **96%** | 2727 tests passing |
+| `home_game_scenarios.py` | **100%** | |
+| `bracket_home_odds.py` | **100%** | |
+| **Total** | **96%** | 2749 tests passing |
 
 Test files: 31 test files including synthetic coin-flip fixture, precomputed-path coverage, and full-season R=0 tests.
 
@@ -155,50 +155,6 @@ The home-game rendering family (`render_team_home_scenarios`, `team_home_scenari
 - **Lines 463, 479**: Unconditional host/not-host with explanation in `render_team_home_scenarios`.
 - **Line 542**: `elif label is None: label = f"Region..."` fallback in `team_home_scenarios_as_dict._cond_dict`.
 - **Lines 633→635**: `entry.explanation` True branch in `render_team_matchups` — no tested matchup entry carries an explanation string.
-
----
-
-## home_game_scenarios.py — gap catalogue
-
-### `_explain_r2` — same-region and equal-seed branches (lines 143–144, 149–150)
-
-- **Lines 143–144**: Same-region second-round explanation (`"Same-region game — higher seed (#N) hosts"`). Same-region R2 matchups do not arise under the current bracket structure.
-- **Lines 149–150**: Equal-seed cross-region R2 tiebreak (`"Equal seed (#N) — lower region# hosts"`). No tested region produces a second-round matchup with equal cross-region seeds.
-
----
-
-### SF dedup `continue` guards (lines 643, 920)
-
-- **Line 643**: `continue` in `_build_sf_scenarios` when a `(region, seed)` opponent pair has already been processed in the slot iteration. Fires only when the same opponent slot appears twice due to bracket structure — not triggered in tested regions.
-- **Line 920**: Same guard in `_matchup_raw_sf`.
-
----
-
-## bracket_home_odds.py — gap catalogue
-
-### `_p_team_reach` zero-wins shortcut (line 238)
-
-`if num_wins == 0: return 1.0` — fired when a team has already reached a round (zero additional wins needed). All callers pass `num_wins ≥ 1` in the tested paths.
-
----
-
-### Equal-seed coin-flip / non-tiebreak paths (lines 332, 386)
-
-- **Line 332**: `p += p_opp_r1 * 0.5` in `_p_home_in_r2` — equal seeds in R2; the R2 home rule is silent on equal cross-region seeds, so a 50/50 coin flip is applied. No tested bracket has two R2 opponents of equal seed.
-- **Line 386**: `p += w * 0.5` in `_p_host_seed_rule` when `use_region_tiebreak=False` and seeds are equal — the R2-specific coin-flip path. Same root cause as line 332.
-
----
-
-### `r2_home_team` edge cases (lines 516, 521)
-
-- **Line 516**: `return (region1, seed1) if seed1 < seed2 else (region2, seed2)` — same-region R2 branch. Same-region R2 matchups do not arise under the current bracket structure.
-- **Line 521**: `return (region1, seed1) if region1 < region2 else (region2, seed2)` — equal-seed cross-region tiebreak (lower region# hosts). No tested R2 matchup involves equal cross-region seeds.
-
----
-
-### `idx is None` guard in compute functions (lines 648, 699, 749, 807)
-
-`if idx is None: continue` — fires when `_slot_index_for` cannot locate a (region, seed) pair in the half-slot list. Protective guard; all tested regions have complete slot assignments.
 
 ---
 

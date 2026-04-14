@@ -57,7 +57,11 @@ from backend.helpers.data_classes import (
     HomeGameScenario,
     RoundHomeScenarios,
 )
-from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
+from backend.helpers.home_game_scenarios import (
+    _explain_r2,
+    enumerate_home_game_scenarios,
+    enumerate_team_matchups,
+)
 from backend.helpers.scenario_renderer import (
     render_team_home_scenarios,
     team_home_scenarios_as_dict,
@@ -1330,3 +1334,124 @@ class TestEvenYearTiebreak:
         assert even_year_explanations == [], (
             f"Unexpected even-year explanation with odd season: {even_year_explanations}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 12. _explain_r2 — same-region and equal-seed branches (lines 143–144, 149–150)
+# ---------------------------------------------------------------------------
+
+
+class TestExplainR2:
+    """Direct unit tests for the private _explain_r2 helper.
+
+    The standard different-region / different-seed branch (lines 145–147) is
+    already exercised via 1A-4A second-round tests.  This class targets the
+    two remaining branches:
+      - same-region R2 game (lines 143–144)
+      - cross-region equal-seed tiebreak (lines 149–150)
+    """
+
+    def test_same_region_higher_seed_hosts(self):
+        """Same-region R2: the lower seed# (better seed) hosts — lines 143–144."""
+        result = _explain_r2(team_region=1, team_seed=2, opp_region=1, opp_seed=3, season=SEASON)
+        assert result == "Same-region game — higher seed (#2) hosts"
+
+    def test_same_region_team_is_lower_seed(self):
+        """Same-region R2: explanation correct when team is the worse seed — lines 143–144."""
+        result = _explain_r2(team_region=2, team_seed=4, opp_region=2, opp_seed=1, season=SEASON)
+        assert result == "Same-region game — higher seed (#1) hosts"
+
+    def test_equal_seed_cross_region_odd_year_lower_region_hosts(self):
+        """Cross-region equal-seed, odd year: lower region# hosts — lines 149–150."""
+        result = _explain_r2(team_region=2, team_seed=2, opp_region=3, opp_seed=2, season=2025)
+        assert result == "Equal seed (#2) — region tiebreak: odd year, lower region# hosts (Region 2)"
+
+    def test_equal_seed_cross_region_even_year_higher_region_hosts(self):
+        """Cross-region equal-seed, even year: higher region# hosts — lines 149–150."""
+        result = _explain_r2(team_region=2, team_seed=2, opp_region=3, opp_seed=2, season=2024)
+        assert result == "Equal seed (#2) — region tiebreak: even year, higher region# hosts (Region 3)"
+
+    def test_equal_seed_cross_region_names_correct_odd_host(self):
+        """Odd year: host region is min(team_region, opp_region)."""
+        result = _explain_r2(team_region=5, team_seed=3, opp_region=1, opp_seed=3, season=2025)
+        assert result == "Equal seed (#3) — region tiebreak: odd year, lower region# hosts (Region 1)"
+
+    def test_different_region_different_seed_unchanged(self):
+        """Sanity-check: the covered branch still returns the expected string."""
+        result = _explain_r2(team_region=1, team_seed=1, opp_region=2, opp_seed=3, season=SEASON)
+        assert result == "Higher seed (#1) hosts"
+
+
+# ---------------------------------------------------------------------------
+# 13. SF dedup `continue` guards (lines 643, 920)
+# ---------------------------------------------------------------------------
+
+# Synthetic 4-slot bracket half where one (region, seed) pair appears in two
+# different SF opponent slots.  Slot indices 0-3:
+#   idx 0 — R1s1 vs R2s4   (slot 1)
+#   idx 1 — R1s1 vs R1s3   (slot 2)  ← R1s1 appears again → dedup fires
+#   idx 2 — R2s1 vs R1s4   (slot 3)
+#   idx 3 — R1s2 vs R2s3   (slot 4)  ← target team
+#
+# For R1s2 (idx 3), sf_round_offset = log2(4) = 2, so
+# opponent_slot_indices(3, 2) covers indices [0, 1].
+# Both slots 0 and 1 list R1s1 as a team → `seen` fires on the second encounter.
+_SF_DEDUP_SLOTS = [
+    FormatSlot(slot=1, home_region=1, home_seed=1, away_region=2, away_seed=4, north_south="N"),
+    FormatSlot(slot=2, home_region=1, home_seed=1, away_region=1, away_seed=3, north_south="N"),
+    FormatSlot(slot=3, home_region=2, home_seed=1, away_region=1, away_seed=4, north_south="N"),
+    FormatSlot(slot=4, home_region=1, home_seed=2, away_region=2, away_seed=3, north_south="N"),
+]
+
+
+class TestSFDedupGuard:
+    """Tests that exercise the `seen` duplicate-opponent guard in the SF builders.
+
+    With _SF_DEDUP_SLOTS, R1s2's SF opponent pool is slots 0 and 1 (indices 0
+    and 1).  Both slots contain R1s1, so the second encounter triggers the
+    `continue` at line 643 (_enumerate_sf) and line 920 (_matchup_raw_sf).
+    The resulting scenario list must have exactly 3 unique opponents (R1s1,
+    R2s4, R1s3) rather than 4.
+    """
+
+    def test_enumerate_sf_dedup_fires_correct_opponent_count(self):
+        """enumerate_home_game_scenarios: R1s2 has 3 unique SF opponents, not 4 (line 643)."""
+        result = enumerate_home_game_scenarios(1, 2, _SF_DEDUP_SLOTS, SEASON)
+        sf = result[-1]  # last round = Semifinals
+        assert sf.round_name == "Semifinals"
+        total_scenarios = len(sf.will_host) + len(sf.will_not_host)
+        assert total_scenarios == 3, (
+            f"Expected 3 unique SF opponents after dedup; got {total_scenarios}"
+        )
+
+    def test_enumerate_sf_dedup_r1s1_appears_once(self):
+        """After dedup, R1s1 appears exactly once in the SF scenario list (line 643)."""
+        result = enumerate_home_game_scenarios(1, 2, _SF_DEDUP_SLOTS, SEASON)
+        sf = result[-1]
+        all_scenarios = list(sf.will_host) + list(sf.will_not_host)
+        # Each scenario has conditions (team_cond, opp_cond); opp_cond carries region/seed
+        r1s1_count = sum(
+            1 for sc in all_scenarios
+            for cond in sc.conditions
+            if cond.region == 1 and cond.seed == 1
+        )
+        assert r1s1_count == 1, f"R1s1 should appear exactly once; found {r1s1_count}"
+
+    def test_matchup_raw_sf_dedup_fires_correct_opponent_count(self):
+        """enumerate_team_matchups: R1s2 has 3 unique SF matchup entries, not 4 (line 920)."""
+        result = enumerate_team_matchups(1, 2, _SF_DEDUP_SLOTS, SEASON)
+        sf = result[-1]  # last round = Semifinals
+        assert sf.round_name == "Semifinals"
+        assert len(sf.entries) == 3, (
+            f"Expected 3 unique SF matchup entries after dedup; got {len(sf.entries)}"
+        )
+
+    def test_matchup_raw_sf_dedup_r1s1_appears_once(self):
+        """After dedup, R1s1 appears exactly once in enumerate_team_matchups SF results (line 920)."""
+        result = enumerate_team_matchups(1, 2, _SF_DEDUP_SLOTS, SEASON)
+        sf = result[-1]
+        r1s1_count = sum(
+            1 for m in sf.entries
+            if m.opponent_region == 1 and m.opponent_seed == 1
+        )
+        assert r1s1_count == 1, f"R1s1 should appear exactly once; found {r1s1_count}"

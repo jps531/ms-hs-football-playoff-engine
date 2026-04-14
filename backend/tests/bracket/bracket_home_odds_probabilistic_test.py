@@ -45,14 +45,17 @@ import pytest
 
 from backend.helpers.bracket_home_odds import (
     MatchupProbFn,
+    _p_home_in_r2,
+    _p_team_reach,
     compute_bracket_advancement_odds,
     compute_quarterfinal_home_odds,
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
     equal_matchup_prob,
     marginal_home_odds,
+    r2_home_team,
 )
-from backend.helpers.data_classes import StandingsOdds
+from backend.helpers.data_classes import FormatSlot, StandingsOdds
 from backend.helpers.scenarios import compute_bracket_odds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
 
@@ -234,7 +237,7 @@ def test_sum_invariant_r2_1a4a_north(season: int) -> None:
     all_odds = _1a4a_north_all_locked_odds()
     total = 0.0
     for region in range(1, 5):
-        result = compute_second_round_home_odds(region, all_odds[region], SLOTS_1A_4A_2025)
+        result = compute_second_round_home_odds(region, all_odds[region], SLOTS_1A_4A_2025, season)
         total += sum(result.values())
     assert total == pytest.approx(_1A4A_NORTH_R2_GAMES, abs=1e-9)
 
@@ -281,12 +284,12 @@ def test_r2_linearity_uniform_equals_seed_average_1a4a() -> None:
     region = 1
     school = "TeamA"
     uniform_odds = {school: _uniform(school)}
-    result_uniform = compute_second_round_home_odds(region, uniform_odds, SLOTS_1A_4A_2025)
+    result_uniform = compute_second_round_home_odds(region, uniform_odds, SLOTS_1A_4A_2025, ODD_SEASON)
 
     weighted = 0.0
     for seed in range(1, 5):
         locked_odds = {school: _locked(school, seed)}
-        r = compute_second_round_home_odds(region, locked_odds, SLOTS_1A_4A_2025)
+        r = compute_second_round_home_odds(region, locked_odds, SLOTS_1A_4A_2025, ODD_SEASON)
         weighted += 0.25 * r[school]
 
     assert result_uniform[school] == pytest.approx(weighted, abs=1e-9)
@@ -353,7 +356,7 @@ def test_r2_loser_gets_zero_1a4a() -> None:
     # 1A-4A North slot 1: home=R1s1 (1,1,2,4), away=R2s4.  R1s1 wins.
     fn = _slot_results_fn({(1, 1, 2, 4): 1.0})
     odds = {school: _locked(school, 4)}
-    result = compute_second_round_home_odds(region, odds, SLOTS_1A_4A_2025, fn)
+    result = compute_second_round_home_odds(region, odds, SLOTS_1A_4A_2025, ODD_SEASON, fn)
     assert result[school] == pytest.approx(0.0, abs=1e-9)
 
 
@@ -590,7 +593,7 @@ def test_1a4a_seed1_always_hosts_r2() -> None:
     region = 1
     school = "R1s1"
     odds = {school: _locked(school, 1)}
-    result = compute_second_round_home_odds(region, odds, SLOTS_1A_4A_2025)
+    result = compute_second_round_home_odds(region, odds, SLOTS_1A_4A_2025, ODD_SEASON)
     assert result[school] == pytest.approx(0.5, abs=1e-9)
 
 
@@ -603,7 +606,7 @@ def test_1a4a_seed4_never_hosts_r2() -> None:
     region = 2
     school = "R2s4"
     odds = {school: _locked(school, 4)}
-    result = compute_second_round_home_odds(region, odds, SLOTS_1A_4A_2025)
+    result = compute_second_round_home_odds(region, odds, SLOTS_1A_4A_2025, ODD_SEASON)
     assert result[school] == pytest.approx(0.0, abs=1e-9)
 
 
@@ -612,8 +615,8 @@ def test_1a4a_seed1_r2_hosting_exceeds_seed3() -> None:
     region = 1
     s1_odds = {"R1s1": _locked("R1s1", 1)}
     s3_odds = {"R1s3": _locked("R1s3", 3)}
-    r1 = compute_second_round_home_odds(region, s1_odds, SLOTS_1A_4A_2025)
-    r3 = compute_second_round_home_odds(region, s3_odds, SLOTS_1A_4A_2025)
+    r1 = compute_second_round_home_odds(region, s1_odds, SLOTS_1A_4A_2025, ODD_SEASON)
+    r3 = compute_second_round_home_odds(region, s3_odds, SLOTS_1A_4A_2025, ODD_SEASON)
     assert r1["R1s1"] > r3["R1s3"]
 
 
@@ -693,3 +696,138 @@ def test_marginal_home_odds_zero_conditional() -> None:
 def test_marginal_home_odds_taylorsville_qf() -> None:
     """Spot-check against Taylorsville 2025 QF: 25% reach × 37.5% host = 9.375%."""
     assert marginal_home_odds(0.375, 0.25) == pytest.approx(0.09375)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 8: _p_team_reach zero-wins shortcut (line 239)
+# ---------------------------------------------------------------------------
+
+
+def test_p_team_reach_zero_wins_returns_one() -> None:
+    """_p_team_reach with num_wins=0 returns 1.0 immediately — line 239.
+
+    Zero wins needed means the team has already reached this round; probability
+    is 1.0 regardless of the bracket structure.
+    """
+    half = [SLOTS_5A_7A_2025[s] for s in range(4)]  # North half, indices 0-3
+    result = _p_team_reach(1, 1, 0, 0, half, equal_matchup_prob)
+    assert result == pytest.approx(1.0, abs=1e-9)
+
+
+def test_p_team_reach_one_win_less_than_one() -> None:
+    """Sanity check: num_wins=1 returns P(win R1) < 1.0 under equal prob."""
+    half = [SLOTS_5A_7A_2025[s] for s in range(4)]
+    result = _p_team_reach(1, 1, 0, 1, half, equal_matchup_prob)
+    assert 0.0 < result < 1.0
+
+
+# ---------------------------------------------------------------------------
+# Scenario 9: _p_home_in_r2 equal-seed tiebreak (lines 339–342)
+# ---------------------------------------------------------------------------
+#
+# Adjacent slot has home=R3s2 (equal seed to the target R1s2), away=R4s3.
+# Under equal_matchup_prob each candidate has p_opp_r1=0.5.
+#
+# Odd year (2025): lower region# hosts.  R1 (region 1) < R3 (region 3) → R1 hosts
+#   equal-seed case.  Also R4s3 (worse seed) → R1 hosts.  Total = 0.5 + 0.5 = 1.0
+# Even year (2024): higher region# hosts.  R3 (region 3) > R1 (region 1) → R3 hosts
+#   equal-seed case.  R4s3 → R1 still hosts (better seed).  Total = 0.0 + 0.5 = 0.5
+
+_R2_EQUAL_SEED_SLOT = FormatSlot(
+    slot=2, home_region=3, home_seed=2, away_region=4, away_seed=3, north_south="N"
+)
+
+
+def test_p_home_in_r2_equal_seed_odd_year() -> None:
+    """Odd year: team with lower region# wins the equal-seed R2 hosting — lines 339–340."""
+    result = _p_home_in_r2(
+        team_seed=2, team_region=1,
+        r2_opp_slot=_R2_EQUAL_SEED_SLOT,
+        season=2025,
+        win_prob_fn=equal_matchup_prob,
+    )
+    assert result == pytest.approx(1.0, abs=1e-9)
+
+
+def test_p_home_in_r2_equal_seed_even_year() -> None:
+    """Even year: team with lower region# loses the equal-seed hosting — lines 341–342."""
+    result = _p_home_in_r2(
+        team_seed=2, team_region=1,
+        r2_opp_slot=_R2_EQUAL_SEED_SLOT,
+        season=2024,
+        win_prob_fn=equal_matchup_prob,
+    )
+    # Equal-seed opp (R3s2) → R3 hosts (even year); worse-seed opp (R4s3) → R1 hosts
+    assert result == pytest.approx(0.5, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 10: r2_home_team same-region + equal-seed tiebreak (lines 528, 534–537)
+# ---------------------------------------------------------------------------
+
+
+def test_r2_home_team_same_region_lower_seed_hosts() -> None:
+    """Same-region R2: lower seed# (better seed) always hosts — line 528."""
+    assert r2_home_team(1, 1, 1, 2, season=2025) == (1, 1)
+
+
+def test_r2_home_team_same_region_higher_seed_input_reversed() -> None:
+    """Same-region R2: result is the same regardless of argument order — line 528."""
+    assert r2_home_team(1, 2, 1, 1, season=2025) == (1, 1)
+
+
+def test_r2_home_team_equal_seed_odd_year_lower_region_hosts() -> None:
+    """Equal cross-region seed, odd year: lower region# hosts — lines 534–536."""
+    assert r2_home_team(1, 2, 3, 2, season=2025) == (1, 2)
+
+
+def test_r2_home_team_equal_seed_even_year_higher_region_hosts() -> None:
+    """Equal cross-region seed, even year: higher region# hosts — lines 534, 537."""
+    assert r2_home_team(1, 2, 3, 2, season=2024) == (3, 2)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 11: idx is None guard in all four compute functions (lines 667, 718, 768, 826)
+# ---------------------------------------------------------------------------
+#
+# Synthetic 4-slot half where region 1 only has seeds 1 and 2.
+# Passing region_odds for region 1 with p3=1.0 triggers _slot_index_for to
+# return None (no slot contains R1s3), hitting the `continue` guard in every
+# compute function.  With only seed-3 probability, the result is 0.0.
+
+_IDX_NONE_SLOTS = [
+    FormatSlot(slot=1, home_region=1, home_seed=1, away_region=2, away_seed=4, north_south="N"),
+    FormatSlot(slot=2, home_region=1, home_seed=2, away_region=2, away_seed=3, north_south="N"),
+    FormatSlot(slot=3, home_region=2, home_seed=1, away_region=3, away_seed=4, north_south="N"),
+    FormatSlot(slot=4, home_region=3, home_seed=1, away_region=3, away_seed=2, north_south="N"),
+]
+_IDX_NONE_ODDS = {"TeamX": StandingsOdds(
+    school="TeamX", p1=0.0, p2=0.0, p3=1.0, p4=0.0,
+    p_playoffs=1.0, final_playoffs=1.0, clinched=False, eliminated=False,
+)}
+
+
+def test_idx_none_guard_second_round() -> None:
+    """idx is None → skip; seed-3 not in bracket → P(hosting R2) = 0.0 — line 667."""
+    result = compute_second_round_home_odds(1, _IDX_NONE_ODDS, _IDX_NONE_SLOTS, ODD_SEASON)
+    assert result["TeamX"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_idx_none_guard_quarterfinal() -> None:
+    """idx is None → skip; seed-3 not in bracket → P(hosting QF) = 0.0 — line 718."""
+    result = compute_quarterfinal_home_odds(1, _IDX_NONE_ODDS, _IDX_NONE_SLOTS, ODD_SEASON)
+    assert result["TeamX"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_idx_none_guard_semifinal() -> None:
+    """idx is None → skip; seed-3 not in bracket → P(hosting SF) = 0.0 — line 768."""
+    result = compute_semifinal_home_odds(1, _IDX_NONE_ODDS, _IDX_NONE_SLOTS, ODD_SEASON)
+    assert result["TeamX"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_idx_none_guard_bracket_advancement() -> None:
+    """idx is None → skip; seed-3 not in bracket → all advancement probs 0.0 — line 826."""
+    result = compute_bracket_advancement_odds(1, _IDX_NONE_ODDS, _IDX_NONE_SLOTS)
+    bo = result["TeamX"]
+    assert bo.quarterfinals == pytest.approx(0.0, abs=1e-9)
+    assert bo.semifinals == pytest.approx(0.0, abs=1e-9)
