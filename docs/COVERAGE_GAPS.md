@@ -9,17 +9,35 @@
 | `scenarios.py` | **100%** | |
 | `scenario_serializers.py` | **100%** | |
 | `tiebreakers.py` | **100%** | |
-| `scenario_renderer.py` | **91%** | Weighted odds + home-game renderers untested |
+| `scenario_renderer.py` | **98%** | Weighted odds rendering untested (blocked on feature) |
 | `scenario_viewer.py` | **96%** | Outer stability loop second pass + several edge cases |
 | `home_game_scenarios.py` | **100%** | |
 | `bracket_home_odds.py` | **100%** | |
-| **Total** | **98%** | 2760 tests passing |
+| **Total** | **98%** | 2785 tests passing |
 
-Test files: 31 test files including synthetic coin-flip fixture, precomputed-path coverage, and full-season R=0 tests.
+Test files: 32 test files including synthetic coin-flip fixture, precomputed-path coverage, and full-season R=0 tests.
 
 ---
 
 ## scenario_viewer.py — gap catalogue
+
+### `_find_combined_atom` — unknown condition type (line 142→123)
+
+The `elif isinstance(cond, MarginCondition):` branch at line 142 falls through to line 123 (next loop iteration) when an atom contains a condition that is neither `GameResult` nor `MarginCondition`. Defensive; no such condition type is produced by the current atom-building logic.
+
+---
+
+### `_eval_mc` — unknown operator fallback (line 217)
+
+`return True` fires when `mc.op` is not `<=`, `>=`, or `==`. Defensive; only those three operators are constructed in practice.
+
+---
+
+### `_derive_atom` — failed split under `len(sens_indices) != 2` (line 445→447)
+
+Inside the `if len(sens_indices) != 2` branch: if the valid set is non-rectangular, `_split_non_rectangular_atom` is called; if it returns `None`, execution falls through to `return [atom]` at line 447. Requires `len(sens_indices) != 2` **and** non-rectangular **and** split failure simultaneously. Not triggered by any natural or synthetic fixture.
+
+---
 
 ### Rule 1/2 merge edge cases (lines 526, 651, 665, 670, 684)
 
@@ -56,7 +74,7 @@ In Step 5, `sometimes_elim_only_masks` collects masks where a team is eliminated
 
 The outer `while globally_changed:` loop runs at least once. A second pass fires only when Rule 3 or Rule 4 produces an atom list where Rule 1/2 can now merge additional atoms, or subsumption can now eliminate one. No tested region creates this chain.
 
-**What would cover it:** A region where Rule 4 splits an atom into two pieces that are adjacent-range-mergeable by Rule 1/2. Likely requires 3+ margin-sensitive games simultaneously (5A–7A with 4 games remaining is the best candidate).
+**What would cover it:** A region where Rule 4 splits an atom into two pieces that are adjacent-range-mergeable by Rule 1/2. Requires 3+ margin-sensitive games simultaneously. The R=4 Region 3-7A fixture (16 masks × 12⁴ margin combos) was tried and did not trigger the second pass. No tested region has created this chain.
 
 ---
 
@@ -86,55 +104,12 @@ The `if scenario_atoms:` False branch inside the margin-sensitive scenario path.
 
 ## scenario_renderer.py — gap catalogue
 
-### `_winner_label` — non-GameResult loop iteration (line 32→31)
+### Weighted odds rendering (lines 141, 143, 414, 416)
 
-The `isinstance(cond, GameResult)` False branch fires when a non-GameResult condition (e.g. `MarginCondition`) appears in the atom iteration before the matching `GameResult` is found. Since atoms are constructed with `GameResult` conditions first, the matching result is always found before non-`GameResult` conditions are reached, so this branch never triggers.
+- **Lines 141, 143**: Both-unweighted-and-weighted and weighted-only paths in `render_team_scenarios._odds_suffix`.
+- **Lines 414, 416**: Both-odds and weighted-only paths in the standalone `_odds_pct` helper used by the home-game renderers.
 
----
-
-### `_render_margin_condition` — edge cases (lines 67, 74, 78–80)
-
-- **Line 67**: `cond.op == "=="` with two add operands — combined total equals exactly N. No tested atom produces this shape.
-- **Line 74**: `t == 0` in the 1-add/1-sub case — the two winning margins are equal. No tested atom produces this condition.
-- **Lines 78–80**: General fallback for patterns with more than 2 operands (more than one add+sub term). Not produced by the current atom-building logic.
-
----
-
-### `_render_condition` — unknown type fallback (line 91)
-
-`return str(cond)` fires when the condition is none of `GameResult`, `MarginCondition`, or `CoinFlipResult`. Defensive; never triggered in practice.
-
----
-
-### Weighted odds rendering (lines 141, 143)
-
-- **Line 141**: Both unweighted and weighted odds provided — renders `"(XX.X% – XX.X% Weighted)"`.
-- **Line 143**: Only weighted odds provided — renders `"(XX.X% Weighted)"`.
-
-The `weighted_odds` parameter of `render_team_scenarios` is never passed in any current test; blocked on the weighted odds computation feature.
-
----
-
-### Home-game renderer (lines 347–348, 384–385, 414, 416, 463, 479, 542, 633→635)
-
-The home-game rendering family (`render_team_home_scenarios`, `team_home_scenarios_as_dict`, `render_team_matchups`, `team_matchups_as_dict`) has no tests. Specific uncovered paths:
-
-- **Lines 347–348**: `kind == "seed_required"` branch in `_render_condition_label` — renders a team's finishing seed rather than an advancement condition.
-- **Lines 384–385**: Unconditional host with an explanation note in `render_team_home_scenarios`.
-- **Lines 414, 416**: Both-odds and weighted-only paths in `_odds_pct`.
-- **Lines 463, 479**: Unconditional host/not-host with explanation in `render_team_home_scenarios`.
-- **Line 542**: `elif label is None: label = f"Region..."` fallback in `team_home_scenarios_as_dict._cond_dict`.
-- **Lines 633→635**: `entry.explanation` True branch in `render_team_matchups` — no tested matchup entry carries an explanation string.
-
----
-
-## Proposed new tests — prioritized
-
-### Priority 1: 5A–7A region with 4 games remaining ⭐⭐⭐ **High effort, high reward**
-
-2^4 = 16 masks × 12^4 = 20,736 margin combos. Larger atom lists make it more likely that Rule 4 fires AND the result is further reducible by Rule 1/2 (outer stability loop second pass). Also the most likely trigger for `_try_rule4` lower-bound guards.
-
-**Caveat:** Computationally expensive but tractable (the 4-4A midseason test at R=4 already runs fine).
+Blocked on the weighted odds computation feature. `weighted_odds` is never passed in any current test.
 
 ---
 

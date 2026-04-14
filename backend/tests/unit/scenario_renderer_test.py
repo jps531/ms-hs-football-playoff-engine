@@ -2,9 +2,26 @@
 
 import pytest
 
+from backend.helpers.data_classes import (
+    GameResult,
+    HomeGameCondition,
+    HomeGameScenario,
+    MarginCondition,
+    MatchupEntry,
+    RoundHomeScenarios,
+    RoundMatchups,
+)
 from backend.helpers.scenario_renderer import (
+    _render_condition,
+    _render_condition_label,
+    _render_home_scenario_block,
+    _render_margin_condition,
+    _winner_label,
     division_scenarios_as_dict,
+    render_team_home_scenarios,
+    render_team_matchups,
     render_team_scenarios,
+    team_home_scenarios_as_dict,
     team_scenarios_as_dict,
 )
 from backend.helpers.scenario_viewer import build_scenario_atoms, enumerate_division_scenarios
@@ -508,3 +525,196 @@ def test_team_scenarios_dict_with_odds_fully_eliminated():
     meridian = d["Meridian"]
     assert meridian["eliminated"]["odds"] == pytest.approx(1.0)
     assert meridian["eliminated"]["scenarios"] == []
+
+
+# ---------------------------------------------------------------------------
+# Synthetic coverage tests — private rendering helpers
+# ---------------------------------------------------------------------------
+
+
+class TestWinnerLabel:
+    """Synthetic tests for the _winner_label helper (line 32→31 branch coverage)."""
+
+    def test_skips_non_game_result_condition(self):
+        """_winner_label iterates past a MarginCondition to find the GameResult (line 32→31)."""
+        atom = [
+            MarginCondition(add=(("A", "B"),), sub=(), op=">=", threshold=1),
+            GameResult("A", "B", 1, None),
+        ]
+        assert _winner_label(("A", "B"), atom) == "A"
+
+
+class TestRenderMarginCondition:
+    """Synthetic tests for _render_margin_condition edge cases (lines 67, 74, 78–80)."""
+
+    def _atom(self, *pairs):
+        """Build a minimal atom with one A-beats-B GameResult per pair."""
+        return [GameResult(a, b, 1, None) for a, b in pairs]
+
+    def test_two_add_no_sub_eq(self):
+        """len(add)==2, no sub, op=='==' renders 'combined total exactly N' (line 67)."""
+        cond = MarginCondition(
+            add=(("A", "B"), ("C", "D")), sub=(), op="==", threshold=10
+        )
+        atom = self._atom(("A", "B"), ("C", "D"))
+        result = _render_margin_condition(cond, atom)
+        assert result == "A's margin and C's margin combined total exactly 10"
+
+    def test_one_add_one_sub_ge_threshold_zero(self):
+        """op='>=' with adjusted t==0 renders 'add is at least as large as sub' (line 67)."""
+        cond = MarginCondition(
+            add=(("A", "B"),), sub=(("C", "D"),), op=">=", threshold=0
+        )
+        atom = self._atom(("A", "B"), ("C", "D"))
+        result = _render_margin_condition(cond, atom)
+        assert result == "A's margin is at least as large as C's"
+
+    def test_one_add_one_sub_le_threshold_zero(self):
+        """op='<=' with adjusted t==0 renders 'sub is at least as large as add' (line 74)."""
+        cond = MarginCondition(
+            add=(("A", "B"),), sub=(("C", "D"),), op="<=", threshold=0
+        )
+        atom = self._atom(("A", "B"), ("C", "D"))
+        result = _render_margin_condition(cond, atom)
+        assert result == "C's margin is at least as large as A's"
+
+    def test_fallback_multiple_operands(self):
+        """len(add)==2, len(sub)==1 falls back to generic sum expression (lines 78–80)."""
+        cond = MarginCondition(
+            add=(("A", "B"), ("C", "D")), sub=(("E", "F"),), op=">=", threshold=5
+        )
+        atom = self._atom(("A", "B"), ("C", "D"), ("E", "F"))
+        result = _render_margin_condition(cond, atom)
+        assert result == "A's margin + C's margin + \u2212E's margin >= 5"
+
+
+class TestRenderConditionUnknownType:
+    """Synthetic test for _render_condition unknown-type fallback (line 91)."""
+
+    def test_unknown_type_returns_str(self):
+        """_render_condition falls back to str() for unrecognised condition types (line 91)."""
+        result = _render_condition("mystery_object", [])
+        assert result == "mystery_object"
+
+
+# ---------------------------------------------------------------------------
+# Synthetic coverage tests — home-game renderers
+# ---------------------------------------------------------------------------
+
+_UNCOND_EXPL = HomeGameScenario(conditions=(), explanation="Higher seed")
+_UNCOND_NO_EXPL = HomeGameScenario(conditions=(), explanation=None)
+
+
+def _rhs(will_host=(), will_not_host=()):
+    """Build a minimal RoundHomeScenarios with all probability fields as None."""
+    return RoundHomeScenarios(
+        round_name="First Round",
+        will_host=will_host,
+        will_not_host=will_not_host,
+        p_reach=None,
+        p_host_conditional=None,
+        p_host_marginal=None,
+        p_reach_weighted=None,
+        p_host_conditional_weighted=None,
+        p_host_marginal_weighted=None,
+    )
+
+
+class TestRenderConditionLabel:
+    """Synthetic tests for _render_condition_label seed_required path (lines 347–348)."""
+
+    def test_seed_required_no_team_name(self):
+        """kind='seed_required' with no team_name renders region/seed label (lines 347–348)."""
+        cond = HomeGameCondition(
+            kind="seed_required", round_name=None, region=2, seed=3, team_name=None
+        )
+        assert _render_condition_label(cond) == "Region 2 #3 Seed finishes as the #3 seed"
+
+    def test_seed_required_with_team_name(self):
+        """kind='seed_required' with a team_name uses the name directly (lines 347–348)."""
+        cond = HomeGameCondition(
+            kind="seed_required", round_name=None, region=2, seed=1, team_name="Oak Grove"
+        )
+        assert _render_condition_label(cond) == "Oak Grove finishes as the #1 seed"
+
+
+class TestRenderHomeScenarioBlock:
+    """Synthetic tests for _render_home_scenario_block unconditional paths (lines 384–385, 384→378)."""
+
+    def test_unconditional_scenario_with_explanation(self):
+        """Unconditional scenario (no conditions) with explanation renders as indented note (lines 384–385)."""
+        lines = _render_home_scenario_block((_UNCOND_EXPL,), "TeamA")
+        assert lines == ["   [Higher seed]"]
+
+    def test_unconditional_scenario_without_explanation(self):
+        """Unconditional scenario (no conditions, no explanation) contributes no lines (line 384→378)."""
+        lines = _render_home_scenario_block((_UNCOND_NO_EXPL,), "TeamA")
+        assert lines == []
+
+
+class TestRenderTeamHomeScenarios:
+    """Synthetic tests for render_team_home_scenarios unconditional host/not-host paths (lines 463, 479)."""
+
+    def test_unconditional_host_no_explanation(self):
+        """Unconditional host with no explanation renders bare header line (line 463)."""
+        result = render_team_home_scenarios("TeamA", [_rhs(will_host=(_UNCOND_NO_EXPL,))])
+        assert "Will Host First Round:" in result
+        assert "[" not in result
+
+    def test_unconditional_not_host_no_explanation(self):
+        """Unconditional not-host with no explanation renders bare header line (line 479)."""
+        result = render_team_home_scenarios("TeamA", [_rhs(will_not_host=(_UNCOND_NO_EXPL,))])
+        assert "Will Not Host First Round:" in result
+        assert "[" not in result
+
+
+class TestTeamHomeScenasAsDict:
+    """Synthetic tests for team_home_scenarios_as_dict region-label fallback (line 542)."""
+
+    def test_region_condition_gets_region_label(self):
+        """Condition with region but no team_name generates 'Region X #Y Seed' label (line 542)."""
+        cond = HomeGameCondition(
+            kind="advances", round_name="Quarterfinals", region=3, seed=2, team_name=None
+        )
+        sc = HomeGameScenario(conditions=(cond,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamA", [rnd])
+        assert result["first_round"]["will_host"][0]["conditions"][0]["team"] == "Region 3 #2 Seed"
+
+
+class TestRenderTeamMatchups:
+    """Synthetic tests for render_team_matchups explanation branch (lines 633→634, 633→635)."""
+
+    def _rnd(self, explanation):
+        """Build a RoundMatchups with a single home-matchup entry."""
+        entry = MatchupEntry(
+            opponent="Pearl",
+            opponent_region=3,
+            opponent_seed=2,
+            home=True,
+            p_conditional=0.5,
+            p_conditional_weighted=None,
+            p_marginal=0.25,
+            p_marginal_weighted=None,
+            explanation=explanation,
+        )
+        return RoundMatchups(
+            round_name="First Round",
+            p_reach=0.5,
+            p_host_conditional=None,
+            p_host_marginal=None,
+            p_reach_weighted=None,
+            p_host_conditional_weighted=None,
+            p_host_marginal_weighted=None,
+            entries=(entry,),
+        )
+
+    def test_entry_with_explanation_appends_bracket(self):
+        """MatchupEntry with explanation appends it to the rendered line (line 633→634)."""
+        result = render_team_matchups("TeamA", [self._rnd("Region tiebreak")])
+        assert "[Region tiebreak]" in result
+
+    def test_entry_without_explanation_omits_bracket(self):
+        """MatchupEntry with no explanation renders without a bracket suffix (line 633→635)."""
+        result = render_team_matchups("TeamA", [self._rnd(None)])
+        assert "[" not in result
