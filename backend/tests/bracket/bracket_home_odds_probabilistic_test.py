@@ -45,6 +45,7 @@ import pytest
 
 from backend.helpers.bracket_home_odds import (
     MatchupProbFn,
+    compute_bracket_advancement_odds,
     compute_quarterfinal_home_odds,
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
@@ -52,6 +53,7 @@ from backend.helpers.bracket_home_odds import (
     marginal_home_odds,
 )
 from backend.helpers.data_classes import StandingsOdds
+from backend.helpers.scenarios import compute_bracket_odds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
 
 # ---------------------------------------------------------------------------
@@ -633,6 +635,54 @@ def test_marginal_home_odds_zero_advancement() -> None:
 def test_marginal_home_odds_full_certainty() -> None:
     """Both 100% → marginal is 100%."""
     assert marginal_home_odds(1.0, 1.0) == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 7: compute_bracket_advancement_odds — parity with compute_bracket_odds
+# ---------------------------------------------------------------------------
+#
+# compute_bracket_advancement_odds traverses the actual bracket via
+# _p_team_reach.  With equal_matchup_prob (P=0.5 every game), it must
+# produce the same per-round advancement probabilities as compute_bracket_odds
+# (the closed-form geometric formula p_playoffs × 0.5^r).
+#
+# 5A-7A (4 rounds): QF=0.5, SF=0.25, finals=0.125, champion=0.0625
+# 1A-4A (5 rounds): R2=0.5, QF=0.25, SF=0.125, finals=0.0625, champion=0.03125
+# (all probabilities for a locked seed with p_playoffs=1.0)
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 4], ids=["s1", "s2", "s3", "s4"])
+def test_bracket_advancement_odds_matches_compute_bracket_odds_5a7a(seed: int) -> None:
+    """compute_bracket_advancement_odds with equal_matchup_prob matches compute_bracket_odds for 5A-7A."""
+    region = 1
+    school = f"R{region}s{seed}"
+    odds = {school: _locked(school, seed)}
+
+    adv = compute_bracket_advancement_odds(region, odds, SLOTS_5A_7A_2025, equal_matchup_prob)
+    simple = compute_bracket_odds(4, odds)
+
+    assert adv[school].second_round == pytest.approx(simple[school].second_round, abs=1e-9)
+    assert adv[school].quarterfinals == pytest.approx(simple[school].quarterfinals, abs=1e-9)
+    assert adv[school].semifinals == pytest.approx(simple[school].semifinals, abs=1e-9)
+    assert adv[school].finals == pytest.approx(simple[school].finals, abs=1e-9)
+    assert adv[school].champion == pytest.approx(simple[school].champion, abs=1e-9)
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 4], ids=["s1", "s2", "s3", "s4"])
+def test_bracket_advancement_odds_matches_compute_bracket_odds_1a4a(seed: int) -> None:
+    """compute_bracket_advancement_odds with equal_matchup_prob matches compute_bracket_odds for 1A-4A."""
+    region = 1
+    school = f"R{region}s{seed}"
+    odds = {school: _locked(school, seed)}
+
+    adv = compute_bracket_advancement_odds(region, odds, SLOTS_1A_4A_2025, equal_matchup_prob)
+    simple = compute_bracket_odds(5, odds)
+
+    assert adv[school].second_round == pytest.approx(simple[school].second_round, abs=1e-9)
+    assert adv[school].quarterfinals == pytest.approx(simple[school].quarterfinals, abs=1e-9)
+    assert adv[school].semifinals == pytest.approx(simple[school].semifinals, abs=1e-9)
+    assert adv[school].finals == pytest.approx(simple[school].finals, abs=1e-9)
+    assert adv[school].champion == pytest.approx(simple[school].champion, abs=1e-9)
 
 
 def test_marginal_home_odds_zero_conditional() -> None:

@@ -11,9 +11,9 @@
 | `tiebreakers.py` | **100%** | |
 | `scenario_renderer.py` | **91%** | Weighted odds + home-game renderers untested |
 | `scenario_viewer.py` | **93%** | Outer stability loop second pass + several edge cases |
-| `home_game_scenarios.py` | **96%** | Even-year tiebreaks + dedup guards |
-| `bracket_home_odds.py` | **86%** | Several cross-region and equal-seed branches; `compute_bracket_advancement_odds` uncovered |
-| **Total** | **95%** | 2700 tests passing |
+| `home_game_scenarios.py` | **97%** | Same-region R2/R2-equal-seed explanations + dedup guards |
+| `bracket_home_odds.py` | **95%** | Several cross-region and equal-seed branches |
+| **Total** | **96%** | 2727 tests passing |
 
 Test files: 31 test files including synthetic coin-flip fixture, precomputed-path coverage, and full-season R=0 tests.
 
@@ -102,12 +102,6 @@ The outer `while globally_changed:` loop runs at least once. A second pass fires
 
 ---
 
-### Coin-flip metadata — flip outside playoff range (lines 1307→1305, 1540→1534)
-
-The `if relevant:` False branch fires when `_relevant_flip_groups` returns an empty list — i.e., a coin flip exists but all flipped teams are outside the playoff cutoff (e.g., a coin flip between seeds 3 and 4 in a `playoff_seeds=2` region). Coverable with a synthetic below-cutoff coin-flip fixture.
-
----
-
 ### `enumerate_division_scenarios` — duplicate-mask guard (line 1538)
 
 `continue` inside the coin-flip metadata loop when a non-sensitive mask has already been processed. A non-sensitive mask has exactly one seeding, so this guard is structurally unreachable for coin-flip masks (which are always non-sensitive in practice). Not unit-testable by design.
@@ -173,15 +167,6 @@ The home-game rendering family (`render_team_home_scenarios`, `team_home_scenari
 
 ---
 
-### Even-year tiebreak returns in `_explain_qf` and `_explain_sf` (lines 198–199, 231–232)
-
-- **Lines 198–199**: Even-year QF tiebreak — `host_region = max(region1, region2)` (`"...even year, higher region# hosts"`).
-- **Lines 231–232**: Even-year SF tiebreak — same pattern.
-
-All tested home-game fixture data uses an odd-year season; even-year paths are not exercised.
-
----
-
 ### SF dedup `continue` guards (lines 643, 920)
 
 - **Line 643**: `continue` in `_build_sf_scenarios` when a `(region, seed)` opponent pair has already been processed in the slot iteration. Fires only when the same opponent slot appears twice due to bracket structure — not triggered in tested regions.
@@ -211,57 +196,19 @@ All tested home-game fixture data uses an odd-year season; even-year paths are n
 
 ---
 
-### Even-year tiebreak in `qf_home_team` and `sf_home_team` (lines 570, 608)
-
-- **Line 570**: `return (region1, seed1) if region1 > region2 else (region2, seed2)` in `qf_home_team` — even-year tiebreak (higher region# hosts).
-- **Line 608**: Same pattern in `sf_home_team`.
-
-All tested home-game season data uses an odd year; even-year code paths are not exercised.
-
----
-
-### `idx is None` guard in compute functions (lines 648, 699, 749)
+### `idx is None` guard in compute functions (lines 648, 699, 749, 807)
 
 `if idx is None: continue` — fires when `_slot_index_for` cannot locate a (region, seed) pair in the half-slot list. Protective guard; all tested regions have complete slot assignments.
 
 ---
 
-### `compute_bracket_advancement_odds` — entirely uncovered (lines 792–826)
-
-This function traverses the actual bracket structure via `_p_team_reach` to compute per-round advancement probabilities with a custom `win_prob_fn`. The simpler `compute_bracket_odds` is used in all current tests. `compute_bracket_advancement_odds` is the correct function to use when a non-uniform win-probability function is needed, but no test exercises this path.
-
-**What would cover it:** Call `compute_bracket_advancement_odds` with the equal-probability default for any region/slot combination and assert results match `compute_bracket_odds`.
-
----
-
 ## Proposed new tests — prioritized
 
-### Priority 1: Below-cutoff coin-flip fixture ⭐⭐ **Medium**
-
-Create a synthetic 4-team region with `playoff_seeds=2` where the coin flip happens between teams finishing at seeds 3 and 4 (both outside the playoff cutoff). This would cover:
-- Lines 1307→1305 and 1540→1534: the `if relevant:` False branch in both `build_scenario_atoms` and `enumerate_division_scenarios` coin-flip metadata loops.
-
-**Fixture sketch:** Alpha/Beta beat Gamma/Delta (2-0). Delta and Gamma also play each other, so one of Delta/Gamma ends up at 1-1; the other at 0-2. Within the {Delta, Gamma} pair that ties at 1-1... actually this doesn't produce a coin flip at seeds 3-4. A simpler approach: all four teams end at 1-1 with coin flips between the lower pair only.
-
----
-
-### Priority 2: `compute_bracket_advancement_odds` test ⭐ **Easy**
-
-Call `compute_bracket_advancement_odds(region, region_odds, slots)` with default equal probability for an existing tested region and assert the results match `compute_bracket_odds`. Covers lines 792–826 in one short test.
-
----
-
-### Priority 3: 5A–7A region with 4 games remaining ⭐⭐⭐ **High effort, high reward**
+### Priority 1: 5A–7A region with 4 games remaining ⭐⭐⭐ **High effort, high reward**
 
 2^4 = 16 masks × 12^4 = 20,736 margin combos. Larger atom lists make it more likely that Rule 4 fires AND the result is further reducible by Rule 1/2 (outer stability loop second pass). Also the most likely trigger for `_split_non_rectangular_atom` reverse direction and `_try_rule4` lower-bound guards.
 
 **Caveat:** Computationally expensive but tractable (the 4-4A midseason test at R=4 already runs fine).
-
----
-
-### Priority 4: Even-year home-game fixture ⭐ **Easy**
-
-Pass `season=2024` (or another even year) to any home-game test that currently uses an odd year. Covers the even-year tiebreak branches in `_explain_qf`, `_explain_sf`, `qf_home_team`, and `sf_home_team` (lines 198–199, 231–232, 570, 608). Two lines of change to an existing test.
 
 ---
 

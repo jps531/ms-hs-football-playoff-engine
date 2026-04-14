@@ -1229,3 +1229,104 @@ class TestTaylorsville2025:
             if c.region is not None
         }
         assert (6, 1) in not_host_opponents, "Simmons (R6#1) must be in SF will_not_host"
+
+
+# ---------------------------------------------------------------------------
+# 12. Even-year tiebreak (lines 198-199, 231-232 in home_game_scenarios.py;
+#     lines 570, 608 in bracket_home_odds.py)
+# ---------------------------------------------------------------------------
+#
+# The equal-seed cross-region QF/SF tiebreak uses odd/even year:
+#   odd year  → lower region# hosts
+#   even year → higher region# hosts (the uncovered branch)
+#
+# 5A-7A SF case: R1s2 (slot 4) can face R2s2 in the SF — seeds equal, cross-region.
+#   Odd year (2025): Region 1 hosts.  Even year (2024): Region 2 hosts.
+#
+# 1A-4A QF case: R3s2 (slot 2) can face R4s2 in the QF — seeds equal, cross-region.
+#   Odd year (2025): Region 3 hosts.  Even year (2024): Region 4 hosts.
+
+EVEN_SEASON = 2024
+
+
+class TestEvenYearTiebreak:
+    """Cover even-year QF/SF explanation paths in home_game_scenarios and bracket_home_odds."""
+
+    def test_sf_even_year_explanation_present_5a7a(self):
+        """R1s2 SF: even year produces an 'even year' explanation in will_not_host."""
+        result = enumerate_home_game_scenarios(1, 2, SLOTS_5A_7A_2025, EVEN_SEASON)
+        sf = result[2]  # First Round (0), QF (1), SF (2)
+        even_year_explanations = [
+            sc.explanation
+            for sc in sf.will_not_host
+            if sc.explanation and "even year" in sc.explanation
+        ]
+        assert len(even_year_explanations) >= 1, (
+            "Expected at least one SF will_not_host scenario with an 'even year' explanation"
+        )
+
+    def test_sf_even_year_names_higher_region_as_host_5a7a(self):
+        """Even-year SF explanation says Region 2 (higher region#) hosts vs R1s2."""
+        result = enumerate_home_game_scenarios(1, 2, SLOTS_5A_7A_2025, EVEN_SEASON)
+        sf = result[2]
+        even_year_explanations = [
+            sc.explanation
+            for sc in sf.will_not_host
+            if sc.explanation and "even year" in sc.explanation
+        ]
+        assert any("Region 2" in exp for exp in even_year_explanations), (
+            f"Expected explanation to name Region 2 as host; got: {even_year_explanations}"
+        )
+
+    def test_sf_odd_year_no_even_year_explanation_5a7a(self):
+        """With odd-year season (2025), no SF explanation should mention 'even year'."""
+        result = enumerate_home_game_scenarios(1, 2, SLOTS_5A_7A_2025, SEASON)
+        sf = result[2]
+        even_year_explanations = [
+            sc.explanation
+            for sc in list(sf.will_host) + list(sf.will_not_host)
+            if sc.explanation and "even year" in sc.explanation
+        ]
+        assert even_year_explanations == [], (
+            f"Unexpected even-year explanation with odd season: {even_year_explanations}"
+        )
+
+    def test_qf_even_year_explanation_present_1a4a(self):
+        """R3s2 QF: even year produces an 'even year' explanation in will_not_host."""
+        # R3s2 is in slot 2 (1A-4A North); QF opponents include R4s2 (equal seed, cross-region).
+        result = enumerate_home_game_scenarios(3, 2, SLOTS_1A_4A_2025, EVEN_SEASON)
+        qf = result[2]  # First Round (0), R2 (1), QF (2), SF (3)
+        even_year_explanations = [
+            sc.explanation
+            for sc in qf.will_not_host
+            if sc.explanation and "even year" in sc.explanation
+        ]
+        assert len(even_year_explanations) >= 1, (
+            "Expected at least one QF will_not_host scenario with an 'even year' explanation"
+        )
+
+    def test_qf_even_year_names_higher_region_as_host_1a4a(self):
+        """Even-year QF explanation says Region 4 (higher region#) hosts vs R3s2."""
+        result = enumerate_home_game_scenarios(3, 2, SLOTS_1A_4A_2025, EVEN_SEASON)
+        qf = result[2]
+        even_year_explanations = [
+            sc.explanation
+            for sc in qf.will_not_host
+            if sc.explanation and "even year" in sc.explanation
+        ]
+        assert any("Region 4" in exp for exp in even_year_explanations), (
+            f"Expected explanation to name Region 4 as host; got: {even_year_explanations}"
+        )
+
+    def test_qf_odd_year_no_even_year_explanation_1a4a(self):
+        """With odd-year season (2025), no QF explanation should mention 'even year'."""
+        result = enumerate_home_game_scenarios(3, 2, SLOTS_1A_4A_2025, SEASON)
+        qf = result[2]
+        even_year_explanations = [
+            sc.explanation
+            for sc in list(qf.will_host) + list(qf.will_not_host)
+            if sc.explanation and "even year" in sc.explanation
+        ]
+        assert even_year_explanations == [], (
+            f"Unexpected even-year explanation with odd season: {even_year_explanations}"
+        )

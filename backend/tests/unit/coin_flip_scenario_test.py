@@ -428,3 +428,139 @@ class TestPrecomputedPathCoinFlip:
         assert len(_PRECOMPUTED.coin_flips) == 2  # both masks (Delta wins / Gamma wins)
         for mask_flips in _PRECOMPUTED.coin_flips.values():
             assert any("Alpha" in g and "Beta" in g for g in mask_flips)
+
+
+# ---------------------------------------------------------------------------
+# Below-cutoff coin-flip fixture
+# ---------------------------------------------------------------------------
+#
+# Fixture design (lines 1307→1305 and 1540→1534 in scenario_viewer.py):
+#   Alpha and Beta each beat Gamma and Delta.  The only remaining game is
+#   Alpha vs Beta — whichever team wins is clearly seed 1; the other is seed 2.
+#   Gamma and Delta both end at 0-2 with identical margins and no H2H game,
+#   so they tie on all 7 tiebreaker steps → coin flip between them.
+#
+#   With playoff_seeds=2, Gamma and Delta are BOTH outside the playoff cutoff
+#   regardless of the coin-flip outcome.  _relevant_flip_groups therefore
+#   returns [] for both masks, and the `if relevant:` guard at lines 1307
+#   (build_scenario_atoms) and 1540 (enumerate_division_scenarios) evaluates
+#   to False — the previously uncovered branch.
+#
+#   Expected behavior:
+#     • No sub-scenarios (no "a"/"b" labels): the below-cutoff flip does not
+#       expand into multiple scenario variants.
+#     • Gamma and Delta appear in seedings at positions 3 and 4 (alphabetical
+#       proxy ordering) but have no atoms and no CoinFlipResult conditions.
+#     • Alpha and Beta get standard game-winner atoms for the A-vs-B game.
+
+_BC_TEAMS = ["Alpha", "Beta", "Delta", "Gamma"]
+_BC_PLAYOFF_SEEDS = 2
+
+# Alpha and Beta each beat Gamma and Delta by the same margin.
+# pa_a=14 → alpha allowed 14 points; pa_b=21 → gamma/delta allowed 21 points.
+_BC_COMPLETED = [
+    CompletedGame(a="Alpha", b="Gamma",  res_a=1, pd_a=7, pa_a=14, pa_b=21),
+    CompletedGame(a="Alpha", b="Delta",  res_a=1, pd_a=7, pa_a=14, pa_b=21),
+    CompletedGame(a="Beta",  b="Gamma",  res_a=1, pd_a=7, pa_a=14, pa_b=21),
+    CompletedGame(a="Beta",  b="Delta",  res_a=1, pd_a=7, pa_a=14, pa_b=21),
+]
+
+# The only remaining game: Alpha vs Beta.  Gamma and Delta don't play it, so
+# their standings (0-2, same margins) are unaffected by the outcome or margin.
+_BC_REMAINING = [RemainingGame(a="Alpha", b="Beta")]
+
+_BC_ATOMS = build_scenario_atoms(
+    _BC_TEAMS, _BC_COMPLETED, _BC_REMAINING, playoff_seeds=_BC_PLAYOFF_SEEDS
+)
+_BC_SCENARIOS = enumerate_division_scenarios(
+    _BC_TEAMS, _BC_COMPLETED, _BC_REMAINING,
+    playoff_seeds=_BC_PLAYOFF_SEEDS, scenario_atoms=_BC_ATOMS,
+)
+_BC_PRECOMPUTED = enumerate_outcomes(_BC_TEAMS, _BC_COMPLETED, _BC_REMAINING)
+_BC_SCENARIOS_PRE = enumerate_division_scenarios(
+    _BC_TEAMS, _BC_COMPLETED, _BC_REMAINING,
+    playoff_seeds=_BC_PLAYOFF_SEEDS,
+    scenario_atoms=build_scenario_atoms(
+        _BC_TEAMS, _BC_COMPLETED, _BC_REMAINING,
+        playoff_seeds=_BC_PLAYOFF_SEEDS, precomputed=_BC_PRECOMPUTED,
+    ),
+    precomputed=_BC_PRECOMPUTED,
+)
+
+
+class TestBelowCutoffCoinFlipAtoms:
+    """build_scenario_atoms: below-cutoff flip does not produce CoinFlipResult atoms."""
+
+    def test_alpha_has_seed1_and_seed2_atoms(self):
+        """Alpha can finish 1st or 2nd → atoms at seeds 1 and 2."""
+        assert 1 in _BC_ATOMS.get("Alpha", {})
+        assert 2 in _BC_ATOMS.get("Alpha", {})
+
+    def test_beta_has_seed1_and_seed2_atoms(self):
+        """Beta can finish 1st or 2nd → atoms at seeds 1 and 2."""
+        assert 1 in _BC_ATOMS.get("Beta", {})
+        assert 2 in _BC_ATOMS.get("Beta", {})
+
+    def test_delta_has_no_playoff_atoms(self):
+        """Delta finishes at seed 3 — outside playoff_seeds=2 → no atoms."""
+        for seed in (1, 2):
+            assert seed not in _BC_ATOMS.get("Delta", {})
+
+    def test_gamma_has_no_playoff_atoms(self):
+        """Gamma finishes at seed 4 — outside playoff_seeds=2 → no atoms."""
+        for seed in (1, 2):
+            assert seed not in _BC_ATOMS.get("Gamma", {})
+
+    def test_alpha_seed1_has_no_coin_flip_result(self):
+        """Alpha's seed-1 atom reflects winning the Alpha/Beta game — no CoinFlipResult."""
+        for atom in _BC_ATOMS["Alpha"][1]:
+            assert not any(isinstance(c, CoinFlipResult) for c in atom), (
+                f"Unexpected CoinFlipResult in below-cutoff fixture atom: {atom}"
+            )
+
+    def test_beta_seed1_has_no_coin_flip_result(self):
+        """Beta's seed-1 atom reflects winning the Alpha/Beta game — no CoinFlipResult."""
+        for atom in _BC_ATOMS["Beta"][1]:
+            assert not any(isinstance(c, CoinFlipResult) for c in atom), (
+                f"Unexpected CoinFlipResult in below-cutoff fixture atom: {atom}"
+            )
+
+
+class TestBelowCutoffCoinFlipScenarios:
+    """enumerate_division_scenarios: below-cutoff flip produces no sub-scenario expansion."""
+
+    def test_produces_exactly_two_scenarios(self):
+        """Two outcome masks (Alpha wins / Beta wins) → exactly 2 scenarios."""
+        assert len(_BC_SCENARIOS) == 2
+
+    def test_no_sub_labels(self):
+        """No sub-labels: the below-cutoff flip does not generate 'a'/'b' variants."""
+        assert all(sc["sub_label"] == "" for sc in _BC_SCENARIOS)
+
+    def test_alpha_and_beta_each_appear_at_seed1_once(self):
+        """Alpha is seed 1 in one scenario; Beta is seed 1 in the other."""
+        seed1_teams = {sc["seeding"][0] for sc in _BC_SCENARIOS}
+        assert seed1_teams == {"Alpha", "Beta"}
+
+    def test_gamma_and_delta_never_at_seed1_or_seed2(self):
+        """Gamma and Delta are always at positions 3 and 4 in every scenario."""
+        for sc in _BC_SCENARIOS:
+            assert sc["seeding"][0] not in ("Gamma", "Delta")
+            assert sc["seeding"][1] not in ("Gamma", "Delta")
+
+    def test_delta_before_gamma_alphabetical_proxy(self):
+        """Tied Gamma/Delta are resolved alphabetically: Delta (index 2) before Gamma (3)."""
+        for sc in _BC_SCENARIOS:
+            assert sc["seeding"][2] == "Delta"
+            assert sc["seeding"][3] == "Gamma"
+
+    def test_precomputed_path_produces_same_scenario_count(self):
+        """Precomputed path agrees: 2 scenarios with no sub-labels."""
+        assert len(_BC_SCENARIOS_PRE) == 2
+        assert all(sc["sub_label"] == "" for sc in _BC_SCENARIOS_PRE)
+
+    def test_precomputed_path_seedings_match(self):
+        """Precomputed and direct paths produce identical seedings."""
+        direct = {sc["scenario_num"]: tuple(sc["seeding"]) for sc in _BC_SCENARIOS}
+        pre = {sc["scenario_num"]: tuple(sc["seeding"]) for sc in _BC_SCENARIOS_PRE}
+        assert direct == pre
