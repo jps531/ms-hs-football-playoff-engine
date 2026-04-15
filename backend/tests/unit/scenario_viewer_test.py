@@ -2,12 +2,14 @@
 
 from itertools import product
 
-from backend.helpers.data_classes import GameResult, MarginCondition, RemainingGame
+from backend.helpers.data_classes import CoinFlipResult, CompletedGame, GameResult, MarginCondition, RemainingGame
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_renderer import _render_margin_condition
 from backend.helpers.scenario_viewer import (
     _derive_atom,
+    _eval_mc,
     _find_combined_atom,
+    _simplify_atom_list,
     _split_non_rectangular_atom,
     build_scenario_atoms,
     enumerate_division_scenarios,
@@ -1210,3 +1212,483 @@ def test_render_scenarios_no_eliminated_line_when_all_advance():
     scenarios = enumerate_division_scenarios(_4_4A_TEAMS, _4_4A_COMPLETED_FULL, _4_4A_REMAINING_ZERO)
     text = render_scenarios(scenarios, playoff_seeds=5)
     assert "Eliminated:" not in text
+
+
+# ---------------------------------------------------------------------------
+# Synthetic gap-closure tests — scenario_viewer.py internal helpers
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# _find_combined_atom — line 142→123: CoinFlipResult in atom is silently skipped
+# ---------------------------------------------------------------------------
+
+
+class TestFindCombinedAtomCoinFlipResult:
+    """_find_combined_atom skips CoinFlipResult conditions (line 142→123 branch)."""
+
+    def test_coin_flip_result_in_atom_is_skipped(self):
+        """CoinFlipResult in an atom passes the satisfied_by check but is not
+        processed as GameResult or MarginCondition, exercising the 142→123 branch."""
+        remaining = [RemainingGame("A", "B")]
+        # Atom contains a real GameResult plus a CoinFlipResult.
+        # CoinFlipResult.satisfied_by always returns True, so the atom is found.
+        atom = [
+            GameResult("A", "B", min_margin=1, max_margin=None),
+            CoinFlipResult(winner="A", loser="C"),
+        ]
+        scenario_atoms = {"A": {1: [atom]}}
+        seeding = ("A", "C")
+        mask = 1  # bit 0 = 1 → A wins
+        sample_margins = {("A", "B"): 7}
+
+        result = _find_combined_atom(seeding, 2, mask, sample_margins, scenario_atoms, remaining)
+
+        # The CoinFlipResult is skipped; the GameResult is captured normally.
+        assert result is not None
+        game_results = [c for c in result if isinstance(c, GameResult)]
+        assert len(game_results) == 1
+        assert game_results[0].winner == "A"
+
+    def test_atom_with_only_coin_flip_result_returns_empty_list(self):
+        """When the atom contains only a CoinFlipResult, the combined atom has no
+        game or margin conditions (result is an empty list, not None)."""
+        remaining = [RemainingGame("A", "B")]
+        atom = [CoinFlipResult(winner="A", loser="B")]
+        scenario_atoms = {"A": {1: [atom]}}
+        seeding = ("A",)
+        mask = 1
+        sample_margins = {("A", "B"): 7}
+
+        result = _find_combined_atom(seeding, 1, mask, sample_margins, scenario_atoms, remaining)
+
+        # found_any=True, but no GameResult/MarginCondition collected → empty list returned
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _eval_mc — line 217: unknown operator falls through to return True
+# ---------------------------------------------------------------------------
+
+
+class TestEvalMcUnknownOperator:
+    """_eval_mc returns True for an unrecognised operator (line 217 fallback)."""
+
+    def test_gt_operator_returns_true(self):
+        """op='>' is not one of '<=', '>=', '==' — line 217 fires and returns True."""
+        mc = MarginCondition(add=(("A", "B"),), sub=(), op=">", threshold=5)
+        margins = {("A", "B"): 3}  # value 3 is NOT > 5, but fallback returns True anyway
+        assert _eval_mc(mc, margins) is True
+
+    def test_lt_operator_returns_true(self):
+        """op='<' also exercises the unknown-operator fallback."""
+        mc = MarginCondition(add=(("A", "B"),), sub=(), op="<", threshold=1)
+        margins = {("A", "B"): 5}  # value 5 is NOT < 1, but fallback returns True
+        assert _eval_mc(mc, margins) is True
+
+
+# ---------------------------------------------------------------------------
+# _derive_atom — line 445→447: 1 sensitive game, non-rectangular, split returns None
+# ---------------------------------------------------------------------------
+
+
+class TestDeriveAtomSingleSensitiveSplitFails:
+    """_derive_atom falls back to [atom] when split returns None (line 445→447)."""
+
+    def test_one_sensitive_game_noncontiguous_margins(self):
+        """With R=1 and a non-contiguous valid set (e.g. {3, 5}), _split_non_rectangular_atom
+        returns None (its inner loop never runs for R=1), so line 447 fires."""
+        remaining = [RemainingGame("A", "B")]
+        pairs = [("A", "B")]
+        # Valid margins: only 3 and 5 — skips 4. Range [3,5] has 3 values but only 2 are valid.
+        valid_margins_list = [{("A", "B"): 3}, {("A", "B"): 5}]
+        mask = 1  # A wins bit 0
+
+        result = _derive_atom(mask, valid_margins_list, remaining, pairs, all_margins_valid=False)
+
+        # Should return a single broad atom covering [3, 6) (max_margin=hi+1=5+1=6)
+        assert len(result) == 1
+        atom = result[0]
+        assert len(atom) == 1
+        gr = atom[0]
+        assert isinstance(gr, GameResult)
+        assert gr.winner == "A"
+        assert gr.min_margin == 3
+        assert gr.max_margin == 6  # exclusive: 5+1=6
+
+
+# ---------------------------------------------------------------------------
+# _derive_atom — line 526: 2 sensitive games, predicted set doesn't match, split fails
+# ---------------------------------------------------------------------------
+
+
+class TestDeriveAtomTwoSensitiveSplitFails:
+    """_derive_atom fallback [atom] when predicted set ≠ valid set and split fails (line 526)."""
+
+    def test_diamond_valid_set_forces_fallback(self):
+        """valid_2d = {(1,2),(2,1),(3,2),(2,3)} — a diamond pattern.
+
+        The sum constraint IS binding (sum in [3,5]), so margin_conds is non-empty
+        and the early-return at line 496 is not taken.  The sum constraint doesn't
+        fully reproduce the valid set (predicted has 7 points vs actual 4), so
+        line 514 isn't taken either.  Both forward and reverse groupings in
+        _split_non_rectangular_atom have non-contiguous outer indices ([1,3] missing
+        2), so it returns None.  Line 526 fires.
+        """
+        remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
+        pairs = [("A", "B"), ("C", "D")]
+        # Diamond: four corners of a rotated square in margin space
+        valid_margins_list = [
+            {("A", "B"): 1, ("C", "D"): 2},
+            {("A", "B"): 2, ("C", "D"): 1},
+            {("A", "B"): 3, ("C", "D"): 2},
+            {("A", "B"): 2, ("C", "D"): 3},
+        ]
+        mask = 3  # both A and C win
+
+        result = _derive_atom(mask, valid_margins_list, remaining, pairs, all_margins_valid=False)
+
+        # Fallback: single broad atom [GameResult(A,B,1,4), GameResult(C,D,1,4)]
+        # (lows=[1,1], highs=[3,3] → max_margin=4 for both)
+        assert len(result) == 1
+        atom = result[0]
+        gr_ab = next(c for c in atom if isinstance(c, GameResult) and c.winner == "A")
+        assert gr_ab.min_margin == 1
+        assert gr_ab.max_margin == 4
+        gr_cd = next(c for c in atom if isinstance(c, GameResult) and c.winner == "C")
+        assert gr_cd.min_margin == 1
+        assert gr_cd.max_margin == 4
+
+
+# ---------------------------------------------------------------------------
+# _simplify_atom_list — Rule 1 with MarginCondition (line 651)
+# ---------------------------------------------------------------------------
+
+
+class TestSimplifyAtomListRule1WithMarginCondition:
+    """Rule 1 merge path appends mc_a[val] when atoms also contain MarginConditions (line 651)."""
+
+    def test_rule1_merge_preserves_identical_margin_condition(self):
+        """Two atoms with the same winner and adjacent GameResult ranges plus an
+        identical MarginCondition are merged.  During reconstruction, line 651
+        appends mc_a[val] for the shared MarginCondition."""
+        p_ab = ("A", "B")
+        mc = MarginCondition(add=(p_ab,), sub=(), op=">=", threshold=2)
+
+        # Atom 1: A beats B in [1,4) + mc
+        atom1 = [GameResult("A", "B", min_margin=1, max_margin=4), mc]
+        # Atom 2: A beats B in [3,7) + mc (same winner, overlapping range)
+        atom2 = [GameResult("A", "B", min_margin=3, max_margin=7), mc]
+
+        result = _simplify_atom_list([atom1, atom2])
+
+        # Should merge into one atom covering [1,7) plus the MarginCondition
+        assert len(result) == 1
+        merged = result[0]
+        game_conds = [c for c in merged if isinstance(c, GameResult)]
+        margin_conds = [c for c in merged if isinstance(c, MarginCondition)]
+        assert len(game_conds) == 1
+        assert game_conds[0].min_margin == 1
+        assert game_conds[0].max_margin == 7
+        assert len(margin_conds) == 1
+        assert margin_conds[0] == mc
+
+
+# ---------------------------------------------------------------------------
+# _simplify_atom_list — Rule 2 blocked by MarginCondition (line 665)
+# ---------------------------------------------------------------------------
+
+
+class TestSimplifyAtomListRule2BlockedByMarginCondition:
+    """Rule 2 returns None when a MarginCondition references the game being dropped (line 665)."""
+
+    def test_rule2_blocked_when_mc_references_game(self):
+        """Atoms have opposite unconstrained winners for game (A,B) but a MarginCondition
+        that references (A,B) in its .add tuple.  Line 665 fires, preventing the merge."""
+        p_ab = ("A", "B")
+        # MarginCondition references the very game being considered for Rule-2 elimination
+        mc = MarginCondition(add=(p_ab,), sub=(), op=">=", threshold=5)
+
+        atom1 = [GameResult("A", "B", min_margin=1, max_margin=None), mc]
+        atom2 = [GameResult("B", "A", min_margin=1, max_margin=None), mc]
+
+        result = _simplify_atom_list([atom1, atom2])
+
+        # Merge blocked by line 665 → atoms unchanged
+        assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# _simplify_atom_list — final return None in _try_merge (line 670)
+# ---------------------------------------------------------------------------
+
+
+class TestSimplifyAtomListSameWinnerGappedRanges:
+    """Rule 1 does not merge atoms when the same winner's ranges have a gap (line 641 return)."""
+
+    def test_same_winner_gap_in_ranges_not_merged(self):
+        """A beats B in [1,4) and [6,∞) — same winner, but a gap between ranges.
+
+        Rule 1 detects the gap at line 641 (first_hi=4 < second_lo=6) and returns None.
+        Rule 2 never fires (same winner means ca.loser ≠ cb.winner for game (A,B)).
+        Both atoms survive unchanged.
+
+        Note: line 670 (`return None` at end of _try_merge, after both rule blocks)
+        is structurally unreachable for well-formed two-team game pairs — for any
+        pair (A,B), either Rule 1 (same winner) or Rule 2 (opposite winners)
+        always matches, so execution never falls through to line 670."""
+        atom1 = [GameResult("A", "B", min_margin=1, max_margin=4)]
+        atom2 = [GameResult("A", "B", min_margin=6, max_margin=None)]
+
+        result = _simplify_atom_list([atom1, atom2])
+
+        assert len(result) == 2
+        margins = {(c.min_margin, c.max_margin) for atom in result for c in atom if isinstance(c, GameResult)}
+        assert (1, 4) in margins
+        assert (6, None) in margins
+
+
+# ---------------------------------------------------------------------------
+# _simplify_atom_list — Rule 3 non-overlapping guard (line 753)
+# ---------------------------------------------------------------------------
+
+
+class TestSimplifyAtomListRule3NonOverlapping:
+    """_try_rule3 fires the non-overlapping guard (line 752→753 continue) when
+    the tightening game's ranges don't overlap."""
+
+    def test_non_overlapping_ranges_block_rule3(self):
+        """Atom1: A beats B (unconstrained), G beats H in [1,4).
+        Atom2: B beats A (unconstrained), G beats H in [5,∞).
+
+        The tightening game G-H has ranges [1,4) and [5,∞) which don't overlap
+        (ca_t.max_margin=4 ≤ cb_t.min_margin=5).  Line 752→753 fires and Rule 3
+        returns None.  Both atoms survive unchanged."""
+        atom1 = [GameResult("A", "B", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=1, max_margin=4)]
+        atom2 = [GameResult("B", "A", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=5, max_margin=None)]
+
+        result = _simplify_atom_list([atom1, atom2])
+
+        # Rule 3 blocked; Rule 4 also blocked (lower bounds differ: 1 vs 5).
+        # Both atoms survive.
+        assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# _simplify_atom_list — Rule 4 structural guards (lines 859, 864)
+# ---------------------------------------------------------------------------
+
+
+class TestSimplifyAtomListRule4Guards:
+    """Rule 4 structural-reject guards (lower-bound mismatch and range not strictly narrower)."""
+
+    def test_rule4_lower_bound_mismatch_fires_line_859(self):
+        """Atoms with different lower bounds for the tightening game trigger line 859.
+
+        Atom1: A beats B (unconstrained), G beats H in [1,3).
+        Atom2: B beats A (unconstrained), G beats H in [5,∞).
+
+        First Rule-4 assignment (p_comp=AB, p_tight=GH): min_margins differ (1 vs 5)
+        → line 859 fires.  Second assignment (p_comp=GH, p_tight=AB) fails at the
+        complementary-game check (G≠H).  Rule 4 returns None; Rule 3 also blocked
+        (ca_t.max_margin=3 ≤ cb_t.min_margin=5)."""
+        atom1 = [GameResult("A", "B", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=1, max_margin=3)]
+        atom2 = [GameResult("B", "A", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=5, max_margin=None)]
+
+        result = _simplify_atom_list([atom1, atom2])
+
+        assert len(result) == 2
+
+    def test_rule4_range_not_strictly_narrower_fires_line_864(self):
+        """First assignment (p_comp=AB, p_tight=GH): both start at min=1, but
+        ca_t.max_margin=5 ≥ cb_t.max_margin=3 → line 864 fires.  Second
+        assignment fails at the complementary-game check.  Rule 4 returns None.
+
+        Rule 3 also skipped: ca_t.min_margin=1 ≥ cb_t.min_margin=1 → line 749
+        fires in _try_rule3, preventing Rule 3 from simplifying first."""
+        # Atom 1: A beats B (unconstrained), G beats H in [1,5) — wider range
+        atom1 = [GameResult("A", "B", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=1, max_margin=5)]
+        # Atom 2: B beats A (unconstrained), G beats H in [1,3) — narrower range
+        atom2 = [GameResult("B", "A", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=1, max_margin=3)]
+
+        result = _simplify_atom_list([atom1, atom2])
+
+        assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# Coin flip under margin-sensitive mask (lines 1132, 1299, 1528)
+#
+# Fixture: 3-team region (A, B, C) with 1 completed game and 2 remaining games.
+#
+#   Completed : A beats B (margin=6, scores 20–14)
+#   Remaining : RemainingGame("A","C"), RemainingGame("B","C")
+#
+# For mask=2 (C beats A, B beats C) the standings cycle A→C→B→A, producing
+# a 3-way 1-1 tie.  Head-to-head PD among the three: at margin combo (6,6)
+# all three teams score 0 net PD; subsequent PA tiebreakers are also symmetric,
+# so a coin flip is required.  The seeding at corners (m0=1,m1=1) and
+# (m0=12,m1=12) differ → the mask IS margin-sensitive, placing the coin-flip
+# path inside the sensitive-mask enumeration branch.
+# ---------------------------------------------------------------------------
+
+_COIN_TEAMS = ["A", "B", "C"]
+# A beats B by 6.  Scores: A scores 20, B scores 14 → pa_a=14 (B's points against A),
+# pa_b=20 (A's points against B).  At remaining margin=6 for both games, all three
+# teams end up with PA=34, exhausting all tiebreakers and triggering a coin flip.
+_COIN_COMPLETED = [
+    CompletedGame(a="A", b="B", res_a=1, pd_a=6, pa_a=14, pa_b=20),
+]
+_COIN_REMAINING = [RemainingGame("A", "C"), RemainingGame("B", "C")]
+
+
+class TestCoinFlipUnderMarginSensitiveMask:
+    """Coin flip under a margin-sensitive mask covers lines 1132, 1299, and 1528."""
+
+    def test_enumerate_outcomes_stores_coin_flip_for_sensitive_mask(self):
+        """enumerate_outcomes line 1132: flip_collector non-empty inside the sensitive
+        mask branch for at least one margin combo → coin_flips[mask] populated."""
+        outcomes = enumerate_outcomes(_COIN_TEAMS, _COIN_COMPLETED, _COIN_REMAINING)
+
+        # mask=2 is margin-sensitive (seedings differ at corners) and produces a
+        # coin flip for the margin combo (6, 6).
+        assert 2 in outcomes.coin_flips, "mask=2 should have a coin flip recorded"
+        assert 2 not in outcomes.non_sensitive_masks, "mask=2 should be margin-sensitive"
+
+    def test_build_scenario_atoms_coin_flip_under_sensitive_mask(self):
+        """build_scenario_atoms line 1299: same condition as above — coin flip
+        encountered during the sensitive-mask margin enumeration path."""
+        atoms = build_scenario_atoms(_COIN_TEAMS, _COIN_COMPLETED, _COIN_REMAINING)
+
+        # The function should complete without error; existence of the coin-flip
+        # mask's data in the returned atoms dict confirms the path was exercised.
+        # (Coin-flip masks produce no per-team atoms since seedings are
+        # non-deterministic, so we just verify the call succeeds.)
+        assert isinstance(atoms, dict)
+
+    def test_enumerate_division_scenarios_coin_flip_under_sensitive_mask(self):
+        """enumerate_division_scenarios line 1528: coin flip encountered during
+        the sensitive-mask inner enumeration path inside the function's own loop."""
+        scenarios = enumerate_division_scenarios(_COIN_TEAMS, _COIN_COMPLETED, _COIN_REMAINING)
+
+        # Should return at least one scenario without error.
+        assert len(scenarios) >= 1
+        scenario_nums = [sc["scenario_num"] for sc in scenarios]
+        assert 1 in scenario_nums
+
+
+# ---------------------------------------------------------------------------
+# enumerate_division_scenarios — line 1640→1649: scenario_atoms={} (falsy)
+# ---------------------------------------------------------------------------
+
+
+class TestEnumerateDivisionScenariosNoAtoms:
+    """Line 1640→1649: passing scenario_atoms={} leaves conditions_atom as None."""
+
+    def test_empty_scenario_atoms_dict_leaves_conditions_atom_none(self):
+        """When scenario_atoms is an empty dict (falsy), the margin-sensitive
+        sub-scenario path at line 1640 takes the False branch, leaving
+        conditions_atom=None for all sub-scenarios."""
+        # Use the 3-7A fixture which has margin-sensitive scenarios.
+        scenarios = enumerate_division_scenarios(
+            teams_3_7a,
+            expected_3_7a_completed_games,
+            _REMAINING,
+            scenario_atoms={},  # explicitly empty — falsy, bypasses auto-build
+        )
+
+        ms_scenarios = [sc for sc in scenarios if sc["sub_label"] != ""]
+        assert len(ms_scenarios) > 0, "Need at least one margin-sensitive sub-scenario"
+
+        for sc in ms_scenarios:
+            assert sc["conditions_atom"] is None, (
+                f"Scenario {sc['scenario_num']}{sc['sub_label']}: expected None "
+                f"but got {sc['conditions_atom']}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Outer stability loop — second pass
+# (lines 897, 901, 904-910, 911→895, 920-921, 933-936, 938)
+# ---------------------------------------------------------------------------
+
+
+class TestOuterStabilityLoopSecondPassViaRule4:
+    """Rule 4 in pass 1 creates atoms that Rule 1 can merge in pass 2.
+
+    Three atoms are constructed so that the pre-loop exhausts no merges
+    (all pairs have two differing conditions), then in the outer loop:
+
+    Pass 1:  Rule 4 splits [Alpha-Beta-unc, GD[1,4)] and [Beta-Alpha-unc, GD[1,7)]
+             into [GD[1,4)] and [Beta-Alpha-unc, GD[4,7)].
+             globally_changed = True → second outer pass fires.
+
+    Pass 2:  Rule 1 merges [GD[1,4)] with the pre-existing [GD[4,∞)] into [GD[1,∞)].
+             Lines 904-910 fire (merge recorded), 897 fires (i=2 already in used),
+             901 fires (j=2 already used when scanning from i=1), 911→895 fires
+             (found_pair=True at i=0, skipping the append and looping back).
+
+    Pass 2 subsumption: [GD[1,∞)] subsumes [Beta-Alpha-unc, GD[4,7)].
+             Lines 920-921 fire, shrinking atoms to [[GD[1,∞)]].
+    """
+
+    def test_rule4_then_rule1_merge_in_second_pass(self):
+        atom0 = [GameResult("Alpha", "Beta", 1, None), GameResult("Gamma", "Delta", 1, 4)]
+        atom1 = [GameResult("Beta", "Alpha", 1, None), GameResult("Gamma", "Delta", 1, 7)]
+        atom2 = [GameResult("Gamma", "Delta", 4, None)]
+
+        result = _simplify_atom_list([atom0, atom1, atom2])
+
+        assert result == [[GameResult("Gamma", "Delta", 1, None)]]
+
+
+class TestOuterStabilityLoopRule3:
+    """Rule 3 fires in the outer stability loop (lines 933-936, 938).
+
+    The outer-loop Rule 3 section (lines 923-938) is distinct from the
+    pre-stability-loop Rule 3 (lines 799-811).  To reach 933-938, Rule 3
+    must fire on atoms that were NOT Rule-3-applicable before the outer loop
+    started — only outer-loop Rule 4 can create that opportunity.
+
+    Construction (3 atoms):
+      atom0 = [Phi-Rho-unc, Gamma-Delta[1,4), Alpha-Beta-unc]   pairs {PR, GD, AB}
+      atom1 = [Rho-Phi-unc, Gamma-Delta[1,7), Alpha-Beta-unc]   pairs {PR, GD, AB}
+      atom_x = [Gamma-Delta[3,∞), Beta-Alpha-unc]               pairs {GD, AB}
+
+    Pre-loop Rule 3 does NOT fire: atom0/1 have 3-pair set; atom_x has 2-pair
+    set; Rule 3 requires identical pair sets, so no pair fires.
+
+    Outer pass 1 — Rule 4 fires on (atom0, atom1):
+      new_a = [GD[1,4), AB-unc]          ← comp game (PR) dropped
+      new_b = [Rho-Phi-unc, GD[4,7), AB-unc]
+
+    Outer pass 2 — Rule 3 fires on (new_a, atom_x):
+      new_a and atom_x now share the same 2-pair set {GD, AB}.
+      new_a is the wider atom (GD[1,4)), atom_x is tighter (GD[3,∞)).
+      → atom_x replaced with [GD[3,∞)]   lines 933-936, 938 fire.
+
+    Outer pass 3 — subsumption: [GD[3,∞)] subsumes new_b ([Rho-Phi-unc, GD[4,7), AB-unc]).
+    Final: [[GD[1,4), AB-unc], [GD[3,∞)]]
+    """
+
+    def test_rule4_exposes_rule3_opportunity_in_outer_loop(self):
+        atom0 = [
+            GameResult("Phi", "Rho", 1, None),    # comp: Phi beats Rho, unc
+            GameResult("Gamma", "Delta", 1, 4),   # tight (narrow): GD [1,4)
+            GameResult("Alpha", "Beta", 1, None), # shared: Alpha beats Beta, unc
+        ]
+        atom1 = [
+            GameResult("Rho", "Phi", 1, None),    # comp (opposite): Rho beats Phi, unc
+            GameResult("Gamma", "Delta", 1, 7),   # tight (wide): GD [1,7)
+            GameResult("Alpha", "Beta", 1, None), # shared: same as atom0
+        ]
+        atom_x = [
+            GameResult("Gamma", "Delta", 3, None),  # tight (tighter): GD [3,∞)
+            GameResult("Beta", "Alpha", 1, None),   # shared (opposite): Beta beats Alpha, unc
+        ]
+
+        result = _simplify_atom_list([atom0, atom1, atom_x])
+
+        assert result == [
+            [GameResult("Gamma", "Delta", 1, 4), GameResult("Alpha", "Beta", 1, None)],
+            [GameResult("Gamma", "Delta", 3, None)],
+        ]
