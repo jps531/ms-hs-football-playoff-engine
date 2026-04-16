@@ -1632,7 +1632,10 @@ def enumerate_division_scenarios(
         else:
             _, _, _, mask, sub_list = entry
             scenario_num += 1
-            sub_list_sorted = sorted(sub_list, key=lambda x: x[0])
+            sub_list_sorted = sorted(
+                sub_list,
+                key=lambda x: tuple(min(m[pair] for m in x[1]) for pair in pairs),
+            )
             mask_game_winners = _game_winners_for_mask(mask, remaining)
             for k, (seeding, margins_list) in enumerate(sub_list_sorted):
                 sub_label = chr(ord("a") + k)

@@ -452,21 +452,21 @@ def test_div_dict_scenario3_seeds():
 
 
 def test_div_dict_scenario1a_seeds():
-    """Scenario 1a: SP #1, LC #2, CH #3, GRE #4 (SAL by 12+, SP by 1–6)."""
+    """Scenario 1a: SP #1, LC #2, GRE #3, CH #4 (small SAL/SP margin)."""
     s = _DIV_DICT["1a"]
-    assert s["one_seed"] == "South Panola"
-    assert s["two_seed"] == "Lake Cormorant"
-    assert s["three_seed"] == "Center Hill"
-    assert s["four_seed"] == "Grenada"
-
-
-def test_div_dict_scenario1b_seeds():
-    """Scenario 1b: SP #1, LC #2, GRE #3, CH #4."""
-    s = _DIV_DICT["1b"]
     assert s["one_seed"] == "South Panola"
     assert s["two_seed"] == "Lake Cormorant"
     assert s["three_seed"] == "Grenada"
     assert s["four_seed"] == "Center Hill"
+
+
+def test_div_dict_scenario1b_seeds():
+    """Scenario 1b: SP #1, LC #2, CH #3, GRE #4 (large SAL/SP margin)."""
+    s = _DIV_DICT["1b"]
+    assert s["one_seed"] == "South Panola"
+    assert s["two_seed"] == "Lake Cormorant"
+    assert s["three_seed"] == "Center Hill"
+    assert s["four_seed"] == "Grenada"
 
 
 

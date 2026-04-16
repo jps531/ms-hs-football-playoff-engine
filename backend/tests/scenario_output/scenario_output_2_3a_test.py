@@ -466,13 +466,13 @@ def test_div_dict_scenario3_title():
 
 
 def test_div_dict_scenario4a_title():
-    """Scenario 4a: CC beats IND AND HS beats NP by 9 or more."""
-    assert _DIV_DICT["4a"]["title"] == "Coahoma County beats Independence AND Holly Springs beats North Panola by 9 or more"
+    """Scenario 4a: CC beats IND AND HS beats NP by 1–8."""
+    assert _DIV_DICT["4a"]["title"] == "Coahoma County beats Independence AND Holly Springs beats North Panola by 1\u20138"
 
 
 def test_div_dict_scenario4b_title():
-    """Scenario 4b: CC beats IND AND HS beats NP by 1–8."""
-    assert _DIV_DICT["4b"]["title"] == "Coahoma County beats Independence AND Holly Springs beats North Panola by 1\u20138"
+    """Scenario 4b: CC beats IND AND HS beats NP by 9 or more."""
+    assert _DIV_DICT["4b"]["title"] == "Coahoma County beats Independence AND Holly Springs beats North Panola by 9 or more"
 
 
 def test_div_dict_scenario1a_seeds():
@@ -512,21 +512,21 @@ def test_div_dict_scenario3_seeds():
 
 
 def test_div_dict_scenario4a_seeds():
-    """Scenario 4a: CC #1, IND #2, HS #3, NP #4."""
+    """Scenario 4a: CC #1, IND #2, NP #3, HS #4 (HS by 1–8)."""
     s = _DIV_DICT["4a"]
-    assert s["one_seed"] == "Coahoma County"
-    assert s["two_seed"] == "Independence"
-    assert s["three_seed"] == "Holly Springs"
-    assert s["four_seed"] == "North Panola"
-
-
-def test_div_dict_scenario4b_seeds():
-    """Scenario 4b: CC #1, IND #2, NP #3, HS #4."""
-    s = _DIV_DICT["4b"]
     assert s["one_seed"] == "Coahoma County"
     assert s["two_seed"] == "Independence"
     assert s["three_seed"] == "North Panola"
     assert s["four_seed"] == "Holly Springs"
+
+
+def test_div_dict_scenario4b_seeds():
+    """Scenario 4b: CC #1, IND #2, HS #3, NP #4 (HS by 9+)."""
+    s = _DIV_DICT["4b"]
+    assert s["one_seed"] == "Coahoma County"
+    assert s["two_seed"] == "Independence"
+    assert s["three_seed"] == "Holly Springs"
+    assert s["four_seed"] == "North Panola"
 
 
 def test_div_dict_no_eliminated_teams():

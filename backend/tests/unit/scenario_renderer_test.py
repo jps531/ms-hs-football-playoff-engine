@@ -3,11 +3,13 @@
 import pytest
 
 from backend.helpers.data_classes import (
+    CompletedGame,
     GameResult,
     HomeGameCondition,
     HomeGameScenario,
     MarginCondition,
     MatchupEntry,
+    RemainingGame,
     RoundHomeScenarios,
     RoundMatchups,
 )
@@ -414,16 +416,20 @@ def test_division_scenarios_dict_scenario_3():
 
 
 def test_division_scenarios_dict_scenario_4a_title():
-    """Scenario 4a title includes margin conditions."""
+    """Scenario 4a title includes margin conditions.
+
+    After ascending-margin sort, 4a is the smallest-margin sub-scenario:
+    p∈[1,4], n∈[1,3], Pearl's margin doesn't exceed NWR's by more than 1.
+    """
     entry = _div_dict()["4a"]
     assert entry["title"] == (
-        "Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND "
-        "Northwest Rankin beats Petal by 6 or more AND "
-        "Pearl's margin and Northwest Rankin's margin combined total 11 or more"
+        "Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND "
+        "Northwest Rankin beats Petal by 1\u20133 AND "
+        "Pearl's margin doesn't exceed Northwest Rankin's by more than 1"
     )
-    assert entry["one_seed"] == "Northwest Rankin"
-    assert entry["two_seed"] == "Oak Grove"
-    assert entry["four_seed"] == "Petal"
+    assert entry["one_seed"] == "Oak Grove"
+    assert entry["two_seed"] == "Petal"
+    assert entry["four_seed"] == "Pearl"
     assert set(entry["eliminated"]) == {"Brandon", "Meridian"}
 
 
@@ -718,3 +724,545 @@ class TestRenderTeamMatchups:
         """MatchupEntry with no explanation renders without a bracket suffix (line 633→635)."""
         result = render_team_matchups("TeamA", [self._rnd(None)])
         assert "[" not in result
+
+
+# ===========================================================================
+# Partial-results peace-of-mind tests — Region 3-7A (2025)
+#
+# These tests simulate mid-final-week states where some results are known and
+# others are not.  All three scenarios use the real 2025 final-week scores.
+#
+# Real results:
+#   Brandon  beat Meridian        40–13  (margin 27)
+#   Oak Grove beat Pearl          28–7   (margin 21)
+#   Northwest Rankin beat Petal   34–28  (margin  6)
+# ===========================================================================
+
+# Convenience: the three final-week completed games
+_BRN_MER = CompletedGame("Brandon",          "Meridian", 1, 27, 13, 40)
+_OG_PRL  = CompletedGame("Oak Grove",        "Pearl",    1, 21,  7, 28)
+_NWR_PET = CompletedGame("Northwest Rankin", "Petal",    1,  6, 28, 34)
+
+# ---------------------------------------------------------------------------
+# Partial A: Brandon/Meridian known; OG/Pearl and NWR/Petal still TBD
+# ---------------------------------------------------------------------------
+# Brandon's win eliminates all Meridian-wins-Brandon scenarios, but the
+# margin-sensitive 5-way-tie atoms (which all require Brandon to win) survive
+# intact.  Two remaining games, same complex structure as the full 3-game view
+# but without any Meridian-wins branch.
+# ---------------------------------------------------------------------------
+
+_completed_pa = sorted(
+    expected_3_7a_completed_games + [_BRN_MER],
+    key=lambda g: (g.a, g.b),
+)
+_remaining_pa = [
+    RemainingGame("Oak Grove", "Pearl"),
+    RemainingGame("Northwest Rankin", "Petal"),
+]
+
+_atoms_pa  = build_scenario_atoms(teams_3_7a, _completed_pa, _remaining_pa)
+_sr_pa     = determine_scenarios(teams_3_7a, _completed_pa, _remaining_pa)
+_odds_pa   = determine_odds(
+    teams_3_7a,
+    _sr_pa.first_counts, _sr_pa.second_counts,
+    _sr_pa.third_counts, _sr_pa.fourth_counts,
+    _sr_pa.denom,
+)
+
+_PARTIAL_A_BRANDON = """\
+Brandon
+
+#3 seed if: (50.0%)
+1. Oak Grove beats Pearl
+
+#4 seed if: (25.0%)
+1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
+
+Eliminated if: (25.0%)
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal"""
+
+_PARTIAL_A_MERIDIAN = """\
+Meridian
+
+Eliminated. (100.0%)"""
+
+_PARTIAL_A_NWR = """\
+Northwest Rankin
+
+#1 seed if: (11.6%)
+1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+2. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+
+#2 seed if: (7.1%)
+1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+3. Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+
+#3 seed if: (4.2%)
+1. Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+2. Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+3. Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+
+#4 seed if: (52.1%)
+1. Oak Grove beats Pearl
+2. Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+3. Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+4. Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+
+Eliminated if: (25.0%)
+1. Pearl beats Oak Grove AND Petal beats Northwest Rankin"""
+
+_PARTIAL_A_OAK_GROVE = """\
+Oak Grove
+
+#1 seed if: (30.0%)
+1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
+2. Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+3. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+4. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+
+#2 seed if: (30.4%)
+1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
+2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+3. Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+4. Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+
+#3 seed if: (32.6%)
+1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
+2. Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+4. Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+
+#4 seed if: (6.9%)
+1. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+2. Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+3. Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more"""
+
+_PARTIAL_A_PEARL = """\
+Pearl
+
+#1 seed if: (6.3%)
+1. Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+3. Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+
+#2 seed if: (33.3%)
+1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
+2. Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+4. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+
+#3 seed if: (5.7%)
+1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+3. Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+
+#4 seed if: (4.7%)
+1. Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+3. Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+
+Eliminated if: (50.0%)
+1. Oak Grove beats Pearl"""
+
+_PARTIAL_A_PETAL = """\
+Petal
+
+#1 seed if: (52.1%)
+1. Petal beats Northwest Rankin
+2. Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+3. Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+4. Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+
+#2 seed if: (29.2%)
+1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
+2. Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+3. Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+4. Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+
+#3 seed if: (7.5%)
+1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+2. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+3. Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+
+#4 seed if: (11.3%)
+1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1"""
+
+
+@pytest.mark.parametrize(
+    "team,expected",
+    [
+        ("Brandon",          _PARTIAL_A_BRANDON),
+        ("Meridian",         _PARTIAL_A_MERIDIAN),
+        ("Northwest Rankin", _PARTIAL_A_NWR),
+        ("Oak Grove",        _PARTIAL_A_OAK_GROVE),
+        ("Pearl",            _PARTIAL_A_PEARL),
+        ("Petal",            _PARTIAL_A_PETAL),
+    ],
+)
+def test_partial_a_brandon_meridian_known(team, expected):
+    """After Brandon beats Meridian, the Meridian-wins branch vanishes but all
+    margin-sensitive 5-way-tie scenarios (which require Brandon to win) remain.
+    Two games still undecided: OG/Pearl and NWR/Petal."""
+    result = render_team_scenarios(team, _atoms_pa, odds=_odds_pa)
+    assert result == expected, (
+        f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Partial B: Brandon/Meridian AND OG/Pearl known; only NWR/Petal TBD
+# ---------------------------------------------------------------------------
+# OG beating Pearl eliminates Pearl (2-3 final) and removes every mask-5
+# scenario (which required Pearl to beat OG).  The remaining game determines
+# only #1/#2 between OG and Petal; Brandon and NWR are clinched at #3/#4
+# because Petal's H2H win over OG determines tiebreakers in the NWR/Brandon
+# 2-way if Petal beats NWR, and step-2 (record vs OG) locks Petal at #2 over
+# NWR and Brandon if NWR beats Petal.
+# ---------------------------------------------------------------------------
+
+_completed_pb = sorted(
+    expected_3_7a_completed_games + [_BRN_MER, _OG_PRL],
+    key=lambda g: (g.a, g.b),
+)
+_remaining_pb = [RemainingGame("Northwest Rankin", "Petal")]
+
+_atoms_pb  = build_scenario_atoms(teams_3_7a, _completed_pb, _remaining_pb)
+_sr_pb     = determine_scenarios(teams_3_7a, _completed_pb, _remaining_pb)
+_odds_pb   = determine_odds(
+    teams_3_7a,
+    _sr_pb.first_counts, _sr_pb.second_counts,
+    _sr_pb.third_counts, _sr_pb.fourth_counts,
+    _sr_pb.denom,
+)
+
+_PARTIAL_B_BRANDON = """\
+Brandon
+
+Clinched #3 seed. (100.0%)"""
+
+_PARTIAL_B_MERIDIAN = """\
+Meridian
+
+Eliminated. (100.0%)"""
+
+_PARTIAL_B_NWR = """\
+Northwest Rankin
+
+Clinched #4 seed. (100.0%)"""
+
+_PARTIAL_B_OAK_GROVE = """\
+Oak Grove
+
+#1 seed if: (50.0%)
+1. Northwest Rankin beats Petal
+
+#2 seed if: (50.0%)
+1. Petal beats Northwest Rankin"""
+
+_PARTIAL_B_PEARL = """\
+Pearl
+
+Eliminated. (100.0%)"""
+
+_PARTIAL_B_PETAL = """\
+Petal
+
+#1 seed if: (50.0%)
+1. Petal beats Northwest Rankin
+
+#2 seed if: (50.0%)
+1. Northwest Rankin beats Petal"""
+
+
+@pytest.mark.parametrize(
+    "team,expected",
+    [
+        ("Brandon",          _PARTIAL_B_BRANDON),
+        ("Meridian",         _PARTIAL_B_MERIDIAN),
+        ("Northwest Rankin", _PARTIAL_B_NWR),
+        ("Oak Grove",        _PARTIAL_B_OAK_GROVE),
+        ("Pearl",            _PARTIAL_B_PEARL),
+        ("Petal",            _PARTIAL_B_PETAL),
+    ],
+)
+def test_partial_b_brandon_meridian_and_og_pearl_known(team, expected):
+    """After Brandon beats Meridian AND OG beats Pearl, all margin-sensitive
+    scenarios are gone.  Pearl is eliminated; Brandon and NWR are clinched at
+    #3/#4; the sole remaining game (NWR/Petal) decides only #1 vs #2 between
+    OG and Petal."""
+    result = render_team_scenarios(team, _atoms_pb, odds=_odds_pb)
+    assert result == expected, (
+        f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Partial C: Brandon/Meridian AND NWR/Petal known; only OG/Pearl TBD
+# ---------------------------------------------------------------------------
+# NWR beat Petal by 6 (the real result).  With NWR's margin fixed at 6,
+# the 5-way-tie tiebreaker becomes a function of Pearl's margin alone, so
+# new single-game margin atoms appear on the OG/Pearl game.  This is the
+# most interesting partial state: complex structure remains but is now
+# one-dimensional rather than two-dimensional.
+# ---------------------------------------------------------------------------
+
+_completed_pc = sorted(
+    expected_3_7a_completed_games + [_BRN_MER, _NWR_PET],
+    key=lambda g: (g.a, g.b),
+)
+_remaining_pc = [RemainingGame("Oak Grove", "Pearl")]
+
+_atoms_pc  = build_scenario_atoms(teams_3_7a, _completed_pc, _remaining_pc)
+_sr_pc     = determine_scenarios(teams_3_7a, _completed_pc, _remaining_pc)
+_odds_pc   = determine_odds(
+    teams_3_7a,
+    _sr_pc.first_counts, _sr_pc.second_counts,
+    _sr_pc.third_counts, _sr_pc.fourth_counts,
+    _sr_pc.denom,
+)
+
+_PARTIAL_C_BRANDON = """\
+Brandon
+
+#3 seed if: (50.0%)
+1. Oak Grove beats Pearl
+
+Eliminated if: (50.0%)
+1. Pearl beats Oak Grove"""
+
+_PARTIAL_C_MERIDIAN = """\
+Meridian
+
+Eliminated. (100.0%)"""
+
+_PARTIAL_C_NWR = """\
+Northwest Rankin
+
+#1 seed if: (16.7%)
+1. Pearl beats Oak Grove by 5\u20138
+
+#2 seed if: (33.3%)
+1. Pearl beats Oak Grove by 1\u20134
+2. Pearl beats Oak Grove by 9 or more
+
+#4 seed if: (50.0%)
+1. Oak Grove beats Pearl"""
+
+_PARTIAL_C_OAK_GROVE = """\
+Oak Grove
+
+#1 seed if: (66.7%)
+1. Oak Grove beats Pearl
+2. Pearl beats Oak Grove by 1\u20134
+
+#2 seed if: (4.2%)
+1. Pearl beats Oak Grove by exactly 5
+
+#3 seed if: (8.3%)
+1. Pearl beats Oak Grove by 6\u20137
+
+#4 seed if: (20.8%)
+1. Pearl beats Oak Grove by 8 or more"""
+
+_PARTIAL_C_PEARL = """\
+Pearl
+
+#1 seed if: (16.7%)
+1. Pearl beats Oak Grove by 9 or more
+
+#2 seed if: (12.5%)
+1. Pearl beats Oak Grove by 6\u20138
+
+#3 seed if: (8.3%)
+1. Pearl beats Oak Grove by 4\u20135
+
+#4 seed if: (12.5%)
+1. Pearl beats Oak Grove by 1\u20133
+
+Eliminated if: (50.0%)
+1. Oak Grove beats Pearl"""
+
+_PARTIAL_C_PETAL = """\
+Petal
+
+#2 seed if: (50.0%)
+1. Oak Grove beats Pearl
+
+#3 seed if: (33.3%)
+1. Pearl beats Oak Grove by 1\u20133
+2. Pearl beats Oak Grove by 8 or more
+
+#4 seed if: (16.7%)
+1. Pearl beats Oak Grove by 4\u20137"""
+
+
+@pytest.mark.parametrize(
+    "team,expected",
+    [
+        ("Brandon",          _PARTIAL_C_BRANDON),
+        ("Meridian",         _PARTIAL_C_MERIDIAN),
+        ("Northwest Rankin", _PARTIAL_C_NWR),
+        ("Oak Grove",        _PARTIAL_C_OAK_GROVE),
+        ("Pearl",            _PARTIAL_C_PEARL),
+        ("Petal",            _PARTIAL_C_PETAL),
+    ],
+)
+def test_partial_c_brandon_meridian_and_nwr_petal_known(team, expected):
+    """After Brandon beats Meridian AND NWR beats Petal by 6, the 2-D
+    margin space collapses to 1-D: all tiebreaker conditions now depend only
+    on Pearl's winning margin vs OG.  The NWR #3 seed disappears (NWR always
+    beats Petal in step 2 vs OG), and the remaining game produces new
+    single-game margin thresholds driven by the known n=6 boundary."""
+    result = render_team_scenarios(team, _atoms_pc, odds=_odds_pc)
+    assert result == expected, (
+        f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Partial C — cross-validation against full-season ground truth
+# ---------------------------------------------------------------------------
+# Partial C was computed independently (build_scenario_atoms on 14 completed
+# games + 1 remaining).  This class verifies it is consistent with the full-
+# season computation (determine_scenarios on all 15 games, remaining=[]).
+#
+# For each unique seeding outcome in Partial C — determined by Pearl's winning
+# margin vs OG — we construct the complete 15-game record with a specific
+# OG/Pearl score, run determine_scenarios, and confirm every team's seed.
+#
+# The 5-way-tie H2H PD formula (n=6 fixed, p=Pearl's margin):
+#   OG = 8-p,  Petal = 0,  Pearl = p-4,  NWR = 4,  Brandon = -8
+# Boundary crossings: p=4 (OG/NWR tie resolved by OG's H2H win over NWR),
+#   p=5 (NWR takes #1 outright), p=6 (Pearl=OG at 2; Pearl wins H2H vs OG),
+#   p=8 (NWR=Pearl at 4; NWR wins H2H over Pearl), p=9 (Pearl surpasses NWR).
+# ---------------------------------------------------------------------------
+
+
+def _og_wins_game(margin: int) -> CompletedGame:
+    """OG beats Pearl by *margin*."""
+    return CompletedGame("Oak Grove", "Pearl", 1, margin, 28 - margin, 28)
+
+
+def _pearl_wins_game(p: int) -> CompletedGame:
+    """Pearl beats OG by *p* (OG scores 21, Pearl scores 21+p)."""
+    return CompletedGame("Oak Grove", "Pearl", -1, -p, 21 + p, 21)
+
+
+def _full_season_seeds(og_pearl: CompletedGame) -> dict[str, int]:
+    """Return {team: seed_1_to_4_or_5} for the fully-resolved 15-game season."""
+    completed = sorted(
+        expected_3_7a_completed_games + [_BRN_MER, _NWR_PET, og_pearl],
+        key=lambda g: (g.a, g.b),
+    )
+    sr = determine_scenarios(teams_3_7a, completed, [])
+    odds = determine_odds(
+        teams_3_7a,
+        sr.first_counts, sr.second_counts, sr.third_counts, sr.fourth_counts,
+        sr.denom,
+    )
+    result = {}
+    for team, o in odds.items():
+        if abs(o.p1 - 1.0) < 1e-9:
+            result[team] = 1
+        elif abs(o.p2 - 1.0) < 1e-9:
+            result[team] = 2
+        elif abs(o.p3 - 1.0) < 1e-9:
+            result[team] = 3
+        elif abs(o.p4 - 1.0) < 1e-9:
+            result[team] = 4
+        else:
+            result[team] = 5  # eliminated
+    return result
+
+
+@pytest.mark.parametrize(
+    "og_pearl_game,expected_seeds",
+    [
+        # OG wins: not a 5-way tie; Petal beats OG H2H → Petal #2; then
+        # Brandon beats NWR H2H → Brandon #3, NWR #4.
+        (
+            _og_wins_game(21),
+            {"Oak Grove": 1, "Petal": 2, "Brandon": 3, "Northwest Rankin": 4,
+             "Pearl": 5, "Meridian": 5},
+        ),
+        # Pearl by 2: OG PD=6, NWR PD=4, Petal=0, Pearl=-2, Brandon=-8 → all unique.
+        (
+            _pearl_wins_game(2),
+            {"Oak Grove": 1, "Northwest Rankin": 2, "Petal": 3, "Pearl": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+        # Pearl by 3: OG PD=5 > NWR PD=4 > Petal=0 > Pearl=-1 > Brandon=-8.
+        (
+            _pearl_wins_game(3),
+            {"Oak Grove": 1, "Northwest Rankin": 2, "Petal": 3, "Pearl": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+        # Pearl by 4 (boundary): OG=NWR=4; OG beat NWR H2H → OG #1, NWR #2.
+        # Petal=Pearl=0; Pearl beat Petal H2H → Pearl #3, Petal #4.
+        (
+            _pearl_wins_game(4),
+            {"Oak Grove": 1, "Northwest Rankin": 2, "Pearl": 3, "Petal": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+        # Pearl by 5 (boundary): NWR PD=4 > OG PD=3 → NWR #1 outright.
+        (
+            _pearl_wins_game(5),
+            {"Northwest Rankin": 1, "Oak Grove": 2, "Pearl": 3, "Petal": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+        # Pearl by 6 (boundary): NWR #1 (PD=4). OG=Pearl=2; Pearl beat OG H2H
+        # (in this game) → Pearl #2, OG #3.  Petal #4, Brandon #5.
+        (
+            _pearl_wins_game(6),
+            {"Northwest Rankin": 1, "Pearl": 2, "Oak Grove": 3, "Petal": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+        # Pearl by 7: NWR PD=4 > Pearl PD=3 > OG PD=1 > Petal=0 > Brandon — all unique.
+        (
+            _pearl_wins_game(7),
+            {"Northwest Rankin": 1, "Pearl": 2, "Oak Grove": 3, "Petal": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+        # Pearl by 8 (boundary): NWR=Pearl=4; NWR beat Pearl H2H → NWR #1, Pearl #2.
+        # OG=Petal=0; Petal beat OG H2H → Petal #3, OG #4.
+        (
+            _pearl_wins_game(8),
+            {"Northwest Rankin": 1, "Pearl": 2, "Petal": 3, "Oak Grove": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+        # Pearl by 9 (boundary): Pearl PD=5 > NWR PD=4 → Pearl #1 outright.
+        (
+            _pearl_wins_game(9),
+            {"Pearl": 1, "Northwest Rankin": 2, "Petal": 3, "Oak Grove": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+        # Pearl by 12 (max): Pearl PD=8 > NWR PD=4 — same outcome category as p=9.
+        (
+            _pearl_wins_game(12),
+            {"Pearl": 1, "Northwest Rankin": 2, "Petal": 3, "Oak Grove": 4,
+             "Brandon": 5, "Meridian": 5},
+        ),
+    ],
+    ids=[
+        "og_wins_21",
+        "pearl_by_2",
+        "pearl_by_3",
+        "pearl_by_4_boundary",
+        "pearl_by_5_boundary",
+        "pearl_by_6_boundary",
+        "pearl_by_7",
+        "pearl_by_8_boundary",
+        "pearl_by_9_boundary",
+        "pearl_by_12_max",
+    ],
+)
+def test_partial_c_consistent_with_full_season(og_pearl_game, expected_seeds):
+    """Full-season seedings (0 remaining games) match what Partial C predicts
+    for every unique outcome category, confirming the two independent
+    computations — partial atom-building vs. full-season resolution — agree."""
+    assert _full_season_seeds(og_pearl_game) == expected_seeds

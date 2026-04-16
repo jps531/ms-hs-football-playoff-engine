@@ -386,23 +386,23 @@ def test_div_dict_scenario2_title():
 
 
 def test_div_dict_scenario3a_title():
-    """Scenario 3a: Yazoo City wins + Greenwood wins by 9+ (GRE #2)."""
-    assert _DIV_DICT["3a"]["title"] == "Yazoo City beats Gentry AND Greenwood beats Louisville by 9 or more"
+    """Scenario 3a: Yazoo City wins + Greenwood wins by 1–8 (LOU stays #2; ascending margin order)."""
+    assert _DIV_DICT["3a"]["title"] == "Yazoo City beats Gentry AND Greenwood beats Louisville by 1\u20138"
 
 
 def test_div_dict_scenario3b_title():
-    """Scenario 3b: Yazoo City wins + Greenwood wins by 1–8 (LOU stays #2)."""
-    assert _DIV_DICT["3b"]["title"] == "Yazoo City beats Gentry AND Greenwood beats Louisville by 1\u20138"
+    """Scenario 3b: Yazoo City wins + Greenwood wins by 9+ (GRE #2)."""
+    assert _DIV_DICT["3b"]["title"] == "Yazoo City beats Gentry AND Greenwood beats Louisville by 9 or more"
 
 
 def test_div_dict_scenario4a_title():
-    """Scenario 4a: Gentry wins + Greenwood wins by 9+ (GRE #2)."""
-    assert _DIV_DICT["4a"]["title"] == "Gentry beats Yazoo City AND Greenwood beats Louisville by 9 or more"
+    """Scenario 4a: Gentry wins + Greenwood wins by 1–8 (LOU stays #2; ascending margin order)."""
+    assert _DIV_DICT["4a"]["title"] == "Gentry beats Yazoo City AND Greenwood beats Louisville by 1\u20138"
 
 
 def test_div_dict_scenario4b_title():
-    """Scenario 4b: Gentry wins + Greenwood wins by 1–8 (LOU stays #2)."""
-    assert _DIV_DICT["4b"]["title"] == "Gentry beats Yazoo City AND Greenwood beats Louisville by 1\u20138"
+    """Scenario 4b: Gentry wins + Greenwood wins by 9+ (GRE #2)."""
+    assert _DIV_DICT["4b"]["title"] == "Gentry beats Yazoo City AND Greenwood beats Louisville by 9 or more"
 
 
 def test_div_dict_scenario1_seeds():
@@ -426,41 +426,41 @@ def test_div_dict_scenario2_seeds():
 
 
 def test_div_dict_scenario3a_seeds():
-    """Scenario 3a (GRE wins by 9+, YC wins): Kosciusko #1, Greenwood #2, Louisville #3."""
+    """Scenario 3a (GRE wins by 1–8, YC wins): Kosciusko #1, Louisville #2, Greenwood #3."""
     s = _DIV_DICT["3a"]
     assert s["one_seed"] == "Kosciusko"
-    assert s["two_seed"] == "Greenwood"
-    assert s["three_seed"] == "Louisville"
+    assert s["two_seed"] == "Louisville"
+    assert s["three_seed"] == "Greenwood"
     assert s["four_seed"] == "Yazoo City"
     assert "Gentry" in s["eliminated"]
 
 
 def test_div_dict_scenario3b_seeds():
-    """Scenario 3b (GRE wins by 1–8, YC wins): Kosciusko #1, Louisville #2, Greenwood #3."""
+    """Scenario 3b (GRE wins by 9+, YC wins): Kosciusko #1, Greenwood #2, Louisville #3."""
     s = _DIV_DICT["3b"]
     assert s["one_seed"] == "Kosciusko"
-    assert s["two_seed"] == "Louisville"
-    assert s["three_seed"] == "Greenwood"
+    assert s["two_seed"] == "Greenwood"
+    assert s["three_seed"] == "Louisville"
     assert s["four_seed"] == "Yazoo City"
     assert "Gentry" in s["eliminated"]
 
 
 def test_div_dict_scenario4a_seeds():
-    """Scenario 4a (GRE wins by 9+, GEN wins): Kosciusko #1, Greenwood #2, Louisville #3, Gentry #4."""
+    """Scenario 4a (GRE wins by 1–8, GEN wins): Kosciusko #1, Louisville #2, Greenwood #3, Gentry #4."""
     s = _DIV_DICT["4a"]
     assert s["one_seed"] == "Kosciusko"
-    assert s["two_seed"] == "Greenwood"
-    assert s["three_seed"] == "Louisville"
+    assert s["two_seed"] == "Louisville"
+    assert s["three_seed"] == "Greenwood"
     assert s["four_seed"] == "Gentry"
     assert "Yazoo City" in s["eliminated"]
 
 
 def test_div_dict_scenario4b_seeds():
-    """Scenario 4b (GRE wins by 1–8, GEN wins): Kosciusko #1, Louisville #2, Greenwood #3, Gentry #4."""
+    """Scenario 4b (GRE wins by 9+, GEN wins): Kosciusko #1, Greenwood #2, Louisville #3, Gentry #4."""
     s = _DIV_DICT["4b"]
     assert s["one_seed"] == "Kosciusko"
-    assert s["two_seed"] == "Louisville"
-    assert s["three_seed"] == "Greenwood"
+    assert s["two_seed"] == "Greenwood"
+    assert s["three_seed"] == "Louisville"
     assert s["four_seed"] == "Gentry"
     assert "Yazoo City" in s["eliminated"]
 

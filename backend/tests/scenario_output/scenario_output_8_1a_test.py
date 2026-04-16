@@ -7,9 +7,9 @@ Region 5-3A case:
   - **Margin-sensitive sub-scenarios** — When Stringer beats Resurrection AND
     Lumberton beats Taylorsville, the 3-way tie (Taylorsville, Stringer, Lumberton
     all 3-1) is resolved by H2H point differential (Step 3, ±12 cap), NOT a coin
-    flip.  Two sub-scenarios emerge from the same game_winners:
-      "2b": Lumberton wins by 1-11 → Taylorsville #1 (PD still favors Taylorsville)
-      "2a": Lumberton wins by 12+  → Lumberton #1 (cap zeroes all three; later steps
+    flip.  Two sub-scenarios emerge from the same game_winners (ascending margin order):
+      "2a": Lumberton wins by 1-11  → Taylorsville #1 (PD still favors Taylorsville)
+      "2b": Lumberton wins by 12+   → Lumberton #1 (cap zeroes all three; later steps
             break the remaining tie in Lumberton's favour)
     The ±12 threshold is the tiebreaker's H2H PD cap, not a coin-flip boundary.
   - **Teams spanning two seeds** — Taylorsville can land at #1 or #2; Lumberton at
@@ -214,15 +214,15 @@ def test_scenario_1_seeding():
 
 
 def test_scenario_2a_seeding():
-    """Scenario 2a (margin ≥12): Lumberton / Taylorsville / Stringer / Richton."""
+    """Scenario 2a (margin 1–11, ascending-margin order): Taylorsville / Stringer / Lumberton / Richton."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
-    assert sc["seeding"][:4] == ("Lumberton", "Taylorsville", "Stringer", "Richton")
+    assert sc["seeding"][:4] == ("Taylorsville", "Stringer", "Lumberton", "Richton")
 
 
 def test_scenario_2b_seeding():
-    """Scenario 2b (margin 1-11): Taylorsville / Stringer / Lumberton / Richton."""
+    """Scenario 2b (margin ≥12): Lumberton / Taylorsville / Stringer / Richton."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
-    assert sc["seeding"][:4] == ("Taylorsville", "Stringer", "Lumberton", "Richton")
+    assert sc["seeding"][:4] == ("Lumberton", "Taylorsville", "Stringer", "Richton")
 
 
 def test_scenario_2a_2b_same_game_winners():
@@ -261,25 +261,25 @@ def test_non_sub_scenarios_conditions_atom_none():
 
 
 def test_scenario_2a_conditions_atom():
-    """Scenario 2a conditions_atom: Lumberton beats Taylorsville by 12 or more."""
+    """Scenario 2a conditions_atom: Lumberton beats Taylorsville by 1–11 (ascending-margin order)."""
     sc2a = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
     ca = sc2a["conditions_atom"]
     assert ca is not None, "conditions_atom should be populated for margin-sensitive sub-scenario"
     lb_gr = next(gr for gr in ca if gr.winner == "Lumberton")
     assert lb_gr.loser == "Taylorsville"
-    assert lb_gr.min_margin == 12
-    assert lb_gr.max_margin is None
+    assert lb_gr.min_margin == 1
+    assert lb_gr.max_margin == 12  # exclusive upper bound → displayed as 1–11
 
 
 def test_scenario_2b_conditions_atom():
-    """Scenario 2b conditions_atom: Lumberton beats Taylorsville by 1–11 (max_margin=12, exclusive)."""
+    """Scenario 2b conditions_atom: Lumberton beats Taylorsville by 12 or more."""
     sc2b = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
     ca = sc2b["conditions_atom"]
     assert ca is not None
     lb_gr = next(gr for gr in ca if gr.winner == "Lumberton")
     assert lb_gr.loser == "Taylorsville"
-    assert lb_gr.min_margin == 1
-    assert lb_gr.max_margin == 12  # exclusive upper bound → displayed as 1–11
+    assert lb_gr.min_margin == 12
+    assert lb_gr.max_margin is None
 
 
 # ---------------------------------------------------------------------------
@@ -311,18 +311,8 @@ def test_div_dict_scenario_1():
 
 
 def test_div_dict_scenario_2a():
-    """Scenario 2a (Lumberton wins by 12+): Lumberton gets seed 1; title is standalone margin condition."""
+    """Scenario 2a (Lumberton wins by 1–11, ascending-margin order): Taylorsville gets seed 1."""
     entry = _DIV_DICT["2a"]
-    assert entry["title"] == "Lumberton beats Taylorsville by 12 or more"
-    assert entry["one_seed"] == "Lumberton"
-    assert entry["two_seed"] == "Taylorsville"
-    assert entry["three_seed"] == "Stringer"
-    assert entry["four_seed"] == "Richton"
-
-
-def test_div_dict_scenario_2b():
-    """Scenario 2b (Lumberton wins by 1-11): Taylorsville gets seed 1; title includes margin qualifier."""
-    entry = _DIV_DICT["2b"]
     assert entry["title"] == "Stringer beats Resurrection AND Lumberton beats Taylorsville by 1\u201311"
     assert entry["one_seed"] == "Taylorsville"
     assert entry["two_seed"] == "Stringer"
@@ -330,11 +320,21 @@ def test_div_dict_scenario_2b():
     assert entry["four_seed"] == "Richton"
 
 
+def test_div_dict_scenario_2b():
+    """Scenario 2b (Lumberton wins by 12+): Lumberton gets seed 1; title is standalone margin condition."""
+    entry = _DIV_DICT["2b"]
+    assert entry["title"] == "Lumberton beats Taylorsville by 12 or more"
+    assert entry["one_seed"] == "Lumberton"
+    assert entry["two_seed"] == "Taylorsville"
+    assert entry["three_seed"] == "Stringer"
+    assert entry["four_seed"] == "Richton"
+
+
 def test_div_dict_scenario_2a_2b_distinct_titles():
     """Margin-sensitive sub-scenarios have distinct margin-qualified titles (no longer share same string)."""
     assert _DIV_DICT["2a"]["title"] != _DIV_DICT["2b"]["title"]
-    assert "12 or more" in _DIV_DICT["2a"]["title"]
-    assert "1\u201311" in _DIV_DICT["2b"]["title"]
+    assert "1\u201311" in _DIV_DICT["2a"]["title"]
+    assert "12 or more" in _DIV_DICT["2b"]["title"]
 
 
 def test_div_dict_scenario_3():

@@ -723,22 +723,6 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "4a": (
-        "Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood",
-        "Louisville",
-        "Kosciusko",
-        "Gentry",
-        "Greenwood",
-        ["Yazoo City"],
-    ),
-    "4b": (
-        "Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood",
-        "Louisville",
-        "Kosciusko",
-        "Gentry",
-        "Yazoo City",
-        ["Greenwood"],
-    ),
-    "4c": (
         "Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20134 AND Louisville beats Greenwood",
         "Louisville",
         "Kosciusko",
@@ -746,12 +730,28 @@ _EXPECTED_SCENARIOS = {
         "Gentry",
         ["Yazoo City"],
     ),
-    "4d": (
+    "4b": (
         "Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 5 or more AND Louisville beats Greenwood",
         "Louisville",
         "Kosciusko",
         "Greenwood",
         "Yazoo City",
+        ["Gentry"],
+    ),
+    "4c": (
+        "Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood",
+        "Louisville",
+        "Kosciusko",
+        "Gentry",
+        "Greenwood",
+        ["Yazoo City"],
+    ),
+    "4d": (
+        "Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood",
+        "Louisville",
+        "Kosciusko",
+        "Yazoo City",
+        "Greenwood",
         ["Gentry"],
     ),
     "4e": (
@@ -763,12 +763,12 @@ _EXPECTED_SCENARIOS = {
         ["Greenwood"],
     ),
     "4f": (
-        "Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood",
+        "Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood",
         "Louisville",
         "Kosciusko",
+        "Gentry",
         "Yazoo City",
-        "Greenwood",
-        ["Gentry"],
+        ["Greenwood"],
     ),
     "5": (
         "Greenwood beats Gentry AND Gentry beats Yazoo City AND Louisville beats Greenwood",
@@ -803,18 +803,18 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "9a": (
-        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville by 9 or more",
-        "Kosciusko",
-        "Greenwood",
-        "Louisville",
-        "Yazoo City",
-        ["Gentry"],
-    ),
-    "9b": (
         "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville by 1\u20138",
         "Kosciusko",
         "Louisville",
         "Greenwood",
+        "Yazoo City",
+        ["Gentry"],
+    ),
+    "9b": (
+        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville by 9 or more",
+        "Kosciusko",
+        "Greenwood",
+        "Louisville",
         "Yazoo City",
         ["Gentry"],
     ),
@@ -835,18 +835,18 @@ _EXPECTED_SCENARIOS = {
         ["Yazoo City"],
     ),
     "12a": (
-        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 9 or more",
-        "Kosciusko",
-        "Greenwood",
-        "Louisville",
-        "Gentry",
-        ["Yazoo City"],
-    ),
-    "12b": (
         "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 1\u20138",
         "Kosciusko",
         "Louisville",
         "Greenwood",
+        "Gentry",
+        ["Yazoo City"],
+    ),
+    "12b": (
+        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 9 or more",
+        "Kosciusko",
+        "Greenwood",
+        "Louisville",
         "Gentry",
         ["Yazoo City"],
     ),
@@ -891,22 +891,22 @@ def test_scenario_3():
 
 
 def test_scenario_4a():
-    """Scenario 4a: Gentry>GRE by 5+ AND KOS>YZ AND YZ>Gentry by exactly 1 AND LOU>GRE."""
+    """Scenario 4a: Gentry>GRE by exactly 1 AND KOS>YZ AND YZ>Gentry by 1-4 AND LOU>GRE."""
     _check_scenario("4a")
 
 
 def test_scenario_4b():
-    """Scenario 4b: Gentry>GRE by exactly 10 AND KOS>YZ AND YZ>Gentry by exactly 9 AND LOU>GRE."""
+    """Scenario 4b: Gentry>GRE by exactly 1 AND KOS>YZ AND YZ>Gentry by 5+ AND LOU>GRE."""
     _check_scenario("4b")
 
 
 def test_scenario_4c():
-    """Scenario 4c: Gentry>GRE by exactly 1 AND KOS>YZ AND YZ>Gentry by 1-4 AND LOU>GRE."""
+    """Scenario 4c: Gentry>GRE by 5+ AND KOS>YZ AND YZ>Gentry by exactly 1 AND LOU>GRE."""
     _check_scenario("4c")
 
 
 def test_scenario_4d():
-    """Scenario 4d: Gentry>GRE by exactly 1 AND KOS>YZ AND YZ>Gentry by 5+ AND LOU>GRE."""
+    """Scenario 4d: Gentry>GRE by 7-10 AND KOS>YZ AND YZ>Gentry by 12+ AND LOU>GRE."""
     _check_scenario("4d")
 
 
@@ -916,7 +916,7 @@ def test_scenario_4e():
 
 
 def test_scenario_4f():
-    """Scenario 4f: Gentry>GRE by 7-10 AND KOS>YZ AND YZ>Gentry by 12+ AND LOU>GRE."""
+    """Scenario 4f: Gentry>GRE by exactly 10 AND KOS>YZ AND YZ>Gentry by exactly 9 AND LOU>GRE."""
     _check_scenario("4f")
 
 
@@ -941,12 +941,12 @@ def test_scenario_8():
 
 
 def test_scenario_9a():
-    """Scenario 9a: GRE>Gentry AND KOS>YZ AND YZ>Gentry AND GRE>LOU by 9+."""
+    """Scenario 9a: GRE>Gentry AND KOS>YZ AND YZ>Gentry AND GRE>LOU by 1-8."""
     _check_scenario("9a")
 
 
 def test_scenario_9b():
-    """Scenario 9b: GRE>Gentry AND KOS>YZ AND YZ>Gentry AND GRE>LOU by 1-8."""
+    """Scenario 9b: GRE>Gentry AND KOS>YZ AND YZ>Gentry AND GRE>LOU by 9+."""
     _check_scenario("9b")
 
 
@@ -961,10 +961,10 @@ def test_scenario_11():
 
 
 def test_scenario_12a():
-    """Scenario 12a: GRE>Gentry AND KOS>YZ AND Gentry>YZ AND GRE>LOU by 9+."""
+    """Scenario 12a: GRE>Gentry AND KOS>YZ AND Gentry>YZ AND GRE>LOU by 1-8."""
     _check_scenario("12a")
 
 
 def test_scenario_12b():
-    """Scenario 12b: GRE>Gentry AND KOS>YZ AND Gentry>YZ AND GRE>LOU by 1-8."""
+    """Scenario 12b: GRE>Gentry AND KOS>YZ AND Gentry>YZ AND GRE>LOU by 9+."""
     _check_scenario("12b")

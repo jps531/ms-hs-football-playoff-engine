@@ -555,20 +555,20 @@ def test_div_dict_scenario_keys():
 
 
 def test_div_dict_scenario1a_seeds():
-    """Scenario 1a: HAT #1, TER #2, WJ #3, GC #4."""
+    """Scenario 1a: HAT #1, WJ #2, TER #3, GC #4 (TER wins by 1–6)."""
     s = _DIV_DICT["1a"]
     assert s["one_seed"] == "Hattiesburg"
-    assert s["two_seed"] == "Terry"
-    assert s["three_seed"] == "West Jones"
+    assert s["two_seed"] == "West Jones"
+    assert s["three_seed"] == "Terry"
     assert s["four_seed"] == "George County"
 
 
 def test_div_dict_scenario1b_seeds():
-    """Scenario 1b: HAT #1, WJ #2, TER #3, GC #4."""
+    """Scenario 1b: HAT #1, TER #2, WJ #3, GC #4 (TER wins by 7–10)."""
     s = _DIV_DICT["1b"]
     assert s["one_seed"] == "Hattiesburg"
-    assert s["two_seed"] == "West Jones"
-    assert s["three_seed"] == "Terry"
+    assert s["two_seed"] == "Terry"
+    assert s["three_seed"] == "West Jones"
     assert s["four_seed"] == "George County"
 
 
@@ -582,19 +582,19 @@ def test_div_dict_scenario1c_seeds():
 
 
 def test_div_dict_scenario2a_seeds():
-    """Scenario 2a: HAT #1, TER #2, WJ #3, FH #4 (FH wins by 9+, TER by 7–10)."""
+    """Scenario 2a: HAT #1, WJ #2, TER #3, GC #4 (FH wins by 1–8, TER by 1–6)."""
     s = _DIV_DICT["2a"]
     assert s["one_seed"] == "Hattiesburg"
-    assert s["two_seed"] == "Terry"
-    assert s["three_seed"] == "West Jones"
-    assert s["four_seed"] == "Forest Hill"
+    assert s["two_seed"] == "West Jones"
+    assert s["three_seed"] == "Terry"
+    assert s["four_seed"] == "George County"
 
 
 def test_div_dict_scenario2e_seeds():
-    """Scenario 2e: TER #1, HAT #2, WJ #3, FH #4 (FH wins by 9+, TER by 11+)."""
+    """Scenario 2e: HAT #1, TER #2, WJ #3, FH #4 (FH wins by 9+, TER by 7–10)."""
     s = _DIV_DICT["2e"]
-    assert s["one_seed"] == "Terry"
-    assert s["two_seed"] == "Hattiesburg"
+    assert s["one_seed"] == "Hattiesburg"
+    assert s["two_seed"] == "Terry"
     assert s["three_seed"] == "West Jones"
     assert s["four_seed"] == "Forest Hill"
 
@@ -614,19 +614,19 @@ def test_div_dict_scenario3_seeds():
 
 
 def test_div_dict_scenario4a_seeds():
-    """Scenario 4a: HAT #1, WJ #2, TER #3, FH #4 (FH by 9+, HAT wins)."""
+    """Scenario 4a: HAT #1, WJ #2, TER #3, GC #4 (FH by 1–8, HAT wins)."""
     s = _DIV_DICT["4a"]
-    assert s["one_seed"] == "Hattiesburg"
-    assert s["four_seed"] == "Forest Hill"
-    assert "George County" in s["eliminated"]
-
-
-def test_div_dict_scenario4b_seeds():
-    """Scenario 4b: HAT #1, WJ #2, TER #3, GC #4 (FH by 1–8, HAT wins)."""
-    s = _DIV_DICT["4b"]
     assert s["one_seed"] == "Hattiesburg"
     assert s["four_seed"] == "George County"
     assert "Forest Hill" in s["eliminated"]
+
+
+def test_div_dict_scenario4b_seeds():
+    """Scenario 4b: HAT #1, WJ #2, TER #3, FH #4 (FH by 9+, HAT wins)."""
+    s = _DIV_DICT["4b"]
+    assert s["one_seed"] == "Hattiesburg"
+    assert s["four_seed"] == "Forest Hill"
+    assert "George County" in s["eliminated"]
 
 
 def test_div_dict_scenario5_seeds():

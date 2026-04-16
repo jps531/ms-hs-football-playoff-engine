@@ -380,13 +380,13 @@ def test_div_dict_scenario2_title():
 
 
 def test_div_dict_scenario3a_title():
-    """Scenario 3a: Clinton beats MC by 8+ (covers all OXF/STV outcomes)."""
-    assert _DIV_DICT["3a"]["title"] == "Clinton beats Madison Central by 8 or more"
+    """Scenario 3a: Clinton by 1-7 AND Oxford beats Starkville (3-way tie; MC wins H2H PD)."""
+    assert _DIV_DICT["3a"]["title"] == "Clinton beats Madison Central by 1\u20137 AND Oxford beats Starkville"
 
 
 def test_div_dict_scenario3b_title():
-    """Scenario 3b: Clinton by 1-7 AND Oxford beats Starkville (3-way tie; MC wins H2H PD)."""
-    assert _DIV_DICT["3b"]["title"] == "Clinton beats Madison Central by 1\u20137 AND Oxford beats Starkville"
+    """Scenario 3b: Clinton beats MC by 8+ (covers all OXF/STV outcomes)."""
+    assert _DIV_DICT["3b"]["title"] == "Clinton beats Madison Central by 8 or more"
 
 
 def test_div_dict_scenario1_seeds():
@@ -410,23 +410,23 @@ def test_div_dict_scenario2_seeds():
 
 
 def test_div_dict_scenario3a_seeds():
-    """Scenario 3a: Oxford #1, Germantown #2, Starkville #3, Clinton #4 (CLN wins H2H PD by 8+)."""
+    """Scenario 3a: Oxford #1, Germantown #2, Starkville #3, MC #4 (CLN by 1–7; MC wins H2H PD)."""
     s = _DIV_DICT["3a"]
-    assert s["one_seed"] == "Oxford"
-    assert s["two_seed"] == "Germantown"
-    assert s["three_seed"] == "Starkville"
-    assert s["four_seed"] == "Clinton"
-    assert set(s["eliminated"]) == {"Madison Central", "Murrah"}
-
-
-def test_div_dict_scenario3b_seeds():
-    """Scenario 3b: Oxford #1, Germantown #2, Starkville #3, Madison Central #4 (MC wins H2H PD at low margin)."""
-    s = _DIV_DICT["3b"]
     assert s["one_seed"] == "Oxford"
     assert s["two_seed"] == "Germantown"
     assert s["three_seed"] == "Starkville"
     assert s["four_seed"] == "Madison Central"
     assert set(s["eliminated"]) == {"Clinton", "Murrah"}
+
+
+def test_div_dict_scenario3b_seeds():
+    """Scenario 3b: Oxford #1, Germantown #2, Starkville #3, Clinton #4 (CLN wins H2H PD by 8+)."""
+    s = _DIV_DICT["3b"]
+    assert s["one_seed"] == "Oxford"
+    assert s["two_seed"] == "Germantown"
+    assert s["three_seed"] == "Starkville"
+    assert s["four_seed"] == "Clinton"
+    assert set(s["eliminated"]) == {"Madison Central", "Murrah"}
 
 
 def test_div_dict_oxford_always_one():

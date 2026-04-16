@@ -301,9 +301,9 @@ def test_scenario_3_seeding():
 
 
 def test_scenario_1c_seeding():
-    """Scenario 1c: large-margin PC win → Potts Camp #1."""
+    """Scenario 1c: PC 12+ AND HWB 12+ → Falkner still #1 (PD advantage)."""
     sc1c = next(sc for sc in _SCENARIOS if sc["scenario_num"] == 1 and sc["sub_label"] == "c")
-    assert sc1c["seeding"][0] == "Potts Camp"
+    assert sc1c["seeding"][0] == "Falkner"
 
 
 def test_scenario_no_eliminated():
@@ -357,20 +357,8 @@ def test_scenario_1a_conditions_atom():
 
 
 def test_scenario_1b_conditions_atom():
-    """Scenario 1b: PC wins by 12+ AND HWB wins by 12+."""
+    """Scenario 1b: PC wins by 12+ AND HWB wins by 1–11 (max=12, exclusive)."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 1 and s["sub_label"] == "b")
-    ca = sc["conditions_atom"]
-    pc_gr = next(gr for gr in ca if gr.winner == "Potts Camp")
-    assert pc_gr.min_margin == 12
-    assert pc_gr.max_margin is None
-    hwb_gr = next(gr for gr in ca if gr.winner == "H. W. Byers")
-    assert hwb_gr.min_margin == 12
-    assert hwb_gr.max_margin is None
-
-
-def test_scenario_1c_conditions_atom():
-    """Scenario 1c: PC wins by 12+ AND HWB wins by 1–11 (max=12, exclusive)."""
-    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 1 and s["sub_label"] == "c")
     ca = sc["conditions_atom"]
     pc_gr = next(gr for gr in ca if gr.winner == "Potts Camp")
     assert pc_gr.min_margin == 12
@@ -378,6 +366,18 @@ def test_scenario_1c_conditions_atom():
     hwb_gr = next(gr for gr in ca if gr.winner == "H. W. Byers")
     assert hwb_gr.min_margin == 1
     assert hwb_gr.max_margin == 12  # exclusive → renders as "by 1–11"
+
+
+def test_scenario_1c_conditions_atom():
+    """Scenario 1c: PC wins by 12+ AND HWB wins by 12+."""
+    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 1 and s["sub_label"] == "c")
+    ca = sc["conditions_atom"]
+    pc_gr = next(gr for gr in ca if gr.winner == "Potts Camp")
+    assert pc_gr.min_margin == 12
+    assert pc_gr.max_margin is None
+    hwb_gr = next(gr for gr in ca if gr.winner == "H. W. Byers")
+    assert hwb_gr.min_margin == 12
+    assert hwb_gr.max_margin is None
 
 
 def test_scenario_4a_conditions_atom():
@@ -427,8 +427,8 @@ def test_div_dict_no_eliminated_teams():
 def test_div_dict_scenario1_sub_labels_distinct_titles():
     """Scenarios 1a, 1b, 1c each have a distinct margin-qualified title."""
     assert _DIV_DICT["1a"]["title"] == "Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland"
-    assert _DIV_DICT["1b"]["title"] == "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more"
-    assert _DIV_DICT["1c"]["title"] == "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311"
+    assert _DIV_DICT["1b"]["title"] == "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311"
+    assert _DIV_DICT["1c"]["title"] == "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more"
 
 
 def test_div_dict_scenario4_sub_labels_distinct_titles():
@@ -466,10 +466,10 @@ def test_div_dict_scenario3_seeds():
 
 
 def test_div_dict_scenario1c_seeds():
-    """Scenario 1c: large-margin Potts Camp win → Potts Camp #1, Falkner #2."""
+    """Scenario 1c: PC 12+ AND HWB 12+ → Falkner #1, Potts Camp #2 (Falkner PD advantage)."""
     entry = _DIV_DICT["1c"]
-    assert entry["one_seed"] == "Potts Camp"
-    assert entry["two_seed"] == "Falkner"
+    assert entry["one_seed"] == "Falkner"
+    assert entry["two_seed"] == "Potts Camp"
 
 
 def test_div_dict_ashland_always_bottom_two():

@@ -573,13 +573,13 @@ def test_div_dict_scenario3_title():
 
 
 def test_div_dict_scenario4a_title():
-    """Scenario 4a: CLA wins by 1-8 AND RIP wins by 12+ (step-3 PD tiebreaker resolves 3-way)."""
-    assert _DIV_DICT["4a"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more"
+    """Scenario 4a: CLA by 1-8 AND RIP by 1-11 (SEN wins H2H PD tiebreaker over RF)."""
+    assert _DIV_DICT["4a"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311"
 
 
 def test_div_dict_scenario4b_title():
-    """Scenario 4b: CLA by 1-8 AND RIP by 1-11 (SEN wins H2H PD tiebreaker over RF)."""
-    assert _DIV_DICT["4b"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311"
+    """Scenario 4b: CLA wins by 1-8 AND RIP wins by 12+ (step-3 PD tiebreaker resolves 3-way)."""
+    assert _DIV_DICT["4b"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more"
 
 
 def test_div_dict_scenario1a_seeds():
@@ -633,21 +633,21 @@ def test_div_dict_scenario3_seeds():
 
 
 def test_div_dict_scenario4a_seeds():
-    """Scenario 4a: CLA #1, RF #2, SEN #3, RIP #4 (RF wins step-3 PD vs CLA tiebreaker)."""
+    """Scenario 4a: CLA #1, SEN #2, RF #3, RIP #4 (SEN wins H2H PD tiebreaker over RF; RIP by 1–11)."""
     s = _DIV_DICT["4a"]
     assert s["one_seed"] == "Clarksdale"
-    assert s["two_seed"] == "Rosa Fort"
-    assert s["three_seed"] == "Senatobia"
+    assert s["two_seed"] == "Senatobia"
+    assert s["three_seed"] == "Rosa Fort"
     assert s["four_seed"] == "Ripley"
     assert "Byhalia" in s["eliminated"]
 
 
 def test_div_dict_scenario4b_seeds():
-    """Scenario 4b: CLA #1, SEN #2, RF #3, RIP #4 (SEN wins H2H PD tiebreaker over RF)."""
+    """Scenario 4b: CLA #1, RF #2, SEN #3, RIP #4 (RF wins step-3 PD vs CLA; RIP by 12+)."""
     s = _DIV_DICT["4b"]
     assert s["one_seed"] == "Clarksdale"
-    assert s["two_seed"] == "Senatobia"
-    assert s["three_seed"] == "Rosa Fort"
+    assert s["two_seed"] == "Rosa Fort"
+    assert s["three_seed"] == "Senatobia"
     assert s["four_seed"] == "Ripley"
     assert "Byhalia" in s["eliminated"]
 

@@ -422,68 +422,66 @@ def test_scenario_3_seeding():
 
 
 def test_scenario_2a_seeding():
-    """Scenario 2a (Bruce wins by 9+, WV wins): Bruce #3, EU #4."""
+    """Scenario 2a (Bruce wins by 1–2, WV wins): Strayhorn #3 despite losing the game."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
-    assert sc["seeding"][:5] == ("Water Valley", "Myrtle", "Bruce", "East Union", "Strayhorn")
-
-
-def test_scenario_2b_seeding():
-    """Scenario 2b (Bruce wins by 5–8): EU #3, Bruce #4."""
-    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
-    assert sc["seeding"][:5] == ("Water Valley", "Myrtle", "East Union", "Bruce", "Strayhorn")
-
-
-def test_scenario_2c_seeding():
-    """Scenario 2c (Bruce wins by 3–4, WV wins): EU #3, Strayhorn #4."""
-    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "c")
-    assert sc["seeding"][:5] == ("Water Valley", "Myrtle", "East Union", "Strayhorn", "Bruce")
-
-
-def test_scenario_2d_seeding():
-    """Scenario 2d (Bruce wins by 1–2, WV wins): Strayhorn #3 despite losing the game."""
-    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "d")
     assert sc["seeding"][:5] == ("Water Valley", "Myrtle", "Strayhorn", "East Union", "Bruce")
 
 
+def test_scenario_2b_seeding():
+    """Scenario 2b (Bruce wins by 3–4, WV wins): EU #3, Strayhorn #4."""
+    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
+    assert sc["seeding"][:5] == ("Water Valley", "Myrtle", "East Union", "Strayhorn", "Bruce")
+
+
+def test_scenario_2c_seeding():
+    """Scenario 2c (Bruce wins by 5–8): EU #3, Bruce #4."""
+    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "c")
+    assert sc["seeding"][:5] == ("Water Valley", "Myrtle", "East Union", "Bruce", "Strayhorn")
+
+
+def test_scenario_2d_seeding():
+    """Scenario 2d (Bruce wins by 9+, WV wins): Bruce #3, EU #4."""
+    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "d")
+    assert sc["seeding"][:5] == ("Water Valley", "Myrtle", "Bruce", "East Union", "Strayhorn")
+
+
 def test_scenario_2b_conditions_atom_no_eu_wv():
-    """Scenario 2b conditions_atom only specifies Bruce margin — no EU/WV game condition."""
+    """Scenario 2b conditions_atom: Bruce wins by 3–4 AND WV wins (EU/WV game also required)."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
     ca = sc["conditions_atom"]
     assert ca is not None
-    assert len(ca) == 1
-    gr = ca[0]
-    assert isinstance(gr, GameResult)
-    assert gr.winner == "Bruce"
-    assert gr.min_margin == 5
-    assert gr.max_margin == 9  # exclusive upper bound: margins 5–8
-    assert {gr.winner, gr.loser} == {"Bruce", "Strayhorn"}
+    assert len(ca) == 2
+    gr_bruce = next(c for c in ca if isinstance(c, GameResult) and c.winner == "Bruce")
+    assert gr_bruce.min_margin == 3
+    assert gr_bruce.max_margin == 5  # exclusive upper bound: margins 3–4
 
 
 def test_scenario_2a_conditions_atom():
-    """Scenario 2a conditions_atom: Bruce wins by 9+ AND WV wins."""
+    """Scenario 2a conditions_atom: Bruce wins by 1–2 AND WV wins."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
     ca = sc["conditions_atom"]
     assert ca is not None
     gr_bruce = next(c for c in ca if isinstance(c, GameResult) and c.winner == "Bruce")
-    assert gr_bruce.min_margin == 9 and gr_bruce.max_margin is None
+    assert gr_bruce.min_margin == 1 and gr_bruce.max_margin == 3  # exclusive: margins 1–2
 
 
 def test_scenario_2c_conditions_atom():
-    """Scenario 2c conditions_atom: Bruce wins by 3–4 AND WV wins."""
+    """Scenario 2c conditions_atom: standalone Bruce wins by 5–8 (no EU/WV condition)."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "c")
     ca = sc["conditions_atom"]
+    assert len(ca) == 1
     gr_bruce = next(c for c in ca if isinstance(c, GameResult) and c.winner == "Bruce")
-    assert gr_bruce.min_margin == 3
-    assert gr_bruce.max_margin == 5  # exclusive: margins 3–4
+    assert gr_bruce.min_margin == 5
+    assert gr_bruce.max_margin == 9  # exclusive: margins 5–8
 
 
 def test_scenario_2d_conditions_atom():
-    """Scenario 2d conditions_atom: Bruce wins by 1–2 AND WV wins."""
+    """Scenario 2d conditions_atom: Bruce wins by 9+ AND WV wins."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "d")
     ca = sc["conditions_atom"]
     gr_bruce = next(c for c in ca if isinstance(c, GameResult) and c.winner == "Bruce")
-    assert gr_bruce.min_margin == 1
-    assert gr_bruce.max_margin == 3  # exclusive: margins 1–2
+    assert gr_bruce.min_margin == 9
+    assert gr_bruce.max_margin is None
 
 
 # ---------------------------------------------------------------------------
@@ -509,8 +507,8 @@ def test_div_dict_scenario3_title():
 
 
 def test_div_dict_scenario2b_title():
-    """Scenario 2b title: only the Bruce margin condition (no EU/WV clause)."""
-    assert _DIV_DICT["2b"]["title"] == "Bruce beats Strayhorn by 5\u20138"
+    """Scenario 2b title: Bruce wins by 3–4 AND Water Valley wins."""
+    assert _DIV_DICT["2b"]["title"] == "Bruce beats Strayhorn by 3\u20134 AND Water Valley beats East Union"
 
 
 def test_div_dict_scenario1_seeds():
@@ -523,9 +521,9 @@ def test_div_dict_scenario1_seeds():
 
 
 def test_div_dict_scenario2a_seeds():
-    """Scenario 2a seeds: Bruce #3, EU #4."""
+    """Scenario 2a seeds: Strayhorn #3, EU #4 (Bruce wins by 1–2, Strayhorn survives)."""
     sc = _DIV_DICT["2a"]
-    assert sc["three_seed"] == "Bruce"
+    assert sc["three_seed"] == "Strayhorn"
     assert sc["four_seed"] == "East Union"
 
 
