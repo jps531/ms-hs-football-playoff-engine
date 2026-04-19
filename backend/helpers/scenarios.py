@@ -6,7 +6,7 @@ per-seed counts. No Prefect or database dependencies.
 """
 
 import logging
-from collections import Counter
+from collections import defaultdict
 from itertools import permutations, product
 
 from prefect import get_run_logger
@@ -60,14 +60,14 @@ def _accumulate_slots(
     flip_groups: list[list[str]],
     unweighted: float,
     weighted: float,
-    first_counts: Counter,
-    second_counts: Counter,
-    third_counts: Counter,
-    fourth_counts: Counter,
-    first_counts_weighted: Counter,
-    second_counts_weighted: Counter,
-    third_counts_weighted: Counter,
-    fourth_counts_weighted: Counter,
+    first_counts: defaultdict[str, float],
+    second_counts: defaultdict[str, float],
+    third_counts: defaultdict[str, float],
+    fourth_counts: defaultdict[str, float],
+    first_counts_weighted: defaultdict[str, float],
+    second_counts_weighted: defaultdict[str, float],
+    third_counts_weighted: defaultdict[str, float],
+    fourth_counts_weighted: defaultdict[str, float],
 ) -> None:
     """Accumulate seed counts into counters, distributing evenly over coin-flip permutations.
 
@@ -139,6 +139,7 @@ def determine_scenarios(
     completed: list[CompletedGame],
     remaining: list[RemainingGame],
     win_prob_fn: WinProbFn | None = None,
+    ignore_margins: bool = False,
 ) -> ScenarioResults:
     """Enumerate all seeding scenarios for a region and compute seed-count totals.
 
@@ -158,6 +159,12 @@ def determine_scenarios(
         win_prob_fn: Optional callable ``(team_a, team_b, date) -> float``
             returning the probability that ``team_a`` beats ``team_b``.
             Defaults to ``equal_win_prob`` (50/50).
+        ignore_margins: When True, skip margin-sensitive tiebreaker enumeration
+            entirely.  Each mask is resolved once at the default margin (7) and
+            treated as non-sensitive.  Use for large R (≥8) where full 12^N
+            enumeration is prohibitively slow.  Odds are approximate — margin
+            tiebreakers are not tracked — but correct for display in
+            ``ignore_margins`` rendering mode.
 
     Returns:
         A ``ScenarioResults`` instance with unweighted and weighted seed counts,
@@ -175,14 +182,14 @@ def determine_scenarios(
 
     num_remaining = len(remaining)
 
-    first_counts: Counter = Counter()
-    second_counts: Counter = Counter()
-    third_counts: Counter = Counter()
-    fourth_counts: Counter = Counter()
-    first_counts_weighted: Counter = Counter()
-    second_counts_weighted: Counter = Counter()
-    third_counts_weighted: Counter = Counter()
-    fourth_counts_weighted: Counter = Counter()
+    first_counts: defaultdict[str, float] = defaultdict(float)
+    second_counts: defaultdict[str, float] = defaultdict(float)
+    third_counts: defaultdict[str, float] = defaultdict(float)
+    fourth_counts: defaultdict[str, float] = defaultdict(float)
+    first_counts_weighted: defaultdict[str, float] = defaultdict(float)
+    second_counts_weighted: defaultdict[str, float] = defaultdict(float)
+    third_counts_weighted: defaultdict[str, float] = defaultdict(float)
+    fourth_counts_weighted: defaultdict[str, float] = defaultdict(float)
     denom_weighted: float = 0.0
 
     pa_for_winner = 14
@@ -221,6 +228,30 @@ def determine_scenarios(
                 mask_weight *= p if bit_value else (1.0 - p)
 
             denom_weighted += mask_weight
+
+            if ignore_margins:
+                # Fast path: resolve once at the default margin, skip 12^N enumeration.
+                # Odds are approximate (margin tiebreakers not tracked), consistent with
+                # ignore_margins rendering mode.
+                local_flips: list[list[str]] = []
+                final_order = resolve_standings_for_mask(
+                    teams,
+                    completed,
+                    remaining,
+                    outcome_mask,
+                    margins=base_margins,
+                    base_margin_default=7,
+                    pa_win=pa_for_winner,
+                    coin_flip_collector=local_flips,
+                )
+                all_coinflip_events.extend(local_flips)
+                _accumulate_slots(
+                    final_order, local_flips, 1.0, mask_weight,
+                    first_counts, second_counts, third_counts, fourth_counts,
+                    first_counts_weighted, second_counts_weighted,
+                    third_counts_weighted, fourth_counts_weighted,
+                )
+                continue
 
             wl_totals = standings_from_mask(
                 teams,

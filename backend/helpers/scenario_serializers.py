@@ -121,6 +121,8 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
         "sub_label": str,
         "game_winners": [[winner, loser], ...],
         "conditions_atom": [condition_dict, ...] | null,
+        "tiebreaker_groups": [[team, ...], ...] | null,
+        "coinflip_groups": [[team, ...], ...] | null,
         "seeding": [team, ...]
     }
     """
@@ -133,6 +135,8 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
                 "sub_label": sc["sub_label"],
                 "game_winners": [list(gw) for gw in sc["game_winners"]],
                 "conditions_atom": serialize_atom(atom) if atom is not None else None,
+                "tiebreaker_groups": sc.get("tiebreaker_groups"),
+                "coinflip_groups": sc.get("coinflip_groups"),
                 "seeding": list(sc["seeding"]),
             }
         )
@@ -150,6 +154,8 @@ def deserialize_complete_scenarios(data: list[dict]) -> list[dict]:
                 "sub_label": sc["sub_label"],
                 "game_winners": [tuple(gw) for gw in sc["game_winners"]],
                 "conditions_atom": deserialize_atom(atom_data) if atom_data is not None else None,
+                "tiebreaker_groups": sc.get("tiebreaker_groups"),
+                "coinflip_groups": sc.get("coinflip_groups"),
                 "seeding": tuple(sc["seeding"]),
             }
         )

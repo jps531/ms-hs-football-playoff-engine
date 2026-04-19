@@ -2,6 +2,8 @@
 
 from itertools import product
 
+import pytest
+
 from backend.helpers.data_classes import CoinFlipResult, CompletedGame, GameResult, MarginCondition, RemainingGame
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_renderer import _render_margin_condition
@@ -12,6 +14,7 @@ from backend.helpers.scenario_viewer import (
     _simplify_atom_list,
     _split_non_rectangular_atom,
     build_scenario_atoms,
+    compute_odds_from_precomputed,
     enumerate_division_scenarios,
     enumerate_outcomes,
     render_division_scenarios,
@@ -2225,3 +2228,269 @@ def test_partial_c_consistent_with_partial_a():
             )
 
     assert not failures, "\n".join(failures)
+
+
+# ---------------------------------------------------------------------------
+# compute_odds_from_precomputed
+# ---------------------------------------------------------------------------
+
+
+class TestComputeOddsFromPrecomputed:
+    """Tests for compute_odds_from_precomputed using the 1-2A (R=6) fixture."""
+
+    # Use the 1-2A 0-games-played checkpoint (ignore_margins=True, R=6)
+    # so the test runs fast and covers the coin-flip distribution branch.
+    _fixture = REGION_RESULTS_2025[(2, 1)]
+    _all_games = _fixture["games"]
+    _teams = teams_from_games(_all_games)
+    _cutoff = "2025-10-15"  # 0 games played, R=6
+
+    @classmethod
+    def _eo(cls):
+        """Build an EnumeratedOutcomes fixture for this checkpoint."""
+        completed = get_completed_games(expand_results(
+            [g for g in cls._all_games if g["date"] <= cls._cutoff]
+        ))
+        remaining = [
+            RemainingGame(*sorted([g["winner"], g["loser"]]))
+            for g in cls._all_games if g["date"] > cls._cutoff
+        ]
+        return enumerate_outcomes(cls._teams, completed, remaining, ignore_margins=True)
+
+    def test_returns_all_teams(self):
+        """compute_odds_from_precomputed returns a key for every team."""
+        eo = self._eo()
+        odds = compute_odds_from_precomputed(eo, list(self._teams))
+        assert set(odds.keys()) == set(self._teams)
+
+    def test_playoff_odds_sum_to_four_over_six(self):
+        """4-seed region with 4 teams: each team's p_playoffs ≈ 4/4 = 1.0 but
+        with 4 teams all equally likely, each gets P(playoffs) = 4/4 = 100%."""
+        eo = self._eo()
+        odds = compute_odds_from_precomputed(eo, list(self._teams))
+        # With 4 teams and 4 playoff spots, everyone makes playoffs in every outcome.
+        for team, o in odds.items():
+            assert o.p_playoffs == pytest.approx(1.0), f"{team} p_playoffs != 1.0"
+
+    def test_seed_probs_sum_to_one_per_seed(self):
+        """Across all teams, P(seed=k) sums to 1.0 for each seed k=1..4."""
+        eo = self._eo()
+        odds = compute_odds_from_precomputed(eo, list(self._teams))
+        for seed_attr in ("p1", "p2", "p3", "p4"):
+            total = sum(getattr(o, seed_attr) for o in odds.values())
+            assert total == pytest.approx(1.0), f"sum({seed_attr}) = {total}"
+
+    def test_coin_flip_masks_distribute_evenly(self):
+        """In a symmetric 0-games-played region, all teams have equal seed odds."""
+        eo = self._eo()
+        odds = compute_odds_from_precomputed(eo, list(self._teams))
+        # With 4 teams and equal probability, each has 25% chance at each seed.
+        for team, o in odds.items():
+            assert o.p1 == pytest.approx(0.25, abs=1e-9), f"{team} p1={o.p1}"
+            assert o.p2 == pytest.approx(0.25, abs=1e-9), f"{team} p2={o.p2}"
+            assert o.p3 == pytest.approx(0.25, abs=1e-9), f"{team} p3={o.p3}"
+            assert o.p4 == pytest.approx(0.25, abs=1e-9), f"{team} p4={o.p4}"
+
+    def test_clinched_flag_set_when_p_playoffs_is_1(self):
+        """clinched is True when p_playoffs >= 0.999."""
+        eo = self._eo()
+        odds = compute_odds_from_precomputed(eo, list(self._teams))
+        for o in odds.values():
+            assert o.clinched is True
+
+    def test_eliminated_flag_not_set(self):
+        """eliminated is False when p_playoffs > 0.001."""
+        eo = self._eo()
+        odds = compute_odds_from_precomputed(eo, list(self._teams))
+        for o in odds.values():
+            assert o.eliminated is False
+
+    def test_matches_determine_scenarios_odds(self):
+        """compute_odds_from_precomputed gives the same odds as determine_scenarios."""
+        from backend.helpers.scenarios import determine_odds, determine_scenarios
+        completed = get_completed_games(expand_results(
+            [g for g in self._all_games if g["date"] <= self._cutoff]
+        ))
+        remaining = [
+            RemainingGame(*sorted([g["winner"], g["loser"]]))
+            for g in self._all_games if g["date"] > self._cutoff
+        ]
+        eo = enumerate_outcomes(self._teams, completed, remaining, ignore_margins=True)
+        fast_odds = compute_odds_from_precomputed(eo, list(self._teams))
+
+        r = determine_scenarios(self._teams, completed, remaining, ignore_margins=True)
+        ref_odds = determine_odds(
+            list(self._teams),
+            r.first_counts, r.second_counts, r.third_counts, r.fourth_counts,
+            r.denom,
+        )
+        for team in self._teams:
+            assert fast_odds[team].p1 == pytest.approx(ref_odds[team].p1, abs=1e-9)
+            assert fast_odds[team].p2 == pytest.approx(ref_odds[team].p2, abs=1e-9)
+            assert fast_odds[team].p3 == pytest.approx(ref_odds[team].p3, abs=1e-9)
+            assert fast_odds[team].p4 == pytest.approx(ref_odds[team].p4, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# build_scenario_atoms R > 10 gate
+# ---------------------------------------------------------------------------
+
+
+class TestBuildScenarioAtomsLargeRGate:
+    """build_scenario_atoms returns {} for R > 10 without computing atoms."""
+
+    def test_r11_returns_empty_dict(self):
+        """11 remaining games triggers the R>10 gate and returns {}."""
+        # Craft 11 minimal RemainingGame objects — no completed games needed.
+        teams = [f"T{i}" for i in range(5)]
+        remaining = [
+            RemainingGame(*sorted([f"T{i}", f"T{j}"]))
+            for i in range(5) for j in range(i + 1, 5)
+        ]
+        # C(5,2)=10 games only — add one dummy to reach 11.
+        remaining.append(RemainingGame("T0", "T1"))  # duplicate is fine for gate test
+        assert len(remaining) == 11
+        result = build_scenario_atoms(teams, [], remaining)
+        assert result == {}
+
+    def test_r10_does_not_trigger_gate(self):
+        """R=10 is at the boundary and still computes atoms (returns non-empty dict)."""
+        fixture = REGION_RESULTS_2025[(1, 8)]  # 5-team region, R=10 at season start
+        all_games = fixture["games"]
+        teams = teams_from_games(all_games)
+        cutoff = "2025-10-02"
+        completed = get_completed_games(expand_results(
+            [g for g in all_games if g["date"] <= cutoff]
+        ))
+        remaining = [
+            RemainingGame(*sorted([g["winner"], g["loser"]]))
+            for g in all_games if g["date"] > cutoff
+        ]
+        assert len(remaining) == 10
+        eo = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
+        result = build_scenario_atoms(teams, completed, remaining, precomputed=eo)
+        assert result != {}
+
+
+# ---------------------------------------------------------------------------
+# Step 3c: PDRankCondition atoms in ignore_margins mode
+# ---------------------------------------------------------------------------
+
+
+class TestStep3cPDRankAtoms:
+    """build_scenario_atoms emits PDRankCondition atoms for coinflip masks in
+    ignore_margins mode (Step 3c)."""
+
+    # Use the 1-2A 0-games-played checkpoint which has 16 coinflip scenarios.
+    _fixture = REGION_RESULTS_2025[(2, 1)]
+    _all_games = _fixture["games"]
+    _teams = teams_from_games(_all_games)
+    _cutoff = "2025-10-15"
+
+    @classmethod
+    def _setup(cls):
+        """Build scenario atoms fixture for this checkpoint."""
+        completed = get_completed_games(expand_results(
+            [g for g in cls._all_games if g["date"] <= cls._cutoff]
+        ))
+        remaining = [
+            RemainingGame(*sorted([g["winner"], g["loser"]]))
+            for g in cls._all_games if g["date"] > cls._cutoff
+        ]
+        eo = enumerate_outcomes(cls._teams, completed, remaining, ignore_margins=True)
+        atoms = build_scenario_atoms(cls._teams, completed, remaining, precomputed=eo)
+        return atoms
+
+    def test_coinflip_teams_have_multiple_seed_entries(self):
+        """Coinflip-affected teams (Hamilton, Hatley, Walnut) appear at more than
+        one seed in the atoms dict due to Step 3c PDRankCondition atoms."""
+        from backend.helpers.data_classes import PDRankCondition
+        atoms = self._setup()
+        for team in ("Hamilton", "Hatley", "Walnut"):
+            assert team in atoms, f"{team} missing from atoms"
+            seeds_with_pd_rank = [
+                seed for seed, atom_list in atoms[team].items()
+                if any(
+                    isinstance(c, PDRankCondition)
+                    for atom in atom_list for c in atom
+                )
+            ]
+            assert len(seeds_with_pd_rank) >= 2, (
+                f"{team} should have PDRankCondition atoms at ≥2 seeds, "
+                f"got {seeds_with_pd_rank}"
+            )
+
+    def test_pd_rank_condition_team_matches_atom_key(self):
+        """Every PDRankCondition in a team's atom list names that same team."""
+        from backend.helpers.data_classes import PDRankCondition
+        atoms = self._setup()
+        for team, seed_map in atoms.items():
+            for seed, atom_list in seed_map.items():
+                for atom in atom_list:
+                    for cond in atom:
+                        if isinstance(cond, PDRankCondition):
+                            assert cond.team == team, (
+                                f"PDRankCondition.team={cond.team!r} in atom for {team!r}"
+                            )
+
+    def test_pd_rank_condition_group_contains_team(self):
+        """Every PDRankCondition's group includes the team the condition is for."""
+        from backend.helpers.data_classes import PDRankCondition
+        atoms = self._setup()
+        for team, seed_map in atoms.items():
+            for seed, atom_list in seed_map.items():
+                for atom in atom_list:
+                    for cond in atom:
+                        if isinstance(cond, PDRankCondition):
+                            assert cond.team in cond.group, (
+                                f"team {cond.team!r} not in group {cond.group}"
+                            )
+
+    def test_pd_rank_condition_rank_in_bounds(self):
+        """Every PDRankCondition has rank in [1, len(group)] and is at a valid playoff seed."""
+        from backend.helpers.data_classes import PDRankCondition
+        atoms = self._setup()
+        for team, seed_map in atoms.items():
+            for seed, atom_list in seed_map.items():
+                for atom in atom_list:
+                    for cond in atom:
+                        if isinstance(cond, PDRankCondition):
+                            assert 1 <= cond.rank <= len(cond.group), (
+                                f"{team} seed {seed}: rank {cond.rank} out of bounds "
+                                f"for group of size {len(cond.group)}"
+                            )
+                            assert 1 <= seed <= 4, f"PDRankCondition at non-playoff seed {seed}"
+
+    def test_pd_rank_condition_higher_rank_at_higher_seed(self):
+        """For a given team and game-winner set, higher PD rank → higher seed number.
+
+        Within the same mask (identified by identical game-winner conditions), atoms
+        at a lower seed number must have a strictly lower PDRankCondition rank.
+        """
+        from backend.helpers.data_classes import PDRankCondition
+
+        atoms = self._setup()
+        for team, seed_map in atoms.items():
+            # Build: game_winner_key -> list of (seed, rank) from PDRankCondition atoms
+            gw_to_seed_rank: dict[tuple, list] = {}
+            for seed, atom_list in seed_map.items():
+                for atom in atom_list:
+                    pd_conds = [c for c in atom if isinstance(c, PDRankCondition)]
+                    if not pd_conds:
+                        continue
+                    gr_key = tuple(
+                        (c.winner, c.loser) for c in atom
+                        if isinstance(c, GameResult)
+                    )
+                    for pd in pd_conds:
+                        gw_to_seed_rank.setdefault(gr_key, []).append((seed, pd.rank))
+
+            for gw_key, pairs in gw_to_seed_rank.items():
+                pairs_sorted = sorted(pairs)  # by seed ascending
+                for i in range(len(pairs_sorted) - 1):
+                    s1, r1 = pairs_sorted[i]
+                    s2, r2 = pairs_sorted[i + 1]
+                    assert r1 < r2, (
+                        f"{team}: same game winners {gw_key} — seed {s1} has rank {r1}, "
+                        f"but seed {s2} has rank {r2} (expected r1 < r2)"
+                    )

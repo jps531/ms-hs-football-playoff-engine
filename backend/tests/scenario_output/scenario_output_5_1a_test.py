@@ -189,7 +189,7 @@ def test_scenario_keys():
 
 def test_scenario_entry_shape():
     """Every scenario dict has the required keys."""
-    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom"}
+    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "tiebreaker_groups", "coinflip_groups"}
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required
 

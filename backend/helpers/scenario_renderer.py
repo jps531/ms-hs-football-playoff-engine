@@ -6,6 +6,7 @@ from backend.helpers.data_classes import (
     HomeGameCondition,
     HomeGameScenario,
     MarginCondition,
+    PDRankCondition,
     RoundHomeScenarios,
     RoundMatchups,
 )
@@ -88,6 +89,10 @@ def _render_condition(cond, atom: list) -> str:
         return _render_margin_condition(cond, atom)
     if isinstance(cond, CoinFlipResult):
         return f"{cond.winner} wins coin flip vs {cond.loser}"
+    if isinstance(cond, PDRankCondition):
+        ordinals = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
+        ord_str = ordinals.get(cond.rank, f"{cond.rank}th")
+        return f"{cond.team} finishes {ord_str} in point differential"
     return str(cond)
 
 

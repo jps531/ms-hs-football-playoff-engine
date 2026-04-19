@@ -121,8 +121,8 @@ Saltillo
 1. Saltillo beats Grenada AND Center Hill beats South Panola
 
 Eliminated if: (75.0%)
-1. South Panola beats Center Hill
-2. Grenada beats Saltillo AND Center Hill beats South Panola"""
+1. Grenada beats Saltillo
+2. South Panola beats Center Hill"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — seed key structure
@@ -391,30 +391,31 @@ def test_atoms_saltillo_eliminated_count():
 
 
 def test_atoms_saltillo_eliminated_atom0():
-    """SAL eliminated atom 0: South Panola beats Center Hill (any margin). GRE/SAL absent."""
+    """SAL eliminated atom 0: Grenada beats Saltillo — sufficient alone (CH clinched top-4)."""
     atom = _ATOMS["Saltillo"][5][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert gr.winner == "Grenada"
+    assert gr.loser == "Saltillo"
+    assert gr.max_margin is None
+
+
+def test_atoms_saltillo_eliminated_atom0_ch_sp_absent():
+    """CH/SP game absent from SAL eliminated atom 0 — GRE beating SAL is sufficient."""
+    atom = _ATOMS["Saltillo"][5][0]
+    pairs = {(g.winner, g.loser) for g in atom}
+    assert ("Center Hill", "South Panola") not in pairs
+    assert ("South Panola", "Center Hill") not in pairs
+
+
+def test_atoms_saltillo_eliminated_atom1():
+    """SAL eliminated atom 1: South Panola beats Center Hill (any margin). GRE/SAL absent."""
+    atom = _ATOMS["Saltillo"][5][1]
     assert len(atom) == 1
     gr = atom[0]
     assert gr.winner == "South Panola"
     assert gr.loser == "Center Hill"
     assert gr.max_margin is None
-
-
-def test_atoms_saltillo_eliminated_atom0_gre_sal_absent():
-    """GRE/SAL game absent from SAL eliminated atom 0 — SP beating CH is sufficient."""
-    atom = _ATOMS["Saltillo"][5][0]
-    pairs = {(g.winner, g.loser) for g in atom}
-    assert ("Saltillo", "Grenada") not in pairs
-    assert ("Grenada", "Saltillo") not in pairs
-
-
-def test_atoms_saltillo_eliminated_atom1():
-    """SAL eliminated atom 1: Grenada beats Saltillo AND Center Hill beats South Panola."""
-    atom = _ATOMS["Saltillo"][5][1]
-    assert len(atom) == 2
-    winners = {g.winner for g in atom}
-    assert "Grenada" in winners
-    assert "Center Hill" in winners
 
 
 # ---------------------------------------------------------------------------

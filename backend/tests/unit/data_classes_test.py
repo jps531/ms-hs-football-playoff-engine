@@ -640,3 +640,36 @@ def test_coin_flip_result_str() -> None:
 
     cfr = CoinFlipResult(winner="Alpha", loser="Beta")
     assert str(cfr) == "Alpha wins coin flip vs Beta"
+
+
+# ---------------------------------------------------------------------------
+# PDRankCondition
+# ---------------------------------------------------------------------------
+
+
+def test_pd_rank_condition_satisfied_by_always_true() -> None:
+    """PDRankCondition.satisfied_by always returns True regardless of arguments."""
+    from backend.helpers.data_classes import PDRankCondition
+
+    cond = PDRankCondition(team="Alpha", rank=1, group=("Alpha", "Beta", "Gamma"))
+    assert cond.satisfied_by(0, {}, []) is True
+    assert cond.satisfied_by(0xFF, {"x": 1}, _REMAINING) is True
+
+
+def test_pd_rank_condition_str_ordinals() -> None:
+    """PDRankCondition.__str__ formats rank 1-4 with correct ordinal suffixes."""
+    from backend.helpers.data_classes import PDRankCondition
+
+    group = ("Alpha", "Beta")
+    assert str(PDRankCondition("Alpha", 1, group)) == "Alpha finishes 1st in point differential"
+    assert str(PDRankCondition("Beta", 2, group)) == "Beta finishes 2nd in point differential"
+    assert str(PDRankCondition("Alpha", 3, group)) == "Alpha finishes 3rd in point differential"
+    assert str(PDRankCondition("Beta", 4, group)) == "Beta finishes 4th in point differential"
+
+
+def test_pd_rank_condition_str_fifth_or_higher() -> None:
+    """PDRankCondition.__str__ falls back to 'Nth' for rank > 4."""
+    from backend.helpers.data_classes import PDRankCondition
+
+    cond = PDRankCondition(team="Alpha", rank=5, group=("Alpha", "Beta"))
+    assert str(cond) == "Alpha finishes 5th in point differential"

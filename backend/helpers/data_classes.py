@@ -4,7 +4,7 @@ Includes raw and processed game representations, standings odds, and
 DB-mapped objects for schools, locations, brackets, and bracket games.
 """
 
-from collections import Counter
+from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -49,16 +49,16 @@ class ScenarioResults:
     re-running enumeration.
     """
 
-    first_counts: Counter
-    second_counts: Counter
-    third_counts: Counter
-    fourth_counts: Counter
+    first_counts: defaultdict[str, float]
+    second_counts: defaultdict[str, float]
+    third_counts: defaultdict[str, float]
+    fourth_counts: defaultdict[str, float]
     denom: float
     coinflip_teams: set[str]
-    first_counts_weighted: Counter
-    second_counts_weighted: Counter
-    third_counts_weighted: Counter
-    fourth_counts_weighted: Counter
+    first_counts_weighted: defaultdict[str, float]
+    second_counts_weighted: defaultdict[str, float]
+    third_counts_weighted: defaultdict[str, float]
+    fourth_counts_weighted: defaultdict[str, float]
     denom_weighted: float
 
 
@@ -756,6 +756,37 @@ class CoinFlipResult:
     def __str__(self) -> str:
         """Return a compact human-readable representation."""
         return f"{self.winner} wins coin flip vs {self.loser}"
+
+
+# --- Data class for point-differential rank in a coin-flip group ---
+@dataclass(frozen=True)
+class PDRankCondition:
+    """A point-differential rank condition within a coin-flip tiebreaker group.
+
+    Used in ignore_margins mode when teams are completely tied (coin flip would
+    determine seeding under full enumeration).  Encodes the PD rank the named
+    team must achieve within the tied group to reach a specific seed position.
+
+    ``rank`` is 1-based: rank=1 means the team needs the best PD in the group.
+    ``group`` is the sorted tuple of all teams in the tiebreaker group.
+
+    ``satisfied_by`` always returns True — the condition is baked into the atom
+    for the specific (team, seed) combination.
+    """
+
+    team: str
+    rank: int
+    group: tuple[str, ...]
+
+    def satisfied_by(self, _outcome_mask: int, _margins: dict, _remaining: list) -> bool:
+        """Always returns True — PD rank is baked into the atom."""
+        return True
+
+    def __str__(self) -> str:
+        """Return a human-readable description of this PD rank condition."""
+        ordinals = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
+        ord_str = ordinals.get(self.rank, f"{self.rank}th")
+        return f"{self.team} finishes {ord_str} in point differential"
 
 
 # --- Data class for bracket advancement odds ---

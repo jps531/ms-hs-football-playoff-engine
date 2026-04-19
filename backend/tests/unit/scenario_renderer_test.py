@@ -603,6 +603,67 @@ class TestRenderConditionUnknownType:
         assert result == "mystery_object"
 
 
+class TestRenderConditionPDRank:
+    """Tests for the PDRankCondition branch of _render_condition."""
+
+    def test_rank_1_renders_1st(self):
+        """rank=1 renders as '1st in point differential'."""
+        from backend.helpers.data_classes import PDRankCondition
+        cond = PDRankCondition("Hamilton", 1, ("Hamilton", "Hatley", "Walnut"))
+        assert _render_condition(cond, []) == "Hamilton finishes 1st in point differential"
+
+    def test_rank_2_renders_2nd(self):
+        """rank=2 renders as '2nd in point differential'."""
+        from backend.helpers.data_classes import PDRankCondition
+        cond = PDRankCondition("Hatley", 2, ("Hamilton", "Hatley", "Walnut"))
+        assert _render_condition(cond, []) == "Hatley finishes 2nd in point differential"
+
+    def test_rank_3_renders_3rd(self):
+        """rank=3 renders as '3rd in point differential'."""
+        from backend.helpers.data_classes import PDRankCondition
+        cond = PDRankCondition("Walnut", 3, ("Hamilton", "Hatley", "Walnut"))
+        assert _render_condition(cond, []) == "Walnut finishes 3rd in point differential"
+
+    def test_render_atom_with_pd_rank_condition(self):
+        """_render_atom joins a GameResult and PDRankCondition with AND."""
+        from backend.helpers.data_classes import PDRankCondition
+        from backend.helpers.scenario_renderer import _render_atom
+        atom = [
+            GameResult("Hamilton", "Baldwyn"),
+            PDRankCondition("Hamilton", 1, ("Hamilton", "Hatley", "Walnut")),
+        ]
+        result = _render_atom(atom)
+        assert result == "Hamilton beats Baldwyn AND Hamilton finishes 1st in point differential"
+
+
+class TestOddsSuffixWeightedPaths:
+    """Cover the weighted-only and both-provided branches of _odds_suffix."""
+
+    def _make_odds(self, p1, p2, p3, p4):
+        """Build a StandingsOdds fixture from raw seed probabilities."""
+        from backend.helpers.data_classes import StandingsOdds
+        p = p1 + p2 + p3 + p4
+        return StandingsOdds("T", p1, p2, p3, p4, p, p, False, False)
+
+    def test_weighted_only_suffix(self):
+        """When only weighted_odds is provided, suffix shows 'XX.X% Weighted'."""
+        odds = self._make_odds(0.5, 0.2, 0.2, 0.1)
+        atoms = {"T": {1: [[GameResult("T", "X")]]}}
+        rendered = render_team_scenarios("T", atoms, weighted_odds={"T": odds})
+        assert "50.0% Weighted" in rendered
+        assert "\u2013" not in rendered  # no en-dash (no dual display)
+
+    def test_both_odds_suffix(self):
+        """When both odds and weighted_odds are provided, suffix shows both values."""
+        odds_u = self._make_odds(0.4, 0.2, 0.2, 0.1)
+        odds_w = self._make_odds(0.6, 0.2, 0.1, 0.05)
+        atoms = {"T": {1: [[GameResult("T", "X")]]}}
+        rendered = render_team_scenarios("T", atoms, odds={"T": odds_u}, weighted_odds={"T": odds_w})
+        assert "40.0%" in rendered
+        assert "60.0% Weighted" in rendered
+        assert "\u2013" in rendered  # en-dash separates the two values
+
+
 # ---------------------------------------------------------------------------
 # Synthetic coverage tests — home-game renderers
 # ---------------------------------------------------------------------------

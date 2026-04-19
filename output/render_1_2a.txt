@@ -1,0 +1,974 @@
+========================================================================
+  Region 1-2A — Checkpoint A (0 games played)
+  R=6, ignore_margins=True, 4 teams: Baldwyn, Hamilton, Hatley, Walnut
+========================================================================
+  enumerate_outcomes : 0.002s  |  odds : 0.000s
+  atom build         : 0.031s  |  scenario enumeration : 0.000s
+========================================================================
+
+Scenario 1: Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Hatley beats Hamilton
+1. Walnut
+2. Hatley
+3. Hamilton
+4. Baldwyn
+
+Scenario 2: Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1-3. Tie between Hamilton, Hatley, and Walnut — depends on point differential
+4. Baldwyn
+
+Scenario 3: Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1. Walnut
+2-4. Tie between Baldwyn, Hamilton, and Hatley — depends on point differential
+
+Scenario 4: Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn
+1. Hamilton
+2. Walnut
+3. Baldwyn
+4. Hatley
+
+Scenario 5: Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1. Walnut
+2. Hatley
+3. Baldwyn
+4. Hamilton
+
+Scenario 6: Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1. Walnut
+2. Baldwyn
+3. Hatley
+4. Hamilton
+
+Scenario 7: Walnut beats Hamilton AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1. Hatley
+2. Walnut
+3. Hamilton
+4. Baldwyn
+
+Scenario 8: Hamilton beats Walnut AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1. Hatley
+2. Hamilton
+3. Walnut
+4. Baldwyn
+
+Scenario 9: Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn
+1. Hatley
+2. Walnut
+3. Baldwyn
+4. Hamilton
+
+Scenario 10: Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hatley beats Hamilton
+1. Hatley
+2-4. Tie between Baldwyn, Hamilton, and Walnut — depends on point differential
+
+Scenario 11: Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1-3. Tie between Baldwyn, Hatley, and Walnut — depends on point differential
+4. Hamilton
+
+Scenario 12: Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hatley beats Hamilton
+1. Baldwyn
+2. Hatley
+3. Hamilton
+4. Walnut
+
+Scenario 13: Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1. Hatley
+2. Hamilton
+3. Baldwyn
+4. Walnut
+
+Scenario 14: Walnut beats Hamilton AND Baldwyn beats Hatley AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1. Baldwyn
+2. Walnut
+3. Hatley
+4. Hamilton
+
+Scenario 15: Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut
+1. Hamilton
+2. Baldwyn
+3. Walnut
+4. Hatley
+
+Scenario 16: Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1-3. Tie between Baldwyn, Hatley, and Walnut — depends on point differential
+4. Hamilton
+
+Scenario 17: Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1. Hatley
+2. Baldwyn
+3. Hamilton
+4. Walnut
+
+Scenario 18: Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1. Baldwyn
+2-4. Tie between Hamilton, Hatley, and Walnut — depends on point differential
+
+Scenario 19: Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1. Hatley
+2-4. Tie between Baldwyn, Hamilton, and Walnut — depends on point differential
+
+Scenario 20: Walnut beats Hamilton AND Baldwyn beats Hatley AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1. Baldwyn
+2. Hatley
+3. Walnut
+4. Hamilton
+
+Scenario 21: Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1-3. Tie between Baldwyn, Hamilton, and Hatley — depends on point differential
+4. Walnut
+
+Scenario 22: Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut
+1. Hatley
+2. Baldwyn
+3. Walnut
+4. Hamilton
+
+Scenario 23: Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Hamilton beats Hatley
+1. Walnut
+2. Hamilton
+3. Hatley
+4. Baldwyn
+
+Scenario 24: Hamilton beats Walnut AND Hatley beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+1. Hamilton
+2. Walnut
+3. Hatley
+4. Baldwyn
+
+Scenario 25: Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Baldwyn AND Hamilton beats Hatley
+1. Walnut
+2. Hamilton
+3. Baldwyn
+4. Hatley
+
+Scenario 26: Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+1. Walnut
+2-4. Tie between Baldwyn, Hamilton, and Hatley — depends on point differential
+
+Scenario 27: Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Baldwyn AND Hamilton beats Hatley
+1. Walnut
+2. Baldwyn
+3. Hamilton
+4. Hatley
+
+Scenario 28: Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Hamilton beats Hatley
+1-3. Tie between Baldwyn, Hamilton, and Walnut — depends on point differential
+4. Hatley
+
+Scenario 29: Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+1-3. Tie between Hamilton, Hatley, and Walnut — depends on point differential
+4. Baldwyn
+
+Scenario 30: Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Hamilton beats Hatley
+1. Hamilton
+2-4. Tie between Baldwyn, Hatley, and Walnut — depends on point differential
+
+Scenario 31: Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+1. Hamilton
+2. Hatley
+3. Walnut
+4. Baldwyn
+
+Scenario 32: Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hamilton beats Hatley
+1. Baldwyn
+2. Hamilton
+3. Hatley
+4. Walnut
+
+Scenario 33: Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1. Hamilton
+2-4. Tie between Baldwyn, Hatley, and Walnut — depends on point differential
+
+Scenario 34: Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1-3. Tie between Baldwyn, Hamilton, and Walnut — depends on point differential
+4. Hatley
+
+Scenario 35: Walnut beats Hamilton AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1. Baldwyn
+2. Walnut
+3. Hamilton
+4. Hatley
+
+Scenario 36: Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1. Baldwyn
+2. Hamilton
+3. Walnut
+4. Hatley
+
+Scenario 37: Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1. Hamilton
+2. Hatley
+3. Baldwyn
+4. Walnut
+
+Scenario 38: Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1. Hamilton
+2. Baldwyn
+3. Hatley
+4. Walnut
+
+Scenario 39: Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1-3. Tie between Baldwyn, Hamilton, and Hatley — depends on point differential
+4. Walnut
+
+Scenario 40: Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1. Baldwyn
+2-4. Tie between Hamilton, Hatley, and Walnut — depends on point differential
+========================================================================
+  Per-team scenario atoms
+========================================================================
+
+Baldwyn
+
+#1 seed if: (25.0%)
+1. Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Baldwyn beats Walnut
+2. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn
+3. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Baldwyn beats Walnut AND Hatley beats Hamilton
+4. Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+5. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 1st in point differential
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 1st in point differential
+7. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 1st in point differential
+8. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 1st in point differential
+9. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 1st in point differential
+10. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 1st in point differential
+
+#2 seed if: (25.0%)
+1. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut
+2. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Baldwyn beats Walnut AND Hatley beats Hamilton
+3. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Baldwyn AND Hamilton beats Hatley
+4. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut
+5. Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+6. Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+7. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 2nd in point differential
+8. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 2nd in point differential
+9. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 1st in point differential
+10. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 2nd in point differential
+11. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 1st in point differential
+12. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 1st in point differential
+13. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 2nd in point differential
+14. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 2nd in point differential
+15. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 1st in point differential
+16. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 2nd in point differential
+17. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 1st in point differential
+18. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 1st in point differential
+
+#3 seed if: (25.0%)
+1. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Baldwyn beats Walnut AND Hatley beats Hamilton
+2. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn
+3. Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+4. Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+5. Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 3rd in point differential
+7. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 3rd in point differential
+8. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 2nd in point differential
+9. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+10. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 3rd in point differential
+11. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 2nd in point differential
+12. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 2nd in point differential
+13. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 3rd in point differential
+14. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+15. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 3rd in point differential
+16. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 2nd in point differential
+17. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 3rd in point differential
+18. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 2nd in point differential
+19. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 2nd in point differential
+
+#4 seed if: (25.0%)
+1. Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Baldwyn
+2. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Baldwyn AND Hamilton beats Hatley
+3. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut
+4. Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+5. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 3rd in point differential
+6. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 3rd in point differential
+7. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Baldwyn finishes 3rd in point differential
+8. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Baldwyn finishes 3rd in point differential
+9. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Baldwyn finishes 3rd in point differential
+10. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Baldwyn finishes 3rd in point differential
+
+Hamilton
+
+#1 seed if: (25.0%)
+1. Hamilton beats Walnut AND Hamilton beats Baldwyn AND Hamilton beats Hatley
+2. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Hatley beats Hamilton
+3. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Baldwyn AND Hamilton beats Hatley
+4. Walnut beats Hamilton AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+5. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 1st in point differential
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 1st in point differential
+7. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 1st in point differential
+8. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 1st in point differential
+9. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 1st in point differential
+10. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 1st in point differential
+
+#2 seed if: (25.0%)
+1. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hamilton beats Hatley
+2. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Baldwyn beats Walnut AND Hatley beats Hamilton
+3. Hamilton beats Walnut AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+4. Hamilton beats Walnut AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+5. Walnut beats Hamilton AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 1st in point differential
+7. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 2nd in point differential
+8. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 2nd in point differential
+9. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 2nd in point differential
+10. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 1st in point differential
+11. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 2nd in point differential
+12. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 1st in point differential
+13. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+14. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 2nd in point differential
+15. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 1st in point differential
+16. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 1st in point differential
+17. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 1st in point differential
+18. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 2nd in point differential
+19. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+
+#3 seed if: (25.0%)
+1. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hatley beats Hamilton
+2. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Baldwyn beats Walnut AND Hatley beats Hamilton
+3. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Baldwyn AND Hamilton beats Hatley
+4. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Baldwyn AND Hatley beats Hamilton
+5. Walnut beats Hamilton AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 2nd in point differential
+7. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 3rd in point differential
+8. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 3rd in point differential
+9. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 3rd in point differential
+10. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 2nd in point differential
+11. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 3rd in point differential
+12. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 2nd in point differential
+13. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+14. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 3rd in point differential
+15. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 2nd in point differential
+16. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 2nd in point differential
+17. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 2nd in point differential
+18. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 3rd in point differential
+19. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+
+#4 seed if: (25.0%)
+1. Walnut beats Hamilton AND Baldwyn beats Hamilton AND Hatley beats Hamilton
+2. Hamilton beats Walnut AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+3. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Baldwyn beats Walnut AND Hatley beats Hamilton
+4. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hamilton beats Hatley
+5. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 3rd in point differential
+6. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 3rd in point differential
+7. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hamilton finishes 3rd in point differential
+8. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hamilton finishes 3rd in point differential
+9. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hamilton finishes 3rd in point differential
+10. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hamilton finishes 3rd in point differential
+
+Hatley
+
+#1 seed if: (25.0%)
+1. Hatley beats Baldwyn AND Hatley beats Walnut AND Hatley beats Hamilton
+2. Hamilton beats Walnut AND Hatley beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+3. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hamilton beats Hatley
+4. Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+5. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 1st in point differential
+6. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 1st in point differential
+7. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 1st in point differential
+8. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 1st in point differential
+9. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 1st in point differential
+10. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 1st in point differential
+
+#2 seed if: (25.0%)
+1. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hatley beats Hamilton
+2. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+3. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+4. Walnut beats Hamilton AND Hatley beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+5. Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 1st in point differential
+7. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 2nd in point differential
+8. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 1st in point differential
+9. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 2nd in point differential
+10. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+11. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 1st in point differential
+12. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 2nd in point differential
+13. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 1st in point differential
+14. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 2nd in point differential
+15. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 1st in point differential
+16. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 2nd in point differential
+17. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 1st in point differential
+18. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 2nd in point differential
+19. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+
+#3 seed if: (25.0%)
+1. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Hamilton beats Hatley
+2. Walnut beats Hamilton AND Baldwyn beats Hatley AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+3. Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+4. Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+5. Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 2nd in point differential
+7. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 3rd in point differential
+8. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 2nd in point differential
+9. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 3rd in point differential
+10. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+11. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 2nd in point differential
+12. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 3rd in point differential
+13. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 2nd in point differential
+14. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 3rd in point differential
+15. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 2nd in point differential
+16. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 3rd in point differential
+17. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 2nd in point differential
+18. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 3rd in point differential
+19. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+
+#4 seed if: (25.0%)
+1. Baldwyn beats Hatley AND Walnut beats Hatley AND Hamilton beats Hatley
+2. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Hatley beats Hamilton
+3. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+4. Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+5. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Hatley finishes 3rd in point differential
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 3rd in point differential
+7. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 3rd in point differential
+8. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Hatley finishes 3rd in point differential
+9. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Hatley finishes 3rd in point differential
+10. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Hatley finishes 3rd in point differential
+
+Walnut
+
+#1 seed if: (25.0%)
+1. Walnut beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn
+2. Hamilton beats Walnut AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+3. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+4. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut
+5. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 1st in point differential
+6. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 1st in point differential
+7. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 1st in point differential
+8. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 1st in point differential
+9. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 1st in point differential
+10. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 1st in point differential
+
+#2 seed if: (25.0%)
+1. Hamilton beats Walnut AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+2. Walnut beats Hamilton AND Baldwyn beats Hatley AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+3. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn
+4. Walnut beats Hamilton AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+5. Walnut beats Hamilton AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 1st in point differential
+7. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 2nd in point differential
+8. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 1st in point differential
+9. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+10. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 1st in point differential
+11. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+12. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 1st in point differential
+13. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 2nd in point differential
+14. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 1st in point differential
+15. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 2nd in point differential
+16. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 2nd in point differential
+17. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 2nd in point differential
+18. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 1st in point differential
+19. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 2nd in point differential
+
+#3 seed if: (25.0%)
+1. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut
+2. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn
+3. Hamilton beats Walnut AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+4. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+5. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 2nd in point differential
+7. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 3rd in point differential
+8. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 2nd in point differential
+9. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+10. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+11. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 2nd in point differential
+12. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 2nd in point differential
+13. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 3rd in point differential
+14. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 2nd in point differential
+15. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 3rd in point differential
+16. Walnut beats Hamilton AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 3rd in point differential
+17. Walnut beats Hamilton AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 3rd in point differential
+18. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 2nd in point differential
+19. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 3rd in point differential
+
+#4 seed if: (25.0%)
+1. Hamilton beats Walnut AND Hatley beats Walnut AND Baldwyn beats Walnut
+2. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn
+3. Hamilton beats Walnut AND Hatley beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+4. Walnut beats Hamilton AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+5. Hamilton beats Walnut AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 3rd in point differential
+6. Hamilton beats Walnut AND Baldwyn beats Hatley AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley AND Walnut finishes 3rd in point differential
+7. Hamilton beats Walnut AND Hatley beats Baldwyn AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton AND Walnut finishes 3rd in point differential
+8. Hamilton beats Walnut AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 3rd in point differential
+9. Walnut beats Hamilton AND Baldwyn beats Hatley AND Baldwyn beats Hamilton AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley AND Walnut finishes 3rd in point differential
+10. Walnut beats Hamilton AND Hatley beats Baldwyn AND Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton AND Walnut finishes 3rd in point differential
+
+========================================================================
+
+========================================================================
+  Region 1-2A — Checkpoint B (1 week played)
+  R=4, ignore_margins=False, 4 teams: Baldwyn, Hamilton, Hatley, Walnut
+========================================================================
+  enumerate_outcomes : 1.186s  |  odds : 0.000s
+  atom build         : 0.110s  |  scenario enumeration : 0.120s
+========================================================================
+
+Scenario 1: Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn
+1. Hamilton
+2. Walnut
+3. Baldwyn
+4. Hatley
+
+Scenario 2: Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1. Walnut
+2. Baldwyn
+3. Hatley
+4. Hamilton
+
+Scenario 3: Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+1. Hatley
+2. Hamilton
+3. Walnut
+4. Baldwyn
+
+Scenario 4: Baldwyn beats Hamilton AND Hatley beats Walnut AND Hatley beats Hamilton
+1. Baldwyn
+2. Hatley
+3. Hamilton
+4. Walnut
+
+Scenario 5: Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut
+1. Hamilton
+2. Baldwyn
+3. Walnut
+4. Hatley
+
+Scenario 6a: Baldwyn beats Hamilton AND Walnut beats Hatley by 1–2 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–6
+1. Baldwyn
+2. Hamilton
+3. Hatley
+4. Walnut
+
+Scenario 6b: Baldwyn beats Hamilton AND Walnut beats Hatley by 1–2 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 7 or more
+1. Baldwyn
+2. Hatley
+3. Hamilton
+4. Walnut
+
+Scenario 6c: Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 7 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–2
+1. Baldwyn
+2. Hamilton
+3. Walnut
+4. Hatley
+
+Scenario 6d: Baldwyn beats Hamilton by exactly 2 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by exactly 1 AND Hatley beats Hamilton by 12 or more
+1. Baldwyn
+2. Walnut
+3. Hamilton
+4. Hatley
+
+Scenario 6e: Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–11 AND Hatley beats Hamilton by 12 or more
+1. Baldwyn
+2. Walnut
+3. Hatley
+4. Hamilton
+
+Scenario 7a: Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+1. Baldwyn
+2. Hamilton
+3. Hatley
+4. Walnut
+
+Scenario 7b: Hamilton beats Baldwyn by 1–2 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 7 or more
+1. Baldwyn
+2. Hatley
+3. Hamilton
+4. Walnut
+
+Scenario 7c: Hamilton beats Baldwyn by exactly 7 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–2
+1. Hamilton
+2. Baldwyn
+3. Hatley
+4. Walnut
+
+Scenario 7d: Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 2 AND Baldwyn beats Walnut by exactly 1 AND Hatley beats Hamilton by 12 or more
+1. Hamilton
+2. Hatley
+3. Baldwyn
+4. Walnut
+
+Scenario 7e: Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 12 or more AND Baldwyn beats Walnut by 1–11 AND Hatley beats Hamilton by 12 or more
+1. Hatley
+2. Hamilton
+3. Baldwyn
+4. Walnut
+
+Scenario 8a: Baldwyn beats Hamilton by 1–2 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–6 AND Hamilton beats Hatley
+1. Hamilton
+2. Baldwyn
+3. Walnut
+4. Hatley
+
+Scenario 8b: Baldwyn beats Hamilton by 1–2 AND Walnut beats Hatley AND Walnut beats Baldwyn by 7 or more AND Hamilton beats Hatley
+1. Hamilton
+2. Walnut
+3. Baldwyn
+4. Hatley
+
+Scenario 8c: Baldwyn beats Hamilton by exactly 7 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–2 AND Hamilton beats Hatley
+1. Baldwyn
+2. Hamilton
+3. Walnut
+4. Hatley
+
+Scenario 8d: Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 2 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by exactly 1
+1. Baldwyn
+2. Walnut
+3. Hamilton
+4. Hatley
+
+Scenario 8e: Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–11
+1. Walnut
+2. Baldwyn
+3. Hamilton
+4. Hatley
+
+Scenario 9a: Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut by 1–11 AND Walnut beats Baldwyn AND Hamilton beats Hatley
+1. Hamilton
+2. Baldwyn
+3. Walnut
+4. Hatley
+
+Scenario 9b: Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut by 1–2 AND Walnut beats Baldwyn by 7 or more AND Hamilton beats Hatley
+1. Hamilton
+2. Walnut
+3. Baldwyn
+4. Hatley
+
+Scenario 9c: Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut by 7 or more AND Walnut beats Baldwyn AND Hamilton beats Hatley
+1. Hamilton
+2. Baldwyn
+3. Hatley
+4. Walnut
+
+Scenario 9d: Hamilton beats Baldwyn by exactly 2 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by exactly 1
+1. Hamilton
+2. Hatley
+3. Baldwyn
+4. Walnut
+
+Scenario 9e: Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–11
+1. Hamilton
+2. Hatley
+3. Walnut
+4. Baldwyn
+
+Scenario 10: Baldwyn beats Hamilton AND Hatley beats Walnut AND Hamilton beats Hatley
+1. Baldwyn
+2. Hamilton
+3. Hatley
+4. Walnut
+
+Scenario 11: Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1. Baldwyn
+2. Hamilton
+3. Walnut
+4. Hatley
+
+Scenario 12: Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hamilton beats Hatley
+1. Hamilton
+2. Baldwyn
+3. Hatley
+4. Walnut
+========================================================================
+  Per-team scenario atoms
+========================================================================
+
+Baldwyn
+
+#1 seed if: (43.8%)
+1. Baldwyn beats Hamilton AND Hatley beats Walnut
+2. Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut
+3. Baldwyn beats Hamilton by exactly 7 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–2 AND Hamilton beats Hatley
+4. Baldwyn beats Hamilton by exactly 8 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–4 AND Hamilton beats Hatley
+5. Baldwyn beats Hamilton by exactly 9 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–6 AND Hamilton beats Hatley
+6. Baldwyn beats Hamilton by exactly 10 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–8 AND Hamilton beats Hatley
+7. Baldwyn beats Hamilton by exactly 11 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–10 AND Hamilton beats Hatley
+8. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+9. Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+10. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 12 or more AND Baldwyn beats Walnut AND Hatley beats Hamilton
+
+#2 seed if: (28.1%)
+1. Hamilton beats Baldwyn AND Hatley beats Walnut AND Hamilton beats Hatley
+2. Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut
+3. Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+4. Baldwyn beats Hamilton by 1–2 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–6 AND Hamilton beats Hatley
+5. Baldwyn beats Hamilton by 3–4 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–7 AND Hamilton beats Hatley
+6. Baldwyn beats Hamilton by 5–6 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–8 AND Hamilton beats Hatley
+7. Baldwyn beats Hamilton by exactly 7 AND Walnut beats Hatley AND Walnut beats Baldwyn by 3–9 AND Hamilton beats Hatley
+8. Baldwyn beats Hamilton by exactly 8 AND Walnut beats Hatley AND Walnut beats Baldwyn by 5–9 AND Hamilton beats Hatley
+9. Baldwyn beats Hamilton by exactly 9 AND Walnut beats Hatley AND Walnut beats Baldwyn by 7–10 AND Hamilton beats Hatley
+10. Baldwyn beats Hamilton by exactly 10 AND Walnut beats Hatley AND Walnut beats Baldwyn by 9–10 AND Hamilton beats Hatley
+11. Baldwyn beats Hamilton by exactly 11 AND Walnut beats Hatley AND Walnut beats Baldwyn by exactly 11 AND Hamilton beats Hatley
+12. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–11
+13. Hamilton beats Baldwyn by exactly 7 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–2
+14. Hamilton beats Baldwyn by exactly 8 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–4
+15. Hamilton beats Baldwyn by exactly 9 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–6
+16. Hamilton beats Baldwyn by exactly 10 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–8
+17. Hamilton beats Baldwyn by exactly 11 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–10
+18. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+
+#3 seed if: (21.9%)
+1. Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn
+2. Baldwyn beats Hamilton by 1–2 AND Walnut beats Hatley AND Walnut beats Baldwyn by 7 or more AND Hamilton beats Hatley
+3. Baldwyn beats Hamilton by 3–4 AND Walnut beats Hatley AND Walnut beats Baldwyn by 8 or more AND Hamilton beats Hatley
+4. Baldwyn beats Hamilton by 5–6 AND Walnut beats Hatley AND Walnut beats Baldwyn by 9 or more AND Hamilton beats Hatley
+5. Baldwyn beats Hamilton by 7–8 AND Walnut beats Hatley AND Walnut beats Baldwyn by 10 or more AND Hamilton beats Hatley
+6. Baldwyn beats Hamilton by 9–10 AND Walnut beats Hatley AND Walnut beats Baldwyn by 11 or more AND Hamilton beats Hatley
+7. Baldwyn beats Hamilton by exactly 11 AND Walnut beats Hatley AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley
+8. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 2 AND Baldwyn beats Walnut by exactly 1 AND Hatley beats Hamilton by 12 or more
+9. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 3 AND Baldwyn beats Walnut by 1–2 AND Hatley beats Hamilton by 12 or more
+10. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 4 AND Baldwyn beats Walnut by 1–3 AND Hatley beats Hamilton by 12 or more
+11. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 5 AND Baldwyn beats Walnut by 1–4 AND Hatley beats Hamilton by 12 or more
+12. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 6 AND Baldwyn beats Walnut by 1–5 AND Hatley beats Hamilton by 12 or more
+13. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 7 AND Baldwyn beats Walnut by 1–6 AND Hatley beats Hamilton by 12 or more
+14. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 8 AND Baldwyn beats Walnut by 1–7 AND Hatley beats Hamilton by 12 or more
+15. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 9 AND Baldwyn beats Walnut by 1–8 AND Hatley beats Hamilton by 12 or more
+16. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 10 AND Baldwyn beats Walnut by 1–9 AND Hatley beats Hamilton by 12 or more
+17. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 11 AND Baldwyn beats Walnut by 1–10 AND Hatley beats Hamilton by 12 or more
+18. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 12 or more AND Baldwyn beats Walnut by 1–11 AND Hatley beats Hamilton by 12 or more
+19. Hamilton beats Baldwyn AND Hatley beats Walnut by 1–2 AND Walnut beats Baldwyn by 7 or more AND Hamilton beats Hatley
+20. Hamilton beats Baldwyn AND Hatley beats Walnut by 3–4 AND Walnut beats Baldwyn by 8 or more AND Hamilton beats Hatley
+21. Hamilton beats Baldwyn AND Hatley beats Walnut by 5–6 AND Walnut beats Baldwyn by 9 or more AND Hamilton beats Hatley
+22. Hamilton beats Baldwyn AND Hatley beats Walnut by 7–8 AND Walnut beats Baldwyn by 10 or more AND Hamilton beats Hatley
+23. Hamilton beats Baldwyn AND Hatley beats Walnut by 9–10 AND Walnut beats Baldwyn by 11 or more AND Hamilton beats Hatley
+24. Hamilton beats Baldwyn AND Hatley beats Walnut by exactly 11 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley
+25. Hamilton beats Baldwyn by exactly 2 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by exactly 1
+26. Hamilton beats Baldwyn by exactly 3 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–2
+27. Hamilton beats Baldwyn by exactly 4 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–3
+28. Hamilton beats Baldwyn by exactly 5 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–4
+29. Hamilton beats Baldwyn by exactly 6 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–5
+30. Hamilton beats Baldwyn by exactly 7 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–6
+31. Hamilton beats Baldwyn by exactly 8 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–7
+32. Hamilton beats Baldwyn by exactly 9 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–8
+33. Hamilton beats Baldwyn by exactly 10 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–9
+34. Hamilton beats Baldwyn by exactly 11 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–10
+
+#4 seed if: (6.2%)
+1. Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+2. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–11
+
+Hamilton
+
+#1 seed if: (43.8%)
+1. Hamilton beats Baldwyn AND Walnut beats Hatley
+2. Hamilton beats Baldwyn AND Hatley beats Walnut AND Hamilton beats Hatley
+3. Baldwyn beats Hamilton by 1–6 AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+4. Baldwyn beats Hamilton by exactly 7 AND Walnut beats Hatley AND Walnut beats Baldwyn by 3–9 AND Hamilton beats Hatley
+5. Baldwyn beats Hamilton by 7–8 AND Walnut beats Hatley AND Walnut beats Baldwyn by 10 or more AND Hamilton beats Hatley
+6. Baldwyn beats Hamilton by exactly 8 AND Walnut beats Hatley AND Walnut beats Baldwyn by 5–9 AND Hamilton beats Hatley
+7. Baldwyn beats Hamilton by exactly 9 AND Walnut beats Hatley AND Walnut beats Baldwyn by 7–10 AND Hamilton beats Hatley
+8. Baldwyn beats Hamilton by 9–11 AND Walnut beats Hatley AND Walnut beats Baldwyn by 11 or more AND Hamilton beats Hatley
+9. Baldwyn beats Hamilton by exactly 10 AND Walnut beats Hatley AND Walnut beats Baldwyn by 9–10 AND Hamilton beats Hatley
+10. Hamilton beats Baldwyn by exactly 7 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–2
+11. Hamilton beats Baldwyn by exactly 8 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–4
+12. Hamilton beats Baldwyn by exactly 9 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–6
+13. Hamilton beats Baldwyn by exactly 10 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–8
+14. Hamilton beats Baldwyn by exactly 11 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–10
+15. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton
+
+#2 seed if: (28.1%)
+1. Baldwyn beats Hamilton by 12 or more AND Hamilton beats Hatley
+2. Baldwyn beats Hamilton AND Hatley beats Walnut AND Hamilton beats Hatley
+3. Walnut beats Hatley by 12 or more AND Baldwyn beats Hamilton AND Baldwyn beats Walnut
+4. Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut AND Hatley beats Hamilton
+5. Hatley beats Walnut by 12 or more AND Hamilton beats Baldwyn by 12 or more AND Hatley beats Hamilton
+6. Baldwyn beats Hamilton AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+7. Baldwyn beats Hamilton AND Walnut beats Hatley by 1–2 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–6
+8. Baldwyn beats Hamilton AND Walnut beats Hatley by 3–4 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–7
+9. Baldwyn beats Hamilton AND Walnut beats Hatley by 5–6 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–8
+10. Baldwyn beats Hamilton AND Walnut beats Hatley by 7–8 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–9
+11. Baldwyn beats Hamilton AND Walnut beats Hatley by 9–10 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–10
+12. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 11 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–11
+13. Baldwyn beats Hamilton by exactly 7 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–2 AND Hamilton beats Hatley
+14. Baldwyn beats Hamilton by exactly 8 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–4 AND Hamilton beats Hatley
+15. Baldwyn beats Hamilton by exactly 9 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–6 AND Hamilton beats Hatley
+16. Baldwyn beats Hamilton by exactly 10 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–8 AND Hamilton beats Hatley
+17. Baldwyn beats Hamilton by exactly 11 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–10 AND Hamilton beats Hatley
+18. Walnut beats Baldwyn AND Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut AND Hatley beats Hamilton
+
+#3 seed if: (21.9%)
+1. Baldwyn beats Hamilton AND Hatley beats Walnut AND Hatley beats Hamilton
+2. Baldwyn beats Hamilton AND Walnut beats Hatley by 1–2 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 7 or more
+3. Baldwyn beats Hamilton AND Walnut beats Hatley by 3–4 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 8 or more
+4. Baldwyn beats Hamilton AND Walnut beats Hatley by 5–6 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 9 or more
+5. Baldwyn beats Hamilton AND Walnut beats Hatley by 7–8 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 10 or more
+6. Baldwyn beats Hamilton AND Walnut beats Hatley by 9–10 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 11 or more
+7. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 11 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 12 or more
+8. Baldwyn beats Hamilton by exactly 2 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by exactly 1 AND Hatley beats Hamilton by 12 or more
+9. Baldwyn beats Hamilton by exactly 3 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–2 AND Hatley beats Hamilton by 12 or more
+10. Baldwyn beats Hamilton by exactly 4 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–3 AND Hatley beats Hamilton by 12 or more
+11. Baldwyn beats Hamilton by exactly 5 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–4 AND Hatley beats Hamilton by 12 or more
+12. Baldwyn beats Hamilton by exactly 6 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–5 AND Hatley beats Hamilton by 12 or more
+13. Baldwyn beats Hamilton by exactly 7 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–6 AND Hatley beats Hamilton by 12 or more
+14. Baldwyn beats Hamilton by exactly 8 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–7 AND Hatley beats Hamilton by 12 or more
+15. Baldwyn beats Hamilton by exactly 9 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–8 AND Hatley beats Hamilton by 12 or more
+16. Baldwyn beats Hamilton by exactly 10 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–9 AND Hatley beats Hamilton by 12 or more
+17. Baldwyn beats Hamilton by exactly 11 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–10 AND Hatley beats Hamilton by 12 or more
+18. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 2 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by exactly 1
+19. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 3 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–2
+20. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 4 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–3
+21. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 5 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–4
+22. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 6 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–5
+23. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 7 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–6
+24. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 8 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–7
+25. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 9 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–8
+26. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 10 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–9
+27. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 11 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–10
+28. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–11
+29. Hamilton beats Baldwyn by 1–2 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 7 or more
+30. Hamilton beats Baldwyn by 3–4 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 8 or more
+31. Hamilton beats Baldwyn by 5–6 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 9 or more
+32. Hamilton beats Baldwyn by 7–8 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 10 or more
+33. Hamilton beats Baldwyn by 9–10 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 11 or more
+34. Hamilton beats Baldwyn by exactly 11 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 12 or more
+
+#4 seed if: (6.2%)
+1. Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+2. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–11 AND Hatley beats Hamilton by 12 or more
+
+Hatley
+
+#1 seed if: (6.2%)
+1. Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+2. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 12 or more AND Baldwyn beats Walnut by 1–11 AND Hatley beats Hamilton by 12 or more
+
+#2 seed if: (21.9%)
+1. Baldwyn beats Hamilton AND Hatley beats Walnut AND Hatley beats Hamilton
+2. Baldwyn beats Hamilton AND Walnut beats Hatley by 1–2 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 7 or more
+3. Baldwyn beats Hamilton AND Walnut beats Hatley by 3–4 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 8 or more
+4. Baldwyn beats Hamilton AND Walnut beats Hatley by 5–6 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 9 or more
+5. Baldwyn beats Hamilton AND Walnut beats Hatley by 7–8 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 10 or more
+6. Baldwyn beats Hamilton AND Walnut beats Hatley by 9–10 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 11 or more
+7. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 11 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 12 or more
+8. Hamilton beats Baldwyn by 1–2 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 7 or more
+9. Hamilton beats Baldwyn by 3–4 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 8 or more
+10. Hamilton beats Baldwyn by 5–6 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 9 or more
+11. Hamilton beats Baldwyn by 7–8 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 10 or more
+12. Hamilton beats Baldwyn by 9–10 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 11 or more
+13. Hamilton beats Baldwyn by exactly 11 AND Hatley beats Walnut AND Baldwyn beats Walnut AND Hatley beats Hamilton by 12 or more
+14. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 2 AND Baldwyn beats Walnut by exactly 1 AND Hatley beats Hamilton by 12 or more
+15. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 3 AND Baldwyn beats Walnut by 1–2 AND Hatley beats Hamilton by 12 or more
+16. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 4 AND Baldwyn beats Walnut by 1–3 AND Hatley beats Hamilton by 12 or more
+17. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 5 AND Baldwyn beats Walnut by 1–4 AND Hatley beats Hamilton by 12 or more
+18. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 6 AND Baldwyn beats Walnut by 1–5 AND Hatley beats Hamilton by 12 or more
+19. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 7 AND Baldwyn beats Walnut by 1–6 AND Hatley beats Hamilton by 12 or more
+20. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 8 AND Baldwyn beats Walnut by 1–7 AND Hatley beats Hamilton by 12 or more
+21. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 9 AND Baldwyn beats Walnut by 1–8 AND Hatley beats Hamilton by 12 or more
+22. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 10 AND Baldwyn beats Walnut by 1–9 AND Hatley beats Hamilton by 12 or more
+23. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by exactly 11 AND Baldwyn beats Walnut by 1–10 AND Hatley beats Hamilton by 12 or more
+24. Hamilton beats Baldwyn by exactly 2 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by exactly 1
+25. Hamilton beats Baldwyn by exactly 3 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–2
+26. Hamilton beats Baldwyn by exactly 4 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–3
+27. Hamilton beats Baldwyn by exactly 5 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–4
+28. Hamilton beats Baldwyn by exactly 6 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–5
+29. Hamilton beats Baldwyn by exactly 7 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–6
+30. Hamilton beats Baldwyn by exactly 8 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–7
+31. Hamilton beats Baldwyn by exactly 9 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–8
+32. Hamilton beats Baldwyn by exactly 10 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–9
+33. Hamilton beats Baldwyn by exactly 11 AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–10
+34. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–11
+
+#3 seed if: (28.1%)
+1. Baldwyn beats Hamilton AND Hatley beats Walnut AND Hamilton beats Hatley
+2. Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut
+3. Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+4. Baldwyn beats Hamilton AND Walnut beats Hatley by 1–2 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–6
+5. Baldwyn beats Hamilton AND Walnut beats Hatley by 3–4 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–7
+6. Baldwyn beats Hamilton AND Walnut beats Hatley by 5–6 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–8
+7. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 7 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 3–9
+8. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 8 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 5–9
+9. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 9 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 7–10
+10. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 10 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 9–10
+11. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 11 AND Baldwyn beats Walnut AND Hatley beats Hamilton by exactly 11
+12. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–11 AND Hatley beats Hamilton by 12 or more
+13. Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut by 7 or more AND Walnut beats Baldwyn AND Hamilton beats Hatley
+14. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 7 or more AND Walnut beats Baldwyn by 1–11 AND Hamilton beats Hatley
+
+#4 seed if: (43.8%)
+1. Hamilton beats Baldwyn AND Walnut beats Hatley
+2. Baldwyn beats Hamilton AND Walnut beats Hatley AND Hamilton beats Hatley
+3. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 7 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–2
+4. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 8 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–4
+5. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 9 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–6
+6. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 10 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–8
+7. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 11 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–10
+8. Baldwyn beats Hamilton AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut AND Hatley beats Hamilton
+9. Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut by 1–11 AND Walnut beats Baldwyn AND Hamilton beats Hatley
+10. Hamilton beats Baldwyn AND Hatley beats Walnut by 1–2 AND Walnut beats Baldwyn by 7 or more AND Hamilton beats Hatley
+11. Hamilton beats Baldwyn AND Hatley beats Walnut by 3–4 AND Walnut beats Baldwyn by 8 or more AND Hamilton beats Hatley
+12. Hamilton beats Baldwyn AND Hatley beats Walnut by 5–6 AND Walnut beats Baldwyn by 9 or more AND Hamilton beats Hatley
+13. Hamilton beats Baldwyn AND Hatley beats Walnut by 7–8 AND Walnut beats Baldwyn by 10 or more AND Hamilton beats Hatley
+14. Hamilton beats Baldwyn AND Hatley beats Walnut by 9–10 AND Walnut beats Baldwyn by 11 or more AND Hamilton beats Hatley
+15. Hamilton beats Baldwyn AND Hatley beats Walnut by exactly 11 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley
+16. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hamilton beats Hatley
+
+Walnut
+
+#1 seed if: (6.2%)
+1. Baldwyn beats Hamilton AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hatley beats Hamilton
+2. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by 12 or more AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–11
+
+#2 seed if: (21.9%)
+1. Hamilton beats Baldwyn AND Walnut beats Hatley AND Walnut beats Baldwyn
+2. Baldwyn beats Hamilton by exactly 2 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by exactly 1 AND Hatley beats Hamilton by 12 or more
+3. Baldwyn beats Hamilton by exactly 3 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–2 AND Hatley beats Hamilton by 12 or more
+4. Baldwyn beats Hamilton by exactly 4 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–3 AND Hatley beats Hamilton by 12 or more
+5. Baldwyn beats Hamilton by exactly 5 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–4 AND Hatley beats Hamilton by 12 or more
+6. Baldwyn beats Hamilton by exactly 6 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–5 AND Hatley beats Hamilton by 12 or more
+7. Baldwyn beats Hamilton by exactly 7 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–6 AND Hatley beats Hamilton by 12 or more
+8. Baldwyn beats Hamilton by exactly 8 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–7 AND Hatley beats Hamilton by 12 or more
+9. Baldwyn beats Hamilton by exactly 9 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–8 AND Hatley beats Hamilton by 12 or more
+10. Baldwyn beats Hamilton by exactly 10 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–9 AND Hatley beats Hamilton by 12 or more
+11. Baldwyn beats Hamilton by exactly 11 AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–10 AND Hatley beats Hamilton by 12 or more
+12. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut by 1–11 AND Hatley beats Hamilton by 12 or more
+13. Baldwyn beats Hamilton by 1–2 AND Walnut beats Hatley AND Walnut beats Baldwyn by 7 or more AND Hamilton beats Hatley
+14. Baldwyn beats Hamilton by 3–4 AND Walnut beats Hatley AND Walnut beats Baldwyn by 8 or more AND Hamilton beats Hatley
+15. Baldwyn beats Hamilton by 5–6 AND Walnut beats Hatley AND Walnut beats Baldwyn by 9 or more AND Hamilton beats Hatley
+16. Baldwyn beats Hamilton by 7–8 AND Walnut beats Hatley AND Walnut beats Baldwyn by 10 or more AND Hamilton beats Hatley
+17. Baldwyn beats Hamilton by 9–10 AND Walnut beats Hatley AND Walnut beats Baldwyn by 11 or more AND Hamilton beats Hatley
+18. Baldwyn beats Hamilton by exactly 11 AND Walnut beats Hatley AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley
+19. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 2 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by exactly 1
+20. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 3 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–2
+21. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 4 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–3
+22. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 5 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–4
+23. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 6 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–5
+24. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 7 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–6
+25. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 8 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–7
+26. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 9 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–8
+27. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 10 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–9
+28. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley by exactly 11 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley by 1–10
+29. Hamilton beats Baldwyn AND Hatley beats Walnut by 1–2 AND Walnut beats Baldwyn by 7 or more AND Hamilton beats Hatley
+30. Hamilton beats Baldwyn AND Hatley beats Walnut by 3–4 AND Walnut beats Baldwyn by 8 or more AND Hamilton beats Hatley
+31. Hamilton beats Baldwyn AND Hatley beats Walnut by 5–6 AND Walnut beats Baldwyn by 9 or more AND Hamilton beats Hatley
+32. Hamilton beats Baldwyn AND Hatley beats Walnut by 7–8 AND Walnut beats Baldwyn by 10 or more AND Hamilton beats Hatley
+33. Hamilton beats Baldwyn AND Hatley beats Walnut by 9–10 AND Walnut beats Baldwyn by 11 or more AND Hamilton beats Hatley
+34. Hamilton beats Baldwyn AND Hatley beats Walnut by exactly 11 AND Walnut beats Baldwyn by 12 or more AND Hamilton beats Hatley
+
+#3 seed if: (28.1%)
+1. Walnut beats Hatley by 12 or more AND Baldwyn beats Walnut
+2. Walnut beats Hatley AND Baldwyn beats Walnut AND Hamilton beats Hatley
+3. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut AND Walnut beats Baldwyn
+4. Hamilton beats Baldwyn AND Hatley beats Walnut AND Walnut beats Baldwyn AND Hatley beats Hamilton
+5. Hamilton beats Baldwyn AND Walnut beats Hatley AND Baldwyn beats Walnut AND Hatley beats Hamilton
+6. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 7 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–2
+7. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 8 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–4
+8. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 9 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–6
+9. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 10 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–8
+10. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 11 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 1–10
+11. Baldwyn beats Hamilton by 1–2 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–6 AND Hamilton beats Hatley
+12. Baldwyn beats Hamilton by 3–4 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–7 AND Hamilton beats Hatley
+13. Baldwyn beats Hamilton by 5–6 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–8 AND Hamilton beats Hatley
+14. Baldwyn beats Hamilton by 7–8 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–9 AND Hamilton beats Hatley
+15. Baldwyn beats Hamilton by 9–10 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–10 AND Hamilton beats Hatley
+16. Baldwyn beats Hamilton by exactly 11 AND Walnut beats Hatley AND Walnut beats Baldwyn by 1–11 AND Hamilton beats Hatley
+17. Baldwyn beats Hamilton by 12 or more AND Walnut beats Hatley AND Walnut beats Baldwyn AND Hamilton beats Hatley
+18. Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut by 1–11 AND Walnut beats Baldwyn AND Hamilton beats Hatley
+
+#4 seed if: (43.8%)
+1. Baldwyn beats Hamilton AND Hatley beats Walnut
+2. Hamilton beats Baldwyn AND Hatley beats Walnut AND Baldwyn beats Walnut
+3. Baldwyn beats Hamilton AND Walnut beats Hatley by 1–6 AND Baldwyn beats Walnut AND Hatley beats Hamilton
+4. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 7 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 3–9
+5. Baldwyn beats Hamilton AND Walnut beats Hatley by 7–8 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 10 or more
+6. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 8 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 5–9
+7. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 9 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 7–10
+8. Baldwyn beats Hamilton AND Walnut beats Hatley by 9–11 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 11 or more
+9. Baldwyn beats Hamilton AND Walnut beats Hatley by exactly 10 AND Baldwyn beats Walnut AND Hatley beats Hamilton by 9–10
+10. Hamilton beats Baldwyn by 1–11 AND Hatley beats Walnut by 7 or more AND Walnut beats Baldwyn AND Hamilton beats Hatley
+11. Hamilton beats Baldwyn by 12 or more AND Hatley beats Walnut by 7 or more AND Walnut beats Baldwyn by 1–11 AND Hamilton beats Hatley

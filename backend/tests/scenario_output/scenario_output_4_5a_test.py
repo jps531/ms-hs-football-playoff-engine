@@ -93,8 +93,8 @@ East Central
 1. Wayne County beats Northeast Jones AND Purvis beats Vancleave AND East Central beats Stone
 
 Eliminated if: (75.0%)
-1. Stone beats East Central
-2. Northeast Jones beats Wayne County AND East Central beats Stone"""
+1. Northeast Jones beats Wayne County
+2. Stone beats East Central"""
 
 NORTHEAST_JONES_EXPECTED = """\
 Northeast Jones
@@ -105,7 +105,7 @@ Northeast Jones
 
 Eliminated if: (62.5%)
 1. Vancleave beats Purvis
-2. Wayne County beats Northeast Jones AND Purvis beats Vancleave AND East Central beats Stone"""
+2. Wayne County beats Northeast Jones AND East Central beats Stone"""
 
 PURVIS_EXPECTED = """\
 Purvis
@@ -199,8 +199,20 @@ def test_atoms_east_central_eliminated_count():
 
 
 def test_atoms_east_central_eliminated_atom0():
-    """EC eliminated atom 0: Stone beats EC (any margin) — covers 4 masks."""
+    """EC eliminated atom 0: NJ beats WC — covers all masks where NJ beats WC."""
     atom = _ATOMS["East Central"][5][0]
+    assert len(atom) == 1
+    gr = atom[0]
+    assert isinstance(gr, GameResult)
+    assert gr.winner == "Northeast Jones"
+    assert gr.loser == "Wayne County"
+    assert gr.min_margin == 1
+    assert gr.max_margin is None
+
+
+def test_atoms_east_central_eliminated_atom1():
+    """EC eliminated atom 1: Stone beats EC — covers remaining elimination masks."""
+    atom = _ATOMS["East Central"][5][1]
     assert len(atom) == 1
     gr = atom[0]
     assert isinstance(gr, GameResult)
@@ -208,15 +220,6 @@ def test_atoms_east_central_eliminated_atom0():
     assert gr.loser == "East Central"
     assert gr.min_margin == 1
     assert gr.max_margin is None
-
-
-def test_atoms_east_central_eliminated_atom1():
-    """EC eliminated atom 1: NJ beats WC AND EC beats Stone — covers 2 remaining masks."""
-    atom = _ATOMS["East Central"][5][1]
-    assert len(atom) == 2
-    winners = {gr.winner for gr in atom}
-    assert "Northeast Jones" in winners
-    assert "East Central" in winners
 
 
 # ---------------------------------------------------------------------------
@@ -242,12 +245,11 @@ def test_atoms_northeast_jones_eliminated_atom0():
 
 
 def test_atoms_northeast_jones_eliminated_atom1():
-    """NJ eliminated atom 1: WC beats NJ AND PUR beats VAN AND EC beats Stone."""
+    """NJ eliminated atom 1: WC beats NJ AND EC beats Stone — Purvis/Vancleave dropped as redundant."""
     atom = _ATOMS["Northeast Jones"][5][1]
-    assert len(atom) == 3
+    assert len(atom) == 2
     winners = {gr.winner for gr in atom}
     assert "Wayne County" in winners
-    assert "Purvis" in winners
     assert "East Central" in winners
 
 

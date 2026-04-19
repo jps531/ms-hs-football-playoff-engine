@@ -107,7 +107,7 @@ def test_scenario_count():
 def test_scenario_single_entry_shape():
     """The single scenario has all required keys."""
     sc = _SCENARIOS[0]
-    assert set(sc.keys()) == {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom"}
+    assert set(sc.keys()) == {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "tiebreaker_groups", "coinflip_groups"}
 
 
 def test_scenario_num_and_label():
