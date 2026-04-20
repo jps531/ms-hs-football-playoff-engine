@@ -838,6 +838,7 @@ def _matchup_raw_qf(
     slot_idx: int,
     season: int,
     is_1a_4a: bool,
+    r1_survivors: set[tuple[int, int]] | None = None,
 ) -> list[tuple[int, int, bool, str | None]]:
     """Raw matchup entries for the quarterfinals.
 
@@ -846,6 +847,12 @@ def _matchup_raw_qf(
     possible R2 opponents for each QF candidate (1A-4A only).  Duplicate
     ``(opp_r, opp_s, is_home)`` entries from different paths are intentional:
     the caller weights them to derive equal-probability conditional odds.
+
+    When *r1_survivors* is provided (the set of teams that won their R1 game),
+    only those teams are considered as R2 opponents for both the target team and
+    each QF candidate.  This collapses the R2-home-status split to a single
+    known value.  Note: *r1_survivors* must reflect R1 results specifically —
+    passing post-R2 survivors would incorrectly exclude teams eliminated in R2.
     """
     round_offset = 2 if is_1a_4a else 1
     opp_slot_list = opponent_slots(slot_idx, round_offset=round_offset, half_slots=half_slots)
@@ -855,11 +862,15 @@ def _matchup_raw_qf(
 
     if is_1a_4a:
         adj_slot = opponent_slots(slot_idx, round_offset=1, half_slots=half_slots)[0]
-        r2_home_options = [
-            _r2_home_status(seed, adj_slot.home_seed),
-            _r2_home_status(seed, adj_slot.away_seed),
+        r2_adj_candidates: list[tuple[int, int]] = [
+            (adj_slot.home_region, adj_slot.home_seed),
+            (adj_slot.away_region, adj_slot.away_seed),
         ]
-        r2_home_unique = list(dict.fromkeys(r2_home_options))
+        if r1_survivors is not None:
+            r2_adj_candidates = [(r, s) for r, s in r2_adj_candidates if (r, s) in r1_survivors]
+        r2_home_unique = list(dict.fromkeys(
+            _r2_home_status(seed, s) for _, s in r2_adj_candidates
+        ))
     else:
         r2_home_unique = [False]  # sentinel for 5A-7A (no R2)
 
@@ -879,10 +890,17 @@ def _matchup_raw_qf(
                         round_offset=1,
                         half_slots=half_slots,
                     )[0]
-                    opp_r2_vals = list(dict.fromkeys([
-                        _r2_home_status(opp_s, opp_adj.home_seed),
-                        _r2_home_status(opp_s, opp_adj.away_seed),
-                    ]))
+                    opp_r2_candidates: list[tuple[int, int]] = [
+                        (opp_adj.home_region, opp_adj.home_seed),
+                        (opp_adj.away_region, opp_adj.away_seed),
+                    ]
+                    if r1_survivors is not None:
+                        opp_r2_candidates = [
+                            (r, s) for r, s in opp_r2_candidates if (r, s) in r1_survivors
+                        ]
+                    opp_r2_vals = list(dict.fromkeys(
+                        _r2_home_status(opp_s, s) for _, s in opp_r2_candidates
+                    ))
                 else:
                     opp_r2_vals = [False]  # sentinel for 5A-7A
 
@@ -946,6 +964,9 @@ def enumerate_team_matchups(
     p_host_marginal_weighted_by_round: dict[str, float] | None = None,
     p_conditional_weighted_by_matchup: dict[str, dict[tuple[int, int, bool], float]] | None = None,
     team_lookup: dict[tuple[int, int], str] | None = None,
+    known_survivors: set[tuple[int, int]] | None = None,
+    r1_survivors: set[tuple[int, int]] | None = None,
+    completed_rounds: set[str] | None = None,
 ) -> list[RoundMatchups]:
     """Enumerate all possible playoff matchups for a team across every round.
 
@@ -980,10 +1001,25 @@ def enumerate_team_matchups(
                                              integration; pass ``None`` to
                                              leave weighted fields as ``None``.
         team_lookup: Optional ``(region, seed)`` → school name mapping.
+        known_survivors: Optional set of ``(region, seed)`` pairs currently
+            alive in the tournament.  Opponent entries not in this set are
+            dropped and ``p_conditional`` values are renormalized.  Use the
+            survivors of the most recently completed round.
+        r1_survivors: Optional set of ``(region, seed)`` pairs that won their
+            first-round game.  Used inside the QF path enumeration to fix each
+            team's R2 opponent (and thus their R2 home-game count) to the
+            actual R1 winner.  Must reflect R1 results only — do not pass
+            post-R2 survivors here, as teams eliminated in R2 still need to be
+            included.  Typically set to the same value as *known_survivors*
+            when calling after R1; set explicitly when calling after later
+            rounds.
+        completed_rounds: Optional set of round names to exclude from the
+            returned list.  Use this to omit already-played rounds from the
+            output (e.g. ``{"First Round"}`` after R1 is complete).
 
     Returns:
         List of ``RoundMatchups``, one per applicable round, in chronological
-        order.
+        order.  Rounds named in *completed_rounds* are omitted.
 
     Raises:
         ValueError: If the team's ``(region, seed)`` is not found in *slots*.
@@ -1010,6 +1046,8 @@ def enumerate_team_matchups(
             p_host_marginal_weighted=_get(p_host_marginal_weighted_by_round),
         )
 
+    _completed = completed_rounds or set()
+
     def _build_round(
         round_name: str,
         raw: list[tuple[int, int, bool, str | None]],
@@ -1019,9 +1057,14 @@ def enumerate_team_matchups(
         p_reach = odds.p_reach
         p_reach_w = odds.p_reach_weighted
 
+        # Drop paths for eliminated opponents before counting.
+        if known_survivors is not None:
+            raw = [(r, s, h, e) for r, s, h, e in raw if (r, s) in known_survivors]
+
         # Count how many raw paths lead to each (opp_r, opp_s, is_home) outcome.
         # Under equal probability every path is equiprobable, so the fraction of
-        # paths gives the correct conditional probability.
+        # paths gives the correct conditional probability.  Filtering eliminates
+        # impossible paths; the remaining counts renormalize automatically.
         path_counts: Counter[tuple[int, int, bool]] = Counter()
         path_explanations: dict[tuple[int, int, bool], str | None] = {}
         for opp_r, opp_s, is_home, explanation in raw:
@@ -1057,16 +1100,20 @@ def enumerate_team_matchups(
     results: list[RoundMatchups] = []
 
     r1_name = round_names[0]
-    results.append(_build_round(r1_name, _matchup_raw_r1(region, seed, half_slots, slot_idx)))
+    if r1_name not in _completed:
+        results.append(_build_round(r1_name, _matchup_raw_r1(region, seed, half_slots, slot_idx)))
 
     if is_1a_4a:
         r2_name = round_names[1]
-        results.append(_build_round(r2_name, _matchup_raw_r2(region, seed, half_slots, slot_idx, season)))
+        if r2_name not in _completed:
+            results.append(_build_round(r2_name, _matchup_raw_r2(region, seed, half_slots, slot_idx, season)))
 
     qf_name = round_names[2] if is_1a_4a else round_names[1]
-    results.append(_build_round(qf_name, _matchup_raw_qf(region, seed, half_slots, slot_idx, season, is_1a_4a)))
+    if qf_name not in _completed:
+        results.append(_build_round(qf_name, _matchup_raw_qf(region, seed, half_slots, slot_idx, season, is_1a_4a, r1_survivors)))
 
     sf_name = round_names[-1]
-    results.append(_build_round(sf_name, _matchup_raw_sf(region, seed, half_slots, slot_idx, season)))
+    if sf_name not in _completed:
+        results.append(_build_round(sf_name, _matchup_raw_sf(region, seed, half_slots, slot_idx, season)))
 
     return results

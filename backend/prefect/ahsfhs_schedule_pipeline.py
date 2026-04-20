@@ -47,7 +47,7 @@ DATE_LINE_RE = re.compile(
 
 
 @task(task_run_name="Fetch AHSFHS Schedule Data for {school_name} for {season}")
-def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) -> list[Game]:
+def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str, clazz: int) -> list[Game]:
     """
     Parse AHSFHS schedule text (with lots of line breaks) into a list of dicts:
     Each dict has the following keys:
@@ -82,7 +82,7 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
         (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.,\s+
         (?P<mon>[A-Z]{3,9})\.?,?\s+
         (?P<day>\d{1,2})\s+
-        (?P<loc>vs\.|@)\s+
+        (?:(?P<loc>vs\.|@)\s+)?
         (?P<opp>[A-Z&.'\- ]+)
         (?:\s*(?P<star1>\*))?
         (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+
@@ -152,15 +152,25 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str) ->
         if round_text:
             round_text = " ".join(round_text.strip().split())  # normalize spacing
 
+        # Sanitize Round Names
+        if round_text:
+            round_text = round_text.replace("1st Round Playoffs", "First Round")
+            if clazz >= 5:
+                round_text = round_text.replace("2nd Round Playoffs", "Second Round")
+            else:
+                round_text = round_text.replace("2nd Round Playoffs", "Quarterfinals")
+            round_text = round_text.replace("3rd Round Playoffs", "Quarterfinals")
+            round_text = round_text.replace("Semi-finals Playoffs", "Semifinals")
+
         region = bool(m.group("star1") or m.group("star2"))
 
-        loc = m.group("loc").lower().rstrip(".")
-        if loc == "vs":
-            location = "home"
-        elif loc == "@":
-            location = "away"
-        else:
+        raw_loc = m.group("loc")
+        if raw_loc is None:
             location = "neutral"
+        elif raw_loc.lower().rstrip(".") == "vs":
+            location = "home"
+        else:
+            location = "away"
 
         game = Game.from_db_tuple(
             {
@@ -203,7 +213,9 @@ def find_ahsfhs_schedule_for_schools(schools: list[School], season: int) -> list
 
         text = fetch_article_text_from_ahsfhs(url)
 
-        schedule = parse_ahsfhs_schedule(text or "", season=season, school_name=school.school, url=url)
+        schedule = parse_ahsfhs_schedule(
+            text or "", season=season, school_name=school.school, url=url, clazz=school.class_
+        )
 
         records.extend(schedule)
 

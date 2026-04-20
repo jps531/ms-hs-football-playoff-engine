@@ -360,6 +360,27 @@ def test_r2_loser_gets_zero_1a4a() -> None:
     assert result[school] == pytest.approx(0.0, abs=1e-9)
 
 
+def test_qf_r1_loser_gets_zero_1a4a() -> None:
+    """A known R1 loser must have marginal P(hosting QF) = 0.0 in 1A-4A."""
+    region = 2
+    school = "R2s4"
+    # 1A-4A North slot 1: home=R1s1 (1,1,2,4), away=R2s4.  R1s1 wins.
+    fn = _slot_results_fn({(1, 1, 2, 4): 1.0})
+    odds = {school: _locked(school, 4)}
+    result = compute_quarterfinal_home_odds(region, odds, SLOTS_1A_4A_2025, ODD_SEASON, fn)
+    assert result[school] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_qf_r1_winner_nonzero_1a4a() -> None:
+    """A known R1 winner's marginal P(hosting QF) must be > 0 in 1A-4A."""
+    region = 1
+    school = "R1s1"
+    fn = _slot_results_fn({(1, 1, 2, 4): 1.0})
+    odds = {school: _locked(school, 1)}
+    result = compute_quarterfinal_home_odds(region, odds, SLOTS_1A_4A_2025, ODD_SEASON, fn)
+    assert result[school] > 0.0
+
+
 # ---------------------------------------------------------------------------
 # Scenario 5: R1 complete — bridge to deterministic functions
 # ---------------------------------------------------------------------------
@@ -435,6 +456,111 @@ def test_qf_bridge_r1_complete_5a7a(s1_home_wins: bool, s2_home_wins: bool, expe
     assert away_result[away_school] == pytest.approx(0.0, abs=1e-9), (
         f"Expected P(hosting QF) == 0.0 for {away_school}, got {away_result[away_school]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Scenario 5b: R2 complete — bridge to deterministic for 1A-4A
+# ---------------------------------------------------------------------------
+#
+# 1A-4A North QF game A pairs slots 0,1 against slots 2,3:
+#   Slot 0 (idx 0): home=R1s1 (1,1), away=R2s4 (2,4)
+#   Slot 1 (idx 1): home=R3s2 (3,2), away=R4s3 (4,3)
+#   Slot 2 (idx 2): home=R2s1 (2,1), away=R1s4 (1,4)
+#   Slot 3 (idx 3): home=R4s2 (4,2), away=R3s3 (3,3)
+#
+# All home teams win R1.  R2 pairings (lower seed hosts):
+#   R2 game A (slots 0+1): R1s1 vs R3s2 → R1s1 hosts (better seed).
+#     win_prob_fn(1,1,3,2) = 1.0 → R1s1 advances; 0.0 → R3s2 advances.
+#   R2 game B (slots 2+3): R2s1 vs R4s2 → R2s1 hosts (better seed).
+#     win_prob_fn(2,1,4,2) = 1.0 → R2s1 advances; 0.0 → R4s2 advances.
+#
+# Expected QF hosts (odd year, lower region# breaks seed ties):
+#   (r2a=T, r2b=T): R1s1(h=2) vs R2s1(h=2) → seed tie → R1 hosts  → (1,1)
+#   (r2a=T, r2b=F): R1s1(h=2) vs R4s2(h=1) → fewer homes → R4s2 hosts → (4,2)
+#   (r2a=F, r2b=T): R3s2(h=1) vs R2s1(h=2) → fewer homes → R3s2 hosts → (3,2)
+#   (r2a=F, r2b=F): R3s2(h=1) vs R4s2(h=1) → seed tie → R3 hosts  → (3,2)
+#
+# Home-game counts per team:
+#   - R1s1: r1_home=T (slot 0 home); R2: hosts vs R3s2 (better seed) → h2=T → total=2
+#   - R3s2: r1_home=T (slot 1 home); R2: away at R1s1 (worse seed) → h2=F → total=1
+#   - R2s1: r1_home=T (slot 2 home); R2: hosts vs R4s2 (better seed) → h2=T → total=2
+#   - R4s2: r1_home=T (slot 3 home); R2: away at R2s1 (worse seed) → h2=F → total=1
+
+# R1 results — all home slots win (slot tuples used by win_prob_fn)
+_1A4A_QF_A_R1_RESULTS = {
+    (1, 1, 2, 4): 1.0,  # slot 0: R1s1 wins
+    (3, 2, 4, 3): 1.0,  # slot 1: R3s2 wins
+    (2, 1, 1, 4): 1.0,  # slot 2: R2s1 wins
+    (4, 2, 3, 3): 1.0,  # slot 3: R4s2 wins
+}
+
+_1A4A_QF_A_BRIDGE_CASES = [
+    # (r2a_home_wins, r2b_home_wins, expected_host, non_host)
+    (True,  True,  (1, 1), (2, 1)),
+    (True,  False, (4, 2), (1, 1)),
+    (False, True,  (3, 2), (2, 1)),
+    (False, False, (3, 2), (4, 2)),
+]
+
+
+@pytest.mark.parametrize(
+    "r2a_home_wins,r2b_home_wins,expected_host,non_host",
+    [
+        pytest.param(*c, id=f"r2a={'win' if c[0] else 'loss'}_r2b={'win' if c[1] else 'loss'}")
+        for c in _1A4A_QF_A_BRIDGE_CASES
+    ],
+)
+def test_qf_bridge_r2_complete_1a4a(
+    r2a_home_wins: bool,
+    r2b_home_wins: bool,
+    expected_host: tuple,
+    non_host: tuple,
+) -> None:
+    """Probabilistic QF marginal with known R1+R2 agrees with qf_home_team for 1A-4A.
+
+    For the team that deterministically hosts, P(hosting QF) == 1.0.
+    For the non-host QF participant, P(hosting QF) == 0.0.
+    """
+    fn = _slot_results_fn({
+        **_1A4A_QF_A_R1_RESULTS,
+        (1, 1, 3, 2): 1.0 if r2a_home_wins else 0.0,
+        (2, 1, 4, 2): 1.0 if r2b_home_wins else 0.0,
+    })
+
+    host_region, host_seed = expected_host
+    host_school = f"R{host_region}s{host_seed}"
+    result = compute_quarterfinal_home_odds(
+        host_region, {host_school: _locked(host_school, host_seed)},
+        SLOTS_1A_4A_2025, ODD_SEASON, fn,
+    )
+    assert result[host_school] == pytest.approx(1.0, abs=1e-9), (
+        f"Expected P(hosting QF) == 1.0 for {host_school}, got {result[host_school]}"
+    )
+
+    non_region, non_seed = non_host
+    non_school = f"R{non_region}s{non_seed}"
+    non_result = compute_quarterfinal_home_odds(
+        non_region, {non_school: _locked(non_school, non_seed)},
+        SLOTS_1A_4A_2025, ODD_SEASON, fn,
+    )
+    assert non_result[non_school] == pytest.approx(0.0, abs=1e-9), (
+        f"Expected P(hosting QF) == 0.0 for {non_school}, got {non_result[non_school]}"
+    )
+
+
+def test_qf_r2_loser_gets_zero_1a4a() -> None:
+    """A known R2 loser must have marginal P(hosting QF) = 0.0 in 1A-4A."""
+    region = 1
+    school = "R1s1"
+    # R1s1 wins R1 (slot 0 home), R3s2 wins R1 (slot 1 home), then R3s2 beats R1s1 in R2.
+    fn = _slot_results_fn({
+        (1, 1, 2, 4): 1.0,  # R1s1 wins R1
+        (3, 2, 4, 3): 1.0,  # R3s2 wins R1 (their slot)
+        (1, 1, 3, 2): 0.0,  # R3s2 beats R1s1 in R2 (R1s1 was home by seed, loses)
+    })
+    odds = {school: _locked(school, 1)}
+    result = compute_quarterfinal_home_odds(region, odds, SLOTS_1A_4A_2025, ODD_SEASON, fn)
+    assert result[school] == pytest.approx(0.0, abs=1e-9)
 
 
 # ---------------------------------------------------------------------------

@@ -809,6 +809,422 @@ class TestTaylorsville2025:
 
 
 # ---------------------------------------------------------------------------
+# Ground truth: Taylorsville 2025 post-first-round (1A, Region 8 #1)
+# ---------------------------------------------------------------------------
+
+
+class TestTaylorsville2025PostFirstRound:
+    """Ground-truth snapshot for Taylorsville after all first-round results are known.
+
+    All R1 South-half results are known; R2 has not been played.
+
+    R1 winners (South half):
+      Taylorsville's QF group:  Taylorsville (R8s1), South Delta (R6s2),
+                                Leake County (R5s2), Bogue Chitto (R7s1)
+      Taylorsville's SF group:  Nanih Waiya (R5s1), Lumberton (R8s3),
+                                Simmons (R6s1), Stringer (R8s2)
+    R1 losers eliminated:       West Lincoln, Ethel, Richton, Shaw,
+                                Noxapater, West Bolivar, Salem, Mount Olive
+
+    Post-first-round odds:
+      Second Round:  reach=100%, host|reach=100%, marginal=100%
+      Quarterfinals: reach=50%,  host|reach=0%,   marginal=0%
+      Semifinals:    reach=25%,  host|reach=75%,  marginal=18.75%
+
+    QF host|reach=0% because both remaining QF opponents always host:
+    Bogue Chitto (R7<R8, odd-year seed tiebreak) and Leake County (fewer
+    home games in all bracket paths).  This matches the actual 2025 outcome
+    where Leake County hosted Taylorsville in the QF.
+    """
+
+    EXPECTED_TEXT = (
+        "Taylorsville\n"
+        "\n"
+        "Second Round (100.0%):\n"
+        "  Region 6 #2 South Delta at Taylorsville (100.0%)  [Higher seed (#1) hosts]\n"
+        "\n"
+        "Quarterfinals (50.0%):\n"
+        "  Taylorsville at Region 5 #2 Leake County (50.0%)"
+        "  [Fewer home games played (1 vs 2) \u2014 opponent hosts]\n"
+        "  Taylorsville at Region 7 #1 Bogue Chitto (50.0%)"
+        "  [Equal seed (#1) \u2014 region tiebreak: odd year, lower region# hosts (Region 7)]\n"
+        "\n"
+        "Semifinals (25.0%):\n"
+        "  Region 8 #2 Stringer at Taylorsville (25.0%)"
+        "  [Same-region game \u2014 higher seed (#1) hosts]\n"
+        "  Region 8 #3 Lumberton at Taylorsville (25.0%)"
+        "  [Same-region game \u2014 higher seed (#1) hosts]\n"
+        "  Taylorsville at Region 5 #1 Nanih Waiya (25.0%)"
+        "  [Equal seed (#1) \u2014 region tiebreak: odd year, lower region# hosts (Region 5)]\n"
+        "  Taylorsville at Region 6 #1 Simmons (25.0%)"
+        "  [Equal seed (#1) \u2014 region tiebreak: odd year, lower region# hosts (Region 6)]"
+    )
+
+    # R1 winners in the South half — all other teams are eliminated.
+    _SURVIVORS: set[tuple[int, int]] = {
+        (5, 1), (5, 2),       # Nanih Waiya, Leake County
+        (6, 1), (6, 2),       # Simmons, South Delta
+        (7, 1),               # Bogue Chitto
+        (8, 1), (8, 2), (8, 3),  # Taylorsville, Stringer, Lumberton
+    }
+
+    @pytest.fixture
+    def lookup(self):
+        """Build the 1A (region, seed) → school-name mapping from 2025 ground-truth data."""
+        result: dict[tuple[int, int], str] = {}
+        for region in range(1, 9):
+            for seed, school in REGION_RESULTS_2025[(1, region)]["seeds"].items():
+                result[(region, seed)] = school
+        return result
+
+    @pytest.fixture
+    def taylorsville_rounds(self, lookup):
+        """Enumerate Taylorsville's post-first-round 2025 matchups."""
+        return enumerate_team_matchups(
+            region=8,
+            seed=1,
+            slots=SLOTS_1A_4A_2025,
+            season=2025,
+            p_reach_by_round={
+                "Second Round": 1.0,
+                "Quarterfinals": 0.5,
+                "Semifinals": 0.25,
+            },
+            p_host_conditional_by_round={
+                "Second Round": 1.0,
+                "Quarterfinals": 0.0,
+                "Semifinals": 0.75,
+            },
+            p_host_marginal_by_round={
+                "Second Round": 1.0,
+                "Quarterfinals": 0.0,
+                "Semifinals": 0.1875,
+            },
+            team_lookup=lookup,
+            known_survivors=self._SURVIVORS,
+            r1_survivors=self._SURVIVORS,
+            completed_rounds={"First Round"},
+        )
+
+    def test_render_text(self, taylorsville_rounds):
+        """render_team_matchups must produce the exact documented text output."""
+        text = render_team_matchups("Taylorsville", taylorsville_rounds)
+        assert text == self.EXPECTED_TEXT
+
+    def test_round_names(self, taylorsville_rounds):
+        """Output must contain exactly 3 rounds; First Round is omitted."""
+        names = [r.round_name for r in taylorsville_rounds]
+        assert names == ["Second Round", "Quarterfinals", "Semifinals"]
+
+    def test_dict_round_level_odds(self, taylorsville_rounds):
+        """Round-level odds must reflect post-first-round state."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        assert "first_round" not in d
+        assert d["second_round"]["p_reach"] == pytest.approx(1.0)
+        assert d["second_round"]["p_host_conditional"] == pytest.approx(1.0)
+        assert d["quarterfinals"]["p_reach"] == pytest.approx(0.5)
+        assert d["quarterfinals"]["p_host_conditional"] == pytest.approx(0.0)
+        assert d["semifinals"]["p_reach"] == pytest.approx(0.25)
+        assert d["semifinals"]["p_host_conditional"] == pytest.approx(0.75)
+
+    def test_dict_second_round(self, taylorsville_rounds):
+        """R2 must show only South Delta (Ethel eliminated); p_conditional=1.0."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        matchups = d["second_round"]["matchups"]
+        assert len(matchups) == 1
+        m = matchups[0]
+        assert m["opponent"] == "South Delta"
+        assert m["home"] is True
+        assert m["p_conditional"] == pytest.approx(1.0)
+        assert m["p_marginal"] == pytest.approx(1.0)
+        assert m["explanation"] == "Higher seed (#1) hosts"
+
+    def test_dict_quarterfinals(self, taylorsville_rounds):
+        """QF shows 2 entries after R1 survivors fix R2 home counts — Taylorsville always away."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        matchups = d["quarterfinals"]["matchups"]
+
+        assert len(matchups) == 2
+        assert d["quarterfinals"]["p_host_conditional"] == pytest.approx(0.0)
+        assert all(m["home"] is False for m in matchups)
+
+        # Leake County: away only — R1 results fix Leake County's R2 opp to Bogue Chitto,
+        # giving Leake County at most 1 home game vs Taylorsville's 2 → always hosts.
+        lc = next(m for m in matchups if m["opponent"] == "Leake County")
+        assert lc["home"] is False
+        assert lc["p_conditional"] == pytest.approx(0.5)
+        assert "Fewer home games" in lc["explanation"]
+
+        # Bogue Chitto: always away, odd-year seed tiebreak
+        bc = next(m for m in matchups if m["opponent"] == "Bogue Chitto")
+        assert bc["home"] is False
+        assert bc["p_conditional"] == pytest.approx(0.5)
+        assert "lower region# hosts (Region 7)" in bc["explanation"]
+
+    def test_dict_semifinals(self, taylorsville_rounds):
+        """SF shows 4 entries (R1 losers eliminated): 2 home, 2 away."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        matchups = d["semifinals"]["matchups"]
+
+        assert len(matchups) == 4
+        home_opps = {m["opponent"] for m in matchups if m["home"]}
+        away_opps = {m["opponent"] for m in matchups if not m["home"]}
+        assert home_opps == {"Stringer", "Lumberton"}
+        assert away_opps == {"Nanih Waiya", "Simmons"}
+
+        for m in matchups:
+            assert m["p_conditional"] == pytest.approx(0.25)
+            assert m["p_marginal"] == pytest.approx(0.0625)
+
+
+# ---------------------------------------------------------------------------
+# Ground truth: Taylorsville 2025 post-second-round (1A, Region 8 #1)
+# ---------------------------------------------------------------------------
+
+
+class TestTaylorsville2025PostSecondRound:
+    """Ground-truth snapshot for Taylorsville after all second-round results are known.
+
+    R2 South results (actual 2025):
+      (5,1,8,3): Nanih Waiya beats Lumberton
+      (6,1,8,2): Simmons beats Stringer
+      (7,1,5,2): Bogue Chitto hosts → Leake County WINS
+      (8,1,6,2): Taylorsville beats South Delta
+
+    R2 survivors: Taylorsville (R8s1), Leake County (R5s2),
+                  Nanih Waiya (R5s1), Simmons (R6s1)
+
+    Post-second-round odds:
+      Quarterfinals: reach=100%, host|reach=0%,  marginal=0%
+      Semifinals:    reach=50%,  host|reach=0%,  marginal=0%
+
+    QF: Leake County is the only opponent (Bogue Chitto eliminated in R2).
+    Taylorsville is always away — Leake County had 1 home game vs Taylorsville's 2.
+    SF: Nanih Waiya and Simmons are the only opponents (Lumberton and Stringer
+    eliminated in R2).  Both are seed #1 from lower-numbered regions; in an odd
+    year the lower region# hosts, so Taylorsville is always away.
+    """
+
+    # R1 winners in the South half (needed for accurate QF R2 home-status computation).
+    _R1_SURVIVORS: set[tuple[int, int]] = {
+        (5, 1), (5, 2),
+        (6, 1), (6, 2),
+        (7, 1),
+        (8, 1), (8, 2), (8, 3),
+    }
+    # Teams still alive after R2.
+    _R2_SURVIVORS: set[tuple[int, int]] = {(5, 1), (5, 2), (6, 1), (8, 1)}
+
+    EXPECTED_TEXT = (
+        "Taylorsville\n"
+        "\n"
+        "Quarterfinals (100.0%):\n"
+        "  Taylorsville at Region 5 #2 Leake County (100.0%)"
+        "  [Fewer home games played (1 vs 2) \u2014 opponent hosts]\n"
+        "\n"
+        "Semifinals (50.0%):\n"
+        "  Taylorsville at Region 5 #1 Nanih Waiya (50.0%)"
+        "  [Equal seed (#1) \u2014 region tiebreak: odd year, lower region# hosts (Region 5)]\n"
+        "  Taylorsville at Region 6 #1 Simmons (50.0%)"
+        "  [Equal seed (#1) \u2014 region tiebreak: odd year, lower region# hosts (Region 6)]"
+    )
+
+    @pytest.fixture
+    def lookup(self):
+        """Build the 1A (region, seed) → school-name mapping from 2025 ground-truth data."""
+        result: dict[tuple[int, int], str] = {}
+        for region in range(1, 9):
+            for seed, school in REGION_RESULTS_2025[(1, region)]["seeds"].items():
+                result[(region, seed)] = school
+        return result
+
+    @pytest.fixture
+    def taylorsville_rounds(self, lookup):
+        """Enumerate Taylorsville's post-second-round 2025 matchups."""
+        return enumerate_team_matchups(
+            region=8,
+            seed=1,
+            slots=SLOTS_1A_4A_2025,
+            season=2025,
+            p_reach_by_round={"Quarterfinals": 1.0, "Semifinals": 0.5},
+            p_host_conditional_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
+            p_host_marginal_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
+            team_lookup=lookup,
+            known_survivors=self._R2_SURVIVORS,
+            r1_survivors=self._R1_SURVIVORS,
+            completed_rounds={"First Round", "Second Round"},
+        )
+
+    def test_render_text(self, taylorsville_rounds):
+        """render_team_matchups must produce the exact documented text output."""
+        text = render_team_matchups("Taylorsville", taylorsville_rounds)
+        assert text == self.EXPECTED_TEXT
+
+    def test_round_names(self, taylorsville_rounds):
+        """Output must contain exactly 2 rounds; First Round and Second Round are omitted."""
+        names = [r.round_name for r in taylorsville_rounds]
+        assert names == ["Quarterfinals", "Semifinals"]
+
+    def test_dict_round_level_odds(self, taylorsville_rounds):
+        """Round-level odds must reflect post-second-round state."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        assert "first_round" not in d
+        assert "second_round" not in d
+        assert d["quarterfinals"]["p_reach"] == pytest.approx(1.0)
+        assert d["quarterfinals"]["p_host_conditional"] == pytest.approx(0.0)
+        assert d["semifinals"]["p_reach"] == pytest.approx(0.5)
+        assert d["semifinals"]["p_host_conditional"] == pytest.approx(0.0)
+
+    def test_dict_quarterfinals(self, taylorsville_rounds):
+        """QF shows exactly one entry — Leake County always hosts (fewer home games)."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        matchups = d["quarterfinals"]["matchups"]
+        assert len(matchups) == 1
+        m = matchups[0]
+        assert m["opponent"] == "Leake County"
+        assert m["home"] is False
+        assert m["p_conditional"] == pytest.approx(1.0)
+        assert m["p_marginal"] == pytest.approx(1.0)
+        assert "Fewer home games" in m["explanation"]
+
+    def test_dict_semifinals(self, taylorsville_rounds):
+        """SF shows 2 entries (Lumberton and Stringer eliminated in R2); both away."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        matchups = d["semifinals"]["matchups"]
+        assert len(matchups) == 2
+        assert all(m["home"] is False for m in matchups)
+        opponents = {m["opponent"] for m in matchups}
+        assert opponents == {"Nanih Waiya", "Simmons"}
+        for m in matchups:
+            assert m["p_conditional"] == pytest.approx(0.5)
+            assert m["p_marginal"] == pytest.approx(0.25)
+
+
+# ---------------------------------------------------------------------------
+# Ground truth: Taylorsville 2025 post-quarterfinals (1A, Region 8 #1)
+# ---------------------------------------------------------------------------
+
+
+class TestTaylorsville2025PostQuarterfinals:
+    """Ground-truth snapshot for Taylorsville after all quarterfinal results are known.
+
+    QF South results (actual 2025):
+      (5,1,6,1): Nanih Waiya hosts → Simmons WINS
+      (5,2,8,1): Leake County hosts → Taylorsville WINS
+
+    QF survivors: Taylorsville (R8s1), Simmons (R6s1)
+
+    Semifinals: Taylorsville vs Simmons; Simmons hosts (seed #1 equal,
+    odd year → lower region# = R6 hosts).  Actual result: (6,1,8,1).
+
+    Post-quarterfinals odds:
+      Semifinals: reach=100%, host|reach=0%, marginal=0%
+    """
+
+    _R1_SURVIVORS: set[tuple[int, int]] = {
+        (5, 1), (5, 2),
+        (6, 1), (6, 2),
+        (7, 1),
+        (8, 1), (8, 2), (8, 3),
+    }
+    _QF_SURVIVORS: set[tuple[int, int]] = {(6, 1), (8, 1)}
+
+    EXPECTED_TEXT = (
+        "Taylorsville\n"
+        "\n"
+        "Semifinals (100.0%):\n"
+        "  Taylorsville at Region 6 #1 Simmons (100.0%)"
+        "  [Equal seed (#1) \u2014 region tiebreak: odd year, lower region# hosts (Region 6)]"
+    )
+
+    @pytest.fixture
+    def lookup(self):
+        """Build the 1A (region, seed) → school-name mapping from 2025 ground-truth data."""
+        result: dict[tuple[int, int], str] = {}
+        for region in range(1, 9):
+            for seed, school in REGION_RESULTS_2025[(1, region)]["seeds"].items():
+                result[(region, seed)] = school
+        return result
+
+    @pytest.fixture
+    def taylorsville_rounds(self, lookup):
+        """Enumerate Taylorsville's post-quarterfinals 2025 matchups."""
+        return enumerate_team_matchups(
+            region=8,
+            seed=1,
+            slots=SLOTS_1A_4A_2025,
+            season=2025,
+            p_reach_by_round={"Semifinals": 1.0},
+            p_host_conditional_by_round={"Semifinals": 0.0},
+            p_host_marginal_by_round={"Semifinals": 0.0},
+            team_lookup=lookup,
+            known_survivors=self._QF_SURVIVORS,
+            r1_survivors=self._R1_SURVIVORS,
+            completed_rounds={"First Round", "Second Round", "Quarterfinals"},
+        )
+
+    def test_render_text(self, taylorsville_rounds):
+        """render_team_matchups must produce the exact documented text output."""
+        text = render_team_matchups("Taylorsville", taylorsville_rounds)
+        assert text == self.EXPECTED_TEXT
+
+    def test_round_names(self, taylorsville_rounds):
+        """Output must contain exactly 1 round; all earlier rounds are omitted."""
+        names = [r.round_name for r in taylorsville_rounds]
+        assert names == ["Semifinals"]
+
+    def test_dict_round_level_odds(self, taylorsville_rounds):
+        """Round-level odds must reflect post-quarterfinals state."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        assert "quarterfinals" not in d
+        assert d["semifinals"]["p_reach"] == pytest.approx(1.0)
+        assert d["semifinals"]["p_host_conditional"] == pytest.approx(0.0)
+
+    def test_dict_semifinals(self, taylorsville_rounds):
+        """SF shows exactly one entry — Simmons always hosts (lower region#, odd year)."""
+        d = team_matchups_as_dict(taylorsville_rounds)
+        matchups = d["semifinals"]["matchups"]
+        assert len(matchups) == 1
+        m = matchups[0]
+        assert m["opponent"] == "Simmons"
+        assert m["home"] is False
+        assert m["p_conditional"] == pytest.approx(1.0)
+        assert m["p_marginal"] == pytest.approx(1.0)
+        assert "lower region# hosts (Region 6)" in m["explanation"]
+
+
+# ---------------------------------------------------------------------------
+# 12a. completed_rounds — Semifinals omitted
+# ---------------------------------------------------------------------------
+
+
+class TestCompletedRoundsSemifinals:
+    """Verify that Semifinals is omitted when included in completed_rounds."""
+
+    def test_5a_7a_semifinals_omitted(self):
+        """5A-7A: passing completed_rounds={'Semifinals'} returns only R1 and QF."""
+        rounds = _matchups(7, region=1, seed=1, completed_rounds={"Semifinals"})
+        names = [r.round_name for r in rounds]
+        assert names == ["First Round", "Quarterfinals"]
+
+    def test_1a_4a_semifinals_omitted(self):
+        """1A-4A: passing completed_rounds={'Semifinals'} returns R1, R2, and QF."""
+        rounds = _matchups(2, region=8, seed=1, completed_rounds={"Semifinals"})
+        names = [r.round_name for r in rounds]
+        assert names == ["First Round", "Second Round", "Quarterfinals"]
+
+    def test_all_rounds_completed_returns_empty(self):
+        """Marking every round as completed yields an empty list."""
+        rounds = _matchups(
+            7,
+            region=1,
+            seed=1,
+            completed_rounds={"First Round", "Quarterfinals", "Semifinals"},
+        )
+        assert rounds == []
+
+
+# ---------------------------------------------------------------------------
 # 12. Error handling
 # ---------------------------------------------------------------------------
 

@@ -1455,3 +1455,278 @@ class TestSFDedupGuard:
             if m.opponent_region == 1 and m.opponent_seed == 1
         )
         assert r1s1_count == 1, f"R1s1 should appear exactly once; found {r1s1_count}"
+
+
+# ---------------------------------------------------------------------------
+# 14. 1A rendered text output — post-first-round scenarios
+# ---------------------------------------------------------------------------
+#
+# These tests use two 2025 1A North teams with contrasting bracket histories:
+#
+# Biggersville  — Region 1 #1, slot 1 home team (always hosts R1 and R2).
+#   Slot 1 (idx 0): home=R1s1 (Biggersville),  away=R2s4 (Ashland)
+#   Adjacent slot 2 (idx 1): home=R3s2 (West Lowndes), away=R4s3 (Coffeeville)
+#   Biggersville's R2 opponent is always a lower seed → always hosts R2.
+#   After two home games, Biggersville faces the "fewer home games" disadvantage
+#   in QF against teams who have 0 or 1 home games.
+#
+# Okolona — Region 3 #3, slot 4 away team (never hosts R1).
+#   Slot 4 (idx 3): home=R4s2 (West Tallahatchie), away=R3s3 (Okolona)
+#   Adjacent slot 3 (idx 2): home=R2s1 (Falkner),         away=R1s4 (Thrasher)
+#   Okolona's R2 opponent is the winner of Falkner/Thrasher:
+#     • Falkner wins R1 (seed 1 < 3) → Falkner hosts R2 → Okolona away → homes=0
+#     • Thrasher wins R1 (seed 3 < 4) → Okolona hosts R2              → homes=1
+#   Both sub-cases give Okolona ≤ 1 home game versus Biggersville's 2 → Okolona
+#   is always the QF home team against Biggersville.  The 2025 actual QF result
+#   (3,3,1,1) confirms this.
+
+
+def _1a_lookup() -> dict[tuple[int, int], str]:
+    """Build a (region, seed) → school-name mapping for 1A from 2025 data."""
+    lookup: dict[tuple[int, int], str] = {}
+    for region in range(1, 9):
+        seeds = REGION_RESULTS_2025[(1, region)]["seeds"]
+        for seed, school in seeds.items():
+            lookup[(region, seed)] = school
+    return lookup
+
+
+class TestRender1APostFirstRound:
+    """Human-readable rendered text for 1A teams after the first round.
+
+    Targets render_team_home_scenarios output for Biggersville (always home in
+    R1/R2) and Okolona (away in R1, conditional R2, hosts QF via fewer-home-
+    games rule).
+    """
+
+    @staticmethod
+    def _biggersville() -> tuple[str, list[RoundHomeScenarios]]:
+        """Return (team_name, scenarios) for Biggersville (R1#1) — always hosts R1/R2."""
+        lookup = _1a_lookup()
+        team = lookup[(1, 1)]
+        scens = enumerate_home_game_scenarios(1, 1, SLOTS_1A_4A_2025, SEASON, team_lookup=lookup)
+        return team, scens
+
+    @staticmethod
+    def _okolona() -> tuple[str, list[RoundHomeScenarios]]:
+        """Return (team_name, scenarios) for Okolona (R3#3) — away R1, conditional R2/QF."""
+        lookup = _1a_lookup()
+        team = lookup[(3, 3)]
+        scens = enumerate_home_game_scenarios(3, 3, SLOTS_1A_4A_2025, SEASON, team_lookup=lookup)
+        return team, scens
+
+    # --- Biggersville: section headers ---
+
+    def test_biggersville_all_four_rounds_present(self):
+        """Biggersville rendered text contains all four 1A round section headers."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        for round_name in ("First Round", "Second Round", "Quarterfinals", "Semifinals"):
+            assert round_name in text, f"Expected '{round_name}' in output"
+
+    def test_biggersville_starts_with_team_name(self):
+        """First line of the rendered output is the school name."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        assert text.startswith("Biggersville")
+
+    # --- Biggersville: First Round (unconditional home) ---
+
+    def test_biggersville_r1_unconditional_will_host(self):
+        """Biggersville's R1 is unconditional — no numbered conditions in the First Round block."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        assert "Will Host First Round" in text
+        assert "Will Not Host First Round" not in text
+
+    def test_biggersville_r1_no_numbered_conditions(self):
+        """Unconditional R1 means no '1.' bullet appears in the First Round block."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        r1_section = text.split("Will Host First Round")[1].split("Will Host Second Round")[0]
+        assert "1." not in r1_section
+
+    def test_biggersville_r1_explanation_in_brackets(self):
+        """Unconditional R1 shows the explanation in square brackets on the header line."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        assert "[Designated home team in bracket]" in text
+
+    # --- Biggersville: Second Round (always hosts) ---
+
+    def test_biggersville_r2_will_host_present(self):
+        """Biggersville always hosts R2 as the #1 seed — 'Will Host Second Round' must appear."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        assert "Will Host Second Round" in text
+
+    def test_biggersville_r2_will_not_host_absent(self):
+        """Biggersville never loses R2 hosting — 'Will Not Host Second Round' must not appear."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        assert "Will Not Host Second Round" not in text
+
+    def test_biggersville_r2_merged_single_scenario(self):
+        """Both R2 opponents yield the same hosting outcome → scenarios merge into one.
+
+        Since Biggersville (#1) always hosts R2 regardless of whether West Lowndes
+        or Coffeeville wins R1, the two paths collapse into a single condition with
+        no specific opponent (region=None).
+        """
+        _, scens = self._biggersville()
+        r2 = scens[1]
+        assert r2.round_name == "Second Round"
+        assert len(r2.will_host) == 1
+        sc = r2.will_host[0]
+        # Merged scenario: only one condition (the team itself advances; no opponent needed)
+        assert len(sc.conditions) == 1
+        assert sc.conditions[0].region is None
+
+    def test_biggersville_r2_explanation_higher_seed(self):
+        """Second Round explanation mentions 'Higher seed (#1) hosts'."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        assert "Higher seed (#1) hosts" in text
+
+    # --- Biggersville: Quarterfinals (mixed — hosts some, not others) ---
+
+    def test_biggersville_qf_both_sections_present(self):
+        """After two home games, Biggersville can host or be away in QF — both sections present."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        assert "Will Host Quarterfinals" in text
+        assert "Will Not Host Quarterfinals" in text
+
+    def test_biggersville_qf_fewer_home_games_explanation(self):
+        """At least one QF scenario cites the 'Fewer home games' rule (Biggersville has 2)."""
+        team, scens = self._biggersville()
+        text = render_team_home_scenarios(team, scens)
+        assert "Fewer home games" in text
+
+    def test_biggersville_qf_2025_actual_away_against_okolona(self):
+        """2025 QF: (3,3,1,1) — Okolona hosted Biggersville.  Okolona must appear in will_not_host."""
+        _, scens = self._biggersville()
+        qf = scens[2]
+        assert qf.round_name == "Quarterfinals"
+        away_opponents = {
+            (c.region, c.seed)
+            for sc in qf.will_not_host
+            for c in sc.conditions
+            if c.region is not None
+        }
+        assert (3, 3) in away_opponents, (
+            "Okolona (R3#3) must appear in Biggersville's QF will_not_host (2025 actual host)"
+        )
+
+    # --- Okolona: First Round (unconditional away) ---
+
+    def test_okolona_r1_unconditional_will_not_host(self):
+        """Okolona is the designated away team in slot 4 — no numbered conditions."""
+        team, scens = self._okolona()
+        text = render_team_home_scenarios(team, scens)
+        assert "Will Not Host First Round" in text
+        assert "Will Host First Round" not in text
+
+    def test_okolona_r1_explanation_in_brackets(self):
+        """Away designation shows 'Designated away team in bracket' on the header line."""
+        team, scens = self._okolona()
+        text = render_team_home_scenarios(team, scens)
+        assert "[Designated away team in bracket]" in text
+
+    # --- Okolona: Second Round (conditional) ---
+
+    def test_okolona_r2_both_sections_present(self):
+        """Okolona hosts R2 vs Thrasher but not vs Falkner — both sections must appear."""
+        team, scens = self._okolona()
+        text = render_team_home_scenarios(team, scens)
+        assert "Will Host Second Round" in text
+        assert "Will Not Host Second Round" in text
+
+    def test_okolona_r2_will_host_when_thrasher_advances(self):
+        """Okolona hosts R2 when Thrasher (R1#4) advances — better seed (#3) hosts."""
+        _, scens = self._okolona()
+        r2 = scens[1]
+        assert r2.round_name == "Second Round"
+        host_conditions = {
+            (c.region, c.seed)
+            for sc in r2.will_host
+            for c in sc.conditions
+            if c.region is not None
+        }
+        assert (1, 4) in host_conditions, "Thrasher (R1#4) must appear in Okolona's R2 will_host"
+
+    def test_okolona_r2_will_not_host_when_falkner_advances(self):
+        """Okolona is away in R2 when Falkner (R2#1) advances — better seed (#1) hosts."""
+        _, scens = self._okolona()
+        r2 = scens[1]
+        away_conditions = {
+            (c.region, c.seed)
+            for sc in r2.will_not_host
+            for c in sc.conditions
+            if c.region is not None
+        }
+        assert (2, 1) in away_conditions, "Falkner (R2#1) must appear in Okolona's R2 will_not_host"
+
+    def test_okolona_r2_school_names_resolved(self):
+        """Resolved names 'Thrasher' and 'Falkner' appear in the Second Round section."""
+        team, scens = self._okolona()
+        text = render_team_home_scenarios(team, scens)
+        assert "Thrasher" in text
+        assert "Falkner" in text
+
+    # --- Okolona: Quarterfinals (hosts via fewer-home-games rule) ---
+
+    def test_okolona_qf_will_host_present(self):
+        """Okolona can host QF (0 or 1 home games entering QF vs opponents with 2)."""
+        team, scens = self._okolona()
+        text = render_team_home_scenarios(team, scens)
+        assert "Will Host Quarterfinals" in text
+
+    def test_okolona_qf_will_host_biggersville(self):
+        """2025 QF (3,3,1,1): Biggersville (R1#1) appears in Okolona's QF will_host.
+
+        Biggersville had 2 home games (R1 home + R2 home); Okolona had 0 or 1.
+        Fewer home games always gives Okolona the QF home game vs Biggersville.
+        """
+        _, scens = self._okolona()
+        qf = scens[2]
+        assert qf.round_name == "Quarterfinals"
+        host_opponents = {
+            (c.region, c.seed)
+            for sc in qf.will_host
+            for c in sc.conditions
+            if c.region is not None
+        }
+        assert (1, 1) in host_opponents, (
+            "Biggersville (R1#1) must appear in Okolona's QF will_host (2025 actual result)"
+        )
+
+    def test_okolona_qf_fewer_home_games_explanation_present(self):
+        """QF will_host explanations include 'Fewer home games played' (the decisive rule)."""
+        _, scens = self._okolona()
+        qf = scens[2]
+        host_explanations = [sc.explanation for sc in qf.will_host]
+        assert any("Fewer home games played" in (exp or "") for exp in host_explanations), (
+            f"Expected 'Fewer home games played' in at least one QF will_host explanation; "
+            f"got: {host_explanations}"
+        )
+
+    def test_okolona_qf_biggersville_fewer_homes_explanation(self):
+        """The specific QF scenario vs Biggersville cites 'target team hosts' (Okolona)."""
+        _, scens = self._okolona()
+        qf = scens[2]
+        biggersville_sc = next(
+            sc for sc in qf.will_host
+            if any(c.region == 1 and c.seed == 1 for c in sc.conditions)
+        )
+        assert biggersville_sc.explanation is not None
+        assert "target team hosts" in biggersville_sc.explanation
+
+    def test_okolona_qf_2025_ground_truth_confirmed(self):
+        """Cross-check: Biggersville is away in 2025 QF confirms via _actual_home."""
+        assert _actual_home(1, "quarterfinals", 1, 1) is False, (
+            "2025 bracket: Biggersville (R1#1) was away in QF — Okolona (R3#3) hosted"
+        )
+        assert _actual_home(1, "quarterfinals", 3, 3) is True, (
+            "2025 bracket: Okolona (R3#3) was home in QF"
+        )

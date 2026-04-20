@@ -436,10 +436,10 @@ def determine_odds(teams, first_counts, second_counts, third_counts, fourth_coun
     """
     odds: dict[str, StandingsOdds] = {}
     for school in teams:
-        p1 = first_counts[school] / denom
-        p2 = second_counts[school] / denom
-        p3 = third_counts[school] / denom
-        p4 = fourth_counts[school] / denom
+        p1 = first_counts.get(school, 0.0) / denom
+        p2 = second_counts.get(school, 0.0) / denom
+        p3 = third_counts.get(school, 0.0) / denom
+        p4 = fourth_counts.get(school, 0.0) / denom
         p_playoffs = p1 + p2 + p3 + p4
         clinched = p_playoffs >= 0.999
         eliminated = p_playoffs <= 0.001
