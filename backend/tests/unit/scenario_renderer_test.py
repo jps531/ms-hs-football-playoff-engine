@@ -18,8 +18,10 @@ from backend.helpers.scenario_renderer import (
     _render_condition_label,
     _render_home_scenario_block,
     _render_margin_condition,
+    _render_pre_playoff_block,
     _winner_label,
     division_scenarios_as_dict,
+    render_pre_playoff_team_home_scenarios,
     render_team_home_scenarios,
     render_team_matchups,
     render_team_scenarios,
@@ -1327,3 +1329,113 @@ def test_partial_c_consistent_with_full_season(og_pearl_game, expected_seeds):
     for every unique outcome category, confirming the two independent
     computations — partial atom-building vs. full-season resolution — agree."""
     assert _full_season_seeds(og_pearl_game) == expected_seeds
+
+
+# ---------------------------------------------------------------------------
+# _render_pre_playoff_block edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestRenderPrePlayoffBlockEdgeCases:
+    """Cover defensive branches in _render_pre_playoff_block."""
+
+    def test_empty_conditions_with_explanation(self):
+        """Scenario with no conditions renders only the bracketed explanation."""
+        sc = HomeGameScenario(conditions=(), explanation="Designated home team in bracket")
+        lines = _render_pre_playoff_block((sc,), "Team", {})
+        assert lines == ["   [Designated home team in bracket]"]
+
+    def test_empty_conditions_without_explanation_produces_no_lines(self):
+        """Scenario with no conditions and no explanation is silently skipped."""
+        sc = HomeGameScenario(conditions=(), explanation=None)
+        lines = _render_pre_playoff_block((sc,), "Team", {})
+        assert lines == []
+
+    def test_seed_required_with_no_atoms_for_that_seed(self):
+        """seed_required scenario produces no numbered lines when seed_atoms is missing the seed."""
+        cond = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=3, team_name=None)
+        sc = HomeGameScenario(conditions=(cond,), explanation=None)
+        # seed_atoms has entries for seeds 1 and 2 but not 3 → atoms=[] → loop body skipped
+        lines = _render_pre_playoff_block((sc,), "TeamX", {"TeamX": {1: [[]], 2: [[]]}})
+        assert lines == []
+
+    def test_non_seed_required_first_condition_uses_fallback_rendering(self):
+        """Scenario not starting with seed_required falls back to a single numbered line."""
+        cond = HomeGameCondition(kind="advances", round_name="Quarterfinals", region=1, seed=1, team_name="Alpha")
+        sc = HomeGameScenario(conditions=(cond,), explanation="Higher seed (#1) hosts")
+        lines = _render_pre_playoff_block((sc,), "Team", {})
+        assert len(lines) == 2
+        assert lines[0].startswith("1. ")
+        assert "Alpha" in lines[0]
+        assert lines[1] == "   [Higher seed (#1) hosts]"
+
+    def test_non_seed_required_team_substitution_in_fallback(self):
+        """'Team advances' / 'Team finishes' substitution works in the fallback path."""
+        cond = HomeGameCondition(kind="advances", round_name="QF", region=None, seed=1, team_name=None)
+        sc = HomeGameScenario(conditions=(cond,), explanation=None)
+        lines = _render_pre_playoff_block((sc,), "Taylorsville", {})
+        assert "Taylorsville" in lines[0]
+
+    def test_seed_required_with_atoms_and_no_explanation(self):
+        """seed_required scenario with atoms but explanation=None produces numbered lines only.
+
+        Covers the False path of 'if sc.explanation:' inside the atom loop
+        (branch 473→468): the loop body executes, but the explanation line is skipped.
+        """
+        cond = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name=None)
+        sc = HomeGameScenario(conditions=(cond,), explanation=None)
+        # Provide one minimal atom (a list with a single GameResult-like object is fine
+        # for rendering purposes — _render_atom just formats the list).
+        from backend.helpers.data_classes import GameResult
+        atom = [GameResult("Taylorsville", "Lumberton", 1, None)]
+        seed_atoms = {"Taylorsville": {1: [atom]}}
+        lines = _render_pre_playoff_block((sc,), "Taylorsville", seed_atoms)
+        assert len(lines) == 1
+        assert lines[0].startswith("1. ")
+
+
+# ---------------------------------------------------------------------------
+# render_pre_playoff_team_home_scenarios: empty will_host branch
+# ---------------------------------------------------------------------------
+
+
+class TestRenderPrePlayoffTeamHomeScenariosEmptyWillHost:
+    """Rounds where will_host is empty skip the 'Will Host' section entirely."""
+
+    def test_empty_will_host_skips_host_block(self):
+        """When will_host=(), the 'Will Host <round>' header is not emitted."""
+        seed_cond = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name=None)
+        sc_away = HomeGameScenario(conditions=(seed_cond,), explanation="Higher seed hosts")
+        rnd = RoundHomeScenarios(
+            round_name="Quarterfinals",
+            will_host=(),
+            will_not_host=(sc_away,),
+            p_reach=None,
+            p_host_conditional=None,
+            p_host_marginal=None,
+            p_reach_weighted=None,
+            p_host_conditional_weighted=None,
+            p_host_marginal_weighted=None,
+        )
+        result = render_pre_playoff_team_home_scenarios("Team", [rnd], {})
+        assert "Will Host Quarterfinals" not in result
+        assert "Will Not Host Quarterfinals" in result
+
+    def test_empty_will_not_host_skips_away_block(self):
+        """Symmetrically, when will_not_host=(), the 'Will Not Host' header is not emitted."""
+        seed_cond = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name=None)
+        sc_home = HomeGameScenario(conditions=(seed_cond,), explanation="Designated home team in bracket")
+        rnd = RoundHomeScenarios(
+            round_name="First Round",
+            will_host=(sc_home,),
+            will_not_host=(),
+            p_reach=None,
+            p_host_conditional=None,
+            p_host_marginal=None,
+            p_reach_weighted=None,
+            p_host_conditional_weighted=None,
+            p_host_marginal_weighted=None,
+        )
+        result = render_pre_playoff_team_home_scenarios("Team", [rnd], {})
+        assert "Will Host First Round" in result
+        assert "Will Not Host First Round" not in result

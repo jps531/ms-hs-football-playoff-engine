@@ -66,6 +66,7 @@ from backend.helpers.data_classes import (
     HomeGameCondition,
     HomeGameScenario,
     MatchupEntry,
+    PlayoffState,
     RoundHomeScenarios,
     RoundMatchups,
 )
@@ -94,8 +95,8 @@ class _RoundOdds(NamedTuple):
 # ---------------------------------------------------------------------------
 
 
-def _team_label(region: int, seed: int, lookup: dict[tuple[int, int], str] | None) -> str:
-    """Return the school name for *(region, seed)*, or a generic label.
+def _team_label(region: int, seed: int, lookup: dict[tuple[int, int], str] | None) -> str | None:
+    """Return the school name for *(region, seed)* if known, otherwise None.
 
     Args:
         region: Region number.
@@ -103,11 +104,11 @@ def _team_label(region: int, seed: int, lookup: dict[tuple[int, int], str] | Non
         lookup: Optional mapping of ``(region, seed)`` to school name.
 
     Returns:
-        School name when found in *lookup*; otherwise ``"Region {region} #{seed} Seed"``.
+        School name when found in *lookup*; otherwise ``None``.
     """
     if lookup and (region, seed) in lookup:
         return lookup[(region, seed)]
-    return f"Region {region} #{seed} Seed"
+    return None
 
 
 def _advances(
@@ -672,11 +673,26 @@ def _enumerate_sf(
 # ---------------------------------------------------------------------------
 
 
+def _prefix_conditions(
+    scenarios: tuple[HomeGameScenario, ...],
+    condition: HomeGameCondition,
+) -> tuple[HomeGameScenario, ...]:
+    """Prepend *condition* to every scenario's conditions tuple."""
+    return tuple(
+        HomeGameScenario(
+            conditions=(condition,) + sc.conditions,
+            explanation=sc.explanation,
+        )
+        for sc in scenarios
+    )
+
+
 def enumerate_home_game_scenarios(
     region: int,
-    seed: int,
+    seed: int | None,
     slots: list[FormatSlot],
     season: int,
+    achievable_seeds: list[int] | None = None,
     p_reach_by_round: dict[str, float] | None = None,
     p_host_conditional_by_round: dict[str, float] | None = None,
     p_host_marginal_by_round: dict[str, float] | None = None,
@@ -697,15 +713,29 @@ def enumerate_home_game_scenarios(
     * 4 slots → 5A-7A: First Round, Quarterfinals, Semifinals.
     * 8 slots → 1A-4A: First Round, Second Round, Quarterfinals, Semifinals.
 
+    Pre-playoff mode (``seed=None``):
+        When the bracket has not yet been set, pass ``seed=None`` and
+        ``achievable_seeds`` (the list of seeds the team could still
+        finish as).  The function enumerates scenarios for each achievable
+        seed separately and prepends a ``HomeGameCondition(kind=
+        "seed_required")`` to every scenario before merging all seeds'
+        results into a single ``list[RoundHomeScenarios]``.  The aggregate
+        odds arguments (``p_reach_by_round``, etc.) should reflect the
+        overall probability across all seeding paths.
+
     Args:
         region: The team's region number.
-        seed:   The team's region seed (1 = best).
+        seed:   The team's region seed (1 = best), or ``None`` when the
+                bracket has not been set (pre-playoff mode).
         slots:  All first-round ``FormatSlot`` objects for the class/season,
                 as returned by ``fetch_all_format_slots`` (or the test
                 fixture equivalents ``SLOTS_5A_7A_2025`` /
                 ``SLOTS_1A_4A_2025``).
         season: Football season year (e.g. ``2025``).  Determines the
                 odd/even region-number tiebreak for QF and SF.
+        achievable_seeds: Required when ``seed`` is ``None``.  List of seeds
+            (e.g. ``[1, 2]``) the team could still achieve; seeds not found
+            in *slots* are silently skipped.
         p_reach_by_round: Optional mapping of round name →
             P(team reaches round) under equal win probabilities.
         p_host_conditional_by_round: Optional mapping of round name →
@@ -729,8 +759,78 @@ def enumerate_home_game_scenarios(
         chronological order (First Round first, Semifinals last).
 
     Raises:
-        ValueError: If the team's ``(region, seed)`` is not found in *slots*.
+        ValueError: If ``seed`` is ``None`` and ``achievable_seeds`` is
+            empty or not provided.
+        ValueError: If the team's ``(region, seed)`` is not found in
+            *slots* (post-playoff mode only).
     """
+    # --- Pre-playoff path: seed unknown, enumerate across all achievable seeds ---
+    if seed is None:
+        if not achievable_seeds:
+            raise ValueError("achievable_seeds must be non-empty when seed is None")
+
+        half_slots = half_slots_for_region(region, slots)
+        is_1a_4a = len(half_slots) == 8
+        round_names = _ROUND_NAMES_1A_4A if is_1a_4a else _ROUND_NAMES_5A_7A
+        _no_odds = _RoundOdds(None, None, None, None, None, None)
+
+        round_will_host: dict[str, list[HomeGameScenario]] = {rn: [] for rn in round_names}
+        round_will_not_host: dict[str, list[HomeGameScenario]] = {rn: [] for rn in round_names}
+
+        for s in achievable_seeds:
+            slot_idx = slot_index_for(region, s, half_slots)
+            if slot_idx is None:
+                continue
+            seed_cond = HomeGameCondition(
+                kind="seed_required", round_name=None, region=None, seed=s, team_name=None,
+            )
+
+            r1_name = round_names[0]
+            r1 = _enumerate_r1(region, s, half_slots, slot_idx, r1_name, _no_odds)
+            round_will_host[r1_name].extend(_prefix_conditions(r1.will_host, seed_cond))
+            round_will_not_host[r1_name].extend(_prefix_conditions(r1.will_not_host, seed_cond))
+
+            if is_1a_4a:
+                r2_name = round_names[1]
+                r2 = _enumerate_r2(region, s, half_slots, slot_idx, season, r2_name, _no_odds, team_lookup)
+                round_will_host[r2_name].extend(_prefix_conditions(r2.will_host, seed_cond))
+                round_will_not_host[r2_name].extend(_prefix_conditions(r2.will_not_host, seed_cond))
+
+            qf_name = round_names[2] if is_1a_4a else round_names[1]
+            qf = _enumerate_qf(region, s, half_slots, slot_idx, season, is_1a_4a, qf_name, _no_odds, team_lookup)
+            round_will_host[qf_name].extend(_prefix_conditions(qf.will_host, seed_cond))
+            round_will_not_host[qf_name].extend(_prefix_conditions(qf.will_not_host, seed_cond))
+
+            sf_name = round_names[-1]
+            sf = _enumerate_sf(region, s, half_slots, slot_idx, season, sf_name, _no_odds, team_lookup)
+            round_will_host[sf_name].extend(_prefix_conditions(sf.will_host, seed_cond))
+            round_will_not_host[sf_name].extend(_prefix_conditions(sf.will_not_host, seed_cond))
+
+        def _agg_odds(rname: str) -> _RoundOdds:
+            """Collect all six odds fields for *rname* from the caller-supplied dicts."""
+            def _get(d: dict[str, float] | None) -> float | None:
+                """Return d[rname] when d is provided, otherwise None."""
+                return d.get(rname) if d else None
+            return _RoundOdds(
+                p_reach=_get(p_reach_by_round),
+                p_host_conditional=_get(p_host_conditional_by_round),
+                p_host_marginal=_get(p_host_marginal_by_round),
+                p_reach_weighted=_get(p_reach_weighted_by_round),
+                p_host_conditional_weighted=_get(p_host_conditional_weighted_by_round),
+                p_host_marginal_weighted=_get(p_host_marginal_weighted_by_round),
+            )
+
+        return [
+            RoundHomeScenarios(
+                round_name=rn,
+                will_host=tuple(round_will_host[rn]),
+                will_not_host=tuple(round_will_not_host[rn]),
+                **_agg_odds(rn)._asdict(),
+            )
+            for rn in round_names
+        ]
+
+    # --- Post-playoff path: seed is known ---
     half_slots = half_slots_for_region(region, slots)
     slot_idx = slot_index_for(region, seed, half_slots)
     if slot_idx is None:
@@ -964,9 +1064,7 @@ def enumerate_team_matchups(
     p_host_marginal_weighted_by_round: dict[str, float] | None = None,
     p_conditional_weighted_by_matchup: dict[str, dict[tuple[int, int, bool], float]] | None = None,
     team_lookup: dict[tuple[int, int], str] | None = None,
-    known_survivors: set[tuple[int, int]] | None = None,
-    r1_survivors: set[tuple[int, int]] | None = None,
-    completed_rounds: set[str] | None = None,
+    state: PlayoffState | None = None,
 ) -> list[RoundMatchups]:
     """Enumerate all possible playoff matchups for a team across every round.
 
@@ -1001,21 +1099,9 @@ def enumerate_team_matchups(
                                              integration; pass ``None`` to
                                              leave weighted fields as ``None``.
         team_lookup: Optional ``(region, seed)`` → school name mapping.
-        known_survivors: Optional set of ``(region, seed)`` pairs currently
-            alive in the tournament.  Opponent entries not in this set are
-            dropped and ``p_conditional`` values are renormalized.  Use the
-            survivors of the most recently completed round.
-        r1_survivors: Optional set of ``(region, seed)`` pairs that won their
-            first-round game.  Used inside the QF path enumeration to fix each
-            team's R2 opponent (and thus their R2 home-game count) to the
-            actual R1 winner.  Must reflect R1 results only — do not pass
-            post-R2 survivors here, as teams eliminated in R2 still need to be
-            included.  Typically set to the same value as *known_survivors*
-            when calling after R1; set explicitly when calling after later
-            rounds.
-        completed_rounds: Optional set of round names to exclude from the
-            returned list.  Use this to omit already-played rounds from the
-            output (e.g. ``{"First Round"}`` after R1 is complete).
+        state: Optional ``PlayoffState`` capturing the in-progress bracket.
+            See ``PlayoffState`` for field semantics.  Pass ``None`` (default)
+            when the bracket has not yet started.
 
     Returns:
         List of ``RoundMatchups``, one per applicable round, in chronological
@@ -1046,7 +1132,9 @@ def enumerate_team_matchups(
             p_host_marginal_weighted=_get(p_host_marginal_weighted_by_round),
         )
 
-    _completed = completed_rounds or set()
+    _completed = (state.completed_rounds if state else None) or set()
+    _known_survivors = state.known_survivors if state else None
+    _r1_survivors = state.r1_survivors if state else None
 
     def _build_round(
         round_name: str,
@@ -1058,8 +1146,8 @@ def enumerate_team_matchups(
         p_reach_w = odds.p_reach_weighted
 
         # Drop paths for eliminated opponents before counting.
-        if known_survivors is not None:
-            raw = [(r, s, h, e) for r, s, h, e in raw if (r, s) in known_survivors]
+        if _known_survivors is not None:
+            raw = [(r, s, h, e) for r, s, h, e in raw if (r, s) in _known_survivors]
 
         # Count how many raw paths lead to each (opp_r, opp_s, is_home) outcome.
         # Under equal probability every path is equiprobable, so the fraction of
@@ -1082,7 +1170,7 @@ def enumerate_team_matchups(
             p_marg = (p_cond * p_reach) if (p_cond is not None and p_reach is not None) else None
             p_marg_w = (p_cond_w * p_reach_w) if (p_cond_w is not None and p_reach_w is not None) else None
             entries.append(MatchupEntry(
-                opponent=_team_label(opp_r, opp_s, team_lookup),
+                opponent=_team_label(opp_r, opp_s, team_lookup) or f"Region {opp_r} #{opp_s} Seed",
                 opponent_region=opp_r,
                 opponent_seed=opp_s,
                 home=is_home,
@@ -1110,7 +1198,7 @@ def enumerate_team_matchups(
 
     qf_name = round_names[2] if is_1a_4a else round_names[1]
     if qf_name not in _completed:
-        results.append(_build_round(qf_name, _matchup_raw_qf(region, seed, half_slots, slot_idx, season, is_1a_4a, r1_survivors)))
+        results.append(_build_round(qf_name, _matchup_raw_qf(region, seed, half_slots, slot_idx, season, is_1a_4a, _r1_survivors)))
 
     sf_name = round_names[-1]
     if sf_name not in _completed:

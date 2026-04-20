@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from backend.helpers.bracket_helpers import survivors_from_games
-from backend.helpers.data_classes import Game
+from backend.helpers.data_classes import Game, PlayoffState
 
 # ---------------------------------------------------------------------------
 # Fixture helpers
@@ -209,7 +209,7 @@ class TestUnknownSchool:
             _game("Taylorsville", "W", "First Round"),
             _game("UnknownSchool", "W", "First Round"),
         ]
-        known, r1 = survivors_from_games(games, _LOOKUP)
+        known, _r1 = survivors_from_games(games, _LOOKUP)
         assert (8, 1) in known
         # UnknownSchool has no entry — must not raise, must not appear
         for seed_pair in known:
@@ -221,7 +221,7 @@ class TestUnknownSchool:
             _game("Taylorsville", "W", "First Round"),
             _game("UnknownSchool", "L", "First Round"),
         ]
-        known, r1 = survivors_from_games(games, _LOOKUP)
+        known, _r1 = survivors_from_games(games, _LOOKUP)
         assert (8, 1) in known
 
 
@@ -259,7 +259,7 @@ class TestNoneResult:
             _game("Taylorsville", "W", "First Round"),
             _game("West Lincoln", None, "First Round"),  # not yet played
         ]
-        known, r1 = survivors_from_games(games, _LOOKUP)
+        known, _r1 = survivors_from_games(games, _LOOKUP)
         # West Lincoln has no result — should NOT appear as loser, so Taylorsville
         # is alive and West Lincoln is neither in nor excluded from survivors.
         assert (8, 1) in known  # Taylorsville won
@@ -300,9 +300,7 @@ class TestRoundTripWithEnumerateMatchups:
             seed=1,
             slots=SLOTS_1A_4A_2025,
             season=2025,
-            known_survivors=known,
-            r1_survivors=r1,
-            completed_rounds={"First Round"},
+            state=PlayoffState(known_survivors=known, r1_survivors=r1, completed_rounds={"First Round"}),
         )
         round_names = [r.round_name for r in rounds]
         assert "First Round" not in round_names

@@ -881,6 +881,34 @@ class HomeGameScenario:
     explanation: str | None
 
 
+# --- Data class for in-progress playoff bracket state ---
+@dataclass
+class PlayoffState:
+    """Current state of an in-progress playoff bracket.
+
+    Passed as a single parameter to ``enumerate_team_matchups`` to filter
+    and condition the returned matchups based on results already known.
+
+    Attributes:
+        known_survivors: Teams still alive in the tournament (won their most
+            recent game and not yet eliminated).  Opponent candidates not in
+            this set are dropped from the matchup list.  Use the survivors
+            from the most recently completed round.
+        r1_survivors: Teams that won their First Round game specifically.
+            Used inside the QF path to fix each team's R2 opponent (and thus
+            their R2 home-game count) to the actual R1 winner.  Must reflect
+            R1 results only — do not pass post-R2 survivors here.  Typically
+            equal to ``known_survivors`` when called after R1.
+        completed_rounds: Round names that have already been played and
+            should be omitted from the returned list (e.g.
+            ``{"First Round"}`` after R1 is complete).
+    """
+
+    known_survivors: set[tuple[int, int]] | None = None
+    r1_survivors: set[tuple[int, int]] | None = None
+    completed_rounds: set[str] | None = None
+
+
 @dataclass(frozen=True)
 class MatchupEntry:
     """One possible playoff matchup for a team in a specific round.

@@ -8,11 +8,15 @@ from backend.helpers.data_classes import CoinFlipResult, CompletedGame, GameResu
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_renderer import _render_margin_condition
 from backend.helpers.scenario_viewer import (
+    EnumeratedOutcomes,
     _derive_atom,
     _eval_mc,
     _find_combined_atom,
+    _format_team_list,
+    _minimize_game_winner_atom,
     _simplify_atom_list,
     _split_non_rectangular_atom,
+    build_pre_playoff_home_scenarios,
     build_scenario_atoms,
     compute_odds_from_precomputed,
     enumerate_division_scenarios,
@@ -21,6 +25,7 @@ from backend.helpers.scenario_viewer import (
     render_scenarios,
 )
 from backend.helpers.tiebreakers import resolve_standings_for_mask
+from backend.tests.data.playoff_brackets_2025 import SLOTS_5A_7A_2025
 from backend.tests.data.results_2025_ground_truth import REGION_RESULTS_2025, expand_results, teams_from_games
 from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_completed_games,
@@ -187,7 +192,7 @@ def test_3_7a_conditions_match_seedings():
         candidate_mask = 0
         for i, rg in enumerate(_REMAINING):
             if rg.a in winner_set:
-                candidate_mask |= (1 << i)
+                candidate_mask |= 1 << i
 
         found = False
         for m0, m1, m2 in product(range(1, 13), repeat=3):
@@ -209,10 +214,7 @@ def test_3_7a_conditions_match_seedings():
                 )
                 found = True
                 break
-        assert found, (
-            f"Scenario {sc['scenario_num']}{sc['sub_label']}: "
-            f"no satisfying (mask, margins) found for atom"
-        )
+        assert found, f"Scenario {sc['scenario_num']}{sc['sub_label']}: no satisfying (mask, margins) found for atom"
 
 
 # ---------------------------------------------------------------------------
@@ -402,9 +404,7 @@ def test_4h_has_exact_diff_condition():
     assert len(eq_conds) >= 1
     # Either add=Pearl/sub=NWR with threshold=2 or add=NWR/sub=Pearl with threshold=-2 —
     # both encode "Pearl's margin exceeds NWR's by exactly 2"
-    assert any(
-        abs(c.threshold) == 2 and len(c.add) == 1 and len(c.sub) == 1 for c in eq_conds
-    )
+    assert any(abs(c.threshold) == 2 and len(c.add) == 1 and len(c.sub) == 1 for c in eq_conds)
 
 
 def test_4j_has_exact_sum_condition():
@@ -557,9 +557,7 @@ def test_render_division_scenarios_full_output():
     result = render_division_scenarios(
         teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms=_ATOMS_3_7A
     )
-    assert result == _EXPECTED_3_7A_RENDER, (
-        f"\n--- EXPECTED ---\n{_EXPECTED_3_7A_RENDER}\n--- ACTUAL ---\n{result}"
-    )
+    assert result == _EXPECTED_3_7A_RENDER, f"\n--- EXPECTED ---\n{_EXPECTED_3_7A_RENDER}\n--- ACTUAL ---\n{result}"
 
 
 # ---------------------------------------------------------------------------
@@ -570,8 +568,6 @@ def test_render_division_scenarios_full_output():
 # exact-margin-sample implementation would have produced "by exactly N"
 # wording (point samples) instead of human-readable ranges.
 # ---------------------------------------------------------------------------
-
-
 
 
 class TestBuildScenarioAtoms37A:
@@ -614,8 +610,7 @@ class TestBuildScenarioAtoms37A:
             for clause in clauses:
                 if "beats" in clause and "by exactly" in clause:
                     raise AssertionError(
-                        f"Per-game point-sample condition found (expected a range): {clause!r}\n"
-                        f"Full line: {line!r}"
+                        f"Per-game point-sample condition found (expected a range): {clause!r}\nFull line: {line!r}"
                     )
 
     def test_render_contains_joint_constraints(self):
@@ -677,10 +672,7 @@ class TestBuildScenarioAtoms37A:
                 if isinstance(cond, GameResult) and cond.winner == nwr and cond.loser == pet:
                     # Should have a range (max_margin - min_margin > 1) or be unbounded
                     span = (cond.max_margin - cond.min_margin) if cond.max_margin else 12
-                    assert span > 1, (
-                        f"NWR seed-1 atom has point-sample GameResult: {cond}. "
-                        "Expected a margin range."
-                    )
+                    assert span > 1, f"NWR seed-1 atom has point-sample GameResult: {cond}. Expected a margin range."
 
 
 # ---------------------------------------------------------------------------
@@ -803,8 +795,10 @@ class TestSplitNonRectangularAtom:
         Reverse: frozenset({2}) → game1=[1]; frozenset({1,2,3}) → game1=[2] — both contiguous.
         """
         valid = [
-            {_AB: 1, _CD: 2}, {_AB: 2, _CD: 1},
-            {_AB: 2, _CD: 2}, {_AB: 3, _CD: 2},
+            {_AB: 1, _CD: 2},
+            {_AB: 2, _CD: 1},
+            {_AB: 2, _CD: 2},
+            {_AB: 3, _CD: 2},
         ]
         result = self._call(valid, lows=[1, 1], highs=[3, 2])
         assert result is not None
@@ -820,8 +814,10 @@ class TestSplitNonRectangularAtom:
         Returns None (line 337).
         """
         valid = [
-            {_AB: 1, _CD: 1}, {_AB: 1, _CD: 2},
-            {_AB: 3, _CD: 1}, {_AB: 3, _CD: 2},
+            {_AB: 1, _CD: 1},
+            {_AB: 1, _CD: 2},
+            {_AB: 3, _CD: 1},
+            {_AB: 3, _CD: 2},
         ]
         result = self._call(valid, lows=[1, 1], highs=[3, 2])
         assert result is None
@@ -836,8 +832,10 @@ class TestSplitNonRectangularAtom:
         Returns None (line 337).
         """
         valid = [
-            {_AB: 1, _CD: 1}, {_AB: 1, _CD: 3},
-            {_AB: 2, _CD: 1}, {_AB: 2, _CD: 3},
+            {_AB: 1, _CD: 1},
+            {_AB: 1, _CD: 3},
+            {_AB: 2, _CD: 1},
+            {_AB: 2, _CD: 3},
         ]
         result = self._call(valid, lows=[1, 1], highs=[2, 3])
         assert result is None
@@ -870,7 +868,9 @@ class TestDeriveAtom:
         GameResult path fires and the atom has max_margin=None for both games.
         """
         valid = [
-            {_AB: 1, _CD: 1}, {_AB: 1, _CD: 2}, {_AB: 2, _CD: 1},
+            {_AB: 1, _CD: 1},
+            {_AB: 1, _CD: 2},
+            {_AB: 2, _CD: 1},
         ]
         result = _derive_atom(
             mask=_SYNTH_MASK,
@@ -980,10 +980,7 @@ def test_per_team_atoms_consistent_with_division_scenarios():
                     f"(full order: {tuple(order)})"
                 )
 
-    assert not failures, (
-        f"{len(failures)} per-team / division inconsistencies:\n"
-        + "\n".join(failures[:5])
-    )
+    assert not failures, f"{len(failures)} per-team / division inconsistencies:\n" + "\n".join(failures[:5])
 
 
 # ---------------------------------------------------------------------------
@@ -997,26 +994,21 @@ _4_4A = REGION_RESULTS_2025[(4, 4)]
 _4_4A_CUTOFF = "2025-10-17"
 _4_4A_ALL = _4_4A["games"]
 _4_4A_TEAMS = teams_from_games(_4_4A_ALL)
-_4_4A_COMPLETED = get_completed_games(
-    expand_results([g for g in _4_4A_ALL if g["date"] <= _4_4A_CUTOFF])
-)
-_4_4A_REMAINING = [
-    RemainingGame(*sorted([g["winner"], g["loser"]]))
-    for g in _4_4A_ALL
-    if g["date"] > _4_4A_CUTOFF
-]
+_4_4A_COMPLETED = get_completed_games(expand_results([g for g in _4_4A_ALL if g["date"] <= _4_4A_CUTOFF]))
+_4_4A_REMAINING = [RemainingGame(*sorted([g["winner"], g["loser"]])) for g in _4_4A_ALL if g["date"] > _4_4A_CUTOFF]
 
 # Compute both paths once at module level for efficiency.
 _ATOMS_DIRECT = build_scenario_atoms(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING)
 _SCENARIOS_DIRECT = enumerate_division_scenarios(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING)
 
 _PRECOMPUTED = enumerate_outcomes(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING)
-_ATOMS_PRE = build_scenario_atoms(
-    _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=_PRECOMPUTED
-)
+_ATOMS_PRE = build_scenario_atoms(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=_PRECOMPUTED)
 _SCENARIOS_PRE = enumerate_division_scenarios(
-    _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING,
-    scenario_atoms=_ATOMS_PRE, precomputed=_PRECOMPUTED,
+    _4_4A_TEAMS,
+    _4_4A_COMPLETED,
+    _4_4A_REMAINING,
+    scenario_atoms=_ATOMS_PRE,
+    precomputed=_PRECOMPUTED,
 )
 
 
@@ -1028,16 +1020,16 @@ def test_precomputed_atoms_teams_match():
 def test_precomputed_atoms_seeds_match():
     """Precomputed path produces atoms for the same seeds per team."""
     for team in _ATOMS_DIRECT:
-        assert set(_ATOMS_PRE[team].keys()) == set(_ATOMS_DIRECT[team].keys()), \
-            f"{team}: seed keys differ"
+        assert set(_ATOMS_PRE[team].keys()) == set(_ATOMS_DIRECT[team].keys()), f"{team}: seed keys differ"
 
 
 def test_precomputed_atoms_count_match():
     """Precomputed path produces the same number of atoms per (team, seed)."""
     for team in _ATOMS_DIRECT:
         for seed in _ATOMS_DIRECT[team]:
-            assert len(_ATOMS_PRE[team][seed]) == len(_ATOMS_DIRECT[team][seed]), \
+            assert len(_ATOMS_PRE[team][seed]) == len(_ATOMS_DIRECT[team][seed]), (
                 f"{team} seed {seed}: atom count differs"
+            )
 
 
 def test_precomputed_scenarios_count_match():
@@ -1048,14 +1040,12 @@ def test_precomputed_scenarios_count_match():
 def test_precomputed_scenarios_seedings_match():
     """Precomputed path produces identical seedings in the same order."""
     for i, (pre, direct) in enumerate(zip(_SCENARIOS_PRE, _SCENARIOS_DIRECT)):
-        assert pre["seeding"] == direct["seeding"], \
+        assert pre["seeding"] == direct["seeding"], (
             f"Scenario {i}: seeding differs — pre={pre['seeding']} direct={direct['seeding']}"
-        assert pre["scenario_num"] == direct["scenario_num"], \
-            f"Scenario {i}: scenario_num differs"
-        assert pre["sub_label"] == direct["sub_label"], \
-            f"Scenario {i}: sub_label differs"
-        assert pre["game_winners"] == direct["game_winners"], \
-            f"Scenario {i}: game_winners differs"
+        )
+        assert pre["scenario_num"] == direct["scenario_num"], f"Scenario {i}: scenario_num differs"
+        assert pre["sub_label"] == direct["sub_label"], f"Scenario {i}: sub_label differs"
+        assert pre["game_winners"] == direct["game_winners"], f"Scenario {i}: game_winners differs"
 
 
 def test_precomputed_non_sensitive_masks_nonempty():
@@ -1072,9 +1062,7 @@ def test_precomputed_r_and_pairs():
 
 def test_ignore_margins_seedings_subset():
     """Win/loss-only mode produces a seeding for every mask (2^R keys in groups)."""
-    wl_outcomes = enumerate_outcomes(
-        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True
-    )
+    wl_outcomes = enumerate_outcomes(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True)
     # One seeding per mask — all masks are non-sensitive in ignore_margins mode.
     assert len(wl_outcomes.non_sensitive_masks) == 1 << 4
     assert len(wl_outcomes.groups) == 1 << 4
@@ -1082,12 +1070,8 @@ def test_ignore_margins_seedings_subset():
 
 def test_ignore_margins_atoms_cover_all_teams():
     """Win/loss-only atoms are produced for every team (no margin conditions)."""
-    wl_outcomes = enumerate_outcomes(
-        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True
-    )
-    wl_atoms = build_scenario_atoms(
-        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=wl_outcomes
-    )
+    wl_outcomes = enumerate_outcomes(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True)
+    wl_atoms = build_scenario_atoms(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=wl_outcomes)
     # Every team that appears in the full atoms should also appear in win/loss-only atoms.
     assert set(wl_atoms.keys()) == set(_ATOMS_DIRECT.keys())
 
@@ -1095,18 +1079,16 @@ def test_ignore_margins_atoms_cover_all_teams():
 def test_ignore_margins_no_margin_conditions():
     """Win/loss-only atoms contain no MarginCondition objects."""
     from backend.helpers.data_classes import MarginCondition as MC
-    wl_outcomes = enumerate_outcomes(
-        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True
-    )
-    wl_atoms = build_scenario_atoms(
-        _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=wl_outcomes
-    )
+
+    wl_outcomes = enumerate_outcomes(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, ignore_margins=True)
+    wl_atoms = build_scenario_atoms(_4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=wl_outcomes)
     for team, seed_map in wl_atoms.items():
         for seed, atom_list in seed_map.items():
             for atom in atom_list:
                 for cond in atom:
-                    assert not isinstance(cond, MC), \
+                    assert not isinstance(cond, MC), (
                         f"{team} seed {seed}: unexpected MarginCondition in win/loss-only atom"
+                    )
 
 
 # ---------------------------------------------------------------------------
@@ -1133,14 +1115,12 @@ def test_enumerate_division_scenarios_auto_build_atoms_seedings_match():
         _4_4A_TEAMS, _4_4A_COMPLETED, _4_4A_REMAINING, precomputed=_PRECOMPUTED
     )
     for i, (auto, direct) in enumerate(zip(scenarios_auto, _SCENARIOS_DIRECT)):
-        assert auto["seeding"] == direct["seeding"], \
+        assert auto["seeding"] == direct["seeding"], (
             f"Scenario {i}: seeding differs — auto={auto['seeding']} direct={direct['seeding']}"
-        assert auto["scenario_num"] == direct["scenario_num"], \
-            f"Scenario {i}: scenario_num differs"
-        assert auto["sub_label"] == direct["sub_label"], \
-            f"Scenario {i}: sub_label differs"
-        assert auto["game_winners"] == direct["game_winners"], \
-            f"Scenario {i}: game_winners differs"
+        )
+        assert auto["scenario_num"] == direct["scenario_num"], f"Scenario {i}: scenario_num differs"
+        assert auto["sub_label"] == direct["sub_label"], f"Scenario {i}: sub_label differs"
+        assert auto["game_winners"] == direct["game_winners"], f"Scenario {i}: game_winners differs"
 
 
 def test_enumerate_division_scenarios_auto_build_atoms_conditions_populated():
@@ -1151,8 +1131,9 @@ def test_enumerate_division_scenarios_auto_build_atoms_conditions_populated():
     ms_scenarios = [sc for sc in scenarios_auto if sc["sub_label"] != ""]
     assert len(ms_scenarios) > 0, "Expected at least one margin-sensitive sub-scenario in 4-4A"
     for sc in ms_scenarios:
-        assert sc["conditions_atom"] is not None, \
+        assert sc["conditions_atom"] is not None, (
             f"Scenario {sc['scenario_num']}{sc['sub_label']}: conditions_atom is None in auto-build path"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1161,13 +1142,9 @@ def test_enumerate_division_scenarios_auto_build_atoms_conditions_populated():
 
 # Use 4-4A with cutoff after the last game — R=0.
 _4_4A_FINAL_CUTOFF = "2025-11-01"
-_4_4A_COMPLETED_FULL = get_completed_games(
-    expand_results([g for g in _4_4A_ALL if g["date"] <= _4_4A_FINAL_CUTOFF])
-)
+_4_4A_COMPLETED_FULL = get_completed_games(expand_results([g for g in _4_4A_ALL if g["date"] <= _4_4A_FINAL_CUTOFF]))
 _4_4A_REMAINING_ZERO = [
-    RemainingGame(*sorted([g["winner"], g["loser"]]))
-    for g in _4_4A_ALL
-    if g["date"] > _4_4A_FINAL_CUTOFF
+    RemainingGame(*sorted([g["winner"], g["loser"]])) for g in _4_4A_ALL if g["date"] > _4_4A_FINAL_CUTOFF
 ]
 
 
@@ -1477,7 +1454,10 @@ class TestSimplifyAtomListRule3NonOverlapping:
         (ca_t.max_margin=4 ≤ cb_t.min_margin=5).  Line 752→753 fires and Rule 3
         returns None.  Both atoms survive unchanged."""
         atom1 = [GameResult("A", "B", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=1, max_margin=4)]
-        atom2 = [GameResult("B", "A", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=5, max_margin=None)]
+        atom2 = [
+            GameResult("B", "A", min_margin=1, max_margin=None),
+            GameResult("G", "H", min_margin=5, max_margin=None),
+        ]
 
         result = _simplify_atom_list([atom1, atom2])
 
@@ -1505,7 +1485,10 @@ class TestSimplifyAtomListRule4Guards:
         complementary-game check (G≠H).  Rule 4 returns None; Rule 3 also blocked
         (ca_t.max_margin=3 ≤ cb_t.min_margin=5)."""
         atom1 = [GameResult("A", "B", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=1, max_margin=3)]
-        atom2 = [GameResult("B", "A", min_margin=1, max_margin=None), GameResult("G", "H", min_margin=5, max_margin=None)]
+        atom2 = [
+            GameResult("B", "A", min_margin=1, max_margin=None),
+            GameResult("G", "H", min_margin=5, max_margin=None),
+        ]
 
         result = _simplify_atom_list([atom1, atom2])
 
@@ -1614,8 +1597,7 @@ class TestEnumerateDivisionScenariosNoAtoms:
 
         for sc in ms_scenarios:
             assert sc["conditions_atom"] is None, (
-                f"Scenario {sc['scenario_num']}{sc['sub_label']}: expected None "
-                f"but got {sc['conditions_atom']}"
+                f"Scenario {sc['scenario_num']}{sc['sub_label']}: expected None but got {sc['conditions_atom']}"
             )
 
 
@@ -1687,18 +1669,18 @@ class TestOuterStabilityLoopRule3:
     def test_rule4_exposes_rule3_opportunity_in_outer_loop(self):
         """Rule 4 merges a complementary pair in pass 1, creating a new atom that Rule 3 can then simplify in the outer stability loop."""
         atom0 = [
-            GameResult("Phi", "Rho", 1, None),    # comp: Phi beats Rho, unc
-            GameResult("Gamma", "Delta", 1, 4),   # tight (narrow): GD [1,4)
-            GameResult("Alpha", "Beta", 1, None), # shared: Alpha beats Beta, unc
+            GameResult("Phi", "Rho", 1, None),  # comp: Phi beats Rho, unc
+            GameResult("Gamma", "Delta", 1, 4),  # tight (narrow): GD [1,4)
+            GameResult("Alpha", "Beta", 1, None),  # shared: Alpha beats Beta, unc
         ]
         atom1 = [
-            GameResult("Rho", "Phi", 1, None),    # comp (opposite): Rho beats Phi, unc
-            GameResult("Gamma", "Delta", 1, 7),   # tight (wide): GD [1,7)
-            GameResult("Alpha", "Beta", 1, None), # shared: same as atom0
+            GameResult("Rho", "Phi", 1, None),  # comp (opposite): Rho beats Phi, unc
+            GameResult("Gamma", "Delta", 1, 7),  # tight (wide): GD [1,7)
+            GameResult("Alpha", "Beta", 1, None),  # shared: same as atom0
         ]
         atom_x = [
             GameResult("Gamma", "Delta", 3, None),  # tight (tighter): GD [3,∞)
-            GameResult("Beta", "Alpha", 1, None),   # shared (opposite): Beta beats Alpha, unc
+            GameResult("Beta", "Alpha", 1, None),  # shared (opposite): Beta beats Alpha, unc
         ]
 
         result = _simplify_atom_list([atom0, atom1, atom_x])
@@ -1713,30 +1695,24 @@ class TestOuterStabilityLoopRule3:
 # Partial-results fixtures — 3-7A with some final-week games already known
 # ---------------------------------------------------------------------------
 
-_GAME_BRN_MER = CompletedGame("Brandon",          "Meridian", 1, 27, 13, 40)
-_GAME_OG_PRL  = CompletedGame("Oak Grove",        "Pearl",    1, 21,  7, 28)
-_GAME_NWR_PET = CompletedGame("Northwest Rankin", "Petal",    1,  6, 28, 34)
+_GAME_BRN_MER = CompletedGame("Brandon", "Meridian", 1, 27, 13, 40)
+_GAME_OG_PRL = CompletedGame("Oak Grove", "Pearl", 1, 21, 7, 28)
+_GAME_NWR_PET = CompletedGame("Northwest Rankin", "Petal", 1, 6, 28, 34)
 
 # Partial A: Brandon/Meridian settled; OG/Pearl and NWR/Petal still TBD
-_COMPLETED_PA = sorted(
-    expected_3_7a_completed_games + [_GAME_BRN_MER], key=lambda g: (g.a, g.b)
-)
+_COMPLETED_PA = sorted(expected_3_7a_completed_games + [_GAME_BRN_MER], key=lambda g: (g.a, g.b))
 _REMAINING_PA = [RemainingGame("Oak Grove", "Pearl"), RemainingGame("Northwest Rankin", "Petal")]
 _PAIRS_PA = [(rg.a, rg.b) for rg in _REMAINING_PA]
 _SCENARIOS_PA = enumerate_division_scenarios(teams_3_7a, _COMPLETED_PA, _REMAINING_PA)
 
 # Partial B: Brandon + OG/Pearl settled; NWR/Petal still TBD
-_COMPLETED_PB = sorted(
-    expected_3_7a_completed_games + [_GAME_BRN_MER, _GAME_OG_PRL], key=lambda g: (g.a, g.b)
-)
+_COMPLETED_PB = sorted(expected_3_7a_completed_games + [_GAME_BRN_MER, _GAME_OG_PRL], key=lambda g: (g.a, g.b))
 _REMAINING_PB = [RemainingGame("Northwest Rankin", "Petal")]
 _PAIRS_PB = [(rg.a, rg.b) for rg in _REMAINING_PB]
 _SCENARIOS_PB = enumerate_division_scenarios(teams_3_7a, _COMPLETED_PB, _REMAINING_PB)
 
 # Partial C: Brandon + NWR/Petal settled (n=6); OG/Pearl still TBD
-_COMPLETED_PC = sorted(
-    expected_3_7a_completed_games + [_GAME_BRN_MER, _GAME_NWR_PET], key=lambda g: (g.a, g.b)
-)
+_COMPLETED_PC = sorted(expected_3_7a_completed_games + [_GAME_BRN_MER, _GAME_NWR_PET], key=lambda g: (g.a, g.b))
 _REMAINING_PC = [RemainingGame("Oak Grove", "Pearl")]
 _PAIRS_PC = [(rg.a, rg.b) for rg in _REMAINING_PC]
 _SCENARIOS_PC = enumerate_division_scenarios(teams_3_7a, _COMPLETED_PC, _REMAINING_PC)
@@ -1778,8 +1754,13 @@ def test_partial_a_backward_coverage():
         for m0, m1 in product(range(1, 13), repeat=2):
             margins = {_PAIRS_PA[0]: m0, _PAIRS_PA[1]: m1}
             order = resolve_standings_for_mask(
-                teams_3_7a, _COMPLETED_PA, _REMAINING_PA,
-                mask, margins, _BASE_MARGIN_DEFAULT, _PA_WIN,
+                teams_3_7a,
+                _COMPLETED_PA,
+                _REMAINING_PA,
+                mask,
+                margins,
+                _BASE_MARGIN_DEFAULT,
+                _PA_WIN,
             )
             if tuple(order) not in seeding_map:
                 failures.append(f"mask={mask} margins={margins}: {tuple(order)} not in scenarios")
@@ -1814,8 +1795,13 @@ def test_partial_a_soundness():
             if not _atom_ok(atom, mask, margins):
                 continue
             actual = resolve_standings_for_mask(
-                teams_3_7a, _COMPLETED_PA, _REMAINING_PA,
-                mask, margins, _BASE_MARGIN_DEFAULT, _PA_WIN,
+                teams_3_7a,
+                _COMPLETED_PA,
+                _REMAINING_PA,
+                mask,
+                margins,
+                _BASE_MARGIN_DEFAULT,
+                _PA_WIN,
             )
             if tuple(actual) != sc["seeding"]:
                 failures.append(
@@ -1848,8 +1834,7 @@ def test_partial_b_no_margin_conditions():
     """Partial B scenarios are margin-insensitive (conditions_atom is None for all)."""
     for sc in _SCENARIOS_PB:
         assert sc.get("conditions_atom") is None, (
-            f"Scenario {sc['scenario_num']}: expected no conditions_atom "
-            f"but got {sc['conditions_atom']}"
+            f"Scenario {sc['scenario_num']}: expected no conditions_atom but got {sc['conditions_atom']}"
         )
 
 
@@ -1861,8 +1846,13 @@ def test_partial_b_backward_coverage():
         for m in range(1, 13):
             margins = {_PAIRS_PB[0]: m}
             order = resolve_standings_for_mask(
-                teams_3_7a, _COMPLETED_PB, _REMAINING_PB,
-                mask, margins, _BASE_MARGIN_DEFAULT, _PA_WIN,
+                teams_3_7a,
+                _COMPLETED_PB,
+                _REMAINING_PB,
+                mask,
+                margins,
+                _BASE_MARGIN_DEFAULT,
+                _PA_WIN,
             )
             if tuple(order) not in seeding_map:
                 failures.append(f"mask={mask} margin={m}: {tuple(order)} not in scenarios")
@@ -1905,8 +1895,13 @@ def test_partial_c_backward_coverage():
         for m in range(1, 13):
             margins = {_PAIRS_PC[0]: m}
             order = resolve_standings_for_mask(
-                teams_3_7a, _COMPLETED_PC, _REMAINING_PC,
-                mask, margins, _BASE_MARGIN_DEFAULT, _PA_WIN,
+                teams_3_7a,
+                _COMPLETED_PC,
+                _REMAINING_PC,
+                mask,
+                margins,
+                _BASE_MARGIN_DEFAULT,
+                _PA_WIN,
             )
             if tuple(order) not in seeding_map:
                 failures.append(f"mask={mask} margin={m}: {tuple(order)} not in scenarios")
@@ -1941,8 +1936,13 @@ def test_partial_c_soundness():
             if not _atom_ok_pc(atom, mask, margins):
                 continue
             actual = resolve_standings_for_mask(
-                teams_3_7a, _COMPLETED_PC, _REMAINING_PC,
-                mask, margins, _BASE_MARGIN_DEFAULT, _PA_WIN,
+                teams_3_7a,
+                _COMPLETED_PC,
+                _REMAINING_PC,
+                mask,
+                margins,
+                _BASE_MARGIN_DEFAULT,
+                _PA_WIN,
             )
             if tuple(actual) != sc["seeding"]:
                 failures.append(
@@ -2171,61 +2171,67 @@ def test_partial_c_consistent_with_partial_a():
       PC 1f (p=9)  → PA 3k  (p≥7, n∈[4,9], p–n≥3      → 9–6=3 ✓)
       PC 2         → PA 4   (OG wins, NWR wins)
     """
-    pa_seeding_to_label = {
-        sc["seeding"]: f"{sc['scenario_num']}{sc['sub_label']}"
-        for sc in _SCENARIOS_PA
-    }
+    pa_seeding_to_label = {sc["seeding"]: f"{sc['scenario_num']}{sc['sub_label']}" for sc in _SCENARIOS_PA}
 
     # (pc_key, sample_p for Pearl-wins cases or None for OG-wins, expected_pa_label)
     cases = [
-        ("1a", 1,    "3b"),
-        ("1b", 4,    "3c"),
-        ("1c", 5,    "3d"),
-        ("1d", 6,    "3i"),
-        ("1e", 8,    "3h"),
-        ("1f", 9,    "3k"),
-        ("2",  None, "4"),
+        ("1a", 1, "3b"),
+        ("1b", 4, "3c"),
+        ("1c", 5, "3d"),
+        ("1d", 6, "3i"),
+        ("1e", 8, "3h"),
+        ("1f", 9, "3k"),
+        ("2", None, "4"),
     ]
 
     # _REMAINING_PA: index 0 = OG/Pearl (bit 0=1 → OG wins), index 1 = NWR/Petal (bit 1=1 → NWR wins)
-    _og_pearl  = _PAIRS_PA[0]
+    _og_pearl = _PAIRS_PA[0]
     _nwr_petal = _PAIRS_PA[1]
     _n = 6  # NWR beats Petal by 6
 
     failures = []
     for pc_key, p, expected_pa in cases:
         if p is None:  # OG wins the Pearl game
-            mask_pc   = 1       # bit 0=1 → OG wins
-            mask_pa   = 0b11    # bit 0=OG wins, bit 1=NWR wins
+            mask_pc = 1  # bit 0=1 → OG wins
+            mask_pa = 0b11  # bit 0=OG wins, bit 1=NWR wins
             margins_pc = {_PAIRS_PC[0]: 7}
             margins_pa = {_og_pearl: 7, _nwr_petal: _n}
-        else:          # Pearl wins the OG game
-            mask_pc   = 0       # bit 0=0 → Pearl wins
-            mask_pa   = 0b10    # bit 0=Pearl wins, bit 1=NWR wins
+        else:  # Pearl wins the OG game
+            mask_pc = 0  # bit 0=0 → Pearl wins
+            mask_pa = 0b10  # bit 0=Pearl wins, bit 1=NWR wins
             margins_pc = {_PAIRS_PC[0]: p}
             margins_pa = {_og_pearl: p, _nwr_petal: _n}
 
-        seeding_pc = tuple(resolve_standings_for_mask(
-            teams_3_7a, _COMPLETED_PC, _REMAINING_PC,
-            mask_pc, margins_pc, _BASE_MARGIN_DEFAULT, _PA_WIN,
-        ))
-        seeding_pa = tuple(resolve_standings_for_mask(
-            teams_3_7a, _COMPLETED_PA, _REMAINING_PA,
-            mask_pa, margins_pa, _BASE_MARGIN_DEFAULT, _PA_WIN,
-        ))
+        seeding_pc = tuple(
+            resolve_standings_for_mask(
+                teams_3_7a,
+                _COMPLETED_PC,
+                _REMAINING_PC,
+                mask_pc,
+                margins_pc,
+                _BASE_MARGIN_DEFAULT,
+                _PA_WIN,
+            )
+        )
+        seeding_pa = tuple(
+            resolve_standings_for_mask(
+                teams_3_7a,
+                _COMPLETED_PA,
+                _REMAINING_PA,
+                mask_pa,
+                margins_pa,
+                _BASE_MARGIN_DEFAULT,
+                _PA_WIN,
+            )
+        )
 
         if seeding_pc != seeding_pa:
-            failures.append(
-                f"PC {pc_key} (p={p}, n={_n}): seedings differ — "
-                f"PC={seeding_pc}, PA={seeding_pa}"
-            )
+            failures.append(f"PC {pc_key} (p={p}, n={_n}): seedings differ — PC={seeding_pc}, PA={seeding_pa}")
             continue
 
         actual_pa = pa_seeding_to_label.get(seeding_pa, "?")
         if actual_pa != expected_pa:
-            failures.append(
-                f"PC {pc_key} (p={p}, n={_n}): PA scenario is {actual_pa}, expected {expected_pa}"
-            )
+            failures.append(f"PC {pc_key} (p={p}, n={_n}): PA scenario is {actual_pa}, expected {expected_pa}")
 
     assert not failures, "\n".join(failures)
 
@@ -2248,12 +2254,9 @@ class TestComputeOddsFromPrecomputed:
     @classmethod
     def _eo(cls):
         """Build an EnumeratedOutcomes fixture for this checkpoint."""
-        completed = get_completed_games(expand_results(
-            [g for g in cls._all_games if g["date"] <= cls._cutoff]
-        ))
+        completed = get_completed_games(expand_results([g for g in cls._all_games if g["date"] <= cls._cutoff]))
         remaining = [
-            RemainingGame(*sorted([g["winner"], g["loser"]]))
-            for g in cls._all_games if g["date"] > cls._cutoff
+            RemainingGame(*sorted([g["winner"], g["loser"]])) for g in cls._all_games if g["date"] > cls._cutoff
         ]
         return enumerate_outcomes(cls._teams, completed, remaining, ignore_margins=True)
 
@@ -2308,12 +2311,10 @@ class TestComputeOddsFromPrecomputed:
     def test_matches_determine_scenarios_odds(self):
         """compute_odds_from_precomputed gives the same odds as determine_scenarios."""
         from backend.helpers.scenarios import determine_odds, determine_scenarios
-        completed = get_completed_games(expand_results(
-            [g for g in self._all_games if g["date"] <= self._cutoff]
-        ))
+
+        completed = get_completed_games(expand_results([g for g in self._all_games if g["date"] <= self._cutoff]))
         remaining = [
-            RemainingGame(*sorted([g["winner"], g["loser"]]))
-            for g in self._all_games if g["date"] > self._cutoff
+            RemainingGame(*sorted([g["winner"], g["loser"]])) for g in self._all_games if g["date"] > self._cutoff
         ]
         eo = enumerate_outcomes(self._teams, completed, remaining, ignore_margins=True)
         fast_odds = compute_odds_from_precomputed(eo, list(self._teams))
@@ -2321,7 +2322,10 @@ class TestComputeOddsFromPrecomputed:
         r = determine_scenarios(self._teams, completed, remaining, ignore_margins=True)
         ref_odds = determine_odds(
             list(self._teams),
-            r.first_counts, r.second_counts, r.third_counts, r.fourth_counts,
+            r.first_counts,
+            r.second_counts,
+            r.third_counts,
+            r.fourth_counts,
             r.denom,
         )
         for team in self._teams:
@@ -2343,10 +2347,7 @@ class TestBuildScenarioAtomsLargeRGate:
         """11 remaining games triggers the R>10 gate and returns {}."""
         # Craft 11 minimal RemainingGame objects — no completed games needed.
         teams = [f"T{i}" for i in range(5)]
-        remaining = [
-            RemainingGame(*sorted([f"T{i}", f"T{j}"]))
-            for i in range(5) for j in range(i + 1, 5)
-        ]
+        remaining = [RemainingGame(*sorted([f"T{i}", f"T{j}"])) for i in range(5) for j in range(i + 1, 5)]
         # C(5,2)=10 games only — add one dummy to reach 11.
         remaining.append(RemainingGame("T0", "T1"))  # duplicate is fine for gate test
         assert len(remaining) == 11
@@ -2359,13 +2360,8 @@ class TestBuildScenarioAtomsLargeRGate:
         all_games = fixture["games"]
         teams = teams_from_games(all_games)
         cutoff = "2025-10-02"
-        completed = get_completed_games(expand_results(
-            [g for g in all_games if g["date"] <= cutoff]
-        ))
-        remaining = [
-            RemainingGame(*sorted([g["winner"], g["loser"]]))
-            for g in all_games if g["date"] > cutoff
-        ]
+        completed = get_completed_games(expand_results([g for g in all_games if g["date"] <= cutoff]))
+        remaining = [RemainingGame(*sorted([g["winner"], g["loser"]])) for g in all_games if g["date"] > cutoff]
         assert len(remaining) == 10
         eo = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
         result = build_scenario_atoms(teams, completed, remaining, precomputed=eo)
@@ -2390,12 +2386,9 @@ class TestStep3cPDRankAtoms:
     @classmethod
     def _setup(cls):
         """Build scenario atoms fixture for this checkpoint."""
-        completed = get_completed_games(expand_results(
-            [g for g in cls._all_games if g["date"] <= cls._cutoff]
-        ))
+        completed = get_completed_games(expand_results([g for g in cls._all_games if g["date"] <= cls._cutoff]))
         remaining = [
-            RemainingGame(*sorted([g["winner"], g["loser"]]))
-            for g in cls._all_games if g["date"] > cls._cutoff
+            RemainingGame(*sorted([g["winner"], g["loser"]])) for g in cls._all_games if g["date"] > cls._cutoff
         ]
         eo = enumerate_outcomes(cls._teams, completed, remaining, ignore_margins=True)
         atoms = build_scenario_atoms(cls._teams, completed, remaining, precomputed=eo)
@@ -2405,50 +2398,47 @@ class TestStep3cPDRankAtoms:
         """Coinflip-affected teams (Hamilton, Hatley, Walnut) appear at more than
         one seed in the atoms dict due to Step 3c PDRankCondition atoms."""
         from backend.helpers.data_classes import PDRankCondition
+
         atoms = self._setup()
         for team in ("Hamilton", "Hatley", "Walnut"):
             assert team in atoms, f"{team} missing from atoms"
             seeds_with_pd_rank = [
-                seed for seed, atom_list in atoms[team].items()
-                if any(
-                    isinstance(c, PDRankCondition)
-                    for atom in atom_list for c in atom
-                )
+                seed
+                for seed, atom_list in atoms[team].items()
+                if any(isinstance(c, PDRankCondition) for atom in atom_list for c in atom)
             ]
             assert len(seeds_with_pd_rank) >= 2, (
-                f"{team} should have PDRankCondition atoms at ≥2 seeds, "
-                f"got {seeds_with_pd_rank}"
+                f"{team} should have PDRankCondition atoms at ≥2 seeds, got {seeds_with_pd_rank}"
             )
 
     def test_pd_rank_condition_team_matches_atom_key(self):
         """Every PDRankCondition in a team's atom list names that same team."""
         from backend.helpers.data_classes import PDRankCondition
+
         atoms = self._setup()
         for team, seed_map in atoms.items():
             for seed, atom_list in seed_map.items():
                 for atom in atom_list:
                     for cond in atom:
                         if isinstance(cond, PDRankCondition):
-                            assert cond.team == team, (
-                                f"PDRankCondition.team={cond.team!r} in atom for {team!r}"
-                            )
+                            assert cond.team == team, f"PDRankCondition.team={cond.team!r} in atom for {team!r}"
 
     def test_pd_rank_condition_group_contains_team(self):
         """Every PDRankCondition's group includes the team the condition is for."""
         from backend.helpers.data_classes import PDRankCondition
+
         atoms = self._setup()
         for team, seed_map in atoms.items():
             for seed, atom_list in seed_map.items():
                 for atom in atom_list:
                     for cond in atom:
                         if isinstance(cond, PDRankCondition):
-                            assert cond.team in cond.group, (
-                                f"team {cond.team!r} not in group {cond.group}"
-                            )
+                            assert cond.team in cond.group, f"team {cond.team!r} not in group {cond.group}"
 
     def test_pd_rank_condition_rank_in_bounds(self):
         """Every PDRankCondition has rank in [1, len(group)] and is at a valid playoff seed."""
         from backend.helpers.data_classes import PDRankCondition
+
         atoms = self._setup()
         for team, seed_map in atoms.items():
             for seed, atom_list in seed_map.items():
@@ -2478,10 +2468,7 @@ class TestStep3cPDRankAtoms:
                     pd_conds = [c for c in atom if isinstance(c, PDRankCondition)]
                     if not pd_conds:
                         continue
-                    gr_key = tuple(
-                        (c.winner, c.loser) for c in atom
-                        if isinstance(c, GameResult)
-                    )
+                    gr_key = tuple((c.winner, c.loser) for c in atom if isinstance(c, GameResult))
                     for pd in pd_conds:
                         gw_to_seed_rank.setdefault(gr_key, []).append((seed, pd.rank))
 
@@ -2494,3 +2481,267 @@ class TestStep3cPDRankAtoms:
                         f"{team}: same game winners {gw_key} — seed {s1} has rank {r1}, "
                         f"but seed {s2} has rank {r2} (expected r1 < r2)"
                     )
+
+
+# ---------------------------------------------------------------------------
+# _minimize_game_winner_atom edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestMinimizeGameWinnerAtomEdgeCases:
+    """Cover defensive branches in _minimize_game_winner_atom."""
+
+    _remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
+
+    def test_margin_condition_in_atom_is_skipped_by_covered(self):
+        """covered() skips non-GameResult conditions (MarginCondition) with continue.
+
+        When the candidate atom contains a MarginCondition, the covered() inner
+        function still returns the full mask set (all outcomes possible) because
+        the MarginCondition is ignored — it does not constrain which game-winner
+        mask is covered.
+        """
+        mc = MarginCondition(add=(("A", "B"),), sub=(), op=">=", threshold=3)
+        # atom: one simple GameResult + one MarginCondition
+        atom = [GameResult("A", "B", 1, None), mc]
+        # always_covered_set covers all 4 outcomes — so the GameResult is redundant
+        result = _minimize_game_winner_atom(atom, {0, 1, 2, 3}, self._remaining, 2)
+        # The GameResult is dropped; the MarginCondition is kept
+        assert result == [mc]
+
+    def test_non_unit_min_margin_gameresult_is_skipped(self):
+        """GameResult with min_margin != 1 is skipped by the outer continue."""
+        atom = [GameResult("A", "B", 3, None)]
+        result = _minimize_game_winner_atom(atom, {0, 1, 2, 3}, self._remaining, 2)
+        assert result == [GameResult("A", "B", 3, None)]
+
+    def test_bounded_max_margin_gameresult_is_skipped(self):
+        """GameResult with max_margin set is skipped by the outer continue."""
+        atom = [GameResult("A", "B", 1, 4)]
+        result = _minimize_game_winner_atom(atom, {0, 1, 2, 3}, self._remaining, 2)
+        assert result == [GameResult("A", "B", 1, 4)]
+
+    def test_gameresult_pair_not_in_remaining_exhausts_inner_loop(self):
+        """GameResult whose team pair doesn't appear in remaining exhausts the inner
+        for loop covering the 1070→1067 (inner-loop fall-through) branch.
+
+        With remaining=[RemainingGame("A","B")] and an atom containing
+        GameResult("X","Y",...), the inner loop iterates all pairs and finds no match.
+        The outer loop then proceeds to the next condition in conds (branch 1070→1067).
+        """
+        remaining_one = [RemainingGame("A", "B")]
+        # First condition: GameResult for (A,B) — matched, so covered() works.
+        # Second condition: GameResult for (X,Y) — NOT in remaining; inner loop exhausts.
+        atom = [GameResult("A", "B", 1, None), GameResult("X", "Y", 1, None)]
+        # Both conditions are "simple" (min_margin=1, max_margin=None).
+        # always_covered_set covers all outcomes → both are redundant → result is [].
+        result = _minimize_game_winner_atom(atom, {0, 1}, remaining_one, 1)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# compute_odds_from_precomputed: eliminated team and seed_idx >= playoff_seeds
+# ---------------------------------------------------------------------------
+
+
+class TestComputeOddsFromPrecomputedEliminatedPath:
+    """compute_odds_from_precomputed with a 5-team region and playoff_seeds=4."""
+
+    @staticmethod
+    def _five_team_eo(coin_flips=None):
+        """Synthetic EnumeratedOutcomes: one mask, 5-team seeding, no remaining games."""
+        return EnumeratedOutcomes(
+            groups={(0, ("A", "B", "C", "D", "E")): []},
+            non_sensitive_masks={0},
+            pairs=[],
+            R=0,
+            total_combos=1,
+            coin_flips=coin_flips or {},
+            margin_tiebreaker_masks={},
+        )
+
+    def test_eliminated_team_has_zero_p_playoffs(self):
+        """Team E at seed position 5 (index 4) is not counted — p_playoffs=0."""
+        eo = self._five_team_eo()
+        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
+        assert odds["E"].p_playoffs == pytest.approx(0.0)
+
+    def test_eliminated_flag_set_for_zero_p_playoffs(self):
+        """eliminated=True and final_playoffs=0.0 for the team at position 5."""
+        eo = self._five_team_eo()
+        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
+        assert odds["E"].eliminated is True
+        assert odds["E"].final_playoffs == pytest.approx(0.0)
+
+    def test_top_four_teams_have_nonzero_p_playoffs(self):
+        """Teams A-D are each at a playoff seed in the single outcome."""
+        eo = self._five_team_eo()
+        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
+        for team in ("A", "B", "C", "D"):
+            assert odds[team].p_playoffs == pytest.approx(1.0)
+
+    def test_eliminated_team_skipped_in_coin_flip_path(self):
+        """E at seed position 5 is not accumulated even in the coin-flip (else) path."""
+        # A and B are in a coin-flip group; E is still at the eliminated position
+        eo = self._five_team_eo(coin_flips={0: [["A", "B"]]})
+        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
+        assert odds["E"].p_playoffs == pytest.approx(0.0)
+        assert odds["E"].eliminated is True
+        # A and B split the #1/#2 seed 50/50
+        assert odds["A"].p1 == pytest.approx(0.5)
+        assert odds["B"].p1 == pytest.approx(0.5)
+
+    def test_partial_odds_team_uses_p_playoffs_as_final(self):
+        """A team with 0 < p_playoffs < 1 uses final_playoffs=p_playoffs (else branch).
+
+        Two outcomes: in outcome 1 D makes playoffs (#4 seed), in outcome 2 D is
+        eliminated (position 5). D's p_playoffs=0.5, which is neither clinched nor
+        eliminated, so final_playoffs=p_playoffs is used (line 1227).
+        """
+        eo = EnumeratedOutcomes(
+            groups={
+                (0, ("A", "B", "C", "D", "E")): [],  # D is #4; E eliminated
+                (1, ("E", "A", "B", "C", "D")): [],  # E is #1; D eliminated
+            },
+            non_sensitive_masks={0, 1},
+            pairs=[],
+            R=0,
+            total_combos=1,
+            coin_flips={},
+            margin_tiebreaker_masks={},
+        )
+        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
+        # D appears at playoff seed in only 1 of 2 outcomes
+        assert odds["D"].p_playoffs == pytest.approx(0.5)
+        assert odds["D"].clinched is False
+        assert odds["D"].eliminated is False
+        assert odds["D"].final_playoffs == pytest.approx(0.5)
+        # Same for E
+        assert odds["E"].p_playoffs == pytest.approx(0.5)
+        assert odds["E"].final_playoffs == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# _format_team_list: single-team case
+# ---------------------------------------------------------------------------
+
+
+class TestFormatTeamList:
+    """_format_team_list covers all three length branches."""
+
+    def test_single_team(self):
+        """Single-element list returns the team name directly (line 2007 coverage)."""
+        assert _format_team_list(["Alpha"]) == "Alpha"
+
+    def test_two_teams(self):
+        """Two-element list uses 'A and B' format."""
+        assert _format_team_list(["Alpha", "Beta"]) == "Alpha and Beta"
+
+    def test_three_teams(self):
+        """Three-element list uses Oxford-comma 'A, B, and C' format."""
+        assert _format_team_list(["Alpha", "Beta", "Gamma"]) == "Alpha, Beta, and Gamma"
+
+
+# ---------------------------------------------------------------------------
+# render_scenarios: tie-group edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestRenderScenariosEdgeCases:
+    """render_scenarios branches for cross-boundary tie groups and group interiors."""
+
+    @staticmethod
+    def _sc(seeding, tiebreaker_groups=None, coinflip_groups=None):
+        """Build a minimal scenario dict for render_scenarios."""
+        return {
+            "scenario_num": 1,
+            "sub_label": "",
+            "conditions_atom": None,
+            "game_winners": [("A", "B")],
+            "seeding": tuple(seeding),
+            "tiebreaker_groups": tiebreaker_groups,
+            "coinflip_groups": coinflip_groups,
+        }
+
+    def test_tie_group_spanning_playoff_boundary_falls_through(self):
+        """A tiebreaker group crossing the playoff boundary is not collapsed.
+
+        Group [D, E] sits at positions 3 and 4 (0-indexed). With playoff_seeds=4,
+        position 4 is outside the playoff cutoff, so all(p < 4) is False and the
+        group is not added to tb_pos — normal individual rendering applies to
+        positions 0-3.
+        """
+        sc = self._sc(
+            seeding=["A", "B", "C", "D", "E"],
+            tiebreaker_groups=[["D", "E"]],
+        )
+        rendered = render_scenarios([sc], playoff_seeds=4)
+        assert "Tie between" not in rendered
+        assert "4. D" in rendered
+
+    def test_overlapping_groups_hit_interior_continue(self):
+        """Overlapping tiebreaker+coinflip groups overwrite tb_pos so that an
+        interior position is encountered, triggering the i += 1 path.
+
+        tiebreaker_groups=[["A","B"]] → tb_pos = {0:(0,[A,B],...), 1:(0,[A,B],...)}
+        coinflip_groups=[["B","C"]]  → overwrites tb_pos[1] with (1,[B,C],...),
+                                       adds tb_pos[2] = (1,[B,C],...)
+
+        Loop: i=0 renders "1-2. Tie A and B" → jumps to i=2.
+              i=2: tb_pos[2] but group_start=1 ≠ i=2 → interior continue → i=3.
+              i=3: normal "4. D".
+        """
+        sc = self._sc(
+            seeding=["A", "B", "C", "D"],
+            tiebreaker_groups=[["A", "B"]],
+            coinflip_groups=[["B", "C"]],
+        )
+        rendered = render_scenarios([sc], playoff_seeds=4)
+        assert "1-2. Tie between A and B" in rendered
+        assert "4. D" in rendered
+        # position 3 (C) is skipped by the interior continue — no "3. C" line
+        assert "3. C" not in rendered
+
+
+# ---------------------------------------------------------------------------
+# build_pre_playoff_home_scenarios: 5A-7A bracket (is_1a_4a=False) and away seeds
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPrePlayoffHomeScenariosEdgeCases:
+    """build_pre_playoff_home_scenarios branches for 5A-7A and away-seed R1."""
+
+    # Use the 3-7A mid-season fixture: 3 remaining games, teams include Brandon
+    # which can finish 1st through 4th (some as away-team seeds in SLOTS_5A_7A_2025).
+    # Region 3 in SLOTS_5A_7A_2025: seeds 1 and 2 are home, seeds 3 and 4 are away.
+
+    def test_5a_7a_returns_three_rounds(self):
+        """5A-7A bracket produces 3 rounds (no Second Round)."""
+        home_scenarios, _ = build_pre_playoff_home_scenarios(
+            team="Brandon",
+            region=3,
+            season=2025,
+            slots=SLOTS_5A_7A_2025,
+            teams=teams_3_7a,
+            completed=expected_3_7a_completed_games,
+            remaining=expected_3_7a_remaining_games,
+        )
+        assert len(home_scenarios) == 3
+        assert [r.round_name for r in home_scenarios] == ["First Round", "Quarterfinals", "Semifinals"]
+
+    def test_5a_7a_away_seed_paths_produce_will_not_host_r1(self):
+        """Brandon finishing as seed 3 or 4 (both away in SLOTS_5A_7A_2025) contributes
+        to will_not_host in R1, confirming the was_home_r1=False branch is reached."""
+        home_scenarios, _ = build_pre_playoff_home_scenarios(
+            team="Brandon",
+            region=3,
+            season=2025,
+            slots=SLOTS_5A_7A_2025,
+            teams=teams_3_7a,
+            completed=expected_3_7a_completed_games,
+            remaining=expected_3_7a_remaining_games,
+        )
+        r1 = home_scenarios[0]
+        assert r1.round_name == "First Round"
+        # Brandon can be seed 3 or 4 (away teams) → will_not_host is non-empty
+        assert len(r1.will_not_host) > 0

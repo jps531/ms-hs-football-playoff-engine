@@ -349,13 +349,18 @@ def _render_condition_label(cond: HomeGameCondition) -> str:
         or ``"Region 2 #3 Seed advances to Second Round"``.
     """
     if cond.kind == "seed_required":
+        if cond.region is None and cond.team_name is None:
+            return f"Team finishes as the #{cond.seed} seed"
         label = cond.team_name or f"Region {cond.region} #{cond.seed} Seed"
         return f"{label} finishes as the #{cond.seed} seed"
     # kind == "advances"
     if cond.region is None:
         # Refers to the target team itself; caller should substitute name
         return f"Team advances to {cond.round_name}"
-    label = cond.team_name or f"Region {cond.region} #{cond.seed} Seed"
+    if cond.team_name is not None:
+        label = f"Region {cond.region} #{cond.seed} {cond.team_name}"
+    else:
+        label = f"Region {cond.region} #{cond.seed} Seed"
     return f"{label} advances to {cond.round_name}"
 
 
@@ -422,6 +427,68 @@ def _odds_pct(p: float | None, p_w: float | None) -> str:
     return f" ({p * 100:.1f}%)"  # type: ignore[operator]
 
 
+def _render_pre_playoff_block(
+    scenarios: tuple[HomeGameScenario, ...],
+    team_name: str,
+    seed_atoms: dict[str, dict[int, list[list]]],
+) -> list[str]:
+    """Render a pre-playoff home-game block, expanding seed_required into game conditions.
+
+    Each ``HomeGameScenario`` whose first condition is ``kind="seed_required"``
+    with ``region=None`` is expanded: the ``seed_required`` is replaced by each
+    atom in ``seed_atoms[team_name][seed]``, with any remaining
+    ``HomeGameCondition`` objects AND-joined after the atom text.  Multiple atoms
+    produce multiple numbered lines.  Scenarios without a ``seed_required`` first
+    condition fall back to a single numbered line of AND-joined condition labels.
+    """
+    lines: list[str] = []
+    n = 0
+
+    for sc in scenarios:
+        conds = sc.conditions
+        if not conds:
+            if sc.explanation:
+                lines.append(f"   [{sc.explanation}]")
+            continue
+
+        first_cond = conds[0]
+        if first_cond.kind == "seed_required" and first_cond.region is None and first_cond.seed is not None:
+            seed: int = first_cond.seed
+            atoms = seed_atoms.get(team_name, {}).get(seed, [])
+            remaining = conds[1:]
+
+            # Pre-render the remaining HomeGameConditions (same for every atom)
+            remaining_labels = []
+            for cond in remaining:
+                label = _render_condition_label(cond)
+                label = label.replace("Team advances", f"{team_name} advances")
+                label = label.replace("Team finishes", f"{team_name} finishes")
+                remaining_labels.append(label)
+
+            for atom in atoms:
+                n += 1
+                parts = [_render_atom(atom)] + remaining_labels
+                line = f"{n}. " + " AND ".join(parts)
+                lines.append(line)
+                if sc.explanation:
+                    lines.append(f"   [{sc.explanation}]")
+        else:
+            # Fallback: flatten all conditions to a single numbered line
+            n += 1
+            labels = []
+            for cond in conds:
+                label = _render_condition_label(cond)
+                label = label.replace("Team advances", f"{team_name} advances")
+                label = label.replace("Team finishes", f"{team_name} finishes")
+                labels.append(label)
+            line = f"{n}. " + " AND ".join(labels)
+            lines.append(line)
+            if sc.explanation:
+                lines.append(f"   [{sc.explanation}]")
+
+    return lines
+
+
 def render_team_home_scenarios(
     team: str,
     home_scenarios: list[RoundHomeScenarios],
@@ -485,6 +552,54 @@ def render_team_home_scenarios(
             else:
                 lines.append(header)
                 lines.extend(_render_home_scenario_block(rnd.will_not_host, team))
+            lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def render_pre_playoff_team_home_scenarios(
+    team: str,
+    home_scenarios: list[RoundHomeScenarios],
+    seed_atoms: dict[str, dict[int, list[list]]],
+) -> str:
+    """Render pre-playoff home scenarios with seed_required conditions expanded to game conditions.
+
+    Like ``render_team_home_scenarios`` but for the ``seed=None`` (pre-playoff)
+    path of ``enumerate_home_game_scenarios``.  Each
+    ``HomeGameCondition(kind="seed_required")`` is replaced by the actual
+    regular-season game conditions from *seed_atoms* so the reader sees
+    "Taylorsville beats Lumberton" instead of "Taylorsville finishes as the #1 seed".
+
+    Multiple atoms for the same seed produce multiple numbered lines; remaining
+    playoff-advance conditions are AND-joined after the atom text on the same line.
+
+    Args:
+        team:           School name of the target team.
+        home_scenarios: From ``enumerate_home_game_scenarios(seed=None, ...)``.
+        seed_atoms:     From ``build_scenario_atoms``, keyed by
+                        ``team → seed → list[atom]``.
+
+    Returns:
+        Multi-line string suitable for printing to a terminal or text file.
+    """
+    lines: list[str] = [team, ""]
+
+    for rnd in home_scenarios:
+        p = rnd.p_host_marginal
+        p_w = rnd.p_host_marginal_weighted
+
+        if rnd.will_host:
+            header = f"Will Host {rnd.round_name}{_odds_pct(p, p_w)}:"
+            lines.append(header)
+            lines.extend(_render_pre_playoff_block(rnd.will_host, team, seed_atoms))
+            lines.append("")
+
+        if rnd.will_not_host:
+            not_p = (1.0 - p) if p is not None else None
+            not_p_w = (1.0 - p_w) if p_w is not None else None
+            header = f"Will Not Host {rnd.round_name}{_odds_pct(not_p, not_p_w)}:"
+            lines.append(header)
+            lines.extend(_render_pre_playoff_block(rnd.will_not_host, team, seed_atoms))
             lines.append("")
 
     return "\n".join(lines).rstrip()

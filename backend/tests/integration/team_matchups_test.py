@@ -44,7 +44,7 @@ Coverage areas
 
 import pytest
 
-from backend.helpers.data_classes import FormatSlot, MatchupEntry, RoundMatchups
+from backend.helpers.data_classes import FormatSlot, MatchupEntry, PlayoffState, RoundMatchups
 from backend.helpers.home_game_scenarios import enumerate_team_matchups
 from backend.helpers.scenario_renderer import render_team_matchups, team_matchups_as_dict
 from backend.tests.data.playoff_brackets_2025 import (
@@ -901,9 +901,7 @@ class TestTaylorsville2025PostFirstRound:
                 "Semifinals": 0.1875,
             },
             team_lookup=lookup,
-            known_survivors=self._SURVIVORS,
-            r1_survivors=self._SURVIVORS,
-            completed_rounds={"First Round"},
+            state=PlayoffState(known_survivors=self._SURVIVORS, r1_survivors=self._SURVIVORS, completed_rounds={"First Round"}),
         )
 
     def test_render_text(self, taylorsville_rounds):
@@ -1050,9 +1048,7 @@ class TestTaylorsville2025PostSecondRound:
             p_host_conditional_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
             p_host_marginal_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
             team_lookup=lookup,
-            known_survivors=self._R2_SURVIVORS,
-            r1_survivors=self._R1_SURVIVORS,
-            completed_rounds={"First Round", "Second Round"},
+            state=PlayoffState(known_survivors=self._R2_SURVIVORS, r1_survivors=self._R1_SURVIVORS, completed_rounds={"First Round", "Second Round"}),
         )
 
     def test_render_text(self, taylorsville_rounds):
@@ -1158,9 +1154,7 @@ class TestTaylorsville2025PostQuarterfinals:
             p_host_conditional_by_round={"Semifinals": 0.0},
             p_host_marginal_by_round={"Semifinals": 0.0},
             team_lookup=lookup,
-            known_survivors=self._QF_SURVIVORS,
-            r1_survivors=self._R1_SURVIVORS,
-            completed_rounds={"First Round", "Second Round", "Quarterfinals"},
+            state=PlayoffState(known_survivors=self._QF_SURVIVORS, r1_survivors=self._R1_SURVIVORS, completed_rounds={"First Round", "Second Round", "Quarterfinals"}),
         )
 
     def test_render_text(self, taylorsville_rounds):
@@ -1203,13 +1197,13 @@ class TestCompletedRoundsSemifinals:
 
     def test_5a_7a_semifinals_omitted(self):
         """5A-7A: passing completed_rounds={'Semifinals'} returns only R1 and QF."""
-        rounds = _matchups(7, region=1, seed=1, completed_rounds={"Semifinals"})
+        rounds = _matchups(7, region=1, seed=1, state=PlayoffState(completed_rounds={"Semifinals"}))
         names = [r.round_name for r in rounds]
         assert names == ["First Round", "Quarterfinals"]
 
     def test_1a_4a_semifinals_omitted(self):
         """1A-4A: passing completed_rounds={'Semifinals'} returns R1, R2, and QF."""
-        rounds = _matchups(2, region=8, seed=1, completed_rounds={"Semifinals"})
+        rounds = _matchups(2, region=8, seed=1, state=PlayoffState(completed_rounds={"Semifinals"}))
         names = [r.round_name for r in rounds]
         assert names == ["First Round", "Second Round", "Quarterfinals"]
 
@@ -1219,7 +1213,7 @@ class TestCompletedRoundsSemifinals:
             7,
             region=1,
             seed=1,
-            completed_rounds={"First Round", "Quarterfinals", "Semifinals"},
+            state=PlayoffState(completed_rounds={"First Round", "Quarterfinals", "Semifinals"}),
         )
         assert rounds == []
 

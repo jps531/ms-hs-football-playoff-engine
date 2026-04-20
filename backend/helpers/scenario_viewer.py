@@ -2114,3 +2114,195 @@ def render_division_scenarios(
         teams, completed, remaining, scenario_atoms, playoff_seeds, pa_win, base_margin_default
     )
     return render_scenarios(scenarios, playoff_seeds)
+
+
+# ---------------------------------------------------------------------------
+# Pre-playoff home-game scenario integration
+# ---------------------------------------------------------------------------
+
+
+def build_pre_playoff_home_scenarios(
+    team: str,
+    region: int,
+    season: int,
+    slots: list,
+    teams: list[str],
+    completed: list[CompletedGame],
+    remaining: list[RemainingGame],
+    playoff_seeds: int = 4,
+    win_prob_fn=None,
+    team_lookup: dict | None = None,
+) -> tuple[list, dict]:
+    """Build pre-playoff home scenarios and scenario atoms for a team in one call.
+
+    Combines ``enumerate_outcomes``, ``build_scenario_atoms``,
+    ``compute_odds_from_precomputed``, and the ``bracket_home_odds`` helpers so
+    the caller does not have to wire them together manually.
+
+    The returned ``(home_scenarios, atoms)`` pair is ready to pass directly to
+    ``render_pre_playoff_team_home_scenarios``.
+
+    Args:
+        team:          School name of the target team.
+        region:        Region number (1–8 for 1A; same range for other classes).
+        season:        Football season year (e.g. ``2025``).
+        slots:         All first-round ``FormatSlot`` objects for the class/season
+                       (e.g. ``SLOTS_1A_4A_2025``).
+        teams:         All team names in the region.
+        completed:     Completed region games.
+        remaining:     Remaining (unplayed) region games.
+        playoff_seeds: Number of seeds that advance to the playoffs (default 4).
+        win_prob_fn:   Optional win-probability function
+                       ``(r1, s1, r2, s2) -> float`` for weighted bracket odds.
+                       Defaults to 50/50 (``equal_matchup_prob``).
+        team_lookup:   Optional ``(region, seed) → school name`` mapping passed
+                       through to ``enumerate_home_game_scenarios``.
+
+    Returns:
+        ``(home_scenarios, atoms)`` where
+
+        * ``home_scenarios`` — ``list[RoundHomeScenarios]`` as returned by
+          ``enumerate_home_game_scenarios``.
+        * ``atoms`` — ``dict[team → dict[seed → list[atom]]]`` as returned by
+          ``build_scenario_atoms``.
+
+    Raises:
+        ValueError: If *team* is not in *teams*, or has already been eliminated
+                    (no achievable playoff seeds remain).
+    """
+    from backend.helpers.bracket_home_odds import (
+        compute_bracket_advancement_odds,
+        compute_quarterfinal_home_odds,
+        compute_second_round_home_odds,
+        compute_semifinal_home_odds,
+        half_slots_for_region,
+        slot_index_for,
+        was_home_r1,
+    )
+    from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
+    from backend.helpers.scenarios import determine_odds, determine_scenarios
+
+    # 1. Build atoms and compute seeding odds.
+    #    enumerate_outcomes is shared with build_scenario_atoms to avoid a
+    #    second 12^R margin enumeration.  determine_scenarios runs its own
+    #    enumeration for margin-accurate seeding probabilities (compute_odds_from_precomputed
+    #    does not weight margin-sensitive seedings correctly).
+    eo = enumerate_outcomes(teams, completed, remaining)
+    atoms = build_scenario_atoms(teams, completed, remaining, playoff_seeds=playoff_seeds, precomputed=eo)
+    sr = determine_scenarios(teams, completed, remaining)
+    region_odds = determine_odds(
+        teams, sr.first_counts, sr.second_counts, sr.third_counts, sr.fourth_counts, sr.denom
+    )
+
+    # 2. Determine which seeds the target team can still achieve.
+    team_odds = region_odds.get(team)
+    if team_odds is None:
+        raise ValueError(f"Team {team!r} not found in region data")
+    achievable_seeds = [s for s in range(1, playoff_seeds + 1) if getattr(team_odds, f"p{s}", 0.0) > 0.0]
+    if not achievable_seeds:
+        raise ValueError(f"{team!r} has been eliminated — no achievable playoff seeds remain")
+
+    # 3. Compute bracket advancement and hosting odds.
+    kw: dict = {"win_prob_fn": win_prob_fn} if win_prob_fn is not None else {}
+    ba = compute_bracket_advancement_odds(region, region_odds, slots, **kw)
+    qf_host = compute_quarterfinal_home_odds(region, region_odds, slots, season, **kw)
+    sf_host = compute_semifinal_home_odds(region, region_odds, slots, season, **kw)
+
+    # 4. Compute R1 hosting marginal probability: sum p_seed for seeds that are
+    #    the designated home team in their R1 bracket slot.
+    half_slots = half_slots_for_region(region, slots)
+    is_1a_4a = len(half_slots) == 8
+    pm_r1 = 0.0
+    for s in achievable_seeds:
+        idx = slot_index_for(region, s, half_slots)
+        if idx is None:
+            continue
+        if was_home_r1(region, s, half_slots[idx]):
+            pm_r1 += getattr(team_odds, f"p{s}", 0.0)
+
+    tay_ba = ba[team]
+    p_reach: dict[str, float] = {
+        "First Round": 1.0,
+        "Quarterfinals": tay_ba.quarterfinals,
+        "Semifinals": tay_ba.semifinals,
+    }
+    pm: dict[str, float] = {
+        "First Round": pm_r1,
+        "Quarterfinals": qf_host[team],
+        "Semifinals": sf_host[team],
+    }
+
+    if is_1a_4a:
+        r2_host = compute_second_round_home_odds(region, region_odds, slots, season, **kw)
+        p_reach["Second Round"] = tay_ba.second_round
+        pm["Second Round"] = r2_host[team]
+
+    pc: dict[str, float] = {rn: pm[rn] / p_reach[rn] for rn in p_reach if p_reach[rn] > 0.0}
+
+    # 5. Enumerate home scenarios with pre-computed odds.
+    home_scenarios = enumerate_home_game_scenarios(
+        region=region,
+        seed=None,
+        slots=slots,
+        season=season,
+        achievable_seeds=achievable_seeds,
+        p_reach_by_round=p_reach,
+        p_host_marginal_by_round=pm,
+        p_host_conditional_by_round=pc,
+        team_lookup=team_lookup,
+    )
+
+    return home_scenarios, atoms
+
+
+def render_team_pre_playoff_home_scenarios(
+    team: str,
+    region: int,
+    season: int,
+    slots: list,
+    teams: list[str],
+    completed: list[CompletedGame],
+    remaining: list[RemainingGame],
+    playoff_seeds: int = 4,
+    win_prob_fn=None,
+    team_lookup: dict | None = None,
+) -> str:
+    """Enumerate and render pre-playoff home scenarios for a team as human-readable text.
+
+    Convenience wrapper that calls ``build_pre_playoff_home_scenarios`` then
+    ``render_pre_playoff_team_home_scenarios``.  All parameters are forwarded
+    to the underlying functions unchanged.
+
+    Args:
+        team:          School name of the target team.
+        region:        Region number.
+        season:        Football season year.
+        slots:         All first-round ``FormatSlot`` objects for the class/season.
+        teams:         All team names in the region.
+        completed:     Completed region games.
+        remaining:     Remaining (unplayed) region games.
+        playoff_seeds: Number of seeds that advance to the playoffs (default 4).
+        win_prob_fn:   Optional win-probability function for weighted odds.
+        team_lookup:   Optional ``(region, seed) → school name`` mapping.
+
+    Returns:
+        Multi-line string suitable for printing to a terminal or text file.
+
+    Raises:
+        ValueError: If the team is not in the region data or has been eliminated.
+    """
+    from backend.helpers.scenario_renderer import render_pre_playoff_team_home_scenarios
+
+    home_scenarios, atoms = build_pre_playoff_home_scenarios(
+        team=team,
+        region=region,
+        season=season,
+        slots=slots,
+        teams=teams,
+        completed=completed,
+        remaining=remaining,
+        playoff_seeds=playoff_seeds,
+        win_prob_fn=win_prob_fn,
+        team_lookup=team_lookup,
+    )
+    return render_pre_playoff_team_home_scenarios(team, home_scenarios, atoms)
