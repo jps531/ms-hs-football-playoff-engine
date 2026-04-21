@@ -193,25 +193,31 @@ _STEP2_TEAMS = ["Alpha", "Beta", "Delta", "Gamma", "Omega"]
 
 _STEP2_COMPLETED = [
     # Alpha's games (no game vs Beta)
-    CompletedGame(a="Alpha", b="Delta", res_a=1,  pd_a=7,   pa_a=7,   pa_b=14),
-    CompletedGame(a="Alpha", b="Gamma", res_a=1,  pd_a=21,  pa_a=0,   pa_b=21),
-    CompletedGame(a="Alpha", b="Omega", res_a=-1, pd_a=-7,  pa_a=7,   pa_b=0),
+    CompletedGame(a="Alpha", b="Delta", res_a=1, pd_a=7, pa_a=7, pa_b=14),
+    CompletedGame(a="Alpha", b="Gamma", res_a=1, pd_a=21, pa_a=0, pa_b=21),
+    CompletedGame(a="Alpha", b="Omega", res_a=-1, pd_a=-7, pa_a=7, pa_b=0),
     # Beta's games (no game vs Alpha)
-    CompletedGame(a="Beta",  b="Delta", res_a=1,  pd_a=7,   pa_a=0,   pa_b=7),
-    CompletedGame(a="Beta",  b="Gamma", res_a=-1, pd_a=-14, pa_a=14,  pa_b=0),
-    CompletedGame(a="Beta",  b="Omega", res_a=1,  pd_a=7,   pa_a=7,   pa_b=14),
+    CompletedGame(a="Beta", b="Delta", res_a=1, pd_a=7, pa_a=0, pa_b=7),
+    CompletedGame(a="Beta", b="Gamma", res_a=-1, pd_a=-14, pa_a=14, pa_b=0),
+    CompletedGame(a="Beta", b="Omega", res_a=1, pd_a=7, pa_a=7, pa_b=14),
     # Other games (Delta, Gamma, Omega round-robin)
-    CompletedGame(a="Delta", b="Gamma", res_a=-1, pd_a=-7,  pa_a=14,  pa_b=7),
-    CompletedGame(a="Delta", b="Omega", res_a=-1, pd_a=-14, pa_a=14,  pa_b=0),
-    CompletedGame(a="Gamma", b="Omega", res_a=1,  pd_a=7,   pa_a=0,   pa_b=7),
+    CompletedGame(a="Delta", b="Gamma", res_a=-1, pd_a=-7, pa_a=14, pa_b=7),
+    CompletedGame(a="Delta", b="Omega", res_a=-1, pd_a=-14, pa_a=14, pa_b=0),
+    CompletedGame(a="Gamma", b="Omega", res_a=1, pd_a=7, pa_a=0, pa_b=7),
 ]
 
 _STEP2_REMAINING: list[RemainingGame] = []
 
 _STEP2_MARGINS = {
-    ("Alpha", "Delta"): 7,   ("Alpha", "Gamma"): 21,  ("Alpha", "Omega"): 7,
-    ("Beta",  "Delta"): 7,   ("Beta",  "Gamma"): 14,  ("Beta",  "Omega"): 7,
-    ("Delta", "Gamma"): 7,   ("Delta", "Omega"): 14,  ("Gamma", "Omega"): 7,
+    ("Alpha", "Delta"): 7,
+    ("Alpha", "Gamma"): 21,
+    ("Alpha", "Omega"): 7,
+    ("Beta", "Delta"): 7,
+    ("Beta", "Gamma"): 14,
+    ("Beta", "Omega"): 7,
+    ("Delta", "Gamma"): 7,
+    ("Delta", "Omega"): 14,
+    ("Gamma", "Omega"): 7,
 }
 
 
@@ -712,19 +718,28 @@ class TestExplainBucketCircularThreeWay:
     """
 
     _BUCKET = ["Alpha", "Beta", "Gamma"]
-    _H2H: dict = defaultdict(float, {
-        ("Alpha", "Beta"): 1.0, ("Beta", "Alpha"): 0.0,
-        ("Beta", "Gamma"): 1.0, ("Gamma", "Beta"): 0.0,
-        ("Gamma", "Alpha"): 1.0, ("Alpha", "Gamma"): 0.0,
-    })
+    _H2H: dict = defaultdict(
+        float,
+        {
+            ("Alpha", "Beta"): 1.0,
+            ("Beta", "Alpha"): 0.0,
+            ("Beta", "Gamma"): 1.0,
+            ("Gamma", "Beta"): 0.0,
+            ("Gamma", "Alpha"): 1.0,
+            ("Alpha", "Gamma"): 0.0,
+        },
+    )
     # step2 fully resolves all three (all distinct keys)
     _SD = _make_step_data(
         step2={"Alpha": [2, 2], "Beta": [2, 0], "Gamma": [0, 2]},
         step4={"Alpha": [7, 7], "Beta": [7, 0], "Gamma": [0, 7]},
         h2h_pd_cap_dict={
-            ("Alpha", "Beta"): 7, ("Beta", "Alpha"): -7,
-            ("Beta", "Gamma"): 7, ("Gamma", "Beta"): -7,
-            ("Gamma", "Alpha"): 7, ("Alpha", "Gamma"): -7,
+            ("Alpha", "Beta"): 7,
+            ("Beta", "Alpha"): -7,
+            ("Beta", "Gamma"): 7,
+            ("Gamma", "Beta"): -7,
+            ("Gamma", "Alpha"): 7,
+            ("Alpha", "Gamma"): -7,
         },
         wl_totals={"Alpha": {"pa": 10}, "Beta": {"pa": 20}, "Gamma": {"pa": 15}},
         outside=["Wayne", "Jones"],
@@ -783,11 +798,17 @@ class TestExplainBucketPartialSplit:
     and instead say 'giving B 2nd' since the H2H record tells the whole story.
     """
 
-    _H2H: dict = defaultdict(float, {
-        ("Alpha", "Beta"): 1.0, ("Beta", "Alpha"): 0.0,
-        ("Alpha", "Gamma"): 1.0, ("Gamma", "Alpha"): 0.0,
-        ("Beta", "Gamma"): 1.0, ("Gamma", "Beta"): 0.0,
-    })
+    _H2H: dict = defaultdict(
+        float,
+        {
+            ("Alpha", "Beta"): 1.0,
+            ("Beta", "Alpha"): 0.0,
+            ("Alpha", "Gamma"): 1.0,
+            ("Gamma", "Alpha"): 0.0,
+            ("Beta", "Gamma"): 1.0,
+            ("Gamma", "Beta"): 0.0,
+        },
+    )
 
     def _call(self, team, seed):
         """Invoke _explain_bucket for one team; step_data is irrelevant here."""
@@ -936,11 +957,17 @@ class TestExplainBucketFallbackPaths:
 
     def test_circular_three_way_no_step_data_falls_to_via_tiebreaker(self):
         """Circular beat1/lost1 without step_data → 'via tiebreaker' fallback (line 387)."""
-        h2h: dict = defaultdict(float, {
-            ("Alpha", "Beta"): 1.0, ("Beta", "Alpha"): 0.0,
-            ("Beta", "Gamma"): 1.0, ("Gamma", "Beta"): 0.0,
-            ("Gamma", "Alpha"): 1.0, ("Alpha", "Gamma"): 0.0,
-        })
+        h2h: dict = defaultdict(
+            float,
+            {
+                ("Alpha", "Beta"): 1.0,
+                ("Beta", "Alpha"): 0.0,
+                ("Beta", "Gamma"): 1.0,
+                ("Gamma", "Beta"): 0.0,
+                ("Gamma", "Alpha"): 1.0,
+                ("Alpha", "Gamma"): 0.0,
+            },
+        )
         result = _explain_bucket(
             team="Alpha",
             bucket=["Alpha", "Beta", "Gamma"],
@@ -955,10 +982,14 @@ class TestExplainBucketFallbackPaths:
 
     def test_three_way_mixed_fallback_with_step_data(self):
         """3-way mixed bucket (beat one, haven't played other) with step_data provides specific clause."""
-        h2h: dict = defaultdict(float, {
-            ("Alpha", "Beta"): 1.0, ("Beta", "Alpha"): 0.0,
-            # Alpha vs Gamma: no H2H → 0.0 each (not played)
-        })
+        h2h: dict = defaultdict(
+            float,
+            {
+                ("Alpha", "Beta"): 1.0,
+                ("Beta", "Alpha"): 0.0,
+                # Alpha vs Gamma: no H2H → 0.0 each (not played)
+            },
+        )
         sd = _make_step_data(
             step2={"Alpha": [2], "Beta": [0], "Gamma": [2]},
             step4={"Alpha": [7], "Beta": [0], "Gamma": [7]},
@@ -983,18 +1014,27 @@ class TestExplainBucketFallbackPaths:
 
     def test_circular_three_way_with_step_data_all_tied_falls_to_via_tiebreaker(self):
         """Circular beat1/lost1 WITH step_data where clause is None → 'via tiebreaker' (line 381→387)."""
-        h2h: dict = defaultdict(float, {
-            ("Alpha", "Beta"): 1.0, ("Beta", "Alpha"): 0.0,
-            ("Beta", "Gamma"): 1.0, ("Gamma", "Beta"): 0.0,
-            ("Gamma", "Alpha"): 1.0, ("Alpha", "Gamma"): 0.0,
-        })
+        h2h: dict = defaultdict(
+            float,
+            {
+                ("Alpha", "Beta"): 1.0,
+                ("Beta", "Alpha"): 0.0,
+                ("Beta", "Gamma"): 1.0,
+                ("Gamma", "Beta"): 0.0,
+                ("Gamma", "Alpha"): 1.0,
+                ("Alpha", "Gamma"): 0.0,
+            },
+        )
         sd = _make_step_data(
             step2={"Alpha": [2], "Beta": [2], "Gamma": [2]},
             step4={"Alpha": [7], "Beta": [7], "Gamma": [7]},
             h2h_pd_cap_dict={
-                ("Alpha", "Beta"): 0, ("Beta", "Alpha"): 0,
-                ("Beta", "Gamma"): 0, ("Gamma", "Beta"): 0,
-                ("Alpha", "Gamma"): 0, ("Gamma", "Alpha"): 0,
+                ("Alpha", "Beta"): 0,
+                ("Beta", "Alpha"): 0,
+                ("Beta", "Gamma"): 0,
+                ("Gamma", "Beta"): 0,
+                ("Alpha", "Gamma"): 0,
+                ("Gamma", "Alpha"): 0,
             },
             wl_totals={"Alpha": {"pa": 14}, "Beta": {"pa": 14}, "Gamma": {"pa": 14}},
             outside=["Wayne"],
@@ -1015,9 +1055,13 @@ class TestExplainBucketFallbackPaths:
 
     def test_mixed_three_way_with_step_data_all_tied_falls_to_via_tiebreaker(self):
         """3-way mixed bucket with step_data where clause is None → 'via tiebreaker' (line 401→403)."""
-        h2h: dict = defaultdict(float, {
-            ("Alpha", "Beta"): 1.0, ("Beta", "Alpha"): 0.0,
-        })
+        h2h: dict = defaultdict(
+            float,
+            {
+                ("Alpha", "Beta"): 1.0,
+                ("Beta", "Alpha"): 0.0,
+            },
+        )
         sd = _make_step_data(
             step2={"Alpha": [2], "Beta": [2], "Gamma": [2]},
             step4={"Alpha": [7], "Beta": [7], "Gamma": [7]},
