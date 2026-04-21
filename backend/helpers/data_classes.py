@@ -18,21 +18,51 @@ from typing import TypedDict
 #: Called as ``win_prob_fn(team_a, team_b, date_str)`` where ``team_a`` is the
 #: lexicographically-first team (per RemainingGame convention).  Returns the
 #: probability that ``team_a`` beats ``team_b`` on the given date.
-WinProbFn = Callable[[str, str, str | None], float]
+WinProbFn = Callable[[str, str, str | None, str | None], float]
 
 
-def equal_win_prob(_team_a: str, _team_b: str, _date_str: str | None = None) -> float:
+def equal_win_prob(
+    _team_a: str,
+    _team_b: str,
+    _date_str: str | None = None,
+    _location_a: str | None = None,
+) -> float:
     """Return 0.5 for every matchup (equal-probability default).
 
     Args:
         _team_a: Lexicographically-first team name (unused).
         _team_b: Lexicographically-second team name (unused).
         _date_str: Optional game date (unused in this implementation).
+        _location_a: Location from team_a's perspective (unused in this implementation).
 
     Returns:
         Always ``0.5``.
     """
     return 0.5
+
+
+@dataclass(frozen=True)
+class WinProbFactors:
+    """Full breakdown of a win probability estimate for frontend display.
+
+    All probabilities are from ``team_a``'s perspective (same convention as
+    ``WinProbFn``).  ``team_a`` is lexicographically first.
+    """
+
+    team_a: str
+    team_b: str
+    elo_a: float                    # Elo rating for team_a (as of query date)
+    elo_b: float                    # Elo rating for team_b (as of query date)
+    class_a: int                    # MHSAA classification 1–7
+    class_b: int                    # MHSAA classification 1–7
+    games_played_a: int             # completed games processed for team_a
+    games_played_b: int             # completed games processed for team_b
+    rpi_a: float | None             # RPI for team_a; None if < 3 games
+    rpi_b: float | None             # RPI for team_b; None if < 3 games
+    location_a: str | None          # 'home'/'away'/'neutral'/None (None = neutral)
+    raw_elo_prob: float             # P(team_a wins) without home-field adjustment
+    location_adjusted_prob: float   # P(team_a wins) with HFA applied
+    final_prob: float               # == location_adjusted_prob today; extension point
 
 
 # -------------------------
@@ -616,6 +646,7 @@ class RemainingGame:
 
     a: str  # team (lexicographically first)
     b: str  # team (lexicographically second)
+    location_a: str | None = None  # 'home'/'away'/'neutral' from a's perspective; None = unknown
 
 
 # --- Data class for a game result supplied by a caller (e.g. front-end what-if) ---

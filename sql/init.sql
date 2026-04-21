@@ -148,6 +148,26 @@ CREATE TABLE IF NOT EXISTS region_standings (
 
 
 -- ---------------------------------------------------------------------------
+-- Materialized Elo ratings and RPI per school per season
+-- ---------------------------------------------------------------------------
+-- One row per school per season. Overwritten on every pipeline run so the
+-- frontend always reads ratings that are consistent with the seeding odds
+-- stored in region_standings (both written in the same pipeline execution).
+-- computed_at lets the frontend show a "ratings as of [time]" freshness indicator,
+-- which is especially important during live-score-update runs.
+
+CREATE TABLE IF NOT EXISTS team_ratings (
+  school        TEXT    NOT NULL REFERENCES schools(school),
+  season        INTEGER NOT NULL,
+  elo           REAL    NOT NULL,
+  rpi           REAL,                   -- NULL if team has < 3 completed games
+  games_played  INTEGER NOT NULL,
+  computed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (school, season)
+);
+
+
+-- ---------------------------------------------------------------------------
 -- Pre-computed region scenario data
 -- ---------------------------------------------------------------------------
 -- One row per season/class/region. Updated by the Prefect pipeline after each
@@ -531,6 +551,28 @@ COMMENT ON COLUMN region_standings.odds_quarterfinals_home_weighted IS
   'Weighted version of odds_quarterfinals_home. Not yet implemented.';
 COMMENT ON COLUMN region_standings.odds_semifinals_home_weighted IS
   'Weighted version of odds_semifinals_home. Not yet implemented.';
+
+
+-- team_ratings
+
+COMMENT ON TABLE team_ratings IS
+  'Materialized Elo ratings and RPI for each school, recomputed on every pipeline '
+  'run and written alongside region_standings to guarantee consistency. '
+  'One row per school per season; overwritten (not appended) each run.';
+
+COMMENT ON COLUMN team_ratings.elo IS
+  'Elo rating after processing all completed games for the season in chronological '
+  'order. Starts from a classification-based prior (1A=1000, 7A=1300, step 50) '
+  'and updates using a margin-of-victory multiplier (FiveThirtyEight-style).';
+COMMENT ON COLUMN team_ratings.rpi IS
+  'Rating Percentage Index: 0.25*WP + 0.50*OWP + 0.25*OOWP. '
+  'Stored for display context only; does not affect win probability calculations. '
+  'NULL when the team has fewer than 3 completed games.';
+COMMENT ON COLUMN team_ratings.games_played IS
+  'Number of completed, scored games processed when computing these ratings.';
+COMMENT ON COLUMN team_ratings.computed_at IS
+  'Timestamp of the pipeline run that produced these ratings. '
+  'Should match the computed_at of the corresponding region_standings rows.';
 
 
 -- region_scenarios

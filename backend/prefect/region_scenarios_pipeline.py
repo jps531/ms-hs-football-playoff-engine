@@ -6,6 +6,7 @@ and ``determine_odds()`` from ``scenarios.py``, and writes results to the
 """
 
 from dataclasses import dataclass as _dataclass
+from datetime import date
 
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import Json, execute_values
@@ -20,10 +21,13 @@ from backend.helpers.data_classes import (
     BracketOdds,
     CompletedGame,
     FormatSlot,
+    Game,
     RawCompletedGame,
     RemainingGame,
+    School,
     Standings,
     StandingsOdds,
+    WinProbFn,
 )
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.database_helpers import get_database_connection
@@ -42,6 +46,12 @@ from backend.helpers.scenarios import (
     compute_first_round_home_odds,
     determine_odds,
     determine_scenarios,
+)
+from backend.helpers.win_probability import (
+    EloConfig,
+    compute_elo_ratings,
+    compute_rpi,
+    make_win_prob_fn_from_ratings,
 )
 
 # -------------------------
@@ -81,6 +91,116 @@ def fetch_region_teams(clazz: int, region: int, season: int) -> list[str]:
             return [r[0] for r in cur.fetchall()]
 
 
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} All Season Games for Win Probability")
+def fetch_all_season_games(season: int) -> list[Game]:
+    """Fetch all final, scored games for the season (used to build Elo/RPI ratings)."""
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT school, date, season, location_id, points_for, points_against, "
+                "       round, kickoff_time, opponent, result, game_status, source, "
+                "       location, region_game, final, overtime "
+                "FROM games "
+                "WHERE season=%s AND final=TRUE "
+                "  AND points_for IS NOT NULL AND points_against IS NOT NULL",
+                (season,),
+            )
+            return [
+                Game(
+                    school=row[0],
+                    date=row[1],
+                    season=row[2],
+                    location_id=row[3],
+                    points_for=row[4],
+                    points_against=row[5],
+                    round=row[6],
+                    kickoff_time=row[7],
+                    opponent=row[8],
+                    result=row[9],
+                    game_status=row[10],
+                    source=row[11],
+                    location=row[12],
+                    region_game=row[13],
+                    final=row[14],
+                    overtime=row[15],
+                )
+                for row in cur.fetchall()
+            ]
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} All Season Schools for Win Probability")
+def fetch_all_season_schools(season: int) -> list[School]:
+    """Fetch all schools for the season (used for Elo classification priors)."""
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT ss.school, ss.season, ss.class, ss.region, "
+                "       s.city, s.zip, s.latitude, s.longitude, "
+                "       s.mascot, s.maxpreps_id, s.maxpreps_url, s.maxpreps_logo, "
+                "       s.primary_color, s.secondary_color "
+                "FROM school_seasons ss "
+                "JOIN schools s USING (school) "
+                "WHERE ss.season=%s",
+                (season,),
+            )
+            return [
+                School(
+                    school=row[0],
+                    season=row[1],
+                    class_=row[2],
+                    region=row[3],
+                    city=row[4],
+                    zip=row[5],
+                    latitude=row[6],
+                    longitude=row[7],
+                    mascot=row[8],
+                    maxpreps_id=row[9],
+                    maxpreps_url=row[10],
+                    maxpreps_logo=row[11],
+                    primary_color=row[12],
+                    secondary_color=row[13],
+                )
+                for row in cur.fetchall()
+            ]
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Write {season} Team Ratings")
+def write_team_ratings(
+    elo_ratings: dict[str, float],
+    rpi: dict[str, float | None],
+    games_count: dict[str, int],
+    season: int,
+) -> int:
+    """Upsert Elo and RPI ratings into the ``team_ratings`` table.
+
+    Writes one row per school, overwriting any existing row for the season.
+    ``computed_at`` is set to NOW() so the frontend can display a freshness timestamp.
+
+    Returns:
+        Number of rows written.
+    """
+    data = [(school, season, elo, rpi.get(school), games_count.get(school, 0)) for school, elo in elo_ratings.items()]
+    if not data:
+        return 0
+
+    sql = """
+        INSERT INTO team_ratings (school, season, elo, rpi, games_played, computed_at)
+        VALUES %s
+        ON CONFLICT (school, season) DO UPDATE SET
+            elo          = EXCLUDED.elo,
+            rpi          = EXCLUDED.rpi,
+            games_played = EXCLUDED.games_played,
+            computed_at  = EXCLUDED.computed_at
+    """
+    template = "(%s, %s, %s, %s, %s, NOW())"
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, data, template=template, page_size=500)
+        conn.commit()
+
+    return len(data)
+
+
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Completed Region Games for {teams}")
 def fetch_completed_pairs(teams: list[str], season: int) -> list[CompletedGame]:
     """Fetch and normalize all finalized region games among the given teams."""
@@ -117,18 +237,35 @@ def fetch_completed_pairs(teams: list[str], season: int) -> list[CompletedGame]:
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Remaining Region Games for {teams}")
 def fetch_remaining_pairs(teams: list[str], season: int) -> list[RemainingGame]:
-    """Fetch all unfinished region game pairs (deduplicated, in canonical order) for the given teams."""
+    """Fetch all unfinished region game pairs (deduplicated, canonical order) with location.
+
+    Returns one RemainingGame per unplayed contest.  ``location_a`` is the
+    location from the lex-first team's perspective ('home'/'away'/'neutral').
+    """
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "WITH cand AS ("
-                "  SELECT LEAST(school,opponent) a, GREATEST(school,opponent) b FROM games "
-                "  WHERE season=%s AND final=FALSE AND region_game=TRUE "
+                "  SELECT"
+                "    LEAST(school, opponent) AS a,"
+                "    GREATEST(school, opponent) AS b,"
+                "    CASE"
+                "      WHEN school < opponent THEN location"
+                "      WHEN school > opponent THEN"
+                "        CASE location"
+                "          WHEN 'home' THEN 'away'"
+                "          WHEN 'away' THEN 'home'"
+                "          ELSE 'neutral'"
+                "        END"
+                "      ELSE 'neutral'"
+                "    END AS location_a"
+                "  FROM games"
+                "  WHERE season=%s AND final=FALSE AND region_game=TRUE"
                 "    AND school = ANY(%s) AND opponent = ANY(%s)"
-                ") SELECT DISTINCT a,b FROM cand",
+                ") SELECT DISTINCT ON (a, b) a, b, location_a FROM cand",
                 (season, teams, teams),
             )
-            return [RemainingGame(a, b) for a, b in cur.fetchall()]
+            return [RemainingGame(a, b, loc) for a, b, loc in cur.fetchall()]
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Region Standings for {region}-{clazz}A")
@@ -270,9 +407,7 @@ def write_region_standings(
     bracket_odds = bracket_odds or {}
     bracket_odds_weighted = bracket_odds_weighted or {}
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
-    _empty_home = HomeOdds(
-        first_round={}, second_round={}, quarterfinals={}, semifinals={}
-    )
+    _empty_home = HomeOdds(first_round={}, second_round={}, quarterfinals={}, semifinals={})
     ho = home_odds or _empty_home
     how = home_odds_weighted or _empty_home
 
@@ -311,20 +446,20 @@ def write_region_standings(
                 b.semifinals,
                 b.finals,
                 b.champion,
-                bw.second_round,   # odds_playoffs_weighted (= p_playoffs × win odds)
-                bw.second_round,   # odds_second_round_weighted
+                bw.second_round,  # odds_playoffs_weighted (= p_playoffs × win odds)
+                bw.second_round,  # odds_second_round_weighted
                 bw.quarterfinals,  # odds_quarterfinals_weighted
-                bw.semifinals,     # odds_semifinals_weighted
-                bw.finals,         # odds_finals_weighted
-                bw.champion,       # odds_champion_weighted
-                ho.first_round.get(team.school, 0.0),    # odds_first_round_home
-                ho.second_round.get(team.school, 0.0),   # odds_second_round_home
+                bw.semifinals,  # odds_semifinals_weighted
+                bw.finals,  # odds_finals_weighted
+                bw.champion,  # odds_champion_weighted
+                ho.first_round.get(team.school, 0.0),  # odds_first_round_home
+                ho.second_round.get(team.school, 0.0),  # odds_second_round_home
                 ho.quarterfinals.get(team.school, 0.0),  # odds_quarterfinals_home
-                ho.semifinals.get(team.school, 0.0),     # odds_semifinals_home
-                how.first_round.get(team.school, 0.0),    # odds_first_round_home_weighted
-                how.second_round.get(team.school, 0.0),   # odds_second_round_home_weighted
+                ho.semifinals.get(team.school, 0.0),  # odds_semifinals_home
+                how.first_round.get(team.school, 0.0),  # odds_first_round_home_weighted
+                how.second_round.get(team.school, 0.0),  # odds_second_round_home_weighted
                 how.quarterfinals.get(team.school, 0.0),  # odds_quarterfinals_home_weighted
-                how.semifinals.get(team.school, 0.0),     # odds_semifinals_home_weighted
+                how.semifinals.get(team.school, 0.0),  # odds_semifinals_home_weighted
                 team.school in coinflip_teams,  # coin_flip_needed
             )
         )
@@ -433,7 +568,11 @@ def write_region_scenarios(
     logger = get_run_logger()
     logger.info(
         "Writing region scenarios for season %d, class %d, region %d (%d complete scenarios, margin_sensitive=%s)",
-        season, clazz, region, len(complete_scenarios), margin_sensitive,
+        season,
+        clazz,
+        region,
+        len(complete_scenarios),
+        margin_sensitive,
     )
 
     remaining_json = Json(serialize_remaining_games(remaining))
@@ -469,8 +608,10 @@ def write_region_scenarios(
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(scenarios_sql, (season, str(clazz), region, remaining_json, atoms_json, scenarios_json))
-            cur.execute(state_sql, (season, clazz, region, r_remaining, margin_sensitive,
-                                    margin_compute_status, margin_computed_at))
+            cur.execute(
+                state_sql,
+                (season, clazz, region, r_remaining, margin_sensitive, margin_compute_status, margin_computed_at),
+            )
         conn.commit()
 
 
@@ -494,22 +635,34 @@ def upgrade_region_scenarios(
     logger = get_run_logger()
     logger.info(
         "Upgrading region %d-%dA season %d to margin-sensitive scenarios",
-        region, clazz, season,
+        region,
+        clazz,
+        season,
     )
 
-    precomputed = enumerate_outcomes(teams, completed, remaining, pa_win=pa_win,
-                                     base_margin_default=base_margin_default)
-    scenario_atoms = build_scenario_atoms(teams, completed, remaining,
-                                          pa_win=pa_win, base_margin_default=base_margin_default,
-                                          precomputed=precomputed)
-    complete_scenarios = enumerate_division_scenarios(teams, completed, remaining,
-                                                      scenario_atoms=scenario_atoms,
-                                                      pa_win=pa_win,
-                                                      base_margin_default=base_margin_default,
-                                                      precomputed=precomputed)
+    precomputed = enumerate_outcomes(
+        teams, completed, remaining, pa_win=pa_win, base_margin_default=base_margin_default
+    )
+    scenario_atoms = build_scenario_atoms(
+        teams, completed, remaining, pa_win=pa_win, base_margin_default=base_margin_default, precomputed=precomputed
+    )
+    complete_scenarios = enumerate_division_scenarios(
+        teams,
+        completed,
+        remaining,
+        scenario_atoms=scenario_atoms,
+        pa_win=pa_win,
+        base_margin_default=base_margin_default,
+        precomputed=precomputed,
+    )
 
     write_region_scenarios(
-        clazz, region, season, remaining, scenario_atoms, complete_scenarios,
+        clazz,
+        region,
+        season,
+        remaining,
+        scenario_atoms,
+        complete_scenarios,
         r_remaining=len(remaining),
         margin_sensitive=True,
         margin_compute_status="complete",
@@ -519,16 +672,34 @@ def upgrade_region_scenarios(
 
 
 # R thresholds for margin computation mode
-_R_ALWAYS_MARGIN = 4   # R ≤ this: always full margin, synchronous
+_R_ALWAYS_MARGIN = 4  # R ≤ this: always full margin, synchronous
 _R_BACKGROUND_MAX = 6  # R ≤ this (and > _R_ALWAYS_MARGIN): win/loss first, upgrade in background
-                        # R > this: win/loss only, permanently
+# R > this: win/loss only, permanently
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
-def get_region_finish_scenarios(clazz: int, region: int, season: int):
-    """
-    Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
+def get_region_finish_scenarios(
+    clazz: int,
+    region: int,
+    season: int,
+    elo_ratings: dict[str, float] | None = None,
+    elo_snapshots: list[tuple[date, dict[str, float]]] | None = None,
+    elo_config: EloConfig | None = None,
+):
+    """Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
     and aggregate seeding odds + human-readable scenario explanations.
+
+    Args:
+        clazz: MHSAA classification (1–7).
+        region: Region number within the class.
+        season: Football season year.
+        elo_ratings: Pre-computed final Elo ratings for all teams (from flow level).
+            When provided, win probabilities are computed from these ratings.
+            When None, falls back to equal 50/50 probability for all games.
+        elo_snapshots: Date-ordered rating snapshots for date-conditioned queries.
+            Paired with ``elo_ratings``; ignored when ``elo_ratings`` is None.
+        elo_config: Elo configuration used when computing the ratings.  Defaults
+            to ``EloConfig()`` if omitted.
     """
     logger = get_run_logger()
 
@@ -538,7 +709,16 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
     completed = fetch_completed_pairs(teams, season)
     remaining = fetch_remaining_pairs(teams, season)
 
-    r = determine_scenarios(teams, completed, remaining)
+    # Build win probability function from pre-computed ratings (or fall back to equal).
+    win_prob_fn: WinProbFn | None = None
+    if elo_ratings is not None:
+        win_prob_fn = make_win_prob_fn_from_ratings(
+            elo_ratings,
+            elo_snapshots or [],
+            elo_config,
+        )
+
+    r = determine_scenarios(teams, completed, remaining, win_prob_fn=win_prob_fn)
 
     odds = determine_odds(teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
 
@@ -549,9 +729,7 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
     first_round_home_marginal = compute_first_round_home_odds(home_seeds, odds)
 
     slots = fetch_all_format_slots(clazz, season)
-    second_round_home_marginal = (
-        compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
-    )
+    second_round_home_marginal = compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
     quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season)
     semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season)
 
@@ -571,10 +749,14 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
         school: _safe_cond(m, odds[school].p_playoffs if school in odds else 0.0)
         for school, m in first_round_home_marginal.items()
     }
-    second_round_home_cond = {
-        school: _safe_cond(m, bracket.get(school, _empty_bracket).second_round)
-        for school, m in second_round_home_marginal.items()
-    } if clazz <= 4 else {}
+    second_round_home_cond = (
+        {
+            school: _safe_cond(m, bracket.get(school, _empty_bracket).second_round)
+            for school, m in second_round_home_marginal.items()
+        }
+        if clazz <= 4
+        else {}
+    )
     quarterfinals_home_cond = {
         school: _safe_cond(m, bracket.get(school, _empty_bracket).quarterfinals)
         for school, m in quarterfinals_home_marginal.items()
@@ -585,17 +767,19 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
     }
 
     # Weighted conditional home odds (same win_prob_fn caveat as bracket_weighted).
-    second_round_home_marginal_w = (
-        compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
-    )
+    second_round_home_marginal_w = compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
     quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds, slots, season)
     semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds, slots, season)
 
     first_round_home_cond_w = first_round_home_cond  # same until win_prob_fn is wired
-    second_round_home_cond_w = {
-        school: _safe_cond(m, bracket_weighted.get(school, _empty_bracket).second_round)
-        for school, m in second_round_home_marginal_w.items()
-    } if clazz <= 4 else {}
+    second_round_home_cond_w = (
+        {
+            school: _safe_cond(m, bracket_weighted.get(school, _empty_bracket).second_round)
+            for school, m in second_round_home_marginal_w.items()
+        }
+        if clazz <= 4
+        else {}
+    )
     quarterfinals_home_cond_w = {
         school: _safe_cond(m, bracket_weighted.get(school, _empty_bracket).quarterfinals)
         for school, m in quarterfinals_home_marginal_w.items()
@@ -643,7 +827,12 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed
         )
         write_region_scenarios(
-            clazz, region, season, remaining, scenario_atoms, complete_scenarios,
+            clazz,
+            region,
+            season,
+            remaining,
+            scenario_atoms,
+            complete_scenarios,
             r_remaining=R,
             margin_sensitive=True,
             margin_compute_status="not_needed",
@@ -656,14 +845,24 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
         )
         write_region_scenarios(
-            clazz, region, season, remaining, scenario_atoms, complete_scenarios,
+            clazz,
+            region,
+            season,
+            remaining,
+            scenario_atoms,
+            complete_scenarios,
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="pending",
         )
         # Submit background upgrade — runs full margin enumeration asynchronously.
         upgrade_region_scenarios.submit(
-            clazz, region, season, teams, completed, remaining,
+            clazz,
+            region,
+            season,
+            teams,
+            completed,
+            remaining,
         )
     else:
         # R ≥ 7: win/loss-only permanently.
@@ -673,7 +872,12 @@ def get_region_finish_scenarios(clazz: int, region: int, season: int):
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
         )
         write_region_scenarios(
-            clazz, region, season, remaining, scenario_atoms, complete_scenarios,
+            clazz,
+            region,
+            season,
+            remaining,
+            scenario_atoms,
+            complete_scenarios,
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="skipped",
@@ -696,16 +900,30 @@ def region_scenarios_data_flow(
         clazz,
         region,
     )
+
+    # Compute Elo ratings once at flow level from all season games.
+    # Ratings and RPI are written to team_ratings before region tasks run,
+    # guaranteeing that region_standings and team_ratings reflect the same computation.
+    all_games = fetch_all_season_games(season)
+    all_schools = fetch_all_season_schools(season)
+    elo_cfg = EloConfig()
+    elo_ratings, games_count, elo_snapshots = compute_elo_ratings(all_games, all_schools, elo_cfg)
+    rpi = compute_rpi(all_games)
+    write_team_ratings(elo_ratings, rpi, games_count, season)
+    logger.info("Wrote team ratings for %d teams", len(elo_ratings))
+
     scenario_dicts: dict = {}
     if clazz is None or region is None:
         for c in [1, 2, 3, 4]:
             scenario_dicts[c] = {}
             for r in [1, 2, 3, 4, 5, 6, 7, 8]:
-                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season)
+                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, elo_ratings, elo_snapshots, elo_cfg)
         for c in [5, 6, 7]:
             scenario_dicts[c] = {}
             for r in [1, 2, 3, 4]:
-                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season)
+                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, elo_ratings, elo_snapshots, elo_cfg)
     else:
-        scenario_dicts.setdefault(clazz, {})[region] = get_region_finish_scenarios(clazz, region, season)
+        scenario_dicts.setdefault(clazz, {})[region] = get_region_finish_scenarios(
+            clazz, region, season, elo_ratings, elo_snapshots, elo_cfg
+        )
     return scenario_dicts

@@ -9,9 +9,6 @@ import logging
 from collections import defaultdict
 from itertools import permutations, product
 
-from prefect import get_run_logger
-from prefect.exceptions import MissingContextError
-
 from backend.helpers.data_classes import (
     BracketOdds,
     CompletedGame,
@@ -172,8 +169,10 @@ def determine_scenarios(
         coin flip in at least one outcome.
     """
     try:
+        from prefect import get_run_logger
+
         logger = get_run_logger()
-    except MissingContextError:
+    except Exception:
         logger = logging.getLogger("scenarios")
         if not logger.handlers:
             logger.addHandler(logging.NullHandler())
@@ -210,10 +209,18 @@ def determine_scenarios(
         )
         all_coinflip_events.extend(local_flips)
         _accumulate_slots(
-            final_order, local_flips, 1.0, 1.0,
-            first_counts, second_counts, third_counts, fourth_counts,
-            first_counts_weighted, second_counts_weighted,
-            third_counts_weighted, fourth_counts_weighted,
+            final_order,
+            local_flips,
+            1.0,
+            1.0,
+            first_counts,
+            second_counts,
+            third_counts,
+            fourth_counts,
+            first_counts_weighted,
+            second_counts_weighted,
+            third_counts_weighted,
+            fourth_counts_weighted,
         )
         denom = 1.0
         denom_weighted = 1.0
@@ -224,7 +231,7 @@ def determine_scenarios(
             mask_weight = 1.0
             for bit_index, rem_game in enumerate(remaining):
                 bit_value = (outcome_mask >> bit_index) & 1
-                p = _win_prob_fn(rem_game.a, rem_game.b, None)
+                p = _win_prob_fn(rem_game.a, rem_game.b, None, rem_game.location_a)
                 mask_weight *= p if bit_value else (1.0 - p)
 
             denom_weighted += mask_weight
@@ -246,10 +253,18 @@ def determine_scenarios(
                 )
                 all_coinflip_events.extend(local_flips)
                 _accumulate_slots(
-                    final_order, local_flips, 1.0, mask_weight,
-                    first_counts, second_counts, third_counts, fourth_counts,
-                    first_counts_weighted, second_counts_weighted,
-                    third_counts_weighted, fourth_counts_weighted,
+                    final_order,
+                    local_flips,
+                    1.0,
+                    mask_weight,
+                    first_counts,
+                    second_counts,
+                    third_counts,
+                    fourth_counts,
+                    first_counts_weighted,
+                    second_counts_weighted,
+                    third_counts_weighted,
+                    fourth_counts_weighted,
                 )
                 continue
 
@@ -268,8 +283,14 @@ def determine_scenarios(
                 # Also include boundary games (bucket team vs. outside team) whose
                 # margin is sensitive to the tiebreaker outcome under 12^N enumeration.
                 boundary = sensitive_boundary_games(
-                    tie_buckets, remaining, intra_bucket_games,
-                    teams, completed, outcome_mask, base_margins, pa_for_winner,
+                    tie_buckets,
+                    remaining,
+                    intra_bucket_games,
+                    teams,
+                    completed,
+                    outcome_mask,
+                    base_margins,
+                    pa_for_winner,
                 )
                 if boundary:
                     intra_bucket_games = intra_bucket_games + boundary
@@ -287,10 +308,18 @@ def determine_scenarios(
                 )
                 all_coinflip_events.extend(local_flips)
                 _accumulate_slots(
-                    final_order, local_flips, 1.0, mask_weight,
-                    first_counts, second_counts, third_counts, fourth_counts,
-                    first_counts_weighted, second_counts_weighted,
-                    third_counts_weighted, fourth_counts_weighted,
+                    final_order,
+                    local_flips,
+                    1.0,
+                    mask_weight,
+                    first_counts,
+                    second_counts,
+                    third_counts,
+                    fourth_counts,
+                    first_counts_weighted,
+                    second_counts_weighted,
+                    third_counts_weighted,
+                    fourth_counts_weighted,
                 )
             else:
                 # Enumerate all 12^N margin combinations for intra-bucket games.
@@ -300,7 +329,7 @@ def determine_scenarios(
                 # by 1–6 simultaneously).
                 intra_pairs = [(rg.a, rg.b) for rg in intra_bucket_games]
                 n_intra = len(intra_pairs)
-                total_combos = 12 ** n_intra
+                total_combos = 12**n_intra
                 for margin_combo in product(range(1, 13), repeat=n_intra):
                     branch_margins = dict(base_margins)
                     for (a, b), m in zip(intra_pairs, margin_combo):
@@ -320,10 +349,18 @@ def determine_scenarios(
                     )
                     all_coinflip_events.extend(local_flips)
                     _accumulate_slots(
-                        final_order, local_flips, branch_weight, effective_weight,
-                        first_counts, second_counts, third_counts, fourth_counts,
-                        first_counts_weighted, second_counts_weighted,
-                        third_counts_weighted, fourth_counts_weighted,
+                        final_order,
+                        local_flips,
+                        branch_weight,
+                        effective_weight,
+                        first_counts,
+                        second_counts,
+                        third_counts,
+                        fourth_counts,
+                        first_counts_weighted,
+                        second_counts_weighted,
+                        third_counts_weighted,
+                        fourth_counts_weighted,
                     )
 
         denom = float(1 << num_remaining)
@@ -376,7 +413,7 @@ def compute_bracket_odds(num_rounds: int, odds: dict[str, StandingsOdds]) -> dic
             quarterfinals=p * (0.5 ** (num_rounds - 3)),
             semifinals=p * (0.5 ** (num_rounds - 2)),
             finals=p * (0.5 ** (num_rounds - 1)),
-            champion=p * (0.5 ** num_rounds),
+            champion=p * (0.5**num_rounds),
         )
     return result
 
