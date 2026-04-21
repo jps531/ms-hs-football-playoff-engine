@@ -618,6 +618,26 @@ class RemainingGame:
     b: str  # team (lexicographically second)
 
 
+# --- Data class for a game result supplied by a caller (e.g. front-end what-if) ---
+@dataclass(frozen=True)
+class AppliedGameResult:
+    """A concrete game result provided by the caller for what-if scenario computation.
+
+    Used by ``apply_region_game_results`` and ``apply_bracket_game_results`` to
+    represent games whose outcomes the caller wants to "apply" before re-running
+    odds computation.  Teams may be supplied in any order; normalization is
+    performed internally.
+
+    ``game_date`` is optional metadata; it does not affect odds computation.
+    """
+
+    team_a: str
+    team_b: str
+    score_a: int
+    score_b: int
+    game_date: date | None = None
+
+
 # --- Data class for a possible game result ---
 @dataclass(frozen=True)
 class GameResult:
