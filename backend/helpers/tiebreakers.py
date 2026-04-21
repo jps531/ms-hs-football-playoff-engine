@@ -291,6 +291,7 @@ def resolve_bucket(
     margins,
     base_margin_default=7,
     coin_flip_collector: list[list[str]] | None = None,
+    step_trace_collector: dict | None = None,
 ):
     """Apply tiebreaker Steps 1-6 to order a single tied group of teams.
 
@@ -314,6 +315,10 @@ def resolve_bucket(
             in ``margins``.
         coin_flip_collector: Optional list that accumulates groups of teams that
             remain tied after all 5 deterministic steps (Step 6 coin flip).
+        step_trace_collector: Optional dict that is populated with
+            ``{tuple(sorted(bucket)): (step2, step4)}`` for this bucket and
+            any sub-buckets resolved by recursive calls.  Pass the same dict
+            to ``resolve_standings_with_trace`` to avoid recomputing step data.
 
     Returns:
         An ordered list of team names (highest seed first) for this bucket.
@@ -341,6 +346,8 @@ def resolve_bucket(
     step2, step4 = step2_step4_arrays(
         teams, bucket, base_order, completed, remaining, outcome_mask, margins, base_margin_default
     )
+    if step_trace_collector is not None:
+        step_trace_collector[tuple(sorted(bucket))] = (step2, step4)
 
     # ``pending`` is a list of groups still needing resolution.  Each entry is
     # either a singleton [team] (already placed) or a multi-team tied group.
@@ -383,6 +390,7 @@ def resolve_bucket(
                         resolved = resolve_bucket(
                             part, teams, wl_totals, base_order, completed, remaining,
                             outcome_mask, margins, base_margin_default, coin_flip_collector,
+                            step_trace_collector=step_trace_collector,
                         )
                         next_pending.extend([[t] for t in resolved])
         pending = next_pending
@@ -466,6 +474,7 @@ def resolve_standings_for_mask(
     base_margin_default=7,
     pa_win=14,
     coin_flip_collector: list[list[str]] | None = None,
+    step_trace_collector: dict | None = None,
 ):
     """Resolve the full region seeding order for a single outcome mask.
 
@@ -484,6 +493,9 @@ def resolve_standings_for_mask(
         pa_win: Points assumed scored against the winner in a remaining game.
         coin_flip_collector: If provided, groups of teams that required a coin
             flip to break a tie are appended to this list.
+        step_trace_collector: If provided, populated with per-bucket step data
+            via ``resolve_bucket``.  Prefer ``resolve_standings_with_trace``
+            over passing this directly.
 
     Returns:
         An ordered list of all team names (seed 1 first through seed N last).
@@ -505,9 +517,61 @@ def resolve_standings_for_mask(
                 margins,
                 base_margin_default,
                 coin_flip_collector=coinflip_events,
+                step_trace_collector=step_trace_collector,
             )
         )
     return final
+
+
+def resolve_standings_with_trace(
+    teams,
+    completed,
+    remaining,
+    outcome_mask,
+    margins,
+    base_margin_default=7,
+    pa_win=14,
+    coin_flip_collector: list[list[str]] | None = None,
+) -> tuple[list[str], dict]:
+    """Resolve the full region seeding order and return per-bucket step data.
+
+    Thin wrapper around ``resolve_standings_for_mask`` that captures the
+    ``step2``/``step4`` arrays already computed inside each ``resolve_bucket``
+    call, avoiding a redundant ``step2_step4_arrays`` pass in callers that need
+    those arrays for explanation or display purposes.
+
+    Args:
+        teams: List of all team names in the region.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+        outcome_mask: Bitmask where bit i=1 means remaining[i].a wins.
+        margins: Dict keyed by (team_a, team_b) storing the winning margin
+            (always positive).
+        base_margin_default: Assumed winning margin when a game's margin is not
+            in ``margins``.
+        pa_win: Points assumed scored against the winner in a remaining game.
+        coin_flip_collector: If provided, groups of teams that required a coin
+            flip to break a tie are appended to this list.
+
+    Returns:
+        ``(order, step_trace)`` where ``order`` is the fully resolved seeding
+        list and ``step_trace`` is a dict mapping
+        ``tuple(sorted(bucket)) → (step2, step4)`` for every non-singleton
+        tie bucket (including sub-buckets from recursive resolution).
+    """
+    step_trace: dict = {}
+    order = resolve_standings_for_mask(
+        teams,
+        completed,
+        remaining,
+        outcome_mask,
+        margins,
+        base_margin_default,
+        pa_win,
+        coin_flip_collector,
+        step_trace_collector=step_trace,
+    )
+    return order, step_trace
 
 
 def rank_to_slots(order) -> dict[str, tuple[int, int]]:

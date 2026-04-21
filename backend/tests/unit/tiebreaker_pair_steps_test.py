@@ -19,6 +19,7 @@ from backend.helpers.tiebreakers import (
     build_h2h_maps,
     resolve_bucket,
     resolve_standings_for_mask,
+    resolve_standings_with_trace,
     resolve_with_results,
     sensitive_boundary_games,
     standings_from_mask,
@@ -376,6 +377,51 @@ def test_resolve_bucket_no_collector_runs_silently():
 
     assert set(result) == {"Alpha", "Beta"}
     assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# resolve_standings_with_trace — step_trace_collector populated
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_standings_with_trace_populates_step_trace():
+    """resolve_standings_with_trace returns step2/step4 arrays for each tie bucket.
+
+    The [Alpha, Beta] bucket has no H2H; step2/step4 arrays must be present
+    in the returned trace keyed by the sorted bucket tuple.
+    """
+    teams = ["Alpha", "Beta", "Delta", "Gamma"]
+    remaining: list[RemainingGame] = []
+
+    order, trace = resolve_standings_with_trace(
+        teams, _BASE_COMPLETED, remaining, outcome_mask=0, margins={}
+    )
+
+    assert set(order) == set(teams)
+    assert ("Alpha", "Beta") in trace
+    s2, s4 = trace[("Alpha", "Beta")]
+    assert "Alpha" in s2 and "Beta" in s2
+    assert "Alpha" in s4 and "Beta" in s4
+
+
+def test_resolve_bucket_step_trace_collector_populated():
+    """resolve_bucket stores (step2, step4) into step_trace_collector when provided."""
+    teams = ["Alpha", "Beta", "Delta", "Gamma"]
+    remaining: list[RemainingGame] = []
+    wl_totals = standings_from_mask(teams, _BASE_COMPLETED, remaining, 0, pa_win=14, margins={})
+    base_order = base_bucket_order(teams, wl_totals)
+    collector: dict = {}
+
+    resolve_bucket(
+        ["Alpha", "Beta"],
+        teams, wl_totals, base_order, _BASE_COMPLETED, remaining,
+        outcome_mask=0, margins={},
+        step_trace_collector=collector,
+    )
+
+    assert ("Alpha", "Beta") in collector
+    s2, _ = collector[("Alpha", "Beta")]
+    assert "Alpha" in s2 and "Beta" in s2
 
 
 # ---------------------------------------------------------------------------
