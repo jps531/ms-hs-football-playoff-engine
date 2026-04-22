@@ -37,14 +37,17 @@ _404 = {404: {"description": "Not found"}}
 
 
 def _today() -> date:
+    """Return today's date (injectable seam for tests)."""
     return datetime.now().date()
 
 
 def _remaining_models(remaining: list[RemainingGame]) -> list[RemainingGameModel]:
+    """Convert RemainingGame dataclasses to API response models."""
     return [RemainingGameModel(team_a=r.a, team_b=r.b, location_a=r.location_a) for r in remaining]
 
 
 def _scenario_list(complete_scenarios: list[dict] | None) -> list[ScenarioEntry] | None:
+    """Convert complete scenario dicts to ScenarioEntry response models, or None if empty."""
     if not complete_scenarios:
         return None
     result = []

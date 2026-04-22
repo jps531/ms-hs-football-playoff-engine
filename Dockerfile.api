@@ -1,0 +1,17 @@
+ARG PYTHON_VERSION=3.11
+
+FROM python:${PYTHON_VERSION}-slim
+
+WORKDIR /app
+
+COPY pyproject.toml /app/
+RUN mkdir -p /app/backend && touch /app/backend/__init__.py \
+    && pip install --no-cache-dir . \
+    && pip uninstall --yes ms-hs-football-playoff-engine
+
+COPY backend/ /app/backend/
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+CMD ["fastapi", "dev", "backend/api/main.py", "--host", "0.0.0.0", "--port", "8000"]

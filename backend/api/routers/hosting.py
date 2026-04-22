@@ -20,7 +20,6 @@ from backend.helpers.bracket_home_odds import (
     marginal_home_odds,
 )
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
-from backend.helpers.scenario_serializers import deserialize_remaining_games
 
 router = APIRouter(prefix="/api/v1", tags=["hosting"])
 

@@ -17,6 +17,7 @@ _404 = {404: {"description": "Not found"}}
 
 
 def _today() -> date:
+    """Return today's date (injectable seam for tests)."""
     return datetime.now().date()
 
 

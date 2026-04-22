@@ -21,6 +21,7 @@ _CLINCHED_THRESHOLD = 0.999
 
 
 def _today() -> date:
+    """Return today's date (injectable seam for tests)."""
     return datetime.now().date()
 
 
