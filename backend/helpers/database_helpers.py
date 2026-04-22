@@ -53,7 +53,13 @@ def get_database_connection():
     return conn
 
 
-def read_region_scenarios(conn, season: int, clazz: int | str, region: int) -> dict | None:
+def read_region_scenarios(
+    conn,
+    season: int,
+    clazz: int | str,
+    region: int,
+    as_of_date=None,
+) -> dict | None:
     """Load and deserialize pre-computed scenario data from ``region_scenarios``.
 
     Returns a dict with keys:
@@ -62,8 +68,14 @@ def read_region_scenarios(conn, season: int, clazz: int | str, region: int) -> d
                                (team → seed (int) → list of atom lists)
     - ``complete_scenarios`` — deserialized list of scenario dicts
                                (output format of enumerate_division_scenarios)
+    - ``as_of_date``         — the snapshot date that was returned
 
     Returns None if no row exists for the given (season, class, region).
+
+    Args:
+        as_of_date: If provided (``datetime.date``), returns the most recent
+            snapshot with ``as_of_date <= as_of_date``.  If None, returns the
+            most recent snapshot overall.
 
     Example usage::
 
@@ -78,23 +90,28 @@ def read_region_scenarios(conn, season: int, clazz: int | str, region: int) -> d
         deserialize_scenario_atoms,
     )
 
+    query = """
+        SELECT remaining_games, scenario_atoms, complete_scenarios, as_of_date
+        FROM region_scenarios
+        WHERE season = %s AND class = %s AND region = %s
+    """
+    params: list = [season, str(clazz), region]
+    if as_of_date is not None:
+        query += " AND as_of_date <= %s"
+        params.append(as_of_date)
+    query += " ORDER BY as_of_date DESC LIMIT 1"
+
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT remaining_games, scenario_atoms, complete_scenarios
-            FROM region_scenarios
-            WHERE season = %s AND class = %s AND region = %s
-            """,
-            (season, str(clazz), region),
-        )
+        cur.execute(query, params)
         row = cur.fetchone()
 
     if row is None:
         return None
 
-    remaining_raw, atoms_raw, scenarios_raw = row
+    remaining_raw, atoms_raw, scenarios_raw, snapshot_date = row
     return {
         "remaining_games": deserialize_remaining_games(remaining_raw),
         "scenario_atoms": deserialize_scenario_atoms(atoms_raw),
         "complete_scenarios": deserialize_complete_scenarios(scenarios_raw),
+        "as_of_date": snapshot_date,
     }

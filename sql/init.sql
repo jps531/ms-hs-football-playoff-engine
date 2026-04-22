@@ -95,14 +95,13 @@ CREATE TABLE IF NOT EXISTS games (
 -- ---------------------------------------------------------------------------
 -- Region standings and playoff scenario odds
 -- ---------------------------------------------------------------------------
--- One row per school per season. Recalculated after each game week by the
--- Prefect pipeline (region_scenarios_pipeline.py). Enumerates all 2^R
--- remaining-game outcomes and applies the 7-step MHSAA tiebreaker to derive
--- seeding probabilities.
+-- One row per school per season per pipeline run date (as_of_date). The
+-- Prefect pipeline appends a new snapshot after each game week rather than
+-- overwriting, so the API can answer "what were the odds as of date X?" by
+-- finding the most recent row with as_of_date <= X.
 --
 -- Unweighted odds treat all remaining outcomes as equally likely.
--- Weighted odds (not yet implemented) will weight by per-game win probability
--- estimated from scoring margins.
+-- Weighted odds apply per-game win probability estimated from scoring margins.
 --
 -- Columns marked "Not yet implemented" default to 0.0 and are placeholders
 -- for future bracket-odds and home-game-odds features.
@@ -110,6 +109,7 @@ CREATE TABLE IF NOT EXISTS games (
 CREATE TABLE IF NOT EXISTS region_standings (
   school          TEXT NOT NULL,
   season          INTEGER NOT NULL,
+  as_of_date      DATE NOT NULL DEFAULT CURRENT_DATE,
   class           INTEGER NOT NULL,
   region          INTEGER NOT NULL,
   wins            INTEGER NOT NULL DEFAULT 0,
@@ -149,10 +149,12 @@ CREATE TABLE IF NOT EXISTS region_standings (
   odds_second_round_home_weighted REAL NOT NULL DEFAULT 0.0,
   odds_quarterfinals_home_weighted REAL NOT NULL DEFAULT 0.0,
   odds_semifinals_home_weighted REAL NOT NULL DEFAULT 0.0,
-  UNIQUE (school, season),
+  UNIQUE (school, season, as_of_date),
   FOREIGN KEY (school, season) REFERENCES school_seasons(school, season)
 );
 
+CREATE INDEX IF NOT EXISTS idx_region_standings_lookup
+  ON region_standings (school, season, as_of_date DESC);
 
 -- ---------------------------------------------------------------------------
 -- Materialized Elo ratings and RPI per school per season
@@ -166,12 +168,16 @@ CREATE TABLE IF NOT EXISTS region_standings (
 CREATE TABLE IF NOT EXISTS team_ratings (
   school        TEXT    NOT NULL REFERENCES schools(school),
   season        INTEGER NOT NULL,
+  as_of_date    DATE    NOT NULL DEFAULT CURRENT_DATE,
   elo           REAL    NOT NULL,
   rpi           REAL,                   -- NULL if team has < 3 completed games
   games_played  INTEGER NOT NULL,
   computed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (school, season)
+  PRIMARY KEY (school, season, as_of_date)
 );
+
+CREATE INDEX IF NOT EXISTS idx_team_ratings_lookup
+  ON team_ratings (school, season, as_of_date DESC);
 
 
 -- ---------------------------------------------------------------------------
@@ -192,12 +198,16 @@ CREATE TABLE IF NOT EXISTS region_scenarios (
   season              INT          NOT NULL,
   class               VARCHAR(10)  NOT NULL,
   region              INT          NOT NULL,
+  as_of_date          DATE         NOT NULL DEFAULT CURRENT_DATE,
   computed_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   remaining_games     JSONB        NOT NULL,
   scenario_atoms      JSONB        NOT NULL,
   complete_scenarios  JSONB        NOT NULL,
-  PRIMARY KEY (season, class, region)
+  PRIMARY KEY (season, class, region, as_of_date)
 );
+
+CREATE INDEX IF NOT EXISTS idx_region_scenarios_lookup
+  ON region_scenarios (season, class, region, as_of_date DESC);
 
 
 -- ---------------------------------------------------------------------------
@@ -220,6 +230,7 @@ CREATE TABLE IF NOT EXISTS region_computation_state (
   season                  INTEGER NOT NULL,
   class                   INTEGER NOT NULL,
   region                  INTEGER NOT NULL,
+  as_of_date              DATE    NOT NULL DEFAULT CURRENT_DATE,
   r_remaining             INTEGER NOT NULL,
   margin_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,
   margin_compute_status   TEXT    NOT NULL DEFAULT 'not_needed'
@@ -232,8 +243,11 @@ CREATE TABLE IF NOT EXISTS region_computation_state (
                           )),
   computed_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   margin_computed_at      TIMESTAMPTZ,        -- NULL until margin-sensitive computation completes
-  PRIMARY KEY (season, class, region)
+  PRIMARY KEY (season, class, region, as_of_date)
 );
+
+CREATE INDEX IF NOT EXISTS idx_region_computation_state_lookup
+  ON region_computation_state (season, class, region, as_of_date DESC);
 
 
 -- ---------------------------------------------------------------------------
@@ -476,6 +490,8 @@ COMMENT ON COLUMN region_standings.school IS
   'School name; FK to schools(school, season).';
 COMMENT ON COLUMN region_standings.season IS
   'Season year; FK to schools(school, season).';
+COMMENT ON COLUMN region_standings.as_of_date IS
+  'Pipeline run date this snapshot was written. Rows are appended, never overwritten; query with as_of_date <= X to get historical odds.';
 COMMENT ON COLUMN region_standings.class IS
   'Denormalized from schools for query convenience.';
 COMMENT ON COLUMN region_standings.region IS
@@ -600,6 +616,9 @@ COMMENT ON TABLE region_scenarios IS
   'pipeline after each game-result batch. Avoids re-running the tiebreaker engine '
   'and boolean minimizer on every frontend request.';
 
+COMMENT ON COLUMN region_scenarios.as_of_date IS
+  'Pipeline run date this scenario snapshot was written. Used with as_of_date DESC index to retrieve the latest or a historical snapshot for a given region.';
+
 COMMENT ON COLUMN region_scenarios.remaining_games IS
   'Ordered JSON array of {a, b} game-pair objects for the remaining region games. '
   'Required to deserialize MarginCondition.satisfied_by correctly at render time.';
@@ -622,6 +641,9 @@ COMMENT ON TABLE region_computation_state IS
   'game-result batch. Used by the frontend to decide whether to show a '
   '"refining scenarios…" indicator while the background upgrade runs.';
 
+
+COMMENT ON COLUMN region_computation_state.as_of_date IS
+  'Pipeline run date this computation-state row was written. Part of the primary key so each pipeline run produces its own snapshot alongside the matching region_scenarios row.';
 COMMENT ON COLUMN region_computation_state.r_remaining IS
   'Number of unplayed region games at the time of last computation. '
   'Determines which tier applies: ≤4 synchronous, 5-6 two-phase, ≥7 win/loss-only.';

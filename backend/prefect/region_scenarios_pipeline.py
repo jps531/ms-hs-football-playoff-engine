@@ -207,29 +207,30 @@ def write_team_ratings(
     rpi: dict[str, float | None],
     games_count: dict[str, int],
     season: int,
+    as_of_date: date,
 ) -> int:
-    """Upsert Elo and RPI ratings into the ``team_ratings`` table.
+    """Append Elo and RPI ratings to the ``team_ratings`` table for *as_of_date*.
 
-    Writes one row per school, overwriting any existing row for the season.
-    ``computed_at`` is set to NOW() so the frontend can display a freshness timestamp.
+    One row per school per pipeline-run date is retained so the trend API can
+    query historical snapshots.  Same-day reruns overwrite via ON CONFLICT.
 
     Returns:
         Number of rows written.
     """
-    data = [(school, season, elo, rpi.get(school), games_count.get(school, 0)) for school, elo in elo_ratings.items()]
+    data = [(school, season, as_of_date, elo, rpi.get(school), games_count.get(school, 0)) for school, elo in elo_ratings.items()]
     if not data:
         return 0
 
     sql = """
-        INSERT INTO team_ratings (school, season, elo, rpi, games_played, computed_at)
+        INSERT INTO team_ratings (school, season, as_of_date, elo, rpi, games_played, computed_at)
         VALUES %s
-        ON CONFLICT (school, season) DO UPDATE SET
+        ON CONFLICT (school, season, as_of_date) DO UPDATE SET
             elo          = EXCLUDED.elo,
             rpi          = EXCLUDED.rpi,
             games_played = EXCLUDED.games_played,
             computed_at  = EXCLUDED.computed_at
     """
-    template = "(%s, %s, %s, %s, %s, NOW())"
+    template = "(%s, %s, %s, %s, %s, %s, NOW())"
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             execute_values(cur, sql, data, template=template, page_size=500)
@@ -404,6 +405,7 @@ def write_region_standings(
     clazz: int,
     region: int,
     season: int,
+    as_of_date: date,
     coinflip_teams: set[str] | None = None,
     bracket_odds: dict[str, BracketOdds] | None = None,
     bracket_odds_weighted: dict[str, BracketOdds] | None = None,
@@ -462,6 +464,7 @@ def write_region_standings(
             (
                 team.school,
                 season,
+                as_of_date,
                 clazz,
                 region,
                 team.wins,
@@ -506,7 +509,7 @@ def write_region_standings(
 
     sql = """
         INSERT INTO region_standings (
-            school, season, class, region,
+            school, season, as_of_date, class, region,
             wins, losses, ties, region_wins, region_losses, region_ties,
             odds_1st, odds_2nd, odds_3rd, odds_4th,
             odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted,
@@ -520,7 +523,7 @@ def write_region_standings(
             coin_flip_needed
         )
         VALUES %s
-        ON CONFLICT (school, season) DO UPDATE SET
+        ON CONFLICT (school, season, as_of_date) DO UPDATE SET
             class  = COALESCE(EXCLUDED.class,  region_standings.class),
             region = COALESCE(EXCLUDED.region, region_standings.region),
             wins   = EXCLUDED.wins,
@@ -563,7 +566,7 @@ def write_region_standings(
         ;
     """
 
-    template = "(" + ", ".join(["%s"] * 41) + ")"
+    template = "(" + ", ".join(["%s"] * 42) + ")"
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             execute_values(cur, sql, data_by_school, template=template, page_size=500)
@@ -582,6 +585,7 @@ def write_region_scenarios(
     clazz: int,
     region: int,
     season: int,
+    as_of_date: date,
     remaining: list[RemainingGame],
     scenario_atoms: dict,
     complete_scenarios: list[dict],
@@ -621,9 +625,9 @@ def write_region_scenarios(
 
     scenarios_sql = """
         INSERT INTO region_scenarios
-            (season, class, region, computed_at, remaining_games, scenario_atoms, complete_scenarios)
-        VALUES (%s, %s, %s, NOW(), %s, %s, %s)
-        ON CONFLICT (season, class, region) DO UPDATE SET
+            (season, class, region, as_of_date, computed_at, remaining_games, scenario_atoms, complete_scenarios)
+        VALUES (%s, %s, %s, %s, NOW(), %s, %s, %s)
+        ON CONFLICT (season, class, region, as_of_date) DO UPDATE SET
             computed_at        = EXCLUDED.computed_at,
             remaining_games    = EXCLUDED.remaining_games,
             scenario_atoms     = EXCLUDED.scenario_atoms,
@@ -632,10 +636,10 @@ def write_region_scenarios(
 
     state_sql = """
         INSERT INTO region_computation_state
-            (season, class, region, r_remaining, margin_sensitive, margin_compute_status,
+            (season, class, region, as_of_date, r_remaining, margin_sensitive, margin_compute_status,
              computed_at, margin_computed_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
-        ON CONFLICT (season, class, region) DO UPDATE SET
+        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s)
+        ON CONFLICT (season, class, region, as_of_date) DO UPDATE SET
             r_remaining           = EXCLUDED.r_remaining,
             margin_sensitive      = EXCLUDED.margin_sensitive,
             margin_compute_status = EXCLUDED.margin_compute_status,
@@ -647,10 +651,10 @@ def write_region_scenarios(
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(scenarios_sql, (season, str(clazz), region, remaining_json, atoms_json, scenarios_json))
+            cur.execute(scenarios_sql, (season, str(clazz), region, as_of_date, remaining_json, atoms_json, scenarios_json))
             cur.execute(
                 state_sql,
-                (season, clazz, region, r_remaining, margin_sensitive, margin_compute_status, margin_computed_at),
+                (season, clazz, region, as_of_date, r_remaining, margin_sensitive, margin_compute_status, margin_computed_at),
             )
         conn.commit()
 
@@ -660,6 +664,7 @@ def upgrade_region_scenarios(
     clazz: int,
     region: int,
     season: int,
+    as_of_date: date,
     teams: list[str],
     completed: list[CompletedGame],
     remaining: list[RemainingGame],
@@ -700,9 +705,10 @@ def upgrade_region_scenarios(
         clazz,
         region,
         season,
-        remaining,
-        scenario_atoms,
-        complete_scenarios,
+        as_of_date=as_of_date,
+        remaining=remaining,
+        scenario_atoms=scenario_atoms,
+        complete_scenarios=complete_scenarios,
         r_remaining=len(remaining),
         margin_sensitive=True,
         margin_compute_status="complete",
@@ -882,6 +888,7 @@ def get_region_finish_scenarios(
     }
 
     region_standings = fetch_region_standings(clazz, region, season)
+    run_date = date.today()
 
     logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
     logger.info("Region standings: %s", region_standings)
@@ -892,16 +899,17 @@ def get_region_finish_scenarios(
         clazz,
         region,
         season,
-        seeding_data.coinflip_teams,
-        bracket,
-        bracket_weighted,
-        HomeOdds(
+        as_of_date=run_date,
+        coinflip_teams=seeding_data.coinflip_teams,
+        bracket_odds=bracket,
+        bracket_odds_weighted=bracket_weighted,
+        home_odds=HomeOdds(
             first_round=first_round_home_cond,
             second_round=second_round_home_cond,
             quarterfinals=quarterfinals_home_cond,
             semifinals=semifinals_home_cond,
         ),
-        HomeOdds(
+        home_odds_weighted=HomeOdds(
             first_round=first_round_home_cond_w,
             second_round=second_round_home_cond_w,
             quarterfinals=quarterfinals_home_cond_w,
@@ -923,9 +931,10 @@ def get_region_finish_scenarios(
             clazz,
             region,
             season,
-            remaining,
-            scenario_atoms,
-            complete_scenarios,
+            as_of_date=run_date,
+            remaining=remaining,
+            scenario_atoms=scenario_atoms,
+            complete_scenarios=complete_scenarios,
             r_remaining=R,
             margin_sensitive=True,
             margin_compute_status="not_needed",
@@ -941,9 +950,10 @@ def get_region_finish_scenarios(
             clazz,
             region,
             season,
-            remaining,
-            scenario_atoms,
-            complete_scenarios,
+            as_of_date=run_date,
+            remaining=remaining,
+            scenario_atoms=scenario_atoms,
+            complete_scenarios=complete_scenarios,
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="pending",
@@ -953,9 +963,10 @@ def get_region_finish_scenarios(
             clazz,
             region,
             season,
-            teams,
-            completed,
-            remaining,
+            as_of_date=run_date,
+            teams=teams,
+            completed=completed,
+            remaining=remaining,
         )
     else:
         # R ≥ 7: win/loss-only permanently.
@@ -968,9 +979,10 @@ def get_region_finish_scenarios(
             clazz,
             region,
             season,
-            remaining,
-            scenario_atoms,
-            complete_scenarios,
+            as_of_date=run_date,
+            remaining=remaining,
+            scenario_atoms=scenario_atoms,
+            complete_scenarios=complete_scenarios,
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="skipped",
@@ -1005,7 +1017,8 @@ def region_scenarios_data_flow(
         all_games, all_schools, elo_cfg, prior_ratings=prior_elo or None
     )
     rpi = compute_rpi(all_games)
-    write_team_ratings(elo_ratings, rpi, games_count, season)
+    flow_run_date = date.today()
+    write_team_ratings(elo_ratings, rpi, games_count, season, as_of_date=flow_run_date)
     logger.info("Wrote team ratings for %d teams", len(elo_ratings))
 
     # -----------------------------------------------------------------------

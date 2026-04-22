@@ -1,10 +1,11 @@
 """Demo script showing probability outputs across all engine components."""
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from helpers.bracket_home_odds import compute_bracket_advancement_odds
 from helpers.data_classes import FormatSlot, StandingsOdds
 from helpers.win_probability import (
     EloConfig,
@@ -12,7 +13,6 @@ from helpers.win_probability import (
     compute_ot_win_prob,
     make_matchup_prob_fn,
 )
-from helpers.bracket_home_odds import compute_bracket_advancement_odds
 
 BOLD = "\033[1m"
 RESET = "\033[0m"
@@ -21,11 +21,13 @@ CYAN = "\033[36m"
 GREEN = "\033[32m"
 
 def header(title: str) -> None:
+    """Print a bold cyan section header to stdout."""
     print(f"\n{BOLD}{CYAN}{'='*60}{RESET}")
     print(f"{BOLD}{CYAN}  {title}{RESET}")
     print(f"{BOLD}{CYAN}{'='*60}{RESET}\n")
 
 def pct(p: float) -> str:
+    """Format a probability in [0, 1] as a right-aligned percentage string."""
     return f"{p*100:6.1f}%"
 
 
@@ -78,6 +80,7 @@ elo_ratings = {
 cfg = EloConfig()
 
 def elo_wp(team_a: str, team_b: str, hfa: bool = False) -> float:
+    """Return P(team_a wins) using local elo_ratings, optionally with home-field advantage."""
     r_a = elo_ratings[team_a] + (cfg.hfa_points if hfa else 0)
     r_b = elo_ratings[team_b]
     return 1.0 / (1.0 + 10.0 ** ((r_b - r_a) / cfg.scale))

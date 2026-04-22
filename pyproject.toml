@@ -8,9 +8,10 @@ dependencies = [
     "pandas>=2.2",
     "lxml>=5.2",
     "psycopg2-binary>=2.9",
-    "psycopg[binary]>=3.1",
+    "psycopg[binary,pool]>=3.1",
     "playwright>=1.47",
     "beautifulsoup4>=4.12.0",
+    "fastapi[standard]>=0.136.0",
 ]
 
 [dependency-groups]
@@ -61,6 +62,16 @@ verbose = 2
 [tool.coverage.run]
 branch = true
 source = ["backend"]
+omit = [
+    "**/__init__.py",
+    "backend/prefect/*",
+    "backend/api/*",
+    "backend/api/routers/*",
+    "backend/api/models/*",
+    "backend/helpers/database_helpers.py",
+    "backend/helpers/web_helpers.py",
+    "backend/tests/*",
+]
 
 [tool.coverage.report]
 # Exclude Prefect pipeline files — these require a live DB/Prefect and are
@@ -68,6 +79,9 @@ source = ["backend"]
 omit = [
     "**/__init__.py",
     "backend/prefect/*",
+    "backend/api/*",
+    "backend/api/routers/*",
+    "backend/api/models/*",
     "backend/helpers/database_helpers.py",
     "backend/helpers/web_helpers.py",
     "backend/tests/*",
