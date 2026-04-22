@@ -11,7 +11,12 @@ from collections.abc import Mapping
 
 from bs4 import BeautifulSoup
 
-from backend.helpers.data_classes import CompletedGame, RawCompletedGame
+from backend.helpers.data_classes import (
+    CompletedGame,
+    GameClock,
+    GameStatus,
+    RawCompletedGame,
+)
 
 # -------------------------
 # Constants
@@ -450,3 +455,95 @@ def get_completed_games(raw_results: list[RawCompletedGame]) -> list[CompletedGa
         out.append(CompletedGame(a, b, res_a_sign, v["pd_a"], v["pa_a"], v["pa_b"]))
 
     return out
+
+
+# ---------------------------------------------------------------------------
+# Game status parsing
+# ---------------------------------------------------------------------------
+
+# Matches regulation clock strings like "8:00 1Q", "0:24 4Q", "11:47 2Q"
+_REG_CLOCK_RE = re.compile(
+    r"^(?P<mm>\d{1,2}):(?P<ss>\d{2})\s+(?P<q>[1-4])Q$", re.IGNORECASE
+)
+# Matches OT in-progress strings: "OT", "1OT", "2OT", "3OT", …
+_OT_PROGRESS_RE = re.compile(r"^(?P<n>\d*)OT$", re.IGNORECASE)
+# Matches OT-ended strings: "End OT", "End 1OT", "End 2OT", …
+_OT_END_RE = re.compile(r"^End\s+(?P<n>\d*)OT$", re.IGNORECASE)
+
+_TERMINAL_STATUS_MAP: dict[str, GameStatus] = {
+    "final": GameStatus.FINAL,
+    "final - forfeit": GameStatus.FINAL_FORFEIT,
+    "end 1q": GameStatus.END_1Q,
+    "halftime": GameStatus.HALFTIME,
+    "end 3q": GameStatus.END_3Q,
+    "end 4q": GameStatus.END_4Q,
+    "postponed": GameStatus.POSTPONED,
+    "canceled": GameStatus.CANCELED,
+    "cancelled": GameStatus.CANCELED,
+    "suspended": GameStatus.SUSPENDED,
+}
+
+
+def normalize_game_status(raw: str | None) -> GameStatus:
+    """Map a raw scraper status string to a canonical ``GameStatus`` value."""
+    if not raw:
+        return GameStatus.NOT_STARTED
+    norm = raw.strip()
+    lower = norm.lower()
+    if lower in _TERMINAL_STATUS_MAP:
+        return _TERMINAL_STATUS_MAP[lower]
+    if _OT_END_RE.match(norm):
+        return GameStatus.END_OT
+    if _OT_PROGRESS_RE.match(norm):
+        return GameStatus.IN_PROGRESS
+    if _REG_CLOCK_RE.match(norm):
+        return GameStatus.IN_PROGRESS
+    return GameStatus.NOT_STARTED
+
+
+def parse_game_clock(raw: str | None) -> GameClock:
+    """Parse a raw status string into a structured ``GameClock``.
+
+    Regulation in-progress (``"8:00 1Q"``): ``quarter`` 1–4, ``clock`` ``"MM:SS"``.
+    OT in-progress (``"OT"``/``"2OT"``): ``quarter = 4 + ot_number`` (so OT1→5), ``clock = None``.
+    OT ended (``"End 1OT"``): ``status = END_OT``, same quarter encoding, ``clock = None``.
+    Terminal/break states: ``quarter = None``, ``clock = None``.
+    """
+    status = normalize_game_status(raw)
+    norm = (raw or "").strip()
+
+    if status == GameStatus.IN_PROGRESS:
+        reg_m = _REG_CLOCK_RE.match(norm)
+        if reg_m:
+            mm = int(reg_m.group("mm"))
+            ss = int(reg_m.group("ss"))
+            clock_str = f"{mm}:{ss:02d}"
+            return GameClock(status=status, quarter=int(reg_m.group("q")), clock=clock_str)
+        ot_m = _OT_PROGRESS_RE.match(norm)
+        if ot_m:
+            ot_n = int(ot_m.group("n") or "1")
+            return GameClock(status=status, quarter=4 + ot_n, clock=None)
+
+    if status == GameStatus.END_OT:
+        ot_m = _OT_END_RE.match(norm)
+        if ot_m:
+            ot_n = int(ot_m.group("n") or "1")
+            return GameClock(status=status, quarter=4 + ot_n, clock=None)
+
+    return GameClock(status=status, quarter=None, clock=None)
+
+
+def game_seconds_remaining(quarter: int, clock: str) -> int:
+    """Return total regulation seconds remaining given the current quarter and clock.
+
+    ``clock`` must be ``"MM:SS"`` format.  Returns ``0`` for ``quarter > 4``
+    (OT is untimed — callers should use the OT win probability model instead).
+
+    Each quarter is 12 minutes (720 seconds); total regulation is 2 880 seconds.
+    """
+    if quarter > 4:
+        return 0
+    mm, ss = clock.split(":")
+    remaining_this_q = int(mm) * 60 + int(ss)
+    full_qs_after = max(0, 4 - quarter) * 720
+    return remaining_this_q + full_qs_after

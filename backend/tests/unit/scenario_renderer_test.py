@@ -736,6 +736,41 @@ class TestRenderTeamHomeScenarios:
         assert "Will Not Host First Round:" in result
         assert "[" not in result
 
+    def test_both_weighted_and_unweighted_prob_in_header(self):
+        """_odds_pct shows both values when p_host_marginal and its weighted counterpart are set."""
+        rnd = RoundHomeScenarios(
+            round_name="First Round",
+            will_host=(_UNCOND_EXPL,),
+            will_not_host=(),
+            p_reach=0.8,
+            p_host_conditional=0.6,
+            p_host_marginal=0.6,
+            p_reach_weighted=None,
+            p_host_conditional_weighted=None,
+            p_host_marginal_weighted=0.7,
+        )
+        result = render_team_home_scenarios("TeamA", [rnd])
+        assert "60.0%" in result
+        assert "70.0% Weighted" in result
+        assert "–" in result  # en-dash separating both values
+
+    def test_weighted_only_prob_in_header(self):
+        """_odds_pct shows only weighted value when unweighted is None but weighted is set."""
+        rnd = RoundHomeScenarios(
+            round_name="First Round",
+            will_host=(_UNCOND_EXPL,),
+            will_not_host=(),
+            p_reach=None,
+            p_host_conditional=None,
+            p_host_marginal=None,
+            p_reach_weighted=None,
+            p_host_conditional_weighted=None,
+            p_host_marginal_weighted=0.65,
+        )
+        result = render_team_home_scenarios("TeamA", [rnd])
+        assert "65.0% Weighted" in result
+        assert "–" not in result  # no en-dash when only one value
+
 
 class TestTeamHomeScenasAsDict:
     """Synthetic tests for team_home_scenarios_as_dict region-label fallback (line 542)."""

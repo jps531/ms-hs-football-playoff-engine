@@ -7,11 +7,15 @@ imports here.
 
 Public API
 ----------
-EloConfig               — tunable model parameters
-compute_elo_ratings()   — build Elo ratings + date snapshots from game history
-compute_rpi()           — compute RPI for each team (display-only)
-make_win_prob_fn()      — factory: returns a WinProbFn closure
-win_prob_with_factors() — returns a full WinProbFactors breakdown for display
+EloConfig                — tunable model parameters
+compute_elo_ratings()    — build Elo ratings + date snapshots from game history
+compute_rpi()            — compute RPI for each team (display-only)
+make_win_prob_fn()       — factory: returns a WinProbFn closure
+make_win_prob_fn_from_ratings() — alternate factory using pre-computed ratings
+make_matchup_prob_fn()        — bridge: seed-based MatchupProbFn from Elo ratings
+compute_in_game_win_prob()    — regulation in-game win probability (Gaussian model)
+compute_ot_win_prob()         — OT mid-possession win probability (discrete model)
+win_prob_with_factors()       — returns a full WinProbFactors breakdown for display
 """
 
 import bisect
@@ -20,7 +24,15 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 
-from backend.helpers.data_classes import Game, School, WinProbFactors, WinProbFn
+from backend.helpers.data_classes import (
+    Game,
+    InGameConfig,
+    MatchupProbFn,
+    School,
+    StandingsOdds,
+    WinProbFactors,
+    WinProbFn,
+)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -64,6 +76,13 @@ class EloConfig:
     """Starting Elo by classification (index 0 = 1A, index 6 = 7A).
     Teams with no classification data fall back to ``class_ratings[0]``."""
 
+    carryover_factor: float = 0.50
+    """Fraction of the prior season's final Elo carried into the new season.
+    ``0.0`` resets every team to the class prior each season; ``1.0`` uses the
+    prior rating unchanged.  Defaults to 0.50, reflecting that roughly half a
+    HS program's strength signal is roster-specific (turns over annually) and
+    half is program-level (coaching, scheme, tradition)."""
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -75,6 +94,22 @@ def _class_prior(school: str, schools_by_name: dict[str, School], config: EloCon
     if s is None:
         return config.class_ratings[0]
     return config.class_ratings[s.class_ - 1]
+
+
+def _apply_carryover(
+    class_prior: float,
+    school: str,
+    prior_ratings: dict[str, float] | None,
+    carryover_factor: float,
+) -> float:
+    """Blend a classification prior with a prior-season rating.
+
+    Returns ``class_prior`` unchanged when ``prior_ratings`` is empty/None or
+    the school has no prior-season entry.
+    """
+    if not prior_ratings or school not in prior_ratings:
+        return class_prior
+    return (1.0 - carryover_factor) * class_prior + carryover_factor * prior_ratings[school]
 
 
 def _elo_expected(r_a: float, r_b: float, scale: float) -> float:
@@ -102,12 +137,28 @@ def compute_elo_ratings(
     games: list[Game],
     schools: list[School],
     config: EloConfig,
+    prior_ratings: dict[str, float] | None = None,
 ) -> tuple[dict[str, float], dict[str, int], list[tuple[date, dict[str, float]]]]:
     """Compute Elo ratings for all teams from completed game history.
 
     Games are processed in chronological order.  The games table has one row
     per team per game; this function deduplicates by (min_name, max_name, date)
     so each contest is applied exactly once.
+
+    Parameters
+    ----------
+    games : list[Game]
+        All completed games for the season.
+    schools : list[School]
+        All known schools for the season (used for classification priors).
+    config : EloConfig
+        Model parameters including ``carryover_factor``.
+    prior_ratings : dict[str, float] | None
+        Final Elo ratings from the previous season (e.g. fetched from
+        ``team_ratings`` for ``season - 1``).  When provided, each team's
+        starting rating is blended:
+        ``(1 - carryover_factor) * class_prior + carryover_factor * prior_elo``.
+        Teams absent from ``prior_ratings`` start at the class prior unchanged.
 
     Returns
     -------
@@ -121,9 +172,12 @@ def compute_elo_ratings(
     """
     schools_by_name: dict[str, School] = {s.school: s for s in schools}
 
-    # Seed every known school with its classification prior
+    # Seed every known school — blend with prior-season rating when available
     ratings: dict[str, float] = {
-        s.school: config.class_ratings[s.class_ - 1] for s in schools
+        s.school: _apply_carryover(
+            config.class_ratings[s.class_ - 1], s.school, prior_ratings, config.carryover_factor
+        )
+        for s in schools
     }
     games_count: dict[str, int] = defaultdict(int)
 
@@ -159,9 +213,13 @@ def compute_elo_ratings(
 
         # Ensure both teams have a rating (handles out-of-state / untracked opponents)
         if school not in ratings:
-            ratings[school] = _class_prior(school, schools_by_name, config)
+            ratings[school] = _apply_carryover(
+                _class_prior(school, schools_by_name, config), school, prior_ratings, config.carryover_factor
+            )
         if opponent not in ratings:
-            ratings[opponent] = _class_prior(opponent, schools_by_name, config)
+            ratings[opponent] = _apply_carryover(
+                _class_prior(opponent, schools_by_name, config), opponent, prior_ratings, config.carryover_factor
+            )
 
         r_school = ratings[school]
         r_opp = ratings[opponent]
@@ -439,6 +497,190 @@ def make_win_prob_fn_from_ratings(
         return max(0.0, min(1.0, prob))
 
     return win_prob_fn
+
+
+# ---------------------------------------------------------------------------
+# Matchup probability bridge (team-name Elo → seed-based bracket)
+# ---------------------------------------------------------------------------
+
+def make_matchup_prob_fn(
+    elo_ratings: dict[str, float],
+    seeding_odds_by_region: dict[int, dict[str, StandingsOdds]],
+    config: EloConfig | None = None,
+) -> MatchupProbFn:
+    """Build a ``MatchupProbFn`` using probability-weighted expected Elo per seed.
+
+    For each ``(region, seed)`` position the expected Elo is:
+
+        expected_elo[region, seed] = Σ_t  P(t achieves seed in region)  ×  elo[t]
+
+    When seeding is fully determined (one team has ``p=1.0``) this equals that
+    team's exact Elo.  When uncertain mid-season it is a proper probability-
+    weighted expectation.  Seed rank is not used as a proxy — only Elo matters,
+    so a high-Elo lower seed is correctly favoured over a low-Elo higher seed.
+
+    Home-field advantage (``config.hfa_points``) is applied to the home team.
+    Per MHSAA rules the lower seed number (better seed) hosts, so the home
+    team is always the argument passed as ``home_region, home_seed``.
+
+    Unknown ``(region, seed)`` pairs (no seeding odds available) return 0.5.
+
+    Args:
+        elo_ratings:            Final Elo ratings keyed by school name.
+        seeding_odds_by_region: ``region → {school: StandingsOdds}`` for a
+                                single class.  All regions in the class should
+                                be included so cross-region playoff matchups are
+                                handled correctly.
+        config:                 Elo configuration used for ``hfa_points`` and
+                                ``scale``.  Defaults to ``EloConfig()``.
+
+    Returns:
+        A ``MatchupProbFn``: ``fn(home_region, home_seed, away_region,
+        away_seed) → float``.
+    """
+    cfg = config or EloConfig()
+    seed_elo: dict[tuple[int, int], float] = {}
+    for region, school_odds in seeding_odds_by_region.items():
+        for school, so in school_odds.items():
+            elo = elo_ratings.get(school, cfg.class_ratings[0])
+            for seed, p in ((1, so.p1), (2, so.p2), (3, so.p3), (4, so.p4)):
+                key = (region, seed)
+                seed_elo[key] = seed_elo.get(key, 0.0) + p * elo
+
+    def matchup_prob_fn(
+        home_region: int, home_seed: int, away_region: int, away_seed: int
+    ) -> float:
+        """Return P(home wins) using probability-weighted expected Elo."""
+        elo_home = seed_elo.get((home_region, home_seed))
+        elo_away = seed_elo.get((away_region, away_seed))
+        if elo_home is None or elo_away is None:
+            return 0.5
+        adjusted = elo_home + cfg.hfa_points
+        return 1.0 / (1.0 + 10.0 ** ((elo_away - adjusted) / cfg.scale))
+
+    return matchup_prob_fn
+
+
+# ---------------------------------------------------------------------------
+# In-game win probability
+# ---------------------------------------------------------------------------
+
+
+def _norm_cdf(x: float) -> float:
+    """Standard normal CDF using math.erf (no scipy dependency)."""
+    return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
+
+def _norm_ppf(p: float) -> float:
+    """Approximate inverse normal CDF (percent-point function) via bisection.
+
+    Accurate to ~1e-6 for p in (0.001, 0.999). Used only once per call to
+    ``compute_in_game_win_prob`` so bisection cost is negligible.
+    """
+    p = max(1e-9, min(1.0 - 1e-9, p))
+    lo, hi = -10.0, 10.0
+    for _ in range(60):
+        mid = (lo + hi) / 2.0
+        if _norm_cdf(mid) < p:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+def compute_in_game_win_prob(
+    pregame_prob: float,
+    current_margin: int,
+    seconds_remaining: int,
+    config: InGameConfig | None = None,
+) -> float:
+    """Return P(team_a wins) given current score and time remaining in regulation.
+
+    Uses a Gaussian remaining-score random walk calibrated for MSHAA 48-minute
+    rules.  Do not call this for overtime possessions; use ``compute_ot_win_prob``
+    instead.
+
+    Args:
+        pregame_prob: Elo win probability for team_a before the game started.
+        current_margin: team_a score minus team_b score (positive = team_a leading).
+        seconds_remaining: Total regulation seconds left (use ``game_seconds_remaining()``).
+        config: Model parameters; defaults to ``InGameConfig()``.
+    """
+    cfg = config or InGameConfig()
+    t = max(0, seconds_remaining)
+    T = cfg.total_seconds
+
+    if t == 0:
+        if current_margin > 0:
+            return 1.0
+        if current_margin < 0:
+            return 0.0
+        return 0.5  # tied at end of regulation → overtime
+
+    frac = t / T
+    sigma_remaining = cfg.sigma * math.sqrt(frac)
+
+    # Apply mercy-rule variance collapse when margin meets/exceeds threshold
+    if abs(current_margin) >= cfg.mercy_threshold:
+        sigma_remaining *= cfg.mercy_sigma_factor
+
+    # Expected final margin: current score + remaining drift scaled by time left
+    pregame_drift = _norm_ppf(pregame_prob) * cfg.sigma  # expected total margin at kickoff
+    mu_final = current_margin + pregame_drift * frac
+
+    result = _norm_cdf(mu_final / sigma_remaining)
+    return max(0.0, min(1.0, result))
+
+
+def _ot_score_distribution(
+    p_b_wins_ot: float,
+    cfg: InGameConfig,
+) -> dict[int, float]:
+    """Return the probability distribution over team B's OT possession score.
+
+    Scores are one of ``{0, 3, 6, 7, 8}`` corresponding to no score, field goal,
+    TD + missed PAT, TD + 1-pt PAT, and TD + 2-pt PAT respectively.
+
+    The distribution is adjusted by ``p_b_wins_ot`` (B's stateless OT win
+    probability, i.e. ``1 - pregame_prob_a``): stronger teams score TDs more
+    often, weaker teams less often.
+    """
+    adj = cfg.ot_elo_factor * (p_b_wins_ot - 0.5)
+    p_td = max(0.0, min(1.0, cfg.ot_p_td_base + adj))
+    p_fg = max(0.0, min(1.0 - p_td, cfg.ot_p_fg_base + adj * 0.5))
+    p_0 = max(0.0, 1.0 - p_td - p_fg)
+    return {
+        0: p_0,
+        3: p_fg,
+        6: p_td * cfg.ot_p_missed_pat,
+        7: p_td * cfg.ot_p_1pt_pat,
+        8: p_td * cfg.ot_p_2pt_pat,
+    }
+
+
+def compute_ot_win_prob(
+    pregame_prob_a: float,
+    ot_scored_margin: int,
+    config: InGameConfig | None = None,
+) -> float:
+    """Return P(team_a wins the game) after team_a scored in their OT possession.
+
+    Team_b has not yet possessed.  ``ot_scored_margin`` must be one of
+    ``{0, 3, 6, 7, 8}``.  The "another OT" recursion resolves via
+    ``pregame_prob_a`` (each new OT period resets to the same team-strength
+    contest).
+
+    MSHAA overtime is untimed alternating possessions (NFHS Kansas City
+    Tiebreaker format).  Scoring rates are adjusted by the Elo gap.
+    """
+    cfg = config or InGameConfig()
+    dist_b = _ot_score_distribution(1.0 - pregame_prob_a, cfg)
+
+    p_a_wins_direct = sum(p for score, p in dist_b.items() if score < ot_scored_margin)
+    p_another_ot = sum(p for score, p in dist_b.items() if score == ot_scored_margin)
+
+    # If tied after both possessions → another OT → use stateless pregame probability
+    return max(0.0, min(1.0, p_a_wins_direct + p_another_ot * pregame_prob_a))
 
 
 # ---------------------------------------------------------------------------

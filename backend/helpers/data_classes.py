@@ -8,6 +8,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
+from enum import StrEnum
 from typing import TypedDict
 
 # -------------------------
@@ -39,6 +40,88 @@ def equal_win_prob(
         Always ``0.5``.
     """
     return 0.5
+
+
+#: Injectable playoff matchup win-probability function type.
+#: Called as ``matchup_prob_fn(home_region, home_seed, away_region, away_seed)``
+#: and returns P(home team wins).
+MatchupProbFn = Callable[[int, int, int, int], float]
+
+
+def equal_matchup_prob(
+    _home_region: int,
+    _home_seed: int,
+    _away_region: int,
+    _away_seed: int,
+) -> float:
+    """Return 0.5 for every matchup (equal-probability default)."""
+    return 0.5
+
+
+# -------------------------
+# In-game status
+# -------------------------
+
+
+class GameStatus(StrEnum):
+    """Normalized game status values stored in the ``game_status`` column."""
+
+    FINAL = "final"
+    FINAL_FORFEIT = "final_forfeit"
+    END_1Q = "end_1q"
+    HALFTIME = "halftime"
+    END_3Q = "end_3q"
+    END_4Q = "end_4q"
+    IN_PROGRESS = "in_progress"   # clock running (reg) or OT possession underway
+    END_OT = "end_ot"             # OT period ended tied; game_quarter = which OT (5=OT1, …)
+    POSTPONED = "postponed"
+    CANCELED = "canceled"
+    SUSPENDED = "suspended"
+    NOT_STARTED = "not_started"
+
+
+@dataclass(frozen=True)
+class GameClock:
+    """Structured in-progress game state parsed from a raw status string."""
+
+    status: GameStatus
+    quarter: int | None   # 1–4 regulation; 5+ for OT (5=OT1, 6=OT2, …)
+    clock: str | None     # "MM:SS" within the quarter; always None for OT
+
+
+# -------------------------
+# In-game win probability config
+# -------------------------
+
+
+@dataclass
+class InGameConfig:
+    """Tunable parameters for the in-game and OT win probability models.
+
+    Defaults are calibrated for MSHAA rules:
+    four 12-minute quarters (2880 s total), 35-point running-clock rule,
+    and OT possessions starting at the opponent's ~10-yard line (NFHS format).
+    """
+
+    # Regulation Gaussian model
+    total_seconds: int = 2880
+    sigma: float = 17.0
+    mercy_threshold: int = 35
+    mercy_sigma_factor: float = 0.25
+
+    # OT discrete possession model
+    ot_p_td_base: float = 0.60      # P(TD) for evenly matched teams in an OT possession
+    ot_p_fg_base: float = 0.20      # P(FG only) for evenly matched teams
+    ot_p_missed_pat: float = 0.10   # P(missed PAT | TD)  — must sum to 1.0 with below
+    ot_p_1pt_pat: float = 0.80      # P(1-pt PAT made | TD)
+    ot_p_2pt_pat: float = 0.10      # P(2-pt PAT attempted+made | TD)
+    ot_elo_factor: float = 0.30     # how much Elo gap shifts OT scoring rates
+
+
+#: Injectable in-game win probability function type.
+#: Called as ``fn(pregame_prob, current_margin, seconds_remaining)`` and returns
+#: P(team_a wins).  Use for regulation only; see ``compute_ot_win_prob`` for OT.
+InGameWinProbFn = Callable[[float, int, int], float]
 
 
 @dataclass(frozen=True)
@@ -237,7 +320,7 @@ class Game:
     kickoff_time: str | None  # ISO 8601 format, e.g., "2023-09-01T19:00:00Z"
     opponent: str | None
     result: str | None
-    game_status: str | None
+    game_status: GameStatus | None
     source: str | None
     location: str = "neutral"
     region_game: bool = False
@@ -297,7 +380,7 @@ class Game:
                 kickoff_time=row.get("kickoff_time"),
                 opponent=row.get("opponent"),
                 result=row.get("result"),
-                game_status=row.get("game_status"),
+                game_status=GameStatus(row["game_status"].lower()) if row.get("game_status") else None,
                 source=row.get("source"),
                 region_game=bool(row.get("region_game")),
                 final=bool(row.get("final")),
@@ -337,7 +420,7 @@ class Game:
                 kickoff_time=kickoff_time,
                 opponent=opponent,
                 result=result,
-                game_status=game_status,
+                game_status=GameStatus(game_status.lower()) if game_status else None,
                 source=source,
                 region_game=bool(region_game),
                 final=bool(final),

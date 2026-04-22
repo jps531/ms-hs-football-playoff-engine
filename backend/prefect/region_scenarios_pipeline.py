@@ -22,12 +22,14 @@ from backend.helpers.data_classes import (
     CompletedGame,
     FormatSlot,
     Game,
+    MatchupProbFn,
     RawCompletedGame,
     RemainingGame,
     School,
     Standings,
     StandingsOdds,
     WinProbFn,
+    equal_matchup_prob,
 )
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.database_helpers import get_database_connection
@@ -51,6 +53,7 @@ from backend.helpers.win_probability import (
     EloConfig,
     compute_elo_ratings,
     compute_rpi,
+    make_matchup_prob_fn,
     make_win_prob_fn_from_ratings,
 )
 
@@ -72,6 +75,23 @@ class HomeOdds:
     second_round: dict[str, float]
     quarterfinals: dict[str, float]
     semifinals: dict[str, float]
+
+
+@_dataclass
+class RegionSeedingData:
+    """Intermediate result from Phase 1 of the pipeline.
+
+    Produced by ``get_region_seeding_odds`` and consumed by
+    ``get_region_finish_scenarios``.  Carries everything computed from
+    ``determine_scenarios`` so the expensive enumeration is not repeated.
+    """
+
+    odds: dict[str, StandingsOdds]
+    odds_weighted: dict[str, StandingsOdds]
+    coinflip_teams: set[str]
+    teams: list[str]
+    completed: list[CompletedGame]
+    remaining: list[RemainingGame]
 
 
 # -------------------------
@@ -162,6 +182,23 @@ def fetch_all_season_schools(season: int) -> list[School]:
                 )
                 for row in cur.fetchall()
             ]
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {prior_season} Prior Season Elo Ratings")
+def fetch_prior_season_elo(prior_season: int) -> dict[str, float]:
+    """Fetch final Elo ratings from the prior season for cross-season carryover.
+
+    Returns an empty dict when no ratings exist for ``prior_season`` (e.g. the
+    first season in the database), in which case ``compute_elo_ratings`` falls
+    back to class priors for all teams.
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT school, elo FROM team_ratings WHERE season = %s",
+                (prior_season,),
+            )
+            return {row[0]: row[1] for row in cur.fetchall()}
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Write {season} Team Ratings")
@@ -372,6 +409,7 @@ def write_region_standings(
     bracket_odds_weighted: dict[str, BracketOdds] | None = None,
     home_odds: HomeOdds | None = None,
     home_odds_weighted: HomeOdds | None = None,
+    odds_weighted: dict[str, StandingsOdds] | None = None,
 ):
     """Upsert standings and odds into the ``region_standings`` table.
 
@@ -406,6 +444,7 @@ def write_region_standings(
     coinflip_teams = coinflip_teams or set()
     bracket_odds = bracket_odds or {}
     bracket_odds_weighted = bracket_odds_weighted or {}
+    odds_weighted = odds_weighted or {}
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
     _empty_home = HomeOdds(first_round={}, second_round={}, quarterfinals={}, semifinals={})
     ho = home_odds or _empty_home
@@ -416,6 +455,7 @@ def write_region_standings(
     data_by_school = []
     for team in standings:
         o = odds.get(team.school, _empty_odds)
+        ow = odds_weighted.get(team.school, _empty_odds)
         b = bracket_odds.get(team.school, _empty_bracket)
         bw = bracket_odds_weighted.get(team.school, _empty_bracket)
         data_by_school.append(
@@ -434,10 +474,10 @@ def write_region_standings(
                 o.p2,
                 o.p3,
                 o.p4,
-                0.0,  # odds_1st_weighted (seeding weights not yet implemented)
-                0.0,  # odds_2nd_weighted
-                0.0,  # odds_3rd_weighted
-                0.0,  # odds_4th_weighted
+                ow.p1,  # odds_1st_weighted
+                ow.p2,  # odds_2nd_weighted
+                ow.p3,  # odds_3rd_weighted
+                ow.p4,  # odds_4th_weighted
                 o.p_playoffs,
                 o.clinched,
                 o.eliminated,
@@ -446,7 +486,7 @@ def write_region_standings(
                 b.semifinals,
                 b.finals,
                 b.champion,
-                bw.second_round,  # odds_playoffs_weighted (= p_playoffs × win odds)
+                ow.p_playoffs,  # odds_playoffs_weighted
                 bw.second_round,  # odds_second_round_weighted
                 bw.quarterfinals,  # odds_quarterfinals_weighted
                 bw.semifinals,  # odds_semifinals_weighted
@@ -677,68 +717,122 @@ _R_BACKGROUND_MAX = 6  # R ≤ this (and > _R_ALWAYS_MARGIN): win/loss first, up
 # R > this: win/loss only, permanently
 
 
-@task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
-def get_region_finish_scenarios(
+@task(retries=2, retry_delay_seconds=10, task_run_name="Seeding Odds {season} {region}-{clazz}A")
+def get_region_seeding_odds(
     clazz: int,
     region: int,
     season: int,
     elo_ratings: dict[str, float] | None = None,
     elo_snapshots: list[tuple[date, dict[str, float]]] | None = None,
     elo_config: EloConfig | None = None,
-):
-    """Enumerate all remaining outcomes for a (class, region, season), apply the tiebreakers,
-    and aggregate seeding odds + human-readable scenario explanations.
+) -> RegionSeedingData:
+    """Phase 1: fetch games, enumerate outcomes, and return seeding odds.
+
+    Fetches all game data for the region, runs ``determine_scenarios``, and
+    converts raw counts to ``StandingsOdds`` probabilities.  Results are
+    returned as a ``RegionSeedingData`` bundle for consumption by
+    ``get_region_finish_scenarios`` in Phase 2.
 
     Args:
-        clazz: MHSAA classification (1–7).
-        region: Region number within the class.
-        season: Football season year.
-        elo_ratings: Pre-computed final Elo ratings for all teams (from flow level).
-            When provided, win probabilities are computed from these ratings.
-            When None, falls back to equal 50/50 probability for all games.
-        elo_snapshots: Date-ordered rating snapshots for date-conditioned queries.
-            Paired with ``elo_ratings``; ignored when ``elo_ratings`` is None.
-        elo_config: Elo configuration used when computing the ratings.  Defaults
-            to ``EloConfig()`` if omitted.
-    """
-    logger = get_run_logger()
+        clazz:         MHSAA classification (1–7).
+        region:        Region number within the class.
+        season:        Football season year.
+        elo_ratings:   Pre-computed final Elo ratings for all teams.  When
+                       provided, win probabilities are Elo-based; otherwise
+                       falls back to equal 50/50.
+        elo_snapshots: Date-ordered rating snapshots paired with
+                       ``elo_ratings``; ignored when ``elo_ratings`` is None.
+        elo_config:    Elo configuration.  Defaults to ``EloConfig()``.
 
+    Returns:
+        A ``RegionSeedingData`` containing unweighted and weighted seeding
+        odds, coinflip teams, and the fetched game lists.
+    """
     teams = fetch_region_teams(clazz, region, season)
     if not teams:
         raise SystemExit("No teams found.")
     completed = fetch_completed_pairs(teams, season)
     remaining = fetch_remaining_pairs(teams, season)
 
-    # Build win probability function from pre-computed ratings (or fall back to equal).
     win_prob_fn: WinProbFn | None = None
     if elo_ratings is not None:
-        win_prob_fn = make_win_prob_fn_from_ratings(
-            elo_ratings,
-            elo_snapshots or [],
-            elo_config,
-        )
+        win_prob_fn = make_win_prob_fn_from_ratings(elo_ratings, elo_snapshots or [], elo_config)
 
     r = determine_scenarios(teams, completed, remaining, win_prob_fn=win_prob_fn)
 
-    odds = determine_odds(teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
+    odds = determine_odds(
+        teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom
+    )
+    odds_weighted = determine_odds(
+        teams,
+        r.first_counts_weighted,
+        r.second_counts_weighted,
+        r.third_counts_weighted,
+        r.fourth_counts_weighted,
+        r.denom_weighted,
+    )
+    return RegionSeedingData(
+        odds=odds,
+        odds_weighted=odds_weighted,
+        coinflip_teams=r.coinflip_teams,
+        teams=teams,
+        completed=completed,
+        remaining=remaining,
+    )
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
+def get_region_finish_scenarios(
+    clazz: int,
+    region: int,
+    season: int,
+    seeding_data: RegionSeedingData,
+    matchup_prob_fn: MatchupProbFn | None = None,
+):
+    """Phase 2: compute bracket/home odds and write results to DB.
+
+    Consumes pre-computed seeding odds from ``get_region_seeding_odds`` and an
+    optional Elo-based ``MatchupProbFn`` built at flow level from all-region
+    seeding odds.  Computes bracket advancement and home-game probabilities,
+    writes ``region_standings``, and then writes scenario atoms.
+
+    Args:
+        clazz:           MHSAA classification (1–7).
+        region:          Region number within the class.
+        season:          Football season year.
+        seeding_data:    Pre-computed seeding odds from Phase 1.
+        matchup_prob_fn: Elo-based matchup probability function built from all
+                         regions in the class.  Falls back to equal 50/50 when
+                         ``None``.
+    """
+    logger = get_run_logger()
+
+    odds = seeding_data.odds
+    odds_weighted = seeding_data.odds_weighted
+    teams = seeding_data.teams
+    completed = seeding_data.completed
+    remaining = seeding_data.remaining
+
+    mp_fn = matchup_prob_fn or equal_matchup_prob
 
     num_rounds = fetch_num_rounds(clazz, season)
     bracket = compute_bracket_odds(num_rounds, odds)
 
     home_seeds = fetch_first_round_home_seeds(clazz, region, season)
     first_round_home_marginal = compute_first_round_home_odds(home_seeds, odds)
+    first_round_home_marginal_w = compute_first_round_home_odds(home_seeds, odds_weighted)
 
     slots = fetch_all_format_slots(clazz, season)
     second_round_home_marginal = compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
     quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season)
     semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season)
 
-    # Weighted bracket advancement odds (win_prob_fn not yet wired from DB;
-    # defaults to equal_matchup_prob, giving the same values as `bracket`).
-    bracket_weighted = compute_bracket_advancement_odds(region, odds, slots)
+    bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn)
+    second_round_home_marginal_w = compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn) if clazz <= 4 else {}
+    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn)
+    semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn)
 
     # Convert marginal home odds to conditional: P(hosts | reaches).
-    # If a team cannot reach a round (advancement == 0) store 0.0.
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
 
     def _safe_cond(marginal: float, advancement: float) -> float:
@@ -766,12 +860,10 @@ def get_region_finish_scenarios(
         for school, m in semifinals_home_marginal.items()
     }
 
-    # Weighted conditional home odds (same win_prob_fn caveat as bracket_weighted).
-    second_round_home_marginal_w = compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
-    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds, slots, season)
-    semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds, slots, season)
-
-    first_round_home_cond_w = first_round_home_cond  # same until win_prob_fn is wired
+    first_round_home_cond_w = {
+        school: _safe_cond(m, odds_weighted[school].p_playoffs if school in odds_weighted else 0.0)
+        for school, m in first_round_home_marginal_w.items()
+    }
     second_round_home_cond_w = (
         {
             school: _safe_cond(m, bracket_weighted.get(school, _empty_bracket).second_round)
@@ -800,7 +892,7 @@ def get_region_finish_scenarios(
         clazz,
         region,
         season,
-        r.coinflip_teams,
+        seeding_data.coinflip_teams,
         bracket,
         bracket_weighted,
         HomeOdds(
@@ -815,6 +907,7 @@ def get_region_finish_scenarios(
             quarterfinals=quarterfinals_home_cond_w,
             semifinals=semifinals_home_cond_w,
         ),
+        odds_weighted=odds_weighted,
     )
 
     R = len(remaining)
@@ -907,23 +1000,57 @@ def region_scenarios_data_flow(
     all_games = fetch_all_season_games(season)
     all_schools = fetch_all_season_schools(season)
     elo_cfg = EloConfig()
-    elo_ratings, games_count, elo_snapshots = compute_elo_ratings(all_games, all_schools, elo_cfg)
+    prior_elo = fetch_prior_season_elo(season - 1)
+    elo_ratings, games_count, elo_snapshots = compute_elo_ratings(
+        all_games, all_schools, elo_cfg, prior_ratings=prior_elo or None
+    )
     rpi = compute_rpi(all_games)
     write_team_ratings(elo_ratings, rpi, games_count, season)
     logger.info("Wrote team ratings for %d teams", len(elo_ratings))
 
+    # -----------------------------------------------------------------------
+    # Phase 1: enumerate seeding odds for every region.
+    # All regions must finish before we can build the per-class matchup fn.
+    # -----------------------------------------------------------------------
+    seeding: dict[tuple[int, int], RegionSeedingData] = {}
+    if clazz is None or region is None:
+        for c in [1, 2, 3, 4]:
+            for r in [1, 2, 3, 4, 5, 6, 7, 8]:
+                seeding[(c, r)] = get_region_seeding_odds(c, r, season, elo_ratings, elo_snapshots, elo_cfg)
+        for c in [5, 6, 7]:
+            for r in [1, 2, 3, 4]:
+                seeding[(c, r)] = get_region_seeding_odds(c, r, season, elo_ratings, elo_snapshots, elo_cfg)
+    else:
+        seeding[(clazz, region)] = get_region_seeding_odds(clazz, region, season, elo_ratings, elo_snapshots, elo_cfg)
+
+    # -----------------------------------------------------------------------
+    # Build one MatchupProbFn per class using all-region weighted seeding odds.
+    # expected_elo[region, seed] = Σ_t  P(t achieves seed)  ×  elo[t]
+    # -----------------------------------------------------------------------
+    def _regions_for(c: int) -> list[int]:
+        """Return valid region numbers for class c (1–8 for 1A–4A; 1–4 for 5A–7A)."""
+        return list(range(1, 9)) if c <= 4 else list(range(1, 5))
+
+    matchup_fns: dict[int, MatchupProbFn] = {}
+    for c in ({clazz} if clazz is not None else {1, 2, 3, 4, 5, 6, 7}):
+        class_weighted_odds = {r: seeding[(c, r)].odds_weighted for r in _regions_for(c) if (c, r) in seeding}
+        matchup_fns[c] = make_matchup_prob_fn(elo_ratings, class_weighted_odds, elo_cfg)
+
+    # -----------------------------------------------------------------------
+    # Phase 2: compute bracket/home odds and write all results to DB.
+    # -----------------------------------------------------------------------
     scenario_dicts: dict = {}
     if clazz is None or region is None:
         for c in [1, 2, 3, 4]:
             scenario_dicts[c] = {}
             for r in [1, 2, 3, 4, 5, 6, 7, 8]:
-                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, elo_ratings, elo_snapshots, elo_cfg)
+                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, seeding[(c, r)], matchup_fns[c])
         for c in [5, 6, 7]:
             scenario_dicts[c] = {}
             for r in [1, 2, 3, 4]:
-                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, elo_ratings, elo_snapshots, elo_cfg)
+                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, seeding[(c, r)], matchup_fns[c])
     else:
         scenario_dicts.setdefault(clazz, {})[region] = get_region_finish_scenarios(
-            clazz, region, season, elo_ratings, elo_snapshots, elo_cfg
+            clazz, region, season, seeding[(clazz, region)], matchup_fns[clazz]
         )
     return scenario_dicts

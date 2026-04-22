@@ -8,14 +8,19 @@ from datetime import date
 
 import pytest
 
-from backend.helpers.data_classes import Game, School, WinProbFactors
+from backend.helpers.data_classes import Game, GameStatus, InGameConfig, School, StandingsOdds, WinProbFactors
 from backend.helpers.win_probability import (
     EloConfig,
+    _apply_carryover,
     _class_prior,
     _elo_expected,
     _mov_multiplier,
+    _ot_score_distribution,
     compute_elo_ratings,
+    compute_in_game_win_prob,
+    compute_ot_win_prob,
     compute_rpi,
+    make_matchup_prob_fn,
     make_win_prob_fn,
     make_win_prob_fn_from_ratings,
     win_prob_with_factors,
@@ -53,7 +58,7 @@ def _game(
         kickoff_time=None,
         opponent=opponent,
         result=result,
-        game_status="Final",
+        game_status=GameStatus.FINAL,
         source="test",
         location=location,
         region_game=region_game,
@@ -537,10 +542,15 @@ class TestComputeRPI:
         # Build a 4-team round-robin so every team has exactly 3 games.
         # W1 goes 3-0, L2 goes 0-3 → W1 RPI > L2 RPI.
         from datetime import timedelta
+
         base_date = date(2025, 9, 1)
         matchups = [
-            ("W1", "L1"), ("W1", "L2"), ("W1", "W2"),
-            ("W2", "L1"), ("W2", "L2"), ("L1", "L2"),
+            ("W1", "L1"),
+            ("W1", "L2"),
+            ("W1", "W2"),
+            ("W2", "L1"),
+            ("W2", "L2"),
+            ("L1", "L2"),
         ]
         games = []
         for i, (w, l) in enumerate(matchups):
@@ -564,6 +574,7 @@ class TestComputeRPI:
     def test_tie_game_counted_as_half_point(self):
         """Tie result contributes 0.5 to each team's win percentage."""
         from datetime import timedelta
+
         base_date = date(2025, 9, 1)
         # X: 1 tie (vs Y), 1 win (vs Z), 1 loss (vs W) — exactly 3 games for X
         games = [
@@ -770,14 +781,383 @@ class TestWinProbWithFactors:
     def test_away_location_decreases_prob(self):
         """Away location lowers location_adjusted_prob without changing raw_elo_prob."""
         neutral = win_prob_with_factors(
-            "Alpha", "Beta",
-            self.elo_ratings, self.games_count, self.rpi, self.schools_by_name,
+            "Alpha",
+            "Beta",
+            self.elo_ratings,
+            self.games_count,
+            self.rpi,
+            self.schools_by_name,
             location_a="neutral",
         )
         away = win_prob_with_factors(
-            "Alpha", "Beta",
-            self.elo_ratings, self.games_count, self.rpi, self.schools_by_name,
+            "Alpha",
+            "Beta",
+            self.elo_ratings,
+            self.games_count,
+            self.rpi,
+            self.schools_by_name,
             location_a="away",
         )
         assert away.location_adjusted_prob < neutral.location_adjusted_prob
         assert away.raw_elo_prob == pytest.approx(neutral.raw_elo_prob)
+
+
+# ---------------------------------------------------------------------------
+# make_matchup_prob_fn
+# ---------------------------------------------------------------------------
+
+
+def _so(p1: float, p2: float, p3: float, p4: float) -> StandingsOdds:
+    """Build a minimal StandingsOdds fixture for testing."""
+    p_po = p1 + p2 + p3 + p4
+    return StandingsOdds(
+        school="",
+        p1=p1,
+        p2=p2,
+        p3=p3,
+        p4=p4,
+        p_playoffs=p_po,
+        final_playoffs=p_po,
+        clinched=p_po >= 0.999,
+        eliminated=p_po <= 0.001,
+    )
+
+
+class TestMakeMatchupProbFn:
+    """Tests for make_matchup_prob_fn — the Elo-to-seed MatchupProbFn bridge."""
+
+    def setup_method(self):
+        """Set up a two-region fixture with four teams each and known Elo ratings."""
+        # Region 1: Strong > Medium > Fair > Weak (seeds determined)
+        self.elo_ratings = {
+            "Strong": 1400.0,
+            "Medium": 1200.0,
+            "Fair": 1100.0,
+            "Weak": 900.0,
+            # Region 2: all near-equal
+            "R2A": 1150.0,
+            "R2B": 1100.0,
+            "R2C": 1050.0,
+            "R2D": 1000.0,
+        }
+        # Region 1: seeds fully determined (p=1.0 each)
+        self.seeding_r1 = {
+            "Strong": _so(1.0, 0.0, 0.0, 0.0),
+            "Medium": _so(0.0, 1.0, 0.0, 0.0),
+            "Fair": _so(0.0, 0.0, 1.0, 0.0),
+            "Weak": _so(0.0, 0.0, 0.0, 1.0),
+        }
+        # Region 2: seeds fully determined
+        self.seeding_r2 = {
+            "R2A": _so(1.0, 0.0, 0.0, 0.0),
+            "R2B": _so(0.0, 1.0, 0.0, 0.0),
+            "R2C": _so(0.0, 0.0, 1.0, 0.0),
+            "R2D": _so(0.0, 0.0, 0.0, 1.0),
+        }
+        self.seeding_by_region = {1: self.seeding_r1, 2: self.seeding_r2}
+
+    def test_returns_callable(self):
+        """make_matchup_prob_fn returns a callable."""
+        fn = make_matchup_prob_fn(self.elo_ratings, self.seeding_by_region)
+        assert callable(fn)
+
+    def test_known_seeding_uses_exact_elo(self):
+        """When p=1.0 at a seed, expected Elo equals that team's exact Elo."""
+        fn = make_matchup_prob_fn(self.elo_ratings, self.seeding_by_region, EloConfig(hfa_points=0.0))
+        # Strong (1400) at region 1 seed 1 vs Weak (900) at region 1 seed 4.
+        # With no HFA: expected = 1/(1+10^((900-1400)/400)) > 0.5
+        p = fn(1, 1, 1, 4)
+        expected = 1.0 / (1.0 + 10.0 ** ((900.0 - 1400.0) / 400.0))
+        assert p == pytest.approx(expected)
+
+    def test_higher_elo_home_wins_more_often(self):
+        """The higher-Elo team has P > 0.5 (with or without HFA)."""
+        fn = make_matchup_prob_fn(self.elo_ratings, self.seeding_by_region, EloConfig(hfa_points=0.0))
+        assert fn(1, 1, 1, 4) > 0.5  # Strong vs Weak, no HFA
+
+    def test_hfa_applied_to_home_team(self):
+        """Equal Elo gives P > 0.5 to the home team due to hfa_points."""
+        # Build fixture where home and away have equal Elo
+        elo = {"H": 1200.0, "A": 1200.0}
+        seeding = {1: {"H": _so(1.0, 0.0, 0.0, 0.0)}, 2: {"A": _so(0.0, 0.0, 0.0, 1.0)}}
+        fn = make_matchup_prob_fn(elo, seeding, EloConfig(hfa_points=65.0))
+        assert fn(1, 1, 2, 4) > 0.5
+
+    def test_away_high_elo_overcomes_hfa(self):
+        """A sufficiently better away team wins despite HFA."""
+        fn = make_matchup_prob_fn(self.elo_ratings, self.seeding_by_region, EloConfig(hfa_points=65.0))
+        # Weak (900) hosts Strong (1400): 500-point Elo gap minus 65 HFA = 435 net away advantage
+        p_home_wins = fn(1, 4, 1, 1)  # Weak is home seed 4, Strong is away seed 1
+        assert p_home_wins < 0.5
+
+    def test_strong_lower_seed_beats_weak_higher_seed(self):
+        """A 3-seed with high Elo is favoured over a 2-seed with low Elo."""
+        # Override: region 1 seed 2 has low Elo, seed 3 has high Elo
+        elo = {"LowSeed2": 900.0, "HighSeed3": 1400.0}
+        seeding = {
+            1: {
+                "LowSeed2": _so(0.0, 1.0, 0.0, 0.0),
+                "HighSeed3": _so(0.0, 0.0, 1.0, 0.0),
+            }
+        }
+        fn = make_matchup_prob_fn(elo, seeding, EloConfig(hfa_points=0.0))
+        # Seed 2 hosts (lower number = home), but Elo disadvantage is large
+        p_seed2_wins = fn(1, 2, 1, 3)
+        assert p_seed2_wins < 0.5
+
+    def test_probability_weighted_mid_season(self):
+        """Two teams tied 50/50 for seed 1 → expected Elo is their average."""
+        elo = {"Alpha": 1300.0, "Beta": 1100.0, "Opp": 1000.0}
+        # Alpha and Beta each have 50% chance of seed 1 in region 1
+        seeding = {
+            1: {
+                "Alpha": _so(0.5, 0.5, 0.0, 0.0),
+                "Beta": _so(0.5, 0.5, 0.0, 0.0),
+            },
+            2: {"Opp": _so(1.0, 0.0, 0.0, 0.0)},
+        }
+        fn_weighted = make_matchup_prob_fn(elo, seeding, EloConfig(hfa_points=0.0))
+        # expected_elo[(1, 1)] = 0.5×1300 + 0.5×1100 = 1200
+        expected_elo_seed1 = 0.5 * 1300.0 + 0.5 * 1100.0
+        opp_elo = 1000.0
+        expected_p = 1.0 / (1.0 + 10.0 ** ((opp_elo - expected_elo_seed1) / 400.0))
+        assert fn_weighted(1, 1, 2, 1) == pytest.approx(expected_p)
+
+    def test_unknown_region_seed_returns_half(self):
+        """A (region, seed) not present in seeding_odds_by_region returns 0.5."""
+        fn = make_matchup_prob_fn(self.elo_ratings, self.seeding_by_region)
+        assert fn(99, 1, 1, 1) == pytest.approx(0.5)  # region 99 unknown
+        assert fn(1, 1, 99, 1) == pytest.approx(0.5)  # away region 99 unknown
+
+    def test_custom_config_hfa_wired(self):
+        """EloConfig.hfa_points is used: larger HFA shifts result further from 0.5."""
+        elo = {"H": 1200.0, "A": 1200.0}
+        seeding = {1: {"H": _so(1.0, 0.0, 0.0, 0.0)}, 2: {"A": _so(1.0, 0.0, 0.0, 0.0)}}
+        fn_small = make_matchup_prob_fn(elo, seeding, EloConfig(hfa_points=10.0))
+        fn_large = make_matchup_prob_fn(elo, seeding, EloConfig(hfa_points=200.0))
+        assert fn_large(1, 1, 2, 1) > fn_small(1, 1, 2, 1)
+
+    def test_symmetry(self):
+        """P(A hosts B) + P(B hosts A) ≈ 1.0 when regions are swapped."""
+        fn = make_matchup_prob_fn(self.elo_ratings, self.seeding_by_region, EloConfig(hfa_points=0.0))
+        p_fwd = fn(1, 1, 2, 1)
+        p_rev = fn(2, 1, 1, 1)
+        assert p_fwd + p_rev == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# compute_in_game_win_prob
+# ---------------------------------------------------------------------------
+
+
+class TestInGameWinProb:
+    """Tests for compute_in_game_win_prob (regulation Gaussian model)."""
+
+    def test_full_time_equals_pregame_prob(self):
+        """At kickoff with margin=0, result equals pregame_prob."""
+        assert compute_in_game_win_prob(0.65, 0, 2880) == pytest.approx(0.65, abs=1e-4)
+
+    def test_full_time_neutral_game(self):
+        """At kickoff with margin=0 and neutral pregame, result equals 0.5."""
+        assert compute_in_game_win_prob(0.5, 0, 2880) == pytest.approx(0.5, abs=1e-4)
+
+    def test_game_over_positive_margin(self):
+        """At t=0 with positive margin, team_a wins with certainty."""
+        assert compute_in_game_win_prob(0.5, 7, 0) == pytest.approx(1.0)
+
+    def test_game_over_negative_margin(self):
+        """At t=0 with negative margin, team_a loses with certainty."""
+        assert compute_in_game_win_prob(0.5, -7, 0) == pytest.approx(0.0)
+
+    def test_game_over_tie(self):
+        """Tied at end of regulation → 0.5 (going to overtime)."""
+        assert compute_in_game_win_prob(0.5, 0, 0) == pytest.approx(0.5)
+
+    def test_large_lead_high_probability(self):
+        """44–0 with 5 min left → overwhelming probability."""
+        p = compute_in_game_win_prob(0.5, 44, 300)
+        assert p > 0.999
+
+    def test_close_game_mid_game_neutral(self):
+        """10–10 at halftime, neutral pregame → close to 0.5."""
+        p = compute_in_game_win_prob(0.5, 0, 1440)
+        assert p == pytest.approx(0.5, abs=1e-4)
+
+    def test_favorite_slight_edge_mid_game_tied(self):
+        """Favourite is still slightly favoured when tied at halftime."""
+        p = compute_in_game_win_prob(0.65, 0, 1440)
+        assert 0.5 < p < 0.65
+
+    def test_underdog_winning_increases_prob(self):
+        """Underdog (pregame 0.35) leading by 14 at halftime → now favoured."""
+        p = compute_in_game_win_prob(0.35, 14, 1440)
+        assert p > 0.5
+
+    def test_mercy_rule_collapses_sigma(self):
+        """35+ point lead mid-game → near certainty."""
+        p = compute_in_game_win_prob(0.5, 35, 720)
+        assert p > 0.998
+
+    def test_probability_clipped_zero_one(self):
+        """Extreme inputs stay within [0, 1]."""
+        assert 0.0 <= compute_in_game_win_prob(0.99, 100, 10) <= 1.0
+        assert 0.0 <= compute_in_game_win_prob(0.01, -100, 10) <= 1.0
+
+    def test_custom_config_sigma_wired(self):
+        """Higher sigma reduces certainty on large leads."""
+        p_low_sigma = compute_in_game_win_prob(0.5, 21, 720, InGameConfig(sigma=10.0))
+        p_high_sigma = compute_in_game_win_prob(0.5, 21, 720, InGameConfig(sigma=30.0))
+        assert p_low_sigma > p_high_sigma
+
+    def test_symmetry(self):
+        """P(a|margin, t) + P(b|−margin, t) ≈ 1.0 for neutral pregame."""
+        p_a = compute_in_game_win_prob(0.5, 7, 900)
+        p_b = compute_in_game_win_prob(0.5, -7, 900)
+        assert p_a + p_b == pytest.approx(1.0, abs=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# _ot_score_distribution + compute_ot_win_prob
+# ---------------------------------------------------------------------------
+
+
+class TestComputeOtWinProb:
+    """Tests for compute_ot_win_prob and _ot_score_distribution (OT possession model)."""
+
+    def test_score_distribution_sums_to_one(self):
+        """Score distribution over {0,3,6,7,8} sums to 1.0 for evenly matched teams."""
+        cfg = InGameConfig()
+        dist = _ot_score_distribution(0.5, cfg)
+        assert sum(dist.values()) == pytest.approx(1.0, abs=1e-9)
+
+    def test_score_distribution_sums_to_one_strong_team(self):
+        """Score distribution sums to 1.0 even when one team is strongly favoured."""
+        cfg = InGameConfig()
+        dist = _ot_score_distribution(0.75, cfg)
+        assert sum(dist.values()) == pytest.approx(1.0, abs=1e-9)
+
+    def test_scored_8_very_high_probability(self):
+        """TD + 2-pt PAT: opposing team needs matching 8 or better — very rare."""
+        p = compute_ot_win_prob(0.5, 8)
+        assert p > 0.95
+
+    def test_scored_7_good_odds(self):
+        """TD + 1-pt PAT gives good win odds: B needs 8+ to win outright."""
+        p = compute_ot_win_prob(0.5, 7)
+        assert p > 0.65
+
+    def test_scored_6_below_7(self):
+        """TD + missed PAT (+6) is weaker than TD + 1-pt PAT (+7): B wins with any PAT."""
+        p_6 = compute_ot_win_prob(0.5, 6)
+        p_7 = compute_ot_win_prob(0.5, 7)
+        assert p_6 < p_7
+
+    def test_scored_3_lower_than_td(self):
+        """Field goal gives lower odds than a TD score."""
+        p_fg = compute_ot_win_prob(0.5, 3)
+        p_td = compute_ot_win_prob(0.5, 6)
+        assert p_fg < p_td
+
+    def test_scored_3_low_elo_attenuates_odds(self):
+        """Weaker team's FG is less safe: strong opponent is more likely to outscore."""
+        p_weak = compute_ot_win_prob(0.25, 3)
+        p_strong = compute_ot_win_prob(0.65, 3)
+        assert p_weak < p_strong
+
+    def test_scored_0_low_probability(self):
+        """No score: team_a only wins if team_b also fails to score."""
+        p = compute_ot_win_prob(0.5, 0)
+        assert p < 0.25
+
+    def test_strong_team_fg_risky(self):
+        """Low-Elo team scores FG, high-Elo opponent → P(win) below 0.5."""
+        p = compute_ot_win_prob(0.25, 3)
+        assert p < 0.5
+
+    def test_probability_in_unit_interval(self):
+        """All scored margins produce a probability in [0, 1]."""
+        for margin in (0, 3, 6, 7, 8):
+            p = compute_ot_win_prob(0.5, margin)
+            assert 0.0 <= p <= 1.0
+
+    def test_custom_config_ot_factor_wired(self):
+        """Higher ot_elo_factor amplifies the Elo gap effect on FG odds."""
+        p_low = compute_ot_win_prob(0.25, 3, InGameConfig(ot_elo_factor=0.05))
+        p_high = compute_ot_win_prob(0.25, 3, InGameConfig(ot_elo_factor=0.60))
+        assert p_high < p_low  # stronger opponent benefits more from larger factor
+
+
+# ---------------------------------------------------------------------------
+# Cross-season Elo carryover
+# ---------------------------------------------------------------------------
+
+
+class TestEloCarryover:
+    """Tests for cross-season Elo carryover via EloConfig.carryover_factor and prior_ratings."""
+
+    def test_no_prior_uses_class_prior(self):
+        """Without prior_ratings, all teams seed from their classification prior."""
+        cfg = EloConfig()
+        ratings, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings=None)
+        assert ratings["Alpha"] == pytest.approx(cfg.class_ratings[6])  # 7A = index 6
+
+    def test_carryover_blends_prior_and_class_prior(self):
+        """With carryover_factor=0.5, starting rating is exactly halfway between prior and class."""
+        cfg = EloConfig(carryover_factor=0.5)
+        class_prior = cfg.class_ratings[6]  # 7A
+        prior = {"Alpha": 1500.0}
+        ratings, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings=prior)
+        assert ratings["Alpha"] == pytest.approx(0.5 * class_prior + 0.5 * 1500.0)
+
+    def test_carryover_factor_zero_ignores_prior(self):
+        """carryover_factor=0.0 always uses class prior regardless of prior_ratings."""
+        cfg = EloConfig(carryover_factor=0.0)
+        ratings, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings={"Alpha": 1600.0})
+        assert ratings["Alpha"] == pytest.approx(cfg.class_ratings[6])
+
+    def test_carryover_factor_one_uses_prior_directly(self):
+        """carryover_factor=1.0 seeds the team exactly at its prior-season rating."""
+        cfg = EloConfig(carryover_factor=1.0)
+        ratings, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings={"Alpha": 1450.0})
+        assert ratings["Alpha"] == pytest.approx(1450.0)
+
+    def test_team_not_in_prior_gets_class_prior(self):
+        """Teams absent from prior_ratings still seed from the class prior."""
+        cfg = EloConfig(carryover_factor=0.5)
+        ratings, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings={"Alpha": 1500.0})
+        assert ratings["Beta"] == pytest.approx(cfg.class_ratings[5])   # 6A = index 5
+        assert ratings["Gamma"] == pytest.approx(cfg.class_ratings[4])  # 5A = index 4
+
+    def test_empty_prior_dict_behaves_like_none(self):
+        """An empty prior_ratings dict is equivalent to passing None."""
+        cfg = EloConfig(carryover_factor=0.5)
+        ratings_none, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings=None)
+        ratings_empty, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings={})
+        for school in ("Alpha", "Beta", "Gamma", "Delta"):
+            assert ratings_none[school] == pytest.approx(ratings_empty[school])
+
+    def test_strong_prior_raises_initial_rating(self):
+        """A prior rating well above the class prior pulls the seed upward."""
+        cfg = EloConfig(carryover_factor=0.5)
+        ratings, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings={"Alpha": 1600.0})
+        assert ratings["Alpha"] > cfg.class_ratings[6]
+
+    def test_weak_prior_lowers_initial_rating(self):
+        """A prior rating well below the class prior pulls the seed downward."""
+        cfg = EloConfig(carryover_factor=0.5)
+        ratings, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings={"Alpha": 900.0})
+        assert ratings["Alpha"] < cfg.class_ratings[6]
+
+    def test_apply_carryover_unit(self):
+        """_apply_carryover returns the correct blend for a known school in prior."""
+        result = _apply_carryover(1300.0, "Alpha", {"Alpha": 1500.0}, 0.5)
+        assert result == pytest.approx(1400.0)
+
+    def test_apply_carryover_missing_school(self):
+        """_apply_carryover returns the class_prior unchanged when school not in prior."""
+        result = _apply_carryover(1300.0, "Unknown", {"Alpha": 1500.0}, 0.5)
+        assert result == pytest.approx(1300.0)
+
+    def test_apply_carryover_no_prior(self):
+        """_apply_carryover returns the class_prior when prior_ratings is None."""
+        assert _apply_carryover(1200.0, "Beta", None, 0.5) == pytest.approx(1200.0)

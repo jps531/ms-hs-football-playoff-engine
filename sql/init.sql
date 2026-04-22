@@ -72,7 +72,14 @@ CREATE TABLE IF NOT EXISTS games (
   points_against  INTEGER,
   result          TEXT CHECK (result IN ('W', 'L', 'T')),
   final           BOOLEAN NOT NULL DEFAULT FALSE,
-  game_status     TEXT,
+  game_status     TEXT CHECK (game_status IS NULL OR game_status IN (
+                    'final', 'final_forfeit',
+                    'end_1q', 'halftime', 'end_3q', 'end_4q',
+                    'in_progress', 'end_ot',
+                    'postponed', 'canceled', 'suspended', 'not_started'
+                  )),
+  game_quarter    SMALLINT,
+  game_clock      TEXT,
   source          TEXT,
   region_game     BOOLEAN NOT NULL DEFAULT FALSE,
   season          INTEGER NOT NULL,
@@ -432,7 +439,16 @@ COMMENT ON COLUMN games.final IS
   'TRUE once the game result is confirmed. A game can have a game_status without being final '
   '(e.g. postponed games show a status before they are rescheduled).';
 COMMENT ON COLUMN games.game_status IS
-  'Raw status string from the data source (e.g. "Final", "Postponed"). Not normalized.';
+  'Normalized game status. One of: final, final_forfeit, end_1q, halftime, end_3q, end_4q, '
+  'in_progress, end_ot, postponed, canceled, suspended, not_started. '
+  'NULL for legacy rows inserted before normalization was enforced.';
+COMMENT ON COLUMN games.game_quarter IS
+  'Current quarter (1–4 for regulation; 5 = OT1, 6 = OT2, etc.). '
+  'Only populated when game_status is in_progress or end_ot. NULL otherwise.';
+COMMENT ON COLUMN games.game_clock IS
+  'Clock remaining within the current regulation quarter in "MM:SS" format. '
+  'Always NULL for OT (MSHAA overtime is untimed alternating possessions). '
+  'Only populated when game_status is in_progress during regulation.';
 COMMENT ON COLUMN games.source IS
   'Data source that provided this game record (e.g. "maxpreps", "mhsaa").';
 COMMENT ON COLUMN games.region_game IS
@@ -562,8 +578,10 @@ COMMENT ON TABLE team_ratings IS
 
 COMMENT ON COLUMN team_ratings.elo IS
   'Elo rating after processing all completed games for the season in chronological '
-  'order. Starts from a classification-based prior (1A=1000, 7A=1300, step 50) '
-  'and updates using a margin-of-victory multiplier (FiveThirtyEight-style).';
+  'order. Starting rating blends the prior-season final Elo with the classification '
+  'prior (1A=1000, 7A=1300, step 50) using EloConfig.carryover_factor (default 0.50). '
+  'First-season teams (no prior row) start at the classification prior. '
+  'Updates use a margin-of-victory multiplier (FiveThirtyEight-style).';
 COMMENT ON COLUMN team_ratings.rpi IS
   'Rating Percentage Index: 0.25*WP + 0.50*OWP + 0.25*OOWP. '
   'Stored for display context only; does not affect win probability calculations. '
