@@ -93,11 +93,11 @@ def update_rows(school_records: Iterable[dict]) -> int:
     # --- do the updates ---
     sql = """
         UPDATE schools
-        SET primary_color   = COALESCE(NULLIF(%s, ''), primary_color),
-            secondary_color = COALESCE(NULLIF(%s, ''), secondary_color),
-            latitude        = COALESCE(%s, latitude),
-            longitude       = COALESCE(%s, longitude),
-            maxpreps_logo   = COALESCE(NULLIF(%s, ''), maxpreps_logo)
+        SET primary_color   = CASE WHEN overrides ? 'primary_color'   THEN primary_color   ELSE COALESCE(NULLIF(%s, ''), primary_color)   END,
+            secondary_color = CASE WHEN overrides ? 'secondary_color' THEN secondary_color ELSE COALESCE(NULLIF(%s, ''), secondary_color) END,
+            latitude        = CASE WHEN overrides ? 'latitude'        THEN latitude        ELSE COALESCE(%s, latitude)                   END,
+            longitude       = CASE WHEN overrides ? 'longitude'       THEN longitude       ELSE COALESCE(%s, longitude)                  END,
+            maxpreps_logo   = CASE WHEN overrides ? 'maxpreps_logo'   THEN maxpreps_logo   ELSE COALESCE(NULLIF(%s, ''), maxpreps_logo)   END
         WHERE school = %s
     """
 
@@ -133,7 +133,7 @@ def get_existing_schools() -> list[School]:
                s.maxpreps_id, s.maxpreps_url, s.maxpreps_logo,
                s.primary_color, s.secondary_color
         FROM school_seasons ss
-        JOIN schools s USING (school)
+        JOIN schools_effective s USING (school)
     """
     schools: list[School] = []
     with get_database_connection() as conn:

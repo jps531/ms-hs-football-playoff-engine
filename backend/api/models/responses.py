@@ -74,6 +74,8 @@ class TeamModel(BaseModel):
     """Single team with identity metadata."""
 
     school: str
+    display_name: str
+    display_logo: str
     season: int
     class_: int
     region: int

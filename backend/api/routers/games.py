@@ -59,7 +59,7 @@ async def list_games(
     query = sql.SQL("""
         SELECT g.school, g.opponent, g.date, g.points_for, g.points_against,
                g.location, g.region_game, g.game_status, g.season
-        FROM games g
+        FROM games_effective g
         JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season
         WHERE {}
         ORDER BY g.date, g.school

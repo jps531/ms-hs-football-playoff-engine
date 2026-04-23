@@ -93,7 +93,7 @@ async def _recompute_from_games(
     game_rows = await conn.execute(
         """
         SELECT school, opponent, points_for, points_against, date
-        FROM games
+        FROM games_effective
         WHERE season = %s AND region_game = TRUE AND final = TRUE AND date <= %s
           AND school = ANY(%s)
         ORDER BY date
@@ -206,7 +206,7 @@ async def simulate_standings(
         game_rows = await conn.execute(
             """
             SELECT school, opponent, points_for, points_against, date
-            FROM games
+            FROM games_effective
             WHERE season = %s AND region_game = TRUE AND final = TRUE AND date <= %s
               AND school = ANY(%s)
             ORDER BY date

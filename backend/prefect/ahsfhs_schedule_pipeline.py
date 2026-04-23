@@ -271,6 +271,13 @@ def insert_rows(game_records: Iterable[Game]) -> int:
             overtime::integer     AS overtime
         FROM incoming_raw
     ),
+    preserved AS (
+        SELECT g.school, g.date, g.overrides
+        FROM games g
+        JOIN incoming i ON g.school = i.school
+            AND g.date BETWEEN i.date - INTERVAL '3 days'
+                            AND i.date + INTERVAL '3 days'
+    ),
     deleted AS (
         DELETE FROM games g
         USING incoming i
@@ -282,28 +289,30 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     INSERT INTO games
         (school, date, season, location_id, points_for, points_against,
         "round", kickoff_time, opponent, result, game_status, source,
-        location, region_game, final, overtime)
+        location, region_game, final, overtime, overrides)
     SELECT
         i.school, i.date, i.season, i.location_id, i.points_for, i.points_against,
         i."round", i.kickoff_time, i.opponent, i.result, i.game_status, i.source,
-        i.location, i.region_game, i.final, i.overtime
+        i.location, i.region_game, i.final, i.overtime,
+        COALESCE(p.overrides, '{}'::jsonb)
     FROM incoming i
+    LEFT JOIN preserved p ON p.school = i.school AND p.date = i.date
     ON CONFLICT (school, date) DO UPDATE SET
-        location        = COALESCE(NULLIF(EXCLUDED.location,''),        games.location),
-        location_id     = COALESCE(EXCLUDED.location_id,                games.location_id),
+        location        = CASE WHEN games.overrides ? 'location'       THEN games.location       ELSE COALESCE(NULLIF(EXCLUDED.location,''),    games.location)       END,
+        location_id     = CASE WHEN games.overrides ? 'location_id'    THEN games.location_id    ELSE COALESCE(EXCLUDED.location_id,            games.location_id)    END,
         opponent        = COALESCE(NULLIF(EXCLUDED.opponent,''),        games.opponent),
-        points_for      = COALESCE(EXCLUDED.points_for,                 games.points_for),
-        points_against  = COALESCE(EXCLUDED.points_against,             games.points_against),
+        points_for      = CASE WHEN games.overrides ? 'points_for'     THEN games.points_for     ELSE COALESCE(EXCLUDED.points_for,             games.points_for)     END,
+        points_against  = CASE WHEN games.overrides ? 'points_against' THEN games.points_against ELSE COALESCE(EXCLUDED.points_against,         games.points_against) END,
         result          = COALESCE(NULLIF(EXCLUDED.result,''),          games.result),
         final           = COALESCE(EXCLUDED.final,                      games.final),
         overtime        = COALESCE(EXCLUDED.overtime,                   games.overtime),
         game_status     = COALESCE(EXCLUDED.game_status,                games.game_status),
         source          = COALESCE(EXCLUDED.source,                     games.source),
-        region_game     = COALESCE(EXCLUDED.region_game,                games.region_game),
+        region_game     = CASE WHEN games.overrides ? 'region_game'    THEN games.region_game    ELSE COALESCE(EXCLUDED.region_game,            games.region_game)    END,
         season          = COALESCE(EXCLUDED.season,                     games.season),
-        "round"         = COALESCE(NULLIF(EXCLUDED."round",''),         games."round"),
-        kickoff_time    = COALESCE(EXCLUDED.kickoff_time,               games.kickoff_time)
-        -- you can keep / drop the big IS DISTINCT FROM WHERE clause if you want
+        "round"         = CASE WHEN games.overrides ? 'round'          THEN games."round"        ELSE COALESCE(NULLIF(EXCLUDED."round",''),     games."round")        END,
+        kickoff_time    = CASE WHEN games.overrides ? 'kickoff_time'   THEN games.kickoff_time   ELSE COALESCE(EXCLUDED.kickoff_time,           games.kickoff_time)   END
+        -- overrides column is never written by the pipeline
     ;
     """
 
@@ -328,7 +337,7 @@ def get_existing_schools(season: int) -> list[School]:
                s.maxpreps_id, s.maxpreps_url, s.maxpreps_logo,
                s.primary_color, s.secondary_color
         FROM school_seasons ss
-        JOIN schools s USING (school)
+        JOIN schools_effective s USING (school)
         WHERE ss.season = %s
     """
     schools: list[School] = []

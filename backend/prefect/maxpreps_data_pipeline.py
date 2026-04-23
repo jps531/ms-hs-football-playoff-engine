@@ -182,9 +182,9 @@ def update_rows(school_records: Iterable[dict]) -> int:
     # --- do the updates ---
     sql = """
         UPDATE schools
-        SET city         = COALESCE(NULLIF(%s, ''), city),
-            zip          = COALESCE(NULLIF(%s, ''), zip),
-            mascot       = COALESCE(NULLIF(%s, ''), mascot),
+        SET city         = CASE WHEN overrides ? 'city'         THEN city         ELSE COALESCE(NULLIF(%s, ''), city)         END,
+            zip          = CASE WHEN overrides ? 'zip'          THEN zip          ELSE COALESCE(NULLIF(%s, ''), zip)          END,
+            mascot       = CASE WHEN overrides ? 'mascot'       THEN mascot       ELSE COALESCE(NULLIF(%s, ''), mascot)       END,
             maxpreps_id  = COALESCE(NULLIF(%s, ''), maxpreps_id),
             maxpreps_url = COALESCE(NULLIF(%s, ''), maxpreps_url)
         WHERE school = %s

@@ -22,7 +22,7 @@ region_records AS (
     COUNT(*) FILTER (WHERE g.final AND g.region_game AND g.result = 'L') AS region_losses,
     COUNT(*) FILTER (WHERE g.final AND g.region_game AND g.result = 'T') AS region_ties
   FROM division_schools ds
-  LEFT JOIN games g
+  LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
   GROUP BY ds.school, ds.class, ds.region, ds.season
@@ -34,7 +34,7 @@ overall_records AS (
     COUNT(*) FILTER (WHERE g.final AND g.result = 'L') AS losses,
     COUNT(*) FILTER (WHERE g.final AND g.result = 'T') AS ties
   FROM division_schools ds
-  LEFT JOIN games g
+  LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
   GROUP BY ds.school
@@ -71,7 +71,7 @@ h2h AS (
   JOIN base_with_tie_groups t2
     ON t2.tie_group_key = t1.tie_group_key
    AND t2.school       <> t1.school
-  LEFT JOIN games g
+  LEFT JOIN games_effective g
     ON g.school       = t1.school
    AND g.season       = t1.season
    AND g.final        = TRUE
@@ -88,7 +88,7 @@ h2h_pd_capped AS (
   JOIN base_with_tie_groups t2
     ON t2.tie_group_key = t1.tie_group_key
    AND t2.school       <> t1.school
-  LEFT JOIN games g
+  LEFT JOIN games_effective g
     ON g.school       = t1.school
    AND g.season       = t1.season
    AND g.final        = TRUE
@@ -101,7 +101,7 @@ region_points_allowed AS (
     ds.school,
     COALESCE(SUM(g.points_against) FILTER (WHERE g.final AND g.region_game), 0) AS region_pts_allowed
   FROM division_schools ds
-  LEFT JOIN games g
+  LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
   GROUP BY ds.school

@@ -120,7 +120,7 @@ def fetch_all_season_games(season: int) -> list[Game]:
                 "SELECT school, date, season, location_id, points_for, points_against, "
                 "       round, kickoff_time, opponent, result, game_status, source, "
                 "       location, region_game, final, overtime "
-                "FROM games "
+                "FROM games_effective "
                 "WHERE season=%s AND final=TRUE "
                 "  AND points_for IS NOT NULL AND points_against IS NOT NULL",
                 (season,),
@@ -159,7 +159,7 @@ def fetch_all_season_schools(season: int) -> list[School]:
                 "       s.mascot, s.maxpreps_id, s.maxpreps_url, s.maxpreps_logo, "
                 "       s.primary_color, s.secondary_color "
                 "FROM school_seasons ss "
-                "JOIN schools s USING (school) "
+                "JOIN schools_effective s USING (school) "
                 "WHERE ss.season=%s",
                 (season,),
             )
@@ -246,7 +246,7 @@ def fetch_completed_pairs(teams: list[str], season: int) -> list[CompletedGame]:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT school, opponent, date, result, points_for, points_against "
-                "FROM games "
+                "FROM games_effective "
                 "WHERE season=%s AND final=TRUE AND region_game=TRUE "
                 "  AND school = ANY(%s) AND opponent = ANY(%s)",
                 (season, teams, teams),
@@ -297,7 +297,7 @@ def fetch_remaining_pairs(teams: list[str], season: int) -> list[RemainingGame]:
                 "        END"
                 "      ELSE 'neutral'"
                 "    END AS location_a"
-                "  FROM games"
+                "  FROM games_effective"
                 "  WHERE season=%s AND final=FALSE AND region_game=TRUE"
                 "    AND school = ANY(%s) AND opponent = ANY(%s)"
                 ") SELECT DISTINCT ON (a, b) a, b, location_a FROM cand",

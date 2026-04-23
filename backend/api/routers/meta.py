@@ -71,9 +71,10 @@ async def list_teams(
 
     where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
     query = sql.SQL("""
-        SELECT s.school, ss.season, ss.class, ss.region,
-               s.city, s.mascot, s.primary_color, s.secondary_color, s.maxpreps_logo
-        FROM schools s
+        SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
+               s.city, s.mascot, s.primary_color, s.secondary_color, s.maxpreps_logo,
+               s.display_logo
+        FROM schools_effective s
         JOIN school_seasons ss ON s.school = ss.school
         WHERE {}
         ORDER BY ss.class, ss.region, s.school
@@ -83,14 +84,16 @@ async def list_teams(
         return [
             TeamModel(
                 school=r[0],
-                season=r[1],
-                class_=r[2],
-                region=r[3],
-                city=r[4] or "",
-                mascot=r[5] or "",
-                primary_color=r[6] or "",
-                secondary_color=r[7] or "",
-                maxpreps_logo=r[8] or "",
+                display_name=r[1],
+                season=r[2],
+                class_=r[3],
+                region=r[4],
+                city=r[5] or "",
+                mascot=r[6] or "",
+                primary_color=r[7] or "",
+                secondary_color=r[8] or "",
+                maxpreps_logo=r[9] or "",
+                display_logo=r[10] or "",
             )
             async for r in rows
         ]
@@ -102,9 +105,10 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
     async with get_conn() as conn:
         row = await conn.execute(
             """
-            SELECT s.school, ss.season, ss.class, ss.region,
-                   s.city, s.mascot, s.primary_color, s.secondary_color, s.maxpreps_logo
-            FROM schools s
+            SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
+                   s.city, s.mascot, s.primary_color, s.secondary_color, s.maxpreps_logo,
+                   s.display_logo
+            FROM schools_effective s
             JOIN school_seasons ss ON s.school = ss.school
             WHERE s.school = %s AND ss.season = %s
             """,
@@ -117,14 +121,16 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
 
     return TeamModel(
         school=r[0],
-        season=r[1],
-        class_=r[2],
-        region=r[3],
-        city=r[4] or "",
-        mascot=r[5] or "",
-        primary_color=r[6] or "",
-        secondary_color=r[7] or "",
-        maxpreps_logo=r[8] or "",
+        display_name=r[1],
+        season=r[2],
+        class_=r[3],
+        region=r[4],
+        city=r[5] or "",
+        mascot=r[6] or "",
+        primary_color=r[7] or "",
+        secondary_color=r[8] or "",
+        maxpreps_logo=r[9] or "",
+        display_logo=r[10] or "",
     )
 
 

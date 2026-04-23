@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS schools (
   maxpreps_url    TEXT,
   maxpreps_logo   TEXT,
   primary_color   TEXT,
-  secondary_color TEXT
+  secondary_color TEXT,
+  overrides       JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
 
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS locations (
   home_team       TEXT,
   latitude        REAL,
   longitude       REAL,
+  overrides       JSONB NOT NULL DEFAULT '{}'::jsonb,
   UNIQUE(name, city, home_team)
 );
 
@@ -115,10 +117,55 @@ CREATE TABLE IF NOT EXISTS games (
   round           TEXT,
   kickoff_time    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   overtime        INTEGER DEFAULT 0,
+  overrides       JSONB NOT NULL DEFAULT '{}'::jsonb,
   FOREIGN KEY (school, season) REFERENCES school_seasons(school, season),
   FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
   PRIMARY KEY (school, date)
 );
+
+
+-- ---------------------------------------------------------------------------
+-- Effective views — merge overrides JSONB over raw column values.
+-- All reads (API and pipeline) should use these views.
+-- All writes go to the base tables only; the overrides column is never written
+-- by any pipeline task.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW schools_effective AS
+SELECT
+  school, city, zip, maxpreps_id, maxpreps_url, maxpreps_logo
+  COALESCE((overrides->>'latitude')::float,    latitude)        AS latitude,
+  COALESCE((overrides->>'longitude')::float,   longitude)       AS longitude,
+  COALESCE(overrides->>'mascot',               mascot)          AS mascot,
+  COALESCE(overrides->>'primary_color',        primary_color)   AS primary_color,
+  COALESCE(overrides->>'secondary_color',      secondary_color) AS secondary_color,
+  COALESCE(overrides->>'display_name',         school)          AS display_name,
+  COALESCE(overrides->>'display_logo',         maxpreps_logo)   AS display_logo,
+  overrides
+FROM schools;
+
+CREATE OR REPLACE VIEW locations_effective AS
+SELECT
+  id, name, city,
+  COALESCE(overrides->>'home_team',           home_team)  AS home_team,
+  COALESCE((overrides->>'latitude')::float,   latitude)   AS latitude,
+  COALESCE((overrides->>'longitude')::float,  longitude)  AS longitude,
+  overrides
+FROM locations;
+
+CREATE OR REPLACE VIEW games_effective AS
+SELECT
+  school, date, season, opponent, result, final, overtime,
+  game_status, game_quarter, game_clock, source,
+  COALESCE(overrides->>'location',                location)       AS location,
+  COALESCE((overrides->>'location_id')::int,      location_id)    AS location_id,
+  COALESCE((overrides->>'points_for')::int,       points_for)     AS points_for,
+  COALESCE((overrides->>'points_against')::int,   points_against) AS points_against,
+  COALESCE((overrides->>'region_game')::boolean,  region_game)    AS region_game,
+  COALESCE(overrides->>'round',                   round)          AS round,
+  COALESCE((overrides->>'kickoff_time')::timestamptz, kickoff_time) AS kickoff_time,
+  overrides
+FROM games;
 
 
 -- ---------------------------------------------------------------------------
@@ -435,6 +482,13 @@ COMMENT ON COLUMN schools.primary_color IS
   'Hex color string for the school''s primary team color.';
 COMMENT ON COLUMN schools.secondary_color IS
   'Hex color string for the school''s secondary team color.';
+COMMENT ON COLUMN schools.overrides IS
+  'User-managed JSONB patch applied on read via the schools_effective view. Any key here shadows '
+  'the corresponding raw column (latitude, longitude, mascot, maxpreps_logo, primary_color, secondary_color). '
+  'Known override keys: display_name (frontend-only label; falls back to school when absent), '
+  'display_logo (frontend-only logo URL; falls back to maxpreps_logo when absent), '
+  'latitude, longitude, mascot, primary_color, secondary_color. '
+  'Written only through set_school_override() / clear_school_override(); never by the pipeline.';
 
 
 -- helmet_designs
@@ -514,6 +568,10 @@ COMMENT ON COLUMN locations.latitude IS
   'Latitude of the venue in decimal degrees. Used for drive-time / distance calculations.';
 COMMENT ON COLUMN locations.longitude IS
   'Longitude of the venue in decimal degrees.';
+COMMENT ON COLUMN locations.overrides IS
+  'User-managed JSONB patch applied on read via the locations_v view. Any key here shadows '
+  'the corresponding raw column (home_team, latitude, longitude). '
+  'Written only through set_location_override() / clear_location_override(); never by the pipeline.';
 
 
 -- games
@@ -566,6 +624,11 @@ COMMENT ON COLUMN games.kickoff_time IS
   'may not reflect the actual kickoff until the data source provides it.';
 COMMENT ON COLUMN games.overtime IS
   'Number of overtime periods played. 0 for regulation finishes.';
+COMMENT ON COLUMN games.overrides IS
+  'User-managed JSONB patch applied on read via the games_v view. Any key here shadows '
+  'the corresponding raw column (home_team, latitude, longitude, location, location_id, '
+  'points_for, points_against, region_game, round, kickoff_time). '
+  'Written only through set_game_override() / clear_game_override(); never by the pipeline.';
 
 
 -- region_standings
