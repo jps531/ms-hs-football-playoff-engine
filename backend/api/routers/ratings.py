@@ -1,9 +1,10 @@
 """Elo ratings and RPI endpoints."""
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Any, LiteralString
 
 from fastapi import APIRouter, HTTPException, Query
+from psycopg import sql
 
 from backend.api.db import get_conn
 from backend.api.models.responses import EloSnapshot, EloTrendResponse, TeamRatingModel
@@ -11,7 +12,7 @@ from backend.api.models.responses import EloSnapshot, EloTrendResponse, TeamRati
 router = APIRouter(prefix="/api/v1", tags=["ratings"])
 
 SeasonQ = Annotated[int, Query()]
-_404 = {404: {"description": "Not found"}}
+_404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
 @router.get("/ratings")
@@ -22,7 +23,7 @@ async def list_ratings(
     team: Annotated[str | None, Query()] = None,
 ) -> list[TeamRatingModel]:
     """Return current Elo and RPI for teams matching the given filters."""
-    conditions = ["tr.season = %s"]
+    conditions: list[LiteralString] = ["tr.season = %s"]
     params: list = [season]
     if class_ is not None:
         conditions.append("ss.class = %s")
@@ -34,14 +35,14 @@ async def list_ratings(
         conditions.append("tr.school = %s")
         params.append(team)
 
-    where = " AND ".join(conditions)
-    query = f"""
+    where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+    query = sql.SQL("""
         SELECT tr.school, tr.season, tr.elo, tr.rpi
         FROM team_ratings tr
         JOIN school_seasons ss ON tr.school = ss.school AND tr.season = ss.season
-        WHERE {where}
+        WHERE {}
         ORDER BY tr.elo DESC
-    """
+    """).format(where_clause)
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
         return [TeamRatingModel(school=r[0], season=r[1], elo=r[2], rpi=r[3]) async for r in rows]
@@ -61,10 +62,12 @@ async def elo_trend(
     returned snapshots.  Returns an empty list if no pipeline has run yet.
     """
     async with get_conn() as conn:
-        exists = await (await conn.execute(
-            "SELECT 1 FROM school_seasons WHERE school = %s AND season = %s",
-            (team, season),
-        )).fetchone()
+        exists = await (
+            await conn.execute(
+                "SELECT 1 FROM school_seasons WHERE school = %s AND season = %s",
+                (team, season),
+            )
+        ).fetchone()
         if exists is None:
             raise HTTPException(status_code=404, detail=f"Team '{team}' not found for season {season}")
 

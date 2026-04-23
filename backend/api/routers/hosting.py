@@ -1,30 +1,25 @@
 """Playoff hosting odds endpoints."""
 
-from datetime import date
-from typing import Annotated
+from datetime import date, datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.db import get_conn
 from backend.api.models.requests import SimulateRegionRequest
-from backend.api.models.responses import (
-    HostingResponse,
-    RoundHostingOdds,
-    TeamHostingEntry,
-)
-from backend.helpers.bracket_home_odds import (
-    compute_bracket_advancement_odds,
-    compute_quarterfinal_home_odds,
-    compute_second_round_home_odds,
-    compute_semifinal_home_odds,
-    marginal_home_odds,
+from backend.api.models.responses import HostingResponse
+from backend.helpers.api_helpers import (
+    build_hosting_entries,
+    parse_completed_games,
+    results_to_applied,
 )
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
+from backend.helpers.scenario_updater import apply_region_game_results
 
 router = APIRouter(prefix="/api/v1", tags=["hosting"])
 
 SeasonQ = Annotated[int, Query()]
-_404 = {404: {"description": "Not found"}}
+_404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
 async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:
@@ -62,80 +57,17 @@ async def _load_region_odds(conn, season: int, clazz: int, region: int, as_of: d
     result: dict[str, StandingsOdds] = {}
     async for r in rows:
         result[r[0]] = StandingsOdds(
-            school=r[0], p1=r[1], p2=r[2], p3=r[3], p4=r[4],
-            p_playoffs=r[5], final_playoffs=r[6],
-            clinched=r[7], eliminated=r[8],
+            school=r[0],
+            p1=r[1],
+            p2=r[2],
+            p3=r[3],
+            p4=r[4],
+            p_playoffs=r[5],
+            final_playoffs=r[6],
+            clinched=r[7],
+            eliminated=r[8],
         )
     return result if result else None
-
-
-def _build_hosting_entries(
-    region_odds: dict[str, StandingsOdds],
-    slots: list[FormatSlot],
-    region: int,
-    season: int,
-    clazz: int,
-) -> list[TeamHostingEntry]:
-    """Compute per-round hosting odds for all teams in the region."""
-    is_1a_4a = clazz <= 4
-    adv_odds = compute_bracket_advancement_odds(region, region_odds, slots)
-    qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season)
-    sf_home = compute_semifinal_home_odds(region, region_odds, slots, season)
-
-    entries = []
-    for school, o in region_odds.items():
-        adv = adv_odds.get(school)
-        p_qf_cond = qf_home.get(school, 0.0)
-        p_sf_cond = sf_home.get(school, 0.0)
-
-        if is_1a_4a:
-            r2_home_dict = compute_second_round_home_odds(region, region_odds, slots, season)
-            p_r2_cond = r2_home_dict.get(school, 0.0)
-            p_r1_adv = adv.second_round if adv else 0.0
-            p_r2_adv = adv.quarterfinals if adv else 0.0
-            p_qf_adv = adv.semifinals if adv else 0.0
-            r1_odds = RoundHostingOdds(
-                conditional=1.0,
-                marginal=marginal_home_odds(1.0, o.p_playoffs),
-            )
-            r2_odds = RoundHostingOdds(
-                conditional=p_r2_cond / p_r1_adv if p_r1_adv > 0 else None,
-                marginal=marginal_home_odds(p_r2_cond, p_r1_adv) if p_r1_adv > 0 else 0.0,
-            )
-            qf_odds = RoundHostingOdds(
-                conditional=p_qf_cond / p_r2_adv if p_r2_adv > 0 else None,
-                marginal=marginal_home_odds(p_qf_cond, p_r2_adv) if p_r2_adv > 0 else 0.0,
-            )
-            sf_odds = RoundHostingOdds(
-                conditional=p_sf_cond / p_qf_adv if p_qf_adv > 0 else None,
-                marginal=marginal_home_odds(p_sf_cond, p_qf_adv) if p_qf_adv > 0 else 0.0,
-            )
-        else:
-            # 5A–7A: no second round; first round IS the quarterfinal
-            p_qf_adv = adv.quarterfinals if adv else 0.0
-            p_sf_adv = adv.semifinals if adv else 0.0
-            r1_odds = RoundHostingOdds(
-                conditional=1.0,
-                marginal=marginal_home_odds(1.0, o.p_playoffs),
-            )
-            r2_odds = RoundHostingOdds(conditional=None, marginal=None)
-            qf_odds = RoundHostingOdds(
-                conditional=p_qf_cond / p_qf_adv if p_qf_adv > 0 else None,
-                marginal=marginal_home_odds(p_qf_cond, p_qf_adv) if p_qf_adv > 0 else 0.0,
-            )
-            sf_odds = RoundHostingOdds(
-                conditional=p_sf_cond / p_sf_adv if p_sf_adv > 0 else None,
-                marginal=marginal_home_odds(p_sf_cond, p_sf_adv) if p_sf_adv > 0 else 0.0,
-            )
-
-        entries.append(TeamHostingEntry(
-            school=school,
-            first_round=r1_odds,
-            second_round=r2_odds,
-            quarterfinals=qf_odds,
-            semifinals=sf_odds,
-        ))
-    return entries
 
 
 @router.get("/hosting/{clazz}/{region}", responses=_404)
@@ -146,7 +78,6 @@ async def get_hosting(
     date: Annotated[date | None, Query()] = None,
 ) -> HostingResponse:
     """Return playoff hosting odds per round for all teams in *clazz*A Region *region*."""
-    from datetime import datetime
     as_of = date or datetime.now().date()
     async with get_conn() as conn:
         region_odds = await _load_region_odds(conn, season, clazz, region, as_of)
@@ -156,7 +87,7 @@ async def get_hosting(
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
 
-    entries = _build_hosting_entries(region_odds, slots, region, season, clazz)
+    entries = build_hosting_entries(region_odds, slots, region, season, clazz)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 
@@ -185,11 +116,7 @@ async def simulate_hosting(
     date: Annotated[date | None, Query()] = None,
 ) -> HostingResponse:
     """Apply hypothetical game results and return updated hosting odds."""
-    from datetime import datetime
-
     from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
-    from backend.helpers.data_classes import AppliedGameResult
-    from backend.helpers.scenario_updater import apply_region_game_results
 
     as_of = date or datetime.now().date()
     async with get_conn() as conn:
@@ -218,26 +145,11 @@ async def simulate_hosting(
             """,
             (season, as_of, teams),
         )
-        from backend.helpers.data_classes import CompletedGame
-        seen: set[frozenset] = set()
-        completed = []
-        async for school, opponent, pf, pa, gd in game_rows:
-            pair = frozenset([school, opponent])
-            if pair in seen or pf is None or pa is None:
-                continue
-            seen.add(pair)
-            a, b = (school, opponent) if school < opponent else (opponent, school)
-            winner = school if pf > pa else opponent
-            loser = opponent if pf > pa else school
-            completed.append(CompletedGame(a=a, b=b, winner=winner, loser=loser, margin=abs(pf - pa), game_date=gd))
-
-        new_results = [
-            AppliedGameResult(team_a=r.winner, team_b=r.loser, score_a=r.winner_score or 1, score_b=r.loser_score or 0)
-            for r in body.results
-        ]
+        completed = parse_completed_games([r async for r in game_rows])
+        new_results = results_to_applied(body.results)
         _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
 
-    entries = _build_hosting_entries(odds_map, slots, region, season, clazz)
+    entries = build_hosting_entries(odds_map, slots, region, season, clazz)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 

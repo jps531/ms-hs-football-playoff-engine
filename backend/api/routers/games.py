@@ -1,9 +1,10 @@
 """Game schedule and win probability endpoints."""
 
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Any, LiteralString
 
 from fastapi import APIRouter, HTTPException, Query
+from psycopg import sql
 
 from backend.api.db import get_conn
 from backend.api.models.requests import LiveWinProbRequest, OTWinProbRequest
@@ -13,7 +14,7 @@ from backend.helpers.win_probability import EloConfig, compute_in_game_win_prob,
 router = APIRouter(prefix="/api/v1", tags=["games"])
 
 SeasonQ = Annotated[int, Query()]
-_404 = {404: {"description": "Not found"}}
+_404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
 def _today() -> date:
@@ -36,7 +37,7 @@ async def list_games(
     is supplied, games are listed from that team's perspective.
     """
     # Build the base query joining back to school_seasons for class/region filters
-    conditions = ["g.season = %s"]
+    conditions: list[LiteralString] = ["g.season = %s"]
     params: list = [season]
     if class_ is not None:
         conditions.append("ss.class = %s")
@@ -54,15 +55,15 @@ async def list_games(
         conditions.append("g.date <= %s")
         params.append(date_to)
 
-    where = " AND ".join(conditions)
-    query = f"""
+    where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+    query = sql.SQL("""
         SELECT g.school, g.opponent, g.date, g.points_for, g.points_against,
                g.location, g.region_game, g.game_status, g.season
         FROM games g
         JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season
-        WHERE {where}
+        WHERE {}
         ORDER BY g.date, g.school
-    """
+    """).format(where_clause)
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
         seen_pairs: set[frozenset] = set()
@@ -78,17 +79,19 @@ async def list_games(
                     school, opponent = opponent, school
                     pf, pa = pa, pf
                     location = {"home": "away", "away": "home"}.get(location, location)
-            games.append(GameModel(
-                season=gseason,
-                date=game_date,
-                team_a=school,
-                team_b=opponent,
-                score_a=pf,
-                score_b=pa,
-                location_a=location,
-                is_region_game=region_game,
-                status=status,
-            ))
+            games.append(
+                GameModel(
+                    season=gseason,
+                    date=game_date,
+                    team_a=school,
+                    team_b=opponent,
+                    score_a=pf,
+                    score_b=pa,
+                    location_a=location,
+                    is_region_game=region_game,
+                    status=status,
+                )
+            )
     return games
 
 
@@ -105,14 +108,18 @@ async def pregame_win_probability(
     Omit for a neutral-site game.
     """
     async with get_conn() as conn:
-        row_a = await (await conn.execute(
-            "SELECT elo FROM team_ratings WHERE school = %s AND season = %s",
-            (team_a, season),
-        )).fetchone()
-        row_b = await (await conn.execute(
-            "SELECT elo FROM team_ratings WHERE school = %s AND season = %s",
-            (team_b, season),
-        )).fetchone()
+        row_a = await (
+            await conn.execute(
+                "SELECT elo FROM team_ratings WHERE school = %s AND season = %s",
+                (team_a, season),
+            )
+        ).fetchone()
+        row_b = await (
+            await conn.execute(
+                "SELECT elo FROM team_ratings WHERE school = %s AND season = %s",
+                (team_b, season),
+            )
+        ).fetchone()
 
     if row_a is None:
         raise HTTPException(status_code=404, detail=f"No Elo rating for '{team_a}' in season {season}")
@@ -122,7 +129,12 @@ async def pregame_win_probability(
     cfg = EloConfig()
     elo_a = row_a[0]
     elo_b = row_b[0]
-    hfa = cfg.hfa_points if location == "home" else (-cfg.hfa_points if location == "away" else 0.0)
+    if location == "home":
+        hfa = cfg.hfa_points
+    elif location == "away":
+        hfa = -cfg.hfa_points
+    else:
+        hfa = 0.0
     p = 1.0 / (1.0 + 10.0 ** ((elo_b - elo_a - hfa) / cfg.scale))
 
     return PreGameWinProbResponse(

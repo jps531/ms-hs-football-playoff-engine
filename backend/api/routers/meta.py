@@ -1,6 +1,9 @@
 """Navigation and metadata endpoints: seasons, structure, teams."""
 
+from typing import Annotated, Any, LiteralString
+
 from fastapi import APIRouter, HTTPException, Query
+from psycopg import sql
 
 from backend.api.db import get_conn
 from backend.api.models.responses import (
@@ -12,19 +15,18 @@ from backend.api.models.responses import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["meta"])
+_404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
-@router.get("/seasons", response_model=list[SeasonModel])
+@router.get("/seasons")
 async def list_seasons() -> list[SeasonModel]:
     """Return all seasons that have at least one school enrolled."""
     async with get_conn() as conn:
-        rows = await conn.execute(
-            "SELECT DISTINCT season FROM school_seasons ORDER BY season DESC"
-        )
+        rows = await conn.execute("SELECT DISTINCT season FROM school_seasons ORDER BY season DESC")
         return [SeasonModel(season=r[0]) async for r in rows]
 
 
-@router.get("/seasons/{season}/structure", response_model=SeasonStructureResponse)
+@router.get("/seasons/{season}/structure", responses=_404)
 async def get_season_structure(season: int) -> SeasonStructureResponse:
     """Return all classes and regions with team counts for *season*."""
     async with get_conn() as conn:
@@ -49,14 +51,14 @@ async def get_season_structure(season: int) -> SeasonStructureResponse:
     return SeasonStructureResponse(season=season, classes=classes)
 
 
-@router.get("/teams", response_model=list[TeamModel])
+@router.get("/teams")
 async def list_teams(
-    season: int = Query(...),
-    class_: int | None = Query(None, alias="class"),
-    region: int | None = Query(None),
+    season: Annotated[int, Query()],
+    class_: Annotated[int | None, Query(alias="class")] = None,
+    region: Annotated[int | None, Query()] = None,
 ) -> list[TeamModel]:
     """Return teams for *season*, optionally filtered by class and region."""
-    conditions = ["ss.season = %s"]
+    conditions: list[LiteralString] = ["ss.season = %s"]
     params: list = [season]
     if class_ is not None:
         conditions.append("ss.class = %s")
@@ -65,29 +67,35 @@ async def list_teams(
         conditions.append("ss.region = %s")
         params.append(region)
 
-    where = " AND ".join(conditions)
-    query = f"""
+    where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+    query = sql.SQL("""
         SELECT s.school, ss.season, ss.class, ss.region,
                s.city, s.mascot, s.primary_color, s.secondary_color, s.maxpreps_logo
         FROM schools s
         JOIN school_seasons ss ON s.school = ss.school
-        WHERE {where}
+        WHERE {}
         ORDER BY ss.class, ss.region, s.school
-    """
+    """).format(where_clause)
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
         return [
             TeamModel(
-                school=r[0], season=r[1], class_=r[2], region=r[3],
-                city=r[4] or "", mascot=r[5] or "", primary_color=r[6] or "",
-                secondary_color=r[7] or "", maxpreps_logo=r[8] or "",
+                school=r[0],
+                season=r[1],
+                class_=r[2],
+                region=r[3],
+                city=r[4] or "",
+                mascot=r[5] or "",
+                primary_color=r[6] or "",
+                secondary_color=r[7] or "",
+                maxpreps_logo=r[8] or "",
             )
             async for r in rows
         ]
 
 
-@router.get("/teams/{team}", response_model=TeamModel)
-async def get_team(team: str, season: int = Query(...)) -> TeamModel:
+@router.get("/teams/{team}", responses=_404)
+async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
     """Return metadata for a single *team* in *season*."""
     async with get_conn() as conn:
         row = await conn.execute(
@@ -106,7 +114,13 @@ async def get_team(team: str, season: int = Query(...)) -> TeamModel:
         raise HTTPException(status_code=404, detail=f"Team '{team}' not found for season {season}")
 
     return TeamModel(
-        school=r[0], season=r[1], class_=r[2], region=r[3],
-        city=r[4] or "", mascot=r[5] or "", primary_color=r[6] or "",
-        secondary_color=r[7] or "", maxpreps_logo=r[8] or "",
+        school=r[0],
+        season=r[1],
+        class_=r[2],
+        region=r[3],
+        city=r[4] or "",
+        mascot=r[5] or "",
+        primary_color=r[6] or "",
+        secondary_color=r[7] or "",
+        maxpreps_logo=r[8] or "",
     )
