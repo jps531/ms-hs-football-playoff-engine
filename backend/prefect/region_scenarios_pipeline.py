@@ -105,7 +105,7 @@ def fetch_region_teams(clazz: int, region: int, season: int) -> list[str]:
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT school FROM school_seasons WHERE class=%s AND region=%s AND season=%s ORDER BY school",
+                "SELECT school FROM school_seasons WHERE class=%s AND region=%s AND season=%s AND is_active=TRUE ORDER BY school",
                 (clazz, region, season),
             )
             return [r[0] for r in cur.fetchall()]

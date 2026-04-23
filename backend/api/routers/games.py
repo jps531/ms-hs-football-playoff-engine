@@ -8,7 +8,13 @@ from psycopg import sql
 
 from backend.api.db import get_conn
 from backend.api.models.requests import LiveWinProbRequest, OTWinProbRequest
-from backend.api.models.responses import GameModel, LiveWinProbResponse, OTWinProbResponse, PreGameWinProbResponse
+from backend.api.models.responses import (
+    GameModel,
+    LiveWinProbResponse,
+    OTWinProbResponse,
+    PreGameWinProbResponse,
+    VenueModel,
+)
 from backend.helpers.win_probability import EloConfig, compute_in_game_win_prob, compute_ot_win_prob
 
 router = APIRouter(prefix="/api/v1", tags=["games"])
@@ -58,9 +64,11 @@ async def list_games(
     where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
     query = sql.SQL("""
         SELECT g.school, g.opponent, g.date, g.points_for, g.points_against,
-               g.location, g.region_game, g.game_status, g.season
+               g.location, g.region_game, g.game_status, g.season,
+               l.name, l.city, l.latitude, l.longitude
         FROM games_effective g
         JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season
+        LEFT JOIN locations l ON g.location_id = l.id
         WHERE {}
         ORDER BY g.date, g.school
     """).format(where_clause)
@@ -68,7 +76,21 @@ async def list_games(
         rows = await conn.execute(query, params)
         seen_pairs: set[frozenset] = set()
         games: list[GameModel] = []
-        async for school, opponent, game_date, pf, pa, location, region_game, status, gseason in rows:
+        async for (
+            school,
+            opponent,
+            game_date,
+            pf,
+            pa,
+            location,
+            region_game,
+            status,
+            gseason,
+            v_name,
+            v_city,
+            v_lat,
+            v_lon,
+        ) in rows:
             # De-duplicate symmetric game pairs when not team-filtered
             if team is None:
                 pair = frozenset([school, opponent])
@@ -79,6 +101,7 @@ async def list_games(
                     school, opponent = opponent, school
                     pf, pa = pa, pf
                     location = {"home": "away", "away": "home"}.get(location, location)
+            venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
             games.append(
                 GameModel(
                     season=gseason,
@@ -90,6 +113,7 @@ async def list_games(
                     location_a=location,
                     is_region_game=region_game,
                     status=status,
+                    venue=venue,
                 )
             )
     return games

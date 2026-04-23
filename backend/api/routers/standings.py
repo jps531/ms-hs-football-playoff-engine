@@ -83,7 +83,7 @@ async def _recompute_from_games(
 ) -> tuple[list[str], list[CompletedGame], list[RemainingGame], dict[str, StandingsOdds], set[str]]:
     """Build completed/remaining game lists from raw game data and recompute odds."""
     team_rows = await conn.execute(
-        "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s ORDER BY school",
+        "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s AND is_active = TRUE ORDER BY school",
         (season, clazz, region),
     )
     teams = [r[0] async for r in team_rows]
@@ -198,7 +198,7 @@ async def simulate_standings(
             snapshot_date = as_of
 
         team_rows = await conn.execute(
-            "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s ORDER BY school",
+            "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s AND is_active = TRUE ORDER BY school",
             (season, clazz, region),
         )
         teams = [r[0] async for r in team_rows]

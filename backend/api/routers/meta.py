@@ -135,6 +135,7 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
 
 
 def _row_to_helmet(r) -> HelmetDesignModel:
+    """Map a raw DB row tuple to a HelmetDesignModel."""
     years_worn = None
     if r[4] is not None:
         years_worn = [YearsWornRange(start=span["start"], end=span["end"]) for span in r[4]]

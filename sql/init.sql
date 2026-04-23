@@ -58,10 +58,11 @@ CREATE INDEX IF NOT EXISTS idx_helmet_designs_school
 -- Acts as the anchor for games and region_standings foreign keys.
 
 CREATE TABLE IF NOT EXISTS school_seasons (
-  school  TEXT    NOT NULL REFERENCES schools(school),
-  season  INTEGER NOT NULL,
-  class   INTEGER NOT NULL,
-  region  INTEGER NOT NULL,
+  school    TEXT    NOT NULL REFERENCES schools(school),
+  season    INTEGER NOT NULL,
+  class     INTEGER NOT NULL,
+  region    INTEGER NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   PRIMARY KEY (school, season)
 );
 
@@ -550,6 +551,9 @@ COMMENT ON COLUMN school_seasons.class IS
   'MHSAA classification 1-7 (1A smallest enrollment, 7A largest).';
 COMMENT ON COLUMN school_seasons.region IS
   'Region number within the classification for this season (1-indexed).';
+COMMENT ON COLUMN school_seasons.is_active IS
+  'FALSE for schools that withdrew, merged, or were otherwise removed mid-season. '
+  'Inactive schools are excluded from standings and scenario calculations.';
 
 
 -- locations

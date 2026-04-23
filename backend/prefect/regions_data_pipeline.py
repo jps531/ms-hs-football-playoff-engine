@@ -118,6 +118,7 @@ def insert_rows(rows: Iterable[School]) -> int:
         ON CONFLICT (school, season) DO UPDATE SET
             class  = COALESCE(EXCLUDED.class,  school_seasons.class),
             region = COALESCE(EXCLUDED.region, school_seasons.region)
+            -- is_active is never overwritten by the pipeline; set manually via UPDATE
     """
     schools_data = [(r.school,) for r in rows_data]
     seasons_data = [(r.school, r.season, r.class_, r.region) for r in rows_data]

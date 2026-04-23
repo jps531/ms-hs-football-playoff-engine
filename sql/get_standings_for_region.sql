@@ -8,9 +8,10 @@ AS $function$
 WITH division_schools AS (
   SELECT ss.school, ss.class, ss.region, ss.season
   FROM school_seasons ss
-  WHERE ss.class  = p_class
-    AND ss.region = p_region
-    AND ss.season = p_season
+  WHERE ss.class     = p_class
+    AND ss.region    = p_region
+    AND ss.season    = p_season
+    AND ss.is_active = TRUE
 ),
 region_records AS (
   SELECT

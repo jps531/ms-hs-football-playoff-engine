@@ -30,6 +30,15 @@ class SeedingOddsModel(BaseModel):
     p_playoffs: float
 
 
+class VenueModel(BaseModel):
+    """Physical venue for a game (populated only when location_id is set)."""
+
+    name: str
+    city: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+
 class RemainingGameModel(BaseModel):
     """An unplayed region game."""
 
@@ -229,6 +238,7 @@ class GameModel(BaseModel):
     location_a: str | None = None
     is_region_game: bool
     status: str | None = None
+    venue: VenueModel | None = None
 
 
 class PreGameWinProbResponse(BaseModel):

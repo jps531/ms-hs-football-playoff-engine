@@ -131,7 +131,7 @@ async def simulate_hosting(
             _, _, remaining, _, _ = await _recompute_from_games(conn, season, clazz, region, as_of)
 
         team_rows = await conn.execute(
-            "SELECT school FROM school_seasons WHERE season=%s AND class=%s AND region=%s ORDER BY school",
+            "SELECT school FROM school_seasons WHERE season=%s AND class=%s AND region=%s AND is_active=TRUE ORDER BY school",
             (season, clazz, region),
         )
         teams = [r[0] async for r in team_rows]
