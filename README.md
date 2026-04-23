@@ -233,6 +233,8 @@ All endpoints are under `/api/v1`. Interactive docs available at `/docs` when th
 | GET | `/seasons/{season}/structure` | All classes and regions with team counts for a season |
 | GET | `/teams` | List teams; `season` required, optional `class` and `region` filters |
 | GET | `/teams/{team}` | Metadata for a single team in a season |
+| GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
+| GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag` |
 
 #### Standings — `/standings`
 

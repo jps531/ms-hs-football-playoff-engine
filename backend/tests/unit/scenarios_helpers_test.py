@@ -195,7 +195,7 @@ class TestDetermineScenariosFullSeason:
 
     def test_denom_is_one(self):
         """With no remaining games the denominator is exactly 1."""
-        assert self._result().denom == 1.0
+        assert self._result().denom == pytest.approx(1.0)
 
     def test_each_team_has_exactly_one_seed_count(self):
         """Every team's seed counts sum to 1.0 across all four seed buckets."""

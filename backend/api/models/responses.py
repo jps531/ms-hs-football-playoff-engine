@@ -84,6 +84,33 @@ class TeamModel(BaseModel):
     maxpreps_logo: str
 
 
+class YearsWornRange(BaseModel):
+    """A contiguous span of seasons a helmet design was worn."""
+
+    start: int
+    end: int
+
+
+class HelmetDesignModel(BaseModel):
+    """A single helmet design variant for a school."""
+
+    id: int | None = None
+    school: str
+    year_first_worn: int
+    year_last_worn: int | None = None
+    years_worn: list[YearsWornRange] | None = None
+    image_left: str | None = None
+    image_right: str | None = None
+    photo: str | None = None
+    color: str | None = None
+    finish: str | None = None
+    facemask_color: str | None = None
+    logo: str | None = None
+    stripe: str | None = None
+    tags: list[str] = []
+    notes: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Standings / scenarios
 # ---------------------------------------------------------------------------

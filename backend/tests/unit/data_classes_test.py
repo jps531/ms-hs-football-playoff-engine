@@ -16,6 +16,8 @@ from backend.helpers.data_classes import (
     BracketTeam,
     Game,
     GameResult,
+    GameStatus,
+    HelmetDesign,
     Location,
     MarginCondition,
     RemainingGame,
@@ -92,10 +94,20 @@ def test_school_from_db_tuple_4col() -> None:
 def test_school_from_db_tuple_14col() -> None:
     """from_db_tuple with 14 columns populates all fields including metadata."""
     row = (
-        "Greenwood", 2025, 5, 3,
-        "Greenwood", "38930", 33.5162, -90.1793,
-        "Bulldogs", "abc123", "https://maxpreps.com/greenwood",
-        "https://maxpreps.com/logo.png", "#003366", "#FFFFFF",
+        "Greenwood",
+        2025,
+        5,
+        3,
+        "Greenwood",
+        "38930",
+        33.5162,
+        -90.1793,
+        "Bulldogs",
+        "abc123",
+        "https://maxpreps.com/greenwood",
+        "https://maxpreps.com/logo.png",
+        "#003366",
+        "#FFFFFF",
     )
     s = School.from_db_tuple(row)
     assert s.school == "Greenwood"
@@ -136,7 +148,7 @@ _GAME_FULL = Game(
     kickoff_time="2025-10-03T19:00:00Z",
     opponent="Starkville",
     result="W",
-    game_status="Final",
+    game_status=GameStatus.FINAL,
     source="maxpreps",
     location="home",
     region_game=True,
@@ -159,7 +171,7 @@ def test_game_as_db_tuple() -> None:
         "2025-10-03T19:00:00Z",
         "Starkville",
         "W",
-        "Final",
+        GameStatus.FINAL,
         "maxpreps",
         "home",
         True,
@@ -212,9 +224,22 @@ def test_game_from_db_tuple_dict_null_location_defaults_to_neutral() -> None:
 def test_game_from_db_tuple_16col_tuple() -> None:
     """from_db_tuple with a 16-column positional tuple populates all fields correctly."""
     row = (
-        "Greenwood", _GAME_DATE, 2025, 42, 28, 14,
-        "Regular", "2025-10-03T19:00:00Z", "Starkville", "W",
-        "Final", "maxpreps", "home", True, True, 0,
+        "Greenwood",
+        _GAME_DATE,
+        2025,
+        42,
+        28,
+        14,
+        "Regular",
+        "2025-10-03T19:00:00Z",
+        "Starkville",
+        "W",
+        "Final",
+        "maxpreps",
+        "home",
+        True,
+        True,
+        0,
     )
     g = Game.from_db_tuple(row)
     assert g.school == "Greenwood"
@@ -225,8 +250,22 @@ def test_game_from_db_tuple_16col_tuple() -> None:
 def test_game_from_db_tuple_16col_null_location_defaults_to_neutral() -> None:
     """None location in a tuple row falls back to 'neutral'."""
     row = (
-        "Greenwood", _GAME_DATE, 2025, None, None, None,
-        None, None, None, None, None, None, None, False, False, 0,
+        "Greenwood",
+        _GAME_DATE,
+        2025,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        False,
+        False,
+        0,
     )
     g = Game.from_db_tuple(row)
     assert g.location == "neutral"
@@ -384,8 +423,8 @@ def test_bracket_game_from_db_tuple_bad_length_raises() -> None:
 # ---------------------------------------------------------------------------
 
 _REMAINING = [
-    RemainingGame("Brandon", "Meridian"),   # bit 0: Brandon wins if bit set
-    RemainingGame("Oak Grove", "Pearl"),    # bit 1
+    RemainingGame("Brandon", "Meridian"),  # bit 0: Brandon wins if bit set
+    RemainingGame("Oak Grove", "Pearl"),  # bit 1
     RemainingGame("Northwest Rankin", "Petal"),  # bit 2
 ]
 
@@ -393,7 +432,7 @@ _REMAINING = [
 _MASK_BRN_NWR = 0b101
 _MARGINS_BRN_NWR = {
     ("Brandon", "Meridian"): 7,
-    ("Oak Grove", "Pearl"): 3,      # Pearl wins by 3
+    ("Oak Grove", "Pearl"): 3,  # Pearl wins by 3
     ("Northwest Rankin", "Petal"): 5,
 }
 
@@ -673,3 +712,137 @@ def test_pd_rank_condition_str_fifth_or_higher() -> None:
 
     cond = PDRankCondition(team="Alpha", rank=5, group=("Alpha", "Beta"))
     assert str(cond) == "Alpha finishes 5th in point differential"
+
+
+# ---------------------------------------------------------------------------
+# HelmetDesign
+# ---------------------------------------------------------------------------
+
+_HELMET_FULL = HelmetDesign(
+    id=42,
+    school="Greenwood",
+    year_first_worn=2001,
+    year_last_worn=2018,
+    years_worn=[{"start": 2001, "end": 2005}, {"start": 2007, "end": 2007}, {"start": 2009, "end": 2018}],
+    image_left="https://example.com/helmet_left.png",
+    image_right="https://example.com/helmet_right.png",
+    photo="https://example.com/helmet_photo.jpg",
+    color="matte black",
+    finish="matte",
+    facemask_color="white",
+    logo="outlined script G",
+    stripe="single center stripe",
+    tags=["throwback", "special edition"],
+    notes="Worn only for rivalry games in odd years.",
+)
+
+_HELMET_MINIMAL = HelmetDesign(school="Greenwood", year_first_worn=2023)
+
+
+def test_helmet_design_as_db_tuple_full() -> None:
+    """as_db_tuple returns a 14-element tuple (no id) in column order."""
+    t = _HELMET_FULL.as_db_tuple()
+    assert len(t) == 14
+    assert t == (
+        "Greenwood",
+        2001,
+        2018,
+        [{"start": 2001, "end": 2005}, {"start": 2007, "end": 2007}, {"start": 2009, "end": 2018}],
+        "https://example.com/helmet_left.png",
+        "https://example.com/helmet_right.png",
+        "https://example.com/helmet_photo.jpg",
+        "matte black",
+        "matte",
+        "white",
+        "outlined script G",
+        "single center stripe",
+        ["throwback", "special edition"],
+        "Worn only for rivalry games in odd years.",
+    )
+
+
+def test_helmet_design_as_db_tuple_minimal() -> None:
+    """as_db_tuple with only required fields has 14 elements; all optional slots are None."""
+    t = _HELMET_MINIMAL.as_db_tuple()
+    assert len(t) == 14
+    assert t[0] == "Greenwood"
+    assert t[1] == 2023
+    assert all(v is None for v in t[2:])  # all optional fields are None
+
+
+def test_helmet_design_from_db_tuple_tuple_path() -> None:
+    """from_db_tuple with a 15-element tuple populates all fields correctly."""
+    row = (
+        42,
+        "Greenwood",
+        2001,
+        2018,
+        [{"start": 2001, "end": 2005}],
+        "https://example.com/left.png",
+        "https://example.com/right.png",
+        "https://example.com/photo.jpg",
+        "matte black",
+        "matte",
+        "white",
+        "outlined script G",
+        "single center stripe",
+        ["throwback"],
+        "Rivalry only.",
+    )
+    h = HelmetDesign.from_db_tuple(row)
+    assert h.id == 42
+    assert h.school == "Greenwood"
+    assert h.year_first_worn == 2001
+    assert h.year_last_worn == 2018
+    assert h.years_worn == [{"start": 2001, "end": 2005}]
+    assert h.color == "matte black"
+    assert h.finish == "matte"
+    assert h.tags == ["throwback"]
+    assert h.notes == "Rivalry only."
+
+
+def test_helmet_design_from_db_tuple_dict_path() -> None:
+    """from_db_tuple with a dict row (psycopg RealDictRow style) populates all fields."""
+    row = {
+        "id": 7,
+        "school": "Starkville",
+        "year_first_worn": 2015,
+        "year_last_worn": None,
+        "years_worn": [{"start": 2015, "end": 2018}, {"start": 2020, "end": 2020}],
+        "image_left": None,
+        "image_right": None,
+        "photo": "https://example.com/p.jpg",
+        "color": "gold",
+        "finish": "gloss",
+        "facemask_color": "black",
+        "logo": "block S",
+        "stripe": None,
+        "tags": ["current"],
+        "notes": None,
+    }
+    h = HelmetDesign.from_db_tuple(row)
+    assert h.id == 7
+    assert h.school == "Starkville"
+    assert h.year_first_worn == 2015
+    assert h.year_last_worn is None
+    assert h.years_worn == [{"start": 2015, "end": 2018}, {"start": 2020, "end": 2020}]
+    assert h.color == "gold"
+    assert h.tags == ["current"]
+
+
+def test_helmet_design_from_db_tuple_null_fields() -> None:
+    """None values in optional columns become None; tags=None becomes []."""
+    row = (1, "Greenwood", 2010, None, None, None, None, None, None, None, None, None, None, None, None)
+    h = HelmetDesign.from_db_tuple(row)
+    assert h.id == 1
+    assert h.school == "Greenwood"
+    assert h.year_first_worn == 2010
+    assert h.year_last_worn is None
+    assert h.color is None
+    assert h.tags == []
+
+
+def test_helmet_design_from_db_tuple_bad_length() -> None:
+    """from_db_tuple raises ValueError when given the wrong number of columns."""
+    with pytest.raises(ValueError, match="Expected 15 columns"):
+        HelmetDesign.from_db_tuple((1, "Greenwood", 2010))

@@ -8,10 +8,12 @@ from psycopg import sql
 from backend.api.db import get_conn
 from backend.api.models.responses import (
     ClassStructure,
+    HelmetDesignModel,
     RegionSummary,
     SeasonModel,
     SeasonStructureResponse,
     TeamModel,
+    YearsWornRange,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["meta"])
@@ -124,3 +126,96 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
         secondary_color=r[7] or "",
         maxpreps_logo=r[8] or "",
     )
+
+
+def _row_to_helmet(r) -> HelmetDesignModel:
+    years_worn = None
+    if r[4] is not None:
+        years_worn = [YearsWornRange(start=span["start"], end=span["end"]) for span in r[4]]
+    return HelmetDesignModel(
+        id=r[0],
+        school=r[1],
+        year_first_worn=r[2],
+        year_last_worn=r[3],
+        years_worn=years_worn,
+        image_left=r[5],
+        image_right=r[6],
+        photo=r[7],
+        color=r[8],
+        finish=r[9],
+        facemask_color=r[10],
+        logo=r[11],
+        stripe=r[12],
+        tags=list(r[13] or []),
+        notes=r[14],
+    )
+
+
+_HELMET_SELECT = """
+    SELECT id, school, year_first_worn, year_last_worn, years_worn,
+           image_left, image_right, photo, color, finish,
+           facemask_color, logo, stripe, tags, notes
+    FROM helmet_designs
+"""
+
+
+@router.get("/teams/{team}/helmets", responses=_404)
+async def list_team_helmets(
+    team: str,
+    year: Annotated[int | None, Query()] = None,
+) -> list[HelmetDesignModel]:
+    """Return all helmet designs for *team*, optionally filtered to designs worn in *year*."""
+    conditions: list[LiteralString] = ["school = %s"]
+    params: list = [team]
+    if year is not None:
+        conditions.append("year_first_worn <= %s AND (year_last_worn IS NULL OR year_last_worn >= %s)")
+        params.extend([year, year])
+
+    where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+    query = sql.SQL(_HELMET_SELECT + " WHERE {} ORDER BY year_first_worn").format(where_clause)
+
+    async with get_conn() as conn:
+        rows = await conn.execute(query, params)
+        results = [_row_to_helmet(r) async for r in rows]
+
+    if not results and year is None:
+        async with get_conn() as conn:
+            check = await conn.execute("SELECT 1 FROM schools WHERE school = %s", (team,))
+            if await check.fetchone() is None:
+                raise HTTPException(status_code=404, detail=f"Team '{team}' not found")
+
+    return results
+
+
+@router.get("/helmets")
+async def list_helmets(
+    team: Annotated[str | None, Query()] = None,
+    color: Annotated[str | None, Query()] = None,
+    finish: Annotated[str | None, Query()] = None,
+    tag: Annotated[str | None, Query()] = None,
+) -> list[HelmetDesignModel]:
+    """Return helmet designs across all teams with optional filters."""
+    conditions: list[LiteralString] = []
+    params: list = []
+    if team is not None:
+        conditions.append("school = %s")
+        params.append(team)
+    if color is not None:
+        conditions.append("color ILIKE %s")
+        params.append(color)
+    if finish is not None:
+        conditions.append("finish ILIKE %s")
+        params.append(finish)
+    if tag is not None:
+        conditions.append("%s = ANY(tags)")
+        params.append(tag)
+
+    if conditions:
+        where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+        query = sql.SQL(_HELMET_SELECT + " WHERE {} ORDER BY school, year_first_worn").format(where_clause)
+    else:
+        query = sql.SQL(_HELMET_SELECT + " ORDER BY school, year_first_worn")
+
+    async with get_conn() as conn:
+        rows = await conn.execute(query, params)
+        return [_row_to_helmet(r) async for r in rows]

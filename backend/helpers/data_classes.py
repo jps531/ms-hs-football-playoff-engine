@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
-from typing import TypedDict
+from typing import Any, TypedDict
 
 # -------------------------
 # Win probability interface
@@ -72,8 +72,8 @@ class GameStatus(StrEnum):
     HALFTIME = "halftime"
     END_3Q = "end_3q"
     END_4Q = "end_4q"
-    IN_PROGRESS = "in_progress"   # clock running (reg) or OT possession underway
-    END_OT = "end_ot"             # OT period ended tied; game_quarter = which OT (5=OT1, …)
+    IN_PROGRESS = "in_progress"  # clock running (reg) or OT possession underway
+    END_OT = "end_ot"  # OT period ended tied; game_quarter = which OT (5=OT1, …)
     POSTPONED = "postponed"
     CANCELED = "canceled"
     SUSPENDED = "suspended"
@@ -85,8 +85,8 @@ class GameClock:
     """Structured in-progress game state parsed from a raw status string."""
 
     status: GameStatus
-    quarter: int | None   # 1–4 regulation; 5+ for OT (5=OT1, 6=OT2, …)
-    clock: str | None     # "MM:SS" within the quarter; always None for OT
+    quarter: int | None  # 1–4 regulation; 5+ for OT (5=OT1, 6=OT2, …)
+    clock: str | None  # "MM:SS" within the quarter; always None for OT
 
 
 # -------------------------
@@ -110,12 +110,12 @@ class InGameConfig:
     mercy_sigma_factor: float = 0.25
 
     # OT discrete possession model
-    ot_p_td_base: float = 0.60      # P(TD) for evenly matched teams in an OT possession
-    ot_p_fg_base: float = 0.20      # P(FG only) for evenly matched teams
-    ot_p_missed_pat: float = 0.10   # P(missed PAT | TD)  — must sum to 1.0 with below
-    ot_p_1pt_pat: float = 0.80      # P(1-pt PAT made | TD)
-    ot_p_2pt_pat: float = 0.10      # P(2-pt PAT attempted+made | TD)
-    ot_elo_factor: float = 0.30     # how much Elo gap shifts OT scoring rates
+    ot_p_td_base: float = 0.60  # P(TD) for evenly matched teams in an OT possession
+    ot_p_fg_base: float = 0.20  # P(FG only) for evenly matched teams
+    ot_p_missed_pat: float = 0.10  # P(missed PAT | TD)  — must sum to 1.0 with below
+    ot_p_1pt_pat: float = 0.80  # P(1-pt PAT made | TD)
+    ot_p_2pt_pat: float = 0.10  # P(2-pt PAT attempted+made | TD)
+    ot_elo_factor: float = 0.30  # how much Elo gap shifts OT scoring rates
 
 
 #: Injectable in-game win probability function type.
@@ -134,18 +134,18 @@ class WinProbFactors:
 
     team_a: str
     team_b: str
-    elo_a: float                    # Elo rating for team_a (as of query date)
-    elo_b: float                    # Elo rating for team_b (as of query date)
-    class_a: int                    # MHSAA classification 1–7
-    class_b: int                    # MHSAA classification 1–7
-    games_played_a: int             # completed games processed for team_a
-    games_played_b: int             # completed games processed for team_b
-    rpi_a: float | None             # RPI for team_a; None if < 3 games
-    rpi_b: float | None             # RPI for team_b; None if < 3 games
-    location_a: str | None          # 'home'/'away'/'neutral'/None (None = neutral)
-    raw_elo_prob: float             # P(team_a wins) without home-field adjustment
-    location_adjusted_prob: float   # P(team_a wins) with HFA applied
-    final_prob: float               # == location_adjusted_prob today; extension point
+    elo_a: float  # Elo rating for team_a (as of query date)
+    elo_b: float  # Elo rating for team_b (as of query date)
+    class_a: int  # MHSAA classification 1–7
+    class_b: int  # MHSAA classification 1–7
+    games_played_a: int  # completed games processed for team_a
+    games_played_b: int  # completed games processed for team_b
+    rpi_a: float | None  # RPI for team_a; None if < 3 games
+    rpi_b: float | None  # RPI for team_b; None if < 3 games
+    location_a: str | None  # 'home'/'away'/'neutral'/None (None = neutral)
+    raw_elo_prob: float  # P(team_a wins) without home-field adjustment
+    location_adjusted_prob: float  # P(team_a wins) with HFA applied
+    final_prob: float  # == location_adjusted_prob today; extension point
 
 
 # -------------------------
@@ -854,6 +854,7 @@ class MarginCondition:
 
     def __str__(self) -> str:
         """Return a compact human-readable representation of this margin condition."""
+
         def fmt(pairs):
             """Format a sequence of game pairs as a sum expression."""
             return " + ".join(f"{a}v{b}_margin" for a, b in pairs)
@@ -961,6 +962,7 @@ class StandingsOdds:
 
 
 # --- Data classes for playoff home-game scenarios ---
+
 
 @dataclass(frozen=True)
 class HomeGameCondition:
@@ -1118,6 +1120,122 @@ class RoundMatchups:
     p_host_conditional_weighted: float | None
     p_host_marginal_weighted: float | None
     entries: tuple[MatchupEntry, ...]
+
+
+@dataclass
+class HelmetDesign:
+    """DB-mapped dataclass for a row in the ``helmet_designs`` table.
+
+    Tracks a single helmet design variant for a school across one or more
+    seasons.  ``year_first_worn`` / ``year_last_worn`` are the outer bounds;
+    ``years_worn`` encodes non-contiguous spans as a list of ``{start, end}``
+    dicts (e.g. ``[{"start": 2001, "end": 2005}, {"start": 2007, "end": 2007}]``).
+    """
+
+    school: str
+    year_first_worn: int
+    id: int | None = None
+    year_last_worn: int | None = None
+    years_worn: list[dict] | None = None
+    image_left: str | None = None
+    image_right: str | None = None
+    photo: str | None = None
+    color: str | None = None
+    finish: str | None = None
+    facemask_color: str | None = None
+    logo: str | None = None
+    stripe: str | None = None
+    tags: list[str] | None = None
+    notes: str | None = None
+
+    def as_db_tuple(self) -> tuple:
+        """Positional tuple for INSERT (excludes id; matches column order)."""
+        return (
+            self.school,
+            self.year_first_worn,
+            self.year_last_worn,
+            self.years_worn,
+            self.image_left,
+            self.image_right,
+            self.photo,
+            self.color,
+            self.finish,
+            self.facemask_color,
+            self.logo,
+            self.stripe,
+            self.tags,
+            self.notes,
+        )
+
+    @classmethod
+    def from_db_tuple(cls, row: Any) -> "HelmetDesign":
+        """Create a HelmetDesign from a DB row (dict or 15-column tuple).
+
+        Args:
+            row: Either a dict with named fields (e.g., psycopg RealDictRow)
+                or a positional tuple with 15 columns (id first).
+
+        Returns:
+            A HelmetDesign instance populated from the row.
+
+        Raises:
+            ValueError: If a tuple row has an unexpected number of columns.
+        """
+        if hasattr(row, "keys"):
+            return cls(
+                id=row.get("id"),
+                school=row.get("school") or "",
+                year_first_worn=row.get("year_first_worn") or 0,
+                year_last_worn=row.get("year_last_worn"),
+                years_worn=row.get("years_worn"),
+                image_left=row.get("image_left"),
+                image_right=row.get("image_right"),
+                photo=row.get("photo"),
+                color=row.get("color"),
+                finish=row.get("finish"),
+                facemask_color=row.get("facemask_color"),
+                logo=row.get("logo"),
+                stripe=row.get("stripe"),
+                tags=list(row.get("tags") or []),
+                notes=row.get("notes"),
+            )
+        row = tuple(row)
+        if len(row) != 15:
+            raise ValueError(f"Expected 15 columns in helmet_designs row, got {len(row)}")
+        (
+            id_,
+            school,
+            year_first_worn,
+            year_last_worn,
+            years_worn,
+            image_left,
+            image_right,
+            photo,
+            color,
+            finish,
+            facemask_color,
+            logo,
+            stripe,
+            tags,
+            notes,
+        ) = row
+        return cls(
+            id=id_,
+            school=school or "",
+            year_first_worn=year_first_worn or 0,
+            year_last_worn=year_last_worn,
+            years_worn=years_worn,
+            image_left=image_left,
+            image_right=image_right,
+            photo=photo,
+            color=color,
+            finish=finish,
+            facemask_color=facemask_color,
+            logo=logo,
+            stripe=stripe,
+            tags=list(tags or []),
+            notes=notes,
+        )
 
 
 @dataclass(frozen=True)

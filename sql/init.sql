@@ -21,6 +21,35 @@ CREATE TABLE IF NOT EXISTS schools (
 
 
 -- ---------------------------------------------------------------------------
+-- Helmet design history (static per design, spans multiple seasons)
+-- ---------------------------------------------------------------------------
+-- One row per distinct helmet design worn by a school. Not season-keyed —
+-- year_first_worn / year_last_worn span multiple seasons. years_worn is a
+-- JSONB array of {start, end} range objects to represent non-contiguous spans.
+
+CREATE TABLE IF NOT EXISTS helmet_designs (
+  id              SERIAL PRIMARY KEY,
+  school          TEXT    NOT NULL REFERENCES schools(school),
+  year_first_worn INTEGER NOT NULL,
+  year_last_worn  INTEGER,                   -- NULL = currently in use
+  years_worn      JSONB,                     -- [{start: 2001, end: 2005}, {start: 2007, end: 2007}]
+  image_left      TEXT,                      -- URL to 2D mockup facing left
+  image_right     TEXT,                      -- URL to 2D mockup facing right
+  photo           TEXT,                      -- URL to real-life photo
+  color           TEXT,
+  finish          TEXT,                      -- e.g. 'matte', 'gloss', 'chrome', 'satin'
+  facemask_color  TEXT,
+  logo            TEXT,                      -- description, e.g. 'outlined script W'
+  stripe          TEXT,                      -- description, e.g. 'single center stripe'
+  tags            TEXT[],                    -- queryable metadata tags
+  notes           TEXT                       -- free-text catch-all
+);
+
+CREATE INDEX IF NOT EXISTS idx_helmet_designs_school
+  ON helmet_designs (school);
+
+
+-- ---------------------------------------------------------------------------
 -- Per-season class and region assignments
 -- ---------------------------------------------------------------------------
 -- One row per school per season. Tracks the MHSAA classification and region
@@ -386,6 +415,16 @@ COMMENT ON TABLE schools IS
 COMMENT ON COLUMN schools.school IS
   'Canonical school name — primary key and join key throughout the schema. '
   'Normalized via name_normalize() in data_helpers.py.';
+COMMENT ON COLUMN schools.city IS
+  'City where the school is located.';
+COMMENT ON COLUMN schools.zip IS
+  'ZIP code for the school''s address.';
+COMMENT ON COLUMN schools.latitude IS
+  'Latitude of the school in decimal degrees. Used for drive-time / distance calculations.';
+COMMENT ON COLUMN schools.longitude IS
+  'Longitude of the school in decimal degrees.';
+COMMENT ON COLUMN schools.mascot IS
+  'Team mascot name (e.g. "Bulldogs", "Tigers").';
 COMMENT ON COLUMN schools.maxpreps_id IS
   'MaxPreps internal school identifier, used to construct schedule URLs.';
 COMMENT ON COLUMN schools.maxpreps_url IS
@@ -396,6 +435,50 @@ COMMENT ON COLUMN schools.primary_color IS
   'Hex color string for the school''s primary team color.';
 COMMENT ON COLUMN schools.secondary_color IS
   'Hex color string for the school''s secondary team color.';
+
+
+-- helmet_designs
+
+COMMENT ON TABLE helmet_designs IS
+  'One row per distinct helmet design variant worn by a school. Not season-keyed — '
+  'a single design may span multiple seasons with gaps. year_first_worn / year_last_worn '
+  'are the outer bounds; years_worn encodes non-contiguous spans in detail. '
+  'id is the sole unique identifier; no composite uniqueness constraint is enforced '
+  'because teams can wear multiple distinct helmets within the same year.';
+
+COMMENT ON COLUMN helmet_designs.school IS
+  'FK to schools(school). Canonical school name.';
+COMMENT ON COLUMN helmet_designs.year_first_worn IS
+  'First season this design was worn. The lower bound of the wear span.';
+COMMENT ON COLUMN helmet_designs.year_last_worn IS
+  'Last season this design was worn. NULL means the design is still in current use.';
+COMMENT ON COLUMN helmet_designs.years_worn IS
+  'JSONB array of {start, end} range objects encoding non-contiguous wear spans '
+  '(e.g. [{"start": 2001, "end": 2005}, {"start": 2007, "end": 2007}]). '
+  'NULL if the school wore the design continuously from year_first_worn to year_last_worn.';
+COMMENT ON COLUMN helmet_designs.image_left IS
+  'URL to a 2D mockup image of the helmet facing left.';
+COMMENT ON COLUMN helmet_designs.image_right IS
+  'URL to a 2D mockup image of the helmet facing right.';
+COMMENT ON COLUMN helmet_designs.photo IS
+  'URL to a real-life photograph of the helmet.';
+COMMENT ON COLUMN helmet_designs.color IS
+  'Primary helmet shell color (e.g. "matte black", "metallic gold").';
+COMMENT ON COLUMN helmet_designs.finish IS
+  'Surface finish of the helmet shell (e.g. "matte", "gloss", "chrome", "satin").';
+COMMENT ON COLUMN helmet_designs.facemask_color IS
+  'Color of the facemask (e.g. "white", "black", "gray").';
+COMMENT ON COLUMN helmet_designs.logo IS
+  'Free-text description of the helmet logo (e.g. "outlined script W", "block G with shadow").';
+COMMENT ON COLUMN helmet_designs.stripe IS
+  'Free-text description of any stripe pattern (e.g. "single center stripe", "dual side stripes").';
+COMMENT ON COLUMN helmet_designs.tags IS
+  'Array of metadata tags for filtering and discovery '
+  '(e.g. ARRAY[''throwback'', ''alternate'', ''special edition'']). '
+  'Queryable via: %s = ANY(tags).';
+COMMENT ON COLUMN helmet_designs.notes IS
+  'Free-text catch-all for details that do not fit a structured column '
+  '(e.g. "worn only for rivalry games", "limited-edition homecoming helmet").';
 
 
 -- school_seasons
@@ -423,8 +506,14 @@ COMMENT ON TABLE locations IS
 
 COMMENT ON COLUMN locations.name IS
   'Venue name (e.g. "Veterans Memorial Stadium").';
+COMMENT ON COLUMN locations.city IS
+  'City where the venue is located.';
 COMMENT ON COLUMN locations.home_team IS
   'School that uses this venue as its home field, if applicable. NULL for neutral sites.';
+COMMENT ON COLUMN locations.latitude IS
+  'Latitude of the venue in decimal degrees. Used for drive-time / distance calculations.';
+COMMENT ON COLUMN locations.longitude IS
+  'Longitude of the venue in decimal degrees.';
 
 
 -- games
@@ -592,6 +681,13 @@ COMMENT ON TABLE team_ratings IS
   'run and written alongside region_standings to guarantee consistency. '
   'One row per school per season; overwritten (not appended) each run.';
 
+COMMENT ON COLUMN team_ratings.school IS
+  'FK to schools(school). Canonical school name.';
+COMMENT ON COLUMN team_ratings.season IS
+  'Four-digit season year. Part of the primary key.';
+COMMENT ON COLUMN team_ratings.as_of_date IS
+  'Pipeline run date these ratings were computed. Part of the primary key; '
+  'query with as_of_date DESC to get the most recent ratings for a school.';
 COMMENT ON COLUMN team_ratings.elo IS
   'Elo rating after processing all completed games for the season in chronological '
   'order. Starting rating blends the prior-season final Elo with the classification '
@@ -616,8 +712,16 @@ COMMENT ON TABLE region_scenarios IS
   'pipeline after each game-result batch. Avoids re-running the tiebreaker engine '
   'and boolean minimizer on every frontend request.';
 
+COMMENT ON COLUMN region_scenarios.season IS
+  'Four-digit season year. Part of the primary key.';
+COMMENT ON COLUMN region_scenarios.class IS
+  'MHSAA classification (1-7). Part of the primary key.';
+COMMENT ON COLUMN region_scenarios.region IS
+  'Region number within the classification. Part of the primary key.';
 COMMENT ON COLUMN region_scenarios.as_of_date IS
   'Pipeline run date this scenario snapshot was written. Used with as_of_date DESC index to retrieve the latest or a historical snapshot for a given region.';
+COMMENT ON COLUMN region_scenarios.computed_at IS
+  'Timestamp when the pipeline wrote this snapshot. More precise than as_of_date for auditing run order.';
 
 COMMENT ON COLUMN region_scenarios.remaining_games IS
   'Ordered JSON array of {a, b} game-pair objects for the remaining region games. '
@@ -642,6 +746,12 @@ COMMENT ON TABLE region_computation_state IS
   '"refining scenarios…" indicator while the background upgrade runs.';
 
 
+COMMENT ON COLUMN region_computation_state.season IS
+  'Four-digit season year. Part of the primary key.';
+COMMENT ON COLUMN region_computation_state.class IS
+  'MHSAA classification (1-7). Part of the primary key.';
+COMMENT ON COLUMN region_computation_state.region IS
+  'Region number within the classification. Part of the primary key.';
 COMMENT ON COLUMN region_computation_state.as_of_date IS
   'Pipeline run date this computation-state row was written. Part of the primary key so each pipeline run produces its own snapshot alongside the matching region_scenarios row.';
 COMMENT ON COLUMN region_computation_state.r_remaining IS
@@ -667,6 +777,8 @@ COMMENT ON TABLE playoff_formats IS
   'Bracket format template for each season/class combination. '
   'Defines bracket size and round count; slot-level matchups live in playoff_format_slots.';
 
+COMMENT ON COLUMN playoff_formats.season IS
+  'Four-digit season year this format applies to. Part of the unique key with class.';
 COMMENT ON COLUMN playoff_formats.class IS
   'MHSAA classification (1-7). 1A-4A use 8-region 32-team brackets; '
   '5A-7A use 4-region 16-team brackets.';
@@ -676,6 +788,9 @@ COMMENT ON COLUMN playoff_formats.seeds_per_region IS
   'Number of playoff qualifiers per region. Always 4 under current MHSAA rules.';
 COMMENT ON COLUMN playoff_formats.num_rounds IS
   '4 for 16-team brackets (5A-7A), 5 for 32-team brackets (1A-4A).';
+COMMENT ON COLUMN playoff_formats.notes IS
+  'Optional human-readable label for this format (e.g. "7A — 16-team bracket"). '
+  'Informational only; not used by the engine.';
 
 
 -- playoff_format_slots
@@ -685,6 +800,8 @@ COMMENT ON TABLE playoff_format_slots IS
   'Adjacent slot pairs (1,2), (3,4), … feed the same round-2 game, '
   'forming an implicit bracket tree.';
 
+COMMENT ON COLUMN playoff_format_slots.format_id IS
+  'FK to playoff_formats(id). Cascades on delete so removing a format removes all its slots.';
 COMMENT ON COLUMN playoff_format_slots.slot IS
   '1-based slot index within the bracket. Adjacent pairs determine round-2 opponents.';
 COMMENT ON COLUMN playoff_format_slots.home_region IS
