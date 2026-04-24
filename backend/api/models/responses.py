@@ -239,6 +239,8 @@ class GameModel(BaseModel):
     is_region_game: bool
     status: str | None = None
     venue: VenueModel | None = None
+    helmet_a: HelmetDesignModel | None = None
+    helmet_b: HelmetDesignModel | None = None
 
 
 class PreGameWinProbResponse(BaseModel):

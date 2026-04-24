@@ -10,6 +10,7 @@ from backend.api.db import get_conn
 from backend.api.models.requests import LiveWinProbRequest, OTWinProbRequest
 from backend.api.models.responses import (
     GameModel,
+    HelmetDesignModel,
     LiveWinProbResponse,
     OTWinProbResponse,
     PreGameWinProbResponse,
@@ -22,10 +23,29 @@ router = APIRouter(prefix="/api/v1", tags=["games"])
 SeasonQ = Annotated[int, Query()]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
+_HELMET_COLS = (
+    "id", "school", "year_first_worn", "year_last_worn", "years_worn",
+    "image_left", "image_right", "photo", "color", "finish",
+    "facemask_color", "logo", "stripe", "tags", "notes",
+)
+
 
 def _today() -> date:
     """Return today's date (injectable seam for tests)."""
     return datetime.now().date()
+
+
+def _build_helmet(*fields) -> HelmetDesignModel | None:
+    """Build a HelmetDesignModel from a flat sequence of helmet_designs columns.
+
+    Expects fields in the same order as ``_HELMET_COLS``. Returns None when
+    the first field (id) is None, which indicates no helmet has been designated
+    for this team in this game.
+    """
+    hid = fields[0]
+    if hid is None:
+        return None
+    return HelmetDesignModel(**dict(zip(_HELMET_COLS, fields)))
 
 
 @router.get("/games")
@@ -65,10 +85,20 @@ async def list_games(
     query = sql.SQL("""
         SELECT g.school, g.opponent, g.date, g.points_for, g.points_against,
                g.location, g.region_game, g.game_status, g.season,
-               l.name, l.city, l.latitude, l.longitude
+               l.name, l.city, l.latitude, l.longitude,
+               hd_a.id, hd_a.school, hd_a.year_first_worn, hd_a.year_last_worn, hd_a.years_worn,
+               hd_a.image_left, hd_a.image_right, hd_a.photo, hd_a.color, hd_a.finish,
+               hd_a.facemask_color, hd_a.logo, hd_a.stripe, hd_a.tags, hd_a.notes,
+               hd_b.id, hd_b.school, hd_b.year_first_worn, hd_b.year_last_worn, hd_b.years_worn,
+               hd_b.image_left, hd_b.image_right, hd_b.photo, hd_b.color, hd_b.finish,
+               hd_b.facemask_color, hd_b.logo, hd_b.stripe, hd_b.tags, hd_b.notes
         FROM games_effective g
         JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season
         LEFT JOIN locations l ON g.location_id = l.id
+        LEFT JOIN helmet_designs hd_a ON hd_a.id = g.helmet_design_id
+        LEFT JOIN games_effective g_opp
+          ON g_opp.school = g.opponent AND g_opp.date = g.date AND g_opp.season = g.season
+        LEFT JOIN helmet_designs hd_b ON hd_b.id = g_opp.helmet_design_id
         WHERE {}
         ORDER BY g.date, g.school
     """).format(where_clause)
@@ -77,20 +107,12 @@ async def list_games(
         seen_pairs: set[frozenset] = set()
         games: list[GameModel] = []
         async for (
-            school,
-            opponent,
-            game_date,
-            pf,
-            pa,
-            location,
-            region_game,
-            status,
-            gseason,
-            v_name,
-            v_city,
-            v_lat,
-            v_lon,
+            school, opponent, game_date, pf, pa, location, region_game, status, gseason,
+            v_name, v_city, v_lat, v_lon,
+            *ha_fields_then_hb,
         ) in rows:
+            ha_fields = tuple(ha_fields_then_hb[:15])
+            hb_fields = tuple(ha_fields_then_hb[15:])
             # De-duplicate symmetric game pairs when not team-filtered
             if team is None:
                 pair = frozenset([school, opponent])
@@ -101,6 +123,7 @@ async def list_games(
                     school, opponent = opponent, school
                     pf, pa = pa, pf
                     location = {"home": "away", "away": "home"}.get(location, location)
+                    ha_fields, hb_fields = hb_fields, ha_fields
             venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
             games.append(
                 GameModel(
@@ -114,6 +137,8 @@ async def list_games(
                     is_region_game=region_game,
                     status=status,
                     venue=venue,
+                    helmet_a=_build_helmet(*ha_fields),
+                    helmet_b=_build_helmet(*hb_fields),
                 )
             )
     return games

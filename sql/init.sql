@@ -119,10 +119,16 @@ CREATE TABLE IF NOT EXISTS games (
   kickoff_time    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   overtime        INTEGER DEFAULT 0,
   overrides       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  helmet_design_id INTEGER REFERENCES helmet_designs(id) ON DELETE SET NULL,
   FOREIGN KEY (school, season) REFERENCES school_seasons(school, season),
   FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
   PRIMARY KEY (school, date)
 );
+
+
+CREATE INDEX IF NOT EXISTS idx_games_helmet_design
+  ON games (helmet_design_id)
+  WHERE helmet_design_id IS NOT NULL;
 
 
 -- ---------------------------------------------------------------------------
@@ -158,6 +164,7 @@ CREATE OR REPLACE VIEW games_effective AS
 SELECT
   school, date, season, opponent, result, final, overtime,
   game_status, game_quarter, game_clock, source,
+  helmet_design_id,
   COALESCE(overrides->>'location',                location)       AS location,
   COALESCE((overrides->>'location_id')::int,      location_id)    AS location_id,
   COALESCE((overrides->>'points_for')::int,       points_for)     AS points_for,
@@ -633,6 +640,9 @@ COMMENT ON COLUMN games.overrides IS
   'the corresponding raw column (home_team, latitude, longitude, location, location_id, '
   'points_for, points_against, region_game, round, kickoff_time). '
   'Written only through set_game_override() / clear_game_override(); never by the pipeline.';
+COMMENT ON COLUMN games.helmet_design_id IS
+  'FK to helmet_designs(id). The helmet design this school wore in this game. '
+  'NULL until manually designated. Not written by any pipeline — updated manually only.';
 
 
 -- region_standings
