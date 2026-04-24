@@ -7,6 +7,7 @@ class section for school-to-region mappings, and writes results to the
 
 import re
 from collections.abc import Iterable
+from datetime import date
 
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_values
@@ -148,10 +149,12 @@ def scrape_task(url: str, season: int) -> list[School]:
 
 
 @flow(name="Regions Data Flow")
-def regions_data_flow(season: int = 2025) -> int:
+def regions_data_flow(season: int | None = None) -> int:
     """
     Flow to scrape and insert regions data.
     """
+    if season is None:
+        season = date.today().year
     logger = get_run_logger()
     regions_source_url = ""
     if season == 2025:

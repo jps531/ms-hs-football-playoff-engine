@@ -7,7 +7,7 @@ and writes records to the ``games`` table via INSERT ... ON CONFLICT UPDATE.
 import re
 import time
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import date, datetime
 
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_values
@@ -132,16 +132,16 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str, cl
             if tag in {"WON", "LOST"}:
                 # mark as Forfeit game
                 result = "W" if tag.startswith("W") else "L"
-                game_status = "Final - Forfeit"
+                game_status = "final_forfeit"
             else:
                 # Regular W/L result
                 result = tag
-                game_status = "Final"
+                game_status = "final"
         else:
             # No result: determine if the game has happened yet or not
             if m.group("pfor") and m.group("pagn"):
                 result = "W" if int(m.group("pfor")) > int(m.group("pagn")) else "L"
-                game_status = "Final"
+                game_status = "final"
             else:
                 result = None
                 game_status = ""
@@ -365,10 +365,12 @@ def scrape_task(existing_schools: list[School], season: int) -> int:
 
 
 @flow(name="AHSFHS Schedule Data Flow")
-def ahsfhs_schedule_data_flow(season: int = 2025) -> int:
+def ahsfhs_schedule_data_flow(season: int | None = None) -> int:
     """
     Flow to scrape and update school rows with AHSFHS schedule data.
     """
+    if season is None:
+        season = date.today().year
     existing_schools = get_existing_schools(season)
     updated_count = scrape_task(existing_schools, season)
     return updated_count

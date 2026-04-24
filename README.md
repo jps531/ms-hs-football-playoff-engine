@@ -142,11 +142,22 @@ Copy the environment template, then bring up the stack:
 
 ```
 cp .env.example .env.local
-docker compose --env-file .env.local down
-docker compose --env-file .env.local up --build -d
+docker compose --env-file .env.local --profile local-db down
+docker compose --env-file .env.local --profile local-db up --build -d
 ```
 
+The `--profile local-db` flag is required to start the local PostgreSQL container (`db` service). Without it, only the Prefect server/worker and API start — use that when pointing at a remote database instead.
+
 This starts the Prefect server/worker (`localhost:4200`), a local PostgreSQL instance (`localhost:5432`), and the API server (`localhost:8000`).
+
+To reset the database and re-run the schema from scratch (e.g. after a schema change):
+
+```
+docker compose --env-file .env.local --profile local-db down -v
+docker compose --env-file .env.local --profile local-db up --build -d
+```
+
+The `-v` flag removes the postgres data volume; the container will re-run `sql/init.sql` on startup.
 
 #### Once per season (pre-season setup)
 
@@ -154,6 +165,7 @@ Run these in order — each depends on the previous step's data being in the dat
 
 1. Navigate to [the Local Prefect UI](http://localhost:4200/deployments)
 2. Do a "Quick Run" of the **Regions Data Pipeline** — populates `school_seasons` (class/region assignments)
+   1. Note - The "Regions Data" Pipeline defaults to the current currantly year. Use a **Custom Run** in the Prefect UI to target a different season.
 3. Do a "Quick Run" of the **MaxPreps Data Pipeline** — populates `schools` (metadata) and seeds `games` rows for the schedule
 4. Do a "Quick Run" of the **School Info Data Pipeline** — fills in school identity details (colors, mascot, etc.)
 
@@ -166,11 +178,15 @@ The `playoff_formats` and `playoff_format_slots` tables (which define the bracke
 1. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** — fetches the latest scores and marks games `final=TRUE`
 2. Do a "Quick Run" of the **Region Scenarios Pipeline** — reads the updated game results, runs the tiebreaker engine, and writes pre-computed standings odds and scenario data to `region_standings` and `region_scenarios`
 
+> **Season parameter:** Both of these pipelines default to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
+
 The API reads its data from these pre-computed snapshots; run this pipeline before serving fresh results.
 
 #### Once per season (after importing a full historical season)
 
 After the AHSFHS and Region Scenarios pipelines have run for the first time on a season, run the **Backfill Historical Snapshots** pipeline from the [Local Prefect UI](http://localhost:4200/deployments).
+
+> **Season parameter:** This pipeline defaults to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
 
 This populates dated snapshots in `team_ratings`, `region_standings`, `region_scenarios`, and `region_computation_state` for each unique game-week so the timeline API can serve historical odds for any past date without recomputation. Only needs to run once per season (or again after re-importing a full season's games).
 

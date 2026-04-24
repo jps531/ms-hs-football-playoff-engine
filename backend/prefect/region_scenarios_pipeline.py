@@ -253,6 +253,7 @@ def write_elo_game_date_snapshots(
     elo_snapshots: list[tuple[date, dict[str, float], dict[str, int]]],
     season: int,
     skip_date: date,
+    known_schools: set[str] | None = None,
 ) -> int:
     """Persist per-game-date Elo snapshots to team_ratings for timeline queries.
 
@@ -261,16 +262,20 @@ def write_elo_game_date_snapshots(
     are known, so the full-season value is written separately by write_team_ratings.
 
     Args:
-        elo_snapshots: Per-game-date snapshots from compute_elo_ratings().
-        season:        Football season year.
-        skip_date:     A date to skip (typically today's pipeline run date, which
-                       is already written with full RPI by write_team_ratings).
+        elo_snapshots:  Per-game-date snapshots from compute_elo_ratings().
+        season:         Football season year.
+        skip_date:      A date to skip (typically today's pipeline run date, which
+                        is already written with full RPI by write_team_ratings).
+        known_schools:  When provided, only schools in this set are written.
+                        Use to exclude out-of-state opponents that lack a row in
+                        the schools table.
     """
     data = [
         (school, season, snap_date, elo, None, snap_games.get(school, 0))
         for snap_date, snap_ratings, snap_games in elo_snapshots
         if snap_date != skip_date
         for school, elo in snap_ratings.items()
+        if known_schools is None or school in known_schools
     ]
     if not data:
         return 0
@@ -1075,11 +1080,13 @@ def get_region_finish_scenarios(
 
 @flow(name="Region Scenarios Data Flow")
 def region_scenarios_data_flow(
-    season: int = 2025,
+    season: int | None = None,
     clazz: int | None = None,
     region: int | None = None,
 ) -> dict[str, object]:
     """Region Scenarios Data Flow"""
+    if season is None:
+        season = date.today().year
     logger = get_run_logger()
     logger.info(
         "Running region scenarios data flow for season %d, class %d, region %d",
@@ -1099,9 +1106,14 @@ def region_scenarios_data_flow(
         all_games, all_schools, elo_cfg, prior_ratings=prior_elo or None
     )
     rpi = compute_rpi(all_games)
+    # Restrict to MS schools only — out-of-state opponents get Elo ratings during
+    # computation (for win probability accuracy) but have no row in schools/school_seasons.
+    ms_schools = {s.school for s in all_schools}
+    ms_elo_ratings = {k: v for k, v in elo_ratings.items() if k in ms_schools}
+    ms_games_count = {k: v for k, v in games_count.items() if k in ms_schools}
     flow_run_date = date.today()
-    write_team_ratings(elo_ratings, rpi, games_count, season, as_of_date=flow_run_date)
-    n_snap = write_elo_game_date_snapshots(elo_snapshots, season, skip_date=flow_run_date)
+    write_team_ratings(ms_elo_ratings, rpi, ms_games_count, season, as_of_date=flow_run_date)
+    n_snap = write_elo_game_date_snapshots(elo_snapshots, season, skip_date=flow_run_date, known_schools=ms_schools)
     logger.info("Wrote team ratings for %d teams; %d historical game-date snapshot rows", len(elo_ratings), n_snap)
 
     # -----------------------------------------------------------------------
@@ -1153,7 +1165,7 @@ def region_scenarios_data_flow(
 
 
 @flow(name="Backfill Historical Snapshots")
-def backfill_historical_snapshots(season: int = 2025) -> None:
+def backfill_historical_snapshots(season: int | None = None) -> None:
     """Populate dated snapshots for every computed table across all game-dates in a season.
 
     Run this once after importing a full historical season's games.  It writes
@@ -1166,6 +1178,8 @@ def backfill_historical_snapshots(season: int = 2025) -> None:
     accurate because fetch_completed_pairs and fetch_remaining_pairs are
     cutoff-date filtered.
     """
+    if season is None:
+        season = date.today().year
     logger = get_run_logger()
 
     all_games = fetch_all_season_games(season)
@@ -1176,10 +1190,13 @@ def backfill_historical_snapshots(season: int = 2025) -> None:
         all_games, all_schools, elo_cfg, prior_ratings=prior_elo or None
     )
     rpi = compute_rpi(all_games)
+    ms_schools = {s.school for s in all_schools}
+    ms_elo_ratings = {k: v for k, v in elo_ratings.items() if k in ms_schools}
+    ms_games_count = {k: v for k, v in games_count.items() if k in ms_schools}
 
     today = date.today()
-    write_team_ratings(elo_ratings, rpi, games_count, season, as_of_date=today)
-    n_snap = write_elo_game_date_snapshots(elo_snapshots, season, skip_date=today)
+    write_team_ratings(ms_elo_ratings, rpi, ms_games_count, season, as_of_date=today)
+    n_snap = write_elo_game_date_snapshots(elo_snapshots, season, skip_date=today, known_schools=ms_schools)
     logger.info("Wrote %d Elo game-date snapshot rows for season %d", n_snap, season)
 
     if not elo_snapshots:

@@ -140,7 +140,7 @@ CREATE INDEX IF NOT EXISTS idx_games_helmet_design
 
 CREATE OR REPLACE VIEW schools_effective AS
 SELECT
-  school, city, zip, maxpreps_id, maxpreps_url, maxpreps_logo
+  school, city, zip, maxpreps_id, maxpreps_url, maxpreps_logo,
   COALESCE((overrides->>'latitude')::float,    latitude)        AS latitude,
   COALESCE((overrides->>'longitude')::float,   longitude)       AS longitude,
   COALESCE(overrides->>'mascot',               mascot)          AS mascot,
