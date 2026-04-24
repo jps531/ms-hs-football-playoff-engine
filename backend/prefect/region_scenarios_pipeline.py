@@ -5,6 +5,7 @@ and ``determine_odds()`` from ``scenarios.py``, and writes results to the
 ``region_standings`` table.
 """
 
+import bisect
 from dataclasses import dataclass as _dataclass
 from datetime import date
 
@@ -112,18 +113,26 @@ def fetch_region_teams(clazz: int, region: int, season: int) -> list[str]:
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} All Season Games for Win Probability")
-def fetch_all_season_games(season: int) -> list[Game]:
-    """Fetch all final, scored games for the season (used to build Elo/RPI ratings)."""
+def fetch_all_season_games(season: int, cutoff_date: date | None = None) -> list[Game]:
+    """Fetch all final, scored games for the season (used to build Elo/RPI ratings).
+
+    Args:
+        cutoff_date: When provided, only games on or before this date are returned.
+                     Used by the historical backfill flow to reconstruct past state.
+    """
+    where = (
+        "WHERE season=%s AND final=TRUE AND points_for IS NOT NULL AND points_against IS NOT NULL"
+        + (" AND date <= %s" if cutoff_date is not None else "")
+    )
+    params: tuple = (season, cutoff_date) if cutoff_date is not None else (season,)
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT school, date, season, location_id, points_for, points_against, "
                 "       round, kickoff_time, opponent, result, game_status, source, "
                 "       location, region_game, final, overtime "
-                "FROM games_effective "
-                "WHERE season=%s AND final=TRUE "
-                "  AND points_for IS NOT NULL AND points_against IS NOT NULL",
-                (season,),
+                f"FROM games_effective {where}",
+                params,
             )
             return [
                 Game(
@@ -239,17 +248,67 @@ def write_team_ratings(
     return len(data)
 
 
+@task(retries=2, retry_delay_seconds=10, task_run_name="Write {season} Elo Game-Date Snapshots")
+def write_elo_game_date_snapshots(
+    elo_snapshots: list[tuple[date, dict[str, float], dict[str, int]]],
+    season: int,
+    skip_date: date,
+) -> int:
+    """Persist per-game-date Elo snapshots to team_ratings for timeline queries.
+
+    Each entry in elo_snapshots corresponds to one unique game-date in the season.
+    rpi is NULL for historical snapshots — RPI is only meaningful when all games
+    are known, so the full-season value is written separately by write_team_ratings.
+
+    Args:
+        elo_snapshots: Per-game-date snapshots from compute_elo_ratings().
+        season:        Football season year.
+        skip_date:     A date to skip (typically today's pipeline run date, which
+                       is already written with full RPI by write_team_ratings).
+    """
+    data = [
+        (school, season, snap_date, elo, None, snap_games.get(school, 0))
+        for snap_date, snap_ratings, snap_games in elo_snapshots
+        if snap_date != skip_date
+        for school, elo in snap_ratings.items()
+    ]
+    if not data:
+        return 0
+
+    sql = """
+        INSERT INTO team_ratings (school, season, as_of_date, elo, rpi, games_played, computed_at)
+        VALUES %s
+        ON CONFLICT (school, season, as_of_date) DO UPDATE SET
+            elo          = EXCLUDED.elo,
+            games_played = EXCLUDED.games_played,
+            computed_at  = EXCLUDED.computed_at
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, data, template="(%s,%s,%s,%s,%s,%s,NOW())", page_size=500)
+        conn.commit()
+
+    return len(data)
+
+
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Completed Region Games for {teams}")
-def fetch_completed_pairs(teams: list[str], season: int) -> list[CompletedGame]:
-    """Fetch and normalize all finalized region games among the given teams."""
+def fetch_completed_pairs(teams: list[str], season: int, cutoff_date: date | None = None) -> list[CompletedGame]:
+    """Fetch and normalize all finalized region games among the given teams.
+
+    Args:
+        cutoff_date: When provided, only games on or before this date are returned.
+                     Used by the historical backfill flow to reconstruct past state.
+    """
+    cutoff_clause = " AND date <= %s" if cutoff_date is not None else ""
+    params: tuple = (season, cutoff_date, teams, teams) if cutoff_date is not None else (season, teams, teams)
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT school, opponent, date, result, points_for, points_against "
                 "FROM games_effective "
-                "WHERE season=%s AND final=TRUE AND region_game=TRUE "
+                f"WHERE season=%s AND final=TRUE AND region_game=TRUE{cutoff_clause} "
                 "  AND school = ANY(%s) AND opponent = ANY(%s)",
-                (season, teams, teams),
+                params,
             )
             rows = cur.fetchall()
 
@@ -274,12 +333,24 @@ def fetch_completed_pairs(teams: list[str], season: int) -> list[CompletedGame]:
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Remaining Region Games for {teams}")
-def fetch_remaining_pairs(teams: list[str], season: int) -> list[RemainingGame]:
+def fetch_remaining_pairs(teams: list[str], season: int, cutoff_date: date | None = None) -> list[RemainingGame]:
     """Fetch all unfinished region game pairs (deduplicated, canonical order) with location.
 
     Returns one RemainingGame per unplayed contest.  ``location_a`` is the
     location from the lex-first team's perspective ('home'/'away'/'neutral').
+
+    Args:
+        cutoff_date: When provided, treats games with date > cutoff_date as
+                     remaining (historical reconstruction mode). Without it,
+                     fetches games currently marked final=FALSE.
     """
+    if cutoff_date is not None:
+        game_filter = "date > %s AND region_game=TRUE"
+        params: tuple = (season, cutoff_date, teams, teams)
+    else:
+        game_filter = "final=FALSE AND region_game=TRUE"
+        params = (season, teams, teams)
+
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -298,10 +369,10 @@ def fetch_remaining_pairs(teams: list[str], season: int) -> list[RemainingGame]:
                 "      ELSE 'neutral'"
                 "    END AS location_a"
                 "  FROM games_effective"
-                "  WHERE season=%s AND final=FALSE AND region_game=TRUE"
+                f"  WHERE season=%s AND {game_filter}"
                 "    AND school = ANY(%s) AND opponent = ANY(%s)"
                 ") SELECT DISTINCT ON (a, b) a, b, location_a FROM cand",
-                (season, teams, teams),
+                params,
             )
             return [RemainingGame(a, b, loc) for a, b, loc in cur.fetchall()]
 
@@ -729,8 +800,9 @@ def get_region_seeding_odds(
     region: int,
     season: int,
     elo_ratings: dict[str, float] | None = None,
-    elo_snapshots: list[tuple[date, dict[str, float]]] | None = None,
+    elo_snapshots: list[tuple[date, dict[str, float], dict[str, int]]] | None = None,
     elo_config: EloConfig | None = None,
+    cutoff_date: date | None = None,
 ) -> RegionSeedingData:
     """Phase 1: fetch games, enumerate outcomes, and return seeding odds.
 
@@ -749,6 +821,9 @@ def get_region_seeding_odds(
         elo_snapshots: Date-ordered rating snapshots paired with
                        ``elo_ratings``; ignored when ``elo_ratings`` is None.
         elo_config:    Elo configuration.  Defaults to ``EloConfig()``.
+        cutoff_date:   When provided, only games on or before this date are
+                       treated as completed; later games are treated as remaining.
+                       Used by the historical backfill flow.
 
     Returns:
         A ``RegionSeedingData`` containing unweighted and weighted seeding
@@ -757,8 +832,8 @@ def get_region_seeding_odds(
     teams = fetch_region_teams(clazz, region, season)
     if not teams:
         raise SystemExit("No teams found.")
-    completed = fetch_completed_pairs(teams, season)
-    remaining = fetch_remaining_pairs(teams, season)
+    completed = fetch_completed_pairs(teams, season, cutoff_date=cutoff_date)
+    remaining = fetch_remaining_pairs(teams, season, cutoff_date=cutoff_date)
 
     win_prob_fn: WinProbFn | None = None
     if elo_ratings is not None:
@@ -794,6 +869,7 @@ def get_region_finish_scenarios(
     season: int,
     seeding_data: RegionSeedingData,
     matchup_prob_fn: MatchupProbFn | None = None,
+    as_of_date: date | None = None,
 ):
     """Phase 2: compute bracket/home odds and write results to DB.
 
@@ -810,6 +886,9 @@ def get_region_finish_scenarios(
         matchup_prob_fn: Elo-based matchup probability function built from all
                          regions in the class.  Falls back to equal 50/50 when
                          ``None``.
+        as_of_date:      Date to write snapshots for.  Defaults to today.
+                         When provided explicitly (backfill mode), skips the
+                         background margin-sensitivity upgrade.
     """
     logger = get_run_logger()
 
@@ -888,7 +967,8 @@ def get_region_finish_scenarios(
     }
 
     region_standings = fetch_region_standings(clazz, region, season)
-    run_date = date.today()
+    run_date = as_of_date if as_of_date is not None else date.today()
+    is_backfill = as_of_date is not None
 
     logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
     logger.info("Region standings: %s", region_standings)
@@ -959,15 +1039,17 @@ def get_region_finish_scenarios(
             margin_compute_status="pending",
         )
         # Submit background upgrade — runs full margin enumeration asynchronously.
-        upgrade_region_scenarios.submit(
-            clazz,
-            region,
-            season,
-            as_of_date=run_date,
-            teams=teams,
-            completed=completed,
-            remaining=remaining,
-        )
+        # Skipped in backfill mode (historical data is already final).
+        if not is_backfill:
+            upgrade_region_scenarios.submit(
+                clazz,
+                region,
+                season,
+                as_of_date=run_date,
+                teams=teams,
+                completed=completed,
+                remaining=remaining,
+            )
     else:
         # R ≥ 7: win/loss-only permanently.
         precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
@@ -1019,7 +1101,8 @@ def region_scenarios_data_flow(
     rpi = compute_rpi(all_games)
     flow_run_date = date.today()
     write_team_ratings(elo_ratings, rpi, games_count, season, as_of_date=flow_run_date)
-    logger.info("Wrote team ratings for %d teams", len(elo_ratings))
+    n_snap = write_elo_game_date_snapshots(elo_snapshots, season, skip_date=flow_run_date)
+    logger.info("Wrote team ratings for %d teams; %d historical game-date snapshot rows", len(elo_ratings), n_snap)
 
     # -----------------------------------------------------------------------
     # Phase 1: enumerate seeding odds for every region.
@@ -1067,3 +1150,81 @@ def region_scenarios_data_flow(
             clazz, region, season, seeding[(clazz, region)], matchup_fns[clazz]
         )
     return scenario_dicts
+
+
+@flow(name="Backfill Historical Snapshots")
+def backfill_historical_snapshots(season: int = 2025) -> None:
+    """Populate dated snapshots for every computed table across all game-dates in a season.
+
+    Run this once after importing a full historical season's games.  It writes
+    team_ratings, region_standings, region_scenarios, and region_computation_state
+    rows for each unique game-date so the frontend timeline can serve any past
+    date without on-the-fly recomputation.
+
+    Note: region_standings W/L records reflect whatever is in the DB when this
+    flow runs (the stored proc has no date filter).  Seeding odds are historically
+    accurate because fetch_completed_pairs and fetch_remaining_pairs are
+    cutoff-date filtered.
+    """
+    logger = get_run_logger()
+
+    all_games = fetch_all_season_games(season)
+    all_schools = fetch_all_season_schools(season)
+    elo_cfg = EloConfig()
+    prior_elo = fetch_prior_season_elo(season - 1)
+    elo_ratings, games_count, elo_snapshots = compute_elo_ratings(
+        all_games, all_schools, elo_cfg, prior_ratings=prior_elo or None
+    )
+    rpi = compute_rpi(all_games)
+
+    today = date.today()
+    write_team_ratings(elo_ratings, rpi, games_count, season, as_of_date=today)
+    n_snap = write_elo_game_date_snapshots(elo_snapshots, season, skip_date=today)
+    logger.info("Wrote %d Elo game-date snapshot rows for season %d", n_snap, season)
+
+    if not elo_snapshots:
+        logger.info("No game-date snapshots — nothing to backfill.")
+        return
+
+    snap_dates = [snap[0] for snap in elo_snapshots]
+
+    def _ratings_at_cutoff(cutoff: date) -> dict[str, float]:
+        """Return Elo ratings as of cutoff by finding the last snapshot on or before it."""
+        idx = bisect.bisect_right(snap_dates, cutoff) - 1
+        return elo_snapshots[idx][1] if idx >= 0 else elo_ratings
+
+    class_regions: dict[int, list[int]] = {
+        c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)
+    }
+
+    for cutoff_date in snap_dates:
+        logger.info("Backfilling region standings/scenarios for %s", cutoff_date)
+        ratings_at = _ratings_at_cutoff(cutoff_date)
+
+        # Phase 1: seeding odds per region.  Pass ratings_at and empty snapshots
+        # so win probability for remaining games uses cutoff-date ratings only.
+        seeding: dict[tuple[int, int], RegionSeedingData] = {}
+        for c, regions in class_regions.items():
+            for r in regions:
+                seeding[(c, r)] = get_region_seeding_odds(
+                    c, r, season,
+                    elo_ratings=ratings_at,
+                    elo_snapshots=[],
+                    elo_config=elo_cfg,
+                    cutoff_date=cutoff_date,
+                )
+
+        # Build per-class matchup probability functions from cutoff-date ratings.
+        matchup_fns: dict[int, MatchupProbFn] = {}
+        for c, regions in class_regions.items():
+            class_weighted_odds = {r: seeding[(c, r)].odds_weighted for r in regions}
+            matchup_fns[c] = make_matchup_prob_fn(ratings_at, class_weighted_odds, elo_cfg)
+
+        # Phase 2: bracket/home odds and write all results with as_of_date=cutoff_date.
+        for c, regions in class_regions.items():
+            for r in regions:
+                get_region_finish_scenarios(
+                    c, r, season, seeding[(c, r)], matchup_fns[c], as_of_date=cutoff_date
+                )
+
+    logger.info("Backfill complete for season %d: %d dates processed", season, len(snap_dates))

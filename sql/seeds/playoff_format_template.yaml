@@ -1,0 +1,92 @@
+# Playoff format template for a new MHSAA season.
+# Copy this file, rename it (e.g. playoff_formats_2027.yaml), fill in the
+# values, and run:
+#   uv run python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_2027.yaml
+#
+# The script is idempotent: re-running for the same season skips existing rows.
+#
+# Slot rules:
+# - One slot per first-round game.
+# - home_region/home_seed = the designated home team (higher seed per rules).
+# - adjacent slot pairs (1,2), (3,4), etc. feed the same round-2 game.
+# - north_south: 'N' = North bracket half, 'S' = South bracket half.
+#   The state-championship site rule: South hosts in odd years.
+
+season: 2027
+
+classes:
+  - class: 5
+    num_regions: 4
+    seeds_per_region: 4
+    num_rounds: 4          # 16-team bracket
+    notes: "5A — 16-team bracket"
+    slots:
+      # Round-2 game A (North): winner of slot 1 vs winner of slot 2
+      - {slot: 1, home_region: 1, home_seed: 1, away_region: 2, away_seed: 4, north_south: N}
+      - {slot: 2, home_region: 2, home_seed: 2, away_region: 1, away_seed: 3, north_south: N}
+      # Round-2 game B (North): winner of slot 3 vs winner of slot 4
+      - {slot: 3, home_region: 2, home_seed: 1, away_region: 1, away_seed: 4, north_south: N}
+      - {slot: 4, home_region: 1, home_seed: 2, away_region: 2, away_seed: 3, north_south: N}
+      # Round-2 game C (South): winner of slot 5 vs winner of slot 6
+      - {slot: 5, home_region: 3, home_seed: 1, away_region: 4, away_seed: 4, north_south: S}
+      - {slot: 6, home_region: 4, home_seed: 2, away_region: 3, away_seed: 3, north_south: S}
+      # Round-2 game D (South): winner of slot 7 vs winner of slot 8
+      - {slot: 7, home_region: 4, home_seed: 1, away_region: 3, away_seed: 4, north_south: S}
+      - {slot: 8, home_region: 3, home_seed: 2, away_region: 4, away_seed: 3, north_south: S}
+
+  - class: 6
+    num_regions: 4
+    seeds_per_region: 4
+    num_rounds: 4
+    notes: "6A — 16-team bracket"
+    slots:
+      - {slot: 1, home_region: 1, home_seed: 1, away_region: 2, away_seed: 4, north_south: N}
+      - {slot: 2, home_region: 2, home_seed: 2, away_region: 1, away_seed: 3, north_south: N}
+      - {slot: 3, home_region: 2, home_seed: 1, away_region: 1, away_seed: 4, north_south: N}
+      - {slot: 4, home_region: 1, home_seed: 2, away_region: 2, away_seed: 3, north_south: N}
+      - {slot: 5, home_region: 3, home_seed: 1, away_region: 4, away_seed: 4, north_south: S}
+      - {slot: 6, home_region: 4, home_seed: 2, away_region: 3, away_seed: 3, north_south: S}
+      - {slot: 7, home_region: 4, home_seed: 1, away_region: 3, away_seed: 4, north_south: S}
+      - {slot: 8, home_region: 3, home_seed: 2, away_region: 4, away_seed: 3, north_south: S}
+
+  - class: 7
+    num_regions: 4
+    seeds_per_region: 4
+    num_rounds: 4
+    notes: "7A — 16-team bracket"
+    slots:
+      - {slot: 1, home_region: 1, home_seed: 1, away_region: 2, away_seed: 4, north_south: N}
+      - {slot: 2, home_region: 2, home_seed: 2, away_region: 1, away_seed: 3, north_south: N}
+      - {slot: 3, home_region: 2, home_seed: 1, away_region: 1, away_seed: 4, north_south: N}
+      - {slot: 4, home_region: 1, home_seed: 2, away_region: 2, away_seed: 3, north_south: N}
+      - {slot: 5, home_region: 3, home_seed: 1, away_region: 4, away_seed: 4, north_south: S}
+      - {slot: 6, home_region: 4, home_seed: 2, away_region: 3, away_seed: 3, north_south: S}
+      - {slot: 7, home_region: 4, home_seed: 1, away_region: 3, away_seed: 4, north_south: S}
+      - {slot: 8, home_region: 3, home_seed: 2, away_region: 4, away_seed: 3, north_south: S}
+
+  - class: 1
+    num_regions: 8
+    seeds_per_region: 4
+    num_rounds: 5          # 32-team bracket
+    notes: "1A — 32-team bracket"
+    slots:
+      # Slots 1-8 = North (Regions 1-4), slots 9-16 = South (Regions 5-8)
+      - {slot:  1, home_region: 1, home_seed: 1, away_region: 2, away_seed: 4, north_south: N}
+      - {slot:  2, home_region: 3, home_seed: 2, away_region: 4, away_seed: 3, north_south: N}
+      - {slot:  3, home_region: 2, home_seed: 1, away_region: 1, away_seed: 4, north_south: N}
+      - {slot:  4, home_region: 4, home_seed: 2, away_region: 3, away_seed: 3, north_south: N}
+      - {slot:  5, home_region: 3, home_seed: 1, away_region: 4, away_seed: 4, north_south: N}
+      - {slot:  6, home_region: 1, home_seed: 2, away_region: 2, away_seed: 3, north_south: N}
+      - {slot:  7, home_region: 4, home_seed: 1, away_region: 3, away_seed: 4, north_south: N}
+      - {slot:  8, home_region: 2, home_seed: 2, away_region: 1, away_seed: 3, north_south: N}
+      - {slot:  9, home_region: 5, home_seed: 1, away_region: 6, away_seed: 4, north_south: S}
+      - {slot: 10, home_region: 7, home_seed: 2, away_region: 8, away_seed: 3, north_south: S}
+      - {slot: 11, home_region: 6, home_seed: 1, away_region: 5, away_seed: 4, north_south: S}
+      - {slot: 12, home_region: 8, home_seed: 2, away_region: 7, away_seed: 3, north_south: S}
+      - {slot: 13, home_region: 7, home_seed: 1, away_region: 8, away_seed: 4, north_south: S}
+      - {slot: 14, home_region: 5, home_seed: 2, away_region: 6, away_seed: 3, north_south: S}
+      - {slot: 15, home_region: 8, home_seed: 1, away_region: 7, away_seed: 4, north_south: S}
+      - {slot: 16, home_region: 6, home_seed: 2, away_region: 5, away_seed: 3, north_south: S}
+
+  # Repeat the same slot structure for classes 2, 3, 4 (same bracket pairing as class 1).
+  # Copy and paste the class 1 block above, changing only the class number and notes.

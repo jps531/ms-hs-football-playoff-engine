@@ -293,7 +293,7 @@ class TestComputeEloRatings:
     def test_snapshots_chronological(self):
         """Snapshots are returned in ascending date order."""
         _, _, snapshots = compute_elo_ratings(GAMES_4, SCHOOLS_4, EloConfig())
-        dates = [d for d, _ in snapshots]
+        dates = [snap[0] for snap in snapshots]
         assert dates == sorted(dates)
 
     def test_snapshots_one_per_game_date(self):

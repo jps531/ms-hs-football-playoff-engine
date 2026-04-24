@@ -138,7 +138,7 @@ def compute_elo_ratings(
     schools: list[School],
     config: EloConfig,
     prior_ratings: dict[str, float] | None = None,
-) -> tuple[dict[str, float], dict[str, int], list[tuple[date, dict[str, float]]]]:
+) -> tuple[dict[str, float], dict[str, int], list[tuple[date, dict[str, float], dict[str, int]]]]:
     """Compute Elo ratings for all teams from completed game history.
 
     Games are processed in chronological order.  The games table has one row
@@ -166,9 +166,11 @@ def compute_elo_ratings(
         Final Elo rating for every team seen in the data.
     games_count : dict[str, int]
         Number of completed games processed per team.
-    snapshots : list[tuple[date, dict[str, float]]]
+    snapshots : list[tuple[date, dict[str, float], dict[str, int]]]
         Ratings snapshot after each unique game-date, in chronological order.
-        Used by ``make_win_prob_fn`` for date-conditioned queries.
+        Each entry is (game_date, ratings_at_that_date, games_count_at_that_date).
+        Used by ``make_win_prob_fn`` for date-conditioned queries and by the
+        backfill pipeline to persist per-game-date Elo rows.
     """
     schools_by_name: dict[str, School] = {s.school: s for s in schools}
 
@@ -193,7 +195,7 @@ def compute_elo_ratings(
     valid.sort(key=lambda g: g.date)
 
     processed: set[tuple[str, str, str]] = set()
-    snapshots: list[tuple[date, dict[str, float]]] = []
+    snapshots: list[tuple[date, dict[str, float], dict[str, int]]] = []
     current_date: date | None = None
 
     for g in valid:
@@ -208,7 +210,7 @@ def compute_elo_ratings(
 
         # Record snapshot when the date advances (after all games on previous date)
         if current_date is not None and g.date != current_date:
-            snapshots.append((current_date, dict(ratings)))
+            snapshots.append((current_date, dict(ratings), dict(games_count)))
         current_date = g.date
 
         # Ensure both teams have a rating (handles out-of-state / untracked opponents)
@@ -260,7 +262,7 @@ def compute_elo_ratings(
 
     # Record final snapshot for the last game-date
     if current_date is not None:
-        snapshots.append((current_date, dict(ratings)))
+        snapshots.append((current_date, dict(ratings), dict(games_count)))
 
     return ratings, dict(games_count), snapshots
 
@@ -385,7 +387,7 @@ def make_win_prob_fn(
     final_ratings, _games_count, snapshots = compute_elo_ratings(games, schools, cfg)
 
     # Parallel list of snapshot dates for bisect
-    snapshot_dates: list[date] = [d for d, _ in snapshots]
+    snapshot_dates: list[date] = [snap[0] for snap in snapshots]
 
     def _ratings_at(target: date) -> dict[str, float]:
         """Return the ratings snapshot for the most recent game date on or before target."""
@@ -442,7 +444,7 @@ def make_win_prob_fn(
 
 def make_win_prob_fn_from_ratings(
     final_ratings: dict[str, float],
-    snapshots: list[tuple[date, dict[str, float]]],
+    snapshots: list[tuple[date, dict[str, float], dict[str, int]]],
     config: EloConfig | None = None,
 ) -> WinProbFn:
     """Build a WinProbFn closure from already-computed ratings and snapshots.
@@ -453,7 +455,7 @@ def make_win_prob_fn_from_ratings(
     no re-serialization of the full game list is needed.
     """
     cfg = config or EloConfig()
-    snapshot_dates: list[date] = [d for d, _ in snapshots]
+    snapshot_dates: list[date] = [snap[0] for snap in snapshots]
 
     def _ratings_at(target: date) -> dict[str, float]:
         """Return the ratings snapshot for the most recent game date on or before target."""

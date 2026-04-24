@@ -6,7 +6,7 @@ from prefect import serve
 
 from backend.prefect.ahsfhs_schedule_pipeline import ahsfhs_schedule_data_flow
 from backend.prefect.maxpreps_data_pipeline import maxpreps_data_flow
-from backend.prefect.region_scenarios_pipeline import region_scenarios_data_flow
+from backend.prefect.region_scenarios_pipeline import backfill_historical_snapshots, region_scenarios_data_flow
 from backend.prefect.regions_data_pipeline import regions_data_flow
 from backend.prefect.school_info_pipeline import school_info_data_flow
 
@@ -19,6 +19,7 @@ async def main():
         await school_info_data_flow.to_deployment("school-info-data-pipeline"),
         await ahsfhs_schedule_data_flow.to_deployment("ahsfhs-schedule-data-pipeline"),
         await region_scenarios_data_flow.to_deployment("region-scenarios-data-pipeline"),
+        await backfill_historical_snapshots.to_deployment("backfill-historical-snapshots"),
     )
 
 

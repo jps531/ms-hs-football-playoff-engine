@@ -159,12 +159,34 @@ Run these in order — each depends on the previous step's data being in the dat
 
 Re-run these if MHSAA reclassifies schools (every two years) or if the playoff format changes.
 
+The `playoff_formats` and `playoff_format_slots` tables (which define the bracket structure) are **automatically seeded for 2025** by `sql/init.sql` when the database is created — no manual step is needed. See [New Season Setup](#new-season-setup) below for adding a future season.
+
 #### Once per week (during the season)
 
 1. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** — fetches the latest scores and marks games `final=TRUE`
 2. Do a "Quick Run" of the **Region Scenarios Pipeline** — reads the updated game results, runs the tiebreaker engine, and writes pre-computed standings odds and scenario data to `region_standings` and `region_scenarios`
 
 The API reads its data from these pre-computed snapshots; run this pipeline before serving fresh results.
+
+#### Once per season (after importing a full historical season)
+
+After the AHSFHS and Region Scenarios pipelines have run for the first time on a season, run the **Backfill Historical Snapshots** pipeline from the [Local Prefect UI](http://localhost:4200/deployments).
+
+This populates dated snapshots in `team_ratings`, `region_standings`, `region_scenarios`, and `region_computation_state` for each unique game-week so the timeline API can serve historical odds for any past date without recomputation. Only needs to run once per season (or again after re-importing a full season's games).
+
+### New Season Setup
+
+When MHSAA reclassifies schools (every two years) or the bracket structure changes, add playoff format data for the new season:
+
+1. Copy `sql/seeds/playoff_format_template.yaml` to `sql/seeds/playoff_formats_YYYY.yaml`
+2. Fill in the `season`, `classes`, and `slots` fields to match the MHSAA bracket
+3. Run:
+
+```
+uv run python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_YYYY.yaml
+```
+
+Use `--dry-run` first to preview what will be inserted. The script is idempotent — re-running for the same season skips rows that already exist.
 
 ## Development Reference
 
