@@ -1676,7 +1676,7 @@ wheels = [
 [[package]]
 name = "ms-hs-football-playoff-engine"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "fastapi", extra = ["standard"] },

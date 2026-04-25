@@ -1,6 +1,6 @@
 """Tests for scenario_serializers: round-trip fidelity for all serialization functions."""
 
-from backend.helpers.data_classes import GameResult, MarginCondition, RemainingGame
+from backend.helpers.data_classes import GameResult, MarginCondition, PDRankCondition, RemainingGame
 from backend.helpers.scenario_serializers import (
     deserialize_atom,
     deserialize_complete_scenarios,
@@ -97,6 +97,45 @@ def test_margin_condition_roundtrip_eq():
         threshold=2,
     )
     assert deserialize_condition(serialize_condition(mc)) == mc
+
+
+# ---------------------------------------------------------------------------
+# PDRankCondition serialization
+# ---------------------------------------------------------------------------
+
+
+def test_pd_rank_condition_serialize():
+    """serialize_condition produces the expected dict for a PDRankCondition."""
+    cond = PDRankCondition(team="Hamilton", rank=1, group=("Hamilton", "Hatley", "Walnut"))
+    d = serialize_condition(cond)
+    assert d == {
+        "type": "pd_rank_condition",
+        "team": "Hamilton",
+        "rank": 1,
+        "group": ["Hamilton", "Hatley", "Walnut"],
+    }
+
+
+def test_pd_rank_condition_roundtrip():
+    """A PDRankCondition survives a serialize → deserialize round-trip unchanged."""
+    cond = PDRankCondition(team="Hatley", rank=2, group=("Hamilton", "Hatley", "Walnut"))
+    assert deserialize_condition(serialize_condition(cond)) == cond
+
+
+def test_pd_rank_condition_group_is_tuple_after_roundtrip():
+    """The group field is restored as a tuple (not a list) after deserialization."""
+    cond = PDRankCondition(team="Walnut", rank=3, group=("Hamilton", "Hatley", "Walnut"))
+    result = deserialize_condition(serialize_condition(cond))
+    assert isinstance(result.group, tuple)
+
+
+def test_atom_roundtrip_with_pd_rank_condition():
+    """An atom mixing a GameResult and PDRankCondition round-trips correctly."""
+    atom = [
+        GameResult(winner="Hamilton", loser="Hatley", min_margin=1, max_margin=None),
+        PDRankCondition(team="Hamilton", rank=1, group=("Hamilton", "Hatley", "Walnut")),
+    ]
+    assert deserialize_atom(serialize_atom(atom)) == atom
 
 
 def test_serialize_condition_unknown_type_raises():

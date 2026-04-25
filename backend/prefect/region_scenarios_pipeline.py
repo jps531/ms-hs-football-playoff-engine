@@ -844,7 +844,8 @@ def get_region_seeding_odds(
     if elo_ratings is not None:
         win_prob_fn = make_win_prob_fn_from_ratings(elo_ratings, elo_snapshots or [], elo_config)
 
-    r = determine_scenarios(teams, completed, remaining, win_prob_fn=win_prob_fn)
+    R = len(remaining)
+    r = determine_scenarios(teams, completed, remaining, win_prob_fn=win_prob_fn, ignore_margins=(R > _R_ALWAYS_MARGIN))
 
     odds = determine_odds(
         teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom
@@ -1205,6 +1206,29 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
 
     snap_dates = [snap[0] for snap in elo_snapshots]
 
+    # Only backfill region standings/scenarios for dates when at least one region game
+    # has been completed.  Pre-region dates (all teams 0-0, R=max) trigger worst-case
+    # 12^R margin enumeration in determine_scenarios and produce no useful standings data.
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT date FROM games_effective "
+                "WHERE season=%s AND final=TRUE AND region_game=TRUE "
+                "ORDER BY date",
+                (season,),
+            )
+            region_cutoff_dates = [row[0] for row in cur.fetchall()]
+
+    if not region_cutoff_dates:
+        logger.info("No completed region games found — skipping region standings backfill.")
+        return
+
+    logger.info(
+        "Backfilling region standings for %d region-game dates (of %d total game dates)",
+        len(region_cutoff_dates),
+        len(snap_dates),
+    )
+
     def _ratings_at_cutoff(cutoff: date) -> dict[str, float]:
         """Return Elo ratings as of cutoff by finding the last snapshot on or before it."""
         idx = bisect.bisect_right(snap_dates, cutoff) - 1
@@ -1214,7 +1238,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)
     }
 
-    for cutoff_date in snap_dates:
+    for cutoff_date in region_cutoff_dates:
         logger.info("Backfilling region standings/scenarios for %s", cutoff_date)
         ratings_at = _ratings_at_cutoff(cutoff_date)
 
@@ -1244,4 +1268,4 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
                     c, r, season, seeding[(c, r)], matchup_fns[c], as_of_date=cutoff_date
                 )
 
-    logger.info("Backfill complete for season %d: %d dates processed", season, len(snap_dates))
+    logger.info("Backfill complete for season %d: %d dates processed", season, len(region_cutoff_dates))

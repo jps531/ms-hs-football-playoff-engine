@@ -82,6 +82,7 @@ services:
       - ./sql/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
       - ./sql/get_standings_for_region.sql:/docker-entrypoint-initdb.d/02_get_standings_for_region.sql:ro
       - ./sql/override_helpers.sql:/docker-entrypoint-initdb.d/03_override_helpers.sql:ro
+      - ./sql/seeds/locations_championship_stadiums.sql:/docker-entrypoint-initdb.d/04_locations_championship_stadiums.sql:ro
     networks:
       - mshsfootball
     healthcheck:

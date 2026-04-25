@@ -10,7 +10,7 @@ Round-trip guarantee:
     deserialize_complete_scenarios(serialize_complete_scenarios(cs)) == cs
 """
 
-from backend.helpers.data_classes import GameResult, MarginCondition
+from backend.helpers.data_classes import GameResult, MarginCondition, PDRankCondition
 
 # ---------------------------------------------------------------------------
 # Individual condition serialization
@@ -35,6 +35,13 @@ def serialize_condition(cond) -> dict:
             "op": cond.op,
             "threshold": cond.threshold,
         }
+    if isinstance(cond, PDRankCondition):
+        return {
+            "type": "pd_rank_condition",
+            "team": cond.team,
+            "rank": cond.rank,
+            "group": list(cond.group),
+        }
     raise TypeError(f"Cannot serialize condition of type {type(cond).__name__!r}")
 
 
@@ -54,6 +61,12 @@ def deserialize_condition(d: dict) -> GameResult | MarginCondition:
             sub=tuple(tuple(p) for p in d["sub"]),
             op=d["op"],
             threshold=d["threshold"],
+        )
+    if t == "pd_rank_condition":
+        return PDRankCondition(
+            team=d["team"],
+            rank=d["rank"],
+            group=tuple(d["group"]),
         )
     raise ValueError(f"Unknown condition type: {t!r}")
 
