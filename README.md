@@ -261,7 +261,7 @@ The report excludes pipeline files (same omit list as test coverage) and skips m
 
 ### API Reference
 
-All endpoints are under `/api/v1`. Interactive docs available at `/docs` when the server is running.
+All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running.
 
 #### Meta
 
