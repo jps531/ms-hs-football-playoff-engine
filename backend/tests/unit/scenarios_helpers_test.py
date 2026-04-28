@@ -256,6 +256,7 @@ class TestDetermineScenariosMonteCarlo:
         return games
 
     def _run(self, n_samples: int = 2_000):
+        """Run determine_scenarios with all remaining games and return the result."""
         remaining = self._make_remaining()
         return determine_scenarios(
             self.TEAMS,

@@ -8,9 +8,10 @@ and ``determine_odds()`` from ``scenarios.py``, and writes results to the
 import bisect
 from dataclasses import dataclass as _dataclass
 from datetime import date
+from typing import TypeVar
 
 from prefect import flow, get_run_logger, task
-from prefect.utilities.annotations import quote
+from prefect.utilities.annotations import quote as _prefect_quote
 from psycopg2.extras import Json, execute_values
 
 from backend.helpers.bracket_home_odds import (
@@ -58,6 +59,14 @@ from backend.helpers.win_probability import (
     make_matchup_prob_fn,
     make_win_prob_fn_from_ratings,
 )
+
+_T = TypeVar("_T")
+
+
+def quote(value: _T) -> _T:
+    """Wrap value with Prefect's quote to skip task-parameter introspection."""
+    return _prefect_quote(value)  # type: ignore[return-value]
+
 
 # -------------------------
 # Local helpers
@@ -121,9 +130,8 @@ def fetch_all_season_games(season: int, cutoff_date: date | None = None) -> list
         cutoff_date: When provided, only games on or before this date are returned.
                      Used by the historical backfill flow to reconstruct past state.
     """
-    where = (
-        "WHERE season=%s AND final=TRUE AND points_for IS NOT NULL AND points_against IS NOT NULL"
-        + (" AND date <= %s" if cutoff_date is not None else "")
+    where = "WHERE season=%s AND final=TRUE AND points_for IS NOT NULL AND points_against IS NOT NULL" + (
+        " AND date <= %s" if cutoff_date is not None else ""
     )
     params: tuple = (season, cutoff_date) if cutoff_date is not None else (season,)
     with get_database_connection() as conn:
@@ -227,7 +235,10 @@ def write_team_ratings(
     Returns:
         Number of rows written.
     """
-    data = [(school, season, as_of_date, elo, rpi.get(school), games_count.get(school, 0)) for school, elo in elo_ratings.items()]
+    data = [
+        (school, season, as_of_date, elo, rpi.get(school), games_count.get(school, 0))
+        for school, elo in elo_ratings.items()
+    ]
     if not data:
         return 0
 
@@ -733,10 +744,21 @@ def write_region_scenarios(
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(scenarios_sql, (season, str(clazz), region, as_of_date, remaining_json, atoms_json, scenarios_json))
+            cur.execute(
+                scenarios_sql, (season, str(clazz), region, as_of_date, remaining_json, atoms_json, scenarios_json)
+            )
             cur.execute(
                 state_sql,
-                (season, clazz, region, as_of_date, r_remaining, margin_sensitive, margin_compute_status, margin_computed_at),
+                (
+                    season,
+                    clazz,
+                    region,
+                    as_of_date,
+                    r_remaining,
+                    margin_sensitive,
+                    margin_compute_status,
+                    margin_computed_at,
+                ),
             )
         conn.commit()
 
@@ -802,7 +824,7 @@ def upgrade_region_scenarios(
 # R thresholds for margin computation mode
 _R_ALWAYS_MARGIN = 4  # R ≤ this: always full margin, synchronous
 _R_BACKGROUND_MAX = 6  # R ≤ this (and > _R_ALWAYS_MARGIN): win/loss first, upgrade in background
-_R_MAX_COMPUTE = 15   # R > this: Monte Carlo odds, skip scenario enumeration entirely
+_R_MAX_COMPUTE = 15  # R > this: Monte Carlo odds, skip scenario enumeration entirely
 # R > _R_BACKGROUND_MAX and R ≤ _R_MAX_COMPUTE: win/loss enumeration, no margin
 
 
@@ -854,15 +876,15 @@ def get_region_seeding_odds(
     R = len(remaining)
     use_sampling = R > _R_MAX_COMPUTE
     r = determine_scenarios(
-        teams, completed, remaining,
+        teams,
+        completed,
+        remaining,
         win_prob_fn=win_prob_fn,
         ignore_margins=use_sampling or (R > _R_ALWAYS_MARGIN),
         n_samples=50_000 if use_sampling else None,
     )
 
-    odds = determine_odds(
-        teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom
-    )
+    odds = determine_odds(teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
     odds_weighted = determine_odds(
         teams,
         r.first_counts_weighted,
@@ -932,7 +954,9 @@ def get_region_finish_scenarios(
     semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season)
 
     bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn)
-    second_round_home_marginal_w = compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn) if clazz <= 4 else {}
+    second_round_home_marginal_w = (
+        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn) if clazz <= 4 else {}
+    )
     quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn)
     semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn)
 
@@ -1144,7 +1168,9 @@ def region_scenarios_data_flow(
     ms_games_count = {k: v for k, v in games_count.items() if k in ms_schools}
     flow_run_date = date.today()
     write_team_ratings(quote(ms_elo_ratings), quote(rpi), quote(ms_games_count), season, as_of_date=flow_run_date)
-    n_snap = write_elo_game_date_snapshots(quote(elo_snapshots), season, skip_date=flow_run_date, known_schools=quote(ms_schools))
+    n_snap = write_elo_game_date_snapshots(
+        quote(elo_snapshots), season, skip_date=flow_run_date, known_schools=quote(ms_schools)
+    )
     logger.info("Wrote team ratings for %d teams; %d historical game-date snapshot rows", len(elo_ratings), n_snap)
 
     # Cache quoted versions to avoid re-quoting on every loop iteration.
@@ -1164,7 +1190,9 @@ def region_scenarios_data_flow(
             for r in [1, 2, 3, 4]:
                 seeding[(c, r)] = get_region_seeding_odds(c, r, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
     else:
-        seeding[(clazz, region)] = get_region_seeding_odds(clazz, region, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
+        seeding[(clazz, region)] = get_region_seeding_odds(
+            clazz, region, season, q_elo_ratings, q_elo_snapshots, elo_cfg
+        )
 
     # -----------------------------------------------------------------------
     # Build one MatchupProbFn per class using all-region weighted seeding odds.
@@ -1175,7 +1203,7 @@ def region_scenarios_data_flow(
         return list(range(1, 9)) if c <= 4 else list(range(1, 5))
 
     matchup_fns: dict[int, MatchupProbFn] = {}
-    for c in ({clazz} if clazz is not None else {1, 2, 3, 4, 5, 6, 7}):
+    for c in {clazz} if clazz is not None else {1, 2, 3, 4, 5, 6, 7}:
         class_weighted_odds = {r: seeding[(c, r)].odds_weighted for r in _regions_for(c) if (c, r) in seeding}
         matchup_fns[c] = make_matchup_prob_fn(elo_ratings, class_weighted_odds, elo_cfg)
 
@@ -1231,7 +1259,9 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
 
     today = date.today()
     write_team_ratings(quote(ms_elo_ratings), quote(rpi), quote(ms_games_count), season, as_of_date=today)
-    n_snap = write_elo_game_date_snapshots(quote(elo_snapshots), season, skip_date=today, known_schools=quote(ms_schools))
+    n_snap = write_elo_game_date_snapshots(
+        quote(elo_snapshots), season, skip_date=today, known_schools=quote(ms_schools)
+    )
     logger.info("Wrote %d Elo game-date snapshot rows for season %d", n_snap, season)
 
     if not elo_snapshots:
@@ -1247,9 +1277,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         idx = bisect.bisect_right(snap_dates, cutoff) - 1
         return elo_snapshots[idx][1] if idx >= 0 else elo_ratings
 
-    class_regions: dict[int, list[int]] = {
-        c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)
-    }
+    class_regions: dict[int, list[int]] = {c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)}
 
     for cutoff_date in snap_dates:
         logger.info("Backfilling region standings/scenarios for %s", cutoff_date)
@@ -1262,7 +1290,9 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         for c, regions in class_regions.items():
             for r in regions:
                 seeding[(c, r)] = get_region_seeding_odds(
-                    c, r, season,
+                    c,
+                    r,
+                    season,
                     elo_ratings=q_ratings_at,
                     elo_snapshots=quote([]),
                     elo_config=elo_cfg,

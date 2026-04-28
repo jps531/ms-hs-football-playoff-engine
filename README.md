@@ -173,7 +173,7 @@ Re-run these if MHSAA reclassifies schools (every two years) or if the playoff f
 
 The `playoff_formats` and `playoff_format_slots` tables (which define the bracket structure) are **automatically seeded for 2025** by `sql/init.sql` when the database is created — no manual step is needed. See [New Season Setup](#new-season-setup) below for adding a future season.
 
-#### Once per week (during the season)
+#### Once per week (regular season)
 
 1. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** — fetches the latest scores and marks games `final=TRUE`
 2. Do a "Quick Run" of the **Region Scenarios Pipeline** — reads the updated game results, runs the tiebreaker engine, and writes pre-computed standings odds and scenario data to `region_standings` and `region_scenarios`
@@ -182,13 +182,24 @@ The `playoff_formats` and `playoff_format_slots` tables (which define the bracke
 
 The API reads its data from these pre-computed snapshots; run this pipeline before serving fresh results.
 
+#### After each playoff round
+
+1. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** — fetches playoff scores and marks games `final=TRUE`
+2. Do a "Quick Run" of the **Playoff Bracket Update** pipeline — reads completed playoff results, marks eliminated teams, sets alive teams to deterministic 1.0/0.0 seeding odds, and writes one `region_standings` snapshot per class/region dated to that round's game date
+
+> **Season parameter:** This pipeline defaults to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
+
+Run this after each round concludes (first round, second round, semifinals, finals). The Region Scenarios Pipeline does **not** need to re-run during the playoffs — seedings are fully determined at that point.
+
 #### Once per season (after importing a full historical season)
 
 After the AHSFHS and Region Scenarios pipelines have run for the first time on a season, run the **Backfill Historical Snapshots** pipeline from the [Local Prefect UI](http://localhost:4200/deployments).
 
-> **Season parameter:** This pipeline defaults to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
-
 This populates dated snapshots in `team_ratings`, `region_standings`, `region_scenarios`, and `region_computation_state` for each unique game-week so the timeline API can serve historical odds for any past date without recomputation. Only needs to run once per season (or again after re-importing a full season's games).
+
+Then run the **Playoff Bracket Update** pipeline with the same historical season via a **Custom Run**. It is self-backfilling: it reads all completed playoff games for that season and writes one `region_standings` snapshot per playoff round date automatically — no separate per-round runs needed for past seasons.
+
+> **Season parameter:** These pipelines default to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
 
 ### New Season Setup
 
