@@ -10,6 +10,7 @@ from dataclasses import dataclass as _dataclass
 from datetime import date
 
 from prefect import flow, get_run_logger, task
+from prefect.utilities.annotations import quote
 from psycopg2.extras import Json, execute_values
 
 from backend.helpers.bracket_home_odds import (
@@ -383,14 +384,19 @@ def fetch_remaining_pairs(teams: list[str], season: int, cutoff_date: date | Non
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Region Standings for {region}-{clazz}A")
-def fetch_region_standings(clazz: int, region: int, season: int) -> list[Standings]:
-    """Fetch current overall and region W/L/T records via the ``get_standings_for_region`` stored proc."""
+def fetch_region_standings(clazz: int, region: int, season: int, cutoff_date: date | None = None) -> list[Standings]:
+    """Fetch overall and region W/L/T records via the ``get_standings_for_region`` stored proc.
+
+    Args:
+        cutoff_date: When provided, only games on or before this date are counted.
+                     Used by the historical backfill flow to reconstruct past records.
+    """
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT school, class, region, season, wins, losses, ties, region_wins, region_losses, region_ties "
-                "FROM get_standings_for_region(%s, %s)",
-                (clazz, region),
+                "FROM get_standings_for_region(%s, %s, %s, %s)",
+                (clazz, region, season, cutoff_date),
             )
             return [Standings(*r) for r in cur.fetchall()]
 
@@ -796,7 +802,8 @@ def upgrade_region_scenarios(
 # R thresholds for margin computation mode
 _R_ALWAYS_MARGIN = 4  # R ≤ this: always full margin, synchronous
 _R_BACKGROUND_MAX = 6  # R ≤ this (and > _R_ALWAYS_MARGIN): win/loss first, upgrade in background
-# R > this: win/loss only, permanently
+_R_MAX_COMPUTE = 15   # R > this: Monte Carlo odds, skip scenario enumeration entirely
+# R > _R_BACKGROUND_MAX and R ≤ _R_MAX_COMPUTE: win/loss enumeration, no margin
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Seeding Odds {season} {region}-{clazz}A")
@@ -845,7 +852,13 @@ def get_region_seeding_odds(
         win_prob_fn = make_win_prob_fn_from_ratings(elo_ratings, elo_snapshots or [], elo_config)
 
     R = len(remaining)
-    r = determine_scenarios(teams, completed, remaining, win_prob_fn=win_prob_fn, ignore_margins=(R > _R_ALWAYS_MARGIN))
+    use_sampling = R > _R_MAX_COMPUTE
+    r = determine_scenarios(
+        teams, completed, remaining,
+        win_prob_fn=win_prob_fn,
+        ignore_margins=use_sampling or (R > _R_ALWAYS_MARGIN),
+        n_samples=50_000 if use_sampling else None,
+    )
 
     odds = determine_odds(
         teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom
@@ -972,7 +985,7 @@ def get_region_finish_scenarios(
         for school, m in semifinals_home_marginal_w.items()
     }
 
-    region_standings = fetch_region_standings(clazz, region, season)
+    region_standings = fetch_region_standings(clazz, region, season, cutoff_date=as_of_date)
     run_date = as_of_date if as_of_date is not None else date.today()
     is_backfill = as_of_date is not None
 
@@ -1018,9 +1031,9 @@ def get_region_finish_scenarios(
             region,
             season,
             as_of_date=run_date,
-            remaining=remaining,
-            scenario_atoms=scenario_atoms,
-            complete_scenarios=complete_scenarios,
+            remaining=quote(remaining),
+            scenario_atoms=quote(scenario_atoms),
+            complete_scenarios=quote(complete_scenarios),
             r_remaining=R,
             margin_sensitive=True,
             margin_compute_status="not_needed",
@@ -1037,9 +1050,9 @@ def get_region_finish_scenarios(
             region,
             season,
             as_of_date=run_date,
-            remaining=remaining,
-            scenario_atoms=scenario_atoms,
-            complete_scenarios=complete_scenarios,
+            remaining=quote(remaining),
+            scenario_atoms=quote(scenario_atoms),
+            complete_scenarios=quote(complete_scenarios),
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="pending",
@@ -1056,8 +1069,25 @@ def get_region_finish_scenarios(
                 completed=completed,
                 remaining=remaining,
             )
+    elif R > _R_MAX_COMPUTE:
+        # Too many remaining games to enumerate scenarios: write empty atoms/scenarios.
+        # Monte Carlo odds are written by get_region_seeding_odds; scenario text is
+        # not meaningful or displayable at this R.
+        write_region_scenarios(
+            clazz,
+            region,
+            season,
+            as_of_date=run_date,
+            remaining=quote(remaining),
+            scenario_atoms=quote({}),
+            complete_scenarios=quote([]),
+            r_remaining=R,
+            margin_sensitive=False,
+            margin_compute_status="skipped",
+        )
+        return {}
     else:
-        # R ≥ 7: win/loss-only permanently.
+        # R > _R_BACKGROUND_MAX and R ≤ _R_MAX_COMPUTE: win/loss-only permanently.
         precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
         scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed_wl)
         complete_scenarios = enumerate_division_scenarios(
@@ -1068,9 +1098,9 @@ def get_region_finish_scenarios(
             region,
             season,
             as_of_date=run_date,
-            remaining=remaining,
-            scenario_atoms=scenario_atoms,
-            complete_scenarios=complete_scenarios,
+            remaining=quote(remaining),
+            scenario_atoms=quote(scenario_atoms),
+            complete_scenarios=quote(complete_scenarios),
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="skipped",
@@ -1113,9 +1143,13 @@ def region_scenarios_data_flow(
     ms_elo_ratings = {k: v for k, v in elo_ratings.items() if k in ms_schools}
     ms_games_count = {k: v for k, v in games_count.items() if k in ms_schools}
     flow_run_date = date.today()
-    write_team_ratings(ms_elo_ratings, rpi, ms_games_count, season, as_of_date=flow_run_date)
-    n_snap = write_elo_game_date_snapshots(elo_snapshots, season, skip_date=flow_run_date, known_schools=ms_schools)
+    write_team_ratings(quote(ms_elo_ratings), quote(rpi), quote(ms_games_count), season, as_of_date=flow_run_date)
+    n_snap = write_elo_game_date_snapshots(quote(elo_snapshots), season, skip_date=flow_run_date, known_schools=quote(ms_schools))
     logger.info("Wrote team ratings for %d teams; %d historical game-date snapshot rows", len(elo_ratings), n_snap)
+
+    # Cache quoted versions to avoid re-quoting on every loop iteration.
+    q_elo_ratings = quote(elo_ratings)
+    q_elo_snapshots = quote(elo_snapshots)
 
     # -----------------------------------------------------------------------
     # Phase 1: enumerate seeding odds for every region.
@@ -1125,12 +1159,12 @@ def region_scenarios_data_flow(
     if clazz is None or region is None:
         for c in [1, 2, 3, 4]:
             for r in [1, 2, 3, 4, 5, 6, 7, 8]:
-                seeding[(c, r)] = get_region_seeding_odds(c, r, season, elo_ratings, elo_snapshots, elo_cfg)
+                seeding[(c, r)] = get_region_seeding_odds(c, r, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
         for c in [5, 6, 7]:
             for r in [1, 2, 3, 4]:
-                seeding[(c, r)] = get_region_seeding_odds(c, r, season, elo_ratings, elo_snapshots, elo_cfg)
+                seeding[(c, r)] = get_region_seeding_odds(c, r, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
     else:
-        seeding[(clazz, region)] = get_region_seeding_odds(clazz, region, season, elo_ratings, elo_snapshots, elo_cfg)
+        seeding[(clazz, region)] = get_region_seeding_odds(clazz, region, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
 
     # -----------------------------------------------------------------------
     # Build one MatchupProbFn per class using all-region weighted seeding odds.
@@ -1153,14 +1187,14 @@ def region_scenarios_data_flow(
         for c in [1, 2, 3, 4]:
             scenario_dicts[c] = {}
             for r in [1, 2, 3, 4, 5, 6, 7, 8]:
-                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, seeding[(c, r)], matchup_fns[c])
+                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, quote(seeding[(c, r)]), matchup_fns[c])
         for c in [5, 6, 7]:
             scenario_dicts[c] = {}
             for r in [1, 2, 3, 4]:
-                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, seeding[(c, r)], matchup_fns[c])
+                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, quote(seeding[(c, r)]), matchup_fns[c])
     else:
         scenario_dicts.setdefault(clazz, {})[region] = get_region_finish_scenarios(
-            clazz, region, season, seeding[(clazz, region)], matchup_fns[clazz]
+            clazz, region, season, quote(seeding[(clazz, region)]), matchup_fns[clazz]
         )
     return scenario_dicts
 
@@ -1196,8 +1230,8 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
     ms_games_count = {k: v for k, v in games_count.items() if k in ms_schools}
 
     today = date.today()
-    write_team_ratings(ms_elo_ratings, rpi, ms_games_count, season, as_of_date=today)
-    n_snap = write_elo_game_date_snapshots(elo_snapshots, season, skip_date=today, known_schools=ms_schools)
+    write_team_ratings(quote(ms_elo_ratings), quote(rpi), quote(ms_games_count), season, as_of_date=today)
+    n_snap = write_elo_game_date_snapshots(quote(elo_snapshots), season, skip_date=today, known_schools=quote(ms_schools))
     logger.info("Wrote %d Elo game-date snapshot rows for season %d", n_snap, season)
 
     if not elo_snapshots:
@@ -1206,28 +1240,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
 
     snap_dates = [snap[0] for snap in elo_snapshots]
 
-    # Only backfill region standings/scenarios for dates when at least one region game
-    # has been completed.  Pre-region dates (all teams 0-0, R=max) trigger worst-case
-    # 12^R margin enumeration in determine_scenarios and produce no useful standings data.
-    with get_database_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT DISTINCT date FROM games_effective "
-                "WHERE season=%s AND final=TRUE AND region_game=TRUE "
-                "ORDER BY date",
-                (season,),
-            )
-            region_cutoff_dates = [row[0] for row in cur.fetchall()]
-
-    if not region_cutoff_dates:
-        logger.info("No completed region games found — skipping region standings backfill.")
-        return
-
-    logger.info(
-        "Backfilling region standings for %d region-game dates (of %d total game dates)",
-        len(region_cutoff_dates),
-        len(snap_dates),
-    )
+    logger.info("Backfilling region standings for %d game dates", len(snap_dates))
 
     def _ratings_at_cutoff(cutoff: date) -> dict[str, float]:
         """Return Elo ratings as of cutoff by finding the last snapshot on or before it."""
@@ -1238,9 +1251,10 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)
     }
 
-    for cutoff_date in region_cutoff_dates:
+    for cutoff_date in snap_dates:
         logger.info("Backfilling region standings/scenarios for %s", cutoff_date)
         ratings_at = _ratings_at_cutoff(cutoff_date)
+        q_ratings_at = quote(ratings_at)
 
         # Phase 1: seeding odds per region.  Pass ratings_at and empty snapshots
         # so win probability for remaining games uses cutoff-date ratings only.
@@ -1249,8 +1263,8 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
             for r in regions:
                 seeding[(c, r)] = get_region_seeding_odds(
                     c, r, season,
-                    elo_ratings=ratings_at,
-                    elo_snapshots=[],
+                    elo_ratings=q_ratings_at,
+                    elo_snapshots=quote([]),
                     elo_config=elo_cfg,
                     cutoff_date=cutoff_date,
                 )
@@ -1265,7 +1279,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         for c, regions in class_regions.items():
             for r in regions:
                 get_region_finish_scenarios(
-                    c, r, season, seeding[(c, r)], matchup_fns[c], as_of_date=cutoff_date
+                    c, r, season, quote(seeding[(c, r)]), matchup_fns[c], as_of_date=cutoff_date
                 )
 
-    logger.info("Backfill complete for season %d: %d dates processed", season, len(region_cutoff_dates))
+    logger.info("Backfill complete for season %d: %d dates processed", season, len(snap_dates))

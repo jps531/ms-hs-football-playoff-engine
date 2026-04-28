@@ -6,6 +6,7 @@ per-seed counts. No Prefect or database dependencies.
 """
 
 import logging
+import random
 from collections import defaultdict
 from itertools import permutations, product
 
@@ -137,6 +138,7 @@ def determine_scenarios(
     remaining: list[RemainingGame],
     win_prob_fn: WinProbFn | None = None,
     ignore_margins: bool = False,
+    n_samples: int | None = None,
 ) -> ScenarioResults:
     """Enumerate all seeding scenarios for a region and compute seed-count totals.
 
@@ -148,6 +150,12 @@ def determine_scenarios(
     counts are accumulated in a single pass.  When ``win_prob_fn`` is None,
     ``equal_win_prob`` is used, making weighted == unweighted / 2^R (i.e.
     ``denom_weighted == 1.0``).
+
+    When ``n_samples`` is set, uses Monte Carlo sampling instead of full 2^R
+    enumeration.  Each sample draws outcomes from Bernoulli(p) per game using
+    ``win_prob_fn``, so sample frequency is Elo-weighted by construction.
+    Implies ``ignore_margins=True``.  Use for large R (>15) where 2^R full
+    enumeration is prohibitively slow.
 
     Args:
         teams: List of all team names in the region.
@@ -162,6 +170,8 @@ def determine_scenarios(
             enumeration is prohibitively slow.  Odds are approximate — margin
             tiebreakers are not tracked — but correct for display in
             ``ignore_margins`` rendering mode.
+        n_samples: When set, use Monte Carlo sampling with this many draws
+            instead of exhaustive 2^R enumeration.  Forces ``ignore_margins``.
 
     Returns:
         A ``ScenarioResults`` instance with unweighted and weighted seed counts,
@@ -224,6 +234,46 @@ def determine_scenarios(
         )
         denom = 1.0
         denom_weighted = 1.0
+
+    elif n_samples is not None:
+        # Monte Carlo path: sample outcomes from the Elo joint distribution.
+        # Each game is drawn Bernoulli(p); sample frequency is Elo-weighted by
+        # construction, so weighted and unweighted counts are both accumulated
+        # uniformly (each sample contributes weight 1.0 / n_samples).
+        for _ in range(n_samples):
+            outcome_mask = 0
+            for bit_index, rem_game in enumerate(remaining):
+                p = _win_prob_fn(rem_game.a, rem_game.b, None, rem_game.location_a)
+                if random.random() < p:
+                    outcome_mask |= 1 << bit_index
+            local_flips: list[list[str]] = []
+            final_order = resolve_standings_for_mask(
+                teams,
+                completed,
+                remaining,
+                outcome_mask,
+                margins=base_margins,
+                base_margin_default=7,
+                pa_win=pa_for_winner,
+                coin_flip_collector=local_flips,
+            )
+            all_coinflip_events.extend(local_flips)
+            _accumulate_slots(
+                final_order,
+                local_flips,
+                1.0,
+                1.0,
+                first_counts,
+                second_counts,
+                third_counts,
+                fourth_counts,
+                first_counts_weighted,
+                second_counts_weighted,
+                third_counts_weighted,
+                fourth_counts_weighted,
+            )
+            denom_weighted += 1.0
+        denom = float(n_samples)
 
     else:
         total_masks = 1 << num_remaining

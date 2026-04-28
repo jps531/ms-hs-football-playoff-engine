@@ -233,3 +233,66 @@ class TestDetermineScenariosFullSeason:
         """A fully-determined final season has no coin flip events."""
         r = self._result()
         assert r.coinflip_teams == set()
+
+
+# ---------------------------------------------------------------------------
+# Monte Carlo sampling path
+# ---------------------------------------------------------------------------
+
+
+class TestDetermineScenariosMonteCarlo:
+    """Tests for the n_samples Monte Carlo path in determine_scenarios."""
+
+    TEAMS = ["A", "B", "C", "D", "E", "F", "G"]
+
+    def _make_remaining(self):
+        """Build C(7,2)=21 round-robin remaining games for 7 teams."""
+        from backend.helpers.data_classes import RemainingGame
+
+        games = []
+        for i, a in enumerate(self.TEAMS):
+            for b in self.TEAMS[i + 1 :]:
+                games.append(RemainingGame(a=a, b=b))
+        return games
+
+    def _run(self, n_samples: int = 2_000):
+        remaining = self._make_remaining()
+        return determine_scenarios(
+            self.TEAMS,
+            completed=[],
+            remaining=remaining,
+            n_samples=n_samples,
+        )
+
+    def test_denom_equals_n_samples(self):
+        """denom and denom_weighted both equal n_samples."""
+        r = self._run(n_samples=500)
+        assert r.denom == pytest.approx(500.0)
+        assert r.denom_weighted == pytest.approx(500.0)
+
+    def test_seed_probabilities_sum_to_at_most_one_per_team(self):
+        """Each team's p1+p2+p3+p4 sums to ≤1.0; with 7 teams only 4 qualify so ~4/7 ≈ 57%."""
+        r = self._run()
+        for team in self.TEAMS:
+            total = (
+                r.first_counts[team] / r.denom
+                + r.second_counts[team] / r.denom
+                + r.third_counts[team] / r.denom
+                + r.fourth_counts[team] / r.denom
+            )
+            assert 0.0 <= total <= 1.0 + 1e-9, f"{team}: seed probs sum to {total}"
+            assert total > 0.0, f"{team} never earned any seed in 2000 samples"
+
+    def test_weighted_and_unweighted_close_at_equal_prob(self):
+        """With no win_prob_fn (50/50), weighted and unweighted odds should be nearly identical."""
+        r = self._run(n_samples=2_000)
+        for team in self.TEAMS:
+            p_unw = r.first_counts[team] / r.denom
+            p_w = r.first_counts_weighted[team] / r.denom_weighted
+            assert abs(p_unw - p_w) < 0.15, f"{team}: unweighted={p_unw:.3f} vs weighted={p_w:.3f}"
+
+    def test_all_teams_have_nonzero_first_seed_chance(self):
+        """With all games remaining and equal strength, every team can win the region."""
+        r = self._run(n_samples=2_000)
+        for team in self.TEAMS:
+            assert r.first_counts[team] > 0, f"{team} never seeded 1st in 2000 samples"

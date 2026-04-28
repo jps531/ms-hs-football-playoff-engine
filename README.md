@@ -278,7 +278,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain. Params: `season`, `date` |
+| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain. Params: `season`, `date`. See [docs/SCENARIO_COMPUTATION.md](docs/SCENARIO_COMPUTATION.md) for the full computation model. |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team |
 | POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |

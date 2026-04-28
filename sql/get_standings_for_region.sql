@@ -1,6 +1,6 @@
--- DROP FUNCTION public.get_standings_for_region(int4, int4, int4);
+-- DROP FUNCTION public.get_standings_for_region(int4, int4, int4, date);
 
-CREATE OR REPLACE FUNCTION public.get_standings_for_region(p_class integer, p_region integer, p_season integer DEFAULT 2025)
+CREATE OR REPLACE FUNCTION public.get_standings_for_region(p_class integer, p_region integer, p_season integer DEFAULT 2025, p_cutoff_date date DEFAULT NULL)
  RETURNS TABLE(school text, class integer, region integer, season integer, wins integer, losses integer, ties integer, region_wins integer, region_losses integer, region_ties integer)
  LANGUAGE sql
  STABLE
@@ -26,6 +26,7 @@ region_records AS (
   LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
+   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
   GROUP BY ds.school, ds.class, ds.region, ds.season
 ),
 overall_records AS (
@@ -38,6 +39,7 @@ overall_records AS (
   LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
+   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
   GROUP BY ds.school
 ),
 region_base AS (
@@ -78,6 +80,7 @@ h2h AS (
    AND g.final        = TRUE
    AND g.region_game  = TRUE
    AND g.opponent     = t2.school
+   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
   GROUP BY t1.school, t1.tie_group_key
 ),
 h2h_pd_capped AS (
@@ -95,6 +98,7 @@ h2h_pd_capped AS (
    AND g.final        = TRUE
    AND g.region_game  = TRUE
    AND g.opponent     = t2.school
+   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
   GROUP BY t1.school, t1.tie_group_key
 ),
 region_points_allowed AS (
@@ -105,6 +109,7 @@ region_points_allowed AS (
   LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
+   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
   GROUP BY ds.school
 ),
 ranked AS (
