@@ -295,3 +295,46 @@ class EloTrendResponse(BaseModel):
     school: str
     season: int
     snapshots: list[EloSnapshot]
+
+
+# ---------------------------------------------------------------------------
+# Admin
+# ---------------------------------------------------------------------------
+
+
+class LocationModel(BaseModel):
+    """A venue in the locations table."""
+
+    id: int
+    name: str
+    city: str | None = None
+    home_team: str | None = None
+
+
+class PlayoffFormatSeedResult(BaseModel):
+    """Result of seeding a playoff bracket format."""
+
+    season: int
+    classes_inserted: int
+    slots_inserted: int
+    dry_run: bool
+
+
+class ChampionshipGameRow(BaseModel):
+    """One game row updated by assign-championship-venue."""
+
+    school: str
+    date: date
+    opponent: str
+    class_: int
+
+
+class AssignChampionshipVenueResult(BaseModel):
+    """Result of assigning a championship venue."""
+
+    season: int
+    location_id: int
+    location_name: str
+    games_updated: int
+    games: list[ChampionshipGameRow]
+    dry_run: bool

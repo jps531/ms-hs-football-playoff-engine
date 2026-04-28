@@ -203,17 +203,17 @@ Then run the **Playoff Bracket Update** pipeline with the same historical season
 
 ### New Season Setup
 
-When MHSAA reclassifies schools (every two years) or the bracket structure changes, add playoff format data for the new season:
+When MHSAA reclassifies schools (every two years) or the bracket structure changes, add playoff format data for the new season via the admin API:
 
-1. Copy `sql/seeds/playoff_format_template.yaml` to `sql/seeds/playoff_formats_YYYY.yaml`
-2. Fill in the `season`, `classes`, and `slots` fields to match the MHSAA bracket
-3. Run:
+1. Copy `sql/seeds/playoff_format_template.yaml` to `sql/seeds/playoff_formats_YYYY.yaml` and fill in `season`, `classes`, and `slots` to match the MHSAA bracket — use this as your source of truth.
+2. POST the same data as JSON to `POST /api/v1/admin/playoff-format` (or use the Swagger UI at [localhost:8000/docs](http://localhost:8000/docs)).
+3. Use `?dry_run=true` first to preview the row counts without writing. The endpoint is idempotent — re-running for the same season skips rows that already exist.
 
-```
-uv run python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_YYYY.yaml
-```
+After the championship games are ingested by the AHSFHS pipeline, assign the venue:
 
-Use `--dry-run` first to preview what will be inserted. The script is idempotent — re-running for the same season skips rows that already exist.
+1. `GET /api/v1/admin/locations` to find the correct `location_id` for the venue.
+2. `POST /api/v1/admin/championship-venue` with `{ "season": YYYY, "location_id": N }`.
+3. Use `?dry_run=true` first to confirm which game rows will be updated.
 
 ## Development Reference
 
@@ -325,3 +325,11 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 |--------|------|-------------|
 | GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending |
 | GET | `/{team}/trend` | Elo time-series for one team. Optional `date_from` / `date_to` |
+
+#### Admin — `/admin`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/locations` | List all venues (id, name, city, home_team); use to look up `location_id` for other admin calls |
+| POST | `/playoff-format` | Seed `playoff_formats` + `playoff_format_slots` for a new season. Idempotent. `?dry_run=true` to preview counts without writing |
+| POST | `/championship-venue` | Set `location_id = neutral` on all Championship Game rows for a season. `?dry_run=true` to preview affected rows without writing |
