@@ -84,7 +84,9 @@ class TeamModel(BaseModel):
 
     school: str
     display_name: str
-    display_logo: str
+    logo_primary: str
+    logo_secondary: str
+    logo_tertiary: str
     season: int
     class_: int
     region: int

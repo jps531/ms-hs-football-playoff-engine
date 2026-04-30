@@ -1,9 +1,12 @@
 """Cloudinary image upload helpers."""
 
 import os
+from typing import Literal
 
 import cloudinary
 import cloudinary.uploader
+
+LogoType = Literal["primary", "secondary", "tertiary"]
 
 
 def _configure() -> None:
@@ -14,11 +17,17 @@ def _configure() -> None:
     )
 
 
-def upload_logo(local_path: str, school_name: str) -> str:
-    """Upload a school logo and return the path to store in logo_override."""
+def upload_logo(local_path: str, school_name: str, logo_type: LogoType = "primary") -> str:
+    """Upload a school logo and return the path to store in the DB."""
     _configure()
-    public_id = f"logos/primary/{school_name}"
-    cloudinary.uploader.upload(local_path, public_id=public_id, overwrite=True, invalidate=True)
+    public_id = f"logos/{logo_type}/{school_name.replace(' ', '_')}"
+    cloudinary.uploader.upload(
+        local_path,
+        public_id=public_id,
+        asset_folder=f"logos/{logo_type}",
+        overwrite=True,
+        invalidate=True,
+    )
     return public_id
 
 

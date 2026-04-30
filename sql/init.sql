@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS schools (
   secondary_color     TEXT,
   primary_color_hex   TEXT,
   secondary_color_hex TEXT,
-  logo_override       TEXT,
+  logo_primary        TEXT,
+  logo_secondary      TEXT,
+  logo_tertiary       TEXT,
   overrides           JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
@@ -147,7 +149,9 @@ SELECT
   COALESCE(overrides->>'primary_color',        primary_color)       AS primary_color,
   COALESCE(overrides->>'secondary_color',      secondary_color)     AS secondary_color,
   COALESCE(overrides->>'display_name',         school)              AS display_name,
-  COALESCE(logo_override, overrides->>'display_logo', '')           AS display_logo,
+  COALESCE(overrides->>'logo_primary',   logo_primary,   '') AS logo_primary,
+  COALESCE(overrides->>'logo_secondary', logo_secondary, '') AS logo_secondary,
+  COALESCE(overrides->>'logo_tertiary',  logo_tertiary,  '') AS logo_tertiary,
   COALESCE(overrides->>'primary_color_hex',    primary_color_hex)   AS primary_color_hex,
   COALESCE(overrides->>'secondary_color_hex',  secondary_color_hex) AS secondary_color_hex,
   overrides
@@ -486,12 +490,24 @@ COMMENT ON COLUMN schools.primary_color IS
   'Hex color string for the school''s primary team color.';
 COMMENT ON COLUMN schools.secondary_color IS
   'Hex color string for the school''s secondary team color.';
+COMMENT ON COLUMN schools.primary_color_hex IS
+  'Hex code for the school''s primary team color (e.g. "#006400"). Derived from primary_color.';
+COMMENT ON COLUMN schools.secondary_color_hex IS
+  'Hex code for the school''s secondary team color (e.g. "#FFD700"). Derived from secondary_color.';
+COMMENT ON COLUMN schools.logo_primary IS
+  'Cloudinary path for the primary school logo (e.g. "logos/primary/Taylorsville"). '
+  'Assembled into a full URL at read time via CLOUDINARY_BASE_URL. Empty when not yet uploaded.';
+COMMENT ON COLUMN schools.logo_secondary IS
+  'Cloudinary path for the secondary/alternate school logo. Empty when not yet uploaded.';
+COMMENT ON COLUMN schools.logo_tertiary IS
+  'Cloudinary path for the tertiary/alternate school logo. Empty when not yet uploaded.';
 COMMENT ON COLUMN schools.overrides IS
   'User-managed JSONB patch applied on read via the schools_effective view. Any key here shadows '
-  'the corresponding raw column (latitude, longitude, mascot, primary_color, secondary_color). '
+  'the corresponding raw column (latitude, longitude, mascot, primary_color, secondary_color, ' 
+  'primary_color_hex, secondary_color_hex). '
   'Known override keys: display_name (frontend-only label; falls back to school when absent), '
-  'display_logo (frontend-only logo URL; empty string when absent), '
-  'latitude, longitude, mascot, primary_color, secondary_color. '
+  'logo_primary, logo_secondary, logo_tertiary (Cloudinary paths; empty string when absent), '
+  'latitude, longitude, mascot, primary_color, secondary_color, primary_color_hex, secondary_color_hex. '
   'Written only through set_school_override() / clear_school_override(); never by the pipeline.';
 
 

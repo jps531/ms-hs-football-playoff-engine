@@ -74,7 +74,7 @@ async def list_teams(
     query = sql.SQL("""
         SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
                s.city, s.mascot, s.primary_color, s.secondary_color,
-               s.display_logo
+               s.logo_primary, s.logo_secondary, s.logo_tertiary
         FROM schools_effective s
         JOIN school_seasons ss ON s.school = ss.school
         WHERE {}
@@ -93,7 +93,9 @@ async def list_teams(
                 mascot=r[6] or "",
                 primary_color=r[7] or "",
                 secondary_color=r[8] or "",
-                display_logo=logo_url(r[9] or ""),
+                logo_primary=logo_url(r[9] or ""),
+                logo_secondary=logo_url(r[10] or ""),
+                logo_tertiary=logo_url(r[11] or ""),
             )
             async for r in rows
         ]
@@ -107,7 +109,7 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
             """
             SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
                    s.city, s.mascot, s.primary_color, s.secondary_color,
-                   s.display_logo
+                   s.logo_primary, s.logo_secondary, s.logo_tertiary
             FROM schools_effective s
             JOIN school_seasons ss ON s.school = ss.school
             WHERE s.school = %s AND ss.season = %s
@@ -129,7 +131,9 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
         mascot=r[6] or "",
         primary_color=r[7] or "",
         secondary_color=r[8] or "",
-        display_logo=r[9] or "",
+        logo_primary=logo_url(r[9] or ""),
+        logo_secondary=logo_url(r[10] or ""),
+        logo_tertiary=logo_url(r[11] or ""),
     )
 
 
