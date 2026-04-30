@@ -9,11 +9,17 @@ import pytest
 
 from backend.helpers.data_classes import RawCompletedGame, School
 from backend.helpers.data_helpers import (
+    _color_to_hex,
+    _colors_csv_to_hex,
     _get_field,
     _month_to_num,
     _norm,
+    _normalize_color,
+    _normalize_mascot,
     _normalize_ws,
     _pad,
+    _parse_colors,
+    _split_color_words,
     as_float_or_none,
     clean_school_name,
     get_completed_games,
@@ -567,3 +573,298 @@ def test_get_completed_games_b_row_does_not_overwrite_a_row() -> None:
 def test_get_field_non_mapping_non_dataclass_returns_none() -> None:
     """_get_field returns None when r is neither a dataclass nor a Mapping."""
     assert _get_field(42, "anything") is None
+
+
+# ---------------------------------------------------------------------------
+# _normalize_mascot
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_mascot_empty_string() -> None:
+    """Empty mascot returns empty string."""
+    assert _normalize_mascot("") == ""
+
+
+def test_normalize_mascot_basic_pluralizes() -> None:
+    """A bare singular mascot is title-cased and pluralized."""
+    assert _normalize_mascot("ram") == "Rams"
+
+
+def test_normalize_mascot_already_plural() -> None:
+    """A mascot already ending in 's' is not double-pluralized."""
+    assert _normalize_mascot("Tigers") == "Tigers"
+
+
+def test_normalize_mascot_slash_drops_lady_variant() -> None:
+    """When both variants are separated by '/', the non-Lady form is kept."""
+    assert _normalize_mascot("Rams/Lady Rams") == "Rams"
+
+
+def test_normalize_mascot_slash_both_lady_uses_first() -> None:
+    """When all slash parts start with 'Lady', the first part is used after stripping the prefix."""
+    assert _normalize_mascot("Lady Rams/Lady Tigers") == "Rams"
+
+
+def test_normalize_mascot_bare_lady_prefix_stripped() -> None:
+    """A bare 'Lady ' prefix is stripped before title-casing."""
+    assert _normalize_mascot("Lady Warriors") == "Warriors"
+
+
+def test_normalize_mascot_maroon_tide_no_plural() -> None:
+    """'Maroon Tide' is in the no-plural set and must not gain a trailing 's'."""
+    assert _normalize_mascot("Maroon Tide") == "Maroon Tide"
+
+
+def test_normalize_mascot_maroon_tide_lowercase_no_plural() -> None:
+    """No-plural check is case-insensitive; lowercase input still yields 'Maroon Tide'."""
+    assert _normalize_mascot("maroon tide") == "Maroon Tide"
+
+
+def test_normalize_mascot_greenwave_pluralized() -> None:
+    """'Greenwave' is not in the no-plural set and does not end in 's', so it gains one."""
+    assert _normalize_mascot("Greenwave") == "Greenwaves"
+
+
+def test_normalize_mascot_title_cases() -> None:
+    """Mascot is title-cased even when the input is all-lowercase."""
+    assert _normalize_mascot("eagles") == "Eagles"
+
+
+def test_normalize_mascot_empty_after_lady_strip() -> None:
+    """A slash entry whose non-lady part is empty returns '' rather than crashing."""
+    # "/Lady" → parts=["", "Lady"], non_lady=[""], mascot="" → empty after strip → ""
+    assert _normalize_mascot("/Lady") == ""
+
+
+# ---------------------------------------------------------------------------
+# _split_color_words
+# ---------------------------------------------------------------------------
+
+
+def test_split_color_words_single_word() -> None:
+    """A single-word input is returned as a one-element list."""
+    assert _split_color_words("Red") == ["Red"]
+
+
+def test_split_color_words_empty_string() -> None:
+    """An empty string returns an empty list."""
+    assert _split_color_words("") == []
+
+
+def test_split_color_words_boundary_splits() -> None:
+    """'Royal White' splits at the boundary word 'Royal' because the pair is not protected."""
+    assert _split_color_words("Royal White") == ["Royal", "White"]
+
+
+def test_split_color_words_protected_pair_not_split() -> None:
+    """'Royal Blue' is a protected pair and must not be split."""
+    assert _split_color_words("Royal Blue") == ["Royal Blue"]
+
+
+def test_split_color_words_compound_colors() -> None:
+    """'Kelly Green Cardinal Yellow' splits into two two-word colour tokens."""
+    assert _split_color_words("Kelly Green Cardinal Yellow") == ["Kelly Green", "Cardinal Yellow"]
+
+
+def test_split_color_words_three_boundary_words() -> None:
+    """'Red White Blue' splits into three single-word tokens."""
+    assert _split_color_words("Red White Blue") == ["Red", "White", "Blue"]
+
+
+def test_split_color_words_green_bay_not_split() -> None:
+    """'Green Bay Gold' does not split at 'Green' because 'green bay' is a protected pair."""
+    assert _split_color_words("Green Bay Gold") == ["Green Bay Gold"]
+
+
+def test_split_color_words_navy_blue_protected() -> None:
+    """'Navy Blue' is a protected pair and stays together."""
+    assert _split_color_words("Navy Blue") == ["Navy Blue"]
+
+
+# ---------------------------------------------------------------------------
+# _normalize_color
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_color_empty_string() -> None:
+    """Empty string returns empty string."""
+    assert _normalize_color("") == ""
+
+
+def test_normalize_color_whitespace_only() -> None:
+    """Whitespace-only string returns empty string."""
+    assert _normalize_color("   ") == ""
+
+
+def test_normalize_color_typo_whited() -> None:
+    """'whited' (MHSAA directory typo) is corrected to 'White'."""
+    assert _normalize_color("whited") == "White"
+
+
+def test_normalize_color_typo_re() -> None:
+    """'re' (truncated 'Red') is corrected to 'Red'."""
+    assert _normalize_color("re") == "Red"
+
+
+def test_normalize_color_title_cases() -> None:
+    """A normal colour name is title-cased."""
+    assert _normalize_color("royal blue") == "Royal Blue"
+
+
+def test_normalize_color_strips_surrounding_whitespace() -> None:
+    """Surrounding whitespace is stripped before title-casing."""
+    assert _normalize_color("  gold  ") == "Gold"
+
+
+# ---------------------------------------------------------------------------
+# _color_to_hex
+# ---------------------------------------------------------------------------
+
+
+def test_color_to_hex_known_color() -> None:
+    """A known colour name returns its hex value."""
+    assert _color_to_hex("Red") == "#CC0000"
+
+
+def test_color_to_hex_case_insensitive() -> None:
+    """Lookup is case-insensitive."""
+    assert _color_to_hex("GOLD") == "#FFD700"
+
+
+def test_color_to_hex_compound_color() -> None:
+    """A known two-word colour returns its hex value."""
+    assert _color_to_hex("Royal Blue") == "#4169E1"
+
+
+def test_color_to_hex_unknown_returns_empty() -> None:
+    """An unmapped colour returns an empty string."""
+    assert _color_to_hex("Chartreuse") == ""
+
+
+def test_color_to_hex_empty_string_returns_empty() -> None:
+    """Empty string returns empty string."""
+    assert _color_to_hex("") == ""
+
+
+# ---------------------------------------------------------------------------
+# _colors_csv_to_hex
+# ---------------------------------------------------------------------------
+
+
+def test_colors_csv_to_hex_empty_string() -> None:
+    """Empty input returns empty string."""
+    assert _colors_csv_to_hex("") == ""
+
+
+def test_colors_csv_to_hex_single_known() -> None:
+    """A single known colour returns its hex value."""
+    assert _colors_csv_to_hex("Navy") == "#001F5B"
+
+
+def test_colors_csv_to_hex_multiple_known() -> None:
+    """Multiple known colours are returned as comma-separated hex values."""
+    assert _colors_csv_to_hex("Red, White") == "#CC0000, #FFFFFF"
+
+
+def test_colors_csv_to_hex_unknown_omitted() -> None:
+    """Unknown colours are omitted rather than represented as empty slots."""
+    assert _colors_csv_to_hex("Red, Chartreuse, White") == "#CC0000, #FFFFFF"
+
+
+def test_colors_csv_to_hex_all_unknown_returns_empty() -> None:
+    """If all colours are unknown the result is an empty string."""
+    assert _colors_csv_to_hex("Chartreuse, Mauve") == ""
+
+
+# ---------------------------------------------------------------------------
+# _parse_colors
+# ---------------------------------------------------------------------------
+
+
+def test_parse_colors_empty_string() -> None:
+    """Empty input returns ('', '')."""
+    assert _parse_colors("") == ("", "")
+
+
+def test_parse_colors_single_color() -> None:
+    """A single colour returns (primary, '') with no secondary."""
+    assert _parse_colors("Red") == ("Red", "")
+
+
+def test_parse_colors_and_separator() -> None:
+    """'Red and White' splits on 'and' into primary and secondary."""
+    assert _parse_colors("Red and White") == ("Red", "White")
+
+
+def test_parse_colors_ampersand_separator() -> None:
+    """'Red & White' splits on '&'."""
+    assert _parse_colors("Red & White") == ("Red", "White")
+
+
+def test_parse_colors_slash_separator() -> None:
+    """'Red/White' splits on '/'."""
+    assert _parse_colors("Red/White") == ("Red", "White")
+
+
+def test_parse_colors_comma_separator() -> None:
+    """'Red, White' splits on ','."""
+    assert _parse_colors("Red, White") == ("Red", "White")
+
+
+def test_parse_colors_hyphen_separator() -> None:
+    """'Red-Navy' splits on '-' (real MHSAA data pattern)."""
+    primary, secondary = _parse_colors("Red-Navy")
+    assert primary == "Red"
+    assert secondary == "Navy"
+
+
+def test_parse_colors_strips_parenthetical() -> None:
+    """Parenthetical annotations like '(Sundown)' are stripped before splitting."""
+    assert _parse_colors("Bright Gold (Sundown)") == ("Bright Gold", "")
+
+
+def test_parse_colors_comma_after_parenthetical_not_doubled() -> None:
+    """'Bright Gold, (Sundown)' → parenthetical stripped, no spurious empty token."""
+    primary, secondary = _parse_colors("Bright Gold, (Sundown)")
+    assert primary == "Bright Gold"
+    assert secondary == ""
+
+
+def test_parse_colors_implicit_boundary_split() -> None:
+    """'Royal White' splits on the implicit word boundary into two colours."""
+    assert _parse_colors("Royal White") == ("Royal", "White")
+
+
+def test_parse_colors_compound_implicit_split() -> None:
+    """'Kelly Green Cardinal Yellow' splits into two two-word compound colours."""
+    assert _parse_colors("Kelly Green Cardinal Yellow") == ("Kelly Green", "Cardinal Yellow")
+
+
+def test_parse_colors_three_colors_red_white_blue() -> None:
+    """'Red White Blue' splits into three single-word colours."""
+    primary, secondary = _parse_colors("Red White Blue")
+    assert primary == "Red"
+    assert secondary == "White, Blue"
+
+
+def test_parse_colors_green_bay_gold_not_split() -> None:
+    """'Green Bay Gold' stays as a single primary colour (protected pair)."""
+    assert _parse_colors("Green Bay Gold") == ("Green Bay Gold", "")
+
+
+def test_parse_colors_typo_corrected() -> None:
+    """Typos in colour names are corrected during normalization."""
+    primary, _ = _parse_colors("Whited")
+    assert primary == "White"
+
+
+def test_parse_colors_title_cases_output() -> None:
+    """Output colours are always title-cased."""
+    primary, secondary = _parse_colors("red and white")
+    assert primary == "Red"
+    assert secondary == "White"
+
+
+def test_parse_colors_only_parenthetical_returns_empty() -> None:
+    """Input that is entirely a parenthetical annotation yields ('', '')."""
+    assert _parse_colors("(Sundown)") == ("", "")

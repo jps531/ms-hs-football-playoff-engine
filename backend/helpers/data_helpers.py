@@ -600,28 +600,29 @@ def parse_game_clock(raw: str | None) -> GameClock:
     OT ended (``"End 1OT"``): ``status = END_OT``, same quarter encoding, ``clock = None``.
     Terminal/break states: ``quarter = None``, ``clock = None``.
     """
-    status = normalize_game_status(raw)
     norm = (raw or "").strip()
 
-    if status == GameStatus.IN_PROGRESS:
-        reg_m = _REG_CLOCK_RE.match(norm)
-        if reg_m:
-            mm = int(reg_m.group("mm"))
-            ss = int(reg_m.group("ss"))
-            clock_str = f"{mm}:{ss:02d}"
-            return GameClock(status=status, quarter=int(reg_m.group("q")), clock=clock_str)
-        ot_m = _OT_PROGRESS_RE.match(norm)
-        if ot_m:
-            ot_n = int(ot_m.group("n") or "1")
-            return GameClock(status=status, quarter=4 + ot_n, clock=None)
+    reg_m = _REG_CLOCK_RE.match(norm)
+    if reg_m:
+        mm = int(reg_m.group("mm"))
+        ss = int(reg_m.group("ss"))
+        return GameClock(
+            status=GameStatus.IN_PROGRESS,
+            quarter=int(reg_m.group("q")),
+            clock=f"{mm}:{ss:02d}",
+        )
 
-    if status == GameStatus.END_OT:
-        ot_m = _OT_END_RE.match(norm)
-        if ot_m:
-            ot_n = int(ot_m.group("n") or "1")
-            return GameClock(status=status, quarter=4 + ot_n, clock=None)
+    ot_m = _OT_PROGRESS_RE.match(norm)
+    if ot_m:
+        ot_n = int(ot_m.group("n") or "1")
+        return GameClock(status=GameStatus.IN_PROGRESS, quarter=4 + ot_n, clock=None)
 
-    return GameClock(status=status, quarter=None, clock=None)
+    ot_end_m = _OT_END_RE.match(norm)
+    if ot_end_m:
+        ot_n = int(ot_end_m.group("n") or "1")
+        return GameClock(status=GameStatus.END_OT, quarter=4 + ot_n, clock=None)
+
+    return GameClock(status=normalize_game_status(raw), quarter=None, clock=None)
 
 
 def game_seconds_remaining(quarter: int, clock: str) -> int:
