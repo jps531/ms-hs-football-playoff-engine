@@ -29,6 +29,7 @@ The following data model describes how data is stored and controlled in this app
 | `region_computation_state` | Tracks background margin-sensitivity upgrade status per region (the two-phase computation model for regions with 5–6 games remaining). |
 | `playoff_formats` | Bracket template per class/season: size, number of regions, rounds. |
 | `playoff_format_slots` | First-round matchup slots. Adjacent pairs implicitly define the bracket tree for round-2 and beyond. |
+| `submissions` | User-submitted corrections and new assets (logos, helmet designs, colors, GPS coordinates, scores, feedback). Rows enter the queue with `status='pending'` and are approved or rejected by a moderator via the moderation API. Approved submissions are auto-applied to the live tables (except helmet submissions, which require manual mockup creation). |
 
 ### Schema Diagram
 
@@ -140,9 +141,21 @@ erDiagram
         text north_south
     }
 
+    submissions {
+        int id PK
+        text type
+        text status
+        text school FK
+        jsonb payload
+        text moderator_notes
+        timestamptz reviewed_at
+        timestamptz submitted_at
+    }
+
     schools ||--o{ school_seasons : "plays in"
     schools ||--o{ helmet_designs : "wears"
     schools ||--o{ team_ratings : "rated in"
+    schools ||--o{ submissions : "submitted for"
     school_seasons ||--o{ games : "plays"
     school_seasons ||--o{ region_standings : "has odds in"
     locations ||--o{ games : "hosted at"
@@ -401,3 +414,27 @@ Upload images to Cloudinary and write the resulting path back to the database. R
 |--------|------|-------------|
 | POST | `/logos/{school}/{logo_type}` | Upload a school logo (`primary`, `secondary`, or `tertiary`). Updates `schools.logo_{type}`. |
 | POST | `/helmets/{helmet_design_id}/{image_type}` | Upload a helmet image (`left`, `right`, or `photo`). Looks up school and year from the existing `helmet_designs` row, uploads to `helmets/{type}/{School}_{year}_{id}`, and updates the corresponding column. |
+
+#### Submissions — `/submissions`
+
+Unauthenticated endpoints for user-submitted corrections and new assets. Submissions enter a moderation queue with `status='pending'` and are not applied to the live database until approved via the moderation API.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/logos` | Submit a school logo for moderator review. Multipart: `school`, `logo_type` (`primary`/`secondary`/`tertiary`), `file`. Image is staged on Cloudinary and promoted to production on approval. 404 if school not found. |
+| POST | `/helmets` | Submit a helmet design for moderator review. Multipart: `school`, `year_first_worn`, `description`, plus optional metadata fields and up to 5 reference images (`images`) and an optional logo image (`logo_image`). Moderator creates the helmet record manually from the submitted info. 404 if school not found. |
+| POST | `/colors` | Submit a school color correction. Body: `school`, optional `primary_color` `{name, hex}`, optional `secondary_colors` array. Auto-applied on approval via `set_school_override`. 404 if school not found. |
+| POST | `/locations` | Submit corrected GPS coordinates for a school. Body: `school`, `latitude`, `longitude`. Auto-applied on approval via `set_school_override`. 404 if school not found. |
+| POST | `/scores` | Submit a corrected game score. Body: `school`, `date`, `points_for`, `points_against`. Both the school and the game row must already exist. Auto-applied on approval via `set_game_override`. 404 if school or game not found. |
+| POST | `/feedback` | Submit general feedback (no school required). Body: `subject`, `message`. No DB action is taken on approval. |
+
+#### Moderation — `/moderation`
+
+Requires the `X-Moderator-Key` header to match the `MODERATOR_API_KEY` environment variable.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/submissions` | List submissions. Optional query params: `type` (`logo`/`helmet`/`colors`/`location`/`score`/`feedback`), `status_filter` (`pending`/`approved`/`rejected`), `limit` (default 50), `offset` |
+| GET | `/submissions/{id}` | Get a single submission with its full payload. 404 if not found. |
+| POST | `/submissions/{id}/approve` | Approve a pending submission and auto-apply it to the live database. Optional body: `{ "notes": "..." }`. 404 if not found; 409 if already reviewed. |
+| POST | `/submissions/{id}/reject` | Reject a pending submission. No changes are applied to the database. Optional body: `{ "notes": "..." }`. 404 if not found; 409 if already reviewed. |
