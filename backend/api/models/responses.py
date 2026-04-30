@@ -92,7 +92,6 @@ class TeamModel(BaseModel):
     mascot: str
     primary_color: str
     secondary_color: str
-    maxpreps_logo: str
 
 
 class YearsWornRange(BaseModel):

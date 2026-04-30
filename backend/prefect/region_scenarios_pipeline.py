@@ -174,8 +174,7 @@ def fetch_all_season_schools(season: int) -> list[School]:
             cur.execute(
                 "SELECT ss.school, ss.season, ss.class, ss.region, "
                 "       s.city, s.zip, s.latitude, s.longitude, "
-                "       s.mascot, s.maxpreps_id, s.maxpreps_url, s.maxpreps_logo, "
-                "       s.primary_color, s.secondary_color "
+                "       s.mascot, s.primary_color, s.secondary_color "
                 "FROM school_seasons ss "
                 "JOIN schools_effective s USING (school) "
                 "WHERE ss.season=%s",
@@ -192,11 +191,8 @@ def fetch_all_season_schools(season: int) -> list[School]:
                     latitude=row[6],
                     longitude=row[7],
                     mascot=row[8],
-                    maxpreps_id=row[9],
-                    maxpreps_url=row[10],
-                    maxpreps_logo=row[11],
-                    primary_color=row[12],
-                    secondary_color=row[13],
+                    primary_color=row[9],
+                    secondary_color=row[10],
                 )
                 for row in cur.fetchall()
             ]

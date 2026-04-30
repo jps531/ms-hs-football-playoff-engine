@@ -4,7 +4,7 @@ An application that calculates standings and playoff scenarios for Mississippi H
 
 ## How It Works
 
-- Three Prefect pipelines ingest data from MHSAA, MaxPreps, and AHSFHS into PostgreSQL.
+- Four Prefect pipelines ingest data from MHSAA (region assignments and school identity), the NCES EDGE API (school locations), and AHSFHS (schedules) into PostgreSQL.
 - Once game results are in, the tiebreaker engine enumerates every possible outcome across the 2^R remaining region games, applies the 7-step MHSAA tiebreaker algorithm (head-to-head record → point differential vs. highest-ranked opponent → capped per-game margin → coin flip) to determine seedings, and uses boolean minimization to reduce the scenario space into concise human-readable conditions.
 - Results are stored as dated snapshots so the API can answer historical "what were the odds on date X?" queries without recomputation.
 - The FastAPI layer serves those snapshots for live requests, falls back to on-demand in-memory recomputation when no snapshot exists, and exposes a simulation endpoint that lets callers apply hypothetical results to explore what-if outcomes.
@@ -18,7 +18,7 @@ The following data model describes how data is stored and controlled in this app
 
 | Table | Description |
 |-------|-------------|
-| `schools` | Static school identity: location, mascot, colors, MaxPreps identifiers. Never duplicated across seasons. |
+| `schools` | Static school identity: location (city, zip, lat/lon), mascot, colors. Never duplicated across seasons. |
 | `school_seasons` | Per-season class and region assignments (can change on MHSAA's two-year cycle). FK anchor for all season-scoped data. |
 | `locations` | Physical venues. Referenced by `games` for geocoding and home-field logic. |
 | `games` | School-perspective game rows — two rows per contest, so scores and results are always relative to the `school` column. Covers regular season and playoffs. |
@@ -38,7 +38,7 @@ erDiagram
         text city
         text mascot
         text primary_color
-        text maxpreps_logo
+        text secondary_color
     }
     school_seasons {
         text school PK,FK
@@ -165,11 +165,12 @@ Run these in order — each depends on the previous step's data being in the dat
 
 1. Navigate to [the Local Prefect UI](http://localhost:4200/deployments)
 2. Do a "Quick Run" of the **Regions Data Pipeline** — populates `school_seasons` (class/region assignments)
-   1. Note - The "Regions Data" Pipeline defaults to the current currantly year. Use a **Custom Run** in the Prefect UI to target a different season.
-3. Do a "Quick Run" of the **MaxPreps Data Pipeline** — populates `schools` (metadata) and seeds `games` rows for the schedule
-4. Do a "Quick Run" of the **School Info Data Pipeline** — fills in school identity details (colors, mascot, etc.)
+   - The pipeline defaults to the current year. Use a **Custom Run** in the Prefect UI to target a different season.
+3. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** with the target season — seeds `schools` and `games` rows from the schedule
+4. Do a "Quick Run" of the **NCES School Geographic Data Flow** — fills in city, zip, latitude, and longitude for all public schools from the NCES EDGE API, then applies the private-school location seed for schools not in NCES
+5. Do a "Quick Run" of the **MHSAA School Identity Data Flow** — scrapes mascot and primary/secondary colors from the MHSAA school directory
 
-Re-run these if MHSAA reclassifies schools (every two years) or if the playoff format changes.
+Re-run steps 4–5 if schools move or rebrand. Re-run steps 2–3 if MHSAA reclassifies schools (every two years) or if the playoff format changes.
 
 The `playoff_formats` and `playoff_format_slots` tables (which define the bracket structure) are **automatically seeded for 2025** by `sql/init.sql` when the database is created — no manual step is needed. See [New Season Setup](#new-season-setup) below for adding a future season.
 

@@ -221,9 +221,6 @@ class School:
     latitude: float = 0.0
     longitude: float = 0.0
     mascot: str = ""
-    maxpreps_id: str = ""
-    maxpreps_url: str = ""
-    maxpreps_logo: str = ""
     primary_color: str = ""
     secondary_color: str = ""
 
@@ -236,9 +233,6 @@ class School:
             self.latitude,
             self.longitude,
             self.mascot,
-            self.maxpreps_id,
-            self.maxpreps_url,
-            self.maxpreps_logo,
             self.primary_color,
             self.secondary_color,
         )
@@ -253,7 +247,7 @@ class School:
 
         Args:
             row: An iterable of column values. Accepts rows with 4 columns
-                (school, season, class_, region) or 14 columns (all fields,
+                (school, season, class_, region) or 11 columns (all fields,
                 as returned by a JOIN of schools + school_seasons).
 
         Returns:
@@ -268,7 +262,7 @@ class School:
         if len(row) == 4:
             school, season, class_, region = row
             return cls(school=school, season=season, class_=class_, region=region)
-        elif len(row) >= 14:
+        elif len(row) >= 11:
             (
                 school,
                 season,
@@ -279,12 +273,9 @@ class School:
                 latitude,
                 longitude,
                 mascot,
-                maxpreps_id,
-                maxpreps_url,
-                maxpreps_logo,
                 primary_color,
                 secondary_color,
-            ) = row[:14]
+            ) = row[:11]
             return cls(
                 school=school,
                 season=season,
@@ -295,9 +286,6 @@ class School:
                 latitude=latitude or 0.0,
                 longitude=longitude or 0.0,
                 mascot=mascot or "",
-                maxpreps_id=maxpreps_id or "",
-                maxpreps_url=maxpreps_url or "",
-                maxpreps_logo=maxpreps_logo or "",
                 primary_color=primary_color or "",
                 secondary_color=secondary_color or "",
             )

@@ -334,7 +334,6 @@ def get_existing_schools(season: int) -> list[School]:
     q = """
         SELECT ss.school, ss.season, ss.class, ss.region,
                s.city, s.zip, s.latitude, s.longitude, s.mascot,
-               s.maxpreps_id, s.maxpreps_url, s.maxpreps_logo,
                s.primary_color, s.secondary_color
         FROM school_seasons ss
         JOIN schools_effective s USING (school)

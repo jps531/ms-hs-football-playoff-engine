@@ -50,16 +50,13 @@ _SCHOOL_FULL = School(
     latitude=33.5162,
     longitude=-90.1793,
     mascot="Bulldogs",
-    maxpreps_id="abc123",
-    maxpreps_url="https://maxpreps.com/greenwood",
-    maxpreps_logo="https://maxpreps.com/logo.png",
     primary_color="#003366",
     secondary_color="#FFFFFF",
 )
 
 
 def test_school_as_schools_tuple() -> None:
-    """as_schools_tuple returns the correct 11-field tuple for the schools table."""
+    """as_schools_tuple returns the correct 8-field tuple for the schools table."""
     t = _SCHOOL_FULL.as_schools_tuple()
     assert t == (
         "Greenwood",
@@ -68,9 +65,6 @@ def test_school_as_schools_tuple() -> None:
         33.5162,
         -90.1793,
         "Bulldogs",
-        "abc123",
-        "https://maxpreps.com/greenwood",
-        "https://maxpreps.com/logo.png",
         "#003366",
         "#FFFFFF",
     )
@@ -91,8 +85,8 @@ def test_school_from_db_tuple_4col() -> None:
     assert s.city == ""  # default
 
 
-def test_school_from_db_tuple_14col() -> None:
-    """from_db_tuple with 14 columns populates all fields including metadata."""
+def test_school_from_db_tuple_11col() -> None:
+    """from_db_tuple with 11 columns populates all fields including metadata."""
     row = (
         "Greenwood",
         2025,
@@ -103,9 +97,6 @@ def test_school_from_db_tuple_14col() -> None:
         33.5162,
         -90.1793,
         "Bulldogs",
-        "abc123",
-        "https://maxpreps.com/greenwood",
-        "https://maxpreps.com/logo.png",
         "#003366",
         "#FFFFFF",
     )
@@ -116,9 +107,9 @@ def test_school_from_db_tuple_14col() -> None:
     assert s.primary_color == "#003366"
 
 
-def test_school_from_db_tuple_14col_null_fields_become_defaults() -> None:
+def test_school_from_db_tuple_11col_null_fields_become_defaults() -> None:
     """None values in optional columns fall back to empty string / 0.0 defaults."""
-    row = ("Greenwood", 2025, 5, 3, None, None, None, None, None, None, None, None, None, None)
+    row = ("Greenwood", 2025, 5, 3, None, None, None, None, None, None, None)
     s = School.from_db_tuple(row)
     assert s.city == ""
     assert s.latitude == pytest.approx(0.0)

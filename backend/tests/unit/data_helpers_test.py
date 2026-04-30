@@ -18,12 +18,12 @@ from backend.helpers.data_helpers import (
     clean_school_name,
     get_completed_games,
     get_school_name_from_ahsfhs,
+    normalize_nces_school_name,
     normalize_pair,
     parse_text_section,
     to_normal_case,
     to_plain_text,
     update_school_name_for_ahsfhs_search,
-    update_school_name_for_maxpreps_search,
 )
 
 # ---------------------------------------------------------------------------
@@ -101,29 +101,55 @@ def test_norm_curly_quote_to_straight() -> None:
 
 
 # ---------------------------------------------------------------------------
-# update_school_name_for_maxpreps_search
+# normalize_nces_school_name
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "input_name,expected",
+    "nces_name,expected",
     [
-        ("Pearl River Central", "prc"),
-        ("Cleveland Central", "cleveland"),
-        ("Leake Central", "carthage"),
-        ("Thomas E. Edwards", "ruleville"),
-        ("J Z George", "j.z. george"),
-        ("M. S. Palmer", "palmer"),
-        ("H. W. Byers", "byers"),
-        ("Leake County", "leake"),
-        ("Enterprise Clarke", "enterprise bulldogs"),
-        ("Enterprise Lincoln", "enterprise yellowjackets"),
-        ("Greenwood", "greenwood"),  # no mapping → lowercased
+        ("WEST JONES HIGH SCHOOL", "West Jones"),
+        ("SOUTH PANOLA HIGH SCHOOL", "South Panola"),
+        ("GREENWOOD HIGH SCHOOL", "Greenwood"),
+        ("WEST BOLIVAR HIGH SCHOOL", "West Bolivar"),
+        ("LEAKE COUNTY SCHOOL", "Leake County"),
+        ("PRENTISS CHRISTIAN SCHOOL", "Prentiss Christian"),
+        ("NORTHWEST RANKIN SENIOR HIGH SCHOOL", "Northwest Rankin"),
+        ("J Z GEORGE HIGH SCHOOL", "J.Z. George"),
+        ("M S PALMER HIGH SCHOOL", "M. S. Palmer"),
+        ("H W BYERS HIGH SCHOOL", "H. W. Byers"),
+        ("THOMAS E EDWARDS HIGH SCHOOL", "Thomas E. Edwards"),
+        ("PEARL RIVER CENTRAL HIGH SCHOOL", "Pearl River Central"),
+        # grade-range parentheticals
+        ("BYHALIA HIGH SCHOOL (9-12)", "Byhalia"),
+        ("POTTS CAMP HIGH SCHOOL (5-12)", "Potts Camp"),
+        ("H W BYERS HIGH SCHOOL (5-12)", "H. W. Byers"),
+        # standalone HIGH suffix (no SCHOOL)
+        ("GRENADA HIGH", "Grenada"),
+        # PUBLIC pre-modifier
+        ("CANTON PUBLIC HIGH SCHOOL", "Canton"),
+        # MEMORIAL pre-modifier
+        ("PICAYUNE MEMORIAL HIGH SCHOOL", "Picayune"),
+        # SECONDARY SCHOOL suffix
+        ("WINONA SECONDARY SCHOOL", "Winona"),
+        # MIDDLE-HIGH SCHOOL suffix
+        ("ASHLAND MIDDLE-HIGH SCHOOL", "Ashland"),
+        # ATTENDANCE CENTER suffix
+        ("WESSON ATTENDANCE CENTER", "Wesson"),
+        ("ETHEL ATTENDANCE CENTER", "Ethel"),
+        ("MCLAURIN ATTENDANCE CENTER", "McLaurin"),
+        # SENIOR HIGH SCH abbreviation + D'Iberville apostrophe
+        ("DIBERVILLE SENIOR HIGH SCH", "D'Iberville"),
+        # explicit remaps
+        ("FRANKLIN HIGH SCHOOL", "Franklin County"),
+        ("JDC HIGH SCHOOL", "Jefferson Davis County"),
+        # Saint → St. conversion
+        ("SAINT PATRICK HIGH SCHOOL", "St. Patrick"),
     ],
 )
-def test_update_school_name_for_maxpreps_search(input_name: str, expected: str) -> None:
-    """update_school_name_for_maxpreps_search returns the correct MaxPreps search key."""
-    assert update_school_name_for_maxpreps_search(input_name) == expected
+def test_normalize_nces_school_name(nces_name: str, expected: str) -> None:
+    """normalize_nces_school_name strips suffix and title-cases correctly."""
+    assert normalize_nces_school_name(nces_name) == expected
 
 
 # ---------------------------------------------------------------------------

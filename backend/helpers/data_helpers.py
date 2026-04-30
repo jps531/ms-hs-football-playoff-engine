@@ -1,8 +1,9 @@
 """Helper functions for school name normalization, game result parsing, and pair normalization.
 
 Used by both the Prefect pipeline and the pure-logic modules. Contains name
-mapping constants, HTML-to-text utilities, and ``get_completed_games()`` for
-converting raw DB rows into CompletedGame instances.
+mapping constants, HTML-to-text utilities, ``get_completed_games()`` for
+converting raw DB rows into CompletedGame instances, and school-identity
+helpers for mascot normalisation and colour parsing / hex mapping.
 """
 
 import re
@@ -23,6 +24,16 @@ from backend.helpers.data_classes import (
 # -------------------------
 
 SPACE_RE = re.compile(r"\s+")
+_NCES_GRADE_RANGE_RE = re.compile(r"\s*\(\d+-\d+\)\s*$")
+_NCES_PREMOD_RE = re.compile(r"\s+(?:public|memorial)\b", re.IGNORECASE)
+_NCES_SUFFIX_RE = re.compile(
+    r"\s+(senior high school|senior high sch|secondary school|middle-high school|middle high school|attendance center|high school|senior high|school|hs|high)\s*$",
+    re.IGNORECASE,
+)
+_NCES_NAME_REMAPS = {
+    "Franklin": "Franklin County",
+    "Jdc": "Jefferson Davis County",
+}
 
 
 # One source of truth: "official" -> "AHSFHS canonical"
@@ -98,6 +109,83 @@ CLEAN_PHRASES = [
 
 CLEAN_RE = re.compile("|".join(CLEAN_PHRASES), flags=re.IGNORECASE)
 
+# ---------------------------------------------------------------------------
+# School identity constants (colour parsing + mascot normalisation)
+# ---------------------------------------------------------------------------
+
+# Words that, when they appear at the END of a colour token, signal that the
+# NEXT word begins a NEW colour rather than extending the current one.
+# e.g. "Royal White" → ["Royal", "White"]; "Red White Blue" → three tokens.
+_COLOR_BOUNDARY_WORDS = frozenset({
+    "red", "blue", "green", "white", "black", "yellow", "orange",
+    "purple", "brown", "gray", "grey", "maroon", "pink", "gold",
+    "silver", "royal", "crimson", "scarlet", "teal", "tan",
+})
+
+# Two-word colour names that must NOT be split even when the first word is a
+# boundary word (e.g. "Royal Blue" is one colour, not two).
+_NO_SPLIT_PAIRS = frozenset({
+    "royal blue", "navy blue", "kelly green", "forest green",
+    "hunter green", "dark green", "midnight blue", "old gold",
+    # "Green Bay Gold" — the city-name prefix must not split on "green"
+    "green bay",
+})
+
+# Known MHSAA directory typos → canonical title-cased spelling.
+_COLOR_TYPOS = {
+    "whited": "White",
+    "re":     "Red",
+}
+
+# Canonical hex values keyed by lower-cased colour name.
+_COLOR_HEX_MAP: dict[str, str] = {
+    # Blues
+    "royal blue":      "#4169E1",
+    "royal":           "#4169E1",
+    "blue":            "#003DA5",
+    "navy":            "#001F5B",
+    "navy blue":       "#001F5B",
+    "columbia blue":   "#9BDDFF",
+    "carolina blue":   "#4B9CD3",
+    "midnight blue":   "#191970",
+    # Greens
+    "green":           "#006400",
+    "kelly green":     "#4CBB17",
+    "forest green":    "#228B22",
+    "emerald":         "#50C878",
+    # Reds / Pinks
+    "red":             "#CC0000",
+    "scarlet":         "#FF2400",
+    "cardinal":        "#C41E3A",
+    "maroon":          "#800000",
+    "crimson":         "#990000",
+    # Yellows / Golds
+    "gold":            "#FFD700",
+    "athletic gold":   "#FFB81C",
+    "bright gold":     "#FFC72C",
+    "vegas gold":      "#C5A028",
+    "green bay gold":  "#FFB612",
+    "packer gold":     "#FFB612",
+    "yellow":          "#FFD100",
+    "cardinal yellow": "#FFD100",
+    "old gold":        "#CFB53B",
+    # Oranges
+    "orange":          "#FF6600",
+    # Purples
+    "purple":          "#6B2D8B",
+    "violet":          "#EE82EE",
+    "lavender":        "#967BB6",
+    # Neutrals
+    "black":           "#000000",
+    "white":           "#FFFFFF",
+    "gray":            "#808080",
+    "grey":            "#808080",
+    "silver":          "#C0C0C0",
+}
+
+# Mascots that must NOT gain a trailing "s" during pluralisation.
+_MASCOT_NO_PLURAL = frozenset({"maroon tide"})
+
 
 # -------------------------
 # Helpers
@@ -135,30 +223,33 @@ def _norm(s: str) -> str:
     return s.lower()
 
 
-def update_school_name_for_maxpreps_search(s: str) -> str:
-    """Translate an official school name to the best MaxPreps search query.
+def normalize_nces_school_name(s: str) -> str:
+    """Strip boilerplate from an NCES school name for fuzzy matching.
 
-    Several schools are listed under a different name on MaxPreps (e.g.,
-    "Pearl River Central" searches better as "PRC").  Returns the name
-    lowercased for URL inclusion.
+    Handles: grade-range parentheticals like ``(9-12)``, pre-modifiers
+    (PUBLIC, MEMORIAL), and suffixes including HIGH SCHOOL, SENIOR HIGH,
+    ATTENDANCE CENTER, SECONDARY SCHOOL, MIDDLE-HIGH SCHOOL, and plain
+    SCHOOL/HS.  The result is title-cased via ``to_normal_case`` (which
+    handles D'Iberville, Mc-prefixes, possessives, St. abbreviations) and
+    then checked against known name remaps (e.g. Franklin → Franklin County).
 
     Args:
-        s: Official MHSAA school name.
+        s: Raw NCES ``SCH_NAME`` value.
 
     Returns:
-        A lowercase search string suitable for appending to a MaxPreps URL.
+        Normalized title-case name ready for ``_norm()`` + ``_ratio()`` matching.
     """
-    s = s.replace("Pearl River Central", "PRC")
-    s = s.replace("Cleveland Central", "Cleveland")
-    s = s.replace("Leake Central", "Carthage")
-    s = s.replace("Thomas E. Edwards", "Ruleville")
+    s = s.strip()
+    s = _NCES_GRADE_RANGE_RE.sub("", s)
+    s = _NCES_PREMOD_RE.sub("", s).strip()
+    s = _NCES_SUFFIX_RE.sub("", s).strip()
+    s = to_normal_case(s)
+    s = re.sub(r"\bSaint\b", "St.", s)
     s = s.replace("J Z George", "J.Z. George")
-    s = s.replace("M. S. Palmer", "Palmer")
-    s = s.replace("H. W. Byers", "Byers")
-    s = s.replace("Leake County", "Leake")
-    s = s.replace("Enterprise Clarke", "Enterprise Bulldogs")
-    s = s.replace("Enterprise Lincoln", "Enterprise Yellowjackets")
-    return s.lower()
+    s = s.replace("M S Palmer", "M. S. Palmer")
+    s = s.replace("H W Byers", "H. W. Byers")
+    s = s.replace("Thomas E Edwards", "Thomas E. Edwards")
+    return _NCES_NAME_REMAPS.get(s, s)
 
 
 def update_school_name_for_ahsfhs_search(s: str) -> str:
@@ -547,3 +638,128 @@ def game_seconds_remaining(quarter: int, clock: str) -> int:
     remaining_this_q = int(mm) * 60 + int(ss)
     full_qs_after = max(0, 4 - quarter) * 720
     return remaining_this_q + full_qs_after
+
+
+# ---------------------------------------------------------------------------
+# School identity helpers (colour parsing + mascot normalisation)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_mascot(mascot: str) -> str:
+    """Normalise a mascot string scraped from the MHSAA directory.
+
+    Steps applied in order:
+
+    1. Drop the "Lady" variant when schools list both nicknames separated by
+       ``/`` (e.g. ``"Rams/Lady Rams"`` → ``"Rams"``).
+    2. Strip a bare ``"Lady "`` prefix (``"Lady Rams"`` → ``"Rams"``).
+    3. Title-case.
+    4. Pluralise: append ``"s"`` unless the mascot already ends in ``"s"``
+       or its lower-cased form is listed in ``_MASCOT_NO_PLURAL``
+       (e.g. ``"Maroon Tide"`` stays unchanged).
+    """
+    if not mascot:
+        return ""
+
+    if "/" in mascot:
+        parts = [p.strip() for p in mascot.split("/")]
+        non_lady = [p for p in parts if not p.lower().startswith("lady")]
+        mascot = non_lady[0] if non_lady else parts[0]
+
+    mascot = re.sub(r"^lady\s+", "", mascot.strip(), flags=re.IGNORECASE).strip()
+    if not mascot:
+        return ""
+
+    mascot = mascot.title()
+
+    if mascot.lower() not in _MASCOT_NO_PLURAL and not mascot.endswith("s"):
+        mascot += "s"
+
+    return mascot
+
+
+def _split_color_words(text: str) -> list[str]:
+    """Split a colour segment into individual tokens on implicit word boundaries.
+
+    A split is inserted before word *i* when word *i-1* is in
+    ``_COLOR_BOUNDARY_WORDS`` and the bigram ``words[i-1] words[i]`` is not a
+    known compound colour in ``_NO_SPLIT_PAIRS``.
+
+    Examples::
+
+        "Royal White"                  → ["Royal", "White"]
+        "Kelly Green Cardinal Yellow"  → ["Kelly Green", "Cardinal Yellow"]
+        "Red White Blue"               → ["Red", "White", "Blue"]
+    """
+    words = text.split()
+    if len(words) <= 1:
+        return [text.strip()] if text.strip() else []
+    tokens: list[str] = []
+    start = 0
+    for i in range(1, len(words)):
+        prev = words[i - 1].lower()
+        if prev in _COLOR_BOUNDARY_WORDS:
+            pair = f"{prev} {words[i].lower()}"
+            if pair not in _NO_SPLIT_PAIRS:
+                tokens.append(" ".join(words[start:i]))
+                start = i
+    tokens.append(" ".join(words[start:]))
+    return tokens
+
+
+def _normalize_color(color: str) -> str:
+    """Title-case a colour name and apply known directory typo corrections."""
+    stripped = color.strip()
+    if not stripped:
+        return ""
+    lower = stripped.lower()
+    if lower in _COLOR_TYPOS:
+        return _COLOR_TYPOS[lower]
+    return stripped.title()
+
+
+def _color_to_hex(color: str) -> str:
+    """Return the hex value for a single normalised colour name, or '' if unmapped."""
+    return _COLOR_HEX_MAP.get(color.strip().lower(), "")
+
+
+def _colors_csv_to_hex(colors_csv: str) -> str:
+    """Convert a comma-separated colour list to a comma-separated hex list.
+
+    Unknown colours are omitted rather than represented as empty slots.
+    """
+    if not colors_csv:
+        return ""
+    hexes = [_color_to_hex(c) for c in re.split(r",\s*", colors_csv) if c.strip()]
+    return ", ".join(h for h in hexes if h)
+
+
+def _parse_colors(raw: str) -> tuple[str, str]:
+    """Parse a raw MHSAA colours string into ``(primary_color, secondary_color)``.
+
+    Handles all observed separators (``and``, ``&``, ``/``, ``,``, ``@``, ``-``)
+    and implicit space-separated colour names.  Parenthetical annotations
+    (e.g. ``"Bright Gold (Sundown)"``) are stripped before splitting.
+    Returns the first colour as the primary; remaining colours are title-cased
+    and joined as a comma-separated secondary string.
+    """
+    if not raw:
+        return "", ""
+
+    raw = re.sub(r"\s*\([^)]*\)", "", raw).strip()
+    parts = re.split(r"\s*(?:and|[&/,@\-])\s*", raw.strip(), flags=re.IGNORECASE)
+
+    colors: list[str] = []
+    for part in parts:
+        part = re.sub(r"\s+", " ", part).strip()
+        if part:
+            colors.extend(_split_color_words(part))
+
+    colors = [_normalize_color(c) for c in colors if c]
+
+    if not colors:
+        return "", ""
+
+    primary = colors[0]
+    secondary = ", ".join(colors[1:]) if len(colors) > 1 else ""
+    return primary, secondary

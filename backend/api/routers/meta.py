@@ -72,7 +72,7 @@ async def list_teams(
     where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
     query = sql.SQL("""
         SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
-               s.city, s.mascot, s.primary_color, s.secondary_color, s.maxpreps_logo,
+               s.city, s.mascot, s.primary_color, s.secondary_color,
                s.display_logo
         FROM schools_effective s
         JOIN school_seasons ss ON s.school = ss.school
@@ -92,8 +92,7 @@ async def list_teams(
                 mascot=r[6] or "",
                 primary_color=r[7] or "",
                 secondary_color=r[8] or "",
-                maxpreps_logo=r[9] or "",
-                display_logo=r[10] or "",
+                display_logo=r[9] or "",
             )
             async for r in rows
         ]
@@ -106,7 +105,7 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
         row = await conn.execute(
             """
             SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
-                   s.city, s.mascot, s.primary_color, s.secondary_color, s.maxpreps_logo,
+                   s.city, s.mascot, s.primary_color, s.secondary_color,
                    s.display_logo
             FROM schools_effective s
             JOIN school_seasons ss ON s.school = ss.school
@@ -129,8 +128,7 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
         mascot=r[6] or "",
         primary_color=r[7] or "",
         secondary_color=r[8] or "",
-        maxpreps_logo=r[9] or "",
-        display_logo=r[10] or "",
+        display_logo=r[9] or "",
     )
 
 

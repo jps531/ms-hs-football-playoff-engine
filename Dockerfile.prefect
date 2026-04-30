@@ -30,6 +30,7 @@ RUN mkdir -p /app/backend && touch /app/backend/__init__.py \
 # Copy flows as a backend/ subdir under CWD so that
 # `from backend.xxx import yyy` resolves to local files, not site-packages.
 COPY backend/ /opt/prefect/flows/pipelines/backend/
+COPY sql/seeds/ /opt/prefect/flows/pipelines/sql/seeds/
 
 # Copy env file for flows (as you had)
 ARG ENVIRONMENT=local

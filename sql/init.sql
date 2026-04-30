@@ -2,7 +2,7 @@
 -- Core school identity (static per school)
 -- ---------------------------------------------------------------------------
 -- One row per school — never duplicated across seasons. Stores metadata that
--- does not change year to year: location, mascot, MaxPreps identifiers, colors.
+-- does not change year to year: location, mascot, colors.
 -- Class and region assignments (which can change) live in school_seasons.
 
 CREATE TABLE IF NOT EXISTS schools (
@@ -11,13 +11,12 @@ CREATE TABLE IF NOT EXISTS schools (
   zip             TEXT,
   latitude        REAL,
   longitude       REAL,
-  mascot          TEXT,
-  maxpreps_id     TEXT,
-  maxpreps_url    TEXT,
-  maxpreps_logo   TEXT,
-  primary_color   TEXT,
-  secondary_color TEXT,
-  overrides       JSONB NOT NULL DEFAULT '{}'::jsonb
+  mascot              TEXT,
+  primary_color       TEXT,
+  secondary_color     TEXT,
+  primary_color_hex   TEXT,
+  secondary_color_hex TEXT,
+  overrides           JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
 
@@ -140,14 +139,16 @@ CREATE INDEX IF NOT EXISTS idx_games_helmet_design
 
 CREATE OR REPLACE VIEW schools_effective AS
 SELECT
-  school, city, zip, maxpreps_id, maxpreps_url, maxpreps_logo,
+  school, city, zip,
   COALESCE((overrides->>'latitude')::float,    latitude)        AS latitude,
   COALESCE((overrides->>'longitude')::float,   longitude)       AS longitude,
-  COALESCE(overrides->>'mascot',               mascot)          AS mascot,
-  COALESCE(overrides->>'primary_color',        primary_color)   AS primary_color,
-  COALESCE(overrides->>'secondary_color',      secondary_color) AS secondary_color,
-  COALESCE(overrides->>'display_name',         school)          AS display_name,
-  COALESCE(overrides->>'display_logo',         maxpreps_logo)   AS display_logo,
+  COALESCE(overrides->>'mascot',               mascot)              AS mascot,
+  COALESCE(overrides->>'primary_color',        primary_color)       AS primary_color,
+  COALESCE(overrides->>'secondary_color',      secondary_color)     AS secondary_color,
+  COALESCE(overrides->>'display_name',         school)              AS display_name,
+  COALESCE(overrides->>'display_logo',         '')                  AS display_logo,
+  COALESCE(overrides->>'primary_color_hex',    primary_color_hex)   AS primary_color_hex,
+  COALESCE(overrides->>'secondary_color_hex',  secondary_color_hex) AS secondary_color_hex,
   overrides
 FROM schools;
 
@@ -463,8 +464,8 @@ ON CONFLICT DO NOTHING;
 -- schools
 
 COMMENT ON TABLE schools IS
-  'One row per school (ever). Stores static identity metadata sourced from '
-  'MaxPreps: location, mascot, colors, and MaxPreps identifiers. '
+  'One row per school (ever). Stores static identity metadata '
+  'location, mascot, colors identifiers. '
   'Season-varying data (class, region) lives in school_seasons.';
 
 COMMENT ON COLUMN schools.school IS
@@ -480,21 +481,15 @@ COMMENT ON COLUMN schools.longitude IS
   'Longitude of the school in decimal degrees.';
 COMMENT ON COLUMN schools.mascot IS
   'Team mascot name (e.g. "Bulldogs", "Tigers").';
-COMMENT ON COLUMN schools.maxpreps_id IS
-  'MaxPreps internal school identifier, used to construct schedule URLs.';
-COMMENT ON COLUMN schools.maxpreps_url IS
-  'Full MaxPreps schedule page URL for scraping game results.';
-COMMENT ON COLUMN schools.maxpreps_logo IS
-  'URL of the school logo image hosted on MaxPreps.';
 COMMENT ON COLUMN schools.primary_color IS
   'Hex color string for the school''s primary team color.';
 COMMENT ON COLUMN schools.secondary_color IS
   'Hex color string for the school''s secondary team color.';
 COMMENT ON COLUMN schools.overrides IS
   'User-managed JSONB patch applied on read via the schools_effective view. Any key here shadows '
-  'the corresponding raw column (latitude, longitude, mascot, maxpreps_logo, primary_color, secondary_color). '
+  'the corresponding raw column (latitude, longitude, mascot, primary_color, secondary_color). '
   'Known override keys: display_name (frontend-only label; falls back to school when absent), '
-  'display_logo (frontend-only logo URL; falls back to maxpreps_logo when absent), '
+  'display_logo (frontend-only logo URL; empty string when absent), '
   'latitude, longitude, mascot, primary_color, secondary_color. '
   'Written only through set_school_override() / clear_school_override(); never by the pipeline.';
 
