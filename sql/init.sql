@@ -463,6 +463,38 @@ ON CONFLICT DO NOTHING;
 
 
 -- ---------------------------------------------------------------------------
+-- Submission queue (user-submitted corrections and new assets)
+-- ---------------------------------------------------------------------------
+
+CREATE TYPE submission_type AS ENUM (
+    'logo', 'helmet', 'colors', 'location', 'score', 'feedback'
+);
+
+CREATE TYPE submission_status AS ENUM ('pending', 'approved', 'rejected');
+
+CREATE TABLE IF NOT EXISTS submissions (
+    id              SERIAL              PRIMARY KEY,
+    type            submission_type     NOT NULL,
+    status          submission_status   NOT NULL DEFAULT 'pending',
+    school          TEXT                REFERENCES schools(school) ON DELETE SET NULL,
+    payload         JSONB               NOT NULL DEFAULT '{}'::jsonb,
+    moderator_notes TEXT,
+    reviewed_at     TIMESTAMPTZ,
+    submitted_at    TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ         NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_submissions_type
+    ON submissions (type);
+CREATE INDEX IF NOT EXISTS idx_submissions_status
+    ON submissions (status);
+CREATE INDEX IF NOT EXISTS idx_submissions_school
+    ON submissions (school) WHERE school IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_submissions_pending
+    ON submissions (submitted_at DESC) WHERE status = 'pending';
+
+
+-- ---------------------------------------------------------------------------
 -- Table and column documentation
 -- ---------------------------------------------------------------------------
 
@@ -904,3 +936,42 @@ COMMENT ON COLUMN playoff_format_slots.away_seed IS
 COMMENT ON COLUMN playoff_format_slots.north_south IS
   'Which half of the bracket this slot belongs to (N=North, S=South). '
   'Used to apply the state-championship home-site rule: South hosts in odd years.';
+
+
+-- submissions
+
+COMMENT ON TABLE submissions IS
+  'Polymorphic user submission queue. One row per submission regardless of type. '
+  'Type-specific fields live in the payload JSONB column. '
+  'Approved submissions are auto-applied to live DB tables via the moderation endpoint; '
+  'helmet submissions are informational only (moderator creates the mockup manually).';
+
+COMMENT ON COLUMN submissions.id IS
+  'Auto-incrementing surrogate key.';
+COMMENT ON COLUMN submissions.type IS
+  'Discriminator. One of: logo, helmet, colors, location, score, feedback. '
+  'Determines the shape of the payload column and the apply-on-approve logic.';
+COMMENT ON COLUMN submissions.status IS
+  'Moderation state. Starts as pending; transitions to approved or rejected '
+  'by a moderator via POST /api/v1/moderation/submissions/{id}/approve|reject.';
+COMMENT ON COLUMN submissions.school IS
+  'FK to schools(school). NULL only for feedback-type submissions. '
+  'SET NULL on school delete so feedback-linked rows are not lost.';
+COMMENT ON COLUMN submissions.payload IS
+  'JSONB object whose shape varies by type. '
+  'logo: {logo_type, cloudinary_path} — cloudinary_path points to the staging area. '
+  'helmet: {year_first_worn, description, year_last_worn?, currently_worn?, color?, '
+  '         finish?, facemask_color?, logo_description?, stripe?, additional_notes?, image_paths[]}. '
+  'colors: {primary_color?: {name, hex}, secondary_colors?: [{name, hex}]}. '
+  'location: {latitude, longitude}. '
+  'score: {date, points_for, points_against}. '
+  'feedback: {subject, message}.';
+COMMENT ON COLUMN submissions.moderator_notes IS
+  'Optional annotation written by the moderator at review time. '
+  'Used for rejection reasons or internal notes on approved submissions.';
+COMMENT ON COLUMN submissions.reviewed_at IS
+  'Timestamp when the submission was approved or rejected. NULL while pending.';
+COMMENT ON COLUMN submissions.submitted_at IS
+  'Timestamp when the user submitted this row. Immutable after insert.';
+COMMENT ON COLUMN submissions.updated_at IS
+  'Timestamp of the last modification to this row (status change, notes edit).';

@@ -1,8 +1,9 @@
 """Pydantic request body models for the playoff engine REST API."""
 
+from datetime import date as date_type
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Override field type aliases — used in request bodies and DELETE path validation
@@ -229,4 +230,61 @@ class PatchHelmetDesignRequest(BaseModel):
     logo: str | None = None
     stripe: str | None = None
     tags: list[str] | None = None
+    notes: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# User submissions
+# ---------------------------------------------------------------------------
+
+
+class ColorEntry(BaseModel):
+    """A single named color with its hex code."""
+
+    name: str
+    hex: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
+class SubmitColorsRequest(BaseModel):
+    """Submit a school color correction. At least one of primary_color or secondary_colors is required."""
+
+    school: str
+    primary_color: ColorEntry | None = None
+    secondary_colors: list[ColorEntry] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def _require_at_least_one(self) -> "SubmitColorsRequest":
+        """Require at least one of primary_color or secondary_colors."""
+        if self.primary_color is None and not self.secondary_colors:
+            raise ValueError("At least one of primary_color or secondary_colors must be provided")
+        return self
+
+
+class SubmitLocationRequest(BaseModel):
+    """Submit corrected GPS coordinates for a school."""
+
+    school: str
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
+
+
+class SubmitScoreRequest(BaseModel):
+    """Submit a corrected game score."""
+
+    school: str
+    date: date_type
+    points_for: int = Field(ge=0)
+    points_against: int = Field(ge=0)
+
+
+class SubmitFeedbackRequest(BaseModel):
+    """Submit general feedback visible to moderators."""
+
+    subject: str = Field(min_length=1, max_length=200)
+    message: str = Field(min_length=1, max_length=5000)
+
+
+class ModerationDecisionRequest(BaseModel):
+    """Optional body for a moderator approve/reject action."""
+
     notes: str | None = None

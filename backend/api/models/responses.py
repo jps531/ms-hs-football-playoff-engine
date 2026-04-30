@@ -1,6 +1,6 @@
 """Pydantic response models for the playoff engine REST API."""
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -365,3 +365,35 @@ class AssignChampionshipVenueResult(BaseModel):
     games_updated: int
     games: list[ChampionshipGameRow]
     dry_run: bool
+
+
+# ---------------------------------------------------------------------------
+# Submissions
+# ---------------------------------------------------------------------------
+
+
+class SubmissionCreatedResponse(BaseModel):
+    """Returned after a user successfully creates a submission."""
+
+    id: int
+    type: str
+    school: str | None
+    submitted_at: datetime
+
+
+class SubmissionSummary(BaseModel):
+    """A submission row as returned in list views."""
+
+    id: int
+    type: str
+    status: str
+    school: str | None
+    submitted_at: datetime
+    reviewed_at: datetime | None
+
+
+class SubmissionDetail(SubmissionSummary):
+    """A single submission with its full payload and moderator notes."""
+
+    payload: dict
+    moderator_notes: str | None

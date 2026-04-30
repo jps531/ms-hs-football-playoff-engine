@@ -48,6 +48,68 @@ def upload_helmet(local_path: str, school_name: str, year: int, image_type: Helm
     return public_id
 
 
+def upload_submission_logo(local_path: str, school_name: str, logo_type: LogoType) -> str:
+    """Upload a logo to the staging area and return the Cloudinary path to store in the DB.
+
+    Staged path: ``logos/submissions/{logo_type}/{school_normalized}``.
+    Call :func:`promote_submission_logo` after moderator approval to move it to production.
+    """
+    _configure()
+    name = school_name.replace(" ", "_")
+    public_id = f"logos/submissions/{logo_type}/{name}"
+    cloudinary.uploader.upload(
+        local_path,
+        public_id=public_id,
+        asset_folder=f"logos/submissions/{logo_type}",
+        overwrite=True,
+        invalidate=True,
+    )
+    return public_id
+
+
+def promote_submission_logo(staging_path: str, logo_type: LogoType) -> str:
+    """Rename a staged logo from ``logos/submissions/…`` to the live ``logos/…`` folder.
+
+    Uses Cloudinary's server-side rename so there is no window where the asset is missing.
+    Returns the new production path.
+    """
+    _configure()
+    school_segment = staging_path.split("/")[-1]
+    target_path = f"logos/{logo_type}/{school_segment}"
+    cloudinary.uploader.rename(
+        staging_path,
+        target_path,
+        overwrite=True,
+        invalidate=True,
+    )
+    return target_path
+
+
+def upload_submission_helmet_image(
+    local_path: str,
+    school_name: str,
+    submission_id: int,
+    index: int,
+) -> str:
+    """Upload one reference image for a helmet submission and return the Cloudinary path.
+
+    Path: ``helmets/submissions/{school_normalized}_{submission_id}_{index}``.
+    These images are used by the moderator to create a helmet mockup; they are never
+    promoted to a production path automatically.
+    """
+    _configure()
+    name = school_name.replace(" ", "_")
+    public_id = f"helmets/submissions/{name}_{submission_id}_{index}"
+    cloudinary.uploader.upload(
+        local_path,
+        public_id=public_id,
+        asset_folder="helmets/submissions",
+        overwrite=True,
+        invalidate=True,
+    )
+    return public_id
+
+
 def logo_url(path: str) -> str:
     """Assemble a full Cloudinary URL from a stored path.
 
