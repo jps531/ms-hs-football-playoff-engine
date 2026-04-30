@@ -79,6 +79,13 @@ class SeasonStructureResponse(BaseModel):
     classes: list[ClassStructure]
 
 
+class ImageUploadResponse(BaseModel):
+    """Result of a Cloudinary image upload."""
+
+    path: str
+    url: str
+
+
 class TeamModel(BaseModel):
     """Single team with identity metadata."""
 
@@ -310,6 +317,25 @@ class LocationModel(BaseModel):
     name: str
     city: str | None = None
     home_team: str | None = None
+
+
+class LocationDetailModel(BaseModel):
+    """A venue with full coordinate data."""
+
+    id: int
+    name: str
+    city: str | None = None
+    home_team: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+class OverrideAuditRow(BaseModel):
+    """One active manual override entry."""
+
+    source: str
+    key: str
+    value: str
 
 
 class PlayoffFormatSeedResult(BaseModel):

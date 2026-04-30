@@ -1,6 +1,27 @@
 """Pydantic request body models for the playoff engine REST API."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Override field type aliases — used in request bodies and DELETE path validation
+# ---------------------------------------------------------------------------
+
+SchoolOverrideField = Literal[
+    "display_name", "mascot",
+    "primary_color", "secondary_color",
+    "primary_color_hex", "secondary_color_hex",
+    "latitude", "longitude",
+]
+
+GameOverrideField = Literal[
+    "location", "location_id",
+    "points_for", "points_against",
+    "region_game", "round", "kickoff_time",
+]
+
+LocationOverrideField = Literal["home_team", "latitude", "longitude"]
 
 
 class GameResultRequest(BaseModel):
@@ -93,3 +114,119 @@ class AssignChampionshipVenueRequest(BaseModel):
     class_: int | None = Field(default=None, alias="class", ge=1, le=7)
 
     model_config = {"populate_by_name": True}
+
+
+# ---------------------------------------------------------------------------
+# Override endpoints
+# ---------------------------------------------------------------------------
+
+
+class SetSchoolOverrideRequest(BaseModel):
+    """Set one key in a school's overrides JSONB, shadowing the pipeline-written value."""
+
+    field: SchoolOverrideField
+    value: str
+
+
+class SetGameOverrideRequest(BaseModel):
+    """Set one key in a game row's overrides JSONB, shadowing the pipeline-written value."""
+
+    field: GameOverrideField
+    value: str
+
+
+class SetLocationOverrideRequest(BaseModel):
+    """Set one key in a location's overrides JSONB, shadowing the base column value."""
+
+    field: LocationOverrideField
+    value: str
+
+
+# ---------------------------------------------------------------------------
+# Game helmet assignment
+# ---------------------------------------------------------------------------
+
+
+class SetGameHelmetRequest(BaseModel):
+    """Assign or clear the helmet design worn by a school in a specific game."""
+
+    helmet_design_id: int | None
+
+
+# ---------------------------------------------------------------------------
+# School season flags
+# ---------------------------------------------------------------------------
+
+
+class PatchSchoolSeasonRequest(BaseModel):
+    """Manually-managed school_season fields (pipeline never writes these)."""
+
+    is_active: bool
+
+
+# ---------------------------------------------------------------------------
+# Location CRUD
+# ---------------------------------------------------------------------------
+
+
+class CreateLocationRequest(BaseModel):
+    """Create a new venue in the locations table."""
+
+    name: str
+    city: str | None = None
+    home_team: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+class PatchLocationRequest(BaseModel):
+    """Partial update for an existing venue — only provided fields are written."""
+
+    name: str | None = None
+    city: str | None = None
+    home_team: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+# ---------------------------------------------------------------------------
+# Helmet design CRUD
+# ---------------------------------------------------------------------------
+
+
+class YearsWornRangeInput(BaseModel):
+    """A contiguous span of seasons a helmet design was worn."""
+
+    start: int
+    end: int
+
+
+class CreateHelmetDesignRequest(BaseModel):
+    """Create a new helmet design record. Upload images separately via /images/helmets/{id}/{type}."""
+
+    school: str
+    year_first_worn: int
+    year_last_worn: int | None = None
+    years_worn: list[YearsWornRangeInput] | None = None
+    color: str | None = None
+    finish: str | None = None
+    facemask_color: str | None = None
+    logo: str | None = None
+    stripe: str | None = None
+    tags: list[str] = []
+    notes: str | None = None
+
+
+class PatchHelmetDesignRequest(BaseModel):
+    """Partial update for a helmet design — only provided fields are written. Image columns are managed via /images/helmets/."""
+
+    year_first_worn: int | None = None
+    year_last_worn: int | None = None
+    years_worn: list[YearsWornRangeInput] | None = None
+    color: str | None = None
+    finish: str | None = None
+    facemask_color: str | None = None
+    logo: str | None = None
+    stripe: str | None = None
+    tags: list[str] | None = None
+    notes: str | None = None

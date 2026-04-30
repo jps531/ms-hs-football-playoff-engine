@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import db
-from backend.api.routers import admin, bracket, games, hosting, meta, ratings, standings
+from backend.api.routers import admin, bracket, games, hosting, images, meta, ratings, standings
 
 
 @asynccontextmanager
@@ -43,3 +43,4 @@ app.include_router(bracket.router)
 app.include_router(games.router)
 app.include_router(ratings.router)
 app.include_router(admin.router)
+app.include_router(images.router)

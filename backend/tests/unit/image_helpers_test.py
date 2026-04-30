@@ -1,7 +1,5 @@
 """Tests for image URL assembly in image_helpers.py."""
 
-import pytest
-
 from backend.helpers.image_helpers import logo_url
 
 

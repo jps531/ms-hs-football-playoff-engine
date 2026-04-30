@@ -18,12 +18,13 @@ The following data model describes how data is stored and controlled in this app
 
 | Table | Description |
 |-------|-------------|
-| `schools` | Static school identity: location (city, zip, lat/lon), mascot, colors. Never duplicated across seasons. |
+| `schools` | Static school identity: location (city, zip, lat/lon), mascot, colors, and Cloudinary logo paths (`logo_primary`, `logo_secondary`, `logo_tertiary`). Never duplicated across seasons. |
+| `helmet_designs` | Per-school helmet design history. One row per distinct design; `year_first_worn`/`year_last_worn` span multiple seasons. Stores Cloudinary image paths for left-view mockup, right-view mockup, and photo. |
 | `school_seasons` | Per-season class and region assignments (can change on MHSAA's two-year cycle). FK anchor for all season-scoped data. |
 | `locations` | Physical venues. Referenced by `games` for geocoding and home-field logic. |
 | `games` | School-perspective game rows — two rows per contest, so scores and results are always relative to the `school` column. Covers regular season and playoffs. |
-| `region_standings` | Dated snapshots of seeding probabilities (1st–4th, playoff odds, home-game odds). Appended each pipeline run; never overwritten. |
-| `team_ratings` | Dated Elo and RPI snapshots. One row per school per season per pipeline run. |
+| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion), and home-game odds per round. Appended each pipeline run; never overwritten. |
+| `team_ratings` | Dated Elo and RPI snapshots. One row per school per season per `as_of_date`. |
 | `region_scenarios` | Serialized tiebreaker scenario trees (complete outcomes + minimized per-team conditions). Computed once per pipeline run, read at request time. |
 | `region_computation_state` | Tracks background margin-sensitivity upgrade status per region (the two-phase computation model for regions with 5–6 games remaining). |
 | `playoff_formats` | Bracket template per class/season: size, number of regions, rounds. |
@@ -39,6 +40,21 @@ erDiagram
         text mascot
         text primary_color
         text secondary_color
+        text logo_primary
+        text logo_secondary
+        text logo_tertiary
+    }
+    helmet_designs {
+        int id PK
+        text school FK
+        int year_first_worn
+        int year_last_worn
+        text image_left
+        text image_right
+        text photo
+        text color
+        text finish
+        text tags
     }
     school_seasons {
         text school PK,FK
@@ -124,7 +140,8 @@ erDiagram
         text north_south
     }
 
-    schools ||--o{ school_seasons : "enrolled in"
+    schools ||--o{ school_seasons : "plays in"
+    schools ||--o{ helmet_designs : "wears"
     schools ||--o{ team_ratings : "rated in"
     school_seasons ||--o{ games : "plays"
     school_seasons ||--o{ region_standings : "has odds in"
@@ -329,8 +346,58 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 #### Admin — `/admin`
 
+**Season setup**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/playoff-format` | Seed `playoff_formats` + `playoff_format_slots` for a new season. Idempotent. `?dry_run=true` to preview counts without writing |
+| POST | `/championship-venue` | Set `location_id = neutral` on all Championship Game rows for a season. `?dry_run=true` to preview affected rows without writing |
+
+**Overrides** — the three base tables (`schools`, `games`, `locations`) each have an `overrides` JSONB column that wins over the pipeline-written value on read (via the `*_effective` views). Use these endpoints instead of raw SQL when you need to correct a pipeline error without touching the source data.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/overrides` | Audit all active manual overrides across schools, locations, and games |
+| PUT | `/schools/{school}/overrides` | Set one override field on a school. Body: `{ "field": "display_name", "value": "West Jones" }`. Valid fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude` |
+| DELETE | `/schools/{school}/overrides/{field}` | Clear one override field, restoring the pipeline-written value |
+| PUT | `/games/{school}/{date}/overrides` | Set one override field on a game row (e.g. fix a miscategorized region game or a wrong score). Valid fields: `location`, `location_id`, `points_for`, `points_against`, `region_game`, `round`, `kickoff_time` |
+| DELETE | `/games/{school}/{date}/overrides/{field}` | Clear one override field on a game row |
+| PUT | `/locations/{id}/overrides` | Set one override field on a venue. Valid fields: `home_team`, `latitude`, `longitude` |
+| DELETE | `/locations/{id}/overrides/{field}` | Clear one override field on a venue |
+
+**Games (manual-only columns)**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PUT | `/games/{school}/{date}/helmet` | Assign or clear the helmet design worn by `school` in a game. Body: `{ "helmet_design_id": 42 }` (or `null` to clear) |
+
+**School seasons**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PATCH | `/school-seasons/{school}/{season}` | Toggle `is_active` for a school in a season (pipeline never writes this column). Body: `{ "is_active": false }` |
+
+**Locations CRUD** — the pipeline never writes this table; venues are otherwise seeded by SQL only.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/locations` | List all venues (id, name, city, home_team); use to look up `location_id` for other admin calls |
-| POST | `/playoff-format` | Seed `playoff_formats` + `playoff_format_slots` for a new season. Idempotent. `?dry_run=true` to preview counts without writing |
-| POST | `/championship-venue` | Set `location_id = neutral` on all Championship Game rows for a season. `?dry_run=true` to preview affected rows without writing |
+| POST | `/locations` | Add a new venue. Body: `name` (required), `city`, `home_team`, `latitude`, `longitude`. Returns full record including `id`. 409 on duplicate `(name, city, home_team)` |
+| PATCH | `/locations/{id}` | Partial update of any venue field. Only provided fields are written |
+
+**Helmet designs CRUD** — the pipeline never writes this table. Create a record first to get an `id`, then upload images via `POST /images/helmets/{id}/{type}`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/helmets` | Create a new helmet design record. Body: `school` (required), `year_first_worn` (required), plus optional `year_last_worn`, `years_worn`, `color`, `finish`, `facemask_color`, `logo`, `stripe`, `tags`, `notes`. Returns full record including generated `id` |
+| PATCH | `/helmets/{id}` | Partial update of any metadata field (not image columns). Only provided fields are written |
+| DELETE | `/helmets/{id}` | Delete a helmet design. Any games referencing it have `helmet_design_id` set to NULL automatically |
+
+#### Images — `/images`
+
+Upload images to Cloudinary and write the resulting path back to the database. Returns `{ "path": "...", "url": "https://..." }`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/logos/{school}/{logo_type}` | Upload a school logo (`primary`, `secondary`, or `tertiary`). Updates `schools.logo_{type}`. |
+| POST | `/helmets/{helmet_design_id}/{image_type}` | Upload a helmet image (`left`, `right`, or `photo`). Looks up school and year from the existing `helmet_designs` row, uploads to `helmets/{type}/{School}_{year}_{id}`, and updates the corresponding column. |
