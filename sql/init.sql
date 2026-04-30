@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS schools (
   secondary_color     TEXT,
   primary_color_hex   TEXT,
   secondary_color_hex TEXT,
+  logo_override       TEXT,
   overrides           JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
@@ -146,7 +147,7 @@ SELECT
   COALESCE(overrides->>'primary_color',        primary_color)       AS primary_color,
   COALESCE(overrides->>'secondary_color',      secondary_color)     AS secondary_color,
   COALESCE(overrides->>'display_name',         school)              AS display_name,
-  COALESCE(overrides->>'display_logo',         '')                  AS display_logo,
+  COALESCE(logo_override, overrides->>'display_logo', '')           AS display_logo,
   COALESCE(overrides->>'primary_color_hex',    primary_color_hex)   AS primary_color_hex,
   COALESCE(overrides->>'secondary_color_hex',  secondary_color_hex) AS secondary_color_hex,
   overrides

@@ -15,6 +15,7 @@ from backend.api.models.responses import (
     TeamModel,
     YearsWornRange,
 )
+from backend.helpers.image_helpers import logo_url
 
 router = APIRouter(prefix="/api/v1", tags=["meta"])
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
@@ -92,7 +93,7 @@ async def list_teams(
                 mascot=r[6] or "",
                 primary_color=r[7] or "",
                 secondary_color=r[8] or "",
-                display_logo=r[9] or "",
+                display_logo=logo_url(r[9] or ""),
             )
             async for r in rows
         ]
