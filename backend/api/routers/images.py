@@ -4,9 +4,10 @@ import os
 import tempfile
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from psycopg import sql
 
+from backend.api.auth import require_moderator
 from backend.api.db import get_conn
 from backend.api.models.responses import ImageUploadResponse
 from backend.helpers.image_helpers import (
@@ -17,7 +18,7 @@ from backend.helpers.image_helpers import (
     upload_logo,
 )
 
-router = APIRouter(prefix="/api/v1/images", tags=["images"])
+router = APIRouter(prefix="/api/v1/images", tags=["images"], dependencies=[Depends(require_moderator)])
 
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 

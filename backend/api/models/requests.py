@@ -288,3 +288,29 @@ class ModerationDecisionRequest(BaseModel):
     """Optional body for a moderator approve/reject action."""
 
     notes: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Auth / Users
+# ---------------------------------------------------------------------------
+
+
+class PatchUserRequest(BaseModel):
+    """Body for PATCH /users/me — all fields optional."""
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=100)
+    phone: str | None = None
+    hometown: str | None = None
+    favorite_team: str | None = None
+
+
+class SetUserRoleRequest(BaseModel):
+    """Body for PATCH /users/{id}/role — owner cannot be assigned via API."""
+
+    role: Literal["user", "moderator"]
+
+
+class SetUserActiveRequest(BaseModel):
+    """Body for PATCH /users/{id}/active."""
+
+    is_active: bool

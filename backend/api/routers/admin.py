@@ -3,10 +3,11 @@
 from datetime import date as date_type
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from psycopg import sql
 from psycopg.errors import UniqueViolation
 
+from backend.api.auth import require_moderator
 from backend.api.db import get_conn
 from backend.api.models.requests import (
     AssignChampionshipVenueRequest,
@@ -61,7 +62,7 @@ def _row_to_helmet(r) -> HelmetDesignModel:
         tags=list(r[13] or []), notes=r[14],
     )
 
-router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+router = APIRouter(prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_moderator)])
 
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 

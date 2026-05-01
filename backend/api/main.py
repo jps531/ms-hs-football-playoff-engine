@@ -3,8 +3,12 @@
 Startup and shutdown lifecycle are handled via the ``lifespan`` context manager,
 which opens and closes the async psycopg v3 connection pool.  CORS is configured
 to allow any origin for local development; restrict in production.
+
+Swagger UI and ReDoc are only served when ENVIRONMENT=local (the default).
+In production the docs URL is disabled to prevent public schema exposure.
 """
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api import db
 from backend.api.routers import (
     admin,
+    auth_router,
     bracket,
     games,
     hosting,
@@ -22,7 +27,10 @@ from backend.api.routers import (
     ratings,
     standings,
     submissions,
+    users,
 )
+
+_ENV = os.getenv("ENVIRONMENT", "local")
 
 
 @asynccontextmanager
@@ -38,6 +46,9 @@ app = FastAPI(
     description="Playoff scenarios, seeding odds, win probabilities, and bracket advancement for Mississippi high school football.",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if _ENV == "local" else None,
+    redoc_url="/redoc" if _ENV == "local" else None,
+    openapi_url="/openapi.json" if _ENV == "local" else None,
 )
 
 app.add_middleware(
@@ -47,6 +58,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router.router)
+app.include_router(users.router)
 app.include_router(meta.router)
 app.include_router(standings.router)
 app.include_router(hosting.router)

@@ -29,7 +29,10 @@ The following data model describes how data is stored and controlled in this app
 | `region_computation_state` | Tracks background margin-sensitivity upgrade status per region (the two-phase computation model for regions with 5–6 games remaining). |
 | `playoff_formats` | Bracket template per class/season: size, number of regions, rounds. |
 | `playoff_format_slots` | First-round matchup slots. Adjacent pairs implicitly define the bracket tree for round-2 and beyond. |
-| `submissions` | User-submitted corrections and new assets (logos, helmet designs, colors, GPS coordinates, scores, feedback). Rows enter the queue with `status='pending'` and are approved or rejected by a moderator via the moderation API. Approved submissions are auto-applied to the live tables (except helmet submissions, which require manual mockup creation). |
+| `submissions` | User-submitted corrections and new assets (logos, helmet designs, colors, GPS coordinates, scores, feedback). Rows enter the queue with `status='pending'` and are approved or rejected by a moderator via the moderation API. Approved submissions are auto-applied to the live tables (except helmet submissions, which require manual mockup creation). Has an optional `user_id` FK for linking submissions to registered users. |
+| `users` | Registered user accounts with role (`user`/`moderator`/`owner`), profile fields (display name, phone, hometown), and a favorite team FK. Identity is managed by Auth0; `auth0_id` stores the Auth0 `sub` claim. Rows are lazy-provisioned on first authenticated request. |
+| `user_followed_teams` | Many-to-many join between users and the schools they follow. |
+| `user_attended_games` | Many-to-many join between users and games they marked as attended. References the composite PK `(school, date)` on `games`. |
 
 ### Schema Diagram
 
@@ -146,16 +149,40 @@ erDiagram
         text type
         text status
         text school FK
+        int user_id FK
         jsonb payload
         text moderator_notes
         timestamptz reviewed_at
         timestamptz submitted_at
+    }
+    users {
+        int id PK
+        text auth0_id
+        text email
+        text display_name
+        text role
+        text favorite_team FK
+        bool is_active
+    }
+    user_followed_teams {
+        int user_id PK,FK
+        text school PK,FK
+    }
+    user_attended_games {
+        int user_id PK,FK
+        text school PK,FK
+        date date PK
     }
 
     schools ||--o{ school_seasons : "plays in"
     schools ||--o{ helmet_designs : "wears"
     schools ||--o{ team_ratings : "rated in"
     schools ||--o{ submissions : "submitted for"
+    schools ||--o{ user_followed_teams : "followed by"
+    users ||--o{ submissions : "submitted by"
+    users ||--o{ user_followed_teams : "follows"
+    users ||--o{ user_attended_games : "attended"
+    games ||--o{ user_attended_games : "attended by"
     school_seasons ||--o{ games : "plays"
     school_seasons ||--o{ region_standings : "has odds in"
     locations ||--o{ games : "hosted at"
@@ -168,17 +195,36 @@ erDiagram
 
 #### Start the Docker Containers
 
-Copy the environment template, then bring up the stack:
+Copy the environment template, fill in `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` from your Auth0 dashboard, then bring up the stack:
 
 ```
 cp .env.example .env.local
-docker compose --env-file .env.local --profile local-db down
 docker compose --env-file .env.local --profile local-db up --build -d
 ```
 
-The `--profile local-db` flag is required to start the local PostgreSQL container (`db` service). Without it, only the Prefect server/worker and API start — use that when pointing at a remote database instead.
+The `--profile local-db` flag is required to start the local PostgreSQL container (`db` service). On a VM with an external database, omit it.
 
-This starts the Prefect server/worker (`localhost:4200`), a local PostgreSQL instance (`localhost:5432`), and the API server (`localhost:8000`).
+This starts nginx (`localhost:80`), Prefect server/worker (internal), and a local PostgreSQL instance (`localhost:5432`).
+
+> **nginx reverse proxy**: All traffic enters through nginx on port 80. The Prefect UI is accessible at `http://localhost/prefect/` but requires a valid moderator `Authorization: Bearer <token>` header.
+
+#### Start the API (local development)
+
+The FastAPI API runs **outside Docker** in local development due to a Docker Desktop on Apple Silicon limitation with asymmetric crypto. Run it natively against the Dockerized PostgreSQL:
+
+```
+cp .env.example .env.non-docker.local   # fill in all vars + POSTGRES_HOST=localhost
+(set -a && source .env.non-docker.local && set +a && uv run fastapi run backend/api/main.py --host 0.0.0.0 --port 8000)
+```
+
+The API is then available directly at `http://localhost:8000`. Swagger UI is at `http://localhost:8000/docs`.
+
+After first login via Auth0, promote yourself to owner directly in the database:
+
+```
+docker exec -it ms-hs-football-playoff-engine-db-1 psql -U postgres -d mshsfootball -c \
+  "UPDATE users SET role = 'owner' WHERE auth0_id = 'auth0|YOUR_SUB_HERE';"
+```
 
 To reset the database and re-run the schema from scratch (e.g. after a schema change):
 
@@ -188,6 +234,16 @@ docker compose --env-file .env.local --profile local-db up --build -d
 ```
 
 The `-v` flag removes the postgres data volume; the container will re-run `sql/init.sql` on startup.
+
+#### Production / VM deployment
+
+On an x86_64 Linux VM the API runs in Docker normally (no Apple Silicon crypto limitation). Use `.env.local` with `COMPOSE_PROFILES=` (no `local-db` if the database is external):
+
+```
+docker compose --env-file .env.local up --build -d
+```
+
+Required env vars: `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`, `CLOUDINARY_*`.
 
 #### Once per season (pre-season setup)
 
@@ -415,22 +471,49 @@ Upload images to Cloudinary and write the resulting path back to the database. R
 | POST | `/logos/{school}/{logo_type}` | Upload a school logo (`primary`, `secondary`, or `tertiary`). Updates `schools.logo_{type}`. |
 | POST | `/helmets/{helmet_design_id}/{image_type}` | Upload a helmet image (`left`, `right`, or `photo`). Looks up school and year from the existing `helmet_designs` row, uploads to `helmets/{type}/{School}_{year}_{id}`, and updates the corresponding column. |
 
+#### Auth — `/auth`
+
+Authentication is handled by **Auth0**. Users log in via Auth0 and receive an RS256-signed JWT access token, which they pass as `Authorization: Bearer <token>` on every request. The API validates tokens against Auth0's JWKS endpoint and lazy-provisions a `users` row on first authenticated request.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/verify-moderator` | Bearer (moderator+) | Internal endpoint called by nginx `auth_request` to gate the Prefect UI. Returns 200 for moderator/owner, 401/403 otherwise. Not shown in Swagger. |
+
+#### Users — `/users`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/me` | Bearer | Own profile: display name, phone, hometown, favorite team, followed teams, attended game count. |
+| PATCH | `/me` | Bearer | Update display name, phone, hometown, or favorite team. |
+| GET | `/me/followed-teams` | Bearer | List followed school names. |
+| PUT | `/me/followed-teams/{school}` | Bearer | Follow a team (idempotent). 404 if school not found. |
+| DELETE | `/me/followed-teams/{school}` | Bearer | Unfollow. |
+| GET | `/me/attended-games` | Bearer | List attended games with opponent and result. |
+| PUT | `/me/attended-games/{school}/{date}` | Bearer | Mark a game as attended (idempotent). 404 if game not found. |
+| DELETE | `/me/attended-games/{school}/{date}` | Bearer | Remove attendance record. |
+| GET | `/me/submissions` | Bearer | List own submissions. |
+| GET | `/` | Owner | List all user accounts (admin view). |
+| PATCH | `/{user_id}/role` | Owner | Promote/demote to `user` or `moderator` (cannot set `owner`). |
+| PATCH | `/{user_id}/active` | Owner | Activate or deactivate an account. |
+
 #### Submissions — `/submissions`
 
-Unauthenticated endpoints for user-submitted corrections and new assets. Submissions enter a moderation queue with `status='pending'` and are not applied to the live database until approved via the moderation API.
+Open endpoints — no authentication required. Submissions enter a moderation queue with `status='pending'` and are not applied to the live database until approved via the moderation API.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/logos` | Submit a school logo for moderator review. Multipart: `school`, `logo_type` (`primary`/`secondary`/`tertiary`), `file`. Image is staged on Cloudinary and promoted to production on approval. 404 if school not found. |
-| POST | `/helmets` | Submit a helmet design for moderator review. Multipart: `school`, `year_first_worn`, `description`, plus optional metadata fields and up to 5 reference images (`images`) and an optional logo image (`logo_image`). Moderator creates the helmet record manually from the submitted info. 404 if school not found. |
-| POST | `/colors` | Submit a school color correction. Body: `school`, optional `primary_color` `{name, hex}`, optional `secondary_colors` array. Auto-applied on approval via `set_school_override`. 404 if school not found. |
-| POST | `/locations` | Submit corrected GPS coordinates for a school. Body: `school`, `latitude`, `longitude`. Auto-applied on approval via `set_school_override`. 404 if school not found. |
-| POST | `/scores` | Submit a corrected game score. Body: `school`, `date`, `points_for`, `points_against`. Both the school and the game row must already exist. Auto-applied on approval via `set_game_override`. 404 if school or game not found. |
-| POST | `/feedback` | Submit general feedback (no school required). Body: `subject`, `message`. No DB action is taken on approval. |
+If a valid `Authorization: Bearer <token>` header is included, the submission is linked to the authenticated user (`user_id`). This is optional but enables future features like auto-approval for trusted contributors. Anonymous submissions are accepted normally with `user_id=NULL`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/logos` | optional Bearer | Submit a school logo for moderator review. Multipart: `school`, `logo_type` (`primary`/`secondary`/`tertiary`), `file`. Image is staged on Cloudinary and promoted to production on approval. 404 if school not found. |
+| POST | `/helmets` | optional Bearer | Submit a helmet design for moderator review. Multipart: `school`, `year_first_worn`, `description`, plus optional metadata fields and up to 5 reference images (`images`) and an optional logo image (`logo_image`). Moderator creates the helmet record manually from the submitted info. 404 if school not found. |
+| POST | `/colors` | optional Bearer | Submit a school color correction. Body: `school`, optional `primary_color` `{name, hex}`, optional `secondary_colors` array. Auto-applied on approval via `set_school_override`. 404 if school not found. |
+| POST | `/locations` | optional Bearer | Submit corrected GPS coordinates for a school. Body: `school`, `latitude`, `longitude`. Auto-applied on approval via `set_school_override`. 404 if school not found. |
+| POST | `/scores` | optional Bearer | Submit a corrected game score. Body: `school`, `date`, `points_for`, `points_against`. Both the school and the game row must already exist. Auto-applied on approval via `set_game_override`. 404 if school or game not found. |
+| POST | `/feedback` | optional Bearer | Submit general feedback (no school required). Body: `subject`, `message`. No DB action is taken on approval. |
 
 #### Moderation — `/moderation`
 
-Requires the `X-Moderator-Key` header to match the `MODERATOR_API_KEY` environment variable.
+Requires a valid `Authorization: Bearer <token>` header with `moderator` or `owner` role.
 
 | Method | Path | Description |
 |--------|------|-------------|

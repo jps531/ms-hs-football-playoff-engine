@@ -1,8 +1,12 @@
 """Public endpoints for user-submitted corrections and new assets.
 
-All endpoints are unauthenticated.  Submissions enter a moderation queue
-and are not applied to the live database until a moderator approves them
-via ``/api/v1/moderation/submissions/{id}/approve``.
+All endpoints are open to anonymous callers.  If the request includes a valid
+Auth0 Bearer token the submission is linked to that user's row (user_id), which
+enables future features like auto-approval for trusted contributors.  Submissions
+without a token are accepted normally with user_id=NULL.
+
+Submissions enter a moderation queue and are not applied to the live database
+until a moderator approves them via ``/api/v1/moderation/submissions/{id}/approve``.
 """
 
 import json
@@ -12,6 +16,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
+from backend.api.auth import OptionalUser
 from backend.api.db import get_conn
 from backend.api.models.requests import (
     SubmitColorsRequest,
@@ -53,6 +58,7 @@ async def submit_logo(
     school: Annotated[str, Form()],
     logo_type: Annotated[LogoType, Form()],
     file: Annotated[UploadFile, File()],
+    current_user: OptionalUser = None,
 ) -> SubmissionCreatedResponse:
     """Submit a school logo for moderator review.
 
@@ -70,12 +76,13 @@ async def submit_logo(
     finally:
         os.unlink(tmp_path)
 
+    user_id = current_user["db_id"] if current_user else None
     payload = {"logo_type": logo_type, "cloudinary_path": cloudinary_path}
     async with get_conn() as conn:
         row = await (
             await conn.execute(
-                "INSERT INTO submissions (type, school, payload) VALUES ('logo', %s, %s) RETURNING id, submitted_at",
-                (school, json.dumps(payload)),
+                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('logo', %s, %s, %s) RETURNING id, submitted_at",
+                (school, user_id, json.dumps(payload)),
             )
         ).fetchone()
     assert row is not None
@@ -98,6 +105,7 @@ async def submit_helmet(
     additional_notes: Annotated[str | None, Form()] = None,
     images: Annotated[list[UploadFile], File()] = [],
     logo_image: Annotated[UploadFile | None, File()] = None,
+    current_user: OptionalUser = None,
 ) -> SubmissionCreatedResponse:
     """Submit a helmet design for moderator review.
 
@@ -134,12 +142,13 @@ async def submit_helmet(
         if val is not None:
             payload[key] = val
 
+    user_id = current_user["db_id"] if current_user else None
     # Insert first so we get the submission_id for Cloudinary path construction.
     async with get_conn() as conn:
         row = await (
             await conn.execute(
-                "INSERT INTO submissions (type, school, payload) VALUES ('helmet', %s, %s) RETURNING id, submitted_at",
-                (school, json.dumps(payload)),
+                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('helmet', %s, %s, %s) RETURNING id, submitted_at",
+                (school, user_id, json.dumps(payload)),
             )
         ).fetchone()
     assert row is not None
@@ -185,8 +194,9 @@ async def submit_helmet(
 
 
 @router.post("/colors", status_code=status.HTTP_201_CREATED, responses=_404)
-async def submit_colors(body: SubmitColorsRequest) -> SubmissionCreatedResponse:
+async def submit_colors(body: SubmitColorsRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit a school color correction for moderator review."""
+    user_id = current_user["db_id"] if current_user else None
     async with get_conn() as conn:
         await _require_school(conn, body.school)
 
@@ -198,8 +208,8 @@ async def submit_colors(body: SubmitColorsRequest) -> SubmissionCreatedResponse:
 
         row = await (
             await conn.execute(
-                "INSERT INTO submissions (type, school, payload) VALUES ('colors', %s, %s) RETURNING id, submitted_at",
-                (body.school, json.dumps(payload)),
+                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('colors', %s, %s, %s) RETURNING id, submitted_at",
+                (body.school, user_id, json.dumps(payload)),
             )
         ).fetchone()
         assert row is not None
@@ -208,16 +218,17 @@ async def submit_colors(body: SubmitColorsRequest) -> SubmissionCreatedResponse:
 
 
 @router.post("/locations", status_code=status.HTTP_201_CREATED, responses=_404)
-async def submit_location(body: SubmitLocationRequest) -> SubmissionCreatedResponse:
+async def submit_location(body: SubmitLocationRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit corrected GPS coordinates for a school."""
+    user_id = current_user["db_id"] if current_user else None
     async with get_conn() as conn:
         await _require_school(conn, body.school)
 
         payload = {"latitude": body.latitude, "longitude": body.longitude}
         row = await (
             await conn.execute(
-                "INSERT INTO submissions (type, school, payload) VALUES ('location', %s, %s) RETURNING id, submitted_at",
-                (body.school, json.dumps(payload)),
+                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('location', %s, %s, %s) RETURNING id, submitted_at",
+                (body.school, user_id, json.dumps(payload)),
             )
         ).fetchone()
         assert row is not None
@@ -226,7 +237,7 @@ async def submit_location(body: SubmitLocationRequest) -> SubmissionCreatedRespo
 
 
 @router.post("/scores", status_code=status.HTTP_201_CREATED, responses={404: {"description": "School or game not found"}})
-async def submit_score(body: SubmitScoreRequest) -> SubmissionCreatedResponse:
+async def submit_score(body: SubmitScoreRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit a corrected game score for moderator review.
 
     Both the school and the game (school + date) must already exist in the database.
@@ -246,6 +257,7 @@ async def submit_score(body: SubmitScoreRequest) -> SubmissionCreatedResponse:
                 detail=f"Game for '{body.school}' on {body.date} not found",
             )
 
+        user_id = current_user["db_id"] if current_user else None
         payload = {
             "date": body.date.isoformat(),
             "points_for": body.points_for,
@@ -253,8 +265,8 @@ async def submit_score(body: SubmitScoreRequest) -> SubmissionCreatedResponse:
         }
         row = await (
             await conn.execute(
-                "INSERT INTO submissions (type, school, payload) VALUES ('score', %s, %s) RETURNING id, submitted_at",
-                (body.school, json.dumps(payload)),
+                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('score', %s, %s, %s) RETURNING id, submitted_at",
+                (body.school, user_id, json.dumps(payload)),
             )
         ).fetchone()
         assert row is not None
@@ -263,14 +275,15 @@ async def submit_score(body: SubmitScoreRequest) -> SubmissionCreatedResponse:
 
 
 @router.post("/feedback", status_code=status.HTTP_201_CREATED)
-async def submit_feedback(body: SubmitFeedbackRequest) -> SubmissionCreatedResponse:
+async def submit_feedback(body: SubmitFeedbackRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit general feedback for moderator review."""
+    user_id = current_user["db_id"] if current_user else None
     payload = {"subject": body.subject, "message": body.message}
     async with get_conn() as conn:
         row = await (
             await conn.execute(
-                "INSERT INTO submissions (type, school, payload) VALUES ('feedback', NULL, %s) RETURNING id, submitted_at",
-                (json.dumps(payload),),
+                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('feedback', NULL, %s, %s) RETURNING id, submitted_at",
+                (user_id, json.dumps(payload)),
             )
         ).fetchone()
     assert row is not None

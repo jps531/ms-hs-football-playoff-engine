@@ -1,31 +1,169 @@
-"""Moderator API key authentication dependency."""
+"""Auth0-based JWT authentication for the Mississippi HS Football Playoff Engine API.
 
+Access tokens are issued by Auth0 (RS256, validated against Auth0's JWKS endpoint).
+Roles and active status live in our own users table; get_current_user enriches the
+decoded JWT payload with db_id and role via a single DB lookup, lazy-provisioning
+a new user row (role='user') on the first authenticated request from a given Auth0 sub.
+"""
+
+import json
 import os
+import urllib.request
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
+from jose import JWTError, jwt
 
-_KEY_ENV = "MODERATOR_API_KEY"
+AUTH0_DOMAIN = os.environ["AUTH0_DOMAIN"]
+AUTH0_AUDIENCE = os.environ["AUTH0_AUDIENCE"]
+_ISSUER = f"https://{AUTH0_DOMAIN}/"
+_ALGORITHMS = ["RS256"]
+
+_jwks_cache: dict | None = None
 
 
-def require_moderator(
-    x_moderator_key: Annotated[str | None, Header()] = None,
-) -> None:
-    """Validate the X-Moderator-Key request header.
+def _get_jwks() -> dict:
+    """Fetch and module-level-cache Auth0's JSON Web Key Set."""
+    global _jwks_cache
+    if _jwks_cache is None:
+        url = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json"
+        with urllib.request.urlopen(url) as response:
+            _jwks_cache = json.load(response)
+    return _jwks_cache
 
-    Reads ``MODERATOR_API_KEY`` from the environment at call time so tests
-    can override it via ``monkeypatch.setenv``.  Raises HTTP 401 if the
-    header is absent or does not match.
-    """
-    expected = os.environ.get(_KEY_ENV)
-    if not expected:
-        raise RuntimeError(f"Server misconfiguration: {_KEY_ENV} env var is not set")
-    if x_moderator_key != expected:
+
+def _find_rsa_key(jwks: dict, kid: str) -> dict:
+    """Return the RSA key matching kid, or empty dict if not found."""
+    for key in jwks.get("keys", []):
+        if key.get("kid") == kid:
+            return {k: key[k] for k in ("kty", "kid", "use", "n", "e") if k in key}
+    return {}
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"https://{AUTH0_DOMAIN}/oauth/token")
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+def _decode_auth0_token(token: str) -> dict:
+    """Validate an Auth0 RS256 JWT against the JWKS; raise HTTP 401 on any failure."""
+    try:
+        header = jwt.get_unverified_header(token)  # nosonar: python:S5659 — kid extracted here solely to select the JWKS key; full signature+claims verification is done by jwt.decode() below
+        rsa_key = _find_rsa_key(_get_jwks(), header.get("kid", ""))
+        if not rsa_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unable to find signing key",
+            )
+        return jwt.decode(
+            token,
+            rsa_key,
+            algorithms=_ALGORITHMS,
+            audience=AUTH0_AUDIENCE,
+            issuer=_ISSUER,
+        )
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing X-Moderator-Key header",
-            headers={"WWW-Authenticate": "ApiKey"},
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
 
-ModeratorAuth = Annotated[None, Depends(require_moderator)]
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dict:
+    """Validate the Auth0 JWT, look up the user in our DB, and return an enriched payload.
+
+    Lazy-provisions a new user row (role='user') on the first authenticated request.
+    Raises HTTP 401 if the account has been deactivated.
+    """
+    from backend.api.db import get_conn  # local import avoids circular dependency
+
+    payload = _decode_auth0_token(token)
+    sub = payload["sub"]
+
+    async with get_conn() as conn:
+        row = await (
+            await conn.execute(
+                "SELECT id, role, is_active FROM users WHERE auth0_id = %s",
+                (sub,),
+            )
+        ).fetchone()
+
+        if row is None:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO users (auth0_id, email, display_name)
+                    VALUES (%s, %s, %s)
+                    RETURNING id, role, is_active
+                    """,
+                    (sub, payload.get("email", ""), payload.get("name", sub)),
+                )
+            ).fetchone()
+
+    assert row is not None
+    db_id, role, is_active = row
+    if not is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is deactivated",
+        )
+    return {**payload, "db_id": db_id, "role": role}
+
+
+# ---------------------------------------------------------------------------
+# Composable role dependencies
+# ---------------------------------------------------------------------------
+
+
+def require_user(payload: Annotated[dict, Depends(get_current_user)]) -> dict:
+    """Require any authenticated active user."""
+    return payload
+
+
+def require_moderator(payload: Annotated[dict, Depends(get_current_user)]) -> dict:
+    """Require moderator or owner role; raise HTTP 403 for base users."""
+    if payload.get("role") not in ("moderator", "owner"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Moderator access required",
+        )
+    return payload
+
+
+def require_owner(payload: Annotated[dict, Depends(get_current_user)]) -> dict:
+    """Require owner role; raise HTTP 403 for moderators and base users."""
+    if payload.get("role") != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner access required",
+        )
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Annotated type aliases for route signatures
+# ---------------------------------------------------------------------------
+
+CurrentUser = Annotated[dict, Depends(require_user)]
+ModeratorAuth = Annotated[dict, Depends(require_moderator)]
+OwnerAuth = Annotated[dict, Depends(require_owner)]
+
+
+async def get_optional_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_optional_bearer)],
+) -> dict | None:
+    """Return the current user dict if a valid Bearer token is present, else None.
+
+    Never raises — anonymous callers simply get None so that unauthenticated
+    endpoints can still record a user_id when the client happens to be logged in.
+    """
+    if credentials is None:
+        return None
+    try:
+        return await get_current_user(credentials.credentials)
+    except HTTPException:
+        return None
+
+
+OptionalUser = Annotated[dict | None, Depends(get_optional_user)]

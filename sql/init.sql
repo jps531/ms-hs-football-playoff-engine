@@ -463,6 +463,50 @@ ON CONFLICT DO NOTHING;
 
 
 -- ---------------------------------------------------------------------------
+-- User accounts and sessions
+-- ---------------------------------------------------------------------------
+
+CREATE TYPE user_role AS ENUM ('user', 'moderator', 'owner');
+
+CREATE TABLE IF NOT EXISTS users (
+    id              SERIAL          PRIMARY KEY,
+    auth0_id        TEXT            NOT NULL UNIQUE,
+    email           TEXT            NOT NULL DEFAULT '',
+    display_name    TEXT            NOT NULL DEFAULT '',
+    phone           TEXT,
+    hometown        TEXT,
+    role            user_role       NOT NULL DEFAULT 'user',
+    favorite_team   TEXT            REFERENCES schools(school) ON DELETE SET NULL,
+    is_active       BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_auth0_id
+    ON users (auth0_id);
+CREATE INDEX IF NOT EXISTS idx_users_role
+    ON users (role) WHERE role IN ('moderator', 'owner');
+
+-- Followed teams (M2M)
+CREATE TABLE IF NOT EXISTS user_followed_teams (
+    user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    school      TEXT        NOT NULL REFERENCES schools(school) ON DELETE CASCADE,
+    followed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, school)
+);
+
+-- Games attended (M2M; references composite PK on games)
+CREATE TABLE IF NOT EXISTS user_attended_games (
+    user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    school      TEXT        NOT NULL,
+    date        DATE        NOT NULL,
+    attended_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, school, date),
+    FOREIGN KEY (school, date) REFERENCES games(school, date) ON DELETE CASCADE
+);
+
+
+-- ---------------------------------------------------------------------------
 -- Submission queue (user-submitted corrections and new assets)
 -- ---------------------------------------------------------------------------
 
@@ -477,6 +521,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     type            submission_type     NOT NULL,
     status          submission_status   NOT NULL DEFAULT 'pending',
     school          TEXT                REFERENCES schools(school) ON DELETE SET NULL,
+    user_id         INTEGER             REFERENCES users(id) ON DELETE SET NULL,
     payload         JSONB               NOT NULL DEFAULT '{}'::jsonb,
     moderator_notes TEXT,
     reviewed_at     TIMESTAMPTZ,
@@ -492,6 +537,8 @@ CREATE INDEX IF NOT EXISTS idx_submissions_school
     ON submissions (school) WHERE school IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_submissions_pending
     ON submissions (submitted_at DESC) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_submissions_user_id
+    ON submissions (user_id) WHERE user_id IS NOT NULL;
 
 
 -- ---------------------------------------------------------------------------
@@ -975,3 +1022,72 @@ COMMENT ON COLUMN submissions.submitted_at IS
   'Timestamp when the user submitted this row. Immutable after insert.';
 COMMENT ON COLUMN submissions.updated_at IS
   'Timestamp of the last modification to this row (status change, notes edit).';
+COMMENT ON COLUMN submissions.user_id IS
+  'FK to users(id). NULL for anonymous submissions or if the user account is later deleted. '
+  'SET NULL on user delete so submission history is not lost.';
+
+
+-- users
+
+COMMENT ON TABLE users IS
+  'Application user accounts. One row per registered user. '
+  'Roles: user (standard), moderator (can approve/reject submissions), '
+  'owner (superadmin; exactly one; set during bootstrap, not via API).';
+
+COMMENT ON COLUMN users.id IS
+  'Auto-incrementing surrogate key used for FK relationships within this DB.';
+COMMENT ON COLUMN users.auth0_id IS
+  'Auth0 subject identifier (sub claim). Stable, unique across all Auth0 tenants. '
+  'Used as the primary lookup key on every authenticated request.';
+COMMENT ON COLUMN users.email IS
+  'Email address synced from Auth0 at first login. May be empty string if Auth0 '
+  'does not include the email claim (e.g. some social providers).';
+COMMENT ON COLUMN users.display_name IS
+  'Display name synced from Auth0 at first login. Editable by the user via PATCH /users/me.';
+COMMENT ON COLUMN users.phone IS
+  'Optional contact phone number. Not validated beyond max-length in the API.';
+COMMENT ON COLUMN users.hometown IS
+  'Optional free-text hometown field for user profile display.';
+COMMENT ON COLUMN users.role IS
+  'Role enum controlling API access. user: standard read/write of own data. '
+  'moderator: can access moderation and admin endpoints. '
+  'owner: can manage user roles; set directly in DB for the initial owner account.';
+COMMENT ON COLUMN users.favorite_team IS
+  'FK to schools(school). Optional; SET NULL if the school is removed.';
+COMMENT ON COLUMN users.is_active IS
+  'FALSE deactivates the account; requests return 401. Soft-delete alternative.';
+COMMENT ON COLUMN users.created_at IS
+  'Timestamp when the user first authenticated (row was lazy-provisioned).';
+COMMENT ON COLUMN users.updated_at IS
+  'Timestamp of the last modification to this row.';
+
+
+-- user_followed_teams
+
+COMMENT ON TABLE user_followed_teams IS
+  'Many-to-many join between users and the schools they follow. '
+  'Cascade-deletes when either the user or the school is removed.';
+
+COMMENT ON COLUMN user_followed_teams.user_id IS
+  'FK to users(id).';
+COMMENT ON COLUMN user_followed_teams.school IS
+  'FK to schools(school). Canonical school name.';
+COMMENT ON COLUMN user_followed_teams.followed_at IS
+  'Timestamp when the user followed this team.';
+
+
+-- user_attended_games
+
+COMMENT ON TABLE user_attended_games IS
+  'Many-to-many join recording games a user has marked as attended. '
+  'References the composite PK (school, date) on the games table. '
+  'Cascade-deletes when the user or the underlying game row is removed.';
+
+COMMENT ON COLUMN user_attended_games.user_id IS
+  'FK to users(id).';
+COMMENT ON COLUMN user_attended_games.school IS
+  'Part of the FK to games(school, date). Canonical school name.';
+COMMENT ON COLUMN user_attended_games.date IS
+  'Part of the FK to games(school, date). Game date.';
+COMMENT ON COLUMN user_attended_games.attended_at IS
+  'Timestamp when the user marked this game as attended.';

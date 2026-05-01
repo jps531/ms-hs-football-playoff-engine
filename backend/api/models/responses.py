@@ -397,3 +397,44 @@ class SubmissionDetail(SubmissionSummary):
 
     payload: dict
     moderator_notes: str | None
+
+
+# ---------------------------------------------------------------------------
+# Auth / Users
+# ---------------------------------------------------------------------------
+
+
+class UserProfileResponse(BaseModel):
+    """Full profile returned from GET /users/me."""
+
+    id: int
+    email: str
+    display_name: str
+    role: str
+    favorite_team: str | None
+    is_active: bool
+    created_at: datetime
+    phone: str | None
+    hometown: str | None
+    followed_teams: list[str]
+    games_attended_count: int
+
+
+class AttendedGameModel(BaseModel):
+    """A game the user has marked as attended."""
+
+    school: str
+    date: date
+    opponent: str
+    result: str | None
+
+
+class UserAdminRow(BaseModel):
+    """User row as seen in the owner-only admin list."""
+
+    id: int
+    email: str
+    display_name: str
+    role: str
+    is_active: bool
+    created_at: datetime

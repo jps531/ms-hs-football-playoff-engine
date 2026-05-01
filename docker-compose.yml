@@ -13,18 +13,34 @@ x-env-common: &env-common
   PREFECT_VERSION: "${PREFECT_VERSION:-2.17.1}"
   PYTHON_VERSION: "${PYTHON_VERSION:-3.11}"
   POSTGRES_VERSION: "${POSTGRES_VERSION:-17}"
+  NGINX_VERSION: "${NGINX_VERSION:-1.27-alpine}"
+  NGINX_PORT: "${NGINX_PORT:-80}"
   PYTHONPATH: "${PYTHONPATH:-/opt/prefect/flows/pipelines}"
   CLOUDINARY_CLOUD_NAME: "${CLOUDINARY_CLOUD_NAME}"
   CLOUDINARY_API_KEY: "${CLOUDINARY_API_KEY}"
   CLOUDINARY_API_SECRET: "${CLOUDINARY_API_SECRET}"
   CLOUDINARY_BASE_URL: "${CLOUDINARY_BASE_URL}"
+  AUTH0_DOMAIN: "${AUTH0_DOMAIN}"
+  AUTH0_AUDIENCE: "${AUTH0_AUDIENCE}"
 
 services:
+  nginx:
+    image: nginx:${NGINX_VERSION:-1.27-alpine}
+    container_name: nginx_${ENVIRONMENT}
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - prefect-server
+    networks:
+      - mshsfootball
+    restart: unless-stopped
+
   prefect-server:
     image: prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
     container_name: prefect-server_${ENVIRONMENT}
-    ports:
-      - "${PREFECT_PORT}:4200"
     restart: unless-stopped
     command: prefect server start --host 0.0.0.0 --port ${PREFECT_PORT}
     logging:
@@ -64,14 +80,14 @@ services:
         - PYTHON_VERSION=${PYTHON_VERSION}
     container_name: api_${ENVIRONMENT}
     restart: unless-stopped
-    ports:
-      - "${API_PORT:-8000}:8000"
     environment:
       <<: *env-common
     networks:
       - mshsfootball
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+        required: false
 
   # Local PostgreSQL for testing (disabled on VM by using profiles)
   db:
