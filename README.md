@@ -189,13 +189,20 @@ erDiagram
     playoff_formats ||--o{ playoff_format_slots : "has slots"
 ```
 
+## Prerequisites
+
+Before starting, create accounts and note your credentials for:
+
+- **Auth0** (auth0.com) — you'll need `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` from your tenant settings
+- **Cloudinary** (cloudinary.com) — you'll need `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`
+
 ## Setting Up Your Environment
 
 ### Backend
 
 #### Start the Docker Containers
 
-Copy the environment template, fill in `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` from your Auth0 dashboard, then bring up the stack:
+Copy the environment template, fill in `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` from your Auth0 dashboard (see **Configure Auth0** below), then bring up the stack:
 
 ```
 cp .env.example .env.local
@@ -208,18 +215,94 @@ This starts nginx (`localhost:80`), Prefect server/worker (internal), and a loca
 
 > **nginx reverse proxy**: All traffic enters through nginx on port 80. The Prefect UI is accessible at `http://localhost/prefect/` but requires a valid moderator `Authorization: Bearer <token>` header.
 
+#### Configure Auth0
+
+Auth0 issues the RS256 JWT tokens the API validates. You need two things: an **API resource** (sets the audience claim) and an **Application** (sets your domain and gives you Swagger UI login credentials).
+
+**Step 1 — Create the API resource**
+
+1. Log in to [manage.auth0.com](https://manage.auth0.com).
+2. Go to **Applications → APIs → Create API**.
+3. Set **Name** to anything descriptive (e.g. `mshsfbanalytics`).
+4. Set **Identifier** to your chosen audience string — this becomes `AUTH0_AUDIENCE` in your `.env` files. You cannot change this after creation.
+5. Leave **Signing Algorithm** as `RS256`. Click **Create**.
+
+**Step 2 — Create the Application**
+
+1. Go to **Applications → Applications → Create Application**.
+2. Set **Name** to anything descriptive (e.g. `mshsfbanalytics-local`).
+3. Select **Regular Web Application**. Click **Create**.
+4. Open the **Settings** tab. Note these three values — you will need them shortly:
+   - **Domain** → becomes `AUTH0_DOMAIN` (e.g. `yourapp.us.auth0.com`)
+   - **Client ID**
+   - **Client Secret** (click reveal)
+
+**Step 3 — Allow localhost as an origin**
+
+The Swagger UI uses Auth0's Universal Login and redirects back to Swagger UI after login, so Auth0 needs to allow both the origin and the redirect URI. Still on the Application Settings page, add the following values:
+
+- **Allowed Callback URLs**: `http://localhost:8000/docs/oauth2-redirect`
+- **Allowed Web Origins**: `http://localhost:8000`
+- **Allowed Origins (CORS)**: `http://localhost:8000`
+
+Click **Save Changes**.
+
+**Step 4 — Authorize the Application to access the API**
+
+1. Go to **Applications → APIs** and click on your API (`mshsfbanalytics`).
+2. Open the **Application Access** tab.
+3. Find your application (`mshsfbanalytics-local`) and toggle it **on**. Click **Update**.
+
+**Step 5 — Copy credentials to your `.env` files**
+
+In both `.env.local` and `.env.non-docker.local`:
+
+```
+AUTH0_DOMAIN=<Domain from Step 2>
+AUTH0_AUDIENCE=<Identifier from Step 1>
+```
+
+Keep the **Client ID** and **Client Secret** from Step 2 handy — you'll enter them in the Swagger UI Authorize dialog when promoting yourself to owner.
+
 #### Start the API (local development)
 
 The FastAPI API runs **outside Docker** in local development due to a Docker Desktop on Apple Silicon limitation with asymmetric crypto. Run it natively against the Dockerized PostgreSQL:
 
 ```
 cp .env.example .env.non-docker.local   # fill in all vars + POSTGRES_HOST=localhost
-(set -a && source .env.non-docker.local && set +a && uv run fastapi run backend/api/main.py --host 0.0.0.0 --port 8000)
+backend/scripts/start-api.sh
+```
+
+The script checks that the port is free, starts the server in the background, and waits until it's ready before returning. Logs go to `api.log` in the project root. Can be run from any directory.
+
+```
+tail -f api.log                    # stream logs
+backend/scripts/stop-api.sh       # stop the server
 ```
 
 The API is then available directly at `http://localhost:8000`. Swagger UI is at `http://localhost:8000/docs`.
 
-After first login via Auth0, promote yourself to owner directly in the database:
+#### Promote yourself to owner
+
+The owner role grants access to admin and moderation endpoints. Without it, your account is a base `user` and you won't be able to approve submissions, manage other users, or access the Prefect UI.
+
+User rows are lazy-provisioned on the first authenticated API request, so you need to log in before the SQL update will find anything. Since there is no frontend yet, create your user directly in the Auth0 dashboard first:
+
+1. In the Auth0 dashboard, go to **User Management → Users → Create User**.
+2. Enter an email and password. Leave **Connection** as `Username-Password-Authentication`. Click **Create**.
+
+Then log in via the Swagger UI to provision your row:
+
+3. Open the Swagger UI at `http://localhost:8000/docs`
+4. Click **Authorize**. Fill in the dialog fields:
+   - **client_id**: Client ID from Configure Auth0 Step 2
+   - **client_secret**: Client Secret from Configure Auth0 Step 2
+   - Leave **scope** blank
+5. Click **Authorize** — Auth0's Universal Login page will open. Log in with the user you created above.
+6. After login, Auth0 redirects back to Swagger UI automatically. Click **Close**.
+7. Call `GET /api/v1/users/me` — this provisions your row
+
+Then run the promotion. Replace `auth0|YOUR_SUB_HERE` with your Auth0 user ID (the `sub` claim) — find it by decoding your JWT at jwt.io or in the Auth0 dashboard under User Management → Users → User ID. The full `auth0|...` prefix is required.
 
 ```
 docker exec -it ms-hs-football-playoff-engine-db-1 psql -U postgres -d mshsfootball -c \

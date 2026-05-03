@@ -12,7 +12,7 @@ import urllib.request
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2AuthorizationCodeBearer
 from jose import JWTError, jwt
 
 AUTH0_DOMAIN = os.environ["AUTH0_DOMAIN"]
@@ -33,6 +33,16 @@ def _get_jwks() -> dict:
     return _jwks_cache
 
 
+def _get_userinfo(token: str) -> dict:
+    """Fetch user profile from Auth0's /userinfo endpoint using the access token."""
+    req = urllib.request.Request(
+        f"https://{AUTH0_DOMAIN}/userinfo",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    with urllib.request.urlopen(req) as response:
+        return json.load(response)
+
+
 def _find_rsa_key(jwks: dict, kid: str) -> dict:
     """Return the RSA key matching kid, or empty dict if not found."""
     for key in jwks.get("keys", []):
@@ -41,7 +51,10 @@ def _find_rsa_key(jwks: dict, kid: str) -> dict:
     return {}
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"https://{AUTH0_DOMAIN}/oauth/token")
+oauth2_scheme = OAuth2AuthorizationCodeBearer(
+    authorizationUrl=f"https://{AUTH0_DOMAIN}/authorize?audience={AUTH0_AUDIENCE}&scope=openid%20profile%20email",
+    tokenUrl=f"https://{AUTH0_DOMAIN}/oauth/token",
+)
 _optional_bearer = HTTPBearer(auto_error=False)
 
 
@@ -90,6 +103,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
         ).fetchone()
 
         if row is None:
+            userinfo = _get_userinfo(token)
             row = await (
                 await conn.execute(
                     """
@@ -97,7 +111,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
                     VALUES (%s, %s, %s)
                     RETURNING id, role, is_active
                     """,
-                    (sub, payload.get("email", ""), payload.get("name", sub)),
+                    (sub, userinfo.get("email", ""), userinfo.get("name", sub)),
                 )
             ).fetchone()
 

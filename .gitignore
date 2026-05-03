@@ -62,3 +62,6 @@ htmlcov/
 scripts/*.txt
 scripts/*.png
 scripts/*.csv
+
+api.log
+.api.pid
