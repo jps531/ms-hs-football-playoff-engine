@@ -1,8 +1,8 @@
 """FastAPI application for the MS High School Football Playoff Engine.
 
 Startup and shutdown lifecycle are handled via the ``lifespan`` context manager,
-which opens and closes the async psycopg v3 connection pool.  CORS is configured
-to allow any origin for local development; restrict in production.
+which opens and closes the async psycopg v3 connection pool.  CORS origin is
+controlled by the FRONTEND_ORIGIN env var (defaults to ``*`` for local dev).
 
 Swagger UI and ReDoc are only served when ENVIRONMENT=local (the default).
 In production the docs URL is disabled to prevent public schema exposure.
@@ -31,6 +31,7 @@ from backend.api.routers import (
 )
 
 _ENV = os.getenv("ENVIRONMENT", "local")
+_FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
 
 
 @asynccontextmanager
@@ -53,7 +54,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[_FRONTEND_ORIGIN],
+    allow_credentials=_FRONTEND_ORIGIN != "*",
     allow_methods=["*"],
     allow_headers=["*"],
 )
