@@ -158,9 +158,7 @@ class TestDataclasses:
 
     def test_home_game_condition_fields(self):
         """HomeGameCondition exposes kind, round_name, region, seed, and team_name."""
-        cond = HomeGameCondition(
-            kind="seed_required", round_name=None, region=2, seed=3, team_name=None
-        )
+        cond = HomeGameCondition(kind="seed_required", round_name=None, region=2, seed=3, team_name=None)
         assert cond.kind == "seed_required"
         assert cond.round_name is None
         assert cond.region == 2
@@ -169,8 +167,7 @@ class TestDataclasses:
 
     def test_home_game_scenario_conditions_are_tuple(self):
         """HomeGameScenario.conditions must be a tuple, not a list."""
-        cond = HomeGameCondition(kind="advances", round_name="Quarterfinals",
-                                 region=1, seed=1, team_name=None)
+        cond = HomeGameCondition(kind="advances", round_name="Quarterfinals", region=1, seed=1, team_name=None)
         sc = HomeGameScenario(conditions=(cond,), explanation="Higher seed (#1)")
         assert isinstance(sc.conditions, tuple)
 
@@ -243,9 +240,7 @@ class TestR1Detection5A7A:
 
     def test_home_team_in_will_host(self, slot: FormatSlot):
         """Designated home team for each slot lands in will_host with no conditions."""
-        result = enumerate_home_game_scenarios(
-            slot.home_region, slot.home_seed, SLOTS_5A_7A_2025, SEASON
-        )
+        result = enumerate_home_game_scenarios(slot.home_region, slot.home_seed, SLOTS_5A_7A_2025, SEASON)
         r1 = result[0]
         assert r1.round_name == "First Round"
         assert len(r1.will_host) == 1
@@ -253,9 +248,7 @@ class TestR1Detection5A7A:
 
     def test_away_team_in_will_not_host(self, slot: FormatSlot):
         """Designated away team for each slot lands in will_not_host with no conditions."""
-        result = enumerate_home_game_scenarios(
-            slot.away_region, slot.away_seed, SLOTS_5A_7A_2025, SEASON
-        )
+        result = enumerate_home_game_scenarios(slot.away_region, slot.away_seed, SLOTS_5A_7A_2025, SEASON)
         r1 = result[0]
         assert len(r1.will_not_host) == 1
         assert r1.will_not_host[0].conditions == ()
@@ -278,18 +271,14 @@ class TestR1Detection1A4A:
 
     def test_home_team_in_will_host(self, slot: FormatSlot):
         """Designated home team for each slot lands in will_host with no conditions."""
-        result = enumerate_home_game_scenarios(
-            slot.home_region, slot.home_seed, SLOTS_1A_4A_2025, SEASON
-        )
+        result = enumerate_home_game_scenarios(slot.home_region, slot.home_seed, SLOTS_1A_4A_2025, SEASON)
         r1 = result[0]
         assert len(r1.will_host) == 1
         assert r1.will_host[0].conditions == ()
 
     def test_away_team_in_will_not_host(self, slot: FormatSlot):
         """Designated away team for each slot lands in will_not_host with no conditions."""
-        result = enumerate_home_game_scenarios(
-            slot.away_region, slot.away_seed, SLOTS_1A_4A_2025, SEASON
-        )
+        result = enumerate_home_game_scenarios(slot.away_region, slot.away_seed, SLOTS_1A_4A_2025, SEASON)
         r1 = result[0]
         assert len(r1.will_not_host) == 1
         assert r1.will_not_host[0].conditions == ()
@@ -330,9 +319,7 @@ class TestSecondRound1A4A:
         for hr, hs, _ar, _as in games:
             result = enumerate_home_game_scenarios(hr, hs, slots, SEASON)
             r2 = result[1]  # Second Round is index 1 for 1A-4A
-            assert len(r2.will_host) >= 1, (
-                f"Class {clazz}A Region {hr} #{hs}: expected will_host to be non-empty"
-            )
+            assert len(r2.will_host) >= 1, f"Class {clazz}A Region {hr} #{hs}: expected will_host to be non-empty"
 
     @pytest.mark.parametrize("clazz", [1, 2, 3, 4])
     def test_r2_2025_ground_truth_away_team_in_will_not_host(self, clazz: int):
@@ -398,9 +385,7 @@ class TestQuarterfinals:
         for hr, hs, _ar, _as in games:
             result = enumerate_home_game_scenarios(hr, hs, slots, SEASON)
             qf = result[1]
-            assert len(qf.will_host) >= 1, (
-                f"Class {clazz}A Region {hr} #{hs}: expected in will_host"
-            )
+            assert len(qf.will_host) >= 1, f"Class {clazz}A Region {hr} #{hs}: expected in will_host"
 
     @pytest.mark.parametrize("clazz", [5, 6, 7])
     def test_5a_7a_qf_2025_away_in_will_not_host(self, clazz: int):
@@ -412,9 +397,7 @@ class TestQuarterfinals:
         for _hr, _hs, ar, as_ in games:
             result = enumerate_home_game_scenarios(ar, as_, slots, SEASON)
             qf = result[1]
-            assert len(qf.will_not_host) >= 1, (
-                f"Class {clazz}A Region {ar} #{as_}: expected in will_not_host"
-            )
+            assert len(qf.will_not_host) >= 1, f"Class {clazz}A Region {ar} #{as_}: expected in will_not_host"
 
     @pytest.mark.parametrize("clazz", [1, 2, 3, 4])
     def test_1a_4a_qf_2025_home_in_will_host(self, clazz: int):
@@ -426,9 +409,7 @@ class TestQuarterfinals:
         for hr, hs, _ar, _as in games:
             result = enumerate_home_game_scenarios(hr, hs, slots, SEASON)
             qf = result[2]  # QF is index 2 for 1A-4A
-            assert len(qf.will_host) >= 1, (
-                f"Class {clazz}A Region {hr} #{hs}: expected in will_host"
-            )
+            assert len(qf.will_host) >= 1, f"Class {clazz}A Region {hr} #{hs}: expected in will_host"
 
     @pytest.mark.parametrize("clazz", [1, 2, 3, 4])
     def test_1a_4a_qf_2025_away_in_will_not_host(self, clazz: int):
@@ -440,9 +421,7 @@ class TestQuarterfinals:
         for _hr, _hs, ar, as_ in games:
             result = enumerate_home_game_scenarios(ar, as_, slots, SEASON)
             qf = result[2]
-            assert len(qf.will_not_host) >= 1, (
-                f"Class {clazz}A Region {ar} #{as_}: expected in will_not_host"
-            )
+            assert len(qf.will_not_host) >= 1, f"Class {clazz}A Region {ar} #{as_}: expected in will_not_host"
 
 
 # ---------------------------------------------------------------------------
@@ -496,9 +475,7 @@ class TestSemifinals:
         for hr, hs, _ar, _as in games:
             result = enumerate_home_game_scenarios(hr, hs, slots, SEASON)
             sf = result[2]
-            assert len(sf.will_host) >= 1, (
-                f"Class {clazz}A Region {hr} #{hs}: expected in will_host"
-            )
+            assert len(sf.will_host) >= 1, f"Class {clazz}A Region {hr} #{hs}: expected in will_host"
 
     @pytest.mark.parametrize("clazz", [5, 6, 7])
     def test_5a_7a_sf_2025_away_in_will_not_host(self, clazz: int):
@@ -510,9 +487,7 @@ class TestSemifinals:
         for _hr, _hs, ar, as_ in games:
             result = enumerate_home_game_scenarios(ar, as_, slots, SEASON)
             sf = result[2]
-            assert len(sf.will_not_host) >= 1, (
-                f"Class {clazz}A Region {ar} #{as_}: expected in will_not_host"
-            )
+            assert len(sf.will_not_host) >= 1, f"Class {clazz}A Region {ar} #{as_}: expected in will_not_host"
 
     @pytest.mark.parametrize("clazz", [1, 2, 3, 4])
     def test_1a_4a_sf_2025_home_in_will_host(self, clazz: int):
@@ -579,9 +554,7 @@ class TestTeamNameResolution:
             for sc in list(rnd.will_host) + list(rnd.will_not_host):
                 if sc.conditions:
                     first = sc.conditions[0]
-                    assert first.region is None, (
-                        "First condition should refer to the target team (region=None)"
-                    )
+                    assert first.region is None, "First condition should refer to the target team (region=None)"
 
 
 # ---------------------------------------------------------------------------
@@ -599,9 +572,7 @@ class TestProbabilityPassthrough:
             "Quarterfinals": 0.625,
             "Semifinals": 0.25,
         }
-        result = enumerate_home_game_scenarios(
-            1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round
-        )
+        result = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round)
         for rnd in result:
             assert rnd.p_host_marginal == p_by_round[rnd.round_name]
 
@@ -628,9 +599,7 @@ class TestProbabilityPassthrough:
             "Quarterfinals": 0.5,
             "Semifinals": 0.25,
         }
-        result = enumerate_home_game_scenarios(
-            1, 1, SLOTS_1A_4A_2025, SEASON, p_host_marginal_by_round=p_by_round
-        )
+        result = enumerate_home_game_scenarios(1, 1, SLOTS_1A_4A_2025, SEASON, p_host_marginal_by_round=p_by_round)
         for rnd in result:
             assert rnd.p_host_marginal == p_by_round[rnd.round_name]
 
@@ -679,9 +648,7 @@ class TestRenderTeamHomeScenarios:
     def test_probability_suffix_in_header(self):
         """Percentage values from p_host_marginal_by_round appear in round section headers."""
         p_by_round = {"First Round": 1.0, "Quarterfinals": 0.625, "Semifinals": 0.25}
-        scens = enumerate_home_game_scenarios(
-            1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round
-        )
+        scens = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round)
         text = render_team_home_scenarios("TestTeam", scens)
         assert "100.0%" in text
         assert "62.5%" in text
@@ -796,9 +763,7 @@ class TestTeamHomeScenariosAsDict:
     def test_p_host_marginal_propagated_to_dict(self):
         """p_host_marginal values from RoundHomeScenarios are surfaced in the dict."""
         p_by_round = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.25}
-        scens = enumerate_home_game_scenarios(
-            1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round
-        )
+        scens = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round)
         d = team_home_scenarios_as_dict("TestTeam", scens)
         assert d["first_round"]["p_host_marginal"] == pytest.approx(1.0)
         assert d["quarterfinals"]["p_host_marginal"] == pytest.approx(0.5)
@@ -854,14 +819,9 @@ class TestSpotChecks2025:
         qf = result[1]
         # R1#1 should host against R2#2 (higher seed)
         host_opponents = {
-            (cond.region, cond.seed)
-            for sc in qf.will_host
-            for cond in sc.conditions
-            if cond.region is not None
+            (cond.region, cond.seed) for sc in qf.will_host for cond in sc.conditions if cond.region is not None
         }
-        assert (2, 2) in host_opponents, (
-            f"Expected (2,2) in will_host opponents, got {host_opponents}"
-        )
+        assert (2, 2) in host_opponents, f"Expected (2,2) in will_host opponents, got {host_opponents}"
 
     def test_7a_sf_2025_region1_seed1_hosted(self):
         """7A 2025 SF: Region 1 #1 hosted (1,1,2,1) — must be in will_host."""
@@ -870,14 +830,9 @@ class TestSpotChecks2025:
         result = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON)
         sf = result[2]
         host_opponents = {
-            (cond.region, cond.seed)
-            for sc in sf.will_host
-            for cond in sc.conditions
-            if cond.region is not None
+            (cond.region, cond.seed) for sc in sf.will_host for cond in sc.conditions if cond.region is not None
         }
-        assert (2, 1) in host_opponents, (
-            f"Expected (2,1) in will_host opponents, got {host_opponents}"
-        )
+        assert (2, 1) in host_opponents, f"Expected (2,1) in will_host opponents, got {host_opponents}"
 
     def test_4a_qf_2025_region4_seed2_hosted_over_region1_seed1(self):
         """4A 2025 QF: (4,2,1,1) — Region 4 #2 hosted over Region 1 #1.
@@ -905,8 +860,7 @@ class TestSpotChecks2025:
                     for rnd in result:
                         for sc in list(rnd.will_host) + list(rnd.will_not_host):
                             assert sc.explanation is not None, (
-                                f"Class {clazz}A R{region}#{seed} "
-                                f"round={rnd.round_name}: explanation is None"
+                                f"Class {clazz}A R{region}#{seed} round={rnd.round_name}: explanation is None"
                             )
                             assert isinstance(sc.explanation, str)
                             assert len(sc.explanation) > 0
@@ -996,21 +950,13 @@ class TestTaylorsville2025:
     def test_qf_will_host_richton(self):
         """Taylorsville hosts if Richton (Region 8 #4) advances — same-region rule."""
         qf = self._result()[2]
-        opponent_pairs = {
-            (c.region, c.seed)
-            for sc in qf.will_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        opponent_pairs = {(c.region, c.seed) for sc in qf.will_host for c in sc.conditions if c.region is not None}
         assert (8, 4) in opponent_pairs
 
     def test_qf_will_host_richton_explanation(self):
         """Same-region game — higher seed (#1) hosts."""
         qf = self._result()[2]
-        sc = next(
-            sc for sc in qf.will_host
-            if any(c.region == 8 and c.seed == 4 for c in sc.conditions)
-        )
+        sc = next(sc for sc in qf.will_host if any(c.region == 8 and c.seed == 4 for c in sc.conditions))
         assert sc.explanation == "Same-region game — higher seed (#1) hosts"
 
     def test_qf_will_host_leake_county(self):
@@ -1023,10 +969,7 @@ class TestTaylorsville2025:
         Richton advances to the Second Round.
         """
         qf = self._result()[2]
-        leake_host_sc = next(
-            sc for sc in qf.will_host
-            if any(c.region == 5 and c.seed == 2 for c in sc.conditions)
-        )
+        leake_host_sc = next(sc for sc in qf.will_host if any(c.region == 5 and c.seed == 2 for c in sc.conditions))
         # The scenario must include both the R1-winner (Richton) and Leake County.
         r2_cond_names = {c.team_name for c in leake_host_sc.conditions if c.round_name == "Second Round"}
         assert "Richton" in r2_cond_names
@@ -1034,10 +977,7 @@ class TestTaylorsville2025:
     def test_qf_will_host_leake_county_explanation(self):
         """Cross-region, #1 vs #2, equal home-game counts — higher seed (#1) hosts."""
         qf = self._result()[2]
-        sc = next(
-            sc for sc in qf.will_host
-            if any(c.region == 5 and c.seed == 2 for c in sc.conditions)
-        )
+        sc = next(sc for sc in qf.will_host if any(c.region == 5 and c.seed == 2 for c in sc.conditions))
         assert sc.explanation == "Higher seed (#1) hosts"
 
     def test_qf_will_not_host_leake_county_via_bogue_chitto(self):
@@ -1050,53 +990,32 @@ class TestTaylorsville2025:
         condition that Bogue Chitto advances to the Second Round.
         """
         qf = self._result()[2]
-        leake_away_sc = next(
-            sc for sc in qf.will_not_host
-            if any(c.region == 5 and c.seed == 2 for c in sc.conditions)
-        )
+        leake_away_sc = next(sc for sc in qf.will_not_host if any(c.region == 5 and c.seed == 2 for c in sc.conditions))
         r2_cond_names = {c.team_name for c in leake_away_sc.conditions if c.round_name == "Second Round"}
         assert "Bogue Chitto" in r2_cond_names
 
     def test_qf_will_not_host_leake_county_via_bogue_chitto_explanation(self):
         """Leake County had 1 home game (Bogue Chitto path) vs Taylorsville's 2 — LC hosts."""
         qf = self._result()[2]
-        sc = next(
-            sc for sc in qf.will_not_host
-            if any(c.region == 5 and c.seed == 2 for c in sc.conditions)
-        )
+        sc = next(sc for sc in qf.will_not_host if any(c.region == 5 and c.seed == 2 for c in sc.conditions))
         assert sc.explanation == "Fewer home games played (1 vs 2) — opponent hosts"
 
     def test_qf_will_not_host_bogue_chitto(self):
         """Taylorsville is away if Bogue Chitto (Region 7 #1) advances — region tiebreak."""
         qf = self._result()[2]
-        opponent_pairs = {
-            (c.region, c.seed)
-            for sc in qf.will_not_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        opponent_pairs = {(c.region, c.seed) for sc in qf.will_not_host for c in sc.conditions if c.region is not None}
         assert (7, 1) in opponent_pairs
 
     def test_qf_will_not_host_bogue_chitto_explanation(self):
         """Equal #1 seeds — odd year region tiebreak: lower region# (Region 7) hosts."""
         qf = self._result()[2]
-        sc = next(
-            sc for sc in qf.will_not_host
-            if any(c.region == 7 and c.seed == 1 for c in sc.conditions)
-        )
-        assert sc.explanation == (
-            "Equal seed (#1) — region tiebreak: odd year, lower region# hosts (Region 7)"
-        )
+        sc = next(sc for sc in qf.will_not_host if any(c.region == 7 and c.seed == 1 for c in sc.conditions))
+        assert sc.explanation == ("Equal seed (#1) — region tiebreak: odd year, lower region# hosts (Region 7)")
 
     def test_qf_will_not_host_shaw(self):
         """Taylorsville is away if Shaw (Region 6 #3) advances — fewer home games rule."""
         qf = self._result()[2]
-        opponent_pairs = {
-            (c.region, c.seed)
-            for sc in qf.will_not_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        opponent_pairs = {(c.region, c.seed) for sc in qf.will_not_host for c in sc.conditions if c.region is not None}
         assert (6, 3) in opponent_pairs
 
     def test_qf_will_not_host_shaw_explanation(self):
@@ -1108,10 +1027,7 @@ class TestTaylorsville2025:
         R2 option (R7#1 wins R1 → Shaw is away in R2 → 0 home games entering QF).
         """
         qf = self._result()[2]
-        sc = next(
-            sc for sc in qf.will_not_host
-            if any(c.region == 6 and c.seed == 3 for c in sc.conditions)
-        )
+        sc = next(sc for sc in qf.will_not_host if any(c.region == 6 and c.seed == 3 for c in sc.conditions))
         assert sc.explanation == "Fewer home games played (0 vs 2) — opponent hosts"
 
     def test_qf_will_host_team_names_resolved(self):
@@ -1144,24 +1060,14 @@ class TestTaylorsville2025:
     def test_sf_will_host_opponents(self):
         """The 6 will-host SF opponents are West Bolivar, Salem, Lumberton, Noxapater, Stringer, Mount Olive."""
         sf = self._result()[3]
-        host_opponents = {
-            (c.region, c.seed)
-            for sc in sf.will_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        host_opponents = {(c.region, c.seed) for sc in sf.will_host for c in sc.conditions if c.region is not None}
         expected = {(6, 4), (7, 2), (8, 3), (5, 4), (8, 2), (7, 3)}
         assert host_opponents == expected
 
     def test_sf_will_host_team_names(self):
         """Will-host SF opponents appear with their resolved school names."""
         sf = self._result()[3]
-        host_names = {
-            c.team_name
-            for sc in sf.will_host
-            for c in sc.conditions
-            if c.team_name is not None
-        }
+        host_names = {c.team_name for sc in sf.will_host for c in sc.conditions if c.team_name is not None}
         assert host_names == {
             "West Bolivar",
             "Salem",
@@ -1174,46 +1080,26 @@ class TestTaylorsville2025:
     def test_sf_will_not_host_nanih_waiya(self):
         """Nanih Waiya (Region 5 #1) is in will_not_host — equal seed, Region 5 < Region 8."""
         sf = self._result()[3]
-        opponent_pairs = {
-            (c.region, c.seed)
-            for sc in sf.will_not_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        opponent_pairs = {(c.region, c.seed) for sc in sf.will_not_host for c in sc.conditions if c.region is not None}
         assert (5, 1) in opponent_pairs
 
     def test_sf_will_not_host_nanih_waiya_explanation(self):
         """Odd year, lower region# (Region 5) hosts over Region 8."""
         sf = self._result()[3]
-        sc = next(
-            sc for sc in sf.will_not_host
-            if any(c.region == 5 and c.seed == 1 for c in sc.conditions)
-        )
-        assert sc.explanation == (
-            "Equal seed (#1) — region tiebreak: odd year, lower region# hosts (Region 5)"
-        )
+        sc = next(sc for sc in sf.will_not_host if any(c.region == 5 and c.seed == 1 for c in sc.conditions))
+        assert sc.explanation == ("Equal seed (#1) — region tiebreak: odd year, lower region# hosts (Region 5)")
 
     def test_sf_will_not_host_simmons(self):
         """Simmons (Region 6 #1) is in will_not_host — matches actual 2025 result."""
         sf = self._result()[3]
-        opponent_pairs = {
-            (c.region, c.seed)
-            for sc in sf.will_not_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        opponent_pairs = {(c.region, c.seed) for sc in sf.will_not_host for c in sc.conditions if c.region is not None}
         assert (6, 1) in opponent_pairs
 
     def test_sf_will_not_host_simmons_explanation(self):
         """Odd year, lower region# (Region 6) hosts over Region 8."""
         sf = self._result()[3]
-        sc = next(
-            sc for sc in sf.will_not_host
-            if any(c.region == 6 and c.seed == 1 for c in sc.conditions)
-        )
-        assert sc.explanation == (
-            "Equal seed (#1) — region tiebreak: odd year, lower region# hosts (Region 6)"
-        )
+        sc = next(sc for sc in sf.will_not_host if any(c.region == 6 and c.seed == 1 for c in sc.conditions))
+        assert sc.explanation == ("Equal seed (#1) — region tiebreak: odd year, lower region# hosts (Region 6)")
 
     def test_sf_ground_truth_simmons_hosted_2025(self):
         """2025 bracket: game (6,1,8,1) — Simmons hosted Taylorsville in the SF.
@@ -1227,10 +1113,7 @@ class TestTaylorsville2025:
         )
         sf = self._result()[3]
         not_host_opponents = {
-            (c.region, c.seed)
-            for sc in sf.will_not_host
-            for c in sc.conditions
-            if c.region is not None
+            (c.region, c.seed) for sc in sf.will_not_host for c in sc.conditions if c.region is not None
         }
         assert (6, 1) in not_host_opponents, "Simmons (R6#1) must be in SF will_not_host"
 
@@ -1261,9 +1144,7 @@ class TestEvenYearTiebreak:
         result = enumerate_home_game_scenarios(1, 2, SLOTS_5A_7A_2025, EVEN_SEASON)
         sf = result[2]  # First Round (0), QF (1), SF (2)
         even_year_explanations = [
-            sc.explanation
-            for sc in sf.will_not_host
-            if sc.explanation and "even year" in sc.explanation
+            sc.explanation for sc in sf.will_not_host if sc.explanation and "even year" in sc.explanation
         ]
         assert len(even_year_explanations) >= 1, (
             "Expected at least one SF will_not_host scenario with an 'even year' explanation"
@@ -1274,9 +1155,7 @@ class TestEvenYearTiebreak:
         result = enumerate_home_game_scenarios(1, 2, SLOTS_5A_7A_2025, EVEN_SEASON)
         sf = result[2]
         even_year_explanations = [
-            sc.explanation
-            for sc in sf.will_not_host
-            if sc.explanation and "even year" in sc.explanation
+            sc.explanation for sc in sf.will_not_host if sc.explanation and "even year" in sc.explanation
         ]
         assert any("Region 2" in exp for exp in even_year_explanations), (
             f"Expected explanation to name Region 2 as host; got: {even_year_explanations}"
@@ -1301,9 +1180,7 @@ class TestEvenYearTiebreak:
         result = enumerate_home_game_scenarios(3, 2, SLOTS_1A_4A_2025, EVEN_SEASON)
         qf = result[2]  # First Round (0), R2 (1), QF (2), SF (3)
         even_year_explanations = [
-            sc.explanation
-            for sc in qf.will_not_host
-            if sc.explanation and "even year" in sc.explanation
+            sc.explanation for sc in qf.will_not_host if sc.explanation and "even year" in sc.explanation
         ]
         assert len(even_year_explanations) >= 1, (
             "Expected at least one QF will_not_host scenario with an 'even year' explanation"
@@ -1314,9 +1191,7 @@ class TestEvenYearTiebreak:
         result = enumerate_home_game_scenarios(3, 2, SLOTS_1A_4A_2025, EVEN_SEASON)
         qf = result[2]
         even_year_explanations = [
-            sc.explanation
-            for sc in qf.will_not_host
-            if sc.explanation and "even year" in sc.explanation
+            sc.explanation for sc in qf.will_not_host if sc.explanation and "even year" in sc.explanation
         ]
         assert any("Region 4" in exp for exp in even_year_explanations), (
             f"Expected explanation to name Region 4 as host; got: {even_year_explanations}"
@@ -1420,9 +1295,7 @@ class TestSFDedupGuard:
         sf = result[-1]  # last round = Semifinals
         assert sf.round_name == "Semifinals"
         total_scenarios = len(sf.will_host) + len(sf.will_not_host)
-        assert total_scenarios == 3, (
-            f"Expected 3 unique SF opponents after dedup; got {total_scenarios}"
-        )
+        assert total_scenarios == 3, f"Expected 3 unique SF opponents after dedup; got {total_scenarios}"
 
     def test_enumerate_sf_dedup_r1s1_appears_once(self):
         """After dedup, R1s1 appears exactly once in the SF scenario list (line 643)."""
@@ -1430,11 +1303,7 @@ class TestSFDedupGuard:
         sf = result[-1]
         all_scenarios = list(sf.will_host) + list(sf.will_not_host)
         # Each scenario has conditions (team_cond, opp_cond); opp_cond carries region/seed
-        r1s1_count = sum(
-            1 for sc in all_scenarios
-            for cond in sc.conditions
-            if cond.region == 1 and cond.seed == 1
-        )
+        r1s1_count = sum(1 for sc in all_scenarios for cond in sc.conditions if cond.region == 1 and cond.seed == 1)
         assert r1s1_count == 1, f"R1s1 should appear exactly once; found {r1s1_count}"
 
     def test_matchup_raw_sf_dedup_fires_correct_opponent_count(self):
@@ -1442,18 +1311,13 @@ class TestSFDedupGuard:
         result = enumerate_team_matchups(1, 2, _SF_DEDUP_SLOTS, SEASON)
         sf = result[-1]  # last round = Semifinals
         assert sf.round_name == "Semifinals"
-        assert len(sf.entries) == 3, (
-            f"Expected 3 unique SF matchup entries after dedup; got {len(sf.entries)}"
-        )
+        assert len(sf.entries) == 3, f"Expected 3 unique SF matchup entries after dedup; got {len(sf.entries)}"
 
     def test_matchup_raw_sf_dedup_r1s1_appears_once(self):
         """After dedup, R1s1 appears exactly once in enumerate_team_matchups SF results (line 920)."""
         result = enumerate_team_matchups(1, 2, _SF_DEDUP_SLOTS, SEASON)
         sf = result[-1]
-        r1s1_count = sum(
-            1 for m in sf.entries
-            if m.opponent_region == 1 and m.opponent_seed == 1
-        )
+        r1s1_count = sum(1 for m in sf.entries if m.opponent_region == 1 and m.opponent_seed == 1)
         assert r1s1_count == 1, f"R1s1 should appear exactly once; found {r1s1_count}"
 
 
@@ -1608,12 +1472,7 @@ class TestRender1APostFirstRound:
         _, scens = self._biggersville()
         qf = scens[2]
         assert qf.round_name == "Quarterfinals"
-        away_opponents = {
-            (c.region, c.seed)
-            for sc in qf.will_not_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        away_opponents = {(c.region, c.seed) for sc in qf.will_not_host for c in sc.conditions if c.region is not None}
         assert (3, 3) in away_opponents, (
             "Okolona (R3#3) must appear in Biggersville's QF will_not_host (2025 actual host)"
         )
@@ -1647,24 +1506,14 @@ class TestRender1APostFirstRound:
         _, scens = self._okolona()
         r2 = scens[1]
         assert r2.round_name == "Second Round"
-        host_conditions = {
-            (c.region, c.seed)
-            for sc in r2.will_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        host_conditions = {(c.region, c.seed) for sc in r2.will_host for c in sc.conditions if c.region is not None}
         assert (1, 4) in host_conditions, "Thrasher (R1#4) must appear in Okolona's R2 will_host"
 
     def test_okolona_r2_will_not_host_when_falkner_advances(self):
         """Okolona is away in R2 when Falkner (R2#1) advances — better seed (#1) hosts."""
         _, scens = self._okolona()
         r2 = scens[1]
-        away_conditions = {
-            (c.region, c.seed)
-            for sc in r2.will_not_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        away_conditions = {(c.region, c.seed) for sc in r2.will_not_host for c in sc.conditions if c.region is not None}
         assert (2, 1) in away_conditions, "Falkner (R2#1) must appear in Okolona's R2 will_not_host"
 
     def test_okolona_r2_school_names_resolved(self):
@@ -1691,12 +1540,7 @@ class TestRender1APostFirstRound:
         _, scens = self._okolona()
         qf = scens[2]
         assert qf.round_name == "Quarterfinals"
-        host_opponents = {
-            (c.region, c.seed)
-            for sc in qf.will_host
-            for c in sc.conditions
-            if c.region is not None
-        }
+        host_opponents = {(c.region, c.seed) for sc in qf.will_host for c in sc.conditions if c.region is not None}
         assert (1, 1) in host_opponents, (
             "Biggersville (R1#1) must appear in Okolona's QF will_host (2025 actual result)"
         )
@@ -1707,18 +1551,14 @@ class TestRender1APostFirstRound:
         qf = scens[2]
         host_explanations = [sc.explanation for sc in qf.will_host]
         assert any("Fewer home games played" in (exp or "") for exp in host_explanations), (
-            f"Expected 'Fewer home games played' in at least one QF will_host explanation; "
-            f"got: {host_explanations}"
+            f"Expected 'Fewer home games played' in at least one QF will_host explanation; got: {host_explanations}"
         )
 
     def test_okolona_qf_biggersville_fewer_homes_explanation(self):
         """The specific QF scenario vs Biggersville cites 'target team hosts' (Okolona)."""
         _, scens = self._okolona()
         qf = scens[2]
-        biggersville_sc = next(
-            sc for sc in qf.will_host
-            if any(c.region == 1 and c.seed == 1 for c in sc.conditions)
-        )
+        biggersville_sc = next(sc for sc in qf.will_host if any(c.region == 1 and c.seed == 1 for c in sc.conditions))
         assert biggersville_sc.explanation is not None
         assert "target team hosts" in biggersville_sc.explanation
 
@@ -1727,6 +1567,4 @@ class TestRender1APostFirstRound:
         assert _actual_home(1, "quarterfinals", 1, 1) is False, (
             "2025 bracket: Biggersville (R1#1) was away in QF — Okolona (R3#3) hosted"
         )
-        assert _actual_home(1, "quarterfinals", 3, 3) is True, (
-            "2025 bracket: Okolona (R3#3) was home in QF"
-        )
+        assert _actual_home(1, "quarterfinals", 3, 3) is True, "2025 bracket: Okolona (R3#3) was home in QF"

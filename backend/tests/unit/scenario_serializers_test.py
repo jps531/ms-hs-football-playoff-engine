@@ -126,6 +126,7 @@ def test_pd_rank_condition_group_is_tuple_after_roundtrip():
     """The group field is restored as a tuple (not a list) after deserialization."""
     cond = PDRankCondition(team="Walnut", rank=3, group=("Hamilton", "Hatley", "Walnut"))
     result = deserialize_condition(serialize_condition(cond))
+    assert isinstance(result, PDRankCondition)
     assert isinstance(result.group, tuple)
 
 
@@ -141,6 +142,7 @@ def test_atom_roundtrip_with_pd_rank_condition():
 def test_serialize_condition_unknown_type_raises():
     """serialize_condition raises TypeError for unsupported condition types."""
     import pytest
+
     with pytest.raises(TypeError):
         serialize_condition("not_a_condition")
 
@@ -148,6 +150,7 @@ def test_serialize_condition_unknown_type_raises():
 def test_deserialize_condition_unknown_type_raises():
     """deserialize_condition raises ValueError for unrecognised type strings."""
     import pytest
+
     with pytest.raises(ValueError):
         deserialize_condition({"type": "unknown_type"})
 
@@ -208,7 +211,12 @@ def test_scenario_atoms_roundtrip_full():
     """A multi-team, multi-seed scenario_atoms dict round-trips with all conditions preserved."""
     atoms = {
         "Pearl": {
-            1: [[GameResult("Pearl", "Petal", 1, None), MarginCondition(add=(("Pearl", "NWR"),), sub=(), op=">=", threshold=5)]],
+            1: [
+                [
+                    GameResult("Pearl", "Petal", 1, None),
+                    MarginCondition(add=(("Pearl", "NWR"),), sub=(), op=">=", threshold=5),
+                ]
+            ],
             2: [],
         },
         "Petal": {

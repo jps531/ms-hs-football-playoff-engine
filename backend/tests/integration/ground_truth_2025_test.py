@@ -55,6 +55,4 @@ def test_ground_truth_seeds_2025(clazz, region, fixture):
     assert seed_4 == seeds[4], f"Region {region}-{clazz}A seed 4: got {seed_4!r}, expected {seeds[4]!r}"
 
     for team in eliminated:
-        assert odds[team].eliminated is True, (
-            f"Region {region}-{clazz}A: {team!r} should be eliminated but is not"
-        )
+        assert odds[team].eliminated is True, f"Region {region}-{clazz}A: {team!r} should be eliminated but is not"

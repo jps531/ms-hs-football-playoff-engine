@@ -293,6 +293,7 @@ CREATE TABLE IF NOT EXISTS region_scenarios (
   remaining_games     JSONB        NOT NULL,
   scenario_atoms      JSONB        NOT NULL,
   complete_scenarios  JSONB        NOT NULL,
+  key_insights        JSONB        NOT NULL DEFAULT '[]'::jsonb,
   PRIMARY KEY (season, class, region, as_of_date)
 );
 
@@ -903,6 +904,12 @@ COMMENT ON COLUMN region_scenarios.complete_scenarios IS
   'Serialized output of enumerate_division_scenarios(): list of scenario dicts '
   'with scenario_num, sub_label, game_winners, conditions_atom, and seeding. '
   'Source of truth for the "Scenario N: … → 1. Team …" complete-seedings view.';
+
+COMMENT ON COLUMN region_scenarios.key_insights IS
+  'Serialized list of KeyInsight objects extracted from scenario_atoms. '
+  'Each insight is a simple, unconditionally-true conditional statement about a team''s '
+  'seeding or playoff status (e.g. "Taylorsville clinches 1st seed: Taylorsville beats Stringer"). '
+  'Margin-verified for R>4. Empty array when no actionable insights exist.';
 
 
 -- region_computation_state

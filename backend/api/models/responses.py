@@ -152,6 +152,24 @@ class ScenarioEntry(BaseModel):
     outcomes: dict[str, str]  # team → seed label
 
 
+class KeyInsightConditionModel(BaseModel):
+    """A single game-result condition within a key insight."""
+
+    winner: str
+    loser: str
+
+
+class KeyInsightModel(BaseModel):
+    """A pre-computed actionable insight about a team's seeding or playoff status."""
+
+    insight_type: str
+    team: str
+    seed: int | None = None
+    conditions: list[KeyInsightConditionModel]
+    rendered: str
+    r_computed: int
+
+
 class StandingsResponse(BaseModel):
     """Region standings with seeding odds and (if available) scenarios."""
 
@@ -163,6 +181,7 @@ class StandingsResponse(BaseModel):
     remaining_games: list[RemainingGameModel]
     teams: list[TeamStandingsEntry]
     scenarios: list[ScenarioEntry] | None = None
+    key_insights: list[KeyInsightModel] | None = None
 
 
 # ---------------------------------------------------------------------------

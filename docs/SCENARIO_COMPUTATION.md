@@ -4,13 +4,15 @@ This document describes how the tiebreaker engine decides what to compute and st
 
 ## Background: What Gets Computed
 
-The engine produces two distinct things for each class/region/date snapshot:
+The engine produces three distinct things for each class/region/date snapshot:
 
 1. **Seeding odds** — per-team probabilities of finishing 1st, 2nd, 3rd, 4th, and making playoffs. Always computed and stored, regardless of how many games remain.
 
 2. **Scenario data** — the explicit list of game outcomes that lead to each seeding result. Two layers:
    - `scenario_atoms`: a compact per-team, per-seed boolean expression (e.g., "Pearl beats Petal AND wins by ≥3"). Used to generate human-readable scenario text.
    - `complete_scenarios`: the full cross-product enumeration of all outcome combinations, each paired with its resulting seeding. Drives the rendered scenario list shown in the UI.
+
+3. **Key insights** — simple, unconditionally-true conditional statements extracted from `scenario_atoms` (e.g., "Taylorsville clinches 1st seed: Taylorsville beats Stringer" or "Murrah is eliminated: Starkville beats Terry"). Each insight has 1–3 `GameResult` conditions and is margin-verified before storage. Stored at all tiers where atoms exist (R ≤ 10). Shown at all R values: as a headlines banner at R ≤ 6 alongside the full scenario list, and as the only scenario-level content at R 7–10.
 
 ---
 
@@ -48,6 +50,8 @@ Historical backfill skips Phase 2 — past data is final, so win/loss-only is us
 
 Margin sensitivity is skipped entirely. All 2^R outcomes are enumerated once at a fixed default margin. `scenario_atoms` and `complete_scenarios` are stored.
 
+Key insights are extracted and stored at this tier. Because atoms are computed with `ignore_margins=True`, each insight candidate is spot-checked across all 12^k margin combinations for its k condition games before being emitted — only claims that hold for every combination are stored (`margin_verified=True`). This makes them unconditionally true even at this tier despite the win/loss-only atoms.
+
 Note: `build_scenario_atoms` uses boolean minimization (Quine-McCluskey) over the 2^R outcome space. At R = 10, this is 1,024 outcomes × 4 seeds × 7 teams — still manageable in a few seconds. At R = 11+, the QMC complexity grows quadratically and `build_scenario_atoms` returns `{}` early (see next tier).
 
 ### R 11–15 — Win/loss enumeration, atoms always empty
@@ -72,22 +76,22 @@ Even though scenario data is stored for R ≤ 15, the frontend only **renders th
 
 At R ≤ 6, the engine guarantees full margin accuracy (synchronously for R ≤ 4, after background upgrade for R = 5–6). Scenarios at this range are compact and actionable: at most 64 distinct outcomes for a 6-game remaining window.
 
-At R > 6, the number of distinct outcomes and conditions grows too large to present readably. The frontend shows seeding odds (always available) but omits the scenario list.
+At R > 6, the number of distinct outcomes and conditions grows too large to present readably. The frontend shows seeding odds (always available) and key insights (when atoms exist, R ≤ 10), but omits the full scenario list.
 
-**API contract:** The `scenarios_available` flag on every standings response is `true` when `r_remaining ≤ 6`. This is computed at read time from the stored `r_remaining` field — no separate stored flag.
+**API contract:** The `scenarios_available` flag on every standings response is `true` when `r_remaining ≤ 6`. The `key_insights` list is non-empty whenever actionable insights were extractable from the stored atoms (R ≤ 10, non-trivial standings). Both are computed at pipeline time and read directly from the snapshot.
 
 ---
 
 ## Summary Table
 
-| Remaining games (R) | Odds method | Atoms stored | Complete scenarios stored | Shown in UI |
-|---|---|---|---|---|
-| 0 | Exact (1 outcome) | Yes | Yes | Yes |
-| 1–4 | Exact (2^R × 12^R) | Yes, margin-accurate | Yes | Yes |
-| 5–6 | Exact (2^R, margin upgraded in background) | Yes | Yes | Yes |
-| 7–10 | Exact (2^R, no margin) | Yes, win/loss only | Yes | No |
-| 11–15 | Exact (2^R, no margin) | Empty (QMC limit) | Yes, flat | No |
-| > 15 | Monte Carlo, 50K samples, Elo-weighted | Empty | Empty | No |
+| Remaining games (R) | Odds method | Atoms stored | Complete scenarios stored | Key insights stored | Shown in UI |
+|---|---|---|---|---|---|
+| 0 | Exact (1 outcome) | Yes | Yes | Yes (facts only) | Yes |
+| 1–4 | Exact (2^R × 12^R) | Yes, margin-accurate | Yes | Yes, margin-accurate | Yes |
+| 5–6 | Exact (2^R, margin upgraded in background) | Yes | Yes | Yes | Yes |
+| 7–10 | Exact (2^R, no margin) | Yes, win/loss only | Yes | Yes, 12^k verified | Key insights only |
+| 11–15 | Exact (2^R, no margin) | Empty (QMC limit) | Yes, flat | Empty | No |
+| > 15 | Monte Carlo, 50K samples, Elo-weighted | Empty | Empty | Empty | No |
 
 ---
 

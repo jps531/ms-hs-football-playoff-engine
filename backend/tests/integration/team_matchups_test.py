@@ -173,9 +173,7 @@ class TestRoundStructure:
     def test_1a_4a_round_names(self):
         """1A-4A round names must be First Round, Second Round, Quarterfinals, Semifinals."""
         rounds = _matchups(2, region=8, seed=1)
-        assert [r.round_name for r in rounds] == [
-            "First Round", "Second Round", "Quarterfinals", "Semifinals"
-        ]
+        assert [r.round_name for r in rounds] == ["First Round", "Second Round", "Quarterfinals", "Semifinals"]
 
 
 # ---------------------------------------------------------------------------
@@ -195,8 +193,7 @@ class TestEntryCounts:
                     r1 = rounds[0]
                     assert r1.round_name == "First Round"
                     assert len(r1.entries) == 1, (
-                        f"class={clazz} region={region} seed={seed}: "
-                        f"expected 1 R1 entry, got {len(r1.entries)}"
+                        f"class={clazz} region={region} seed={seed}: expected 1 R1 entry, got {len(r1.entries)}"
                     )
 
     def test_r2_exactly_two_entries(self):
@@ -216,9 +213,7 @@ class TestEntryCounts:
             rounds = _matchups(7, region=1, seed=seed)
             qf = rounds[1]
             assert qf.round_name == "Quarterfinals"
-            assert len(qf.entries) >= 2, (
-                f"seed={seed}: expected at least 2 QF entries, got {len(qf.entries)}"
-            )
+            assert len(qf.entries) >= 2, f"seed={seed}: expected at least 2 QF entries, got {len(qf.entries)}"
 
     def test_sf_entry_count_5a_7a(self):
         """5A-7A SF has 4 entries (2 slots × 2 teams from opposing QF game)."""
@@ -226,9 +221,7 @@ class TestEntryCounts:
             rounds = _matchups(7, region=1, seed=seed)
             sf = rounds[2]
             assert sf.round_name == "Semifinals"
-            assert len(sf.entries) == 4, (
-                f"seed={seed}: expected 4 SF entries, got {len(sf.entries)}"
-            )
+            assert len(sf.entries) == 4, f"seed={seed}: expected 4 SF entries, got {len(sf.entries)}"
 
     def test_qf_entry_count_1a_4a_at_least_4(self):
         """1A-4A QF has at least 4 entries; ambiguous R2 paths can add more."""
@@ -261,8 +254,7 @@ class TestConditionalOddsSums:
                 for rnd in rounds:
                     total = sum(e.p_conditional for e in rnd.entries if e.p_conditional is not None)
                     assert abs(total - 1.0) < 1e-9, (
-                        f"region={region} seed={seed} {rnd.round_name}: "
-                        f"p_conditional sum={total}"
+                        f"region={region} seed={seed} {rnd.round_name}: p_conditional sum={total}"
                     )
 
     def test_sum_to_one_1a_4a(self):
@@ -273,8 +265,7 @@ class TestConditionalOddsSums:
                 for rnd in rounds:
                     total = sum(e.p_conditional for e in rnd.entries if e.p_conditional is not None)
                     assert abs(total - 1.0) < 1e-9, (
-                        f"region={region} seed={seed} {rnd.round_name}: "
-                        f"p_conditional sum={total}"
+                        f"region={region} seed={seed} {rnd.round_name}: p_conditional sum={total}"
                     )
 
 
@@ -286,20 +277,23 @@ class TestConditionalOddsSums:
 class TestR1Correctness:
     """Verify the R1 opponent and home status against the FormatSlot definitions."""
 
-    @pytest.mark.parametrize("clazz,region,seed,exp_opp_region,exp_opp_seed,exp_home", [
-        # 5A-7A: slot 1 → home=(1,1), away=(2,4)
-        (7, 1, 1, 2, 4, True),
-        (7, 2, 4, 1, 1, False),
-        # slot 5 → home=(3,1), away=(4,4)
-        (7, 3, 1, 4, 4, True),
-        (7, 4, 4, 3, 1, False),
-        # 1A-4A: slot 15 → home=(8,1), away=(7,4)
-        (2, 8, 1, 7, 4, True),
-        (2, 7, 4, 8, 1, False),
-        # slot 9 → home=(5,1), away=(6,4)
-        (2, 5, 1, 6, 4, True),
-        (2, 6, 4, 5, 1, False),
-    ])
+    @pytest.mark.parametrize(
+        "clazz,region,seed,exp_opp_region,exp_opp_seed,exp_home",
+        [
+            # 5A-7A: slot 1 → home=(1,1), away=(2,4)
+            (7, 1, 1, 2, 4, True),
+            (7, 2, 4, 1, 1, False),
+            # slot 5 → home=(3,1), away=(4,4)
+            (7, 3, 1, 4, 4, True),
+            (7, 4, 4, 3, 1, False),
+            # 1A-4A: slot 15 → home=(8,1), away=(7,4)
+            (2, 8, 1, 7, 4, True),
+            (2, 7, 4, 8, 1, False),
+            # slot 9 → home=(5,1), away=(6,4)
+            (2, 5, 1, 6, 4, True),
+            (2, 6, 4, 5, 1, False),
+        ],
+    )
     def test_r1_opponent_and_home(self, clazz, region, seed, exp_opp_region, exp_opp_seed, exp_home):
         """R1 entry must match the opponent and home status from the FormatSlot definition."""
         rounds = _matchups(clazz, region=region, seed=seed)
@@ -347,8 +341,7 @@ class TestR2Correctness:
                 r2 = rounds[1]
                 home_opps = {(e.opponent_region, e.opponent_seed) for e in r2.entries if e.home}
                 assert (ar, as_) in home_opps, (
-                    f"class={clazz}: ({hr},{hs}) vs ({ar},{as_}) R2 — "
-                    f"opponent not in home_opps={home_opps}"
+                    f"class={clazz}: ({hr},{hs}) vs ({ar},{as_}) R2 — opponent not in home_opps={home_opps}"
                 )
 
 
@@ -414,8 +407,10 @@ class TestOddsPassthrough:
         p_reach = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.25}
         p_host_cond = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.75}
         rounds = enumerate_team_matchups(
-            region=1, seed=1,
-            slots=SLOTS_5A_7A_2025, season=SEASON,
+            region=1,
+            seed=1,
+            slots=SLOTS_5A_7A_2025,
+            season=SEASON,
             p_reach_by_round=p_reach,
             p_host_conditional_by_round=p_host_cond,
         )
@@ -431,8 +426,10 @@ class TestOddsPassthrough:
         """p_marginal for each entry must equal p_conditional × p_reach."""
         p_reach = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.25}
         rounds = enumerate_team_matchups(
-            region=1, seed=1,
-            slots=SLOTS_5A_7A_2025, season=SEASON,
+            region=1,
+            seed=1,
+            slots=SLOTS_5A_7A_2025,
+            season=SEASON,
             p_reach_by_round=p_reach,
         )
         for rnd in rounds:
@@ -466,8 +463,10 @@ class TestWeightedPlaceholder:
             "First Round": {(2, 4, True): 1.0},
         }
         rounds = enumerate_team_matchups(
-            region=1, seed=1,
-            slots=SLOTS_5A_7A_2025, season=SEASON,
+            region=1,
+            seed=1,
+            slots=SLOTS_5A_7A_2025,
+            season=SEASON,
             p_conditional_weighted_by_matchup=weighted,
         )
         r1 = rounds[0]
@@ -480,8 +479,10 @@ class TestWeightedPlaceholder:
             "First Round": {(2, 4, True): 1.0},
         }
         rounds = enumerate_team_matchups(
-            region=1, seed=1,
-            slots=SLOTS_5A_7A_2025, season=SEASON,
+            region=1,
+            seed=1,
+            slots=SLOTS_5A_7A_2025,
+            season=SEASON,
             p_reach_weighted_by_round={"First Round": 0.9},
             p_conditional_weighted_by_matchup=weighted,
         )
@@ -521,7 +522,10 @@ class TestDictRenderer:
     def test_round_level_odds_in_dict(self):
         """Round-level odds provided to the function must appear in the dict."""
         rounds = enumerate_team_matchups(
-            region=1, seed=1, slots=SLOTS_5A_7A_2025, season=SEASON,
+            region=1,
+            seed=1,
+            slots=SLOTS_5A_7A_2025,
+            season=SEASON,
             p_reach_by_round={"First Round": 1.0},
         )
         d = team_matchups_as_dict(rounds)
@@ -536,9 +540,15 @@ class TestDictRenderer:
         assert len(matchups) == 1
         entry = matchups[0]
         expected_keys = {
-            "opponent", "opponent_region", "opponent_seed", "home",
-            "p_conditional", "p_conditional_weighted",
-            "p_marginal", "p_marginal_weighted", "explanation",
+            "opponent",
+            "opponent_region",
+            "opponent_seed",
+            "home",
+            "p_conditional",
+            "p_conditional_weighted",
+            "p_marginal",
+            "p_marginal_weighted",
+            "explanation",
         }
         assert set(entry.keys()) == expected_keys
 
@@ -609,7 +619,10 @@ class TestTextRenderer:
     def test_percentage_suffix_with_odds(self):
         """When odds are supplied, a formatted percentage suffix must appear in output."""
         rounds = enumerate_team_matchups(
-            region=1, seed=1, slots=SLOTS_5A_7A_2025, season=SEASON,
+            region=1,
+            seed=1,
+            slots=SLOTS_5A_7A_2025,
+            season=SEASON,
             p_reach_by_round={"First Round": 1.0},
         )
         text = render_team_matchups("Oak Grove", rounds)
@@ -862,10 +875,14 @@ class TestTaylorsville2025PostFirstRound:
 
     # R1 winners in the South half — all other teams are eliminated.
     _SURVIVORS: set[tuple[int, int]] = {
-        (5, 1), (5, 2),       # Nanih Waiya, Leake County
-        (6, 1), (6, 2),       # Simmons, South Delta
-        (7, 1),               # Bogue Chitto
-        (8, 1), (8, 2), (8, 3),  # Taylorsville, Stringer, Lumberton
+        (5, 1),
+        (5, 2),  # Nanih Waiya, Leake County
+        (6, 1),
+        (6, 2),  # Simmons, South Delta
+        (7, 1),  # Bogue Chitto
+        (8, 1),
+        (8, 2),
+        (8, 3),  # Taylorsville, Stringer, Lumberton
     }
 
     @pytest.fixture
@@ -901,7 +918,9 @@ class TestTaylorsville2025PostFirstRound:
                 "Semifinals": 0.1875,
             },
             team_lookup=lookup,
-            state=PlayoffState(known_survivors=self._SURVIVORS, r1_survivors=self._SURVIVORS, completed_rounds={"First Round"}),
+            state=PlayoffState(
+                known_survivors=self._SURVIVORS, r1_survivors=self._SURVIVORS, completed_rounds={"First Round"}
+            ),
         )
 
     def test_render_text(self, taylorsville_rounds):
@@ -1005,10 +1024,14 @@ class TestTaylorsville2025PostSecondRound:
 
     # R1 winners in the South half (needed for accurate QF R2 home-status computation).
     _R1_SURVIVORS: set[tuple[int, int]] = {
-        (5, 1), (5, 2),
-        (6, 1), (6, 2),
+        (5, 1),
+        (5, 2),
+        (6, 1),
+        (6, 2),
         (7, 1),
-        (8, 1), (8, 2), (8, 3),
+        (8, 1),
+        (8, 2),
+        (8, 3),
     }
     # Teams still alive after R2.
     _R2_SURVIVORS: set[tuple[int, int]] = {(5, 1), (5, 2), (6, 1), (8, 1)}
@@ -1048,7 +1071,11 @@ class TestTaylorsville2025PostSecondRound:
             p_host_conditional_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
             p_host_marginal_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
             team_lookup=lookup,
-            state=PlayoffState(known_survivors=self._R2_SURVIVORS, r1_survivors=self._R1_SURVIVORS, completed_rounds={"First Round", "Second Round"}),
+            state=PlayoffState(
+                known_survivors=self._R2_SURVIVORS,
+                r1_survivors=self._R1_SURVIVORS,
+                completed_rounds={"First Round", "Second Round"},
+            ),
         )
 
     def test_render_text(self, taylorsville_rounds):
@@ -1118,10 +1145,14 @@ class TestTaylorsville2025PostQuarterfinals:
     """
 
     _R1_SURVIVORS: set[tuple[int, int]] = {
-        (5, 1), (5, 2),
-        (6, 1), (6, 2),
+        (5, 1),
+        (5, 2),
+        (6, 1),
+        (6, 2),
         (7, 1),
-        (8, 1), (8, 2), (8, 3),
+        (8, 1),
+        (8, 2),
+        (8, 3),
     }
     _QF_SURVIVORS: set[tuple[int, int]] = {(6, 1), (8, 1)}
 
@@ -1154,7 +1185,11 @@ class TestTaylorsville2025PostQuarterfinals:
             p_host_conditional_by_round={"Semifinals": 0.0},
             p_host_marginal_by_round={"Semifinals": 0.0},
             team_lookup=lookup,
-            state=PlayoffState(known_survivors=self._QF_SURVIVORS, r1_survivors=self._R1_SURVIVORS, completed_rounds={"First Round", "Second Round", "Quarterfinals"}),
+            state=PlayoffState(
+                known_survivors=self._QF_SURVIVORS,
+                r1_survivors=self._R1_SURVIVORS,
+                completed_rounds={"First Round", "Second Round", "Quarterfinals"},
+            ),
         )
 
     def test_render_text(self, taylorsville_rounds):

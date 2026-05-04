@@ -54,9 +54,7 @@ def _r1_home(region: int, seed: int, slots: list[FormatSlot]) -> bool:
     raise ValueError(f"No R1 slot found for region={region}, seed={seed}")
 
 
-def _r2_home(
-    region: int, seed: int, second_round: list[tuple[int, int, int, int]]
-) -> bool:
+def _r2_home(region: int, seed: int, second_round: list[tuple[int, int, int, int]]) -> bool:
     """Return True if (region, seed) was the home team in their R2 game."""
     for hr, hs, ar, as_ in second_round:
         if hr == region and hs == seed:
@@ -76,20 +74,38 @@ _SF_PARAMS: list = []
 
 for _clazz, _bracket in sorted(PLAYOFF_BRACKETS_2025.items()):
     for _hr, _hs, _ar, _as in _bracket.get("second_round", []):
-        _R2_PARAMS.append(pytest.param(
-            _clazz, _hr, _hs, _ar, _as,
-            id=f"{_clazz}A_r2_R{_hr}s{_hs}_v_R{_ar}s{_as}",
-        ))
+        _R2_PARAMS.append(
+            pytest.param(
+                _clazz,
+                _hr,
+                _hs,
+                _ar,
+                _as,
+                id=f"{_clazz}A_r2_R{_hr}s{_hs}_v_R{_ar}s{_as}",
+            )
+        )
     for _hr, _hs, _ar, _as in _bracket.get("quarterfinals", []):
-        _QF_PARAMS.append(pytest.param(
-            _clazz, _hr, _hs, _ar, _as,
-            id=f"{_clazz}A_qf_R{_hr}s{_hs}_v_R{_ar}s{_as}",
-        ))
+        _QF_PARAMS.append(
+            pytest.param(
+                _clazz,
+                _hr,
+                _hs,
+                _ar,
+                _as,
+                id=f"{_clazz}A_qf_R{_hr}s{_hs}_v_R{_ar}s{_as}",
+            )
+        )
     for _hr, _hs, _ar, _as in _bracket.get("semifinals", []):
-        _SF_PARAMS.append(pytest.param(
-            _clazz, _hr, _hs, _ar, _as,
-            id=f"{_clazz}A_sf_R{_hr}s{_hs}_v_R{_ar}s{_as}",
-        ))
+        _SF_PARAMS.append(
+            pytest.param(
+                _clazz,
+                _hr,
+                _hs,
+                _ar,
+                _as,
+                id=f"{_clazz}A_sf_R{_hr}s{_hs}_v_R{_ar}s{_as}",
+            )
+        )
 
 _SKIP = pytest.mark.skip(reason="No bracket data provided yet")
 
@@ -128,15 +144,21 @@ def test_qf_home_team_2025(clazz, home_region, home_seed, away_region, away_seed
     r2h2 = _r2_home(away_region, away_seed, second_round) if second_round else False
 
     result = qf_home_team(
-        home_region, home_seed, r1h1, r2h1,
-        away_region, away_seed, r1h2, r2h2,
+        home_region,
+        home_seed,
+        r1h1,
+        r2h1,
+        away_region,
+        away_seed,
+        r1h2,
+        r2h2,
         SEASON,
     )
     assert result == (home_region, home_seed), (
         f"{clazz}A QF: expected R{home_region}s{home_seed} "
-        f"(R1_home={r1h1}, R2_home={r2h1}, total={r1h1+r2h1}) to host "
+        f"(R1_home={r1h1}, R2_home={r2h1}, total={r1h1 + r2h1}) to host "
         f"R{away_region}s{away_seed} "
-        f"(R1_home={r1h2}, R2_home={r2h2}, total={r1h2+r2h2}), "
+        f"(R1_home={r1h2}, R2_home={r2h2}, total={r1h2 + r2h2}), "
         f"but got R{result[0]}s{result[1]}"
     )
 

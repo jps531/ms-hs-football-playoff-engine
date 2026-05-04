@@ -496,9 +496,9 @@ _1A4A_QF_A_R1_RESULTS = {
 
 _1A4A_QF_A_BRIDGE_CASES = [
     # (r2a_home_wins, r2b_home_wins, expected_host, non_host)
-    (True,  True,  (1, 1), (2, 1)),
-    (True,  False, (4, 2), (1, 1)),
-    (False, True,  (3, 2), (2, 1)),
+    (True, True, (1, 1), (2, 1)),
+    (True, False, (4, 2), (1, 1)),
+    (False, True, (3, 2), (2, 1)),
     (False, False, (3, 2), (4, 2)),
 ]
 
@@ -521,17 +521,22 @@ def test_qf_bridge_r2_complete_1a4a(
     For the team that deterministically hosts, P(hosting QF) == 1.0.
     For the non-host QF participant, P(hosting QF) == 0.0.
     """
-    fn = _slot_results_fn({
-        **_1A4A_QF_A_R1_RESULTS,
-        (1, 1, 3, 2): 1.0 if r2a_home_wins else 0.0,
-        (2, 1, 4, 2): 1.0 if r2b_home_wins else 0.0,
-    })
+    fn = _slot_results_fn(
+        {
+            **_1A4A_QF_A_R1_RESULTS,
+            (1, 1, 3, 2): 1.0 if r2a_home_wins else 0.0,
+            (2, 1, 4, 2): 1.0 if r2b_home_wins else 0.0,
+        }
+    )
 
     host_region, host_seed = expected_host
     host_school = f"R{host_region}s{host_seed}"
     result = compute_quarterfinal_home_odds(
-        host_region, {host_school: _locked(host_school, host_seed)},
-        SLOTS_1A_4A_2025, ODD_SEASON, fn,
+        host_region,
+        {host_school: _locked(host_school, host_seed)},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        fn,
     )
     assert result[host_school] == pytest.approx(1.0, abs=1e-9), (
         f"Expected P(hosting QF) == 1.0 for {host_school}, got {result[host_school]}"
@@ -540,8 +545,11 @@ def test_qf_bridge_r2_complete_1a4a(
     non_region, non_seed = non_host
     non_school = f"R{non_region}s{non_seed}"
     non_result = compute_quarterfinal_home_odds(
-        non_region, {non_school: _locked(non_school, non_seed)},
-        SLOTS_1A_4A_2025, ODD_SEASON, fn,
+        non_region,
+        {non_school: _locked(non_school, non_seed)},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        fn,
     )
     assert non_result[non_school] == pytest.approx(0.0, abs=1e-9), (
         f"Expected P(hosting QF) == 0.0 for {non_school}, got {non_result[non_school]}"
@@ -553,11 +561,13 @@ def test_qf_r2_loser_gets_zero_1a4a() -> None:
     region = 1
     school = "R1s1"
     # R1s1 wins R1 (slot 0 home), R3s2 wins R1 (slot 1 home), then R3s2 beats R1s1 in R2.
-    fn = _slot_results_fn({
-        (1, 1, 2, 4): 1.0,  # R1s1 wins R1
-        (3, 2, 4, 3): 1.0,  # R3s2 wins R1 (their slot)
-        (1, 1, 3, 2): 0.0,  # R3s2 beats R1s1 in R2 (R1s1 was home by seed, loses)
-    })
+    fn = _slot_results_fn(
+        {
+            (1, 1, 2, 4): 1.0,  # R1s1 wins R1
+            (3, 2, 4, 3): 1.0,  # R3s2 wins R1 (their slot)
+            (1, 1, 3, 2): 0.0,  # R3s2 beats R1s1 in R2 (R1s1 was home by seed, loses)
+        }
+    )
     odds = {school: _locked(school, 1)}
     result = compute_quarterfinal_home_odds(region, odds, SLOTS_1A_4A_2025, ODD_SEASON, fn)
     assert result[school] == pytest.approx(0.0, abs=1e-9)
@@ -859,15 +869,14 @@ def test_p_team_reach_one_win_less_than_one() -> None:
 # Even year (2024): higher region# hosts.  R3 (region 3) > R1 (region 1) → R3 hosts
 #   equal-seed case.  R4s3 → R1 still hosts (better seed).  Total = 0.0 + 0.5 = 0.5
 
-_R2_EQUAL_SEED_SLOT = FormatSlot(
-    slot=2, home_region=3, home_seed=2, away_region=4, away_seed=3, north_south="N"
-)
+_R2_EQUAL_SEED_SLOT = FormatSlot(slot=2, home_region=3, home_seed=2, away_region=4, away_seed=3, north_south="N")
 
 
 def test_p_home_in_r2_equal_seed_odd_year() -> None:
     """Odd year: team with lower region# wins the equal-seed R2 hosting — lines 339–340."""
     result = _p_home_in_r2(
-        team_seed=2, team_region=1,
+        team_seed=2,
+        team_region=1,
         r2_opp_slot=_R2_EQUAL_SEED_SLOT,
         season=2025,
         win_prob_fn=equal_matchup_prob,
@@ -878,7 +887,8 @@ def test_p_home_in_r2_equal_seed_odd_year() -> None:
 def test_p_home_in_r2_equal_seed_even_year() -> None:
     """Even year: team with lower region# loses the equal-seed hosting — lines 341–342."""
     result = _p_home_in_r2(
-        team_seed=2, team_region=1,
+        team_seed=2,
+        team_region=1,
         r2_opp_slot=_R2_EQUAL_SEED_SLOT,
         season=2024,
         win_prob_fn=equal_matchup_prob,
@@ -927,10 +937,19 @@ _IDX_NONE_SLOTS = [
     FormatSlot(slot=3, home_region=2, home_seed=1, away_region=3, away_seed=4, north_south="N"),
     FormatSlot(slot=4, home_region=3, home_seed=1, away_region=3, away_seed=2, north_south="N"),
 ]
-_IDX_NONE_ODDS = {"TeamX": StandingsOdds(
-    school="TeamX", p1=0.0, p2=0.0, p3=1.0, p4=0.0,
-    p_playoffs=1.0, final_playoffs=1.0, clinched=False, eliminated=False,
-)}
+_IDX_NONE_ODDS = {
+    "TeamX": StandingsOdds(
+        school="TeamX",
+        p1=0.0,
+        p2=0.0,
+        p3=1.0,
+        p4=0.0,
+        p_playoffs=1.0,
+        final_playoffs=1.0,
+        clinched=False,
+        eliminated=False,
+    )
+}
 
 
 def test_idx_none_guard_second_round() -> None:

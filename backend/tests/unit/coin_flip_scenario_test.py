@@ -44,10 +44,10 @@ _PLAYOFF_SEEDS = 2
 #   res_a=1 → a wins; pd_a=10 → a won by 10; pa_a=14 → points allowed by a;
 #   pa_b=24 → points allowed by b.
 _COMPLETED = [
-    CompletedGame(a="Alpha", b="Delta",  res_a=1, pd_a=10, pa_a=14, pa_b=24),
-    CompletedGame(a="Alpha", b="Gamma",  res_a=1, pd_a=10, pa_a=14, pa_b=24),
-    CompletedGame(a="Beta",  b="Delta",  res_a=1, pd_a=10, pa_a=14, pa_b=24),
-    CompletedGame(a="Beta",  b="Gamma",  res_a=1, pd_a=10, pa_a=14, pa_b=24),
+    CompletedGame(a="Alpha", b="Delta", res_a=1, pd_a=10, pa_a=14, pa_b=24),
+    CompletedGame(a="Alpha", b="Gamma", res_a=1, pd_a=10, pa_a=14, pa_b=24),
+    CompletedGame(a="Beta", b="Delta", res_a=1, pd_a=10, pa_a=14, pa_b=24),
+    CompletedGame(a="Beta", b="Gamma", res_a=1, pd_a=10, pa_a=14, pa_b=24),
 ]
 
 # Only remaining game is Delta vs Gamma — doesn't touch Alpha or Beta.
@@ -61,7 +61,10 @@ _SCENARIOS = enumerate_division_scenarios(
 _r = determine_scenarios(_TEAMS, _COMPLETED, _REMAINING)
 _ODDS = determine_odds(
     _TEAMS,
-    _r.first_counts, _r.second_counts, _r.third_counts, _r.fourth_counts,
+    _r.first_counts,
+    _r.second_counts,
+    _r.third_counts,
+    _r.fourth_counts,
     _r.denom,
 )
 
@@ -206,9 +209,7 @@ class TestBuildScenarioAtomsCoinFlip:
     def test_alpha_seed1_atom_contains_coin_flip_result(self):
         """Alpha's seed-1 atoms each contain a CoinFlipResult condition."""
         for atom in _ATOMS["Alpha"][1]:
-            assert any(isinstance(c, CoinFlipResult) for c in atom), (
-                f"No CoinFlipResult in atom: {atom}"
-            )
+            assert any(isinstance(c, CoinFlipResult) for c in atom), f"No CoinFlipResult in atom: {atom}"
 
     def test_alpha_seed1_coin_flip_names_alpha_as_winner(self):
         """When Alpha wins seed 1, the CoinFlipResult has Alpha as winner."""
@@ -248,13 +249,12 @@ class TestEnumerateDivisionScenariosCoinFlip:
     def test_sub_labels_are_a_and_b_per_group(self):
         """Each scenario number has sub-labels 'a' and 'b'."""
         from collections import defaultdict
+
         by_num = defaultdict(list)
         for sc in _SCENARIOS:
             by_num[sc["scenario_num"]].append(sc["sub_label"])
         for num, labels in by_num.items():
-            assert sorted(labels) == ["a", "b"], (
-                f"Scenario {num} has unexpected labels: {labels}"
-            )
+            assert sorted(labels) == ["a", "b"], f"Scenario {num} has unexpected labels: {labels}"
 
     def test_conditions_atoms_contain_coin_flip_result(self):
         """Every scenario's conditions_atom includes a CoinFlipResult."""
@@ -373,7 +373,9 @@ _ATOMS_PRE = build_scenario_atoms(
     _TEAMS, _COMPLETED, _REMAINING, playoff_seeds=_PLAYOFF_SEEDS, precomputed=_PRECOMPUTED
 )
 _SCENARIOS_PRE = enumerate_division_scenarios(
-    _TEAMS, _COMPLETED, _REMAINING,
+    _TEAMS,
+    _COMPLETED,
+    _REMAINING,
     playoff_seeds=_PLAYOFF_SEEDS,
     scenario_atoms=_ATOMS_PRE,
     precomputed=_PRECOMPUTED,
@@ -392,9 +394,7 @@ class TestPrecomputedPathCoinFlip:
     def test_precomputed_atoms_contain_coin_flip_result(self):
         """Alpha's seed-1 atoms (precomputed path) each have a CoinFlipResult."""
         for atom in _ATOMS_PRE["Alpha"][1]:
-            assert any(isinstance(c, CoinFlipResult) for c in atom), (
-                f"No CoinFlipResult in precomputed atom: {atom}"
-            )
+            assert any(isinstance(c, CoinFlipResult) for c in atom), f"No CoinFlipResult in precomputed atom: {atom}"
 
     def test_precomputed_scenario_count_matches(self):
         """Precomputed path produces the same number of scenarios as direct path."""
@@ -404,23 +404,15 @@ class TestPrecomputedPathCoinFlip:
         """Every scenario from the precomputed path includes a CoinFlipResult."""
         for sc in _SCENARIOS_PRE:
             atom = sc.get("conditions_atom")
-            assert atom is not None, (
-                f"Precomputed scenario {sc['scenario_num']}{sc['sub_label']} has no atom"
-            )
+            assert atom is not None, f"Precomputed scenario {sc['scenario_num']}{sc['sub_label']} has no atom"
             assert any(isinstance(c, CoinFlipResult) for c in atom), (
                 f"No CoinFlipResult in precomputed scenario conditions: {atom}"
             )
 
     def test_precomputed_seedings_match_direct(self):
         """The set of seedings produced matches between precomputed and direct paths."""
-        direct_seedings = {
-            (sc["scenario_num"], sc["sub_label"]): tuple(sc["seeding"])
-            for sc in _SCENARIOS
-        }
-        pre_seedings = {
-            (sc["scenario_num"], sc["sub_label"]): tuple(sc["seeding"])
-            for sc in _SCENARIOS_PRE
-        }
+        direct_seedings = {(sc["scenario_num"], sc["sub_label"]): tuple(sc["seeding"]) for sc in _SCENARIOS}
+        pre_seedings = {(sc["scenario_num"], sc["sub_label"]): tuple(sc["seeding"]) for sc in _SCENARIOS_PRE}
         assert direct_seedings == pre_seedings
 
     def test_enumerate_outcomes_coin_flips_populated(self):
@@ -459,30 +451,36 @@ _BC_PLAYOFF_SEEDS = 2
 # Alpha and Beta each beat Gamma and Delta by the same margin.
 # pa_a=14 → alpha allowed 14 points; pa_b=21 → gamma/delta allowed 21 points.
 _BC_COMPLETED = [
-    CompletedGame(a="Alpha", b="Gamma",  res_a=1, pd_a=7, pa_a=14, pa_b=21),
-    CompletedGame(a="Alpha", b="Delta",  res_a=1, pd_a=7, pa_a=14, pa_b=21),
-    CompletedGame(a="Beta",  b="Gamma",  res_a=1, pd_a=7, pa_a=14, pa_b=21),
-    CompletedGame(a="Beta",  b="Delta",  res_a=1, pd_a=7, pa_a=14, pa_b=21),
+    CompletedGame(a="Alpha", b="Gamma", res_a=1, pd_a=7, pa_a=14, pa_b=21),
+    CompletedGame(a="Alpha", b="Delta", res_a=1, pd_a=7, pa_a=14, pa_b=21),
+    CompletedGame(a="Beta", b="Gamma", res_a=1, pd_a=7, pa_a=14, pa_b=21),
+    CompletedGame(a="Beta", b="Delta", res_a=1, pd_a=7, pa_a=14, pa_b=21),
 ]
 
 # The only remaining game: Alpha vs Beta.  Gamma and Delta don't play it, so
 # their standings (0-2, same margins) are unaffected by the outcome or margin.
 _BC_REMAINING = [RemainingGame(a="Alpha", b="Beta")]
 
-_BC_ATOMS = build_scenario_atoms(
-    _BC_TEAMS, _BC_COMPLETED, _BC_REMAINING, playoff_seeds=_BC_PLAYOFF_SEEDS
-)
+_BC_ATOMS = build_scenario_atoms(_BC_TEAMS, _BC_COMPLETED, _BC_REMAINING, playoff_seeds=_BC_PLAYOFF_SEEDS)
 _BC_SCENARIOS = enumerate_division_scenarios(
-    _BC_TEAMS, _BC_COMPLETED, _BC_REMAINING,
-    playoff_seeds=_BC_PLAYOFF_SEEDS, scenario_atoms=_BC_ATOMS,
+    _BC_TEAMS,
+    _BC_COMPLETED,
+    _BC_REMAINING,
+    playoff_seeds=_BC_PLAYOFF_SEEDS,
+    scenario_atoms=_BC_ATOMS,
 )
 _BC_PRECOMPUTED = enumerate_outcomes(_BC_TEAMS, _BC_COMPLETED, _BC_REMAINING)
 _BC_SCENARIOS_PRE = enumerate_division_scenarios(
-    _BC_TEAMS, _BC_COMPLETED, _BC_REMAINING,
+    _BC_TEAMS,
+    _BC_COMPLETED,
+    _BC_REMAINING,
     playoff_seeds=_BC_PLAYOFF_SEEDS,
     scenario_atoms=build_scenario_atoms(
-        _BC_TEAMS, _BC_COMPLETED, _BC_REMAINING,
-        playoff_seeds=_BC_PLAYOFF_SEEDS, precomputed=_BC_PRECOMPUTED,
+        _BC_TEAMS,
+        _BC_COMPLETED,
+        _BC_REMAINING,
+        playoff_seeds=_BC_PLAYOFF_SEEDS,
+        precomputed=_BC_PRECOMPUTED,
     ),
     precomputed=_BC_PRECOMPUTED,
 )

@@ -201,16 +201,9 @@ class TestDetermineScenariosFullSeason:
         """Every team's seed counts sum to 1.0 across all four seed buckets."""
         r = self._result()
         for team in teams_3_7a:
-            total = (
-                r.first_counts[team]
-                + r.second_counts[team]
-                + r.third_counts[team]
-                + r.fourth_counts[team]
-            )
+            total = r.first_counts[team] + r.second_counts[team] + r.third_counts[team] + r.fourth_counts[team]
             # Playoff teams land in exactly one seed; eliminated teams land nowhere.
-            assert total == pytest.approx(0.0) or total == pytest.approx(1.0), (
-                f"{team}: seed counts sum to {total}"
-            )
+            assert total == pytest.approx(0.0) or total == pytest.approx(1.0), f"{team}: seed counts sum to {total}"
 
     def test_seed_counts_match_final_standings(self):
         """Seed counts reflect the known 3-7A final standings."""

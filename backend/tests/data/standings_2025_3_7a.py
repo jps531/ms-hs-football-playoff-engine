@@ -591,7 +591,17 @@ expected_3_7a_odds: dict[str, StandingsOdds] = {
         True,
         False,
     ),
-    "Brandon": StandingsOdds("Brandon", 0.0, 0.0, 0.37499999999999944, 0.3750000000000001, 0.7499999999999996, 0.7499999999999996, False, False),
+    "Brandon": StandingsOdds(
+        "Brandon",
+        0.0,
+        0.0,
+        0.37499999999999944,
+        0.3750000000000001,
+        0.7499999999999996,
+        0.7499999999999996,
+        False,
+        False,
+    ),
     "Northwest Rankin": StandingsOdds(
         "Northwest Rankin",
         0.1831597222222217,

@@ -740,8 +740,8 @@ def test_records_from_completed_b_wins():
     # sa=7 < sb=21 → res_a = -1 → Beta wins
     completed = [_completed("Alpha", "Beta", 7, 21)]
     result = records_from_completed(teams, completed)
-    assert result["Beta"][3] == 1   # region_wins
-    assert result["Beta"][4] == 0   # region_losses
+    assert result["Beta"][3] == 1  # region_wins
+    assert result["Beta"][4] == 0  # region_losses
     assert result["Alpha"][3] == 0
     assert result["Alpha"][4] == 1
 
@@ -753,17 +753,17 @@ def test_records_from_completed_b_wins():
 # Four teams seeded equally across region 1 for a 5A-7A bracket.
 _REGION1_ODDS_5A = {
     "Alpha": _odds("Alpha", p1=1.0, p_playoffs=1.0),
-    "Beta":  _odds("Beta",  p2=1.0, p_playoffs=1.0),
+    "Beta": _odds("Beta", p2=1.0, p_playoffs=1.0),
     "Gamma": _odds("Gamma", p3=1.0, p_playoffs=1.0),
     "Delta": _odds("Delta", p4=1.0, p_playoffs=1.0),
 }
 
 # Four teams seeded equally across region 1 for a 1A-4A bracket.
 _REGION1_ODDS_1A = {
-    "Able":  _odds("Able",  p1=1.0, p_playoffs=1.0),
+    "Able": _odds("Able", p1=1.0, p_playoffs=1.0),
     "Baker": _odds("Baker", p2=1.0, p_playoffs=1.0),
-    "Camp":  _odds("Camp",  p3=1.0, p_playoffs=1.0),
-    "Dog":   _odds("Dog",   p4=1.0, p_playoffs=1.0),
+    "Camp": _odds("Camp", p3=1.0, p_playoffs=1.0),
+    "Dog": _odds("Dog", p4=1.0, p_playoffs=1.0),
 }
 
 
@@ -810,10 +810,10 @@ class TestBuildHostingEntries:
         """When p_r1_adv == 0 (no seed probability), second_round conditional is None."""
         # A team with all p values = 0 has zero second-round advancement probability.
         region_odds = {
-            "Able":  _odds("Able",  p1=1.0, p_playoffs=1.0, clinched=True),
+            "Able": _odds("Able", p1=1.0, p_playoffs=1.0, clinched=True),
             "Baker": _odds("Baker", p2=1.0, p_playoffs=1.0, clinched=True),
-            "Camp":  _odds("Camp",  p3=1.0, p_playoffs=1.0, clinched=True),
-            "Zero":  _odds("Zero",  p_playoffs=0.0),  # no seeds → second_round = 0
+            "Camp": _odds("Camp", p3=1.0, p_playoffs=1.0, clinched=True),
+            "Zero": _odds("Zero", p_playoffs=0.0),  # no seeds → second_round = 0
         }
         result = build_hosting_entries(region_odds, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1)
         zero = next(e for e in result if e.school == "Zero")

@@ -25,7 +25,7 @@ The following data model describes how data is stored and controlled in this app
 | `games` | School-perspective game rows — two rows per contest, so scores and results are always relative to the `school` column. Covers regular season and playoffs. |
 | `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion), and home-game odds per round. Appended each pipeline run; never overwritten. |
 | `team_ratings` | Dated Elo and RPI snapshots. One row per school per season per `as_of_date`. |
-| `region_scenarios` | Serialized tiebreaker scenario trees (complete outcomes + minimized per-team conditions). Computed once per pipeline run, read at request time. |
+| `region_scenarios` | Serialized tiebreaker scenario trees (complete outcomes + minimized per-team conditions) plus pre-computed key insights (simple, unconditionally-true conditional statements like "Taylorsville clinches 1st seed: Taylorsville beats Stringer"). Computed once per pipeline run, read at request time. |
 | `region_computation_state` | Tracks background margin-sensitivity upgrade status per region (the two-phase computation model for regions with 5–6 games remaining). |
 | `playoff_formats` | Bracket template per class/season: size, number of regions, rounds. |
 | `playoff_format_slots` | First-round matchup slots. Adjacent pairs implicitly define the bracket tree for round-2 and beyond. |
@@ -117,6 +117,7 @@ erDiagram
         jsonb remaining_games
         jsonb scenario_atoms
         jsonb complete_scenarios
+        jsonb key_insights
     }
     region_computation_state {
         int season PK
@@ -474,7 +475,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain. Params: `season`, `date`. See [docs/SCENARIO_COMPUTATION.md](docs/SCENARIO_COMPUTATION.md) for the full computation model. |
+| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`. See [docs/SCENARIO_COMPUTATION.md](docs/SCENARIO_COMPUTATION.md) for the full computation model. |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team |
 | POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |

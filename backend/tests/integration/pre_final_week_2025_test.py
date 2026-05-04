@@ -29,7 +29,6 @@ Each parametrized case asserts four concrete expected properties:
 Stubs (empty ``games`` list) are automatically skipped.
 """
 
-
 import pytest
 
 from backend.helpers.data_classes import RemainingGame
@@ -73,10 +72,7 @@ def _split_games(fixture, clazz):
     remaining_compact = [g for g in all_games if g["date"] > cutoff]
 
     completed_raw = expand_results(completed_compact)
-    remaining_games = [
-        RemainingGame(*sorted([g["winner"], g["loser"]]))
-        for g in remaining_compact
-    ]
+    remaining_games = [RemainingGame(*sorted([g["winner"], g["loser"]])) for g in remaining_compact]
     return completed_raw, remaining_games
 
 
@@ -141,8 +137,7 @@ def test_pre_final_week_denom(clazz, region, fixture):
 
     expected_denom = 2 ** len(remaining_games)
     assert r.denom == expected_denom, (
-        f"Region {region}-{clazz}A: denom={r.denom}, expected {expected_denom} "
-        f"({len(remaining_games)} remaining games)"
+        f"Region {region}-{clazz}A: denom={r.denom}, expected {expected_denom} ({len(remaining_games)} remaining games)"
     )
 
 

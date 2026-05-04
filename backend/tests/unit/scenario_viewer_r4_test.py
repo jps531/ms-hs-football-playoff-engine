@@ -54,9 +54,9 @@ _TEAMS = teams_from_games(_ALL_GAMES)
 # so that the two other 2025-10-31 games are treated as completed.
 _REMAINING_PAIRS = {
     frozenset(["Oak Grove", "Northwest Rankin"]),  # 2025-10-31
-    frozenset(["Brandon", "Meridian"]),             # 2025-11-07
-    frozenset(["Oak Grove", "Pearl"]),              # 2025-11-07
-    frozenset(["Northwest Rankin", "Petal"]),       # 2025-11-07
+    frozenset(["Brandon", "Meridian"]),  # 2025-11-07
+    frozenset(["Oak Grove", "Pearl"]),  # 2025-11-07
+    frozenset(["Northwest Rankin", "Petal"]),  # 2025-11-07
 }
 
 _REMAINING = [
@@ -66,10 +66,9 @@ _REMAINING = [
 ]
 _PAIRS = [(rg.a, rg.b) for rg in _REMAINING]
 
-_COMPLETED = get_completed_games(expand_results([
-    g for g in _ALL_GAMES
-    if frozenset([g["winner"], g["loser"]]) not in _REMAINING_PAIRS
-]))
+_COMPLETED = get_completed_games(
+    expand_results([g for g in _ALL_GAMES if frozenset([g["winner"], g["loser"]]) not in _REMAINING_PAIRS])
+)
 
 # Module-level build — the heavy lifting that exercises _simplify_atom_list.
 _ATOMS = build_scenario_atoms(_TEAMS, _COMPLETED, _REMAINING)
@@ -126,8 +125,7 @@ def test_all_scenarios_have_full_seedings():
     """Every scenario produces a complete seeding of all 6 teams."""
     for sc in _SCENARIOS:
         assert len(sc["seeding"]) == len(_TEAMS), (
-            f"Scenario {sc['scenario_num']}{sc['sub_label']} has "
-            f"{len(sc['seeding'])} teams, expected {len(_TEAMS)}"
+            f"Scenario {sc['scenario_num']}{sc['sub_label']} has {len(sc['seeding'])} teams, expected {len(_TEAMS)}"
         )
 
 
@@ -142,8 +140,7 @@ def test_meridian_always_eliminated():
     for sc in _SCENARIOS:
         meridian_pos = sc["seeding"].index("Meridian") + 1  # 1-indexed
         assert meridian_pos >= 5, (
-            f"Meridian unexpectedly at seed {meridian_pos} in "
-            f"scenario {sc['scenario_num']}{sc['sub_label']}"
+            f"Meridian unexpectedly at seed {meridian_pos} in scenario {sc['scenario_num']}{sc['sub_label']}"
         )
 
 
@@ -205,7 +202,5 @@ def test_backward_coverage():
             _PA_WIN,
         )
         if tuple(order) not in seeding_map:
-            failures.append(
-                f"mask={mask:04b} margins={margins}: {tuple(order)} not in scenarios"
-            )
+            failures.append(f"mask={mask:04b} margins={margins}: {tuple(order)} not in scenarios")
     assert not failures, f"{len(failures)} uncovered:\n" + "\n".join(failures[:5])

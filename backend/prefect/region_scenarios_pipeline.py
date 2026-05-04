@@ -36,6 +36,7 @@ from backend.helpers.data_classes import (
 )
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.insights import extract_insights, serialize_insights
 from backend.helpers.scenario_serializers import (
     serialize_complete_scenarios,
     serialize_remaining_games,
@@ -686,6 +687,7 @@ def write_region_scenarios(
     margin_sensitive: bool,
     margin_compute_status: str,
     margin_computed_at_now: bool = False,
+    key_insights: list | None = None,
 ) -> None:
     """Serialize and upsert pre-computed scenario data into ``region_scenarios``
     and update ``region_computation_state`` accordingly.
@@ -701,6 +703,7 @@ def write_region_scenarios(
         margin_sensitive: Whether this write reflects full margin-sensitive data.
         margin_compute_status: Lifecycle state for ``region_computation_state``.
         margin_computed_at_now: When True, sets ``margin_computed_at = NOW()``.
+        key_insights: Pre-computed actionable insights extracted from atoms.
     """
     logger = get_run_logger()
     logger.info(
@@ -715,16 +718,18 @@ def write_region_scenarios(
     remaining_json = Json(serialize_remaining_games(remaining))
     atoms_json = Json(serialize_scenario_atoms(scenario_atoms))
     scenarios_json = Json(serialize_complete_scenarios(complete_scenarios))
+    insights_json = Json(serialize_insights(key_insights or []))
 
     scenarios_sql = """
         INSERT INTO region_scenarios
-            (season, class, region, as_of_date, computed_at, remaining_games, scenario_atoms, complete_scenarios)
-        VALUES (%s, %s, %s, %s, NOW(), %s, %s, %s)
+            (season, class, region, as_of_date, computed_at, remaining_games, scenario_atoms, complete_scenarios, key_insights)
+        VALUES (%s, %s, %s, %s, NOW(), %s, %s, %s, %s)
         ON CONFLICT (season, class, region, as_of_date) DO UPDATE SET
             computed_at        = EXCLUDED.computed_at,
             remaining_games    = EXCLUDED.remaining_games,
             scenario_atoms     = EXCLUDED.scenario_atoms,
-            complete_scenarios = EXCLUDED.complete_scenarios
+            complete_scenarios = EXCLUDED.complete_scenarios,
+            key_insights       = EXCLUDED.key_insights
     """
 
     state_sql = """
@@ -745,7 +750,8 @@ def write_region_scenarios(
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                scenarios_sql, (season, str(clazz), region, as_of_date, remaining_json, atoms_json, scenarios_json)
+                scenarios_sql,
+                (season, str(clazz), region, as_of_date, remaining_json, atoms_json, scenarios_json, insights_json),
             )
             cur.execute(
                 state_sql,
@@ -804,6 +810,15 @@ def upgrade_region_scenarios(
         base_margin_default=base_margin_default,
         precomputed=precomputed,
     )
+    insights = extract_insights(
+        scenario_atoms,
+        teams,
+        completed,
+        remaining,
+        r_computed=len(remaining),
+        pa_win=pa_win,
+        base_margin_default=base_margin_default,
+    )
 
     write_region_scenarios(
         clazz,
@@ -817,6 +832,7 @@ def upgrade_region_scenarios(
         margin_sensitive=True,
         margin_compute_status="complete",
         margin_computed_at_now=True,
+        key_insights=insights,
     )
     logger.info("Upgrade complete for region %d-%dA season %d", region, clazz, season)
 
@@ -1050,6 +1066,7 @@ def get_region_finish_scenarios(
         complete_scenarios = enumerate_division_scenarios(
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed
         )
+        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
         write_region_scenarios(
             clazz,
             region,
@@ -1061,6 +1078,7 @@ def get_region_finish_scenarios(
             r_remaining=R,
             margin_sensitive=True,
             margin_compute_status="not_needed",
+            key_insights=quote(insights),
         )
     elif R <= _R_BACKGROUND_MAX:
         # Win/loss-only first for fast initial display; schedule margin upgrade.
@@ -1069,6 +1087,7 @@ def get_region_finish_scenarios(
         complete_scenarios = enumerate_division_scenarios(
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
         )
+        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
         write_region_scenarios(
             clazz,
             region,
@@ -1080,6 +1099,7 @@ def get_region_finish_scenarios(
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="pending",
+            key_insights=quote(insights),
         )
         # Submit background upgrade — runs full margin enumeration asynchronously.
         # Skipped in backfill mode (historical data is already final).
@@ -1117,6 +1137,7 @@ def get_region_finish_scenarios(
         complete_scenarios = enumerate_division_scenarios(
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
         )
+        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
         write_region_scenarios(
             clazz,
             region,
@@ -1128,6 +1149,7 @@ def get_region_finish_scenarios(
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="skipped",
+            key_insights=quote(insights),
         )
 
     return scenario_atoms

@@ -54,7 +54,7 @@ def _make_wl_totals(**overrides):
     """Return a wl_totals dict for the 4-team fixture, with optional PA overrides."""
     base = {
         "Alpha": {"w": 2, "l": 0, "t": 0, "pa": 28},
-        "Beta":  {"w": 2, "l": 0, "t": 0, "pa": 28},
+        "Beta": {"w": 2, "l": 0, "t": 0, "pa": 28},
         "Gamma": {"w": 0, "l": 2, "t": 0, "pa": 42},
         "Delta": {"w": 0, "l": 2, "t": 0, "pa": 42},
     }
@@ -120,14 +120,14 @@ def test_step2_step4_arrays_no_game_vs_outside():
     # Alpha vs Delta: no game → None; Alpha vs Gamma: win → 2
     # Beta vs Delta: no game → None; Beta vs Gamma: no game → None
     assert step2["Alpha"][0] is None  # vs Delta: no game
-    assert step2["Alpha"][1] == 2     # vs Gamma: Alpha won
-    assert step2["Beta"][0] is None   # vs Delta: no game
-    assert step2["Beta"][1] is None   # vs Gamma: no game
+    assert step2["Alpha"][1] == 2  # vs Gamma: Alpha won
+    assert step2["Beta"][0] is None  # vs Delta: no game
+    assert step2["Beta"][1] is None  # vs Gamma: no game
 
     assert step4["Alpha"][0] is None  # vs Delta: no game
-    assert step4["Alpha"][1] == 7     # vs Gamma: +7 capped PD
-    assert step4["Beta"][0] is None   # vs Delta: no game
-    assert step4["Beta"][1] is None   # vs Gamma: no game
+    assert step4["Alpha"][1] == 7  # vs Gamma: +7 capped PD
+    assert step4["Beta"][0] is None  # vs Delta: no game
+    assert step4["Beta"][1] is None  # vs Gamma: no game
 
 
 def test_step2_step4_arrays_tie_vs_outside():
@@ -155,9 +155,9 @@ def test_unique_intra_bucket_games_returns_shared_games():
     # Alpha and Beta are in a 2-team tie bucket; Gamma is solo.
     buckets = [["Alpha", "Beta"], ["Gamma"]]
     remaining = [
-        RemainingGame(a="Alpha", b="Beta"),   # intra-bucket
+        RemainingGame(a="Alpha", b="Beta"),  # intra-bucket
         RemainingGame(a="Alpha", b="Gamma"),  # cross-bucket
-        RemainingGame(a="Beta", b="Gamma"),   # cross-bucket
+        RemainingGame(a="Beta", b="Gamma"),  # cross-bucket
     ]
     intra = unique_intra_bucket_games(buckets, remaining)
     assert len(intra) == 1
@@ -217,8 +217,14 @@ def test_sensitive_boundary_games_identifies_sensitive_game():
     intra: list[RemainingGame] = []  # no intra-bucket remaining games
 
     sensitive = sensitive_boundary_games(
-        buckets, remaining, intra, teams, completed, outcome_mask=3,
-        base_margins={}, pa_win=14,
+        buckets,
+        remaining,
+        intra,
+        teams,
+        completed,
+        outcome_mask=3,
+        base_margins={},
+        pa_win=14,
     )
     # Both boundary games could be sensitive; at minimum the list is non-empty
     assert len(sensitive) >= 1
@@ -243,9 +249,7 @@ _RWR_REMAINING = [RemainingGame(a="Alpha", b="Beta")]
 def test_resolve_with_results_basic():
     """resolve_with_results returns a valid seeding from human-readable results."""
     results = {("Alpha", "Beta"): "Alpha"}
-    seeding, _ = resolve_with_results(
-        _RWR_TEAMS, _RWR_COMPLETED, _RWR_REMAINING, results
-    )
+    seeding, _ = resolve_with_results(_RWR_TEAMS, _RWR_COMPLETED, _RWR_REMAINING, results)
     assert seeding[0] == "Alpha"
     assert set(seeding) == set(_RWR_TEAMS)
 
@@ -272,7 +276,10 @@ def test_resolve_with_results_margin_message_when_needed():
     remaining_intra = [RemainingGame(a="Alpha", b="Beta")]
     results = {("Alpha", "Beta"): "Alpha"}
     seeding, _ = resolve_with_results(
-        _RWR_TEAMS, completed_tied, remaining_intra, results
+        _RWR_TEAMS,
+        completed_tied,
+        remaining_intra,
+        results,
         # no margin provided for the intra-bucket game
     )
     assert isinstance(seeding, list)
@@ -284,6 +291,7 @@ def test_resolve_with_results_margin_message_when_needed():
 def test_resolve_with_results_missing_result_raises():
     """ValueError is raised when no result is provided for a remaining game."""
     import pytest
+
     results = {}  # missing Alpha vs Beta result
     with pytest.raises(ValueError, match="No result provided"):
         resolve_with_results(_RWR_TEAMS, _RWR_COMPLETED, _RWR_REMAINING, results)
@@ -292,6 +300,7 @@ def test_resolve_with_results_missing_result_raises():
 def test_resolve_with_results_invalid_winner_raises():
     """ValueError is raised when the winner name is not a participant."""
     import pytest
+
     results = {("Alpha", "Beta"): "Gamma"}  # Gamma not in this game
     with pytest.raises(ValueError, match="not a participant"):
         resolve_with_results(_RWR_TEAMS, _RWR_COMPLETED, _RWR_REMAINING, results)
@@ -301,9 +310,7 @@ def test_resolve_with_results_with_margins():
     """Explicit margins dict is accepted and used without raising."""
     results = {("Alpha", "Beta"): "Alpha"}
     margins = {("Alpha", "Beta"): 10}
-    seeding, messages = resolve_with_results(
-        _RWR_TEAMS, _RWR_COMPLETED, _RWR_REMAINING, results, margins=margins
-    )
+    seeding, messages = resolve_with_results(_RWR_TEAMS, _RWR_COMPLETED, _RWR_REMAINING, results, margins=margins)
     assert seeding[0] == "Alpha"
     assert messages == []  # margin provided → no missing-margin message
 
@@ -331,8 +338,12 @@ def test_resolve_standings_for_mask_coin_flip_collector_populated():
     collector: list = []
 
     resolve_standings_for_mask(
-        teams, _BASE_COMPLETED, remaining, outcome_mask=0,
-        margins={}, coin_flip_collector=collector,
+        teams,
+        _BASE_COMPLETED,
+        remaining,
+        outcome_mask=0,
+        margins={},
+        coin_flip_collector=collector,
     )
 
     # Both tie buckets are unresolvable — each should appear in the collector.
@@ -370,8 +381,13 @@ def test_resolve_bucket_no_collector_runs_silently():
 
     result = resolve_bucket(
         ["Alpha", "Beta"],
-        teams, wl_totals, base_order, _BASE_COMPLETED, remaining,
-        outcome_mask=0, margins={}
+        teams,
+        wl_totals,
+        base_order,
+        _BASE_COMPLETED,
+        remaining,
+        outcome_mask=0,
+        margins={},
         # coin_flip_collector omitted → defaults to None
     )
 
@@ -393,9 +409,7 @@ def test_resolve_standings_with_trace_populates_step_trace():
     teams = ["Alpha", "Beta", "Delta", "Gamma"]
     remaining: list[RemainingGame] = []
 
-    order, trace = resolve_standings_with_trace(
-        teams, _BASE_COMPLETED, remaining, outcome_mask=0, margins={}
-    )
+    order, trace = resolve_standings_with_trace(teams, _BASE_COMPLETED, remaining, outcome_mask=0, margins={})
 
     assert set(order) == set(teams)
     assert ("Alpha", "Beta") in trace
@@ -414,8 +428,13 @@ def test_resolve_bucket_step_trace_collector_populated():
 
     resolve_bucket(
         ["Alpha", "Beta"],
-        teams, wl_totals, base_order, _BASE_COMPLETED, remaining,
-        outcome_mask=0, margins={},
+        teams,
+        wl_totals,
+        base_order,
+        _BASE_COMPLETED,
+        remaining,
+        outcome_mask=0,
+        margins={},
         step_trace_collector=collector,
     )
 
@@ -450,11 +469,11 @@ def test_resolve_with_results_emits_margin_message():
     teams = ["Alpha", "Beta", "Delta", "Gamma"]
     completed = [
         # Alpha won the first meeting
-        CompletedGame(a="Alpha", b="Beta",  res_a=1,  pd_a=7,  pa_a=14, pa_b=21),
-        CompletedGame(a="Alpha", b="Delta", res_a=1,  pd_a=7,  pa_a=14, pa_b=21),
-        CompletedGame(a="Alpha", b="Gamma", res_a=1,  pd_a=7,  pa_a=14, pa_b=21),
-        CompletedGame(a="Beta",  b="Delta", res_a=1,  pd_a=7,  pa_a=14, pa_b=21),
-        CompletedGame(a="Beta",  b="Gamma", res_a=1,  pd_a=7,  pa_a=14, pa_b=21),
+        CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=7, pa_a=14, pa_b=21),
+        CompletedGame(a="Alpha", b="Delta", res_a=1, pd_a=7, pa_a=14, pa_b=21),
+        CompletedGame(a="Alpha", b="Gamma", res_a=1, pd_a=7, pa_a=14, pa_b=21),
+        CompletedGame(a="Beta", b="Delta", res_a=1, pd_a=7, pa_a=14, pa_b=21),
+        CompletedGame(a="Beta", b="Gamma", res_a=1, pd_a=7, pa_a=14, pa_b=21),
         # Gamma beat Delta (makes Gamma 1-2, Delta 0-3 after completed)
         CompletedGame(a="Delta", b="Gamma", res_a=-1, pd_a=-7, pa_a=21, pa_b=14),
     ]

@@ -1125,7 +1125,7 @@ class TestEloCarryover:
         """Teams absent from prior_ratings still seed from the class prior."""
         cfg = EloConfig(carryover_factor=0.5)
         ratings, _, _ = compute_elo_ratings([], SCHOOLS_4, cfg, prior_ratings={"Alpha": 1500.0})
-        assert ratings["Beta"] == pytest.approx(cfg.class_ratings[5])   # 6A = index 5
+        assert ratings["Beta"] == pytest.approx(cfg.class_ratings[5])  # 6A = index 5
         assert ratings["Gamma"] == pytest.approx(cfg.class_ratings[4])  # 5A = index 4
 
     def test_empty_prior_dict_behaves_like_none(self):

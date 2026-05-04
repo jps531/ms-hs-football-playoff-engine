@@ -1740,12 +1740,19 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Clarksdale / Senatobia / Rosa Fort / Ripley
     (4, 3): {
         "denom": 4,
-        "first_counts": Counter({"Clarksdale": 2.5000000000000115, "Rosa Fort": 0.9999999999999974, "Senatobia": 0.49999999999999917}),
+        "first_counts": Counter(
+            {"Clarksdale": 2.5000000000000115, "Rosa Fort": 0.9999999999999974, "Senatobia": 0.49999999999999917}
+        ),
         "second_counts": Counter(
             {"Senatobia": 2.4444444444444544, "Clarksdale": 1.3333333333333297, "Rosa Fort": 0.2222222222222223}
         ),
         "third_counts": Counter(
-            {"Rosa Fort": 2.777777777777797, "Ripley": 0.9999999999999974, "Clarksdale": 0.1666666666666667, "Senatobia": 0.055555555555555566}
+            {
+                "Rosa Fort": 2.777777777777797,
+                "Ripley": 0.9999999999999974,
+                "Clarksdale": 0.1666666666666667,
+                "Senatobia": 0.055555555555555566,
+            }
         ),
         "fourth_counts": Counter({"Ripley": 3.0000000000000258, "Senatobia": 0.9999999999999974}),
         "odds": {
@@ -2237,9 +2244,7 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
         # Lanier in the remaining game), not Lanier via Step 4 PD vs outside.
         "denom": 8,
         "first_counts": Counter({"Cleveland Central": 6.0, "Lanier": 2}),
-        "second_counts": Counter(
-            {"Lanier": 10 / 3, "Vicksburg": 8 / 3, "Cleveland Central": 1, "Florence": 1}
-        ),
+        "second_counts": Counter({"Lanier": 10 / 3, "Vicksburg": 8 / 3, "Cleveland Central": 1, "Florence": 1}),
         "third_counts": Counter(
             {
                 "Lanier": 8 / 3,
@@ -2486,7 +2491,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
         "first_counts": Counter({"South Panola": 7.999999999997066}),
         "second_counts": Counter({"Lake Cormorant": 7.999999999997066}),
         "third_counts": Counter({"Grenada": 5.9166666666652725, "Center Hill": 2.0833333333333828}),
-        "fourth_counts": Counter({"Center Hill": 5.9166666666652725, "Grenada": 0.08333333333333336, "Saltillo": 2.0000000000000475}),
+        "fourth_counts": Counter(
+            {"Center Hill": 5.9166666666652725, "Grenada": 0.08333333333333336, "Saltillo": 2.0000000000000475}
+        ),
         "odds": {
             "Center Hill": StandingsOdds(
                 school="Center Hill",

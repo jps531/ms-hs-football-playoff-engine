@@ -37,20 +37,20 @@ from backend.tests.data.standings_2025_3_7a import (
 )
 
 # Computed once at module level — reused by all tests to avoid redundant builds.
-_ATOMS_3_7A = build_scenario_atoms(
-    teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
-)
+_ATOMS_3_7A = build_scenario_atoms(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
 _SCENARIOS_3_7A = enumerate_division_scenarios(
-    teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games,
+    teams_3_7a,
+    expected_3_7a_completed_games,
+    expected_3_7a_remaining_games,
     scenario_atoms=_ATOMS_3_7A,
 )
-_r_3_7a = determine_scenarios(
-    teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games
-)
+_r_3_7a = determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
 _ODDS_3_7A = determine_odds(
     teams_3_7a,
-    _r_3_7a.first_counts, _r_3_7a.second_counts,
-    _r_3_7a.third_counts, _r_3_7a.fourth_counts,
+    _r_3_7a.first_counts,
+    _r_3_7a.second_counts,
+    _r_3_7a.third_counts,
+    _r_3_7a.fourth_counts,
     _r_3_7a.denom,
 )
 
@@ -343,9 +343,7 @@ Eliminated. (100.0%)"""
 def test_render_team_scenarios(team, expected):
     """render_team_scenarios output from build_scenario_atoms matches expected string for each team."""
     result = render_team_scenarios(team, _ATOMS_3_7A)
-    assert result == expected, (
-        f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
-    )
+    assert result == expected, f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
 
 
 @pytest.mark.parametrize(
@@ -362,14 +360,13 @@ def test_render_team_scenarios(team, expected):
 def test_render_team_scenarios_with_odds(team, expected):
     """render_team_scenarios with odds appends per-seed and elimination probabilities."""
     result = render_team_scenarios(team, _ATOMS_3_7A, odds=_ODDS_3_7A)
-    assert result == expected, (
-        f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
-    )
+    assert result == expected, f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
 
 
 # ---------------------------------------------------------------------------
 # division_scenarios_as_dict
 # ---------------------------------------------------------------------------
+
 
 def _div_dict():
     """Build a ``division_scenarios_as_dict`` result for the Region 3-7A fixture."""
@@ -380,9 +377,23 @@ def test_division_scenarios_dict_keys():
     """All 17 scenario keys are present (1–3, 4a–4l, 5–6)."""
     d = _div_dict()
     expected_keys = {
-        "1", "2", "3",
-        "4a", "4b", "4c", "4d", "4e", "4f", "4g", "4h", "4i", "4j", "4k", "4l",
-        "5", "6",
+        "1",
+        "2",
+        "3",
+        "4a",
+        "4b",
+        "4c",
+        "4d",
+        "4e",
+        "4f",
+        "4g",
+        "4h",
+        "4i",
+        "4j",
+        "4k",
+        "4l",
+        "5",
+        "6",
     }
     assert set(d.keys()) == expected_keys
 
@@ -409,9 +420,7 @@ def test_division_scenarios_dict_scenario_1():
 def test_division_scenarios_dict_scenario_3():
     """Scenario 3 (Meridian upset) renders correctly."""
     entry = _div_dict()["3"]
-    assert entry["title"] == (
-        "Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal"
-    )
+    assert entry["title"] == ("Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal")
     assert entry["one_seed"] == "Northwest Rankin"
     assert entry["two_seed"] == "Pearl"
     assert set(entry["eliminated"]) == {"Brandon", "Meridian"}
@@ -449,6 +458,7 @@ def test_division_scenarios_dict_scenario_6():
 # team_scenarios_as_dict
 # ---------------------------------------------------------------------------
 
+
 def _team_dict(with_odds=False):
     """Build a ``team_scenarios_as_dict`` result for the Region 3-7A fixture."""
     if not with_odds:
@@ -467,9 +477,7 @@ def test_team_scenarios_dict_entry_shape():
     d = _team_dict()
     for team, team_entry in d.items():
         for key, entry in team_entry.items():
-            assert set(entry.keys()) == {"odds", "weighted_odds", "scenarios"}, (
-                f"{team!r} key {key!r} has wrong shape"
-            )
+            assert set(entry.keys()) == {"odds", "weighted_odds", "scenarios"}, f"{team!r} key {key!r} has wrong shape"
 
 
 def test_team_scenarios_dict_meridian_fully_eliminated():
@@ -488,9 +496,7 @@ def test_team_scenarios_dict_brandon_structure():
     assert len(entry[3]["scenarios"]) == 2
     assert len(entry[4]["scenarios"]) == 2
     assert len(entry["eliminated"]["scenarios"]) == 1
-    assert entry["eliminated"]["scenarios"][0] == (
-        "Pearl beats Oak Grove AND Northwest Rankin beats Petal"
-    )
+    assert entry["eliminated"]["scenarios"][0] == ("Pearl beats Oak Grove AND Northwest Rankin beats Petal")
 
 
 def test_team_scenarios_dict_petal_no_elimination():
@@ -561,36 +567,28 @@ class TestRenderMarginCondition:
 
     def test_two_add_no_sub_eq(self):
         """len(add)==2, no sub, op=='==' renders 'combined total exactly N' (line 67)."""
-        cond = MarginCondition(
-            add=(("A", "B"), ("C", "D")), sub=(), op="==", threshold=10
-        )
+        cond = MarginCondition(add=(("A", "B"), ("C", "D")), sub=(), op="==", threshold=10)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
         assert result == "A's margin and C's margin combined total exactly 10"
 
     def test_one_add_one_sub_ge_threshold_zero(self):
         """op='>=' with adjusted t==0 renders 'add is at least as large as sub' (line 67)."""
-        cond = MarginCondition(
-            add=(("A", "B"),), sub=(("C", "D"),), op=">=", threshold=0
-        )
+        cond = MarginCondition(add=(("A", "B"),), sub=(("C", "D"),), op=">=", threshold=0)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
         assert result == "A's margin is at least as large as C's"
 
     def test_one_add_one_sub_le_threshold_zero(self):
         """op='<=' with adjusted t==0 renders 'sub is at least as large as add' (line 74)."""
-        cond = MarginCondition(
-            add=(("A", "B"),), sub=(("C", "D"),), op="<=", threshold=0
-        )
+        cond = MarginCondition(add=(("A", "B"),), sub=(("C", "D"),), op="<=", threshold=0)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
         assert result == "C's margin is at least as large as A's"
 
     def test_fallback_multiple_operands(self):
         """len(add)==2, len(sub)==1 falls back to generic sum expression (lines 78–80)."""
-        cond = MarginCondition(
-            add=(("A", "B"), ("C", "D")), sub=(("E", "F"),), op=">=", threshold=5
-        )
+        cond = MarginCondition(add=(("A", "B"), ("C", "D")), sub=(("E", "F"),), op=">=", threshold=5)
         atom = self._atom(("A", "B"), ("C", "D"), ("E", "F"))
         result = _render_margin_condition(cond, atom)
         assert result == "A's margin + C's margin + \u2212E's margin >= 5"
@@ -611,18 +609,21 @@ class TestRenderConditionPDRank:
     def test_rank_1_renders_1st(self):
         """rank=1 renders as '1st in point differential'."""
         from backend.helpers.data_classes import PDRankCondition
+
         cond = PDRankCondition("Hamilton", 1, ("Hamilton", "Hatley", "Walnut"))
         assert _render_condition(cond, []) == "Hamilton finishes 1st in point differential"
 
     def test_rank_2_renders_2nd(self):
         """rank=2 renders as '2nd in point differential'."""
         from backend.helpers.data_classes import PDRankCondition
+
         cond = PDRankCondition("Hatley", 2, ("Hamilton", "Hatley", "Walnut"))
         assert _render_condition(cond, []) == "Hatley finishes 2nd in point differential"
 
     def test_rank_3_renders_3rd(self):
         """rank=3 renders as '3rd in point differential'."""
         from backend.helpers.data_classes import PDRankCondition
+
         cond = PDRankCondition("Walnut", 3, ("Hamilton", "Hatley", "Walnut"))
         assert _render_condition(cond, []) == "Walnut finishes 3rd in point differential"
 
@@ -630,6 +631,7 @@ class TestRenderConditionPDRank:
         """_render_atom joins a GameResult and PDRankCondition with AND."""
         from backend.helpers.data_classes import PDRankCondition
         from backend.helpers.scenario_renderer import _render_atom
+
         atom = [
             GameResult("Hamilton", "Baldwyn"),
             PDRankCondition("Hamilton", 1, ("Hamilton", "Hatley", "Walnut")),
@@ -644,6 +646,7 @@ class TestOddsSuffixWeightedPaths:
     def _make_odds(self, p1, p2, p3, p4):
         """Build a StandingsOdds fixture from raw seed probabilities."""
         from backend.helpers.data_classes import StandingsOdds
+
         p = p1 + p2 + p3 + p4
         return StandingsOdds("T", p1, p2, p3, p4, p, p, False, False)
 
@@ -694,16 +697,12 @@ class TestRenderConditionLabel:
 
     def test_seed_required_no_team_name(self):
         """kind='seed_required' with no team_name renders region/seed label (lines 347–348)."""
-        cond = HomeGameCondition(
-            kind="seed_required", round_name=None, region=2, seed=3, team_name=None
-        )
+        cond = HomeGameCondition(kind="seed_required", round_name=None, region=2, seed=3, team_name=None)
         assert _render_condition_label(cond) == "Region 2 #3 Seed finishes as the #3 seed"
 
     def test_seed_required_with_team_name(self):
         """kind='seed_required' with a team_name uses the name directly (lines 347–348)."""
-        cond = HomeGameCondition(
-            kind="seed_required", round_name=None, region=2, seed=1, team_name="Oak Grove"
-        )
+        cond = HomeGameCondition(kind="seed_required", round_name=None, region=2, seed=1, team_name="Oak Grove")
         assert _render_condition_label(cond) == "Oak Grove finishes as the #1 seed"
 
 
@@ -777,9 +776,7 @@ class TestTeamHomeScenasAsDict:
 
     def test_region_condition_gets_region_label(self):
         """Condition with region but no team_name generates 'Region X #Y Seed' label (line 542)."""
-        cond = HomeGameCondition(
-            kind="advances", round_name="Quarterfinals", region=3, seed=2, team_name=None
-        )
+        cond = HomeGameCondition(kind="advances", round_name="Quarterfinals", region=3, seed=2, team_name=None)
         sc = HomeGameScenario(conditions=(cond,), explanation=None)
         rnd = _rhs(will_host=(sc,))
         result = team_home_scenarios_as_dict("TeamA", [rnd])
@@ -837,9 +834,9 @@ class TestRenderTeamMatchups:
 # ===========================================================================
 
 # Convenience: the three final-week completed games
-_BRN_MER = CompletedGame("Brandon",          "Meridian", 1, 27, 13, 40)
-_OG_PRL  = CompletedGame("Oak Grove",        "Pearl",    1, 21,  7, 28)
-_NWR_PET = CompletedGame("Northwest Rankin", "Petal",    1,  6, 28, 34)
+_BRN_MER = CompletedGame("Brandon", "Meridian", 1, 27, 13, 40)
+_OG_PRL = CompletedGame("Oak Grove", "Pearl", 1, 21, 7, 28)
+_NWR_PET = CompletedGame("Northwest Rankin", "Petal", 1, 6, 28, 34)
 
 # ---------------------------------------------------------------------------
 # Partial A: Brandon/Meridian known; OG/Pearl and NWR/Petal still TBD
@@ -859,12 +856,14 @@ _remaining_pa = [
     RemainingGame("Northwest Rankin", "Petal"),
 ]
 
-_atoms_pa  = build_scenario_atoms(teams_3_7a, _completed_pa, _remaining_pa)
-_sr_pa     = determine_scenarios(teams_3_7a, _completed_pa, _remaining_pa)
-_odds_pa   = determine_odds(
+_atoms_pa = build_scenario_atoms(teams_3_7a, _completed_pa, _remaining_pa)
+_sr_pa = determine_scenarios(teams_3_7a, _completed_pa, _remaining_pa)
+_odds_pa = determine_odds(
     teams_3_7a,
-    _sr_pa.first_counts, _sr_pa.second_counts,
-    _sr_pa.third_counts, _sr_pa.fourth_counts,
+    _sr_pa.first_counts,
+    _sr_pa.second_counts,
+    _sr_pa.third_counts,
+    _sr_pa.fourth_counts,
     _sr_pa.denom,
 )
 
@@ -994,12 +993,12 @@ Petal
 @pytest.mark.parametrize(
     "team,expected",
     [
-        ("Brandon",          _PARTIAL_A_BRANDON),
-        ("Meridian",         _PARTIAL_A_MERIDIAN),
+        ("Brandon", _PARTIAL_A_BRANDON),
+        ("Meridian", _PARTIAL_A_MERIDIAN),
         ("Northwest Rankin", _PARTIAL_A_NWR),
-        ("Oak Grove",        _PARTIAL_A_OAK_GROVE),
-        ("Pearl",            _PARTIAL_A_PEARL),
-        ("Petal",            _PARTIAL_A_PETAL),
+        ("Oak Grove", _PARTIAL_A_OAK_GROVE),
+        ("Pearl", _PARTIAL_A_PEARL),
+        ("Petal", _PARTIAL_A_PETAL),
     ],
 )
 def test_partial_a_brandon_meridian_known(team, expected):
@@ -1007,9 +1006,7 @@ def test_partial_a_brandon_meridian_known(team, expected):
     margin-sensitive 5-way-tie scenarios (which require Brandon to win) remain.
     Two games still undecided: OG/Pearl and NWR/Petal."""
     result = render_team_scenarios(team, _atoms_pa, odds=_odds_pa)
-    assert result == expected, (
-        f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
-    )
+    assert result == expected, f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
 
 
 # ---------------------------------------------------------------------------
@@ -1029,12 +1026,14 @@ _completed_pb = sorted(
 )
 _remaining_pb = [RemainingGame("Northwest Rankin", "Petal")]
 
-_atoms_pb  = build_scenario_atoms(teams_3_7a, _completed_pb, _remaining_pb)
-_sr_pb     = determine_scenarios(teams_3_7a, _completed_pb, _remaining_pb)
-_odds_pb   = determine_odds(
+_atoms_pb = build_scenario_atoms(teams_3_7a, _completed_pb, _remaining_pb)
+_sr_pb = determine_scenarios(teams_3_7a, _completed_pb, _remaining_pb)
+_odds_pb = determine_odds(
     teams_3_7a,
-    _sr_pb.first_counts, _sr_pb.second_counts,
-    _sr_pb.third_counts, _sr_pb.fourth_counts,
+    _sr_pb.first_counts,
+    _sr_pb.second_counts,
+    _sr_pb.third_counts,
+    _sr_pb.fourth_counts,
     _sr_pb.denom,
 )
 
@@ -1080,12 +1079,12 @@ Petal
 @pytest.mark.parametrize(
     "team,expected",
     [
-        ("Brandon",          _PARTIAL_B_BRANDON),
-        ("Meridian",         _PARTIAL_B_MERIDIAN),
+        ("Brandon", _PARTIAL_B_BRANDON),
+        ("Meridian", _PARTIAL_B_MERIDIAN),
         ("Northwest Rankin", _PARTIAL_B_NWR),
-        ("Oak Grove",        _PARTIAL_B_OAK_GROVE),
-        ("Pearl",            _PARTIAL_B_PEARL),
-        ("Petal",            _PARTIAL_B_PETAL),
+        ("Oak Grove", _PARTIAL_B_OAK_GROVE),
+        ("Pearl", _PARTIAL_B_PEARL),
+        ("Petal", _PARTIAL_B_PETAL),
     ],
 )
 def test_partial_b_brandon_meridian_and_og_pearl_known(team, expected):
@@ -1094,9 +1093,7 @@ def test_partial_b_brandon_meridian_and_og_pearl_known(team, expected):
     #3/#4; the sole remaining game (NWR/Petal) decides only #1 vs #2 between
     OG and Petal."""
     result = render_team_scenarios(team, _atoms_pb, odds=_odds_pb)
-    assert result == expected, (
-        f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
-    )
+    assert result == expected, f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
 
 
 # ---------------------------------------------------------------------------
@@ -1115,12 +1112,14 @@ _completed_pc = sorted(
 )
 _remaining_pc = [RemainingGame("Oak Grove", "Pearl")]
 
-_atoms_pc  = build_scenario_atoms(teams_3_7a, _completed_pc, _remaining_pc)
-_sr_pc     = determine_scenarios(teams_3_7a, _completed_pc, _remaining_pc)
-_odds_pc   = determine_odds(
+_atoms_pc = build_scenario_atoms(teams_3_7a, _completed_pc, _remaining_pc)
+_sr_pc = determine_scenarios(teams_3_7a, _completed_pc, _remaining_pc)
+_odds_pc = determine_odds(
     teams_3_7a,
-    _sr_pc.first_counts, _sr_pc.second_counts,
-    _sr_pc.third_counts, _sr_pc.fourth_counts,
+    _sr_pc.first_counts,
+    _sr_pc.second_counts,
+    _sr_pc.third_counts,
+    _sr_pc.fourth_counts,
     _sr_pc.denom,
 )
 
@@ -1202,12 +1201,12 @@ Petal
 @pytest.mark.parametrize(
     "team,expected",
     [
-        ("Brandon",          _PARTIAL_C_BRANDON),
-        ("Meridian",         _PARTIAL_C_MERIDIAN),
+        ("Brandon", _PARTIAL_C_BRANDON),
+        ("Meridian", _PARTIAL_C_MERIDIAN),
         ("Northwest Rankin", _PARTIAL_C_NWR),
-        ("Oak Grove",        _PARTIAL_C_OAK_GROVE),
-        ("Pearl",            _PARTIAL_C_PEARL),
-        ("Petal",            _PARTIAL_C_PETAL),
+        ("Oak Grove", _PARTIAL_C_OAK_GROVE),
+        ("Pearl", _PARTIAL_C_PEARL),
+        ("Petal", _PARTIAL_C_PETAL),
     ],
 )
 def test_partial_c_brandon_meridian_and_nwr_petal_known(team, expected):
@@ -1217,9 +1216,7 @@ def test_partial_c_brandon_meridian_and_nwr_petal_known(team, expected):
     beats Petal in step 2 vs OG), and the remaining game produces new
     single-game margin thresholds driven by the known n=6 boundary."""
     result = render_team_scenarios(team, _atoms_pc, odds=_odds_pc)
-    assert result == expected, (
-        f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
-    )
+    assert result == expected, f"\n--- EXPECTED ---\n{expected}\n--- ACTUAL ---\n{result}"
 
 
 # ---------------------------------------------------------------------------
@@ -1260,7 +1257,10 @@ def _full_season_seeds(og_pearl: CompletedGame) -> dict[str, int]:
     sr = determine_scenarios(teams_3_7a, completed, [])
     odds = determine_odds(
         teams_3_7a,
-        sr.first_counts, sr.second_counts, sr.third_counts, sr.fourth_counts,
+        sr.first_counts,
+        sr.second_counts,
+        sr.third_counts,
+        sr.fourth_counts,
         sr.denom,
     )
     result = {}
@@ -1285,65 +1285,55 @@ def _full_season_seeds(og_pearl: CompletedGame) -> dict[str, int]:
         # Brandon beats NWR H2H → Brandon #3, NWR #4.
         (
             _og_wins_game(21),
-            {"Oak Grove": 1, "Petal": 2, "Brandon": 3, "Northwest Rankin": 4,
-             "Pearl": 5, "Meridian": 5},
+            {"Oak Grove": 1, "Petal": 2, "Brandon": 3, "Northwest Rankin": 4, "Pearl": 5, "Meridian": 5},
         ),
         # Pearl by 2: OG PD=6, NWR PD=4, Petal=0, Pearl=-2, Brandon=-8 → all unique.
         (
             _pearl_wins_game(2),
-            {"Oak Grove": 1, "Northwest Rankin": 2, "Petal": 3, "Pearl": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Oak Grove": 1, "Northwest Rankin": 2, "Petal": 3, "Pearl": 4, "Brandon": 5, "Meridian": 5},
         ),
         # Pearl by 3: OG PD=5 > NWR PD=4 > Petal=0 > Pearl=-1 > Brandon=-8.
         (
             _pearl_wins_game(3),
-            {"Oak Grove": 1, "Northwest Rankin": 2, "Petal": 3, "Pearl": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Oak Grove": 1, "Northwest Rankin": 2, "Petal": 3, "Pearl": 4, "Brandon": 5, "Meridian": 5},
         ),
         # Pearl by 4 (boundary): OG=NWR=4; OG beat NWR H2H → OG #1, NWR #2.
         # Petal=Pearl=0; Pearl beat Petal H2H → Pearl #3, Petal #4.
         (
             _pearl_wins_game(4),
-            {"Oak Grove": 1, "Northwest Rankin": 2, "Pearl": 3, "Petal": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Oak Grove": 1, "Northwest Rankin": 2, "Pearl": 3, "Petal": 4, "Brandon": 5, "Meridian": 5},
         ),
         # Pearl by 5 (boundary): NWR PD=4 > OG PD=3 → NWR #1 outright.
         (
             _pearl_wins_game(5),
-            {"Northwest Rankin": 1, "Oak Grove": 2, "Pearl": 3, "Petal": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Northwest Rankin": 1, "Oak Grove": 2, "Pearl": 3, "Petal": 4, "Brandon": 5, "Meridian": 5},
         ),
         # Pearl by 6 (boundary): NWR #1 (PD=4). OG=Pearl=2; Pearl beat OG H2H
         # (in this game) → Pearl #2, OG #3.  Petal #4, Brandon #5.
         (
             _pearl_wins_game(6),
-            {"Northwest Rankin": 1, "Pearl": 2, "Oak Grove": 3, "Petal": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Northwest Rankin": 1, "Pearl": 2, "Oak Grove": 3, "Petal": 4, "Brandon": 5, "Meridian": 5},
         ),
         # Pearl by 7: NWR PD=4 > Pearl PD=3 > OG PD=1 > Petal=0 > Brandon — all unique.
         (
             _pearl_wins_game(7),
-            {"Northwest Rankin": 1, "Pearl": 2, "Oak Grove": 3, "Petal": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Northwest Rankin": 1, "Pearl": 2, "Oak Grove": 3, "Petal": 4, "Brandon": 5, "Meridian": 5},
         ),
         # Pearl by 8 (boundary): NWR=Pearl=4; NWR beat Pearl H2H → NWR #1, Pearl #2.
         # OG=Petal=0; Petal beat OG H2H → Petal #3, OG #4.
         (
             _pearl_wins_game(8),
-            {"Northwest Rankin": 1, "Pearl": 2, "Petal": 3, "Oak Grove": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Northwest Rankin": 1, "Pearl": 2, "Petal": 3, "Oak Grove": 4, "Brandon": 5, "Meridian": 5},
         ),
         # Pearl by 9 (boundary): Pearl PD=5 > NWR PD=4 → Pearl #1 outright.
         (
             _pearl_wins_game(9),
-            {"Pearl": 1, "Northwest Rankin": 2, "Petal": 3, "Oak Grove": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Pearl": 1, "Northwest Rankin": 2, "Petal": 3, "Oak Grove": 4, "Brandon": 5, "Meridian": 5},
         ),
         # Pearl by 12 (max): Pearl PD=8 > NWR PD=4 — same outcome category as p=9.
         (
             _pearl_wins_game(12),
-            {"Pearl": 1, "Northwest Rankin": 2, "Petal": 3, "Oak Grove": 4,
-             "Brandon": 5, "Meridian": 5},
+            {"Pearl": 1, "Northwest Rankin": 2, "Petal": 3, "Oak Grove": 4, "Brandon": 5, "Meridian": 5},
         ),
     ],
     ids=[
@@ -1422,6 +1412,7 @@ class TestRenderPrePlayoffBlockEdgeCases:
         # Provide one minimal atom (a list with a single GameResult-like object is fine
         # for rendering purposes — _render_atom just formats the list).
         from backend.helpers.data_classes import GameResult
+
         atom = [GameResult("Taylorsville", "Lumberton", 1, None)]
         seed_atoms = {"Taylorsville": {1: [atom]}}
         lines = _render_pre_playoff_block((sc,), "Taylorsville", seed_atoms)
