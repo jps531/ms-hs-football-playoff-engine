@@ -11,15 +11,15 @@ from backend.api.models.responses import EloSnapshot, EloTrendResponse, TeamRati
 
 router = APIRouter(prefix="/api/v1", tags=["ratings"])
 
-SeasonQ = Annotated[int, Query()]
+SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
 @router.get("/ratings")
 async def list_ratings(
     season: SeasonQ,
-    class_: Annotated[int | None, Query(alias="class")] = None,
-    region: Annotated[int | None, Query()] = None,
+    class_: Annotated[int | None, Query(alias="class", ge=1, le=7)] = None,
+    region: Annotated[int | None, Query(ge=1, le=8)] = None,
     team: Annotated[str | None, Query()] = None,
 ) -> list[TeamRatingModel]:
     """Return current Elo and RPI for teams matching the given filters."""

@@ -70,9 +70,7 @@ class EloConfig:
     scale: float = 400.0
     """Logistic scale factor.  A difference of ``scale`` points gives 10:1 odds."""
 
-    class_ratings: tuple[float, ...] = field(
-        default_factory=lambda: _DEFAULT_CLASS_RATINGS
-    )
+    class_ratings: tuple[float, ...] = field(default_factory=lambda: _DEFAULT_CLASS_RATINGS)
     """Starting Elo by classification (index 0 = 1A, index 6 = 7A).
     Teams with no classification data fall back to ``class_ratings[0]``."""
 
@@ -87,6 +85,7 @@ class EloConfig:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _class_prior(school: str, schools_by_name: dict[str, School], config: EloConfig) -> float:
     """Return the starting Elo rating for a school based on its classification."""
@@ -133,6 +132,7 @@ def _mov_multiplier(margin: int, elo_diff_winner: float, mov_exponent: float) ->
 # Elo computation
 # ---------------------------------------------------------------------------
 
+
 def compute_elo_ratings(
     games: list[Game],
     schools: list[School],
@@ -176,16 +176,15 @@ def compute_elo_ratings(
 
     # Seed every known school — blend with prior-season rating when available
     ratings: dict[str, float] = {
-        s.school: _apply_carryover(
-            config.class_ratings[s.class_ - 1], s.school, prior_ratings, config.carryover_factor
-        )
+        s.school: _apply_carryover(config.class_ratings[s.class_ - 1], s.school, prior_ratings, config.carryover_factor)
         for s in schools
     }
     games_count: dict[str, int] = defaultdict(int)
 
     # Filter to final, scored games with a known result
     valid: list[Game] = [
-        g for g in games
+        g
+        for g in games
         if g.final
         and g.result in ("W", "L", "T")
         and g.points_for is not None
@@ -271,6 +270,7 @@ def compute_elo_ratings(
 # RPI computation (display-only)
 # ---------------------------------------------------------------------------
 
+
 def compute_rpi(games: list[Game]) -> dict[str, float | None]:
     """Compute RPI for each team.
 
@@ -283,12 +283,7 @@ def compute_rpi(games: list[Game]) -> dict[str, float | None]:
     # Build per-team opponent result list: (opponent_name, outcome: 1.0/0.5/0.0)
     results: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
-    valid: list[Game] = [
-        g for g in games
-        if g.final
-        and g.result in ("W", "L", "T")
-        and g.opponent is not None
-    ]
+    valid: list[Game] = [g for g in games if g.final and g.result in ("W", "L", "T") and g.opponent is not None]
 
     # Deduplicate — process each game from one perspective, infer the other
     processed: set[tuple[str, str, str]] = set()
@@ -350,6 +345,7 @@ def compute_rpi(games: list[Game]) -> dict[str, float | None]:
 # Factory
 # ---------------------------------------------------------------------------
 
+
 def make_win_prob_fn(
     games: list[Game],
     schools: list[School],
@@ -394,9 +390,7 @@ def make_win_prob_fn(
         idx = bisect.bisect_right(snapshot_dates, target) - 1
         if idx < 0:
             # Before any games were played — return classification priors
-            return {
-                s.school: cfg.class_ratings[s.class_ - 1] for s in schools
-            }
+            return {s.school: cfg.class_ratings[s.class_ - 1] for s in schools}
         return snapshots[idx][1]
 
     def win_prob_fn(
@@ -441,6 +435,7 @@ def make_win_prob_fn(
 # ---------------------------------------------------------------------------
 # Alternate factory (pre-computed ratings)
 # ---------------------------------------------------------------------------
+
 
 def make_win_prob_fn_from_ratings(
     final_ratings: dict[str, float],
@@ -505,6 +500,7 @@ def make_win_prob_fn_from_ratings(
 # Matchup probability bridge (team-name Elo → seed-based bracket)
 # ---------------------------------------------------------------------------
 
+
 def make_matchup_prob_fn(
     elo_ratings: dict[str, float],
     seeding_odds_by_region: dict[int, dict[str, StandingsOdds]],
@@ -549,9 +545,7 @@ def make_matchup_prob_fn(
                 key = (region, seed)
                 seed_elo[key] = seed_elo.get(key, 0.0) + p * elo
 
-    def matchup_prob_fn(
-        home_region: int, home_seed: int, away_region: int, away_seed: int
-    ) -> float:
+    def matchup_prob_fn(home_region: int, home_seed: int, away_region: int, away_seed: int) -> float:
         """Return P(home wins) using probability-weighted expected Elo."""
         elo_home = seed_elo.get((home_region, home_seed))
         elo_away = seed_elo.get((away_region, away_seed))
@@ -688,6 +682,7 @@ def compute_ot_win_prob(
 # ---------------------------------------------------------------------------
 # Breakdown for frontend display
 # ---------------------------------------------------------------------------
+
 
 def win_prob_with_factors(
     team_a: str,

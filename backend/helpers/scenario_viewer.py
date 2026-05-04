@@ -2190,9 +2190,7 @@ def build_pre_playoff_home_scenarios(
     eo = enumerate_outcomes(teams, completed, remaining)
     atoms = build_scenario_atoms(teams, completed, remaining, playoff_seeds=playoff_seeds, precomputed=eo)
     sr = determine_scenarios(teams, completed, remaining)
-    region_odds = determine_odds(
-        teams, sr.first_counts, sr.second_counts, sr.third_counts, sr.fourth_counts, sr.denom
-    )
+    region_odds = determine_odds(teams, sr.first_counts, sr.second_counts, sr.third_counts, sr.fourth_counts, sr.denom)
 
     # 2. Determine which seeds the target team can still achieve.
     team_odds = region_odds.get(team)

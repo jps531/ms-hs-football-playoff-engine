@@ -20,13 +20,25 @@ from backend.helpers.win_probability import EloConfig, compute_in_game_win_prob,
 
 router = APIRouter(prefix="/api/v1", tags=["games"])
 
-SeasonQ = Annotated[int, Query()]
+SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 _HELMET_COLS = (
-    "id", "school", "year_first_worn", "year_last_worn", "years_worn",
-    "image_left", "image_right", "photo", "color", "finish",
-    "facemask_color", "logo", "stripe", "tags", "notes",
+    "id",
+    "school",
+    "year_first_worn",
+    "year_last_worn",
+    "years_worn",
+    "image_left",
+    "image_right",
+    "photo",
+    "color",
+    "finish",
+    "facemask_color",
+    "logo",
+    "stripe",
+    "tags",
+    "notes",
 )
 
 
@@ -51,8 +63,8 @@ def _build_helmet(*fields) -> HelmetDesignModel | None:
 @router.get("/games")
 async def list_games(
     season: SeasonQ,
-    class_: Annotated[int | None, Query(alias="class")] = None,
-    region: Annotated[int | None, Query()] = None,
+    class_: Annotated[int | None, Query(alias="class", ge=1, le=7)] = None,
+    region: Annotated[int | None, Query(ge=1, le=8)] = None,
     team: Annotated[str | None, Query()] = None,
     date_from: Annotated[date | None, Query()] = None,
     date_to: Annotated[date | None, Query()] = None,
@@ -107,8 +119,19 @@ async def list_games(
         seen_pairs: set[frozenset] = set()
         games: list[GameModel] = []
         async for (
-            school, opponent, game_date, pf, pa, location, region_game, status, gseason,
-            v_name, v_city, v_lat, v_lon,
+            school,
+            opponent,
+            game_date,
+            pf,
+            pa,
+            location,
+            region_game,
+            status,
+            gseason,
+            v_name,
+            v_city,
+            v_lat,
+            v_lon,
             *ha_fields_then_hb,
         ) in rows:
             ha_fields = tuple(ha_fields_then_hb[:15])

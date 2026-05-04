@@ -1,5 +1,6 @@
 """Admin endpoints for season setup and data maintenance."""
 
+import logging
 from datetime import date as date_type
 from typing import Annotated, Any
 
@@ -36,6 +37,8 @@ from backend.api.models.responses import (
     YearsWornRange,
 )
 
+_log = logging.getLogger(__name__)
+
 # Valid field sets for DELETE path param validation
 _SCHOOL_OVERRIDE_FIELDS = frozenset(SchoolOverrideField.__args__)  # type: ignore[attr-defined]
 _GAME_OVERRIDE_FIELDS = frozenset(GameOverrideField.__args__)  # type: ignore[attr-defined]
@@ -56,11 +59,23 @@ def _row_to_helmet(r) -> HelmetDesignModel:
     if r[4] is not None:
         years_worn = [YearsWornRange(start=s["start"], end=s["end"]) for s in r[4]]
     return HelmetDesignModel(
-        id=r[0], school=r[1], year_first_worn=r[2], year_last_worn=r[3],
-        years_worn=years_worn, image_left=r[5], image_right=r[6], photo=r[7],
-        color=r[8], finish=r[9], facemask_color=r[10], logo=r[11], stripe=r[12],
-        tags=list(r[13] or []), notes=r[14],
+        id=r[0],
+        school=r[1],
+        year_first_worn=r[2],
+        year_last_worn=r[3],
+        years_worn=years_worn,
+        image_left=r[5],
+        image_right=r[6],
+        photo=r[7],
+        color=r[8],
+        finish=r[9],
+        facemask_color=r[10],
+        logo=r[11],
+        stripe=r[12],
+        tags=list(r[13] or []),
+        notes=r[14],
     )
+
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_moderator)])
 
@@ -76,13 +91,8 @@ _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 async def list_locations() -> list[LocationModel]:
     """Return all venues in the locations table, ordered by name."""
     async with get_conn() as conn:
-        rows = await conn.execute(
-            "SELECT id, name, city, home_team FROM locations ORDER BY name"
-        )
-        return [
-            LocationModel(id=r[0], name=r[1], city=r[2], home_team=r[3])
-            async for r in rows
-        ]
+        rows = await conn.execute("SELECT id, name, city, home_team FROM locations ORDER BY name")
+        return [LocationModel(id=r[0], name=r[1], city=r[2], home_team=r[3]) async for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +121,7 @@ async def seed_playoff_format(
             dry_run=True,
         )
 
+    _log.info("admin: seeding playoff format season=%s classes=%s", season, [c.class_ for c in body.classes])
     format_sql = """
         INSERT INTO playoff_formats (season, class, num_regions, seeds_per_region, num_rounds, notes)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -198,10 +209,7 @@ async def assign_championship_venue(
         find_sql += " ORDER BY ss.class, g.date, g.school"
 
         game_rows = await conn.execute(find_sql, find_params)
-        games = [
-            ChampionshipGameRow(school=r[0], date=r[1], opponent=r[2], class_=r[3])
-            async for r in game_rows
-        ]
+        games = [ChampionshipGameRow(school=r[0], date=r[1], opponent=r[2], class_=r[3]) async for r in game_rows]
 
         if not games:
             raise HTTPException(
@@ -211,6 +219,13 @@ async def assign_championship_venue(
             )
 
         if not dry_run:
+            _log.info(
+                "admin: assigning championship venue location_id=%s season=%s class=%s games=%s",
+                body.location_id,
+                body.season,
+                body.class_,
+                len(games),
+            )
             for game in games:
                 await conn.execute(
                     "UPDATE games SET location_id = $1, location = 'neutral' WHERE school = $2 AND date = $3",
@@ -253,6 +268,7 @@ async def set_school_override(school: str, body: SetSchoolOverrideRequest) -> Ov
         if row is None:
             raise HTTPException(status_code=404, detail=f"School '{school}' not found")
         await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, body.field, body.value))
+    _log.info("admin: set school override school=%s field=%s", school, body.field)
     return OverrideAuditRow(source=f"school:{school}", key=body.field, value=body.value)
 
 
@@ -260,12 +276,15 @@ async def set_school_override(school: str, body: SetSchoolOverrideRequest) -> Ov
 async def clear_school_override(school: str, field: str) -> None:
     """Remove a manual override from a school field, restoring the pipeline-written value."""
     if field not in _SCHOOL_OVERRIDE_FIELDS:
-        raise HTTPException(status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_SCHOOL_OVERRIDE_FIELDS)}")
+        raise HTTPException(
+            status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_SCHOOL_OVERRIDE_FIELDS)}"
+        )
     async with get_conn() as conn:
         row = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"School '{school}' not found")
         await conn.execute("SELECT clear_school_override(%s, %s)", (school, field))
+    _log.info("admin: cleared school override school=%s field=%s", school, field)
 
 
 # ---------------------------------------------------------------------------
@@ -277,12 +296,13 @@ async def clear_school_override(school: str, field: str) -> None:
 async def set_game_override(school: str, date: date_type, body: SetGameOverrideRequest) -> OverrideAuditRow:
     """Set a manual override on a game field (e.g. fix a miscategorized region game or wrong score)."""
     async with get_conn() as conn:
-        row = await (await conn.execute(
-            "SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date)
-        )).fetchone()
+        row = await (
+            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date))
+        ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Game for '{school}' on {date} not found")
         await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, date, body.field, body.value))
+    _log.info("admin: set game override school=%s date=%s field=%s", school, date, body.field)
     return OverrideAuditRow(source=f"game:{school}:{date}", key=body.field, value=body.value)
 
 
@@ -290,14 +310,17 @@ async def set_game_override(school: str, date: date_type, body: SetGameOverrideR
 async def clear_game_override(school: str, date: date_type, field: str) -> None:
     """Remove a manual override from a game field, restoring the pipeline-written value."""
     if field not in _GAME_OVERRIDE_FIELDS:
-        raise HTTPException(status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_GAME_OVERRIDE_FIELDS)}")
+        raise HTTPException(
+            status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_GAME_OVERRIDE_FIELDS)}"
+        )
     async with get_conn() as conn:
-        row = await (await conn.execute(
-            "SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date)
-        )).fetchone()
+        row = await (
+            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date))
+        ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Game for '{school}' on {date} not found")
         await conn.execute("SELECT clear_game_override(%s, %s, %s)", (school, date, field))
+    _log.info("admin: cleared game override school=%s date=%s field=%s", school, date, field)
 
 
 # ---------------------------------------------------------------------------
@@ -309,21 +332,22 @@ async def clear_game_override(school: str, date: date_type, field: str) -> None:
 async def set_game_helmet(school: str, date: date_type, body: SetGameHelmetRequest) -> dict:
     """Assign (or clear) the helmet design worn by *school* in a specific game."""
     async with get_conn() as conn:
-        row = await (await conn.execute(
-            "SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date)
-        )).fetchone()
+        row = await (
+            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date))
+        ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Game for '{school}' on {date} not found")
         if body.helmet_design_id is not None:
-            hrow = await (await conn.execute(
-                "SELECT 1 FROM helmet_designs WHERE id = %s", (body.helmet_design_id,)
-            )).fetchone()
+            hrow = await (
+                await conn.execute("SELECT 1 FROM helmet_designs WHERE id = %s", (body.helmet_design_id,))
+            ).fetchone()
             if hrow is None:
                 raise HTTPException(status_code=404, detail=f"Helmet design {body.helmet_design_id} not found")
         await conn.execute(
             "UPDATE games SET helmet_design_id = %s WHERE school = %s AND date = %s",
             (body.helmet_design_id, school, date),
         )
+    _log.info("admin: set game helmet school=%s date=%s helmet_design_id=%s", school, date, body.helmet_design_id)
     return {"school": school, "date": str(date), "helmet_design_id": body.helmet_design_id}
 
 
@@ -336,15 +360,16 @@ async def set_game_helmet(school: str, date: date_type, body: SetGameHelmetReque
 async def patch_school_season(school: str, season: int, body: PatchSchoolSeasonRequest) -> dict:
     """Toggle is_active for a school in a given season (pipeline never writes this column)."""
     async with get_conn() as conn:
-        row = await (await conn.execute(
-            "SELECT 1 FROM school_seasons WHERE school = %s AND season = %s", (school, season)
-        )).fetchone()
+        row = await (
+            await conn.execute("SELECT 1 FROM school_seasons WHERE school = %s AND season = %s", (school, season))
+        ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"School '{school}' season {season} not found")
         await conn.execute(
             "UPDATE school_seasons SET is_active = %s WHERE school = %s AND season = %s",
             (body.is_active, school, season),
         )
+    _log.info("admin: set school_season is_active=%s school=%s season=%s", body.is_active, school, season)
     return {"school": school, "season": season, "is_active": body.is_active}
 
 
@@ -361,17 +386,20 @@ async def create_location(body: CreateLocationRequest) -> LocationDetailModel:
     """Add a new venue to the locations table."""
     async with get_conn() as conn:
         try:
-            row = await (await conn.execute(
-                """
+            row = await (
+                await conn.execute(
+                    """
                 INSERT INTO locations (name, city, home_team, latitude, longitude)
                 VALUES (%s, %s, %s, %s, %s)
                 RETURNING id, name, city, home_team, latitude, longitude
                 """,
-                (body.name, body.city, body.home_team, body.latitude, body.longitude),
-            )).fetchone()
+                    (body.name, body.city, body.home_team, body.latitude, body.longitude),
+                )
+            ).fetchone()
         except UniqueViolation:
             raise HTTPException(status_code=409, detail=f"Location '{body.name}' in '{body.city}' already exists")
     assert row is not None
+    _log.info("admin: created location id=%s name=%s city=%s", row[0], body.name, body.city)
     return LocationDetailModel(id=row[0], name=row[1], city=row[2], home_team=row[3], latitude=row[4], longitude=row[5])
 
 
@@ -385,9 +413,7 @@ async def patch_location(location_id: int, body: PatchLocationRequest) -> Locati
         row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Location {location_id} not found")
-        set_clause = sql.SQL(", ").join(
-            sql.SQL("{} = %s").format(sql.Identifier(k)) for k in update_data
-        )
+        set_clause = sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(k)) for k in update_data)
         query = sql.SQL(
             "UPDATE locations SET {} WHERE id = %s RETURNING id, name, city, home_team, latitude, longitude"
         ).format(set_clause)
@@ -411,7 +437,9 @@ async def set_location_override(location_id: int, body: SetLocationOverrideReque
 async def clear_location_override(location_id: int, field: str) -> None:
     """Remove a manual override from a location field."""
     if field not in _LOCATION_OVERRIDE_FIELDS:
-        raise HTTPException(status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_LOCATION_OVERRIDE_FIELDS)}")
+        raise HTTPException(
+            status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_LOCATION_OVERRIDE_FIELDS)}"
+        )
     async with get_conn() as conn:
         row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()
         if row is None:
@@ -428,33 +456,41 @@ async def clear_location_override(location_id: int, field: str) -> None:
 async def create_helmet_design(body: CreateHelmetDesignRequest) -> HelmetDesignModel:
     """Create a new helmet design record. Upload images separately via POST /api/v1/images/helmets/{id}/{type}."""
     async with get_conn() as conn:
-        school_row = await (await conn.execute(
-            "SELECT 1 FROM schools WHERE school = %s", (body.school,)
-        )).fetchone()
+        school_row = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (body.school,))).fetchone()
         if school_row is None:
             raise HTTPException(status_code=404, detail=f"School '{body.school}' not found")
 
         years_worn_json = (
-            [{"start": r.start, "end": r.end} for r in body.years_worn]
-            if body.years_worn is not None else None
+            [{"start": r.start, "end": r.end} for r in body.years_worn] if body.years_worn is not None else None
         )
-        id_row = await (await conn.execute(
-            """
+        id_row = await (
+            await conn.execute(
+                """
             INSERT INTO helmet_designs
                 (school, year_first_worn, year_last_worn, years_worn,
                  color, finish, facemask_color, logo, stripe, tags, notes)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (
-                body.school, body.year_first_worn, body.year_last_worn, years_worn_json,
-                body.color, body.finish, body.facemask_color, body.logo, body.stripe,
-                body.tags, body.notes,
-            ),
-        )).fetchone()
+                (
+                    body.school,
+                    body.year_first_worn,
+                    body.year_last_worn,
+                    years_worn_json,
+                    body.color,
+                    body.finish,
+                    body.facemask_color,
+                    body.logo,
+                    body.stripe,
+                    body.tags,
+                    body.notes,
+                ),
+            )
+        ).fetchone()
         assert id_row is not None
         detail_row = await (await conn.execute(_HELMET_SELECT, (id_row[0],))).fetchone()
     assert detail_row is not None
+    _log.info("admin: created helmet_design id=%s school=%s year=%s", id_row[0], body.school, body.year_first_worn)
     return _row_to_helmet(detail_row)
 
 
@@ -471,9 +507,7 @@ async def patch_helmet_design(design_id: int, body: PatchHelmetDesignRequest) ->
         if row is None:
             raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
 
-        set_clause = sql.SQL(", ").join(
-            sql.SQL("{} = %s").format(sql.Identifier(k)) for k in update_data
-        )
+        set_clause = sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(k)) for k in update_data)
         update_query = sql.SQL("UPDATE helmet_designs SET {} WHERE id = %s").format(set_clause)
         await conn.execute(update_query, list(update_data.values()) + [design_id])
         detail_row = await (await conn.execute(_HELMET_SELECT, (design_id,))).fetchone()
@@ -489,3 +523,4 @@ async def delete_helmet_design(design_id: int) -> None:
         if row is None:
             raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
         await conn.execute("DELETE FROM helmet_designs WHERE id = %s", (design_id,))
+    _log.info("admin: deleted helmet_design id=%s", design_id)

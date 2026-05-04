@@ -782,7 +782,11 @@ def enumerate_home_game_scenarios(
             if slot_idx is None:
                 continue
             seed_cond = HomeGameCondition(
-                kind="seed_required", round_name=None, region=None, seed=s, team_name=None,
+                kind="seed_required",
+                round_name=None,
+                region=None,
+                seed=s,
+                team_name=None,
             )
 
             r1_name = round_names[0]
@@ -808,9 +812,11 @@ def enumerate_home_game_scenarios(
 
         def _agg_odds(rname: str) -> _RoundOdds:
             """Collect all six odds fields for *rname* from the caller-supplied dicts."""
+
             def _get(d: dict[str, float] | None) -> float | None:
                 """Return d[rname] when d is provided, otherwise None."""
                 return d.get(rname) if d else None
+
             return _RoundOdds(
                 p_reach=_get(p_reach_by_round),
                 p_host_conditional=_get(p_host_conditional_by_round),
@@ -841,9 +847,11 @@ def enumerate_home_game_scenarios(
 
     def _odds(rname: str) -> _RoundOdds:
         """Build a ``_RoundOdds`` bundle for *rname* from the caller's dicts."""
+
         def _get(d: dict[str, float] | None) -> float | None:
             """Return ``d[rname]`` if *d* is not None, otherwise ``None``."""
             return d.get(rname) if d else None
+
         return _RoundOdds(
             p_reach=_get(p_reach_by_round),
             p_host_conditional=_get(p_host_conditional_by_round),
@@ -862,23 +870,17 @@ def enumerate_home_game_scenarios(
     if is_1a_4a:
         # --- Second Round (1A-4A only) ---
         r2_name = round_names[1]  # "Second Round"
-        results.append(
-            _enumerate_r2(region, seed, half_slots, slot_idx, season, r2_name, _odds(r2_name), team_lookup)
-        )
+        results.append(_enumerate_r2(region, seed, half_slots, slot_idx, season, r2_name, _odds(r2_name), team_lookup))
 
     # --- Quarterfinals ---
     qf_name = round_names[2] if is_1a_4a else round_names[1]  # "Quarterfinals"
     results.append(
-        _enumerate_qf(
-            region, seed, half_slots, slot_idx, season, is_1a_4a, qf_name, _odds(qf_name), team_lookup
-        )
+        _enumerate_qf(region, seed, half_slots, slot_idx, season, is_1a_4a, qf_name, _odds(qf_name), team_lookup)
     )
 
     # --- Semifinals ---
     sf_name = round_names[-1]  # "Semifinals" — always the last round in both formats
-    results.append(
-        _enumerate_sf(region, seed, half_slots, slot_idx, season, sf_name, _odds(sf_name), team_lookup)
-    )
+    results.append(_enumerate_sf(region, seed, half_slots, slot_idx, season, sf_name, _odds(sf_name), team_lookup))
 
     return results
 
@@ -968,9 +970,7 @@ def _matchup_raw_qf(
         ]
         if r1_survivors is not None:
             r2_adj_candidates = [(r, s) for r, s in r2_adj_candidates if (r, s) in r1_survivors]
-        r2_home_unique = list(dict.fromkeys(
-            _r2_home_status(seed, s) for _, s in r2_adj_candidates
-        ))
+        r2_home_unique = list(dict.fromkeys(_r2_home_status(seed, s) for _, s in r2_adj_candidates))
     else:
         r2_home_unique = [False]  # sentinel for 5A-7A (no R2)
 
@@ -995,26 +995,32 @@ def _matchup_raw_qf(
                         (opp_adj.away_region, opp_adj.away_seed),
                     ]
                     if r1_survivors is not None:
-                        opp_r2_candidates = [
-                            (r, s) for r, s in opp_r2_candidates if (r, s) in r1_survivors
-                        ]
-                    opp_r2_vals = list(dict.fromkeys(
-                        _r2_home_status(opp_s, s) for _, s in opp_r2_candidates
-                    ))
+                        opp_r2_candidates = [(r, s) for r, s in opp_r2_candidates if (r, s) in r1_survivors]
+                    opp_r2_vals = list(dict.fromkeys(_r2_home_status(opp_s, s) for _, s in opp_r2_candidates))
                 else:
                     opp_r2_vals = [False]  # sentinel for 5A-7A
 
                 for opp_r2_home in opp_r2_vals:
                     home_r, home_s = qf_home_team(
-                        region, seed, r1_home_team_val,
+                        region,
+                        seed,
+                        r1_home_team_val,
                         r2_home_t if is_1a_4a else False,
-                        opp_r, opp_s, opp_r1_home, opp_r2_home, season,
+                        opp_r,
+                        opp_s,
+                        opp_r1_home,
+                        opp_r2_home,
+                        season,
                     )
                     is_home = home_r == region and home_s == seed
                     explanation = _explain_qf(
-                        region, seed, r1_home_team_val,
+                        region,
+                        seed,
+                        r1_home_team_val,
                         r2_home_t if is_1a_4a else None,
-                        opp_r, opp_s, opp_r1_home,
+                        opp_r,
+                        opp_s,
+                        opp_r1_home,
                         opp_r2_home if is_1a_4a else None,
                         season,
                     )
@@ -1120,9 +1126,11 @@ def enumerate_team_matchups(
 
     def _round_odds(rname: str) -> _RoundOdds:
         """Build a ``_RoundOdds`` bundle for *rname* from the caller's dicts."""
+
         def _get(d: dict[str, float] | None) -> float | None:
             """Return ``d[rname]`` if *d* is not None, otherwise ``None``."""
             return d.get(rname) if d else None
+
         return _RoundOdds(
             p_reach=_get(p_reach_by_round),
             p_host_conditional=_get(p_host_conditional_by_round),
@@ -1169,17 +1177,19 @@ def enumerate_team_matchups(
             p_cond_w = round_weighted.get((opp_r, opp_s, is_home))
             p_marg = (p_cond * p_reach) if (p_cond is not None and p_reach is not None) else None
             p_marg_w = (p_cond_w * p_reach_w) if (p_cond_w is not None and p_reach_w is not None) else None
-            entries.append(MatchupEntry(
-                opponent=_team_label(opp_r, opp_s, team_lookup) or f"Region {opp_r} #{opp_s} Seed",
-                opponent_region=opp_r,
-                opponent_seed=opp_s,
-                home=is_home,
-                p_conditional=p_cond,
-                p_conditional_weighted=p_cond_w,
-                p_marginal=p_marg,
-                p_marginal_weighted=p_marg_w,
-                explanation=path_explanations[(opp_r, opp_s, is_home)],
-            ))
+            entries.append(
+                MatchupEntry(
+                    opponent=_team_label(opp_r, opp_s, team_lookup) or f"Region {opp_r} #{opp_s} Seed",
+                    opponent_region=opp_r,
+                    opponent_seed=opp_s,
+                    home=is_home,
+                    p_conditional=p_cond,
+                    p_conditional_weighted=p_cond_w,
+                    p_marginal=p_marg,
+                    p_marginal_weighted=p_marg_w,
+                    explanation=path_explanations[(opp_r, opp_s, is_home)],
+                )
+            )
 
         # Sort: home matchups first, then by (opponent_region, opponent_seed)
         entries.sort(key=lambda e: (not e.home, e.opponent_region, e.opponent_seed))
@@ -1198,7 +1208,9 @@ def enumerate_team_matchups(
 
     qf_name = round_names[2] if is_1a_4a else round_names[1]
     if qf_name not in _completed:
-        results.append(_build_round(qf_name, _matchup_raw_qf(region, seed, half_slots, slot_idx, season, is_1a_4a, _r1_survivors)))
+        results.append(
+            _build_round(qf_name, _matchup_raw_qf(region, seed, half_slots, slot_idx, season, is_1a_4a, _r1_survivors))
+        )
 
     sf_name = round_names[-1]
     if sf_name not in _completed:

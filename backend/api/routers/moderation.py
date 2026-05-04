@@ -4,6 +4,7 @@ All endpoints require the ``X-Moderator-Key`` header to match the
 ``MODERATOR_API_KEY`` environment variable.
 """
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -14,6 +15,8 @@ from backend.api.db import get_conn
 from backend.api.models.requests import ModerationDecisionRequest
 from backend.api.models.responses import SubmissionDetail, SubmissionSummary
 from backend.helpers.image_helpers import LogoType, promote_submission_logo
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/moderation", tags=["moderation"])
 
@@ -46,7 +49,7 @@ def _row_to_detail(row: tuple) -> SubmissionDetail:
 
 @router.get("/submissions")
 async def list_submissions(
-    _: ModeratorAuth,
+    moderator: ModeratorAuth,
     type: str | None = None,
     status_filter: str | None = None,
     limit: int = 50,
@@ -71,7 +74,7 @@ async def list_submissions(
 
 
 @router.get("/submissions/{submission_id}", responses={404: {"description": "Not found"}})
-async def get_submission(_: ModeratorAuth, submission_id: int) -> SubmissionDetail:
+async def get_submission(moderator: ModeratorAuth, submission_id: int) -> SubmissionDetail:
     """Get a single submission with its full payload."""
     async with get_conn() as conn:
         row = await (
@@ -93,7 +96,7 @@ async def get_submission(_: ModeratorAuth, submission_id: int) -> SubmissionDeta
     responses={404: {"description": "Not found"}, 409: {"description": "Already reviewed"}},
 )
 async def approve_submission(
-    _: ModeratorAuth,
+    moderator: ModeratorAuth,
     submission_id: int,
     body: ModerationDecisionRequest = ModerationDecisionRequest(),
 ) -> SubmissionDetail:
@@ -131,7 +134,7 @@ async def approve_submission(
             )
         ).fetchone()
     assert updated is not None
-
+    _log.info("moderation: user %s approved submission %s type=%s", moderator["db_id"], submission_id, row[1])
     return _row_to_detail(updated)
 
 
@@ -140,7 +143,7 @@ async def approve_submission(
     responses={404: {"description": "Not found"}, 409: {"description": "Already reviewed"}},
 )
 async def reject_submission(
-    _: ModeratorAuth,
+    moderator: ModeratorAuth,
     submission_id: int,
     body: ModerationDecisionRequest = ModerationDecisionRequest(),
 ) -> SubmissionDetail:
@@ -169,7 +172,7 @@ async def reject_submission(
             )
         ).fetchone()
     assert updated is not None
-
+    _log.info("moderation: user %s rejected submission %s type=%s", moderator["db_id"], submission_id, row[1])
     return _row_to_detail(updated)
 
 
@@ -216,8 +219,13 @@ async def _apply_submission(conn: Any, row: tuple) -> None:
 
     elif stype == "score":
         game_date: str = payload["date"]
-        await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, game_date, "points_for", str(payload["points_for"])))
-        await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, game_date, "points_against", str(payload["points_against"])))
+        await conn.execute(
+            "SELECT set_game_override(%s, %s, %s, %s)", (school, game_date, "points_for", str(payload["points_for"]))
+        )
+        await conn.execute(
+            "SELECT set_game_override(%s, %s, %s, %s)",
+            (school, game_date, "points_against", str(payload["points_against"])),
+        )
 
     elif stype == "feedback":
         pass  # No DB action on approval.

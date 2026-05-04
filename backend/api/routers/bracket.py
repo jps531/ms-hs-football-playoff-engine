@@ -3,9 +3,10 @@
 from datetime import date, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from backend.api.db import get_conn
+from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateBracketRequest
 from backend.api.models.responses import BracketResponse
 from backend.helpers.api_helpers import (
@@ -20,7 +21,8 @@ from backend.helpers.scenario_updater import apply_bracket_game_results
 
 router = APIRouter(prefix="/api/v1", tags=["bracket"])
 
-SeasonQ = Annotated[int, Query()]
+SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
+ClassQ = Annotated[int, Query(alias="class", ge=1, le=7)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
@@ -81,7 +83,7 @@ async def _load_all_region_odds(conn, season: int, clazz: int, as_of: date) -> d
 @router.get("/bracket", responses=_404)
 async def get_bracket(
     season: SeasonQ,
-    class_: Annotated[int, Query(alias="class")],
+    class_: ClassQ,
     date: Annotated[date | None, Query()] = None,
 ) -> BracketResponse:
     """Return bracket advancement odds for all seed slots in *class_* for *season*.
@@ -103,10 +105,12 @@ async def get_bracket(
 
 
 @router.post("/bracket/simulate", responses=_404)
+@limiter.limit("10/minute")
 async def simulate_bracket(
+    request: Request,
     body: SimulateBracketRequest,
     season: SeasonQ,
-    class_: Annotated[int, Query(alias="class")],
+    class_: ClassQ,
     date: Annotated[date | None, Query()] = None,
 ) -> BracketResponse:
     """Apply hypothetical bracket game results and return updated advancement odds.

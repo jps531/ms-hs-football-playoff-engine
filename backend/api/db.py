@@ -18,10 +18,7 @@ _DB_NAME = os.getenv("POSTGRES_DB", "mshsfootball")
 _DB_USER = os.getenv("POSTGRES_USER", "postgres")
 _DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
 
-_conninfo = (
-    f"host={_DB_HOST} port={_DB_PORT} dbname={_DB_NAME} "
-    f"user={_DB_USER} password={_DB_PASSWORD}"
-)
+_conninfo = f"host={_DB_HOST} port={_DB_PORT} dbname={_DB_NAME} user={_DB_USER} password={_DB_PASSWORD}"
 
 pool: AsyncConnectionPool | None = None
 

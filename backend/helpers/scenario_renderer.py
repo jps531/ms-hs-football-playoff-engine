@@ -131,12 +131,8 @@ def render_team_scenarios(
     team_odds = odds.get(team) if odds else None
     team_weighted = weighted_odds.get(team) if weighted_odds else None
 
-    playoff_seed_entries = {
-        seed: atoms for seed, atoms in seed_map.items() if seed <= playoff_seeds
-    }
-    eliminated_atoms: list[list] = [
-        atom for seed, atoms in seed_map.items() if seed > playoff_seeds for atom in atoms
-    ]
+    playoff_seed_entries = {seed: atoms for seed, atoms in seed_map.items() if seed <= playoff_seeds}
+    eliminated_atoms: list[list] = [atom for seed, atoms in seed_map.items() if seed > playoff_seeds for atom in atoms]
 
     def _odds_suffix(p_unweighted: float | None, p_weighted: float | None) -> str:
         """Format an odds suffix from zero, one, or both probability values."""
@@ -298,15 +294,8 @@ def team_scenarios_as_dict(
         team_weighted = weighted_odds.get(team) if weighted_odds else None
         team_entry: dict = {}
 
-        playoff_seed_entries = {
-            seed: atoms for seed, atoms in seed_map.items() if seed <= playoff_seeds
-        }
-        eliminated_atoms = [
-            atom
-            for seed, atoms in seed_map.items()
-            if seed > playoff_seeds
-            for atom in atoms
-        ]
+        playoff_seed_entries = {seed: atoms for seed, atoms in seed_map.items() if seed <= playoff_seeds}
+        eliminated_atoms = [atom for seed, atoms in seed_map.items() if seed > playoff_seeds for atom in atoms]
 
         for seed in sorted(playoff_seed_entries):
             team_entry[seed] = {

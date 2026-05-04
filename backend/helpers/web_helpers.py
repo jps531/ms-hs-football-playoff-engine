@@ -5,6 +5,7 @@ requests library for static content.  Also provides small utilities for
 fuzzy string matching, Next.js ``__NEXT_DATA__`` extraction, and recursive
 dict iteration used by the scraping pipelines.
 """
+
 import json
 import re
 import time

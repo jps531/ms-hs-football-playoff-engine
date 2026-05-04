@@ -239,8 +239,14 @@ def update_rows(school_records: list[dict]) -> int:
         WHERE school = %s
     """
     rows_data = [
-        (r["mascot"], r["primary_color"], r["secondary_color"],
-         r["primary_color_hex"], r["secondary_color_hex"], r["school"])
+        (
+            r["mascot"],
+            r["primary_color"],
+            r["secondary_color"],
+            r["primary_color_hex"],
+            r["secondary_color_hex"],
+            r["school"],
+        )
         for r in school_records
     ]
     with get_database_connection() as conn:

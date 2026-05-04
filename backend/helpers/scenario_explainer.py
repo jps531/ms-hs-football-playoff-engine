@@ -142,10 +142,7 @@ def _step1_totals(sub_bucket: list[str], h2h_pts: dict) -> dict[str, float]:
         Dict mapping each team in ``sub_bucket`` to their total H2H win points
         vs the other members of ``sub_bucket``.
     """
-    return {
-        s: sum(h2h_pts.get((s, o), 0.0) for o in sub_bucket if o != s)
-        for s in sub_bucket
-    }
+    return {s: sum(h2h_pts.get((s, o), 0.0) for o in sub_bucket if o != s) for s in sub_bucket}
 
 
 def _step3_totals(sub_bucket: list[str], h2h_pd_cap: dict) -> dict[str, int]:
@@ -159,10 +156,7 @@ def _step3_totals(sub_bucket: list[str], h2h_pd_cap: dict) -> dict[str, int]:
         Dict mapping each team in ``sub_bucket`` to their total capped H2H PD
         vs the other members of ``sub_bucket``.
     """
-    return {
-        s: sum(h2h_pd_cap.get((s, o), 0) for o in sub_bucket if o != s)
-        for s in sub_bucket
-    }
+    return {s: sum(h2h_pd_cap.get((s, o), 0) for o in sub_bucket if o != s) for s in sub_bucket}
 
 
 def _non_h2h_clause(
@@ -392,9 +386,7 @@ def _explain_bucket(
         if step_data is not None and bucket_seed_order is not None:
             my_idx = bucket_seed_order.index(team)
             adjacent = (
-                bucket_seed_order[my_idx + 1]
-                if my_idx + 1 < len(bucket_seed_order)
-                else bucket_seed_order[my_idx - 1]
+                bucket_seed_order[my_idx + 1] if my_idx + 1 < len(bucket_seed_order) else bucket_seed_order[my_idx - 1]
             )
             clause = _non_h2h_clause(team, adjacent, bucket, step_data)
             if clause:

@@ -4,7 +4,7 @@ import os
 import tempfile
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from psycopg import sql
 
 from backend.api.auth import require_moderator
@@ -28,11 +28,28 @@ _HELMET_COL: dict[HelmetImageType, str] = {
     "photo": "photo",
 }
 
+_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _validate_upload(file: UploadFile, contents: bytes) -> None:
+    """Raise HTTP 422 if the upload is not an allowed image type or exceeds size limit."""
+    if len(contents) > _MAX_FILE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"File exceeds maximum allowed size of {_MAX_FILE_BYTES // 1024 // 1024} MB",
+        )
+    if file.content_type not in _ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported file type '{file.content_type}'. Allowed: {sorted(_ALLOWED_MIME_TYPES)}",
+        )
+
 
 def _save_temp(file: UploadFile, contents: bytes) -> str:
-    """Write upload contents to a named temp file and return its path."""
+    """Write upload contents to a named temp file (mode 0600) and return its path."""
     suffix = os.path.splitext(file.filename or "")[1] or ".png"
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp = tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=suffix)
     tmp.write(contents)
     tmp.close()
     return tmp.name
@@ -51,6 +68,7 @@ async def upload_school_logo(
             raise HTTPException(status_code=404, detail=f"School '{school}' not found")
 
     contents = await file.read()
+    _validate_upload(file, contents)
     tmp_path = _save_temp(file, contents)
     try:
         path = upload_logo(tmp_path, school, logo_type)
@@ -86,6 +104,7 @@ async def upload_helmet_image(
         school, year = row[0], row[1]
 
     contents = await file.read()
+    _validate_upload(file, contents)
     tmp_path = _save_temp(file, contents)
     try:
         path = upload_helmet(tmp_path, school, year, image_type, helmet_design_id)

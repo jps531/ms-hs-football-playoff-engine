@@ -21,6 +21,7 @@ dependencies = [
     "fastapi[standard]>=0.136.0",
     "cloudinary>=1.40",
     "python-jose[cryptography]>=3.3,<4",
+    "slowapi>=0.1.9",
 ]
 
 [dependency-groups]

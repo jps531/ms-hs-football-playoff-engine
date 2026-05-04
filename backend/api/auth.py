@@ -8,6 +8,7 @@ a new user row (role='user') on the first authenticated request from a given Aut
 
 import json
 import os
+import time
 import urllib.request
 from typing import Annotated
 
@@ -21,15 +22,19 @@ _ISSUER = f"https://{AUTH0_DOMAIN}/"
 _ALGORITHMS = ["RS256"]
 
 _jwks_cache: dict | None = None
+_jwks_fetched_at: float = 0.0
+_JWKS_TTL = 86400  # refresh cached keys every 24 hours
 
 
 def _get_jwks() -> dict:
-    """Fetch and module-level-cache Auth0's JSON Web Key Set."""
-    global _jwks_cache
-    if _jwks_cache is None:
+    """Fetch and cache Auth0's JSON Web Key Set. Refreshes every 24 hours."""
+    global _jwks_cache, _jwks_fetched_at
+    if _jwks_cache is None or time.monotonic() - _jwks_fetched_at > _JWKS_TTL:
         url = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json"
-        with urllib.request.urlopen(url) as response:
+        with urllib.request.urlopen(url, timeout=5) as response:  # noqa: S310
             _jwks_cache = json.load(response)
+        _jwks_fetched_at = time.monotonic()
+    assert _jwks_cache is not None
     return _jwks_cache
 
 
@@ -39,7 +44,7 @@ def _get_userinfo(token: str) -> dict:
         f"https://{AUTH0_DOMAIN}/userinfo",
         headers={"Authorization": f"Bearer {token}"},
     )
-    with urllib.request.urlopen(req) as response:
+    with urllib.request.urlopen(req, timeout=5) as response:  # noqa: S310
         return json.load(response)
 
 
@@ -61,7 +66,9 @@ _optional_bearer = HTTPBearer(auto_error=False)
 def _decode_auth0_token(token: str) -> dict:
     """Validate an Auth0 RS256 JWT against the JWKS; raise HTTP 401 on any failure."""
     try:
-        header = jwt.get_unverified_header(token)  # nosonar: python:S5659 — kid extracted here solely to select the JWKS key; full signature+claims verification is done by jwt.decode() below
+        header = jwt.get_unverified_header(
+            token  # NOSONAR - kid extracted here solely to select the JWKS key; full signature+claims verification is done by jwt.decode() below
+        )
         rsa_key = _find_rsa_key(_get_jwks(), header.get("kid", ""))
         if not rsa_key:
             raise HTTPException(

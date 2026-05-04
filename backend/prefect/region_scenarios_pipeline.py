@@ -130,19 +130,21 @@ def fetch_all_season_games(season: int, cutoff_date: date | None = None) -> list
         cutoff_date: When provided, only games on or before this date are returned.
                      Used by the historical backfill flow to reconstruct past state.
     """
-    where = "WHERE season=%s AND final=TRUE AND points_for IS NOT NULL AND points_against IS NOT NULL" + (
-        " AND date <= %s" if cutoff_date is not None else ""
+    base_query = (
+        "SELECT school, date, season, location_id, points_for, points_against, "
+        "       round, kickoff_time, opponent, result, game_status, source, "
+        "       location, region_game, final, overtime "
+        "FROM games_effective "
+        "WHERE season=%s AND final=TRUE AND points_for IS NOT NULL AND points_against IS NOT NULL"
     )
-    params: tuple = (season, cutoff_date) if cutoff_date is not None else (season,)
+    if cutoff_date is not None:
+        base_query += " AND date <= %s"
+        params: tuple = (season, cutoff_date)
+    else:
+        params = (season,)
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT school, date, season, location_id, points_for, points_against, "
-                "       round, kickoff_time, opponent, result, game_status, source, "
-                "       location, region_game, final, overtime "
-                f"FROM games_effective {where}",
-                params,
-            )
+            cur.execute(base_query, params)
             return [
                 Game(
                     school=row[0],
@@ -312,17 +314,20 @@ def fetch_completed_pairs(teams: list[str], season: int, cutoff_date: date | Non
         cutoff_date: When provided, only games on or before this date are returned.
                      Used by the historical backfill flow to reconstruct past state.
     """
-    cutoff_clause = " AND date <= %s" if cutoff_date is not None else ""
-    params: tuple = (season, cutoff_date, teams, teams) if cutoff_date is not None else (season, teams, teams)
+    base_query = (
+        "SELECT school, opponent, date, result, points_for, points_against "
+        "FROM games_effective "
+        "WHERE season=%s AND final=TRUE AND region_game=TRUE"
+    )
+    if cutoff_date is not None:
+        base_query += " AND date <= %s"
+        params: tuple = (season, cutoff_date, teams, teams)
+    else:
+        params = (season, teams, teams)
+    base_query += " AND school = ANY(%s) AND opponent = ANY(%s)"
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT school, opponent, date, result, points_for, points_against "
-                "FROM games_effective "
-                f"WHERE season=%s AND final=TRUE AND region_game=TRUE{cutoff_clause} "
-                "  AND school = ANY(%s) AND opponent = ANY(%s)",
-                params,
-            )
+            cur.execute(base_query, params)
             rows = cur.fetchall()
 
     raw_results: list[RawCompletedGame] = [
@@ -358,35 +363,34 @@ def fetch_remaining_pairs(teams: list[str], season: int, cutoff_date: date | Non
                      fetches games currently marked final=FALSE.
     """
     if cutoff_date is not None:
-        game_filter = "date > %s AND region_game=TRUE"
+        date_filter = "date > %s AND region_game=TRUE"
         params: tuple = (season, cutoff_date, teams, teams)
     else:
-        game_filter = "final=FALSE AND region_game=TRUE"
+        date_filter = "final=FALSE AND region_game=TRUE"
         params = (season, teams, teams)
 
+    base_query = (
+        "WITH cand AS ("
+        "  SELECT"
+        "    LEAST(school, opponent) AS a,"
+        "    GREATEST(school, opponent) AS b,"
+        "    CASE"
+        "      WHEN school < opponent THEN location"
+        "      WHEN school > opponent THEN"
+        "        CASE location"
+        "          WHEN 'home' THEN 'away'"
+        "          WHEN 'away' THEN 'home'"
+        "          ELSE 'neutral'"
+        "        END"
+        "      ELSE 'neutral'"
+        "    END AS location_a"
+        "  FROM games_effective"
+        "  WHERE season=%s AND " + date_filter + "    AND school = ANY(%s) AND opponent = ANY(%s)"
+        ") SELECT DISTINCT ON (a, b) a, b, location_a FROM cand"
+    )
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "WITH cand AS ("
-                "  SELECT"
-                "    LEAST(school, opponent) AS a,"
-                "    GREATEST(school, opponent) AS b,"
-                "    CASE"
-                "      WHEN school < opponent THEN location"
-                "      WHEN school > opponent THEN"
-                "        CASE location"
-                "          WHEN 'home' THEN 'away'"
-                "          WHEN 'away' THEN 'home'"
-                "          ELSE 'neutral'"
-                "        END"
-                "      ELSE 'neutral'"
-                "    END AS location_a"
-                "  FROM games_effective"
-                f"  WHERE season=%s AND {game_filter}"
-                "    AND school = ANY(%s) AND opponent = ANY(%s)"
-                ") SELECT DISTINCT ON (a, b) a, b, location_a FROM cand",
-                params,
-            )
+            cur.execute(base_query, params)
             return [RemainingGame(a, b, loc) for a, b, loc in cur.fetchall()]
 
 

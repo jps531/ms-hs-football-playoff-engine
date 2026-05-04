@@ -3,6 +3,7 @@
 from datetime import date
 
 from fastapi import APIRouter, HTTPException, status
+from psycopg import sql
 
 from backend.api.auth import CurrentUser, OwnerAuth
 from backend.api.db import get_conn
@@ -37,9 +38,15 @@ async def _get_user_row(conn, user_id: int) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail=f"User {user_id} not found")
     return {
-        "id": row[0], "email": row[1], "display_name": row[2],
-        "phone": row[3], "hometown": row[4], "role": row[5],
-        "favorite_team": row[6], "is_active": row[7], "created_at": row[8],
+        "id": row[0],
+        "email": row[1],
+        "display_name": row[2],
+        "phone": row[3],
+        "hometown": row[4],
+        "role": row[5],
+        "favorite_team": row[6],
+        "is_active": row[7],
+        "created_at": row[8],
     }
 
 
@@ -70,7 +77,7 @@ async def _build_profile(conn, user: dict) -> UserProfileResponse:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/me")
+@router.get("/me", responses={404: {"description": "User not found"}})
 async def get_my_profile(current_user: CurrentUser) -> UserProfileResponse:
     """Return the authenticated user's full profile."""
     user_id: int = current_user["db_id"]
@@ -79,19 +86,16 @@ async def get_my_profile(current_user: CurrentUser) -> UserProfileResponse:
         return await _build_profile(conn, user)
 
 
-@router.patch("/me")
+@router.patch("/me", responses={404: {"description": "User not found"}})
 async def patch_my_profile(body: PatchUserRequest, current_user: CurrentUser) -> UserProfileResponse:
     """Update mutable profile fields."""
     user_id: int = current_user["db_id"]
     updates = body.model_dump(exclude_none=True)
     if updates:
-        set_clauses = ", ".join(f"{k} = %s" for k in updates)
-        values = list(updates.values()) + [user_id]
+        set_clause = sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(k)) for k in updates)
+        query = sql.SQL("UPDATE users SET {}, updated_at = NOW() WHERE id = %s").format(set_clause)
         async with get_conn() as conn:
-            await conn.execute(
-                f"UPDATE users SET {set_clauses}, updated_at = NOW() WHERE id = %s",  # noqa: S608
-                values,
-            )
+            await conn.execute(query, list(updates.values()) + [user_id])
     async with get_conn() as conn:
         user = await _get_user_row(conn, user_id)
         return await _build_profile(conn, user)
@@ -116,15 +120,16 @@ async def list_followed_teams(current_user: CurrentUser) -> list[str]:
     return [r[0] for r in rows]
 
 
-@router.put("/me/followed-teams/{school}", status_code=status.HTTP_204_NO_CONTENT,
-            responses={404: {"description": "School not found"}})
+@router.put(
+    "/me/followed-teams/{school}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"description": "School not found"}},
+)
 async def follow_team(school: str, current_user: CurrentUser) -> None:
     """Follow a team (idempotent)."""
     user_id: int = current_user["db_id"]
     async with get_conn() as conn:
-        exists = await (
-            await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))
-        ).fetchone()
+        exists = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))).fetchone()
         if exists is None:
             raise HTTPException(status_code=404, detail=f"School '{school}' not found")
         await conn.execute(
@@ -169,16 +174,17 @@ async def list_attended_games(current_user: CurrentUser) -> list[AttendedGameMod
     return [AttendedGameModel(school=r[0], date=r[1], opponent=r[2], result=r[3]) for r in rows]
 
 
-@router.put("/me/attended-games/{school}/{game_date}", status_code=status.HTTP_204_NO_CONTENT,
-            responses={404: {"description": "Game not found"}})
+@router.put(
+    "/me/attended-games/{school}/{game_date}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"description": "Game not found"}},
+)
 async def mark_attended(school: str, game_date: date, current_user: CurrentUser) -> None:
     """Mark a game as attended (idempotent)."""
     user_id: int = current_user["db_id"]
     async with get_conn() as conn:
         exists = await (
-            await conn.execute(
-                "SELECT 1 FROM games WHERE school = %s AND date = %s", (school, game_date)
-            )
+            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, game_date))
         ).fetchone()
         if exists is None:
             raise HTTPException(status_code=404, detail=f"Game for '{school}' on {game_date} not found")
@@ -220,8 +226,12 @@ async def list_my_submissions(current_user: CurrentUser) -> list[SubmissionSumma
         ).fetchall()
     return [
         SubmissionSummary(
-            id=r[0], type=r[1], status=r[2], school=r[3],
-            submitted_at=r[4], reviewed_at=r[5],
+            id=r[0],
+            type=r[1],
+            status=r[2],
+            school=r[3],
+            submitted_at=r[4],
+            reviewed_at=r[5],
         )
         for r in rows
     ]
@@ -243,15 +253,21 @@ async def list_users(_: OwnerAuth) -> list[UserAdminRow]:
         ).fetchall()
     return [
         UserAdminRow(
-            id=r[0], email=r[1], display_name=r[2],
-            role=r[3], is_active=r[4], created_at=r[5],
+            id=r[0],
+            email=r[1],
+            display_name=r[2],
+            role=r[3],
+            is_active=r[4],
+            created_at=r[5],
         )
         for r in rows
     ]
 
 
-@router.patch("/{user_id}/role", responses={404: {"description": "User not found"},
-                                             409: {"description": "Cannot demote the only owner"}})
+@router.patch(
+    "/{user_id}/role",
+    responses={404: {"description": "User not found"}, 409: {"description": "Cannot demote the only owner"}},
+)
 async def set_user_role(user_id: int, body: SetUserRoleRequest, _: OwnerAuth) -> UserAdminRow:
     """Promote or demote a user to moderator or user role (owner only)."""
     async with get_conn() as conn:
@@ -274,21 +290,23 @@ async def set_user_role(user_id: int, body: SetUserRoleRequest, _: OwnerAuth) ->
         ).fetchone()
     assert updated is not None
     return UserAdminRow(
-        id=updated[0], email=updated[1], display_name=updated[2],
-        role=updated[3], is_active=updated[4], created_at=updated[5],
+        id=updated[0],
+        email=updated[1],
+        display_name=updated[2],
+        role=updated[3],
+        is_active=updated[4],
+        created_at=updated[5],
     )
 
 
-@router.patch("/{user_id}/active", responses={404: {"description": "User not found"},
-                                               409: {"description": "Cannot deactivate the owner"}})
+@router.patch(
+    "/{user_id}/active",
+    responses={404: {"description": "User not found"}, 409: {"description": "Cannot deactivate the owner"}},
+)
 async def set_user_active(user_id: int, body: SetUserActiveRequest, _: OwnerAuth) -> UserAdminRow:
     """Activate or deactivate a user account (owner only)."""
     async with get_conn() as conn:
-        row = await (
-            await conn.execute(
-                "SELECT role FROM users WHERE id = %s", (user_id,)
-            )
-        ).fetchone()
+        row = await (await conn.execute("SELECT role FROM users WHERE id = %s", (user_id,))).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
         if row[0] == "owner" and not body.is_active:
@@ -302,6 +320,10 @@ async def set_user_active(user_id: int, body: SetUserActiveRequest, _: OwnerAuth
         ).fetchone()
     assert updated is not None
     return UserAdminRow(
-        id=updated[0], email=updated[1], display_name=updated[2],
-        role=updated[3], is_active=updated[4], created_at=updated[5],
+        id=updated[0],
+        email=updated[1],
+        display_name=updated[2],
+        role=updated[3],
+        is_active=updated[4],
+        created_at=updated[5],
     )

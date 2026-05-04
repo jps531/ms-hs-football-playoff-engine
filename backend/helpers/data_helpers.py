@@ -116,71 +116,98 @@ CLEAN_RE = re.compile("|".join(CLEAN_PHRASES), flags=re.IGNORECASE)
 # Words that, when they appear at the END of a colour token, signal that the
 # NEXT word begins a NEW colour rather than extending the current one.
 # e.g. "Royal White" → ["Royal", "White"]; "Red White Blue" → three tokens.
-_COLOR_BOUNDARY_WORDS = frozenset({
-    "red", "blue", "green", "white", "black", "yellow", "orange",
-    "purple", "brown", "gray", "grey", "maroon", "pink", "gold",
-    "silver", "royal", "crimson", "scarlet", "teal", "tan",
-})
+_COLOR_BOUNDARY_WORDS = frozenset(
+    {
+        "red",
+        "blue",
+        "green",
+        "white",
+        "black",
+        "yellow",
+        "orange",
+        "purple",
+        "brown",
+        "gray",
+        "grey",
+        "maroon",
+        "pink",
+        "gold",
+        "silver",
+        "royal",
+        "crimson",
+        "scarlet",
+        "teal",
+        "tan",
+    }
+)
 
 # Two-word colour names that must NOT be split even when the first word is a
 # boundary word (e.g. "Royal Blue" is one colour, not two).
-_NO_SPLIT_PAIRS = frozenset({
-    "royal blue", "navy blue", "kelly green", "forest green",
-    "hunter green", "dark green", "midnight blue", "old gold",
-    # "Green Bay Gold" — the city-name prefix must not split on "green"
-    "green bay",
-})
+_NO_SPLIT_PAIRS = frozenset(
+    {
+        "royal blue",
+        "navy blue",
+        "kelly green",
+        "forest green",
+        "hunter green",
+        "dark green",
+        "midnight blue",
+        "old gold",
+        # "Green Bay Gold" — the city-name prefix must not split on "green"
+        "green bay",
+    }
+)
 
 # Known MHSAA directory typos → canonical title-cased spelling.
 _COLOR_TYPOS = {
     "whited": "White",
-    "re":     "Red",
+    "re": "Red",
 }
 
 # Canonical hex values keyed by lower-cased colour name.
 _COLOR_HEX_MAP: dict[str, str] = {
     # Blues
-    "royal blue":      "#4169E1",
-    "royal":           "#4169E1",
-    "blue":            "#003DA5",
-    "navy":            "#001F5B",
-    "navy blue":       "#001F5B",
-    "columbia blue":   "#9BDDFF",
-    "carolina blue":   "#4B9CD3",
-    "midnight blue":   "#191970",
+    "royal blue": "#4169E1",
+    "royal": "#4169E1",
+    "blue": "#003DA5",
+    "navy": "#001F5B",
+    "navy blue": "#001F5B",
+    "columbia blue": "#9BDDFF",
+    "carolina blue": "#4B9CD3",
+    "midnight blue": "#191970",
     # Greens
-    "green":           "#006400",
-    "kelly green":     "#4CBB17",
-    "forest green":    "#228B22",
-    "emerald":         "#50C878",
+    "green": "#006400",
+    "kelly green": "#4CBB17",
+    "forest green": "#228B22",
+    "emerald": "#50C878",
     # Reds / Pinks
-    "red":             "#CC0000",
-    "scarlet":         "#FF2400",
-    "cardinal":        "#C41E3A",
-    "maroon":          "#800000",
-    "crimson":         "#990000",
+    "red": "#CC0000",
+    "scarlet": "#FF2400",
+    "cardinal": "#C41E3A",
+    "maroon": "#800000",
+    "crimson": "#990000",
     # Yellows / Golds
-    "gold":            "#FFD700",
-    "athletic gold":   "#FFB81C",
-    "bright gold":     "#FFC72C",
-    "vegas gold":      "#C5A028",
-    "green bay gold":  "#FFB612",
-    "packer gold":     "#FFB612",
-    "yellow":          "#FFD100",
+    "gold": "#FFD700",
+    "athletic gold": "#FFB81C",
+    "bright gold": "#FFC72C",
+    "vegas gold": "#C5A028",
+    "green bay gold": "#FFB612",
+    "packer gold": "#FFB612",
+    "yellow": "#FFD100",
     "cardinal yellow": "#FFD100",
-    "old gold":        "#CFB53B",
+    "old gold": "#CFB53B",
     # Oranges
-    "orange":          "#FF6600",
+    "orange": "#FF6600",
     # Purples
-    "purple":          "#6B2D8B",
-    "violet":          "#EE82EE",
-    "lavender":        "#967BB6",
+    "purple": "#6B2D8B",
+    "violet": "#EE82EE",
+    "lavender": "#967BB6",
     # Neutrals
-    "black":           "#000000",
-    "white":           "#FFFFFF",
-    "gray":            "#808080",
-    "grey":            "#808080",
-    "silver":          "#C0C0C0",
+    "black": "#000000",
+    "white": "#FFFFFF",
+    "gray": "#808080",
+    "grey": "#808080",
+    "silver": "#C0C0C0",
 }
 
 # Mascots that must NOT gain a trailing "s" during pluralisation.
@@ -553,9 +580,7 @@ def get_completed_games(raw_results: list[RawCompletedGame]) -> list[CompletedGa
 # ---------------------------------------------------------------------------
 
 # Matches regulation clock strings like "8:00 1Q", "0:24 4Q", "11:47 2Q"
-_REG_CLOCK_RE = re.compile(
-    r"^(?P<mm>\d{1,2}):(?P<ss>\d{2})\s+(?P<q>[1-4])Q$", re.IGNORECASE
-)
+_REG_CLOCK_RE = re.compile(r"^(?P<mm>\d{1,2}):(?P<ss>\d{2})\s+(?P<q>[1-4])Q$", re.IGNORECASE)
 # Matches OT in-progress strings: "OT", "1OT", "2OT", "3OT", …
 _OT_PROGRESS_RE = re.compile(r"^(?P<n>\d*)OT$", re.IGNORECASE)
 # Matches OT-ended strings: "End OT", "End 1OT", "End 2OT", …

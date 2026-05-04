@@ -3,9 +3,10 @@
 from datetime import date, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from backend.api.db import get_conn
+from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
 from backend.api.models.responses import StandingsResponse
 from backend.helpers.api_helpers import (
@@ -27,8 +28,10 @@ from backend.helpers.scenarios import determine_odds, determine_scenarios
 
 router = APIRouter(prefix="/api/v1", tags=["standings"])
 
-SeasonQ = Annotated[int, Query()]
+SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
 DateQ = Annotated[date | None, Query()]
+ClazzPath = Annotated[int, Path(ge=1, le=7)]
+RegionPath = Annotated[int, Path(ge=1, le=8)]
 
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
@@ -122,8 +125,8 @@ async def _recompute_from_games(
 
 @router.get("/standings/{clazz}/{region}", responses=_404)
 async def get_standings(
-    clazz: int,
-    region: int,
+    clazz: ClazzPath,
+    region: RegionPath,
     season: SeasonQ,
     date: DateQ = None,
 ) -> StandingsResponse:
@@ -165,8 +168,8 @@ async def get_standings(
 
 @router.get("/standings/{clazz}/{region}/teams/{team}", responses=_404)
 async def get_team_standings(
-    clazz: int,
-    region: int,
+    clazz: ClazzPath,
+    region: RegionPath,
     team: str,
     season: SeasonQ,
     date: DateQ = None,
@@ -180,9 +183,11 @@ async def get_team_standings(
 
 
 @router.post("/standings/{clazz}/{region}/simulate", responses=_404)
+@limiter.limit("10/minute")
 async def simulate_standings(
-    clazz: int,
-    region: int,
+    request: Request,
+    clazz: ClazzPath,
+    region: RegionPath,
     body: SimulateRegionRequest,
     season: SeasonQ,
     date: DateQ = None,
@@ -236,16 +241,18 @@ async def simulate_standings(
 
 
 @router.post("/standings/{clazz}/{region}/teams/{team}/simulate", responses=_404)
+@limiter.limit("10/minute")
 async def simulate_team_standings(
-    clazz: int,
-    region: int,
+    request: Request,
+    clazz: ClazzPath,
+    region: RegionPath,
     team: str,
     body: SimulateRegionRequest,
     season: SeasonQ,
     date: DateQ = None,
 ) -> StandingsResponse:
     """What-if standings filtered to a single *team*."""
-    response = await simulate_standings(clazz, region, body, season=season, date=date)
+    response = await simulate_standings(request, clazz, region, body, season=season, date=date)
     response.teams = [t for t in response.teams if t.school == team]
     if not response.teams:
         raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")

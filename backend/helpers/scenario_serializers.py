@@ -45,7 +45,7 @@ def serialize_condition(cond) -> dict:
     raise TypeError(f"Cannot serialize condition of type {type(cond).__name__!r}")
 
 
-def deserialize_condition(d: dict) -> GameResult | MarginCondition:
+def deserialize_condition(d: dict) -> GameResult | MarginCondition | PDRankCondition:
     """Deserialize a dict produced by serialize_condition back to a dataclass."""
     t = d["type"]
     if t == "game_result":
@@ -98,10 +98,7 @@ def serialize_scenario_atoms(scenario_atoms: dict) -> dict:
     strings (``1`` → ``"1"``).  Deserializing reverses this.
     """
     return {
-        team: {
-            str(seed): [serialize_atom(atom) for atom in atoms]
-            for seed, atoms in seed_map.items()
-        }
+        team: {str(seed): [serialize_atom(atom) for atom in atoms] for seed, atoms in seed_map.items()}
         for team, seed_map in scenario_atoms.items()
     }
 

@@ -388,8 +388,16 @@ def resolve_bucket(
                         next_pending.append(part)
                     else:
                         resolved = resolve_bucket(
-                            part, teams, wl_totals, base_order, completed, remaining,
-                            outcome_mask, margins, base_margin_default, coin_flip_collector,
+                            part,
+                            teams,
+                            wl_totals,
+                            base_order,
+                            completed,
+                            remaining,
+                            outcome_mask,
+                            margins,
+                            base_margin_default,
+                            coin_flip_collector,
                             step_trace_collector=step_trace_collector,
                         )
                         next_pending.extend([[t] for t in resolved])
@@ -669,13 +677,23 @@ def sensitive_boundary_games(buckets, remaining, intra_games, teams, completed, 
         margins_hi = dict(capped_margins)
         margins_hi[key] = 12
         order_lo = resolve_standings_for_mask(
-            teams, completed, remaining, outcome_mask,
-            margins=margins_lo, base_margin_default=7, pa_win=pa_win,
+            teams,
+            completed,
+            remaining,
+            outcome_mask,
+            margins=margins_lo,
+            base_margin_default=7,
+            pa_win=pa_win,
             coin_flip_collector=[],
         )
         order_hi = resolve_standings_for_mask(
-            teams, completed, remaining, outcome_mask,
-            margins=margins_hi, base_margin_default=7, pa_win=pa_win,
+            teams,
+            completed,
+            remaining,
+            outcome_mask,
+            margins=margins_hi,
+            base_margin_default=7,
+            pa_win=pa_win,
             coin_flip_collector=[],
         )
         if order_lo != order_hi:
@@ -744,11 +762,9 @@ def resolve_with_results(
         if winner is None:
             raise ValueError(f"No result provided for game: {rem.a} vs {rem.b}")
         if winner == rem.a:
-            outcome_mask |= (1 << i)
+            outcome_mask |= 1 << i
         elif winner != rem.b:
-            raise ValueError(
-                f"Result winner '{winner}' is not a participant in {rem.a} vs {rem.b}"
-            )
+            raise ValueError(f"Result winner '{winner}' is not a participant in {rem.a} vs {rem.b}")
 
     # Compute seeding using the provided (or default) margins
     seeding = resolve_standings_for_mask(teams, completed, remaining, outcome_mask, norm_margins)
@@ -765,9 +781,7 @@ def resolve_with_results(
             continue
         # Test margins 1–12 to see whether the seeding would change
         seedings_by_margin = {
-            m: resolve_standings_for_mask(
-                teams, completed, remaining, outcome_mask, {**norm_margins, key: m}
-            )
+            m: resolve_standings_for_mask(teams, completed, remaining, outcome_mask, {**norm_margins, key: m})
             for m in range(1, 13)
         }
         if len({tuple(s) for s in seedings_by_margin.values()}) > 1:

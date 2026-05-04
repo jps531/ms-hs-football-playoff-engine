@@ -3,9 +3,10 @@
 from datetime import date, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from backend.api.db import get_conn
+from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
 from backend.api.models.responses import HostingResponse
 from backend.helpers.api_helpers import (
@@ -18,7 +19,9 @@ from backend.helpers.scenario_updater import apply_region_game_results
 
 router = APIRouter(prefix="/api/v1", tags=["hosting"])
 
-SeasonQ = Annotated[int, Query()]
+SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
+ClazzPath = Annotated[int, Path(ge=1, le=7)]
+RegionPath = Annotated[int, Path(ge=1, le=8)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
@@ -72,8 +75,8 @@ async def _load_region_odds(conn, season: int, clazz: int, region: int, as_of: d
 
 @router.get("/hosting/{clazz}/{region}", responses=_404)
 async def get_hosting(
-    clazz: int,
-    region: int,
+    clazz: ClazzPath,
+    region: RegionPath,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
 ) -> HostingResponse:
@@ -93,8 +96,8 @@ async def get_hosting(
 
 @router.get("/hosting/{clazz}/{region}/teams/{team}", responses=_404)
 async def get_team_hosting(
-    clazz: int,
-    region: int,
+    clazz: ClazzPath,
+    region: RegionPath,
     team: str,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
@@ -108,9 +111,11 @@ async def get_team_hosting(
 
 
 @router.post("/hosting/{clazz}/{region}/simulate", responses=_404)
+@limiter.limit("10/minute")
 async def simulate_hosting(
-    clazz: int,
-    region: int,
+    request: Request,
+    clazz: ClazzPath,
+    region: RegionPath,
     body: SimulateRegionRequest,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
@@ -154,16 +159,18 @@ async def simulate_hosting(
 
 
 @router.post("/hosting/{clazz}/{region}/teams/{team}/simulate", responses=_404)
+@limiter.limit("10/minute")
 async def simulate_team_hosting(
-    clazz: int,
-    region: int,
+    request: Request,
+    clazz: ClazzPath,
+    region: RegionPath,
     team: str,
     body: SimulateRegionRequest,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
 ) -> HostingResponse:
     """What-if hosting odds for a single *team*."""
-    response = await simulate_hosting(clazz, region, body, season=season, date=date)
+    response = await simulate_hosting(request, clazz, region, body, season=season, date=date)
     response.teams = [t for t in response.teams if t.school == team]
     if not response.teams:
         raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")

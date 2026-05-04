@@ -10,16 +10,24 @@ from pydantic import BaseModel, Field, model_validator
 # ---------------------------------------------------------------------------
 
 SchoolOverrideField = Literal[
-    "display_name", "mascot",
-    "primary_color", "secondary_color",
-    "primary_color_hex", "secondary_color_hex",
-    "latitude", "longitude",
+    "display_name",
+    "mascot",
+    "primary_color",
+    "secondary_color",
+    "primary_color_hex",
+    "secondary_color_hex",
+    "latitude",
+    "longitude",
 ]
 
 GameOverrideField = Literal[
-    "location", "location_id",
-    "points_for", "points_against",
-    "region_game", "round", "kickoff_time",
+    "location",
+    "location_id",
+    "points_for",
+    "points_against",
+    "region_game",
+    "round",
+    "kickoff_time",
 ]
 
 LocationOverrideField = Literal["home_team", "latitude", "longitude"]
@@ -37,7 +45,7 @@ class GameResultRequest(BaseModel):
 class SimulateRegionRequest(BaseModel):
     """Request body for region what-if simulation endpoints."""
 
-    results: list[GameResultRequest] = Field(min_length=1)
+    results: list[GameResultRequest] = Field(min_length=1, max_length=20)
 
 
 class BracketGameResultRequest(BaseModel):
@@ -53,7 +61,7 @@ class BracketGameResultRequest(BaseModel):
 class SimulateBracketRequest(BaseModel):
     """Request body for bracket what-if simulation endpoints."""
 
-    results: list[BracketGameResultRequest] = Field(min_length=1)
+    results: list[BracketGameResultRequest] = Field(min_length=1, max_length=20)
 
 
 class LiveWinProbRequest(BaseModel):

@@ -14,7 +14,7 @@ import os
 import tempfile
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from backend.api.auth import OptionalUser
 from backend.api.db import get_conn
@@ -35,15 +35,61 @@ router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 _MAX_HELMET_IMAGES = 5
+_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _validate_upload(file: UploadFile, contents: bytes) -> None:
+    """Raise HTTP 422 if the upload is not an allowed image type or exceeds size limit."""
+    if len(contents) > _MAX_FILE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"File exceeds maximum allowed size of {_MAX_FILE_BYTES // 1024 // 1024} MB",
+        )
+    if file.content_type not in _ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported file type '{file.content_type}'. Allowed: {sorted(_ALLOWED_MIME_TYPES)}",
+        )
 
 
 def _save_temp(file: UploadFile, contents: bytes) -> str:
-    """Write upload contents to a named temp file and return its path."""
+    """Write upload contents to a named temp file (mode 0600) and return its path."""
     suffix = os.path.splitext(file.filename or "")[1] or ".png"
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp = tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=suffix)
     tmp.write(contents)
     tmp.close()
     return tmp.name
+
+
+class _HelmetForm:
+    """Helmet submission text fields, grouped via Depends to keep the route signature under the parameter limit."""
+
+    def __init__(
+        self,
+        school: Annotated[str, Form()],
+        year_first_worn: Annotated[int, Form()],
+        description: Annotated[str, Form()],
+        year_last_worn: Annotated[int | None, Form()] = None,
+        currently_worn: Annotated[bool, Form()] = False,
+        color: Annotated[str | None, Form()] = None,
+        finish: Annotated[str | None, Form()] = None,
+        facemask_color: Annotated[str | None, Form()] = None,
+        logo_description: Annotated[str | None, Form()] = None,
+        stripe: Annotated[str | None, Form()] = None,
+        additional_notes: Annotated[str | None, Form()] = None,
+    ) -> None:
+        self.school = school
+        self.year_first_worn = year_first_worn
+        self.description = description
+        self.year_last_worn = year_last_worn
+        self.currently_worn = currently_worn
+        self.color = color
+        self.finish = finish
+        self.facemask_color = facemask_color
+        self.logo_description = logo_description
+        self.stripe = stripe
+        self.additional_notes = additional_notes
 
 
 async def _require_school(conn, school: str) -> None:
@@ -70,6 +116,7 @@ async def submit_logo(
         await _require_school(conn, school)
 
     contents = await file.read()
+    _validate_upload(file, contents)
     tmp_path = _save_temp(file, contents)
     try:
         cloudinary_path = upload_submission_logo(tmp_path, school, logo_type)
@@ -92,17 +139,7 @@ async def submit_logo(
 
 @router.post("/helmets", status_code=status.HTTP_201_CREATED, responses=_404)
 async def submit_helmet(
-    school: Annotated[str, Form()],
-    year_first_worn: Annotated[int, Form()],
-    description: Annotated[str, Form()],
-    year_last_worn: Annotated[int | None, Form()] = None,
-    currently_worn: Annotated[bool, Form()] = False,
-    color: Annotated[str | None, Form()] = None,
-    finish: Annotated[str | None, Form()] = None,
-    facemask_color: Annotated[str | None, Form()] = None,
-    logo_description: Annotated[str | None, Form()] = None,
-    stripe: Annotated[str | None, Form()] = None,
-    additional_notes: Annotated[str | None, Form()] = None,
+    form: Annotated[_HelmetForm, Depends()],
     images: Annotated[list[UploadFile], File()] = [],
     logo_image: Annotated[UploadFile | None, File()] = None,
     current_user: OptionalUser = None,
@@ -121,23 +158,23 @@ async def submit_helmet(
         )
 
     async with get_conn() as conn:
-        await _require_school(conn, school)
+        await _require_school(conn, form.school)
 
     payload: dict[str, Any] = {
-        "year_first_worn": year_first_worn,
-        "description": description,
+        "year_first_worn": form.year_first_worn,
+        "description": form.description,
     }
-    if year_last_worn is not None:
-        payload["year_last_worn"] = year_last_worn
-    if currently_worn:
-        payload["currently_worn"] = currently_worn
+    if form.year_last_worn is not None:
+        payload["year_last_worn"] = form.year_last_worn
+    if form.currently_worn:
+        payload["currently_worn"] = form.currently_worn
     for key, val in [
-        ("color", color),
-        ("finish", finish),
-        ("facemask_color", facemask_color),
-        ("logo_description", logo_description),
-        ("stripe", stripe),
-        ("additional_notes", additional_notes),
+        ("color", form.color),
+        ("finish", form.finish),
+        ("facemask_color", form.facemask_color),
+        ("logo_description", form.logo_description),
+        ("stripe", form.stripe),
+        ("additional_notes", form.additional_notes),
     ]:
         if val is not None:
             payload[key] = val
@@ -148,7 +185,7 @@ async def submit_helmet(
         row = await (
             await conn.execute(
                 "INSERT INTO submissions (type, school, user_id, payload) VALUES ('helmet', %s, %s, %s) RETURNING id, submitted_at",
-                (school, user_id, json.dumps(payload)),
+                (form.school, user_id, json.dumps(payload)),
             )
         ).fetchone()
     assert row is not None
@@ -162,16 +199,18 @@ async def submit_helmet(
     try:
         for i, img in enumerate(images):
             contents = await img.read()
+            _validate_upload(img, contents)
             tmp = _save_temp(img, contents)
             tmp_paths.append(tmp)
-            path = upload_submission_helmet_image(tmp, school, submission_id, i)
+            path = upload_submission_helmet_image(tmp, form.school, submission_id, i)
             image_paths.append(path)
 
         if logo_image is not None:
             contents = await logo_image.read()
+            _validate_upload(logo_image, contents)
             tmp = _save_temp(logo_image, contents)
             tmp_paths.append(tmp)
-            logo_image_path = upload_submission_helmet_image(tmp, school, submission_id, len(images))
+            logo_image_path = upload_submission_helmet_image(tmp, form.school, submission_id, len(images))
     finally:
         for p in tmp_paths:
             try:
@@ -190,7 +229,7 @@ async def submit_helmet(
             (json.dumps(payload), submission_id),
         )
 
-    return SubmissionCreatedResponse(id=submission_id, type="helmet", school=school, submitted_at=submitted_at)
+    return SubmissionCreatedResponse(id=submission_id, type="helmet", school=form.school, submitted_at=submitted_at)
 
 
 @router.post("/colors", status_code=status.HTTP_201_CREATED, responses=_404)
@@ -236,7 +275,9 @@ async def submit_location(body: SubmitLocationRequest, current_user: OptionalUse
     return SubmissionCreatedResponse(id=row[0], type="location", school=body.school, submitted_at=row[1])
 
 
-@router.post("/scores", status_code=status.HTTP_201_CREATED, responses={404: {"description": "School or game not found"}})
+@router.post(
+    "/scores", status_code=status.HTTP_201_CREATED, responses={404: {"description": "School or game not found"}}
+)
 async def submit_score(body: SubmitScoreRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit a corrected game score for moderator review.
 
