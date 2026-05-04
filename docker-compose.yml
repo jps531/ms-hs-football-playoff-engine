@@ -50,6 +50,8 @@ services:
         max-file: "3"
     environment:
       <<: *env-common
+      PREFECT_UI_SERVE_BASE: "/prefect"
+      PREFECT_UI_API_URL: "/prefect/api"
     networks:
       - mshsfootball
     volumes:

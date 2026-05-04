@@ -1,0 +1,10 @@
+# Local development overlay.
+# - Routes the nginx -> API upstream to the host machine because on Apple Silicon
+#   the API runs natively (not in Docker) due to an asymmetric-crypto limitation.
+# - Prevents the api Docker container from crash-looping on Apple Silicon.
+services:
+  nginx:
+    extra_hosts:
+      - "api:host-gateway"
+  api:
+    restart: "no"

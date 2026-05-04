@@ -206,7 +206,7 @@ Copy the environment template, fill in `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` from 
 
 ```
 cp .env.example .env.local
-docker compose --env-file .env.local --profile local-db up --build -d
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local --profile local-db up --build -d
 ```
 
 The `--profile local-db` flag is required to start the local PostgreSQL container (`db` service). On a VM with an external database, omit it.
@@ -214,6 +214,21 @@ The `--profile local-db` flag is required to start the local PostgreSQL containe
 This starts nginx (`localhost:80`), Prefect server/worker (internal), and a local PostgreSQL instance (`localhost:5432`).
 
 > **nginx reverse proxy**: All traffic enters through nginx on port 80. The Prefect UI is accessible at `http://localhost/prefect/` but requires a valid moderator `Authorization: Bearer <token>` header.
+
+#### Accessing the Prefect UI (temporary workaround)
+
+Browsers can't set custom headers on navigation requests, so until an admin frontend exists, use the **[ModHeader](https://modheader.com)** browser extension (Chrome/Firefox):
+
+1. Install ModHeader and add a request header:
+   - **Name**: `Authorization`
+   - **Value**: `Bearer <your token>`
+   - Set a URL filter to `localhost` so it only applies locally
+2. Get your token from Swagger UI — after authorizing, execute any endpoint (e.g. `GET /api/v1/users/me`) and copy the token from the `Authorization: Bearer ...` line in the curl command shown
+3. Navigate to `http://localhost/prefect/`
+
+Auth0 access tokens expire (typically after 24 hours), so you'll need to copy a fresh token from Swagger UI when that happens.
+
+> **Future**: once an admin frontend exists, this will be replaced by cookie-based session auth so the Prefect UI is accessible via a normal link after logging in.
 
 #### Configure Auth0
 
@@ -312,8 +327,8 @@ docker exec -it ms-hs-football-playoff-engine-db-1 psql -U postgres -d mshsfootb
 To reset the database and re-run the schema from scratch (e.g. after a schema change):
 
 ```
-docker compose --env-file .env.local --profile local-db down -v
-docker compose --env-file .env.local --profile local-db up --build -d
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local --profile local-db down -v
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local --profile local-db up --build -d
 ```
 
 The `-v` flag removes the postgres data volume; the container will re-run `sql/init.sql` on startup.
