@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
-from backend.api.models.responses import KeyInsightConditionModel, KeyInsightModel, StandingsResponse
+from backend.api.models.responses import ComputationStateModel, KeyInsightConditionModel, KeyInsightModel, StandingsResponse
 from backend.helpers.api_helpers import (
     DISPLAY_THRESHOLD,
     build_team_entries,
@@ -29,7 +29,7 @@ from backend.helpers.scenarios import determine_odds, determine_scenarios
 
 router = APIRouter(prefix="/api/v1", tags=["standings"])
 
-SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
+SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 DateQ = Annotated[date | None, Query()]
 ClazzPath = Annotated[int, Path(ge=1, le=7)]
 RegionPath = Annotated[int, Path(ge=1, le=8)]
@@ -43,13 +43,32 @@ def _today() -> date:
 
 
 async def _load_standings_snapshot(conn, season: int, clazz: int, region: int, as_of: date) -> list[tuple] | None:
-    """Load region_standings rows for the most recent snapshot on or before *as_of*."""
+    """Load region_standings rows for the most recent snapshot on or before *as_of*.
+
+    Row positions (0-indexed):
+      0-6:   school, wins, losses, ties, region_wins, region_losses, region_ties
+      7-11:  odds_1st–odds_playoffs (unweighted seeding)
+      12-14: clinched, eliminated, coin_flip_needed
+      15:    as_of_date
+      16-20: odds_1st_weighted–odds_playoffs_weighted
+      21-25: odds_second_round–odds_champion (bracket advancement, unweighted)
+      26-30: odds_second_round_weighted–odds_champion_weighted
+      31-34: odds_first_round_home–odds_semifinals_home (unweighted)
+      35-38: odds_first_round_home_weighted–odds_semifinals_home_weighted
+    """
     rows = await conn.execute(
         """
         SELECT DISTINCT ON (school)
             school, wins, losses, ties, region_wins, region_losses, region_ties,
             odds_1st, odds_2nd, odds_3rd, odds_4th, odds_playoffs,
-            clinched, eliminated, coin_flip_needed, as_of_date
+            clinched, eliminated, coin_flip_needed, as_of_date,
+            odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted, odds_playoffs_weighted,
+            odds_second_round, odds_quarterfinals, odds_semifinals, odds_finals, odds_champion,
+            odds_second_round_weighted, odds_quarterfinals_weighted, odds_semifinals_weighted,
+            odds_finals_weighted, odds_champion_weighted,
+            odds_first_round_home, odds_second_round_home, odds_quarterfinals_home, odds_semifinals_home,
+            odds_first_round_home_weighted, odds_second_round_home_weighted,
+            odds_quarterfinals_home_weighted, odds_semifinals_home_weighted
         FROM region_standings
         WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
         ORDER BY school, as_of_date DESC
@@ -58,6 +77,32 @@ async def _load_standings_snapshot(conn, season: int, clazz: int, region: int, a
     )
     result = [r async for r in rows]
     return result if result else None
+
+
+async def _load_computation_state(
+    conn, season: int, clazz: int, region: int, as_of: date
+) -> ComputationStateModel | None:
+    """Load the most recent computation state for a region on or before *as_of*."""
+    row = await (
+        await conn.execute(
+            """
+            SELECT DISTINCT ON (season, class, region)
+                margin_sensitive, margin_compute_status, computed_at, margin_computed_at
+            FROM region_computation_state
+            WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
+            ORDER BY season, class, region, as_of_date DESC
+            """,
+            (season, clazz, region, as_of),
+        )
+    ).fetchone()
+    if row is None:
+        return None
+    return ComputationStateModel(
+        margin_sensitive=row[0],
+        margin_compute_status=row[1],
+        computed_at=row[2],
+        margin_computed_at=row[3],
+    )
 
 
 async def _load_scenarios_snapshot(
@@ -148,6 +193,7 @@ async def get_standings(
     async with get_conn() as conn:
         standings_rows = await _load_standings_snapshot(conn, season, clazz, region, as_of)
         scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
+        computation_state = await _load_computation_state(conn, season, clazz, region, as_of)
 
         if standings_rows is not None and scenarios_data is not None:
             remaining, complete_scenarios, key_insights, snapshot_date = scenarios_data
@@ -179,6 +225,7 @@ async def get_standings(
         teams=team_entries,
         scenarios=scenarios_to_entries(complete_scenarios) if scenarios_available else None,
         key_insights=key_insights if key_insights else None,
+        computation_state=computation_state,
     )
 
 

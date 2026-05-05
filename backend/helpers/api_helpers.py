@@ -10,10 +10,13 @@ from __future__ import annotations
 from collections import defaultdict
 
 from backend.api.models.responses import (
+    BracketAdvancementOdds,
+    HomeGameOdds,
     RecordModel,
     RemainingGameModel,
     RoundHostingOdds,
     ScenarioEntry,
+    ScenarioGameOutcome,
     SeedingOddsModel,
     TeamBracketEntry,
     TeamHostingEntry,
@@ -191,7 +194,16 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
     result = []
     for sc in complete_scenarios:
         seeding = sc.get("seeding", ())
-        result.append(ScenarioEntry(outcomes={team: str(idx + 1) for idx, team in enumerate(seeding)}))
+        result.append(
+            ScenarioEntry(
+                scenario_num=sc["scenario_num"],
+                sub_label=sc["sub_label"],
+                game_winners=[ScenarioGameOutcome(winner=w, loser=l) for w, l in sc.get("game_winners", [])],
+                tiebreaker_groups=sc.get("tiebreaker_groups"),
+                coinflip_groups=sc.get("coinflip_groups"),
+                outcomes={team: str(idx + 1) for idx, team in enumerate(seeding)},
+            )
+        )
     return result
 
 
@@ -222,15 +234,36 @@ def build_team_entries(
             odds = SeedingOddsModel(p1=o.p1, p2=o.p2, p3=o.p3, p4=o.p4, p_playoffs=o.p_playoffs)
             clinched, eliminated = o.clinched, o.eliminated
             coin_flip = school in (coinflip_override or set())
+            bracket_odds = None
+            home_game_odds = None
         else:
-            odds = SeedingOddsModel(p1=row[7], p2=row[8], p3=row[9], p4=row[10], p_playoffs=row[11])
+            odds = SeedingOddsModel(
+                p1=row[7], p2=row[8], p3=row[9], p4=row[10], p_playoffs=row[11],
+                p1_weighted=row[16], p2_weighted=row[17], p3_weighted=row[18],
+                p4_weighted=row[19], p_playoffs_weighted=row[20],
+            )
             clinched, eliminated = row[12], row[13]
             coin_flip = row[14]
+            bracket_odds = BracketAdvancementOdds(
+                second_round=row[21], quarterfinals=row[22], semifinals=row[23],
+                finals=row[24], champion=row[25],
+                second_round_weighted=row[26], quarterfinals_weighted=row[27],
+                semifinals_weighted=row[28], finals_weighted=row[29],
+                champion_weighted=row[30],
+            )
+            home_game_odds = HomeGameOdds(
+                first_round=row[31], second_round=row[32],
+                quarterfinals=row[33], semifinals=row[34],
+                first_round_weighted=row[35], second_round_weighted=row[36],
+                quarterfinals_weighted=row[37], semifinals_weighted=row[38],
+            )
         entries.append(
             TeamStandingsEntry(
                 school=school,
                 record=record,
                 odds=odds,
+                bracket_odds=bracket_odds,
+                home_game_odds=home_game_odds,
                 clinched=clinched,
                 eliminated=eliminated,
                 coin_flip_needed=coin_flip,

@@ -12,6 +12,7 @@ from backend.helpers.data_classes import (
     StandingsOdds,
 )
 from backend.helpers.insights import (
+    _MAX_TOTAL_REGION,
     KeyInsight,
     _atom_is_simple_game_results,
     _cond_game_indices,
@@ -762,7 +763,7 @@ def test_sort_key_alphabetical_by_team():
 
 
 def test_sort_key_none_seed_placed_last():
-    cp = _make_insight("clinch_playoffs")  # seed=None
+    cp = _make_insight("clinch_playoffs")
     cs = _make_insight("clinch_seed", seed=4)
     assert _sort_key(cs) < _sort_key(cp)
 
@@ -843,13 +844,12 @@ def test_extract_insights_none_odds_default():
 
 
 def test_extract_insights_region_cap():
-    """Total insights capped at _MAX_TOTAL_REGION (8)."""
-    # Fabricate lots of insights by having 10 teams each with a clinch_seed atom
-    teams = [f"Team{i}" for i in range(10)]
+    """Total insights capped at _MAX_TOTAL_REGION."""
+    teams = [f"Team{i}" for i in range(_MAX_TOTAL_REGION + 5)]
     atoms = {t: {1: [[GameResult(t, "Opponent")]]} for t in teams}
     remaining = [RemainingGame(t, "Opponent") for t in teams[:3]]
     insights = extract_insights(atoms, teams, [], remaining, odds=None, r_computed=3)
-    assert len(insights) <= 8
+    assert len(insights) <= _MAX_TOTAL_REGION
 
 
 def test_extract_insights_per_team_clinch_cap(monkeypatch):

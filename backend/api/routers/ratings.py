@@ -11,7 +11,7 @@ from backend.api.models.responses import EloSnapshot, EloTrendResponse, TeamRati
 
 router = APIRouter(prefix="/api/v1", tags=["ratings"])
 
-SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
+SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
@@ -37,7 +37,7 @@ async def list_ratings(
 
     where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
     query = sql.SQL("""
-        SELECT tr.school, tr.season, tr.elo, tr.rpi
+        SELECT tr.school, tr.season, tr.elo, tr.rpi, tr.as_of_date, tr.games_played, tr.computed_at
         FROM team_ratings tr
         JOIN school_seasons ss ON tr.school = ss.school AND tr.season = ss.season
         WHERE {}
@@ -45,7 +45,13 @@ async def list_ratings(
     """).format(where_clause)
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
-        return [TeamRatingModel(school=r[0], season=r[1], elo=r[2], rpi=r[3]) async for r in rows]
+        return [
+            TeamRatingModel(
+                school=r[0], season=r[1], elo=r[2], rpi=r[3],
+                as_of_date=r[4], games_played=r[5], computed_at=r[6],
+            )
+            async for r in rows
+        ]
 
 
 @router.get("/ratings/{team}/trend", responses=_404)

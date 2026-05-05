@@ -19,7 +19,7 @@ from backend.helpers.scenario_updater import apply_region_game_results
 
 router = APIRouter(prefix="/api/v1", tags=["hosting"])
 
-SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
+SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 ClazzPath = Annotated[int, Path(ge=1, le=7)]
 RegionPath = Annotated[int, Path(ge=1, le=8)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
@@ -131,7 +131,7 @@ async def simulate_hosting(
 
         scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
         if scenarios_data is not None:
-            remaining, _, _ = scenarios_data
+            remaining, _, _, _ = scenarios_data
         else:
             _, _, remaining, _, _ = await _recompute_from_games(conn, season, clazz, region, as_of)
 

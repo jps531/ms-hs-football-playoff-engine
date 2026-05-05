@@ -21,13 +21,18 @@ class RecordModel(BaseModel):
 
 
 class SeedingOddsModel(BaseModel):
-    """Equal-probability seed odds for a single team."""
+    """Seed odds for a single team — unweighted (50/50 scenarios) and margin-weighted."""
 
     p1: float
     p2: float
     p3: float
     p4: float
     p_playoffs: float
+    p1_weighted: float = 0.0
+    p2_weighted: float = 0.0
+    p3_weighted: float = 0.0
+    p4_weighted: float = 0.0
+    p_playoffs_weighted: float = 0.0
 
 
 class VenueModel(BaseModel):
@@ -101,6 +106,10 @@ class TeamModel(BaseModel):
     mascot: str
     primary_color: str
     secondary_color: str
+    secondary_color_hex: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    zip: str | None = None
 
 
 class YearsWornRange(BaseModel):
@@ -135,21 +144,72 @@ class HelmetDesignModel(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class BracketAdvancementOdds(BaseModel):
+    """Odds of advancing to each playoff round (unweighted and margin-weighted)."""
+
+    second_round: float
+    quarterfinals: float
+    semifinals: float
+    finals: float
+    champion: float
+    second_round_weighted: float
+    quarterfinals_weighted: float
+    semifinals_weighted: float
+    finals_weighted: float
+    champion_weighted: float
+
+
+class HomeGameOdds(BaseModel):
+    """Conditional odds of hosting each playoff round (unweighted and margin-weighted)."""
+
+    first_round: float
+    second_round: float
+    quarterfinals: float
+    semifinals: float
+    first_round_weighted: float
+    second_round_weighted: float
+    quarterfinals_weighted: float
+    semifinals_weighted: float
+
+
+class ComputationStateModel(BaseModel):
+    """Tiebreaker computation state for a region snapshot."""
+
+    margin_sensitive: bool
+    margin_compute_status: str
+    computed_at: datetime | None
+    margin_computed_at: datetime | None
+
+
 class TeamStandingsEntry(BaseModel):
     """Per-team odds row in a region standings response."""
 
     school: str
     record: RecordModel
     odds: SeedingOddsModel
+    bracket_odds: BracketAdvancementOdds | None = None
+    home_game_odds: HomeGameOdds | None = None
     clinched: bool
     eliminated: bool
     coin_flip_needed: bool
 
 
-class ScenarioEntry(BaseModel):
-    """One complete-scenario entry (human-readable)."""
+class ScenarioGameOutcome(BaseModel):
+    """The result of one remaining game in a scenario."""
 
-    outcomes: dict[str, str]  # team → seed label
+    winner: str
+    loser: str
+
+
+class ScenarioEntry(BaseModel):
+    """One complete-scenario entry: the game results that produce a specific seeding."""
+
+    scenario_num: int
+    sub_label: str
+    game_winners: list[ScenarioGameOutcome]
+    tiebreaker_groups: list[list[str]] | None = None
+    coinflip_groups: list[list[str]] | None = None
+    outcomes: dict[str, str]  # team → seed number ("1"–"4")
 
 
 class KeyInsightConditionModel(BaseModel):
@@ -182,6 +242,7 @@ class StandingsResponse(BaseModel):
     teams: list[TeamStandingsEntry]
     scenarios: list[ScenarioEntry] | None = None
     key_insights: list[KeyInsightModel] | None = None
+    computation_state: ComputationStateModel | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +326,13 @@ class GameModel(BaseModel):
     location_a: str | None = None
     is_region_game: bool
     status: str | None = None
+    final: bool = False
+    round: str | None = None
+    kickoff_time: datetime | None = None
+    overtime: int | None = None
+    game_quarter: int | None = None
+    game_clock: str | None = None
+    source: str | None = None
     venue: VenueModel | None = None
     helmet_a: HelmetDesignModel | None = None
     helmet_b: HelmetDesignModel | None = None
@@ -306,6 +374,9 @@ class TeamRatingModel(BaseModel):
     season: int
     elo: float
     rpi: float | None
+    as_of_date: date
+    games_played: int
+    computed_at: datetime
 
 
 class EloSnapshot(BaseModel):

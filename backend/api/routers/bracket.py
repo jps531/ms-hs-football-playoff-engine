@@ -21,7 +21,7 @@ from backend.helpers.scenario_updater import apply_bracket_game_results
 
 router = APIRouter(prefix="/api/v1", tags=["bracket"])
 
-SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
+SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 ClassQ = Annotated[int, Query(alias="class", ge=1, le=7)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 

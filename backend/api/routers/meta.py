@@ -74,7 +74,8 @@ async def list_teams(
     query = sql.SQL("""
         SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
                s.city, s.mascot, s.primary_color, s.secondary_color,
-               s.logo_primary, s.logo_secondary, s.logo_tertiary
+               s.logo_primary, s.logo_secondary, s.logo_tertiary,
+               s.latitude, s.longitude, s.zip, s.secondary_color_hex
         FROM schools_effective s
         JOIN school_seasons ss ON s.school = ss.school
         WHERE {}
@@ -96,6 +97,10 @@ async def list_teams(
                 logo_primary=logo_url(r[9] or ""),
                 logo_secondary=logo_url(r[10] or ""),
                 logo_tertiary=logo_url(r[11] or ""),
+                latitude=r[12],
+                longitude=r[13],
+                zip=r[14],
+                secondary_color_hex=r[15],
             )
             async for r in rows
         ]
@@ -109,7 +114,8 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
             """
             SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
                    s.city, s.mascot, s.primary_color, s.secondary_color,
-                   s.logo_primary, s.logo_secondary, s.logo_tertiary
+                   s.logo_primary, s.logo_secondary, s.logo_tertiary,
+                   s.latitude, s.longitude, s.zip, s.secondary_color_hex
             FROM schools_effective s
             JOIN school_seasons ss ON s.school = ss.school
             WHERE s.school = %s AND ss.season = %s
@@ -134,6 +140,10 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
         logo_primary=logo_url(r[9] or ""),
         logo_secondary=logo_url(r[10] or ""),
         logo_tertiary=logo_url(r[11] or ""),
+        latitude=r[12],
+        longitude=r[13],
+        zip=r[14],
+        secondary_color_hex=r[15],
     )
 
 

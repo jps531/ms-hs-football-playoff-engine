@@ -20,7 +20,7 @@ from backend.helpers.win_probability import EloConfig, compute_in_game_win_prob,
 
 router = APIRouter(prefix="/api/v1", tags=["games"])
 
-SeasonQ = Annotated[int, Query(ge=2020, le=2040)]
+SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 _HELMET_COLS = (
@@ -103,7 +103,9 @@ async def list_games(
                hd_a.facemask_color, hd_a.logo, hd_a.stripe, hd_a.tags, hd_a.notes,
                hd_b.id, hd_b.school, hd_b.year_first_worn, hd_b.year_last_worn, hd_b.years_worn,
                hd_b.image_left, hd_b.image_right, hd_b.photo, hd_b.color, hd_b.finish,
-               hd_b.facemask_color, hd_b.logo, hd_b.stripe, hd_b.tags, hd_b.notes
+               hd_b.facemask_color, hd_b.logo, hd_b.stripe, hd_b.tags, hd_b.notes,
+               g.round, g.kickoff_time, g.overtime, g.final,
+               g.game_quarter, g.game_clock, g.source
         FROM games_effective g
         JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season
         LEFT JOIN locations l ON g.location_id = l.id
@@ -132,10 +134,11 @@ async def list_games(
             v_city,
             v_lat,
             v_lon,
-            *ha_fields_then_hb,
+            *rest,
         ) in rows:
-            ha_fields = tuple(ha_fields_then_hb[:15])
-            hb_fields = tuple(ha_fields_then_hb[15:])
+            ha_fields = tuple(rest[:15])
+            hb_fields = tuple(rest[15:30])
+            g_round, g_kickoff, g_overtime, g_final, g_quarter, g_clock, g_source = rest[30:37]
             # De-duplicate symmetric game pairs when not team-filtered
             if team is None:
                 pair = frozenset([school, opponent])
@@ -159,6 +162,13 @@ async def list_games(
                     location_a=location,
                     is_region_game=region_game,
                     status=status,
+                    final=g_final,
+                    round=g_round,
+                    kickoff_time=g_kickoff,
+                    overtime=g_overtime,
+                    game_quarter=g_quarter,
+                    game_clock=g_clock,
+                    source=g_source,
                     venue=venue,
                     helmet_a=_build_helmet(*ha_fields),
                     helmet_b=_build_helmet(*hb_fields),

@@ -467,7 +467,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | GET | `/seasons` | List all seasons that have enrolled teams |
 | GET | `/seasons/{season}/structure` | All classes and regions with team counts for a season |
 | GET | `/teams` | List teams; `season` required, optional `class` and `region` filters |
-| GET | `/teams/{team}` | Metadata for a single team in a season |
+| GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
 | GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
 | GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag` |
 
@@ -480,11 +480,21 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |
 
+**Response fields per team** (`teams[]`):
+- `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus margin-weighted variants `p1_weighted`–`p_playoffs_weighted`
+- `bracket_odds` — probability of advancing to each playoff round (`second_round` through `champion`), unweighted and weighted. `null` for on-demand/simulate paths.
+- `home_game_odds` — conditional probability of hosting each round (`first_round` through `semifinals`), unweighted and weighted. `null` for on-demand/simulate paths.
+- `clinched`, `eliminated`, `coin_flip_needed`
+
+**Top-level response fields**:
+- `scenarios` — when `scenarios_available` is `true`, each entry includes `game_winners` (which team wins each remaining game to produce this seeding), `tiebreaker_groups`, `coinflip_groups`, and `outcomes` (team → seed number)
+- `computation_state` — `margin_sensitive` (bool), `margin_compute_status` (`not_needed` / `pending` / `running` / `complete` / `skipped`), and timestamps. Use `margin_compute_status` to show a "refining odds…" indicator while background margin computation is running.
+
 #### Hosting — `/hosting`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{clazz}/{region}` | Playoff home-game odds per round (1st round through semifinals) for all teams |
+| GET | `/{clazz}/{region}` | Playoff home-game odds per round (1st round through semifinals), computed on-demand from seeding odds + bracket format |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team |
 | POST | `/{clazz}/{region}/simulate` | Apply hypothetical results and return updated hosting odds |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |
@@ -505,12 +515,16 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | POST | `/probability/live` | In-game win probability. Body: `pregame_prob`, `current_margin`, `seconds_remaining` |
 | POST | `/probability/overtime` | MSHAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
 
+Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinals"` — `null` for regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
+
 #### Ratings — `/ratings`
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending |
 | GET | `/{team}/trend` | Elo time-series for one team. Optional `date_from` / `date_to` |
+
+Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and `computed_at` (timestamp) for freshness tracking.
 
 #### Admin — `/admin`
 

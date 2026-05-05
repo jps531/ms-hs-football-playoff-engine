@@ -494,16 +494,29 @@ class TestScenariosToEntries:
 
     def test_seeding_to_labels(self):
         """Seeding list is converted to 1-indexed string labels."""
-        scenarios = [{"seeding": ["Alpha", "Beta", "Gamma", "Delta"]}]
+        scenarios = [
+            {
+                "scenario_num": 1,
+                "sub_label": "1",
+                "game_winners": [("Alpha", "Beta")],
+                "tiebreaker_groups": None,
+                "coinflip_groups": None,
+                "seeding": ["Alpha", "Beta", "Gamma", "Delta"],
+            }
+        ]
         result = scenarios_to_entries(scenarios)
         assert result is not None
         assert result[0].outcomes == {"Alpha": "1", "Beta": "2", "Gamma": "3", "Delta": "4"}
+        assert result[0].scenario_num == 1
+        assert result[0].sub_label == "1"
+        assert result[0].game_winners[0].winner == "Alpha"
+        assert result[0].game_winners[0].loser == "Beta"
 
     def test_multiple_scenarios(self):
         """Multiple scenarios are all converted."""
         scenarios = [
-            {"seeding": ["Alpha", "Beta"]},
-            {"seeding": ["Beta", "Alpha"]},
+            {"scenario_num": 1, "sub_label": "1", "game_winners": [], "seeding": ["Alpha", "Beta"]},
+            {"scenario_num": 2, "sub_label": "2", "game_winners": [], "seeding": ["Beta", "Alpha"]},
         ]
         result = scenarios_to_entries(scenarios)
         assert result is not None
@@ -515,19 +528,57 @@ class TestScenariosToEntries:
 # TestBuildTeamEntries
 # ---------------------------------------------------------------------------
 
-# A minimal DB standings row: (school, w, l, t, rw, rl, rt, p1, p2, p3, p4, p_pl, clinched, elim, coin)
-_ROW_ALPHA = ("Alpha", 5, 2, 0, 3, 1, 0, 0.6, 0.3, 0.1, 0.0, 1.0, False, False, False)
-_ROW_BETA = ("Beta", 4, 3, 0, 1, 3, 0, 0.1, 0.2, 0.4, 0.3, 1.0, False, False, True)
+# DB standings row — positions mirror _load_standings_snapshot SELECT:
+#   0-6:   school, w, l, t, rw, rl, rt
+#   7-11:  p1, p2, p3, p4, p_playoffs (unweighted seeding)
+#   12-14: clinched, elim, coin_flip
+#   15:    as_of_date
+#   16-20: p1_w, p2_w, p3_w, p4_w, p_playoffs_w (weighted seeding)
+#   21-25: bracket: second_round, quarterfinals, semifinals, finals, champion
+#   26-30: bracket weighted: same 5
+#   31-34: home: first_round, second_round, quarterfinals, semifinals
+#   35-38: home weighted: same 4
+_SNAP_DATE = date(2025, 10, 1)
+_ROW_ALPHA = (
+    "Alpha", 5, 2, 0, 3, 1, 0,          # 0-6
+    0.6, 0.3, 0.1, 0.0, 1.0,             # 7-11 unweighted seeding
+    False, False, False,                  # 12-14 clinched/elim/coin
+    _SNAP_DATE,                           # 15 as_of_date
+    0.65, 0.28, 0.07, 0.0, 1.0,          # 16-20 weighted seeding
+    0.5, 0.3, 0.2, 0.1, 0.05,            # 21-25 bracket advancement
+    0.45, 0.25, 0.15, 0.08, 0.04,        # 26-30 bracket weighted
+    0.6, 0.3, 0.2, 0.1,                  # 31-34 home game
+    0.55, 0.28, 0.18, 0.09,              # 35-38 home game weighted
+)
+_ROW_BETA = (
+    "Beta", 4, 3, 0, 1, 3, 0,            # 0-6
+    0.1, 0.2, 0.4, 0.3, 1.0,             # 7-11 unweighted seeding
+    False, False, True,                   # 12-14 clinched/elim/coin
+    _SNAP_DATE,                           # 15 as_of_date
+    0.08, 0.18, 0.42, 0.32, 1.0,         # 16-20 weighted seeding
+    0.2, 0.15, 0.08, 0.04, 0.02,         # 21-25 bracket advancement
+    0.18, 0.12, 0.06, 0.03, 0.01,        # 26-30 bracket weighted
+    0.15, 0.1, 0.05, 0.02,               # 31-34 home game
+    0.12, 0.09, 0.04, 0.02,              # 35-38 home game weighted
+)
 
 
 class TestBuildTeamEntries:
     """build_team_entries constructs TeamStandingsEntry from DB rows with optional overrides."""
 
     def test_no_override_uses_db_odds(self):
-        """Without an override, p1–p4 come from the DB row."""
+        """Without an override, p1–p4 and weighted odds come from the DB row."""
         result = build_team_entries([_ROW_ALPHA], None, None)
         assert result[0].odds.p1 == pytest.approx(0.6)
         assert result[0].odds.p2 == pytest.approx(0.3)
+        assert result[0].odds.p1_weighted == pytest.approx(0.65)
+        assert result[0].bracket_odds is not None
+        assert result[0].bracket_odds.second_round == pytest.approx(0.5)
+        assert result[0].bracket_odds.champion == pytest.approx(0.05)
+        assert result[0].bracket_odds.champion_weighted == pytest.approx(0.04)
+        assert result[0].home_game_odds is not None
+        assert result[0].home_game_odds.first_round == pytest.approx(0.6)
+        assert result[0].home_game_odds.semifinals_weighted == pytest.approx(0.09)
 
     def test_no_override_uses_db_coin_flip(self):
         """Without override, coin_flip_needed comes from the DB row."""
@@ -535,11 +586,13 @@ class TestBuildTeamEntries:
         assert result[0].coin_flip_needed is True
 
     def test_odds_override_replaces_db_odds(self):
-        """When odds_override contains the school, DB odds are replaced."""
+        """When odds_override contains the school, DB odds are replaced; bracket_odds is None."""
         override = {"Alpha": _odds("Alpha", p1=0.9, p2=0.1, p_playoffs=1.0, clinched=True)}
         result = build_team_entries([_ROW_ALPHA], override, None)
         assert result[0].odds.p1 == pytest.approx(0.9)
         assert result[0].clinched is True
+        assert result[0].bracket_odds is None
+        assert result[0].home_game_odds is None
 
     def test_coinflip_override_replaces_db_field(self):
         """When coinflip_override is provided, it controls coin_flip_needed."""
