@@ -74,6 +74,7 @@ _ODDS_NONE: dict[str, StandingsOdds] = {
 
 
 def _make_odds(team: str, *, clinched: bool = False, eliminated: bool = False) -> StandingsOdds:
+    """Build a StandingsOdds fixture for the given team with optional clinched/eliminated flags."""
     if clinched:
         p = 1.0
     elif eliminated:
@@ -99,59 +100,70 @@ def _make_odds(team: str, *, clinched: bool = False, eliminated: bool = False) -
 
 
 def test_render_already_clinched():
+    """Renders already_clinched type as a simple "has clinched" string."""
     assert _render_insight("already_clinched", "Pearl", None, ()) == "Pearl has clinched a playoff spot"
 
 
 def test_render_already_eliminated():
+    """Renders already_eliminated type as a simple "has been eliminated" string."""
     assert _render_insight("already_eliminated", "Murrah", None, ()) == "Murrah has been eliminated from the playoffs"
 
 
 def test_render_clinch_seed_1st():
+    """Renders clinch_seed with seed=1 using "1st" ordinal."""
     conds = (GameResult("Taylorsville", "Stringer"),)
     rendered = _render_insight("clinch_seed", "Taylorsville", 1, conds)
     assert rendered == "Taylorsville clinches 1st seed: Taylorsville beats Stringer"
 
 
 def test_render_clinch_seed_2nd():
+    """Renders clinch_seed with seed=2 using "2nd" ordinal."""
     conds = (GameResult("Pearl", "Petal"),)
     assert _render_insight("clinch_seed", "Pearl", 2, conds) == "Pearl clinches 2nd seed: Pearl beats Petal"
 
 
 def test_render_clinch_seed_3rd():
+    """Renders clinch_seed with seed=3 using "3rd" ordinal."""
     conds = (GameResult("A", "B"),)
     assert "3rd seed" in _render_insight("clinch_seed", "A", 3, conds)
 
 
 def test_render_clinch_seed_4th():
+    """Renders clinch_seed with seed=4 using "4th" ordinal."""
     conds = (GameResult("A", "B"),)
     assert "4th seed" in _render_insight("clinch_seed", "A", 4, conds)
 
 
 def test_render_clinch_seed_fallback_ordinal():
+    """Renders clinch_seed with seed ≥ 5 using ordinal fallback (e.g. "5th")."""
     conds = (GameResult("A", "B"),)
     rendered = _render_insight("clinch_seed", "A", 5, conds)
     assert "5th seed" in rendered
 
 
 def test_render_clinch_playoffs():
+    """Renders clinch_playoffs type with a single game-result condition."""
     conds = (GameResult("Richland", "Brandon"),)
     rendered = _render_insight("clinch_playoffs", "Richland", None, conds)
     assert rendered == "Richland clinches a playoff spot: Richland beats Brandon"
 
 
 def test_render_eliminated_if():
+    """Renders eliminated_if type with an opponent's win as the condition."""
     conds = (GameResult("Starkville", "Terry"),)
     rendered = _render_insight("eliminated_if", "Murrah", None, conds)
     assert rendered == "Murrah is eliminated from the playoffs: Starkville beats Terry"
 
 
 def test_render_unknown_type_fallback():
+    """Unknown insight type still includes the team name and condition description."""
     conds = (GameResult("A", "B"),)
     rendered = _render_insight("unknown_type", "A", None, conds)
     assert "A" in rendered and "A beats B" in rendered
 
 
 def test_render_multiple_conditions_joined_with_semicolon():
+    """Multiple conditions are joined with "; " in the rendered string."""
     conds = (GameResult("A", "B"), GameResult("C", "D"))
     rendered = _render_insight("clinch_seed", "A", 1, conds)
     assert "A beats B; C beats D" in rendered
@@ -163,42 +175,51 @@ def test_render_multiple_conditions_joined_with_semicolon():
 
 
 def test_atom_simple_one_game_result():
+    """Single GameResult element is a simple atom."""
     assert _atom_is_simple_game_results([GameResult("A", "B")]) is True
 
 
 def test_atom_simple_two_game_results():
+    """Two GameResult elements are a simple atom."""
     assert _atom_is_simple_game_results([GameResult("A", "B"), GameResult("C", "D")]) is True
 
 
 def test_atom_simple_three_game_results():
+    """Three GameResult elements are a simple atom (at the ≤3 limit)."""
     gr = GameResult("A", "B")
     assert _atom_is_simple_game_results([gr, gr, gr]) is True
 
 
 def test_atom_too_many_conditions():
+    """Four or more conditions is not a simple atom."""
     gr = GameResult("A", "B")
     assert _atom_is_simple_game_results([gr, gr, gr, gr]) is False
 
 
 def test_atom_empty_is_not_simple():
+    """Empty atom is not simple (requires at least one condition)."""
     assert _atom_is_simple_game_results([]) is False
 
 
 def test_atom_contains_margin_condition():
+    """Atom with a MarginCondition is not simple."""
     mc = MarginCondition(add=(("A", "B"),), sub=(), op=">=", threshold=3)
     assert _atom_is_simple_game_results([GameResult("A", "B"), mc]) is False
 
 
 def test_atom_contains_coin_flip():
+    """Atom with a CoinFlipResult is not simple."""
     assert _atom_is_simple_game_results([GameResult("A", "B"), CoinFlipResult("X", "Y")]) is False
 
 
 def test_atom_contains_pd_rank_condition():
+    """Atom with a PDRankCondition alongside GameResult is not simple."""
     pdr = PDRankCondition(team="A", rank=1, group=("A", "B"))
     assert _atom_is_simple_game_results([GameResult("A", "B"), pdr]) is False
 
 
 def test_atom_only_pd_rank_condition():
+    """Atom with only a PDRankCondition is not simple."""
     pdr = PDRankCondition(team="A", rank=1, group=("A", "B"))
     assert _atom_is_simple_game_results([pdr]) is False
 
@@ -209,6 +230,7 @@ def test_atom_only_pd_rank_condition():
 
 
 def test_masks_satisfying_single_condition_a_wins():
+    """Single "a wins" condition sets bit 0 to 1."""
     # remaining[0] = ("Beta","Gamma"); bit 0=1 means Beta(a) wins
     conds = (GameResult("Beta", "Gamma"),)
     masks = _masks_satisfying_conditions(conds, _REMAINING_1)
@@ -216,12 +238,14 @@ def test_masks_satisfying_single_condition_a_wins():
 
 
 def test_masks_satisfying_single_condition_b_wins():
+    """Single "b wins" condition sets bit 0 to 0."""
     conds = (GameResult("Gamma", "Beta"),)
     masks = _masks_satisfying_conditions(conds, _REMAINING_1)
     assert masks == [0]
 
 
 def test_masks_satisfying_two_games():
+    """Two conditions constrain both bits, yielding a single mask."""
     remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
     # bit 0=1 means A wins, bit 1=1 means C wins
     conds = (GameResult("A", "B"), GameResult("C", "D"))
@@ -230,6 +254,7 @@ def test_masks_satisfying_two_games():
 
 
 def test_masks_satisfying_partial_constraint():
+    """One condition with two remaining games yields two valid masks."""
     remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
     conds = (GameResult("A", "B"),)  # only game 0 fixed
     masks = _masks_satisfying_conditions(conds, remaining)
@@ -237,12 +262,14 @@ def test_masks_satisfying_partial_constraint():
 
 
 def test_masks_satisfying_no_conditions_returns_all():
+    """No conditions returns all 2^R masks."""
     remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
     masks = _masks_satisfying_conditions((), remaining)
     assert len(masks) == 4
 
 
 def test_masks_satisfying_condition_matches_second_game():
+    """Condition on game index 1 returns masks with that bit set."""
     # Condition on game index 1 — inner loop skips game 0 (no match) before matching game 1
     remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
     conds = (GameResult("C", "D"),)
@@ -251,6 +278,7 @@ def test_masks_satisfying_condition_matches_second_game():
 
 
 def test_masks_satisfying_condition_game_not_in_remaining():
+    """Game absent from remaining adds no constraint; all masks remain valid."""
     # Condition references a game absent from remaining — inner loop exhausts all items
     # without break (covering the 98->97 "loop exhausted" branch), no constraint added
     remaining = [RemainingGame("A", "B")]
@@ -265,23 +293,27 @@ def test_masks_satisfying_condition_game_not_in_remaining():
 
 
 def test_cond_game_indices_single():
+    """Single condition maps to index 0."""
     indices = _cond_game_indices((GameResult("Beta", "Gamma"),), _REMAINING_1)
     assert indices == [0]
 
 
 def test_cond_game_indices_two_different_games():
+    """Two distinct conditions map to their respective indices."""
     remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
     conds = (GameResult("A", "B"), GameResult("C", "D"))
     assert _cond_game_indices(conds, remaining) == [0, 1]
 
 
 def test_cond_game_indices_deduplicates():
+    """Duplicate conditions yield a deduplicated index list."""
     remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
     conds = (GameResult("A", "B"), GameResult("A", "B"))
     assert _cond_game_indices(conds, remaining) == [0]
 
 
 def test_cond_game_indices_reversed_pair():
+    """Condition with reversed winner/loser still maps to the correct index."""
     # condition winner/loser may be reversed vs RemainingGame a/b order
     remaining = [RemainingGame("Beta", "Gamma")]
     conds = (GameResult("Gamma", "Beta"),)  # Gamma(b) wins
@@ -294,6 +326,7 @@ def test_cond_game_indices_reversed_pair():
 
 
 def test_conditions_frozenset_basic():
+    """GameResult conditions produce (winner, loser, 1, None) tuples in the frozenset."""
     conds = (GameResult("A", "B"), GameResult("C", "D"))
     fs = _conditions_frozenset(conds)
     assert ("A", "B", 1, None) in fs
@@ -301,6 +334,7 @@ def test_conditions_frozenset_basic():
 
 
 def test_conditions_frozenset_same_regardless_of_order():
+    """Frozenset equality is order-independent."""
     c1 = (GameResult("A", "B"), GameResult("C", "D"))
     c2 = (GameResult("C", "D"), GameResult("A", "B"))
     assert _conditions_frozenset(c1) == _conditions_frozenset(c2)
@@ -312,6 +346,7 @@ def test_conditions_frozenset_same_regardless_of_order():
 
 
 def test_verify_margins_skipped_at_r4_or_less():
+    """r_computed ≤ 4 skips margin verification and returns True immediately."""
     # With r_computed=4, should return True without calling tiebreaker
     result = _verify_insight_margins(
         (GameResult("Beta", "Gamma"),),
@@ -326,6 +361,7 @@ def test_verify_margins_skipped_at_r4_or_less():
 
 
 def test_verify_margins_r0_skipped():
+    """r_computed = 0 (all games complete) skips verification and returns True."""
     result = _verify_insight_margins(
         (),
         "Alpha",
@@ -469,6 +505,7 @@ def r5_region():
 
 
 def test_extract_clinch_seed_basic():
+    """Simple 1-condition atom emits a clinch_seed insight with correct fields."""
     insights = _extract_clinch_seed_insights(_ATOMS_3, _TEAMS_3, _COMPLETED_3, _REMAINING_1, _ODDS_NONE, r_computed=3)
     # Beta seed 2 and seed 3 atoms are each 1-condition GameResult → emit
     beta_seed2 = [i for i in insights if i.team == "Beta" and i.seed == 2]
@@ -479,6 +516,7 @@ def test_extract_clinch_seed_basic():
 
 
 def test_extract_clinch_seed_skips_already_clinched():
+    """No insights emitted for teams that are already clinched."""
     odds_clinched = {**_ODDS_NONE, "Beta": _make_odds("Beta", clinched=True)}
     insights = _extract_clinch_seed_insights(
         _ATOMS_3, _TEAMS_3, _COMPLETED_3, _REMAINING_1, odds_clinched, r_computed=3
@@ -487,12 +525,14 @@ def test_extract_clinch_seed_skips_already_clinched():
 
 
 def test_extract_clinch_seed_skips_empty_atom():
+    """Empty-condition atoms (e.g. guaranteed seed) do not emit clinch_seed."""
     # Alpha's atom has empty conditions — not a valid clinch_seed insight
     insights = _extract_clinch_seed_insights(_ATOMS_3, _TEAMS_3, _COMPLETED_3, _REMAINING_1, _ODDS_NONE, r_computed=3)
     assert not any(i.team == "Alpha" for i in insights)
 
 
 def test_extract_clinch_seed_skips_margin_condition():
+    """Atoms with a MarginCondition are not emitted as clinch_seed."""
     atoms = {
         "Beta": {
             2: [[GameResult("Beta", "Gamma"), MarginCondition(add=(("Beta", "Gamma"),), sub=(), op=">=", threshold=3)]]
@@ -503,6 +543,7 @@ def test_extract_clinch_seed_skips_margin_condition():
 
 
 def test_extract_clinch_seed_skips_too_many_conditions():
+    """Atoms with 4+ conditions are not emitted as clinch_seed."""
     gr = GameResult("Beta", "Gamma")
     atoms = {"Beta": {2: [[gr, gr, gr, gr]]}}  # 4 conditions
     insights = _extract_clinch_seed_insights(atoms, _TEAMS_3, _COMPLETED_3, _REMAINING_1, _ODDS_NONE, r_computed=3)
@@ -510,6 +551,7 @@ def test_extract_clinch_seed_skips_too_many_conditions():
 
 
 def test_extract_clinch_seed_skips_pd_rank_condition():
+    """Atoms with a PDRankCondition are not emitted as clinch_seed."""
     pdr = PDRankCondition(team="Beta", rank=1, group=("Beta", "Gamma"))
     atoms = {"Beta": {2: [[GameResult("Beta", "Gamma"), pdr]]}}
     insights = _extract_clinch_seed_insights(atoms, _TEAMS_3, _COMPLETED_3, _REMAINING_1, _ODDS_NONE, r_computed=3)
@@ -517,6 +559,7 @@ def test_extract_clinch_seed_skips_pd_rank_condition():
 
 
 def test_extract_clinch_seed_skips_coin_flip():
+    """Atoms with a CoinFlipResult are not emitted as clinch_seed."""
     atoms = {"Beta": {2: [[GameResult("Beta", "Gamma"), CoinFlipResult("Beta", "Gamma")]]}}
     insights = _extract_clinch_seed_insights(atoms, _TEAMS_3, _COMPLETED_3, _REMAINING_1, _ODDS_NONE, r_computed=3)
     assert not any(i.team == "Beta" for i in insights)
@@ -531,11 +574,13 @@ def test_extract_clinch_seed_margin_fail_suppresses(monkeypatch):
 
 
 def test_extract_clinch_seed_empty_atoms():
+    """Empty atoms dict returns an empty insight list."""
     insights = _extract_clinch_seed_insights({}, _TEAMS_3, _COMPLETED_3, _REMAINING_1, _ODDS_NONE, r_computed=3)
     assert insights == []
 
 
 def test_extract_clinch_seed_multiple_seeds_for_same_team():
+    """Both seed-2 and seed-3 qualifying atoms emit separate insights for the same team."""
     insights = _extract_clinch_seed_insights(_ATOMS_3, _TEAMS_3, _COMPLETED_3, _REMAINING_1, _ODDS_NONE, r_computed=3)
     beta_insights = [i for i in insights if i.team == "Beta"]
     seeds = {i.seed for i in beta_insights}
@@ -583,6 +628,7 @@ def test_extract_clinch_playoffs_emits_when_no_seed_insight():
 
 
 def test_extract_clinch_playoffs_skips_already_clinched():
+    """No insights emitted for teams that are already clinched."""
     odds_clinched = {**_ODDS_NONE, "Beta": _make_odds("Beta", clinched=True)}
     clinch_p = _extract_clinch_playoffs_insights(
         _ATOMS_3,
@@ -620,6 +666,7 @@ def test_extract_clinch_playoffs_deduplicates_same_conditions_across_seeds():
 
 
 def test_extract_clinch_playoffs_margin_fail_suppresses(monkeypatch):
+    """Margin verification failure suppresses all clinch_playoffs insights."""
     monkeypatch.setattr("backend.helpers.insights._verify_insight_margins", lambda *a, **kw: False)
     clinch_p = _extract_clinch_playoffs_insights(
         _ATOMS_3,
@@ -634,6 +681,7 @@ def test_extract_clinch_playoffs_margin_fail_suppresses(monkeypatch):
 
 
 def test_extract_clinch_playoffs_skips_non_game_result_atom():
+    """Atoms with non-GameResult conditions are not emitted as clinch_playoffs."""
     atoms = {"Beta": {2: [[GameResult("Beta", "Gamma"), PDRankCondition("Beta", 1, ("Beta", "Gamma"))]]}}
     clinch_p = _extract_clinch_playoffs_insights(
         atoms,
@@ -653,6 +701,7 @@ def test_extract_clinch_playoffs_skips_non_game_result_atom():
 
 
 def test_extract_elimination_basic():
+    """Single-condition atom at the elimination seed emits eliminated_if."""
     # playoff_seeds=2 → elim_seed = playoff_seeds + 1 = 3
     atoms = {"Gamma": {3: [[GameResult("Beta", "Gamma")]]}}
     insights = _extract_elimination_insights(
@@ -665,6 +714,7 @@ def test_extract_elimination_basic():
 
 
 def test_extract_elimination_skips_already_eliminated():
+    """No insights emitted for teams already eliminated."""
     atoms = {"Gamma": {3: [[GameResult("Beta", "Gamma")]]}}
     odds = {**_ODDS_NONE, "Gamma": _make_odds("Gamma", eliminated=True)}
     insights = _extract_elimination_insights(
@@ -674,6 +724,7 @@ def test_extract_elimination_skips_already_eliminated():
 
 
 def test_extract_elimination_skips_margin_condition():
+    """Atoms with a MarginCondition are not emitted as eliminated_if."""
     mc = MarginCondition(add=(("Beta", "Gamma"),), sub=(), op=">=", threshold=3)
     # playoff_seeds=2 → elim_seed=3
     atoms = {"Gamma": {3: [[GameResult("Beta", "Gamma"), mc]]}}
@@ -684,6 +735,7 @@ def test_extract_elimination_skips_margin_condition():
 
 
 def test_extract_elimination_skips_too_many_conditions():
+    """Atoms with 4+ conditions are not emitted as eliminated_if."""
     gr = GameResult("Beta", "Gamma")
     atoms = {"Gamma": {3: [[gr, gr, gr, gr]]}}
     insights = _extract_elimination_insights(
@@ -693,6 +745,7 @@ def test_extract_elimination_skips_too_many_conditions():
 
 
 def test_extract_elimination_skips_pd_rank_condition():
+    """Atoms with a PDRankCondition are not emitted as eliminated_if."""
     pdr = PDRankCondition("Gamma", 1, ("Beta", "Gamma"))
     atoms = {"Gamma": {3: [[GameResult("Beta", "Gamma"), pdr]]}}
     insights = _extract_elimination_insights(
@@ -702,6 +755,7 @@ def test_extract_elimination_skips_pd_rank_condition():
 
 
 def test_extract_elimination_margin_fail_suppresses(monkeypatch):
+    """Margin verification failure suppresses all eliminated_if insights."""
     monkeypatch.setattr("backend.helpers.insights._verify_insight_margins", lambda *a, **kw: False)
     atoms = {"Gamma": {3: [[GameResult("Beta", "Gamma")]]}}
     insights = _extract_elimination_insights(
@@ -711,6 +765,7 @@ def test_extract_elimination_margin_fail_suppresses(monkeypatch):
 
 
 def test_extract_elimination_empty_atoms():
+    """Empty atoms dict returns an empty insight list."""
     insights = _extract_elimination_insights({}, _TEAMS_3, _COMPLETED_3, _REMAINING_1, _ODDS_NONE, r_computed=3)
     assert insights == []
 
@@ -721,6 +776,7 @@ def test_extract_elimination_empty_atoms():
 
 
 def _make_insight(insight_type, team="A", seed=None, num_conditions=1):
+    """Build a KeyInsight fixture with configurable type, team, seed, and condition count."""
     conds = tuple(GameResult("A", "B") for _ in range(num_conditions))
     return KeyInsight(
         insight_type=insight_type,
@@ -734,6 +790,7 @@ def _make_insight(insight_type, team="A", seed=None, num_conditions=1):
 
 
 def test_sort_key_type_ordering():
+    """Type ordering: already_clinched < already_eliminated < clinch_seed < clinch_playoffs < eliminated_if."""
     a_clinched = _make_insight("already_clinched")
     a_elim = _make_insight("already_eliminated")
     cs = _make_insight("clinch_seed", seed=1)
@@ -745,24 +802,28 @@ def test_sort_key_type_ordering():
 
 
 def test_sort_key_fewer_conditions_first():
+    """Fewer conditions sorts before more conditions within the same type and seed."""
     i1 = _make_insight("clinch_seed", seed=1, num_conditions=2)
     i2 = _make_insight("clinch_seed", seed=1, num_conditions=1)
     assert _sort_key(i2) < _sort_key(i1)
 
 
 def test_sort_key_higher_seed_first():
+    """Lower seed number sorts before higher seed number."""
     s1 = _make_insight("clinch_seed", seed=1)
     s2 = _make_insight("clinch_seed", seed=2)
     assert _sort_key(s1) < _sort_key(s2)
 
 
 def test_sort_key_alphabetical_by_team():
+    """Teams are sorted alphabetically within the same type and seed."""
     ia = _make_insight("clinch_seed", team="Alpha", seed=1)
     ib = _make_insight("clinch_seed", team="Beta", seed=1)
     assert _sort_key(ia) < _sort_key(ib)
 
 
 def test_sort_key_none_seed_placed_last():
+    """None seed (clinch_playoffs) sorts after numeric seeds."""
     cp = _make_insight("clinch_playoffs")
     cs = _make_insight("clinch_seed", seed=4)
     assert _sort_key(cs) < _sort_key(cp)
@@ -774,6 +835,7 @@ def test_sort_key_none_seed_placed_last():
 
 
 def test_deduplicate_keeps_subset_drops_superset():
+    """Insight with subset conditions dominates; insight with superset conditions is dropped."""
     conds_small = (GameResult("A", "B"),)
     conds_large = (GameResult("A", "B"), GameResult("C", "D"))
     small = KeyInsight("clinch_seed", "T", 1, conds_small, True, "x", 3)
@@ -784,6 +846,7 @@ def test_deduplicate_keeps_subset_drops_superset():
 
 
 def test_deduplicate_keeps_both_when_no_subset_relation():
+    """Insights with disjoint conditions are both kept."""
     c1 = (GameResult("A", "B"),)
     c2 = (GameResult("C", "D"),)
     i1 = KeyInsight("clinch_seed", "T", 1, c1, True, "x", 3)
@@ -793,6 +856,7 @@ def test_deduplicate_keeps_both_when_no_subset_relation():
 
 
 def test_deduplicate_different_types_not_compared():
+    """Different insight types are not compared for dominance."""
     conds = (GameResult("A", "B"),)
     cs = KeyInsight("clinch_seed", "T", 1, conds, True, "x", 3)
     cp = KeyInsight("clinch_playoffs", "T", None, conds, True, "x", 3)
@@ -802,6 +866,7 @@ def test_deduplicate_different_types_not_compared():
 
 
 def test_deduplicate_different_teams_not_compared():
+    """Insights for different teams are not compared for dominance."""
     conds_small = (GameResult("A", "B"),)
     conds_large = (GameResult("A", "B"), GameResult("C", "D"))
     t1 = KeyInsight("clinch_seed", "Team1", 1, conds_small, True, "x", 3)
@@ -811,6 +876,7 @@ def test_deduplicate_different_teams_not_compared():
 
 
 def test_deduplicate_equal_conditions_both_kept():
+    """Equal conditions for different seeds are both kept."""
     conds = (GameResult("A", "B"),)
     i1 = KeyInsight("clinch_seed", "T", 1, conds, True, "x", 3)
     i2 = KeyInsight("clinch_seed", "T", 2, conds, True, "x", 3)
@@ -824,6 +890,7 @@ def test_deduplicate_equal_conditions_both_kept():
 
 
 def test_extract_insights_already_clinched_emitted():
+    """Clinched team produces an already_clinched insight."""
     odds = {**_ODDS_NONE, "Alpha": _make_odds("Alpha", clinched=True)}
     insights = extract_insights(_ATOMS_3, _TEAMS_3, _COMPLETED_3, _REMAINING_1, odds, r_computed=3)
     alpha_facts = [i for i in insights if i.team == "Alpha"]
@@ -831,6 +898,7 @@ def test_extract_insights_already_clinched_emitted():
 
 
 def test_extract_insights_already_eliminated_emitted():
+    """Eliminated team produces an already_eliminated insight."""
     odds = {**_ODDS_NONE, "Gamma": _make_odds("Gamma", eliminated=True)}
     insights = extract_insights(_ATOMS_3, _TEAMS_3, _COMPLETED_3, _REMAINING_1, odds, r_computed=3)
     gamma_facts = [i for i in insights if i.team == "Gamma"]
@@ -838,6 +906,7 @@ def test_extract_insights_already_eliminated_emitted():
 
 
 def test_extract_insights_none_odds_default():
+    """odds=None does not raise and returns a list."""
     # Passing odds=None should not crash
     insights = extract_insights(_ATOMS_3, _TEAMS_3, _COMPLETED_3, _REMAINING_1, odds=None, r_computed=3)
     assert isinstance(insights, list)
@@ -899,6 +968,7 @@ def test_extract_insights_per_team_elim_cap(monkeypatch):
 
 
 def test_extract_insights_sorted_clinch_before_elim():
+    """already_clinched appears before eliminated_if in sorted output."""
     odds = {**_ODDS_NONE, "Alpha": _make_odds("Alpha", clinched=True)}
     atoms = {
         "Beta": {5: [[GameResult("Beta", "Gamma")]]},
@@ -912,6 +982,7 @@ def test_extract_insights_sorted_clinch_before_elim():
 
 
 def test_extract_insights_returns_list_when_no_atoms():
+    """Empty atoms with r_computed > threshold returns an empty list."""
     insights = extract_insights({}, _TEAMS_3, _COMPLETED_3, _REMAINING_1, odds=None, r_computed=10)
     assert insights == []
 
@@ -922,6 +993,7 @@ def test_extract_insights_returns_list_when_no_atoms():
 
 
 def test_serialize_deserialize_clinch_seed():
+    """clinch_seed insight survives a serialize → deserialize round-trip."""
     ins = KeyInsight(
         insight_type="clinch_seed",
         team="Taylorsville",
@@ -935,6 +1007,7 @@ def test_serialize_deserialize_clinch_seed():
 
 
 def test_serialize_deserialize_clinch_playoffs():
+    """clinch_playoffs insight survives a serialize → deserialize round-trip."""
     ins = KeyInsight(
         insight_type="clinch_playoffs",
         team="Richland",
@@ -948,6 +1021,7 @@ def test_serialize_deserialize_clinch_playoffs():
 
 
 def test_serialize_deserialize_eliminated_if():
+    """eliminated_if insight survives a serialize → deserialize round-trip."""
     ins = KeyInsight(
         insight_type="eliminated_if",
         team="Murrah",
@@ -961,6 +1035,7 @@ def test_serialize_deserialize_eliminated_if():
 
 
 def test_serialize_deserialize_already_clinched():
+    """already_clinched insight survives a serialize → deserialize round-trip."""
     ins = KeyInsight(
         insight_type="already_clinched",
         team="Pearl",
@@ -974,6 +1049,7 @@ def test_serialize_deserialize_already_clinched():
 
 
 def test_serialize_deserialize_already_eliminated():
+    """already_eliminated insight survives a serialize → deserialize round-trip."""
     ins = KeyInsight(
         insight_type="already_eliminated",
         team="Murrah",
@@ -987,6 +1063,7 @@ def test_serialize_deserialize_already_eliminated():
 
 
 def test_serialize_deserialize_seed_none_preserved():
+    """seed=None is preserved through a serialize → deserialize round-trip."""
     ins = KeyInsight(
         insight_type="clinch_playoffs",
         team="A",
@@ -1001,6 +1078,7 @@ def test_serialize_deserialize_seed_none_preserved():
 
 
 def test_serialize_deserialize_multi_condition():
+    """Multi-condition insight survives a serialize → deserialize round-trip."""
     ins = KeyInsight(
         insight_type="clinch_seed",
         team="A",
@@ -1015,8 +1093,10 @@ def test_serialize_deserialize_multi_condition():
 
 
 def test_serialize_empty_list():
+    """Serializing an empty list returns an empty list."""
     assert serialize_insights([]) == []
 
 
 def test_deserialize_empty_list():
+    """Deserializing an empty list returns an empty list."""
     assert deserialize_insights([]) == []

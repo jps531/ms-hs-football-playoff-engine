@@ -79,6 +79,7 @@ class _HelmetForm:
         stripe: Annotated[str | None, Form()] = None,
         additional_notes: Annotated[str | None, Form()] = None,
     ) -> None:
+        """Bind form fields to instance attributes for FastAPI dependency injection."""
         self.school = school
         self.year_first_worn = year_first_worn
         self.description = description

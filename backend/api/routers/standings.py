@@ -8,7 +8,12 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
-from backend.api.models.responses import ComputationStateModel, KeyInsightConditionModel, KeyInsightModel, StandingsResponse
+from backend.api.models.responses import (
+    ComputationStateModel,
+    KeyInsightConditionModel,
+    KeyInsightModel,
+    StandingsResponse,
+)
 from backend.helpers.api_helpers import (
     DISPLAY_THRESHOLD,
     build_team_entries,
