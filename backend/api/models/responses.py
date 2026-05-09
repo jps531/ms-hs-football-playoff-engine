@@ -345,6 +345,8 @@ class PreGameWinProbResponse(BaseModel):
     team_b: str
     elo_a: float
     elo_b: float
+    elo_date_a: date
+    elo_date_b: date
     location_a: str | None
     hfa_adjustment: float
     p_team_a: float

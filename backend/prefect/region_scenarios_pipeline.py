@@ -927,6 +927,7 @@ def get_region_finish_scenarios(
     seeding_data: RegionSeedingData,
     matchup_prob_fn: MatchupProbFn | None = None,
     as_of_date: date | None = None,
+    rounds_completed: int = 0,
 ):
     """Phase 2: compute bracket/home odds and write results to DB.
 
@@ -936,16 +937,20 @@ def get_region_finish_scenarios(
     writes ``region_standings``, and then writes scenario atoms.
 
     Args:
-        clazz:           MHSAA classification (1–7).
-        region:          Region number within the class.
-        season:          Football season year.
-        seeding_data:    Pre-computed seeding odds from Phase 1.
-        matchup_prob_fn: Elo-based matchup probability function built from all
-                         regions in the class.  Falls back to equal 50/50 when
-                         ``None``.
-        as_of_date:      Date to write snapshots for.  Defaults to today.
-                         When provided explicitly (backfill mode), skips the
-                         background margin-sensitivity upgrade.
+        clazz:             MHSAA classification (1–7).
+        region:            Region number within the class.
+        season:            Football season year.
+        seeding_data:      Pre-computed seeding odds from Phase 1.
+        matchup_prob_fn:   Elo-based matchup probability function built from all
+                           regions in the class.  Falls back to equal 50/50 when
+                           ``None``.
+        as_of_date:        Date to write snapshots for.  Defaults to today.
+                           When provided explicitly (backfill mode), skips the
+                           background margin-sensitivity upgrade.
+        rounds_completed:  Playoff rounds already played (0 during regular season).
+                           Passed through to bracket-odds helpers so alive teams
+                           show 1.0 for past rounds and correct forward odds for
+                           remaining rounds.
     """
     logger = get_run_logger()
 
@@ -958,7 +963,7 @@ def get_region_finish_scenarios(
     mp_fn = matchup_prob_fn or equal_matchup_prob
 
     num_rounds = fetch_num_rounds(clazz, season)
-    bracket = compute_bracket_odds(num_rounds, odds)
+    bracket = compute_bracket_odds(num_rounds, odds, rounds_completed)
 
     home_seeds = fetch_first_round_home_seeds(clazz, region, season)
     first_round_home_marginal = compute_first_round_home_odds(home_seeds, odds)
@@ -969,7 +974,7 @@ def get_region_finish_scenarios(
     quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season)
     semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season)
 
-    bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn)
+    bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn, rounds_completed)
     second_round_home_marginal_w = (
         compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn) if clazz <= 4 else {}
     )

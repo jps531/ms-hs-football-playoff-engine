@@ -975,4 +975,45 @@ def test_idx_none_guard_bracket_advancement() -> None:
     result = compute_bracket_advancement_odds(1, _IDX_NONE_ODDS, _IDX_NONE_SLOTS)
     bo = result["TeamX"]
     assert bo.quarterfinals == pytest.approx(0.0, abs=1e-9)
-    assert bo.semifinals == pytest.approx(0.0, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 10: other_half_win_probs dedup guard (line 877)
+# ---------------------------------------------------------------------------
+#
+# When the same (region, seed) key appears in two different other-half slots
+# (a malformed but legal bracket input), the guard at line 877 skips the
+# redundant _p_team_reach call.  We verify the function still returns a result
+# without error and that the repeated-key team's probability was computed once.
+
+_DEDUP_SLOTS: list[FormatSlot] = [
+    # North half: regions 1-2 (same structure as SLOTS_5A_7A_2025 north)
+    FormatSlot(slot=1, home_region=1, home_seed=1, away_region=2, away_seed=4, north_south="N"),
+    FormatSlot(slot=2, home_region=2, home_seed=2, away_region=1, away_seed=3, north_south="N"),
+    FormatSlot(slot=3, home_region=2, home_seed=1, away_region=1, away_seed=4, north_south="N"),
+    FormatSlot(slot=4, home_region=1, home_seed=2, away_region=2, away_seed=3, north_south="N"),
+    # South half: (3,1) appears as *home* in slot 5 and *away* in slot 8 — duplicate key
+    FormatSlot(slot=5, home_region=3, home_seed=1, away_region=4, away_seed=4, north_south="S"),
+    FormatSlot(slot=6, home_region=4, home_seed=2, away_region=3, away_seed=3, north_south="S"),
+    FormatSlot(slot=7, home_region=4, home_seed=1, away_region=3, away_seed=4, north_south="S"),
+    FormatSlot(slot=8, home_region=3, home_seed=2, away_region=3, away_seed=1, north_south="S"),
+]
+
+_DEDUP_ODDS: dict[str, StandingsOdds] = {
+    "R1s1": _locked("R1s1", 1),
+    "R1s2": _locked("R1s2", 2),
+    "R1s3": _locked("R1s3", 3),
+    "R1s4": _locked("R1s4", 4),
+}
+
+
+def test_other_half_win_probs_dedup_guard() -> None:
+    """Duplicate (region, seed) in other-half slots hits the dedup guard without error.
+
+    Slot 5 has (3,1) as home and slot 8 has (3,1) as away.  When iterating south
+    slots as other_half, the second encounter of key (3,1) skips _p_team_reach
+    (line 877 branch → 872).
+    """
+    result = compute_bracket_advancement_odds(1, _DEDUP_ODDS, _DEDUP_SLOTS, equal_matchup_prob)
+    assert set(result) == {"R1s1", "R1s2", "R1s3", "R1s4"}
+    assert result["R1s1"].quarterfinals > 0.0

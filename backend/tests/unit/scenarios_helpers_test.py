@@ -114,6 +114,43 @@ class TestComputeBracketOdds:
         result = compute_bracket_odds(4, odds)
         assert isinstance(result["TeamA"], BracketOdds)
 
+    def test_rounds_completed_finalist_5_round(self):
+        """Finalist in a 5-round bracket (after 4 rounds played) gets finals=1.0, champion=0.5."""
+        odds = {"TeamA": _make_odds("TeamA", 1.0)}
+        r = compute_bracket_odds(5, odds, rounds_completed=4)["TeamA"]
+        assert r.second_round == pytest.approx(1.0)
+        assert r.quarterfinals == pytest.approx(1.0)
+        assert r.semifinals == pytest.approx(1.0)
+        assert r.finals == pytest.approx(1.0)
+        assert r.champion == pytest.approx(0.5)
+
+    def test_rounds_completed_champion_5_round(self):
+        """Championship winner (all 5 rounds played) gets champion=1.0."""
+        odds = {"TeamA": _make_odds("TeamA", 1.0)}
+        r = compute_bracket_odds(5, odds, rounds_completed=5)["TeamA"]
+        assert r.champion == pytest.approx(1.0)
+        assert r.finals == pytest.approx(1.0)
+
+    def test_rounds_completed_finalist_4_round(self):
+        """Finalist in a 4-round bracket (after 3 rounds played) gets finals=1.0, champion=0.5."""
+        odds = {"TeamA": _make_odds("TeamA", 1.0)}
+        r = compute_bracket_odds(4, odds, rounds_completed=3)["TeamA"]
+        assert r.semifinals == pytest.approx(1.0)
+        assert r.finals == pytest.approx(1.0)
+        assert r.champion == pytest.approx(0.5)
+
+    def test_rounds_completed_zero_unchanged(self):
+        """rounds_completed=0 produces the same result as the pre-playoff default."""
+        odds = {"TeamA": _make_odds("TeamA", 1.0)}
+        assert compute_bracket_odds(5, odds) == compute_bracket_odds(5, odds, rounds_completed=0)
+
+    def test_rounds_completed_eliminated_team_stays_zero(self):
+        """Eliminated team (p_playoffs=0) stays at 0.0 regardless of rounds_completed."""
+        odds = {"TeamA": _make_odds("TeamA", 0.0)}
+        r = compute_bracket_odds(5, odds, rounds_completed=4)["TeamA"]
+        assert r.champion == pytest.approx(0.0)
+        assert r.finals == pytest.approx(0.0)
+
 
 # ---------------------------------------------------------------------------
 # compute_first_round_home_odds

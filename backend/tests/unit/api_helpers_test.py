@@ -799,6 +799,17 @@ def test_records_from_completed_b_wins():
     assert result["Alpha"][4] == 1
 
 
+def test_records_from_completed_tie():
+    """When res_a == 0 (tie), neither team receives a win or loss credit."""
+    teams = ["Alpha", "Beta"]
+    completed = [_completed("Alpha", "Beta", 14, 14)]  # tied → res_a=0
+    result = records_from_completed(teams, completed)
+    assert result["Alpha"][3] == 0
+    assert result["Alpha"][4] == 0
+    assert result["Beta"][3] == 0
+    assert result["Beta"][4] == 0
+
+
 # ---------------------------------------------------------------------------
 # TestBuildHostingEntries
 # ---------------------------------------------------------------------------

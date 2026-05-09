@@ -431,7 +431,11 @@ def determine_scenarios(
     )
 
 
-def compute_bracket_odds(num_rounds: int, odds: dict[str, StandingsOdds]) -> dict[str, BracketOdds]:
+def compute_bracket_odds(
+    num_rounds: int,
+    odds: dict[str, StandingsOdds],
+    rounds_completed: int = 0,
+) -> dict[str, BracketOdds]:
     """Compute each team's probability of advancing to successive playoff rounds.
 
     Uses equal win probability (50/50) for every bracket game, making the
@@ -446,8 +450,11 @@ def compute_bracket_odds(num_rounds: int, odds: dict[str, StandingsOdds]) -> dic
     * ``champion``      — P(winning the state championship)
 
     Args:
-        num_rounds: Total playoff rounds for this class (4 for 5A–7A, 5 for 1A–4A).
-        odds: Dict mapping team name to ``StandingsOdds`` from ``determine_odds()``.
+        num_rounds:        Total playoff rounds for this class (4 for 5A–7A, 5 for 1A–4A).
+        odds:              Dict mapping team name to ``StandingsOdds`` from ``determine_odds()``.
+        rounds_completed:  Playoff rounds already played (0 during regular season).
+                           Alive teams will show 1.0 for rounds already played and
+                           correct forward-looking odds for remaining rounds.
 
     Returns:
         Dict mapping team name to ``BracketOdds``.
@@ -455,15 +462,19 @@ def compute_bracket_odds(num_rounds: int, odds: dict[str, StandingsOdds]) -> dic
     result: dict[str, BracketOdds] = {}
     for school, o in odds.items():
         p = o.p_playoffs
+        # Wins still needed to reach each milestone; 0 means already there (→ 1.0).
+        r2_wins   = max(0, 1              - rounds_completed)
+        qf_wins   = max(0, (num_rounds-3) - rounds_completed)
+        sf_wins   = max(0, (num_rounds-2) - rounds_completed)
+        fin_wins  = max(0, (num_rounds-1) - rounds_completed)
+        champ_wins = max(0, num_rounds    - rounds_completed)
         result[school] = BracketOdds(
             school=school,
-            # second_round only exists for classes with 5 rounds (1A–4A)
-            second_round=p * 0.5 if num_rounds >= 5 else 0.0,
-            # quarterfinals = the round where 8 teams remain
-            quarterfinals=p * (0.5 ** (num_rounds - 3)),
-            semifinals=p * (0.5 ** (num_rounds - 2)),
-            finals=p * (0.5 ** (num_rounds - 1)),
-            champion=p * (0.5**num_rounds),
+            second_round=p * (0.5 ** r2_wins) if num_rounds >= 5 else 0.0,
+            quarterfinals=p * (0.5 ** qf_wins),
+            semifinals=p * (0.5 ** sf_wins),
+            finals=p * (0.5 ** fin_wins),
+            champion=p * (0.5 ** champ_wins),
         )
     return result
 

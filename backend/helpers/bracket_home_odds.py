@@ -14,10 +14,10 @@ This module handles the remaining rounds:
   computed exactly from the bracket: R1 home/away is deterministic from each
   team's slot position, and R2 home/away is derived from the seed comparison
   with the possible R2 opponents (each weighted by their win probability).
-* **Semifinals (North/South Championships)**: same-region opponents → higher
-  seed always hosts (golden rule).  Cross-region: higher seed hosts; equal
-  seed → same region-number tiebreak as quarterfinals.  Home games played do
-  **not** factor in at this round per MHSAA rules.
+* **Semifinals**: same-region opponents → higher seed always hosts (golden
+  rule).  Cross-region: higher seed hosts; equal seed → same region-number
+  tiebreak as quarterfinals.  Home games played do **not** factor in at this
+  round per MHSAA rules.
 
 All three public functions return a MARGINAL probability:
     P(team reaches round) x P(team is home | team reaches round)
@@ -43,14 +43,21 @@ slots feed the same second-round game; adjacent pairs of those games feed
 the third-round game, and so on.  The ``playoff_format_slots`` table
 preserves this ordering via its 1-based slot numbers.
 
-For 5A-7A (4 teams per bracket half, slots 1-4 North / 5-8 South):
-    * QF  = round 2  (round_offset 1 from the first-round slot)
-    * SF  = round 3  (round_offset 2)
+Official round names and within-half slot offsets:
 
-For 1A-4A (8 teams per bracket half, slots 1-8 North / 9-16 South):
-    * R2  = round 2  (round_offset 1)
-    * QF  = round 3  (round_offset 2)
-    * SF  = round 4  (round_offset 3)
+5A-7A (4 rounds total: First Round → Quarterfinals → Semifinals → Championship):
+    * 4 slots per half (8 teams per half)
+    * QF  = Round 2  (round_offset 1 from the first-round slot)
+    * SF  = Round 3  (round_offset 2) — winner advances to Championship
+
+1A-4A (5 rounds total: First Round → Second Round → Quarterfinals → Semifinals → Championship):
+    * 8 slots per half (16 teams per half)
+    * R2  = Round 2  (round_offset 1)
+    * QF  = Round 3  (round_offset 2)
+    * SF  = Round 4  (round_offset 3) — winner advances to Championship
+
+The Championship Game (Round 4 for 5A-7A, Round 5 for 1A-4A) is cross-half and
+is handled by ``compute_bracket_advancement_odds``, not the home-game functions.
 """
 
 from backend.helpers.data_classes import (  # noqa: F401
@@ -195,14 +202,30 @@ def _p_team_reach(
 ) -> float:
     """P(team wins the next *num_wins* games from their bracket position).
 
-    Supports num_wins in {0, 1, 2, 3}.  Home/away for games beyond R1 is
+    Supports num_wins in {0, 1, 2, 3, 4}.  Home/away for games beyond R1 is
     determined by seed (lower number = home) for win-probability purposes.
+
+    Round mapping by num_wins:
+
+    * 0 → already there (trivially 1.0)
+    * 1 → win First Round (advance to Second Round / Quarterfinals)
+    * 2 → win through Second Round (5A-7A: advance to Semifinals after QF;
+           1A-4A: advance to Quarterfinals)
+    * 3 → win through Quarterfinals (5A-7A: advance to Championship after
+           winning Semifinals; 1A-4A: advance to Semifinals)
+    * 4 → win through Semifinals (1A-4A only; 4th within-half win, opponent
+           emerges from the opposite 4-slot quarter) — advance to Championship
+
+    num_wins=4 is used by ``compute_bracket_advancement_odds`` both to compute
+    the Elo-weighted ``finals`` (Championship Game appearance) probability for
+    1A-4A teams and to compute each other-half team's probability of reaching
+    the Championship as the opponent.
 
     Args:
         region:    Team's region number.
         seed:      Team's region seed (1 = best).
         slot_idx:  0-based index of team's slot in *half_slots*.
-        num_wins:  Number of consecutive wins required (0–3).
+        num_wins:  Number of consecutive wins required (0–4).
         half_slots: All slots in the bracket half, sorted by slot number.
         win_prob_fn: Win-probability function.
 
@@ -269,7 +292,25 @@ def _p_team_reach(
             p_cand_reach_qf = p_opp_r1 * p_cand_r2
             p_qf += p_cand_reach_qf * _p_beat_by_seed(region, seed, opp_r, opp_s, win_prob_fn)
 
-    return p_r1 * p_r2 * p_qf
+    if num_wins == 3:
+        return p_r1 * p_r2 * p_qf
+
+    # SF opponent (num_wins == 4) emerges from the opposite 4-slot quarter.
+    # Each of the 8 teams there must win 3 games in their sub-bracket to reach
+    # the SF, so we reuse _p_team_reach(num_wins=3) on that sub-bracket.
+    sf_opp_global = _opponent_slot_indices(slot_idx, 3)  # 4 indices into half_slots
+    sf_opp_slots = [half_slots[i] for i in sf_opp_global]
+
+    p_sf_win = 0.0
+    for local_idx, opp_slot in enumerate(sf_opp_slots):
+        for opp_r, opp_s in (
+            (opp_slot.home_region, opp_slot.home_seed),
+            (opp_slot.away_region, opp_slot.away_seed),
+        ):
+            p_opp_wins_sub = _p_team_reach(opp_r, opp_s, local_idx, 3, sf_opp_slots, win_prob_fn)
+            p_sf_win += p_opp_wins_sub * _p_beat_by_seed(region, seed, opp_r, opp_s, win_prob_fn)
+
+    return p_r1 * p_r2 * p_qf * p_sf_win
 
 
 # ---------------------------------------------------------------------------
@@ -722,10 +763,8 @@ def compute_semifinal_home_odds(
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their semifinal game.
 
-    The semifinal is the North/South Championship game.
-
-    For 5A-7A the semifinal is round 3 (two wins after R1).
-    For 1A-4A the semifinal is round 4 (three wins after R1).
+    For 5A-7A the semifinal is Round 3 (two wins after First Round).
+    For 1A-4A the semifinal is Round 4 (three wins after First Round).
 
     Rule: higher seed hosts.  Equal-seed tiebreak: in odd years the
     lower-numbered region hosts; in even years the higher-numbered region hosts.
@@ -776,6 +815,7 @@ def compute_bracket_advancement_odds(
     region_odds: dict[str, StandingsOdds],
     slots: list[FormatSlot],
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
+    rounds_completed: int = 0,
 ) -> dict[str, BracketOdds]:
     """Compute each team's probability of advancing to successive playoff rounds.
 
@@ -785,17 +825,29 @@ def compute_bracket_advancement_odds(
     When called with the default ``equal_matchup_prob`` the results are
     numerically identical to ``compute_bracket_odds``.
 
-    ``finals`` and ``champion`` are cross-half games whose matchup structure is
-    not captured in the per-region slot data.  They are computed from the
-    semifinal probability using equal (0.5) win probability regardless of
-    ``win_prob_fn``.
+    All five ``BracketOdds`` fields are fully Elo-weighted.  ``finals``
+    (reaching the Championship Game) uses ``_p_team_reach(wins_to_win_half)``
+    for the within-half bracket, and ``champion`` (winning the Championship)
+    weights each possible opponent from the other bracket half by their own
+    probability of winning that half.
+
+    BracketOdds field semantics:
+
+    * ``second_round``  — P(advance past First Round to Second Round) [1A-4A only]
+    * ``quarterfinals`` — P(advance to Quarterfinals: Round 3 for 1A-4A, Round 2 for 5A-7A)
+    * ``semifinals``    — P(advance to Semifinals: Round 4 for 1A-4A, Round 3 for 5A-7A)
+    * ``finals``        — P(advance to Championship Game by winning Semifinals)
+    * ``champion``      — P(win the Championship Game)
 
     Args:
-        region:       Region number for the teams in *region_odds*.
-        region_odds:  Dict mapping team name to ``StandingsOdds``.
-        slots:        All first-round format slots for this class (all regions).
-        win_prob_fn:  Win-probability function.  Defaults to ``equal_matchup_prob``
-                      (0.5 for every game).
+        region:            Region number for the teams in *region_odds*.
+        region_odds:       Dict mapping team name to ``StandingsOdds``.
+        slots:             All first-round format slots for this class (all regions).
+        win_prob_fn:       Win-probability function.  Defaults to ``equal_matchup_prob``
+                           (0.5 for every game).
+        rounds_completed:  Playoff rounds already played (0 during regular season).
+                           Alive teams will show 1.0 for within-half rounds already
+                           played and correct forward-looking odds for remaining rounds.
 
     Returns:
         Dict mapping team name to ``BracketOdds`` with per-round advancement
@@ -805,29 +857,74 @@ def compute_bracket_advancement_odds(
     is_1a_4a = len(half_slots) == 8
     qf_offset = 2 if is_1a_4a else 1
     sf_offset = 3 if is_1a_4a else 2
+    wins_to_win_half = sf_offset + 1  # 4 for 1A-4A, 3 for 5A-7A
+
+    # Build the other-half slot list and precompute each other-half team's
+    # probability of winning their entire bracket half.
+    my_ns = half_slots[0].north_south if half_slots else None
+    other_half_slots = sorted(
+        [s for s in slots if s.north_south != my_ns],
+        key=lambda s: s.slot,
+    ) if my_ns is not None else []
+
+    other_half_win_probs: dict[tuple[int, int], float] = {}
+    for local_idx, opp_slot in enumerate(other_half_slots):
+        for opp_r, opp_s in (
+            (opp_slot.home_region, opp_slot.home_seed),
+            (opp_slot.away_region, opp_slot.away_seed),
+        ):
+            key = (opp_r, opp_s)
+            if key not in other_half_win_probs:
+                other_half_win_probs[key] = _p_team_reach(
+                    opp_r, opp_s, local_idx, wins_to_win_half, other_half_slots, win_prob_fn
+                )
 
     result: dict[str, BracketOdds] = {}
     for school, o in region_odds.items():
         p_r2 = 0.0
         p_qf = 0.0
         p_sf = 0.0
+        p_finals = 0.0
+        p_champion = 0.0
+
         for seed, p_seed in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)):
             if p_seed <= 0.0:
                 continue
             idx = _slot_index_for(region, seed, half_slots)
             if idx is None:
                 continue
+
             if is_1a_4a:
                 p_r2 += p_seed * _p_team_r1_win(region, seed, half_slots[idx], win_prob_fn)
             p_qf += p_seed * _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn)
             p_sf += p_seed * _p_team_reach(region, seed, idx, sf_offset, half_slots, win_prob_fn)
+
+            p_wins_half = _p_team_reach(region, seed, idx, wins_to_win_half, half_slots, win_prob_fn)
+            p_finals += p_seed * p_wins_half
+
+            # Championship: team wins their half, then beats the other-half winner.
+            p_beat_other = sum(
+                p_opp * _p_beat_by_seed(region, seed, opp_r, opp_s, win_prob_fn)
+                for (opp_r, opp_s), p_opp in other_half_win_probs.items()
+            )
+            p_champion += p_seed * p_wins_half * p_beat_other
+
+        # For rounds already played, alive teams (p_playoffs > 0) get 1.0 for each
+        # past milestone. Eliminated teams stay at 0.0 since their p_playoffs = 0.
+        p = o.p_playoffs
+        eff_r2 = p if (is_1a_4a and rounds_completed >= 1) else p_r2
+        eff_qf = p if rounds_completed >= qf_offset else p_qf
+        eff_sf = p if rounds_completed >= sf_offset else p_sf
+        eff_finals = p if rounds_completed >= wins_to_win_half else p_finals
+        eff_champion = p if rounds_completed > wins_to_win_half else p_champion
+
         result[school] = BracketOdds(
             school=school,
-            second_round=p_r2 if is_1a_4a else 0.0,
-            quarterfinals=p_qf,
-            semifinals=p_sf,
-            finals=p_sf * 0.5,
-            champion=p_sf * 0.25,
+            second_round=eff_r2 if is_1a_4a else 0.0,
+            quarterfinals=eff_qf,
+            semifinals=eff_sf,
+            finals=eff_finals,
+            champion=eff_champion,
         )
     return result
 

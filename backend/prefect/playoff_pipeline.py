@@ -9,6 +9,9 @@ The flow is self-backfilling: running it on a past season produces one snapshot
 per playoff round date, equivalent to running it live after each round.
 """
 
+import bisect
+import math
+
 from prefect import flow, get_run_logger, task
 
 from backend.helpers.bracket_helpers import survivors_from_games
@@ -223,7 +226,8 @@ def playoff_bracket_update(season: int | None = None) -> None:
     all_games = fetch_all_season_games(season)
     all_schools = fetch_all_season_schools(season)
     elo_cfg = EloConfig()
-    elo_ratings, _, _ = compute_elo_ratings(all_games, all_schools, elo_cfg)
+    elo_ratings, _, elo_snapshots = compute_elo_ratings(all_games, all_schools, elo_cfg)
+    snapshot_dates = [snap[0] for snap in elo_snapshots]
 
     class_regions: dict[int, list[int]] = {c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)}
 
@@ -243,6 +247,15 @@ def playoff_bracket_update(season: int | None = None) -> None:
 
         for playoff_date in playoff_dates:
             games_to_date = [g for g in playoff_games if g.date <= playoff_date]
+            # Derive rounds completed from survivor count rather than distinct dates,
+            # because some rounds span multiple calendar dates (e.g. a first round
+            # where a few games are played the Thursday before the main Friday).
+            # In a single-elimination bracket with N teams: survivors = N / 2^r,
+            # so rounds_completed = floor(log2(N / survivors)).
+            playoff_schools = set(school_to_seed)
+            eliminated = {g.school for g in games_to_date if g.result == "L" and g.school in playoff_schools}
+            surviving = max(1, len(playoff_schools) - len(eliminated))
+            rounds_completed = int(math.log2(len(playoff_schools) / surviving))
 
             seeding: dict[int, RegionSeedingData] = {}
             for region in regions:
@@ -254,9 +267,14 @@ def playoff_bracket_update(season: int | None = None) -> None:
                     games_to_date,
                 )
 
+            # Use Elo snapshot from just before this playoff date so ratings
+            # don't incorporate results of future rounds (lookahead bias fix).
+            idx = bisect.bisect_right(snapshot_dates, playoff_date) - 1
+            elo_at_date = elo_snapshots[idx][1] if idx >= 0 else elo_ratings
+
             # Build Elo-based matchup probability function from deterministic odds.
             class_weighted_odds = {r: seeding[r].odds_weighted for r in regions}
-            matchup_fn = make_matchup_prob_fn(elo_ratings, class_weighted_odds, elo_cfg)
+            matchup_fn = make_matchup_prob_fn(elo_at_date, class_weighted_odds, elo_cfg)
 
             for region in regions:
                 get_region_finish_scenarios(
@@ -266,6 +284,7 @@ def playoff_bracket_update(season: int | None = None) -> None:
                     seeding[region],
                     matchup_fn,
                     as_of_date=playoff_date,
+                    rounds_completed=rounds_completed,
                 )
 
         logger.info("%dA season %d: playoff bracket update complete.", clazz, season)
