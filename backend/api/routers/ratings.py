@@ -21,8 +21,15 @@ async def list_ratings(
     class_: Annotated[int | None, Query(alias="class", ge=1, le=7)] = None,
     region: Annotated[int | None, Query(ge=1, le=8)] = None,
     team: Annotated[str | None, Query()] = None,
+    as_of: Annotated[date | None, Query()] = None,
 ) -> list[TeamRatingModel]:
-    """Return current Elo and RPI for teams matching the given filters."""
+    """Return Elo and RPI for teams matching the given filters.
+
+    Without ``as_of``, returns all stored snapshots for the season (one row per
+    school per pipeline run), sorted by Elo descending.  With ``as_of``, returns
+    one row per school — the most recent snapshot on or before that date —
+    also sorted by Elo descending.
+    """
     conditions: list[LiteralString] = ["tr.season = %s"]
     params: list = [season]
     if class_ is not None:
@@ -36,13 +43,29 @@ async def list_ratings(
         params.append(team)
 
     where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
-    query = sql.SQL("""
-        SELECT tr.school, tr.season, tr.elo, tr.rpi, tr.as_of_date, tr.games_played, tr.computed_at
-        FROM team_ratings tr
-        JOIN school_seasons ss ON tr.school = ss.school AND tr.season = ss.season
-        WHERE {}
-        ORDER BY tr.elo DESC
-    """).format(where_clause)
+
+    if as_of is not None:
+        params.append(as_of)
+        query = sql.SQL("""
+            SELECT * FROM (
+                SELECT DISTINCT ON (tr.school)
+                    tr.school, tr.season, tr.elo, tr.rpi, tr.as_of_date, tr.games_played, tr.computed_at
+                FROM team_ratings tr
+                JOIN school_seasons ss ON tr.school = ss.school AND tr.season = ss.season
+                WHERE {} AND tr.as_of_date <= %s
+                ORDER BY tr.school, tr.as_of_date DESC
+            ) latest
+            ORDER BY elo DESC
+        """).format(where_clause)
+    else:
+        query = sql.SQL("""
+            SELECT tr.school, tr.season, tr.elo, tr.rpi, tr.as_of_date, tr.games_played, tr.computed_at
+            FROM team_ratings tr
+            JOIN school_seasons ss ON tr.school = ss.school AND tr.season = ss.season
+            WHERE {}
+            ORDER BY tr.elo DESC
+        """).format(where_clause)
+
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
         return [

@@ -14,10 +14,11 @@ import os
 import tempfile
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 
 from backend.api.auth import OptionalUser
 from backend.api.db import get_conn
+from backend.api.limiter import limiter
 from backend.api.models.requests import (
     SubmitColorsRequest,
     SubmitFeedbackRequest,
@@ -101,7 +102,9 @@ async def _require_school(conn, school: str) -> None:
 
 
 @router.post("/logos", status_code=status.HTTP_201_CREATED, responses=_404)
+@limiter.limit("3/minute")
 async def submit_logo(
+    request: Request,
     school: Annotated[str, Form()],
     logo_type: Annotated[LogoType, Form()],
     file: Annotated[UploadFile, File()],
@@ -139,7 +142,9 @@ async def submit_logo(
 
 
 @router.post("/helmets", status_code=status.HTTP_201_CREATED, responses=_404)
+@limiter.limit("3/minute")
 async def submit_helmet(
+    request: Request,
     form: Annotated[_HelmetForm, Depends()],
     images: Annotated[list[UploadFile], File()] = [],
     logo_image: Annotated[UploadFile | None, File()] = None,
@@ -234,7 +239,8 @@ async def submit_helmet(
 
 
 @router.post("/colors", status_code=status.HTTP_201_CREATED, responses=_404)
-async def submit_colors(body: SubmitColorsRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
+@limiter.limit("10/minute")
+async def submit_colors(request: Request, body: SubmitColorsRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit a school color correction for moderator review."""
     user_id = current_user["db_id"] if current_user else None
     async with get_conn() as conn:
@@ -258,7 +264,8 @@ async def submit_colors(body: SubmitColorsRequest, current_user: OptionalUser = 
 
 
 @router.post("/locations", status_code=status.HTTP_201_CREATED, responses=_404)
-async def submit_location(body: SubmitLocationRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
+@limiter.limit("10/minute")
+async def submit_location(request: Request, body: SubmitLocationRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit corrected GPS coordinates for a school."""
     user_id = current_user["db_id"] if current_user else None
     async with get_conn() as conn:
@@ -279,7 +286,8 @@ async def submit_location(body: SubmitLocationRequest, current_user: OptionalUse
 @router.post(
     "/scores", status_code=status.HTTP_201_CREATED, responses={404: {"description": "School or game not found"}}
 )
-async def submit_score(body: SubmitScoreRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
+@limiter.limit("10/minute")
+async def submit_score(request: Request, body: SubmitScoreRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit a corrected game score for moderator review.
 
     Both the school and the game (school + date) must already exist in the database.
@@ -317,7 +325,8 @@ async def submit_score(body: SubmitScoreRequest, current_user: OptionalUser = No
 
 
 @router.post("/feedback", status_code=status.HTTP_201_CREATED)
-async def submit_feedback(body: SubmitFeedbackRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
+@limiter.limit("10/minute")
+async def submit_feedback(request: Request, body: SubmitFeedbackRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit general feedback for moderator review."""
     user_id = current_user["db_id"] if current_user else None
     payload = {"subject": body.subject, "message": body.message}

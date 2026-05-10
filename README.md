@@ -490,6 +490,30 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 - `scenarios` — when `scenarios_available` is `true`, each entry includes `game_winners` (which team wins each remaining game to produce this seeding), `tiebreaker_groups`, `coinflip_groups`, and `outcomes` (team → seed number)
 - `computation_state` — `margin_sensitive` (bool), `margin_compute_status` (`not_needed` / `pending` / `running` / `complete` / `skipped`), and timestamps. Use `margin_compute_status` to show a "refining odds…" indicator while background margin computation is running.
 
+#### Rankings — `/rankings`
+
+Cross-region ranked list of teams for a given class, sorted by any single odds metric. Equivalent to a `SELECT DISTINCT ON (school) … ORDER BY <metric> DESC` across `region_standings`, but served as a typed API response.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/{clazz}` | All teams in a class ranked by the chosen odds metric. Required params: `season`, `sort_by`. Optional: `as_of`, `region`, `min_odds`, `limit` |
+
+**`sort_by` values** (any `region_standings` odds column):
+
+*Seeding odds* — `odds_1st`, `odds_2nd`, `odds_3rd`, `odds_4th`, `odds_playoffs` and their `_weighted` variants
+
+*Bracket advancement* — `odds_second_round`, `odds_quarterfinals`, `odds_semifinals`, `odds_finals`, `odds_champion` and their `_weighted` variants
+
+*Home-game odds* — `odds_first_round_home`, `odds_second_round_home`, `odds_quarterfinals_home`, `odds_semifinals_home` and their `_weighted` variants
+
+**Optional params:**
+- `as_of` — use the most recent snapshot on or before this date (defaults to today)
+- `region` — restrict to one region within the class
+- `min_odds` — exclude teams with `sort_by` value ≤ this threshold (e.g. `0.001` drops eliminated teams)
+- `limit` — max teams returned; 1–200, default 25
+
+Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, and `sort_value` (the value of the ranked metric for that team).
+
 #### Hosting — `/hosting`
 
 | Method | Path | Description |
@@ -521,7 +545,7 @@ Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinal
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending |
+| GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending. Without `as_of`: all stored snapshots for the season (one row per school per pipeline run). With `as_of`: one row per school — the most recent snapshot on or before that date. |
 | GET | `/{team}/trend` | Elo time-series for one team. Optional `date_from` / `date_to` |
 
 Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and `computed_at` (timestamp) for freshness tracking.

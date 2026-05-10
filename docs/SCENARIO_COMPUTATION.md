@@ -42,7 +42,15 @@ With R = 5 or 6, the full `12^R` margin enumeration is slower (~seconds). The en
 1. **Phase 1 (synchronous):** Enumerate all 2^R win/loss outcomes without margin sensitivity. Write `scenario_atoms` and `complete_scenarios` to the DB immediately so the API can serve them.
 2. **Phase 2 (background task):** Run the full `12^R` margin enumeration and overwrite with the margin-accurate version.
 
-During the window between Phase 1 and Phase 2 completing, the stored data is marked `margin_compute_status = "pending"`. The API can surface this state to the frontend if needed (e.g., "Margin tiebreakers not yet computed").
+During the window between Phase 1 and Phase 2 completing, the stored data is marked `margin_compute_status = "pending"`. The API surfaces this via `computation_state.margin_compute_status` in every standings response.
+
+#### Polling contract for `margin_compute_status = "pending"`
+
+- **Endpoint:** `GET /api/v1/standings/{clazz}/{region}` — inspect `computation_state.margin_compute_status`.
+- **Poll interval:** 30 seconds. The background upgrade typically completes in 10–60 seconds; faster polling wastes requests without reducing latency.
+- **Terminal states (stop polling):** `complete`, `not_needed`, `skipped` — the value is final, do not poll again for this snapshot.
+- **Timeout:** Stop polling after 10 minutes. If the upgrade hasn't resolved by then it has failed silently; the next scheduled pipeline run will overwrite the snapshot. Do not poll indefinitely.
+- **On timeout:** Render a static "Margin tiebreakers not yet available" message rather than an infinite spinner.
 
 Historical backfill skips Phase 2 — past data is final, so win/loss-only is used for those snapshots.
 

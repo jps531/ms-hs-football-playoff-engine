@@ -10,7 +10,6 @@ per playoff round date, equivalent to running it live after each round.
 """
 
 import bisect
-import math
 
 from prefect import flow, get_run_logger, task
 
@@ -26,6 +25,7 @@ from backend.prefect.region_scenarios_pipeline import (
     fetch_all_season_games,
     fetch_all_season_schools,
     fetch_completed_pairs,
+    fetch_num_rounds,
     fetch_region_teams,
     get_region_finish_scenarios,
 )
@@ -242,6 +242,7 @@ def playoff_bracket_update(season: int | None = None) -> None:
             logger.info("No completed playoff games for %dA season %d — skipping.", clazz, season)
             continue
 
+        num_rounds = fetch_num_rounds(clazz, season)
         playoff_dates = sorted({g.date for g in playoff_games})
         logger.info("%dA season %d: %d playoff dates to process.", clazz, season, len(playoff_dates))
 
@@ -250,12 +251,14 @@ def playoff_bracket_update(season: int | None = None) -> None:
             # Derive rounds completed from survivor count rather than distinct dates,
             # because some rounds span multiple calendar dates (e.g. a first round
             # where a few games are played the Thursday before the main Friday).
-            # In a single-elimination bracket with N teams: survivors = N / 2^r,
-            # so rounds_completed = floor(log2(N / survivors)).
+            # Anchored to num_rounds so classes with fewer actual qualifiers than
+            # the nominal bracket size (e.g. 1A/4A with 16 teams in a 5-round format)
+            # produce correct odds — surviving is always a power of 2, total entry
+            # count is not reliable when not all bracket slots are filled.
             playoff_schools = set(school_to_seed)
             eliminated = {g.school for g in games_to_date if g.result == "L" and g.school in playoff_schools}
             surviving = max(1, len(playoff_schools) - len(eliminated))
-            rounds_completed = int(math.log2(len(playoff_schools) / surviving))
+            rounds_completed = num_rounds - (surviving.bit_length() - 1)
 
             seeding: dict[int, RegionSeedingData] = {}
             for region in regions:

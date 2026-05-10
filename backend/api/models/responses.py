@@ -246,6 +246,34 @@ class StandingsResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Rankings
+# ---------------------------------------------------------------------------
+
+
+class TeamRankEntry(BaseModel):
+    """One team in a rankings response, with all odds and a convenience sort_value field."""
+
+    school: str
+    class_: int
+    region: int
+    as_of_date: date
+    record: RecordModel
+    seeding_odds: SeedingOddsModel
+    bracket: BracketAdvancementOdds
+    home: HomeGameOdds
+    sort_value: float
+
+
+class RankingsResponse(BaseModel):
+    """Ranked list of teams for a class, sorted by a single odds metric."""
+
+    season: int
+    class_: int
+    sort_by: str
+    teams: list[TeamRankEntry]
+
+
+# ---------------------------------------------------------------------------
 # Hosting odds
 # ---------------------------------------------------------------------------
 
