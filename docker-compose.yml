@@ -29,8 +29,10 @@ services:
     container_name: nginx_${ENVIRONMENT}
     ports:
       - "${NGINX_PORT:-80}:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - api
       - prefect-server
