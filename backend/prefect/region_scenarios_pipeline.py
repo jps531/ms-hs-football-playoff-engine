@@ -820,7 +820,7 @@ def upgrade_region_scenarios(
         base_margin_default=base_margin_default,
     )
 
-    write_region_scenarios(
+    write_region_scenarios.fn(
         clazz,
         region,
         season,
@@ -879,11 +879,11 @@ def get_region_seeding_odds(
         A ``RegionSeedingData`` containing unweighted and weighted seeding
         odds, coinflip teams, and the fetched game lists.
     """
-    teams = fetch_region_teams(clazz, region, season)
+    teams = fetch_region_teams.fn(clazz, region, season)
     if not teams:
         raise SystemExit("No teams found.")
-    completed = fetch_completed_pairs(teams, season, cutoff_date=cutoff_date)
-    remaining = fetch_remaining_pairs(teams, season, cutoff_date=cutoff_date)
+    completed = fetch_completed_pairs.fn(teams, season, cutoff_date=cutoff_date)
+    remaining = fetch_remaining_pairs.fn(teams, season, cutoff_date=cutoff_date)
 
     win_prob_fn: WinProbFn | None = None
     if elo_ratings is not None:
@@ -962,14 +962,14 @@ def get_region_finish_scenarios(
 
     mp_fn = matchup_prob_fn or equal_matchup_prob
 
-    num_rounds = fetch_num_rounds(clazz, season)
+    num_rounds = fetch_num_rounds.fn(clazz, season)
     bracket = compute_bracket_odds(num_rounds, odds, rounds_completed)
 
-    home_seeds = fetch_first_round_home_seeds(clazz, region, season)
+    home_seeds = fetch_first_round_home_seeds.fn(clazz, region, season)
     first_round_home_marginal = compute_first_round_home_odds(home_seeds, odds)
     first_round_home_marginal_w = compute_first_round_home_odds(home_seeds, odds_weighted)
 
-    slots = fetch_all_format_slots(clazz, season)
+    slots = fetch_all_format_slots.fn(clazz, season)
     second_round_home_marginal = compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
     quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season)
     semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season)
@@ -1030,14 +1030,14 @@ def get_region_finish_scenarios(
         for school, m in semifinals_home_marginal_w.items()
     }
 
-    region_standings = fetch_region_standings(clazz, region, season, cutoff_date=as_of_date)
+    region_standings = fetch_region_standings.fn(clazz, region, season, cutoff_date=as_of_date)
     run_date = as_of_date if as_of_date is not None else date.today()
     is_backfill = as_of_date is not None
 
     logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
     logger.info("Region standings: %s", region_standings)
     logger.info("Odds: %s", odds)
-    write_region_standings(
+    write_region_standings.fn(
         region_standings,
         odds,
         clazz,
@@ -1072,7 +1072,7 @@ def get_region_finish_scenarios(
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed
         )
         insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
-        write_region_scenarios(
+        write_region_scenarios.fn(
             clazz,
             region,
             season,
@@ -1093,7 +1093,7 @@ def get_region_finish_scenarios(
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
         )
         insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
-        write_region_scenarios(
+        write_region_scenarios.fn(
             clazz,
             region,
             season,
@@ -1122,7 +1122,7 @@ def get_region_finish_scenarios(
         # Too many remaining games to enumerate scenarios: write empty atoms/scenarios.
         # Monte Carlo odds are written by get_region_seeding_odds; scenario text is
         # not meaningful or displayable at this R.
-        write_region_scenarios(
+        write_region_scenarios.fn(
             clazz,
             region,
             season,
@@ -1143,7 +1143,7 @@ def get_region_finish_scenarios(
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
         )
         insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
-        write_region_scenarios(
+        write_region_scenarios.fn(
             clazz,
             region,
             season,

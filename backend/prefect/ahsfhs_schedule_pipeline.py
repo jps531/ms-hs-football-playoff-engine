@@ -46,7 +46,6 @@ DATE_LINE_RE = re.compile(
 # -------------------------
 
 
-@task(task_run_name="Fetch AHSFHS Schedule Data for {school_name} for {season}")
 def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str, clazz: int) -> list[Game]:
     """
     Parse AHSFHS schedule text (with lots of line breaks) into a list of dicts:
@@ -350,19 +349,6 @@ def get_existing_schools(season: int) -> list[School]:
     return schools
 
 
-@task(retries=2, retry_delay_seconds=10, task_run_name="Scrape AHSFHS Schedule Data for {season}")
-def scrape_task(existing_schools: list[School], season: int) -> int:
-    """
-    Task to scrape schedule data from AHSFHS.
-    """
-    logger = get_run_logger()
-    game_records = find_ahsfhs_schedule_for_schools(existing_schools, season)
-    logger.info("Found AHSFHS Schedules for %d games", len(game_records))
-    updated_count = insert_rows(game_records)
-    logger.info("Inserted/Updated %d games", updated_count)
-    return updated_count
-
-
 @flow(name="AHSFHS Schedule Data Flow")
 def ahsfhs_schedule_data_flow(season: int | None = None) -> int:
     """
@@ -371,5 +357,6 @@ def ahsfhs_schedule_data_flow(season: int | None = None) -> int:
     if season is None:
         season = date.today().year
     existing_schools = get_existing_schools(season)
-    updated_count = scrape_task(existing_schools, season)
+    game_records = find_ahsfhs_schedule_for_schools(existing_schools, season)
+    updated_count = insert_rows(game_records)
     return updated_count

@@ -39,7 +39,6 @@ _REGIONS_CYCLE_URLS: dict[int, str] = {
 # -------------------------
 
 
-@task(task_run_name="Find Class Sections")
 def _find_class_sections(text: str) -> list[tuple[int, int, int]]:
     """Find each 'Class {N}A' header and return (class_num, start, end)."""
     matches = list(CLASS_HDR.finditer(text))
@@ -52,7 +51,6 @@ def _find_class_sections(text: str) -> list[tuple[int, int, int]]:
     return sections
 
 
-@task(task_run_name="Parse Class Section: {cls}")
 def _parse_section(text: str, cls: int) -> list[tuple[str, int, int]]:
     """
     Parse a single Class section into (school, class, region) tuples.
@@ -82,7 +80,6 @@ def _parse_section(text: str, cls: int) -> list[tuple[str, int, int]]:
     return rows
 
 
-@task(task_run_name="Parse Regions from Text")
 def parse_regions_from_text(text: str) -> list[dict]:
     """Parse all class sections into dictionaries."""
     out: list[dict] = []

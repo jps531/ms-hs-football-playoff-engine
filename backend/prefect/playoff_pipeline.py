@@ -148,8 +148,8 @@ def build_playoff_region_data(
     Returns:
         ``RegionSeedingData`` with deterministic odds and no remaining games.
     """
-    teams = fetch_region_teams(clazz, region, season)
-    completed_region = fetch_completed_pairs(teams, season)
+    teams = fetch_region_teams.fn(clazz, region, season)
+    completed_region = fetch_completed_pairs.fn(teams, season)
 
     # Teams in this region with a known playoff seed.
     region_seed_map = {school: seed for school, (r, seed) in school_to_seed.items() if r == region}
