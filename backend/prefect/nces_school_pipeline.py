@@ -24,7 +24,7 @@ from backend.helpers.web_helpers import UA, _ratio
 # ---------------------------------------------------------------------------
 
 _NCES_URL = (
-    "https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_ADMINDATA_PUBLICSCH_2223/MapServer/0/query"
+    "https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_ADMINDATA_PUBLICSCH_2425/MapServer/1/query"
 )
 _NCES_PARAMS = {
     "where": "LSTATE = 'MS'",
