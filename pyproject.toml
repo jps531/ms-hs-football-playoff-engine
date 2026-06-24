@@ -11,6 +11,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "prefect>=2.16,<3",
+    "anyio>=3.0,<4",
     "requests>=2.31",
     "pandas>=2.2",
     "lxml>=5.2",
