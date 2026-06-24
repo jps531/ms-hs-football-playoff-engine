@@ -1263,10 +1263,12 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
     rows for each unique game-date so the frontend timeline can serve any past
     date without on-the-fly recomputation.
 
-    Note: region_standings W/L records reflect whatever is in the DB when this
-    flow runs (the stored proc has no date filter).  Seeding odds are historically
-    accurate because fetch_completed_pairs and fetch_remaining_pairs are
-    cutoff-date filtered.
+    All data in the historical snapshots — seeding odds, weighted odds, W/L
+    records, and tiebreaker inputs — are historically accurate at each snapshot
+    date.  ``get_standings_for_region`` accepts a ``p_cutoff_date`` parameter
+    and applies it to every aggregation (region W/L, overall W/L, head-to-head,
+    capped point differential, and points-allowed).  ``fetch_completed_pairs``
+    and ``fetch_remaining_pairs`` are likewise cutoff-date filtered.
     """
     if season is None:
         season = date.today().year

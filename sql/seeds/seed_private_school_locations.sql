@@ -14,3 +14,13 @@ UPDATE schools SET city = 'Ridgeland',     zip = 39157, latitude =  32.433642, l
 UPDATE schools SET city = 'Biloxi',        zip = 39532, latitude =  30.551911, longitude =  -89.020895 WHERE school = 'St. Patrick';
 UPDATE schools SET city = 'Bay St. Louis', zip = 39520, latitude =  30.306702, longitude =  -89.329070 WHERE school = 'St. Stanislaus';
 UPDATE schools SET city = 'Belden',        zip = 38826, latitude =  34.309487, longitude =  -88.795701 WHERE school = 'Tupelo Christian';
+
+-- Leake: 2026 consolidation of Leake County and Leake Central. Same campus as Leake Central.
+-- COALESCE preserves any NCES-sourced values if Leake is eventually registered there.
+UPDATE schools s SET
+    city      = COALESCE(s.city,      src.city),
+    zip       = COALESCE(s.zip,       src.zip),
+    latitude  = COALESCE(s.latitude,  src.latitude),
+    longitude = COALESCE(s.longitude, src.longitude)
+FROM schools_effective src
+WHERE s.school = 'Leake' AND src.school = 'Leake Central';

@@ -105,6 +105,8 @@ services:
       - ./sql/get_standings_for_region.sql:/docker-entrypoint-initdb.d/02_get_standings_for_region.sql:ro
       - ./sql/override_helpers.sql:/docker-entrypoint-initdb.d/03_override_helpers.sql:ro
       - ./sql/seeds/locations_championship_stadiums.sql:/docker-entrypoint-initdb.d/04_locations_championship_stadiums.sql:ro
+      - ./sql/seeds/playoff_formats_2025.sql:/docker-entrypoint-initdb.d/05_playoff_formats_2025.sql:ro
+      - ./sql/seeds/playoff_formats_2026.sql:/docker-entrypoint-initdb.d/06_playoff_formats_2026.sql:ro
     networks:
       - mshsfootball
     healthcheck:

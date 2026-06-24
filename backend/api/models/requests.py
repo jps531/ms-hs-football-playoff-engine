@@ -173,6 +173,26 @@ class PatchSchoolSeasonRequest(BaseModel):
     is_active: bool
 
 
+class UpsertSchoolSeasonRequest(BaseModel):
+    """Create or overwrite a school_seasons row with explicit class, region, and is_active.
+
+    Use for mid-cycle changes the Regions pipeline cannot handle automatically:
+    school consolidations, closures, or new schools.
+
+    ``copy_identity_from`` — if provided, copies mascot, colors, city, zip, latitude, and
+    longitude from that school into the new school's base columns immediately, so identity
+    data is available before the MHSAA identity and NCES pipelines run. 404s if the source
+    school does not exist.
+    """
+
+    class_: int = Field(alias="class", ge=1, le=7)
+    region: int = Field(ge=1, le=8)
+    is_active: bool = True
+    copy_identity_from: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
 # ---------------------------------------------------------------------------
 # Location CRUD
 # ---------------------------------------------------------------------------

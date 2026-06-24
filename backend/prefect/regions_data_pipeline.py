@@ -23,6 +23,16 @@ from backend.helpers.web_helpers import fetch_article_text
 
 CLASS_HDR = re.compile(r"\bClass\s+([1-7])A\b", re.IGNORECASE)
 
+# MHSAA publishes one classification article per 2-year cycle. Keys are the
+# odd year that starts each cycle; add a new entry when MHSAA publishes the
+# next cycle's article.
+_REGIONS_CYCLE_URLS: dict[int, str] = {
+    2019: "https://www.misshsaa.com/2018/10/31/2019-21-football-regions/",
+    2021: "https://www.misshsaa.com/2020/10/29/2021-23-football-regions/",
+    2023: "https://www.misshsaa.com/2022/11/03/2023-25-football-regions/",
+    2025: "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/",
+}
+
 
 # -------------------------
 # Prefect tasks & flow
@@ -156,17 +166,13 @@ def regions_data_flow(season: int | None = None) -> int:
     if season is None:
         season = date.today().year
     logger = get_run_logger()
-    regions_source_url = ""
-    if season == 2025:
-        regions_source_url = "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/"
-    elif season == 2023:
-        regions_source_url = "https://www.misshsaa.com/2022/11/03/2023-25-football-regions/"
-    elif season == 2021:
-        regions_source_url = "https://www.misshsaa.com/2020/10/29/2021-23-football-regions/"
-    elif season == 2019:
-        regions_source_url = "https://www.misshsaa.com/2018/10/31/2019-21-football-regions/"
-    else:
-        raise ValueError(f"No regions URL configured for season {season}")
+    cycle_start = season if season % 2 == 1 else season - 1
+    regions_source_url = _REGIONS_CYCLE_URLS.get(cycle_start)
+    if regions_source_url is None:
+        raise ValueError(
+            f"No regions URL configured for the {cycle_start}–{cycle_start + 1} cycle "
+            f"(season {season}). Add it to _REGIONS_CYCLE_URLS in regions_data_pipeline.py."
+        )
     rows = scrape_task(regions_source_url, season)
     inserted = insert_rows(rows)
     logger.info("Inserted %d new rows into schools", inserted)

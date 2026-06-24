@@ -29,3 +29,15 @@ WHERE school = 'Hazlehurst';
 UPDATE schools SET
     mascot = COALESCE(NULLIF('Green Wave', ''), mascot)
 WHERE school = 'West Point';
+
+-- Leake: 2026 consolidation of Leake County (1A Region 5) and Leake Central (4A Region 5).
+-- Inherits Leake Central's mascot and colors (same school identity).
+-- COALESCE leaves fields untouched if Leake ever gets its own MHSAA directory entry.
+UPDATE schools s SET
+    mascot              = COALESCE(NULLIF(src.mascot, ''),              s.mascot),
+    primary_color       = COALESCE(NULLIF(src.primary_color, ''),       s.primary_color),
+    secondary_color     = COALESCE(NULLIF(src.secondary_color, ''),     s.secondary_color),
+    primary_color_hex   = COALESCE(NULLIF(src.primary_color_hex, ''),   s.primary_color_hex),
+    secondary_color_hex = COALESCE(NULLIF(src.secondary_color_hex, ''), s.secondary_color_hex)
+FROM schools_effective src
+WHERE s.school = 'Leake' AND src.school = 'Leake Central';

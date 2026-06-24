@@ -25,6 +25,7 @@ from backend.api.models.requests import (
     SetGameOverrideRequest,
     SetLocationOverrideRequest,
     SetSchoolOverrideRequest,
+    UpsertSchoolSeasonRequest,
 )
 from backend.api.models.responses import (
     AssignChampionshipVenueResult,
@@ -371,6 +372,75 @@ async def patch_school_season(school: str, season: int, body: PatchSchoolSeasonR
         )
     _log.info("admin: set school_season is_active=%s school=%s season=%s", body.is_active, school, season)
     return {"school": school, "season": season, "is_active": body.is_active}
+
+
+@router.put("/school-seasons/{school}/{season}", dependencies=[Depends(require_moderator)], responses=_404)
+async def upsert_school_season(school: str, season: int, body: UpsertSchoolSeasonRequest) -> dict:
+    """Create or overwrite a school_seasons row with explicit class, region, and is_active.
+
+    Creates the parent schools row if it does not already exist. Overwrites class
+    and region on conflict, so this is safe to re-run. Use for mid-cycle changes
+    the Regions pipeline cannot handle: consolidations, closures, new schools.
+
+    When ``copy_identity_from`` is supplied, copies mascot, colors, city, zip,
+    latitude, and longitude from that school into the new school's base columns
+    immediately, before the MHSAA identity and NCES pipelines have run. 404s if
+    the source school does not exist.
+    """
+    async with get_conn() as conn:
+        await conn.execute(
+            "INSERT INTO schools (school) VALUES (%s) ON CONFLICT (school) DO NOTHING",
+            (school,),
+        )
+        await conn.execute(
+            """
+            INSERT INTO school_seasons (school, season, class, region, is_active)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (school, season) DO UPDATE SET
+                class     = EXCLUDED.class,
+                region    = EXCLUDED.region,
+                is_active = EXCLUDED.is_active
+            """,
+            (school, season, body.class_, body.region, body.is_active),
+        )
+        if body.copy_identity_from:
+            src = await (
+                await conn.execute(
+                    "SELECT 1 FROM schools WHERE school = %s", (body.copy_identity_from,)
+                )
+            ).fetchone()
+            if src is None:
+                raise HTTPException(status_code=404, detail=f"Source school '{body.copy_identity_from}' not found")
+            await conn.execute(
+                """
+                UPDATE schools s SET
+                    mascot              = COALESCE(NULLIF(e.mascot, ''),              s.mascot),
+                    primary_color       = COALESCE(NULLIF(e.primary_color, ''),       s.primary_color),
+                    secondary_color     = COALESCE(NULLIF(e.secondary_color, ''),     s.secondary_color),
+                    primary_color_hex   = COALESCE(NULLIF(e.primary_color_hex, ''),   s.primary_color_hex),
+                    secondary_color_hex = COALESCE(NULLIF(e.secondary_color_hex, ''), s.secondary_color_hex),
+                    city                = COALESCE(s.city,      e.city),
+                    zip                 = COALESCE(s.zip,       e.zip),
+                    latitude            = COALESCE(s.latitude,  e.latitude),
+                    longitude           = COALESCE(s.longitude, e.longitude)
+                FROM schools_effective e
+                WHERE s.school = %s AND e.school = %s
+                """,
+                (school, body.copy_identity_from),
+            )
+            _log.info("admin: copied identity from '%s' to '%s'", body.copy_identity_from, school)
+    _log.info(
+        "admin: upsert school_season school=%s season=%s class=%s region=%s is_active=%s",
+        school, season, body.class_, body.region, body.is_active,
+    )
+    return {
+        "school": school,
+        "season": season,
+        "class": body.class_,
+        "region": body.region,
+        "is_active": body.is_active,
+        "identity_copied_from": body.copy_identity_from,
+    }
 
 
 # ---------------------------------------------------------------------------
