@@ -33,6 +33,25 @@ _REGIONS_CYCLE_URLS: dict[int, str] = {
     2025: "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/",
 }
 
+# Per-season overrides applied AFTER scraping the MHSAA page.
+# Necessary when MHSAA retroactively edits a cycle page after a consolidation
+# or closure, making the live page incorrect for the earlier year of the cycle.
+#
+# Each entry replaces the scraped value for that school in that season (or adds
+# the school if it was removed from the page entirely).  Use this sparingly —
+# only for cases where the source page itself is now wrong.
+#
+# 2025 — Leake County (1A-5) closed after 2025; Leake Central (4A-5) absorbed
+# it and moved to 5A-2 for 2026.  MHSAA updated the 2025-27 cycle page to
+# reflect the post-consolidation state, so the live page now omits Leake County
+# and shows Leake Central in 5A-2.  These overrides restore the true 2025 state.
+_SEASON_OVERRIDES: dict[int, list[dict]] = {
+    2025: [
+        {"school": "Leake Central", "class": 4, "region": 5},
+        {"school": "Leake County",  "class": 1, "region": 5},
+    ],
+}
+
 
 # -------------------------
 # Prefect tasks & flow
@@ -147,12 +166,18 @@ def scrape_task(url: str, season: int) -> list[School]:
     logger = get_run_logger()
     logger.info("Fetching and parsing rendered text from %s", url)
     text = fetch_article_text(url)
-    rows = [
-        School(school=r["school"], class_=r["class"], region=r["region"], season=season)
+    rows = {
+        r["school"]: School(school=r["school"], class_=r["class"], region=r["region"], season=season)
         for r in parse_regions_from_text(text)
-    ]
-    logger.info("Parsed %d schools", len(rows))
-    return rows
+    }
+
+    for override in _SEASON_OVERRIDES.get(season, []):
+        school = override["school"]
+        rows[school] = School(school=school, class_=override["class"], region=override["region"], season=season)
+        logger.info("Applied season override: %s → %dA Region %d", school, override["class"], override["region"])
+
+    logger.info("Parsed %d schools (after overrides)", len(rows))
+    return list(rows.values())
 
 
 @flow(name="Regions Data Flow")
