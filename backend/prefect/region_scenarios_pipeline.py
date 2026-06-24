@@ -1077,13 +1077,13 @@ def get_region_finish_scenarios(
             region,
             season,
             as_of_date=run_date,
-            remaining=quote(remaining),
-            scenario_atoms=quote(scenario_atoms),
-            complete_scenarios=quote(complete_scenarios),
+            remaining=remaining,
+            scenario_atoms=scenario_atoms,
+            complete_scenarios=complete_scenarios,
             r_remaining=R,
             margin_sensitive=True,
             margin_compute_status="not_needed",
-            key_insights=quote(insights),
+            key_insights=insights,
         )
     elif R <= _R_BACKGROUND_MAX:
         # Win/loss-only first for fast initial display; schedule margin upgrade.
@@ -1098,13 +1098,13 @@ def get_region_finish_scenarios(
             region,
             season,
             as_of_date=run_date,
-            remaining=quote(remaining),
-            scenario_atoms=quote(scenario_atoms),
-            complete_scenarios=quote(complete_scenarios),
+            remaining=remaining,
+            scenario_atoms=scenario_atoms,
+            complete_scenarios=complete_scenarios,
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="pending",
-            key_insights=quote(insights),
+            key_insights=insights,
         )
         # Submit background upgrade — runs full margin enumeration asynchronously.
         # Skipped in backfill mode (historical data is already final).
@@ -1127,9 +1127,9 @@ def get_region_finish_scenarios(
             region,
             season,
             as_of_date=run_date,
-            remaining=quote(remaining),
-            scenario_atoms=quote({}),
-            complete_scenarios=quote([]),
+            remaining=remaining,
+            scenario_atoms={},
+            complete_scenarios=[],
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="skipped",
@@ -1148,13 +1148,13 @@ def get_region_finish_scenarios(
             region,
             season,
             as_of_date=run_date,
-            remaining=quote(remaining),
-            scenario_atoms=quote(scenario_atoms),
-            complete_scenarios=quote(complete_scenarios),
+            remaining=remaining,
+            scenario_atoms=scenario_atoms,
+            complete_scenarios=complete_scenarios,
             r_remaining=R,
             margin_sensitive=False,
             margin_compute_status="skipped",
-            key_insights=quote(insights),
+            key_insights=insights,
         )
 
     return scenario_atoms
