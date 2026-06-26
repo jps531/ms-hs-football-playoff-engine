@@ -5,7 +5,7 @@ An application that calculates standings and playoff scenarios for Mississippi H
 ## How It Works
 
 - Four Prefect pipelines ingest data from MHSAA (region assignments and school identity), the NCES EDGE API (school locations), and AHSFHS (schedules) into PostgreSQL.
-- Once game results are in, the tiebreaker engine enumerates every possible outcome across the 2^R remaining region games, applies the 7-step MHSAA tiebreaker algorithm (head-to-head record → point differential vs. highest-ranked opponent → capped per-game margin → coin flip) to determine seedings, and uses boolean minimization to reduce the scenario space into concise human-readable conditions.
+- Once game results are in, the tiebreaker engine enumerates every possible outcome across the 2^R remaining region games, applies the [7-step MHSAA tiebreaker algorithm](docs/SCENARIO_RULES.md) (head-to-head record → point differential vs. highest-ranked opponent → capped per-game margin → coin flip) to determine seedings, and uses boolean minimization to reduce the scenario space into concise human-readable conditions. See [docs/SCENARIO_COMPUTATION.md](docs/SCENARIO_COMPUTATION.md) for how computation tiers, margin sensitivity, and the R threshold interact.
 - Results are stored as dated snapshots so the API can answer historical "what were the odds on date X?" queries without recomputation.
 - The FastAPI layer serves those snapshots for live requests, falls back to on-demand in-memory recomputation when no snapshot exists, and exposes a simulation endpoint that lets callers apply hypothetical results to explore what-if outcomes.
 - Elo ratings with a margin-of-victory multiplier and cross-season carryover drive pregame win probability, while a separate in-game model uses score margin and time remaining (plus MSHAA's untimed alternating-possession OT format) for live probability estimates.
@@ -23,7 +23,7 @@ The following data model describes how data is stored and controlled in this app
 | `school_seasons` | Per-season class and region assignments (can change on MHSAA's two-year cycle). FK anchor for all season-scoped data. |
 | `locations` | Physical venues. Referenced by `games` for geocoding and home-field logic. |
 | `games` | School-perspective game rows — two rows per contest, so scores and results are always relative to the `school` column. Covers regular season and playoffs. |
-| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion), and home-game odds per round. Appended each pipeline run; never overwritten. |
+| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion), and [home-game odds per round](docs/PLAYOFF_HOME_RULES.md). Appended each pipeline run; never overwritten. |
 | `team_ratings` | Dated Elo and RPI snapshots. One row per school per season per `as_of_date`. |
 | `region_scenarios` | Serialized tiebreaker scenario trees (complete outcomes + minimized per-team conditions) plus pre-computed key insights (simple, unconditionally-true conditional statements like "Taylorsville clinches 1st seed: Taylorsville beats Stringer"). Computed once per pipeline run, read at request time. |
 | `region_computation_state` | Tracks background margin-sensitivity upgrade status per region (the two-phase computation model for regions with 5–6 games remaining). |
@@ -34,161 +34,7 @@ The following data model describes how data is stored and controlled in this app
 | `user_followed_teams` | Many-to-many join between users and the schools they follow. |
 | `user_attended_games` | Many-to-many join between users and games they marked as attended. References the composite PK `(school, date)` on `games`. |
 
-### Schema Diagram
-
-```mermaid
-erDiagram
-    schools {
-        text school PK
-        text city
-        text mascot
-        text primary_color
-        text secondary_color
-        text logo_primary
-        text logo_secondary
-        text logo_tertiary
-    }
-    helmet_designs {
-        int id PK
-        text school FK
-        int year_first_worn
-        int year_last_worn
-        text image_left
-        text image_right
-        text photo
-        text color
-        text finish
-        text tags
-    }
-    school_seasons {
-        text school PK,FK
-        int season PK
-        int class
-        int region
-    }
-    locations {
-        int id PK
-        text name
-        text city
-        text home_team
-    }
-    games {
-        text school PK,FK
-        date date PK
-        int season FK
-        text opponent
-        int points_for
-        int points_against
-        text result
-        text game_status
-        boolean region_game
-        boolean final
-        int location_id FK
-    }
-    region_standings {
-        text school FK
-        int season FK
-        date as_of_date
-        int class
-        int region
-        int region_wins
-        int region_losses
-        real odds_1st
-        real odds_2nd
-        real odds_3rd
-        real odds_4th
-        real odds_playoffs
-        boolean clinched
-        boolean eliminated
-    }
-    team_ratings {
-        text school PK,FK
-        int season PK
-        date as_of_date PK
-        real elo
-        real rpi
-        int games_played
-    }
-    region_scenarios {
-        int season PK
-        varchar class PK
-        int region PK
-        date as_of_date PK
-        jsonb remaining_games
-        jsonb scenario_atoms
-        jsonb complete_scenarios
-        jsonb key_insights
-    }
-    region_computation_state {
-        int season PK
-        int class PK
-        int region PK
-        date as_of_date PK
-        int r_remaining
-        boolean margin_sensitive
-        text margin_compute_status
-    }
-    playoff_formats {
-        int id PK
-        int season
-        int class
-        int num_regions
-        int num_rounds
-    }
-    playoff_format_slots {
-        int format_id PK,FK
-        int slot PK
-        int home_region
-        int home_seed
-        int away_region
-        int away_seed
-        text north_south
-    }
-
-    submissions {
-        int id PK
-        text type
-        text status
-        text school FK
-        int user_id FK
-        jsonb payload
-        text moderator_notes
-        timestamptz reviewed_at
-        timestamptz submitted_at
-    }
-    users {
-        int id PK
-        text auth0_id
-        text email
-        text display_name
-        text role
-        text favorite_team FK
-        bool is_active
-    }
-    user_followed_teams {
-        int user_id PK,FK
-        text school PK,FK
-    }
-    user_attended_games {
-        int user_id PK,FK
-        text school PK,FK
-        date date PK
-    }
-
-    schools ||--o{ school_seasons : "plays in"
-    schools ||--o{ helmet_designs : "wears"
-    schools ||--o{ team_ratings : "rated in"
-    schools ||--o{ submissions : "submitted for"
-    schools ||--o{ user_followed_teams : "followed by"
-    users ||--o{ submissions : "submitted by"
-    users ||--o{ user_followed_teams : "follows"
-    users ||--o{ user_attended_games : "attended"
-    games ||--o{ user_attended_games : "attended by"
-    school_seasons ||--o{ games : "plays"
-    school_seasons ||--o{ region_standings : "has odds in"
-    locations ||--o{ games : "hosted at"
-    playoff_formats ||--o{ playoff_format_slots : "has slots"
-```
+See [docs/SCHEMA.md](docs/SCHEMA.md) for the full entity-relationship diagram.
 
 ## Prerequisites
 
@@ -233,52 +79,14 @@ Auth0 access tokens expire (typically after 24 hours), so you'll need to copy a 
 
 #### Configure Auth0
 
-Auth0 issues the RS256 JWT tokens the API validates. You need two things: an **API resource** (sets the audience claim) and an **Application** (sets your domain and gives you Swagger UI login credentials).
+Auth0 issues the RS256 JWT tokens the API validates. You need an **API resource** (sets the audience claim) and an **Application** (sets your domain and gives you Swagger UI login credentials). See [docs/AUTH0_SETUP.md](docs/AUTH0_SETUP.md) for step-by-step instructions.
 
-**Step 1 — Create the API resource**
-
-1. Log in to [manage.auth0.com](https://manage.auth0.com).
-2. Go to **Applications → APIs → Create API**.
-3. Set **Name** to anything descriptive (e.g. `mshsfbanalytics`).
-4. Set **Identifier** to your chosen audience string — this becomes `AUTH0_AUDIENCE` in your `.env` files. You cannot change this after creation.
-5. Leave **Signing Algorithm** as `RS256`. Click **Create**.
-
-**Step 2 — Create the Application**
-
-1. Go to **Applications → Applications → Create Application**.
-2. Set **Name** to anything descriptive (e.g. `mshsfbanalytics-local`).
-3. Select **Regular Web Application**. Click **Create**.
-4. Open the **Settings** tab. Note these three values — you will need them shortly:
-   - **Domain** → becomes `AUTH0_DOMAIN` (e.g. `yourapp.us.auth0.com`)
-   - **Client ID**
-   - **Client Secret** (click reveal)
-
-**Step 3 — Allow localhost as an origin**
-
-The Swagger UI uses Auth0's Universal Login and redirects back to Swagger UI after login, so Auth0 needs to allow both the origin and the redirect URI. Still on the Application Settings page, add the following values:
-
-- **Allowed Callback URLs**: `http://localhost:8000/docs/oauth2-redirect`
-- **Allowed Web Origins**: `http://localhost:8000`
-- **Allowed Origins (CORS)**: `http://localhost:8000`
-
-Click **Save Changes**.
-
-**Step 4 — Authorize the Application to access the API**
-
-1. Go to **Applications → APIs** and click on your API (`mshsfbanalytics`).
-2. Open the **Application Access** tab.
-3. Find your application (`mshsfbanalytics-local`) and toggle it **on**. Click **Update**.
-
-**Step 5 — Copy credentials to your `.env` files**
-
-In both `.env.local` and `.env.non-docker.local`:
+Copy the resulting values to both `.env.local` and `.env.non-docker.local`:
 
 ```
-AUTH0_DOMAIN=<Domain from Step 2>
-AUTH0_AUDIENCE=<Identifier from Step 1>
+AUTH0_DOMAIN=<your Auth0 domain>
+AUTH0_AUDIENCE=<your API identifier>
 ```
-
-Keep the **Client ID** and **Client Secret** from Step 2 handy — you'll enter them in the Swagger UI Authorize dialog when promoting yourself to owner.
 
 #### Start the API (local development)
 
@@ -334,114 +142,9 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env
 
 The `-v` flag removes the postgres data volume; the container will re-run `sql/init.sql` on startup.
 
-#### Production / VM deployment (AWS Lightsail)
+#### Production / VM deployment
 
-This project is deployed on an AWS Lightsail Ubuntu instance (`mshsfootball.com`). On an x86_64 Linux VM the API runs in Docker normally — no Apple Silicon crypto limitation.
-
-**One-time instance setup**
-
-1. Create a Lightsail instance: **Linux/Unix → OS Only → Ubuntu 22.04 LTS**, General purpose, 4 GB RAM minimum. Assign a static IP immediately after creation (first one is free).
-
-2. Open firewall ports in the Lightsail **Networking** tab: HTTP (80) and HTTPS (443). SSH (22) is open by default.
-
-3. Upload your Mac's public SSH key (`~/.ssh/id_ed25519.pub`) during instance creation so you can SSH from Terminal:
-   ```
-   ssh ubuntu@YOUR_STATIC_IP
-   ```
-
-4. Install Docker:
-   ```
-   curl -fsSL https://get.docker.com -o get-docker.sh
-   sudo sh get-docker.sh
-   sudo usermod -aG docker ubuntu
-   ```
-   Log out and back in for the group change to take effect.
-
-5. Add a GitHub deploy key so the VM can clone the private repo:
-   ```
-   ssh-keygen -t ed25519 -C "lightsail-football" -f ~/.ssh/github_deploy
-   cat ~/.ssh/github_deploy.pub   # add this to GitHub → Settings → SSH keys
-   cat >> ~/.ssh/config << 'EOF'
-   Host github.com
-       IdentityFile ~/.ssh/github_deploy
-       IdentitiesOnly yes
-   EOF
-   ```
-
-6. Clone the repo:
-   ```
-   git clone git@github.com:jps531/ms-hs-football-playoff-engine.git
-   cd ms-hs-football-playoff-engine
-   ```
-
-**Domain and DNS**
-
-The domain `mshsfootball.com` is registered and its DNS zone is managed in Lightsail (**Networking → DNS zones**) with an A record pointing to the static IP. The domain is also assigned to the instance under the **Domains** tab.
-
-**Environment and first deploy**
-
-Copy and fill in the environment file:
-```
-cp .env.example .env.local
-nano .env.local
-```
-
-Key values to set:
-- `POSTGRES_HOST=db` — uses Docker's internal service name (PostgreSQL runs in the same stack)
-- `POSTGRES_PASSWORD` — generate with `openssl rand -base64 32`
-- `CLOUDINARY_*` — from your Cloudinary dashboard
-- `CLOUDINARY_BASE_URL` — hardcode the full URL: `https://res.cloudinary.com/YOUR_CLOUD_NAME/image/upload`
-- `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` — from your Auth0 dashboard (same tenant as local dev)
-- `FRONTEND_ORIGIN=https://mshsfootball.com`
-
-Then bring up the stack (PostgreSQL runs in Docker alongside the other services):
-```
-docker compose --env-file .env.local --profile local-db up --build -d
-```
-
-**SSL with Let's Encrypt**
-
-Run once after DNS is resolving to your static IP. Bring the stack down first to free port 80:
-
-```
-docker compose --env-file .env.local --profile local-db down
-sudo apt install certbot -y
-sudo certbot certonly --standalone -d mshsfootball.com
-```
-
-Set up an auto-renewal hook so nginx reloads when the cert renews (every 90 days):
-```
-sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh << 'EOF'
-#!/bin/bash
-docker exec nginx_local nginx -s reload
-EOF
-sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
-```
-
-Bring the stack back up — nginx will now serve HTTPS and redirect HTTP to HTTPS:
-```
-docker compose --env-file .env.local --profile local-db up --build -d
-```
-
-**Auth0 URL updates**
-
-In Auth0 → Applications → Your Application → Settings, add `https://mshsfootball.com` to each field alongside the existing localhost entries (comma-separated):
-
-- **Allowed Callback URLs:** `http://localhost:8000/docs/oauth2-redirect, https://mshsfootball.com/docs/oauth2-redirect`
-- **Allowed Web Origins:** `http://localhost:8000, https://mshsfootball.com`
-- **Allowed Logout URLs:** `http://localhost:8000, https://mshsfootball.com`
-
-`AUTH0_AUDIENCE` is the **Identifier** value from Auth0 → Applications → APIs → your API.
-
-**Deploying updates**
-
-```
-git pull
-docker compose --env-file .env.local --profile local-db up --build -d
-```
-
-Required env vars: `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`, `CLOUDINARY_*`, `FRONTEND_ORIGIN`.
+See [docs/VM_DEPLOYMENT.md](docs/VM_DEPLOYMENT.md) for the full AWS Lightsail setup guide (instance creation, DNS, SSL, Auth0 URL updates, and deploying updates).
 
 #### Once per season (pre-season setup)
 
@@ -491,87 +194,7 @@ After the pre-season setup steps (1–6) have completed for a season, run the fo
 
 ### New Season Setup
 
-#### Playoff bracket format
-
-When MHSAA reclassifies schools (every two years) or the bracket structure changes, add the new season's playoff format:
-
-1. Copy `sql/seeds/playoff_format_template.yaml` to `sql/seeds/playoff_formats_YYYY.yaml` and fill in `season`, `classes`, and `slots` to match the MHSAA bracket.
-2. Generate the matching SQL seed file by hand (follow the pattern in `sql/seeds/playoff_formats_2026.sql`) and save it as `sql/seeds/playoff_formats_YYYY.sql`.
-3. Mount the SQL file in `docker-compose.yml` under the `db` service volumes so fresh deployments seed it automatically:
-   ```yaml
-   - ./sql/seeds/playoff_formats_YYYY.sql:/docker-entrypoint-initdb.d/NN_playoff_formats_YYYY.sql:ro
-   ```
-4. To seed an **already-running** database without restarting, use the script (idempotent):
-   ```
-   uv run python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_YYYY.yaml
-   ```
-   Or POST directly to `POST /api/v1/admin/playoff-format` via the Swagger UI. Use `?dry_run=true` first to preview counts.
-
-After the championship games are ingested by the AHSFHS pipeline, assign the venue:
-
-1. `GET /api/v1/admin/locations` to find the correct `location_id` for the venue.
-2. `POST /api/v1/admin/championship-venue` with `{ "season": YYYY, "location_id": N }`.
-3. Use `?dry_run=true` first to confirm which game rows will be updated.
-
-#### School consolidations, closures, and mid-cycle changes
-
-MHSAA publishes classification assignments on a 2-year cycle. The Regions pipeline reads the same article for both years in a cycle, so consolidations and closures that happen mid-cycle require manual steps after the pipeline runs.
-
-**Step 1 — Deactivate closed/merged schools for the new season**
-
-After running the Regions pipeline for the new season, suppress each closed or merged school:
-
-```
-PATCH /api/v1/admin/school-seasons/{old_school}/{season}
-{"is_active": false}
-```
-
-Their `schools` rows and all historical game data are preserved; they stop appearing in the new season's standings and scenarios.
-
-**Step 2 — Create the new school's season entry**
-
-```
-PUT /api/v1/admin/school-seasons/{new_school}/{season}
-{"class": N, "region": N, "is_active": true}
-```
-
-This creates the `schools` row if it doesn't exist yet (safe to run before AHSFHS schedules publish), then upserts the `school_seasons` row with the correct class and region assignment.
-
-**Step 3 — Set identity data for the new school**
-
-The MHSAA school identity and NCES location pipelines won't have data for a brand-new consolidated school until MHSAA updates their directory. Set known fields immediately via admin overrides:
-
-```
-PUT /api/v1/admin/schools/{school}/overrides   {"field": "mascot",           "value": "..."}
-PUT /api/v1/admin/schools/{school}/overrides   {"field": "primary_color",    "value": "..."}
-PUT /api/v1/admin/schools/{school}/overrides   {"field": "secondary_color",  "value": "..."}
-PUT /api/v1/admin/schools/{school}/overrides   {"field": "latitude",         "value": "..."}
-PUT /api/v1/admin/schools/{school}/overrides   {"field": "longitude",        "value": "..."}
-```
-
-Valid override fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude`. (`city` is populated only by the NCES pipeline and will be NULL until that pipeline runs for the new school.)
-
-Once MHSAA publishes the school's directory entry and the pipelines can fetch the data naturally, clear overrides with `DELETE /api/v1/admin/schools/{school}/overrides/{field}` — or leave them in place, as overrides always win over pipeline values.
-
-**Elo ratings for consolidated schools**
-
-Consolidated schools start the season at the class prior (no manual seeding needed). If the merged program is significantly stronger or weaker than a fresh entrant to their new class, you can seed a starting rating by inserting a synthetic `team_ratings` row for the prior season — the carryover calculation (`50% class prior + 50% prior season Elo`) will use it on the next pipeline run.
-
----
-
-**2026: Leake (5A Region 2)**
-
-Leake County (1A Region 5) and Leake Central (4A Region 5) merged to form Leake (5A Region 2).
-
-After running the Regions pipeline for 2026:
-
-```
-PATCH /api/v1/admin/school-seasons/Leake%20County/2026   {"is_active": false}
-PATCH /api/v1/admin/school-seasons/Leake%20Central/2026  {"is_active": false}
-PUT   /api/v1/admin/school-seasons/Leake/2026            {"class": 5, "region": 2, "copy_identity_from": "Leake Central"}
-```
-
-The `copy_identity_from` field copies Leake Central's mascot, colors, city, zip, and coordinates into Leake's `schools` row immediately — before the MHSAA identity and NCES pipelines run, so identity is available from day one. The corresponding entries in `seed_mhsaa_identity.sql` and `seed_private_school_locations.sql` become no-ops once those fields are populated (both use `COALESCE` and won't overwrite). If Leake ever gets its own MHSAA directory entry or NCES record, those pipeline-sourced values take precedence. Elo starts at the 5A class prior — no manual seeding needed for a program moving up two classes.
+When MHSAA reclassifies schools or consolidations occur mid-cycle, additional manual steps are required after the pipelines run. See [docs/SEASON_SETUP.md](docs/SEASON_SETUP.md) for the full guide covering playoff bracket format seeding and school consolidation/closure procedures.
 
 ## Development Reference
 
@@ -630,203 +253,12 @@ The report excludes pipeline files (same omit list as test coverage) and skips m
 
 ### API Reference
 
-All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running.
+Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running. For the complete endpoint reference see [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
 
-#### Meta
+## Disclaimer
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/seasons` | List all seasons that have enrolled teams |
-| GET | `/seasons/{season}/structure` | All classes and regions with team counts for a season |
-| GET | `/teams` | List teams; `season` required, optional `class` and `region` filters |
-| GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
-| GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
-| GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag` |
+Win probabilities, seeding odds, and playoff advancement percentages are statistical estimates for informational and entertainment purposes only — not gambling advice. See [docs/ODDS_DISCLAIMER.md](docs/ODDS_DISCLAIMER.md) for full details.
 
-#### Standings — `/standings`
+## License
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`. See [docs/SCENARIO_COMPUTATION.md](docs/SCENARIO_COMPUTATION.md) for the full computation model. |
-| GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team |
-| POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds |
-| POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |
-
-**Response fields per team** (`teams[]`):
-- `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus margin-weighted variants `p1_weighted`–`p_playoffs_weighted`
-- `bracket_odds` — probability of advancing to each playoff round (`second_round` through `champion`), unweighted and weighted. `null` for on-demand/simulate paths.
-- `home_game_odds` — conditional probability of hosting each round (`first_round` through `semifinals`), unweighted and weighted. `null` for on-demand/simulate paths.
-- `clinched`, `eliminated`, `coin_flip_needed`
-
-**Top-level response fields**:
-- `scenarios` — when `scenarios_available` is `true`, each entry includes `game_winners` (which team wins each remaining game to produce this seeding), `tiebreaker_groups`, `coinflip_groups`, and `outcomes` (team → seed number)
-- `computation_state` — `margin_sensitive` (bool), `margin_compute_status` (`not_needed` / `pending` / `running` / `complete` / `skipped`), and timestamps. Use `margin_compute_status` to show a "refining odds…" indicator while background margin computation is running.
-
-#### Rankings — `/rankings`
-
-Cross-region ranked list of teams for a given class, sorted by any single odds metric. Equivalent to a `SELECT DISTINCT ON (school) … ORDER BY <metric> DESC` across `region_standings`, but served as a typed API response.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/{clazz}` | All teams in a class ranked by the chosen odds metric. Required params: `season`, `sort_by`. Optional: `as_of`, `region`, `min_odds`, `limit` |
-
-**`sort_by` values** (any `region_standings` odds column):
-
-*Seeding odds* — `odds_1st`, `odds_2nd`, `odds_3rd`, `odds_4th`, `odds_playoffs` and their `_weighted` variants
-
-*Bracket advancement* — `odds_second_round`, `odds_quarterfinals`, `odds_semifinals`, `odds_finals`, `odds_champion` and their `_weighted` variants
-
-*Home-game odds* — `odds_first_round_home`, `odds_second_round_home`, `odds_quarterfinals_home`, `odds_semifinals_home` and their `_weighted` variants
-
-**Optional params:**
-- `as_of` — use the most recent snapshot on or before this date (defaults to today)
-- `region` — restrict to one region within the class
-- `min_odds` — exclude teams with `sort_by` value ≤ this threshold (e.g. `0.001` drops eliminated teams)
-- `limit` — max teams returned; 1–200, default 25
-
-Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, and `sort_value` (the value of the ranked metric for that team).
-
-#### Hosting — `/hosting`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/{clazz}/{region}` | Playoff home-game odds per round (1st round through semifinals), computed on-demand from seeding odds + bracket format |
-| GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team |
-| POST | `/{clazz}/{region}/simulate` | Apply hypothetical results and return updated hosting odds |
-| POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |
-
-#### Bracket — `/bracket`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Advancement odds for every seed slot in a class. Params: `season`, `class`, `date` |
-| POST | `/simulate` | Apply hypothetical bracket results and return updated advancement odds |
-
-#### Games — `/games`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Game schedule; filter by `season`, `class`, `region`, `team`, `date_from`, `date_to` |
-| GET | `/probability` | Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location` |
-| POST | `/probability/live` | In-game win probability. Body: `pregame_prob`, `current_margin`, `seconds_remaining` |
-| POST | `/probability/overtime` | MSHAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
-
-Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinals"` — `null` for regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
-
-#### Ratings — `/ratings`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending. Without `as_of`: all stored snapshots for the season (one row per school per pipeline run). With `as_of`: one row per school — the most recent snapshot on or before that date. |
-| GET | `/{team}/trend` | Elo time-series for one team. Optional `date_from` / `date_to` |
-
-Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and `computed_at` (timestamp) for freshness tracking.
-
-#### Admin — `/admin`
-
-**Season setup**
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/playoff-format` | Seed `playoff_formats` + `playoff_format_slots` for a new season. Idempotent. `?dry_run=true` to preview counts without writing |
-| POST | `/championship-venue` | Set `location_id = neutral` on all Championship Game rows for a season. `?dry_run=true` to preview affected rows without writing |
-
-**Overrides** — the three base tables (`schools`, `games`, `locations`) each have an `overrides` JSONB column that wins over the pipeline-written value on read (via the `*_effective` views). Use these endpoints instead of raw SQL when you need to correct a pipeline error without touching the source data.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/overrides` | Audit all active manual overrides across schools, locations, and games |
-| PUT | `/schools/{school}/overrides` | Set one override field on a school. Body: `{ "field": "display_name", "value": "West Jones" }`. Valid fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude` |
-| DELETE | `/schools/{school}/overrides/{field}` | Clear one override field, restoring the pipeline-written value |
-| PUT | `/games/{school}/{date}/overrides` | Set one override field on a game row (e.g. fix a miscategorized region game or a wrong score). Valid fields: `location`, `location_id`, `points_for`, `points_against`, `region_game`, `round`, `kickoff_time` |
-| DELETE | `/games/{school}/{date}/overrides/{field}` | Clear one override field on a game row |
-| PUT | `/locations/{id}/overrides` | Set one override field on a venue. Valid fields: `home_team`, `latitude`, `longitude` |
-| DELETE | `/locations/{id}/overrides/{field}` | Clear one override field on a venue |
-
-**Games (manual-only columns)**
-
-| Method | Path | Description |
-|--------|------|-------------|
-| PUT | `/games/{school}/{date}/helmet` | Assign or clear the helmet design worn by `school` in a game. Body: `{ "helmet_design_id": 42 }` (or `null` to clear) |
-
-**School seasons**
-
-| Method | Path | Description |
-|--------|------|-------------|
-| PATCH | `/school-seasons/{school}/{season}` | Toggle `is_active` for a school in a season (pipeline never writes this column). Body: `{ "is_active": false }` |
-
-**Locations CRUD** — the pipeline never writes this table; venues are otherwise seeded by SQL only.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/locations` | List all venues (id, name, city, home_team); use to look up `location_id` for other admin calls |
-| POST | `/locations` | Add a new venue. Body: `name` (required), `city`, `home_team`, `latitude`, `longitude`. Returns full record including `id`. 409 on duplicate `(name, city, home_team)` |
-| PATCH | `/locations/{id}` | Partial update of any venue field. Only provided fields are written |
-
-**Helmet designs CRUD** — the pipeline never writes this table. Create a record first to get an `id`, then upload images via `POST /images/helmets/{id}/{type}`.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/helmets` | Create a new helmet design record. Body: `school` (required), `year_first_worn` (required), plus optional `year_last_worn`, `years_worn`, `color`, `finish`, `facemask_color`, `logo`, `stripe`, `tags`, `notes`. Returns full record including generated `id` |
-| PATCH | `/helmets/{id}` | Partial update of any metadata field (not image columns). Only provided fields are written |
-| DELETE | `/helmets/{id}` | Delete a helmet design. Any games referencing it have `helmet_design_id` set to NULL automatically |
-
-#### Images — `/images`
-
-Upload images to Cloudinary and write the resulting path back to the database. Returns `{ "path": "...", "url": "https://..." }`.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/logos/{school}/{logo_type}` | Upload a school logo (`primary`, `secondary`, or `tertiary`). Updates `schools.logo_{type}`. |
-| POST | `/helmets/{helmet_design_id}/{image_type}` | Upload a helmet image (`left`, `right`, or `photo`). Looks up school and year from the existing `helmet_designs` row, uploads to `helmets/{type}/{School}_{year}_{id}`, and updates the corresponding column. |
-
-#### Auth — `/auth`
-
-Authentication is handled by **Auth0**. Users log in via Auth0 and receive an RS256-signed JWT access token, which they pass as `Authorization: Bearer <token>` on every request. The API validates tokens against Auth0's JWKS endpoint and lazy-provisions a `users` row on first authenticated request.
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/verify-moderator` | Bearer (moderator+) | Internal endpoint called by nginx `auth_request` to gate the Prefect UI. Returns 200 for moderator/owner, 401/403 otherwise. Not shown in Swagger. |
-
-#### Users — `/users`
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/me` | Bearer | Own profile: display name, phone, hometown, favorite team, followed teams, attended game count. |
-| PATCH | `/me` | Bearer | Update display name, phone, hometown, or favorite team. |
-| GET | `/me/followed-teams` | Bearer | List followed school names. |
-| PUT | `/me/followed-teams/{school}` | Bearer | Follow a team (idempotent). 404 if school not found. |
-| DELETE | `/me/followed-teams/{school}` | Bearer | Unfollow. |
-| GET | `/me/attended-games` | Bearer | List attended games with opponent and result. |
-| PUT | `/me/attended-games/{school}/{date}` | Bearer | Mark a game as attended (idempotent). 404 if game not found. |
-| DELETE | `/me/attended-games/{school}/{date}` | Bearer | Remove attendance record. |
-| GET | `/me/submissions` | Bearer | List own submissions. |
-| GET | `/` | Owner | List all user accounts (admin view). |
-| PATCH | `/{user_id}/role` | Owner | Promote/demote to `user` or `moderator` (cannot set `owner`). |
-| PATCH | `/{user_id}/active` | Owner | Activate or deactivate an account. |
-
-#### Submissions — `/submissions`
-
-Open endpoints — no authentication required. Submissions enter a moderation queue with `status='pending'` and are not applied to the live database until approved via the moderation API.
-
-If a valid `Authorization: Bearer <token>` header is included, the submission is linked to the authenticated user (`user_id`). This is optional but enables future features like auto-approval for trusted contributors. Anonymous submissions are accepted normally with `user_id=NULL`.
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/logos` | optional Bearer | Submit a school logo for moderator review. Multipart: `school`, `logo_type` (`primary`/`secondary`/`tertiary`), `file`. Image is staged on Cloudinary and promoted to production on approval. 404 if school not found. |
-| POST | `/helmets` | optional Bearer | Submit a helmet design for moderator review. Multipart: `school`, `year_first_worn`, `description`, plus optional metadata fields and up to 5 reference images (`images`) and an optional logo image (`logo_image`). Moderator creates the helmet record manually from the submitted info. 404 if school not found. |
-| POST | `/colors` | optional Bearer | Submit a school color correction. Body: `school`, optional `primary_color` `{name, hex}`, optional `secondary_colors` array. Auto-applied on approval via `set_school_override`. 404 if school not found. |
-| POST | `/locations` | optional Bearer | Submit corrected GPS coordinates for a school. Body: `school`, `latitude`, `longitude`. Auto-applied on approval via `set_school_override`. 404 if school not found. |
-| POST | `/scores` | optional Bearer | Submit a corrected game score. Body: `school`, `date`, `points_for`, `points_against`. Both the school and the game row must already exist. Auto-applied on approval via `set_game_override`. 404 if school or game not found. |
-| POST | `/feedback` | optional Bearer | Submit general feedback (no school required). Body: `subject`, `message`. No DB action is taken on approval. |
-
-#### Moderation — `/moderation`
-
-Requires a valid `Authorization: Bearer <token>` header with `moderator` or `owner` role.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/submissions` | List submissions. Optional query params: `type` (`logo`/`helmet`/`colors`/`location`/`score`/`feedback`), `status_filter` (`pending`/`approved`/`rejected`), `limit` (default 50), `offset` |
-| GET | `/submissions/{id}` | Get a single submission with its full payload. 404 if not found. |
-| POST | `/submissions/{id}/approve` | Approve a pending submission and auto-apply it to the live database. Optional body: `{ "notes": "..." }`. 404 if not found; 409 if already reviewed. |
-| POST | `/submissions/{id}/reject` | Reject a pending submission. No changes are applied to the database. Optional body: `{ "notes": "..." }`. 404 if not found; 409 if already reviewed. |
+Copyright © 2025–2026 Paul Sullivan. All rights reserved. This software is proprietary and confidential — see [LICENSE](LICENSE).
