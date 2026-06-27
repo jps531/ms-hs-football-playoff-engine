@@ -1086,29 +1086,50 @@ def get_region_finish_scenarios(
             key_insights=insights,
         )
     elif R <= _R_BACKGROUND_MAX:
-        # Win/loss-only first for fast initial display; schedule margin upgrade.
-        precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
-        scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed_wl)
-        complete_scenarios = enumerate_division_scenarios(
-            teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
-        )
-        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
-        write_region_scenarios.fn(
-            clazz,
-            region,
-            season,
-            as_of_date=run_date,
-            remaining=remaining,
-            scenario_atoms=scenario_atoms,
-            complete_scenarios=complete_scenarios,
-            r_remaining=R,
-            margin_sensitive=False,
-            margin_compute_status="pending",
-            key_insights=insights,
-        )
-        # Submit background upgrade — runs full margin enumeration asynchronously.
-        # Skipped in backfill mode (historical data is already final).
-        if not is_backfill:
+        if is_backfill:
+            # Historical: run full margin enumeration synchronously so the stored state
+            # matches the terminal state of a live season (margin_sensitive=True, status=complete).
+            precomputed = enumerate_outcomes(teams, completed, remaining)
+            scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed)
+            complete_scenarios = enumerate_division_scenarios(
+                teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed
+            )
+            insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
+            write_region_scenarios.fn(
+                clazz,
+                region,
+                season,
+                as_of_date=run_date,
+                remaining=remaining,
+                scenario_atoms=scenario_atoms,
+                complete_scenarios=complete_scenarios,
+                r_remaining=R,
+                margin_sensitive=True,
+                margin_compute_status="complete",
+                margin_computed_at_now=True,
+                key_insights=insights,
+            )
+        else:
+            # Live: win/loss-only first for fast initial display; upgrade margins in background.
+            precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
+            scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed_wl)
+            complete_scenarios = enumerate_division_scenarios(
+                teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
+            )
+            insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
+            write_region_scenarios.fn(
+                clazz,
+                region,
+                season,
+                as_of_date=run_date,
+                remaining=remaining,
+                scenario_atoms=scenario_atoms,
+                complete_scenarios=complete_scenarios,
+                r_remaining=R,
+                margin_sensitive=False,
+                margin_compute_status="pending",
+                key_insights=insights,
+            )
             upgrade_region_scenarios.submit(
                 clazz,
                 region,

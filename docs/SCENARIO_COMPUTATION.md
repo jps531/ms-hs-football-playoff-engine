@@ -52,7 +52,7 @@ During the window between Phase 1 and Phase 2 completing, the stored data is mar
 - **Timeout:** Stop polling after 10 minutes. If the upgrade hasn't resolved by then it has failed silently; the next scheduled pipeline run will overwrite the snapshot. Do not poll indefinitely.
 - **On timeout:** Render a static "Margin tiebreakers not yet available" message rather than an infinite spinner.
 
-Historical backfill skips Phase 2 — past data is final, so win/loss-only is used for those snapshots.
+Historical backfill skips the two-phase split entirely: it runs the full `12^R` margin enumeration synchronously (same computation as Phase 2) and writes `margin_sensitive=True, margin_compute_status="complete"` directly. This makes backfilled snapshots identical to the terminal state of a live season snapshot at the same R.
 
 ### R 7–10 — Win/loss enumeration, no margin
 

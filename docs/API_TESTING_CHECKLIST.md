@@ -6,16 +6,16 @@ Use these checks in the Swagger UI after seeding a full season to verify data in
 
 ## Standings (`GET /api/v1/standings/{clazz}/{region}`)
 
-**1. Final-week odds should be 0.0 or 1.0 for all teams**
+**1. Final-week odds should be 0.0 or 1.0 for all teams** ✅
 Pick any class/region after the final regular-season date — every team should be either `clinched: true` or `eliminated: true`, and all four odds fields should be exactly `0.0` or `1.0`. If you see fractional odds at the final date, the pipeline didn't finish running.
 
-**2. Odds sum to ≤ 1.0 per position**
+**2. Odds sum to ≤ 1.0 per position** ✅
 The sum of `odds_1st` across all teams should be ≤ 1.0 (exactly 1.0 when no team is eliminated yet, possibly less once some are). Same for 2nd/3rd/4th.
 
-**3. Time-travel consistency with `?date=`**
+**3. Time-travel consistency with `?date=`** ✅
 Hit the same region with `?date=YYYY-10-10` (mid-season), `?date=YYYY-10-24` (late season), and no date. Odds should move from fractional → sparser → binary. If mid-season returns the same binary result as end-of-season, the snapshot lookup is broken.
 
-**4. `scenarios_available` flips at the right threshold**
+**4. `scenarios_available` flips at the right threshold** ⏳
 Early in the season (e.g. `?date=YYYY-09-12`), `scenarios_available` should be `false` (too many remaining games). Around the final 2 weeks it should flip to `true` with an actual `scenarios` list populated with `game_winners`, `tiebreaker_groups`, `coinflip_groups`, and `outcomes`.
 
 **4a. Weighted seeding odds are present and plausible**
