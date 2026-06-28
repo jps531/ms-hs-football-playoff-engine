@@ -14,6 +14,8 @@ The engine produces three distinct things for each class/region/date snapshot:
 
 3. **Key insights** — simple, unconditionally-true conditional statements extracted from `scenario_atoms` (e.g., "Taylorsville clinches 1st seed: Taylorsville beats Stringer" or "Murrah is eliminated: Starkville beats Terry"). Each insight has 1–3 `GameResult` conditions and is margin-verified before storage. Stored at all tiers where atoms exist (R ≤ 10). Shown at all R values: as a headlines banner at R ≤ 6 alongside the full scenario list, and as the only scenario-level content at R 7–10.
 
+> **Note on margin accuracy at R = 6:** At R = 6, scenarios and insights are win/loss-only (no margin conditions). Full margin-sensitive computation is bounded at R ≤ 5 due to the memory cost of 12^6 enumeration at backfill scale.
+
 ---
 
 ## R: Remaining Region Games
@@ -27,34 +29,15 @@ The engine produces three distinct things for each class/region/date snapshot:
 
 ## Computation Tiers
 
-### R ≤ 4 — Full margin-sensitive computation
+### R ≤ 5 — Full margin-sensitive computation
 
 The engine runs the complete `12^R × 2^R` enumeration: every possible win/loss combination AND every possible point margin combination for each outcome. This produces exact, margin-aware scenario atoms and complete scenarios.
 
 Both `scenario_atoms` and `complete_scenarios` are stored and are eligible for UI display (subject to the display threshold below).
 
-**Why the full enumeration is feasible here:** R ≤ 4 means at most `12^4 × 2^4 = 248,832` combinations — runs in well under a second.
+**Why the full enumeration is feasible here:** R ≤ 5 means at most `12^5 × 2^5 = ~8M` combinations — runs in a few seconds. `_is_margin_sensitive_mask()` skips the 12^R inner loop for masks where margin doesn't affect tiebreakers, so actual runtime is typically well under this ceiling.
 
-### R 5–6 — Win/loss first, margin upgrade in background
-
-With R = 5 or 6, the full `12^R` margin enumeration is slower (~seconds). The engine uses a two-phase approach:
-
-1. **Phase 1 (synchronous):** Enumerate all 2^R win/loss outcomes without margin sensitivity. Write `scenario_atoms` and `complete_scenarios` to the DB immediately so the API can serve them.
-2. **Phase 2 (background task):** Run the full `12^R` margin enumeration and overwrite with the margin-accurate version.
-
-During the window between Phase 1 and Phase 2 completing, the stored data is marked `margin_compute_status = "pending"`. The API surfaces this via `computation_state.margin_compute_status` in every standings response.
-
-#### Polling contract for `margin_compute_status = "pending"`
-
-- **Endpoint:** `GET /api/v1/standings/{clazz}/{region}` — inspect `computation_state.margin_compute_status`.
-- **Poll interval:** 30 seconds. The background upgrade typically completes in 10–60 seconds; faster polling wastes requests without reducing latency.
-- **Terminal states (stop polling):** `complete`, `not_needed`, `skipped` — the value is final, do not poll again for this snapshot.
-- **Timeout:** Stop polling after 10 minutes. If the upgrade hasn't resolved by then it has failed silently; the next scheduled pipeline run will overwrite the snapshot. Do not poll indefinitely.
-- **On timeout:** Render a static "Margin tiebreakers not yet available" message rather than an infinite spinner.
-
-Historical backfill skips the two-phase split entirely: it runs the full `12^R` margin enumeration synchronously (same computation as Phase 2) and writes `margin_sensitive=True, margin_compute_status="complete"` directly. This makes backfilled snapshots identical to the terminal state of a live season snapshot at the same R.
-
-### R 7–10 — Win/loss enumeration, no margin
+### R 6–10 — Win/loss enumeration, no margin
 
 Margin sensitivity is skipped entirely. All 2^R outcomes are enumerated once at a fixed default margin. `scenario_atoms` and `complete_scenarios` are stored.
 
@@ -82,7 +65,7 @@ The engine switches to **Monte Carlo sampling** (50,000 draws). Each sample draw
 
 Even though scenario data is stored for R ≤ 15, the frontend only **renders the human-readable scenario list** when **R ≤ 6** (approximately the final two weeks of region play for every 2025 region).
 
-At R ≤ 6, the engine guarantees full margin accuracy (synchronously for R ≤ 4, after background upgrade for R = 5–6). Scenarios at this range are compact and actionable: at most 64 distinct outcomes for a 6-game remaining window.
+At R ≤ 5, the engine guarantees full margin accuracy synchronously. At R = 6, scenarios are win/loss-only (no margin conditions) but are still compact and actionable: at most 64 distinct outcomes for a 6-game remaining window.
 
 At R > 6, the number of distinct outcomes and conditions grows too large to present readably. The frontend shows seeding odds (always available) and key insights (when atoms exist, R ≤ 10), but omits the full scenario list.
 
@@ -95,9 +78,8 @@ At R > 6, the number of distinct outcomes and conditions grows too large to pres
 | Remaining games (R) | Odds method | Atoms stored | Complete scenarios stored | Key insights stored | Shown in UI |
 |---|---|---|---|---|---|
 | 0 | Exact (1 outcome) | Yes | Yes | Yes (facts only) | Yes |
-| 1–4 | Exact (2^R × 12^R) | Yes, margin-accurate | Yes | Yes, margin-accurate | Yes |
-| 5–6 | Exact (2^R, margin upgraded in background) | Yes | Yes | Yes | Yes |
-| 7–10 | Exact (2^R, no margin) | Yes, win/loss only | Yes | Yes, 12^k verified | Key insights only |
+| 1–5 | Exact (2^R × 12^R) | Yes, margin-accurate | Yes | Yes, margin-accurate | Yes |
+| 6–10 | Exact (2^R, no margin) | Yes, win/loss only | Yes | Yes, 12^k verified | Yes (R=6), Key insights only (R 7–10) |
 | 11–15 | Exact (2^R, no margin) | Empty (QMC limit) | Yes, flat | Empty | No |
 | > 15 | Monte Carlo, 50K samples, Elo-weighted | Empty | Empty | Empty | No |
 
@@ -106,8 +88,7 @@ At R > 6, the number of distinct outcomes and conditions grows too large to pres
 ## Relevant constants in `region_scenarios_pipeline.py`
 
 ```python
-_R_ALWAYS_MARGIN = 4   # R ≤ this: full 12^R margin enumeration, synchronous
-_R_BACKGROUND_MAX = 6  # R ≤ this (> _R_ALWAYS_MARGIN): win/loss first, margin upgraded async
+_R_ALWAYS_MARGIN = 5   # R ≤ this: full 12^R margin enumeration, synchronous
 _R_MAX_COMPUTE = 15    # R > this: Monte Carlo odds only, skip all scenario enumeration
 ```
 
