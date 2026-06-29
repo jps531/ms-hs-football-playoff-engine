@@ -15,29 +15,29 @@ The sum of `odds_1st` across all teams should be ≤ 1.0 (exactly 1.0 when no te
 **3. Time-travel consistency with `?date=`** ✅
 Hit the same region with `?date=YYYY-10-10` (mid-season), `?date=YYYY-10-24` (late season), and no date. Odds should move from fractional → sparser → binary. If mid-season returns the same binary result as end-of-season, the snapshot lookup is broken.
 
-**4. `scenarios_available` flips at the right threshold** ⏳
+**4. `scenarios_available` flips at the right threshold** ✅
 Early in the season (e.g. `?date=YYYY-09-12`), `scenarios_available` should be `false` (too many remaining games). Around the final 2 weeks it should flip to `true` with an actual `scenarios` list populated with `game_winners`, `tiebreaker_groups`, `coinflip_groups`, and `outcomes`.
 
-**4a. Weighted seeding odds are present and plausible**
+**4a. Weighted seeding odds are present and plausible** ✅
 Each team in `teams[].odds` should have `p1_weighted`, `p2_weighted`, `p3_weighted`, `p4_weighted`, and `p_playoffs_weighted` alongside the unweighted values. The weighted odds will differ from unweighted when margin-sensitive computation has run (they should be close but not identical). All weighted odds should sum to ≤ 1.0 across teams per position.
 
-**4b. Bracket advancement odds are populated**
+**4b. Bracket advancement odds are populated** ✅
 Each team in `teams[].bracket_odds` should have `second_round` through `champion` (unweighted and weighted). For a clinched 1-seed, `second_round` should be ≥ 0.9. For an eliminated team, all bracket odds should be `0.0`.
 
-**4c. Home game odds are populated**
+**4c. Home game odds are populated** ✅
 Each team in `teams[].home_game_odds` should have `first_round` through `semifinals` (unweighted and weighted). The 1-seed's `first_round` should be `1.0` once clinched.
 
-**4d. `computation_state` reflects pipeline status**
+**4d. `computation_state` reflects pipeline status** ✅
 The response should include a `computation_state` object with `margin_sensitive` (boolean) and `margin_compute_status` (string: `not_needed`, `pending`, `running`, `complete`, or `skipped`). When `margin_sensitive` is `false` and `margin_compute_status` is `pending`, the UI should indicate that odds are being refined.
 
 ---
 
 ## Games (`GET /api/v1/games`)
 
-**5. Game count sanity**
+**5. Game count sanity** ✅
 `GET /api/v1/games?season=YYYY&class=7&region=3` — count the returned games. A typical 7-team region plays 6 games each, so ~21 unique matchups total. Fewer than expected means some scraping missed a week.
 
-**6. No duplicate games**
+**6. No duplicate games** ✅
 Each game should appear exactly once. If you see the same matchup twice on the same date, the dedup logic has a bug.
 
 **7. All completed games have `status = "Final"` and `final: true`**

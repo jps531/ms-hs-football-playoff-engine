@@ -107,8 +107,8 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str, cl
         date = f"{mon:02d}/{day:02d}/{season}"
 
         opponent = get_school_name_from_ahsfhs(m.group("opp").strip())
-        if opponent.lower() == "open":
-            continue  # skip OPEN weeks
+        if opponent.lower().startswith("open"):
+            continue  # skip OPEN weeks (handles "OPEN", "OPEN Playoffs", etc.)
 
         raw_res = m.group("res")
         result = None
