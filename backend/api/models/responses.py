@@ -283,6 +283,8 @@ class RoundHostingOdds(BaseModel):
 
     conditional: float | None
     marginal: float | None
+    conditional_weighted: float | None = None
+    marginal_weighted: float | None = None
 
 
 class TeamHostingEntry(BaseModel):

@@ -65,6 +65,16 @@ Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, an
 | POST | `/{clazz}/{region}/simulate` | Apply hypothetical results and return updated hosting odds |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |
 
+**Response fields per team** (`teams[]`):
+
+Each team has four round entries (`first_round`, `second_round`, `quarterfinals`, `semifinals`), each with:
+- `conditional` — P(hosts round | reaches round). `null` if the team cannot reach this round.
+- `marginal` — P(hosts round) = conditional × P(reaches round).
+- `conditional_weighted` — Elo-weighted version of `conditional`. `null` if the team cannot reach this round.
+- `marginal_weighted` — Elo-weighted version of `marginal`.
+
+For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` is always `null` (teams go directly to quarterfinals). The simulate endpoint does not return weighted fields (`null`).
+
 ## Bracket — `/bracket`
 
 | Method | Path | Description |

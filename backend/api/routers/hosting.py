@@ -46,13 +46,19 @@ async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:
 
 async def _load_region_odds(
     conn, season: int, clazz: int, region: int, as_of: date
-) -> tuple[dict[str, StandingsOdds], dict[str, float]] | None:
-    """Return (StandingsOdds per team, R1 home conditional per team) from the most recent snapshot on or before *as_of*."""
+) -> tuple[dict[str, StandingsOdds], dict[str, float], dict[str, tuple[float, float, float, float]]] | None:
+    """Return (StandingsOdds per team, R1 home conditional per team, weighted home conditionals per team).
+
+    Weighted tuple order: (r1_cond_w, r2_cond_w, qf_cond_w, sf_cond_w) — all conditional probabilities.
+    """
     rows = await conn.execute(
         """
         SELECT DISTINCT ON (school)
             school, odds_1st, odds_2nd, odds_3rd, odds_4th, odds_playoffs,
-            odds_playoffs, clinched, eliminated, odds_first_round_home
+            odds_playoffs, clinched, eliminated,
+            odds_first_round_home,
+            odds_first_round_home_weighted, odds_second_round_home_weighted,
+            odds_quarterfinals_home_weighted, odds_semifinals_home_weighted
         FROM region_standings
         WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
         ORDER BY school, as_of_date DESC
@@ -61,6 +67,7 @@ async def _load_region_odds(
     )
     result: dict[str, StandingsOdds] = {}
     r1_home_cond: dict[str, float] = {}
+    weighted_home_cond: dict[str, tuple[float, float, float, float]] = {}
     async for r in rows:
         result[r[0]] = StandingsOdds(
             school=r[0],
@@ -74,7 +81,8 @@ async def _load_region_odds(
             eliminated=r[8],
         )
         r1_home_cond[r[0]] = r[9]
-    return (result, r1_home_cond) if result else None
+        weighted_home_cond[r[0]] = (r[10], r[11], r[12], r[13])
+    return (result, r1_home_cond, weighted_home_cond) if result else None
 
 
 @router.get("/hosting/{clazz}/{region}", responses=_404)
@@ -90,12 +98,16 @@ async def get_hosting(
         loaded = await _load_region_odds(conn, season, clazz, region, as_of)
         if loaded is None:
             raise HTTPException(status_code=404, detail=f"No data for {clazz}A Region {region} season {season}")
-        region_odds, r1_home_cond = loaded
+        region_odds, r1_home_cond, weighted_home_cond = loaded
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
 
-    entries = build_hosting_entries(region_odds, slots, region, season, clazz, first_round_home_cond=r1_home_cond)
+    entries = build_hosting_entries(
+        region_odds, slots, region, season, clazz,
+        first_round_home_cond=r1_home_cond,
+        weighted_home_cond=weighted_home_cond,
+    )
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 
