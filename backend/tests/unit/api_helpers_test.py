@@ -846,11 +846,14 @@ class TestBuildHostingEntries:
             assert entry.second_round.conditional is None
             assert entry.second_round.marginal is None
 
-    def test_5a_7a_first_round_conditional_is_one(self):
-        """First-round conditional is always 1.0 (every playoff team hosts round 1)."""
+    def test_5a_7a_first_round_conditional(self):
+        """Seeds 1 and 2 host R1 (conditional=1.0); seeds 3 and 4 play away (conditional=0.0)."""
         result = build_hosting_entries(_REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5)
-        for entry in result:
-            assert entry.first_round.conditional == pytest.approx(1.0)
+        by_school = {e.school: e for e in result}
+        assert by_school["Alpha"].first_round.conditional == pytest.approx(1.0)  # seed 1 — home
+        assert by_school["Beta"].first_round.conditional == pytest.approx(1.0)   # seed 2 — home
+        assert by_school["Gamma"].first_round.conditional == pytest.approx(0.0)  # seed 3 — away
+        assert by_school["Delta"].first_round.conditional == pytest.approx(0.0)  # seed 4 — away
 
     def test_1a_4a_returns_entry_per_team(self):
         """One entry per team in region_odds for 1A–4A."""
@@ -864,11 +867,14 @@ class TestBuildHostingEntries:
         able = next(e for e in result if e.school == "Able")
         assert able.second_round.marginal is not None
 
-    def test_1a_4a_first_round_conditional_is_one(self):
-        """First-round conditional is always 1.0 for 1A–4A teams too."""
+    def test_1a_4a_first_round_conditional(self):
+        """Seeds 1 and 2 host R1 (conditional=1.0); seeds 3 and 4 play away (conditional=0.0)."""
         result = build_hosting_entries(_REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1)
-        for entry in result:
-            assert entry.first_round.conditional == pytest.approx(1.0)
+        by_school = {e.school: e for e in result}
+        assert by_school["Able"].first_round.conditional == pytest.approx(1.0)   # seed 1 — home
+        assert by_school["Baker"].first_round.conditional == pytest.approx(1.0)  # seed 2 — home
+        assert by_school["Camp"].first_round.conditional == pytest.approx(0.0)   # seed 3 — away
+        assert by_school["Dog"].first_round.conditional == pytest.approx(0.0)    # seed 4 — away
 
     def test_zero_advancement_gives_none_conditional(self):
         """When p_r1_adv == 0 (no seed probability), second_round conditional is None."""

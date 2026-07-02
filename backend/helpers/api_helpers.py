@@ -317,82 +317,122 @@ def build_hosting_entries(
     region: int,
     season: int,
     clazz: int,
-    first_round_home_cond: dict[str, float] | None = None,
-    weighted_home_cond: dict[str, tuple[float, float, float, float]] | None = None,
+    home_cond: dict[str, tuple[float, float, float, float]] | None = None,
+    home_cond_w: dict[str, tuple[float, float, float, float]] | None = None,
+    stored_adv: dict[str, tuple[float, float, float, float]] | None = None,
+    stored_adv_w: dict[str, tuple[float, float, float, float]] | None = None,
 ) -> list[TeamHostingEntry]:
     """Compute per-round playoff hosting odds for all teams in a region.
 
-    1A–4A have four hosting rounds (first round, second round, quarterfinals,
-    semifinals).  5A–7A have three (first round IS the quarterfinal; ``second_round``
-    is returned with ``None`` odds).
+    When *home_cond* and *stored_adv* are provided (GET endpoint), values are
+    read directly from the DB snapshot — this correctly reflects rounds already
+    played and advancement probabilities after each playoff round.
+
+    When not provided (simulate endpoint, unit tests), falls back to on-the-fly
+    computation from seeding odds.  R1 conditional is 0.0 in the fallback path
+    since home-seed data is not available without a DB lookup.
+
+    1A–4A have four hosting rounds; 5A–7A skip ``second_round`` (null).
+
+    Tuple layout for *home_cond*, *home_cond_w*, *stored_adv*, *stored_adv_w*:
+        index 0 → R1 / p_playoffs
+        index 1 → R2 / odds_second_round
+        index 2 → QF / odds_quarterfinals
+        index 3 → SF / odds_semifinals
     """
     is_1a_4a = clazz <= 4
-    adv_odds = compute_bracket_advancement_odds(region, region_odds, slots)
-    qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season)
-    sf_home = compute_semifinal_home_odds(region, region_odds, slots, season)
+    use_stored = home_cond is not None and stored_adv is not None
+
+    if not use_stored:
+        adv_odds = compute_bracket_advancement_odds(region, region_odds, slots)
+        qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season)
+        sf_home = compute_semifinal_home_odds(region, region_odds, slots, season)
+        r2_home_dict = compute_second_round_home_odds(region, region_odds, slots, season) if is_1a_4a else {}
+        r1_home_seeds = {s.home_seed for s in slots if s.home_region == region}
 
     entries = []
-    r2_home_dict = compute_second_round_home_odds(region, region_odds, slots, season) if is_1a_4a else {}
     for school, o in region_odds.items():
-        adv = adv_odds.get(school)
-        p_qf_cond = qf_home.get(school, 0.0)
-        p_sf_cond = sf_home.get(school, 0.0)
-        w = (weighted_home_cond or {}).get(school, (0.0, 0.0, 0.0, 0.0))
-        r1_cond_w, r2_cond_w, qf_cond_w, sf_cond_w = w
+        if use_stored:
+            r1_c, r2_c, qf_c, sf_c = home_cond.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]
+            a_r1, a_r2, a_qf, a_sf = stored_adv.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]
+            r1_c_w, r2_c_w, qf_c_w, sf_c_w = (home_cond_w or {}).get(school, (0.0, 0.0, 0.0, 0.0))
+            a_r1_w, a_r2_w, a_qf_w, a_sf_w = (stored_adv_w or {}).get(school, (0.0, 0.0, 0.0, 0.0))
 
-        if is_1a_4a:
-            p_r2_cond = r2_home_dict.get(school, 0.0)
-            p_r1_adv = adv.second_round if adv else 0.0
-            p_r2_adv = adv.quarterfinals if adv else 0.0
-            p_qf_adv = adv.semifinals if adv else 0.0
-            r1_cond = (first_round_home_cond or {}).get(school, 0.0)
+            r1_gate = o.p_playoffs > 0 or o.clinched
             r1_odds = RoundHostingOdds(
-                conditional=r1_cond if o.p_playoffs > 0 else None,
-                marginal=marginal_home_odds(r1_cond, o.p_playoffs),
-                conditional_weighted=r1_cond_w if o.p_playoffs > 0 else None,
-                marginal_weighted=r1_cond_w * o.p_playoffs,
+                conditional=r1_c if r1_gate else None,
+                marginal=r1_c * a_r1,
+                conditional_weighted=r1_c_w if r1_gate else None,
+                marginal_weighted=r1_c_w * a_r1_w,
             )
-            r2_odds = RoundHostingOdds(
-                conditional=p_r2_cond / p_r1_adv if p_r1_adv > 0 else None,
-                marginal=p_r2_cond if p_r1_adv > 0 else 0.0,
-                conditional_weighted=r2_cond_w if p_r1_adv > 0 else None,
-                marginal_weighted=r2_cond_w * p_r1_adv if p_r1_adv > 0 else 0.0,
-            )
+            if is_1a_4a:
+                r2_odds = RoundHostingOdds(
+                    conditional=r2_c if a_r2 > 0 else None,
+                    marginal=r2_c * a_r2,
+                    conditional_weighted=r2_c_w if a_r2 > 0 else None,
+                    marginal_weighted=r2_c_w * a_r2_w,
+                )
+            else:
+                r2_odds = RoundHostingOdds(conditional=None, marginal=None)
             qf_odds = RoundHostingOdds(
-                conditional=p_qf_cond / p_r2_adv if p_r2_adv > 0 else None,
-                marginal=p_qf_cond if p_r2_adv > 0 else 0.0,
-                conditional_weighted=qf_cond_w if p_r2_adv > 0 else None,
-                marginal_weighted=qf_cond_w * p_r2_adv if p_r2_adv > 0 else 0.0,
+                conditional=qf_c if a_qf > 0 else None,
+                marginal=qf_c * a_qf,
+                conditional_weighted=qf_c_w if a_qf > 0 else None,
+                marginal_weighted=qf_c_w * a_qf_w,
             )
             sf_odds = RoundHostingOdds(
-                conditional=p_sf_cond / p_qf_adv if p_qf_adv > 0 else None,
-                marginal=p_sf_cond if p_qf_adv > 0 else 0.0,
-                conditional_weighted=sf_cond_w if p_qf_adv > 0 else None,
-                marginal_weighted=sf_cond_w * p_qf_adv if p_qf_adv > 0 else 0.0,
+                conditional=sf_c if a_sf > 0 else None,
+                marginal=sf_c * a_sf,
+                conditional_weighted=sf_c_w if a_sf > 0 else None,
+                marginal_weighted=sf_c_w * a_sf_w,
             )
         else:
-            p_qf_adv = adv.quarterfinals if adv else 0.0
-            p_sf_adv = adv.semifinals if adv else 0.0
-            r1_cond = (first_round_home_cond or {}).get(school, 0.0)
-            r1_odds = RoundHostingOdds(
-                conditional=r1_cond if o.p_playoffs > 0 else None,
-                marginal=marginal_home_odds(r1_cond, o.p_playoffs),
-                conditional_weighted=r1_cond_w if o.p_playoffs > 0 else None,
-                marginal_weighted=r1_cond_w * o.p_playoffs,
+            # On-the-fly fallback (simulate endpoint / unit tests).
+            adv = adv_odds.get(school)  # type: ignore[possibly-undefined]
+            p_qf_cond = qf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
+            p_sf_cond = sf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
+
+            r1_cond = sum(
+                getattr(o, f"p{seed}") * (1.0 if seed in r1_home_seeds else 0.0)  # type: ignore[possibly-undefined]
+                for seed in (1, 2, 3, 4)
             )
-            r2_odds = RoundHostingOdds(conditional=None, marginal=None)
-            qf_odds = RoundHostingOdds(
-                conditional=p_qf_cond / p_qf_adv if p_qf_adv > 0 else None,
-                marginal=p_qf_cond if p_qf_adv > 0 else 0.0,
-                conditional_weighted=qf_cond_w if p_qf_adv > 0 else None,
-                marginal_weighted=qf_cond_w * p_qf_adv if p_qf_adv > 0 else 0.0,
-            )
-            sf_odds = RoundHostingOdds(
-                conditional=p_sf_cond / p_sf_adv if p_sf_adv > 0 else None,
-                marginal=p_sf_cond if p_sf_adv > 0 else 0.0,
-                conditional_weighted=sf_cond_w if p_sf_adv > 0 else None,
-                marginal_weighted=sf_cond_w * p_sf_adv if p_sf_adv > 0 else 0.0,
-            )
+            if is_1a_4a:
+                p_r2_cond = r2_home_dict.get(school, 0.0)  # type: ignore[possibly-undefined]
+                p_r1_adv = adv.second_round if adv else 0.0
+                p_r2_adv = adv.quarterfinals if adv else 0.0
+                p_qf_adv = adv.semifinals if adv else 0.0
+                r1_odds = RoundHostingOdds(
+                    conditional=r1_cond if o.p_playoffs > 0 else None,
+                    marginal=marginal_home_odds(r1_cond, o.p_playoffs),
+                )
+                r2_odds = RoundHostingOdds(
+                    conditional=p_r2_cond / p_r1_adv if p_r1_adv > 0 else None,
+                    marginal=p_r2_cond if p_r1_adv > 0 else 0.0,
+                )
+                qf_odds = RoundHostingOdds(
+                    conditional=p_qf_cond / p_r2_adv if p_r2_adv > 0 else None,
+                    marginal=p_qf_cond if p_r2_adv > 0 else 0.0,
+                )
+                sf_odds = RoundHostingOdds(
+                    conditional=p_sf_cond / p_qf_adv if p_qf_adv > 0 else None,
+                    marginal=p_sf_cond if p_qf_adv > 0 else 0.0,
+                )
+            else:
+                p_qf_adv = adv.quarterfinals if adv else 0.0
+                p_sf_adv = adv.semifinals if adv else 0.0
+                r1_odds = RoundHostingOdds(
+                    conditional=r1_cond if o.p_playoffs > 0 else None,
+                    marginal=marginal_home_odds(r1_cond, o.p_playoffs),
+                )
+                r2_odds = RoundHostingOdds(conditional=None, marginal=None)
+                qf_odds = RoundHostingOdds(
+                    conditional=p_qf_cond / p_qf_adv if p_qf_adv > 0 else None,
+                    marginal=p_qf_cond if p_qf_adv > 0 else 0.0,
+                )
+                sf_odds = RoundHostingOdds(
+                    conditional=p_sf_cond / p_sf_adv if p_sf_adv > 0 else None,
+                    marginal=p_sf_cond if p_sf_adv > 0 else 0.0,
+                )
         entries.append(
             TeamHostingEntry(
                 school=school,

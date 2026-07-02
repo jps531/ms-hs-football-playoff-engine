@@ -46,19 +46,26 @@ async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:
 
 async def _load_region_odds(
     conn, season: int, clazz: int, region: int, as_of: date
-) -> tuple[dict[str, StandingsOdds], dict[str, float], dict[str, tuple[float, float, float, float]]] | None:
-    """Return (StandingsOdds per team, R1 home conditional per team, weighted home conditionals per team).
-
-    Weighted tuple order: (r1_cond_w, r2_cond_w, qf_cond_w, sf_cond_w) — all conditional probabilities.
-    """
+) -> tuple[
+    dict[str, StandingsOdds],
+    dict[str, tuple[float, float, float, float]],   # home_cond (r1, r2, qf, sf)
+    dict[str, tuple[float, float, float, float]],   # home_cond_w (r1, r2, qf, sf)
+    dict[str, tuple[float, float, float, float]],   # adv (r1=p_playoffs, r2, qf, sf)
+    dict[str, tuple[float, float, float, float]],   # adv_w
+] | None:
+    """Load per-team seeding odds, home conditionals, and bracket advancement from the most recent snapshot."""
     rows = await conn.execute(
         """
         SELECT DISTINCT ON (school)
             school, odds_1st, odds_2nd, odds_3rd, odds_4th, odds_playoffs,
             odds_playoffs, clinched, eliminated,
-            odds_first_round_home,
+            odds_first_round_home, odds_second_round_home,
+            odds_quarterfinals_home, odds_semifinals_home,
             odds_first_round_home_weighted, odds_second_round_home_weighted,
-            odds_quarterfinals_home_weighted, odds_semifinals_home_weighted
+            odds_quarterfinals_home_weighted, odds_semifinals_home_weighted,
+            odds_playoffs, odds_second_round, odds_quarterfinals, odds_semifinals,
+            odds_playoffs_weighted, odds_second_round_weighted,
+            odds_quarterfinals_weighted, odds_semifinals_weighted
         FROM region_standings
         WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
         ORDER BY school, as_of_date DESC
@@ -66,8 +73,10 @@ async def _load_region_odds(
         (season, clazz, region, as_of),
     )
     result: dict[str, StandingsOdds] = {}
-    r1_home_cond: dict[str, float] = {}
-    weighted_home_cond: dict[str, tuple[float, float, float, float]] = {}
+    home_cond: dict[str, tuple[float, float, float, float]] = {}
+    home_cond_w: dict[str, tuple[float, float, float, float]] = {}
+    adv: dict[str, tuple[float, float, float, float]] = {}
+    adv_w: dict[str, tuple[float, float, float, float]] = {}
     async for r in rows:
         result[r[0]] = StandingsOdds(
             school=r[0],
@@ -80,9 +89,11 @@ async def _load_region_odds(
             clinched=r[7],
             eliminated=r[8],
         )
-        r1_home_cond[r[0]] = r[9]
-        weighted_home_cond[r[0]] = (r[10], r[11], r[12], r[13])
-    return (result, r1_home_cond, weighted_home_cond) if result else None
+        home_cond[r[0]] = (r[9], r[10], r[11], r[12])    # r1, r2, qf, sf conditionals
+        home_cond_w[r[0]] = (r[13], r[14], r[15], r[16]) # weighted
+        adv[r[0]] = (r[17], r[18], r[19], r[20])          # p_playoffs, r2, qf, sf advancement
+        adv_w[r[0]] = (r[21], r[22], r[23], r[24])        # weighted advancement
+    return (result, home_cond, home_cond_w, adv, adv_w) if result else None
 
 
 @router.get("/hosting/{clazz}/{region}", responses=_404)
@@ -98,15 +109,17 @@ async def get_hosting(
         loaded = await _load_region_odds(conn, season, clazz, region, as_of)
         if loaded is None:
             raise HTTPException(status_code=404, detail=f"No data for {clazz}A Region {region} season {season}")
-        region_odds, r1_home_cond, weighted_home_cond = loaded
+        region_odds, home_cond, home_cond_w, stored_adv, stored_adv_w = loaded
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
 
     entries = build_hosting_entries(
         region_odds, slots, region, season, clazz,
-        first_round_home_cond=r1_home_cond,
-        weighted_home_cond=weighted_home_cond,
+        home_cond=home_cond,
+        home_cond_w=home_cond_w,
+        stored_adv=stored_adv,
+        stored_adv_w=stored_adv_w,
     )
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 

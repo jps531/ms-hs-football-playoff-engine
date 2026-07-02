@@ -178,6 +178,7 @@ def build_playoff_region_data(
                 eliminated=False,
             )
         else:
+            made_playoffs = actual_seed is not None  # eliminated from bracket vs never qualified
             odds[school] = StandingsOdds(
                 school=school,
                 p1=0.0,
@@ -186,7 +187,7 @@ def build_playoff_region_data(
                 p4=0.0,
                 p_playoffs=0.0,
                 final_playoffs=0.0,
-                clinched=False,
+                clinched=made_playoffs,
                 eliminated=True,
             )
 
