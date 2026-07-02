@@ -199,6 +199,7 @@ def _p_team_reach(
     num_wins: int,
     half_slots: list[FormatSlot],
     win_prob_fn: MatchupProbFn,
+    skip_wins: int = 0,
 ) -> float:
     """P(team wins the next *num_wins* games from their bracket position).
 
@@ -236,7 +237,7 @@ def _p_team_reach(
         return 1.0
 
     slot = half_slots[slot_idx]
-    p_r1 = _p_team_r1_win(region, seed, slot, win_prob_fn)
+    p_r1 = 1.0 if skip_wins >= 1 else _p_team_r1_win(region, seed, slot, win_prob_fn)
     if num_wins == 1:
         return p_r1
 
@@ -661,6 +662,7 @@ def compute_second_round_home_odds(
     slots: list[FormatSlot],
     season: int,
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
+    rounds_completed: int = 0,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their second-round game.
 
@@ -691,7 +693,7 @@ def compute_second_round_home_odds(
             idx = _slot_index_for(region, seed, half_slots)
             if idx is None:
                 continue
-            p_r1 = _p_team_r1_win(region, seed, half_slots[idx], win_prob_fn)
+            p_r1 = 1.0 if rounds_completed >= 1 else _p_team_r1_win(region, seed, half_slots[idx], win_prob_fn)
             opp_indices = _opponent_slot_indices(idx, round_offset=1)
             p_r2_home = _p_host_seed_rule(
                 seed,
@@ -714,6 +716,7 @@ def compute_quarterfinal_home_odds(
     slots: list[FormatSlot],
     season: int,
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
+    rounds_completed: int = 0,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their quarterfinal game.
 
@@ -747,7 +750,7 @@ def compute_quarterfinal_home_odds(
             idx = _slot_index_for(region, seed, half_slots)
             if idx is None:
                 continue
-            p_reach = _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn)
+            p_reach = _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn, skip_wins=rounds_completed)
             p_qf_home = _p_host_qf_given_seed(seed, region, idx, half_slots, qf_offset, odd_year, season, win_prob_fn)
             p_home += p_seed * p_reach * p_qf_home
         result[school] = p_home
@@ -760,6 +763,7 @@ def compute_semifinal_home_odds(
     slots: list[FormatSlot],
     season: int,
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
+    rounds_completed: int = 0,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their semifinal game.
 
@@ -793,7 +797,7 @@ def compute_semifinal_home_odds(
             idx = _slot_index_for(region, seed, half_slots)
             if idx is None:
                 continue
-            p_reach = _p_team_reach(region, seed, idx, sf_offset, half_slots, win_prob_fn)
+            p_reach = _p_team_reach(region, seed, idx, sf_offset, half_slots, win_prob_fn, skip_wins=rounds_completed)
             opp_indices = _opponent_slot_indices(idx, round_offset=sf_offset)
             p_sf_home = _p_host_seed_rule(
                 seed,

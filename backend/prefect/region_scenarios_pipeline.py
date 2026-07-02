@@ -901,16 +901,20 @@ def get_region_finish_scenarios(
     first_round_home_marginal_w = compute_first_round_home_odds(home_seeds, odds_weighted)
 
     slots = fetch_all_format_slots.fn(clazz, season)
-    second_round_home_marginal = compute_second_round_home_odds(region, odds, slots, season) if clazz <= 4 else {}
-    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season)
-    semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season)
+    second_round_home_marginal = (
+        compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed)
+        if clazz <= 4 else {}
+    )
+    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed)
+    semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed)
 
     bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn, rounds_completed)
     second_round_home_marginal_w = (
-        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn) if clazz <= 4 else {}
+        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed)
+        if clazz <= 4 else {}
     )
-    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn)
-    semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn)
+    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed)
+    semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed)
 
     # Convert marginal home odds to conditional: P(hosts | reaches).
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
