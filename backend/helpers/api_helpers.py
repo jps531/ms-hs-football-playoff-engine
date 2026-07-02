@@ -317,6 +317,7 @@ def build_hosting_entries(
     region: int,
     season: int,
     clazz: int,
+    first_round_home_cond: dict[str, float] | None = None,
 ) -> list[TeamHostingEntry]:
     """Compute per-round playoff hosting odds for all teams in a region.
 
@@ -341,7 +342,11 @@ def build_hosting_entries(
             p_r1_adv = adv.second_round if adv else 0.0
             p_r2_adv = adv.quarterfinals if adv else 0.0
             p_qf_adv = adv.semifinals if adv else 0.0
-            r1_odds = RoundHostingOdds(conditional=1.0, marginal=marginal_home_odds(1.0, o.p_playoffs))
+            r1_cond = (first_round_home_cond or {}).get(school, 0.0)
+            r1_odds = RoundHostingOdds(
+                conditional=r1_cond if o.p_playoffs > 0 else None,
+                marginal=marginal_home_odds(r1_cond, o.p_playoffs),
+            )
             r2_odds = RoundHostingOdds(
                 conditional=p_r2_cond / p_r1_adv if p_r1_adv > 0 else None,
                 marginal=marginal_home_odds(p_r2_cond, p_r1_adv) if p_r1_adv > 0 else 0.0,
@@ -357,7 +362,11 @@ def build_hosting_entries(
         else:
             p_qf_adv = adv.quarterfinals if adv else 0.0
             p_sf_adv = adv.semifinals if adv else 0.0
-            r1_odds = RoundHostingOdds(conditional=1.0, marginal=marginal_home_odds(1.0, o.p_playoffs))
+            r1_cond = (first_round_home_cond or {}).get(school, 0.0)
+            r1_odds = RoundHostingOdds(
+                conditional=r1_cond if o.p_playoffs > 0 else None,
+                marginal=marginal_home_odds(r1_cond, o.p_playoffs),
+            )
             r2_odds = RoundHostingOdds(conditional=None, marginal=None)
             qf_odds = RoundHostingOdds(
                 conditional=p_qf_cond / p_qf_adv if p_qf_adv > 0 else None,

@@ -740,17 +740,17 @@ COMMENT ON COLUMN region_standings.odds_champion_weighted IS
   'Weighted version of odds_champion. Not yet implemented.';
 
 COMMENT ON COLUMN region_standings.odds_first_round_home IS
-  'Probability of hosting the first round of the playoffs (higher seed per MHSAA rules). '
-  'Not yet implemented — placeholder 0.0.';
+  'Conditional probability of hosting the first-round playoff game: P(hosts R1 | reaches R1). '
+  'Computed by the pipeline as first_round_home_marginal / p_playoffs.';
 COMMENT ON COLUMN region_standings.odds_second_round_home IS
-  'Probability of hosting a second-round playoff game. Not yet implemented.';
+  'Conditional probability of hosting a second-round playoff game: P(hosts R2 | reaches R2).';
 COMMENT ON COLUMN region_standings.odds_quarterfinals_home IS
-  'Probability of hosting a quarterfinal game. Not yet implemented.';
+  'Conditional probability of hosting a quarterfinal game: P(hosts QF | reaches QF).';
 COMMENT ON COLUMN region_standings.odds_semifinals_home IS
-  'Probability of hosting a semifinal game. Not yet implemented.';
+  'Conditional probability of hosting a semifinal game: P(hosts SF | reaches SF).';
 
 COMMENT ON COLUMN region_standings.odds_first_round_home_weighted IS
-  'Weighted version of odds_first_round_home. Not yet implemented.';
+  'Weighted version of odds_first_round_home (Elo-weighted seeding odds). Not yet implemented.';
 COMMENT ON COLUMN region_standings.odds_second_round_home_weighted IS
   'Weighted version of odds_second_round_home. Not yet implemented.';
 COMMENT ON COLUMN region_standings.odds_quarterfinals_home_weighted IS

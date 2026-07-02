@@ -44,13 +44,15 @@ async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:
     ]
 
 
-async def _load_region_odds(conn, season: int, clazz: int, region: int, as_of: date) -> dict[str, StandingsOdds] | None:
-    """Return StandingsOdds per team from the most recent snapshot on or before *as_of*."""
+async def _load_region_odds(
+    conn, season: int, clazz: int, region: int, as_of: date
+) -> tuple[dict[str, StandingsOdds], dict[str, float]] | None:
+    """Return (StandingsOdds per team, R1 home conditional per team) from the most recent snapshot on or before *as_of*."""
     rows = await conn.execute(
         """
         SELECT DISTINCT ON (school)
             school, odds_1st, odds_2nd, odds_3rd, odds_4th, odds_playoffs,
-            odds_playoffs, clinched, eliminated
+            odds_playoffs, clinched, eliminated, odds_first_round_home
         FROM region_standings
         WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
         ORDER BY school, as_of_date DESC
@@ -58,6 +60,7 @@ async def _load_region_odds(conn, season: int, clazz: int, region: int, as_of: d
         (season, clazz, region, as_of),
     )
     result: dict[str, StandingsOdds] = {}
+    r1_home_cond: dict[str, float] = {}
     async for r in rows:
         result[r[0]] = StandingsOdds(
             school=r[0],
@@ -70,7 +73,8 @@ async def _load_region_odds(conn, season: int, clazz: int, region: int, as_of: d
             clinched=r[7],
             eliminated=r[8],
         )
-    return result if result else None
+        r1_home_cond[r[0]] = r[9]
+    return (result, r1_home_cond) if result else None
 
 
 @router.get("/hosting/{clazz}/{region}", responses=_404)
@@ -83,14 +87,15 @@ async def get_hosting(
     """Return playoff hosting odds per round for all teams in *clazz*A Region *region*."""
     as_of = date or datetime.now().date()
     async with get_conn() as conn:
-        region_odds = await _load_region_odds(conn, season, clazz, region, as_of)
-        if region_odds is None:
+        loaded = await _load_region_odds(conn, season, clazz, region, as_of)
+        if loaded is None:
             raise HTTPException(status_code=404, detail=f"No data for {clazz}A Region {region} season {season}")
+        region_odds, r1_home_cond = loaded
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
 
-    entries = build_hosting_entries(region_odds, slots, region, season, clazz)
+    entries = build_hosting_entries(region_odds, slots, region, season, clazz, first_round_home_cond=r1_home_cond)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 

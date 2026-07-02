@@ -40,30 +40,30 @@ The response should include a `computation_state` object with `margin_sensitive`
 **6. No duplicate games** ✅
 Each game should appear exactly once. If you see the same matchup twice on the same date, the dedup logic has a bug.
 
-**7. All completed games have `status = "Final"` and `final: true`**
+**7. All completed games have `status = "Final"` and `final: true`** ✅
 After backfill, every game from before the season's end should have `final: true` and `status: "Final"`. Spot-check a known Week 1 game — score, status, and `final` should all be populated. Playoff games should have a non-null `round` (e.g. `"first_round"`, `"quarterfinals"`). Regular-season games should have `round: null`. Check that `overtime` is `0` for non-OT games and `> 0` for overtime results.
 
 ---
 
 ## Bracket (`GET /api/v1/bracket?season=YYYY&class=5`)
 
-**8. Clinched slots show the correct school**
+**8. Clinched slots show the correct school** ✅
 The `school` field on each bracket entry should match the actual seeding outcome from that season. Compare a few known seeds against actual MHSAA results — this is the highest-confidence sanity check.
 
-**9. Non-clinched slots have `school: null` early in the season**
+**9. Non-clinched slots have `school: null` early in the season** ✅
 Query with `?date=YYYY-10-01` — most slots should have `school: null` and fractional odds. If every slot shows a school name even on that early date, `clinched` flags were written too aggressively.
 
 ---
 
 ## Ratings (`GET /api/v1/ratings?season=YYYY`)
 
-**10. Elo ordering makes intuitive sense**
+**10. Elo ordering makes intuitive sense** ✅
 The highest-Elo teams per class should roughly match the teams that went deepest in the playoffs. If the #1 Elo team in 6A is a team that missed the playoffs, the cross-season carryover or K-factor is misconfigured.
 
-**11. Every active team has a rating**
+**11. Every active team has a rating** ✅
 `GET /api/v1/ratings?season=YYYY&class=7` — the count should match the number of 7A schools. A team missing a rating usually means they had no games scraped.
 
-**11a. Ratings include freshness metadata**
+**11a. Ratings include freshness metadata** ✅
 Each rating entry should include `as_of_date` (the pipeline run date), `games_played` (number of games contributing to the Elo/RPI), and `computed_at` (timestamp). If `games_played` is `0` for a team with known results, the pipeline didn't associate those games with ratings.
 
 ---
