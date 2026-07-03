@@ -714,6 +714,34 @@ def _alive_in_snapshots(
     return None
 
 
+def _school_reached_rc(
+    school: str,
+    region: int,
+    round_snapshots: "dict[int, dict[int, dict[str, StandingsOdds]]]",
+    rc: int,
+) -> bool:
+    """Return True if *school* was alive (p_playoffs > 0) in the post-round-*rc* snapshot."""
+    od = round_snapshots.get(rc, {}).get(region, {}).get(school)
+    return od is not None and od.p_playoffs > 0
+
+
+def _historical_seed(
+    school: str,
+    region: int,
+    round_snapshots: "dict[int, dict[int, dict[str, StandingsOdds]]]",
+) -> "int | None":
+    """Return *school*'s playoff seed from the most-recent snapshot where they were alive.
+
+    Returns None for teams that never appear alive (e.g. R1 losers whose elimination
+    pre-dates all snapshots).
+    """
+    for rc in sorted(round_snapshots, reverse=True):
+        od = round_snapshots.get(rc, {}).get(region, {}).get(school)
+        if od is not None and od.p_playoffs > 0:
+            return next((s for s, p in ((1, od.p1), (2, od.p2), (3, od.p3), (4, od.p4)) if p > 0.5), None)
+    return None
+
+
 def compute_second_round_home_odds(
     region: int,
     region_odds: dict[str, StandingsOdds],
@@ -762,8 +790,18 @@ def compute_second_round_home_odds(
         for school, o in region_odds.items():
             seed = next((s for s, p in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)) if p > 0.5), None)
             if seed is None or o.p_playoffs <= 0:
-                result[school] = 0.0
-                continue
+                # Eliminated playoff teams that won R1 can have historical R2 hosting computed.
+                if not (
+                    seed is None
+                    and o.clinched and o.eliminated and round_snapshots
+                    and _school_reached_rc(school, region, round_snapshots, 1)
+                ):
+                    result[school] = 0.0
+                    continue
+                seed = _historical_seed(school, region, round_snapshots)
+                if seed is None:
+                    result[school] = 0.0
+                    continue
             idx = _slot_index_for(region, seed, half_slots)
             if idx is None:
                 result[school] = 0.0
@@ -850,7 +888,18 @@ def compute_quarterfinal_home_odds(
     result: dict[str, float] = {}
     for school, o in region_odds.items():
         p_home = 0.0
-        for seed, p_seed in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)):
+        # Build seed iteration: alive teams use p_seed from odds;
+        # eliminated playoff teams that reached QF use their historical seed.
+        if o.p_playoffs <= 0 and o.clinched and o.eliminated and round_snapshots:
+            hs = (
+                _historical_seed(school, region, round_snapshots)
+                if _school_reached_rc(school, region, round_snapshots, qf_offset)
+                else None
+            )
+            seed_iter: list[tuple[int, float]] = [(hs, 1.0)] if hs is not None else []
+        else:
+            seed_iter = [(1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)]
+        for seed, p_seed in seed_iter:
             if p_seed <= 0.0:
                 continue
             idx = _slot_index_for(region, seed, half_slots)

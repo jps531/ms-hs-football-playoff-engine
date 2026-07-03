@@ -1466,3 +1466,110 @@ def test_qf_snapshots_resolve_opp_r2h_two_rounds_back() -> None:
 
     assert 0.0 < result_only_r2["R1s1"] < 1.0              # probabilistic (opp_r2h unresolved)
     assert result_full_history["R1s1"] == pytest.approx(0.0)  # (4,2) hosts QF
+
+
+# ---------------------------------------------------------------------------
+# Scenario 13: Eliminated team historical hosting
+# ---------------------------------------------------------------------------
+
+
+def _elim_clinched(school: str) -> StandingsOdds:
+    """Return StandingsOdds for an eliminated playoff team (clinched but knocked out)."""
+    return StandingsOdds(
+        school=school,
+        p1=0.0, p2=0.0, p3=0.0, p4=0.0,
+        p_playoffs=0.0,
+        final_playoffs=0.0,
+        clinched=True,
+        eliminated=True,
+    )
+
+
+def test_r2_eliminated_team_that_won_r1_computes_hosting() -> None:
+    """Eliminated clinched team recovers R2 hosting fact via round_snapshots[1].
+
+    Region 1 seed 1 was eliminated in R2.  Their seed is recovered from the
+    post-R1 snapshot (round_snapshots[1]) where they appear alive.  The R2
+    opponent (3,2) is found in all_region_odds.  Seed 1 always hosts R2 vs
+    a seed-2 opponent → result should be 1.0, not 0.0.
+    """
+    region_odds = {"EliminatedS1": _elim_clinched("EliminatedS1")}
+    all_odds = _multi_alive_odds({(3, 2): "R3s2"})
+    r1_snap = _multi_alive_odds({(1, 1): "EliminatedS1"})
+
+    result_without = compute_second_round_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=2, all_region_odds=all_odds,
+    )
+    result_with = compute_second_round_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=2, all_region_odds=all_odds,
+        round_snapshots={1: r1_snap},
+    )
+
+    assert result_without["EliminatedS1"] == pytest.approx(0.0)   # no snapshot → 0
+    assert result_with["EliminatedS1"] == pytest.approx(1.0)      # snapshot recovers seed 1 → hosted
+
+
+def test_r2_eliminated_team_that_lost_r1_returns_zero() -> None:
+    """Eliminated team not alive in any round_snapshots[1] entry returns 0.
+
+    If the team was eliminated in R1, they appear with p_playoffs=0 in all
+    snapshots and their seed is unrecoverable → R2 hosting must be 0.0.
+    """
+    region_odds = {"EliminatedS1": _elim_clinched("EliminatedS1")}
+    all_odds = _multi_alive_odds({(3, 2): "R3s2"})
+    r1_snap_no_team = _multi_alive_odds({(3, 2): "R3s2"})  # EliminatedS1 absent
+
+    result = compute_second_round_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=2, all_region_odds=all_odds,
+        round_snapshots={1: r1_snap_no_team},
+    )
+
+    assert result["EliminatedS1"] == pytest.approx(0.0)
+
+
+def test_qf_eliminated_team_that_won_r2_computes_hosting() -> None:
+    """Eliminated clinched team recovers QF hosting fact via round_snapshots[qf_offset].
+
+    Region 1 seed 1 was eliminated in QF (1A-4A, qf_offset=2).  Their seed is
+    recovered from round_snapshots[2] where they appear alive.  The QF opponent
+    (2,1) is found in all_region_odds.  Both seeds 1 with 2 home games each →
+    odd-year region tiebreak: lower region (1) hosts → result should be 1.0.
+    """
+    region_odds = {"EliminatedS1": _elim_clinched("EliminatedS1")}
+    all_odds = _multi_alive_odds({(2, 1): "R2s1"})
+    r2_snap = _multi_alive_odds({(1, 1): "EliminatedS1", (2, 1): "R2s1"})
+
+    result_without = compute_quarterfinal_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=3, all_region_odds=all_odds,
+    )
+    result_with = compute_quarterfinal_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=3, all_region_odds=all_odds,
+        round_snapshots={2: r2_snap},
+    )
+
+    assert result_without["EliminatedS1"] == pytest.approx(0.0)   # no snapshot → 0
+    assert result_with["EliminatedS1"] == pytest.approx(1.0)      # snapshot recovers seed 1 → hosted
+
+
+def test_qf_eliminated_team_that_never_reached_qf_returns_zero() -> None:
+    """Eliminated team absent from round_snapshots[qf_offset] returns 0.
+
+    If the team was eliminated before QF (e.g. lost R1 or R2), they will not
+    appear alive in round_snapshots[2] → no historical seed → QF hosting = 0.0.
+    """
+    region_odds = {"EliminatedS1": _elim_clinched("EliminatedS1")}
+    all_odds = _multi_alive_odds({(2, 1): "R2s1"})
+    r2_snap_no_team = _multi_alive_odds({(2, 1): "R2s1"})  # EliminatedS1 absent
+
+    result = compute_quarterfinal_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=3, all_region_odds=all_odds,
+        round_snapshots={2: r2_snap_no_team},
+    )
+
+    assert result["EliminatedS1"] == pytest.approx(0.0)

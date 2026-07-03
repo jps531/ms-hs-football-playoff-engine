@@ -359,11 +359,13 @@ def build_hosting_entries(
             a_r1_w, a_r2_w, a_qf_w, a_sf_w = (stored_adv_w or {}).get(school, (0.0, 0.0, 0.0, 0.0))
 
             r1_gate = o.p_playoffs > 0 or o.clinched
+            eff_a_r1 = a_r1 if a_r1 > 0 else (1.0 if o.clinched else 0.0)
+            eff_a_r1_w = a_r1_w if a_r1_w > 0 else (1.0 if o.clinched else 0.0)
             r1_odds = RoundHostingOdds(
                 conditional=r1_c if r1_gate else None,
-                marginal=r1_c * a_r1,
+                marginal=r1_c * eff_a_r1,
                 conditional_weighted=r1_c_w if r1_gate else None,
-                marginal_weighted=r1_c_w * a_r1_w,
+                marginal_weighted=r1_c_w * eff_a_r1_w,
             )
             if is_1a_4a:
                 r2_odds = RoundHostingOdds(

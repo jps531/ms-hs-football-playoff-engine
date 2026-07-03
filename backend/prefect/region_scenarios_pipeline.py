@@ -911,6 +911,29 @@ def get_region_finish_scenarios(
     first_round_home_marginal = compute_first_round_home_odds(home_seeds, odds)
     first_round_home_marginal_w = compute_first_round_home_odds(home_seeds, odds_weighted)
 
+    # Correct R1 hosting marginal for eliminated playoff teams that can be recovered
+    # from round_snapshots (R2+ losers only; R1 losers remain at 0 since they are
+    # dead in all snapshots).
+    if round_snapshots:
+        for school, o in odds.items():
+            if o.clinched and o.eliminated and not first_round_home_marginal.get(school):
+                for rc in sorted(round_snapshots, reverse=True):
+                    od = round_snapshots.get(rc, {}).get(region, {}).get(school)
+                    if od is not None and od.p_playoffs > 0:
+                        hs = next((s for s, p in ((1, od.p1), (2, od.p2), (3, od.p3), (4, od.p4)) if p > 0.5), None)
+                        if hs is not None:
+                            first_round_home_marginal[school] = 1.0 if hs in home_seeds else 0.0
+                        break
+        for school, o in odds_weighted.items():
+            if o.clinched and o.eliminated and first_round_home_marginal_w.get(school, 0.0) == 0.0:
+                for rc in sorted(round_snapshots, reverse=True):
+                    od = round_snapshots.get(rc, {}).get(region, {}).get(school)
+                    if od is not None and od.p_playoffs > 0:
+                        hs = next((s for s, p in ((1, od.p1), (2, od.p2), (3, od.p3), (4, od.p4)) if p > 0.5), None)
+                        if hs is not None:
+                            first_round_home_marginal_w[school] = 1.0 if hs in home_seeds else 0.0
+                        break
+
     slots = fetch_all_format_slots.fn(clazz, season)
     second_round_home_marginal = (
         compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
@@ -927,6 +950,29 @@ def get_region_finish_scenarios(
     quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
     semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
 
+    # Override bracket advancement for eliminated playoff teams with historical facts.
+    # For each eliminated team, we know exactly which rounds they reached from round_snapshots:
+    # alive in round_snapshots[rc] ↔ they survived through round rc.
+    if round_snapshots and rounds_completed > 0:
+        qf_off = num_rounds - 3  # 2 for 1A-4A, 1 for 5A-7A
+        sf_off = qf_off + 1
+        for school, o in odds.items():
+            if not (o.eliminated and o.clinched):
+                continue
+            def _reached(rc: int, _s: str = school) -> bool:
+                od = round_snapshots.get(rc, {}).get(region, {}).get(_s)
+                return od is not None and od.p_playoffs > 0
+            bracket[school] = BracketOdds(
+                school=school,
+                second_round=1.0 if num_rounds >= 5 and _reached(1) else 0.0,
+                quarterfinals=1.0 if _reached(qf_off) else 0.0,
+                semifinals=1.0 if _reached(sf_off) else 0.0,
+                finals=0.0,
+                champion=0.0,
+            )
+            # Reuse unweighted result for weighted (same deterministic odds in playoff pipeline).
+            bracket_weighted[school] = bracket[school]
+
     # Convert marginal home odds to conditional: P(hosts | reaches).
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)
 
@@ -935,7 +981,10 @@ def get_region_finish_scenarios(
         return marginal / advancement if advancement > 0 else 0.0
 
     first_round_home_cond = {
-        school: _safe_cond(m, odds[school].p_playoffs if school in odds else 0.0)
+        school: _safe_cond(
+            m,
+            (1.0 if odds[school].clinched else odds[school].p_playoffs) if school in odds else 0.0,
+        )
         for school, m in first_round_home_marginal.items()
     }
     second_round_home_cond = (
@@ -956,7 +1005,10 @@ def get_region_finish_scenarios(
     }
 
     first_round_home_cond_w = {
-        school: _safe_cond(m, odds_weighted[school].p_playoffs if school in odds_weighted else 0.0)
+        school: _safe_cond(
+            m,
+            (1.0 if odds_weighted[school].clinched else odds_weighted[school].p_playoffs) if school in odds_weighted else 0.0,
+        )
         for school, m in first_round_home_marginal_w.items()
     }
     second_round_home_cond_w = (
