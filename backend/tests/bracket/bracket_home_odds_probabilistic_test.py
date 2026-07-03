@@ -1341,13 +1341,13 @@ def _multi_alive_odds(alive: dict[tuple[int, int], str]) -> dict[int, dict[str, 
     return result
 
 
-def test_r2_r1_round_odds_finds_eliminated_opponent() -> None:
-    """Bug 1: r1_round_odds (pinned post-R1) recovers an R2 opponent already eliminated.
+def test_r2_snapshots_find_eliminated_opponent() -> None:
+    """Bug 1: round_snapshots recovers an R2 opponent already eliminated.
 
     After R2 completes, (3,2) has been eliminated in all_region_odds, so
     _alive_in_slots on the R2 opp slot [1] returns None → result = 0.0 (wrong).
-    With r1_round_odds (post-R1 snapshot where (3,2) was still alive), the
-    opponent is found and r2_home_team(1,1,3,2,...) returns (1,1) → 1.0.
+    With round_snapshots={1: post-R1 odds where (3,2) was alive}, the opponent
+    is found and r2_home_team(1,1,3,2,...) returns (1,1) → 1.0.
     """
     all_odds = _multi_alive_odds({(1, 1): "R1s1"})
     r1_odds = _multi_alive_odds({(1, 1): "R1s1", (3, 2): "R3s2"})
@@ -1358,19 +1358,19 @@ def test_r2_r1_round_odds_finds_eliminated_opponent() -> None:
     )
     result_with = compute_second_round_home_odds(
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
-        all_region_odds=all_odds, r1_round_odds=r1_odds,
+        all_region_odds=all_odds, round_snapshots={1: r1_odds},
     )
 
     assert result_without["R1s1"] == pytest.approx(0.0)  # bug: no alive opponent found
     assert result_with["R1s1"] == pytest.approx(1.0)     # fix: seed 1 hosted R2
 
 
-def test_qf_r1_round_odds_resolves_ambiguous_team_r2h() -> None:
-    """Bug 2: r1_round_odds resolves a team's ambiguous r2_home_if_deterministic=None.
+def test_qf_snapshots_resolve_ambiguous_team_r2h() -> None:
+    """Bug 2: round_snapshots resolves a team's ambiguous r2_home_if_deterministic=None.
 
     Region 1 seed 2 (idx=5) has R2 opp slot [4] = (3,1)/(4,4).  Different seeds
     → _r2_home_if_deterministic returns None → falls through to probabilistic.
-    r1_round_odds shows (4,4) won R1 in slot 5 → r2h=True (seed 2 < seed 4,
+    round_snapshots[1] shows (4,4) won R1 in slot 5 → r2h=True (seed 2 < seed 4,
     (1,2) hosts).  QF opponent (4,1) has unambiguous r2h=True.  Equal home games
     (2 each) → seed tiebreak: (4,1) wins → (1,2) does not host QF → 0.0.
     """
@@ -1383,20 +1383,20 @@ def test_qf_r1_round_odds_resolves_ambiguous_team_r2h() -> None:
     )
     result_with = compute_quarterfinal_home_odds(
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
-        all_region_odds=all_odds, r1_round_odds=r1_odds,
+        all_region_odds=all_odds, round_snapshots={1: r1_odds},
     )
 
     assert 0.0 < result_without["R1s2"] < 1.0          # probabilistic fallback (bug)
     assert result_with["R1s2"] == pytest.approx(0.0)   # fix: (4,1) hosts QF
 
 
-def test_qf_r1_round_odds_resolves_ambiguous_opp_r2h() -> None:
-    """Bug 2b: r1_round_odds resolves the QF opponent's ambiguous r2_home_if_deterministic.
+def test_qf_snapshots_resolve_ambiguous_opp_r2h() -> None:
+    """Bug 2b: round_snapshots resolves the QF opponent's ambiguous r2_home_if_deterministic.
 
     Region 1 seed 1 (idx=0) has unambiguous r2h=True.  Its QF opp slot [2,3]
     produces (4,2) (idx=3) whose R2 opp slot [2] = (2,1)/(1,4): different seeds
     → opp's _r2_home_if_deterministic=None → probabilistic fallback.
-    r1_round_odds shows (2,1) won R1 in slot 3 → opp_r2h=False ((2,1) hosted
+    round_snapshots[1] shows (2,1) won R1 in slot 3 → opp_r2h=False ((2,1) hosted
     R2 vs (4,2)).  Team has 2 homes, opp has 1 → opp hosts QF → (1,1) = 0.0.
     """
     all_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 2): "R4s2"})
@@ -1408,61 +1408,61 @@ def test_qf_r1_round_odds_resolves_ambiguous_opp_r2h() -> None:
     )
     result_with = compute_quarterfinal_home_odds(
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
-        all_region_odds=all_odds, r1_round_odds=r1_odds,
+        all_region_odds=all_odds, round_snapshots={1: r1_odds},
     )
 
     assert 0.0 < result_without["R1s1"] < 1.0          # probabilistic fallback (bug)
     assert result_with["R1s1"] == pytest.approx(0.0)   # fix: (4,2) hosts QF
 
 
-def test_r2_r1_round_odds_finds_opponent_two_rounds_back() -> None:
-    """Bug 1 at rounds_completed=3: r1_round_odds is needed when prior_round_odds lacks the R2 opp.
+def test_r2_snapshots_search_oldest_for_two_rounds_back() -> None:
+    """Bug 1 at rounds_completed=3: round_snapshots searches all history newest-first.
 
     On post-QF dates, the R2 opponent was eliminated in R2, so they're absent
-    from both all_region_odds (post-QF) and prior_round_odds (post-R2).
-    Only r1_round_odds (pinned post-R1) still has them alive.
-    (3,2) is the R2 opp for (1,1) via slot [1]; (3,2) absent from prior_odds.
+    from all_region_odds (post-QF) and round_snapshots[2] (post-R2).
+    Only round_snapshots[1] (post-R1) still has them.  Searching newest-first,
+    the helper skips round 2 (no match) then finds (3,2) in round 1.
     """
     all_odds = _multi_alive_odds({(1, 1): "R1s1"})
-    prior_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 1): "R4s1"})  # post-R2: (3,2) gone
-    r1_odds = _multi_alive_odds({(1, 1): "R1s1", (3, 2): "R3s2"})     # post-R1: (3,2) alive
+    r2_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 1): "R4s1"})  # post-R2: (3,2) gone
+    r1_odds = _multi_alive_odds({(1, 1): "R1s1", (3, 2): "R3s2"})  # post-R1: (3,2) alive
     region_odds = {"R1s1": _locked("R1s1", 1)}
 
-    result_with_stale = compute_second_round_home_odds(
+    result_only_r2 = compute_second_round_home_odds(
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=3,
-        all_region_odds=all_odds, r1_round_odds=prior_odds,   # wrong snapshot — (3,2) missing
+        all_region_odds=all_odds, round_snapshots={2: r2_odds},   # (3,2) not in r2 snapshot
     )
-    result_with_pinned = compute_second_round_home_odds(
+    result_full_history = compute_second_round_home_odds(
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=3,
-        all_region_odds=all_odds, r1_round_odds=r1_odds,      # pinned post-R1 — (3,2) alive
+        all_region_odds=all_odds, round_snapshots={1: r1_odds, 2: r2_odds},
     )
 
-    assert result_with_stale["R1s1"] == pytest.approx(0.0)   # wrong snapshot misses (3,2)
-    assert result_with_pinned["R1s1"] == pytest.approx(1.0)  # pinned r1 finds (3,2)
+    assert result_only_r2["R1s1"] == pytest.approx(0.0)      # r2 snapshot misses (3,2)
+    assert result_full_history["R1s1"] == pytest.approx(1.0)  # r1 snapshot finds (3,2)
 
 
-def test_qf_r1_round_odds_resolves_opp_r2h_two_rounds_back() -> None:
-    """Bug 2b at rounds_completed=3: resolving opp_r2h needs r1_round_odds, not prior_round_odds.
+def test_qf_snapshots_resolve_opp_r2h_two_rounds_back() -> None:
+    """Bug 2b at rounds_completed=3: opp_r2h resolution requires oldest snapshot.
 
     On post-QF dates (rounds_completed=3):
-    - QF opp (4,2) is eliminated from all_region_odds but alive in prior_round_odds (post-R2).
+    - QF opp (4,2) is eliminated from all_region_odds but alive in round_snapshots[2].
     - (4,2)'s R2 opp slot [2] = (2,1)/(1,4): different seeds → opp_r2h ambiguous.
-    - prior_round_odds (post-R2) doesn't have (2,1) — they lost R2 to (4,2) and are gone.
-    - r1_round_odds (post-R1) has (2,1) alive → opp_r2h=False → (4,2) hosts QF → (1,1)=0.0.
+    - round_snapshots[2] (post-R2) doesn't have (2,1) — they lost R2 to (4,2).
+    - round_snapshots[1] (post-R1) has (2,1) alive → opp_r2h=False → (4,2) hosts → 0.0.
     """
     all_odds = _multi_alive_odds({(1, 1): "R1s1"})
-    prior_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 2): "R4s2"})            # post-R2: (2,1) gone
+    r2_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 2): "R4s2"})             # post-R2: (2,1) gone
     r1_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 2): "R4s2", (2, 1): "R2s1"})  # post-R1: (2,1) alive
     region_odds = {"R1s1": _locked("R1s1", 1)}
 
-    result_without_r1 = compute_quarterfinal_home_odds(
+    result_only_r2 = compute_quarterfinal_home_odds(
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=3,
-        all_region_odds=all_odds, prior_round_odds=prior_odds,
+        all_region_odds=all_odds, round_snapshots={2: r2_odds},
     )
-    result_with_r1 = compute_quarterfinal_home_odds(
+    result_full_history = compute_quarterfinal_home_odds(
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=3,
-        all_region_odds=all_odds, prior_round_odds=prior_odds, r1_round_odds=r1_odds,
+        all_region_odds=all_odds, round_snapshots={1: r1_odds, 2: r2_odds},
     )
 
-    assert 0.0 < result_without_r1["R1s1"] < 1.0           # probabilistic (opp_r2h unresolved)
-    assert result_with_r1["R1s1"] == pytest.approx(0.0)    # fix: (4,2) hosts QF
+    assert 0.0 < result_only_r2["R1s1"] < 1.0              # probabilistic (opp_r2h unresolved)
+    assert result_full_history["R1s1"] == pytest.approx(0.0)  # (4,2) hosts QF

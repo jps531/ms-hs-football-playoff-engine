@@ -860,8 +860,7 @@ def get_region_finish_scenarios(
     as_of_date: date | None = None,
     rounds_completed: int = 0,
     all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
-    prior_round_odds: dict[int, dict[str, StandingsOdds]] | None = None,
-    r1_round_odds: dict[int, dict[str, StandingsOdds]] | None = None,
+    round_snapshots: dict[int, dict[int, dict[str, StandingsOdds]]] | None = None,
 ):
     """Phase 2: compute bracket/home odds and write results to DB.
 
@@ -889,13 +888,11 @@ def get_region_finish_scenarios(
                             When provided alongside rounds_completed >= 1, enables
                             deterministic (exactly 0 or 1) home odds for completed
                             rounds instead of probabilistic estimates.
-        prior_round_odds:   Post-round seeding odds from the *previous* playoff
-                            round.  Used to find the QF opponent when they have
-                            been eliminated from *all_region_odds*.
-        r1_round_odds:      Post-round seeding odds pinned to the round-1 snapshot
-                            (never updated after R1 completes).  Used to identify
-                            the R2 opponent and resolve ambiguous r2_home values
-                            regardless of how many subsequent rounds have been played.
+        round_snapshots:    Accumulated per-round survivor odds, keyed by
+                            rounds_completed at the time of each snapshot.
+                            Searched newest-first when opponents are no longer
+                            alive in *all_region_odds* or when r2_home history
+                            must be resolved from an earlier round's data.
     """
     logger = get_run_logger()
 
@@ -916,18 +913,18 @@ def get_region_finish_scenarios(
 
     slots = fetch_all_format_slots.fn(clazz, season)
     second_round_home_marginal = (
-        compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, r1_round_odds=r1_round_odds)
+        compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
         if clazz <= 4 else {}
     )
-    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, prior_round_odds=prior_round_odds, r1_round_odds=r1_round_odds)
+    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
     semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
 
     bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn, rounds_completed)
     second_round_home_marginal_w = (
-        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, r1_round_odds=r1_round_odds)
+        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
         if clazz <= 4 else {}
     )
-    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, prior_round_odds=prior_round_odds, r1_round_odds=r1_round_odds)
+    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
     semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
 
     # Convert marginal home odds to conditional: P(hosts | reaches).

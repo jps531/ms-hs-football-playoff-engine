@@ -247,8 +247,7 @@ def playoff_bracket_update(season: int | None = None) -> None:
         playoff_dates = sorted({g.date for g in playoff_games})
         logger.info("%dA season %d: %d playoff dates to process.", clazz, season, len(playoff_dates))
 
-        prev_all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None
-        r1_all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None
+        round_snapshots: dict[int, dict[int, dict[str, StandingsOdds]]] = {}
         for playoff_date in playoff_dates:
             games_to_date = [g for g in playoff_games if g.date <= playoff_date]
             # Derive rounds completed from survivor count rather than distinct dates,
@@ -294,12 +293,9 @@ def playoff_bracket_update(season: int | None = None) -> None:
                     as_of_date=playoff_date,
                     rounds_completed=rounds_completed,
                     all_region_odds=all_region_odds,
-                    prior_round_odds=prev_all_region_odds,
-                    r1_round_odds=r1_all_region_odds,
+                    round_snapshots=round_snapshots,
                 )
 
-            if rounds_completed == 1 and r1_all_region_odds is None:
-                r1_all_region_odds = all_region_odds
-            prev_all_region_odds = all_region_odds
+            round_snapshots[rounds_completed] = all_region_odds
 
         logger.info("%dA season %d: playoff bracket update complete.", clazz, season)
