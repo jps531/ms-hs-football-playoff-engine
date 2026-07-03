@@ -860,6 +860,7 @@ def get_region_finish_scenarios(
     as_of_date: date | None = None,
     rounds_completed: int = 0,
     all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
+    prior_round_odds: dict[int, dict[str, StandingsOdds]] | None = None,
 ):
     """Phase 2: compute bracket/home odds and write results to DB.
 
@@ -869,24 +870,28 @@ def get_region_finish_scenarios(
     writes ``region_standings``, and then writes scenario atoms.
 
     Args:
-        clazz:             MHSAA classification (1–7).
-        region:            Region number within the class.
-        season:            Football season year.
-        seeding_data:      Pre-computed seeding odds from Phase 1.
-        matchup_prob_fn:   Elo-based matchup probability function built from all
-                           regions in the class.  Falls back to equal 50/50 when
-                           ``None``.
-        as_of_date:        Date to write snapshots for.  Defaults to today.
-                           When provided explicitly (backfill mode), skips the
-                           background margin-sensitivity upgrade.
-        rounds_completed:  Playoff rounds already played (0 during regular season).
-                           Passed through to bracket-odds helpers so alive teams
-                           show 1.0 for past rounds and correct forward odds for
-                           remaining rounds.
-        all_region_odds:   Post-round seeding odds for all regions in this class.
-                           When provided alongside rounds_completed >= 1, enables
-                           deterministic (exactly 0 or 1) home odds for completed
-                           rounds instead of probabilistic estimates.
+        clazz:              MHSAA classification (1–7).
+        region:             Region number within the class.
+        season:             Football season year.
+        seeding_data:       Pre-computed seeding odds from Phase 1.
+        matchup_prob_fn:    Elo-based matchup probability function built from all
+                            regions in the class.  Falls back to equal 50/50 when
+                            ``None``.
+        as_of_date:         Date to write snapshots for.  Defaults to today.
+                            When provided explicitly (backfill mode), skips the
+                            background margin-sensitivity upgrade.
+        rounds_completed:   Playoff rounds already played (0 during regular season).
+                            Passed through to bracket-odds helpers so alive teams
+                            show 1.0 for past rounds and correct forward odds for
+                            remaining rounds.
+        all_region_odds:    Post-round seeding odds for all regions in this class.
+                            When provided alongside rounds_completed >= 1, enables
+                            deterministic (exactly 0 or 1) home odds for completed
+                            rounds instead of probabilistic estimates.
+        prior_round_odds:   Post-round seeding odds from the *previous* playoff
+                            round.  Used to resolve R2 home status when the R2
+                            opponent has since been eliminated (rounds_completed >= 2)
+                            or when ``_r2_home_if_deterministic`` is ambiguous.
     """
     logger = get_run_logger()
 
@@ -907,18 +912,18 @@ def get_region_finish_scenarios(
 
     slots = fetch_all_format_slots.fn(clazz, season)
     second_round_home_marginal = (
-        compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+        compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, prior_round_odds=prior_round_odds)
         if clazz <= 4 else {}
     )
-    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, prior_round_odds=prior_round_odds)
     semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
 
     bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn, rounds_completed)
     second_round_home_marginal_w = (
-        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, prior_round_odds=prior_round_odds)
         if clazz <= 4 else {}
     )
-    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, prior_round_odds=prior_round_odds)
     semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
 
     # Convert marginal home odds to conditional: P(hosts | reaches).

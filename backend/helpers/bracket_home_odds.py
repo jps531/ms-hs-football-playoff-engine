@@ -704,6 +704,7 @@ def compute_second_round_home_odds(
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
     rounds_completed: int = 0,
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
+    prior_round_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their second-round game.
 
@@ -715,18 +716,24 @@ def compute_second_round_home_odds(
     When *rounds_completed* >= 1 and *all_region_odds* is provided, bypasses
     probabilistic computation and returns exactly 0.0 or 1.0 per team by
     finding the one alive opponent in the adjacent slot and applying
-    ``r2_home_team`` directly.
+    ``r2_home_team`` directly.  When the R2 opponent is already eliminated
+    (rounds_completed >= 2), *prior_round_odds* (post-R1 survivors) is used
+    as a fallback to identify the opponent.
 
     Args:
-        region:          Region number for the teams in *region_odds*.
-        region_odds:     Dict mapping team name to ``StandingsOdds``.
-        slots:           All first-round format slots for this class (all regions).
-        season:          Football season year (used for odd/even tiebreak).
-        win_prob_fn:     Optional win-probability function.  Defaults to 0.5 for
-                         every game.
-        all_region_odds: Cross-region seeding odds after completed rounds.
-                         When provided alongside *rounds_completed* >= 1, enables
-                         deterministic 0/1 results for the R2 home decision.
+        region:           Region number for the teams in *region_odds*.
+        region_odds:      Dict mapping team name to ``StandingsOdds``.
+        slots:            All first-round format slots for this class (all regions).
+        season:           Football season year (used for odd/even tiebreak).
+        win_prob_fn:      Optional win-probability function.  Defaults to 0.5 for
+                          every game.
+        all_region_odds:  Cross-region seeding odds after completed rounds.
+                          When provided alongside *rounds_completed* >= 1, enables
+                          deterministic 0/1 results for the R2 home decision.
+        prior_round_odds: Cross-region seeding odds from the *previous* playoff
+                          round.  Used when the R2 opponent has since been
+                          eliminated (rounds_completed >= 2) so the opponent can
+                          still be identified from the prior snapshot.
 
     Returns:
         Dict mapping team name to marginal P(hosting round 2) in [0.0, 1.0].
@@ -745,6 +752,8 @@ def compute_second_round_home_odds(
                 continue
             opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, 1)]
             opp = _alive_in_slots(opp_slots, all_region_odds)
+            if opp is None and prior_round_odds is not None:
+                opp = _alive_in_slots(opp_slots, prior_round_odds)
             result[school] = (
                 1.0 if opp and r2_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
             )
@@ -784,6 +793,7 @@ def compute_quarterfinal_home_odds(
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
     rounds_completed: int = 0,
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
+    prior_round_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their quarterfinal game.
 
@@ -795,18 +805,22 @@ def compute_quarterfinal_home_odds(
     region# hosts; even years: higher region# hosts).
 
     When *rounds_completed* >= qf_offset and *all_region_odds* is provided,
-    attempts deterministic 0/1 computation via ``qf_home_team``.  Falls back to
-    probabilistic for teams where ``_r2_home_if_deterministic`` returns None
-    (even-year same-cross-region-seed edge case).
+    attempts deterministic 0/1 computation via ``qf_home_team``.  When
+    ``_r2_home_if_deterministic`` returns None (1A-4A teams whose R2 opponent
+    candidates have different seeds), *prior_round_odds* (post-R1 survivors) is
+    used to identify the actual R2 opponent and resolve r2_home exactly.
 
     Args:
-        region:          Region number for the teams in *region_odds*.
-        region_odds:     Dict mapping team name to ``StandingsOdds``.
-        slots:           All first-round format slots for this class (all regions).
-        season:          Football season year (used for odd/even year tiebreak).
-        win_prob_fn:     Optional win-probability function.  Defaults to 0.5 for
-                         every game.
-        all_region_odds: Cross-region seeding odds after completed rounds.
+        region:           Region number for the teams in *region_odds*.
+        region_odds:      Dict mapping team name to ``StandingsOdds``.
+        slots:            All first-round format slots for this class (all regions).
+        season:           Football season year (used for odd/even year tiebreak).
+        win_prob_fn:      Optional win-probability function.  Defaults to 0.5 for
+                          every game.
+        all_region_odds:  Cross-region seeding odds after completed rounds.
+        prior_round_odds: Cross-region seeding odds from the previous playoff round.
+                          Resolves ambiguous r2_home values when
+                          ``_r2_home_if_deterministic`` returns None.
 
     Returns:
         Dict mapping team name to marginal P(hosting quarterfinal) in [0.0, 1.0].
@@ -826,15 +840,28 @@ def compute_quarterfinal_home_odds(
             if rounds_completed >= qf_offset and all_region_odds is not None:
                 r1h = _was_home_r1(region, seed, half_slots[idx])
                 # For 5A-7A (qf_offset=1) there is no R2; r2_home is always False.
-                # For 1A-4A (qf_offset=2) derive r2_home, falling back to probabilistic if ambiguous.
+                # For 1A-4A (qf_offset=2) derive r2_home from slot structure; if ambiguous
+                # (two R2 opponent candidates with different seeds), resolve via prior_round_odds.
                 r2h: "bool | None" = False if qf_offset == 1 else _r2_home_if_deterministic(region, seed, idx, half_slots, season)
+                if r2h is None and prior_round_odds is not None:
+                    r2_opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, 1)]
+                    actual_r2_opp = _alive_in_slots(r2_opp_slots, prior_round_odds)
+                    if actual_r2_opp is not None:
+                        r2h = r2_home_team(region, seed, actual_r2_opp[0], actual_r2_opp[1], season) == (region, seed)
                 opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, qf_offset)]
                 opp = _alive_in_slots(opp_slots, all_region_odds)
+                if opp is None and prior_round_odds is not None:
+                    opp = _alive_in_slots(opp_slots, prior_round_odds)
                 if r2h is not None and opp is not None:
                     opp_idx = _slot_index_for(opp[0], opp[1], half_slots)
                     if opp_idx is not None:
                         opp_r1h = _was_home_r1(opp[0], opp[1], half_slots[opp_idx])
                         opp_r2h: "bool | None" = False if qf_offset == 1 else _r2_home_if_deterministic(opp[0], opp[1], opp_idx, half_slots, season)
+                        if opp_r2h is None and prior_round_odds is not None:
+                            opp_r2_opp_slots = [half_slots[i] for i in _opponent_slot_indices(opp_idx, 1)]
+                            actual_opp_r2_opp = _alive_in_slots(opp_r2_opp_slots, prior_round_odds)
+                            if actual_opp_r2_opp is not None:
+                                opp_r2h = r2_home_team(opp[0], opp[1], actual_opp_r2_opp[0], actual_opp_r2_opp[1], season) == opp
                         if opp_r2h is not None:
                             host = qf_home_team(region, seed, r1h, r2h, opp[0], opp[1], opp_r1h, opp_r2h, season)
                             p_home += p_seed * (1.0 if host == (region, seed) else 0.0)
