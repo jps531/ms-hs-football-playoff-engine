@@ -70,8 +70,11 @@ Each rating entry should include `as_of_date` (the pipeline run date), `games_pl
 
 ## Hosting (`GET /api/v1/hosting/{clazz}/{region}`)
 
-**12. 1-seeds always have the highest hosting odds**
+**12. 1-seeds always have the highest hosting odds** ✅
 For any completed region, the 1-seed's round-1 hosting odds should be `1.0` (they always host). If a lower seed shows higher odds than the 1-seed, there's a bracket-slot mapping bug.
+
+**12a. Eliminated playoff teams show correct historical hosting facts** ✅
+For a team eliminated mid-bracket (e.g. lost in QF), their hosting odds for rounds they *played* should reflect the actual result (0 or 1), not all-zeros. Example: Leake County (1A region 5) on `?date=2025-11-21` — first_round and quarterfinals conditional should be `1`, second_round conditional should be `0`, semifinals should be `null`.
 
 ---
 

@@ -14,7 +14,8 @@ from backend.helpers.api_helpers import (
     parse_completed_games,
     results_to_applied,
 )
-from backend.helpers.data_classes import FormatSlot, StandingsOdds
+from backend.helpers.bracket_helpers import survivors_from_games
+from backend.helpers.data_classes import FormatSlot, Game, StandingsOdds
 from backend.helpers.scenario_updater import apply_region_game_results
 
 router = APIRouter(prefix="/api/v1", tags=["hosting"])
@@ -182,7 +183,72 @@ async def simulate_hosting(
         )
         completed = parse_completed_games([r async for r in game_rows])
         new_results = results_to_applied(body.results)
-        _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
+
+        if not remaining:
+            # Playoff mode: apply submitted results to the bracket survivor set.
+            seed_rows = await conn.execute(
+                """
+                SELECT rs.school, rs.region,
+                       CASE WHEN rs.odds_1st > 0.99 THEN 1
+                            WHEN rs.odds_2nd > 0.99 THEN 2
+                            WHEN rs.odds_3rd > 0.99 THEN 3
+                            WHEN rs.odds_4th > 0.99 THEN 4
+                       END AS seed
+                FROM region_standings rs
+                WHERE rs.season = %s AND rs.class = %s AND rs.clinched = TRUE
+                  AND rs.as_of_date = (
+                      SELECT MAX(rs2.as_of_date) FROM region_standings rs2
+                      WHERE rs2.season = %s AND rs2.class = %s AND rs2.clinched = TRUE
+                  )
+                """,
+                (season, clazz, season, clazz),
+            )
+            school_to_seed: dict[str, tuple[int, int]] = {}
+            async for school, reg, seed in seed_rows:
+                if seed is not None:
+                    school_to_seed[school] = (reg, seed)
+
+            playoff_game_rows = await conn.execute(
+                """
+                SELECT g.school, g.date, g.season, g.location_id, g.points_for,
+                       g.points_against, g.round, g.kickoff_time, g.opponent,
+                       g.result, g.game_status, g.source, g.location,
+                       g.region_game, g.final, g.overtime
+                FROM games_effective g
+                JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+                WHERE g.season = %s AND g.final = TRUE AND g.round IS NOT NULL
+                  AND ss.class = %s
+                ORDER BY g.date
+                """,
+                (season, clazz),
+            )
+            playoff_games = [Game.from_db_tuple(r) async for r in playoff_game_rows]
+
+            survivors, _ = survivors_from_games(playoff_games, school_to_seed)
+            for r in body.results:
+                if r.loser in school_to_seed:
+                    survivors.discard(school_to_seed[r.loser])
+            alive_seeds = {seed for (reg, seed) in survivors if reg == region}
+
+            odds_map: dict[str, StandingsOdds] = {}
+            for school, (reg, seed) in school_to_seed.items():
+                if reg != region:
+                    continue
+                is_alive = seed in alive_seeds
+                odds_map[school] = StandingsOdds(
+                    school=school,
+                    p1=1.0 if seed == 1 else 0.0,
+                    p2=1.0 if seed == 2 else 0.0,
+                    p3=1.0 if seed == 3 else 0.0,
+                    p4=1.0 if seed == 4 else 0.0,
+                    p_playoffs=1.0 if is_alive else 0.0,
+                    final_playoffs=0.0,
+                    clinched=True,
+                    eliminated=not is_alive,
+                )
+        else:
+            # Regular-season mode: simulate remaining region games.
+            _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
 
     entries = build_hosting_entries(odds_map, slots, region, season, clazz)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)

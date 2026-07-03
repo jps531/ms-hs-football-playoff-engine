@@ -39,6 +39,8 @@ def standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margi
     wl_totals = {t: {"w": 0, "l": 0, "t": 0, "pa": 0} for t in teams}
     # Completed region games
     for comp_game in completed:
+        if comp_game.a not in wl_totals or comp_game.b not in wl_totals:
+            continue
         if comp_game.res_a == 1:
             wl_totals[comp_game.a]["w"] += 1
             wl_totals[comp_game.b]["l"] += 1
