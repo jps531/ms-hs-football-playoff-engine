@@ -280,6 +280,8 @@ def playoff_bracket_update(season: int | None = None) -> None:
             class_weighted_odds = {r: seeding[r].odds_weighted for r in regions}
             matchup_fn = make_matchup_prob_fn(elo_at_date, class_weighted_odds, elo_cfg)
 
+            all_region_odds = {r: seeding[r].odds for r in regions}
+
             for region in regions:
                 get_region_finish_scenarios(
                     clazz,
@@ -289,6 +291,7 @@ def playoff_bracket_update(season: int | None = None) -> None:
                     matchup_fn,
                     as_of_date=playoff_date,
                     rounds_completed=rounds_completed,
+                    all_region_odds=all_region_odds,
                 )
 
         logger.info("%dA season %d: playoff bracket update complete.", clazz, season)

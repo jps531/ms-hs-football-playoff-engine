@@ -859,6 +859,7 @@ def get_region_finish_scenarios(
     matchup_prob_fn: MatchupProbFn | None = None,
     as_of_date: date | None = None,
     rounds_completed: int = 0,
+    all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
 ):
     """Phase 2: compute bracket/home odds and write results to DB.
 
@@ -882,6 +883,10 @@ def get_region_finish_scenarios(
                            Passed through to bracket-odds helpers so alive teams
                            show 1.0 for past rounds and correct forward odds for
                            remaining rounds.
+        all_region_odds:   Post-round seeding odds for all regions in this class.
+                           When provided alongside rounds_completed >= 1, enables
+                           deterministic (exactly 0 or 1) home odds for completed
+                           rounds instead of probabilistic estimates.
     """
     logger = get_run_logger()
 
@@ -902,19 +907,19 @@ def get_region_finish_scenarios(
 
     slots = fetch_all_format_slots.fn(clazz, season)
     second_round_home_marginal = (
-        compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed)
+        compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
         if clazz <= 4 else {}
     )
-    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed)
-    semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed)
+    quarterfinals_home_marginal = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+    semifinals_home_marginal = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
 
     bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn, rounds_completed)
     second_round_home_marginal_w = (
-        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed)
+        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
         if clazz <= 4 else {}
     )
-    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed)
-    semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed)
+    quarterfinals_home_marginal_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+    semifinals_home_marginal_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
 
     # Convert marginal home odds to conditional: P(hosts | reaches).
     _empty_bracket = BracketOdds("", 0.0, 0.0, 0.0, 0.0, 0.0)

@@ -45,15 +45,19 @@ import pytest
 
 from backend.helpers.bracket_home_odds import (
     MatchupProbFn,
+    _alive_in_slots,
     _p_home_in_r2,
     _p_team_reach,
+    _r2_home_if_deterministic,
     compute_bracket_advancement_odds,
     compute_quarterfinal_home_odds,
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
     equal_matchup_prob,
+    half_slots_for_region,
     marginal_home_odds,
     r2_home_team,
+    slot_index_for,
 )
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
 from backend.helpers.scenarios import compute_bracket_odds
@@ -774,6 +778,289 @@ def test_marginal_home_odds_zero_advancement() -> None:
 def test_marginal_home_odds_full_certainty() -> None:
     """Both 100% → marginal is 100%."""
     assert marginal_home_odds(1.0, 1.0) == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 7: Deterministic path via all_region_odds
+# ---------------------------------------------------------------------------
+#
+# When rounds_completed >= threshold AND all_region_odds is provided, the
+# compute functions bypass probabilistic estimation and return exactly 0.0 or
+# 1.0 by finding the one alive opponent and calling the deterministic home-team
+# functions (r2_home_team, qf_home_team, sf_home_team).
+#
+# 1A-4A North structure (used throughout):
+#   idx 0: slot 1  home=R1s1 away=R2s4    (R1 slot; R2 opp comes from idx 1)
+#   idx 1: slot 2  home=R3s2 away=R4s3    (R2 opp candidates for R1s1 / R2s4)
+#   idx 5: slot 6  home=R1s2 away=R2s3    (R1 slot; R2 opp comes from idx 4)
+#   idx 4: slot 5  home=R3s1 away=R4s4    (R2 opp candidates for R1s2 / R2s3)
+#
+# r2_home_if_deterministic coverage:
+#   R1s1 (idx=0): candidates are R3s2 (seed 2) and R4s3 (seed 3) → both worse → True
+#   R2s4 (idx=0): candidates are R3s2 (seed 2) and R4s3 (seed 3) → both better → False
+#   R1s2 (idx=5): candidates are R3s1 (seed 1) and R4s4 (seed 4) → differ → None (ambiguous)
+#
+# 5A-7A North structure:
+#   idx 0: slot 1  home=R1s1 away=R2s4
+#   idx 1: slot 2  home=R2s2 away=R1s3
+#   idx 2: slot 3  home=R2s1 away=R1s4
+#   idx 3: slot 4  home=R1s2 away=R2s3
+#   QF offset=1; SF offset=2.
+
+
+def _alive_odds(region: int, seed: int, school: str) -> dict[int, dict[str, StandingsOdds]]:
+    """Build all_region_odds with exactly one alive team."""
+    return {region: {school: _locked(school, seed)}}
+
+
+# ---------------------------------------------------------------------------
+# _alive_in_slots helper
+# ---------------------------------------------------------------------------
+
+
+def test_alive_in_slots_finds_home_candidate() -> None:
+    """Returns the home-position team when they are the alive candidate."""
+    half = half_slots_for_region(1, SLOTS_1A_4A_2025)
+    opp_slots = [half[1]]  # slot 2: R3s2 (home) vs R4s3 (away)
+    all_odds = {3: {"R3s2": _locked("R3s2", 2)}}
+    assert _alive_in_slots(opp_slots, all_odds) == (3, 2)
+
+
+def test_alive_in_slots_finds_away_candidate() -> None:
+    """Returns the away-position team when they are the alive candidate."""
+    half = half_slots_for_region(1, SLOTS_1A_4A_2025)
+    opp_slots = [half[1]]  # slot 2: R3s2 (home) vs R4s3 (away)
+    all_odds = {4: {"R4s3": _locked("R4s3", 3)}}
+    assert _alive_in_slots(opp_slots, all_odds) == (4, 3)
+
+
+def test_alive_in_slots_returns_none_when_empty() -> None:
+    """Returns None when no team in the slot pool is alive."""
+    half = half_slots_for_region(1, SLOTS_1A_4A_2025)
+    opp_slots = [half[1]]
+    assert _alive_in_slots(opp_slots, {}) is None
+
+
+def test_alive_in_slots_multi_slot_pool() -> None:
+    """Finds the alive team across a two-slot SF opponent pool (5A-7A)."""
+    half = half_slots_for_region(1, SLOTS_5A_7A_2025)
+    # R1s1 (idx=0) SF opponent pool = slots [2, 3]
+    opp_slots = [half[2], half[3]]
+    all_odds = {2: {"R2s1": _locked("R2s1", 1)}}
+    assert _alive_in_slots(opp_slots, all_odds) == (2, 1)
+
+
+# ---------------------------------------------------------------------------
+# _r2_home_if_deterministic helper
+# ---------------------------------------------------------------------------
+
+
+def test_r2_home_deterministic_seed1_always_true() -> None:
+    """Seed 1 hosts R2 against any opponent (seeds 2-4 are all worse) → True."""
+    half = half_slots_for_region(1, SLOTS_1A_4A_2025)
+    idx = slot_index_for(1, 1, half)  # R1s1 at idx=0
+    assert _r2_home_if_deterministic(1, 1, idx, half, ODD_SEASON) is True
+    assert _r2_home_if_deterministic(1, 1, idx, half, EVEN_SEASON) is True
+
+
+def test_r2_home_deterministic_seed4_always_false() -> None:
+    """Seed 4 never hosts R2 (opponents are seeds 2 and 3, both better) → False."""
+    half = half_slots_for_region(2, SLOTS_1A_4A_2025)
+    idx = slot_index_for(2, 4, half)  # R2s4 at idx=0
+    assert _r2_home_if_deterministic(2, 4, idx, half, ODD_SEASON) is False
+    assert _r2_home_if_deterministic(2, 4, idx, half, EVEN_SEASON) is False
+
+
+def test_r2_home_deterministic_seed2_ambiguous() -> None:
+    """Seed 2 (R1s2) whose R2 opponent can be seed 1 or seed 4 → None (ambiguous)."""
+    half = half_slots_for_region(1, SLOTS_1A_4A_2025)
+    idx = slot_index_for(1, 2, half)  # R1s2 at idx=5; opp slot: R3s1 vs R4s4
+    # Odd year: R3s1 → r2_home=False (seed 1 hosts); R4s4 → r2_home=True (seed 2 hosts)
+    assert _r2_home_if_deterministic(1, 2, idx, half, ODD_SEASON) is None
+    # Even year: same ambiguity in this bracket configuration
+    assert _r2_home_if_deterministic(1, 2, idx, half, EVEN_SEASON) is None
+
+
+# ---------------------------------------------------------------------------
+# compute_second_round_home_odds — deterministic path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "opp_region,opp_seed,opp_school,expected",
+    [
+        (3, 2, "R3s2", 1.0),  # R3s2 wins their R1 → R1s1 hosts (seed 1 < 2)
+        (4, 3, "R4s3", 1.0),  # R4s3 wins their R1 → R1s1 hosts (seed 1 < 3)
+    ],
+    ids=["opp_R3s2", "opp_R4s3"],
+)
+def test_r2_deterministic_seed1_hosts_regardless_of_opponent(
+    opp_region: int, opp_seed: int, opp_school: str, expected: float
+) -> None:
+    """R1s1 hosts R2 exactly (1.0) regardless of which R1 opponent survived."""
+    all_odds = _alive_odds(opp_region, opp_seed, opp_school)
+    result = compute_second_round_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=1, all_region_odds=all_odds,
+    )
+    assert result["R1s1"] == pytest.approx(expected)
+
+
+def test_r2_deterministic_seed2_away_when_seed1_opponent() -> None:
+    """R1s2 is away in R2 (0.0) when their opponent is seed-1 R3s1."""
+    all_odds = _alive_odds(3, 1, "R3s1")
+    result = compute_second_round_home_odds(
+        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=1, all_region_odds=all_odds,
+    )
+    assert result["R1s2"] == pytest.approx(0.0)
+
+
+def test_r2_deterministic_seed2_home_when_seed4_opponent() -> None:
+    """R1s2 hosts R2 (1.0) when their opponent is seed-4 R4s4."""
+    all_odds = _alive_odds(4, 4, "R4s4")
+    result = compute_second_round_home_odds(
+        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=1, all_region_odds=all_odds,
+    )
+    assert result["R1s2"] == pytest.approx(1.0)
+
+
+def test_r2_deterministic_falls_through_without_all_region_odds() -> None:
+    """Without all_region_odds, rounds_completed=1 falls through to probabilistic."""
+    result = compute_second_round_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=1,
+    )
+    # Probabilistic: p_r1=1.0, p_r2_home=1.0 (seed 1 always hosts) → marginal = 1.0
+    assert result["R1s1"] == pytest.approx(1.0)
+
+
+def test_r2_deterministic_eliminated_team_gets_zero() -> None:
+    """Eliminated team (p_playoffs=0) returns 0.0 in deterministic path."""
+    elim = StandingsOdds(school="Elim", p1=0.0, p2=0.0, p3=0.0, p4=0.0,
+                         p_playoffs=0.0, final_playoffs=0.0, clinched=False, eliminated=True)
+    all_odds = _alive_odds(3, 2, "R3s2")
+    result = compute_second_round_home_odds(
+        1, {"Elim": elim}, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=1, all_region_odds=all_odds,
+    )
+    assert result["Elim"] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# compute_quarterfinal_home_odds — deterministic path (5A-7A, qf_offset=1)
+# ---------------------------------------------------------------------------
+#
+# 5A-7A: no R2 round → r2_home=False for all. QF opponent from the adjacent slot.
+# R1s1 (idx=0): QF opp from slot idx=[1] = R2s2 vs R1s3
+# R1s1 always hosts vs R2s2 (equal seed, odd year → lower region → R1) or vs R1s3 (golden rule → seed 1).
+
+
+@pytest.mark.parametrize(
+    "opp_region,opp_seed,opp_school,expected",
+    [
+        (2, 2, "R2s2", 1.0),  # equal seed, odd year → lower region R1 hosts
+        (1, 3, "R1s3", 1.0),  # same-region golden rule → seed 1 hosts
+    ],
+    ids=["opp_R2s2", "opp_R1s3"],
+)
+def test_qf_deterministic_seed1_hosts_5a7a(
+    opp_region: int, opp_seed: int, opp_school: str, expected: float
+) -> None:
+    """R1s1 gets QF conditional=1.0 via deterministic path for both possible QF opponents."""
+    all_odds = _alive_odds(opp_region, opp_seed, opp_school)
+    result = compute_quarterfinal_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
+        rounds_completed=1, all_region_odds=all_odds,
+    )
+    assert result["R1s1"] == pytest.approx(expected)
+
+
+def test_qf_deterministic_seed2_away_vs_seed1_5a7a() -> None:
+    """R1s2 is away (0.0) in QF when facing better-seeded R2s1."""
+    all_odds = _alive_odds(2, 1, "R2s1")
+    result = compute_quarterfinal_home_odds(
+        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_5A_7A_2025, ODD_SEASON,
+        rounds_completed=1, all_region_odds=all_odds,
+    )
+    assert result["R1s2"] == pytest.approx(0.0)
+
+
+def test_qf_deterministic_falls_through_without_all_region_odds() -> None:
+    """Without all_region_odds, falls through to probabilistic even when rounds_completed=1.
+
+    R1s2 faces either R2s1 (away) or R1s4 (home via golden rule), each at 0.5 weight
+    under equal_matchup_prob → p_qf_home=0.5, p_reach=1.0 → marginal=0.5.
+    """
+    result = compute_quarterfinal_home_odds(
+        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=1,
+    )
+    assert result["R1s2"] == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# compute_semifinal_home_odds — deterministic path (5A-7A, sf_offset=2)
+# ---------------------------------------------------------------------------
+#
+# R1s1 (idx=0): SF opponent pool = slots [2, 3] = {R2s1, R1s4, R1s2, R2s3}
+# sf_home_team needs only (region, seed) pairs; no prior home game info.
+# R1s1 vs R2s1 (seed tie, odd year) → lower region → R1 hosts → 1.0
+# R1s1 vs R1s2 (same region, seed 1 < 2) → R1s1 hosts → 1.0
+# R2s1 (idx=2): SF opponent pool = slots [0, 1] = {R1s1, R2s4, R2s2, R1s3}
+# R2s1 vs R1s1 (seed tie, odd year) → lower region → R1 hosts → R2s1 gets 0.0
+
+
+@pytest.mark.parametrize(
+    "opp_region,opp_seed,opp_school,expected",
+    [
+        (2, 1, "R2s1", 1.0),   # equal seed, odd year → R1 (lower) hosts
+        (1, 2, "R1s2", 1.0),   # same region, golden rule → seed 1 hosts
+    ],
+    ids=["opp_R2s1_seed_tie", "opp_R1s2_golden_rule"],
+)
+def test_sf_deterministic_seed1_hosts_5a7a(
+    opp_region: int, opp_seed: int, opp_school: str, expected: float
+) -> None:
+    """R1s1 hosts SF (1.0) in the deterministic path against both possible opponents."""
+    all_odds = _alive_odds(opp_region, opp_seed, opp_school)
+    result = compute_semifinal_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
+        rounds_completed=2, all_region_odds=all_odds,
+    )
+    assert result["R1s1"] == pytest.approx(expected)
+
+
+def test_sf_deterministic_seed1_r2_away_vs_r1s1() -> None:
+    """R2s1 gets SF conditional=0.0 vs R1s1 (equal seed, odd year → R1 region hosts)."""
+    all_odds = _alive_odds(1, 1, "R1s1")
+    result = compute_semifinal_home_odds(
+        2, {"R2s1": _locked("R2s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
+        rounds_completed=2, all_region_odds=all_odds,
+    )
+    assert result["R2s1"] == pytest.approx(0.0)
+
+
+def test_sf_deterministic_falls_through_without_all_region_odds() -> None:
+    """Without all_region_odds, falls through to probabilistic even when rounds_completed=2."""
+    result = compute_semifinal_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=2,
+    )
+    # Probabilistic: fractional value (not exactly 0 or 1)
+    assert 0.0 < result["R1s1"] < 1.0
+
+
+def test_sf_deterministic_sum_invariant_5a7a_north() -> None:
+    """Deterministic SF hosting sums to 1 game across both alive SF participants (5A-7A North)."""
+    # R1s1 vs R2s1: odd year → R1s1 hosts
+    all_odds = {
+        1: {"R1s1": _locked("R1s1", 1)},
+        2: {"R2s1": _locked("R2s1", 1)},
+    }
+    r1 = compute_semifinal_home_odds(1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
+                                     rounds_completed=2, all_region_odds=all_odds)
+    r2 = compute_semifinal_home_odds(2, {"R2s1": _locked("R2s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
+                                     rounds_completed=2, all_region_odds=all_odds)
+    assert r1["R1s1"] + r2["R2s1"] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

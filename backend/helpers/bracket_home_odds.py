@@ -516,6 +516,46 @@ def _p_host_qf_given_seed(
 
 
 # ---------------------------------------------------------------------------
+# Helpers for deterministic override (rounds_completed path)
+# ---------------------------------------------------------------------------
+
+
+def _alive_in_slots(
+    opp_slots: list[FormatSlot],
+    all_region_odds: "dict[int, dict[str, StandingsOdds]]",
+) -> "tuple[int, int] | None":
+    """Return (region, seed) of the one alive team across *opp_slots*, or None.
+
+    A team is considered alive when any school in their region has the matching
+    seed probability > 0.5 (post-round seedings are deterministic: 0.0 or 1.0).
+    """
+    for slot in opp_slots:
+        for r, s in ((slot.home_region, slot.home_seed), (slot.away_region, slot.away_seed)):
+            if any(getattr(o, f"p{s}", 0.0) > 0.5 for o in all_region_odds.get(r, {}).values()):
+                return (r, s)
+    return None
+
+
+def _r2_home_if_deterministic(
+    region: int,
+    seed: int,
+    idx: int,
+    half_slots: list[FormatSlot],
+    season: int,
+) -> "bool | None":
+    """True/False if team's R2 home status is the same regardless of which R1 candidate advanced.
+
+    Returns None when the two possible R2 opponents give different r2_home_team results
+    (rare even-year same-cross-region-seed case), indicating the caller should fall back
+    to the probabilistic path.
+    """
+    opp_slot = half_slots[_opponent_slot_indices(idx, 1)[0]]
+    r2h_a = r2_home_team(region, seed, opp_slot.home_region, opp_slot.home_seed, season) == (region, seed)
+    r2h_b = r2_home_team(region, seed, opp_slot.away_region, opp_slot.away_seed, season) == (region, seed)
+    return r2h_a if r2h_a == r2h_b else None
+
+
+# ---------------------------------------------------------------------------
 # Deterministic home-team rules
 # ---------------------------------------------------------------------------
 
@@ -663,6 +703,7 @@ def compute_second_round_home_odds(
     season: int,
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
     rounds_completed: int = 0,
+    all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their second-round game.
 
@@ -671,20 +712,45 @@ def compute_second_round_home_odds(
     Rule: higher seed hosts.  Equal cross-region seeds use the odd/even year
     region-number tiebreak (same as QF/SF).
 
+    When *rounds_completed* >= 1 and *all_region_odds* is provided, bypasses
+    probabilistic computation and returns exactly 0.0 or 1.0 per team by
+    finding the one alive opponent in the adjacent slot and applying
+    ``r2_home_team`` directly.
+
     Args:
-        region:       Region number for the teams in *region_odds*.
-        region_odds:  Dict mapping team name to ``StandingsOdds``.
-        slots:        All first-round format slots for this class (all regions).
-        season:       Football season year (used for odd/even tiebreak).
-        win_prob_fn:  Optional win-probability function.  Defaults to 0.5 for
-                      every game.
+        region:          Region number for the teams in *region_odds*.
+        region_odds:     Dict mapping team name to ``StandingsOdds``.
+        slots:           All first-round format slots for this class (all regions).
+        season:          Football season year (used for odd/even tiebreak).
+        win_prob_fn:     Optional win-probability function.  Defaults to 0.5 for
+                         every game.
+        all_region_odds: Cross-region seeding odds after completed rounds.
+                         When provided alongside *rounds_completed* >= 1, enables
+                         deterministic 0/1 results for the R2 home decision.
 
     Returns:
         Dict mapping team name to marginal P(hosting round 2) in [0.0, 1.0].
     """
     half_slots = _half_slots_for_region(region, slots)
+    if rounds_completed >= 1 and all_region_odds is not None:
+        result: dict[str, float] = {}
+        for school, o in region_odds.items():
+            seed = next((s for s, p in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)) if p > 0.5), None)
+            if seed is None or o.p_playoffs <= 0:
+                result[school] = 0.0
+                continue
+            idx = _slot_index_for(region, seed, half_slots)
+            if idx is None:
+                result[school] = 0.0
+                continue
+            opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, 1)]
+            opp = _alive_in_slots(opp_slots, all_region_odds)
+            result[school] = (
+                1.0 if opp and r2_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
+            )
+        return result
     odd_year = season % 2 == 1
-    result: dict[str, float] = {}
+    result = {}
     for school, o in region_odds.items():
         p_home = 0.0
         for seed, p_seed in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)):
@@ -717,6 +783,7 @@ def compute_quarterfinal_home_odds(
     season: int,
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
     rounds_completed: int = 0,
+    all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their quarterfinal game.
 
@@ -727,13 +794,19 @@ def compute_quarterfinal_home_odds(
     higher seed hosts; equal seed → region-number tiebreak (odd years: lower
     region# hosts; even years: higher region# hosts).
 
+    When *rounds_completed* >= qf_offset and *all_region_odds* is provided,
+    attempts deterministic 0/1 computation via ``qf_home_team``.  Falls back to
+    probabilistic for teams where ``_r2_home_if_deterministic`` returns None
+    (even-year same-cross-region-seed edge case).
+
     Args:
-        region:       Region number for the teams in *region_odds*.
-        region_odds:  Dict mapping team name to ``StandingsOdds``.
-        slots:        All first-round format slots for this class (all regions).
-        season:       Football season year (used for odd/even year tiebreak).
-        win_prob_fn:  Optional win-probability function.  Defaults to 0.5 for
-                      every game.
+        region:          Region number for the teams in *region_odds*.
+        region_odds:     Dict mapping team name to ``StandingsOdds``.
+        slots:           All first-round format slots for this class (all regions).
+        season:          Football season year (used for odd/even year tiebreak).
+        win_prob_fn:     Optional win-probability function.  Defaults to 0.5 for
+                         every game.
+        all_region_odds: Cross-region seeding odds after completed rounds.
 
     Returns:
         Dict mapping team name to marginal P(hosting quarterfinal) in [0.0, 1.0].
@@ -750,6 +823,22 @@ def compute_quarterfinal_home_odds(
             idx = _slot_index_for(region, seed, half_slots)
             if idx is None:
                 continue
+            if rounds_completed >= qf_offset and all_region_odds is not None:
+                r1h = _was_home_r1(region, seed, half_slots[idx])
+                # For 5A-7A (qf_offset=1) there is no R2; r2_home is always False.
+                # For 1A-4A (qf_offset=2) derive r2_home, falling back to probabilistic if ambiguous.
+                r2h: "bool | None" = False if qf_offset == 1 else _r2_home_if_deterministic(region, seed, idx, half_slots, season)
+                opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, qf_offset)]
+                opp = _alive_in_slots(opp_slots, all_region_odds)
+                if r2h is not None and opp is not None:
+                    opp_idx = _slot_index_for(opp[0], opp[1], half_slots)
+                    if opp_idx is not None:
+                        opp_r1h = _was_home_r1(opp[0], opp[1], half_slots[opp_idx])
+                        opp_r2h: "bool | None" = False if qf_offset == 1 else _r2_home_if_deterministic(opp[0], opp[1], opp_idx, half_slots, season)
+                        if opp_r2h is not None:
+                            host = qf_home_team(region, seed, r1h, r2h, opp[0], opp[1], opp_r1h, opp_r2h, season)
+                            p_home += p_seed * (1.0 if host == (region, seed) else 0.0)
+                            continue
             p_reach = _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn, skip_wins=rounds_completed)
             p_qf_home = _p_host_qf_given_seed(seed, region, idx, half_slots, qf_offset, odd_year, season, win_prob_fn)
             p_home += p_seed * p_reach * p_qf_home
@@ -764,6 +853,7 @@ def compute_semifinal_home_odds(
     season: int,
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
     rounds_completed: int = 0,
+    all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their semifinal game.
 
@@ -774,21 +864,43 @@ def compute_semifinal_home_odds(
     lower-numbered region hosts; in even years the higher-numbered region hosts.
     Home games played do **not** factor in at this round.
 
+    When *rounds_completed* >= sf_offset and *all_region_odds* is provided,
+    returns exactly 0.0 or 1.0 per team by finding the one alive SF opponent
+    and applying ``sf_home_team`` directly.
+
     Args:
-        region:       Region number for the teams in *region_odds*.
-        region_odds:  Dict mapping team name to ``StandingsOdds``.
-        slots:        All first-round format slots for this class (all regions).
-        season:       Football season year (used for odd/even year tiebreak).
-        win_prob_fn:  Optional win-probability function.  Defaults to 0.5 for
-                      every game.
+        region:          Region number for the teams in *region_odds*.
+        region_odds:     Dict mapping team name to ``StandingsOdds``.
+        slots:           All first-round format slots for this class (all regions).
+        season:          Football season year (used for odd/even year tiebreak).
+        win_prob_fn:     Optional win-probability function.  Defaults to 0.5 for
+                         every game.
+        all_region_odds: Cross-region seeding odds after completed rounds.
 
     Returns:
         Dict mapping team name to marginal P(hosting semifinal) in [0.0, 1.0].
     """
     half_slots = _half_slots_for_region(region, slots)
     sf_offset = 2 if len(half_slots) == 4 else 3
+    if rounds_completed >= sf_offset and all_region_odds is not None:
+        result: dict[str, float] = {}
+        for school, o in region_odds.items():
+            seed = next((s for s, p in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)) if p > 0.5), None)
+            if seed is None or o.p_playoffs <= 0:
+                result[school] = 0.0
+                continue
+            idx = _slot_index_for(region, seed, half_slots)
+            if idx is None:
+                result[school] = 0.0
+                continue
+            opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, sf_offset)]
+            opp = _alive_in_slots(opp_slots, all_region_odds)
+            result[school] = (
+                1.0 if opp and sf_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
+            )
+        return result
     odd_year = season % 2 == 1
-    result: dict[str, float] = {}
+    result = {}
     for school, o in region_odds.items():
         p_home = 0.0
         for seed, p_seed in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)):
