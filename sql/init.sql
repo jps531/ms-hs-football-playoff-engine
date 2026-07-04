@@ -168,8 +168,11 @@ FROM locations;
 
 CREATE OR REPLACE VIEW games_effective AS
 SELECT
-  school, date, season, opponent, result, final, overtime,
-  game_status, game_quarter, game_clock, source,
+  school, date, season, opponent,
+  COALESCE(overrides->>'result',      result)      AS result,
+  final, overtime,
+  COALESCE(overrides->>'game_status', game_status) AS game_status,
+  game_quarter, game_clock, source,
   helmet_design_id,
   COALESCE(overrides->>'location',                location)       AS location,
   COALESCE((overrides->>'location_id')::int,      location_id)    AS location_id,

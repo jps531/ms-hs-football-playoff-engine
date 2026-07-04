@@ -68,6 +68,41 @@ Consolidated schools start the season at the class prior (no manual seeding need
 
 ---
 
+## Known data corrections (`sql/corrections/`)
+
+Some scraped game results require manual correction because MHSAA overruled an outcome
+after the initial scrape. These corrections are stored as overrides (not direct `games`
+table updates) so they survive pipeline re-runs and leave the original scraped data intact.
+
+**Applying corrections after a fresh deployment:**
+After the season's games are scraped, run any relevant correction scripts before triggering
+the standings or playoff pipelines:
+```
+psql $DATABASE_URL -f sql/corrections/<script>.sql
+```
+
+Scripts are idempotent — re-running a script after pipelines have already processed is safe
+(overrides are already in place; just re-run the standings and playoff pipelines afterward).
+
+To inspect all active overrides:
+```sql
+SELECT * FROM list_overrides();
+```
+
+### Salem 2025 (`sql/corrections/salem_forfeit_2025.sql`)
+
+AHSFHS recorded 6 Salem regular-season games as `final_forfeit` (opponents W, Salem L).
+MHSAA later overruled the forfeits; actual game scores stand (Salem wins each game).
+
+Games affected: Salem vs McLaurin (8/29), Wilkinson County (9/5), Richton (9/12),
+Discovery Christian (10/3), West Lincoln (10/10), Mount Olive (10/24).
+
+After applying the correction, re-run both pipelines:
+1. `region_standings_pipeline(season=2025)`
+2. `playoff_bracket_update(season=2025)`
+
+---
+
 ## 2026: Leake (5A Region 2)
 
 Leake County (1A Region 5) and Leake Central (4A Region 5) merged to form Leake (5A Region 2).
