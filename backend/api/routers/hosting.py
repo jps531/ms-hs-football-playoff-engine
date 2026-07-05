@@ -14,7 +14,7 @@ from backend.helpers.api_helpers import (
     parse_completed_games,
     results_to_applied,
 )
-from backend.helpers.data_classes import FormatSlot, Game, StandingsOdds
+from backend.helpers.data_classes import FormatSlot, StandingsOdds
 from backend.helpers.scenario_updater import apply_region_game_results
 
 router = APIRouter(prefix="/api/v1", tags=["hosting"])
@@ -207,32 +207,11 @@ async def simulate_hosting(
                 if seed is not None:
                     school_to_seed[school] = (reg, seed)
 
-            playoff_game_rows = await conn.execute(
-                """
-                SELECT g.school, g.date, g.season, g.location_id, g.points_for,
-                       g.points_against, g.round, g.kickoff_time, g.opponent,
-                       g.result, g.game_status, g.source, g.location,
-                       g.region_game, g.final, g.overtime
-                FROM games_effective g
-                JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
-                WHERE g.season = %s AND g.final = TRUE AND g.round IS NOT NULL
-                  AND ss.class = %s
-                ORDER BY g.date
-                """,
-                (season, clazz),
-            )
-            playoff_games = [Game.from_db_tuple(r) async for r in playoff_game_rows]
-
-            winners_known: set[tuple[int, int]] = set()
+            wins_by_team: dict[str, int] = {}
             losers_known: set[tuple[int, int]] = set()
-            for g in playoff_games:
-                if g.result == "W" and g.school in school_to_seed:
-                    winners_known.add(school_to_seed[g.school])
-                elif g.result == "L" and g.school in school_to_seed:
-                    losers_known.add(school_to_seed[g.school])
             for r in body.results:
                 if r.winner in school_to_seed:
-                    winners_known.add(school_to_seed[r.winner])
+                    wins_by_team[r.winner] = wins_by_team.get(r.winner, 0) + 1
                 if r.loser in school_to_seed:
                     losers_known.add(school_to_seed[r.loser])
 
@@ -240,9 +219,9 @@ async def simulate_hosting(
             for school, (reg, seed) in school_to_seed.items():
                 if reg != region:
                     continue
-                is_winner = (reg, seed) in winners_known
+                confirmed_wins = wins_by_team.get(school, 0)
                 is_loser = (reg, seed) in losers_known
-                if is_winner:
+                if confirmed_wins > 0:
                     p_playoffs = 1.0
                 elif is_loser:
                     p_playoffs = 0.0
@@ -259,19 +238,12 @@ async def simulate_hosting(
                     clinched=True,
                     eliminated=is_loser,
                 )
-
-            _ROUND_NUMBERS = {"First Round": 1, "Second Round": 2, "Quarterfinals": 3, "Semifinals": 4}
-            rounds_in_db = max(
-                (_ROUND_NUMBERS.get(g.round or "", 0) for g in playoff_games if g.result in ("W", "L")),
-                default=0,
-            )
-            rounds_completed = rounds_in_db + (1 if body.results else 0)
         else:
             # Regular-season mode: simulate remaining region games.
             _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
-            rounds_completed = 0
+            wins_by_team = {}
 
-    entries = build_hosting_entries(odds_map, slots, region, season, clazz, rounds_completed=rounds_completed)
+    entries = build_hosting_entries(odds_map, slots, region, season, clazz, wins_confirmed=wins_by_team)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 

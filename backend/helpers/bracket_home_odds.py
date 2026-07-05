@@ -751,6 +751,7 @@ def compute_second_round_home_odds(
     rounds_completed: int = 0,
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
     round_snapshots: "dict[int, dict[int, dict[str, StandingsOdds]]] | None" = None,
+    wins_confirmed: "dict[str, int] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their second-round game.
 
@@ -818,13 +819,14 @@ def compute_second_round_home_odds(
     result = {}
     for school, o in region_odds.items():
         p_home = 0.0
+        tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
         for seed, p_seed in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)):
             if p_seed <= 0.0:
                 continue
             idx = _slot_index_for(region, seed, half_slots)
             if idx is None:
                 continue
-            p_r1 = 1.0 if rounds_completed >= 1 else _p_team_r1_win(region, seed, half_slots[idx], win_prob_fn)
+            p_r1 = 1.0 if tw >= 1 else _p_team_r1_win(region, seed, half_slots[idx], win_prob_fn)
             opp_indices = _opponent_slot_indices(idx, round_offset=1)
             p_r2_home = _p_host_seed_rule(
                 seed,
@@ -850,6 +852,7 @@ def compute_quarterfinal_home_odds(
     rounds_completed: int = 0,
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
     round_snapshots: "dict[int, dict[int, dict[str, StandingsOdds]]] | None" = None,
+    wins_confirmed: "dict[str, int] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their quarterfinal game.
 
@@ -938,7 +941,8 @@ def compute_quarterfinal_home_odds(
                             host = qf_home_team(region, seed, r1h, r2h, opp[0], opp[1], opp_r1h, opp_r2h, season)
                             p_home += p_seed * (1.0 if host == (region, seed) else 0.0)
                             continue
-            p_reach = _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn, skip_wins=rounds_completed)
+            tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
+            p_reach = _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn, skip_wins=tw)
             p_qf_home = _p_host_qf_given_seed(seed, region, idx, half_slots, qf_offset, odd_year, season, win_prob_fn)
             p_home += p_seed * p_reach * p_qf_home
         result[school] = p_home
@@ -953,6 +957,7 @@ def compute_semifinal_home_odds(
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
     rounds_completed: int = 0,
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
+    wins_confirmed: "dict[str, int] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their semifinal game.
 
@@ -1008,7 +1013,8 @@ def compute_semifinal_home_odds(
             idx = _slot_index_for(region, seed, half_slots)
             if idx is None:
                 continue
-            p_reach = _p_team_reach(region, seed, idx, sf_offset, half_slots, win_prob_fn, skip_wins=rounds_completed)
+            tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
+            p_reach = _p_team_reach(region, seed, idx, sf_offset, half_slots, win_prob_fn, skip_wins=tw)
             opp_indices = _opponent_slot_indices(idx, round_offset=sf_offset)
             p_sf_home = _p_host_seed_rule(
                 seed,
@@ -1031,6 +1037,7 @@ def compute_bracket_advancement_odds(
     slots: list[FormatSlot],
     win_prob_fn: MatchupProbFn = equal_matchup_prob,
     rounds_completed: int = 0,
+    wins_confirmed: "dict[str, int] | None" = None,
 ) -> dict[str, BracketOdds]:
     """Compute each team's probability of advancing to successive playoff rounds.
 
@@ -1127,11 +1134,12 @@ def compute_bracket_advancement_odds(
         # For rounds already played, alive teams (p_playoffs > 0) get 1.0 for each
         # past milestone. Eliminated teams stay at 0.0 since their p_playoffs = 0.
         p = o.p_playoffs
-        eff_r2 = p if (is_1a_4a and rounds_completed >= 1) else p_r2
-        eff_qf = p if rounds_completed >= qf_offset else p_qf
-        eff_sf = p if rounds_completed >= sf_offset else p_sf
-        eff_finals = p if rounds_completed >= wins_to_win_half else p_finals
-        eff_champion = p if rounds_completed > wins_to_win_half else p_champion
+        tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
+        eff_r2 = p if (is_1a_4a and tw >= 1) else p_r2
+        eff_qf = p if tw >= qf_offset else p_qf
+        eff_sf = p if tw >= sf_offset else p_sf
+        eff_finals = p if tw >= wins_to_win_half else p_finals
+        eff_champion = p if tw > wins_to_win_half else p_champion
 
         result[school] = BracketOdds(
             school=school,

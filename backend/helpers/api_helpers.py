@@ -322,6 +322,7 @@ def build_hosting_entries(
     stored_adv: dict[str, tuple[float, float, float, float]] | None = None,
     stored_adv_w: dict[str, tuple[float, float, float, float]] | None = None,
     rounds_completed: int = 0,
+    wins_confirmed: dict[str, int] | None = None,
 ) -> list[TeamHostingEntry]:
     """Compute per-round playoff hosting odds for all teams in a region.
 
@@ -345,10 +346,10 @@ def build_hosting_entries(
     use_stored = home_cond is not None and stored_adv is not None
 
     if not use_stored:
-        adv_odds = compute_bracket_advancement_odds(region, region_odds, slots, rounds_completed=rounds_completed)
-        qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed)
-        sf_home = compute_semifinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed)
-        r2_home_dict = compute_second_round_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed) if is_1a_4a else {}
+        adv_odds = compute_bracket_advancement_odds(region, region_odds, slots, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
+        qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
+        sf_home = compute_semifinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
+        r2_home_dict = compute_second_round_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed) if is_1a_4a else {}
         r1_home_seeds = {s.home_seed for s in slots if s.home_region == region}
 
     entries = []
