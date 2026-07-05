@@ -11,11 +11,13 @@ from backend.api.models.requests import SimulateRegionRequest
 from backend.api.models.responses import HostingResponse
 from backend.helpers.api_helpers import (
     build_hosting_entries,
+    build_seeding_by_region,
     parse_completed_games,
     results_to_applied,
 )
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
 from backend.helpers.scenario_updater import apply_region_game_results
+from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["hosting"])
 
@@ -183,6 +185,17 @@ async def simulate_hosting(
         completed = parse_completed_games([r async for r in game_rows])
         new_results = results_to_applied(body.results)
 
+        elo_rows = await conn.execute(
+            """
+            SELECT DISTINCT ON (school) school, elo
+            FROM team_ratings
+            WHERE season = %s AND as_of_date <= %s
+            ORDER BY school, as_of_date DESC
+            """,
+            (season, as_of),
+        )
+        elo_ratings: dict[str, float] = {r[0]: r[1] async for r in elo_rows}
+
         if not remaining:
             # Playoff mode: apply submitted results to the bracket survivor set.
             seed_rows = await conn.execute(
@@ -221,29 +234,63 @@ async def simulate_hosting(
                     continue
                 confirmed_wins = wins_by_team.get(school, 0)
                 is_loser = (reg, seed) in losers_known
-                if confirmed_wins > 0:
-                    p_playoffs = 1.0
-                elif is_loser:
-                    p_playoffs = 0.0
+                if is_loser:
+                    odds_map[school] = StandingsOdds(
+                        school=school,
+                        p1=0.0, p2=0.0, p3=0.0, p4=0.0,
+                        p_playoffs=0.0, final_playoffs=0.0,
+                        clinched=True, eliminated=True,
+                    )
                 else:
-                    p_playoffs = 0.5
-                odds_map[school] = StandingsOdds(
+                    p_playoffs = 1.0 if confirmed_wins > 0 else 0.5
+                    odds_map[school] = StandingsOdds(
+                        school=school,
+                        p1=1.0 if seed == 1 else 0.0,
+                        p2=1.0 if seed == 2 else 0.0,
+                        p3=1.0 if seed == 3 else 0.0,
+                        p4=1.0 if seed == 4 else 0.0,
+                        p_playoffs=p_playoffs,
+                        final_playoffs=p_playoffs,
+                        clinched=True,
+                        eliminated=False,
+                    )
+
+            seeding_by_region: dict[int, dict[str, StandingsOdds]] = {}
+            for school, (reg, seed) in school_to_seed.items():
+                seeding_by_region.setdefault(reg, {})[school] = StandingsOdds(
                     school=school,
                     p1=1.0 if seed == 1 else 0.0,
                     p2=1.0 if seed == 2 else 0.0,
                     p3=1.0 if seed == 3 else 0.0,
                     p4=1.0 if seed == 4 else 0.0,
-                    p_playoffs=p_playoffs,
-                    final_playoffs=p_playoffs,
-                    clinched=True,
-                    eliminated=is_loser,
+                    p_playoffs=1.0, final_playoffs=1.0,
+                    clinched=True, eliminated=False,
                 )
+            matchup_fn_w = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
         else:
             # Regular-season mode: simulate remaining region games.
             _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
             wins_by_team = {}
 
-    entries = build_hosting_entries(odds_map, slots, region, season, clazz, wins_confirmed=wins_by_team)
+            other_rows = await conn.execute(
+                """
+                SELECT DISTINCT ON (school) school, region, odds_1st, odds_2nd, odds_3rd, odds_4th
+                FROM region_standings
+                WHERE season = %s AND class = %s AND region != %s AND as_of_date <= %s
+                ORDER BY school, as_of_date DESC
+                """,
+                (season, clazz, region, as_of),
+            )
+            other_region_rows = [(r[0], r[1], r[2], r[3], r[4], r[5]) async for r in other_rows]
+            seeding_by_region = build_seeding_by_region(region, odds_map, other_region_rows)
+            matchup_fn_w = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
+
+    entries = build_hosting_entries(
+        odds_map, slots, region, season, clazz,
+        wins_confirmed=wins_by_team,
+        win_prob_fn_weighted=matchup_fn_w,
+        region_odds_weighted=odds_map,
+    )
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 

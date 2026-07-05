@@ -35,6 +35,7 @@ from backend.helpers.data_classes import (
     BracketTeam,
     CompletedGame,
     FormatSlot,
+    MatchupProbFn,
     RemainingGame,
     StandingsOdds,
 )
@@ -307,6 +308,44 @@ def standings_from_odds(
 
 
 # ---------------------------------------------------------------------------
+# Seeding odds helpers — used by simulate endpoint weighted computation
+# ---------------------------------------------------------------------------
+
+
+def build_seeding_by_region(
+    simulated_region: int,
+    simulated_odds: dict[str, StandingsOdds],
+    other_region_rows: list[tuple[str, int, float, float, float, float]],
+) -> dict[int, dict[str, StandingsOdds]]:
+    """Combine hypothetical odds for one region with stored odds for all others.
+
+    Used by the regular-season simulate path to build the full
+    ``seeding_odds_by_region`` argument required by ``make_matchup_prob_fn``.
+
+    Args:
+        simulated_region:  The region whose odds come from the what-if simulation.
+        simulated_odds:    Updated ``StandingsOdds`` for that region (may be
+                           fractional / probabilistic).
+        other_region_rows: Rows from ``region_standings`` for every other region:
+                           ``(school, region, odds_1st, odds_2nd, odds_3rd, odds_4th)``.
+
+    Returns:
+        ``dict[int, dict[str, StandingsOdds]]`` covering all regions present in
+        the inputs, suitable for passing directly to ``make_matchup_prob_fn``.
+    """
+    result: dict[int, dict[str, StandingsOdds]] = {simulated_region: simulated_odds}
+    for school, reg, p1, p2, p3, p4 in other_region_rows:
+        p_playoffs = p1 + p2 + p3 + p4
+        result.setdefault(reg, {})[school] = StandingsOdds(
+            school=school,
+            p1=p1, p2=p2, p3=p3, p4=p4,
+            p_playoffs=p_playoffs, final_playoffs=p_playoffs,
+            clinched=False, eliminated=False,
+        )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Response builders — hosting
 # ---------------------------------------------------------------------------
 
@@ -323,6 +362,8 @@ def build_hosting_entries(
     stored_adv_w: dict[str, tuple[float, float, float, float]] | None = None,
     rounds_completed: int = 0,
     wins_confirmed: dict[str, int] | None = None,
+    win_prob_fn_weighted: MatchupProbFn | None = None,
+    region_odds_weighted: dict[str, StandingsOdds] | None = None,
 ) -> list[TeamHostingEntry]:
     """Compute per-round playoff hosting odds for all teams in a region.
 
@@ -351,6 +392,16 @@ def build_hosting_entries(
         sf_home = compute_semifinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
         r2_home_dict = compute_second_round_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed) if is_1a_4a else {}
         r1_home_seeds = {s.home_seed for s in slots if s.home_region == region}
+
+        if win_prob_fn_weighted is not None:
+            rw = region_odds_weighted if region_odds_weighted is not None else region_odds
+            adv_odds_w = compute_bracket_advancement_odds(region, rw, slots, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
+            qf_home_w = compute_quarterfinal_home_odds(region, rw, slots, season, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
+            sf_home_w = compute_semifinal_home_odds(region, rw, slots, season, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
+            r2_home_dict_w: dict[str, float] = compute_second_round_home_odds(region, rw, slots, season, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed) if is_1a_4a else {}
+        else:
+            adv_odds_w = qf_home_w = sf_home_w = None
+            r2_home_dict_w = {}
 
     entries = []
     for school, o in region_odds.items():
@@ -396,6 +447,10 @@ def build_hosting_entries(
             p_qf_cond = qf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
             p_sf_cond = sf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
 
+            adv_w = adv_odds_w.get(school) if adv_odds_w else None  # type: ignore[possibly-undefined]
+            p_qf_cond_w = qf_home_w.get(school, 0.0) if qf_home_w else 0.0  # type: ignore[possibly-undefined]
+            p_sf_cond_w = sf_home_w.get(school, 0.0) if sf_home_w else 0.0  # type: ignore[possibly-undefined]
+
             r1_cond = sum(
                 getattr(o, f"p{seed}") * (1.0 if seed in r1_home_seeds else 0.0)  # type: ignore[possibly-undefined]
                 for seed in (1, 2, 3, 4)
@@ -405,37 +460,57 @@ def build_hosting_entries(
                 p_r1_adv = adv.second_round if adv else 0.0
                 p_r2_adv = adv.quarterfinals if adv else 0.0
                 p_qf_adv = adv.semifinals if adv else 0.0
+                p_r2_cond_w = r2_home_dict_w.get(school, 0.0)  # type: ignore[possibly-undefined]
+                p_r1_adv_w = adv_w.second_round if adv_w else 0.0
+                p_r2_adv_w = adv_w.quarterfinals if adv_w else 0.0
+                p_qf_adv_w = adv_w.semifinals if adv_w else 0.0
                 r1_odds = RoundHostingOdds(
                     conditional=r1_cond if o.p_playoffs > 0 else None,
                     marginal=marginal_home_odds(r1_cond, o.p_playoffs),
+                    conditional_weighted=r1_cond if (o.p_playoffs > 0 and adv_w) else None,
+                    marginal_weighted=marginal_home_odds(r1_cond, o.p_playoffs) if adv_w else None,
                 )
                 r2_odds = RoundHostingOdds(
                     conditional=p_r2_cond / p_r1_adv if p_r1_adv > 0 else None,
                     marginal=p_r2_cond if p_r1_adv > 0 else 0.0,
+                    conditional_weighted=p_r2_cond_w / p_r1_adv_w if p_r1_adv_w > 0 else None,
+                    marginal_weighted=p_r2_cond_w if p_r1_adv_w > 0 else 0.0,
                 )
                 qf_odds = RoundHostingOdds(
                     conditional=p_qf_cond / p_r2_adv if p_r2_adv > 0 else None,
                     marginal=p_qf_cond if p_r2_adv > 0 else 0.0,
+                    conditional_weighted=p_qf_cond_w / p_r2_adv_w if p_r2_adv_w > 0 else None,
+                    marginal_weighted=p_qf_cond_w if p_r2_adv_w > 0 else 0.0,
                 )
                 sf_odds = RoundHostingOdds(
                     conditional=p_sf_cond / p_qf_adv if p_qf_adv > 0 else None,
                     marginal=p_sf_cond if p_qf_adv > 0 else 0.0,
+                    conditional_weighted=p_sf_cond_w / p_qf_adv_w if p_qf_adv_w > 0 else None,
+                    marginal_weighted=p_sf_cond_w if p_qf_adv_w > 0 else 0.0,
                 )
             else:
                 p_qf_adv = adv.quarterfinals if adv else 0.0
                 p_sf_adv = adv.semifinals if adv else 0.0
+                p_qf_adv_w = adv_w.quarterfinals if adv_w else 0.0
+                p_sf_adv_w = adv_w.semifinals if adv_w else 0.0
                 r1_odds = RoundHostingOdds(
                     conditional=r1_cond if o.p_playoffs > 0 else None,
                     marginal=marginal_home_odds(r1_cond, o.p_playoffs),
+                    conditional_weighted=r1_cond if (o.p_playoffs > 0 and adv_w) else None,
+                    marginal_weighted=marginal_home_odds(r1_cond, o.p_playoffs) if adv_w else None,
                 )
                 r2_odds = RoundHostingOdds(conditional=None, marginal=None)
                 qf_odds = RoundHostingOdds(
                     conditional=p_qf_cond / p_qf_adv if p_qf_adv > 0 else None,
                     marginal=p_qf_cond if p_qf_adv > 0 else 0.0,
+                    conditional_weighted=p_qf_cond_w / p_qf_adv_w if p_qf_adv_w > 0 else None,
+                    marginal_weighted=p_qf_cond_w if p_qf_adv_w > 0 else 0.0,
                 )
                 sf_odds = RoundHostingOdds(
                     conditional=p_sf_cond / p_sf_adv if p_sf_adv > 0 else None,
                     marginal=p_sf_cond if p_sf_adv > 0 else 0.0,
+                    conditional_weighted=p_sf_cond_w / p_sf_adv_w if p_sf_adv_w > 0 else None,
+                    marginal_weighted=p_sf_cond_w if p_sf_adv_w > 0 else 0.0,
                 )
         entries.append(
             TeamHostingEntry(

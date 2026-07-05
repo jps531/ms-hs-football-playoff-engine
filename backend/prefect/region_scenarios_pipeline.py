@@ -960,6 +960,7 @@ def get_region_finish_scenarios(
             if not (o.eliminated and o.clinched):
                 continue
             def _reached(rc: int, _s: str = school) -> bool:
+                """Return True if the team had a positive playoff probability at the given round snapshot."""
                 od = round_snapshots.get(rc, {}).get(region, {}).get(_s)
                 return od is not None and od.p_playoffs > 0
             bracket[school] = BracketOdds(

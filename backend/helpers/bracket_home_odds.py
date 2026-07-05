@@ -913,7 +913,7 @@ def compute_quarterfinal_home_odds(
                 # For 5A-7A (qf_offset=1) there is no R2; r2_home is always False.
                 # For 1A-4A (qf_offset=2) derive r2_home from slot structure; if ambiguous
                 # (two R2 opponent candidates with different seeds), resolve via prior_round_odds.
-                r2h: "bool | None" = False if qf_offset == 1 else _r2_home_if_deterministic(region, seed, idx, half_slots, season)
+                r2h: bool | None = False if qf_offset == 1 else _r2_home_if_deterministic(region, seed, idx, half_slots, season)
                 if r2h is None:
                     r2_opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, 1)]
                     actual_r2_opp = _alive_in_slots(r2_opp_slots, all_region_odds)
@@ -929,7 +929,7 @@ def compute_quarterfinal_home_odds(
                     opp_idx = _slot_index_for(opp[0], opp[1], half_slots)
                     if opp_idx is not None:
                         opp_r1h = _was_home_r1(opp[0], opp[1], half_slots[opp_idx])
-                        opp_r2h: "bool | None" = False if qf_offset == 1 else _r2_home_if_deterministic(opp[0], opp[1], opp_idx, half_slots, season)
+                        opp_r2h: bool | None = False if qf_offset == 1 else _r2_home_if_deterministic(opp[0], opp[1], opp_idx, half_slots, season)
                         if opp_r2h is None:
                             opp_r2_opp_slots = [half_slots[i] for i in _opponent_slot_indices(opp_idx, 1)]
                             actual_opp_r2_opp = _alive_in_slots(opp_r2_opp_slots, all_region_odds)
@@ -1108,6 +1108,7 @@ def compute_bracket_advancement_odds(
         p_sf = 0.0
         p_finals = 0.0
         p_champion = 0.0
+        tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
 
         for seed, p_seed in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)):
             if p_seed <= 0.0:
@@ -1117,11 +1118,11 @@ def compute_bracket_advancement_odds(
                 continue
 
             if is_1a_4a:
-                p_r2 += p_seed * _p_team_r1_win(region, seed, half_slots[idx], win_prob_fn)
-            p_qf += p_seed * _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn)
-            p_sf += p_seed * _p_team_reach(region, seed, idx, sf_offset, half_slots, win_prob_fn)
+                p_r2 += p_seed * (1.0 if tw >= 1 else _p_team_r1_win(region, seed, half_slots[idx], win_prob_fn))
+            p_qf += p_seed * _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn, skip_wins=tw)
+            p_sf += p_seed * _p_team_reach(region, seed, idx, sf_offset, half_slots, win_prob_fn, skip_wins=tw)
 
-            p_wins_half = _p_team_reach(region, seed, idx, wins_to_win_half, half_slots, win_prob_fn)
+            p_wins_half = _p_team_reach(region, seed, idx, wins_to_win_half, half_slots, win_prob_fn, skip_wins=tw)
             p_finals += p_seed * p_wins_half
 
             # Championship: team wins their half, then beats the other-half winner.
@@ -1134,7 +1135,6 @@ def compute_bracket_advancement_odds(
         # For rounds already played, alive teams (p_playoffs > 0) get 1.0 for each
         # past milestone. Eliminated teams stay at 0.0 since their p_playoffs = 0.
         p = o.p_playoffs
-        tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
         eff_r2 = p if (is_1a_4a and tw >= 1) else p_r2
         eff_qf = p if tw >= qf_offset else p_qf
         eff_sf = p if tw >= sf_offset else p_sf

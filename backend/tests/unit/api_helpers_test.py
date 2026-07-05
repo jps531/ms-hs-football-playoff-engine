@@ -12,6 +12,7 @@ from backend.helpers.api_helpers import (
     build_bracket_entries_from_odds_map,
     build_bracket_teams,
     build_hosting_entries,
+    build_seeding_by_region,
     build_team_entries,
     clinched_school,
     compute_remaining_games,
@@ -811,6 +812,84 @@ def test_records_from_completed_tie():
 
 
 # ---------------------------------------------------------------------------
+# TestBuildSeedingByRegion
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSeedingByRegion:
+    """build_seeding_by_region combines simulated-region odds with stored other-region rows."""
+
+    def _simulated_odds(self) -> dict[str, StandingsOdds]:
+        """Return two-team fractional seeding odds for region 1."""
+        return {
+            "Alpha": StandingsOdds(school="Alpha", p1=0.6, p2=0.3, p3=0.1, p4=0.0, p_playoffs=1.0, final_playoffs=1.0, clinched=False, eliminated=False),
+            "Beta":  StandingsOdds(school="Beta",  p1=0.4, p2=0.7, p3=0.9, p4=1.0, p_playoffs=1.0, final_playoffs=1.0, clinched=False, eliminated=False),
+        }
+
+    def test_simulated_region_present(self):
+        """Simulated region appears in the result with correct odds."""
+        result = build_seeding_by_region(1, self._simulated_odds(), [])
+        assert 1 in result
+        assert result[1]["Alpha"].p1 == pytest.approx(0.6)
+
+    def test_simulated_odds_passed_through_unchanged(self):
+        """The simulated_odds dict is stored as-is (same object reference)."""
+        odds = self._simulated_odds()
+        result = build_seeding_by_region(1, odds, [])
+        assert result[1] is odds
+
+    def test_empty_other_rows_gives_only_simulated_region(self):
+        """No other-region rows → only the simulated region key is present."""
+        result = build_seeding_by_region(3, self._simulated_odds(), [])
+        assert set(result.keys()) == {3}
+
+    def test_other_region_rows_added(self):
+        """Other-region rows appear under the correct region key with correct seed odds."""
+        other_rows = [
+            ("TeamX", 2, 1.0, 0.0, 0.0, 0.0),
+            ("TeamY", 2, 0.0, 1.0, 0.0, 0.0),
+        ]
+        result = build_seeding_by_region(1, self._simulated_odds(), other_rows)
+        assert 2 in result
+        assert "TeamX" in result[2]
+        assert result[2]["TeamX"].p1 == pytest.approx(1.0)
+        assert result[2]["TeamY"].p2 == pytest.approx(1.0)
+
+    def test_multiple_other_regions(self):
+        """Teams from different regions each land in their own dict entry."""
+        other_rows = [
+            ("TeamA", 2, 1.0, 0.0, 0.0, 0.0),
+            ("TeamB", 3, 0.0, 0.0, 1.0, 0.0),
+            ("TeamC", 4, 0.0, 0.0, 0.0, 1.0),
+        ]
+        result = build_seeding_by_region(1, self._simulated_odds(), other_rows)
+        assert set(result.keys()) == {1, 2, 3, 4}
+
+    def test_p_playoffs_computed_from_seeds(self):
+        """p_playoffs for other-region teams equals sum of p1+p2+p3+p4."""
+        other_rows = [("TeamX", 2, 0.3, 0.4, 0.2, 0.1)]
+        result = build_seeding_by_region(1, self._simulated_odds(), other_rows)
+        assert result[2]["TeamX"].p_playoffs == pytest.approx(1.0)
+
+    def test_partial_p_playoffs(self):
+        """Fractional seeding odds produce fractional p_playoffs."""
+        other_rows = [("TeamX", 2, 0.3, 0.2, 0.0, 0.0)]
+        result = build_seeding_by_region(1, self._simulated_odds(), other_rows)
+        assert result[2]["TeamX"].p_playoffs == pytest.approx(0.5)
+
+    def test_multiple_teams_same_other_region(self):
+        """All four teams from a single other region are grouped under that region key."""
+        other_rows = [
+            ("Reg2S1", 2, 1.0, 0.0, 0.0, 0.0),
+            ("Reg2S2", 2, 0.0, 1.0, 0.0, 0.0),
+            ("Reg2S3", 2, 0.0, 0.0, 1.0, 0.0),
+            ("Reg2S4", 2, 0.0, 0.0, 0.0, 1.0),
+        ]
+        result = build_seeding_by_region(1, self._simulated_odds(), other_rows)
+        assert len(result[2]) == 4
+
+
+# ---------------------------------------------------------------------------
 # TestBuildHostingEntries
 # ---------------------------------------------------------------------------
 
@@ -888,6 +967,98 @@ class TestBuildHostingEntries:
         result = build_hosting_entries(region_odds, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1)
         zero = next(e for e in result if e.school == "Zero")
         assert zero.second_round.conditional is None
+
+    # ------------------------------------------------------------------
+    # Stored-odds path (home_cond + stored_adv provided)
+    # ------------------------------------------------------------------
+
+    def test_stored_path_1a_4a_uses_stored_values(self):
+        """When home_cond and stored_adv are supplied, marginal = conditional × advancement."""
+        home_cond = {
+            "Able":  (1.0, 0.6, 0.3, 0.15),
+            "Baker": (1.0, 0.5, 0.25, 0.1),
+            "Camp":  (0.0, 0.0, 0.0, 0.0),
+            "Dog":   (0.0, 0.0, 0.0, 0.0),
+        }
+        stored_adv = {
+            "Able":  (1.0, 0.5, 0.25, 0.125),
+            "Baker": (1.0, 0.5, 0.25, 0.125),
+            "Camp":  (0.5, 0.25, 0.125, 0.0625),
+            "Dog":   (0.5, 0.25, 0.125, 0.0625),
+        }
+        result = build_hosting_entries(
+            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
+            home_cond=home_cond, stored_adv=stored_adv,
+        )
+        by_school = {e.school: e for e in result}
+        able = by_school["Able"]
+        assert able.first_round.conditional == pytest.approx(1.0)
+        assert able.first_round.marginal == pytest.approx(1.0 * 1.0)
+        assert able.second_round.conditional == pytest.approx(0.6)
+        assert able.second_round.marginal == pytest.approx(0.6 * 0.5)
+        assert able.quarterfinals.conditional == pytest.approx(0.3)
+        assert able.quarterfinals.marginal == pytest.approx(0.3 * 0.25)
+        assert able.semifinals.conditional == pytest.approx(0.15)
+        assert able.semifinals.marginal == pytest.approx(0.15 * 0.125)
+
+    def test_stored_path_5a_7a_second_round_always_none(self):
+        """5A–7A stored path: second_round conditional and marginal are always None."""
+        home_cond = {s: (1.0, 0.0, 0.5, 0.25) for s in ("Alpha", "Beta", "Gamma", "Delta")}
+        stored_adv = {s: (1.0, 0.0, 0.5, 0.25) for s in ("Alpha", "Beta", "Gamma", "Delta")}
+        result = build_hosting_entries(
+            _REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5,
+            home_cond=home_cond, stored_adv=stored_adv,
+        )
+        for entry in result:
+            assert entry.second_round.conditional is None
+            assert entry.second_round.marginal is None
+
+    def test_stored_path_zero_advancement_gives_none_conditional(self):
+        """Stored path: conditional is None when the advancement probability is zero."""
+        home_cond = {"Able": (1.0, 0.5, 0.3, 0.15)}
+        stored_adv = {"Able": (0.0, 0.0, 0.0, 0.0)}  # no advancement
+        region_odds = {"Able": _odds("Able", p1=1.0, p_playoffs=1.0, clinched=True)}
+        result = build_hosting_entries(
+            region_odds, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
+            home_cond=home_cond, stored_adv=stored_adv,
+        )
+        able = result[0]
+        assert able.second_round.conditional is None
+        assert able.quarterfinals.conditional is None
+        assert able.semifinals.conditional is None
+
+    # ------------------------------------------------------------------
+    # Weighted fallback path (win_prob_fn_weighted provided)
+    # ------------------------------------------------------------------
+
+    def test_weighted_fallback_1a_4a_populates_weighted_fields(self):
+        """Passing win_prob_fn_weighted produces non-None conditional_weighted values."""
+        def equal_w(hr: int, hs: int, ar: int, as_: int) -> float:
+            """Return 0.5 for all matchups (equal probability)."""
+            return 0.5
+
+        result = build_hosting_entries(
+            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
+            win_prob_fn_weighted=equal_w,
+        )
+        able = next(e for e in result if e.school == "Able")
+        assert able.first_round.conditional_weighted is not None
+        assert able.second_round.marginal_weighted is not None
+
+    def test_weighted_fallback_matches_unweighted_for_equal_prob(self):
+        """With 50/50 weighted fn, conditional_weighted equals conditional."""
+        def equal_w(hr: int, hs: int, ar: int, as_: int) -> float:
+            """Return 0.5 for all matchups (equal probability)."""
+            return 0.5
+
+        result = build_hosting_entries(
+            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
+            win_prob_fn_weighted=equal_w,
+        )
+        for entry in result:
+            assert entry.first_round.conditional_weighted == pytest.approx(
+                entry.first_round.conditional or 0.0, abs=1e-9
+            )
 
 
 # ---------------------------------------------------------------------------

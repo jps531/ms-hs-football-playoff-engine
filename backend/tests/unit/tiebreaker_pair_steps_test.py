@@ -489,3 +489,22 @@ def test_resolve_with_results_emits_margin_message():
     # Margin of the rematch shifts the H2H PD tiebreaker → message expected.
     assert len(messages) >= 1
     assert any("Beta" in msg or "Alpha" in msg for msg in messages)
+
+
+# ---------------------------------------------------------------------------
+# standings_from_mask — out-of-region game skip (line 43)
+# ---------------------------------------------------------------------------
+
+
+def test_standings_from_mask_skips_game_with_non_region_team():
+    """A completed game whose team is not in the region teams list is silently skipped."""
+    teams = ["Alpha", "Beta"]
+    completed = [
+        CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=7, pa_a=14, pa_b=21),
+        # "External" is not in teams — this game must be skipped via the continue branch.
+        CompletedGame(a="Alpha", b="External", res_a=1, pd_a=14, pa_a=7, pa_b=21),
+    ]
+    result = standings_from_mask(teams, completed, [], outcome_mask=0, pa_win=14, margins={})
+    assert result["Alpha"]["w"] == 1
+    assert result["Beta"]["l"] == 1
+    assert "External" not in result
