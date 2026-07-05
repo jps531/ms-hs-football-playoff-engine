@@ -1060,6 +1060,112 @@ class TestBuildHostingEntries:
                 entry.first_round.conditional or 0.0, abs=1e-9
             )
 
+    # ------------------------------------------------------------------
+    # Cross-region elimination via all_region_odds / cross_region_wins
+    # ------------------------------------------------------------------
+
+    def _1a_all_region_odds_eliminate_r3_r4_seed1(self) -> dict:
+        """Build all_region_odds where R3/R4 seed-1 teams are eliminated.
+
+        R1 and R2 are unchanged (seed-1 alive).  R3 and R4 seed-1 are zeroed
+        so that Able (R1-seed-1) is the only remaining seed-1 in the north half.
+        """
+        def _alive(school: str, seed: int) -> StandingsOdds:
+            """Return a clinched StandingsOdds with a single confirmed seed."""
+            kwargs = {"p1": 0.0, "p2": 0.0, "p3": 0.0, "p4": 0.0}
+            kwargs[f"p{seed}"] = 1.0
+            return StandingsOdds(school=school, **kwargs, p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False)
+
+        def _eliminated(school: str) -> StandingsOdds:
+            """Return a fully eliminated StandingsOdds."""
+            return StandingsOdds(school=school, p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, final_playoffs=0.0, clinched=True, eliminated=True)
+
+        return {
+            1: {
+                "Able":  _alive("Able",  1),
+                "Baker": _alive("Baker", 2),
+                "Camp":  _alive("Camp",  3),
+                "Dog":   _alive("Dog",   4),
+            },
+            2: {
+                "R2T1": _alive("R2T1", 1),
+                "R2T2": _alive("R2T2", 2),
+                "R2T3": _alive("R2T3", 3),
+                "R2T4": _alive("R2T4", 4),
+            },
+            3: {
+                "R3T1": _eliminated("R3T1"),   # seed-1 eliminated
+                "R3T2": _alive("R3T2", 2),
+                "R3T3": _alive("R3T3", 3),
+                "R3T4": _alive("R3T4", 4),
+            },
+            4: {
+                "R4T1": _eliminated("R4T1"),   # seed-1 eliminated
+                "R4T2": _alive("R4T2", 2),
+                "R4T3": _alive("R4T3", 3),
+                "R4T4": _alive("R4T4", 4),
+            },
+        }
+
+    def test_sf_conditional_1_when_all_opp_seed1s_eliminated(self):
+        """When all opposing-quarter seed-1 teams are eliminated, SF conditional = 1.0 for seed-1 team.
+
+        Uses season=2024 (even year) so that equal-seed SF matchups are decided by higher
+        region number hosting — meaning R1-1 would NOT host against R3-1 or R4-1 in a normal
+        bracket.  Eliminating both R3-1 and R4-1 forces all SF opponents to be lower seeds,
+        guaranteeing R1-1 hosts.
+        """
+        all_region_odds = self._1a_all_region_odds_eliminate_r3_r4_seed1()
+        result = build_hosting_entries(
+            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+            all_region_odds=all_region_odds,
+        )
+        able = next(e for e in result if e.school == "Able")
+        assert able.semifinals.conditional == pytest.approx(1.0)
+
+    def test_sf_conditional_partial_elimination_between_0_and_1(self):
+        """Eliminating only one opposing seed-1 puts SF conditional strictly between baseline and 1.0."""
+        all_region_odds = self._1a_all_region_odds_eliminate_r3_r4_seed1()
+        # Restore R3-seed-1 as alive — only R4-seed-1 is eliminated.
+        all_region_odds[3]["R3T1"] = StandingsOdds(
+            school="R3T1", p1=1.0, p2=0.0, p3=0.0, p4=0.0,
+            p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False,
+        )
+        baseline = build_hosting_entries(
+            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+        )
+        result = build_hosting_entries(
+            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+            all_region_odds=all_region_odds,
+        )
+        able = next(e for e in result if e.school == "Able")
+        baseline_able = next(e for e in baseline if e.school == "Able")
+        assert able.semifinals.conditional is not None
+        assert (baseline_able.semifinals.conditional or 0.0) < able.semifinals.conditional < 1.0
+
+    def test_sf_conditional_unchanged_with_no_elimination(self):
+        """With all_region_odds but no eliminations, SF conditional matches the baseline (no all_region_odds)."""
+        all_region_odds = self._1a_all_region_odds_eliminate_r3_r4_seed1()
+        # Restore both R3 and R4 seed-1 as alive.
+        for reg in (3, 4):
+            school = f"R{reg}T1"
+            all_region_odds[reg][school] = StandingsOdds(
+                school=school, p1=1.0, p2=0.0, p3=0.0, p4=0.0,
+                p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False,
+            )
+        baseline = build_hosting_entries(
+            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+        )
+        with_odds = build_hosting_entries(
+            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+            all_region_odds=all_region_odds,
+        )
+        baseline_able = next(e for e in baseline if e.school == "Able")
+        with_able = next(e for e in with_odds if e.school == "Able")
+        assert with_able.semifinals.conditional == pytest.approx(
+            baseline_able.semifinals.conditional or 0.0, abs=1e-6
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestBuildBracketEntries

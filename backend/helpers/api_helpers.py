@@ -364,6 +364,8 @@ def build_hosting_entries(
     wins_confirmed: dict[str, int] | None = None,
     win_prob_fn_weighted: MatchupProbFn | None = None,
     region_odds_weighted: dict[str, StandingsOdds] | None = None,
+    all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
+    cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> list[TeamHostingEntry]:
     """Compute per-round playoff hosting odds for all teams in a region.
 
@@ -388,16 +390,16 @@ def build_hosting_entries(
 
     if not use_stored:
         adv_odds = compute_bracket_advancement_odds(region, region_odds, slots, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
-        qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
-        sf_home = compute_semifinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
+        qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed, all_region_odds=all_region_odds, cross_region_wins=cross_region_wins)
+        sf_home = compute_semifinal_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed, all_region_odds=all_region_odds, cross_region_wins=cross_region_wins)
         r2_home_dict = compute_second_round_home_odds(region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed) if is_1a_4a else {}
         r1_home_seeds = {s.home_seed for s in slots if s.home_region == region}
 
         if win_prob_fn_weighted is not None:
             rw = region_odds_weighted if region_odds_weighted is not None else region_odds
             adv_odds_w = compute_bracket_advancement_odds(region, rw, slots, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
-            qf_home_w = compute_quarterfinal_home_odds(region, rw, slots, season, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
-            sf_home_w = compute_semifinal_home_odds(region, rw, slots, season, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed)
+            qf_home_w = compute_quarterfinal_home_odds(region, rw, slots, season, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed, all_region_odds=all_region_odds, cross_region_wins=cross_region_wins)
+            sf_home_w = compute_semifinal_home_odds(region, rw, slots, season, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed, all_region_odds=all_region_odds, cross_region_wins=cross_region_wins)
             r2_home_dict_w: dict[str, float] = compute_second_round_home_odds(region, rw, slots, season, win_prob_fn=win_prob_fn_weighted, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed) if is_1a_4a else {}
         else:
             adv_odds_w = qf_home_w = sf_home_w = None

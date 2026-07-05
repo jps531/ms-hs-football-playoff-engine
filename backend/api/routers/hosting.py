@@ -196,6 +196,9 @@ async def simulate_hosting(
         )
         elo_ratings: dict[str, float] = {r[0]: r[1] async for r in elo_rows}
 
+        all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None
+        cross_region_wins: dict[tuple[int, int], int] | None = None
+
         if not remaining:
             # Playoff mode: apply submitted results to the bracket survivor set.
             seed_rows = await conn.execute(
@@ -255,18 +258,36 @@ async def simulate_hosting(
                         eliminated=False,
                     )
 
-            seeding_by_region: dict[int, dict[str, StandingsOdds]] = {}
+            all_region_odds: dict[int, dict[str, StandingsOdds]] = {}
             for school, (reg, seed) in school_to_seed.items():
-                seeding_by_region.setdefault(reg, {})[school] = StandingsOdds(
-                    school=school,
-                    p1=1.0 if seed == 1 else 0.0,
-                    p2=1.0 if seed == 2 else 0.0,
-                    p3=1.0 if seed == 3 else 0.0,
-                    p4=1.0 if seed == 4 else 0.0,
-                    p_playoffs=1.0, final_playoffs=1.0,
-                    clinched=True, eliminated=False,
-                )
-            matchup_fn_w = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
+                confirmed_wins = wins_by_team.get(school, 0)
+                is_loser = (reg, seed) in losers_known
+                if is_loser:
+                    so = StandingsOdds(
+                        school=school,
+                        p1=0.0, p2=0.0, p3=0.0, p4=0.0,
+                        p_playoffs=0.0, final_playoffs=0.0,
+                        clinched=True, eliminated=True,
+                    )
+                else:
+                    p_playoffs = 1.0 if confirmed_wins > 0 else 0.5
+                    so = StandingsOdds(
+                        school=school,
+                        p1=1.0 if seed == 1 else 0.0,
+                        p2=1.0 if seed == 2 else 0.0,
+                        p3=1.0 if seed == 3 else 0.0,
+                        p4=1.0 if seed == 4 else 0.0,
+                        p_playoffs=p_playoffs, final_playoffs=p_playoffs,
+                        clinched=True, eliminated=False,
+                    )
+                all_region_odds.setdefault(reg, {})[school] = so
+
+            cross_region_wins: dict[tuple[int, int], int] = {
+                school_to_seed[school]: wins
+                for school, wins in wins_by_team.items()
+                if school in school_to_seed
+            }
+            matchup_fn_w = make_matchup_prob_fn(elo_ratings, all_region_odds, EloConfig()) if elo_ratings else None
         else:
             # Regular-season mode: simulate remaining region games.
             _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
@@ -290,6 +311,8 @@ async def simulate_hosting(
         wins_confirmed=wins_by_team,
         win_prob_fn_weighted=matchup_fn_w,
         region_odds_weighted=odds_map,
+        all_region_odds=all_region_odds,
+        cross_region_wins=cross_region_wins,
     )
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 

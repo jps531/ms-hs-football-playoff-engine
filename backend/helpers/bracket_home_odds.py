@@ -374,12 +374,19 @@ def _p_host_seed_rule(
     odd_year: bool,
     use_region_tiebreak: bool,
     win_prob_fn: MatchupProbFn,
+    all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
+    cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> float:
     """P(team hosts | reaches this round). Home rule: seed, then optionally region.
 
     Weights each opponent candidate by P(they reach this round), computed via
-    ``_p_team_reach``.  The weights sum to 1.0, so the return value is a
-    proper conditional probability.
+    ``_p_team_reach``.  When no eliminations are known the weights sum to 1.0.
+
+    When *all_region_odds* is provided, eliminated opponents (p_seed == 0 for
+    every school in their region) are skipped entirely.  When *cross_region_wins*
+    is provided, confirmed wins for surviving opponents adjust their
+    ``_p_team_reach`` via ``skip_wins``, so weights remain consistent and still
+    sum to 1.0 without renormalization.
 
     Args:
         team_seed:           Team's region seed (1 = best).
@@ -390,30 +397,45 @@ def _p_host_seed_rule(
         odd_year:            True if the season year is odd.
         use_region_tiebreak: Apply region-number tiebreak for equal seeds.
         win_prob_fn:         Win-probability function.
+        all_region_odds:     Optional cross-region seeding state; eliminated seed
+                             positions (no school has p_seed > 0) are skipped.
+        cross_region_wins:   Optional ``(region, seed) → confirmed_wins`` map used
+                             to set ``skip_wins`` on ``_p_team_reach`` calls for
+                             surviving opponents that have already won rounds.
 
     Returns:
         Probability in [0.0, 1.0] that the team is the home team.
     """
-    p = 0.0
+    hosting_w = 0.0
+    total_w = 0.0
     for opp_slot_idx in opp_indices:
         opp_slot = half_slots[opp_slot_idx]
         for opp_seed, opp_region in (
             (opp_slot.home_seed, opp_slot.home_region),
             (opp_slot.away_seed, opp_slot.away_region),
         ):
-            w = _p_team_reach(opp_region, opp_seed, opp_slot_idx, opp_num_wins, half_slots, win_prob_fn)
+            if all_region_odds is not None:
+                opp_alive = any(
+                    getattr(o, f"p{opp_seed}", 0.0) > 0
+                    for o in all_region_odds.get(opp_region, {}).values()
+                )
+                if not opp_alive:
+                    continue
+            skip = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
+            w = _p_team_reach(opp_region, opp_seed, opp_slot_idx, opp_num_wins, half_slots, win_prob_fn, skip_wins=skip)
+            total_w += w
             if team_region == opp_region:
                 # Golden rule: same-region opponents → higher seed (lower number) always hosts.
                 if team_seed < opp_seed:
-                    p += w
+                    hosting_w += w
             elif team_seed < opp_seed:
-                p += w
+                hosting_w += w
             elif team_seed == opp_seed and use_region_tiebreak:
                 if odd_year:
-                    p += w if team_region < opp_region else 0.0
+                    hosting_w += w if team_region < opp_region else 0.0
                 else:
-                    p += w if team_region > opp_region else 0.0
-    return p
+                    hosting_w += w if team_region > opp_region else 0.0
+    return hosting_w / total_w if total_w > 0.0 else 0.0
 
 
 def _p_host_qf_given_seed(
@@ -425,6 +447,8 @@ def _p_host_qf_given_seed(
     odd_year: bool,
     season: int,
     win_prob_fn: MatchupProbFn,
+    all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
+    cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> float:
     """P(team hosts QF | team reaches QF at *team_seed*).
 
@@ -445,14 +469,21 @@ def _p_host_qf_given_seed(
 
     QF opponent candidates are weighted by P(they reach the QF).
 
+    When *all_region_odds* is provided, eliminated candidates (p_seed == 0 for
+    every school in their region) are skipped.  *cross_region_wins* adjusts
+    ``_p_team_reach`` via ``skip_wins`` for surviving opponents with confirmed
+    wins, keeping weights consistent.
+
     Args:
-        team_seed:      Team's region seed (1 = best).
-        team_region:    Team's region number.
-        team_slot_idx:  0-based index of the team's slot in *half_slots*.
-        half_slots:     All slots in the bracket half, sorted by slot number.
-        qf_offset:      Rounds from R1 to QF (1 for 5A-7A, 2 for 1A-4A).
-        odd_year:       True if the season year is odd.
-        win_prob_fn:    Win-probability function.
+        team_seed:         Team's region seed (1 = best).
+        team_region:       Team's region number.
+        team_slot_idx:     0-based index of the team's slot in *half_slots*.
+        half_slots:        All slots in the bracket half, sorted by slot number.
+        qf_offset:         Rounds from R1 to QF (1 for 5A-7A, 2 for 1A-4A).
+        odd_year:          True if the season year is odd.
+        win_prob_fn:       Win-probability function.
+        all_region_odds:   Optional cross-region seeding state for elimination checks.
+        cross_region_wins: Optional ``(region, seed) → confirmed_wins`` for skip_wins.
 
     Returns:
         Probability in [0.0, 1.0] that the team is the QF home team.
@@ -483,10 +514,17 @@ def _p_host_qf_given_seed(
 
             if qf_offset >= 2:
                 p_opp_h2 = _p_home_in_r2(opp_seed, opp_region, opp_r2_partner, season, win_prob_fn)
-                p_cand_reach = _p_team_reach(opp_region, opp_seed, opp_slot_idx, qf_offset, half_slots, win_prob_fn)
+                skip = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
+                p_cand_reach = _p_team_reach(opp_region, opp_seed, opp_slot_idx, qf_offset, half_slots, win_prob_fn, skip_wins=skip)
             else:
                 p_opp_h2 = 0.0
-                p_cand_reach = _p_team_r1_win(opp_region, opp_seed, opp_slot, win_prob_fn)
+                skip = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
+                p_cand_reach = 1.0 if skip >= 1 else _p_team_r1_win(opp_region, opp_seed, opp_slot, win_prob_fn)
+            if all_region_odds is not None and not any(
+                getattr(o, f"p{opp_seed}", 0.0) > 0
+                for o in all_region_odds.get(opp_region, {}).values()
+            ):
+                p_cand_reach = 0.0
 
             if team_region == opp_region:
                 # Golden rule: same-region opponents → higher seed (lower number) always hosts,
@@ -853,6 +891,7 @@ def compute_quarterfinal_home_odds(
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
     round_snapshots: "dict[int, dict[int, dict[str, StandingsOdds]]] | None" = None,
     wins_confirmed: "dict[str, int] | None" = None,
+    cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their quarterfinal game.
 
@@ -943,7 +982,10 @@ def compute_quarterfinal_home_odds(
                             continue
             tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
             p_reach = _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn, skip_wins=tw)
-            p_qf_home = _p_host_qf_given_seed(seed, region, idx, half_slots, qf_offset, odd_year, season, win_prob_fn)
+            p_qf_home = _p_host_qf_given_seed(
+                seed, region, idx, half_slots, qf_offset, odd_year, season, win_prob_fn,
+                all_region_odds=all_region_odds, cross_region_wins=cross_region_wins,
+            )
             p_home += p_seed * p_reach * p_qf_home
         result[school] = p_home
     return result
@@ -958,6 +1000,7 @@ def compute_semifinal_home_odds(
     rounds_completed: int = 0,
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
     wins_confirmed: "dict[str, int] | None" = None,
+    cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's marginal probability of hosting their semifinal game.
 
@@ -973,13 +1016,17 @@ def compute_semifinal_home_odds(
     and applying ``sf_home_team`` directly.
 
     Args:
-        region:          Region number for the teams in *region_odds*.
-        region_odds:     Dict mapping team name to ``StandingsOdds``.
-        slots:           All first-round format slots for this class (all regions).
-        season:          Football season year (used for odd/even year tiebreak).
-        win_prob_fn:     Optional win-probability function.  Defaults to 0.5 for
-                         every game.
-        all_region_odds: Cross-region seeding odds after completed rounds.
+        region:            Region number for the teams in *region_odds*.
+        region_odds:       Dict mapping team name to ``StandingsOdds``.
+        slots:             All first-round format slots for this class (all regions).
+        season:            Football season year (used for odd/even year tiebreak).
+        win_prob_fn:       Optional win-probability function.  Defaults to 0.5 for
+                           every game.
+        all_region_odds:   Cross-region seeding odds; eliminated seed positions are
+                           excluded from the opponent candidate pool.
+        cross_region_wins: ``(region, seed) → confirmed_wins`` for surviving
+                           cross-region teams; adjusts ``_p_team_reach`` via
+                           ``skip_wins`` so their advancement weights are correct.
 
     Returns:
         Dict mapping team name to marginal P(hosting semifinal) in [0.0, 1.0].
@@ -1025,6 +1072,8 @@ def compute_semifinal_home_odds(
                 odd_year=odd_year,
                 use_region_tiebreak=True,
                 win_prob_fn=win_prob_fn,
+                all_region_odds=all_region_odds,
+                cross_region_wins=cross_region_wins,
             )
             p_home += p_seed * p_reach * p_sf_home
         result[school] = p_home
