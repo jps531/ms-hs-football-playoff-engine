@@ -243,55 +243,61 @@ def _p_team_reach(
 
     # R2 opponent is the winner of the adjacent slot.
     r2_opp_slot = _opponent_slots(slot_idx, 1, half_slots)[0]
-    p_adj_home_r1 = win_prob_fn(
-        r2_opp_slot.home_region,
-        r2_opp_slot.home_seed,
-        r2_opp_slot.away_region,
-        r2_opp_slot.away_seed,
-    )
-    p_r2 = p_adj_home_r1 * _p_beat_by_seed(
-        region, seed, r2_opp_slot.home_region, r2_opp_slot.home_seed, win_prob_fn
-    ) + (1.0 - p_adj_home_r1) * _p_beat_by_seed(
-        region, seed, r2_opp_slot.away_region, r2_opp_slot.away_seed, win_prob_fn
-    )
+    if skip_wins >= 2:
+        p_r2 = 1.0
+    else:
+        p_adj_home_r1 = win_prob_fn(
+            r2_opp_slot.home_region,
+            r2_opp_slot.home_seed,
+            r2_opp_slot.away_region,
+            r2_opp_slot.away_seed,
+        )
+        p_r2 = p_adj_home_r1 * _p_beat_by_seed(
+            region, seed, r2_opp_slot.home_region, r2_opp_slot.home_seed, win_prob_fn
+        ) + (1.0 - p_adj_home_r1) * _p_beat_by_seed(
+            region, seed, r2_opp_slot.away_region, r2_opp_slot.away_seed, win_prob_fn
+        )
     if num_wins == 2:
         return p_r1 * p_r2
 
     # QF opponent is the winner of the R2 game from the adjacent slot pair.
-    qf_opp_indices = _opponent_slot_indices(slot_idx, 2)
-    slot_a_idx, slot_b_idx = qf_opp_indices[0], qf_opp_indices[1]
-    slot_a = half_slots[slot_a_idx]
-    slot_b = half_slots[slot_b_idx]
+    if skip_wins >= 3:
+        p_qf = 1.0
+    else:
+        qf_opp_indices = _opponent_slot_indices(slot_idx, 2)
+        slot_a_idx, slot_b_idx = qf_opp_indices[0], qf_opp_indices[1]
+        slot_a = half_slots[slot_a_idx]
+        slot_b = half_slots[slot_b_idx]
 
-    p_qf = 0.0
-    for opp_slot, partner_slot in (
-        (slot_a, slot_b),
-        (slot_b, slot_a),
-    ):
-        p_opp_home_r1 = win_prob_fn(
-            opp_slot.home_region,
-            opp_slot.home_seed,
-            opp_slot.away_region,
-            opp_slot.away_seed,
-        )
-        p_partner_home_r1 = win_prob_fn(
-            partner_slot.home_region,
-            partner_slot.home_seed,
-            partner_slot.away_region,
-            partner_slot.away_seed,
-        )
-        for opp_r, opp_s, p_opp_r1 in (
-            (opp_slot.home_region, opp_slot.home_seed, p_opp_home_r1),
-            (opp_slot.away_region, opp_slot.away_seed, 1.0 - p_opp_home_r1),
+        p_qf = 0.0
+        for opp_slot, partner_slot in (
+            (slot_a, slot_b),
+            (slot_b, slot_a),
         ):
-            # P(this candidate reaches QF) = P(wins R1) × P(wins R2 vs partner winner)
-            p_cand_r2 = p_partner_home_r1 * _p_beat_by_seed(
-                opp_r, opp_s, partner_slot.home_region, partner_slot.home_seed, win_prob_fn
-            ) + (1.0 - p_partner_home_r1) * _p_beat_by_seed(
-                opp_r, opp_s, partner_slot.away_region, partner_slot.away_seed, win_prob_fn
+            p_opp_home_r1 = win_prob_fn(
+                opp_slot.home_region,
+                opp_slot.home_seed,
+                opp_slot.away_region,
+                opp_slot.away_seed,
             )
-            p_cand_reach_qf = p_opp_r1 * p_cand_r2
-            p_qf += p_cand_reach_qf * _p_beat_by_seed(region, seed, opp_r, opp_s, win_prob_fn)
+            p_partner_home_r1 = win_prob_fn(
+                partner_slot.home_region,
+                partner_slot.home_seed,
+                partner_slot.away_region,
+                partner_slot.away_seed,
+            )
+            for opp_r, opp_s, p_opp_r1 in (
+                (opp_slot.home_region, opp_slot.home_seed, p_opp_home_r1),
+                (opp_slot.away_region, opp_slot.away_seed, 1.0 - p_opp_home_r1),
+            ):
+                # P(this candidate reaches QF) = P(wins R1) × P(wins R2 vs partner winner)
+                p_cand_r2 = p_partner_home_r1 * _p_beat_by_seed(
+                    opp_r, opp_s, partner_slot.home_region, partner_slot.home_seed, win_prob_fn
+                ) + (1.0 - p_partner_home_r1) * _p_beat_by_seed(
+                    opp_r, opp_s, partner_slot.away_region, partner_slot.away_seed, win_prob_fn
+                )
+                p_cand_reach_qf = p_opp_r1 * p_cand_r2
+                p_qf += p_cand_reach_qf * _p_beat_by_seed(region, seed, opp_r, opp_s, win_prob_fn)
 
     if num_wins == 3:
         return p_r1 * p_r2 * p_qf
@@ -299,17 +305,20 @@ def _p_team_reach(
     # SF opponent (num_wins == 4) emerges from the opposite 4-slot quarter.
     # Each of the 8 teams there must win 3 games in their sub-bracket to reach
     # the SF, so we reuse _p_team_reach(num_wins=3) on that sub-bracket.
-    sf_opp_global = _opponent_slot_indices(slot_idx, 3)  # 4 indices into half_slots
-    sf_opp_slots = [half_slots[i] for i in sf_opp_global]
+    if skip_wins >= 4:
+        p_sf_win = 1.0
+    else:
+        sf_opp_global = _opponent_slot_indices(slot_idx, 3)  # 4 indices into half_slots
+        sf_opp_slots = [half_slots[i] for i in sf_opp_global]
 
-    p_sf_win = 0.0
-    for local_idx, opp_slot in enumerate(sf_opp_slots):
-        for opp_r, opp_s in (
-            (opp_slot.home_region, opp_slot.home_seed),
-            (opp_slot.away_region, opp_slot.away_seed),
-        ):
-            p_opp_wins_sub = _p_team_reach(opp_r, opp_s, local_idx, 3, sf_opp_slots, win_prob_fn)
-            p_sf_win += p_opp_wins_sub * _p_beat_by_seed(region, seed, opp_r, opp_s, win_prob_fn)
+        p_sf_win = 0.0
+        for local_idx, opp_slot in enumerate(sf_opp_slots):
+            for opp_r, opp_s in (
+                (opp_slot.home_region, opp_slot.home_seed),
+                (opp_slot.away_region, opp_slot.away_seed),
+            ):
+                p_opp_wins_sub = _p_team_reach(opp_r, opp_s, local_idx, 3, sf_opp_slots, win_prob_fn)
+                p_sf_win += p_opp_wins_sub * _p_beat_by_seed(region, seed, opp_r, opp_s, win_prob_fn)
 
     return p_r1 * p_r2 * p_qf * p_sf_win
 
@@ -325,6 +334,7 @@ def _p_home_in_r2(
     r2_opp_slot: FormatSlot,
     season: int,
     win_prob_fn: MatchupProbFn,
+    all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
 ) -> float:
     """P(team was home in R2) given R2 opponent is the winner of *r2_opp_slot*.
 
@@ -332,12 +342,16 @@ def _p_home_in_r2(
     the odd/even year region-number tiebreak (same as QF/SF).
     Each possible R2 opponent is weighted by their R1 win probability.
 
+    When *all_region_odds* is provided, eliminated candidates are skipped and
+    the remaining weights are renormalized so the result stays in [0.0, 1.0].
+
     Args:
-        team_seed:    Team's region seed (1 = best).
-        team_region:  Team's region number.
-        r2_opp_slot:  The slot whose winner the team faces in R2.
-        season:       Football season year (used for odd/even tiebreak).
-        win_prob_fn:  Win-probability function.
+        team_seed:       Team's region seed (1 = best).
+        team_region:     Team's region number.
+        r2_opp_slot:     The slot whose winner the team faces in R2.
+        season:          Football season year (used for odd/even tiebreak).
+        win_prob_fn:     Win-probability function.
+        all_region_odds: Optional cross-region seeding state for elimination checks.
 
     Returns:
         Probability in [0.0, 1.0] that the team hosted their R2 game.
@@ -350,10 +364,19 @@ def _p_home_in_r2(
     )
     odd_year = season % 2 == 1
     p = 0.0
+    total_w = 0.0
     for opp_region, opp_seed, p_opp_r1 in (
         (r2_opp_slot.home_region, r2_opp_slot.home_seed, p_adj_home_r1),
         (r2_opp_slot.away_region, r2_opp_slot.away_seed, 1.0 - p_adj_home_r1),
     ):
+        if all_region_odds is not None:
+            opp_alive = any(
+                getattr(o, f"p{opp_seed}", 0.0) > 0
+                for o in all_region_odds.get(opp_region, {}).values()
+            )
+            if not opp_alive:
+                continue
+        total_w += p_opp_r1
         if team_seed < opp_seed:
             p += p_opp_r1
         elif team_seed == opp_seed:
@@ -362,7 +385,7 @@ def _p_home_in_r2(
                 p += p_opp_r1 if team_region < opp_region else 0.0
             else:
                 p += p_opp_r1 if team_region > opp_region else 0.0
-    return p
+    return p / total_w if total_w > 0.0 else 0.0
 
 
 def _p_host_seed_rule(
@@ -493,12 +516,14 @@ def _p_host_qf_given_seed(
 
     if qf_offset >= 2:
         r2_opp_slot = _opponent_slots(team_slot_idx, 1, half_slots)[0]
-        p_team_h2 = _p_home_in_r2(team_seed, team_region, r2_opp_slot, season, win_prob_fn)
+        p_team_h2 = _p_home_in_r2(team_seed, team_region, r2_opp_slot, season, win_prob_fn,
+                                    all_region_odds=all_region_odds)
     else:
         p_team_h2 = 0.0
 
     qf_opp_indices = _opponent_slot_indices(team_slot_idx, qf_offset)
     p = 0.0
+    total_w = 0.0
 
     for i, opp_slot_idx in enumerate(qf_opp_indices):
         opp_slot = half_slots[opp_slot_idx]
@@ -513,7 +538,8 @@ def _p_host_qf_given_seed(
             opp_h1 = 1 if opp_r1_home else 0
 
             if qf_offset >= 2:
-                p_opp_h2 = _p_home_in_r2(opp_seed, opp_region, opp_r2_partner, season, win_prob_fn)
+                p_opp_h2 = _p_home_in_r2(opp_seed, opp_region, opp_r2_partner, season, win_prob_fn,
+                                           all_region_odds=all_region_odds)
                 skip = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
                 p_cand_reach = _p_team_reach(opp_region, opp_seed, opp_slot_idx, qf_offset, half_slots, win_prob_fn, skip_wins=skip)
             else:
@@ -548,9 +574,10 @@ def _p_host_qf_given_seed(
                                 else:
                                     p_host += weight if team_region > opp_region else 0.0
 
+            total_w += p_cand_reach
             p += p_cand_reach * p_host
 
-    return p
+    return p / total_w if total_w > 0.0 else 0.0
 
 
 # ---------------------------------------------------------------------------
