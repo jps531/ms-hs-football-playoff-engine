@@ -1166,6 +1166,98 @@ class TestBuildHostingEntries:
             baseline_able.semifinals.conditional or 0.0, abs=1e-6
         )
 
+    # ------------------------------------------------------------------
+    # QF conditional — cross-region eliminations / confirmed wins
+    # ------------------------------------------------------------------
+    #
+    # South-half 1A 2025 bracket (slots 9–16, 0-based indices 8–15):
+    #   Q4 upper-south: slots  9 (R5-1 vs R6-4) + 10 (R7-2 vs R8-3)
+    #   Q4 upper-north: slots 11 (R6-1 vs R5-4) + 12 (R8-2 vs R7-3)
+    #   Q4 lower-north: slots 13 (R7-1 vs R8-4) + 14 (R5-2 vs R6-3)  ← QF opp source for R8-1
+    #   Q4 lower-south: slots 15 (R8-1 vs R7-4) + 16 (R6-2 vs R5-3)  ← R8-1's sub-bracket
+    #
+    # Scenario: R7-1 eliminated (lost R1), R8-4 has 1 win (won R1, lost R2 to R5-2),
+    # R6-3 eliminated (lost R1), R5-2 has 2 wins → guaranteed QF opponent of R8-1.
+    # R8-1 (seed-1) always hosts R2; R5-2 (seed-2) hosted R2 vs R8-4 (seed-4).
+    # Equal home games (2 each) → higher seed (R8-1 seed-1) hosts → conditional = 1.0.
+
+    def _region8_odds_1a(self) -> dict:
+        """Region 8 seeding odds for QF conditional tests."""
+        return {
+            "R8T1": _odds("R8T1", p1=1.0, p_playoffs=1.0),
+            "R8T2": _odds("R8T2", p2=1.0, p_playoffs=1.0),
+            "R8T3": _odds("R8T3", p3=1.0, p_playoffs=1.0),
+            "R8T4": _odds("R8T4", p4=1.0, p_playoffs=1.0),
+        }
+
+    def _all_region_odds_qf_test(self) -> dict:
+        """all_region_odds for QF conditional tests: R7-1 and R6-3 eliminated (0 wins);
+        R8-4 eliminated with 1 win (survived R1, lost R2 to R5-2); R5-2 alive.
+        """
+        def _alive(school: str, seed: int) -> StandingsOdds:
+            """Return a clinched StandingsOdds with a single confirmed seed."""
+            kwargs = {"p1": 0.0, "p2": 0.0, "p3": 0.0, "p4": 0.0}
+            kwargs[f"p{seed}"] = 1.0
+            return StandingsOdds(school=school, **kwargs, p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False)
+
+        def _eliminated(school: str) -> StandingsOdds:
+            """Return a fully eliminated StandingsOdds."""
+            return StandingsOdds(school=school, p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, final_playoffs=0.0, clinched=True, eliminated=True)
+
+        return {
+            # North half — all alive (not involved in south-half QF computation)
+            1: {"R1T1": _alive("R1T1", 1), "R1T2": _alive("R1T2", 2), "R1T3": _alive("R1T3", 3), "R1T4": _alive("R1T4", 4)},
+            2: {"R2T1": _alive("R2T1", 1), "R2T2": _alive("R2T2", 2), "R2T3": _alive("R2T3", 3), "R2T4": _alive("R2T4", 4)},
+            3: {"R3T1": _alive("R3T1", 1), "R3T2": _alive("R3T2", 2), "R3T3": _alive("R3T3", 3), "R3T4": _alive("R3T4", 4)},
+            4: {"R4T1": _alive("R4T1", 1), "R4T2": _alive("R4T2", 2), "R4T3": _alive("R4T3", 3), "R4T4": _alive("R4T4", 4)},
+            # South half — selective eliminations
+            # Slot 14 (R5-2 home vs R6-3 away): R6-3 eliminated (lost R1), R5-2 alive
+            5: {"R5T1": _alive("R5T1", 1), "R5T2": _alive("R5T2", 2), "R5T3": _alive("R5T3", 3), "R5T4": _alive("R5T4", 4)},
+            6: {"R6T1": _alive("R6T1", 1), "R6T2": _alive("R6T2", 2), "R6T3": _eliminated("R6T3"), "R6T4": _alive("R6T4", 4)},
+            # Slot 13 (R7-1 home vs R8-4 away): R7-1 eliminated (lost R1); R8-4 eliminated (won R1, lost R2)
+            7: {"R7T1": _eliminated("R7T1"), "R7T2": _alive("R7T2", 2), "R7T3": _alive("R7T3", 3), "R7T4": _alive("R7T4", 4)},
+            8: {"R8T1": _alive("R8T1", 1), "R8T2": _alive("R8T2", 2), "R8T3": _alive("R8T3", 3), "R8T4": _eliminated("R8T4")},
+        }
+
+    def test_qf_conditional_1_when_guaranteed_home_opponent(self):
+        """QF conditional = 1.0 when the only surviving QF opponent was home in R2.
+
+        Scenario mirrors the Taylorsville bug: R8-1 seed-1 vs confirmed R5-2 (seed-2).
+        Both teams had 2 home games entering QF, so R8-1 (higher seed) hosts → 1.0.
+        """
+        all_region_odds = self._all_region_odds_qf_test()
+        # R5-2 has 2 confirmed wins; R8-4 has 1 (survived R1 → valid R2 opponent for R5-2).
+        cross_region_wins: dict = {(5, 2): 2, (8, 4): 1}
+        result = build_hosting_entries(
+            self._region8_odds_1a(), SLOTS_1A_4A_2025, region=8, season=2025, clazz=1,
+            all_region_odds=all_region_odds,
+            cross_region_wins=cross_region_wins,
+        )
+        r8t1 = next(e for e in result if e.school == "R8T1")
+        assert r8t1.quarterfinals.conditional == pytest.approx(1.0)
+
+    def test_qf_conditional_between_0_and_1_with_partial_elimination(self):
+        """Partial elimination leaves QF conditional strictly between baseline and 1.0."""
+        all_region_odds = self._all_region_odds_qf_test()
+        # Restore R7-1 as alive — now R7-1 and R5-2 are both QF candidates.
+        all_region_odds[7]["R7T1"] = StandingsOdds(
+            school="R7T1", p1=1.0, p2=0.0, p3=0.0, p4=0.0,
+            p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False,
+        )
+        cross_region_wins: dict = {(5, 2): 2, (8, 4): 1}
+        baseline = build_hosting_entries(
+            self._region8_odds_1a(), SLOTS_1A_4A_2025, region=8, season=2025, clazz=1,
+        )
+        result = build_hosting_entries(
+            self._region8_odds_1a(), SLOTS_1A_4A_2025, region=8, season=2025, clazz=1,
+            all_region_odds=all_region_odds,
+            cross_region_wins=cross_region_wins,
+        )
+        r8t1 = next(e for e in result if e.school == "R8T1")
+        baseline_r8t1 = next(e for e in baseline if e.school == "R8T1")
+        assert r8t1.quarterfinals.conditional is not None
+        assert (baseline_r8t1.quarterfinals.conditional or 0.0) <= r8t1.quarterfinals.conditional <= 1.0
+
 
 # ---------------------------------------------------------------------------
 # TestBuildBracketEntries

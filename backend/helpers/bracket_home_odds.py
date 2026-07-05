@@ -335,6 +335,7 @@ def _p_home_in_r2(
     season: int,
     win_prob_fn: MatchupProbFn,
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
+    cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> float:
     """P(team was home in R2) given R2 opponent is the winner of *r2_opp_slot*.
 
@@ -342,16 +343,20 @@ def _p_home_in_r2(
     the odd/even year region-number tiebreak (same as QF/SF).
     Each possible R2 opponent is weighted by their R1 win probability.
 
-    When *all_region_odds* is provided, eliminated candidates are skipped and
-    the remaining weights are renormalized so the result stays in [0.0, 1.0].
+    When *all_region_odds* is provided, candidates that were eliminated before R2
+    (i.e., eliminated with zero confirmed wins in *cross_region_wins*) are skipped.
+    Candidates that are eliminated but have >= 1 confirmed win survived R1 and are
+    still valid R2 opponent candidates.  Remaining weights are renormalized.
 
     Args:
-        team_seed:       Team's region seed (1 = best).
-        team_region:     Team's region number.
-        r2_opp_slot:     The slot whose winner the team faces in R2.
-        season:          Football season year (used for odd/even tiebreak).
-        win_prob_fn:     Win-probability function.
-        all_region_odds: Optional cross-region seeding state for elimination checks.
+        team_seed:         Team's region seed (1 = best).
+        team_region:       Team's region number.
+        r2_opp_slot:       The slot whose winner the team faces in R2.
+        season:            Football season year (used for odd/even tiebreak).
+        win_prob_fn:       Win-probability function.
+        all_region_odds:   Optional cross-region seeding state for elimination checks.
+        cross_region_wins: Optional ``(region, seed) → confirmed_wins`` used to
+                           distinguish R1 losers (0 wins) from R2+ losers (≥ 1 win).
 
     Returns:
         Probability in [0.0, 1.0] that the team hosted their R2 game.
@@ -375,7 +380,12 @@ def _p_home_in_r2(
                 for o in all_region_odds.get(opp_region, {}).values()
             )
             if not opp_alive:
-                continue
+                # Only skip if they have zero wins — they lost in R1 before ever being
+                # a valid R2 opponent.  A team with >= 1 win survived R1 and was a real
+                # R2 candidate (they lost later), so we keep them in the weight sum.
+                confirmed_wins = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
+                if confirmed_wins == 0:
+                    continue
         total_w += p_opp_r1
         if team_seed < opp_seed:
             p += p_opp_r1
@@ -517,7 +527,8 @@ def _p_host_qf_given_seed(
     if qf_offset >= 2:
         r2_opp_slot = _opponent_slots(team_slot_idx, 1, half_slots)[0]
         p_team_h2 = _p_home_in_r2(team_seed, team_region, r2_opp_slot, season, win_prob_fn,
-                                    all_region_odds=all_region_odds)
+                                    all_region_odds=all_region_odds,
+                                    cross_region_wins=cross_region_wins)
     else:
         p_team_h2 = 0.0
 
@@ -539,7 +550,8 @@ def _p_host_qf_given_seed(
 
             if qf_offset >= 2:
                 p_opp_h2 = _p_home_in_r2(opp_seed, opp_region, opp_r2_partner, season, win_prob_fn,
-                                           all_region_odds=all_region_odds)
+                                           all_region_odds=all_region_odds,
+                                           cross_region_wins=cross_region_wins)
                 skip = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
                 p_cand_reach = _p_team_reach(opp_region, opp_seed, opp_slot_idx, qf_offset, half_slots, win_prob_fn, skip_wins=skip)
             else:
