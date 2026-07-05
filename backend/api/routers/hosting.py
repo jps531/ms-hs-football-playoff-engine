@@ -14,7 +14,6 @@ from backend.helpers.api_helpers import (
     parse_completed_games,
     results_to_applied,
 )
-from backend.helpers.bracket_helpers import survivors_from_games
 from backend.helpers.data_classes import FormatSlot, Game, StandingsOdds
 from backend.helpers.scenario_updater import apply_region_game_results
 
@@ -224,33 +223,55 @@ async def simulate_hosting(
             )
             playoff_games = [Game.from_db_tuple(r) async for r in playoff_game_rows]
 
-            survivors, _ = survivors_from_games(playoff_games, school_to_seed)
+            winners_known: set[tuple[int, int]] = set()
+            losers_known: set[tuple[int, int]] = set()
+            for g in playoff_games:
+                if g.result == "W" and g.school in school_to_seed:
+                    winners_known.add(school_to_seed[g.school])
+                elif g.result == "L" and g.school in school_to_seed:
+                    losers_known.add(school_to_seed[g.school])
             for r in body.results:
+                if r.winner in school_to_seed:
+                    winners_known.add(school_to_seed[r.winner])
                 if r.loser in school_to_seed:
-                    survivors.discard(school_to_seed[r.loser])
-            alive_seeds = {seed for (reg, seed) in survivors if reg == region}
+                    losers_known.add(school_to_seed[r.loser])
 
             odds_map: dict[str, StandingsOdds] = {}
             for school, (reg, seed) in school_to_seed.items():
                 if reg != region:
                     continue
-                is_alive = seed in alive_seeds
+                is_winner = (reg, seed) in winners_known
+                is_loser = (reg, seed) in losers_known
+                if is_winner:
+                    p_playoffs = 1.0
+                elif is_loser:
+                    p_playoffs = 0.0
+                else:
+                    p_playoffs = 0.5
                 odds_map[school] = StandingsOdds(
                     school=school,
                     p1=1.0 if seed == 1 else 0.0,
                     p2=1.0 if seed == 2 else 0.0,
                     p3=1.0 if seed == 3 else 0.0,
                     p4=1.0 if seed == 4 else 0.0,
-                    p_playoffs=1.0 if is_alive else 0.0,
-                    final_playoffs=0.0,
+                    p_playoffs=p_playoffs,
+                    final_playoffs=p_playoffs,
                     clinched=True,
-                    eliminated=not is_alive,
+                    eliminated=is_loser,
                 )
+
+            _ROUND_NUMBERS = {"First Round": 1, "Second Round": 2, "Quarterfinals": 3, "Semifinals": 4}
+            rounds_in_db = max(
+                (_ROUND_NUMBERS.get(g.round or "", 0) for g in playoff_games if g.result in ("W", "L")),
+                default=0,
+            )
+            rounds_completed = rounds_in_db + (1 if body.results else 0)
         else:
             # Regular-season mode: simulate remaining region games.
             _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
+            rounds_completed = 0
 
-    entries = build_hosting_entries(odds_map, slots, region, season, clazz)
+    entries = build_hosting_entries(odds_map, slots, region, season, clazz, rounds_completed=rounds_completed)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 
