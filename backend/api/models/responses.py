@@ -307,6 +307,15 @@ class HostingResponse(BaseModel):
     teams: list[TeamHostingEntry]
 
 
+class ClassHostingResponse(BaseModel):
+    """Hosting odds across all regions for a classification."""
+
+    season: int
+    class_: int
+    as_of_date: date
+    regions: list[HostingResponse]
+
+
 # ---------------------------------------------------------------------------
 # Bracket advancement
 # ---------------------------------------------------------------------------

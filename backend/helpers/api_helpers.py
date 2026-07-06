@@ -364,8 +364,8 @@ def build_hosting_entries(
     wins_confirmed: dict[str, int] | None = None,
     win_prob_fn_weighted: MatchupProbFn | None = None,
     region_odds_weighted: dict[str, StandingsOdds] | None = None,
-    all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
-    cross_region_wins: "dict[tuple[int, int], int] | None" = None,
+    all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
+    cross_region_wins: dict[tuple[int, int], int] | None = None,
 ) -> list[TeamHostingEntry]:
     """Compute per-round playoff hosting odds for all teams in a region.
 
