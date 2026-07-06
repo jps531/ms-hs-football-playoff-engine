@@ -350,7 +350,7 @@ def build_seeding_by_region(
 # ---------------------------------------------------------------------------
 
 
-def build_hosting_entries(
+def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (stored) and simulate (on-the-fly) paths
     region_odds: dict[str, StandingsOdds],
     slots: list[FormatSlot],
     region: int,
@@ -366,6 +366,7 @@ def build_hosting_entries(
     region_odds_weighted: dict[str, StandingsOdds] | None = None,
     all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
     cross_region_wins: dict[tuple[int, int], int] | None = None,
+    eliminated_hosting: dict[str, tuple[float | None, float | None, float | None, float | None]] | None = None,
 ) -> list[TeamHostingEntry]:
     """Compute per-round playoff hosting odds for all teams in a region.
 
@@ -376,6 +377,10 @@ def build_hosting_entries(
     When not provided (simulate endpoint, unit tests), falls back to on-the-fly
     computation from seeding odds.  R1 conditional is 0.0 in the fallback path
     since home-seed data is not available without a DB lookup.
+
+    *eliminated_hosting* overrides both paths for eliminated teams: supply a
+    ``(r1, r2, qf, sf)`` tuple of 1.0/0.0/None per team so that rounds they
+    actually played show a deterministic conditional rather than null.
 
     1A–4A have four hosting rounds; 5A–7A skip ``second_round`` (null).
 
@@ -407,7 +412,23 @@ def build_hosting_entries(
 
     entries = []
     for school, o in region_odds.items():
-        if use_stored:
+        if o.eliminated and eliminated_hosting is not None and school in eliminated_hosting:
+            r1_det, r2_det, qf_det, sf_det = eliminated_hosting[school]
+
+            def _det(val: float | None) -> RoundHostingOdds:
+                """Wrap a deterministic hosting value as RoundHostingOdds (marginal = conditional since p_reach = 1)."""
+                return RoundHostingOdds(
+                    conditional=val,
+                    marginal=val if val is not None else 0.0,
+                    conditional_weighted=val,
+                    marginal_weighted=val if val is not None else 0.0,
+                )
+
+            r1_odds = _det(r1_det)
+            r2_odds = _det(r2_det) if is_1a_4a else RoundHostingOdds(conditional=None, marginal=None)
+            qf_odds = _det(qf_det)
+            sf_odds = _det(sf_det)
+        elif use_stored:
             r1_c, r2_c, qf_c, sf_c = home_cond.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]
             a_r1, a_r2, a_qf, a_sf = stored_adv.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]
             r1_c_w, r2_c_w, qf_c_w, sf_c_w = (home_cond_w or {}).get(school, (0.0, 0.0, 0.0, 0.0))

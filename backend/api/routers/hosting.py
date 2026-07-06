@@ -15,6 +15,15 @@ from backend.helpers.api_helpers import (
     parse_completed_games,
     results_to_applied,
 )
+from backend.helpers.bracket_home_odds import (
+    half_slots_for_region,
+    opponent_slots,
+    qf_home_team,
+    r2_home_team,
+    sf_home_team,
+    slot_index_for,
+    was_home_r1,
+)
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
 from backend.helpers.scenario_updater import apply_region_game_results
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
@@ -144,6 +153,96 @@ async def _load_all_regions_hosting_odds(
         adv[school] = (r[18], r[19], r[20], r[21])
         adv_w[school] = (r[22], r[23], r[24], r[25])
     return by_region
+
+
+def _find_bracket_survivor(
+    opp_slots: list[FormatSlot],
+    min_wins: int,
+    seed_to_school: dict[tuple[int, int], str],
+    wins_by_team: dict[str, int],
+) -> tuple[int, int] | None:
+    """Return (region, seed) of the team from opp_slots with the most confirmed wins >= min_wins."""
+    best: tuple[int, int] | None = None
+    best_w = -1
+    for slot in opp_slots:
+        for r, s in ((slot.home_region, slot.home_seed), (slot.away_region, slot.away_seed)):
+            school = seed_to_school.get((r, s))
+            if school:
+                w = wins_by_team.get(school, 0)
+                if w >= min_wins and w > best_w:
+                    best = (r, s)
+                    best_w = w
+    return best
+
+
+def _eliminated_team_hosting(
+    region: int,
+    seed: int,
+    rounds_played: int,
+    slots: list[FormatSlot],
+    seed_to_school: dict[tuple[int, int], str],
+    wins_by_team: dict[str, int],
+    season: int,
+    clazz: int,
+) -> tuple[float | None, float | None, float | None, float | None]:
+    """Deterministic (r1, r2, qf, sf) hosting tuple for an eliminated team.
+
+    Values: 1.0 = hosted, 0.0 = away, None = round not played.
+    rounds_played = confirmed_wins + 1.
+    """
+    is_1a_4a = clazz <= 4
+    half = half_slots_for_region(region, slots)
+    idx = slot_index_for(region, seed, half)
+    if idx is None:
+        return (None, None, None, None)
+
+    r1_home_us = was_home_r1(region, seed, half[idx])
+    r1 = 1.0 if r1_home_us else 0.0
+    if rounds_played < 2:
+        return (r1, None, None, None)
+
+    r2: float | None = None
+    r2_home_us = False
+    if is_1a_4a:
+        r2_opp = _find_bracket_survivor(opponent_slots(idx, 1, half), 1, seed_to_school, wins_by_team)
+        if r2_opp is None:
+            return (r1, None, None, None)
+        r2_result = r2_home_team(region, seed, r2_opp[0], r2_opp[1], season)
+        r2_home_us = r2_result == (region, seed)
+        r2 = 1.0 if r2_home_us else 0.0
+        if rounds_played < 3:
+            return (r1, r2, None, None)
+
+    # QF: offset differs between 1A-4A (offset 2) and 5A-7A (offset 1)
+    qf_offset = 2 if is_1a_4a else 1
+    min_wins_qf = 2 if is_1a_4a else 1
+    qf_opp = _find_bracket_survivor(opponent_slots(idx, qf_offset, half), min_wins_qf, seed_to_school, wins_by_team)
+    if qf_opp is None:
+        return (r1, r2, None, None)
+    qf_r, qf_s = qf_opp
+    qf_half = half_slots_for_region(qf_r, slots)
+    qf_idx = slot_index_for(qf_r, qf_s, qf_half)
+    r1_home_opp = was_home_r1(qf_r, qf_s, qf_half[qf_idx]) if qf_idx is not None else False
+    r2_home_opp = False
+    if is_1a_4a and qf_idx is not None:
+        r2_opp_of_opp = _find_bracket_survivor(opponent_slots(qf_idx, 1, qf_half), 1, seed_to_school, wins_by_team)
+        if r2_opp_of_opp:
+            r2_home_opp = r2_home_team(qf_r, qf_s, r2_opp_of_opp[0], r2_opp_of_opp[1], season) == (qf_r, qf_s)
+    qf_home = qf_home_team(region, seed, r1_home_us, r2_home_us, qf_r, qf_s, r1_home_opp, r2_home_opp, season)
+    qf = 1.0 if qf_home == (region, seed) else 0.0
+    rounds_for_sf = 4 if is_1a_4a else 3
+    if rounds_played < rounds_for_sf:
+        return (r1, r2, qf, None)
+
+    # SF: offset differs between 1A-4A (offset 3) and 5A-7A (offset 2)
+    sf_offset = 3 if is_1a_4a else 2
+    min_wins_sf = 3 if is_1a_4a else 2
+    sf_opp = _find_bracket_survivor(opponent_slots(idx, sf_offset, half), min_wins_sf, seed_to_school, wins_by_team)
+    if sf_opp is None:
+        return (r1, r2, qf, None)
+    sf_home = sf_home_team(region, seed, sf_opp[0], sf_opp[1], season)
+    sf = 1.0 if sf_home == (region, seed) else 0.0
+    return (r1, r2, qf, sf)
 
 
 @router.get("/hosting/{clazz}", responses=_404)
@@ -277,6 +376,7 @@ async def simulate_class_hosting(
         odds_by_region: dict[int, dict[str, StandingsOdds]] = {}
         wins_by_team: dict[str, int] = {}
         matchup_fn_by_region: dict[int, object] = {}
+        eliminated_hosting_map: dict[str, tuple] = {}
 
         if not sentinel_remaining:
             # Playoff mode: apply submitted results across the full bracket.
@@ -336,6 +436,15 @@ async def simulate_class_hosting(
                 for school, wins in wins_by_team.items()
                 if school in school_to_seed
             }
+            seed_to_school_map = {v: k for k, v in school_to_seed.items()}
+            eliminated_hosting_map: dict[str, tuple] = {
+                school: _eliminated_team_hosting(
+                    reg, seed, wins_by_team.get(school, 0) + 1,
+                    slots, seed_to_school_map, wins_by_team, season, clazz,
+                )
+                for school, (reg, seed) in school_to_seed.items()
+                if (reg, seed) in losers_known
+            }
             odds_by_region = dict(all_region_odds)
             shared_matchup_fn = make_matchup_prob_fn(elo_ratings, all_region_odds, EloConfig()) if elo_ratings else None
             matchup_fn_by_region = {reg: shared_matchup_fn for reg in odds_by_region}
@@ -392,6 +501,7 @@ async def simulate_class_hosting(
             region_odds_weighted=odds_by_region[reg],
             all_region_odds=all_region_odds,
             cross_region_wins=cross_region_wins,
+            eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
         )
         region_responses.append(
             HostingResponse(season=season, class_=clazz, region=reg, as_of_date=as_of, teams=entries)
@@ -455,6 +565,7 @@ async def simulate_hosting(
 
         all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None
         cross_region_wins: dict[tuple[int, int], int] | None = None
+        eliminated_hosting_map: dict[str, tuple] = {}
 
         if not remaining:
             # Playoff mode: apply submitted results to the bracket survivor set.
@@ -540,6 +651,15 @@ async def simulate_hosting(
                 for school, wins in wins_by_team.items()
                 if school in school_to_seed
             }
+            seed_to_school_map = {v: k for k, v in school_to_seed.items()}
+            eliminated_hosting_map = {
+                school: _eliminated_team_hosting(
+                    reg, seed, wins_by_team.get(school, 0) + 1,
+                    slots, seed_to_school_map, wins_by_team, season, clazz,
+                )
+                for school, (reg, seed) in school_to_seed.items()
+                if (reg, seed) in losers_known
+            }
             matchup_fn_w = make_matchup_prob_fn(elo_ratings, all_region_odds, EloConfig()) if elo_ratings else None
         else:
             # Regular-season mode: simulate remaining region games.
@@ -566,6 +686,7 @@ async def simulate_hosting(
         region_odds_weighted=odds_map,
         all_region_odds=all_region_odds,
         cross_region_wins=cross_region_wins,
+        eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
     )
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
