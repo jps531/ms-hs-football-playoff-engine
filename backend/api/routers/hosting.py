@@ -311,7 +311,6 @@ async def simulate_class_hosting(
 
             all_region_odds = {}
             for school, (reg, seed) in school_to_seed.items():
-                confirmed_wins = wins_by_team.get(school, 0)
                 is_loser = (reg, seed) in losers_known
                 if is_loser:
                     so = StandingsOdds(
@@ -321,14 +320,13 @@ async def simulate_class_hosting(
                         clinched=True, eliminated=True,
                     )
                 else:
-                    p_playoffs = 1.0 if confirmed_wins > 0 else 0.5
                     so = StandingsOdds(
                         school=school,
                         p1=1.0 if seed == 1 else 0.0,
                         p2=1.0 if seed == 2 else 0.0,
                         p3=1.0 if seed == 3 else 0.0,
                         p4=1.0 if seed == 4 else 0.0,
-                        p_playoffs=p_playoffs, final_playoffs=p_playoffs,
+                        p_playoffs=1.0, final_playoffs=1.0,
                         clinched=True, eliminated=False,
                     )
                 all_region_odds.setdefault(reg, {})[school] = so
@@ -494,7 +492,6 @@ async def simulate_hosting(
             for school, (reg, seed) in school_to_seed.items():
                 if reg != region:
                     continue
-                confirmed_wins = wins_by_team.get(school, 0)
                 is_loser = (reg, seed) in losers_known
                 if is_loser:
                     odds_map[school] = StandingsOdds(
@@ -504,22 +501,20 @@ async def simulate_hosting(
                         clinched=True, eliminated=True,
                     )
                 else:
-                    p_playoffs = 1.0 if confirmed_wins > 0 else 0.5
                     odds_map[school] = StandingsOdds(
                         school=school,
                         p1=1.0 if seed == 1 else 0.0,
                         p2=1.0 if seed == 2 else 0.0,
                         p3=1.0 if seed == 3 else 0.0,
                         p4=1.0 if seed == 4 else 0.0,
-                        p_playoffs=p_playoffs,
-                        final_playoffs=p_playoffs,
+                        p_playoffs=1.0,
+                        final_playoffs=1.0,
                         clinched=True,
                         eliminated=False,
                     )
 
             all_region_odds: dict[int, dict[str, StandingsOdds]] = {}
             for school, (reg, seed) in school_to_seed.items():
-                confirmed_wins = wins_by_team.get(school, 0)
                 is_loser = (reg, seed) in losers_known
                 if is_loser:
                     so = StandingsOdds(
@@ -529,14 +524,13 @@ async def simulate_hosting(
                         clinched=True, eliminated=True,
                     )
                 else:
-                    p_playoffs = 1.0 if confirmed_wins > 0 else 0.5
                     so = StandingsOdds(
                         school=school,
                         p1=1.0 if seed == 1 else 0.0,
                         p2=1.0 if seed == 2 else 0.0,
                         p3=1.0 if seed == 3 else 0.0,
                         p4=1.0 if seed == 4 else 0.0,
-                        p_playoffs=p_playoffs, final_playoffs=p_playoffs,
+                        p_playoffs=1.0, final_playoffs=1.0,
                         clinched=True, eliminated=False,
                     )
                 all_region_odds.setdefault(reg, {})[school] = so
