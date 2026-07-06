@@ -402,7 +402,32 @@ async def simulate_class_hosting(
                 if seed is not None:
                     school_to_seed[school] = (reg, seed)
 
+            db_losers: set[str] = set()
+            if school_to_seed:
+                db_rows = await conn.execute(
+                    """
+                    SELECT school,
+                           SUM(CASE WHEN points_for > points_against THEN 1 ELSE 0 END)::int AS wins,
+                           SUM(CASE WHEN points_for < points_against THEN 1 ELSE 0 END)::int AS losses
+                    FROM games_effective
+                    WHERE season = %s AND final = TRUE AND round IS NOT NULL
+                      AND date <= %s AND school = ANY(%s)
+                    GROUP BY school
+                    """,
+                    (season, as_of, list(school_to_seed.keys())),
+                )
+                async for school, wins, losses in db_rows:
+                    if wins:
+                        wins_by_team[school] = wins
+                    if losses:
+                        db_losers.add(school)
+
+            submitted_winners = {r.winner for r in body.results if r.winner in school_to_seed}
             losers_known: set[tuple[int, int]] = set()
+            for school in db_losers:
+                if school not in submitted_winners:
+                    losers_known.add(school_to_seed[school])
+
             for r in body.results:
                 if r.winner in school_to_seed:
                     wins_by_team[r.winner] = wins_by_team.get(r.winner, 0) + 1
@@ -592,7 +617,32 @@ async def simulate_hosting(
                     school_to_seed[school] = (reg, seed)
 
             wins_by_team: dict[str, int] = {}
+            db_losers: set[str] = set()
+            if school_to_seed:
+                db_rows = await conn.execute(
+                    """
+                    SELECT school,
+                           SUM(CASE WHEN points_for > points_against THEN 1 ELSE 0 END)::int AS wins,
+                           SUM(CASE WHEN points_for < points_against THEN 1 ELSE 0 END)::int AS losses
+                    FROM games_effective
+                    WHERE season = %s AND final = TRUE AND round IS NOT NULL
+                      AND date <= %s AND school = ANY(%s)
+                    GROUP BY school
+                    """,
+                    (season, as_of, list(school_to_seed.keys())),
+                )
+                async for school, wins, losses in db_rows:
+                    if wins:
+                        wins_by_team[school] = wins
+                    if losses:
+                        db_losers.add(school)
+
+            submitted_winners = {r.winner for r in body.results if r.winner in school_to_seed}
             losers_known: set[tuple[int, int]] = set()
+            for school in db_losers:
+                if school not in submitted_winners:
+                    losers_known.add(school_to_seed[school])
+
             for r in body.results:
                 if r.winner in school_to_seed:
                     wins_by_team[r.winner] = wins_by_team.get(r.winner, 0) + 1
