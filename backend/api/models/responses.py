@@ -321,12 +321,25 @@ class ClassHostingResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class BracketSlotHosting(BaseModel):
+    """Hosting odds for one bracket slot across all playoff rounds."""
+
+    first_round: RoundHostingOdds
+    second_round: RoundHostingOdds
+    quarterfinals: RoundHostingOdds
+    semifinals: RoundHostingOdds
+
+
 class TeamBracketEntry(BaseModel):
-    """Per-slot bracket advancement odds.
+    """Per-slot bracket advancement odds and hosting odds.
 
     ``school`` is populated only when the team has clinched that seed position
     (``p{seed} >= 0.999``).  Before seedings are locked, ``school`` is None
     and the slot is identified by ``region`` + ``seed``.
+
+    ``*_weighted`` fields use Elo-based win probabilities; ``null`` when no
+    Elo ratings exist for the season.  ``hosting`` contains conditional and
+    marginal hosting odds per round (``null`` fields for 5A–7A second_round).
     """
 
     region: int
@@ -337,6 +350,12 @@ class TeamBracketEntry(BaseModel):
     semifinals: float
     finals: float
     champion: float
+    second_round_weighted: float | None = None
+    quarterfinals_weighted: float | None = None
+    semifinals_weighted: float | None = None
+    finals_weighted: float | None = None
+    champion_weighted: float | None = None
+    hosting: BracketSlotHosting | None = None
 
 
 class BracketResponse(BaseModel):

@@ -23,7 +23,7 @@ The following data model describes how data is stored and controlled in this app
 | `school_seasons` | Per-season class and region assignments (can change on MHSAA's two-year cycle). FK anchor for all season-scoped data. |
 | `locations` | Physical venues. Referenced by `games` for geocoding and home-field logic. |
 | `games` | School-perspective game rows — two rows per contest, so scores and results are always relative to the `school` column. Covers regular season and playoffs. |
-| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion), and [home-game odds per round](docs/PLAYOFF_HOME_RULES.md). Appended each pipeline run; never overwritten. |
+| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion, raw and Elo-weighted), and [home-game odds per round](docs/PLAYOFF_HOME_RULES.md) (raw and Elo-weighted). Appended each pipeline run; never overwritten. |
 | `team_ratings` | Dated Elo and RPI snapshots. One row per school per season per `as_of_date`. |
 | `region_scenarios` | Serialized tiebreaker scenario trees (complete outcomes + minimized per-team conditions) plus pre-computed key insights (simple, unconditionally-true conditional statements like "Taylorsville clinches 1st seed: Taylorsville beats Stringer"). Computed once per pipeline run, read at request time. |
 | `region_computation_state` | Tracks background margin-sensitivity upgrade status per region (the two-phase computation model for regions with 5–6 games remaining). |
@@ -254,6 +254,12 @@ The report excludes pipeline files (same omit list as test coverage) and skips m
 ### API Reference
 
 Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running. For the complete endpoint reference see [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
+
+Key endpoints summary:
+- `/api/v1/standings/{clazz}/{region}` — seeding odds + scenarios + bracket/home-game odds snapshots
+- `/api/v1/hosting/{clazz}/{region}` — playoff hosting odds (conditional + marginal, raw + Elo-weighted) per round; simulate endpoint accepts winner/loser school names
+- `/api/v1/bracket` — bracket advancement odds per (region, seed) slot, including Elo-weighted advancement, non-weighted and weighted hosting odds per round; simulate endpoint (playoff mode only, same winner/loser format) returns the same full set of fields
+- `/api/v1/ratings` — Elo and RPI snapshots per team
 
 ## Disclaimer
 

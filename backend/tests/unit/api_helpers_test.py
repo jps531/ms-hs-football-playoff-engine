@@ -4,20 +4,20 @@ from datetime import date
 
 import pytest
 
+from backend.api.models.requests import GameResultRequest
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
     DISPLAY_THRESHOLD,
-    bracket_results_to_applied,
+    PlayoffBracketState,
     build_bracket_entries,
     build_bracket_entries_from_odds_map,
-    build_bracket_teams,
     build_hosting_entries,
+    build_playoff_bracket_state,
     build_seeding_by_region,
     build_team_entries,
     clinched_school,
     compute_remaining_games,
     filter_remaining_after_simulation,
-    num_rounds_for_class,
     parse_completed_games,
     records_from_completed,
     remaining_to_models,
@@ -73,18 +73,6 @@ class _GameResult:
         self.loser = loser
         self.winner_score = winner_score
         self.loser_score = loser_score
-
-
-class _BracketResult:
-    """Minimal stub for BracketGameResultRequest."""
-
-    def __init__(self, home_region, home_seed, away_region, away_seed, home_wins):
-        """Initialise with home/away slot coordinates and outcome."""
-        self.home_region = home_region
-        self.home_seed = home_seed
-        self.away_region = away_region
-        self.away_seed = away_seed
-        self.home_wins = home_wins
 
 
 # ---------------------------------------------------------------------------
@@ -316,83 +304,6 @@ class TestFilterRemainingAfterSimulation:
         """Empty body_results leaves remaining unchanged."""
         result = filter_remaining_after_simulation(self._REMAINING, [])
         assert len(result) == len(self._REMAINING)
-
-
-# ---------------------------------------------------------------------------
-# TestBracketResultsToApplied
-# ---------------------------------------------------------------------------
-
-
-class TestBracketResultsToApplied:
-    """bracket_results_to_applied uses R{region}S{seed} slot IDs."""
-
-    def test_slot_ids_constructed(self):
-        """team_a and team_b use R{region}S{seed} format."""
-        body = [_BracketResult(1, 1, 2, 4, True)]
-        result = bracket_results_to_applied(body)
-        assert result[0].team_a == "R1S1"
-        assert result[0].team_b == "R2S4"
-
-    def test_home_wins_true(self):
-        """home_wins=True → score_a=1, score_b=0."""
-        body = [_BracketResult(1, 1, 2, 4, True)]
-        result = bracket_results_to_applied(body)
-        assert result[0].score_a == 1
-        assert result[0].score_b == 0
-
-    def test_home_wins_false(self):
-        """home_wins=False → score_a=0, score_b=1."""
-        body = [_BracketResult(1, 1, 2, 4, False)]
-        result = bracket_results_to_applied(body)
-        assert result[0].score_a == 0
-        assert result[0].score_b == 1
-
-
-# ---------------------------------------------------------------------------
-# TestBuildBracketTeams
-# ---------------------------------------------------------------------------
-
-
-class TestBuildBracketTeams:
-    """build_bracket_teams produces one BracketTeam per region/seed combination."""
-
-    def test_count(self):
-        """Two regions × 4 seeds = 8 teams."""
-        by_region = {1: {}, 2: {}}
-        result = build_bracket_teams(by_region, season=2025)
-        assert len(result) == 8
-
-    def test_slot_id_names(self):
-        """School names follow the R{region}S{seed} format."""
-        by_region = {1: {}}
-        result = build_bracket_teams(by_region, season=2025)
-        names = {t.school for t in result}
-        assert names == {"R1S1", "R1S2", "R1S3", "R1S4"}
-
-    def test_season_assigned(self):
-        """Season is assigned to every team."""
-        by_region = {3: {}}
-        result = build_bracket_teams(by_region, season=2025)
-        assert all(t.season == 2025 for t in result)
-
-
-# ---------------------------------------------------------------------------
-# TestNumRoundsForClass
-# ---------------------------------------------------------------------------
-
-
-class TestNumRoundsForClass:
-    """num_rounds_for_class returns 5 for 1A–4A, 4 for 5A–7A."""
-
-    @pytest.mark.parametrize("clazz", [1, 2, 3, 4])
-    def test_small_classes(self, clazz):
-        """1A–4A use a 32-team, 5-round bracket."""
-        assert num_rounds_for_class(clazz) == 5
-
-    @pytest.mark.parametrize("clazz", [5, 6, 7])
-    def test_large_classes(self, clazz):
-        """5A–7A use a 16-team, 4-round bracket."""
-        assert num_rounds_for_class(clazz) == 4
 
 
 # ---------------------------------------------------------------------------
@@ -779,6 +690,22 @@ class TestBuildBracketEntriesFromOddsMap:
         r1s2 = next(e for e in result if e.region == 1 and e.seed == 2)
         assert r1s2.region == 1
         assert r1s2.seed == 2
+
+    def test_weighted_odds_map_populates_weighted_fields(self):
+        """When odds_map_weighted is supplied, *_weighted fields are set on each entry."""
+        from backend.helpers.data_classes import BracketOdds
+
+        weighted_map = {"R1S1": BracketOdds(school="R1S1", second_round=0.9, quarterfinals=0.6,
+                                             semifinals=0.3, finals=0.15, champion=0.08)}
+        by_region = {1: {"Alpha": _odds("Alpha", p1=1.0, clinched=True)}}
+        result = build_bracket_entries_from_odds_map(
+            by_region,
+            {"R1S1": _bracket_odds("R1S1")},
+            odds_map_weighted=weighted_map,
+        )
+        assert result[0].second_round_weighted == pytest.approx(0.9)
+        assert result[0].quarterfinals_weighted == pytest.approx(0.6)
+        assert result[0].champion_weighted == pytest.approx(0.08)
 
 
 # ---------------------------------------------------------------------------
@@ -1260,6 +1187,103 @@ class TestBuildHostingEntries:
 
 
 # ---------------------------------------------------------------------------
+# TestBuildPlayoffBracketState
+# ---------------------------------------------------------------------------
+
+
+def _game_result(winner: str, loser: str) -> GameResultRequest:
+    """Convenience constructor for GameResultRequest."""
+    return GameResultRequest(winner=winner, loser=loser)
+
+
+def _school_to_seed_4teams() -> dict[str, tuple[int, int]]:
+    """Minimal 4-team bracket: one seed per region in two regions."""
+    return {
+        "AlphaS1": (1, 1), "AlphaS2": (1, 2),
+        "BetaS1":  (2, 1), "BetaS2":  (2, 2),
+    }
+
+
+class TestBuildPlayoffBracketState:
+    """build_playoff_bracket_state is a pure function — fully unit-testable."""
+
+    def _base_state(self, submitted=None, db_wins=None, db_losers=None):
+        """Return a PlayoffBracketState built from a fixed 4-team bracket for use in tests."""
+        return build_playoff_bracket_state(
+            school_to_seed=_school_to_seed_4teams(),
+            db_wins=db_wins or {},
+            db_losers=db_losers or set(),
+            submitted_results=submitted or [],
+            elo_ratings={},
+            slots=SLOTS_5A_7A_2025,
+            season=2025,
+            clazz=5,
+        )
+
+    def test_returns_playoff_bracket_state(self):
+        """Return type is PlayoffBracketState."""
+        assert isinstance(self._base_state(), PlayoffBracketState)
+
+    def test_all_alive_with_no_results(self):
+        """Without any results all schools are alive (p_playoffs=1.0)."""
+        state = self._base_state()
+        for reg_odds in state.all_region_odds.values():
+            for so in reg_odds.values():
+                assert so.p_playoffs == pytest.approx(1.0)
+
+    def test_submitted_winner_gets_win_credit(self):
+        """Submitted winner's win count increments by 1."""
+        state = self._base_state(submitted=[_game_result("AlphaS1", "BetaS1")])
+        assert state.wins_by_team.get("AlphaS1", 0) == 1
+
+    def test_submitted_loser_is_eliminated(self):
+        """Submitted loser's slot has p_playoffs=0.0 in all_region_odds."""
+        state = self._base_state(submitted=[_game_result("AlphaS1", "BetaS1")])
+        loser_odds = state.all_region_odds[2]["BetaS1"]
+        assert loser_odds.p_playoffs == pytest.approx(0.0)
+        assert loser_odds.eliminated is True
+
+    def test_db_loser_overridden_by_submitted_winner(self):
+        """A school marked as DB loser but also submitted as winner stays alive."""
+        state = self._base_state(
+            db_losers={"AlphaS1"},
+            submitted=[_game_result("AlphaS1", "BetaS1")],
+        )
+        alpha_odds = state.all_region_odds[1]["AlphaS1"]
+        assert alpha_odds.p_playoffs == pytest.approx(1.0)
+        assert alpha_odds.eliminated is False
+
+    def test_cross_region_wins_populated(self):
+        """cross_region_wins maps (region, seed) → confirmed wins."""
+        state = self._base_state(submitted=[_game_result("AlphaS1", "BetaS1")])
+        assert state.cross_region_wins.get((1, 1), 0) == 1
+
+    def test_eliminated_hosting_map_contains_losers(self):
+        """eliminated_hosting_map is keyed by losers' school names."""
+        state = self._base_state(submitted=[_game_result("AlphaS1", "BetaS1")])
+        assert "BetaS1" in state.eliminated_hosting_map
+
+    def test_no_elo_ratings_matchup_fn_is_none(self):
+        """matchup_fn is None when elo_ratings is empty."""
+        state = self._base_state()
+        assert state.matchup_fn is None
+
+    def test_with_elo_ratings_matchup_fn_is_not_none(self):
+        """matchup_fn is set when elo_ratings are provided."""
+        state = build_playoff_bracket_state(
+            school_to_seed=_school_to_seed_4teams(),
+            db_wins={},
+            db_losers=set(),
+            submitted_results=[],
+            elo_ratings={"AlphaS1": 1500.0, "AlphaS2": 1400.0, "BetaS1": 1480.0, "BetaS2": 1420.0},
+            slots=SLOTS_5A_7A_2025,
+            season=2025,
+            clazz=5,
+        )
+        assert state.matchup_fn is not None
+
+
+# ---------------------------------------------------------------------------
 # TestBuildBracketEntries
 # ---------------------------------------------------------------------------
 
@@ -1297,3 +1321,61 @@ class TestBuildBracketEntries:
             assert isinstance(entry.second_round, float)
             assert isinstance(entry.semifinals, float)
             assert isinstance(entry.champion, float)
+
+    def test_weighted_fields_none_without_prob_fn(self):
+        """*_weighted fields are None when win_prob_fn_weighted is not supplied."""
+        result = build_bracket_entries(self._by_region(), SLOTS_5A_7A_2025)
+        for entry in result:
+            assert entry.second_round_weighted is None
+            assert entry.quarterfinals_weighted is None
+            assert entry.semifinals_weighted is None
+            assert entry.finals_weighted is None
+            assert entry.champion_weighted is None
+
+    def test_hosting_none_without_season_clazz(self):
+        """hosting is None when season/clazz are not passed."""
+        result = build_bracket_entries(self._by_region(), SLOTS_5A_7A_2025)
+        assert all(e.hosting is None for e in result)
+
+    def test_5a_7a_hosting_second_round_is_null(self):
+        """5A–7A has no second round: hosting.second_round conditional/marginal are None."""
+        result = build_bracket_entries(
+            self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5
+        )
+        for entry in result:
+            assert entry.hosting is not None
+            assert entry.hosting.second_round.conditional is None
+            assert entry.hosting.second_round.marginal is None
+
+    def test_1a_4a_hosting_second_round_is_populated(self):
+        """1A–4A has a second round: hosting.second_round marginal is not None."""
+        result = build_bracket_entries(
+            self._by_region(), SLOTS_1A_4A_2025, season=2025, clazz=1
+        )
+        for entry in result:
+            assert entry.hosting is not None
+            assert entry.hosting.second_round.marginal is not None
+
+    def test_seed1_hosting_first_round_conditional_is_one(self):
+        """Every seed-1 slot is the home team in round 1: conditional == 1.0."""
+        result = build_bracket_entries(
+            self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5
+        )
+        seed1_entries = [e for e in result if e.seed == 1]
+        assert seed1_entries, "expected at least one seed-1 entry"
+        for entry in seed1_entries:
+            assert entry.hosting is not None
+            assert entry.hosting.first_round.conditional == pytest.approx(1.0)
+
+    def test_r1_marginal_equals_conditional_when_all_clinched(self):
+        """When all teams are clinched (p_playoffs=1.0), R1 marginal == conditional."""
+        result = build_bracket_entries(
+            self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5
+        )
+        for entry in result:
+            h = entry.hosting
+            assert h is not None
+            cond = h.first_round.conditional
+            marg = h.first_round.marginal
+            if cond is not None and marg is not None:
+                assert marg == pytest.approx(cond, abs=1e-9)

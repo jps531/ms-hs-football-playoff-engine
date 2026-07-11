@@ -48,21 +48,6 @@ class SimulateRegionRequest(BaseModel):
     results: list[GameResultRequest] = Field(min_length=1, max_length=20)
 
 
-class BracketGameResultRequest(BaseModel):
-    """A single hypothetical bracket game result."""
-
-    home_region: int
-    home_seed: int
-    away_region: int
-    away_seed: int
-    home_wins: bool
-
-
-class SimulateBracketRequest(BaseModel):
-    """Request body for bracket what-if simulation endpoints."""
-
-    results: list[BracketGameResultRequest] = Field(min_length=1, max_length=20)
-
 
 class LiveWinProbRequest(BaseModel):
     """Request body for live (in-game regulation) win probability."""

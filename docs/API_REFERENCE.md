@@ -73,14 +73,26 @@ Each team has four round entries (`first_round`, `second_round`, `quarterfinals`
 - `conditional_weighted` — Elo-weighted version of `conditional`. `null` if the team cannot reach this round.
 - `marginal_weighted` — Elo-weighted version of `marginal`.
 
-For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` is always `null` (teams go directly to quarterfinals). The simulate endpoint does not return weighted fields (`null`).
+For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` is always `null` (teams go directly to quarterfinals). Weighted fields (`conditional_weighted`, `marginal_weighted`) are populated on both GET and simulate paths when Elo ratings are available for the season; `null` for seasons with no ratings data.
 
 ## Bracket — `/bracket`
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Advancement odds for every seed slot in a class. Params: `season`, `class`, `date` |
-| POST | `/simulate` | Apply hypothetical bracket results and return updated advancement odds |
+| POST | `/simulate` | Apply hypothetical bracket results and return updated odds (playoff mode only — 404 before seedings are clinched) |
+
+**Response fields per slot** (`teams[]`):
+- `region`, `seed` — bracket slot identifier. `school` is set only when a team has clinched that seed; otherwise `null`.
+- Advancement odds: `second_round`, `quarterfinals`, `semifinals`, `finals`, `champion` (non-weighted, 50/50 matchups).
+- Weighted advancement: `second_round_weighted`, `quarterfinals_weighted`, `semifinals_weighted`, `finals_weighted`, `champion_weighted` — Elo-weighted. `null` when no Elo ratings exist for the season.
+- `hosting` — nested object with four round entries (`first_round`, `second_round`, `quarterfinals`, `semifinals`), each with the same `conditional`/`marginal`/`conditional_weighted`/`marginal_weighted` fields as the hosting endpoint. For 5A–7A, `hosting.second_round` is `null` (no second round). Weighted hosting fields follow the same `null` rule as weighted advancement.
+
+**Simulate input** (`POST /bracket/simulate`):
+```json
+{ "results": [{ "winner": "School Name", "loser": "Other School" }] }
+```
+Same format as the hosting simulate endpoints. Only available in playoff mode — returns 404 when seedings are not yet clinched.
 
 ## Games — `/games`
 

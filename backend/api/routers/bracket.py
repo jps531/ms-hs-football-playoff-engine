@@ -7,17 +7,15 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
-from backend.api.models.requests import SimulateBracketRequest
+from backend.api.models.requests import SimulateRegionRequest
 from backend.api.models.responses import BracketResponse
 from backend.helpers.api_helpers import (
-    bracket_results_to_applied,
+    _load_and_build_playoff_bracket_state,
+    _load_elo_ratings,
     build_bracket_entries,
-    build_bracket_entries_from_odds_map,
-    build_bracket_teams,
-    num_rounds_for_class,
 )
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
-from backend.helpers.scenario_updater import apply_bracket_game_results
+from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["bracket"])
 
@@ -90,6 +88,10 @@ async def get_bracket(
 
     Each entry represents one (region, seed) slot.  ``school`` is set only when
     the team has clinched that seed position; otherwise it is null.
+
+    Weighted fields use Elo-based win probabilities; ``null`` when no Elo ratings
+    exist for the season.  ``hosting`` contains conditional and marginal hosting odds
+    per round; ``hosting.second_round`` is ``null`` for 5A–7A (no second round).
     """
     as_of = date or _today()
     async with get_conn() as conn:
@@ -99,8 +101,14 @@ async def get_bracket(
         by_region = await _load_all_region_odds(conn, season, class_, as_of)
         if not by_region:
             raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
+        elo_ratings = await _load_elo_ratings(conn, season, as_of)
 
-    entries = build_bracket_entries(by_region, slots)
+    matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
+    entries = build_bracket_entries(
+        by_region, slots,
+        season=season, clazz=class_,
+        win_prob_fn_weighted=matchup_fn,
+    )
     return BracketResponse(season=season, class_=class_, teams=entries)
 
 
@@ -108,29 +116,40 @@ async def get_bracket(
 @limiter.limit("10/minute")
 async def simulate_bracket(
     request: Request,
-    body: SimulateBracketRequest,
+    body: SimulateRegionRequest,
     season: SeasonQ,
     class_: ClassQ,
     date: Annotated[date | None, Query()] = None,
 ) -> BracketResponse:
     """Apply hypothetical bracket game results and return updated advancement odds.
 
-    Results are specified as (home_region, home_seed, away_region, away_seed, home_wins).
-    Slot identifiers (``"R{region}S{seed}"``) are used internally; ``school`` is only
-    populated in the response when a team has clinched that seed.
+    Results are specified as winner/loser school name pairs (same format as the
+    hosting simulate endpoints).  Only available in playoff mode — returns 404
+    when seedings are not yet clinched.
     """
     as_of = date or _today()
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, class_)
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format for {class_}A season {season}")
-        by_region = await _load_all_region_odds(conn, season, class_, as_of)
-        if not by_region:
-            raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
+        elo_ratings = await _load_elo_ratings(conn, season, as_of)
+        state = await _load_and_build_playoff_bracket_state(
+            conn, season, class_, as_of, body.results, elo_ratings, slots
+        )
 
-    bracket_teams = build_bracket_teams(by_region, season)
-    new_results = bracket_results_to_applied(body.results)
-    updated_odds = apply_bracket_game_results(bracket_teams, num_rounds_for_class(class_), [], new_results)
+    if state is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Seedings not yet clinched for {class_}A season {season}",
+        )
 
-    entries = build_bracket_entries_from_odds_map(by_region, updated_odds)
+    entries = build_bracket_entries(
+        state.all_region_odds, slots,
+        season=season, clazz=class_,
+        win_prob_fn_weighted=state.matchup_fn,
+        wins_by_team=state.wins_by_team,
+        all_region_odds=state.all_region_odds,
+        cross_region_wins=state.cross_region_wins,
+        eliminated_hosting=state.eliminated_hosting_map,
+    )
     return BracketResponse(season=season, class_=class_, teams=entries)

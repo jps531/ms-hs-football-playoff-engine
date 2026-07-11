@@ -10,19 +10,12 @@ from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
 from backend.api.models.responses import ClassHostingResponse, HostingResponse
 from backend.helpers.api_helpers import (
+    _load_and_build_playoff_bracket_state,
+    _load_elo_ratings,
     build_hosting_entries,
     build_seeding_by_region,
     parse_completed_games,
     results_to_applied,
-)
-from backend.helpers.bracket_home_odds import (
-    half_slots_for_region,
-    opponent_slots,
-    qf_home_team,
-    r2_home_team,
-    sf_home_team,
-    slot_index_for,
-    was_home_r1,
 )
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
 from backend.helpers.scenario_updater import apply_region_game_results
@@ -155,96 +148,6 @@ async def _load_all_regions_hosting_odds(
     return by_region
 
 
-def _find_bracket_survivor(
-    opp_slots: list[FormatSlot],
-    min_wins: int,
-    seed_to_school: dict[tuple[int, int], str],
-    wins_by_team: dict[str, int],
-) -> tuple[int, int] | None:
-    """Return (region, seed) of the team from opp_slots with the most confirmed wins >= min_wins."""
-    best: tuple[int, int] | None = None
-    best_w = -1
-    for slot in opp_slots:
-        for r, s in ((slot.home_region, slot.home_seed), (slot.away_region, slot.away_seed)):
-            school = seed_to_school.get((r, s))
-            if school:
-                w = wins_by_team.get(school, 0)
-                if w >= min_wins and w > best_w:
-                    best = (r, s)
-                    best_w = w
-    return best
-
-
-def _eliminated_team_hosting(
-    region: int,
-    seed: int,
-    rounds_played: int,
-    slots: list[FormatSlot],
-    seed_to_school: dict[tuple[int, int], str],
-    wins_by_team: dict[str, int],
-    season: int,
-    clazz: int,
-) -> tuple[float | None, float | None, float | None, float | None]:
-    """Deterministic (r1, r2, qf, sf) hosting tuple for an eliminated team.
-
-    Values: 1.0 = hosted, 0.0 = away, None = round not played.
-    rounds_played = confirmed_wins + 1.
-    """
-    is_1a_4a = clazz <= 4
-    half = half_slots_for_region(region, slots)
-    idx = slot_index_for(region, seed, half)
-    if idx is None:
-        return (None, None, None, None)
-
-    r1_home_us = was_home_r1(region, seed, half[idx])
-    r1 = 1.0 if r1_home_us else 0.0
-    if rounds_played < 2:
-        return (r1, None, None, None)
-
-    r2: float | None = None
-    r2_home_us = False
-    if is_1a_4a:
-        r2_opp = _find_bracket_survivor(opponent_slots(idx, 1, half), 1, seed_to_school, wins_by_team)
-        if r2_opp is None:
-            return (r1, None, None, None)
-        r2_result = r2_home_team(region, seed, r2_opp[0], r2_opp[1], season)
-        r2_home_us = r2_result == (region, seed)
-        r2 = 1.0 if r2_home_us else 0.0
-        if rounds_played < 3:
-            return (r1, r2, None, None)
-
-    # QF: offset differs between 1A-4A (offset 2) and 5A-7A (offset 1)
-    qf_offset = 2 if is_1a_4a else 1
-    min_wins_qf = 2 if is_1a_4a else 1
-    qf_opp = _find_bracket_survivor(opponent_slots(idx, qf_offset, half), min_wins_qf, seed_to_school, wins_by_team)
-    if qf_opp is None:
-        return (r1, r2, None, None)
-    qf_r, qf_s = qf_opp
-    qf_half = half_slots_for_region(qf_r, slots)
-    qf_idx = slot_index_for(qf_r, qf_s, qf_half)
-    r1_home_opp = was_home_r1(qf_r, qf_s, qf_half[qf_idx]) if qf_idx is not None else False
-    r2_home_opp = False
-    if is_1a_4a and qf_idx is not None:
-        r2_opp_of_opp = _find_bracket_survivor(opponent_slots(qf_idx, 1, qf_half), 1, seed_to_school, wins_by_team)
-        if r2_opp_of_opp:
-            r2_home_opp = r2_home_team(qf_r, qf_s, r2_opp_of_opp[0], r2_opp_of_opp[1], season) == (qf_r, qf_s)
-    qf_home = qf_home_team(region, seed, r1_home_us, r2_home_us, qf_r, qf_s, r1_home_opp, r2_home_opp, season)
-    qf = 1.0 if qf_home == (region, seed) else 0.0
-    rounds_for_sf = 4 if is_1a_4a else 3
-    if rounds_played < rounds_for_sf:
-        return (r1, r2, qf, None)
-
-    # SF: offset differs between 1A-4A (offset 3) and 5A-7A (offset 2)
-    sf_offset = 3 if is_1a_4a else 2
-    min_wins_sf = 3 if is_1a_4a else 2
-    sf_opp = _find_bracket_survivor(opponent_slots(idx, sf_offset, half), min_wins_sf, seed_to_school, wins_by_team)
-    if sf_opp is None:
-        return (r1, r2, qf, None)
-    sf_home = sf_home_team(region, seed, sf_opp[0], sf_opp[1], season)
-    sf = 1.0 if sf_home == (region, seed) else 0.0
-    return (r1, r2, qf, sf)
-
-
 @router.get("/hosting/{clazz}", responses=_404)
 async def get_class_hosting(
     clazz: ClazzPath,
@@ -360,16 +263,7 @@ async def simulate_class_hosting(
         else:
             _, _, sentinel_remaining, _, _ = await _recompute_from_games(conn, season, clazz, sentinel_region, as_of)
 
-        elo_rows = await conn.execute(
-            """
-            SELECT DISTINCT ON (school) school, elo
-            FROM team_ratings
-            WHERE season = %s AND as_of_date <= %s
-            ORDER BY school, as_of_date DESC
-            """,
-            (season, as_of),
-        )
-        elo_ratings: dict[str, float] = {r[0]: r[1] async for r in elo_rows}
+        elo_ratings = await _load_elo_ratings(conn, season, as_of)
 
         all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None
         cross_region_wins: dict[tuple[int, int], int] | None = None
@@ -379,99 +273,18 @@ async def simulate_class_hosting(
         eliminated_hosting_map: dict[str, tuple] = {}
 
         if not sentinel_remaining:
-            # Playoff mode: apply submitted results across the full bracket.
-            seed_rows = await conn.execute(
-                """
-                SELECT rs.school, rs.region,
-                       CASE WHEN rs.odds_1st > 0.99 THEN 1
-                            WHEN rs.odds_2nd > 0.99 THEN 2
-                            WHEN rs.odds_3rd > 0.99 THEN 3
-                            WHEN rs.odds_4th > 0.99 THEN 4
-                       END AS seed
-                FROM region_standings rs
-                WHERE rs.season = %s AND rs.class = %s AND rs.clinched = TRUE
-                  AND rs.as_of_date = (
-                      SELECT MAX(rs2.as_of_date) FROM region_standings rs2
-                      WHERE rs2.season = %s AND rs2.class = %s AND rs2.clinched = TRUE
-                  )
-                """,
-                (season, clazz, season, clazz),
+            # Playoff mode: delegate to shared bracket-state builder.
+            state = await _load_and_build_playoff_bracket_state(
+                conn, season, clazz, as_of, body.results, elo_ratings, slots
             )
-            school_to_seed: dict[str, tuple[int, int]] = {}
-            async for school, reg, seed in seed_rows:
-                if seed is not None:
-                    school_to_seed[school] = (reg, seed)
-
-            db_losers: set[str] = set()
-            if school_to_seed:
-                db_rows = await conn.execute(
-                    """
-                    SELECT school,
-                           SUM(CASE WHEN points_for > points_against THEN 1 ELSE 0 END)::int AS wins,
-                           SUM(CASE WHEN points_for < points_against THEN 1 ELSE 0 END)::int AS losses
-                    FROM games_effective
-                    WHERE season = %s AND final = TRUE AND round IS NOT NULL
-                      AND date <= %s AND school = ANY(%s)
-                    GROUP BY school
-                    """,
-                    (season, as_of, list(school_to_seed.keys())),
-                )
-                async for school, wins, losses in db_rows:
-                    if wins:
-                        wins_by_team[school] = wins
-                    if losses:
-                        db_losers.add(school)
-
-            submitted_winners = {r.winner for r in body.results if r.winner in school_to_seed}
-            losers_known: set[tuple[int, int]] = set()
-            for school in db_losers:
-                if school not in submitted_winners:
-                    losers_known.add(school_to_seed[school])
-
-            for r in body.results:
-                if r.winner in school_to_seed:
-                    wins_by_team[r.winner] = wins_by_team.get(r.winner, 0) + 1
-                if r.loser in school_to_seed:
-                    losers_known.add(school_to_seed[r.loser])
-
-            all_region_odds = {}
-            for school, (reg, seed) in school_to_seed.items():
-                is_loser = (reg, seed) in losers_known
-                if is_loser:
-                    so = StandingsOdds(
-                        school=school,
-                        p1=0.0, p2=0.0, p3=0.0, p4=0.0,
-                        p_playoffs=0.0, final_playoffs=0.0,
-                        clinched=True, eliminated=True,
-                    )
-                else:
-                    so = StandingsOdds(
-                        school=school,
-                        p1=1.0 if seed == 1 else 0.0,
-                        p2=1.0 if seed == 2 else 0.0,
-                        p3=1.0 if seed == 3 else 0.0,
-                        p4=1.0 if seed == 4 else 0.0,
-                        p_playoffs=1.0, final_playoffs=1.0,
-                        clinched=True, eliminated=False,
-                    )
-                all_region_odds.setdefault(reg, {})[school] = so
-
-            cross_region_wins = {
-                school_to_seed[school]: wins
-                for school, wins in wins_by_team.items()
-                if school in school_to_seed
-            }
-            seed_to_school_map = {v: k for k, v in school_to_seed.items()}
-            eliminated_hosting_map: dict[str, tuple] = {
-                school: _eliminated_team_hosting(
-                    reg, seed, wins_by_team.get(school, 0) + 1,
-                    slots, seed_to_school_map, wins_by_team, season, clazz,
-                )
-                for school, (reg, seed) in school_to_seed.items()
-                if (reg, seed) in losers_known
-            }
-            odds_by_region = dict(all_region_odds)
-            shared_matchup_fn = make_matchup_prob_fn(elo_ratings, all_region_odds, EloConfig()) if elo_ratings else None
+            if state is None:
+                raise HTTPException(status_code=404, detail=f"No clinched seeds for {clazz}A season {season}")
+            all_region_odds = state.all_region_odds
+            cross_region_wins = state.cross_region_wins
+            wins_by_team = state.wins_by_team
+            eliminated_hosting_map = state.eliminated_hosting_map
+            odds_by_region = dict(state.all_region_odds)
+            shared_matchup_fn = state.matchup_fn
             matchup_fn_by_region = {reg: shared_matchup_fn for reg in odds_by_region}
         else:
             # Regular-season mode: per-region simulation.
@@ -577,140 +390,26 @@ async def simulate_hosting(
         completed = parse_completed_games([r async for r in game_rows])
         new_results = results_to_applied(body.results)
 
-        elo_rows = await conn.execute(
-            """
-            SELECT DISTINCT ON (school) school, elo
-            FROM team_ratings
-            WHERE season = %s AND as_of_date <= %s
-            ORDER BY school, as_of_date DESC
-            """,
-            (season, as_of),
-        )
-        elo_ratings: dict[str, float] = {r[0]: r[1] async for r in elo_rows}
+        elo_ratings = await _load_elo_ratings(conn, season, as_of)
 
         all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None
         cross_region_wins: dict[tuple[int, int], int] | None = None
+        wins_by_team: dict[str, int] = {}
         eliminated_hosting_map: dict[str, tuple] = {}
 
         if not remaining:
-            # Playoff mode: apply submitted results to the bracket survivor set.
-            seed_rows = await conn.execute(
-                """
-                SELECT rs.school, rs.region,
-                       CASE WHEN rs.odds_1st > 0.99 THEN 1
-                            WHEN rs.odds_2nd > 0.99 THEN 2
-                            WHEN rs.odds_3rd > 0.99 THEN 3
-                            WHEN rs.odds_4th > 0.99 THEN 4
-                       END AS seed
-                FROM region_standings rs
-                WHERE rs.season = %s AND rs.class = %s AND rs.clinched = TRUE
-                  AND rs.as_of_date = (
-                      SELECT MAX(rs2.as_of_date) FROM region_standings rs2
-                      WHERE rs2.season = %s AND rs2.class = %s AND rs2.clinched = TRUE
-                  )
-                """,
-                (season, clazz, season, clazz),
+            # Playoff mode: delegate to shared bracket-state builder.
+            state = await _load_and_build_playoff_bracket_state(
+                conn, season, clazz, as_of, body.results, elo_ratings, slots
             )
-            school_to_seed: dict[str, tuple[int, int]] = {}
-            async for school, reg, seed in seed_rows:
-                if seed is not None:
-                    school_to_seed[school] = (reg, seed)
-
-            wins_by_team: dict[str, int] = {}
-            db_losers: set[str] = set()
-            if school_to_seed:
-                db_rows = await conn.execute(
-                    """
-                    SELECT school,
-                           SUM(CASE WHEN points_for > points_against THEN 1 ELSE 0 END)::int AS wins,
-                           SUM(CASE WHEN points_for < points_against THEN 1 ELSE 0 END)::int AS losses
-                    FROM games_effective
-                    WHERE season = %s AND final = TRUE AND round IS NOT NULL
-                      AND date <= %s AND school = ANY(%s)
-                    GROUP BY school
-                    """,
-                    (season, as_of, list(school_to_seed.keys())),
-                )
-                async for school, wins, losses in db_rows:
-                    if wins:
-                        wins_by_team[school] = wins
-                    if losses:
-                        db_losers.add(school)
-
-            submitted_winners = {r.winner for r in body.results if r.winner in school_to_seed}
-            losers_known: set[tuple[int, int]] = set()
-            for school in db_losers:
-                if school not in submitted_winners:
-                    losers_known.add(school_to_seed[school])
-
-            for r in body.results:
-                if r.winner in school_to_seed:
-                    wins_by_team[r.winner] = wins_by_team.get(r.winner, 0) + 1
-                if r.loser in school_to_seed:
-                    losers_known.add(school_to_seed[r.loser])
-
-            odds_map: dict[str, StandingsOdds] = {}
-            for school, (reg, seed) in school_to_seed.items():
-                if reg != region:
-                    continue
-                is_loser = (reg, seed) in losers_known
-                if is_loser:
-                    odds_map[school] = StandingsOdds(
-                        school=school,
-                        p1=0.0, p2=0.0, p3=0.0, p4=0.0,
-                        p_playoffs=0.0, final_playoffs=0.0,
-                        clinched=True, eliminated=True,
-                    )
-                else:
-                    odds_map[school] = StandingsOdds(
-                        school=school,
-                        p1=1.0 if seed == 1 else 0.0,
-                        p2=1.0 if seed == 2 else 0.0,
-                        p3=1.0 if seed == 3 else 0.0,
-                        p4=1.0 if seed == 4 else 0.0,
-                        p_playoffs=1.0,
-                        final_playoffs=1.0,
-                        clinched=True,
-                        eliminated=False,
-                    )
-
-            all_region_odds: dict[int, dict[str, StandingsOdds]] = {}
-            for school, (reg, seed) in school_to_seed.items():
-                is_loser = (reg, seed) in losers_known
-                if is_loser:
-                    so = StandingsOdds(
-                        school=school,
-                        p1=0.0, p2=0.0, p3=0.0, p4=0.0,
-                        p_playoffs=0.0, final_playoffs=0.0,
-                        clinched=True, eliminated=True,
-                    )
-                else:
-                    so = StandingsOdds(
-                        school=school,
-                        p1=1.0 if seed == 1 else 0.0,
-                        p2=1.0 if seed == 2 else 0.0,
-                        p3=1.0 if seed == 3 else 0.0,
-                        p4=1.0 if seed == 4 else 0.0,
-                        p_playoffs=1.0, final_playoffs=1.0,
-                        clinched=True, eliminated=False,
-                    )
-                all_region_odds.setdefault(reg, {})[school] = so
-
-            cross_region_wins: dict[tuple[int, int], int] = {
-                school_to_seed[school]: wins
-                for school, wins in wins_by_team.items()
-                if school in school_to_seed
-            }
-            seed_to_school_map = {v: k for k, v in school_to_seed.items()}
-            eliminated_hosting_map = {
-                school: _eliminated_team_hosting(
-                    reg, seed, wins_by_team.get(school, 0) + 1,
-                    slots, seed_to_school_map, wins_by_team, season, clazz,
-                )
-                for school, (reg, seed) in school_to_seed.items()
-                if (reg, seed) in losers_known
-            }
-            matchup_fn_w = make_matchup_prob_fn(elo_ratings, all_region_odds, EloConfig()) if elo_ratings else None
+            if state is None:
+                raise HTTPException(status_code=404, detail=f"No clinched seeds for {clazz}A region {region} season {season}")
+            all_region_odds = state.all_region_odds
+            cross_region_wins = state.cross_region_wins
+            wins_by_team = state.wins_by_team
+            eliminated_hosting_map = state.eliminated_hosting_map
+            odds_map = state.all_region_odds.get(region, {})
+            matchup_fn_w = state.matchup_fn
         else:
             # Regular-season mode: simulate remaining region games.
             _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)

@@ -53,6 +53,24 @@ The `school` field on each bracket entry should match the actual seeding outcome
 **9. Non-clinched slots have `school: null` early in the season** ✅
 Query with `?date=YYYY-10-01` — most slots should have `school: null` and fractional odds. If every slot shows a school name even on that early date, `clinched` flags were written too aggressively.
 
+**9a. Weighted advancement odds are present and differ from unweighted** ✅
+Each entry should have `second_round_weighted` through `champion_weighted` populated (not `null`) for a season with Elo ratings. For a clinched strong 1-seed, `second_round_weighted` should be higher than `second_round`.
+
+**9b. Hosting odds are present on every entry** ✅
+Each entry should have a non-null `hosting` object with `first_round`, `second_round`, `quarterfinals`, `semifinals` — each with `conditional` and `marginal` fields. For a 5A–7A class, `hosting.second_round.conditional` and `.marginal` should both be `null`. For a 1A–4A class, `hosting.second_round` should be fully populated.
+
+**9c. Seed-1 first_round hosting conditional is always 1.0** ✅
+For every region, the seed-1 slot's `hosting.first_round.conditional` should be exactly `1.0` — seed-1 is always the home team in round 1 by bracket definition.
+
+**9d. Weighted hosting fields are `null` for a season with no Elo data** ✅
+Query the bracket for an older season that has no Elo ratings (e.g. `?season=2010`). All `*_weighted` fields — both advancement and hosting — should be `null`.
+
+**9e. Simulate with winner/loser school names returns updated odds**
+`POST /api/v1/bracket/simulate?season=YYYY&class=5` with body `{"results": [{"winner": "Team A", "loser": "Team B"}]}`. The losing team's slot should show `0.0` for all future-round advancement odds. The winning team's advancement odds should reflect one confirmed win. Non-weighted forward odds should approximate 50/50 geometric series.
+
+**9f. Simulate returns 404 before seedings are clinched**
+Run the simulate endpoint with `?date=YYYY-10-01` (before any seedings are locked). The response should be 404 with a message about seedings not yet clinched.
+
 ---
 
 ## Ratings (`GET /api/v1/ratings?season=YYYY`)
@@ -80,7 +98,7 @@ For a team eliminated mid-bracket (e.g. lost in QF), their hosting odds for roun
 
 ## Simulate (`POST /api/v1/standings/{clazz}/{region}/simulate`)
 
-**13. Simulating all remaining games produces binary odds**
+**13. Simulating all remaining games produces binary odds** ✅
 Take a mid-season snapshot (`?date=` week before the final week) and POST a `simulate` body filling in all remaining region games. Every team's odds should collapse to `0.0` or `1.0`. If they stay fractional, `apply_region_game_results` isn't draining the remaining game list correctly.
 
 ---
