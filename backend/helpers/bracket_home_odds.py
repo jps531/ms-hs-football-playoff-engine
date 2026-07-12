@@ -795,6 +795,30 @@ def _alive_in_snapshots(
     return None
 
 
+def _resolved_opp_in_slots(
+    slots: list["FormatSlot"],
+    all_region_odds: "dict[int, dict[str, StandingsOdds]]",
+    wins_confirmed: "dict[str, int]",
+    min_wins: int,
+) -> "tuple[int, int] | None":
+    """Find the unique eliminated opponent that has confirmed wins >= min_wins.
+
+    Used as a last-resort fallback in compute_quarterfinal_home_odds when
+    _alive_in_slots returns None (opponent is eliminated) and round_snapshots
+    is unavailable. The game is provably over (caller holds tw >= threshold),
+    so exactly one team in the opponent slots reached that round and lost.
+    """
+    found: list[tuple[int, int]] = []
+    for slot in slots:
+        for r, s in ((slot.home_region, slot.home_seed), (slot.away_region, slot.away_seed)):
+            slot_id = f"R{r}S{s}"
+            if wins_confirmed.get(slot_id, 0) >= min_wins and any(
+                getattr(o, f"p{s}", 0.0) > 0.5 for o in all_region_odds.get(r, {}).values()
+            ):
+                found.append((r, s))
+    return found[0] if len(found) == 1 else None
+
+
 def _school_reached_rc(
     school: str,
     region: int,
@@ -1012,12 +1036,16 @@ def compute_quarterfinal_home_odds(
                     actual_r2_opp = _alive_in_slots(r2_opp_slots, all_region_odds)
                     if actual_r2_opp is None and round_snapshots:
                         actual_r2_opp = _alive_in_snapshots(r2_opp_slots, round_snapshots)
+                    if actual_r2_opp is None and wins_confirmed is not None:
+                        actual_r2_opp = _resolved_opp_in_slots(r2_opp_slots, all_region_odds, wins_confirmed, 1)
                     if actual_r2_opp is not None:
                         r2h = r2_home_team(region, seed, actual_r2_opp[0], actual_r2_opp[1], season) == (region, seed)
                 opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, qf_offset)]
                 opp = _alive_in_slots(opp_slots, all_region_odds)
                 if opp is None and round_snapshots:
                     opp = _alive_in_snapshots(opp_slots, round_snapshots)
+                if opp is None and wins_confirmed is not None:
+                    opp = _resolved_opp_in_slots(opp_slots, all_region_odds, wins_confirmed, qf_offset)
                 if r2h is not None and opp is not None:
                     opp_idx = _slot_index_for(opp[0], opp[1], half_slots)
                     if opp_idx is not None:
@@ -1028,6 +1056,8 @@ def compute_quarterfinal_home_odds(
                             actual_opp_r2_opp = _alive_in_slots(opp_r2_opp_slots, all_region_odds)
                             if actual_opp_r2_opp is None and round_snapshots:
                                 actual_opp_r2_opp = _alive_in_snapshots(opp_r2_opp_slots, round_snapshots)
+                            if actual_opp_r2_opp is None and wins_confirmed is not None:
+                                actual_opp_r2_opp = _resolved_opp_in_slots(opp_r2_opp_slots, all_region_odds, wins_confirmed, 1)
                             if actual_opp_r2_opp is not None:
                                 opp_r2h = r2_home_team(opp[0], opp[1], actual_opp_r2_opp[0], actual_opp_r2_opp[1], season) == opp
                         if opp_r2h is not None:
