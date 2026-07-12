@@ -376,7 +376,7 @@ def _p_home_in_r2(
     ):
         if all_region_odds is not None:
             opp_alive = any(
-                getattr(o, f"p{opp_seed}", 0.0) > 0
+                getattr(o, f"p{opp_seed}", 0.0) > 0 and o.p_playoffs > 0
                 for o in all_region_odds.get(opp_region, {}).values()
             )
             if not opp_alive:
@@ -449,7 +449,7 @@ def _p_host_seed_rule(
         ):
             if all_region_odds is not None:
                 opp_alive = any(
-                    getattr(o, f"p{opp_seed}", 0.0) > 0
+                    getattr(o, f"p{opp_seed}", 0.0) > 0 and o.p_playoffs > 0
                     for o in all_region_odds.get(opp_region, {}).values()
                 )
                 if not opp_alive:
@@ -559,7 +559,7 @@ def _p_host_qf_given_seed(
                 skip = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
                 p_cand_reach = 1.0 if skip >= 1 else _p_team_r1_win(opp_region, opp_seed, opp_slot, win_prob_fn)
             if all_region_odds is not None and not any(
-                getattr(o, f"p{opp_seed}", 0.0) > 0
+                getattr(o, f"p{opp_seed}", 0.0) > 0 and o.p_playoffs > 0
                 for o in all_region_odds.get(opp_region, {}).values()
             ):
                 p_cand_reach = 0.0
@@ -905,6 +905,8 @@ def compute_second_round_home_odds(
                 opp = _alive_in_slots(opp_slots_a, all_region_odds)
                 if opp is None and round_snapshots:
                     opp = _alive_in_snapshots(opp_slots_a, round_snapshots)
+                if opp is None and wins_confirmed is not None:
+                    opp = _resolved_opp_in_slots(opp_slots_a, all_region_odds, wins_confirmed, 1)
                 if opp is not None:
                     result[school] = 1.0 if r2_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
                     continue
