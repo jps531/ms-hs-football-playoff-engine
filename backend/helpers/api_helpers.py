@@ -792,15 +792,14 @@ def build_playoff_bracket_state(
     all_region_odds: dict[int, dict[str, StandingsOdds]] = {}
     for school, (reg, seed) in school_to_seed.items():
         is_loser = (reg, seed) in losers_known
-        p_alive = 0.0 if is_loser else 1.0
         so = StandingsOdds(
             school=school,
-            p1=p_alive if seed == 1 else 0.0,
-            p2=p_alive if seed == 2 else 0.0,
-            p3=p_alive if seed == 3 else 0.0,
-            p4=p_alive if seed == 4 else 0.0,
-            p_playoffs=p_alive,
-            final_playoffs=p_alive,
+            p1=1.0 if seed == 1 else 0.0,
+            p2=1.0 if seed == 2 else 0.0,
+            p3=1.0 if seed == 3 else 0.0,
+            p4=1.0 if seed == 4 else 0.0,
+            p_playoffs=0.0 if is_loser else 1.0,
+            final_playoffs=0.0 if is_loser else 1.0,
             clinched=True,
             eliminated=is_loser,
         )

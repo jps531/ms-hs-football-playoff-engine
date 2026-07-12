@@ -103,13 +103,27 @@ async def get_bracket(
         if not by_region:
             raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
+        state = await _load_and_build_playoff_bracket_state(
+            conn, season, class_, as_of, [], elo_ratings, slots
+        )
 
-    matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
-    entries = build_bracket_entries(
-        by_region, slots,
-        season=season, clazz=class_,
-        win_prob_fn_weighted=matchup_fn,
-    )
+    if state is not None:
+        entries = build_bracket_entries(
+            state.all_region_odds, slots,
+            season=season, clazz=class_,
+            win_prob_fn_weighted=state.matchup_fn,
+            wins_by_team=state.wins_by_team,
+            all_region_odds=state.all_region_odds,
+            cross_region_wins=state.cross_region_wins,
+            eliminated_hosting=state.eliminated_hosting_map,
+        )
+    else:
+        matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
+        entries = build_bracket_entries(
+            by_region, slots,
+            season=season, clazz=class_,
+            win_prob_fn_weighted=matchup_fn,
+        )
     return BracketResponse(season=season, class_=class_, teams=entries)
 
 

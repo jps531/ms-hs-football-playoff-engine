@@ -1191,12 +1191,24 @@ def compute_bracket_advancement_odds(
 
     result: dict[str, BracketOdds] = {}
     for school, o in region_odds.items():
+        tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
+
+        if o.eliminated:
+            result[school] = BracketOdds(
+                school=school,
+                second_round=1.0 if (is_1a_4a and tw >= 1) else 0.0,
+                quarterfinals=1.0 if tw >= qf_offset else 0.0,
+                semifinals=1.0 if tw >= sf_offset else 0.0,
+                finals=1.0 if tw >= wins_to_win_half else 0.0,
+                champion=0.0,
+            )
+            continue
+
         p_r2 = 0.0
         p_qf = 0.0
         p_sf = 0.0
         p_finals = 0.0
         p_champion = 0.0
-        tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
 
         for seed, p_seed in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)):
             if p_seed <= 0.0:
