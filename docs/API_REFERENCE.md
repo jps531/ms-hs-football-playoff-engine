@@ -62,7 +62,7 @@ Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, an
 |--------|------|-------------|
 | GET | `/{clazz}/{region}` | Playoff home-game odds per round (1st round through semifinals), computed on-demand from seeding odds + bracket format |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team |
-| POST | `/{clazz}/{region}/simulate` | Apply hypothetical results and return updated hosting odds |
+| POST | `/{clazz}/{region}/simulate` | Apply hypothetical results and return updated hosting odds. See simulate input format under Bracket. |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |
 
 **Response fields per team** (`teams[]`):
@@ -88,11 +88,22 @@ For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` 
 - Weighted advancement: `second_round_weighted`, `quarterfinals_weighted`, `semifinals_weighted`, `finals_weighted`, `champion_weighted` — Elo-weighted. `null` when no Elo ratings exist for the season.
 - `hosting` — nested object with four round entries (`first_round`, `second_round`, `quarterfinals`, `semifinals`), each with the same `conditional`/`marginal`/`conditional_weighted`/`marginal_weighted` fields as the hosting endpoint. For 5A–7A, `hosting.second_round` is `null` (no second round). Weighted hosting fields follow the same `null` rule as weighted advancement.
 
-**Simulate input** (`POST /bracket/simulate`):
+**Simulate input** (all three simulate endpoints — `POST /bracket/simulate`, `POST /hosting/{clazz}/simulate`, `POST /hosting/{clazz}/{region}/simulate`):
+
+Each result identifies participants by school name, (region, seed) slot ref, or a mix:
 ```json
-{ "results": [{ "winner": "School Name", "loser": "Other School" }] }
+{ "results": [
+  { "winner": "School Name",              "loser": { "region": 1, "seed": 2 } },
+  { "winner": { "region": 3, "seed": 1 }, "loser": "Other School" }
+]}
 ```
-Same format as the hosting simulate endpoints. Only available in playoff mode — returns 404 when seedings are not yet clinched.
+A plain string is shorthand for `{"school": "Name"}` and is backward-compatible with the original format.
+
+**Bracket simulate** (`POST /bracket/simulate`): works in two modes:
+- *Playoff mode* (some or all seedings clinched): school names and slot refs both resolve to known teams.
+- *Pre-clinching mode* (no seedings clinched yet): only slot refs are meaningful; school-name refs are silently skipped. No longer returns 404 before seedings lock.
+
+**Hosting simulate** (`POST /hosting/{clazz}/simulate`, `POST /hosting/{clazz}/{region}/simulate`): slot refs apply only in playoff mode (seedings clinched); they are silently skipped in regular-season mode where school names are required.
 
 ## Games — `/games`
 

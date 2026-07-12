@@ -7,14 +7,15 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
-from backend.api.models.requests import SimulateRegionRequest
+from backend.api.models.requests import SimulateBracketRequest
 from backend.api.models.responses import BracketResponse
 from backend.helpers.api_helpers import (
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
+    _resolve_ref_to_slot_id,
     build_bracket_entries,
 )
-from backend.helpers.data_classes import FormatSlot, StandingsOdds
+from backend.helpers.data_classes import FormatSlot, MatchupProbFn, StandingsOdds
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["bracket"])
@@ -116,18 +117,24 @@ async def get_bracket(
 @limiter.limit("10/minute")
 async def simulate_bracket(
     request: Request,
-    body: SimulateRegionRequest,
+    body: SimulateBracketRequest,
     season: SeasonQ,
     class_: ClassQ,
     date: Annotated[date | None, Query()] = None,
 ) -> BracketResponse:
     """Apply hypothetical bracket game results and return updated advancement odds.
 
-    Results are specified as winner/loser school name pairs (same format as the
-    hosting simulate endpoints).  Only available in playoff mode — returns 404
-    when seedings are not yet clinched.
+    Participants are identified by school name, (region, seed) slot ref, or a mix.
+    A plain string is shorthand for ``{"school": "Name"}`` and is backward-compatible.
+
+    Works in two modes:
+    - Playoff mode (seedings clinched): school names and slot refs both resolve to known teams.
+    - Pre-clinching mode (no seedings yet): only slot refs are meaningful; school-name refs
+      are silently skipped.
     """
     as_of = date or _today()
+    by_region: dict[int, dict[str, StandingsOdds]] = {}
+    matchup_fn_pre: MatchupProbFn | None = None
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, class_)
         if not slots:
@@ -136,20 +143,34 @@ async def simulate_bracket(
         state = await _load_and_build_playoff_bracket_state(
             conn, season, class_, as_of, body.results, elo_ratings, slots
         )
+        if state is None:
+            by_region = await _load_all_region_odds(conn, season, class_, as_of)
+            if not by_region:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No standings data for {class_}A season {season}",
+                )
+            matchup_fn_pre = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
 
-    if state is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Seedings not yet clinched for {class_}A season {season}",
+    if state is not None:
+        entries = build_bracket_entries(
+            state.all_region_odds, slots,
+            season=season, clazz=class_,
+            win_prob_fn_weighted=state.matchup_fn,
+            wins_by_team=state.wins_by_team,
+            all_region_odds=state.all_region_odds,
+            cross_region_wins=state.cross_region_wins,
+            eliminated_hosting=state.eliminated_hosting_map,
+        )
+    else:
+        slot_wins: dict[str, int] = {}
+        for r in body.results:
+            w_sid = _resolve_ref_to_slot_id(r.winner)
+            if w_sid:
+                slot_wins[w_sid] = slot_wins.get(w_sid, 0) + 1
+        entries = build_bracket_entries(
+            by_region, slots, season=season, clazz=class_,
+            win_prob_fn_weighted=matchup_fn_pre, wins_by_slot=slot_wins,
         )
 
-    entries = build_bracket_entries(
-        state.all_region_odds, slots,
-        season=season, clazz=class_,
-        win_prob_fn_weighted=state.matchup_fn,
-        wins_by_team=state.wins_by_team,
-        all_region_odds=state.all_region_odds,
-        cross_region_wins=state.cross_region_wins,
-        eliminated_hosting=state.eliminated_hosting_map,
-    )
     return BracketResponse(season=season, class_=class_, teams=entries)

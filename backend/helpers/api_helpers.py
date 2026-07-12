@@ -12,7 +12,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 
-from backend.api.models.requests import GameResultRequest
+from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
     BracketAdvancementOdds,
     BracketSlotHosting,
@@ -617,6 +617,28 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
 
 
 # ---------------------------------------------------------------------------
+# Participant reference resolution helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_ref_to_school(
+    ref: ParticipantRef,
+    seed_to_school: dict[tuple[int, int], str],
+) -> str | None:
+    """Return the school name for *ref*, or ``None`` if the slot is not yet clinched."""
+    if ref.school is not None:
+        return ref.school
+    return seed_to_school.get((ref.region, ref.seed))  # type: ignore[index]
+
+
+def _resolve_ref_to_slot_id(ref: ParticipantRef) -> str | None:
+    """Return a slot ID (e.g. ``"R1S2"``) for a slot ref; ``None`` for school-name refs."""
+    if ref.region is not None and ref.seed is not None:
+        return f"R{ref.region}S{ref.seed}"
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Playoff bracket state helpers
 # ---------------------------------------------------------------------------
 
@@ -725,7 +747,7 @@ def build_playoff_bracket_state(
     school_to_seed: dict[str, tuple[int, int]],
     db_wins: dict[str, int],
     db_losers: set[str],
-    submitted_results: list[GameResultRequest],
+    submitted_results: list[BracketGameResultRequest],
     elo_ratings: dict[str, float],
     slots: list[FormatSlot],
     season: int,
@@ -747,17 +769,25 @@ def build_playoff_bracket_state(
         clazz:             Classification (1–7).
     """
     wins_by_team: dict[str, int] = dict(db_wins)
+    seed_to_school: dict[tuple[int, int], str] = {v: k for k, v in school_to_seed.items()}
 
-    submitted_winners = {r.winner for r in submitted_results if r.winner in school_to_seed}
+    submitted_winners: set[str] = set()
+    for r in submitted_results:
+        w = _resolve_ref_to_school(r.winner, seed_to_school)
+        if w is not None and w in school_to_seed:
+            submitted_winners.add(w)
+
     losers_known: set[tuple[int, int]] = set()
     for school in db_losers:
         if school not in submitted_winners:
             losers_known.add(school_to_seed[school])
     for r in submitted_results:
-        if r.winner in school_to_seed:
-            wins_by_team[r.winner] = wins_by_team.get(r.winner, 0) + 1
-        if r.loser in school_to_seed:
-            losers_known.add(school_to_seed[r.loser])
+        w = _resolve_ref_to_school(r.winner, seed_to_school)
+        ll = _resolve_ref_to_school(r.loser, seed_to_school)
+        if w is not None and w in school_to_seed:
+            wins_by_team[w] = wins_by_team.get(w, 0) + 1
+        if ll is not None and ll in school_to_seed:
+            losers_known.add(school_to_seed[ll])
 
     all_region_odds: dict[int, dict[str, StandingsOdds]] = {}
     for school, (reg, seed) in school_to_seed.items():
@@ -820,7 +850,7 @@ async def _load_and_build_playoff_bracket_state(
     season: int,
     clazz: int,
     as_of: date,
-    submitted_results: list[GameResultRequest],
+    submitted_results: list[BracketGameResultRequest],
     elo_ratings: dict[str, float],
     slots: list[FormatSlot],
 ) -> PlayoffBracketState | None:
@@ -1105,6 +1135,7 @@ def build_bracket_entries(
     all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
     cross_region_wins: dict[tuple[int, int], int] | None = None,
     eliminated_hosting: dict[str, tuple] | None = None,
+    wins_by_slot: dict[str, int] | None = None,
 ) -> list[TeamBracketEntry]:
     """Build ``TeamBracketEntry`` list with advancement and hosting odds per bracket slot.
 
@@ -1114,9 +1145,11 @@ def build_bracket_entries(
     the same MHSAA rules used by the hosting endpoints.
 
     GET path: pass *by_region* only; all slots are treated as certainties.
-    Simulate path: also pass *all_region_odds* (real school names, clinched),
+    Simulate path (playoff mode): also pass *all_region_odds* (real school names, clinched),
     *wins_by_team* (school → confirmed wins), *cross_region_wins*, and
     *eliminated_hosting* (school → (r1,r2,qf,sf) deterministic tuple).
+    Simulate path (pre-clinching mode): pass *wins_by_slot* (slot ID → confirmed wins)
+    directly; school→slot mapping is not available so *wins_by_team* is not used.
 
     When *season* or *clazz* is ``None``, hosting computation is skipped and
     ``hosting`` is ``None`` on every entry.
@@ -1126,7 +1159,7 @@ def build_bracket_entries(
 
     # Build slot-ID-keyed odds and wins for all regions in one pass
     all_slot_odds: dict[int, dict[str, StandingsOdds]] = {}
-    wins_by_slot: dict[str, int] = {}
+    _wins_by_slot: dict[str, int] = {}
     school_to_slot: dict[str, str] = {}
 
     for region_num in sorted(by_region):
@@ -1141,7 +1174,13 @@ def build_bracket_entries(
                     sid = f"R{region_num}S{seed}"
                     school_to_slot[school] = sid
                     if school in wins_by_team:
-                        wins_by_slot[sid] = wins_by_team[school]
+                        _wins_by_slot[sid] = wins_by_team[school]
+
+    # Merge in directly-supplied slot wins (pre-clinching mode)
+    if wins_by_slot:
+        for sid, w in wins_by_slot.items():
+            if sid not in _wins_by_slot:
+                _wins_by_slot[sid] = w
 
     # Map eliminated_hosting (school-name keys) → slot IDs
     eliminated_by_slot: dict[str, tuple] | None = None
@@ -1157,13 +1196,13 @@ def build_bracket_entries(
     all_odds_w: dict[str, BracketOdds] = {}
     for region_num, slot_odds in all_slot_odds.items():
         all_odds.update(
-            compute_bracket_advancement_odds(region_num, slot_odds, slots, wins_confirmed=wins_by_slot)
+            compute_bracket_advancement_odds(region_num, slot_odds, slots, wins_confirmed=_wins_by_slot)
         )
         if win_prob_fn_weighted is not None:
             all_odds_w.update(
                 compute_bracket_advancement_odds(
                     region_num, slot_odds, slots,
-                    win_prob_fn=win_prob_fn_weighted, wins_confirmed=wins_by_slot,
+                    win_prob_fn=win_prob_fn_weighted, wins_confirmed=_wins_by_slot,
                 )
             )
 
@@ -1179,7 +1218,7 @@ def build_bracket_entries(
                 adv_w = all_odds_w.get(slot_id) if win_prob_fn_weighted is not None else None
                 hosting_by_slot[slot_id] = _hosting_for_slot(
                     slot_id, region_num, seed, all_slot_odds, slots,
-                    season, is_1a_4a, wins_by_slot, cross_region_wins,  # type: ignore[arg-type]
+                    season, is_1a_4a, _wins_by_slot, cross_region_wins,  # type: ignore[arg-type]
                     adv, adv_w, eliminated_by_slot, win_prob_fn_weighted,
                 )
 

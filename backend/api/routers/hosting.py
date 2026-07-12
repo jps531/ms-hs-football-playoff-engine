@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
-from backend.api.models.requests import SimulateRegionRequest
+from backend.api.models.requests import GameResultRequest, SimulateBracketRequest
 from backend.api.models.responses import ClassHostingResponse, HostingResponse
 from backend.helpers.api_helpers import (
     _load_and_build_playoff_bracket_state,
@@ -230,7 +230,7 @@ async def get_team_hosting(
 async def simulate_class_hosting(
     request: Request,
     clazz: ClazzPath,
-    body: SimulateRegionRequest,
+    body: SimulateBracketRequest,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
 ) -> ClassHostingResponse:
@@ -299,11 +299,20 @@ async def simulate_class_hosting(
             )
             all_db_seeding: list[tuple] = [(r[0], r[1], r[2], r[3], r[4], r[5]) async for r in db_seeding_rows]
 
-            results_by_region: dict[int, list] = {}
+            results_by_region: dict[int, list[GameResultRequest]] = {}
             for r in body.results:
-                reg = school_to_region.get(r.winner) or school_to_region.get(r.loser)
+                if r.winner.school is None or r.loser.school is None:
+                    continue  # slot refs don't map to regular-season games
+                reg = school_to_region.get(r.winner.school) or school_to_region.get(r.loser.school)
                 if reg is not None:
-                    results_by_region.setdefault(reg, []).append(r)
+                    results_by_region.setdefault(reg, []).append(
+                        GameResultRequest(
+                            winner=r.winner.school,
+                            loser=r.loser.school,
+                            winner_score=r.winner_score,
+                            loser_score=r.loser_score,
+                        )
+                    )
 
             for reg, reg_teams in sorted(regions_in_class.items()):
                 reg_scenarios = await _load_scenarios_snapshot(conn, season, clazz, reg, as_of)
@@ -353,7 +362,7 @@ async def simulate_hosting(
     request: Request,
     clazz: ClazzPath,
     region: RegionPath,
-    body: SimulateRegionRequest,
+    body: SimulateBracketRequest,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
 ) -> HostingResponse:
@@ -388,7 +397,17 @@ async def simulate_hosting(
             (season, as_of, teams),
         )
         completed = parse_completed_games([r async for r in game_rows])
-        new_results = results_to_applied(body.results)
+        school_results = [
+            GameResultRequest(
+                winner=r.winner.school,
+                loser=r.loser.school,
+                winner_score=r.winner_score,
+                loser_score=r.loser_score,
+            )
+            for r in body.results
+            if r.winner.school is not None and r.loser.school is not None
+        ]
+        new_results = results_to_applied(school_results)
 
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
 
@@ -447,7 +466,7 @@ async def simulate_team_hosting(
     clazz: ClazzPath,
     region: RegionPath,
     team: str,
-    body: SimulateRegionRequest,
+    body: SimulateBracketRequest,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
 ) -> HostingResponse:

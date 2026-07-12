@@ -48,6 +48,52 @@ class SimulateRegionRequest(BaseModel):
     results: list[GameResultRequest] = Field(min_length=1, max_length=20)
 
 
+class ParticipantRef(BaseModel):
+    """A bracket participant identified by school name OR by (region, seed) slot.
+
+    Accepts a plain string for backward compatibility:
+    ``"School Name"`` coerces to ``ParticipantRef(school="School Name")``.
+    """
+
+    school: str | None = None
+    region: int | None = Field(default=None, ge=1, le=8)
+    seed: int | None = Field(default=None, ge=1, le=4)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_string(cls, v: object) -> object:
+        if isinstance(v, str):
+            return {"school": v}
+        return v
+
+    @model_validator(mode="after")
+    def _validate_ref(self) -> "ParticipantRef":
+        has_name = self.school is not None
+        half_slot = (self.region is None) != (self.seed is None)
+        has_slot = self.region is not None and self.seed is not None
+        if half_slot:
+            raise ValueError("'region' and 'seed' must both be provided together")
+        if has_name and has_slot:
+            raise ValueError("Provide either 'school' or 'region'+'seed', not both")
+        if not has_name and not has_slot:
+            raise ValueError("Provide either 'school' or 'region'+'seed'")
+        return self
+
+
+class BracketGameResultRequest(BaseModel):
+    """A hypothetical bracket game result — participants identified by name or (region, seed)."""
+
+    winner: ParticipantRef
+    loser: ParticipantRef
+    winner_score: int | None = None
+    loser_score: int | None = None
+
+
+class SimulateBracketRequest(BaseModel):
+    """Request body for all three bracket/hosting simulate endpoints."""
+
+    results: list[BracketGameResultRequest] = Field(min_length=1, max_length=20)
+
 
 class LiveWinProbRequest(BaseModel):
     """Request body for live (in-game regulation) win probability."""

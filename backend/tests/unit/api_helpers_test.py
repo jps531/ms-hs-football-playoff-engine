@@ -4,11 +4,13 @@ from datetime import date
 
 import pytest
 
-from backend.api.models.requests import GameResultRequest
+from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
     DISPLAY_THRESHOLD,
     PlayoffBracketState,
+    _resolve_ref_to_school,
+    _resolve_ref_to_slot_id,
     build_bracket_entries,
     build_bracket_entries_from_odds_map,
     build_hosting_entries,
@@ -1191,9 +1193,9 @@ class TestBuildHostingEntries:
 # ---------------------------------------------------------------------------
 
 
-def _game_result(winner: str, loser: str) -> GameResultRequest:
-    """Convenience constructor for GameResultRequest."""
-    return GameResultRequest(winner=winner, loser=loser)
+def _game_result(winner: str, loser: str) -> BracketGameResultRequest:
+    """Convenience constructor for BracketGameResultRequest with school-name refs."""
+    return BracketGameResultRequest(winner=winner, loser=loser)
 
 
 def _school_to_seed_4teams() -> dict[str, tuple[int, int]]:
@@ -1379,3 +1381,120 @@ class TestBuildBracketEntries:
             marg = h.first_round.marginal
             if cond is not None and marg is not None:
                 assert marg == pytest.approx(cond, abs=1e-9)
+
+    def test_wins_by_slot_param_applied(self):
+        """Direct wins_by_slot param boosts advancement odds for the named slot.
+
+        For 5A-7A there is no second round, so a confirmed first-round win shows
+        up as quarterfinals=1.0 (the team is confirmed into the second game).
+        """
+        by_region = self._by_region()
+        baseline = build_bracket_entries(by_region, SLOTS_5A_7A_2025)
+        result = build_bracket_entries(by_region, SLOTS_5A_7A_2025, wins_by_slot={"R1S1": 1})
+        r1s1_base = next(e for e in baseline if e.region == 1 and e.seed == 1)
+        r1s1 = next(e for e in result if e.region == 1 and e.seed == 1)
+        assert r1s1.quarterfinals > r1s1_base.quarterfinals
+
+
+# ---------------------------------------------------------------------------
+# TestResolveParticipantRef
+# ---------------------------------------------------------------------------
+
+
+class TestResolveParticipantRef:
+    """_resolve_ref_to_school and _resolve_ref_to_slot_id resolution helpers."""
+
+    _SEED_TO_SCHOOL: dict[tuple[int, int], str] = {
+        (1, 1): "AlphaS1",
+        (1, 2): "AlphaS2",
+        (2, 1): "BetaS1",
+    }
+
+    def test_school_ref_returns_name_directly(self):
+        """A school-name ref returns the name without consulting seed_to_school."""
+        ref = ParticipantRef(school="AlphaS1")
+        assert _resolve_ref_to_school(ref, self._SEED_TO_SCHOOL) == "AlphaS1"
+
+    def test_slot_ref_resolved_when_clinched(self):
+        """A slot ref resolves to the school that clinched that seed."""
+        ref = ParticipantRef(region=1, seed=1)
+        assert _resolve_ref_to_school(ref, self._SEED_TO_SCHOOL) == "AlphaS1"
+
+    def test_slot_ref_returns_none_when_not_clinched(self):
+        """A slot ref for an unclinched (unknown) slot returns None."""
+        ref = ParticipantRef(region=3, seed=1)
+        assert _resolve_ref_to_school(ref, self._SEED_TO_SCHOOL) is None
+
+    def test_resolve_slot_id_correct_format(self):
+        """_resolve_ref_to_slot_id returns 'R{region}S{seed}' for slot refs."""
+        ref = ParticipantRef(region=2, seed=3)
+        assert _resolve_ref_to_slot_id(ref) == "R2S3"
+
+    def test_resolve_slot_id_returns_none_for_school_ref(self):
+        """_resolve_ref_to_slot_id returns None for school-name refs."""
+        ref = ParticipantRef(school="AlphaS1")
+        assert _resolve_ref_to_slot_id(ref) is None
+
+
+# ---------------------------------------------------------------------------
+# TestParticipantRefValidation
+# ---------------------------------------------------------------------------
+
+
+class TestParticipantRefValidation:
+    """ParticipantRef validates and coerces its inputs."""
+
+    def test_plain_string_coerces_to_school(self):
+        """A plain string is coerced to a school-name ref."""
+        ref = ParticipantRef.model_validate("School Name")
+        assert ref.school == "School Name"
+        assert ref.region is None
+        assert ref.seed is None
+
+    def test_school_dict_form(self):
+        """Explicit school field works."""
+        ref = ParticipantRef(school="Alpha")
+        assert ref.school == "Alpha"
+
+    def test_slot_dict_form(self):
+        """(region, seed) slot form works."""
+        ref = ParticipantRef(region=1, seed=2)
+        assert ref.region == 1
+        assert ref.seed == 2
+        assert ref.school is None
+
+    def test_both_school_and_slot_raises(self):
+        """Providing school + region + seed raises ValueError."""
+        with pytest.raises(ValueError, match="not both"):
+            ParticipantRef(school="Alpha", region=1, seed=2)
+
+    def test_region_without_seed_raises(self):
+        """Providing region without seed raises ValueError."""
+        with pytest.raises(ValueError, match="together"):
+            ParticipantRef(region=1)
+
+    def test_seed_without_region_raises(self):
+        """Providing seed without region raises ValueError."""
+        with pytest.raises(ValueError, match="together"):
+            ParticipantRef(seed=2)
+
+    def test_neither_school_nor_slot_raises(self):
+        """Providing neither school nor slot raises ValueError."""
+        with pytest.raises(ValueError, match="Provide either"):
+            ParticipantRef()
+
+    def test_bracket_game_result_accepts_string_winner(self):
+        """BracketGameResultRequest coerces string winner/loser to ParticipantRef."""
+        r = BracketGameResultRequest(winner="Team A", loser="Team B")
+        assert r.winner.school == "Team A"
+        assert r.loser.school == "Team B"
+
+    def test_bracket_game_result_accepts_slot_ref(self):
+        """BracketGameResultRequest accepts slot-ref dicts."""
+        r = BracketGameResultRequest(
+            winner={"region": 1, "seed": 1},
+            loser={"region": 2, "seed": 4},
+        )
+        assert r.winner.region == 1
+        assert r.winner.seed == 1
+        assert r.loser.region == 2

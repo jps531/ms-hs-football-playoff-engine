@@ -68,8 +68,14 @@ Query the bracket for an older season that has no Elo ratings (e.g. `?season=201
 **9e. Simulate with winner/loser school names returns updated odds**
 `POST /api/v1/bracket/simulate?season=YYYY&class=5` with body `{"results": [{"winner": "Team A", "loser": "Team B"}]}`. The losing team's slot should show `0.0` for all future-round advancement odds. The winning team's advancement odds should reflect one confirmed win. Non-weighted forward odds should approximate 50/50 geometric series.
 
-**9f. Simulate returns 404 before seedings are clinched**
-Run the simulate endpoint with `?date=YYYY-10-01` (before any seedings are locked). The response should be 404 with a message about seedings not yet clinched.
+**9f. Simulate with slot refs before clinching returns a valid response (not 404)**
+Run `POST /api/v1/bracket/simulate?season=YYYY&class=5&date=YYYY-10-01` (before any seedings are locked) with body `{"results": [{"winner": {"region": 1, "seed": 1}, "loser": {"region": 2, "seed": 4}}]}`. The response should be 200 with R1S1's `second_round` odds boosted. Previously this returned 404 — it no longer does.
+
+**9g. Old plain-string format still accepted (backward compat)**
+`POST /api/v1/bracket/simulate` with `{"results": [{"winner": "Team A", "loser": "Team B"}]}` (strings, not objects) should return 200 and behave identically to `{"winner": {"school": "Team A"}, "loser": {"school": "Team B"}}`.
+
+**9h. Mixed school-name and slot-ref in the same request works**
+`POST /api/v1/bracket/simulate` (playoff mode) with `{"results": [{"winner": "School A", "loser": {"region": 2, "seed": 4}}]}`. The slot-ref loser's slot should show `0.0` advancement odds.
 
 ---
 
