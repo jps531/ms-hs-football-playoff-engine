@@ -870,9 +870,10 @@ async def _load_and_build_playoff_bracket_state(
           AND rs.as_of_date = (
               SELECT MAX(rs2.as_of_date) FROM region_standings rs2
               WHERE rs2.season = %s AND rs2.class = %s AND rs2.clinched = TRUE
+                AND rs2.as_of_date <= %s
           )
         """,
-        (season, clazz, season, clazz),
+        (season, clazz, season, clazz, as_of),
     )
     school_to_seed: dict[str, tuple[int, int]] = {}
     async for school, reg, seed in seed_rows:
