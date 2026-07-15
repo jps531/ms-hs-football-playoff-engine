@@ -861,21 +861,20 @@ async def _load_and_build_playoff_bracket_state(
     """
     seed_rows = await conn.execute(
         """
-        SELECT rs.school, rs.region,
+        SELECT DISTINCT ON (rs.school) rs.school, rs.region,
                CASE WHEN rs.odds_1st > 0.99 THEN 1
                     WHEN rs.odds_2nd > 0.99 THEN 2
                     WHEN rs.odds_3rd > 0.99 THEN 3
                     WHEN rs.odds_4th > 0.99 THEN 4
                END AS seed
         FROM region_standings rs
-        WHERE rs.season = %s AND rs.class = %s AND rs.clinched = TRUE
-          AND rs.as_of_date = (
-              SELECT MAX(rs2.as_of_date) FROM region_standings rs2
-              WHERE rs2.season = %s AND rs2.class = %s AND rs2.clinched = TRUE
-                AND rs2.as_of_date <= %s
-          )
+        WHERE rs.season = %s AND rs.class = %s
+          AND rs.clinched = TRUE
+          AND (rs.odds_1st > 0.99 OR rs.odds_2nd > 0.99 OR rs.odds_3rd > 0.99 OR rs.odds_4th > 0.99)
+          AND rs.as_of_date <= %s
+        ORDER BY rs.school, rs.as_of_date DESC
         """,
-        (season, clazz, season, clazz, as_of),
+        (season, clazz, as_of),
     )
     school_to_seed: dict[str, tuple[int, int]] = {}
     async for school, reg, seed in seed_rows:
@@ -958,13 +957,16 @@ def build_bracket_entries_from_odds_map(
     odds_map: dict[str, BracketOdds],
     odds_map_weighted: dict[str, BracketOdds] | None = None,
     hosting_by_slot: dict[str, BracketSlotHosting] | None = None,
+    seed_to_school: dict[tuple[int, int], str] | None = None,
 ) -> list[TeamBracketEntry]:
     """Build ``TeamBracketEntry`` list from pre-computed bracket advancement odds.
 
     *odds_map* maps slot IDs (e.g. ``"R1S2"``) to ``BracketOdds``.  Slots absent
     from *odds_map* are skipped.  ``school`` is populated only when a team has
-    clinched that seed position.  Used by both the snapshot path (via
-    ``build_bracket_entries``) and the simulation path.
+    clinched that seed position.  *seed_to_school* provides a fallback for
+    eliminated teams whose ``by_region`` odds have been zeroed post-elimination.
+    Used by both the snapshot path (via ``build_bracket_entries``) and the
+    simulation path.
     """
     entries: list[TeamBracketEntry] = []
     for region_num, region_odds in sorted(by_region.items()):
@@ -974,11 +976,14 @@ def build_bracket_entries_from_odds_map(
             if bo is None:
                 continue
             bo_w = odds_map_weighted.get(slot_id) if odds_map_weighted is not None else None
+            school = clinched_school(region_odds, seed)
+            if school is None and seed_to_school is not None:
+                school = seed_to_school.get((region_num, seed))
             entries.append(
                 TeamBracketEntry(
                     region=region_num,
                     seed=seed,
-                    school=clinched_school(region_odds, seed),
+                    school=school,
                     second_round=bo.second_round,
                     quarterfinals=bo.quarterfinals,
                     semifinals=bo.semifinals,
@@ -1167,6 +1172,7 @@ def build_bracket_entries(
     cross_region_wins: dict[tuple[int, int], int] | None = None,
     eliminated_hosting: dict[str, tuple] | None = None,
     wins_by_slot: dict[str, int] | None = None,
+    school_to_seed: dict[str, tuple[int, int]] | None = None,
 ) -> list[TeamBracketEntry]:
     """Build ``TeamBracketEntry`` list with advancement and hosting odds per bracket slot.
 
@@ -1187,6 +1193,9 @@ def build_bracket_entries(
     """
     is_1a_4a = clazz is not None and clazz <= 4
     compute_hosting = season is not None and clazz is not None
+    seed_to_school: dict[tuple[int, int], str] | None = (
+        {(r, s): sch for sch, (r, s) in school_to_seed.items()} if school_to_seed else None
+    )
 
     # Build slot-ID-keyed odds and wins for all regions in one pass
     all_slot_odds: dict[int, dict[str, StandingsOdds]] = {}
@@ -1257,4 +1266,5 @@ def build_bracket_entries(
         by_region, all_odds,
         odds_map_weighted=all_odds_w if win_prob_fn_weighted is not None else None,
         hosting_by_slot=hosting_by_slot if compute_hosting else None,
+        seed_to_school=seed_to_school,
     )

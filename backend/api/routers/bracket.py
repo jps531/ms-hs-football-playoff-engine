@@ -117,6 +117,7 @@ async def get_bracket(
             all_region_odds=state.all_region_odds,
             cross_region_wins=state.cross_region_wins,
             eliminated_hosting=state.eliminated_hosting_map,
+            school_to_seed=state.school_to_seed,
         )
     else:
         matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
@@ -179,6 +180,7 @@ async def simulate_bracket(
             all_region_odds=state.all_region_odds,
             cross_region_wins=state.cross_region_wins,
             eliminated_hosting=state.eliminated_hosting_map,
+            school_to_seed=state.school_to_seed,
         )
     else:
         slot_wins: dict[str, int] = {}

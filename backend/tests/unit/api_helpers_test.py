@@ -1571,3 +1571,94 @@ class TestBuildBracketLayout:
         north_r1_slots = [g.slot for g in layout.halves["N"][0]]
         expected = sorted(s.slot for s in SLOTS_1A_4A_2025 if s.north_south == "N")
         assert north_r1_slots == expected
+
+
+# ---------------------------------------------------------------------------
+# TestEliminatedTeamsInBracket
+# ---------------------------------------------------------------------------
+
+
+class TestEliminatedTeamsInBracket:
+    """After playoff R1, eliminated teams appear with school name and zero advancement odds."""
+
+    # school names are "R{region}S{seed}" for easy assertion
+    _S2S: dict[str, tuple[int, int]] = {
+        f"R{r}S{s}": (r, s)
+        for r in (1, 2, 3, 4)
+        for s in (1, 2, 3, 4)
+    }
+
+    def _by_region_post_r1(self) -> dict:
+        """by_region after R1: seeds 1+2 survived; seeds 3+4 eliminated (all-zero odds)."""
+        result: dict = {}
+        for r in (1, 2, 3, 4):
+            result[r] = {
+                f"R{r}S1": _odds(f"R{r}S1", p1=1.0, p_playoffs=1.0, clinched=True),
+                f"R{r}S2": _odds(f"R{r}S2", p2=1.0, p_playoffs=1.0, clinched=True),
+                # Pipeline zeros all odds for losers
+                f"R{r}S3": _odds(f"R{r}S3", clinched=True, eliminated=True),
+                f"R{r}S4": _odds(f"R{r}S4", clinched=True, eliminated=True),
+            }
+        return result
+
+    def _state_post_r1(self):
+        """PlayoffBracketState with seeds 3+4 eliminated in all regions."""
+        db_losers = {f"R{r}S{s}" for r in (1, 2, 3, 4) for s in (3, 4)}
+        return build_playoff_bracket_state(
+            self._S2S, {}, db_losers, [], {}, SLOTS_5A_7A_2025, 2025, 5
+        )
+
+    def _entries(self, state):
+        return build_bracket_entries(
+            self._by_region_post_r1(), SLOTS_5A_7A_2025,
+            all_region_odds=state.all_region_odds,
+            wins_by_team=state.wins_by_team,
+            cross_region_wins=state.cross_region_wins,
+            eliminated_hosting=state.eliminated_hosting_map,
+            school_to_seed=state.school_to_seed,
+        )
+
+    def test_all_16_entries_returned_post_r1(self):
+        """All 16 slots are returned (not just 8 survivors)."""
+        state = self._state_post_r1()
+        assert len(self._entries(state)) == 16
+
+    def test_eliminated_teams_have_school_populated(self):
+        """Eliminated teams show a school name, not null."""
+        state = self._state_post_r1()
+        eliminated = [e for e in self._entries(state) if e.seed in (3, 4)]
+        assert len(eliminated) == 8
+        assert all(e.school is not None for e in eliminated)
+
+    def test_eliminated_teams_school_name_matches_seed_assignment(self):
+        """School name for an eliminated slot matches the expected team identifier."""
+        state = self._state_post_r1()
+        entries = self._entries(state)
+        r1s3 = next(e for e in entries if e.region == 1 and e.seed == 3)
+        assert r1s3.school == "R1S3"
+        r2s4 = next(e for e in entries if e.region == 2 and e.seed == 4)
+        assert r2s4.school == "R2S4"
+
+    def test_eliminated_teams_have_zero_advancement_odds(self):
+        """R1 losers have 0.0 for all remaining rounds."""
+        state = self._state_post_r1()
+        eliminated = [e for e in self._entries(state) if e.seed in (3, 4)]
+        for e in eliminated:
+            assert e.second_round == pytest.approx(0.0)
+            assert e.quarterfinals == pytest.approx(0.0)
+            assert e.semifinals == pytest.approx(0.0)
+            assert e.finals == pytest.approx(0.0)
+            assert e.champion == pytest.approx(0.0)
+
+    def test_survivors_have_nonzero_quarterfinal_odds(self):
+        """R1 winners have nonzero QF odds (5A-7A QF is the first cross-region round)."""
+        state = self._state_post_r1()
+        survivors = [e for e in self._entries(state) if e.seed in (1, 2)]
+        assert len(survivors) == 8
+        assert all(e.quarterfinals > 0 for e in survivors)
+
+    def test_entries_still_sorted_by_region_then_seed(self):
+        """All 16 entries are still ordered by (region, seed)."""
+        state = self._state_post_r1()
+        keys = [(e.region, e.seed) for e in self._entries(state)]
+        assert keys == sorted(keys)
