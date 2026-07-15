@@ -15,6 +15,8 @@ from datetime import date
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
     BracketAdvancementOdds,
+    BracketGame,
+    BracketLayout,
     BracketSlotHosting,
     HomeGameOdds,
     RecordModel,
@@ -911,6 +913,35 @@ async def _load_and_build_playoff_bracket_state(
 # ---------------------------------------------------------------------------
 # Response builders — bracket
 # ---------------------------------------------------------------------------
+
+
+def build_bracket_layout(slots: list[FormatSlot]) -> BracketLayout:
+    """Build a UI-ready bracket tree from first-round format slots.
+
+    Returns a ``BracketLayout`` with two halves ('N' and 'S').  Each half is a
+    list of rounds; ``rounds[0]`` contains ``BracketGame`` leaf nodes (one per
+    first-round format slot) with ``slot``, ``home``, and ``away`` set.
+    Subsequent rounds contain interior nodes with ``feeds_from`` referencing the
+    two previous-round game indices whose winners meet there.  The last entry in
+    each half's round list is the Semifinal.
+
+    ``championship`` has ``feeds_from_halves: ["N", "S"]`` — the two Semifinal
+    winners meet there.
+    """
+    halves: dict[str, list[list[BracketGame]]] = {}
+    for ns in ("N", "S"):
+        half = sorted([s for s in slots if s.north_south == ns], key=lambda s: s.slot)
+        if not half:
+            continue
+        rounds: list[list[BracketGame]] = [
+            [BracketGame(slot=s.slot, home=(s.home_region, s.home_seed), away=(s.away_region, s.away_seed))
+             for s in half]
+        ]
+        while len(rounds[-1]) > 1:
+            prev = rounds[-1]
+            rounds.append([BracketGame(feeds_from=[i, i + 1]) for i in range(0, len(prev), 2)])
+        halves[ns] = rounds
+    return BracketLayout(halves=halves, championship={"feeds_from_halves": ["N", "S"]})
 
 
 def clinched_school(region_odds: dict[str, StandingsOdds], seed: int) -> str | None:

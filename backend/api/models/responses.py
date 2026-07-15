@@ -358,11 +358,45 @@ class TeamBracketEntry(BaseModel):
     hosting: BracketSlotHosting | None = None
 
 
+class BracketGame(BaseModel):
+    """One game node in the bracket tree.
+
+    R1 leaf nodes have ``slot``, ``home``, and ``away`` set (from the playoff
+    format).  All later-round nodes have ``feeds_from`` set: a pair of 0-based
+    indices into the *previous* round's game list indicating which two R1-path
+    winners meet here.  ``slot``/``home``/``away`` are ``None`` for non-R1 nodes.
+    """
+
+    slot: int | None = None
+    home: tuple[int, int] | None = None
+    away: tuple[int, int] | None = None
+    feeds_from: list[int] | None = None
+
+
+class BracketLayout(BaseModel):
+    """Pre-computed bracket tree for both halves plus the championship.
+
+    ``halves`` maps each bracket half identifier (``"N"`` or ``"S"``) to a list
+    of rounds.  ``rounds[0]`` contains the First Round games (``BracketGame``
+    nodes with ``slot/home/away``).  Each subsequent round contains games whose
+    ``feeds_from`` pair references the two preceding-round indices that produced
+    the participants.  The final element of each half's round list is the
+    Semifinal.
+
+    ``championship`` has a single ``feeds_from_halves`` key listing the two half
+    identifiers whose Semifinal winners meet in the Championship Game.
+    """
+
+    halves: dict[str, list[list[BracketGame]]]
+    championship: dict[str, list[str]]
+
+
 class BracketResponse(BaseModel):
     """Full bracket advancement odds for a class (both halves)."""
 
     season: int
     class_: int
+    bracket_layout: BracketLayout
     teams: list[TeamBracketEntry]
 
 

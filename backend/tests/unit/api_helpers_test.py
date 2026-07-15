@@ -8,6 +8,7 @@ from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
     DISPLAY_THRESHOLD,
+    build_bracket_layout,
     PlayoffBracketState,
     _resolve_ref_to_school,
     _resolve_ref_to_slot_id,
@@ -1498,3 +1499,75 @@ class TestParticipantRefValidation:
         assert r.winner.region == 1
         assert r.winner.seed == 1
         assert r.loser.region == 2
+
+
+# ---------------------------------------------------------------------------
+# TestBuildBracketLayout
+# ---------------------------------------------------------------------------
+
+
+class TestBuildBracketLayout:
+    """build_bracket_layout produces the correct tree structure for both bracket formats."""
+
+    def test_1a_4a_produces_n_and_s_halves(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        assert set(layout.halves.keys()) == {"N", "S"}
+
+    def test_1a_4a_north_has_four_rounds(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        rounds = layout.halves["N"]
+        assert len(rounds) == 4
+        assert [len(r) for r in rounds] == [8, 4, 2, 1]
+
+    def test_1a_4a_south_has_four_rounds(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        rounds = layout.halves["S"]
+        assert len(rounds) == 4
+        assert [len(r) for r in rounds] == [8, 4, 2, 1]
+
+    def test_5a_7a_north_has_three_rounds(self):
+        layout = build_bracket_layout(SLOTS_5A_7A_2025)
+        rounds = layout.halves["N"]
+        assert len(rounds) == 3
+        assert [len(r) for r in rounds] == [4, 2, 1]
+
+    def test_r1_games_have_slot_home_away_not_feeds_from(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        for game in layout.halves["N"][0]:
+            assert game.slot is not None
+            assert game.home is not None
+            assert game.away is not None
+            assert game.feeds_from is None
+
+    def test_later_round_games_have_feeds_from_not_slot(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        for round_ in layout.halves["N"][1:]:
+            for game in round_:
+                assert game.feeds_from is not None
+                assert game.slot is None
+                assert game.home is None
+                assert game.away is None
+
+    def test_r2_first_game_feeds_from_r1_0_and_1(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        assert layout.halves["N"][1][0].feeds_from == [0, 1]
+
+    def test_r2_second_game_feeds_from_r1_2_and_3(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        assert layout.halves["N"][1][1].feeds_from == [2, 3]
+
+    def test_sf_is_single_game_feeding_from_two_qf_games(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        sf_round = layout.halves["N"][-1]
+        assert len(sf_round) == 1
+        assert sf_round[0].feeds_from == [0, 1]
+
+    def test_championship_feeds_from_halves(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        assert layout.championship == {"feeds_from_halves": ["N", "S"]}
+
+    def test_r1_slot_numbers_match_format_input(self):
+        layout = build_bracket_layout(SLOTS_1A_4A_2025)
+        north_r1_slots = [g.slot for g in layout.halves["N"][0]]
+        expected = sorted(s.slot for s in SLOTS_1A_4A_2025 if s.north_south == "N")
+        assert north_r1_slots == expected
