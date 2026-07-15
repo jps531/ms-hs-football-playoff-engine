@@ -358,6 +358,24 @@ class TeamBracketEntry(BaseModel):
     hosting: BracketSlotHosting | None = None
 
 
+class BracketParticipant(BaseModel):
+    """A team occupying one side of a bracket game slot."""
+
+    region: int
+    seed: int
+    school: str | None = None
+
+
+class BracketGameResult(BaseModel):
+    """Outcome of a completed bracket game."""
+
+    winner: BracketParticipant
+    loser: BracketParticipant
+    winner_score: int | None = None
+    loser_score: int | None = None
+    simulated: bool = False
+
+
 class BracketGame(BaseModel):
     """One game node in the bracket tree.
 
@@ -365,12 +383,28 @@ class BracketGame(BaseModel):
     format).  All later-round nodes have ``feeds_from`` set: a pair of 0-based
     indices into the *previous* round's game list indicating which two R1-path
     winners meet here.  ``slot``/``home``/``away`` are ``None`` for non-R1 nodes.
+
+    ``home_participant`` and ``away_participant`` are populated when the teams
+    occupying each side are known (seeds clinched or bracket advanced).
+    ``result`` is set once the game has a confirmed or simulated outcome.
     """
 
     slot: int | None = None
     home: tuple[int, int] | None = None
     away: tuple[int, int] | None = None
     feeds_from: list[int] | None = None
+    home_participant: BracketParticipant | None = None
+    away_participant: BracketParticipant | None = None
+    result: BracketGameResult | None = None
+
+
+class ChampionshipGame(BaseModel):
+    """The championship game, fed by the two Semifinal winners."""
+
+    feeds_from_halves: list[str] = ["N", "S"]
+    north_participant: BracketParticipant | None = None
+    south_participant: BracketParticipant | None = None
+    result: BracketGameResult | None = None
 
 
 class BracketLayout(BaseModel):
@@ -383,12 +417,12 @@ class BracketLayout(BaseModel):
     the participants.  The final element of each half's round list is the
     Semifinal.
 
-    ``championship`` has a single ``feeds_from_halves`` key listing the two half
-    identifiers whose Semifinal winners meet in the Championship Game.
+    ``championship`` carries the two SF-winner participants and the result once
+    the championship game has been played.
     """
 
     halves: dict[str, list[list[BracketGame]]]
-    championship: dict[str, list[str]]
+    championship: ChampionshipGame
 
 
 class BracketResponse(BaseModel):

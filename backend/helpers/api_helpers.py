@@ -16,8 +16,11 @@ from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
     BracketAdvancementOdds,
     BracketGame,
+    BracketGameResult,
     BracketLayout,
+    BracketParticipant,
     BracketSlotHosting,
+    ChampionshipGame,
     HomeGameOdds,
     RecordModel,
     RemainingGameModel,
@@ -743,6 +746,7 @@ class PlayoffBracketState:
     cross_region_wins: dict[tuple[int, int], int]
     eliminated_hosting_map: dict[str, tuple]
     matchup_fn: MatchupProbFn | None
+    confirmed_game_results: list[tuple[str, str, int | None, int | None]]
 
 
 def build_playoff_bracket_state(
@@ -829,6 +833,7 @@ def build_playoff_bracket_state(
         cross_region_wins=cross_region_wins,
         eliminated_hosting_map=eliminated_hosting_map,
         matchup_fn=matchup_fn,
+        confirmed_game_results=[],
     )
 
 
@@ -904,9 +909,25 @@ async def _load_and_build_playoff_bracket_state(
         if losses:
             db_losers.add(school)
 
-    return build_playoff_bracket_state(
+    game_rows = await conn.execute(
+        """
+        SELECT g.school, g.opponent, g.points_for, g.points_against
+        FROM games_effective g
+        WHERE g.season = %s AND g.final = TRUE AND g.round IS NOT NULL
+          AND g.date <= %s AND g.school = ANY(%s)
+          AND g.points_for > g.points_against
+        """,
+        (season, as_of, list(school_to_seed.keys())),
+    )
+    confirmed_game_results: list[tuple[str, str, int | None, int | None]] = []
+    async for winner, loser, winner_score, loser_score in game_rows:
+        confirmed_game_results.append((winner, loser, winner_score, loser_score))
+
+    state = build_playoff_bracket_state(
         school_to_seed, db_wins, db_losers, submitted_results, elo_ratings, slots, season, clazz
     )
+    state.confirmed_game_results = confirmed_game_results
+    return state
 
 
 # ---------------------------------------------------------------------------
@@ -940,7 +961,131 @@ def build_bracket_layout(slots: list[FormatSlot]) -> BracketLayout:
             prev = rounds[-1]
             rounds.append([BracketGame(feeds_from=[i, i + 1]) for i in range(0, len(prev), 2)])
         halves[ns] = rounds
-    return BracketLayout(halves=halves, championship={"feeds_from_halves": ["N", "S"]})
+    return BracketLayout(halves=halves, championship=ChampionshipGame())
+
+
+def build_enriched_bracket_layout(
+    layout: BracketLayout,
+    seed_to_school: dict[tuple[int, int], str] | None,
+    confirmed_results: list[tuple[str, str, int | None, int | None]],
+    simulated_results: list[tuple[str, str, int | None, int | None]],
+) -> BracketLayout:
+    """Enrich a ``BracketLayout`` with per-game participants and results.
+
+    Each ``BracketGame`` node gains ``home_participant``, ``away_participant``,
+    and ``result`` (set when the game has a confirmed DB result or a simulated
+    result from the request body).  Confirmed results take priority — a simulated
+    result for the same pair is ignored when the DB result already exists.
+
+    Participants propagate round-by-round: R1 participants come from
+    ``seed_to_school``; later-round participants are the winners of the
+    ``feeds_from`` games in the previous round.  When ``seed_to_school`` is
+    ``None`` (pre-playoff, no clinched seeds), all participants are ``None``.
+
+    The championship node is similarly enriched from the two Semifinal winners.
+    """
+    def _make_participant(region: int, seed: int) -> BracketParticipant:
+        school = seed_to_school.get((region, seed)) if seed_to_school else None
+        return BracketParticipant(region=region, seed=seed, school=school)
+
+    # Build results lookup keyed by the frozenset of the two schools.
+    # Confirmed (DB) results are inserted first; simulated results only fill gaps.
+    results_by_pair: dict[frozenset, BracketGameResult] = {}
+    for winner, loser, ws, ls in confirmed_results:
+        key = frozenset((winner, loser))
+        if key not in results_by_pair:
+            results_by_pair[key] = BracketGameResult(
+                winner=BracketParticipant(region=0, seed=0, school=winner),
+                loser=BracketParticipant(region=0, seed=0, school=loser),
+                winner_score=ws,
+                loser_score=ls,
+                simulated=False,
+            )
+    for winner, loser, ws, ls in simulated_results:
+        key = frozenset((winner, loser))
+        if key not in results_by_pair:
+            results_by_pair[key] = BracketGameResult(
+                winner=BracketParticipant(region=0, seed=0, school=winner),
+                loser=BracketParticipant(region=0, seed=0, school=loser),
+                winner_score=ws,
+                loser_score=ls,
+                simulated=True,
+            )
+
+    def _find_result(
+        home_p: BracketParticipant | None,
+        away_p: BracketParticipant | None,
+    ) -> BracketGameResult | None:
+        if home_p is None or away_p is None:
+            return None
+        if home_p.school is None or away_p.school is None:
+            return None
+        raw = results_by_pair.get(frozenset((home_p.school, away_p.school)))
+        if raw is None:
+            return None
+        # Re-attach region/seed to winner and loser from the participants.
+        if raw.winner.school == home_p.school:
+            w_p, l_p = home_p, away_p
+        else:
+            w_p, l_p = away_p, home_p
+        return BracketGameResult(
+            winner=w_p, loser=l_p,
+            winner_score=raw.winner_score, loser_score=raw.loser_score,
+            simulated=raw.simulated,
+        )
+
+    enriched_halves: dict[str, list[list[BracketGame]]] = {}
+    half_sf_winners: dict[str, BracketParticipant | None] = {}
+
+    for ns, rounds in layout.halves.items():
+        # round_winners[i] = winner BracketParticipant from game i in that round (or None)
+        prev_round_winners: list[BracketParticipant | None] = []
+        enriched_rounds: list[list[BracketGame]] = []
+
+        for games in rounds:
+            cur_round_winners: list[BracketParticipant | None] = []
+            enriched_games: list[BracketGame] = []
+
+            for game in games:
+                if game.slot is not None:  # R1 leaf
+                    assert game.home is not None and game.away is not None
+                    home_p = _make_participant(game.home[0], game.home[1])
+                    away_p = _make_participant(game.away[0], game.away[1])
+                else:  # later-round interior node
+                    assert game.feeds_from is not None
+                    home_p = prev_round_winners[game.feeds_from[0]]
+                    away_p = prev_round_winners[game.feeds_from[1]]
+
+                result = _find_result(home_p, away_p)
+                winner_p: BracketParticipant | None = None
+                if result is not None:
+                    winner_p = result.winner
+
+                enriched_games.append(BracketGame(
+                    slot=game.slot, home=game.home, away=game.away,
+                    feeds_from=game.feeds_from,
+                    home_participant=home_p, away_participant=away_p,
+                    result=result,
+                ))
+                cur_round_winners.append(winner_p)
+
+            enriched_rounds.append(enriched_games)
+            prev_round_winners = cur_round_winners
+
+        enriched_halves[ns] = enriched_rounds
+        # SF winner is the single winner from the last round in this half
+        half_sf_winners[ns] = prev_round_winners[0] if prev_round_winners else None
+
+    north_p = half_sf_winners.get("N")
+    south_p = half_sf_winners.get("S")
+    championship_result = _find_result(north_p, south_p)
+    championship = ChampionshipGame(
+        north_participant=north_p,
+        south_participant=south_p,
+        result=championship_result,
+    )
+
+    return BracketLayout(halves=enriched_halves, championship=championship)
 
 
 def clinched_school(region_odds: dict[str, StandingsOdds], seed: int) -> str | None:

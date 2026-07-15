@@ -9,6 +9,7 @@ from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
     DISPLAY_THRESHOLD,
     build_bracket_layout,
+    build_enriched_bracket_layout,
     PlayoffBracketState,
     _resolve_ref_to_school,
     _resolve_ref_to_slot_id,
@@ -1564,7 +1565,7 @@ class TestBuildBracketLayout:
 
     def test_championship_feeds_from_halves(self):
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
-        assert layout.championship == {"feeds_from_halves": ["N", "S"]}
+        assert layout.championship.feeds_from_halves == ["N", "S"]
 
     def test_r1_slot_numbers_match_format_input(self):
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
@@ -1662,3 +1663,149 @@ class TestEliminatedTeamsInBracket:
         state = self._state_post_r1()
         keys = [(e.region, e.seed) for e in self._entries(state)]
         assert keys == sorted(keys)
+
+
+# ---------------------------------------------------------------------------
+# TestBuildEnrichedBracketLayout
+# ---------------------------------------------------------------------------
+
+
+class TestBuildEnrichedBracketLayout:
+    """build_enriched_bracket_layout populates participants and results on each BracketGame node."""
+
+    # Slot 1 in SLOTS_5A_7A_2025: R1S1 (home) vs R2S4 (away), North half
+    _S2S: dict[tuple[int, int], str] = {
+        (r, s): f"R{r}S{s}"
+        for r in (1, 2, 3, 4)
+        for s in (1, 2, 3, 4)
+    }
+
+    def _layout(self):
+        return build_bracket_layout(SLOTS_5A_7A_2025)
+
+    def test_r1_participants_populated_when_seed_to_school_provided(self):
+        """R1 game nodes have home_participant and away_participant with school names."""
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
+        game = layout.halves["N"][0][0]  # slot 1: R1S1 vs R2S4
+        assert game.home_participant is not None
+        assert game.away_participant is not None
+        assert game.home_participant.school == "R1S1"
+        assert game.away_participant.school == "R2S4"
+
+    def test_r1_participants_have_correct_region_and_seed(self):
+        """Participant region and seed match the format slot."""
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
+        game = layout.halves["N"][0][0]  # R1S1 (home) vs R2S4 (away)
+        assert game.home_participant.region == 1
+        assert game.home_participant.seed == 1
+        assert game.away_participant.region == 2
+        assert game.away_participant.seed == 4
+
+    def test_r1_school_null_when_no_seed_to_school(self):
+        """School is None for all participants when seed_to_school is not provided."""
+        layout = build_enriched_bracket_layout(self._layout(), None, [], [])
+        for game in layout.halves["N"][0]:
+            assert game.home_participant.school is None
+            assert game.away_participant.school is None
+
+    def test_r1_result_populated_from_confirmed(self):
+        """A confirmed result for a matching pair appears on the R1 game node."""
+        confirmed = [("R1S1", "R2S4", 28, 14)]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
+        game = layout.halves["N"][0][0]  # R1S1 vs R2S4
+        assert game.result is not None
+        assert game.result.winner.school == "R1S1"
+        assert game.result.loser.school == "R2S4"
+        assert game.result.winner_score == 28
+        assert game.result.loser_score == 14
+
+    def test_r1_result_simulated_false_for_confirmed(self):
+        """Confirmed results have simulated=False."""
+        confirmed = [("R1S1", "R2S4", 28, 14)]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
+        assert layout.halves["N"][0][0].result.simulated is False
+
+    def test_no_result_when_game_not_yet_played(self):
+        """Game nodes with no matching result have result=None."""
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
+        assert layout.halves["N"][0][0].result is None
+
+    def test_simulated_result_marked_simulated_true(self):
+        """Results from the simulated list have simulated=True."""
+        simulated = [("R1S1", "R2S4", None, None)]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
+        assert layout.halves["N"][0][0].result is not None
+        assert layout.halves["N"][0][0].result.simulated is True
+
+    def test_real_result_not_overridden_by_simulated(self):
+        """Confirmed DB result is not replaced by a simulated result for the same pair."""
+        confirmed = [("R1S1", "R2S4", 28, 14)]
+        simulated = [("R2S4", "R1S1", 21, 7)]  # reversed — simulated says opposite winner
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, simulated)
+        result = layout.halves["N"][0][0].result
+        assert result is not None
+        assert result.winner.school == "R1S1"  # DB result preserved
+        assert result.simulated is False
+
+    def test_qf_participants_populated_from_r1_winners(self):
+        """QF game participants are the winners of the feeding R1 games."""
+        # In 5A-7A North, R1 has 4 games; QF (round index 1) has 2 games.
+        # Slots N[0][0] (R1S1 vs R2S4) and N[0][1] (R2S2 vs R1S3) feed into N[1][0].
+        confirmed = [
+            ("R1S1", "R2S4", 28, 14),   # N[0][0] winner: R1S1
+            ("R2S2", "R1S3", 21, 7),     # N[0][1] winner: R2S2
+        ]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
+        qf_game = layout.halves["N"][1][0]
+        assert qf_game.home_participant is not None
+        assert qf_game.away_participant is not None
+        schools = {qf_game.home_participant.school, qf_game.away_participant.school}
+        assert schools == {"R1S1", "R2S2"}
+
+    def test_championship_participants_from_sf_winners(self):
+        """Championship participants are the Semifinal winners of each half."""
+        # Supply results for all rounds in the North half to propagate a winner.
+        # North slots (from SLOTS_5A_7A_2025):
+        #   R1: (R1S1 vs R2S4), (R2S2 vs R1S3), (R2S1 vs R1S4), (R1S2 vs R2S3)
+        #   QF: R1S1 vs R2S2; R2S1 vs R1S2
+        #   SF: R1S1 vs R2S1
+        confirmed = [
+            ("R1S1", "R2S4", 28, 14),
+            ("R2S2", "R1S3", 21, 7),
+            ("R2S1", "R1S4", 35, 0),
+            ("R1S2", "R2S3", 14, 10),
+            ("R1S1", "R2S2", 20, 17),  # QF
+            ("R2S1", "R1S2", 30, 14),  # QF
+            ("R1S1", "R2S1", 24, 21),  # SF — N half winner
+            # South half — make R3S1 the SF winner
+            ("R3S1", "R4S4", 28, 0),
+            ("R4S2", "R3S3", 21, 7),
+            ("R4S1", "R3S4", 35, 0),
+            ("R3S2", "R4S3", 14, 10),
+            ("R3S1", "R4S2", 20, 17),
+            ("R4S1", "R3S2", 30, 14),
+            ("R3S1", "R4S1", 24, 21),  # SF — S half winner
+        ]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
+        champ = layout.championship
+        assert champ.north_participant is not None
+        assert champ.south_participant is not None
+        assert champ.north_participant.school == "R1S1"
+        assert champ.south_participant.school == "R3S1"
+
+    def test_championship_result_populated(self):
+        """Championship result is set when both SF winners have played each other."""
+        confirmed = [
+            ("R1S1", "R2S4", 28, 14), ("R2S2", "R1S3", 21, 7),
+            ("R2S1", "R1S4", 35, 0), ("R1S2", "R2S3", 14, 10),
+            ("R1S1", "R2S2", 20, 17), ("R2S1", "R1S2", 30, 14),
+            ("R1S1", "R2S1", 24, 21),
+            ("R3S1", "R4S4", 28, 0), ("R4S2", "R3S3", 21, 7),
+            ("R4S1", "R3S4", 35, 0), ("R3S2", "R4S3", 14, 10),
+            ("R3S1", "R4S2", 20, 17), ("R4S1", "R3S2", 30, 14),
+            ("R3S1", "R4S1", 24, 21),
+            ("R1S1", "R3S1", 31, 28),  # championship
+        ]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
+        assert layout.championship.result is not None
+        assert layout.championship.result.winner.school == "R1S1"

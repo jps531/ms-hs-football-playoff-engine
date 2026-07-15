@@ -12,9 +12,11 @@ from backend.api.models.responses import BracketResponse
 from backend.helpers.api_helpers import (
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
+    _resolve_ref_to_school,
     _resolve_ref_to_slot_id,
     build_bracket_entries,
     build_bracket_layout,
+    build_enriched_bracket_layout,
 )
 from backend.helpers.data_classes import FormatSlot, MatchupProbFn, StandingsOdds
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
@@ -119,6 +121,11 @@ async def get_bracket(
             eliminated_hosting=state.eliminated_hosting_map,
             school_to_seed=state.school_to_seed,
         )
+        seed_to_school = {(r, s): sch for sch, (r, s) in state.school_to_seed.items()}
+        bracket_layout = build_enriched_bracket_layout(
+            build_bracket_layout(slots), seed_to_school,
+            state.confirmed_game_results, simulated_results=[],
+        )
     else:
         matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
         entries = build_bracket_entries(
@@ -126,9 +133,10 @@ async def get_bracket(
             season=season, clazz=class_,
             win_prob_fn_weighted=matchup_fn,
         )
+        bracket_layout = build_bracket_layout(slots)
     return BracketResponse(
         season=season, class_=class_,
-        bracket_layout=build_bracket_layout(slots),
+        bracket_layout=bracket_layout,
         teams=entries,
     )
 
@@ -182,6 +190,17 @@ async def simulate_bracket(
             eliminated_hosting=state.eliminated_hosting_map,
             school_to_seed=state.school_to_seed,
         )
+        seed_to_school = {(r, s): sch for sch, (r, s) in state.school_to_seed.items()}
+        simulated: list[tuple[str, str, int | None, int | None]] = []
+        for r in body.results:
+            w = _resolve_ref_to_school(r.winner, seed_to_school)
+            lo = _resolve_ref_to_school(r.loser, seed_to_school)
+            if w is not None and lo is not None:
+                simulated.append((w, lo, r.winner_score, r.loser_score))
+        bracket_layout = build_enriched_bracket_layout(
+            build_bracket_layout(slots), seed_to_school,
+            state.confirmed_game_results, simulated,
+        )
     else:
         slot_wins: dict[str, int] = {}
         for r in body.results:
@@ -192,9 +211,10 @@ async def simulate_bracket(
             by_region, slots, season=season, clazz=class_,
             win_prob_fn_weighted=matchup_fn_pre, wins_by_slot=slot_wins,
         )
+        bracket_layout = build_bracket_layout(slots)
 
     return BracketResponse(
         season=season, class_=class_,
-        bracket_layout=build_bracket_layout(slots),
+        bracket_layout=bracket_layout,
         teams=entries,
     )
