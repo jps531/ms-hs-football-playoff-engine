@@ -5,18 +5,23 @@ from datetime import date
 import pytest
 
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
+from backend.api.models.responses import (
+    BracketSlotHosting,
+    RoundHostingOdds,
+    TeamBracketEntry,
+)
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
     DISPLAY_THRESHOLD,
+    PlayoffBracketState,
     _apply_round_ceilings,
     _collect_possible_opponents,
-    build_bracket_layout,
-    build_enriched_bracket_layout,
-    PlayoffBracketState,
     _resolve_ref_to_school,
     _resolve_ref_to_slot_id,
     build_bracket_entries,
     build_bracket_entries_from_odds_map,
+    build_bracket_layout,
+    build_enriched_bracket_layout,
     build_hosting_entries,
     build_playoff_bracket_state,
     build_seeding_by_region,
@@ -458,26 +463,86 @@ class TestScenariosToEntries:
 #   35-38: home weighted: same 4
 _SNAP_DATE = date(2025, 10, 1)
 _ROW_ALPHA = (
-    "Alpha", 5, 2, 0, 3, 1, 0,          # 0-6
-    0.6, 0.3, 0.1, 0.0, 1.0,             # 7-11 unweighted seeding
-    False, False, False,                  # 12-14 clinched/elim/coin
-    _SNAP_DATE,                           # 15 as_of_date
-    0.65, 0.28, 0.07, 0.0, 1.0,          # 16-20 weighted seeding
-    0.5, 0.3, 0.2, 0.1, 0.05,            # 21-25 bracket advancement
-    0.45, 0.25, 0.15, 0.08, 0.04,        # 26-30 bracket weighted
-    0.6, 0.3, 0.2, 0.1,                  # 31-34 home game
-    0.55, 0.28, 0.18, 0.09,              # 35-38 home game weighted
+    "Alpha",
+    5,
+    2,
+    0,
+    3,
+    1,
+    0,  # 0-6
+    0.6,
+    0.3,
+    0.1,
+    0.0,
+    1.0,  # 7-11 unweighted seeding
+    False,
+    False,
+    False,  # 12-14 clinched/elim/coin
+    _SNAP_DATE,  # 15 as_of_date
+    0.65,
+    0.28,
+    0.07,
+    0.0,
+    1.0,  # 16-20 weighted seeding
+    0.5,
+    0.3,
+    0.2,
+    0.1,
+    0.05,  # 21-25 bracket advancement
+    0.45,
+    0.25,
+    0.15,
+    0.08,
+    0.04,  # 26-30 bracket weighted
+    0.6,
+    0.3,
+    0.2,
+    0.1,  # 31-34 home game
+    0.55,
+    0.28,
+    0.18,
+    0.09,  # 35-38 home game weighted
 )
 _ROW_BETA = (
-    "Beta", 4, 3, 0, 1, 3, 0,            # 0-6
-    0.1, 0.2, 0.4, 0.3, 1.0,             # 7-11 unweighted seeding
-    False, False, True,                   # 12-14 clinched/elim/coin
-    _SNAP_DATE,                           # 15 as_of_date
-    0.08, 0.18, 0.42, 0.32, 1.0,         # 16-20 weighted seeding
-    0.2, 0.15, 0.08, 0.04, 0.02,         # 21-25 bracket advancement
-    0.18, 0.12, 0.06, 0.03, 0.01,        # 26-30 bracket weighted
-    0.15, 0.1, 0.05, 0.02,               # 31-34 home game
-    0.12, 0.09, 0.04, 0.02,              # 35-38 home game weighted
+    "Beta",
+    4,
+    3,
+    0,
+    1,
+    3,
+    0,  # 0-6
+    0.1,
+    0.2,
+    0.4,
+    0.3,
+    1.0,  # 7-11 unweighted seeding
+    False,
+    False,
+    True,  # 12-14 clinched/elim/coin
+    _SNAP_DATE,  # 15 as_of_date
+    0.08,
+    0.18,
+    0.42,
+    0.32,
+    1.0,  # 16-20 weighted seeding
+    0.2,
+    0.15,
+    0.08,
+    0.04,
+    0.02,  # 21-25 bracket advancement
+    0.18,
+    0.12,
+    0.06,
+    0.03,
+    0.01,  # 26-30 bracket weighted
+    0.15,
+    0.1,
+    0.05,
+    0.02,  # 31-34 home game
+    0.12,
+    0.09,
+    0.04,
+    0.02,  # 35-38 home game weighted
 )
 
 
@@ -701,8 +766,11 @@ class TestBuildBracketEntriesFromOddsMap:
         """When odds_map_weighted is supplied, *_weighted fields are set on each entry."""
         from backend.helpers.data_classes import BracketOdds
 
-        weighted_map = {"R1S1": BracketOdds(school="R1S1", second_round=0.9, quarterfinals=0.6,
-                                             semifinals=0.3, finals=0.15, champion=0.08)}
+        weighted_map = {
+            "R1S1": BracketOdds(
+                school="R1S1", second_round=0.9, quarterfinals=0.6, semifinals=0.3, finals=0.15, champion=0.08
+            )
+        }
         by_region = {1: {"Alpha": _odds("Alpha", p1=1.0, clinched=True)}}
         result = build_bracket_entries_from_odds_map(
             by_region,
@@ -755,8 +823,28 @@ class TestBuildSeedingByRegion:
     def _simulated_odds(self) -> dict[str, StandingsOdds]:
         """Return two-team fractional seeding odds for region 1."""
         return {
-            "Alpha": StandingsOdds(school="Alpha", p1=0.6, p2=0.3, p3=0.1, p4=0.0, p_playoffs=1.0, final_playoffs=1.0, clinched=False, eliminated=False),
-            "Beta":  StandingsOdds(school="Beta",  p1=0.4, p2=0.7, p3=0.9, p4=1.0, p_playoffs=1.0, final_playoffs=1.0, clinched=False, eliminated=False),
+            "Alpha": StandingsOdds(
+                school="Alpha",
+                p1=0.6,
+                p2=0.3,
+                p3=0.1,
+                p4=0.0,
+                p_playoffs=1.0,
+                final_playoffs=1.0,
+                clinched=False,
+                eliminated=False,
+            ),
+            "Beta": StandingsOdds(
+                school="Beta",
+                p1=0.4,
+                p2=0.7,
+                p3=0.9,
+                p4=1.0,
+                p_playoffs=1.0,
+                final_playoffs=1.0,
+                clinched=False,
+                eliminated=False,
+            ),
         }
 
     def test_simulated_region_present(self):
@@ -863,7 +951,7 @@ class TestBuildHostingEntries:
         result = build_hosting_entries(_REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5)
         by_school = {e.school: e for e in result}
         assert by_school["Alpha"].first_round.conditional == pytest.approx(1.0)  # seed 1 — home
-        assert by_school["Beta"].first_round.conditional == pytest.approx(1.0)   # seed 2 — home
+        assert by_school["Beta"].first_round.conditional == pytest.approx(1.0)  # seed 2 — home
         assert by_school["Gamma"].first_round.conditional == pytest.approx(0.0)  # seed 3 — away
         assert by_school["Delta"].first_round.conditional == pytest.approx(0.0)  # seed 4 — away
 
@@ -883,10 +971,10 @@ class TestBuildHostingEntries:
         """Seeds 1 and 2 host R1 (conditional=1.0); seeds 3 and 4 play away (conditional=0.0)."""
         result = build_hosting_entries(_REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1)
         by_school = {e.school: e for e in result}
-        assert by_school["Able"].first_round.conditional == pytest.approx(1.0)   # seed 1 — home
+        assert by_school["Able"].first_round.conditional == pytest.approx(1.0)  # seed 1 — home
         assert by_school["Baker"].first_round.conditional == pytest.approx(1.0)  # seed 2 — home
-        assert by_school["Camp"].first_round.conditional == pytest.approx(0.0)   # seed 3 — away
-        assert by_school["Dog"].first_round.conditional == pytest.approx(0.0)    # seed 4 — away
+        assert by_school["Camp"].first_round.conditional == pytest.approx(0.0)  # seed 3 — away
+        assert by_school["Dog"].first_round.conditional == pytest.approx(0.0)  # seed 4 — away
 
     def test_zero_advancement_gives_none_conditional(self):
         """When p_r1_adv == 0 (no seed probability), second_round conditional is None."""
@@ -908,20 +996,25 @@ class TestBuildHostingEntries:
     def test_stored_path_1a_4a_uses_stored_values(self):
         """When home_cond and stored_adv are supplied, marginal = conditional × advancement."""
         home_cond = {
-            "Able":  (1.0, 0.6, 0.3, 0.15),
+            "Able": (1.0, 0.6, 0.3, 0.15),
             "Baker": (1.0, 0.5, 0.25, 0.1),
-            "Camp":  (0.0, 0.0, 0.0, 0.0),
-            "Dog":   (0.0, 0.0, 0.0, 0.0),
+            "Camp": (0.0, 0.0, 0.0, 0.0),
+            "Dog": (0.0, 0.0, 0.0, 0.0),
         }
         stored_adv = {
-            "Able":  (1.0, 0.5, 0.25, 0.125),
+            "Able": (1.0, 0.5, 0.25, 0.125),
             "Baker": (1.0, 0.5, 0.25, 0.125),
-            "Camp":  (0.5, 0.25, 0.125, 0.0625),
-            "Dog":   (0.5, 0.25, 0.125, 0.0625),
+            "Camp": (0.5, 0.25, 0.125, 0.0625),
+            "Dog": (0.5, 0.25, 0.125, 0.0625),
         }
         result = build_hosting_entries(
-            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
-            home_cond=home_cond, stored_adv=stored_adv,
+            _REGION1_ODDS_1A,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2025,
+            clazz=1,
+            home_cond=home_cond,
+            stored_adv=stored_adv,
         )
         by_school = {e.school: e for e in result}
         able = by_school["Able"]
@@ -939,8 +1032,13 @@ class TestBuildHostingEntries:
         home_cond = {s: (1.0, 0.0, 0.5, 0.25) for s in ("Alpha", "Beta", "Gamma", "Delta")}
         stored_adv = {s: (1.0, 0.0, 0.5, 0.25) for s in ("Alpha", "Beta", "Gamma", "Delta")}
         result = build_hosting_entries(
-            _REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5,
-            home_cond=home_cond, stored_adv=stored_adv,
+            _REGION1_ODDS_5A,
+            SLOTS_5A_7A_2025,
+            region=1,
+            season=2025,
+            clazz=5,
+            home_cond=home_cond,
+            stored_adv=stored_adv,
         )
         for entry in result:
             assert entry.second_round.conditional is None
@@ -952,8 +1050,13 @@ class TestBuildHostingEntries:
         stored_adv = {"Able": (0.0, 0.0, 0.0, 0.0)}  # no advancement
         region_odds = {"Able": _odds("Able", p1=1.0, p_playoffs=1.0, clinched=True)}
         result = build_hosting_entries(
-            region_odds, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
-            home_cond=home_cond, stored_adv=stored_adv,
+            region_odds,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2025,
+            clazz=1,
+            home_cond=home_cond,
+            stored_adv=stored_adv,
         )
         able = result[0]
         assert able.second_round.conditional is None
@@ -966,12 +1069,17 @@ class TestBuildHostingEntries:
 
     def test_weighted_fallback_1a_4a_populates_weighted_fields(self):
         """Passing win_prob_fn_weighted produces non-None conditional_weighted values."""
+
         def equal_w(hr: int, hs: int, ar: int, as_: int) -> float:
             """Return 0.5 for all matchups (equal probability)."""
             return 0.5
 
         result = build_hosting_entries(
-            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
+            _REGION1_ODDS_1A,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2025,
+            clazz=1,
             win_prob_fn_weighted=equal_w,
         )
         able = next(e for e in result if e.school == "Able")
@@ -980,12 +1088,17 @@ class TestBuildHostingEntries:
 
     def test_weighted_fallback_matches_unweighted_for_equal_prob(self):
         """With 50/50 weighted fn, conditional_weighted equals conditional."""
+
         def equal_w(hr: int, hs: int, ar: int, as_: int) -> float:
             """Return 0.5 for all matchups (equal probability)."""
             return 0.5
 
         result = build_hosting_entries(
-            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
+            _REGION1_ODDS_1A,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2025,
+            clazz=1,
             win_prob_fn_weighted=equal_w,
         )
         for entry in result:
@@ -1003,22 +1116,35 @@ class TestBuildHostingEntries:
         R1 and R2 are unchanged (seed-1 alive).  R3 and R4 seed-1 are zeroed
         so that Able (R1-seed-1) is the only remaining seed-1 in the north half.
         """
+
         def _alive(school: str, seed: int) -> StandingsOdds:
             """Return a clinched StandingsOdds with a single confirmed seed."""
             kwargs = {"p1": 0.0, "p2": 0.0, "p3": 0.0, "p4": 0.0}
             kwargs[f"p{seed}"] = 1.0
-            return StandingsOdds(school=school, **kwargs, p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False)
+            return StandingsOdds(
+                school=school, **kwargs, p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False
+            )
 
         def _eliminated(school: str) -> StandingsOdds:
             """Return a fully eliminated StandingsOdds."""
-            return StandingsOdds(school=school, p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, final_playoffs=0.0, clinched=True, eliminated=True)
+            return StandingsOdds(
+                school=school,
+                p1=0.0,
+                p2=0.0,
+                p3=0.0,
+                p4=0.0,
+                p_playoffs=0.0,
+                final_playoffs=0.0,
+                clinched=True,
+                eliminated=True,
+            )
 
         return {
             1: {
-                "Able":  _alive("Able",  1),
+                "Able": _alive("Able", 1),
                 "Baker": _alive("Baker", 2),
-                "Camp":  _alive("Camp",  3),
-                "Dog":   _alive("Dog",   4),
+                "Camp": _alive("Camp", 3),
+                "Dog": _alive("Dog", 4),
             },
             2: {
                 "R2T1": _alive("R2T1", 1),
@@ -1027,13 +1153,13 @@ class TestBuildHostingEntries:
                 "R2T4": _alive("R2T4", 4),
             },
             3: {
-                "R3T1": _eliminated("R3T1"),   # seed-1 eliminated
+                "R3T1": _eliminated("R3T1"),  # seed-1 eliminated
                 "R3T2": _alive("R3T2", 2),
                 "R3T3": _alive("R3T3", 3),
                 "R3T4": _alive("R3T4", 4),
             },
             4: {
-                "R4T1": _eliminated("R4T1"),   # seed-1 eliminated
+                "R4T1": _eliminated("R4T1"),  # seed-1 eliminated
                 "R4T2": _alive("R4T2", 2),
                 "R4T3": _alive("R4T3", 3),
                 "R4T4": _alive("R4T4", 4),
@@ -1050,7 +1176,11 @@ class TestBuildHostingEntries:
         """
         all_region_odds = self._1a_all_region_odds_eliminate_r3_r4_seed1()
         result = build_hosting_entries(
-            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+            _REGION1_ODDS_1A,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2024,
+            clazz=1,
             all_region_odds=all_region_odds,
         )
         able = next(e for e in result if e.school == "Able")
@@ -1061,14 +1191,29 @@ class TestBuildHostingEntries:
         all_region_odds = self._1a_all_region_odds_eliminate_r3_r4_seed1()
         # Restore R3-seed-1 as alive — only R4-seed-1 is eliminated.
         all_region_odds[3]["R3T1"] = StandingsOdds(
-            school="R3T1", p1=1.0, p2=0.0, p3=0.0, p4=0.0,
-            p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False,
+            school="R3T1",
+            p1=1.0,
+            p2=0.0,
+            p3=0.0,
+            p4=0.0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=False,
         )
         baseline = build_hosting_entries(
-            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+            _REGION1_ODDS_1A,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2024,
+            clazz=1,
         )
         result = build_hosting_entries(
-            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+            _REGION1_ODDS_1A,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2024,
+            clazz=1,
             all_region_odds=all_region_odds,
         )
         able = next(e for e in result if e.school == "Able")
@@ -1083,21 +1228,34 @@ class TestBuildHostingEntries:
         for reg in (3, 4):
             school = f"R{reg}T1"
             all_region_odds[reg][school] = StandingsOdds(
-                school=school, p1=1.0, p2=0.0, p3=0.0, p4=0.0,
-                p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False,
+                school=school,
+                p1=1.0,
+                p2=0.0,
+                p3=0.0,
+                p4=0.0,
+                p_playoffs=1.0,
+                final_playoffs=1.0,
+                clinched=True,
+                eliminated=False,
             )
         baseline = build_hosting_entries(
-            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+            _REGION1_ODDS_1A,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2024,
+            clazz=1,
         )
         with_odds = build_hosting_entries(
-            _REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2024, clazz=1,
+            _REGION1_ODDS_1A,
+            SLOTS_1A_4A_2025,
+            region=1,
+            season=2024,
+            clazz=1,
             all_region_odds=all_region_odds,
         )
         baseline_able = next(e for e in baseline if e.school == "Able")
         with_able = next(e for e in with_odds if e.school == "Able")
-        assert with_able.semifinals.conditional == pytest.approx(
-            baseline_able.semifinals.conditional or 0.0, abs=1e-6
-        )
+        assert with_able.semifinals.conditional == pytest.approx(baseline_able.semifinals.conditional or 0.0, abs=1e-6)
 
     # ------------------------------------------------------------------
     # QF conditional — cross-region eliminations / confirmed wins
@@ -1127,29 +1285,82 @@ class TestBuildHostingEntries:
         """all_region_odds for QF conditional tests: R7-1 and R6-3 eliminated (0 wins);
         R8-4 eliminated with 1 win (survived R1, lost R2 to R5-2); R5-2 alive.
         """
+
         def _alive(school: str, seed: int) -> StandingsOdds:
             """Return a clinched StandingsOdds with a single confirmed seed."""
             kwargs = {"p1": 0.0, "p2": 0.0, "p3": 0.0, "p4": 0.0}
             kwargs[f"p{seed}"] = 1.0
-            return StandingsOdds(school=school, **kwargs, p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False)
+            return StandingsOdds(
+                school=school, **kwargs, p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False
+            )
 
         def _eliminated(school: str) -> StandingsOdds:
             """Return a fully eliminated StandingsOdds."""
-            return StandingsOdds(school=school, p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, final_playoffs=0.0, clinched=True, eliminated=True)
+            return StandingsOdds(
+                school=school,
+                p1=0.0,
+                p2=0.0,
+                p3=0.0,
+                p4=0.0,
+                p_playoffs=0.0,
+                final_playoffs=0.0,
+                clinched=True,
+                eliminated=True,
+            )
 
         return {
             # North half — all alive (not involved in south-half QF computation)
-            1: {"R1T1": _alive("R1T1", 1), "R1T2": _alive("R1T2", 2), "R1T3": _alive("R1T3", 3), "R1T4": _alive("R1T4", 4)},
-            2: {"R2T1": _alive("R2T1", 1), "R2T2": _alive("R2T2", 2), "R2T3": _alive("R2T3", 3), "R2T4": _alive("R2T4", 4)},
-            3: {"R3T1": _alive("R3T1", 1), "R3T2": _alive("R3T2", 2), "R3T3": _alive("R3T3", 3), "R3T4": _alive("R3T4", 4)},
-            4: {"R4T1": _alive("R4T1", 1), "R4T2": _alive("R4T2", 2), "R4T3": _alive("R4T3", 3), "R4T4": _alive("R4T4", 4)},
+            1: {
+                "R1T1": _alive("R1T1", 1),
+                "R1T2": _alive("R1T2", 2),
+                "R1T3": _alive("R1T3", 3),
+                "R1T4": _alive("R1T4", 4),
+            },
+            2: {
+                "R2T1": _alive("R2T1", 1),
+                "R2T2": _alive("R2T2", 2),
+                "R2T3": _alive("R2T3", 3),
+                "R2T4": _alive("R2T4", 4),
+            },
+            3: {
+                "R3T1": _alive("R3T1", 1),
+                "R3T2": _alive("R3T2", 2),
+                "R3T3": _alive("R3T3", 3),
+                "R3T4": _alive("R3T4", 4),
+            },
+            4: {
+                "R4T1": _alive("R4T1", 1),
+                "R4T2": _alive("R4T2", 2),
+                "R4T3": _alive("R4T3", 3),
+                "R4T4": _alive("R4T4", 4),
+            },
             # South half — selective eliminations
             # Slot 14 (R5-2 home vs R6-3 away): R6-3 eliminated (lost R1), R5-2 alive
-            5: {"R5T1": _alive("R5T1", 1), "R5T2": _alive("R5T2", 2), "R5T3": _alive("R5T3", 3), "R5T4": _alive("R5T4", 4)},
-            6: {"R6T1": _alive("R6T1", 1), "R6T2": _alive("R6T2", 2), "R6T3": _eliminated("R6T3"), "R6T4": _alive("R6T4", 4)},
+            5: {
+                "R5T1": _alive("R5T1", 1),
+                "R5T2": _alive("R5T2", 2),
+                "R5T3": _alive("R5T3", 3),
+                "R5T4": _alive("R5T4", 4),
+            },
+            6: {
+                "R6T1": _alive("R6T1", 1),
+                "R6T2": _alive("R6T2", 2),
+                "R6T3": _eliminated("R6T3"),
+                "R6T4": _alive("R6T4", 4),
+            },
             # Slot 13 (R7-1 home vs R8-4 away): R7-1 eliminated (lost R1); R8-4 eliminated (won R1, lost R2)
-            7: {"R7T1": _eliminated("R7T1"), "R7T2": _alive("R7T2", 2), "R7T3": _alive("R7T3", 3), "R7T4": _alive("R7T4", 4)},
-            8: {"R8T1": _alive("R8T1", 1), "R8T2": _alive("R8T2", 2), "R8T3": _alive("R8T3", 3), "R8T4": _eliminated("R8T4")},
+            7: {
+                "R7T1": _eliminated("R7T1"),
+                "R7T2": _alive("R7T2", 2),
+                "R7T3": _alive("R7T3", 3),
+                "R7T4": _alive("R7T4", 4),
+            },
+            8: {
+                "R8T1": _alive("R8T1", 1),
+                "R8T2": _alive("R8T2", 2),
+                "R8T3": _alive("R8T3", 3),
+                "R8T4": _eliminated("R8T4"),
+            },
         }
 
     def test_qf_conditional_1_when_guaranteed_home_opponent(self):
@@ -1162,7 +1373,11 @@ class TestBuildHostingEntries:
         # R5-2 has 2 confirmed wins; R8-4 has 1 (survived R1 → valid R2 opponent for R5-2).
         cross_region_wins: dict = {(5, 2): 2, (8, 4): 1}
         result = build_hosting_entries(
-            self._region8_odds_1a(), SLOTS_1A_4A_2025, region=8, season=2025, clazz=1,
+            self._region8_odds_1a(),
+            SLOTS_1A_4A_2025,
+            region=8,
+            season=2025,
+            clazz=1,
             all_region_odds=all_region_odds,
             cross_region_wins=cross_region_wins,
         )
@@ -1174,15 +1389,30 @@ class TestBuildHostingEntries:
         all_region_odds = self._all_region_odds_qf_test()
         # Restore R7-1 as alive — now R7-1 and R5-2 are both QF candidates.
         all_region_odds[7]["R7T1"] = StandingsOdds(
-            school="R7T1", p1=1.0, p2=0.0, p3=0.0, p4=0.0,
-            p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=False,
+            school="R7T1",
+            p1=1.0,
+            p2=0.0,
+            p3=0.0,
+            p4=0.0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=False,
         )
         cross_region_wins: dict = {(5, 2): 2, (8, 4): 1}
         baseline = build_hosting_entries(
-            self._region8_odds_1a(), SLOTS_1A_4A_2025, region=8, season=2025, clazz=1,
+            self._region8_odds_1a(),
+            SLOTS_1A_4A_2025,
+            region=8,
+            season=2025,
+            clazz=1,
         )
         result = build_hosting_entries(
-            self._region8_odds_1a(), SLOTS_1A_4A_2025, region=8, season=2025, clazz=1,
+            self._region8_odds_1a(),
+            SLOTS_1A_4A_2025,
+            region=8,
+            season=2025,
+            clazz=1,
             all_region_odds=all_region_odds,
             cross_region_wins=cross_region_wins,
         )
@@ -1205,8 +1435,10 @@ def _game_result(winner: str, loser: str) -> BracketGameResultRequest:
 def _school_to_seed_4teams() -> dict[str, tuple[int, int]]:
     """Minimal 4-team bracket: one seed per region in two regions."""
     return {
-        "AlphaS1": (1, 1), "AlphaS2": (1, 2),
-        "BetaS1":  (2, 1), "BetaS2":  (2, 2),
+        "AlphaS1": (1, 1),
+        "AlphaS2": (1, 2),
+        "BetaS1": (2, 1),
+        "BetaS2": (2, 2),
     }
 
 
@@ -1345,9 +1577,7 @@ class TestBuildBracketEntries:
 
     def test_5a_7a_hosting_second_round_is_null(self):
         """5A–7A has no second round: hosting.second_round conditional/marginal are None."""
-        result = build_bracket_entries(
-            self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5
-        )
+        result = build_bracket_entries(self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5)
         for entry in result:
             assert entry.hosting is not None
             assert entry.hosting.second_round.conditional is None
@@ -1355,18 +1585,14 @@ class TestBuildBracketEntries:
 
     def test_1a_4a_hosting_second_round_is_populated(self):
         """1A–4A has a second round: hosting.second_round marginal is not None."""
-        result = build_bracket_entries(
-            self._by_region(), SLOTS_1A_4A_2025, season=2025, clazz=1
-        )
+        result = build_bracket_entries(self._by_region(), SLOTS_1A_4A_2025, season=2025, clazz=1)
         for entry in result:
             assert entry.hosting is not None
             assert entry.hosting.second_round.marginal is not None
 
     def test_seed1_hosting_first_round_conditional_is_one(self):
         """Every seed-1 slot is the home team in round 1: conditional == 1.0."""
-        result = build_bracket_entries(
-            self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5
-        )
+        result = build_bracket_entries(self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5)
         seed1_entries = [e for e in result if e.seed == 1]
         assert seed1_entries, "expected at least one seed-1 entry"
         for entry in seed1_entries:
@@ -1375,9 +1601,7 @@ class TestBuildBracketEntries:
 
     def test_r1_marginal_equals_conditional_when_all_clinched(self):
         """When all teams are clinched (p_playoffs=1.0), R1 marginal == conditional."""
-        result = build_bracket_entries(
-            self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5
-        )
+        result = build_bracket_entries(self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5)
         for entry in result:
             h = entry.hosting
             assert h is not None
@@ -1513,28 +1737,33 @@ class TestBuildBracketLayout:
     """build_bracket_layout produces the correct tree structure for both bracket formats."""
 
     def test_1a_4a_produces_n_and_s_halves(self):
+        """1A-4A format produces exactly the N and S halves."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         assert set(layout.halves.keys()) == {"N", "S"}
 
     def test_1a_4a_north_has_four_rounds(self):
+        """1A-4A north half has 4 rounds with 8/4/2/1 games."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         rounds = layout.halves["N"]
         assert len(rounds) == 4
         assert [len(r) for r in rounds] == [8, 4, 2, 1]
 
     def test_1a_4a_south_has_four_rounds(self):
+        """1A-4A south half has 4 rounds with 8/4/2/1 games."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         rounds = layout.halves["S"]
         assert len(rounds) == 4
         assert [len(r) for r in rounds] == [8, 4, 2, 1]
 
     def test_5a_7a_north_has_three_rounds(self):
+        """5A-7A north half has 3 rounds with 4/2/1 games."""
         layout = build_bracket_layout(SLOTS_5A_7A_2025)
         rounds = layout.halves["N"]
         assert len(rounds) == 3
         assert [len(r) for r in rounds] == [4, 2, 1]
 
     def test_r1_games_have_slot_and_participants_not_feeds_from(self):
+        """Round-1 games carry a slot and both participants, and no feeds_from."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         for game in layout.halves["N"][0]:
             assert game.slot is not None
@@ -1543,6 +1772,7 @@ class TestBuildBracketLayout:
             assert game.feeds_from is None
 
     def test_later_round_games_have_feeds_from_not_slot(self):
+        """Rounds after round 1 carry feeds_from and have no slot."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         for round_ in layout.halves["N"][1:]:
             for game in round_:
@@ -1550,24 +1780,29 @@ class TestBuildBracketLayout:
                 assert game.slot is None
 
     def test_r2_first_game_feeds_from_r1_0_and_1(self):
+        """First round-2 game feeds from round-1 games 0 and 1."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         assert layout.halves["N"][1][0].feeds_from == [0, 1]
 
     def test_r2_second_game_feeds_from_r1_2_and_3(self):
+        """Second round-2 game feeds from round-1 games 2 and 3."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         assert layout.halves["N"][1][1].feeds_from == [2, 3]
 
     def test_sf_is_single_game_feeding_from_two_qf_games(self):
+        """The semifinal round is a single game fed by both quarterfinal games."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         sf_round = layout.halves["N"][-1]
         assert len(sf_round) == 1
         assert sf_round[0].feeds_from == [0, 1]
 
     def test_championship_feeds_from_halves(self):
+        """The championship game feeds from the N and S halves."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         assert layout.championship.feeds_from_halves == ["N", "S"]
 
     def test_r1_slot_numbers_match_format_input(self):
+        """Round-1 slot numbers match the slots given in the input format."""
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         north_r1_slots = [g.slot for g in layout.halves["N"][0]]
         expected = sorted(s.slot for s in SLOTS_1A_4A_2025 if s.north_south == "N")
@@ -1583,11 +1818,7 @@ class TestEliminatedTeamsInBracket:
     """After playoff R1, eliminated teams appear with school name and zero advancement odds."""
 
     # school names are "R{region}S{seed}" for easy assertion
-    _S2S: dict[str, tuple[int, int]] = {
-        f"R{r}S{s}": (r, s)
-        for r in (1, 2, 3, 4)
-        for s in (1, 2, 3, 4)
-    }
+    _S2S: dict[str, tuple[int, int]] = {f"R{r}S{s}": (r, s) for r in (1, 2, 3, 4) for s in (1, 2, 3, 4)}
 
     def _by_region_post_r1(self) -> dict:
         """by_region after R1: seeds 1+2 survived; seeds 3+4 eliminated (all-zero odds)."""
@@ -1605,13 +1836,13 @@ class TestEliminatedTeamsInBracket:
     def _state_post_r1(self):
         """PlayoffBracketState with seeds 3+4 eliminated in all regions."""
         db_losers = {f"R{r}S{s}" for r in (1, 2, 3, 4) for s in (3, 4)}
-        return build_playoff_bracket_state(
-            self._S2S, {}, db_losers, [], {}, SLOTS_5A_7A_2025, 2025, 5
-        )
+        return build_playoff_bracket_state(self._S2S, {}, db_losers, [], {}, SLOTS_5A_7A_2025, 2025, 5)
 
     def _entries(self, state):
+        """Build bracket entries for ``state`` using the post-R1 by-region odds fixture."""
         return build_bracket_entries(
-            self._by_region_post_r1(), SLOTS_5A_7A_2025,
+            self._by_region_post_r1(),
+            SLOTS_5A_7A_2025,
             all_region_odds=state.all_region_odds,
             wins_by_team=state.wins_by_team,
             cross_region_wins=state.cross_region_wins,
@@ -1674,13 +1905,10 @@ class TestBuildEnrichedBracketLayout:
     """build_enriched_bracket_layout populates participants and results on each BracketGame node."""
 
     # Slot 1 in SLOTS_5A_7A_2025: R1S1 (home) vs R2S4 (away), North half
-    _S2S: dict[tuple[int, int], str] = {
-        (r, s): f"R{r}S{s}"
-        for r in (1, 2, 3, 4)
-        for s in (1, 2, 3, 4)
-    }
+    _S2S: dict[tuple[int, int], str] = {(r, s): f"R{r}S{s}" for r in (1, 2, 3, 4) for s in (1, 2, 3, 4)}
 
     def _layout(self):
+        """Base (unenriched) bracket layout for the 5A-7A format used by these tests."""
         return build_bracket_layout(SLOTS_5A_7A_2025)
 
     def test_r1_participants_populated_when_seed_to_school_provided(self):
@@ -1752,8 +1980,8 @@ class TestBuildEnrichedBracketLayout:
         # In 5A-7A North, R1 has 4 games; QF (round index 1) has 2 games.
         # Slots N[0][0] (R1S1 vs R2S4) and N[0][1] (R2S2 vs R1S3) feed into N[1][0].
         confirmed = [
-            ("R1S1", "R2S4", 28, 14),   # N[0][0] winner: R1S1
-            ("R2S2", "R1S3", 21, 7),     # N[0][1] winner: R2S2
+            ("R1S1", "R2S4", 28, 14),  # N[0][0] winner: R1S1
+            ("R2S2", "R1S3", 21, 7),  # N[0][1] winner: R2S2
         ]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
         qf_game = layout.halves["N"][1][0]
@@ -1796,13 +2024,19 @@ class TestBuildEnrichedBracketLayout:
     def test_championship_result_populated(self):
         """Championship result is set when both SF winners have played each other."""
         confirmed = [
-            ("R1S1", "R2S4", 28, 14), ("R2S2", "R1S3", 21, 7),
-            ("R2S1", "R1S4", 35, 0), ("R1S2", "R2S3", 14, 10),
-            ("R1S1", "R2S2", 20, 17), ("R2S1", "R1S2", 30, 14),
+            ("R1S1", "R2S4", 28, 14),
+            ("R2S2", "R1S3", 21, 7),
+            ("R2S1", "R1S4", 35, 0),
+            ("R1S2", "R2S3", 14, 10),
+            ("R1S1", "R2S2", 20, 17),
+            ("R2S1", "R1S2", 30, 14),
             ("R1S1", "R2S1", 24, 21),
-            ("R3S1", "R4S4", 28, 0), ("R4S2", "R3S3", 21, 7),
-            ("R4S1", "R3S4", 35, 0), ("R3S2", "R4S3", 14, 10),
-            ("R3S1", "R4S2", 20, 17), ("R4S1", "R3S2", 30, 14),
+            ("R3S1", "R4S4", 28, 0),
+            ("R4S2", "R3S3", 21, 7),
+            ("R4S1", "R3S4", 35, 0),
+            ("R3S2", "R4S3", 14, 10),
+            ("R3S1", "R4S2", 20, 17),
+            ("R4S1", "R3S2", 30, 14),
             ("R3S1", "R4S1", 24, 21),
             ("R1S1", "R3S1", 31, 28),  # championship
         ]
@@ -1845,9 +2079,7 @@ class TestBuildEnrichedBracketLayout:
             "R1S1": {"first_round": 1.0, "quarterfinals": 1.0, "semifinals": None, "second_round": None},
         }
         confirmed = [("R1S1", "R2S4", 28, 14)]  # only N[0][0] resolved → N[1][0].participant_b = None
-        layout = build_enriched_bracket_layout(
-            self._layout(), self._S2S, confirmed, [], hosting_conditional=hosting
-        )
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [], hosting_conditional=hosting)
         qf_game = layout.halves["N"][1][0]
         assert qf_game.participant_b is None
         assert qf_game.home_team is not None
@@ -1869,9 +2101,7 @@ class TestBuildEnrichedBracketLayout:
         simulated = [("R1S1", None, 12, 0, "first_round")]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
         qf_game = layout.halves["N"][1][0]
-        winner_schools = {
-            p.school for p in (qf_game.participant_a, qf_game.participant_b) if p
-        }
+        winner_schools = {p.school for p in (qf_game.participant_a, qf_game.participant_b) if p}
         assert "R1S1" in winner_schools
 
     def test_winner_only_result_has_null_loser_on_game_node(self):
@@ -1916,6 +2146,7 @@ class TestCollectPossibleOpponents:
     """_collect_possible_opponents returns R1 seeds on the opponent's bracket branch."""
 
     def _layout(self):
+        """Base bracket layout for the 5A-7A format used by these tests."""
         return build_bracket_layout(SLOTS_5A_7A_2025)
 
     def test_qf_opponents_of_r1s1(self):
@@ -1956,16 +2187,25 @@ class TestBuildPlayoffBracketStateLoserless:
     """build_playoff_bracket_state handles loser-less results via round-based elimination."""
 
     def _school_to_seed(self):
+        """8-team school_to_seed fixture matching the North half of SLOTS_5A_7A_2025."""
         # 8 teams (2 regions × 4 seeds) matching North half of SLOTS_5A_7A_2025
         return {
-            "R1S1": (1, 1), "R1S2": (1, 2), "R1S3": (1, 3), "R1S4": (1, 4),
-            "R2S1": (2, 1), "R2S2": (2, 2), "R2S3": (2, 3), "R2S4": (2, 4),
+            "R1S1": (1, 1),
+            "R1S2": (1, 2),
+            "R1S3": (1, 3),
+            "R1S4": (1, 4),
+            "R2S1": (2, 1),
+            "R2S2": (2, 2),
+            "R2S3": (2, 3),
+            "R2S4": (2, 4),
         }
 
     def _loserless_result(self, winner: str, round_: str) -> BracketGameResultRequest:
+        """Build a submitted result naming only the winner and target round, no loser."""
         return BracketGameResultRequest(winner=winner, round=round_)
 
     def _state(self, submitted):
+        """Build playoff bracket state from ``submitted`` results over the 5A-7A layout."""
         layout = build_bracket_layout(SLOTS_5A_7A_2025)
         return build_playoff_bracket_state(
             school_to_seed=self._school_to_seed(),
@@ -2025,12 +2265,8 @@ class TestApplyRoundCeilings:
         sf: float = 0.4,
         fn: float = 0.2,
         ch: float = 0.1,
-    ) -> "TeamBracketEntry":
-        from backend.api.models.responses import (
-            BracketSlotHosting,
-            RoundHostingOdds,
-            TeamBracketEntry,
-        )
+    ) -> TeamBracketEntry:
+        """Build a TeamBracketEntry with the given odds and a fixed hosting-odds fixture."""
         hosting = BracketSlotHosting(
             first_round=RoundHostingOdds(conditional=1.0, marginal=0.9),
             second_round=RoundHostingOdds(conditional=0.7, marginal=0.5),
@@ -2038,10 +2274,19 @@ class TestApplyRoundCeilings:
             semifinals=RoundHostingOdds(conditional=0.3, marginal=0.2),
         )
         return TeamBracketEntry(
-            region=region, seed=seed, school=f"R{region}S{seed}",
-            second_round=sr, quarterfinals=qf, semifinals=sf, finals=fn, champion=ch,
-            second_round_weighted=sr, quarterfinals_weighted=qf,
-            semifinals_weighted=sf, finals_weighted=fn, champion_weighted=ch,
+            region=region,
+            seed=seed,
+            school=f"R{region}S{seed}",
+            second_round=sr,
+            quarterfinals=qf,
+            semifinals=sf,
+            finals=fn,
+            champion=ch,
+            second_round_weighted=sr,
+            quarterfinals_weighted=qf,
+            semifinals_weighted=sf,
+            finals_weighted=fn,
+            champion_weighted=ch,
             hosting=hosting,
         )
 
@@ -2062,7 +2307,7 @@ class TestApplyRoundCeilings:
         entry = self._entry(1, 2)
         result = _apply_round_ceilings([entry], {(1, 2): "second_round"})
         out = result[0]
-        assert out.second_round == pytest.approx(0.8)   # preserved
+        assert out.second_round == pytest.approx(0.8)  # preserved
         assert out.quarterfinals == 0.0
         assert out.semifinals == 0.0
         assert out.finals == 0.0

@@ -912,7 +912,7 @@ def compute_second_round_home_odds(
                     continue
 
         # Path B — eliminated teams that won R1 can have historical hosting computed via snapshots.
-        if seed is None or o.p_playoffs <= 0:
+        if o.p_playoffs <= 0:
             if not (
                 seed is None
                 and o.clinched and o.eliminated and round_snapshots

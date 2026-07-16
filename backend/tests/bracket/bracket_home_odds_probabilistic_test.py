@@ -1085,10 +1085,10 @@ def test_sf_deterministic_seed1_r2_away_vs_r1s1() -> None:
 def test_sf_deterministic_falls_through_without_all_region_odds() -> None:
     """Without all_region_odds, falls through to probabilistic even when rounds_completed=2."""
     result = compute_semifinal_home_odds(
-        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=2,
+        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=2,
     )
-    # Probabilistic: fractional value (not exactly 0 or 1)
-    assert 0.0 < result["R1s1"] < 1.0
+    # Probabilistic: seed 2 hosts 3 of 4 possible SF opponents (not vs seed 1 same region)
+    assert 0.0 < result["R1s2"] < 1.0
 
 
 def test_sf_deterministic_sum_invariant_5a7a_north() -> None:
@@ -1428,8 +1428,8 @@ def test_qf_snapshots_resolve_ambiguous_team_r2h() -> None:
         all_region_odds=all_odds, round_snapshots={1: r1_odds},
     )
 
-    assert 0.0 < result_without["R1s2"] < 1.0          # probabilistic fallback (bug)
-    assert result_with["R1s2"] == pytest.approx(0.0)   # fix: (4,1) hosts QF
+    assert result_without["R1s2"] == pytest.approx(0.0)  # (4,1) is only alive QF opp; seed 1 hosts
+    assert result_with["R1s2"] == pytest.approx(0.0)    # snapshots confirm r2h=True; (4,1) hosts QF
 
 
 def test_qf_snapshots_resolve_ambiguous_opp_r2h() -> None:
@@ -1453,8 +1453,8 @@ def test_qf_snapshots_resolve_ambiguous_opp_r2h() -> None:
         all_region_odds=all_odds, round_snapshots={1: r1_odds},
     )
 
-    assert 0.0 < result_without["R1s1"] < 1.0          # probabilistic fallback (bug)
-    assert result_with["R1s1"] == pytest.approx(0.0)   # fix: (4,2) hosts QF
+    assert result_without["R1s1"] == pytest.approx(1.0)  # R4s2 only alive QF opp; seed 1 hosts
+    assert result_with["R1s1"] == pytest.approx(0.0)    # snapshots show R2s1 beat R4s2 in R2; R4s2 hosts QF
 
 
 def test_r2_snapshots_search_oldest_for_two_rounds_back() -> None:
@@ -1506,7 +1506,7 @@ def test_qf_snapshots_resolve_opp_r2h_two_rounds_back() -> None:
         all_region_odds=all_odds, round_snapshots={1: r1_odds, 2: r2_odds},
     )
 
-    assert 0.0 < result_only_r2["R1s1"] < 1.0              # probabilistic (opp_r2h unresolved)
+    assert result_only_r2["R1s1"] == pytest.approx(0.0)       # no alive QF candidates in all_odds
     assert result_full_history["R1s1"] == pytest.approx(0.0)  # (4,2) hosts QF
 
 

@@ -822,6 +822,7 @@ def _collect_possible_opponents(
 
     # 5. Recursively collect all R1 seeds reachable from the opponent branch.
     def _r1_seeds(ri: int, gi: int) -> set[tuple[int, int]]:
+        """Recursively collect (region, seed) pairs feeding into game ``gi`` of round ``ri``."""
         if ri == 0:
             g = rounds[0][gi]
             result: set[tuple[int, int]] = set()
@@ -1101,6 +1102,7 @@ def build_enriched_bracket_layout(
     The championship node is similarly enriched from the two Semifinal winners.
     """
     def _make_participant(region: int, seed: int) -> BracketParticipant:
+        """Build a ``BracketParticipant`` for the given slot, resolving its school if known."""
         school = seed_to_school.get((region, seed)) if seed_to_school else None
         return BracketParticipant(region=region, seed=seed, school=school)
 
@@ -1147,6 +1149,7 @@ def build_enriched_bracket_layout(
         away_p: BracketParticipant | None,
         round_name: str,
     ) -> BracketGameResult | None:
+        """Look up the confirmed or simulated result for a matchup, by pair or by winner-only."""
         # Pair-based lookup (both participants known).
         if home_p and away_p and home_p.school and away_p.school:
             raw = results_by_pair.get(frozenset((home_p.school, away_p.school)))

@@ -62,12 +62,14 @@ class ParticipantRef(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _coerce_string(cls, v: object) -> object:
+        """Coerce a plain school-name string into a ``{"school": ...}`` mapping."""
         if isinstance(v, str):
             return {"school": v}
         return v
 
     @model_validator(mode="after")
     def _validate_ref(self) -> "ParticipantRef":
+        """Require exactly one of ``school`` or the (``region``, ``seed``) pair."""
         has_name = self.school is not None
         half_slot = (self.region is None) != (self.seed is None)
         has_slot = self.region is not None and self.seed is not None
@@ -99,6 +101,7 @@ class BracketGameResultRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_loser_or_round(self) -> "BracketGameResultRequest":
+        """Require exactly one of ``loser`` or ``round``, and validate ``round``'s value."""
         has_loser = self.loser is not None
         has_round = self.round is not None
         if not has_loser and not has_round:
