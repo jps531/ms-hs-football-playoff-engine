@@ -969,13 +969,17 @@ def build_enriched_bracket_layout(
     seed_to_school: dict[tuple[int, int], str] | None,
     confirmed_results: list[tuple[str, str, int | None, int | None]],
     simulated_results: list[tuple[str, str, int | None, int | None]],
+    hosting_conditional: dict[str, dict[str, float | None]] | None = None,
 ) -> BracketLayout:
     """Enrich a ``BracketLayout`` with per-game participants and results.
 
-    Each ``BracketGame`` node gains ``home_participant``, ``away_participant``,
-    and ``result`` (set when the game has a confirmed DB result or a simulated
-    result from the request body).  Confirmed results take priority — a simulated
-    result for the same pair is ignored when the DB result already exists.
+    Each ``BracketGame`` node gains ``round``, ``participant_a``,
+    ``participant_b``, ``home_school``, and ``result``.  Confirmed DB results
+    take priority over simulated results for the same pair.
+
+    ``participant_a`` is positional (format home slot on R1, feeds_from[0]
+    winner on R2+), not a hosting indicator.  ``home_school`` is set when one
+    participant's conditional hosting odds for the round are 1.0.
 
     Participants propagate round-by-round: R1 participants come from
     ``seed_to_school``; later-round participants are the winners of the
@@ -1038,33 +1042,53 @@ def build_enriched_bracket_layout(
     half_sf_winners: dict[str, BracketParticipant | None] = {}
 
     for ns, rounds in layout.halves.items():
+        total_rounds = len(rounds)
         # round_winners[i] = winner BracketParticipant from game i in that round (or None)
         prev_round_winners: list[BracketParticipant | None] = []
         enriched_rounds: list[list[BracketGame]] = []
 
-        for games in rounds:
+        for round_idx, games in enumerate(rounds):
+            if round_idx == 0:
+                round_name = "first_round"
+            else:
+                rounds_from_end = total_rounds - round_idx
+                round_name = {1: "semifinals", 2: "quarterfinals"}.get(
+                    rounds_from_end, "second_round"
+                )
+
             cur_round_winners: list[BracketParticipant | None] = []
             enriched_games: list[BracketGame] = []
 
             for game in games:
                 if game.slot is not None:  # R1 leaf
                     assert game.home is not None and game.away is not None
-                    home_p = _make_participant(game.home[0], game.home[1])
-                    away_p = _make_participant(game.away[0], game.away[1])
+                    p_a = _make_participant(game.home[0], game.home[1])
+                    p_b = _make_participant(game.away[0], game.away[1])
                 else:  # later-round interior node
                     assert game.feeds_from is not None
-                    home_p = prev_round_winners[game.feeds_from[0]]
-                    away_p = prev_round_winners[game.feeds_from[1]]
+                    p_a = prev_round_winners[game.feeds_from[0]]
+                    p_b = prev_round_winners[game.feeds_from[1]]
 
-                result = _find_result(home_p, away_p)
+                result = _find_result(p_a, p_b)
                 winner_p: BracketParticipant | None = None
                 if result is not None:
                     winner_p = result.winner
 
+                home_school: str | None = None
+                if hosting_conditional and p_a and p_a.school and p_b and p_b.school:
+                    a_cond = (hosting_conditional.get(p_a.school) or {}).get(round_name)
+                    b_cond = (hosting_conditional.get(p_b.school) or {}).get(round_name)
+                    if a_cond is not None and a_cond > 0.99:
+                        home_school = p_a.school
+                    elif b_cond is not None and b_cond > 0.99:
+                        home_school = p_b.school
+
                 enriched_games.append(BracketGame(
                     slot=game.slot, home=game.home, away=game.away,
                     feeds_from=game.feeds_from,
-                    home_participant=home_p, away_participant=away_p,
+                    round=round_name,
+                    participant_a=p_a, participant_b=p_b,
+                    home_school=home_school,
                     result=result,
                 ))
                 cur_round_winners.append(winner_p)

@@ -122,9 +122,19 @@ async def get_bracket(
             school_to_seed=state.school_to_seed,
         )
         seed_to_school = {(r, s): sch for sch, (r, s) in state.school_to_seed.items()}
+        hosting_conditional = {
+            e.school: {
+                "first_round": e.hosting.first_round.conditional,
+                "second_round": e.hosting.second_round.conditional if e.hosting.second_round else None,
+                "quarterfinals": e.hosting.quarterfinals.conditional,
+                "semifinals": e.hosting.semifinals.conditional,
+            }
+            for e in entries if e.school and e.hosting
+        }
         bracket_layout = build_enriched_bracket_layout(
             build_bracket_layout(slots), seed_to_school,
             state.confirmed_game_results, simulated_results=[],
+            hosting_conditional=hosting_conditional,
         )
     else:
         matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
@@ -197,9 +207,19 @@ async def simulate_bracket(
             lo = _resolve_ref_to_school(r.loser, seed_to_school)
             if w is not None and lo is not None:
                 simulated.append((w, lo, r.winner_score, r.loser_score))
+        hosting_conditional = {
+            e.school: {
+                "first_round": e.hosting.first_round.conditional,
+                "second_round": e.hosting.second_round.conditional if e.hosting.second_round else None,
+                "quarterfinals": e.hosting.quarterfinals.conditional,
+                "semifinals": e.hosting.semifinals.conditional,
+            }
+            for e in entries if e.school and e.hosting
+        }
         bracket_layout = build_enriched_bracket_layout(
             build_bracket_layout(slots), seed_to_school,
             state.confirmed_game_results, simulated,
+            hosting_conditional=hosting_conditional,
         )
     else:
         slot_wins: dict[str, int] = {}

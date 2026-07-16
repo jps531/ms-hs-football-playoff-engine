@@ -384,8 +384,10 @@ class BracketGame(BaseModel):
     indices into the *previous* round's game list indicating which two R1-path
     winners meet here.  ``slot``/``home``/``away`` are ``None`` for non-R1 nodes.
 
-    ``home_participant`` and ``away_participant`` are populated when the teams
-    occupying each side are known (seeds clinched or bracket advanced).
+    ``participant_a`` and ``participant_b`` are positional: ``participant_a``
+    corresponds to the ``home`` format slot on R1 nodes and to the
+    ``feeds_from[0]`` winner on R2+ nodes — not a hosting indicator.
+    ``home_school`` is the authoritative field for who hosts the game.
     ``result`` is set once the game has a confirmed or simulated outcome.
     """
 
@@ -393,8 +395,10 @@ class BracketGame(BaseModel):
     home: tuple[int, int] | None = None
     away: tuple[int, int] | None = None
     feeds_from: list[int] | None = None
-    home_participant: BracketParticipant | None = None
-    away_participant: BracketParticipant | None = None
+    round: str | None = None
+    participant_a: BracketParticipant | None = None
+    participant_b: BracketParticipant | None = None
+    home_school: str | None = None
     result: BracketGameResult | None = None
 
 
