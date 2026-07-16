@@ -96,11 +96,11 @@ Structure:
 - `championship` — the final game node with `feeds_from_halves: ["N", "S"]`.
 
 Each `BracketGame` node:
-- `slot`, `home`, `away` — set on R1 leaf nodes only (`home`/`away` are `[region, seed]` pairs).
+- `slot` — set on R1 leaf nodes only; `null` for all R2+ nodes.
 - `feeds_from` — set on R2+ nodes; indices into the previous round's game list.
 - `round` — the round name for this game: `"first_round"`, `"second_round"` (1A–4A only), `"quarterfinals"`, or `"semifinals"`.
 - `participant_a`, `participant_b` — `{ region, seed, school }` objects identifying the two teams. `participant_a` corresponds to the `home` format slot on R1 nodes and to the `feeds_from[0]` winner on R2+ nodes — positional only, not a hosting indicator. `school` is `null` when the team is not yet known. Both are `null` pre-playoff.
-- `home_school` — the school that hosts this game. Populated when one participant's conditional hosting odds for this round are 1.0; `null` before seedings are clinched or when hosting is not yet determined.
+- `home_team` — `{ region, seed, school }` identifying who hosts this game. Always set on R1 nodes (region/seed known from the bracket format; `school` null until seedings clinch). Set on R2+ nodes when one participant's conditional hosting odds are 1.0; `null` when hosting is not yet determined or no participants are known.
 - `result` — set when the game has a confirmed or simulated outcome (see below). `null` when not yet played.
 
 `BracketGameResult`:

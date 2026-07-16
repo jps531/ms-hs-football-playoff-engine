@@ -1532,12 +1532,12 @@ class TestBuildBracketLayout:
         assert len(rounds) == 3
         assert [len(r) for r in rounds] == [4, 2, 1]
 
-    def test_r1_games_have_slot_home_away_not_feeds_from(self):
+    def test_r1_games_have_slot_and_participants_not_feeds_from(self):
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
         for game in layout.halves["N"][0]:
             assert game.slot is not None
-            assert game.home is not None
-            assert game.away is not None
+            assert game.participant_a is not None
+            assert game.participant_b is not None
             assert game.feeds_from is None
 
     def test_later_round_games_have_feeds_from_not_slot(self):
@@ -1546,8 +1546,6 @@ class TestBuildBracketLayout:
             for game in round_:
                 assert game.feeds_from is not None
                 assert game.slot is None
-                assert game.home is None
-                assert game.away is None
 
     def test_r2_first_game_feeds_from_r1_0_and_1(self):
         layout = build_bracket_layout(SLOTS_1A_4A_2025)
@@ -1820,20 +1818,42 @@ class TestBuildEnrichedBracketLayout:
             assert rounds[1][0].round == "quarterfinals"
             assert rounds[2][0].round == "semifinals"
 
-    def test_home_school_set_when_hosting_deterministic(self):
-        """home_school is participant_a's school when their conditional hosting = 1.0."""
+    def test_home_team_set_on_r1_nodes_without_hosting_lookup(self):
+        """R1 nodes always have home_team set (= participant_a) even with no hosting_conditional."""
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
+        for game in layout.halves["N"][0]:
+            assert game.home_team is not None
+            assert game.home_team.region == game.participant_a.region
+            assert game.home_team.seed == game.participant_a.seed
+
+    def test_home_team_set_when_hosting_deterministic(self):
+        """home_team is a BracketParticipant with the hosting school when conditional = 1.0."""
         hosting = {
-            "R1S1": {"first_round": 1.0, "quarterfinals": None, "semifinals": None, "second_round": None},
+            "R1S1": {"first_round": 1.0, "quarterfinals": 1.0, "semifinals": None, "second_round": None},
             "R2S4": {"first_round": 0.0, "quarterfinals": None, "semifinals": None, "second_round": None},
         }
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [], hosting_conditional=hosting)
-        game = layout.halves["N"][0][0]  # R1S1 vs R2S4
-        assert game.home_school == "R1S1"
+        game = layout.halves["N"][0][0]  # R1S1 vs R2S4 — R1, so home_team = participant_a always
+        assert game.home_team is not None
+        assert game.home_team.school == "R1S1"
 
-    def test_home_school_null_without_hosting_lookup(self):
-        """home_school is None on all nodes when hosting_conditional is not provided."""
+    def test_home_team_set_when_only_one_participant_known(self):
+        """home_team is set when participant_a hosts deterministically even with no opponent."""
+        hosting = {
+            "R1S1": {"first_round": 1.0, "quarterfinals": 1.0, "semifinals": None, "second_round": None},
+        }
+        confirmed = [("R1S1", "R2S4", 28, 14)]  # only N[0][0] resolved → N[1][0].participant_b = None
+        layout = build_enriched_bracket_layout(
+            self._layout(), self._S2S, confirmed, [], hosting_conditional=hosting
+        )
+        qf_game = layout.halves["N"][1][0]
+        assert qf_game.participant_b is None
+        assert qf_game.home_team is not None
+        assert qf_game.home_team.school == "R1S1"
+
+    def test_home_team_null_on_r2_without_hosting_lookup(self):
+        """R2+ nodes have home_team=None when no hosting_conditional is provided."""
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
-        for half in ("N", "S"):
-            for round_games in layout.halves[half]:
-                for game in round_games:
-                    assert game.home_school is None
+        for round_games in layout.halves["N"][1:]:  # skip R1
+            for game in round_games:
+                assert game.home_team is None

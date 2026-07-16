@@ -379,26 +379,28 @@ class BracketGameResult(BaseModel):
 class BracketGame(BaseModel):
     """One game node in the bracket tree.
 
-    R1 leaf nodes have ``slot``, ``home``, and ``away`` set (from the playoff
-    format).  All later-round nodes have ``feeds_from`` set: a pair of 0-based
-    indices into the *previous* round's game list indicating which two R1-path
-    winners meet here.  ``slot``/``home``/``away`` are ``None`` for non-R1 nodes.
+    R1 leaf nodes have ``slot`` set and ``participant_a``/``participant_b``
+    pre-populated with region and seed (school is null until seedings clinch).
+    All later-round nodes have ``feeds_from`` set: a pair of 0-based indices
+    into the *previous* round's game list indicating which two winners meet here.
+    ``slot`` is ``None`` for non-R1 nodes.
 
-    ``participant_a`` and ``participant_b`` are positional: ``participant_a``
-    corresponds to the ``home`` format slot on R1 nodes and to the
-    ``feeds_from[0]`` winner on R2+ nodes — not a hosting indicator.
-    ``home_school`` is the authoritative field for who hosts the game.
+    ``participant_a`` and ``participant_b`` are positional: on R1 nodes
+    ``participant_a`` is the format-designated home side; on R2+ nodes it is the
+    ``feeds_from[0]`` winner — neither implies hosting.
+    ``home_team`` is the authoritative ``{ region, seed, school }`` object for who
+    hosts the game. Always set on R1 nodes (region/seed known from the format;
+    school null until seedings clinch). Set on R2+ nodes when one participant's
+    conditional hosting odds are 1.0; null when hosting is not yet determined.
     ``result`` is set once the game has a confirmed or simulated outcome.
     """
 
     slot: int | None = None
-    home: tuple[int, int] | None = None
-    away: tuple[int, int] | None = None
     feeds_from: list[int] | None = None
     round: str | None = None
     participant_a: BracketParticipant | None = None
     participant_b: BracketParticipant | None = None
-    home_school: str | None = None
+    home_team: BracketParticipant | None = None
     result: BracketGameResult | None = None
 
 
