@@ -948,6 +948,48 @@ def test_r2_deterministic_eliminated_team_gets_zero() -> None:
 
 
 # ---------------------------------------------------------------------------
+# compute_second_round_home_odds — Path C with eliminated opponent (probabilistic)
+# ---------------------------------------------------------------------------
+#
+# R1s2 has not played yet (rounds_completed=0, wins_confirmed=0, probabilistic path).
+# Their R2 opponent slot contains R3s1 (alive) and R4s4 (eliminated after R1).
+# Without all_region_odds, both candidates get equal weight → marginal ≈ 0.25
+#   (0.5 R1 win × 0.5 hosting chance = 0.5×0.5×0+0.5×0.5×1 / total = 0.25).
+# With all_region_odds showing R4s4 eliminated, only R3s1 remains → R1s2 always
+# away vs seed-1 → marginal = 0.0.
+
+
+def test_r2_probabilistic_eliminated_r2_opp_excluded() -> None:
+    """Path C: eliminated R2 opponent excluded via all_region_odds → marginal = 0.0.
+
+    R1s2 hasn't played (probabilistic path). Their R2 opp slot is R3s1 (alive) vs
+    R4s4 (eliminated). With all_region_odds provided, R4s4 is excluded from weights.
+    Only R3s1 (seed 1) remains — always hosts vs R1s2 (seed 2) → marginal = 0.0.
+    """
+    elim_r4s4 = StandingsOdds(school="R4s4", p1=0.0, p2=0.0, p3=0.0, p4=1.0,
+                               p_playoffs=0.0, final_playoffs=0.0, clinched=True, eliminated=True)
+    all_odds = {3: {"R3s1": _locked("R3s1", 1)}, 4: {"R4s4": elim_r4s4}}
+    result = compute_second_round_home_odds(
+        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_1A_4A_2025, ODD_SEASON,
+        all_region_odds=all_odds,
+    )
+    assert result["R1s2"] == pytest.approx(0.0)
+
+
+def test_r2_probabilistic_without_all_region_odds_returns_nonzero() -> None:
+    """Path C without all_region_odds: eliminated R2 opp still weighted → marginal > 0.
+
+    Same setup as above but without all_region_odds. R4s4 gets equal weight to
+    R3s1. R1s2 hosts vs R4s4 (seed 4) → marginal ≈ 0.25 (0.5 R1 win × 0.5 hosting).
+    This confirms all_region_odds is what causes the change.
+    """
+    result = compute_second_round_home_odds(
+        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_1A_4A_2025, ODD_SEASON,
+    )
+    assert result["R1s2"] == pytest.approx(0.25, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
 # compute_quarterfinal_home_odds — deterministic path (5A-7A, qf_offset=1)
 # ---------------------------------------------------------------------------
 #

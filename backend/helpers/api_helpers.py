@@ -428,7 +428,9 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
         )
         r2_home_dict = (
             compute_second_round_home_odds(
-                region, region_odds, slots, season, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed
+                region, region_odds, slots, season,
+                rounds_completed=rounds_completed, wins_confirmed=wins_confirmed,
+                all_region_odds=all_region_odds,
             )
             if is_1a_4a
             else {}
@@ -476,6 +478,7 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
                     win_prob_fn=win_prob_fn_weighted,
                     rounds_completed=rounds_completed,
                     wins_confirmed=wins_confirmed,
+                    all_region_odds=all_region_odds,
                 )
                 if is_1a_4a
                 else {}

@@ -954,6 +954,7 @@ def compute_second_round_home_odds(
                 odd_year=odd_year,
                 use_region_tiebreak=True,
                 win_prob_fn=win_prob_fn,
+                all_region_odds=all_region_odds,
             )
             p_home += p_seed * p_r1 * p_r2_home
         result[school] = p_home
