@@ -747,6 +747,13 @@ class PlayoffBracketState:
     eliminated_hosting_map: dict[str, tuple]
     matchup_fn: MatchupProbFn | None
     confirmed_game_results: list[tuple[str, str, int | None, int | None]]
+    round_ceiling: dict[tuple[int, int], str]
+
+
+# Advancement round order for ceiling comparisons and _apply_round_ceilings.
+_ROUND_ADVANCEMENT_ORDER = ["second_round", "quarterfinals", "semifinals", "finals", "champion"]
+# Hosting round order (no 'finals'/'champion' — championship has its own node).
+_ROUND_HOSTING_ORDER = ["first_round", "second_round", "quarterfinals", "semifinals"]
 
 
 def _collect_possible_opponents(
@@ -864,6 +871,7 @@ def build_playoff_bracket_state(
             submitted_winners.add(w)
 
     losers_known: set[tuple[int, int]] = set()
+    round_ceiling: dict[tuple[int, int], str] = {}
     for school in db_losers:
         if school not in submitted_winners:
             losers_known.add(school_to_seed[school])
@@ -877,9 +885,17 @@ def build_playoff_bracket_state(
                 losers_known.add(school_to_seed[ll])
         elif r.round is not None and w is not None and w in school_to_seed and layout is not None:
             winner_region, winner_seed = school_to_seed[w]
-            losers_known.update(
-                _collect_possible_opponents(layout, winner_region, winner_seed, r.round)
-            )
+            for opp in _collect_possible_opponents(layout, winner_region, winner_seed, r.round):
+                # Keep the more-restrictive (earlier) ceiling if already set.
+                if opp in round_ceiling:
+                    existing_idx = _ROUND_ADVANCEMENT_ORDER.index(round_ceiling[opp]) \
+                        if round_ceiling[opp] in _ROUND_ADVANCEMENT_ORDER else len(_ROUND_ADVANCEMENT_ORDER)
+                    new_idx = _ROUND_ADVANCEMENT_ORDER.index(r.round) \
+                        if r.round in _ROUND_ADVANCEMENT_ORDER else len(_ROUND_ADVANCEMENT_ORDER)
+                    if new_idx < existing_idx:
+                        round_ceiling[opp] = r.round
+                else:
+                    round_ceiling[opp] = r.round
 
     all_region_odds: dict[int, dict[str, StandingsOdds]] = {}
     for school, (reg, seed) in school_to_seed.items():
@@ -920,6 +936,7 @@ def build_playoff_bracket_state(
         eliminated_hosting_map=eliminated_hosting_map,
         matchup_fn=matchup_fn,
         confirmed_game_results=[],
+        round_ceiling=round_ceiling,
     )
 
 
@@ -1060,7 +1077,7 @@ def build_enriched_bracket_layout(
     layout: BracketLayout,
     seed_to_school: dict[tuple[int, int], str] | None,
     confirmed_results: list[tuple[str, str, int | None, int | None]],
-    simulated_results: list[tuple[str, str | None, int | None, int | None]],
+    simulated_results: list[tuple[str, str | None, int | None, int | None, str | None]],
     hosting_conditional: dict[str, dict[str, float | None]] | None = None,
 ) -> BracketLayout:
     """Enrich a ``BracketLayout`` with per-game participants and results.
@@ -1086,9 +1103,10 @@ def build_enriched_bracket_layout(
 
     # Build results lookup keyed by the frozenset of the two schools.
     # Confirmed (DB) results are inserted first; simulated results only fill gaps.
-    # winner_only holds simulated entries where the loser was unspecified (None).
+    # winner_only holds simulated entries where the loser was unspecified; keyed
+    # by (school, round_name) so the result only applies to the specific round.
     results_by_pair: dict[frozenset, BracketGameResult] = {}
-    winner_only: dict[str, BracketGameResult] = {}
+    winner_only: dict[tuple[str, str], BracketGameResult] = {}
     for winner, loser, ws, ls in confirmed_results:
         key = frozenset((winner, loser))
         if key not in results_by_pair:
@@ -1099,10 +1117,11 @@ def build_enriched_bracket_layout(
                 loser_score=ls,
                 simulated=False,
             )
-    for winner, loser, ws, ls in simulated_results:
+    for winner, loser, ws, ls, rnd in simulated_results:
         if loser is None:
-            if winner not in winner_only:
-                winner_only[winner] = BracketGameResult(
+            wo_key = (winner, rnd or "")
+            if wo_key not in winner_only:
+                winner_only[wo_key] = BracketGameResult(
                     winner=BracketParticipant(region=0, seed=0, school=winner),
                     loser=None,
                     winner_score=ws,
@@ -1123,6 +1142,7 @@ def build_enriched_bracket_layout(
     def _find_result(
         home_p: BracketParticipant | None,
         away_p: BracketParticipant | None,
+        round_name: str,
     ) -> BracketGameResult | None:
         # Pair-based lookup (both participants known).
         if home_p and away_p and home_p.school and away_p.school:
@@ -1138,15 +1158,17 @@ def build_enriched_bracket_layout(
                     winner_score=raw.winner_score, loser_score=raw.loser_score,
                     simulated=raw.simulated,
                 )
-        # Winner-only lookup: one participant won without a specified opponent.
+        # Winner-only lookup: keyed by (school, round_name) so it only fires for
+        # the specific round the result was submitted for.
         for p in (home_p, away_p):
-            if p and p.school and p.school in winner_only:
-                raw = winner_only[p.school]
-                return BracketGameResult(
-                    winner=p, loser=None,
-                    winner_score=raw.winner_score, loser_score=raw.loser_score,
-                    simulated=raw.simulated,
-                )
+            if p and p.school:
+                raw = winner_only.get((p.school, round_name))
+                if raw is not None:
+                    return BracketGameResult(
+                        winner=p, loser=None,
+                        winner_score=raw.winner_score, loser_score=raw.loser_score,
+                        simulated=raw.simulated,
+                    )
         return None
 
     enriched_halves: dict[str, list[list[BracketGame]]] = {}
@@ -1180,7 +1202,7 @@ def build_enriched_bracket_layout(
                     p_a = prev_round_winners[game.feeds_from[0]]
                     p_b = prev_round_winners[game.feeds_from[1]]
 
-                result = _find_result(p_a, p_b)
+                result = _find_result(p_a, p_b, round_name)
                 winner_p: BracketParticipant | None = None
                 if result is not None:
                     winner_p = result.winner
@@ -1217,7 +1239,7 @@ def build_enriched_bracket_layout(
 
     north_p = half_sf_winners.get("N")
     south_p = half_sf_winners.get("S")
-    championship_result = _find_result(north_p, south_p)
+    championship_result = _find_result(north_p, south_p, "finals")
     championship = ChampionshipGame(
         north_participant=north_p,
         south_participant=south_p,
@@ -1225,6 +1247,69 @@ def build_enriched_bracket_layout(
     )
 
     return BracketLayout(halves=enriched_halves, championship=championship)
+
+
+# Advancement fields that should be zeroed for rounds strictly after the ceiling.
+_ADVANCEMENT_FIELDS_AFTER: dict[str, list[str]] = {
+    "second_round": ["quarterfinals", "semifinals", "finals", "champion",
+                     "quarterfinals_weighted", "semifinals_weighted", "finals_weighted", "champion_weighted"],
+    "quarterfinals": ["semifinals", "finals", "champion",
+                      "semifinals_weighted", "finals_weighted", "champion_weighted"],
+    "semifinals": ["finals", "champion", "finals_weighted", "champion_weighted"],
+    "finals": ["champion", "champion_weighted"],
+}
+# Hosting rounds that should be nulled/zeroed for rounds strictly after the ceiling.
+_HOSTING_ROUNDS_AFTER: dict[str, list[str]] = {
+    "second_round": ["quarterfinals", "semifinals"],
+    "quarterfinals": ["semifinals"],
+    "semifinals": [],
+    "finals": [],
+}
+
+
+def _apply_round_ceilings(
+    entries: list[TeamBracketEntry],
+    round_ceiling: dict[tuple[int, int], str],
+) -> list[TeamBracketEntry]:
+    """Zero advancement/hosting odds beyond each team's ceiling round.
+
+    Teams in *round_ceiling* are possible opponents of a winner-only simulated
+    result; they participate normally up through their ceiling round and have
+    zero odds beyond it.
+    """
+    if not round_ceiling:
+        return entries
+
+    result: list[TeamBracketEntry] = []
+    for entry in entries:
+        ceiling = round_ceiling.get((entry.region, entry.seed))
+        if ceiling is None:
+            result.append(entry)
+            continue
+
+        adv_fields = _ADVANCEMENT_FIELDS_AFTER.get(ceiling, [])
+        hosting_rounds = _HOSTING_ROUNDS_AFTER.get(ceiling, [])
+
+        new_entry = entry.model_copy(update=dict.fromkeys(adv_fields, 0.0))
+
+        if new_entry.hosting and hosting_rounds:
+            hosting_updates: dict[str, RoundHostingOdds] = {}
+            for rnd in hosting_rounds:
+                cur = getattr(new_entry.hosting, rnd, None)
+                if cur is not None:
+                    hosting_updates[rnd] = cur.model_copy(update={
+                        "conditional": None,
+                        "marginal": 0.0,
+                        "conditional_weighted": None,
+                        "marginal_weighted": 0.0,
+                    })
+            if hosting_updates:
+                new_entry = new_entry.model_copy(
+                    update={"hosting": new_entry.hosting.model_copy(update=hosting_updates)}
+                )
+
+        result.append(new_entry)
+    return result
 
 
 def clinched_school(region_odds: dict[str, StandingsOdds], seed: int) -> str | None:

@@ -8,6 +8,7 @@ from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
     DISPLAY_THRESHOLD,
+    _apply_round_ceilings,
     _collect_possible_opponents,
     build_bracket_layout,
     build_enriched_bracket_layout,
@@ -1731,7 +1732,7 @@ class TestBuildEnrichedBracketLayout:
 
     def test_simulated_result_marked_simulated_true(self):
         """Results from the simulated list have simulated=True."""
-        simulated = [("R1S1", "R2S4", None, None)]
+        simulated = [("R1S1", "R2S4", None, None, None)]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
         assert layout.halves["N"][0][0].result is not None
         assert layout.halves["N"][0][0].result.simulated is True
@@ -1739,7 +1740,7 @@ class TestBuildEnrichedBracketLayout:
     def test_real_result_not_overridden_by_simulated(self):
         """Confirmed DB result is not replaced by a simulated result for the same pair."""
         confirmed = [("R1S1", "R2S4", 28, 14)]
-        simulated = [("R2S4", "R1S1", 21, 7)]  # reversed — simulated says opposite winner
+        simulated = [("R2S4", "R1S1", 21, 7, None)]  # reversed — simulated says opposite winner
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, simulated)
         result = layout.halves["N"][0][0].result
         assert result is not None
@@ -1865,7 +1866,7 @@ class TestBuildEnrichedBracketLayout:
 
     def test_winner_only_result_propagates_to_next_round(self):
         """A simulated result with None loser advances the winner to the next round."""
-        simulated = [("R1S1", None, 12, 0)]
+        simulated = [("R1S1", None, 12, 0, "first_round")]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
         qf_game = layout.halves["N"][1][0]
         winner_schools = {
@@ -1875,7 +1876,7 @@ class TestBuildEnrichedBracketLayout:
 
     def test_winner_only_result_has_null_loser_on_game_node(self):
         """A winner-only game node has result.loser = None."""
-        simulated = [("R1S1", None, 12, 0)]
+        simulated = [("R1S1", None, 12, 0, "first_round")]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
         r1_game = layout.halves["N"][0][0]  # R1S1 vs R2S4
         assert r1_game.result is not None
@@ -1884,18 +1885,26 @@ class TestBuildEnrichedBracketLayout:
 
     def test_winner_only_result_marked_simulated(self):
         """Winner-only game results have simulated=True."""
-        simulated = [("R1S1", None, 12, 0)]
+        simulated = [("R1S1", None, 12, 0, "first_round")]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
         assert layout.halves["N"][0][0].result.simulated is True
 
     def test_confirmed_result_takes_priority_over_winner_only(self):
         """A confirmed DB result is not replaced by a winner-only simulated entry."""
         confirmed = [("R2S4", "R1S1", 21, 14)]  # upset — R2S4 wins
-        simulated = [("R1S1", None, 12, 0)]
+        simulated = [("R1S1", None, 12, 0, "first_round")]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, simulated)
         r1_game = layout.halves["N"][0][0]
         assert r1_game.result.winner.school == "R2S4"
         assert r1_game.result.simulated is False
+
+    def test_winner_only_result_does_not_bleed_to_later_rounds(self):
+        """A winner-only R1 result does not show as QF/SF winner — only applies to first_round."""
+        simulated = [("R1S1", None, 12, 0, "first_round")]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
+        # QF game should have R1S1 as a participant but no result (opponent unknown)
+        qf_game = layout.halves["N"][1][0]
+        assert qf_game.result is None
 
 
 # ---------------------------------------------------------------------------
@@ -1975,12 +1984,15 @@ class TestBuildPlayoffBracketStateLoserless:
         state = self._state([self._loserless_result("R1S1", "quarterfinals")])
         assert state.wins_by_team.get("R1S1", 0) == 1
 
-    def test_possible_opponents_marked_eliminated(self):
-        """All seeds on the opponent QF branch are marked eliminated."""
+    def test_possible_opponents_marked_ceiling(self):
+        """All seeds on the opponent QF branch are tracked in round_ceiling (not eliminated)."""
         state = self._state([self._loserless_result("R1S1", "quarterfinals")])
         # QF opponents of R1S1: R2S2 and R1S3 (game1 in North R1)
-        assert state.all_region_odds[2]["R2S2"].eliminated is True
-        assert state.all_region_odds[1]["R1S3"].eliminated is True
+        assert state.round_ceiling.get((2, 2)) == "quarterfinals"
+        assert state.round_ceiling.get((1, 3)) == "quarterfinals"
+        # They are NOT in losers_known — still have playoff odds
+        assert state.all_region_odds[2]["R2S2"].eliminated is False
+        assert state.all_region_odds[1]["R1S3"].eliminated is False
 
     def test_winner_not_eliminated(self):
         """The winner itself is not marked eliminated."""
@@ -1993,3 +2005,114 @@ class TestBuildPlayoffBracketStateLoserless:
         # R2S1 and R1S4 are in a different QF sub-tree — they should still be alive
         assert state.all_region_odds[2]["R2S1"].eliminated is False
         assert state.all_region_odds[1]["R1S4"].eliminated is False
+
+
+# ---------------------------------------------------------------------------
+# TestApplyRoundCeilings
+# ---------------------------------------------------------------------------
+
+
+class TestApplyRoundCeilings:
+    """_apply_round_ceilings zeros advancement/hosting odds beyond each team's ceiling."""
+
+    def _entry(
+        self,
+        region: int,
+        seed: int,
+        *,
+        sr: float = 0.8,
+        qf: float = 0.6,
+        sf: float = 0.4,
+        fn: float = 0.2,
+        ch: float = 0.1,
+    ) -> "TeamBracketEntry":
+        from backend.api.models.responses import (
+            BracketSlotHosting,
+            RoundHostingOdds,
+            TeamBracketEntry,
+        )
+        hosting = BracketSlotHosting(
+            first_round=RoundHostingOdds(conditional=1.0, marginal=0.9),
+            second_round=RoundHostingOdds(conditional=0.7, marginal=0.5),
+            quarterfinals=RoundHostingOdds(conditional=0.5, marginal=0.3),
+            semifinals=RoundHostingOdds(conditional=0.3, marginal=0.2),
+        )
+        return TeamBracketEntry(
+            region=region, seed=seed, school=f"R{region}S{seed}",
+            second_round=sr, quarterfinals=qf, semifinals=sf, finals=fn, champion=ch,
+            second_round_weighted=sr, quarterfinals_weighted=qf,
+            semifinals_weighted=sf, finals_weighted=fn, champion_weighted=ch,
+            hosting=hosting,
+        )
+
+    def test_no_ceiling_entries_pass_through_unchanged(self):
+        """Entries not in round_ceiling are returned unmodified."""
+        entry = self._entry(1, 1)
+        result = _apply_round_ceilings([entry], {})
+        assert result[0] is entry
+
+    def test_empty_ceiling_dict_returns_same_list(self):
+        """Empty ceiling dict returns the same list object."""
+        entries = [self._entry(1, 1)]
+        result = _apply_round_ceilings(entries, {})
+        assert result is entries
+
+    def test_second_round_ceiling_zeros_qf_and_beyond(self):
+        """second_round ceiling: QF, SF, finals, champion set to 0."""
+        entry = self._entry(1, 2)
+        result = _apply_round_ceilings([entry], {(1, 2): "second_round"})
+        out = result[0]
+        assert out.second_round == pytest.approx(0.8)   # preserved
+        assert out.quarterfinals == 0.0
+        assert out.semifinals == 0.0
+        assert out.finals == 0.0
+        assert out.champion == 0.0
+
+    def test_quarterfinals_ceiling_zeros_sf_and_beyond(self):
+        """quarterfinals ceiling: SF, finals, champion set to 0; second_round and QF preserved."""
+        entry = self._entry(2, 3)
+        result = _apply_round_ceilings([entry], {(2, 3): "quarterfinals"})
+        out = result[0]
+        assert out.second_round == pytest.approx(0.8)
+        assert out.quarterfinals == pytest.approx(0.6)
+        assert out.semifinals == 0.0
+        assert out.finals == 0.0
+        assert out.champion == 0.0
+
+    def test_weighted_fields_also_zeroed(self):
+        """Weighted advancement fields are zeroed alongside unweighted ones."""
+        entry = self._entry(1, 3)
+        result = _apply_round_ceilings([entry], {(1, 3): "second_round"})
+        out = result[0]
+        assert out.quarterfinals_weighted == 0.0
+        assert out.semifinals_weighted == 0.0
+        assert out.finals_weighted == 0.0
+        assert out.champion_weighted == 0.0
+
+    def test_hosting_zeroed_beyond_ceiling(self):
+        """Hosting odds for rounds after the ceiling are set to conditional=None, marginal=0."""
+        entry = self._entry(1, 4)
+        result = _apply_round_ceilings([entry], {(1, 4): "second_round"})
+        out = result[0]
+        assert out.hosting.second_round.conditional == pytest.approx(0.7)  # preserved
+        assert out.hosting.quarterfinals.conditional is None
+        assert out.hosting.quarterfinals.marginal == 0.0
+        assert out.hosting.semifinals.conditional is None
+        assert out.hosting.semifinals.marginal == 0.0
+
+    def test_hosting_at_ceiling_round_preserved(self):
+        """Hosting odds for the ceiling round itself are not zeroed."""
+        entry = self._entry(2, 1)
+        result = _apply_round_ceilings([entry], {(2, 1): "quarterfinals"})
+        out = result[0]
+        assert out.hosting.quarterfinals.conditional == pytest.approx(0.5)
+        assert out.hosting.semifinals.conditional is None
+        assert out.hosting.semifinals.marginal == 0.0
+
+    def test_entry_without_ceiling_unmodified_alongside_ceilinged(self):
+        """Entries without a ceiling are untouched when mixed with ceilinged entries."""
+        e1 = self._entry(1, 1)
+        e2 = self._entry(1, 2)
+        result = _apply_round_ceilings([e1, e2], {(1, 2): "quarterfinals"})
+        assert result[0] is e1
+        assert result[1].semifinals == 0.0

@@ -10,6 +10,7 @@ from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateBracketRequest
 from backend.api.models.responses import BracketResponse
 from backend.helpers.api_helpers import (
+    _apply_round_ceilings,
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     _resolve_ref_to_school,
@@ -200,17 +201,18 @@ async def simulate_bracket(
             eliminated_hosting=state.eliminated_hosting_map,
             school_to_seed=state.school_to_seed,
         )
+        entries = _apply_round_ceilings(entries, state.round_ceiling)
         seed_to_school = {(r, s): sch for sch, (r, s) in state.school_to_seed.items()}
-        simulated: list[tuple[str, str | None, int | None, int | None]] = []
+        simulated: list[tuple[str, str | None, int | None, int | None, str | None]] = []
         for r in body.results:
             w = _resolve_ref_to_school(r.winner, seed_to_school)
             if r.loser is not None:
                 lo = _resolve_ref_to_school(r.loser, seed_to_school)
                 if w is not None and lo is not None:
-                    simulated.append((w, lo, r.winner_score or 12, r.loser_score or 0))
+                    simulated.append((w, lo, r.winner_score or 12, r.loser_score or 0, None))
             else:
                 if w is not None:
-                    simulated.append((w, None, r.winner_score or 12, r.loser_score or 0))
+                    simulated.append((w, None, r.winner_score or 12, r.loser_score or 0, r.round))
         hosting_conditional = {
             e.school: {
                 "first_round": e.hosting.first_round.conditional,
