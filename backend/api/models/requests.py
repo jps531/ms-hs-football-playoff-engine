@@ -80,13 +80,34 @@ class ParticipantRef(BaseModel):
         return self
 
 
+_VALID_ROUNDS = {"second_round", "quarterfinals", "semifinals"}
+
+
 class BracketGameResultRequest(BaseModel):
-    """A hypothetical bracket game result — participants identified by name or (region, seed)."""
+    """A hypothetical bracket game result — participants identified by name or (region, seed).
+
+    Provide either ``loser`` (specific opponent) or ``round`` (unspecified opponent),
+    but not both.  When ``round`` is given, all teams that could have faced the winner
+    in that round are marked eliminated so they do not appear in later rounds.
+    """
 
     winner: ParticipantRef
-    loser: ParticipantRef
+    loser: ParticipantRef | None = None
+    round: str | None = None
     winner_score: int | None = None
     loser_score: int | None = None
+
+    @model_validator(mode="after")
+    def _validate_loser_or_round(self) -> "BracketGameResultRequest":
+        has_loser = self.loser is not None
+        has_round = self.round is not None
+        if not has_loser and not has_round:
+            raise ValueError("provide either 'loser' or 'round'")
+        if has_loser and has_round:
+            raise ValueError("provide either 'loser' or 'round', not both")
+        if has_round and self.round not in _VALID_ROUNDS:
+            raise ValueError(f"'round' must be one of {sorted(_VALID_ROUNDS)}")
+        return self
 
 
 class SimulateBracketRequest(BaseModel):

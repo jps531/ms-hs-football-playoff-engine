@@ -119,14 +119,14 @@ def compute_remaining_games(teams: list[str], completed: list[CompletedGame]) ->
 def results_to_applied(body_results) -> list[AppliedGameResult]:
     """Convert a list of ``GameResultRequest`` objects to ``AppliedGameResult`` objects.
 
-    ``winner_score`` and ``loser_score`` default to ``1`` and ``0`` respectively
-    when not provided by the caller.
+    ``winner_score`` and ``loser_score`` default to ``12`` and ``0`` respectively
+    when not provided by the caller (same as a forfeit).
     """
     return [
         AppliedGameResult(
             team_a=r.winner,
             team_b=r.loser,
-            score_a=r.winner_score if r.winner_score is not None else 1,
+            score_a=r.winner_score if r.winner_score is not None else 12,
             score_b=r.loser_score if r.loser_score is not None else 0,
         )
         for r in body_results
@@ -749,6 +749,85 @@ class PlayoffBracketState:
     confirmed_game_results: list[tuple[str, str, int | None, int | None]]
 
 
+def _collect_possible_opponents(
+    layout: BracketLayout,
+    winner_region: int,
+    winner_seed: int,
+    round_name: str,
+) -> set[tuple[int, int]]:
+    """Return all R1 (region, seed) slots that could have been the opponent
+    of (winner_region, winner_seed) in *round_name*.
+
+    Used when a simulated result omits the loser: every team that could have
+    faced the winner in the specified round is marked eliminated.
+    """
+    # 1. Find which half and R1 game index holds the winner.
+    winner_half: str | None = None
+    winner_r1_idx: int | None = None
+    for ns, rounds in layout.halves.items():
+        for idx, game in enumerate(rounds[0]):
+            for p in (game.participant_a, game.participant_b):
+                if p and p.region == winner_region and p.seed == winner_seed:
+                    winner_half = ns
+                    winner_r1_idx = idx
+                    break
+            if winner_r1_idx is not None:
+                break
+        if winner_half is not None:
+            break
+
+    if winner_half is None or winner_r1_idx is None:
+        return set()
+
+    rounds = layout.halves[winner_half]
+    total_rounds = len(rounds)
+
+    # 2. Map round_name → round_idx using the same logic as build_enriched_bracket_layout.
+    round_name_to_idx: dict[str, int] = {"first_round": 0}
+    for i in range(1, total_rounds):
+        rfe = total_rounds - i
+        name = {1: "semifinals", 2: "quarterfinals"}.get(rfe, "second_round")
+        round_name_to_idx[name] = i
+
+    target_idx = round_name_to_idx.get(round_name)
+    if target_idx is None or target_idx == 0:
+        return set()
+
+    # 3. Walk round 1 → target_idx, tracking winner's game index at each round.
+    winner_game_at: dict[int, int] = {0: winner_r1_idx}
+    for ri in range(1, target_idx + 1):
+        prev = winner_game_at[ri - 1]
+        for gi, game in enumerate(rounds[ri]):
+            if game.feeds_from and prev in game.feeds_from:
+                winner_game_at[ri] = gi
+                break
+        if ri not in winner_game_at:
+            return set()  # winner's path not found (shouldn't happen with valid input)
+
+    # 4. Find the opponent branch index at the target round.
+    target_game = rounds[target_idx][winner_game_at[target_idx]]
+    assert target_game.feeds_from is not None
+    winner_prev = winner_game_at[target_idx - 1]
+    opp_prev_idx = next(f for f in target_game.feeds_from if f != winner_prev)
+
+    # 5. Recursively collect all R1 seeds reachable from the opponent branch.
+    def _r1_seeds(ri: int, gi: int) -> set[tuple[int, int]]:
+        if ri == 0:
+            g = rounds[0][gi]
+            result: set[tuple[int, int]] = set()
+            for p in (g.participant_a, g.participant_b):
+                if p:
+                    result.add((p.region, p.seed))
+            return result
+        g = rounds[ri][gi]
+        out: set[tuple[int, int]] = set()
+        for fi in (g.feeds_from or []):
+            out |= _r1_seeds(ri - 1, fi)
+        return out
+
+    return _r1_seeds(target_idx - 1, opp_prev_idx)
+
+
 def build_playoff_bracket_state(
     school_to_seed: dict[str, tuple[int, int]],
     db_wins: dict[str, int],
@@ -758,6 +837,7 @@ def build_playoff_bracket_state(
     slots: list[FormatSlot],
     season: int,
     clazz: int,
+    layout: BracketLayout | None = None,
 ) -> PlayoffBracketState:
     """Derive bracket survivor state from clinched seeds, confirmed results, and hypothetical results.
 
@@ -789,11 +869,17 @@ def build_playoff_bracket_state(
             losers_known.add(school_to_seed[school])
     for r in submitted_results:
         w = _resolve_ref_to_school(r.winner, seed_to_school)
-        ll = _resolve_ref_to_school(r.loser, seed_to_school)
         if w is not None and w in school_to_seed:
             wins_by_team[w] = wins_by_team.get(w, 0) + 1
-        if ll is not None and ll in school_to_seed:
-            losers_known.add(school_to_seed[ll])
+        if r.loser is not None:
+            ll = _resolve_ref_to_school(r.loser, seed_to_school)
+            if ll is not None and ll in school_to_seed:
+                losers_known.add(school_to_seed[ll])
+        elif r.round is not None and w is not None and w in school_to_seed and layout is not None:
+            winner_region, winner_seed = school_to_seed[w]
+            losers_known.update(
+                _collect_possible_opponents(layout, winner_region, winner_seed, r.round)
+            )
 
     all_region_odds: dict[int, dict[str, StandingsOdds]] = {}
     for school, (reg, seed) in school_to_seed.items():
@@ -924,7 +1010,8 @@ async def _load_and_build_playoff_bracket_state(
         confirmed_game_results.append((winner, loser, winner_score, loser_score))
 
     state = build_playoff_bracket_state(
-        school_to_seed, db_wins, db_losers, submitted_results, elo_ratings, slots, season, clazz
+        school_to_seed, db_wins, db_losers, submitted_results, elo_ratings, slots, season, clazz,
+        layout=build_bracket_layout(slots),
     )
     state.confirmed_game_results = confirmed_game_results
     return state
@@ -973,7 +1060,7 @@ def build_enriched_bracket_layout(
     layout: BracketLayout,
     seed_to_school: dict[tuple[int, int], str] | None,
     confirmed_results: list[tuple[str, str, int | None, int | None]],
-    simulated_results: list[tuple[str, str, int | None, int | None]],
+    simulated_results: list[tuple[str, str | None, int | None, int | None]],
     hosting_conditional: dict[str, dict[str, float | None]] | None = None,
 ) -> BracketLayout:
     """Enrich a ``BracketLayout`` with per-game participants and results.
@@ -999,7 +1086,9 @@ def build_enriched_bracket_layout(
 
     # Build results lookup keyed by the frozenset of the two schools.
     # Confirmed (DB) results are inserted first; simulated results only fill gaps.
+    # winner_only holds simulated entries where the loser was unspecified (None).
     results_by_pair: dict[frozenset, BracketGameResult] = {}
+    winner_only: dict[str, BracketGameResult] = {}
     for winner, loser, ws, ls in confirmed_results:
         key = frozenset((winner, loser))
         if key not in results_by_pair:
@@ -1011,37 +1100,54 @@ def build_enriched_bracket_layout(
                 simulated=False,
             )
     for winner, loser, ws, ls in simulated_results:
-        key = frozenset((winner, loser))
-        if key not in results_by_pair:
-            results_by_pair[key] = BracketGameResult(
-                winner=BracketParticipant(region=0, seed=0, school=winner),
-                loser=BracketParticipant(region=0, seed=0, school=loser),
-                winner_score=ws,
-                loser_score=ls,
-                simulated=True,
-            )
+        if loser is None:
+            if winner not in winner_only:
+                winner_only[winner] = BracketGameResult(
+                    winner=BracketParticipant(region=0, seed=0, school=winner),
+                    loser=None,
+                    winner_score=ws,
+                    loser_score=ls,
+                    simulated=True,
+                )
+        else:
+            key = frozenset((winner, loser))
+            if key not in results_by_pair:
+                results_by_pair[key] = BracketGameResult(
+                    winner=BracketParticipant(region=0, seed=0, school=winner),
+                    loser=BracketParticipant(region=0, seed=0, school=loser),
+                    winner_score=ws,
+                    loser_score=ls,
+                    simulated=True,
+                )
 
     def _find_result(
         home_p: BracketParticipant | None,
         away_p: BracketParticipant | None,
     ) -> BracketGameResult | None:
-        if home_p is None or away_p is None:
-            return None
-        if home_p.school is None or away_p.school is None:
-            return None
-        raw = results_by_pair.get(frozenset((home_p.school, away_p.school)))
-        if raw is None:
-            return None
-        # Re-attach region/seed to winner and loser from the participants.
-        if raw.winner.school == home_p.school:
-            w_p, l_p = home_p, away_p
-        else:
-            w_p, l_p = away_p, home_p
-        return BracketGameResult(
-            winner=w_p, loser=l_p,
-            winner_score=raw.winner_score, loser_score=raw.loser_score,
-            simulated=raw.simulated,
-        )
+        # Pair-based lookup (both participants known).
+        if home_p and away_p and home_p.school and away_p.school:
+            raw = results_by_pair.get(frozenset((home_p.school, away_p.school)))
+            if raw is not None:
+                # Re-attach region/seed to winner and loser from the participants.
+                if raw.winner.school == home_p.school:
+                    w_p, l_p = home_p, away_p
+                else:
+                    w_p, l_p = away_p, home_p
+                return BracketGameResult(
+                    winner=w_p, loser=l_p,
+                    winner_score=raw.winner_score, loser_score=raw.loser_score,
+                    simulated=raw.simulated,
+                )
+        # Winner-only lookup: one participant won without a specified opponent.
+        for p in (home_p, away_p):
+            if p and p.school and p.school in winner_only:
+                raw = winner_only[p.school]
+                return BracketGameResult(
+                    winner=p, loser=None,
+                    winner_score=raw.winner_score, loser_score=raw.loser_score,
+                    simulated=raw.simulated,
+                )
+        return None
 
     enriched_halves: dict[str, list[list[BracketGame]]] = {}
     half_sf_winners: dict[str, BracketParticipant | None] = {}

@@ -370,7 +370,7 @@ class BracketGameResult(BaseModel):
     """Outcome of a completed bracket game."""
 
     winner: BracketParticipant
-    loser: BracketParticipant
+    loser: BracketParticipant | None = None
     winner_score: int | None = None
     loser_score: int | None = None
     simulated: bool = False

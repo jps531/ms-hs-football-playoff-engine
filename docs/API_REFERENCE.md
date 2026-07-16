@@ -92,7 +92,7 @@ For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` 
 **`bracket_layout`** — pre-built bracket tree enriched with per-game participants and results so the UI does not need to cross-reference other response fields.
 
 Structure:
-- `halves` — `{ "N": [...rounds...], "S": [...rounds...] }`. Each half is a list of rounds; `rounds[0]` is R1 (leaf nodes with `slot`, `home`, `away`), subsequent rounds have `feeds_from` (pair of 0-based indices into the previous round).
+- `halves` — `{ "N": [...rounds...], "S": [...rounds...] }`. Each half is a list of rounds; `rounds[0]` is R1 (leaf nodes with `slot` set and participants pre-populated), subsequent rounds have `feeds_from` (pair of 0-based indices into the previous round).
 - `championship` — the final game node with `feeds_from_halves: ["N", "S"]`.
 
 Each `BracketGame` node:
@@ -104,8 +104,9 @@ Each `BracketGame` node:
 - `result` — set when the game has a confirmed or simulated outcome (see below). `null` when not yet played.
 
 `BracketGameResult`:
-- `winner`, `loser` — each a `{ region, seed, school }` participant object.
-- `winner_score`, `loser_score` — final scores; `null` when not recorded.
+- `winner` — `{ region, seed, school }` participant who won.
+- `loser` — `{ region, seed, school }` participant who lost; `null` when the result was submitted without a named opponent (round-based simulate).
+- `winner_score`, `loser_score` — final scores; default to 12/0 when omitted from a simulate request.
 - `simulated` — `false` for confirmed DB results, `true` for results supplied in a `/simulate` request body.
 
 `ChampionshipGame` (the `championship` node):
@@ -115,18 +116,25 @@ Each `BracketGame` node:
 
 **Simulate input** (all three simulate endpoints — `POST /bracket/simulate`, `POST /hosting/{clazz}/simulate`, `POST /hosting/{clazz}/{region}/simulate`):
 
-Each result identifies participants by school name, (region, seed) slot ref, or a mix:
+Each result identifies participants by school name, (region, seed) slot ref, or a mix. Provide either `loser` (specific opponent) **or** `round` (unspecified opponent) — not both:
+
 ```json
 { "results": [
-  { "winner": "School Name",              "loser": { "region": 1, "seed": 2 } },
-  { "winner": { "region": 3, "seed": 1 }, "loser": "Other School", "winner_score": 28, "loser_score": 14 }
+  { "winner": "School Name", "loser": { "region": 1, "seed": 2 } },
+  { "winner": { "region": 3, "seed": 1 }, "loser": "Other School", "winner_score": 28, "loser_score": 14 },
+  { "winner": "Leake County", "round": "quarterfinals" }
 ]}
 ```
-A plain string is shorthand for `{"school": "Name"}` and is backward-compatible with the original format. `winner_score` and `loser_score` are optional; when provided they appear in the `result` object on the matching `bracket_layout` game node with `simulated: true`. Confirmed DB results are never overridden by simulated ones for the same matchup.
+
+- `loser` — specific opponent. Mutually exclusive with `round`.
+- `round` — one of `"second_round"`, `"quarterfinals"`, `"semifinals"`. When used instead of `loser`, all teams that could have been the opponent in that round are marked eliminated, so they do not appear in later rounds. The winner advances to the next round in `bracket_layout` with `result.loser = null`. Use this to simulate a team's run without enumerating every game (e.g. `[{"winner": "X", "round": "second_round"}, {"winner": "X", "round": "quarterfinals"}]` advances X to the semifinals).
+- `winner_score` / `loser_score` — optional. Defaults to 12/0 (forfeit) when omitted on all simulate endpoints.
+
+A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Confirmed DB results are never overridden by simulated ones for the same matchup.
 
 **Bracket simulate** (`POST /bracket/simulate`): works in two modes:
 - *Playoff mode* (some or all seedings clinched): school names and slot refs both resolve to known teams. The returned `bracket_layout` merges confirmed DB results (marked `simulated: false`) with the hypothetical results in the request body (marked `simulated: true`), and propagates winners into downstream game participants.
-- *Pre-clinching mode* (no seedings clinched yet): only slot refs are meaningful; school-name refs are silently skipped. `bracket_layout` game nodes will have `null` participants and results.
+- *Pre-clinching mode* (no seedings clinched yet): only slot refs are meaningful; school-name refs are silently skipped. `bracket_layout` game nodes will have `null` participants and results. Round-based (loser-less) results require seedings to be clinched and have no effect in pre-clinching mode.
 
 **Hosting simulate** (`POST /hosting/{clazz}/simulate`, `POST /hosting/{clazz}/{region}/simulate`): slot refs apply only in playoff mode (seedings clinched); they are silently skipped in regular-season mode where school names are required.
 

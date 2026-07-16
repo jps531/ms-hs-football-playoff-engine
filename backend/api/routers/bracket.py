@@ -201,12 +201,16 @@ async def simulate_bracket(
             school_to_seed=state.school_to_seed,
         )
         seed_to_school = {(r, s): sch for sch, (r, s) in state.school_to_seed.items()}
-        simulated: list[tuple[str, str, int | None, int | None]] = []
+        simulated: list[tuple[str, str | None, int | None, int | None]] = []
         for r in body.results:
             w = _resolve_ref_to_school(r.winner, seed_to_school)
-            lo = _resolve_ref_to_school(r.loser, seed_to_school)
-            if w is not None and lo is not None:
-                simulated.append((w, lo, r.winner_score, r.loser_score))
+            if r.loser is not None:
+                lo = _resolve_ref_to_school(r.loser, seed_to_school)
+                if w is not None and lo is not None:
+                    simulated.append((w, lo, r.winner_score or 12, r.loser_score or 0))
+            else:
+                if w is not None:
+                    simulated.append((w, None, r.winner_score or 12, r.loser_score or 0))
         hosting_conditional = {
             e.school: {
                 "first_round": e.hosting.first_round.conditional,
