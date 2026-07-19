@@ -28,6 +28,7 @@ from backend.helpers.api_helpers import (
 )
 from backend.helpers.data_classes import CompletedGame, RemainingGame, StandingsOdds
 from backend.helpers.insights import deserialize_insights
+from backend.helpers.scenario_renderer import atoms_from_complete_scenarios, team_scenarios_as_dict
 from backend.helpers.scenario_serializers import deserialize_complete_scenarios, deserialize_remaining_games
 from backend.helpers.scenario_updater import apply_region_game_results
 from backend.helpers.scenarios import determine_odds, determine_scenarios
@@ -38,6 +39,7 @@ SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 DateQ = Annotated[date | None, Query()]
 ClazzPath = Annotated[int, Path(ge=1, le=7)]
 RegionPath = Annotated[int, Path(ge=1, le=8)]
+IncludeTeamScenariosQ = Annotated[bool, Query()]
 
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
@@ -45,6 +47,40 @@ _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 def _today() -> date:
     """Return today's date (injectable seam for tests)."""
     return datetime.now().date()
+
+
+def _odds_from_rows(standings_rows: list[tuple]) -> tuple[dict, dict]:
+    """Build (odds, weighted_odds) StandingsOdds dicts from standings DB rows.
+
+    Row columns 7-11 are unweighted p1-p_playoffs; 16-20 are weighted.
+    """
+    odds: dict[str, StandingsOdds] = {}
+    weighted: dict[str, StandingsOdds] = {}
+    for row in standings_rows:
+        school = row[0]
+        odds[school] = StandingsOdds(
+            school=school, p1=row[7], p2=row[8], p3=row[9], p4=row[10], p_playoffs=row[11],
+            final_playoffs=row[11], clinched=bool(row[12]), eliminated=bool(row[13]),
+        )
+        weighted[school] = StandingsOdds(
+            school=school, p1=row[16], p2=row[17], p3=row[18], p4=row[19], p_playoffs=row[20],
+            final_playoffs=row[20], clinched=bool(row[12]), eliminated=bool(row[13]),
+        )
+    return odds, weighted
+
+
+def _filter_scenarios_by_simulation(
+    complete_scenarios: list[dict],
+    simulated_results: list,
+) -> list[dict]:
+    """Keep only scenarios where every simulated (winner, loser) pair appears in game_winners."""
+    simulated_pairs = {(r.winner, r.loser) for r in simulated_results}
+    if not simulated_pairs:
+        return complete_scenarios
+    return [
+        sc for sc in complete_scenarios
+        if all(pair in sc.get("game_winners", []) for pair in simulated_pairs)
+    ]
 
 
 async def _load_standings_snapshot(conn, season: int, clazz: int, region: int, as_of: date) -> list[tuple] | None:
@@ -192,8 +228,13 @@ async def get_standings(
     region: RegionPath,
     season: SeasonQ,
     date: DateQ = None,
+    include_team_scenarios: IncludeTeamScenariosQ = False,
 ) -> StandingsResponse:
-    """Return seeding odds and (when R≤6) scenario list for *clazz*A Region *region*."""
+    """Return seeding odds and (when R≤6) scenario list for *clazz*A Region *region*.
+
+    Pass ``include_team_scenarios=true`` to also receive per-team per-seed
+    condition strings grouped by team name (only available when R≤6).
+    """
     as_of = date or _today()
     async with get_conn() as conn:
         standings_rows = await _load_standings_snapshot(conn, season, clazz, region, as_of)
@@ -220,6 +261,16 @@ async def get_standings(
             key_insights = None
 
     scenarios_available = len(remaining) <= DISPLAY_THRESHOLD
+
+    ts: dict | None = None
+    if include_team_scenarios and complete_scenarios and scenarios_available:
+        odds, weighted = _odds_from_rows(standings_rows) if standings_rows else ({}, {})
+        ts = team_scenarios_as_dict(
+            atoms_from_complete_scenarios(complete_scenarios),
+            odds=odds,
+            weighted_odds=weighted,
+        )
+
     return StandingsResponse(
         season=season,
         class_=clazz,
@@ -229,6 +280,7 @@ async def get_standings(
         remaining_games=remaining_to_models(remaining),
         teams=team_entries,
         scenarios=scenarios_to_entries(complete_scenarios) if scenarios_available else None,
+        team_scenarios=ts,
         key_insights=key_insights if key_insights else None,
         computation_state=computation_state,
     )
@@ -241,9 +293,10 @@ async def get_team_standings(
     team: str,
     season: SeasonQ,
     date: DateQ = None,
+    include_team_scenarios: IncludeTeamScenariosQ = False,
 ) -> StandingsResponse:
     """Return standings filtered to a single *team* (same data, subset of teams list)."""
-    response = await get_standings(clazz, region, season=season, date=date)
+    response = await get_standings(clazz, region, season=season, date=date, include_team_scenarios=include_team_scenarios)
     response.teams = [t for t in response.teams if t.school == team]
     if not response.teams:
         raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")
@@ -259,15 +312,21 @@ async def simulate_standings(
     body: SimulateRegionRequest,
     season: SeasonQ,
     date: DateQ = None,
+    include_team_scenarios: IncludeTeamScenariosQ = False,
 ) -> StandingsResponse:
-    """Apply hypothetical game results and return updated seeding odds."""
+    """Apply hypothetical game results and return updated seeding odds.
+
+    Pass ``include_team_scenarios=true`` to also receive per-team per-seed
+    condition strings for the remaining scenarios after simulation.
+    """
     as_of = date or _today()
     async with get_conn() as conn:
         scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
         if scenarios_data is not None:
-            remaining, _, _, snapshot_date = scenarios_data
+            remaining, complete_scenarios, _, snapshot_date = scenarios_data
         else:
             _, _, remaining, _, _ = await _recompute_from_games(conn, season, clazz, region, as_of)
+            complete_scenarios = None
             snapshot_date = as_of
 
         team_rows = await conn.execute(
@@ -296,6 +355,22 @@ async def simulate_standings(
     team_entries = standings_from_odds(odds_map, set(), records)
 
     scenarios_available = len(updated_remaining) <= DISPLAY_THRESHOLD
+
+    filtered_scenarios: list[dict] | None = None
+    ts: dict | None = None
+    if complete_scenarios and scenarios_available:
+        filtered_scenarios = _filter_scenarios_by_simulation(complete_scenarios, body.results)
+        if include_team_scenarios and filtered_scenarios:
+            sim_odds = {school: StandingsOdds(
+                school=school, p1=o.p1, p2=o.p2, p3=o.p3, p4=o.p4,
+                p_playoffs=o.p_playoffs, final_playoffs=o.p_playoffs,
+                clinched=o.clinched, eliminated=o.eliminated,
+            ) for school, o in odds_map.items()}
+            ts = team_scenarios_as_dict(
+                atoms_from_complete_scenarios(filtered_scenarios),
+                odds=sim_odds,
+            )
+
     return StandingsResponse(
         season=season,
         class_=clazz,
@@ -304,7 +379,8 @@ async def simulate_standings(
         scenarios_available=scenarios_available,
         remaining_games=remaining_to_models(updated_remaining),
         teams=team_entries,
-        scenarios=None,
+        scenarios=scenarios_to_entries(filtered_scenarios),
+        team_scenarios=ts,
     )
 
 
@@ -318,9 +394,10 @@ async def simulate_team_standings(
     body: SimulateRegionRequest,
     season: SeasonQ,
     date: DateQ = None,
+    include_team_scenarios: IncludeTeamScenariosQ = False,
 ) -> StandingsResponse:
     """What-if standings filtered to a single *team*."""
-    response = await simulate_standings(request, clazz, region, body, season=season, date=date)
+    response = await simulate_standings(request, clazz, region, body, season=season, date=date, include_team_scenarios=include_team_scenarios)
     response.teams = [t for t in response.teams if t.school == team]
     if not response.teams:
         raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")

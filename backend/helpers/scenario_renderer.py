@@ -101,6 +101,37 @@ def _render_atom(atom: list) -> str:
     return " AND ".join(_render_condition(c, atom) for c in atom)
 
 
+def render_scenario_title(sc: dict) -> str:
+    """Return a human-readable title for a single complete-scenario dict.
+
+    If *sc* has a ``conditions_atom``, renders it through ``_render_atom``;
+    otherwise falls back to joining the ``game_winners`` list.
+    """
+    if sc.get("conditions_atom") is not None:
+        return _render_atom(sc["conditions_atom"])
+    return " AND ".join(f"{w} beats {l}" for w, l in sc.get("game_winners", []))
+
+
+def atoms_from_complete_scenarios(complete_scenarios: list[dict]) -> dict[str, dict[int, list[list]]]:
+    """Reconstruct a per-team per-seed atom dict from stored complete-scenario dicts.
+
+    This is O(S × N) where S is the number of scenarios and N the team count.
+    The result is equivalent to ``build_scenario_atoms`` output and can be passed
+    directly to ``team_scenarios_as_dict``.
+    """
+    atoms: dict[str, dict[int, list]] = {}
+    for sc in complete_scenarios:
+        atom = sc.get("conditions_atom")
+        if atom is None:
+            atom = [GameResult(winner=w, loser=l) for w, l in sc.get("game_winners", [])]
+        seeding = sc.get("seeding", ())
+        for seed_idx, team in enumerate(seeding):
+            seed_num = seed_idx + 1
+            team_map = atoms.setdefault(team, {})
+            team_map.setdefault(seed_num, []).append(atom)
+    return atoms
+
+
 def render_team_scenarios(
     team: str,
     scenarios: dict[str, dict[int, list[list]]],

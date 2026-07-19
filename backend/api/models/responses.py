@@ -1,6 +1,7 @@
 """Pydantic response models for the playoff engine REST API."""
 
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -206,6 +207,7 @@ class ScenarioEntry(BaseModel):
 
     scenario_num: int
     sub_label: str
+    title: str | None = None
     game_winners: list[ScenarioGameOutcome]
     tiebreaker_groups: list[list[str]] | None = None
     coinflip_groups: list[list[str]] | None = None
@@ -241,6 +243,7 @@ class StandingsResponse(BaseModel):
     remaining_games: list[RemainingGameModel]
     teams: list[TeamStandingsEntry]
     scenarios: list[ScenarioEntry] | None = None
+    team_scenarios: dict[str, Any] | None = None
     key_insights: list[KeyInsightModel] | None = None
     computation_state: ComputationStateModel | None = None
 
@@ -295,6 +298,7 @@ class TeamHostingEntry(BaseModel):
     second_round: RoundHostingOdds
     quarterfinals: RoundHostingOdds
     semifinals: RoundHostingOdds
+    scenarios: dict[str, Any] | None = None
 
 
 class HostingResponse(BaseModel):

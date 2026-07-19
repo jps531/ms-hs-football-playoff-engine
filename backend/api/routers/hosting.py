@@ -18,6 +18,8 @@ from backend.helpers.api_helpers import (
     results_to_applied,
 )
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
+from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
+from backend.helpers.scenario_renderer import team_home_scenarios_as_dict
 from backend.helpers.scenario_updater import apply_region_game_results
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
@@ -26,7 +28,87 @@ router = APIRouter(prefix="/api/v1", tags=["hosting"])
 SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 ClazzPath = Annotated[int, Path(ge=1, le=7)]
 RegionPath = Annotated[int, Path(ge=1, le=8)]
+IncludeScenariosQ = Annotated[bool, Query()]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
+
+
+def _attach_hosting_scenarios(
+    entries: list,
+    region_odds: dict[str, StandingsOdds],
+    slots: list[FormatSlot],
+    season: int,
+    region: int,
+) -> list:
+    """Return a new list of TeamHostingEntry with hosting scenario conditions attached.
+
+    Calls ``enumerate_home_game_scenarios`` per team (pure/fast) and serialises
+    the result via ``team_home_scenarios_as_dict``.  Probability annotations are
+    derived from the entry's ``RoundHostingOdds`` fields so no extra DB round-trip
+    is needed.
+    """
+    updated = []
+    for entry in entries:
+        odds = region_odds.get(entry.school)
+        if odds is None:
+            updated.append(entry)
+            continue
+
+        # Resolve seed (clinched) or achievable seed list (pre-playoff).
+        seed: int | None = None
+        achievable_seeds: list[int] | None = None
+        for s, attr in ((1, "p1"), (2, "p2"), (3, "p3"), (4, "p4")):
+            prob = getattr(odds, attr, 0.0)
+            if prob >= 0.999:
+                seed = s
+                break
+        if seed is None:
+            achievable_seeds = [
+                s for s, attr in ((1, "p1"), (2, "p2"), (3, "p3"), (4, "p4"))
+                if getattr(odds, attr, 0.0) > 0
+            ]
+
+        # Extract probability dicts from the already-computed TeamHostingEntry.
+        _ROUND_MAP = [
+            ("First Round", entry.first_round),
+            ("Second Round", entry.second_round),
+            ("Quarterfinals", entry.quarterfinals),
+            ("Semifinals", entry.semifinals),
+        ]
+        p_reach: dict[str, float] = {}
+        p_cond: dict[str, float] = {}
+        p_marg: dict[str, float] = {}
+        p_reach_w: dict[str, float] = {}
+        p_cond_w: dict[str, float] = {}
+        p_marg_w: dict[str, float] = {}
+        for rname, rnd in _ROUND_MAP:
+            if rnd.marginal is not None and rnd.conditional:
+                p_reach[rname] = rnd.marginal / rnd.conditional
+            if rnd.conditional is not None:
+                p_cond[rname] = rnd.conditional
+            if rnd.marginal is not None:
+                p_marg[rname] = rnd.marginal
+            if rnd.marginal_weighted is not None and rnd.conditional_weighted:
+                p_reach_w[rname] = rnd.marginal_weighted / rnd.conditional_weighted
+            if rnd.conditional_weighted is not None:
+                p_cond_w[rname] = rnd.conditional_weighted
+            if rnd.marginal_weighted is not None:
+                p_marg_w[rname] = rnd.marginal_weighted
+
+        home_scenarios = enumerate_home_game_scenarios(
+            region=region,
+            seed=seed,
+            slots=slots,
+            season=season,
+            achievable_seeds=achievable_seeds,
+            p_reach_by_round=p_reach or None,
+            p_host_conditional_by_round=p_cond or None,
+            p_host_marginal_by_round=p_marg or None,
+            p_reach_weighted_by_round=p_reach_w or None,
+            p_host_conditional_weighted_by_round=p_cond_w or None,
+            p_host_marginal_weighted_by_round=p_marg_w or None,
+        )
+        updated.append(entry.model_copy(update={"scenarios": team_home_scenarios_as_dict(entry.school, home_scenarios)}))
+    return updated
 
 
 async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:
@@ -153,8 +235,12 @@ async def get_class_hosting(
     clazz: ClazzPath,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
+    include_scenarios: IncludeScenariosQ = False,
 ) -> ClassHostingResponse:
-    """Return playoff hosting odds per round for all regions in *clazz*."""
+    """Return playoff hosting odds per round for all regions in *clazz*.
+
+    Pass ``include_scenarios=true`` to include hosting condition text per team.
+    """
     as_of = date or datetime.now().date()
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, clazz)
@@ -175,6 +261,8 @@ async def get_class_hosting(
             stored_adv=stored_adv,
             stored_adv_w=stored_adv_w,
         )
+        if include_scenarios:
+            entries = _attach_hosting_scenarios(entries, region_odds, slots, season, region)
         region_responses.append(
             HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
         )
@@ -187,8 +275,12 @@ async def get_hosting(
     region: RegionPath,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
+    include_scenarios: IncludeScenariosQ = False,
 ) -> HostingResponse:
-    """Return playoff hosting odds per round for all teams in *clazz*A Region *region*."""
+    """Return playoff hosting odds per round for all teams in *clazz*A Region *region*.
+
+    Pass ``include_scenarios=true`` to include hosting condition text per team.
+    """
     as_of = date or datetime.now().date()
     async with get_conn() as conn:
         loaded = await _load_region_odds(conn, season, clazz, region, as_of)
@@ -206,6 +298,8 @@ async def get_hosting(
         stored_adv=stored_adv,
         stored_adv_w=stored_adv_w,
     )
+    if include_scenarios:
+        entries = _attach_hosting_scenarios(entries, region_odds, slots, season, region)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 
@@ -216,9 +310,10 @@ async def get_team_hosting(
     team: str,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
+    include_scenarios: IncludeScenariosQ = False,
 ) -> HostingResponse:
     """Return hosting odds for a single *team*."""
-    response = await get_hosting(clazz, region, season=season, date=date)
+    response = await get_hosting(clazz, region, season=season, date=date, include_scenarios=include_scenarios)
     response.teams = [t for t in response.teams if t.school == team]
     if not response.teams:
         raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")
@@ -233,8 +328,12 @@ async def simulate_class_hosting(
     body: SimulateBracketRequest,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
+    include_scenarios: IncludeScenariosQ = False,
 ) -> ClassHostingResponse:
-    """Apply hypothetical game results and return updated hosting odds for all regions in *clazz*."""
+    """Apply hypothetical game results and return updated hosting odds for all regions in *clazz*.
+
+    Pass ``include_scenarios=true`` to include hosting condition text per team.
+    """
     from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
 
     as_of = date or datetime.now().date()
@@ -341,15 +440,18 @@ async def simulate_class_hosting(
 
     region_responses = []
     for reg in sorted(odds_by_region):
+        reg_odds = odds_by_region[reg]
         entries = build_hosting_entries(
-            odds_by_region[reg], slots, reg, season, clazz,
+            reg_odds, slots, reg, season, clazz,
             wins_confirmed=wins_by_team,
             win_prob_fn_weighted=matchup_fn_by_region.get(reg),
-            region_odds_weighted=odds_by_region[reg],
+            region_odds_weighted=reg_odds,
             all_region_odds=all_region_odds,
             cross_region_wins=cross_region_wins,
             eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
         )
+        if include_scenarios:
+            entries = _attach_hosting_scenarios(entries, reg_odds, slots, season, reg)
         region_responses.append(
             HostingResponse(season=season, class_=clazz, region=reg, as_of_date=as_of, teams=entries)
         )
@@ -365,6 +467,7 @@ async def simulate_hosting(
     body: SimulateBracketRequest,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
+    include_scenarios: IncludeScenariosQ = False,
 ) -> HostingResponse:
     """Apply hypothetical game results and return updated hosting odds."""
     from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
@@ -456,6 +559,8 @@ async def simulate_hosting(
         cross_region_wins=cross_region_wins,
         eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
     )
+    if include_scenarios:
+        entries = _attach_hosting_scenarios(entries, odds_map, slots, season, region)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 
@@ -469,9 +574,10 @@ async def simulate_team_hosting(
     body: SimulateBracketRequest,
     season: SeasonQ,
     date: Annotated[date | None, Query()] = None,
+    include_scenarios: IncludeScenariosQ = False,
 ) -> HostingResponse:
     """What-if hosting odds for a single *team*."""
-    response = await simulate_hosting(request, clazz, region, body, season=season, date=date)
+    response = await simulate_hosting(request, clazz, region, body, season=season, date=date, include_scenarios=include_scenarios)
     response.teams = [t for t in response.teams if t.school == team]
     if not response.teams:
         raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")

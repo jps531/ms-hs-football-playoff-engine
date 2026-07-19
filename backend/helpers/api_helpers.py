@@ -55,6 +55,7 @@ from backend.helpers.data_classes import (
     RemainingGame,
     StandingsOdds,
 )
+from backend.helpers.scenario_renderer import render_scenario_title
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 # ---------------------------------------------------------------------------
@@ -187,6 +188,7 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
             ScenarioEntry(
                 scenario_num=sc["scenario_num"],
                 sub_label=sc["sub_label"],
+                title=render_scenario_title(sc),
                 game_winners=[ScenarioGameOutcome(winner=w, loser=l) for w, l in sc.get("game_winners", [])],
                 tiebreaker_groups=sc.get("tiebreaker_groups"),
                 coinflip_groups=sc.get("coinflip_groups"),
