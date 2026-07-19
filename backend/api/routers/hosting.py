@@ -1,6 +1,6 @@
 """Playoff hosting odds endpoints."""
 
-from datetime import date, datetime
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
@@ -13,10 +13,13 @@ from backend.helpers.api_helpers import (
     DISPLAY_THRESHOLD,
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
+    _load_format_slots,
     build_hosting_entries,
     build_seeding_by_region,
     parse_completed_games,
     results_to_applied,
+    standings_odds_from_row,
+    today,
 )
 from backend.helpers.data_classes import FormatSlot, StandingsOdds
 from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
@@ -161,25 +164,6 @@ def _attach_hosting_scenarios(
     return updated
 
 
-async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:
-    """Return all playoff format slots for *clazz* in *season*."""
-    rows = await conn.execute(
-        """
-        SELECT pfs.slot, pfs.home_region, pfs.home_seed,
-               pfs.away_region, pfs.away_seed, pfs.north_south
-        FROM playoff_format_slots pfs
-        JOIN playoff_formats pf ON pfs.format_id = pf.id
-        WHERE pf.season = %s AND pf.class = %s
-        ORDER BY pfs.slot
-        """,
-        (season, clazz),
-    )
-    return [
-        FormatSlot(slot=r[0], home_region=r[1], home_seed=r[2], away_region=r[3], away_seed=r[4], north_south=r[5])
-        async for r in rows
-    ]
-
-
 async def _load_region_odds(
     conn, season: int, clazz: int, region: int, as_of: date
 ) -> tuple[
@@ -214,16 +198,8 @@ async def _load_region_odds(
     adv: dict[str, tuple[float, float, float, float]] = {}
     adv_w: dict[str, tuple[float, float, float, float]] = {}
     async for r in rows:
-        result[r[0]] = StandingsOdds(
-            school=r[0],
-            p1=r[1],
-            p2=r[2],
-            p3=r[3],
-            p4=r[4],
-            p_playoffs=r[5],
-            final_playoffs=r[6],
-            clinched=r[7],
-            eliminated=r[8],
+        result[r[0]] = standings_odds_from_row(
+            r[0], r[1], r[2], r[3], r[4], r[5], r[7], r[8],
         )
         home_p_host_given_reach[r[0]] = (r[9], r[10], r[11], r[12])    # r1, r2, qf, sf p_host_given_reach
         home_p_host_given_reach_w[r[0]] = (r[13], r[14], r[15], r[16]) # weighted
@@ -267,11 +243,8 @@ async def _load_all_regions_hosting_odds(
             by_region[reg] = ({}, {}, {}, {}, {})
         result, home_p_host_given_reach, home_p_host_given_reach_w, adv, adv_w = by_region[reg]
         school = r[1]
-        result[school] = StandingsOdds(
-            school=school,
-            p1=r[2], p2=r[3], p3=r[4], p4=r[5],
-            p_playoffs=r[6], final_playoffs=r[7],
-            clinched=r[8], eliminated=r[9],
+        result[school] = standings_odds_from_row(
+            school, r[2], r[3], r[4], r[5], r[6], r[8], r[9],
         )
         home_p_host_given_reach[school] = (r[10], r[11], r[12], r[13])
         home_p_host_given_reach_w[school] = (r[14], r[15], r[16], r[17])
@@ -291,7 +264,7 @@ async def get_class_hosting(
 
     Pass ``include_scenarios=true`` to include hosting condition text per team.
     """
-    as_of = date or datetime.now().date()
+    as_of = date or today()
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:
@@ -338,7 +311,7 @@ async def get_hosting(
 
     Pass ``include_scenarios=true`` to include hosting condition text per team.
     """
-    as_of = date or datetime.now().date()
+    as_of = date or today()
     async with get_conn() as conn:
         loaded = await _load_region_odds(conn, season, clazz, region, as_of)
         if loaded is None:
@@ -394,7 +367,7 @@ async def simulate_class_hosting(
     """
     from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
 
-    as_of = date or datetime.now().date()
+    as_of = date or today()
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:
@@ -536,7 +509,7 @@ async def simulate_hosting(
     """Apply hypothetical game results and return updated hosting odds."""
     from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
 
-    as_of = date or datetime.now().date()
+    as_of = date or today()
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:

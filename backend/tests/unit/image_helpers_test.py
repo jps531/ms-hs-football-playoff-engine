@@ -1,17 +1,22 @@
 """Tests for image URL assembly and Cloudinary upload helpers in image_helpers.py."""
 
+import os
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
 
 from backend.helpers.image_helpers import (
+    MAX_UPLOAD_FILE_BYTES,
     _configure,
     logo_url,
     promote_submission_logo,
+    save_temp,
     upload_helmet,
     upload_logo,
     upload_submission_helmet_image,
     upload_submission_logo,
+    validate_upload,
 )
 
 
@@ -188,6 +193,64 @@ class TestUploadSubmissionHelmetImage:
             overwrite=True,
             invalidate=True,
         )
+
+
+class TestValidateUpload:
+    """validate_upload rejects disallowed MIME types and oversized files."""
+
+    def test_allowed_type_and_size_passes(self):
+        """A recognised image type under the size limit raises nothing."""
+        validate_upload("image/png", 1024)
+
+    def test_oversized_file_raises_422(self):
+        """A file over MAX_UPLOAD_FILE_BYTES raises HTTP 422."""
+        with pytest.raises(HTTPException) as exc_info:
+            validate_upload("image/png", MAX_UPLOAD_FILE_BYTES + 1)
+        assert exc_info.value.status_code == 422
+
+    def test_disallowed_mime_type_raises_422(self):
+        """A MIME type outside the allowed set raises HTTP 422."""
+        with pytest.raises(HTTPException) as exc_info:
+            validate_upload("application/pdf", 1024)
+        assert exc_info.value.status_code == 422
+
+    def test_none_content_type_raises_422(self):
+        """A missing content type (None) is treated as disallowed."""
+        with pytest.raises(HTTPException):
+            validate_upload(None, 1024)
+
+    def test_size_exactly_at_limit_passes(self):
+        """A file exactly at MAX_UPLOAD_FILE_BYTES is not considered oversized."""
+        validate_upload("image/png", MAX_UPLOAD_FILE_BYTES)
+
+
+class TestSaveTemp:
+    """save_temp writes contents to a temp file and returns its path."""
+
+    def test_writes_contents_to_returned_path(self):
+        """The file at the returned path contains exactly the given bytes."""
+        path = save_temp("photo.png", b"fake-image-bytes")
+        try:
+            with open(path, "rb") as f:
+                assert f.read() == b"fake-image-bytes"
+        finally:
+            os.unlink(path)
+
+    def test_suffix_derived_from_filename(self):
+        """The temp file suffix matches the original filename's extension."""
+        path = save_temp("helmet.webp", b"data")
+        try:
+            assert path.endswith(".webp")
+        finally:
+            os.unlink(path)
+
+    def test_missing_filename_defaults_to_png_suffix(self):
+        """A None/empty filename falls back to a .png suffix."""
+        path = save_temp(None, b"data")
+        try:
+            assert path.endswith(".png")
+        finally:
+            os.unlink(path)
 
 
 class TestLogoUrl:

@@ -1,6 +1,6 @@
 """Standings, seeding odds, and scenario endpoints."""
 
-from datetime import date, datetime
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
@@ -26,6 +26,8 @@ from backend.helpers.api_helpers import (
     results_to_applied,
     scenarios_to_entries,
     standings_from_odds,
+    standings_odds_from_row,
+    today,
 )
 from backend.helpers.data_classes import CompletedGame, RemainingGame, StandingsOdds
 from backend.helpers.insights import deserialize_insights
@@ -45,11 +47,6 @@ IncludeTeamScenariosQ = Annotated[bool, Query()]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
-def _today() -> date:
-    """Return today's date (injectable seam for tests)."""
-    return datetime.now().date()
-
-
 def _odds_from_rows(standings_rows: list[tuple]) -> tuple[dict, dict]:
     """Build (odds, weighted_odds) StandingsOdds dicts from standings DB rows.
 
@@ -59,13 +56,11 @@ def _odds_from_rows(standings_rows: list[tuple]) -> tuple[dict, dict]:
     weighted: dict[str, StandingsOdds] = {}
     for row in standings_rows:
         school = row[0]
-        odds[school] = StandingsOdds(
-            school=school, p1=row[7], p2=row[8], p3=row[9], p4=row[10], p_playoffs=row[11],
-            final_playoffs=row[11], clinched=bool(row[12]), eliminated=bool(row[13]),
+        odds[school] = standings_odds_from_row(
+            school, row[7], row[8], row[9], row[10], row[11], row[12], row[13],
         )
-        weighted[school] = StandingsOdds(
-            school=school, p1=row[16], p2=row[17], p3=row[18], p4=row[19], p_playoffs=row[20],
-            final_playoffs=row[20], clinched=bool(row[12]), eliminated=bool(row[13]),
+        weighted[school] = standings_odds_from_row(
+            school, row[16], row[17], row[18], row[19], row[20], row[12], row[13],
         )
     return odds, weighted
 
@@ -222,7 +217,7 @@ async def get_standings(
     Pass ``include_team_scenarios=true`` to also receive per-team per-seed
     condition strings grouped by team name (only available when R≤6).
     """
-    as_of = date or _today()
+    as_of = date or today()
     async with get_conn() as conn:
         standings_rows = await _load_standings_snapshot(conn, season, clazz, region, as_of)
         scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
@@ -306,7 +301,7 @@ async def simulate_standings(
     Pass ``include_team_scenarios=true`` to also receive per-team per-seed
     condition strings for the remaining scenarios after simulation.
     """
-    as_of = date or _today()
+    as_of = date or today()
     async with get_conn() as conn:
         scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
         if scenarios_data is not None:
@@ -348,11 +343,10 @@ async def simulate_standings(
     if complete_scenarios and scenarios_available:
         filtered_scenarios = filter_scenarios_by_simulation(complete_scenarios, body.results)
         if include_team_scenarios and filtered_scenarios:
-            sim_odds = {school: StandingsOdds(
-                school=school, p1=o.p1, p2=o.p2, p3=o.p3, p4=o.p4,
-                p_playoffs=o.p_playoffs, final_playoffs=o.p_playoffs,
-                clinched=o.clinched, eliminated=o.eliminated,
-            ) for school, o in odds_map.items()}
+            sim_odds = {
+                school: standings_odds_from_row(school, o.p1, o.p2, o.p3, o.p4, o.p_playoffs, o.clinched, o.eliminated)
+                for school, o in odds_map.items()
+            }
             ts = team_scenarios_as_dict(
                 atoms_from_complete_scenarios(filtered_scenarios),
                 odds=sim_odds,

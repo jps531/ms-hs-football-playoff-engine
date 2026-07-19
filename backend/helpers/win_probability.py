@@ -116,6 +116,27 @@ def _elo_expected(r_a: float, r_b: float, scale: float) -> float:
     return 1.0 / (1.0 + 10.0 ** ((r_b - r_a) / scale))
 
 
+def compute_pregame_win_prob(
+    elo_a: float,
+    elo_b: float,
+    location_a: str | None = None,
+    config: EloConfig | None = None,
+) -> float:
+    """Return P(team_a beats team_b) given two already-known Elo ratings.
+
+    ``location_a`` is ``"home"``, ``"away"``, or ``None``/``"neutral"`` from
+    team_a's perspective.
+    """
+    cfg = config or EloConfig()
+    if location_a == "home":
+        r_a_adj = elo_a + cfg.hfa_points
+    elif location_a == "away":
+        r_a_adj = elo_a - cfg.hfa_points
+    else:
+        r_a_adj = elo_a
+    return _elo_expected(r_a_adj, elo_b, cfg.scale)
+
+
 def _mov_multiplier(margin: int, elo_diff_winner: float, mov_exponent: float) -> float:
     """FiveThirtyEight-style margin-of-victory multiplier.
 

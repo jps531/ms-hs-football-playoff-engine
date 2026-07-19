@@ -19,6 +19,7 @@ from backend.helpers.win_probability import (
     compute_elo_ratings,
     compute_in_game_win_prob,
     compute_ot_win_prob,
+    compute_pregame_win_prob,
     compute_rpi,
     make_matchup_prob_fn,
     make_win_prob_fn,
@@ -177,6 +178,35 @@ class TestEloInternals:
         """Unknown school returns the 1A fallback prior."""
         result = _class_prior("OOSTeam", {}, EloConfig())
         assert result == pytest.approx(EloConfig().class_ratings[0])
+
+
+class TestComputePregameWinProb:
+    """Tests for compute_pregame_win_prob (used by the /games/probability endpoint)."""
+
+    def test_neutral_site_matches_elo_expected(self):
+        """No location defaults to a neutral-site Elo expectation."""
+        p = compute_pregame_win_prob(1300.0, 1100.0, None, EloConfig())
+        assert p == pytest.approx(_elo_expected(1300.0, 1100.0, 400.0))
+
+    def test_home_location_applies_hfa_boost(self):
+        """team_a at home gets its rating boosted by hfa_points before comparison."""
+        cfg = EloConfig()
+        p_home = compute_pregame_win_prob(1200.0, 1200.0, "home", cfg)
+        assert p_home == pytest.approx(_elo_expected(1200.0 + cfg.hfa_points, 1200.0, cfg.scale))
+        assert p_home > 0.5
+
+    def test_away_location_applies_hfa_penalty(self):
+        """team_a on the road gets its rating reduced by hfa_points before comparison."""
+        cfg = EloConfig()
+        p_away = compute_pregame_win_prob(1200.0, 1200.0, "away", cfg)
+        assert p_away == pytest.approx(_elo_expected(1200.0 - cfg.hfa_points, 1200.0, cfg.scale))
+        assert p_away < 0.5
+
+    def test_default_config_used_when_omitted(self):
+        """Omitting config falls back to EloConfig() defaults."""
+        p_explicit = compute_pregame_win_prob(1400.0, 1000.0, "home", EloConfig())
+        p_default = compute_pregame_win_prob(1400.0, 1000.0, "home")
+        assert p_explicit == pytest.approx(p_default)
 
 
 # ---------------------------------------------------------------------------

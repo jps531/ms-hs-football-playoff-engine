@@ -11,7 +11,6 @@ until a moderator approves them via ``/api/v1/moderation/submissions/{id}/approv
 
 import json
 import os
-import tempfile
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -28,39 +27,16 @@ from backend.api.models.requests import (
 from backend.api.models.responses import SubmissionCreatedResponse
 from backend.helpers.image_helpers import (
     LogoType,
+    save_temp,
     upload_submission_helmet_image,
     upload_submission_logo,
+    validate_upload,
 )
 
 router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 _MAX_HELMET_IMAGES = 5
-_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-_MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
-
-
-def _validate_upload(file: UploadFile, contents: bytes) -> None:
-    """Raise HTTP 422 if the upload is not an allowed image type or exceeds size limit."""
-    if len(contents) > _MAX_FILE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"File exceeds maximum allowed size of {_MAX_FILE_BYTES // 1024 // 1024} MB",
-        )
-    if file.content_type not in _ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Unsupported file type '{file.content_type}'. Allowed: {sorted(_ALLOWED_MIME_TYPES)}",
-        )
-
-
-def _save_temp(file: UploadFile, contents: bytes) -> str:
-    """Write upload contents to a named temp file (mode 0600) and return its path."""
-    suffix = os.path.splitext(file.filename or "")[1] or ".png"
-    tmp = tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=suffix)
-    tmp.write(contents)
-    tmp.close()
-    return tmp.name
 
 
 class _HelmetForm:
@@ -120,8 +96,8 @@ async def submit_logo(
         await _require_school(conn, school)
 
     contents = await file.read()
-    _validate_upload(file, contents)
-    tmp_path = _save_temp(file, contents)
+    validate_upload(file.content_type, len(contents))
+    tmp_path = save_temp(file.filename, contents)
     try:
         cloudinary_path = upload_submission_logo(tmp_path, school, logo_type)
     finally:
@@ -205,16 +181,16 @@ async def submit_helmet(
     try:
         for i, img in enumerate(images):
             contents = await img.read()
-            _validate_upload(img, contents)
-            tmp = _save_temp(img, contents)
+            validate_upload(img.content_type, len(contents))
+            tmp = save_temp(img.filename, contents)
             tmp_paths.append(tmp)
             path = upload_submission_helmet_image(tmp, form.school, submission_id, i)
             image_paths.append(path)
 
         if logo_image is not None:
             contents = await logo_image.read()
-            _validate_upload(logo_image, contents)
-            tmp = _save_temp(logo_image, contents)
+            validate_upload(logo_image.content_type, len(contents))
+            tmp = save_temp(logo_image.filename, contents)
             tmp_paths.append(tmp)
             logo_image_path = upload_submission_helmet_image(tmp, form.school, submission_id, len(images))
     finally:

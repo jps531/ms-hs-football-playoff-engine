@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
@@ -69,6 +69,35 @@ DISPLAY_THRESHOLD = 6
 
 CLINCHED_THRESHOLD = 0.999
 """Minimum seeding probability required to consider a seed position clinched."""
+
+# ---------------------------------------------------------------------------
+# Shared request-time seams
+# ---------------------------------------------------------------------------
+
+
+def today() -> date:
+    """Return today's date (injectable seam for tests)."""
+    return datetime.now().date()
+
+
+async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:
+    """Return all playoff format slots for *clazz* in *season*."""
+    rows = await conn.execute(
+        """
+        SELECT pfs.slot, pfs.home_region, pfs.home_seed,
+               pfs.away_region, pfs.away_seed, pfs.north_south
+        FROM playoff_format_slots pfs
+        JOIN playoff_formats pf ON pfs.format_id = pf.id
+        WHERE pf.season = %s AND pf.class = %s
+        ORDER BY pfs.slot
+        """,
+        (season, clazz),
+    )
+    return [
+        FormatSlot(slot=r[0], home_region=r[1], home_seed=r[2], away_region=r[3], away_seed=r[4], north_south=r[5])
+        async for r in rows
+    ]
+
 
 # ---------------------------------------------------------------------------
 # Game data parsing
@@ -208,6 +237,40 @@ def records_from_completed(teams: list[str], completed: list[CompletedGame]) -> 
             wins[g.b] += 1
             losses[g.a] += 1
     return {t: (0, 0, 0, wins[t], losses[t], 0) for t in teams}
+
+
+# ---------------------------------------------------------------------------
+# Seeding odds construction
+# ---------------------------------------------------------------------------
+
+
+def standings_odds_from_row(
+    school: str,
+    p1: float,
+    p2: float,
+    p3: float,
+    p4: float,
+    p_playoffs: float,
+    clinched: bool,
+    eliminated: bool,
+) -> StandingsOdds:
+    """Build a ``StandingsOdds`` from seeding-probability columns.
+
+    ``final_playoffs`` always mirrors ``p_playoffs`` — every DB snapshot query
+    selects ``odds_playoffs`` for both, and the on-demand computation path has
+    no separate "final" projection either.
+    """
+    return StandingsOdds(
+        school=school,
+        p1=p1,
+        p2=p2,
+        p3=p3,
+        p4=p4,
+        p_playoffs=p_playoffs,
+        final_playoffs=p_playoffs,
+        clinched=bool(clinched),
+        eliminated=bool(eliminated),
+    )
 
 
 # ---------------------------------------------------------------------------

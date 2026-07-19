@@ -1,6 +1,6 @@
 """Cross-region rankings for a given class, sorted by any single odds metric."""
 
-from datetime import date, datetime
+from datetime import date
 from enum import StrEnum
 from typing import Annotated, Any
 
@@ -16,6 +16,7 @@ from backend.api.models.responses import (
     SeedingOddsModel,
     TeamRankEntry,
 )
+from backend.helpers.api_helpers import today
 
 router = APIRouter(prefix="/api/v1/rankings", tags=["rankings"])
 
@@ -174,11 +175,6 @@ def _row_to_entry(row: tuple, sort_col: str) -> TeamRankEntry:
     )
 
 
-def _today() -> date:
-    """Return today's date (injectable seam for tests)."""
-    return datetime.now().date()
-
-
 @router.get("/{clazz}")
 async def get_rankings(
     clazz: ClazzPath,
@@ -197,7 +193,7 @@ async def get_rankings(
     suppress near-zero entries (e.g. ``min_odds=0.001`` omits eliminated
     teams), and *limit* to control the result count (max 200).
     """
-    as_of_date = as_of or _today()
+    as_of_date = as_of or today()
     sort_col = sort_by.value  # safe: constrained to a closed enum of column names
 
     base_params: list[Any] = [season, clazz, as_of_date]

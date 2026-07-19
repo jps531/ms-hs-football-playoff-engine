@@ -36,6 +36,7 @@ from backend.helpers.api_helpers import (
     results_to_applied,
     scenarios_to_entries,
     standings_from_odds,
+    standings_odds_from_row,
 )
 from backend.helpers.data_classes import BracketOdds, CompletedGame, GameResult, RemainingGame, StandingsOdds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
@@ -437,6 +438,39 @@ class TestRecordsFromCompleted:
         assert result["Alpha"][3] == 2  # won both
         assert result["Beta"][4] == 1
         assert result["Gamma"][4] == 1
+
+
+# ---------------------------------------------------------------------------
+# TestStandingsOddsFromRow
+# ---------------------------------------------------------------------------
+
+
+class TestStandingsOddsFromRow:
+    """standings_odds_from_row builds a StandingsOdds from seeding-probability columns."""
+
+    def test_fields_mapped(self):
+        """school and p1-p4/p_playoffs columns map to the same-named fields."""
+        result = standings_odds_from_row("Taylorsville", 0.1, 0.2, 0.3, 0.4, 0.9, False, False)
+        assert result.school == "Taylorsville"
+        assert (result.p1, result.p2, result.p3, result.p4) == (0.1, 0.2, 0.3, 0.4)
+        assert result.p_playoffs == pytest.approx(0.9)
+
+    def test_final_playoffs_mirrors_p_playoffs(self):
+        """final_playoffs is always set equal to p_playoffs, not passed separately."""
+        result = standings_odds_from_row("Taylorsville", 0.1, 0.2, 0.3, 0.4, 0.9, False, False)
+        assert result.final_playoffs == result.p_playoffs
+
+    def test_clinched_and_eliminated_coerced_to_bool(self):
+        """Truthy/falsy DB values (e.g. 0/1 or None) are coerced to real bools."""
+        result = standings_odds_from_row("Taylorsville", 0.1, 0.2, 0.3, 0.4, 0.9, 1, 0)
+        assert result.clinched is True
+        assert result.eliminated is False
+
+    def test_none_clinched_eliminated_coerced_to_false(self):
+        """None for clinched/eliminated (unset DB columns) coerces to False rather than raising."""
+        result = standings_odds_from_row("Taylorsville", 0.1, 0.2, 0.3, 0.4, 0.9, None, None)
+        assert result.clinched is False
+        assert result.eliminated is False
 
 
 # ---------------------------------------------------------------------------

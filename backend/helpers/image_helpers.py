@@ -1,13 +1,41 @@
 """Cloudinary image upload helpers."""
 
 import os
+import tempfile
 from typing import Literal
 
 import cloudinary
 import cloudinary.uploader
+from fastapi import HTTPException, status
 
 LogoType = Literal["primary", "secondary", "tertiary"]
 HelmetImageType = Literal["left", "right", "photo"]
+
+ALLOWED_UPLOAD_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def validate_upload(content_type: str | None, size: int) -> None:
+    """Raise HTTP 422 if *content_type*/*size* describe a disallowed image upload."""
+    if size > MAX_UPLOAD_FILE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"File exceeds maximum allowed size of {MAX_UPLOAD_FILE_BYTES // 1024 // 1024} MB",
+        )
+    if content_type not in ALLOWED_UPLOAD_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported file type '{content_type}'. Allowed: {sorted(ALLOWED_UPLOAD_MIME_TYPES)}",
+        )
+
+
+def save_temp(filename: str | None, contents: bytes) -> str:
+    """Write upload contents to a named temp file (mode 0600) and return its path."""
+    suffix = os.path.splitext(filename or "")[1] or ".png"
+    tmp = tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=suffix)
+    tmp.write(contents)
+    tmp.close()
+    return tmp.name
 
 
 def _configure() -> None:

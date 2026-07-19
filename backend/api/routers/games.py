@@ -1,6 +1,6 @@
 """Game schedule and win probability endpoints."""
 
-from datetime import date, datetime
+from datetime import date
 from typing import Annotated, Any, LiteralString
 
 from fastapi import APIRouter, HTTPException, Query
@@ -16,7 +16,12 @@ from backend.api.models.responses import (
     PreGameWinProbResponse,
     VenueModel,
 )
-from backend.helpers.win_probability import EloConfig, compute_in_game_win_prob, compute_ot_win_prob
+from backend.helpers.win_probability import (
+    EloConfig,
+    compute_in_game_win_prob,
+    compute_ot_win_prob,
+    compute_pregame_win_prob,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["games"])
 
@@ -40,11 +45,6 @@ _HELMET_COLS = (
     "tags",
     "notes",
 )
-
-
-def _today() -> date:
-    """Return today's date (injectable seam for tests)."""
-    return datetime.now().date()
 
 
 def _build_helmet(*fields) -> HelmetDesignModel | None:
@@ -232,7 +232,7 @@ async def pregame_win_probability(
         hfa = -cfg.hfa_points
     else:
         hfa = 0.0
-    p = 1.0 / (1.0 + 10.0 ** ((elo_b - elo_a - hfa) / cfg.scale))
+    p = compute_pregame_win_prob(elo_a, elo_b, location, cfg)
 
     return PreGameWinProbResponse(
         team_a=team_a,
