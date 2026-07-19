@@ -19,7 +19,7 @@ This module handles the remaining rounds:
   tiebreak as quarterfinals.  Home games played do **not** factor in at this
   round per MHSAA rules.
 
-All three public functions return a MARGINAL probability:
+All three public functions return an OVERALL hosting probability:
     P(team reaches round) x P(team is home | team reaches round)
 
 This matches the semantics of ``compute_first_round_home_odds``.
@@ -858,7 +858,7 @@ def compute_second_round_home_odds(
     round_snapshots: "dict[int, dict[int, dict[str, StandingsOdds]]] | None" = None,
     wins_confirmed: "dict[str, int] | None" = None,
 ) -> dict[str, float]:
-    """Compute each team's marginal probability of hosting their second-round game.
+    """Compute each team's overall probability of hosting their second-round game.
 
     Applies to 1A-4A only (5A-7A teams go straight to the quarterfinal).
 
@@ -888,7 +888,7 @@ def compute_second_round_home_odds(
                          alive in *all_region_odds*.
 
     Returns:
-        Dict mapping team name to marginal P(hosting round 2) in [0.0, 1.0].
+        Dict mapping team name to overall P(hosting round 2) in [0.0, 1.0].
     """
     half_slots = _half_slots_for_region(region, slots)
     odd_year = season % 2 == 1
@@ -973,7 +973,7 @@ def compute_quarterfinal_home_odds(
     wins_confirmed: "dict[str, int] | None" = None,
     cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> dict[str, float]:
-    """Compute each team's marginal probability of hosting their quarterfinal game.
+    """Compute each team's overall probability of hosting their quarterfinal game.
 
     For 5A-7A the quarterfinal is round 2 (one win required after R1).
     For 1A-4A the quarterfinal is round 3 (two wins required).
@@ -1002,7 +1002,7 @@ def compute_quarterfinal_home_odds(
                          ambiguous r2_home values across any number of rounds.
 
     Returns:
-        Dict mapping team name to marginal P(hosting quarterfinal) in [0.0, 1.0].
+        Dict mapping team name to overall P(hosting quarterfinal) in [0.0, 1.0].
     """
     half_slots = _half_slots_for_region(region, slots)
     qf_offset = 1 if len(half_slots) == 4 else 2
@@ -1088,7 +1088,7 @@ def compute_semifinal_home_odds(
     wins_confirmed: "dict[str, int] | None" = None,
     cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> dict[str, float]:
-    """Compute each team's marginal probability of hosting their semifinal game.
+    """Compute each team's overall probability of hosting their semifinal game.
 
     For 5A-7A the semifinal is Round 3 (two wins after First Round).
     For 1A-4A the semifinal is Round 4 (three wins after First Round).
@@ -1115,7 +1115,7 @@ def compute_semifinal_home_odds(
                            ``skip_wins`` so their advancement weights are correct.
 
     Returns:
-        Dict mapping team name to marginal P(hosting semifinal) in [0.0, 1.0].
+        Dict mapping team name to overall P(hosting semifinal) in [0.0, 1.0].
     """
     half_slots = _half_slots_for_region(region, slots)
     sf_offset = 2 if len(half_slots) == 4 else 3
@@ -1299,22 +1299,22 @@ def compute_bracket_advancement_odds(
     return result
 
 
-def marginal_home_odds(conditional: float, advancement: float) -> float:
-    """Return the marginal probability of hosting a playoff round.
+def overall_home_odds(p_host_given_reach: float, advancement: float) -> float:
+    """Return the overall probability of hosting a playoff round.
 
-    Marginal = P(reaches round) × P(hosts | reaches round).
+    Overall = P(reaches round) × P(hosts | reaches round).
 
-    This is the complement of ``_safe_cond`` used when storing odds: the DB
-    stores the two components separately (advancement in ``odds_*`` and
-    conditional in ``odds_*_home``), and this function reconstructs the
-    combined probability for display or further calculation.
+    This is the complement of ``_safe_p_host_given_reach`` used when storing
+    odds: the DB stores the two components separately (advancement in
+    ``odds_*`` and p_host_given_reach in ``odds_*_home``), and this function
+    reconstructs the combined probability for display or further calculation.
 
     Args:
-        conditional:  P(hosts round | reaches round) — the stored
+        p_host_given_reach: P(hosts round | reaches round) — the stored
                       ``odds_*_home`` value.
         advancement:  P(reaches round) — the stored ``odds_*`` value.
 
     Returns:
         P(reaches round AND hosts round) in [0.0, 1.0].
     """
-    return conditional * advancement
+    return p_host_given_reach * advancement

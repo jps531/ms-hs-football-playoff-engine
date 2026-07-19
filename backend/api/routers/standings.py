@@ -19,6 +19,7 @@ from backend.helpers.api_helpers import (
     build_team_entries,
     compute_remaining_games,
     filter_remaining_after_simulation,
+    filter_scenarios_by_simulation,
     parse_completed_games,
     records_from_completed,
     remaining_to_models,
@@ -67,20 +68,6 @@ def _odds_from_rows(standings_rows: list[tuple]) -> tuple[dict, dict]:
             final_playoffs=row[20], clinched=bool(row[12]), eliminated=bool(row[13]),
         )
     return odds, weighted
-
-
-def _filter_scenarios_by_simulation(
-    complete_scenarios: list[dict],
-    simulated_results: list,
-) -> list[dict]:
-    """Keep only scenarios where every simulated (winner, loser) pair appears in game_winners."""
-    simulated_pairs = {(r.winner, r.loser) for r in simulated_results}
-    if not simulated_pairs:
-        return complete_scenarios
-    return [
-        sc for sc in complete_scenarios
-        if all(pair in sc.get("game_winners", []) for pair in simulated_pairs)
-    ]
 
 
 async def _load_standings_snapshot(conn, season: int, clazz: int, region: int, as_of: date) -> list[tuple] | None:
@@ -359,7 +346,7 @@ async def simulate_standings(
     filtered_scenarios: list[dict] | None = None
     ts: dict | None = None
     if complete_scenarios and scenarios_available:
-        filtered_scenarios = _filter_scenarios_by_simulation(complete_scenarios, body.results)
+        filtered_scenarios = filter_scenarios_by_simulation(complete_scenarios, body.results)
         if include_team_scenarios and filtered_scenarios:
             sim_odds = {school: StandingsOdds(
                 school=school, p1=o.p1, p2=o.p2, p3=o.p3, p4=o.p4,

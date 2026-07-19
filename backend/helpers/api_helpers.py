@@ -38,8 +38,8 @@ from backend.helpers.bracket_home_odds import (
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
     half_slots_for_region,
-    marginal_home_odds,
     opponent_slots,
+    overall_home_odds,
     qf_home_team,
     r2_home_team,
     sf_home_team,
@@ -51,11 +51,13 @@ from backend.helpers.data_classes import (
     BracketOdds,
     CompletedGame,
     FormatSlot,
+    GameResult,
     MatchupProbFn,
     RemainingGame,
     StandingsOdds,
 )
 from backend.helpers.scenario_renderer import render_scenario_title
+from backend.helpers.scenario_serializers import serialize_atom
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 # ---------------------------------------------------------------------------
@@ -143,6 +145,47 @@ def filter_remaining_after_simulation(
     return [rg for rg in remaining if {rg.a, rg.b} not in applied_pairs]
 
 
+def filter_scenarios_by_simulation(
+    complete_scenarios: list[dict],
+    simulated_results,
+) -> list[dict]:
+    """Keep only scenarios consistent with every simulated (winner, loser[, margin]) result.
+
+    A scenario must have every simulated pair among its ``game_winners``. If a
+    simulated result also carries an explicit score, any ``GameResult`` condition
+    in the scenario's ``conditions_atom`` for that same pair must accept the
+    resulting margin (min_margin/max_margin), so mutually-exclusive margin-bucket
+    sub-scenarios collapse to the one branch the real score actually falls in.
+    """
+    simulated_pairs = {(r.winner, r.loser) for r in simulated_results}
+    if not simulated_pairs:
+        return complete_scenarios
+    known_margins = {
+        (r.winner, r.loser): r.winner_score - r.loser_score
+        for r in simulated_results
+        if r.winner_score is not None and r.loser_score is not None
+    }
+
+    def _margin_ok(sc: dict) -> bool:
+        """Return False if a known margin violates one of the scenario's GameResult bounds."""
+        for cond in sc.get("conditions_atom") or []:
+            if not isinstance(cond, GameResult):
+                continue
+            margin = known_margins.get((cond.winner, cond.loser))
+            if margin is None:
+                continue
+            if margin < cond.min_margin:
+                return False
+            if cond.max_margin is not None and margin >= cond.max_margin:
+                return False
+        return True
+
+    return [
+        sc for sc in complete_scenarios
+        if all(pair in sc.get("game_winners", []) for pair in simulated_pairs) and _margin_ok(sc)
+    ]
+
+
 
 # ---------------------------------------------------------------------------
 # Record helpers
@@ -184,6 +227,7 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
     result = []
     for sc in complete_scenarios:
         seeding = sc.get("seeding", ())
+        conditions_atom = sc.get("conditions_atom")
         result.append(
             ScenarioEntry(
                 scenario_num=sc["scenario_num"],
@@ -193,6 +237,7 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
                 tiebreaker_groups=sc.get("tiebreaker_groups"),
                 coinflip_groups=sc.get("coinflip_groups"),
                 outcomes={team: str(idx + 1) for idx, team in enumerate(seeding)},
+                conditions=serialize_atom(conditions_atom) if conditions_atom else None,
             )
         )
     return result
@@ -367,8 +412,8 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
     region: int,
     season: int,
     clazz: int,
-    home_cond: dict[str, tuple[float, float, float, float]] | None = None,
-    home_cond_w: dict[str, tuple[float, float, float, float]] | None = None,
+    home_p_host_given_reach: dict[str, tuple[float, float, float, float]] | None = None,
+    home_p_host_given_reach_w: dict[str, tuple[float, float, float, float]] | None = None,
     stored_adv: dict[str, tuple[float, float, float, float]] | None = None,
     stored_adv_w: dict[str, tuple[float, float, float, float]] | None = None,
     rounds_completed: int = 0,
@@ -381,28 +426,28 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
 ) -> list[TeamHostingEntry]:
     """Compute per-round playoff hosting odds for all teams in a region.
 
-    When *home_cond* and *stored_adv* are provided (GET endpoint), values are
+    When *home_p_host_given_reach* and *stored_adv* are provided (GET endpoint), values are
     read directly from the DB snapshot — this correctly reflects rounds already
     played and advancement probabilities after each playoff round.
 
     When not provided (simulate endpoint, unit tests), falls back to on-the-fly
-    computation from seeding odds.  R1 conditional is 0.0 in the fallback path
+    computation from seeding odds.  R1 p_host_given_reach is 0.0 in the fallback path
     since home-seed data is not available without a DB lookup.
 
     *eliminated_hosting* overrides both paths for eliminated teams: supply a
     ``(r1, r2, qf, sf)`` tuple of 1.0/0.0/None per team so that rounds they
-    actually played show a deterministic conditional rather than null.
+    actually played show a deterministic p_host_given_reach rather than null.
 
     1A–4A have four hosting rounds; 5A–7A skip ``second_round`` (null).
 
-    Tuple layout for *home_cond*, *home_cond_w*, *stored_adv*, *stored_adv_w*:
+    Tuple layout for *home_p_host_given_reach*, *home_p_host_given_reach_w*, *stored_adv*, *stored_adv_w*:
         index 0 → R1 / p_playoffs
         index 1 → R2 / odds_second_round
         index 2 → QF / odds_quarterfinals
         index 3 → SF / odds_semifinals
     """
     is_1a_4a = clazz <= 4
-    use_stored = home_cond is not None and stored_adv is not None
+    use_stored = home_p_host_given_reach is not None and stored_adv is not None
 
     if not use_stored:
         adv_odds = compute_bracket_advancement_odds(
@@ -495,100 +540,100 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
             r1_det, r2_det, qf_det, sf_det = eliminated_hosting[school]
 
             def _det(val: float | None) -> RoundHostingOdds:
-                """Wrap a deterministic hosting value as RoundHostingOdds (marginal = conditional since p_reach = 1)."""
+                """Wrap a deterministic hosting value as RoundHostingOdds (p_host_overall = p_host_given_reach since p_reach = 1)."""
                 return RoundHostingOdds(
-                    conditional=val,
-                    marginal=val if val is not None else 0.0,
-                    conditional_weighted=val,
-                    marginal_weighted=val if val is not None else 0.0,
+                    p_host_given_reach=val,
+                    p_host_overall=val if val is not None else 0.0,
+                    p_host_given_reach_weighted=val,
+                    p_host_overall_weighted=val if val is not None else 0.0,
                 )
 
             r1_odds = _det(r1_det)
-            r2_odds = _det(r2_det) if is_1a_4a else RoundHostingOdds(conditional=None, marginal=None)
+            r2_odds = _det(r2_det) if is_1a_4a else RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
             qf_odds = _det(qf_det)
             sf_odds = _det(sf_det)
         elif use_stored:
-            r1_c, r2_c, qf_c, sf_c = home_cond.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]
+            r1_given_reach, r2_given_reach, qf_given_reach, sf_given_reach = home_p_host_given_reach.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]
             a_r1, a_r2, a_qf, a_sf = stored_adv.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]
-            r1_c_w, r2_c_w, qf_c_w, sf_c_w = (home_cond_w or {}).get(school, (0.0, 0.0, 0.0, 0.0))
+            r1_given_reach_w, r2_given_reach_w, qf_given_reach_w, sf_given_reach_w = (home_p_host_given_reach_w or {}).get(school, (0.0, 0.0, 0.0, 0.0))
             a_r1_w, a_r2_w, a_qf_w, a_sf_w = (stored_adv_w or {}).get(school, (0.0, 0.0, 0.0, 0.0))
 
             r1_gate = o.p_playoffs > 0 or o.clinched
             eff_a_r1 = a_r1 if a_r1 > 0 else (1.0 if o.clinched else 0.0)
             eff_a_r1_w = a_r1_w if a_r1_w > 0 else (1.0 if o.clinched else 0.0)
             r1_odds = RoundHostingOdds(
-                conditional=r1_c if r1_gate else None,
-                marginal=r1_c * eff_a_r1,
-                conditional_weighted=r1_c_w if r1_gate else None,
-                marginal_weighted=r1_c_w * eff_a_r1_w,
+                p_host_given_reach=r1_given_reach if r1_gate else None,
+                p_host_overall=r1_given_reach * eff_a_r1,
+                p_host_given_reach_weighted=r1_given_reach_w if r1_gate else None,
+                p_host_overall_weighted=r1_given_reach_w * eff_a_r1_w,
             )
             if is_1a_4a:
                 r2_odds = RoundHostingOdds(
-                    conditional=r2_c if a_r2 > 0 else None,
-                    marginal=r2_c * a_r2,
-                    conditional_weighted=r2_c_w if a_r2 > 0 else None,
-                    marginal_weighted=r2_c_w * a_r2_w,
+                    p_host_given_reach=r2_given_reach if a_r2 > 0 else None,
+                    p_host_overall=r2_given_reach * a_r2,
+                    p_host_given_reach_weighted=r2_given_reach_w if a_r2 > 0 else None,
+                    p_host_overall_weighted=r2_given_reach_w * a_r2_w,
                 )
             else:
-                r2_odds = RoundHostingOdds(conditional=None, marginal=None)
+                r2_odds = RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
             qf_odds = RoundHostingOdds(
-                conditional=qf_c if a_qf > 0 else None,
-                marginal=qf_c * a_qf,
-                conditional_weighted=qf_c_w if a_qf > 0 else None,
-                marginal_weighted=qf_c_w * a_qf_w,
+                p_host_given_reach=qf_given_reach if a_qf > 0 else None,
+                p_host_overall=qf_given_reach * a_qf,
+                p_host_given_reach_weighted=qf_given_reach_w if a_qf > 0 else None,
+                p_host_overall_weighted=qf_given_reach_w * a_qf_w,
             )
             sf_odds = RoundHostingOdds(
-                conditional=sf_c if a_sf > 0 else None,
-                marginal=sf_c * a_sf,
-                conditional_weighted=sf_c_w if a_sf > 0 else None,
-                marginal_weighted=sf_c_w * a_sf_w,
+                p_host_given_reach=sf_given_reach if a_sf > 0 else None,
+                p_host_overall=sf_given_reach * a_sf,
+                p_host_given_reach_weighted=sf_given_reach_w if a_sf > 0 else None,
+                p_host_overall_weighted=sf_given_reach_w * a_sf_w,
             )
         else:
             # On-the-fly fallback (simulate endpoint / unit tests).
             adv = adv_odds.get(school)  # type: ignore[possibly-undefined]
-            p_qf_cond = qf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
-            p_sf_cond = sf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
+            qf_given_reach = qf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
+            sf_given_reach = sf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
 
             adv_w = adv_odds_w.get(school) if adv_odds_w else None  # type: ignore[possibly-undefined]
-            p_qf_cond_w = qf_home_w.get(school, 0.0) if qf_home_w else 0.0  # type: ignore[possibly-undefined]
-            p_sf_cond_w = sf_home_w.get(school, 0.0) if sf_home_w else 0.0  # type: ignore[possibly-undefined]
+            qf_given_reach_w = qf_home_w.get(school, 0.0) if qf_home_w else 0.0  # type: ignore[possibly-undefined]
+            sf_given_reach_w = sf_home_w.get(school, 0.0) if sf_home_w else 0.0  # type: ignore[possibly-undefined]
 
-            r1_cond = sum(
+            r1_given_reach = sum(
                 getattr(o, f"p{seed}") * (1.0 if seed in r1_home_seeds else 0.0)  # type: ignore[possibly-undefined]
                 for seed in (1, 2, 3, 4)
             )
             if is_1a_4a:
-                p_r2_cond = r2_home_dict.get(school, 0.0)  # type: ignore[possibly-undefined]
+                r2_given_reach = r2_home_dict.get(school, 0.0)  # type: ignore[possibly-undefined]
                 p_r1_adv = adv.second_round if adv else 0.0
                 p_r2_adv = adv.quarterfinals if adv else 0.0
                 p_qf_adv = adv.semifinals if adv else 0.0
-                p_r2_cond_w = r2_home_dict_w.get(school, 0.0)  # type: ignore[possibly-undefined]
+                r2_given_reach_w = r2_home_dict_w.get(school, 0.0)  # type: ignore[possibly-undefined]
                 p_r1_adv_w = adv_w.second_round if adv_w else 0.0
                 p_r2_adv_w = adv_w.quarterfinals if adv_w else 0.0
                 p_qf_adv_w = adv_w.semifinals if adv_w else 0.0
                 r1_odds = RoundHostingOdds(
-                    conditional=r1_cond if o.p_playoffs > 0 else None,
-                    marginal=marginal_home_odds(r1_cond, o.p_playoffs),
-                    conditional_weighted=r1_cond if (o.p_playoffs > 0 and adv_w) else None,
-                    marginal_weighted=marginal_home_odds(r1_cond, o.p_playoffs) if adv_w else None,
+                    p_host_given_reach=r1_given_reach if o.p_playoffs > 0 else None,
+                    p_host_overall=overall_home_odds(r1_given_reach, o.p_playoffs),
+                    p_host_given_reach_weighted=r1_given_reach if (o.p_playoffs > 0 and adv_w) else None,
+                    p_host_overall_weighted=overall_home_odds(r1_given_reach, o.p_playoffs) if adv_w else None,
                 )
                 r2_odds = RoundHostingOdds(
-                    conditional=p_r2_cond / p_r1_adv if p_r1_adv > 0 else None,
-                    marginal=p_r2_cond if p_r1_adv > 0 else 0.0,
-                    conditional_weighted=p_r2_cond_w / p_r1_adv_w if p_r1_adv_w > 0 else None,
-                    marginal_weighted=p_r2_cond_w if p_r1_adv_w > 0 else 0.0,
+                    p_host_given_reach=r2_given_reach / p_r1_adv if p_r1_adv > 0 else None,
+                    p_host_overall=r2_given_reach if p_r1_adv > 0 else 0.0,
+                    p_host_given_reach_weighted=r2_given_reach_w / p_r1_adv_w if p_r1_adv_w > 0 else None,
+                    p_host_overall_weighted=r2_given_reach_w if p_r1_adv_w > 0 else 0.0,
                 )
                 qf_odds = RoundHostingOdds(
-                    conditional=p_qf_cond / p_r2_adv if p_r2_adv > 0 else None,
-                    marginal=p_qf_cond if p_r2_adv > 0 else 0.0,
-                    conditional_weighted=p_qf_cond_w / p_r2_adv_w if p_r2_adv_w > 0 else None,
-                    marginal_weighted=p_qf_cond_w if p_r2_adv_w > 0 else 0.0,
+                    p_host_given_reach=qf_given_reach / p_r2_adv if p_r2_adv > 0 else None,
+                    p_host_overall=qf_given_reach if p_r2_adv > 0 else 0.0,
+                    p_host_given_reach_weighted=qf_given_reach_w / p_r2_adv_w if p_r2_adv_w > 0 else None,
+                    p_host_overall_weighted=qf_given_reach_w if p_r2_adv_w > 0 else 0.0,
                 )
                 sf_odds = RoundHostingOdds(
-                    conditional=p_sf_cond / p_qf_adv if p_qf_adv > 0 else None,
-                    marginal=p_sf_cond if p_qf_adv > 0 else 0.0,
-                    conditional_weighted=p_sf_cond_w / p_qf_adv_w if p_qf_adv_w > 0 else None,
-                    marginal_weighted=p_sf_cond_w if p_qf_adv_w > 0 else 0.0,
+                    p_host_given_reach=sf_given_reach / p_qf_adv if p_qf_adv > 0 else None,
+                    p_host_overall=sf_given_reach if p_qf_adv > 0 else 0.0,
+                    p_host_given_reach_weighted=sf_given_reach_w / p_qf_adv_w if p_qf_adv_w > 0 else None,
+                    p_host_overall_weighted=sf_given_reach_w if p_qf_adv_w > 0 else 0.0,
                 )
             else:
                 p_qf_adv = adv.quarterfinals if adv else 0.0
@@ -596,23 +641,23 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
                 p_qf_adv_w = adv_w.quarterfinals if adv_w else 0.0
                 p_sf_adv_w = adv_w.semifinals if adv_w else 0.0
                 r1_odds = RoundHostingOdds(
-                    conditional=r1_cond if o.p_playoffs > 0 else None,
-                    marginal=marginal_home_odds(r1_cond, o.p_playoffs),
-                    conditional_weighted=r1_cond if (o.p_playoffs > 0 and adv_w) else None,
-                    marginal_weighted=marginal_home_odds(r1_cond, o.p_playoffs) if adv_w else None,
+                    p_host_given_reach=r1_given_reach if o.p_playoffs > 0 else None,
+                    p_host_overall=overall_home_odds(r1_given_reach, o.p_playoffs),
+                    p_host_given_reach_weighted=r1_given_reach if (o.p_playoffs > 0 and adv_w) else None,
+                    p_host_overall_weighted=overall_home_odds(r1_given_reach, o.p_playoffs) if adv_w else None,
                 )
-                r2_odds = RoundHostingOdds(conditional=None, marginal=None)
+                r2_odds = RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
                 qf_odds = RoundHostingOdds(
-                    conditional=p_qf_cond / p_qf_adv if p_qf_adv > 0 else None,
-                    marginal=p_qf_cond if p_qf_adv > 0 else 0.0,
-                    conditional_weighted=p_qf_cond_w / p_qf_adv_w if p_qf_adv_w > 0 else None,
-                    marginal_weighted=p_qf_cond_w if p_qf_adv_w > 0 else 0.0,
+                    p_host_given_reach=qf_given_reach / p_qf_adv if p_qf_adv > 0 else None,
+                    p_host_overall=qf_given_reach if p_qf_adv > 0 else 0.0,
+                    p_host_given_reach_weighted=qf_given_reach_w / p_qf_adv_w if p_qf_adv_w > 0 else None,
+                    p_host_overall_weighted=qf_given_reach_w if p_qf_adv_w > 0 else 0.0,
                 )
                 sf_odds = RoundHostingOdds(
-                    conditional=p_sf_cond / p_sf_adv if p_sf_adv > 0 else None,
-                    marginal=p_sf_cond if p_sf_adv > 0 else 0.0,
-                    conditional_weighted=p_sf_cond_w / p_sf_adv_w if p_sf_adv_w > 0 else None,
-                    marginal_weighted=p_sf_cond_w if p_sf_adv_w > 0 else 0.0,
+                    p_host_given_reach=sf_given_reach / p_sf_adv if p_sf_adv > 0 else None,
+                    p_host_overall=sf_given_reach if p_sf_adv > 0 else 0.0,
+                    p_host_given_reach_weighted=sf_given_reach_w / p_sf_adv_w if p_sf_adv_w > 0 else None,
+                    p_host_overall_weighted=sf_given_reach_w if p_sf_adv_w > 0 else 0.0,
                 )
         entries.append(
             TeamHostingEntry(
@@ -1084,7 +1129,7 @@ def build_enriched_bracket_layout(
     seed_to_school: dict[tuple[int, int], str] | None,
     confirmed_results: list[tuple[str, str, int | None, int | None]],
     simulated_results: list[tuple[str, str | None, int | None, int | None, str | None]],
-    hosting_conditional: dict[str, dict[str, float | None]] | None = None,
+    p_host_given_reach_by_team: dict[str, dict[str, float | None]] | None = None,
 ) -> BracketLayout:
     """Enrich a ``BracketLayout`` with per-game participants and results.
 
@@ -1094,7 +1139,7 @@ def build_enriched_bracket_layout(
 
     ``participant_a`` is positional (format home slot on R1, feeds_from[0]
     winner on R2+), not a hosting indicator.  ``home_school`` is set when one
-    participant's conditional hosting odds for the round are 1.0.
+    participant's p_host_given_reach hosting odds for the round are 1.0.
 
     Participants propagate round-by-round: R1 participants come from
     ``seed_to_school``; later-round participants are the winners of the
@@ -1219,14 +1264,14 @@ def build_enriched_bracket_layout(
                     home_team: BracketParticipant | None = p_a
                 else:
                     home_team = None
-                    if hosting_conditional:
+                    if p_host_given_reach_by_team:
                         if p_a and p_a.school:
-                            a_cond = (hosting_conditional.get(p_a.school) or {}).get(round_name)
-                            if a_cond is not None and a_cond > 0.99:
+                            a_given_reach = (p_host_given_reach_by_team.get(p_a.school) or {}).get(round_name)
+                            if a_given_reach is not None and a_given_reach > 0.99:
                                 home_team = p_a
                         if home_team is None and p_b and p_b.school:
-                            b_cond = (hosting_conditional.get(p_b.school) or {}).get(round_name)
-                            if b_cond is not None and b_cond > 0.99:
+                            b_given_reach = (p_host_given_reach_by_team.get(p_b.school) or {}).get(round_name)
+                            if b_given_reach is not None and b_given_reach > 0.99:
                                 home_team = p_b
 
                 enriched_games.append(BracketGame(
@@ -1306,10 +1351,10 @@ def _apply_round_ceilings(
                 cur = getattr(new_entry.hosting, rnd, None)
                 if cur is not None:
                     hosting_updates[rnd] = cur.model_copy(update={
-                        "conditional": None,
-                        "marginal": 0.0,
-                        "conditional_weighted": None,
-                        "marginal_weighted": 0.0,
+                        "p_host_given_reach": None,
+                        "p_host_overall": 0.0,
+                        "p_host_given_reach_weighted": None,
+                        "p_host_overall_weighted": 0.0,
                     })
             if hosting_updates:
                 new_entry = new_entry.model_copy(
@@ -1421,33 +1466,33 @@ def _slot_odds_for_region(
 def _det_round_hosting(val: float | None) -> RoundHostingOdds:
     """Wrap a deterministic hosting value (1.0/0.0/None) as RoundHostingOdds."""
     return RoundHostingOdds(
-        conditional=val,
-        marginal=val if val is not None else 0.0,
-        conditional_weighted=val,
-        marginal_weighted=val if val is not None else 0.0,
+        p_host_given_reach=val,
+        p_host_overall=val if val is not None else 0.0,
+        p_host_given_reach_weighted=val,
+        p_host_overall_weighted=val if val is not None else 0.0,
     )
 
 
-def _cond_round_odds(
-    marginal: float,
+def _p_host_odds_from_overall(
+    overall: float,
     advancement: float,
-    marginal_w: float | None,
+    overall_w: float | None,
     adv_w_val: float | None,
 ) -> RoundHostingOdds:
-    """Build RoundHostingOdds from marginal + advancement for one round."""
-    have_w = marginal_w is not None
+    """Build RoundHostingOdds from the overall hosting probability + advancement for one round."""
+    have_w = overall_w is not None
     adv_w_pos = bool(adv_w_val and adv_w_val > 0)
     if have_w and adv_w_pos:
-        marg_w_out: float | None = marginal_w
+        overall_w_out: float | None = overall_w
     elif have_w:
-        marg_w_out = 0.0
+        overall_w_out = 0.0
     else:
-        marg_w_out = None
+        overall_w_out = None
     return RoundHostingOdds(
-        conditional=marginal / advancement if advancement > 0 else None,
-        marginal=marginal if advancement > 0 else 0.0,
-        conditional_weighted=marginal_w / adv_w_val if (have_w and adv_w_pos) else None,  # type: ignore[operator]
-        marginal_weighted=marg_w_out,
+        p_host_given_reach=overall / advancement if advancement > 0 else None,
+        p_host_overall=overall if advancement > 0 else 0.0,
+        p_host_given_reach_weighted=overall_w / adv_w_val if (have_w and adv_w_pos) else None,  # type: ignore[operator]
+        p_host_overall_weighted=overall_w_out,
     )
 
 
@@ -1468,7 +1513,7 @@ def _hosting_for_slot(
 ) -> BracketSlotHosting:
     """Compute BracketSlotHosting for one (region, seed) slot."""
     slot_odds = all_slot_odds[region_num]
-    null_r2 = RoundHostingOdds(conditional=None, marginal=None)
+    null_r2 = RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
 
     if eliminated_by_slot and slot_id in eliminated_by_slot:
         r1_det, r2_det, qf_det, sf_det = eliminated_by_slot[slot_id]
@@ -1482,27 +1527,27 @@ def _hosting_for_slot(
     # R1: structural — home/away determined by bracket format
     half = half_slots_for_region(region_num, slots)
     idx = slot_index_for(region_num, seed, half)
-    r1_cond = 1.0 if (idx is not None and was_home_r1(region_num, seed, half[idx])) else 0.0
+    r1_given_reach = 1.0 if (idx is not None and was_home_r1(region_num, seed, half[idx])) else 0.0
     slot_o = slot_odds.get(slot_id)
     p_playoffs = slot_o.p_playoffs if slot_o is not None else 0.0
-    r1_marg = r1_cond * p_playoffs
+    r1_overall = r1_given_reach * p_playoffs
     r1_odds = RoundHostingOdds(
-        conditional=r1_cond if p_playoffs > 0 else None,
-        marginal=r1_marg,
-        conditional_weighted=r1_cond if (p_playoffs > 0 and adv_w is not None) else None,
-        marginal_weighted=r1_marg if adv_w is not None else None,
+        p_host_given_reach=r1_given_reach if p_playoffs > 0 else None,
+        p_host_overall=r1_overall,
+        p_host_given_reach_weighted=r1_given_reach if (p_playoffs > 0 and adv_w is not None) else None,
+        p_host_overall_weighted=r1_overall if adv_w is not None else None,
     )
 
     if is_1a_4a:
         r2_map = compute_second_round_home_odds(
             region_num, slot_odds, slots, season, wins_confirmed=wins_by_slot, all_region_odds=all_slot_odds
         )
-        r2_marg = r2_map.get(slot_id, 0.0)
-        r2_marg_w = compute_second_round_home_odds(
+        r2_overall = r2_map.get(slot_id, 0.0)
+        r2_overall_w = compute_second_round_home_odds(
             region_num, slot_odds, slots, season,
             win_prob_fn=win_prob_fn_weighted, wins_confirmed=wins_by_slot, all_region_odds=all_slot_odds,
         ).get(slot_id, 0.0) if win_prob_fn_weighted is not None else None
-        r2_odds = _cond_round_odds(r2_marg, adv.second_round, r2_marg_w, adv_w.second_round if adv_w else None)
+        r2_odds = _p_host_odds_from_overall(r2_overall, adv.second_round, r2_overall_w, adv_w.second_round if adv_w else None)
     else:
         r2_odds = null_r2
 
@@ -1510,25 +1555,25 @@ def _hosting_for_slot(
         region_num, slot_odds, slots, season,
         wins_confirmed=wins_by_slot, all_region_odds=all_slot_odds, cross_region_wins=cross_region_wins,
     )
-    qf_marg = qf_map.get(slot_id, 0.0)
-    qf_marg_w = compute_quarterfinal_home_odds(
+    qf_overall = qf_map.get(slot_id, 0.0)
+    qf_overall_w = compute_quarterfinal_home_odds(
         region_num, slot_odds, slots, season,
         win_prob_fn=win_prob_fn_weighted, wins_confirmed=wins_by_slot,
         all_region_odds=all_slot_odds, cross_region_wins=cross_region_wins,
     ).get(slot_id, 0.0) if win_prob_fn_weighted is not None else None
-    qf_odds = _cond_round_odds(qf_marg, adv.quarterfinals, qf_marg_w, adv_w.quarterfinals if adv_w else None)
+    qf_odds = _p_host_odds_from_overall(qf_overall, adv.quarterfinals, qf_overall_w, adv_w.quarterfinals if adv_w else None)
 
     sf_map = compute_semifinal_home_odds(
         region_num, slot_odds, slots, season,
         wins_confirmed=wins_by_slot, all_region_odds=all_slot_odds, cross_region_wins=cross_region_wins,
     )
-    sf_marg = sf_map.get(slot_id, 0.0)
-    sf_marg_w = compute_semifinal_home_odds(
+    sf_overall = sf_map.get(slot_id, 0.0)
+    sf_overall_w = compute_semifinal_home_odds(
         region_num, slot_odds, slots, season,
         win_prob_fn=win_prob_fn_weighted, wins_confirmed=wins_by_slot,
         all_region_odds=all_slot_odds, cross_region_wins=cross_region_wins,
     ).get(slot_id, 0.0) if win_prob_fn_weighted is not None else None
-    sf_odds = _cond_round_odds(sf_marg, adv.semifinals, sf_marg_w, adv_w.semifinals if adv_w else None)
+    sf_odds = _p_host_odds_from_overall(sf_overall, adv.semifinals, sf_overall_w, adv_w.semifinals if adv_w else None)
 
     return BracketSlotHosting(
         first_round=r1_odds,

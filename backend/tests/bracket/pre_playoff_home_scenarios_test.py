@@ -284,24 +284,24 @@ class TestOddsPassthrough:
     """Caller-supplied odds dicts are forwarded unchanged to each RoundHomeScenarios."""
 
     def test_aggregate_odds_appear_on_merged_rounds(self):
-        """p_reach and p_host_conditional supplied to enumerate_home_game_scenarios appear on each round."""
+        """p_reach and p_host_given_reach supplied to enumerate_home_game_scenarios appear on each round."""
         p_reach = {"First Round": 1.0, "Second Round": 0.5, "Quarterfinals": 0.25, "Semifinals": 0.125}
-        p_host_cond = {"First Round": 1.0, "Second Round": 0.6, "Quarterfinals": 0.5, "Semifinals": 0.4}
+        p_host_given_reach = {"First Round": 1.0, "Second Round": 0.6, "Quarterfinals": 0.5, "Semifinals": 0.4}
         rounds = _scenarios(
             p_reach_by_round=p_reach,
-            p_host_conditional_by_round=p_host_cond,
+            p_host_given_reach_by_round=p_host_given_reach,
         )
         for rnd in rounds:
             assert rnd.p_reach == p_reach[rnd.round_name]
-            assert rnd.p_host_conditional == p_host_cond[rnd.round_name]
+            assert rnd.p_host_given_reach == p_host_given_reach[rnd.round_name]
 
     def test_no_odds_means_none_fields(self):
-        """Without odds dicts, p_reach / p_host_conditional / p_host_marginal are all None."""
+        """Without odds dicts, p_reach / p_host_given_reach / p_host_overall are all None."""
         rounds = _scenarios()
         for rnd in rounds:
             assert rnd.p_reach is None
-            assert rnd.p_host_conditional is None
-            assert rnd.p_host_marginal is None
+            assert rnd.p_host_given_reach is None
+            assert rnd.p_host_overall is None
 
 
 # ---------------------------------------------------------------------------
@@ -449,8 +449,8 @@ def _build_combined_render_fixtures():
         season=SEASON,
         achievable_seeds=[1, 2],
         p_reach_by_round=p_reach,
-        p_host_marginal_by_round=pm,
-        p_host_conditional_by_round=pc,
+        p_host_overall_by_round=pm,
+        p_host_given_reach_by_round=pc,
     )
     return atoms, home_scenarios
 

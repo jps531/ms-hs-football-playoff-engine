@@ -1038,7 +1038,7 @@ class MatchupEntry:
     """One possible playoff matchup for a team in a specific round.
 
     Represents a unique ``(opponent, home/away)`` outcome.  Under equal win
-    probability ``p_conditional`` values sum to ``1.0`` across all entries in
+    probability ``p_given_reach`` values sum to ``1.0`` across all entries in
     a round.  Entries are sorted home-first, then by ``(opponent_region,
     opponent_seed)``.
 
@@ -1049,15 +1049,15 @@ class MatchupEntry:
         opponent_seed:              The opponent's region seed (1 = best).
         home:                       ``True`` when the given team is the
                                     designated home team.
-        p_conditional:              P(this matchup | team reaches round) under
+        p_given_reach:              P(this matchup | team reaches round) under
                                     equal win probabilities; ``None`` if not
                                     provided.
-        p_conditional_weighted:     Weighted equivalent; ``None`` if not
+        p_given_reach_weighted:     Weighted equivalent; ``None`` if not
                                     provided.
-        p_marginal:                 P(team reaches round AND this matchup) =
-                                    ``p_conditional`` × ``p_reach``; ``None``
+        p_overall:                  P(team reaches round AND this matchup) =
+                                    ``p_given_reach`` × ``p_reach``; ``None``
                                     if either component is absent.
-        p_marginal_weighted:        Weighted equivalent.
+        p_overall_weighted:         Weighted equivalent.
         explanation:                Human-readable reason for the home/away
                                     designation, e.g.
                                     ``"Higher seed (#1) hosts"``.
@@ -1067,10 +1067,10 @@ class MatchupEntry:
     opponent_region: int
     opponent_seed: int
     home: bool
-    p_conditional: float | None
-    p_conditional_weighted: float | None
-    p_marginal: float | None
-    p_marginal_weighted: float | None
+    p_given_reach: float | None
+    p_given_reach_weighted: float | None
+    p_overall: float | None
+    p_overall_weighted: float | None
     explanation: str | None
 
 
@@ -1087,14 +1087,14 @@ class RoundMatchups:
                                      ``"First Round"``, ``"Quarterfinals"``.
         p_reach:                     P(team reaches this round) under equal win
                                      probabilities; ``None`` if not provided.
-        p_host_conditional:          P(hosts | reaches) under equal win probs;
+        p_host_given_reach:          P(hosts | reaches) under equal win probs;
                                      ``None`` if not provided.
-        p_host_marginal:             P(reaches AND hosts); ``None`` if not
+        p_host_overall:              P(reaches AND hosts); ``None`` if not
                                      provided.
         p_reach_weighted:            Weighted equivalent of ``p_reach``.
-        p_host_conditional_weighted: Weighted equivalent of
-                                     ``p_host_conditional``.
-        p_host_marginal_weighted:    Weighted equivalent of ``p_host_marginal``.
+        p_host_given_reach_weighted: Weighted equivalent of
+                                     ``p_host_given_reach``.
+        p_host_overall_weighted:     Weighted equivalent of ``p_host_overall``.
         entries:                     All possible ``(opponent, home/away)``
                                      combinations, sorted home-first then by
                                      ``(opponent_region, opponent_seed)``.
@@ -1102,11 +1102,11 @@ class RoundMatchups:
 
     round_name: str
     p_reach: float | None
-    p_host_conditional: float | None
-    p_host_marginal: float | None
+    p_host_given_reach: float | None
+    p_host_overall: float | None
     p_reach_weighted: float | None
-    p_host_conditional_weighted: float | None
-    p_host_marginal_weighted: float | None
+    p_host_given_reach_weighted: float | None
+    p_host_overall_weighted: float | None
     entries: tuple[MatchupEntry, ...]
 
 
@@ -1245,23 +1245,23 @@ class RoundHomeScenarios:
                                      team.
         p_reach:                     P(team reaches this round) under equal win
                                      probabilities; ``None`` if not provided.
-        p_host_conditional:          P(hosts | reaches) under equal win probs;
+        p_host_given_reach:          P(hosts | reaches) under equal win probs;
                                      ``None`` if not provided.
-        p_host_marginal:             P(reaches AND hosts) = p_reach ×
-                                     p_host_conditional under equal win probs;
+        p_host_overall:              P(reaches AND hosts) = p_reach ×
+                                     p_host_given_reach under equal win probs;
                                      ``None`` if not provided.
         p_reach_weighted:            Same as ``p_reach`` but computed with a
                                      weighted win-probability function.
-        p_host_conditional_weighted: Same as ``p_host_conditional`` weighted.
-        p_host_marginal_weighted:    Same as ``p_host_marginal`` weighted.
+        p_host_given_reach_weighted: Same as ``p_host_given_reach`` weighted.
+        p_host_overall_weighted:     Same as ``p_host_overall`` weighted.
     """
 
     round_name: str
     will_host: tuple[HomeGameScenario, ...]
     will_not_host: tuple[HomeGameScenario, ...]
     p_reach: float | None
-    p_host_conditional: float | None
-    p_host_marginal: float | None
+    p_host_given_reach: float | None
+    p_host_overall: float | None
     p_reach_weighted: float | None
-    p_host_conditional_weighted: float | None
-    p_host_marginal_weighted: float | None
+    p_host_given_reach_weighted: float | None
+    p_host_overall_weighted: float | None

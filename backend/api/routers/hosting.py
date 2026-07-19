@@ -10,6 +10,7 @@ from backend.api.limiter import limiter
 from backend.api.models.requests import GameResultRequest, SimulateBracketRequest
 from backend.api.models.responses import ClassHostingResponse, HostingResponse
 from backend.helpers.api_helpers import (
+    DISPLAY_THRESHOLD,
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     build_hosting_entries,
@@ -21,6 +22,7 @@ from backend.helpers.data_classes import FormatSlot, StandingsOdds
 from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
 from backend.helpers.scenario_renderer import team_home_scenarios_as_dict
 from backend.helpers.scenario_updater import apply_region_game_results
+from backend.helpers.scenario_viewer import build_scenario_atoms
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["hosting"])
@@ -32,19 +34,63 @@ IncludeScenariosQ = Annotated[bool, Query()]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
+async def _compute_seed_atoms_if_pre_playoff(
+    conn, season: int, clazz: int, region: int, as_of: date, teams: list[str] | None = None,
+) -> dict | None:
+    """Return a ``build_scenario_atoms`` dict for *region*, or ``None`` when it doesn't apply.
+
+    Returns ``None`` when the region has no remaining games (fully decided —
+    every team's seed is already clinched, so no ``seed_required`` placeholder
+    can occur) or when the remaining-game count exceeds ``DISPLAY_THRESHOLD``
+    (the same combinatorial-blowup guard standings scenario enumeration uses).
+    """
+    from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
+
+    scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
+    if scenarios_data is not None:
+        remaining, _, _, _ = scenarios_data
+    else:
+        _, _, remaining, _, _ = await _recompute_from_games(conn, season, clazz, region, as_of)
+
+    if not remaining or len(remaining) > DISPLAY_THRESHOLD:
+        return None
+
+    if teams is None:
+        team_rows = await conn.execute(
+            "SELECT school FROM school_seasons WHERE season=%s AND class=%s AND region=%s AND is_active=TRUE ORDER BY school",
+            (season, clazz, region),
+        )
+        teams = [r[0] async for r in team_rows]
+
+    game_rows = await conn.execute(
+        """
+        SELECT school, opponent, points_for, points_against, date
+        FROM games_effective
+        WHERE season=%s AND region_game=TRUE AND final=TRUE AND date<=%s AND school=ANY(%s)
+        ORDER BY date
+        """,
+        (season, as_of, teams),
+    )
+    completed = parse_completed_games([r async for r in game_rows])
+    return build_scenario_atoms(teams, completed, remaining)
+
+
 def _attach_hosting_scenarios(
     entries: list,
     region_odds: dict[str, StandingsOdds],
     slots: list[FormatSlot],
     season: int,
     region: int,
+    seed_atoms: dict | None = None,
 ) -> list:
     """Return a new list of TeamHostingEntry with hosting scenario conditions attached.
 
     Calls ``enumerate_home_game_scenarios`` per team (pure/fast) and serialises
     the result via ``team_home_scenarios_as_dict``.  Probability annotations are
     derived from the entry's ``RoundHostingOdds`` fields so no extra DB round-trip
-    is needed.
+    is needed.  *seed_atoms* (from ``_compute_seed_atoms_if_pre_playoff``), when
+    provided, expands pre-playoff ``seed_required`` placeholders into the real
+    underlying game conditions.
     """
     updated = []
     for entry in entries:
@@ -75,24 +121,24 @@ def _attach_hosting_scenarios(
             ("Semifinals", entry.semifinals),
         ]
         p_reach: dict[str, float] = {}
-        p_cond: dict[str, float] = {}
-        p_marg: dict[str, float] = {}
+        p_host_given_reach: dict[str, float] = {}
+        p_host_overall: dict[str, float] = {}
         p_reach_w: dict[str, float] = {}
-        p_cond_w: dict[str, float] = {}
-        p_marg_w: dict[str, float] = {}
+        p_host_given_reach_w: dict[str, float] = {}
+        p_host_overall_w: dict[str, float] = {}
         for rname, rnd in _ROUND_MAP:
-            if rnd.marginal is not None and rnd.conditional:
-                p_reach[rname] = rnd.marginal / rnd.conditional
-            if rnd.conditional is not None:
-                p_cond[rname] = rnd.conditional
-            if rnd.marginal is not None:
-                p_marg[rname] = rnd.marginal
-            if rnd.marginal_weighted is not None and rnd.conditional_weighted:
-                p_reach_w[rname] = rnd.marginal_weighted / rnd.conditional_weighted
-            if rnd.conditional_weighted is not None:
-                p_cond_w[rname] = rnd.conditional_weighted
-            if rnd.marginal_weighted is not None:
-                p_marg_w[rname] = rnd.marginal_weighted
+            if rnd.p_host_overall is not None and rnd.p_host_given_reach:
+                p_reach[rname] = rnd.p_host_overall / rnd.p_host_given_reach
+            if rnd.p_host_given_reach is not None:
+                p_host_given_reach[rname] = rnd.p_host_given_reach
+            if rnd.p_host_overall is not None:
+                p_host_overall[rname] = rnd.p_host_overall
+            if rnd.p_host_overall_weighted is not None and rnd.p_host_given_reach_weighted:
+                p_reach_w[rname] = rnd.p_host_overall_weighted / rnd.p_host_given_reach_weighted
+            if rnd.p_host_given_reach_weighted is not None:
+                p_host_given_reach_w[rname] = rnd.p_host_given_reach_weighted
+            if rnd.p_host_overall_weighted is not None:
+                p_host_overall_w[rname] = rnd.p_host_overall_weighted
 
         home_scenarios = enumerate_home_game_scenarios(
             region=region,
@@ -101,13 +147,17 @@ def _attach_hosting_scenarios(
             season=season,
             achievable_seeds=achievable_seeds,
             p_reach_by_round=p_reach or None,
-            p_host_conditional_by_round=p_cond or None,
-            p_host_marginal_by_round=p_marg or None,
+            p_host_given_reach_by_round=p_host_given_reach or None,
+            p_host_overall_by_round=p_host_overall or None,
             p_reach_weighted_by_round=p_reach_w or None,
-            p_host_conditional_weighted_by_round=p_cond_w or None,
-            p_host_marginal_weighted_by_round=p_marg_w or None,
+            p_host_given_reach_weighted_by_round=p_host_given_reach_w or None,
+            p_host_overall_weighted_by_round=p_host_overall_w or None,
         )
-        updated.append(entry.model_copy(update={"scenarios": team_home_scenarios_as_dict(entry.school, home_scenarios)}))
+        updated.append(
+            entry.model_copy(
+                update={"scenarios": team_home_scenarios_as_dict(entry.school, home_scenarios, seed_atoms=seed_atoms)}
+            )
+        )
     return updated
 
 
@@ -134,12 +184,12 @@ async def _load_region_odds(
     conn, season: int, clazz: int, region: int, as_of: date
 ) -> tuple[
     dict[str, StandingsOdds],
-    dict[str, tuple[float, float, float, float]],   # home_cond (r1, r2, qf, sf)
-    dict[str, tuple[float, float, float, float]],   # home_cond_w (r1, r2, qf, sf)
+    dict[str, tuple[float, float, float, float]],   # home_p_host_given_reach (r1, r2, qf, sf)
+    dict[str, tuple[float, float, float, float]],   # home_p_host_given_reach_w (r1, r2, qf, sf)
     dict[str, tuple[float, float, float, float]],   # adv (r1=p_playoffs, r2, qf, sf)
     dict[str, tuple[float, float, float, float]],   # adv_w
 ] | None:
-    """Load per-team seeding odds, home conditionals, and bracket advancement from the most recent snapshot."""
+    """Load per-team seeding odds, home p_host_given_reach values, and bracket advancement from the most recent snapshot."""
     rows = await conn.execute(
         """
         SELECT DISTINCT ON (school)
@@ -159,8 +209,8 @@ async def _load_region_odds(
         (season, clazz, region, as_of),
     )
     result: dict[str, StandingsOdds] = {}
-    home_cond: dict[str, tuple[float, float, float, float]] = {}
-    home_cond_w: dict[str, tuple[float, float, float, float]] = {}
+    home_p_host_given_reach: dict[str, tuple[float, float, float, float]] = {}
+    home_p_host_given_reach_w: dict[str, tuple[float, float, float, float]] = {}
     adv: dict[str, tuple[float, float, float, float]] = {}
     adv_w: dict[str, tuple[float, float, float, float]] = {}
     async for r in rows:
@@ -175,11 +225,11 @@ async def _load_region_odds(
             clinched=r[7],
             eliminated=r[8],
         )
-        home_cond[r[0]] = (r[9], r[10], r[11], r[12])    # r1, r2, qf, sf conditionals
-        home_cond_w[r[0]] = (r[13], r[14], r[15], r[16]) # weighted
+        home_p_host_given_reach[r[0]] = (r[9], r[10], r[11], r[12])    # r1, r2, qf, sf p_host_given_reach
+        home_p_host_given_reach_w[r[0]] = (r[13], r[14], r[15], r[16]) # weighted
         adv[r[0]] = (r[17], r[18], r[19], r[20])          # p_playoffs, r2, qf, sf advancement
         adv_w[r[0]] = (r[21], r[22], r[23], r[24])        # weighted advancement
-    return (result, home_cond, home_cond_w, adv, adv_w) if result else None
+    return (result, home_p_host_given_reach, home_p_host_given_reach_w, adv, adv_w) if result else None
 
 
 async def _load_all_regions_hosting_odds(
@@ -215,7 +265,7 @@ async def _load_all_regions_hosting_odds(
         reg = r[0]
         if reg not in by_region:
             by_region[reg] = ({}, {}, {}, {}, {})
-        result, home_cond, home_cond_w, adv, adv_w = by_region[reg]
+        result, home_p_host_given_reach, home_p_host_given_reach_w, adv, adv_w = by_region[reg]
         school = r[1]
         result[school] = StandingsOdds(
             school=school,
@@ -223,8 +273,8 @@ async def _load_all_regions_hosting_odds(
             p_playoffs=r[6], final_playoffs=r[7],
             clinched=r[8], eliminated=r[9],
         )
-        home_cond[school] = (r[10], r[11], r[12], r[13])
-        home_cond_w[school] = (r[14], r[15], r[16], r[17])
+        home_p_host_given_reach[school] = (r[10], r[11], r[12], r[13])
+        home_p_host_given_reach_w[school] = (r[14], r[15], r[16], r[17])
         adv[school] = (r[18], r[19], r[20], r[21])
         adv_w[school] = (r[22], r[23], r[24], r[25])
     return by_region
@@ -248,21 +298,28 @@ async def get_class_hosting(
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
         all_loaded = await _load_all_regions_hosting_odds(conn, season, clazz, as_of)
 
+        seed_atoms_by_region: dict[int, dict | None] = {}
+        if include_scenarios:
+            for region in all_loaded:
+                seed_atoms_by_region[region] = await _compute_seed_atoms_if_pre_playoff(conn, season, clazz, region, as_of)
+
     if not all_loaded:
         raise HTTPException(status_code=404, detail=f"No data for {clazz}A season {season}")
 
     region_responses = []
     for region in sorted(all_loaded):
-        region_odds, home_cond, home_cond_w, stored_adv, stored_adv_w = all_loaded[region]
+        region_odds, home_p_host_given_reach, home_p_host_given_reach_w, stored_adv, stored_adv_w = all_loaded[region]
         entries = build_hosting_entries(
             region_odds, slots, region, season, clazz,
-            home_cond=home_cond,
-            home_cond_w=home_cond_w,
+            home_p_host_given_reach=home_p_host_given_reach,
+            home_p_host_given_reach_w=home_p_host_given_reach_w,
             stored_adv=stored_adv,
             stored_adv_w=stored_adv_w,
         )
         if include_scenarios:
-            entries = _attach_hosting_scenarios(entries, region_odds, slots, season, region)
+            entries = _attach_hosting_scenarios(
+                entries, region_odds, slots, season, region, seed_atoms=seed_atoms_by_region.get(region)
+            )
         region_responses.append(
             HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
         )
@@ -286,20 +343,21 @@ async def get_hosting(
         loaded = await _load_region_odds(conn, season, clazz, region, as_of)
         if loaded is None:
             raise HTTPException(status_code=404, detail=f"No data for {clazz}A Region {region} season {season}")
-        region_odds, home_cond, home_cond_w, stored_adv, stored_adv_w = loaded
+        region_odds, home_p_host_given_reach, home_p_host_given_reach_w, stored_adv, stored_adv_w = loaded
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
+        seed_atoms = await _compute_seed_atoms_if_pre_playoff(conn, season, clazz, region, as_of) if include_scenarios else None
 
     entries = build_hosting_entries(
         region_odds, slots, region, season, clazz,
-        home_cond=home_cond,
-        home_cond_w=home_cond_w,
+        home_p_host_given_reach=home_p_host_given_reach,
+        home_p_host_given_reach_w=home_p_host_given_reach_w,
         stored_adv=stored_adv,
         stored_adv_w=stored_adv_w,
     )
     if include_scenarios:
-        entries = _attach_hosting_scenarios(entries, region_odds, slots, season, region)
+        entries = _attach_hosting_scenarios(entries, region_odds, slots, season, region, seed_atoms=seed_atoms)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 
@@ -370,6 +428,7 @@ async def simulate_class_hosting(
         wins_by_team: dict[str, int] = {}
         matchup_fn_by_region: dict[int, object] = {}
         eliminated_hosting_map: dict[str, tuple] = {}
+        seed_atoms_by_region: dict[int, dict | None] = {}
 
         if not sentinel_remaining:
             # Playoff mode: delegate to shared bracket-state builder.
@@ -438,6 +497,9 @@ async def simulate_class_hosting(
                 seeding_by_region = build_seeding_by_region(reg, odds_map, other_seeding)
                 matchup_fn_by_region[reg] = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
 
+                if include_scenarios and reg_remaining and len(reg_remaining) <= DISPLAY_THRESHOLD:
+                    seed_atoms_by_region[reg] = build_scenario_atoms(reg_teams, completed, reg_remaining)
+
     region_responses = []
     for reg in sorted(odds_by_region):
         reg_odds = odds_by_region[reg]
@@ -451,7 +513,9 @@ async def simulate_class_hosting(
             eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
         )
         if include_scenarios:
-            entries = _attach_hosting_scenarios(entries, reg_odds, slots, season, reg)
+            entries = _attach_hosting_scenarios(
+                entries, reg_odds, slots, season, reg, seed_atoms=seed_atoms_by_region.get(reg)
+            )
         region_responses.append(
             HostingResponse(season=season, class_=clazz, region=reg, as_of_date=as_of, teams=entries)
         )
@@ -560,7 +624,8 @@ async def simulate_hosting(
         eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
     )
     if include_scenarios:
-        entries = _attach_hosting_scenarios(entries, odds_map, slots, season, region)
+        seed_atoms = build_scenario_atoms(teams, completed, remaining) if remaining and len(remaining) <= DISPLAY_THRESHOLD else None
+        entries = _attach_hosting_scenarios(entries, odds_map, slots, season, region, seed_atoms=seed_atoms)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 

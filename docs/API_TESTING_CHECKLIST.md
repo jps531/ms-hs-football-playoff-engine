@@ -57,10 +57,10 @@ Query with `?date=YYYY-10-01` — most slots should have `school: null` and frac
 Each entry should have `second_round_weighted` through `champion_weighted` populated (not `null`) for a season with Elo ratings. For a clinched strong 1-seed, `second_round_weighted` should be higher than `second_round`.
 
 **9b. Hosting odds are present on every entry** ✅
-Each entry should have a non-null `hosting` object with `first_round`, `second_round`, `quarterfinals`, `semifinals` — each with `conditional` and `marginal` fields. For a 5A–7A class, `hosting.second_round.conditional` and `.marginal` should both be `null`. For a 1A–4A class, `hosting.second_round` should be fully populated.
+Each entry should have a non-null `hosting` object with `first_round`, `second_round`, `quarterfinals`, `semifinals` — each with `p_host_given_reach` and `p_host_overall` fields. For a 5A–7A class, `hosting.second_round.p_host_given_reach` and `.p_host_overall` should both be `null`. For a 1A–4A class, `hosting.second_round` should be fully populated.
 
-**9c. Seed-1 first_round hosting conditional is always 1.0** ✅
-For every region, the seed-1 slot's `hosting.first_round.conditional` should be exactly `1.0` — seed-1 is always the home team in round 1 by bracket definition.
+**9c. Seed-1 first_round hosting p_host_given_reach is always 1.0** ✅
+For every region, the seed-1 slot's `hosting.first_round.p_host_given_reach` should be exactly `1.0` — seed-1 is always the home team in round 1 by bracket definition.
 
 **9d. Weighted hosting fields are `null` for a season with no Elo data** ✅
 Query the bracket for an older season that has no Elo ratings (e.g. `?season=2010`). All `*_weighted` fields — both advancement and hosting — should be `null`.
@@ -98,7 +98,7 @@ Each rating entry should include `as_of_date` (the pipeline run date), `games_pl
 For any completed region, the 1-seed's round-1 hosting odds should be `1.0` (they always host). If a lower seed shows higher odds than the 1-seed, there's a bracket-slot mapping bug.
 
 **12a. Eliminated playoff teams show correct historical hosting facts** ✅
-For a team eliminated mid-bracket (e.g. lost in QF), their hosting odds for rounds they *played* should reflect the actual result (0 or 1), not all-zeros. Example: Leake County (1A region 5) on `?date=2025-11-21` — first_round and quarterfinals conditional should be `1`, second_round conditional should be `0`, semifinals should be `null`.
+For a team eliminated mid-bracket (e.g. lost in QF), their hosting odds for rounds they *played* should reflect the actual result (0 or 1), not all-zeros. Example: Leake County (1A region 5) on `?date=2025-11-21` — first_round and quarterfinals p_host_given_reach should be `1`, second_round p_host_given_reach should be `0`, semifinals should be `null`.
 
 ---
 

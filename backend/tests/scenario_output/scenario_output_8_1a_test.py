@@ -361,7 +361,7 @@ def test_team_dict_entry_shape():
     """Every seed/eliminated entry has odds, weighted_odds, and scenarios keys."""
     for team, team_entry in _TEAM_DICT.items():
         for key, val in team_entry.items():
-            assert set(val.keys()) == {"odds", "weighted_odds", "scenarios"}, f"{team!r} key {key!r} has wrong shape"
+            assert set(val.keys()) == {"odds", "weighted_odds", "scenarios", "conditions"}, f"{team!r} key {key!r} has wrong shape"
 
 
 def test_team_dict_taylorsville_seeds():

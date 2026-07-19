@@ -13,7 +13,7 @@ compute_semifinal_home_odds across six distinct knowledge states:
 
 Sum invariant (applies in all scenarios)
 -----------------------------------------
-For any valid inputs, the sum of marginal P(hosting round X) across every
+For any valid inputs, the sum of overall P(hosting round X) across every
 team in a bracket half equals the number of games played in that round:
 
     5A-7A North or South:  QF = 2,  SF = 1
@@ -29,7 +29,7 @@ All 1A-4A tests use the North half (Regions 1-4) from SLOTS_1A_4A_2025.
     Slot 4: home=R1s2, away=R2s3   (QF game B pair)
 
 With equal_matchup_prob and all seeds locked (p_seed=1.0 for one seed),
-the marginal QF hosting probabilities for Region 1 are:
+the overall QF hosting probabilities for Region 1 are:
     seed 1 (slot 1, home): P(host QF) = 0.5 × 1.0 = 0.5
         — hosts vs R2s2 (equal homes→seed wins) AND vs R1s3 (golden rule wins)
     seed 2 (slot 4, home): P(host QF) = 0.5 × 0.5 = 0.25
@@ -55,7 +55,7 @@ from backend.helpers.bracket_home_odds import (
     compute_semifinal_home_odds,
     equal_matchup_prob,
     half_slots_for_region,
-    marginal_home_odds,
+    overall_home_odds,
     r2_home_team,
     slot_index_for,
 )
@@ -157,11 +157,11 @@ def _slot_results_fn(
 # ---------------------------------------------------------------------------
 
 # Each test uses a region_odds dict for one region with the seed locked to a
-# specific value.  Expected marginals derived from the slot analysis in the
+# specific value.  Expected overall values derived from the slot analysis in the
 # module docstring above.
 
 _5A7A_QF_LOCKED_CASES = [
-    # (region, seed, expected_marginal)
+    # (region, seed, expected_overall)
     # Region 1
     (1, 1, 0.50),
     (1, 2, 0.25),
@@ -180,7 +180,7 @@ _5A7A_QF_LOCKED_CASES = [
     [pytest.param(r, s, e, id=f"R{r}s{s}") for r, s, e in _5A7A_QF_LOCKED_CASES],
 )
 def test_qf_locked_5a7a_north(region: int, seed: int, expected: float) -> None:
-    """Locked seed in 5A-7A North: marginal QF hosting matches hand-computed value."""
+    """Locked seed in 5A-7A North: overall QF hosting matches hand-computed value."""
     odds = {f"Team_R{region}s{seed}": _locked(f"Team_R{region}s{seed}", seed)}
     result = compute_quarterfinal_home_odds(region, odds, SLOTS_5A_7A_2025, ODD_SEASON)
     assert result[f"Team_R{region}s{seed}"] == pytest.approx(expected, abs=1e-9)
@@ -204,14 +204,14 @@ def _1a4a_north_all_locked_odds() -> dict[int, dict[str, StandingsOdds]]:
     return {r: {f"R{r}s{s}": _locked(f"R{r}s{s}", s) for s in range(1, 5)} for r in range(1, 5)}
 
 
-def _sum_marginals(
+def _sum_overall(
     fn,
     regions: list[int],
     all_odds: dict[int, dict[str, StandingsOdds]],
     slots,
     season: int,
 ) -> float:
-    """Sum marginal hosting probabilities across all given regions using the provided compute function."""
+    """Sum overall hosting probabilities across all given regions using the provided compute function."""
     total = 0.0
     for region in regions:
         result = fn(region, all_odds[region], slots, season)
@@ -221,23 +221,23 @@ def _sum_marginals(
 
 @pytest.mark.parametrize("season", [ODD_SEASON, EVEN_SEASON], ids=["odd_year", "even_year"])
 def test_sum_invariant_qf_5a7a_north(season: int) -> None:
-    """Sum of marginal QF hosting across all 5A-7A North teams = 2 (one home per game)."""
+    """Sum of overall QF hosting across all 5A-7A North teams = 2 (one home per game)."""
     all_odds = _5a7a_north_all_locked_odds()
-    total = _sum_marginals(compute_quarterfinal_home_odds, [1, 2], all_odds, SLOTS_5A_7A_2025, season)
+    total = _sum_overall(compute_quarterfinal_home_odds, [1, 2], all_odds, SLOTS_5A_7A_2025, season)
     assert total == pytest.approx(_5A7A_NORTH_QF_GAMES, abs=1e-9)
 
 
 @pytest.mark.parametrize("season", [ODD_SEASON, EVEN_SEASON], ids=["odd_year", "even_year"])
 def test_sum_invariant_sf_5a7a_north(season: int) -> None:
-    """Sum of marginal SF hosting across all 5A-7A North teams = 1 (one home per game)."""
+    """Sum of overall SF hosting across all 5A-7A North teams = 1 (one home per game)."""
     all_odds = _5a7a_north_all_locked_odds()
-    total = _sum_marginals(compute_semifinal_home_odds, [1, 2], all_odds, SLOTS_5A_7A_2025, season)
+    total = _sum_overall(compute_semifinal_home_odds, [1, 2], all_odds, SLOTS_5A_7A_2025, season)
     assert total == pytest.approx(_5A7A_NORTH_SF_GAMES, abs=1e-9)
 
 
 @pytest.mark.parametrize("season", [ODD_SEASON, EVEN_SEASON], ids=["odd_year", "even_year"])
 def test_sum_invariant_r2_1a4a_north(season: int) -> None:
-    """Sum of marginal R2 hosting across all 1A-4A North teams = 4."""
+    """Sum of overall R2 hosting across all 1A-4A North teams = 4."""
     all_odds = _1a4a_north_all_locked_odds()
     total = 0.0
     for region in range(1, 5):
@@ -248,17 +248,17 @@ def test_sum_invariant_r2_1a4a_north(season: int) -> None:
 
 @pytest.mark.parametrize("season", [ODD_SEASON, EVEN_SEASON], ids=["odd_year", "even_year"])
 def test_sum_invariant_qf_1a4a_north(season: int) -> None:
-    """Sum of marginal QF hosting across all 1A-4A North teams = 2."""
+    """Sum of overall QF hosting across all 1A-4A North teams = 2."""
     all_odds = _1a4a_north_all_locked_odds()
-    total = _sum_marginals(compute_quarterfinal_home_odds, list(range(1, 5)), all_odds, SLOTS_1A_4A_2025, season)
+    total = _sum_overall(compute_quarterfinal_home_odds, list(range(1, 5)), all_odds, SLOTS_1A_4A_2025, season)
     assert total == pytest.approx(_1A4A_NORTH_QF_GAMES, abs=1e-9)
 
 
 @pytest.mark.parametrize("season", [ODD_SEASON, EVEN_SEASON], ids=["odd_year", "even_year"])
 def test_sum_invariant_sf_1a4a_north(season: int) -> None:
-    """Sum of marginal SF hosting across all 1A-4A North teams = 1."""
+    """Sum of overall SF hosting across all 1A-4A North teams = 1."""
     all_odds = _1a4a_north_all_locked_odds()
-    total = _sum_marginals(compute_semifinal_home_odds, list(range(1, 5)), all_odds, SLOTS_1A_4A_2025, season)
+    total = _sum_overall(compute_semifinal_home_odds, list(range(1, 5)), all_odds, SLOTS_1A_4A_2025, season)
     assert total == pytest.approx(_1A4A_NORTH_SF_GAMES, abs=1e-9)
 
 
@@ -268,7 +268,7 @@ def test_sum_invariant_sf_1a4a_north(season: int) -> None:
 
 
 def test_qf_linearity_uniform_equals_seed_average_5a7a() -> None:
-    """Uniform p_seed=0.25 marginal equals the average of the four locked-seed marginals."""
+    """Uniform p_seed=0.25 overall value equals the average of the four locked-seed overall values."""
     region = 1
     school = "TeamA"
     uniform_odds = {school: _uniform(school)}
@@ -284,7 +284,7 @@ def test_qf_linearity_uniform_equals_seed_average_5a7a() -> None:
 
 
 def test_r2_linearity_uniform_equals_seed_average_1a4a() -> None:
-    """R2 uniform p_seed marginal equals the average of the four locked-seed marginals (1A-4A)."""
+    """R2 uniform p_seed overall value equals the average of the four locked-seed overall values (1A-4A)."""
     region = 1
     school = "TeamA"
     uniform_odds = {school: _uniform(school)}
@@ -305,7 +305,7 @@ def test_r2_linearity_uniform_equals_seed_average_1a4a() -> None:
 
 
 def test_qf_partially_locked_region_5a7a() -> None:
-    """When some teams are locked and others aren't, locked teams' marginals are unaffected.
+    """When some teams are locked and others aren't, locked teams' overall values are unaffected.
 
     compute_quarterfinal_home_odds operates independently per school via their
     p_seed weights — adding a second school with fractional odds to the dict
@@ -333,7 +333,7 @@ def test_qf_partially_locked_region_5a7a() -> None:
 
 
 def test_qf_r1_loser_gets_zero_5a7a() -> None:
-    """A known R1 loser must have marginal P(hosting QF) = 0.0."""
+    """A known R1 loser must have overall P(hosting QF) = 0.0."""
     region = 2
     school = "R2s4"
     # 5A-7A North slot 1: home=R1s1 (1,1,2,4), away=R2s4.  R1s1 wins → P(home)=1.0.
@@ -344,7 +344,7 @@ def test_qf_r1_loser_gets_zero_5a7a() -> None:
 
 
 def test_qf_r1_winner_nonzero_5a7a() -> None:
-    """A known R1 winner's marginal P(hosting QF) must be > 0."""
+    """A known R1 winner's overall P(hosting QF) must be > 0."""
     region = 1
     school = "R1s1"
     fn = _slot_results_fn({(1, 1, 2, 4): 1.0})
@@ -354,7 +354,7 @@ def test_qf_r1_winner_nonzero_5a7a() -> None:
 
 
 def test_r2_loser_gets_zero_1a4a() -> None:
-    """Known R1 loser in 1A-4A bracket has marginal P(hosting R2) = 0.0."""
+    """Known R1 loser in 1A-4A bracket has overall P(hosting R2) = 0.0."""
     region = 2
     school = "R2s4"
     # 1A-4A North slot 1: home=R1s1 (1,1,2,4), away=R2s4.  R1s1 wins.
@@ -365,7 +365,7 @@ def test_r2_loser_gets_zero_1a4a() -> None:
 
 
 def test_qf_r1_loser_gets_zero_1a4a() -> None:
-    """A known R1 loser must have marginal P(hosting QF) = 0.0 in 1A-4A."""
+    """A known R1 loser must have overall P(hosting QF) = 0.0 in 1A-4A."""
     region = 2
     school = "R2s4"
     # 1A-4A North slot 1: home=R1s1 (1,1,2,4), away=R2s4.  R1s1 wins.
@@ -376,7 +376,7 @@ def test_qf_r1_loser_gets_zero_1a4a() -> None:
 
 
 def test_qf_r1_winner_nonzero_1a4a() -> None:
-    """A known R1 winner's marginal P(hosting QF) must be > 0 in 1A-4A."""
+    """A known R1 winner's overall P(hosting QF) must be > 0 in 1A-4A."""
     region = 1
     school = "R1s1"
     fn = _slot_results_fn({(1, 1, 2, 4): 1.0})
@@ -390,7 +390,7 @@ def test_qf_r1_winner_nonzero_1a4a() -> None:
 # ---------------------------------------------------------------------------
 #
 # When R1 outcomes are certain (win_prob_fn returns 0.0 or 1.0 for every
-# R1 matchup), the probabilistic QF/SF hosting marginals must agree with
+# R1 matchup), the probabilistic QF/SF hosting overall values must agree with
 # the deterministic qf_home_team / sf_home_team functions applied to the
 # resulting known bracket path.
 #
@@ -435,7 +435,7 @@ def _game_a_fn(slot1_home_wins: bool, slot2_home_wins: bool) -> MatchupProbFn:
     ids=["R1s1_v_R2s2", "R1s1_v_R1s3_golden_rule", "R2s4_v_R2s2_golden_rule", "R2s4_v_R1s3"],
 )
 def test_qf_bridge_r1_complete_5a7a(s1_home_wins: bool, s2_home_wins: bool, expected_host: tuple) -> None:
-    """Probabilistic QF marginal with known R1 agrees with deterministic qf_home_team.
+    """Probabilistic QF overall value with known R1 agrees with deterministic qf_home_team.
 
     For the team that deterministically hosts, P(hosting QF) == 1.0.
     For the non-host QF participant, P(hosting QF) == 0.0.
@@ -520,7 +520,7 @@ def test_qf_bridge_r2_complete_1a4a(
     expected_host: tuple,
     non_host: tuple,
 ) -> None:
-    """Probabilistic QF marginal with known R1+R2 agrees with qf_home_team for 1A-4A.
+    """Probabilistic QF overall value with known R1+R2 agrees with qf_home_team for 1A-4A.
 
     For the team that deterministically hosts, P(hosting QF) == 1.0.
     For the non-host QF participant, P(hosting QF) == 0.0.
@@ -561,7 +561,7 @@ def test_qf_bridge_r2_complete_1a4a(
 
 
 def test_qf_r2_loser_gets_zero_1a4a() -> None:
-    """A known R2 loser must have marginal P(hosting QF) = 0.0 in 1A-4A."""
+    """A known R2 loser must have overall P(hosting QF) = 0.0 in 1A-4A."""
     region = 1
     school = "R1s1"
     # R1s1 wins R1 (slot 0 home), R3s2 wins R1 (slot 1 home), then R3s2 beats R1s1 in R2.
@@ -617,12 +617,12 @@ def test_sf_even_year_higher_region_hosts_equal_seeds() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 6b: Non-equal win_prob_fn shifts marginals in the expected direction
+# Scenario 6b: Non-equal win_prob_fn shifts overall values in the expected direction
 # ---------------------------------------------------------------------------
 
 
-def test_stronger_seed1_win_prob_increases_qf_hosting_marginal() -> None:
-    """Higher P(win) for seed 1 increases their marginal P(hosting QF)."""
+def test_stronger_seed1_win_prob_increases_qf_hosting_overall() -> None:
+    """Higher P(win) for seed 1 increases their overall P(hosting QF)."""
     region = 1
     school = "R1s1"
     odds = {school: _locked(school, 1)}
@@ -644,8 +644,8 @@ def test_stronger_seed1_win_prob_increases_qf_hosting_marginal() -> None:
     assert result_strong[school] > result_equal[school]
 
 
-def test_stronger_seed4_win_prob_decreases_seed1_qf_hosting_marginal() -> None:
-    """Higher P(win) for seed 4 (upsets) decreases seed 1's marginal P(hosting QF)."""
+def test_stronger_seed4_win_prob_decreases_seed1_qf_hosting_overall() -> None:
+    """Higher P(win) for seed 4 (upsets) decreases seed 1's overall P(hosting QF)."""
     region = 1
     school = "R1s1"
     odds = {school: _locked(school, 1)}
@@ -725,7 +725,7 @@ def test_golden_rule_seed3_never_hosts_same_region_seed1() -> None:
 
 
 def test_1a4a_seed1_always_hosts_r2() -> None:
-    """In 1A-4A, locked seed 1 has marginal P(hosting R2) = 0.5 under equal win prob.
+    """In 1A-4A, locked seed 1 has overall P(hosting R2) = 0.5 under equal win prob.
 
     Seed 1 always hosts R2 regardless of opponent (seeds 2-4 are all worse),
     so P(hosting R2) = P(win R1) × 1.0 = 0.5.
@@ -738,7 +738,7 @@ def test_1a4a_seed1_always_hosts_r2() -> None:
 
 
 def test_1a4a_seed4_never_hosts_r2() -> None:
-    """In 1A-4A, locked seed 4 has marginal P(hosting R2) = 0.0.
+    """In 1A-4A, locked seed 4 has overall P(hosting R2) = 0.0.
 
     Seed 4 always faces a better-seeded opponent in R2 (seeds 2 or 3 from the
     adjacent slot), so P(hosting R2 | reaches R2) = 0.0 regardless of reach prob.
@@ -761,23 +761,23 @@ def test_1a4a_seed1_r2_hosting_exceeds_seed3() -> None:
 
 
 # ---------------------------------------------------------------------------
-# marginal_home_odds
+# overall_home_odds
 # ---------------------------------------------------------------------------
 
 
-def test_marginal_home_odds_basic() -> None:
-    """Marginal = conditional × advancement."""
-    assert marginal_home_odds(0.75, 0.5) == pytest.approx(0.375)
+def test_overall_home_odds_basic() -> None:
+    """Overall = p_host_given_reach × advancement."""
+    assert overall_home_odds(0.75, 0.5) == pytest.approx(0.375)
 
 
-def test_marginal_home_odds_zero_advancement() -> None:
-    """Zero advancement produces zero marginal (team cannot reach the round)."""
-    assert marginal_home_odds(1.0, 0.0) == pytest.approx(0.0)
+def test_overall_home_odds_zero_advancement() -> None:
+    """Zero advancement produces zero overall (team cannot reach the round)."""
+    assert overall_home_odds(1.0, 0.0) == pytest.approx(0.0)
 
 
-def test_marginal_home_odds_full_certainty() -> None:
-    """Both 100% → marginal is 100%."""
-    assert marginal_home_odds(1.0, 1.0) == pytest.approx(1.0)
+def test_overall_home_odds_full_certainty() -> None:
+    """Both 100% → overall is 100%."""
+    assert overall_home_odds(1.0, 1.0) == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -931,7 +931,7 @@ def test_r2_deterministic_falls_through_without_all_region_odds() -> None:
     result = compute_second_round_home_odds(
         1, {"R1s1": _locked("R1s1", 1)}, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=1,
     )
-    # Probabilistic: p_r1=1.0, p_r2_home=1.0 (seed 1 always hosts) → marginal = 1.0
+    # Probabilistic: p_r1=1.0, p_r2_home=1.0 (seed 1 always hosts) → overall = 1.0
     assert result["R1s1"] == pytest.approx(1.0)
 
 
@@ -953,18 +953,18 @@ def test_r2_deterministic_eliminated_team_gets_zero() -> None:
 #
 # R1s2 has not played yet (rounds_completed=0, wins_confirmed=0, probabilistic path).
 # Their R2 opponent slot contains R3s1 (alive) and R4s4 (eliminated after R1).
-# Without all_region_odds, both candidates get equal weight → marginal ≈ 0.25
+# Without all_region_odds, both candidates get equal weight → overall ≈ 0.25
 #   (0.5 R1 win × 0.5 hosting chance = 0.5×0.5×0+0.5×0.5×1 / total = 0.25).
 # With all_region_odds showing R4s4 eliminated, only R3s1 remains → R1s2 always
-# away vs seed-1 → marginal = 0.0.
+# away vs seed-1 → overall = 0.0.
 
 
 def test_r2_probabilistic_eliminated_r2_opp_excluded() -> None:
-    """Path C: eliminated R2 opponent excluded via all_region_odds → marginal = 0.0.
+    """Path C: eliminated R2 opponent excluded via all_region_odds → overall = 0.0.
 
     R1s2 hasn't played (probabilistic path). Their R2 opp slot is R3s1 (alive) vs
     R4s4 (eliminated). With all_region_odds provided, R4s4 is excluded from weights.
-    Only R3s1 (seed 1) remains — always hosts vs R1s2 (seed 2) → marginal = 0.0.
+    Only R3s1 (seed 1) remains — always hosts vs R1s2 (seed 2) → overall = 0.0.
     """
     elim_r4s4 = StandingsOdds(school="R4s4", p1=0.0, p2=0.0, p3=0.0, p4=1.0,
                                p_playoffs=0.0, final_playoffs=0.0, clinched=True, eliminated=True)
@@ -977,10 +977,10 @@ def test_r2_probabilistic_eliminated_r2_opp_excluded() -> None:
 
 
 def test_r2_probabilistic_without_all_region_odds_returns_nonzero() -> None:
-    """Path C without all_region_odds: eliminated R2 opp still weighted → marginal > 0.
+    """Path C without all_region_odds: eliminated R2 opp still weighted → overall > 0.
 
     Same setup as above but without all_region_odds. R4s4 gets equal weight to
-    R3s1. R1s2 hosts vs R4s4 (seed 4) → marginal ≈ 0.25 (0.5 R1 win × 0.5 hosting).
+    R3s1. R1s2 hosts vs R4s4 (seed 4) → overall ≈ 0.25 (0.5 R1 win × 0.5 hosting).
     This confirms all_region_odds is what causes the change.
     """
     result = compute_second_round_home_odds(
@@ -1009,7 +1009,7 @@ def test_r2_probabilistic_without_all_region_odds_returns_nonzero() -> None:
 def test_qf_deterministic_seed1_hosts_5a7a(
     opp_region: int, opp_seed: int, opp_school: str, expected: float
 ) -> None:
-    """R1s1 gets QF conditional=1.0 via deterministic path for both possible QF opponents."""
+    """R1s1 gets QF p_host_given_reach=1.0 via deterministic path for both possible QF opponents."""
     all_odds = _alive_odds(opp_region, opp_seed, opp_school)
     result = compute_quarterfinal_home_odds(
         1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
@@ -1032,7 +1032,7 @@ def test_qf_deterministic_falls_through_without_all_region_odds() -> None:
     """Without all_region_odds, falls through to probabilistic even when rounds_completed=1.
 
     R1s2 faces either R2s1 (away) or R1s4 (home via golden rule), each at 0.5 weight
-    under equal_matchup_prob → p_qf_home=0.5, p_reach=1.0 → marginal=0.5.
+    under equal_matchup_prob → p_qf_home=0.5, p_reach=1.0 → overall=0.5.
     """
     result = compute_quarterfinal_home_odds(
         1, {"R1s2": _locked("R1s2", 2)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=1,
@@ -1073,7 +1073,7 @@ def test_sf_deterministic_seed1_hosts_5a7a(
 
 
 def test_sf_deterministic_seed1_r2_away_vs_r1s1() -> None:
-    """R2s1 gets SF conditional=0.0 vs R1s1 (equal seed, odd year → R1 region hosts)."""
+    """R2s1 gets SF p_host_given_reach=0.0 vs R1s1 (equal seed, odd year → R1 region hosts)."""
     all_odds = _alive_odds(1, 1, "R1s1")
     result = compute_semifinal_home_odds(
         2, {"R2s1": _locked("R2s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
@@ -1153,14 +1153,14 @@ def test_bracket_advancement_odds_matches_compute_bracket_odds_1a4a(seed: int) -
     assert adv[school].champion == pytest.approx(simple[school].champion, abs=1e-9)
 
 
-def test_marginal_home_odds_zero_conditional() -> None:
-    """Zero conditional (team never hosts when they reach) → zero marginal."""
-    assert marginal_home_odds(0.0, 0.5) == pytest.approx(0.0)
+def test_overall_home_odds_zero_p_host_given_reach() -> None:
+    """Zero p_host_given_reach (team never hosts when they reach) → zero overall."""
+    assert overall_home_odds(0.0, 0.5) == pytest.approx(0.0)
 
 
-def test_marginal_home_odds_taylorsville_qf() -> None:
+def test_overall_home_odds_taylorsville_qf() -> None:
     """Spot-check against Taylorsville 2025 QF: 25% reach × 37.5% host = 9.375%."""
-    assert marginal_home_odds(0.375, 0.25) == pytest.approx(0.09375)
+    assert overall_home_odds(0.375, 0.25) == pytest.approx(0.09375)
 
 
 # ---------------------------------------------------------------------------

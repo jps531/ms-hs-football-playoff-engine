@@ -161,7 +161,7 @@ class BracketAdvancementOdds(BaseModel):
 
 
 class HomeGameOdds(BaseModel):
-    """Conditional odds of hosting each playoff round (unweighted and margin-weighted)."""
+    """P(hosts round | reaches round) for each playoff round (unweighted and margin-weighted)."""
 
     first_round: float
     second_round: float
@@ -212,6 +212,7 @@ class ScenarioEntry(BaseModel):
     tiebreaker_groups: list[list[str]] | None = None
     coinflip_groups: list[list[str]] | None = None
     outcomes: dict[str, str]  # team → seed number ("1"–"4")
+    conditions: list[dict] | None = None  # structured form of `title` (GameResult/MarginCondition/PDRankCondition dicts)
 
 
 class KeyInsightConditionModel(BaseModel):
@@ -284,10 +285,10 @@ class RankingsResponse(BaseModel):
 class RoundHostingOdds(BaseModel):
     """Hosting probability for one playoff round."""
 
-    conditional: float | None
-    marginal: float | None
-    conditional_weighted: float | None = None
-    marginal_weighted: float | None = None
+    p_host_given_reach: float | None
+    p_host_overall: float | None
+    p_host_given_reach_weighted: float | None = None
+    p_host_overall_weighted: float | None = None
 
 
 class TeamHostingEntry(BaseModel):
@@ -342,8 +343,8 @@ class TeamBracketEntry(BaseModel):
     and the slot is identified by ``region`` + ``seed``.
 
     ``*_weighted`` fields use Elo-based win probabilities; ``null`` when no
-    Elo ratings exist for the season.  ``hosting`` contains conditional and
-    marginal hosting odds per round (``null`` fields for 5A–7A second_round).
+    Elo ratings exist for the season.  ``hosting`` contains ``p_host_given_reach``
+    and ``p_host_overall`` hosting odds per round (``null`` fields for 5A–7A second_round).
     """
 
     region: int
@@ -395,7 +396,7 @@ class BracketGame(BaseModel):
     ``home_team`` is the authoritative ``{ region, seed, school }`` object for who
     hosts the game. Always set on R1 nodes (region/seed known from the format;
     school null until seedings clinch). Set on R2+ nodes when one participant's
-    conditional hosting odds are 1.0; null when hosting is not yet determined.
+    p_host_given_reach hosting odds are 1.0; null when hosting is not yet determined.
     ``result`` is set once the game has a confirmed or simulated outcome.
     """
 

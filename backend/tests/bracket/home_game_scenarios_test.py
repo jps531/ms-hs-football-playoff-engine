@@ -147,11 +147,11 @@ class TestDataclasses:
             will_host=(),
             will_not_host=(),
             p_reach=None,
-            p_host_conditional=None,
-            p_host_marginal=None,
+            p_host_given_reach=None,
+            p_host_overall=None,
             p_reach_weighted=None,
-            p_host_conditional_weighted=None,
-            p_host_marginal_weighted=None,
+            p_host_given_reach_weighted=None,
+            p_host_overall_weighted=None,
         )
         with pytest.raises((AttributeError, TypeError)):
             rnd.round_name = "Second Round"  # type: ignore[misc]
@@ -178,11 +178,11 @@ class TestDataclasses:
             will_host=(),
             will_not_host=(),
             p_reach=0.5,
-            p_host_conditional=None,
-            p_host_marginal=None,
+            p_host_given_reach=None,
+            p_host_overall=None,
             p_reach_weighted=None,
-            p_host_conditional_weighted=None,
-            p_host_marginal_weighted=None,
+            p_host_given_reach_weighted=None,
+            p_host_overall_weighted=None,
         )
         assert isinstance(rnd.will_host, tuple)
         assert isinstance(rnd.will_not_host, tuple)
@@ -565,43 +565,43 @@ class TestTeamNameResolution:
 class TestProbabilityPassthrough:
     """Verify that probability-by-round dicts are attached to RoundHomeScenarios."""
 
-    def test_p_host_marginal_attached_to_correct_round(self):
-        """p_host_marginal values are attached to the matching RoundHomeScenarios."""
+    def test_p_host_overall_attached_to_correct_round(self):
+        """p_host_overall values are attached to the matching RoundHomeScenarios."""
         p_by_round = {
             "First Round": 1.0,
             "Quarterfinals": 0.625,
             "Semifinals": 0.25,
         }
-        result = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round)
+        result = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_overall_by_round=p_by_round)
         for rnd in result:
-            assert rnd.p_host_marginal == p_by_round[rnd.round_name]
+            assert rnd.p_host_overall == p_by_round[rnd.round_name]
 
-    def test_p_host_marginal_none_when_not_provided(self):
-        """p_host_marginal is None on every round when no dict is passed."""
+    def test_p_host_overall_none_when_not_provided(self):
+        """p_host_overall is None on every round when no dict is passed."""
         result = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON)
         for rnd in result:
-            assert rnd.p_host_marginal is None
+            assert rnd.p_host_overall is None
 
-    def test_p_host_marginal_weighted_attached(self):
-        """p_host_marginal_weighted values are attached when the weighted dict is supplied."""
+    def test_p_host_overall_weighted_attached(self):
+        """p_host_overall_weighted values are attached when the weighted dict is supplied."""
         pw_by_round = {"First Round": 1.0, "Quarterfinals": 0.70, "Semifinals": 0.30}
         result = enumerate_home_game_scenarios(
-            1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_weighted_by_round=pw_by_round
+            1, 1, SLOTS_5A_7A_2025, SEASON, p_host_overall_weighted_by_round=pw_by_round
         )
         for rnd in result:
-            assert rnd.p_host_marginal_weighted == pw_by_round[rnd.round_name]
+            assert rnd.p_host_overall_weighted == pw_by_round[rnd.round_name]
 
-    def test_1a_4a_p_host_marginal_four_rounds(self):
-        """p_host_marginal is attached to all four rounds for a 1A–4A team."""
+    def test_1a_4a_p_host_overall_four_rounds(self):
+        """p_host_overall is attached to all four rounds for a 1A–4A team."""
         p_by_round = {
             "First Round": 1.0,
             "Second Round": 0.75,
             "Quarterfinals": 0.5,
             "Semifinals": 0.25,
         }
-        result = enumerate_home_game_scenarios(1, 1, SLOTS_1A_4A_2025, SEASON, p_host_marginal_by_round=p_by_round)
+        result = enumerate_home_game_scenarios(1, 1, SLOTS_1A_4A_2025, SEASON, p_host_overall_by_round=p_by_round)
         for rnd in result:
-            assert rnd.p_host_marginal == p_by_round[rnd.round_name]
+            assert rnd.p_host_overall == p_by_round[rnd.round_name]
 
 
 # ---------------------------------------------------------------------------
@@ -646,9 +646,9 @@ class TestRenderTeamHomeScenarios:
         assert "Will Host First Round" not in text
 
     def test_probability_suffix_in_header(self):
-        """Percentage values from p_host_marginal_by_round appear in round section headers."""
+        """Percentage values from p_host_overall_by_round appear in round section headers."""
         p_by_round = {"First Round": 1.0, "Quarterfinals": 0.625, "Semifinals": 0.25}
-        scens = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round)
+        scens = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_overall_by_round=p_by_round)
         text = render_team_home_scenarios("TestTeam", scens)
         assert "100.0%" in text
         assert "62.5%" in text
@@ -715,18 +715,18 @@ class TestTeamHomeScenariosAsDict:
         d = team_home_scenarios_as_dict("TestTeam", scens)
         for rnd_dict in d.values():
             assert "p_reach" in rnd_dict
-            assert "p_host_conditional" in rnd_dict
-            assert "p_host_marginal" in rnd_dict
+            assert "p_host_given_reach" in rnd_dict
+            assert "p_host_overall" in rnd_dict
             assert "p_reach_weighted" in rnd_dict
-            assert "p_host_conditional_weighted" in rnd_dict
-            assert "p_host_marginal_weighted" in rnd_dict
+            assert "p_host_given_reach_weighted" in rnd_dict
+            assert "p_host_overall_weighted" in rnd_dict
             assert "will_host" in rnd_dict
             assert "will_not_host" in rnd_dict
             assert isinstance(rnd_dict["will_host"], list)
             assert isinstance(rnd_dict["will_not_host"], list)
 
     def test_scenario_entry_structure(self):
-        """Each scenario entry contains conditions and explanation keys."""
+        """Each scenario entry contains conditions, explanation, and title keys."""
         scens = self._scenarios_for(1, 1, SLOTS_5A_7A_2025)
         d = team_home_scenarios_as_dict("TestTeam", scens)
         qf = d["quarterfinals"]
@@ -735,21 +735,23 @@ class TestTeamHomeScenariosAsDict:
         for sc in all_scenarios:
             assert "conditions" in sc
             assert "explanation" in sc
+            assert "title" in sc
             assert isinstance(sc["conditions"], list)
 
     def test_condition_entry_structure(self):
-        """Each condition entry contains kind, round, region, seed, and team keys."""
+        """Each condition entry contains type, kind, round_name, region, seed, and team_name keys."""
         scens = self._scenarios_for(1, 1, SLOTS_5A_7A_2025)
         d = team_home_scenarios_as_dict("TestTeam", scens)
         qf = d["quarterfinals"]
         all_scenarios = qf["will_host"] + qf["will_not_host"]
         for sc in all_scenarios:
             for cond in sc["conditions"]:
+                assert cond["type"] == "home_game_condition"
                 assert "kind" in cond
-                assert "round" in cond
+                assert "round_name" in cond
                 assert "region" in cond
                 assert "seed" in cond
-                assert "team" in cond
+                assert "team_name" in cond
 
     def test_target_team_name_in_first_condition(self):
         """The first condition in each QF/SF scenario must name the target team."""
@@ -758,25 +760,25 @@ class TestTeamHomeScenariosAsDict:
         qf = d["quarterfinals"]
         for sc in qf["will_host"] + qf["will_not_host"]:
             if sc["conditions"]:
-                assert sc["conditions"][0]["team"] == "OakGrove"
+                assert sc["conditions"][0]["team_name"] == "OakGrove"
 
-    def test_p_host_marginal_propagated_to_dict(self):
-        """p_host_marginal values from RoundHomeScenarios are surfaced in the dict."""
+    def test_p_host_overall_propagated_to_dict(self):
+        """p_host_overall values from RoundHomeScenarios are surfaced in the dict."""
         p_by_round = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.25}
-        scens = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_marginal_by_round=p_by_round)
+        scens = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON, p_host_overall_by_round=p_by_round)
         d = team_home_scenarios_as_dict("TestTeam", scens)
-        assert d["first_round"]["p_host_marginal"] == pytest.approx(1.0)
-        assert d["quarterfinals"]["p_host_marginal"] == pytest.approx(0.5)
-        assert d["semifinals"]["p_host_marginal"] == pytest.approx(0.25)
+        assert d["first_round"]["p_host_overall"] == pytest.approx(1.0)
+        assert d["quarterfinals"]["p_host_overall"] == pytest.approx(0.5)
+        assert d["semifinals"]["p_host_overall"] == pytest.approx(0.25)
 
     def test_resolved_names_in_dict_conditions(self):
-        """Resolved team names from lookup appear in dict condition 'team' fields."""
+        """Resolved team names from lookup appear in dict condition 'team_name' fields."""
         lookup = _team_lookup_for_class(7)
         scens = self._scenarios_for(1, 1, SLOTS_5A_7A_2025, lookup)
         d = team_home_scenarios_as_dict(lookup[(1, 1)], scens)
         qf = d["quarterfinals"]
         opponent_names = {
-            cond["team"]
+            cond["team_name"]
             for sc in qf["will_host"] + qf["will_not_host"]
             for cond in sc["conditions"]
             if cond["region"] is not None

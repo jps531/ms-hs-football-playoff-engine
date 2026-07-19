@@ -83,11 +83,11 @@ class _RoundOdds(NamedTuple):
     """Bundle of per-round odds values; passed to internal ``_enumerate_*`` helpers."""
 
     p_reach: float | None
-    p_host_conditional: float | None
-    p_host_marginal: float | None
+    p_host_given_reach: float | None
+    p_host_overall: float | None
     p_reach_weighted: float | None
-    p_host_conditional_weighted: float | None
-    p_host_marginal_weighted: float | None
+    p_host_given_reach_weighted: float | None
+    p_host_overall_weighted: float | None
 
 
 # ---------------------------------------------------------------------------
@@ -694,11 +694,11 @@ def enumerate_home_game_scenarios(
     season: int,
     achievable_seeds: list[int] | None = None,
     p_reach_by_round: dict[str, float] | None = None,
-    p_host_conditional_by_round: dict[str, float] | None = None,
-    p_host_marginal_by_round: dict[str, float] | None = None,
+    p_host_given_reach_by_round: dict[str, float] | None = None,
+    p_host_overall_by_round: dict[str, float] | None = None,
     p_reach_weighted_by_round: dict[str, float] | None = None,
-    p_host_conditional_weighted_by_round: dict[str, float] | None = None,
-    p_host_marginal_weighted_by_round: dict[str, float] | None = None,
+    p_host_given_reach_weighted_by_round: dict[str, float] | None = None,
+    p_host_overall_weighted_by_round: dict[str, float] | None = None,
     team_lookup: dict[tuple[int, int], str] | None = None,
 ) -> list[RoundHomeScenarios]:
     """Enumerate all home-game scenarios for a team across every applicable round.
@@ -738,16 +738,16 @@ def enumerate_home_game_scenarios(
             in *slots* are silently skipped.
         p_reach_by_round: Optional mapping of round name →
             P(team reaches round) under equal win probabilities.
-        p_host_conditional_by_round: Optional mapping of round name →
+        p_host_given_reach_by_round: Optional mapping of round name →
             P(hosts | reaches) under equal win probabilities.
-        p_host_marginal_by_round: Optional mapping of round name →
+        p_host_overall_by_round: Optional mapping of round name →
             P(reaches AND hosts) under equal win probabilities.
         p_reach_weighted_by_round: Weighted equivalent of
             *p_reach_by_round*.
-        p_host_conditional_weighted_by_round: Weighted equivalent of
-            *p_host_conditional_by_round*.
-        p_host_marginal_weighted_by_round: Weighted equivalent of
-            *p_host_marginal_by_round*.
+        p_host_given_reach_weighted_by_round: Weighted equivalent of
+            *p_host_given_reach_by_round*.
+        p_host_overall_weighted_by_round: Weighted equivalent of
+            *p_host_overall_by_round*.
         team_lookup: Optional mapping of ``(region, seed)`` → school name.
             When an entry exists the school name is substituted for the
             generic ``"Region X #Y Seed"`` label in condition objects.
@@ -819,11 +819,11 @@ def enumerate_home_game_scenarios(
 
             return _RoundOdds(
                 p_reach=_get(p_reach_by_round),
-                p_host_conditional=_get(p_host_conditional_by_round),
-                p_host_marginal=_get(p_host_marginal_by_round),
+                p_host_given_reach=_get(p_host_given_reach_by_round),
+                p_host_overall=_get(p_host_overall_by_round),
                 p_reach_weighted=_get(p_reach_weighted_by_round),
-                p_host_conditional_weighted=_get(p_host_conditional_weighted_by_round),
-                p_host_marginal_weighted=_get(p_host_marginal_weighted_by_round),
+                p_host_given_reach_weighted=_get(p_host_given_reach_weighted_by_round),
+                p_host_overall_weighted=_get(p_host_overall_weighted_by_round),
             )
 
         return [
@@ -854,11 +854,11 @@ def enumerate_home_game_scenarios(
 
         return _RoundOdds(
             p_reach=_get(p_reach_by_round),
-            p_host_conditional=_get(p_host_conditional_by_round),
-            p_host_marginal=_get(p_host_marginal_by_round),
+            p_host_given_reach=_get(p_host_given_reach_by_round),
+            p_host_overall=_get(p_host_overall_by_round),
             p_reach_weighted=_get(p_reach_weighted_by_round),
-            p_host_conditional_weighted=_get(p_host_conditional_weighted_by_round),
-            p_host_marginal_weighted=_get(p_host_marginal_weighted_by_round),
+            p_host_given_reach_weighted=_get(p_host_given_reach_weighted_by_round),
+            p_host_overall_weighted=_get(p_host_overall_weighted_by_round),
         )
 
     results: list[RoundHomeScenarios] = []
@@ -893,7 +893,7 @@ def enumerate_home_game_scenarios(
 #   (opp_region, opp_seed, is_home, explanation)
 #
 # Under equal win probability every tuple is one equiprobable path, so the
-# caller can compute per-matchup conditional odds as count/total after
+# caller can compute per-matchup p_given_reach odds as count/total after
 # grouping duplicate (opp_r, opp_s, is_home) entries.
 
 
@@ -948,7 +948,7 @@ def _matchup_raw_qf(
     R2 home-status variants for the target team (1A-4A only) and both
     possible R2 opponents for each QF candidate (1A-4A only).  Duplicate
     ``(opp_r, opp_s, is_home)`` entries from different paths are intentional:
-    the caller weights them to derive equal-probability conditional odds.
+    the caller weights them to derive equal-probability p_given_reach odds.
 
     When *r1_survivors* is provided (the set of teams that won their R1 game),
     only those teams are considered as R2 opponents for both the target team and
@@ -1063,12 +1063,12 @@ def enumerate_team_matchups(
     slots: list[FormatSlot],
     season: int,
     p_reach_by_round: dict[str, float] | None = None,
-    p_host_conditional_by_round: dict[str, float] | None = None,
-    p_host_marginal_by_round: dict[str, float] | None = None,
+    p_host_given_reach_by_round: dict[str, float] | None = None,
+    p_host_overall_by_round: dict[str, float] | None = None,
     p_reach_weighted_by_round: dict[str, float] | None = None,
-    p_host_conditional_weighted_by_round: dict[str, float] | None = None,
-    p_host_marginal_weighted_by_round: dict[str, float] | None = None,
-    p_conditional_weighted_by_matchup: dict[str, dict[tuple[int, int, bool], float]] | None = None,
+    p_host_given_reach_weighted_by_round: dict[str, float] | None = None,
+    p_host_overall_weighted_by_round: dict[str, float] | None = None,
+    p_given_reach_weighted_by_matchup: dict[str, dict[tuple[int, int, bool], float]] | None = None,
     team_lookup: dict[tuple[int, int], str] | None = None,
     state: PlayoffState | None = None,
 ) -> list[RoundMatchups]:
@@ -1076,14 +1076,15 @@ def enumerate_team_matchups(
 
     Returns one ``RoundMatchups`` per applicable round.  Each entry in a round
     represents a unique ``(opponent, home/away)`` combination; under equal win
-    probability the ``p_conditional`` values sum to ``1.0`` within a round.
+    probability the ``p_given_reach`` values sum to ``1.0`` within a round.
 
-    Equal-probability per-matchup conditional odds are computed from the
-    bracket structure: every distinct path through the bracket is treated as
-    equiprobable (50/50 game outcomes), so each ``(opp_r, opp_s, is_home)``
-    combination receives a weight proportional to how many of the total
-    enumerated paths lead to it.  This correctly handles the 1A-4A case where
-    the same opponent may appear via two different R2 sub-paths.
+    Equal-probability per-matchup odds (given the team reaches the round) are
+    computed from the bracket structure: every distinct path through the
+    bracket is treated as equiprobable (50/50 game outcomes), so each
+    ``(opp_r, opp_s, is_home)`` combination receives a weight proportional to
+    how many of the total enumerated paths lead to it.  This correctly
+    handles the 1A-4A case where the same opponent may appear via two
+    different R2 sub-paths.
 
     Args:
         region: The team's region number.
@@ -1091,14 +1092,15 @@ def enumerate_team_matchups(
         slots:  All first-round ``FormatSlot`` objects for the class/season.
         season: Football season year (odd/even tiebreak for QF/SF).
         p_reach_by_round:                    Round name → P(team reaches).
-        p_host_conditional_by_round:         Round name → P(hosts | reaches).
-        p_host_marginal_by_round:            Round name → P(reaches AND hosts).
+        p_host_given_reach_by_round:          Round name → P(hosts | reaches).
+        p_host_overall_by_round:              Round name → P(reaches AND hosts).
         p_reach_weighted_by_round:           Weighted equivalents (placeholder
                                              for ``WinProbFn`` integration).
-        p_host_conditional_weighted_by_round: Weighted.
-        p_host_marginal_weighted_by_round:   Weighted.
-        p_conditional_weighted_by_matchup:   Weighted per-matchup conditional
-                                             odds; keyed as
+        p_host_given_reach_weighted_by_round: Weighted.
+        p_host_overall_weighted_by_round:     Weighted.
+        p_given_reach_weighted_by_matchup:   Weighted per-matchup odds (given
+                                             the team reaches the round);
+                                             keyed as
                                              ``round_name → (opp_region,
                                              opp_seed, is_home) → float``.
                                              Placeholder for ``WinProbFn``
@@ -1133,11 +1135,11 @@ def enumerate_team_matchups(
 
         return _RoundOdds(
             p_reach=_get(p_reach_by_round),
-            p_host_conditional=_get(p_host_conditional_by_round),
-            p_host_marginal=_get(p_host_marginal_by_round),
+            p_host_given_reach=_get(p_host_given_reach_by_round),
+            p_host_overall=_get(p_host_overall_by_round),
             p_reach_weighted=_get(p_reach_weighted_by_round),
-            p_host_conditional_weighted=_get(p_host_conditional_weighted_by_round),
-            p_host_marginal_weighted=_get(p_host_marginal_weighted_by_round),
+            p_host_given_reach_weighted=_get(p_host_given_reach_weighted_by_round),
+            p_host_overall_weighted=_get(p_host_overall_weighted_by_round),
         )
 
     _completed = (state.completed_rounds if state else None) or set()
@@ -1159,8 +1161,9 @@ def enumerate_team_matchups(
 
         # Count how many raw paths lead to each (opp_r, opp_s, is_home) outcome.
         # Under equal probability every path is equiprobable, so the fraction of
-        # paths gives the correct conditional probability.  Filtering eliminates
-        # impossible paths; the remaining counts renormalize automatically.
+        # paths gives the correct probability given the team reaches this round.
+        # Filtering eliminates impossible paths; the remaining counts renormalize
+        # automatically.
         path_counts: Counter[tuple[int, int, bool]] = Counter()
         path_explanations: dict[tuple[int, int, bool], str | None] = {}
         for opp_r, opp_s, is_home, explanation in raw:
@@ -1169,24 +1172,28 @@ def enumerate_team_matchups(
             path_explanations[key] = explanation
 
         total = sum(path_counts.values())
-        round_weighted = (p_conditional_weighted_by_matchup or {}).get(round_name, {})
+        round_weighted = (p_given_reach_weighted_by_matchup or {}).get(round_name, {})
 
         entries: list[MatchupEntry] = []
         for (opp_r, opp_s, is_home), count in path_counts.items():
-            p_cond = count / total if total > 0 else None
-            p_cond_w = round_weighted.get((opp_r, opp_s, is_home))
-            p_marg = (p_cond * p_reach) if (p_cond is not None and p_reach is not None) else None
-            p_marg_w = (p_cond_w * p_reach_w) if (p_cond_w is not None and p_reach_w is not None) else None
+            p_given_reach = count / total if total > 0 else None
+            p_given_reach_w = round_weighted.get((opp_r, opp_s, is_home))
+            p_overall = (
+                (p_given_reach * p_reach) if (p_given_reach is not None and p_reach is not None) else None
+            )
+            p_overall_w = (
+                (p_given_reach_w * p_reach_w) if (p_given_reach_w is not None and p_reach_w is not None) else None
+            )
             entries.append(
                 MatchupEntry(
                     opponent=_team_label(opp_r, opp_s, team_lookup) or f"Region {opp_r} #{opp_s} Seed",
                     opponent_region=opp_r,
                     opponent_seed=opp_s,
                     home=is_home,
-                    p_conditional=p_cond,
-                    p_conditional_weighted=p_cond_w,
-                    p_marginal=p_marg,
-                    p_marginal_weighted=p_marg_w,
+                    p_given_reach=p_given_reach,
+                    p_given_reach_weighted=p_given_reach_w,
+                    p_overall=p_overall,
+                    p_overall_weighted=p_overall_w,
                     explanation=path_explanations[(opp_r, opp_s, is_home)],
                 )
             )

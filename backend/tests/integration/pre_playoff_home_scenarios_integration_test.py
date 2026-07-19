@@ -242,8 +242,8 @@ class TestHomeScenarioStructure:
         assert len(r2.will_not_host) >= 1
 
     def test_odds_attached_to_rounds(self, home_scenarios_and_atoms):
-        """Every round has non-None p_reach and p_host_marginal odds."""
+        """Every round has non-None p_reach and p_host_overall odds."""
         home_scenarios, _ = home_scenarios_and_atoms
         for rnd in home_scenarios:
             assert rnd.p_reach is not None
-            assert rnd.p_host_marginal is not None
+            assert rnd.p_host_overall is not None

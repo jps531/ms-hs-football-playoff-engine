@@ -1,5 +1,7 @@
 """Render playoff scenario atoms as human-readable text."""
 
+from dataclasses import replace
+
 from backend.helpers.data_classes import (
     CoinFlipResult,
     GameResult,
@@ -10,6 +12,7 @@ from backend.helpers.data_classes import (
     RoundHomeScenarios,
     RoundMatchups,
 )
+from backend.helpers.scenario_serializers import serialize_atom, serialize_condition
 
 
 def _render_game_result(cond: GameResult) -> str:
@@ -333,6 +336,7 @@ def team_scenarios_as_dict(
                 "odds": getattr(team_odds, f"p{seed}") if team_odds else None,
                 "weighted_odds": getattr(team_weighted, f"p{seed}") if team_weighted else None,
                 "scenarios": [_render_atom(atom) for atom in playoff_seed_entries[seed]],
+                "conditions": [serialize_atom(atom) for atom in playoff_seed_entries[seed]],
             }
 
         if not playoff_seed_entries:
@@ -341,12 +345,14 @@ def team_scenarios_as_dict(
                 "odds": (1.0 - team_odds.p_playoffs) if team_odds else None,
                 "weighted_odds": (1.0 - team_weighted.p_playoffs) if team_weighted else None,
                 "scenarios": [],
+                "conditions": [],
             }
         elif eliminated_atoms:
             team_entry["eliminated"] = {
                 "odds": (1.0 - team_odds.p_playoffs) if team_odds else None,
                 "weighted_odds": (1.0 - team_weighted.p_playoffs) if team_weighted else None,
                 "scenarios": [_render_atom(atom) for atom in eliminated_atoms],
+                "conditions": [serialize_atom(atom) for atom in eliminated_atoms],
             }
 
         result[team] = team_entry
@@ -415,16 +421,33 @@ def _render_home_scenario_block(
                 lines.append(f"   [{sc.explanation}]")
         else:
             for j, cond in enumerate(conds, 1):
-                raw = _render_condition_label(cond)
-                # Substitute placeholder for target team
-                raw = raw.replace("Team advances", f"{team_name} advances")
-                raw = raw.replace("Team finishes", f"{team_name} finishes")
+                raw = _substitute_team_placeholder(_render_condition_label(cond), team_name)
                 if j == len(conds) and sc.explanation:
                     lines.append(f"{j}. {raw}")
                     lines.append(f"   [{sc.explanation}]")
                 else:
                     lines.append(f"{j}. {raw}")
     return lines
+
+
+def _substitute_team_placeholder(label: str, team_name: str) -> str:
+    """Replace the generic ``"Team"`` placeholder in a rendered condition label with *team_name*."""
+    label = label.replace("Team advances", f"{team_name} advances")
+    return label.replace("Team finishes", f"{team_name} finishes")
+
+
+def _render_home_scenario_title(sc: HomeGameScenario, team_name: str) -> str | None:
+    """Render a single ``HomeGameScenario`` as one AND-joined plain-English sentence.
+
+    Unlike ``_render_home_scenario_block``, this produces a single unnumbered
+    string (the hosting-domain analog of ``render_scenario_title`` for
+    standings scenarios). Returns ``None`` when the scenario is unconditional
+    (no conditions to render).
+    """
+    if not sc.conditions:
+        return None
+    labels = [_substitute_team_placeholder(_render_condition_label(c), team_name) for c in sc.conditions]
+    return " AND ".join(labels)
 
 
 def _odds_pct(p: float | None, p_w: float | None) -> str:
@@ -478,12 +501,7 @@ def _render_pre_playoff_block(
             remaining = conds[1:]
 
             # Pre-render the remaining HomeGameConditions (same for every atom)
-            remaining_labels = []
-            for cond in remaining:
-                label = _render_condition_label(cond)
-                label = label.replace("Team advances", f"{team_name} advances")
-                label = label.replace("Team finishes", f"{team_name} finishes")
-                remaining_labels.append(label)
+            remaining_labels = [_substitute_team_placeholder(_render_condition_label(c), team_name) for c in remaining]
 
             for atom in atoms:
                 n += 1
@@ -495,12 +513,7 @@ def _render_pre_playoff_block(
         else:
             # Fallback: flatten all conditions to a single numbered line
             n += 1
-            labels = []
-            for cond in conds:
-                label = _render_condition_label(cond)
-                label = label.replace("Team advances", f"{team_name} advances")
-                label = label.replace("Team finishes", f"{team_name} finishes")
-                labels.append(label)
+            labels = [_substitute_team_placeholder(_render_condition_label(c), team_name) for c in conds]
             line = f"{n}. " + " AND ".join(labels)
             lines.append(line)
             if sc.explanation:
@@ -540,8 +553,8 @@ def render_team_home_scenarios(
     lines: list[str] = [team, ""]
 
     for rnd in home_scenarios:
-        p = rnd.p_host_marginal
-        p_w = rnd.p_host_marginal_weighted
+        p = rnd.p_host_overall
+        p_w = rnd.p_host_overall_weighted
 
         # Will Host block
         if rnd.will_host:
@@ -605,8 +618,8 @@ def render_pre_playoff_team_home_scenarios(
     lines: list[str] = [team, ""]
 
     for rnd in home_scenarios:
-        p = rnd.p_host_marginal
-        p_w = rnd.p_host_marginal_weighted
+        p = rnd.p_host_overall
+        p_w = rnd.p_host_overall_weighted
 
         if rnd.will_host:
             header = f"Will Host {rnd.round_name}{_odds_pct(p, p_w)}:"
@@ -628,6 +641,7 @@ def render_pre_playoff_team_home_scenarios(
 def team_home_scenarios_as_dict(
     team: str,
     home_scenarios: list[RoundHomeScenarios],
+    seed_atoms: dict[str, dict[int, list[list]]] | None = None,
 ) -> dict[str, dict]:
     """Return playoff home-game scenarios as a structured dict for API / frontend use.
 
@@ -639,61 +653,94 @@ def team_home_scenarios_as_dict(
 
         {
             "p_reach": float | None,
-            "p_host_conditional": float | None,
-            "p_host_marginal": float | None,
+            "p_host_given_reach": float | None,
+            "p_host_overall": float | None,
             "p_reach_weighted": float | None,
-            "p_host_conditional_weighted": float | None,
-            "p_host_marginal_weighted": float | None,
+            "p_host_given_reach_weighted": float | None,
+            "p_host_overall_weighted": float | None,
             "will_host": [
                 {
-                    "conditions": [
-                        {
-                            "kind": "advances" | "seed_required",
-                            "round": str | None,
-                            "region": int | None,
-                            "seed": int | None,
-                            "team": str | None,
-                        },
-                        ...
-                    ],
+                    "conditions": [ <condition dict, see serialize_condition>, ... ],
                     "explanation": str | None,
+                    "title": str | None,
                 },
                 ...
             ],
             "will_not_host": [ ... ],
         }
 
+    Each condition dict is produced by ``scenario_serializers.serialize_condition``
+    and carries a ``"type"`` discriminator (``"home_game_condition"`` for
+    ``HomeGameCondition``, or ``"game_result"``/``"margin_condition"`` for the
+    real regular-season game atoms substituted in by *seed_atoms* below).
+
     Args:
         team:           School name of the target team.  Used to resolve
                         ``region=None`` conditions to the team's own name.
         home_scenarios: List of ``RoundHomeScenarios`` as returned by
                         ``enumerate_home_game_scenarios``.
+        seed_atoms:     Optional atoms dict from ``build_scenario_atoms``
+                        (``team → seed → list[atom]``).  When supplied, any
+                        pre-playoff ``seed_required`` placeholder condition is
+                        expanded into the real regular-season game atom(s)
+                        that produce that seed — one dict per atom — instead
+                        of being left as an unresolved placeholder.
 
     Returns:
         Structured dict ready for JSON serialisation.
     """
 
-    def _cond_dict(cond: HomeGameCondition, team_name: str) -> dict:
-        """Serialise a single ``HomeGameCondition`` to a plain dict."""
-        label = cond.team_name
-        if label is None and cond.region is None:
-            label = team_name  # target team itself
-        elif label is None:
-            label = f"Region {cond.region} #{cond.seed} Seed"
-        return {
-            "kind": cond.kind,
-            "round": cond.round_name,
-            "region": cond.region,
-            "seed": cond.seed,
-            "team": label,
-        }
+    def _resolve_condition(cond: HomeGameCondition, team_name: str) -> HomeGameCondition:
+        """Return a copy of *cond* with an unset ``team_name`` resolved to a display label."""
+        if cond.team_name is not None:
+            return cond
+        if cond.region is None:
+            return replace(cond, team_name=team_name)  # target team itself
+        return replace(cond, team_name=f"Region {cond.region} #{cond.seed} Seed")
 
     def _scenario_dict(sc: HomeGameScenario, team_name: str) -> dict:
         """Serialise a single ``HomeGameScenario`` to a plain dict."""
+        resolved = [_resolve_condition(c, team_name) for c in sc.conditions]
         return {
-            "conditions": [_cond_dict(c, team_name) for c in sc.conditions],
+            "conditions": [serialize_condition(c) for c in resolved],
             "explanation": sc.explanation,
+            "title": _render_home_scenario_title(sc, team_name),
         }
+
+    def _expand_scenario(sc: HomeGameScenario, team_name: str) -> list[dict]:
+        """Expand a pre-playoff ``seed_required`` scenario into one dict per real game atom.
+
+        Falls back to a single ``_scenario_dict`` when *seed_atoms* wasn't
+        supplied, the scenario has no conditions, its first condition isn't
+        an unresolved ``seed_required`` placeholder, or no atoms are found
+        for that team/seed.
+        """
+        conds = sc.conditions
+        if not seed_atoms or not conds:
+            return [_scenario_dict(sc, team_name)]
+        first = conds[0]
+        if not (first.kind == "seed_required" and first.region is None and first.seed is not None):
+            return [_scenario_dict(sc, team_name)]
+
+        atoms = seed_atoms.get(team_name, {}).get(first.seed, [])
+        if not atoms:
+            return [_scenario_dict(sc, team_name)]
+
+        remaining = conds[1:]
+        remaining_resolved = [_resolve_condition(c, team_name) for c in remaining]
+        remaining_serialized = [serialize_condition(c) for c in remaining_resolved]
+        remaining_labels = [_substitute_team_placeholder(_render_condition_label(c), team_name) for c in remaining]
+
+        expanded = []
+        for atom in atoms:
+            expanded.append(
+                {
+                    "conditions": serialize_atom(atom) + remaining_serialized,
+                    "explanation": sc.explanation,
+                    "title": " AND ".join([_render_atom(atom)] + remaining_labels),
+                }
+            )
+        return expanded
 
     _ROUND_KEY = {
         "First Round": "first_round",
@@ -705,15 +752,17 @@ def team_home_scenarios_as_dict(
     result: dict[str, dict] = {}
     for rnd in home_scenarios:
         key = _ROUND_KEY.get(rnd.round_name, rnd.round_name.lower().replace(" ", "_"))
+        will_host = [d for sc in rnd.will_host for d in _expand_scenario(sc, team)]
+        will_not_host = [d for sc in rnd.will_not_host for d in _expand_scenario(sc, team)]
         result[key] = {
             "p_reach": rnd.p_reach,
-            "p_host_conditional": rnd.p_host_conditional,
-            "p_host_marginal": rnd.p_host_marginal,
+            "p_host_given_reach": rnd.p_host_given_reach,
+            "p_host_overall": rnd.p_host_overall,
             "p_reach_weighted": rnd.p_reach_weighted,
-            "p_host_conditional_weighted": rnd.p_host_conditional_weighted,
-            "p_host_marginal_weighted": rnd.p_host_marginal_weighted,
-            "will_host": [_scenario_dict(sc, team) for sc in rnd.will_host],
-            "will_not_host": [_scenario_dict(sc, team) for sc in rnd.will_not_host],
+            "p_host_given_reach_weighted": rnd.p_host_given_reach_weighted,
+            "p_host_overall_weighted": rnd.p_host_overall_weighted,
+            "will_host": will_host,
+            "will_not_host": will_not_host,
         }
     return result
 
@@ -741,8 +790,8 @@ def render_team_matchups(
 
         Away at Home (XX.X%)
 
-    where the percentage is the per-matchup conditional probability
-    (``p_conditional``) — i.e. given the team reaches this round, the chance
+    where the percentage is the per-matchup probability given the team
+    reaches this round (``p_given_reach``) — i.e. the chance
     they face this specific opponent as home or away.  Home matchups are listed
     before away matchups within each round.
 
@@ -763,7 +812,7 @@ def render_team_matchups(
         lines.append(f"{rnd.round_name}{reach_suffix}:")
 
         for entry in rnd.entries:
-            p_suffix = _odds_pct(entry.p_conditional, entry.p_conditional_weighted)
+            p_suffix = _odds_pct(entry.p_given_reach, entry.p_given_reach_weighted)
             if entry.home:
                 away_label = f"Region {entry.opponent_region} #{entry.opponent_seed} {entry.opponent}"
                 line = f"  {away_label} at {team}{p_suffix}"
@@ -792,21 +841,21 @@ def team_matchups_as_dict(
 
         {
             "p_reach": float | None,
-            "p_host_conditional": float | None,
-            "p_host_marginal": float | None,
+            "p_host_given_reach": float | None,
+            "p_host_overall": float | None,
             "p_reach_weighted": float | None,
-            "p_host_conditional_weighted": float | None,
-            "p_host_marginal_weighted": float | None,
+            "p_host_given_reach_weighted": float | None,
+            "p_host_overall_weighted": float | None,
             "matchups": [
                 {
                     "opponent": str,
                     "opponent_region": int,
                     "opponent_seed": int,
                     "home": bool,
-                    "p_conditional": float | None,
-                    "p_conditional_weighted": float | None,
-                    "p_marginal": float | None,
-                    "p_marginal_weighted": float | None,
+                    "p_given_reach": float | None,
+                    "p_given_reach_weighted": float | None,
+                    "p_overall": float | None,
+                    "p_overall_weighted": float | None,
                     "explanation": str | None,
                 },
                 ...
@@ -827,21 +876,21 @@ def team_matchups_as_dict(
         key = _ROUND_KEY_MATCHUP.get(rnd.round_name, rnd.round_name.lower().replace(" ", "_"))
         result[key] = {
             "p_reach": rnd.p_reach,
-            "p_host_conditional": rnd.p_host_conditional,
-            "p_host_marginal": rnd.p_host_marginal,
+            "p_host_given_reach": rnd.p_host_given_reach,
+            "p_host_overall": rnd.p_host_overall,
             "p_reach_weighted": rnd.p_reach_weighted,
-            "p_host_conditional_weighted": rnd.p_host_conditional_weighted,
-            "p_host_marginal_weighted": rnd.p_host_marginal_weighted,
+            "p_host_given_reach_weighted": rnd.p_host_given_reach_weighted,
+            "p_host_overall_weighted": rnd.p_host_overall_weighted,
             "matchups": [
                 {
                     "opponent": e.opponent,
                     "opponent_region": e.opponent_region,
                     "opponent_seed": e.opponent_seed,
                     "home": e.home,
-                    "p_conditional": e.p_conditional,
-                    "p_conditional_weighted": e.p_conditional_weighted,
-                    "p_marginal": e.p_marginal,
-                    "p_marginal_weighted": e.p_marginal_weighted,
+                    "p_given_reach": e.p_given_reach,
+                    "p_given_reach_weighted": e.p_given_reach_weighted,
+                    "p_overall": e.p_overall,
+                    "p_overall_weighted": e.p_overall_weighted,
                     "explanation": e.explanation,
                 }
                 for e in rnd.entries

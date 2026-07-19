@@ -17,7 +17,7 @@ Coverage areas
    * QF:  4 entries for 5A-7A; up to 8 for 1A-4A.
    * SF:  4 entries for 5A-7A; up to 8 for 1A-4A.
 
-4. **p_conditional sums to 1.0** in every round under equal win probability.
+4. **p_given_reach sums to 1.0** in every round under equal win probability.
 
 5. **R1 correctness** — the single R1 entry has the right opponent and
    home/away status, verified against the 2025 ``FormatSlot`` data.
@@ -31,8 +31,8 @@ Coverage areas
 8. **Odds passthrough** — round-level and per-matchup odds land on the right
    objects.
 
-9. **Weighted placeholder** — passing ``p_conditional_weighted_by_matchup``
-   populates ``p_conditional_weighted``; omitting it leaves it as ``None``.
+9. **Weighted placeholder** — passing ``p_given_reach_weighted_by_matchup``
+   populates ``p_given_reach_weighted``; omitting it leaves it as ``None``.
 
 10. **Dict renderer** — ``team_matchups_as_dict`` has the expected keys.
 
@@ -114,10 +114,10 @@ class TestDataclasses:
             opponent_region=7,
             opponent_seed=4,
             home=True,
-            p_conditional=1.0,
-            p_conditional_weighted=None,
-            p_marginal=None,
-            p_marginal_weighted=None,
+            p_given_reach=1.0,
+            p_given_reach_weighted=None,
+            p_overall=None,
+            p_overall_weighted=None,
             explanation="Designated home team in bracket",
         )
         with pytest.raises((AttributeError, TypeError)):
@@ -128,11 +128,11 @@ class TestDataclasses:
         rnd = RoundMatchups(
             round_name="First Round",
             p_reach=None,
-            p_host_conditional=None,
-            p_host_marginal=None,
+            p_host_given_reach=None,
+            p_host_overall=None,
             p_reach_weighted=None,
-            p_host_conditional_weighted=None,
-            p_host_marginal_weighted=None,
+            p_host_given_reach_weighted=None,
+            p_host_overall_weighted=None,
             entries=(),
         )
         with pytest.raises((AttributeError, TypeError)):
@@ -239,33 +239,33 @@ class TestEntryCounts:
 
 
 # ---------------------------------------------------------------------------
-# 4. p_conditional sums to 1.0
+# 4. p_given_reach sums to 1.0
 # ---------------------------------------------------------------------------
 
 
-class TestConditionalOddsSums:
-    """Verify that p_conditional values sum to 1.0 across all entries in a round."""
+class TestGivenReachOddsSums:
+    """Verify that p_given_reach values sum to 1.0 across all entries in a round."""
 
     def test_sum_to_one_5a_7a(self):
-        """p_conditional values must sum to 1.0 in every round for 5A-7A."""
+        """p_given_reach values must sum to 1.0 in every round for 5A-7A."""
         for region in (1, 2, 3, 4):
             for seed in (1, 2, 3, 4):
                 rounds = _matchups(7, region=region, seed=seed)
                 for rnd in rounds:
-                    total = sum(e.p_conditional for e in rnd.entries if e.p_conditional is not None)
+                    total = sum(e.p_given_reach for e in rnd.entries if e.p_given_reach is not None)
                     assert abs(total - 1.0) < 1e-9, (
-                        f"region={region} seed={seed} {rnd.round_name}: p_conditional sum={total}"
+                        f"region={region} seed={seed} {rnd.round_name}: p_given_reach sum={total}"
                     )
 
     def test_sum_to_one_1a_4a(self):
-        """p_conditional values must sum to 1.0 in every round for 1A-4A."""
+        """p_given_reach values must sum to 1.0 in every round for 1A-4A."""
         for region in range(1, 9):
             for seed in (1, 2, 3, 4):
                 rounds = _matchups(2, region=region, seed=seed)
                 for rnd in rounds:
-                    total = sum(e.p_conditional for e in rnd.entries if e.p_conditional is not None)
+                    total = sum(e.p_given_reach for e in rnd.entries if e.p_given_reach is not None)
                     assert abs(total - 1.0) < 1e-9, (
-                        f"region={region} seed={seed} {rnd.round_name}: p_conditional sum={total}"
+                        f"region={region} seed={seed} {rnd.round_name}: p_given_reach sum={total}"
                     )
 
 
@@ -303,7 +303,7 @@ class TestR1Correctness:
         assert entry.opponent_region == exp_opp_region
         assert entry.opponent_seed == exp_opp_seed
         assert entry.home == exp_home
-        assert entry.p_conditional == pytest.approx(1.0)
+        assert entry.p_given_reach == pytest.approx(1.0)
 
     def test_r1_entry_has_explanation(self):
         """R1 entry must carry a non-None explanation string."""
@@ -327,11 +327,11 @@ class TestR2Correctness:
         assert opp_pairs == {(6, 2), (5, 3)}
 
     def test_r2_equal_probability(self):
-        """Each R2 entry should have p_conditional == 0.5."""
+        """Each R2 entry should have p_given_reach == 0.5."""
         rounds = _matchups(2, region=8, seed=1)
         r2 = rounds[1]
         for entry in r2.entries:
-            assert entry.p_conditional == pytest.approx(0.5)
+            assert entry.p_given_reach == pytest.approx(0.5)
 
     def test_r2_actual_2025_home_7a_class(self):
         """For all 1A-4A classes, actual 2025 R2 games must appear as home=True."""
@@ -403,27 +403,27 @@ class TestOddsPassthrough:
     """Verify that round-level and per-matchup odds are attached to the correct objects."""
 
     def test_round_level_odds_attached(self):
-        """Round-level p_reach and p_host_conditional must appear on each RoundMatchups."""
+        """Round-level p_reach and p_host_given_reach must appear on each RoundMatchups."""
         p_reach = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.25}
-        p_host_cond = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.75}
+        p_host_given_reach = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.75}
         rounds = enumerate_team_matchups(
             region=1,
             seed=1,
             slots=SLOTS_5A_7A_2025,
             season=SEASON,
             p_reach_by_round=p_reach,
-            p_host_conditional_by_round=p_host_cond,
+            p_host_given_reach_by_round=p_host_given_reach,
         )
         r1, qf, sf = rounds
         assert r1.p_reach == pytest.approx(1.0)
         assert qf.p_reach == pytest.approx(0.5)
         assert sf.p_reach == pytest.approx(0.25)
-        assert r1.p_host_conditional == pytest.approx(1.0)
-        assert qf.p_host_conditional == pytest.approx(0.5)
-        assert sf.p_host_conditional == pytest.approx(0.75)
+        assert r1.p_host_given_reach == pytest.approx(1.0)
+        assert qf.p_host_given_reach == pytest.approx(0.5)
+        assert sf.p_host_given_reach == pytest.approx(0.75)
 
-    def test_marginal_computed_from_p_conditional_times_p_reach(self):
-        """p_marginal for each entry must equal p_conditional × p_reach."""
+    def test_overall_computed_from_p_given_reach_times_p_reach(self):
+        """p_overall for each entry must equal p_given_reach × p_reach."""
         p_reach = {"First Round": 1.0, "Quarterfinals": 0.5, "Semifinals": 0.25}
         rounds = enumerate_team_matchups(
             region=1,
@@ -434,19 +434,19 @@ class TestOddsPassthrough:
         )
         for rnd in rounds:
             for entry in rnd.entries:
-                if entry.p_conditional is not None and rnd.p_reach is not None:
-                    expected = entry.p_conditional * rnd.p_reach
-                    assert entry.p_marginal == pytest.approx(expected)
+                if entry.p_given_reach is not None and rnd.p_reach is not None:
+                    expected = entry.p_given_reach * rnd.p_reach
+                    assert entry.p_overall == pytest.approx(expected)
 
     def test_all_odds_none_when_not_provided(self):
         """All odds fields must be None when no odds dicts are passed."""
         rounds = _matchups(7, region=1, seed=1)
         for rnd in rounds:
             assert rnd.p_reach is None
-            assert rnd.p_host_conditional is None
+            assert rnd.p_host_given_reach is None
             for entry in rnd.entries:
-                assert entry.p_marginal is None
-                assert entry.p_conditional_weighted is None
+                assert entry.p_overall is None
+                assert entry.p_given_reach_weighted is None
 
 
 # ---------------------------------------------------------------------------
@@ -458,7 +458,7 @@ class TestWeightedPlaceholder:
     """Verify the weighted per-matchup odds placeholder wires up correctly."""
 
     def test_weighted_matchup_odds_attached(self):
-        """p_conditional_weighted_by_matchup values must appear on the matching entry."""
+        """p_given_reach_weighted_by_matchup values must appear on the matching entry."""
         weighted = {
             "First Round": {(2, 4, True): 1.0},
         }
@@ -467,14 +467,14 @@ class TestWeightedPlaceholder:
             seed=1,
             slots=SLOTS_5A_7A_2025,
             season=SEASON,
-            p_conditional_weighted_by_matchup=weighted,
+            p_given_reach_weighted_by_matchup=weighted,
         )
         r1 = rounds[0]
         entry = r1.entries[0]
-        assert entry.p_conditional_weighted == pytest.approx(1.0)
+        assert entry.p_given_reach_weighted == pytest.approx(1.0)
 
-    def test_weighted_marginal_computed(self):
-        """p_marginal_weighted must equal p_conditional_weighted × p_reach_weighted."""
+    def test_weighted_overall_computed(self):
+        """p_overall_weighted must equal p_given_reach_weighted × p_reach_weighted."""
         weighted = {
             "First Round": {(2, 4, True): 1.0},
         }
@@ -484,19 +484,19 @@ class TestWeightedPlaceholder:
             slots=SLOTS_5A_7A_2025,
             season=SEASON,
             p_reach_weighted_by_round={"First Round": 0.9},
-            p_conditional_weighted_by_matchup=weighted,
+            p_given_reach_weighted_by_matchup=weighted,
         )
         r1 = rounds[0]
         entry = r1.entries[0]
-        assert entry.p_marginal_weighted == pytest.approx(0.9)
+        assert entry.p_overall_weighted == pytest.approx(0.9)
 
     def test_weighted_none_when_not_provided(self):
         """Weighted fields must be None when no weighted dict is passed."""
         rounds = _matchups(7, region=1, seed=1)
         for rnd in rounds:
             for entry in rnd.entries:
-                assert entry.p_conditional_weighted is None
-                assert entry.p_marginal_weighted is None
+                assert entry.p_given_reach_weighted is None
+                assert entry.p_overall_weighted is None
 
 
 # ---------------------------------------------------------------------------
@@ -530,7 +530,7 @@ class TestDictRenderer:
         )
         d = team_matchups_as_dict(rounds)
         assert d["first_round"]["p_reach"] == pytest.approx(1.0)
-        assert d["first_round"]["p_host_conditional"] is None
+        assert d["first_round"]["p_host_given_reach"] is None
 
     def test_matchup_entry_structure(self):
         """Each matchup entry must contain exactly the expected set of keys."""
@@ -544,10 +544,10 @@ class TestDictRenderer:
             "opponent_region",
             "opponent_seed",
             "home",
-            "p_conditional",
-            "p_conditional_weighted",
-            "p_marginal",
-            "p_marginal_weighted",
+            "p_given_reach",
+            "p_given_reach_weighted",
+            "p_overall",
+            "p_overall_weighted",
             "explanation",
         }
         assert set(entry.keys()) == expected_keys
@@ -651,10 +651,10 @@ class TestTaylorsville2025:
 
     Odds supplied match the existing taylorsville_home_scenarios_2025.md
     odds table (equal win probability):
-      First Round:   reach=100%, host|reach=100%, marginal=100%
-      Second Round:  reach=50%,  host|reach=100%, marginal=50%
-      Quarterfinals: reach=25%,  host|reach=37.5%, marginal=9.375%
-      Semifinals:    reach=12.5%, host|reach=75%,  marginal=9.375%
+      First Round:   reach=100%, host|reach=100%, overall=100%
+      Second Round:  reach=50%,  host|reach=100%, overall=50%
+      Quarterfinals: reach=25%,  host|reach=37.5%, overall=9.375%
+      Semifinals:    reach=12.5%, host|reach=75%,  overall=9.375%
     """
 
     EXPECTED_TEXT = (
@@ -717,13 +717,13 @@ class TestTaylorsville2025:
                 "Quarterfinals": 0.25,
                 "Semifinals": 0.125,
             },
-            p_host_conditional_by_round={
+            p_host_given_reach_by_round={
                 "First Round": 1.0,
                 "Second Round": 1.0,
                 "Quarterfinals": 0.375,
                 "Semifinals": 0.75,
             },
-            p_host_marginal_by_round={
+            p_host_overall_by_round={
                 "First Round": 1.0,
                 "Second Round": 0.5,
                 "Quarterfinals": 0.09375,
@@ -741,13 +741,13 @@ class TestTaylorsville2025:
         """Round-level odds in the dict must match the documented odds table."""
         d = team_matchups_as_dict(taylorsville_rounds)
         assert d["first_round"]["p_reach"] == pytest.approx(1.0)
-        assert d["first_round"]["p_host_conditional"] == pytest.approx(1.0)
+        assert d["first_round"]["p_host_given_reach"] == pytest.approx(1.0)
         assert d["second_round"]["p_reach"] == pytest.approx(0.5)
-        assert d["second_round"]["p_host_conditional"] == pytest.approx(1.0)
+        assert d["second_round"]["p_host_given_reach"] == pytest.approx(1.0)
         assert d["quarterfinals"]["p_reach"] == pytest.approx(0.25)
-        assert d["quarterfinals"]["p_host_conditional"] == pytest.approx(0.375)
+        assert d["quarterfinals"]["p_host_given_reach"] == pytest.approx(0.375)
         assert d["semifinals"]["p_reach"] == pytest.approx(0.125)
-        assert d["semifinals"]["p_host_conditional"] == pytest.approx(0.75)
+        assert d["semifinals"]["p_host_given_reach"] == pytest.approx(0.75)
 
     def test_dict_first_round(self, taylorsville_rounds):
         """First-round dict entry must show West Lincoln as the sole home opponent."""
@@ -759,8 +759,8 @@ class TestTaylorsville2025:
         assert m["opponent_region"] == 7
         assert m["opponent_seed"] == 4
         assert m["home"] is True
-        assert m["p_conditional"] == pytest.approx(1.0)
-        assert m["p_marginal"] == pytest.approx(1.0)
+        assert m["p_given_reach"] == pytest.approx(1.0)
+        assert m["p_overall"] == pytest.approx(1.0)
         assert m["explanation"] == "Designated home team in bracket"
 
     def test_dict_second_round(self, taylorsville_rounds):
@@ -772,8 +772,8 @@ class TestTaylorsville2025:
         opponents = {m["opponent"] for m in matchups}
         assert opponents == {"Ethel", "South Delta"}
         for m in matchups:
-            assert m["p_conditional"] == pytest.approx(0.5)
-            assert m["p_marginal"] == pytest.approx(0.25)
+            assert m["p_given_reach"] == pytest.approx(0.5)
+            assert m["p_overall"] == pytest.approx(0.25)
             assert m["explanation"] == "Higher seed (#1) hosts"
 
     def test_dict_quarterfinals(self, taylorsville_rounds):
@@ -791,17 +791,17 @@ class TestTaylorsville2025:
         # Richton: home (same-region, higher seed)
         richton = next(m for m in matchups if m["opponent"] == "Richton")
         assert richton["home"] is True
-        assert richton["p_conditional"] == pytest.approx(1 / 6)
+        assert richton["p_given_reach"] == pytest.approx(1 / 6)
 
-        # Shaw: away, 2 paths → p_conditional = 2/6 = 1/3
+        # Shaw: away, 2 paths → p_given_reach = 2/6 = 1/3
         shaw = next(m for m in matchups if m["opponent"] == "Shaw")
         assert shaw["home"] is False
-        assert shaw["p_conditional"] == pytest.approx(1 / 3)
+        assert shaw["p_given_reach"] == pytest.approx(1 / 3)
 
         # Bogue Chitto: away (equal seed, odd-year tiebreak)
         bc = next(m for m in matchups if m["opponent"] == "Bogue Chitto")
         assert bc["home"] is False
-        assert bc["p_conditional"] == pytest.approx(1 / 6)
+        assert bc["p_given_reach"] == pytest.approx(1 / 6)
         assert "lower region# hosts (Region 7)" in bc["explanation"]
 
     def test_dict_semifinals(self, taylorsville_rounds):
@@ -815,10 +815,10 @@ class TestTaylorsville2025:
         assert home_opps == {"Noxapater", "West Bolivar", "Salem", "Mount Olive", "Stringer", "Lumberton"}
         assert away_opps == {"Nanih Waiya", "Simmons"}
 
-        # All have equal p_conditional = 1/8
+        # All have equal p_given_reach = 1/8
         for m in matchups:
-            assert m["p_conditional"] == pytest.approx(0.125)
-            assert m["p_marginal"] == pytest.approx(0.015625)
+            assert m["p_given_reach"] == pytest.approx(0.125)
+            assert m["p_overall"] == pytest.approx(0.015625)
 
 
 # ---------------------------------------------------------------------------
@@ -840,9 +840,9 @@ class TestTaylorsville2025PostFirstRound:
                                 Noxapater, West Bolivar, Salem, Mount Olive
 
     Post-first-round odds:
-      Second Round:  reach=100%, host|reach=100%, marginal=100%
-      Quarterfinals: reach=50%,  host|reach=0%,   marginal=0%
-      Semifinals:    reach=25%,  host|reach=75%,  marginal=18.75%
+      Second Round:  reach=100%, host|reach=100%, overall=100%
+      Quarterfinals: reach=50%,  host|reach=0%,   overall=0%
+      Semifinals:    reach=25%,  host|reach=75%,  overall=18.75%
 
     QF host|reach=0% because both remaining QF opponents always host:
     Bogue Chitto (R7<R8, odd-year seed tiebreak) and Leake County (fewer
@@ -907,12 +907,12 @@ class TestTaylorsville2025PostFirstRound:
                 "Quarterfinals": 0.5,
                 "Semifinals": 0.25,
             },
-            p_host_conditional_by_round={
+            p_host_given_reach_by_round={
                 "Second Round": 1.0,
                 "Quarterfinals": 0.0,
                 "Semifinals": 0.75,
             },
-            p_host_marginal_by_round={
+            p_host_overall_by_round={
                 "Second Round": 1.0,
                 "Quarterfinals": 0.0,
                 "Semifinals": 0.1875,
@@ -938,22 +938,22 @@ class TestTaylorsville2025PostFirstRound:
         d = team_matchups_as_dict(taylorsville_rounds)
         assert "first_round" not in d
         assert d["second_round"]["p_reach"] == pytest.approx(1.0)
-        assert d["second_round"]["p_host_conditional"] == pytest.approx(1.0)
+        assert d["second_round"]["p_host_given_reach"] == pytest.approx(1.0)
         assert d["quarterfinals"]["p_reach"] == pytest.approx(0.5)
-        assert d["quarterfinals"]["p_host_conditional"] == pytest.approx(0.0)
+        assert d["quarterfinals"]["p_host_given_reach"] == pytest.approx(0.0)
         assert d["semifinals"]["p_reach"] == pytest.approx(0.25)
-        assert d["semifinals"]["p_host_conditional"] == pytest.approx(0.75)
+        assert d["semifinals"]["p_host_given_reach"] == pytest.approx(0.75)
 
     def test_dict_second_round(self, taylorsville_rounds):
-        """R2 must show only South Delta (Ethel eliminated); p_conditional=1.0."""
+        """R2 must show only South Delta (Ethel eliminated); p_given_reach=1.0."""
         d = team_matchups_as_dict(taylorsville_rounds)
         matchups = d["second_round"]["matchups"]
         assert len(matchups) == 1
         m = matchups[0]
         assert m["opponent"] == "South Delta"
         assert m["home"] is True
-        assert m["p_conditional"] == pytest.approx(1.0)
-        assert m["p_marginal"] == pytest.approx(1.0)
+        assert m["p_given_reach"] == pytest.approx(1.0)
+        assert m["p_overall"] == pytest.approx(1.0)
         assert m["explanation"] == "Higher seed (#1) hosts"
 
     def test_dict_quarterfinals(self, taylorsville_rounds):
@@ -962,20 +962,20 @@ class TestTaylorsville2025PostFirstRound:
         matchups = d["quarterfinals"]["matchups"]
 
         assert len(matchups) == 2
-        assert d["quarterfinals"]["p_host_conditional"] == pytest.approx(0.0)
+        assert d["quarterfinals"]["p_host_given_reach"] == pytest.approx(0.0)
         assert all(m["home"] is False for m in matchups)
 
         # Leake County: away only — R1 results fix Leake County's R2 opp to Bogue Chitto,
         # giving Leake County at most 1 home game vs Taylorsville's 2 → always hosts.
         lc = next(m for m in matchups if m["opponent"] == "Leake County")
         assert lc["home"] is False
-        assert lc["p_conditional"] == pytest.approx(0.5)
+        assert lc["p_given_reach"] == pytest.approx(0.5)
         assert "Fewer home games" in lc["explanation"]
 
         # Bogue Chitto: always away, odd-year seed tiebreak
         bc = next(m for m in matchups if m["opponent"] == "Bogue Chitto")
         assert bc["home"] is False
-        assert bc["p_conditional"] == pytest.approx(0.5)
+        assert bc["p_given_reach"] == pytest.approx(0.5)
         assert "lower region# hosts (Region 7)" in bc["explanation"]
 
     def test_dict_semifinals(self, taylorsville_rounds):
@@ -990,8 +990,8 @@ class TestTaylorsville2025PostFirstRound:
         assert away_opps == {"Nanih Waiya", "Simmons"}
 
         for m in matchups:
-            assert m["p_conditional"] == pytest.approx(0.25)
-            assert m["p_marginal"] == pytest.approx(0.0625)
+            assert m["p_given_reach"] == pytest.approx(0.25)
+            assert m["p_overall"] == pytest.approx(0.0625)
 
 
 # ---------------------------------------------------------------------------
@@ -1012,8 +1012,8 @@ class TestTaylorsville2025PostSecondRound:
                   Nanih Waiya (R5s1), Simmons (R6s1)
 
     Post-second-round odds:
-      Quarterfinals: reach=100%, host|reach=0%,  marginal=0%
-      Semifinals:    reach=50%,  host|reach=0%,  marginal=0%
+      Quarterfinals: reach=100%, host|reach=0%,  overall=0%
+      Semifinals:    reach=50%,  host|reach=0%,  overall=0%
 
     QF: Leake County is the only opponent (Bogue Chitto eliminated in R2).
     Taylorsville is always away — Leake County had 1 home game vs Taylorsville's 2.
@@ -1068,8 +1068,8 @@ class TestTaylorsville2025PostSecondRound:
             slots=SLOTS_1A_4A_2025,
             season=2025,
             p_reach_by_round={"Quarterfinals": 1.0, "Semifinals": 0.5},
-            p_host_conditional_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
-            p_host_marginal_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
+            p_host_given_reach_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
+            p_host_overall_by_round={"Quarterfinals": 0.0, "Semifinals": 0.0},
             team_lookup=lookup,
             state=PlayoffState(
                 known_survivors=self._R2_SURVIVORS,
@@ -1094,9 +1094,9 @@ class TestTaylorsville2025PostSecondRound:
         assert "first_round" not in d
         assert "second_round" not in d
         assert d["quarterfinals"]["p_reach"] == pytest.approx(1.0)
-        assert d["quarterfinals"]["p_host_conditional"] == pytest.approx(0.0)
+        assert d["quarterfinals"]["p_host_given_reach"] == pytest.approx(0.0)
         assert d["semifinals"]["p_reach"] == pytest.approx(0.5)
-        assert d["semifinals"]["p_host_conditional"] == pytest.approx(0.0)
+        assert d["semifinals"]["p_host_given_reach"] == pytest.approx(0.0)
 
     def test_dict_quarterfinals(self, taylorsville_rounds):
         """QF shows exactly one entry — Leake County always hosts (fewer home games)."""
@@ -1106,8 +1106,8 @@ class TestTaylorsville2025PostSecondRound:
         m = matchups[0]
         assert m["opponent"] == "Leake County"
         assert m["home"] is False
-        assert m["p_conditional"] == pytest.approx(1.0)
-        assert m["p_marginal"] == pytest.approx(1.0)
+        assert m["p_given_reach"] == pytest.approx(1.0)
+        assert m["p_overall"] == pytest.approx(1.0)
         assert "Fewer home games" in m["explanation"]
 
     def test_dict_semifinals(self, taylorsville_rounds):
@@ -1119,8 +1119,8 @@ class TestTaylorsville2025PostSecondRound:
         opponents = {m["opponent"] for m in matchups}
         assert opponents == {"Nanih Waiya", "Simmons"}
         for m in matchups:
-            assert m["p_conditional"] == pytest.approx(0.5)
-            assert m["p_marginal"] == pytest.approx(0.25)
+            assert m["p_given_reach"] == pytest.approx(0.5)
+            assert m["p_overall"] == pytest.approx(0.25)
 
 
 # ---------------------------------------------------------------------------
@@ -1141,7 +1141,7 @@ class TestTaylorsville2025PostQuarterfinals:
     odd year → lower region# = R6 hosts).  Actual result: (6,1,8,1).
 
     Post-quarterfinals odds:
-      Semifinals: reach=100%, host|reach=0%, marginal=0%
+      Semifinals: reach=100%, host|reach=0%, overall=0%
     """
 
     _R1_SURVIVORS: set[tuple[int, int]] = {
@@ -1182,8 +1182,8 @@ class TestTaylorsville2025PostQuarterfinals:
             slots=SLOTS_1A_4A_2025,
             season=2025,
             p_reach_by_round={"Semifinals": 1.0},
-            p_host_conditional_by_round={"Semifinals": 0.0},
-            p_host_marginal_by_round={"Semifinals": 0.0},
+            p_host_given_reach_by_round={"Semifinals": 0.0},
+            p_host_overall_by_round={"Semifinals": 0.0},
             team_lookup=lookup,
             state=PlayoffState(
                 known_survivors=self._QF_SURVIVORS,
@@ -1207,7 +1207,7 @@ class TestTaylorsville2025PostQuarterfinals:
         d = team_matchups_as_dict(taylorsville_rounds)
         assert "quarterfinals" not in d
         assert d["semifinals"]["p_reach"] == pytest.approx(1.0)
-        assert d["semifinals"]["p_host_conditional"] == pytest.approx(0.0)
+        assert d["semifinals"]["p_host_given_reach"] == pytest.approx(0.0)
 
     def test_dict_semifinals(self, taylorsville_rounds):
         """SF shows exactly one entry — Simmons always hosts (lower region#, odd year)."""
@@ -1217,8 +1217,8 @@ class TestTaylorsville2025PostQuarterfinals:
         m = matchups[0]
         assert m["opponent"] == "Simmons"
         assert m["home"] is False
-        assert m["p_conditional"] == pytest.approx(1.0)
-        assert m["p_marginal"] == pytest.approx(1.0)
+        assert m["p_given_reach"] == pytest.approx(1.0)
+        assert m["p_overall"] == pytest.approx(1.0)
         assert "lower region# hosts (Region 6)" in m["explanation"]
 
 

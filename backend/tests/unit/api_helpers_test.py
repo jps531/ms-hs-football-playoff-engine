@@ -29,6 +29,7 @@ from backend.helpers.api_helpers import (
     clinched_school,
     compute_remaining_games,
     filter_remaining_after_simulation,
+    filter_scenarios_by_simulation,
     parse_completed_games,
     records_from_completed,
     remaining_to_models,
@@ -36,7 +37,7 @@ from backend.helpers.api_helpers import (
     scenarios_to_entries,
     standings_from_odds,
 )
-from backend.helpers.data_classes import BracketOdds, CompletedGame, RemainingGame, StandingsOdds
+from backend.helpers.data_classes import BracketOdds, CompletedGame, GameResult, RemainingGame, StandingsOdds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
 
 # ---------------------------------------------------------------------------
@@ -318,6 +319,74 @@ class TestFilterRemainingAfterSimulation:
 
 
 # ---------------------------------------------------------------------------
+# TestFilterScenariosBySimulation
+# ---------------------------------------------------------------------------
+
+
+class TestFilterScenariosBySimulation:
+    """filter_scenarios_by_simulation prunes by (winner, loser) identity and, when scores are known, by margin bucket."""
+
+    @staticmethod
+    def _scenario(sub_label, conditions_atom):
+        """Build a synthetic scenario dict with fixed game_winners/seeding for the given sub_label/conditions_atom."""
+        return {
+            "scenario_num": 2,
+            "sub_label": sub_label,
+            "game_winners": [("Lumberton", "Taylorsville"), ("Stringer", "Resurrection")],
+            "conditions_atom": conditions_atom,
+            "seeding": ("Taylorsville", "Stringer", "Lumberton", "Richton", "Resurrection"),
+        }
+
+    def _bucketed_scenarios(self):
+        """Two mutually-exclusive margin buckets for the same (winner, loser) pairs."""
+        bucket_a = [
+            GameResult("Lumberton", "Taylorsville", min_margin=1, max_margin=12),
+            GameResult("Stringer", "Resurrection", min_margin=1, max_margin=None),
+        ]
+        bucket_b = [
+            GameResult("Lumberton", "Taylorsville", min_margin=12, max_margin=None),
+            GameResult("Stringer", "Resurrection", min_margin=1, max_margin=None),
+        ]
+        return [self._scenario("a", bucket_a), self._scenario("b", bucket_b)]
+
+    def test_margin_in_lower_bucket_keeps_only_that_branch(self):
+        """A submitted margin of 5 (12-7) falls in the 1-11 bucket; the 12+ branch is dropped."""
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=12, loser_score=7)]
+        result = filter_scenarios_by_simulation(self._bucketed_scenarios(), body)
+        assert [sc["sub_label"] for sc in result] == ["a"]
+
+    def test_margin_in_upper_bucket_keeps_only_that_branch(self):
+        """A submitted margin of 20 falls in the 12+ bucket; the 1-11 branch is dropped."""
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=27, loser_score=7)]
+        result = filter_scenarios_by_simulation(self._bucketed_scenarios(), body)
+        assert [sc["sub_label"] for sc in result] == ["b"]
+
+    def test_no_scores_keeps_both_buckets(self):
+        """Without explicit scores, margin can't be validated, so both buckets survive (today's behavior)."""
+        body = [_GameResult("Lumberton", "Taylorsville")]
+        result = filter_scenarios_by_simulation(self._bucketed_scenarios(), body)
+        assert {sc["sub_label"] for sc in result} == {"a", "b"}
+
+    def test_scenario_without_conditions_atom_is_unaffected(self):
+        """A scenario with conditions_atom=None is filtered purely on game_winners."""
+        scenario = {
+            "scenario_num": 1,
+            "sub_label": "",
+            "game_winners": [("Lumberton", "Taylorsville")],
+            "conditions_atom": None,
+            "seeding": ("Lumberton", "Taylorsville"),
+        }
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=12, loser_score=7)]
+        result = filter_scenarios_by_simulation([scenario], body)
+        assert result == [scenario]
+
+    def test_empty_body_returns_all_scenarios(self):
+        """Empty simulated_results leaves complete_scenarios unchanged."""
+        scenarios = self._bucketed_scenarios()
+        assert filter_scenarios_by_simulation(scenarios, []) == scenarios
+
+
+# ---------------------------------------------------------------------------
 # TestRecordsFromCompleted
 # ---------------------------------------------------------------------------
 
@@ -445,6 +514,34 @@ class TestScenariosToEntries:
         assert result is not None
         assert len(result) == 2
         assert result[1].outcomes["Beta"] == "1"
+
+    def test_conditions_field_populated_from_conditions_atom(self):
+        """conditions_atom is serialized into the structured `conditions` field."""
+        scenarios = [
+            {
+                "scenario_num": 1,
+                "sub_label": "a",
+                "game_winners": [("Lumberton", "Taylorsville")],
+                "conditions_atom": [GameResult("Lumberton", "Taylorsville", min_margin=1, max_margin=12)],
+                "seeding": ["Lumberton", "Taylorsville"],
+            }
+        ]
+        result = scenarios_to_entries(scenarios)
+        assert result[0].conditions == [
+            {
+                "type": "game_result",
+                "winner": "Lumberton",
+                "loser": "Taylorsville",
+                "min_margin": 1,
+                "max_margin": 12,
+            }
+        ]
+
+    def test_conditions_field_none_when_no_conditions_atom(self):
+        """conditions is None when the scenario dict has no conditions_atom."""
+        scenarios = [{"scenario_num": 1, "sub_label": "1", "game_winners": [], "seeding": ["Alpha", "Beta"]}]
+        result = scenarios_to_entries(scenarios)
+        assert result[0].conditions is None
 
 
 # ---------------------------------------------------------------------------
@@ -940,20 +1037,20 @@ class TestBuildHostingEntries:
         assert len(result) == 4
 
     def test_5a_7a_second_round_odds_none(self):
-        """5A–7A second_round has conditional=None, marginal=None."""
+        """5A–7A second_round has p_host_given_reach=None, p_host_overall=None."""
         result = build_hosting_entries(_REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5)
         for entry in result:
-            assert entry.second_round.conditional is None
-            assert entry.second_round.marginal is None
+            assert entry.second_round.p_host_given_reach is None
+            assert entry.second_round.p_host_overall is None
 
-    def test_5a_7a_first_round_conditional(self):
-        """Seeds 1 and 2 host R1 (conditional=1.0); seeds 3 and 4 play away (conditional=0.0)."""
+    def test_5a_7a_first_round_p_host_given_reach(self):
+        """Seeds 1 and 2 host R1 (p_host_given_reach=1.0); seeds 3 and 4 play away (p_host_given_reach=0.0)."""
         result = build_hosting_entries(_REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5)
         by_school = {e.school: e for e in result}
-        assert by_school["Alpha"].first_round.conditional == pytest.approx(1.0)  # seed 1 — home
-        assert by_school["Beta"].first_round.conditional == pytest.approx(1.0)  # seed 2 — home
-        assert by_school["Gamma"].first_round.conditional == pytest.approx(0.0)  # seed 3 — away
-        assert by_school["Delta"].first_round.conditional == pytest.approx(0.0)  # seed 4 — away
+        assert by_school["Alpha"].first_round.p_host_given_reach == pytest.approx(1.0)  # seed 1 — home
+        assert by_school["Beta"].first_round.p_host_given_reach == pytest.approx(1.0)  # seed 2 — home
+        assert by_school["Gamma"].first_round.p_host_given_reach == pytest.approx(0.0)  # seed 3 — away
+        assert by_school["Delta"].first_round.p_host_given_reach == pytest.approx(0.0)  # seed 4 — away
 
     def test_1a_4a_returns_entry_per_team(self):
         """One entry per team in region_odds for 1A–4A."""
@@ -961,23 +1058,23 @@ class TestBuildHostingEntries:
         assert len(result) == 4
 
     def test_1a_4a_second_round_odds_not_none(self):
-        """1A–4A second_round has non-None marginal when team can advance."""
+        """1A–4A second_round has non-None p_host_overall when team can advance."""
         result = build_hosting_entries(_REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1)
-        # Seed-1 team (Able) has p_r1_adv > 0, so second_round.marginal should be non-None.
+        # Seed-1 team (Able) has p_r1_adv > 0, so second_round.p_host_overall should be non-None.
         able = next(e for e in result if e.school == "Able")
-        assert able.second_round.marginal is not None
+        assert able.second_round.p_host_overall is not None
 
-    def test_1a_4a_first_round_conditional(self):
-        """Seeds 1 and 2 host R1 (conditional=1.0); seeds 3 and 4 play away (conditional=0.0)."""
+    def test_1a_4a_first_round_p_host_given_reach(self):
+        """Seeds 1 and 2 host R1 (p_host_given_reach=1.0); seeds 3 and 4 play away (p_host_given_reach=0.0)."""
         result = build_hosting_entries(_REGION1_ODDS_1A, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1)
         by_school = {e.school: e for e in result}
-        assert by_school["Able"].first_round.conditional == pytest.approx(1.0)  # seed 1 — home
-        assert by_school["Baker"].first_round.conditional == pytest.approx(1.0)  # seed 2 — home
-        assert by_school["Camp"].first_round.conditional == pytest.approx(0.0)  # seed 3 — away
-        assert by_school["Dog"].first_round.conditional == pytest.approx(0.0)  # seed 4 — away
+        assert by_school["Able"].first_round.p_host_given_reach == pytest.approx(1.0)  # seed 1 — home
+        assert by_school["Baker"].first_round.p_host_given_reach == pytest.approx(1.0)  # seed 2 — home
+        assert by_school["Camp"].first_round.p_host_given_reach == pytest.approx(0.0)  # seed 3 — away
+        assert by_school["Dog"].first_round.p_host_given_reach == pytest.approx(0.0)  # seed 4 — away
 
-    def test_zero_advancement_gives_none_conditional(self):
-        """When p_r1_adv == 0 (no seed probability), second_round conditional is None."""
+    def test_zero_advancement_gives_none_p_host_given_reach(self):
+        """When p_r1_adv == 0 (no seed probability), second_round p_host_given_reach is None."""
         # A team with all p values = 0 has zero second-round advancement probability.
         region_odds = {
             "Able": _odds("Able", p1=1.0, p_playoffs=1.0, clinched=True),
@@ -987,15 +1084,15 @@ class TestBuildHostingEntries:
         }
         result = build_hosting_entries(region_odds, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1)
         zero = next(e for e in result if e.school == "Zero")
-        assert zero.second_round.conditional is None
+        assert zero.second_round.p_host_given_reach is None
 
     # ------------------------------------------------------------------
-    # Stored-odds path (home_cond + stored_adv provided)
+    # Stored-odds path (home_p_host_given_reach + stored_adv provided)
     # ------------------------------------------------------------------
 
     def test_stored_path_1a_4a_uses_stored_values(self):
-        """When home_cond and stored_adv are supplied, marginal = conditional × advancement."""
-        home_cond = {
+        """When home_p_host_given_reach and stored_adv are supplied, p_host_overall = p_host_given_reach × advancement."""
+        home_p_host_given_reach = {
             "Able": (1.0, 0.6, 0.3, 0.15),
             "Baker": (1.0, 0.5, 0.25, 0.1),
             "Camp": (0.0, 0.0, 0.0, 0.0),
@@ -1013,23 +1110,23 @@ class TestBuildHostingEntries:
             region=1,
             season=2025,
             clazz=1,
-            home_cond=home_cond,
+            home_p_host_given_reach=home_p_host_given_reach,
             stored_adv=stored_adv,
         )
         by_school = {e.school: e for e in result}
         able = by_school["Able"]
-        assert able.first_round.conditional == pytest.approx(1.0)
-        assert able.first_round.marginal == pytest.approx(1.0 * 1.0)
-        assert able.second_round.conditional == pytest.approx(0.6)
-        assert able.second_round.marginal == pytest.approx(0.6 * 0.5)
-        assert able.quarterfinals.conditional == pytest.approx(0.3)
-        assert able.quarterfinals.marginal == pytest.approx(0.3 * 0.25)
-        assert able.semifinals.conditional == pytest.approx(0.15)
-        assert able.semifinals.marginal == pytest.approx(0.15 * 0.125)
+        assert able.first_round.p_host_given_reach == pytest.approx(1.0)
+        assert able.first_round.p_host_overall == pytest.approx(1.0 * 1.0)
+        assert able.second_round.p_host_given_reach == pytest.approx(0.6)
+        assert able.second_round.p_host_overall == pytest.approx(0.6 * 0.5)
+        assert able.quarterfinals.p_host_given_reach == pytest.approx(0.3)
+        assert able.quarterfinals.p_host_overall == pytest.approx(0.3 * 0.25)
+        assert able.semifinals.p_host_given_reach == pytest.approx(0.15)
+        assert able.semifinals.p_host_overall == pytest.approx(0.15 * 0.125)
 
     def test_stored_path_5a_7a_second_round_always_none(self):
-        """5A–7A stored path: second_round conditional and marginal are always None."""
-        home_cond = {s: (1.0, 0.0, 0.5, 0.25) for s in ("Alpha", "Beta", "Gamma", "Delta")}
+        """5A–7A stored path: second_round p_host_given_reach and p_host_overall are always None."""
+        home_p_host_given_reach = {s: (1.0, 0.0, 0.5, 0.25) for s in ("Alpha", "Beta", "Gamma", "Delta")}
         stored_adv = {s: (1.0, 0.0, 0.5, 0.25) for s in ("Alpha", "Beta", "Gamma", "Delta")}
         result = build_hosting_entries(
             _REGION1_ODDS_5A,
@@ -1037,16 +1134,16 @@ class TestBuildHostingEntries:
             region=1,
             season=2025,
             clazz=5,
-            home_cond=home_cond,
+            home_p_host_given_reach=home_p_host_given_reach,
             stored_adv=stored_adv,
         )
         for entry in result:
-            assert entry.second_round.conditional is None
-            assert entry.second_round.marginal is None
+            assert entry.second_round.p_host_given_reach is None
+            assert entry.second_round.p_host_overall is None
 
-    def test_stored_path_zero_advancement_gives_none_conditional(self):
-        """Stored path: conditional is None when the advancement probability is zero."""
-        home_cond = {"Able": (1.0, 0.5, 0.3, 0.15)}
+    def test_stored_path_zero_advancement_gives_none_p_host_given_reach(self):
+        """Stored path: p_host_given_reach is None when the advancement probability is zero."""
+        home_p_host_given_reach = {"Able": (1.0, 0.5, 0.3, 0.15)}
         stored_adv = {"Able": (0.0, 0.0, 0.0, 0.0)}  # no advancement
         region_odds = {"Able": _odds("Able", p1=1.0, p_playoffs=1.0, clinched=True)}
         result = build_hosting_entries(
@@ -1055,20 +1152,20 @@ class TestBuildHostingEntries:
             region=1,
             season=2025,
             clazz=1,
-            home_cond=home_cond,
+            home_p_host_given_reach=home_p_host_given_reach,
             stored_adv=stored_adv,
         )
         able = result[0]
-        assert able.second_round.conditional is None
-        assert able.quarterfinals.conditional is None
-        assert able.semifinals.conditional is None
+        assert able.second_round.p_host_given_reach is None
+        assert able.quarterfinals.p_host_given_reach is None
+        assert able.semifinals.p_host_given_reach is None
 
     # ------------------------------------------------------------------
     # Weighted fallback path (win_prob_fn_weighted provided)
     # ------------------------------------------------------------------
 
     def test_weighted_fallback_1a_4a_populates_weighted_fields(self):
-        """Passing win_prob_fn_weighted produces non-None conditional_weighted values."""
+        """Passing win_prob_fn_weighted produces non-None p_host_given_reach_weighted values."""
 
         def equal_w(hr: int, hs: int, ar: int, as_: int) -> float:
             """Return 0.5 for all matchups (equal probability)."""
@@ -1083,11 +1180,11 @@ class TestBuildHostingEntries:
             win_prob_fn_weighted=equal_w,
         )
         able = next(e for e in result if e.school == "Able")
-        assert able.first_round.conditional_weighted is not None
-        assert able.second_round.marginal_weighted is not None
+        assert able.first_round.p_host_given_reach_weighted is not None
+        assert able.second_round.p_host_overall_weighted is not None
 
     def test_weighted_fallback_matches_unweighted_for_equal_prob(self):
-        """With 50/50 weighted fn, conditional_weighted equals conditional."""
+        """With 50/50 weighted fn, p_host_given_reach_weighted equals p_host_given_reach."""
 
         def equal_w(hr: int, hs: int, ar: int, as_: int) -> float:
             """Return 0.5 for all matchups (equal probability)."""
@@ -1102,8 +1199,8 @@ class TestBuildHostingEntries:
             win_prob_fn_weighted=equal_w,
         )
         for entry in result:
-            assert entry.first_round.conditional_weighted == pytest.approx(
-                entry.first_round.conditional or 0.0, abs=1e-9
+            assert entry.first_round.p_host_given_reach_weighted == pytest.approx(
+                entry.first_round.p_host_given_reach or 0.0, abs=1e-9
             )
 
     # ------------------------------------------------------------------
@@ -1166,8 +1263,8 @@ class TestBuildHostingEntries:
             },
         }
 
-    def test_sf_conditional_1_when_all_opp_seed1s_eliminated(self):
-        """When all opposing-quarter seed-1 teams are eliminated, SF conditional = 1.0 for seed-1 team.
+    def test_sf_p_host_given_reach_1_when_all_opp_seed1s_eliminated(self):
+        """When all opposing-quarter seed-1 teams are eliminated, SF p_host_given_reach = 1.0 for seed-1 team.
 
         Uses season=2024 (even year) so that equal-seed SF matchups are decided by higher
         region number hosting — meaning R1-1 would NOT host against R3-1 or R4-1 in a normal
@@ -1184,10 +1281,10 @@ class TestBuildHostingEntries:
             all_region_odds=all_region_odds,
         )
         able = next(e for e in result if e.school == "Able")
-        assert able.semifinals.conditional == pytest.approx(1.0)
+        assert able.semifinals.p_host_given_reach == pytest.approx(1.0)
 
-    def test_sf_conditional_partial_elimination_between_0_and_1(self):
-        """Eliminating only one opposing seed-1 puts SF conditional strictly between baseline and 1.0."""
+    def test_sf_p_host_given_reach_partial_elimination_between_0_and_1(self):
+        """Eliminating only one opposing seed-1 puts SF p_host_given_reach strictly between baseline and 1.0."""
         all_region_odds = self._1a_all_region_odds_eliminate_r3_r4_seed1()
         # Restore R3-seed-1 as alive — only R4-seed-1 is eliminated.
         all_region_odds[3]["R3T1"] = StandingsOdds(
@@ -1218,11 +1315,11 @@ class TestBuildHostingEntries:
         )
         able = next(e for e in result if e.school == "Able")
         baseline_able = next(e for e in baseline if e.school == "Able")
-        assert able.semifinals.conditional is not None
-        assert (baseline_able.semifinals.conditional or 0.0) < able.semifinals.conditional < 1.0
+        assert able.semifinals.p_host_given_reach is not None
+        assert (baseline_able.semifinals.p_host_given_reach or 0.0) < able.semifinals.p_host_given_reach < 1.0
 
-    def test_sf_conditional_unchanged_with_no_elimination(self):
-        """With all_region_odds but no eliminations, SF conditional matches the baseline (no all_region_odds)."""
+    def test_sf_p_host_given_reach_unchanged_with_no_elimination(self):
+        """With all_region_odds but no eliminations, SF p_host_given_reach matches the baseline (no all_region_odds)."""
         all_region_odds = self._1a_all_region_odds_eliminate_r3_r4_seed1()
         # Restore both R3 and R4 seed-1 as alive.
         for reg in (3, 4):
@@ -1255,10 +1352,10 @@ class TestBuildHostingEntries:
         )
         baseline_able = next(e for e in baseline if e.school == "Able")
         with_able = next(e for e in with_odds if e.school == "Able")
-        assert with_able.semifinals.conditional == pytest.approx(baseline_able.semifinals.conditional or 0.0, abs=1e-6)
+        assert with_able.semifinals.p_host_given_reach == pytest.approx(baseline_able.semifinals.p_host_given_reach or 0.0, abs=1e-6)
 
     # ------------------------------------------------------------------
-    # QF conditional — cross-region eliminations / confirmed wins
+    # QF p_host_given_reach — cross-region eliminations / confirmed wins
     # ------------------------------------------------------------------
     #
     # South-half 1A 2025 bracket (slots 9–16, 0-based indices 8–15):
@@ -1270,10 +1367,10 @@ class TestBuildHostingEntries:
     # Scenario: R7-1 eliminated (lost R1), R8-4 has 1 win (won R1, lost R2 to R5-2),
     # R6-3 eliminated (lost R1), R5-2 has 2 wins → guaranteed QF opponent of R8-1.
     # R8-1 (seed-1) always hosts R2; R5-2 (seed-2) hosted R2 vs R8-4 (seed-4).
-    # Equal home games (2 each) → higher seed (R8-1 seed-1) hosts → conditional = 1.0.
+    # Equal home games (2 each) → higher seed (R8-1 seed-1) hosts → p_host_given_reach = 1.0.
 
     def _region8_odds_1a(self) -> dict:
-        """Region 8 seeding odds for QF conditional tests."""
+        """Region 8 seeding odds for QF p_host_given_reach tests."""
         return {
             "R8T1": _odds("R8T1", p1=1.0, p_playoffs=1.0),
             "R8T2": _odds("R8T2", p2=1.0, p_playoffs=1.0),
@@ -1282,7 +1379,7 @@ class TestBuildHostingEntries:
         }
 
     def _all_region_odds_qf_test(self) -> dict:
-        """all_region_odds for QF conditional tests: R7-1 and R6-3 eliminated (0 wins);
+        """all_region_odds for QF p_host_given_reach tests: R7-1 and R6-3 eliminated (0 wins);
         R8-4 eliminated with 1 win (survived R1, lost R2 to R5-2); R5-2 alive.
         """
 
@@ -1363,8 +1460,8 @@ class TestBuildHostingEntries:
             },
         }
 
-    def test_qf_conditional_1_when_guaranteed_home_opponent(self):
-        """QF conditional = 1.0 when the only surviving QF opponent was home in R2.
+    def test_qf_p_host_given_reach_1_when_guaranteed_home_opponent(self):
+        """QF p_host_given_reach = 1.0 when the only surviving QF opponent was home in R2.
 
         Scenario mirrors the Taylorsville bug: R8-1 seed-1 vs confirmed R5-2 (seed-2).
         Both teams had 2 home games entering QF, so R8-1 (higher seed) hosts → 1.0.
@@ -1382,10 +1479,10 @@ class TestBuildHostingEntries:
             cross_region_wins=cross_region_wins,
         )
         r8t1 = next(e for e in result if e.school == "R8T1")
-        assert r8t1.quarterfinals.conditional == pytest.approx(1.0)
+        assert r8t1.quarterfinals.p_host_given_reach == pytest.approx(1.0)
 
-    def test_qf_conditional_between_0_and_1_with_partial_elimination(self):
-        """Partial elimination leaves QF conditional strictly between baseline and 1.0."""
+    def test_qf_p_host_given_reach_between_0_and_1_with_partial_elimination(self):
+        """Partial elimination leaves QF p_host_given_reach strictly between baseline and 1.0."""
         all_region_odds = self._all_region_odds_qf_test()
         # Restore R7-1 as alive — now R7-1 and R5-2 are both QF candidates.
         all_region_odds[7]["R7T1"] = StandingsOdds(
@@ -1418,8 +1515,8 @@ class TestBuildHostingEntries:
         )
         r8t1 = next(e for e in result if e.school == "R8T1")
         baseline_r8t1 = next(e for e in baseline if e.school == "R8T1")
-        assert r8t1.quarterfinals.conditional is not None
-        assert (baseline_r8t1.quarterfinals.conditional or 0.0) <= r8t1.quarterfinals.conditional <= 1.0
+        assert r8t1.quarterfinals.p_host_given_reach is not None
+        assert (baseline_r8t1.quarterfinals.p_host_given_reach or 0.0) <= r8t1.quarterfinals.p_host_given_reach <= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -1576,37 +1673,37 @@ class TestBuildBracketEntries:
         assert all(e.hosting is None for e in result)
 
     def test_5a_7a_hosting_second_round_is_null(self):
-        """5A–7A has no second round: hosting.second_round conditional/marginal are None."""
+        """5A–7A has no second round: hosting.second_round p_host_given_reach/p_host_overall are None."""
         result = build_bracket_entries(self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5)
         for entry in result:
             assert entry.hosting is not None
-            assert entry.hosting.second_round.conditional is None
-            assert entry.hosting.second_round.marginal is None
+            assert entry.hosting.second_round.p_host_given_reach is None
+            assert entry.hosting.second_round.p_host_overall is None
 
     def test_1a_4a_hosting_second_round_is_populated(self):
-        """1A–4A has a second round: hosting.second_round marginal is not None."""
+        """1A–4A has a second round: hosting.second_round p_host_overall is not None."""
         result = build_bracket_entries(self._by_region(), SLOTS_1A_4A_2025, season=2025, clazz=1)
         for entry in result:
             assert entry.hosting is not None
-            assert entry.hosting.second_round.marginal is not None
+            assert entry.hosting.second_round.p_host_overall is not None
 
-    def test_seed1_hosting_first_round_conditional_is_one(self):
-        """Every seed-1 slot is the home team in round 1: conditional == 1.0."""
+    def test_seed1_hosting_first_round_p_host_given_reach_is_one(self):
+        """Every seed-1 slot is the home team in round 1: p_host_given_reach == 1.0."""
         result = build_bracket_entries(self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5)
         seed1_entries = [e for e in result if e.seed == 1]
         assert seed1_entries, "expected at least one seed-1 entry"
         for entry in seed1_entries:
             assert entry.hosting is not None
-            assert entry.hosting.first_round.conditional == pytest.approx(1.0)
+            assert entry.hosting.first_round.p_host_given_reach == pytest.approx(1.0)
 
-    def test_r1_marginal_equals_conditional_when_all_clinched(self):
-        """When all teams are clinched (p_playoffs=1.0), R1 marginal == conditional."""
+    def test_r1_p_host_overall_equals_p_host_given_reach_when_all_clinched(self):
+        """When all teams are clinched (p_playoffs=1.0), R1 p_host_overall == p_host_given_reach."""
         result = build_bracket_entries(self._by_region(), SLOTS_5A_7A_2025, season=2025, clazz=5)
         for entry in result:
             h = entry.hosting
             assert h is not None
-            cond = h.first_round.conditional
-            marg = h.first_round.marginal
+            cond = h.first_round.p_host_given_reach
+            marg = h.first_round.p_host_overall
             if cond is not None and marg is not None:
                 assert marg == pytest.approx(cond, abs=1e-9)
 
@@ -2055,7 +2152,7 @@ class TestBuildEnrichedBracketLayout:
             assert rounds[2][0].round == "semifinals"
 
     def test_home_team_set_on_r1_nodes_without_hosting_lookup(self):
-        """R1 nodes always have home_team set (= participant_a) even with no hosting_conditional."""
+        """R1 nodes always have home_team set (= participant_a) even with no p_host_given_reach_by_team."""
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
         for game in layout.halves["N"][0]:
             assert game.home_team is not None
@@ -2063,12 +2160,12 @@ class TestBuildEnrichedBracketLayout:
             assert game.home_team.seed == game.participant_a.seed
 
     def test_home_team_set_when_hosting_deterministic(self):
-        """home_team is a BracketParticipant with the hosting school when conditional = 1.0."""
+        """home_team is a BracketParticipant with the hosting school when p_host_given_reach = 1.0."""
         hosting = {
             "R1S1": {"first_round": 1.0, "quarterfinals": 1.0, "semifinals": None, "second_round": None},
             "R2S4": {"first_round": 0.0, "quarterfinals": None, "semifinals": None, "second_round": None},
         }
-        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [], hosting_conditional=hosting)
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [], p_host_given_reach_by_team=hosting)
         game = layout.halves["N"][0][0]  # R1S1 vs R2S4 — R1, so home_team = participant_a always
         assert game.home_team is not None
         assert game.home_team.school == "R1S1"
@@ -2079,14 +2176,14 @@ class TestBuildEnrichedBracketLayout:
             "R1S1": {"first_round": 1.0, "quarterfinals": 1.0, "semifinals": None, "second_round": None},
         }
         confirmed = [("R1S1", "R2S4", 28, 14)]  # only N[0][0] resolved → N[1][0].participant_b = None
-        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [], hosting_conditional=hosting)
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [], p_host_given_reach_by_team=hosting)
         qf_game = layout.halves["N"][1][0]
         assert qf_game.participant_b is None
         assert qf_game.home_team is not None
         assert qf_game.home_team.school == "R1S1"
 
     def test_home_team_null_on_r2_without_hosting_lookup(self):
-        """R2+ nodes have home_team=None when no hosting_conditional is provided."""
+        """R2+ nodes have home_team=None when no p_host_given_reach_by_team is provided."""
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
         for round_games in layout.halves["N"][1:]:  # skip R1
             for game in round_games:
@@ -2268,10 +2365,10 @@ class TestApplyRoundCeilings:
     ) -> TeamBracketEntry:
         """Build a TeamBracketEntry with the given odds and a fixed hosting-odds fixture."""
         hosting = BracketSlotHosting(
-            first_round=RoundHostingOdds(conditional=1.0, marginal=0.9),
-            second_round=RoundHostingOdds(conditional=0.7, marginal=0.5),
-            quarterfinals=RoundHostingOdds(conditional=0.5, marginal=0.3),
-            semifinals=RoundHostingOdds(conditional=0.3, marginal=0.2),
+            first_round=RoundHostingOdds(p_host_given_reach=1.0, p_host_overall=0.9),
+            second_round=RoundHostingOdds(p_host_given_reach=0.7, p_host_overall=0.5),
+            quarterfinals=RoundHostingOdds(p_host_given_reach=0.5, p_host_overall=0.3),
+            semifinals=RoundHostingOdds(p_host_given_reach=0.3, p_host_overall=0.2),
         )
         return TeamBracketEntry(
             region=region,
@@ -2335,24 +2432,24 @@ class TestApplyRoundCeilings:
         assert out.champion_weighted == 0.0
 
     def test_hosting_zeroed_beyond_ceiling(self):
-        """Hosting odds for rounds after the ceiling are set to conditional=None, marginal=0."""
+        """Hosting odds for rounds after the ceiling are set to p_host_given_reach=None, p_host_overall=0."""
         entry = self._entry(1, 4)
         result = _apply_round_ceilings([entry], {(1, 4): "second_round"})
         out = result[0]
-        assert out.hosting.second_round.conditional == pytest.approx(0.7)  # preserved
-        assert out.hosting.quarterfinals.conditional is None
-        assert out.hosting.quarterfinals.marginal == 0.0
-        assert out.hosting.semifinals.conditional is None
-        assert out.hosting.semifinals.marginal == 0.0
+        assert out.hosting.second_round.p_host_given_reach == pytest.approx(0.7)  # preserved
+        assert out.hosting.quarterfinals.p_host_given_reach is None
+        assert out.hosting.quarterfinals.p_host_overall == 0.0
+        assert out.hosting.semifinals.p_host_given_reach is None
+        assert out.hosting.semifinals.p_host_overall == 0.0
 
     def test_hosting_at_ceiling_round_preserved(self):
         """Hosting odds for the ceiling round itself are not zeroed."""
         entry = self._entry(2, 1)
         result = _apply_round_ceilings([entry], {(2, 1): "quarterfinals"})
         out = result[0]
-        assert out.hosting.quarterfinals.conditional == pytest.approx(0.5)
-        assert out.hosting.semifinals.conditional is None
-        assert out.hosting.semifinals.marginal == 0.0
+        assert out.hosting.quarterfinals.p_host_given_reach == pytest.approx(0.5)
+        assert out.hosting.semifinals.p_host_given_reach is None
+        assert out.hosting.semifinals.p_host_overall == 0.0
 
     def test_entry_without_ceiling_unmodified_alongside_ceilinged(self):
         """Entries without a ceiling are untouched when mixed with ceilinged entries."""

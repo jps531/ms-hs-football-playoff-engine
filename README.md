@@ -257,7 +257,7 @@ Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when t
 
 Key endpoints summary:
 - `/api/v1/standings/{clazz}/{region}` — seeding odds + scenarios + bracket/home-game odds snapshots
-- `/api/v1/hosting/{clazz}/{region}` — playoff hosting odds (conditional + marginal, raw + Elo-weighted) per round; simulate endpoint accepts winner/loser school names
+- `/api/v1/hosting/{clazz}/{region}` — playoff hosting odds (p_host_given_reach + p_host_overall, raw + Elo-weighted) per round; simulate endpoint accepts winner/loser school names
 - `/api/v1/bracket` — bracket advancement odds per (region, seed) slot, including Elo-weighted advancement, non-weighted and weighted hosting odds per round; simulate endpoint (playoff mode only, same winner/loser format) returns the same full set of fields
 - `/api/v1/ratings` — Elo and RPI snapshots per team
 

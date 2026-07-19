@@ -10,7 +10,13 @@ Round-trip guarantee:
     deserialize_complete_scenarios(serialize_complete_scenarios(cs)) == cs
 """
 
-from backend.helpers.data_classes import GameResult, MarginCondition, PDRankCondition
+from backend.helpers.data_classes import (
+    GameResult,
+    HomeGameCondition,
+    HomeGameScenario,
+    MarginCondition,
+    PDRankCondition,
+)
 
 # ---------------------------------------------------------------------------
 # Individual condition serialization
@@ -42,6 +48,15 @@ def serialize_condition(cond) -> dict:
             "rank": cond.rank,
             "group": list(cond.group),
         }
+    if isinstance(cond, HomeGameCondition):
+        return {
+            "type": "home_game_condition",
+            "kind": cond.kind,
+            "round_name": cond.round_name,
+            "region": cond.region,
+            "seed": cond.seed,
+            "team_name": cond.team_name,
+        }
     raise TypeError(f"Cannot serialize condition of type {type(cond).__name__!r}")
 
 
@@ -68,6 +83,14 @@ def deserialize_condition(d: dict) -> GameResult | MarginCondition | PDRankCondi
             rank=d["rank"],
             group=tuple(d["group"]),
         )
+    if t == "home_game_condition":
+        return HomeGameCondition(
+            kind=d["kind"],
+            round_name=d["round_name"],
+            region=d["region"],
+            seed=d["seed"],
+            team_name=d["team_name"],
+        )
     raise ValueError(f"Unknown condition type: {t!r}")
 
 
@@ -84,6 +107,27 @@ def serialize_atom(atom: list) -> list[dict]:
 def deserialize_atom(data: list[dict]) -> list:
     """Deserialize a list of condition dicts back to a list of dataclasses."""
     return [deserialize_condition(d) for d in data]
+
+
+# ---------------------------------------------------------------------------
+# HomeGameScenario (a condition tuple + explanation, hosting-domain container)
+# ---------------------------------------------------------------------------
+
+
+def serialize_home_game_scenario(sc: HomeGameScenario) -> dict:
+    """Serialize a single HomeGameScenario to a JSON-safe dict."""
+    return {
+        "conditions": [serialize_condition(c) for c in sc.conditions],
+        "explanation": sc.explanation,
+    }
+
+
+def deserialize_home_game_scenario(d: dict) -> HomeGameScenario:
+    """Deserialize a dict produced by serialize_home_game_scenario back to a HomeGameScenario."""
+    return HomeGameScenario(
+        conditions=tuple(deserialize_condition(c) for c in d["conditions"]),
+        explanation=d["explanation"],
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -473,11 +473,13 @@ def test_team_scenarios_dict_all_teams_present():
 
 
 def test_team_scenarios_dict_entry_shape():
-    """Each seed/eliminated entry has odds, weighted_odds, and scenarios keys."""
+    """Each seed/eliminated entry has odds, weighted_odds, scenarios, and conditions keys."""
     d = _team_dict()
     for team, team_entry in d.items():
         for key, entry in team_entry.items():
-            assert set(entry.keys()) == {"odds", "weighted_odds", "scenarios"}, f"{team!r} key {key!r} has wrong shape"
+            assert set(entry.keys()) == {"odds", "weighted_odds", "scenarios", "conditions"}, (
+                f"{team!r} key {key!r} has wrong shape"
+            )
 
 
 def test_team_scenarios_dict_meridian_fully_eliminated():
@@ -684,11 +686,11 @@ def _rhs(will_host=(), will_not_host=()):
         will_host=will_host,
         will_not_host=will_not_host,
         p_reach=None,
-        p_host_conditional=None,
-        p_host_marginal=None,
+        p_host_given_reach=None,
+        p_host_overall=None,
         p_reach_weighted=None,
-        p_host_conditional_weighted=None,
-        p_host_marginal_weighted=None,
+        p_host_given_reach_weighted=None,
+        p_host_overall_weighted=None,
     )
 
 
@@ -736,17 +738,17 @@ class TestRenderTeamHomeScenarios:
         assert "[" not in result
 
     def test_both_weighted_and_unweighted_prob_in_header(self):
-        """_odds_pct shows both values when p_host_marginal and its weighted counterpart are set."""
+        """_odds_pct shows both values when p_host_overall and its weighted counterpart are set."""
         rnd = RoundHomeScenarios(
             round_name="First Round",
             will_host=(_UNCOND_EXPL,),
             will_not_host=(),
             p_reach=0.8,
-            p_host_conditional=0.6,
-            p_host_marginal=0.6,
+            p_host_given_reach=0.6,
+            p_host_overall=0.6,
             p_reach_weighted=None,
-            p_host_conditional_weighted=None,
-            p_host_marginal_weighted=0.7,
+            p_host_given_reach_weighted=None,
+            p_host_overall_weighted=0.7,
         )
         result = render_team_home_scenarios("TeamA", [rnd])
         assert "60.0%" in result
@@ -760,11 +762,11 @@ class TestRenderTeamHomeScenarios:
             will_host=(_UNCOND_EXPL,),
             will_not_host=(),
             p_reach=None,
-            p_host_conditional=None,
-            p_host_marginal=None,
+            p_host_given_reach=None,
+            p_host_overall=None,
             p_reach_weighted=None,
-            p_host_conditional_weighted=None,
-            p_host_marginal_weighted=0.65,
+            p_host_given_reach_weighted=None,
+            p_host_overall_weighted=0.65,
         )
         result = render_team_home_scenarios("TeamA", [rnd])
         assert "65.0% Weighted" in result
@@ -780,7 +782,89 @@ class TestTeamHomeScenasAsDict:
         sc = HomeGameScenario(conditions=(cond,), explanation=None)
         rnd = _rhs(will_host=(sc,))
         result = team_home_scenarios_as_dict("TeamA", [rnd])
-        assert result["first_round"]["will_host"][0]["conditions"][0]["team"] == "Region 3 #2 Seed"
+        assert result["first_round"]["will_host"][0]["conditions"][0]["team_name"] == "Region 3 #2 Seed"
+
+
+class TestTeamHomeScenariosAsDictSeedAtomsExpansion:
+    """Synthetic tests for the seed_atoms pre-playoff expansion in team_home_scenarios_as_dict."""
+
+    _SEED_REQUIRED = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name=None)
+
+    def _seed_atoms(self):
+        """Two atoms for TeamA's #1 seed: outright win, or narrow loss + a second team losing."""
+        return {
+            "TeamA": {
+                1: [
+                    [GameResult(winner="TeamA", loser="TeamB", min_margin=1, max_margin=None)],
+                    [
+                        GameResult(winner="TeamB", loser="TeamA", min_margin=1, max_margin=7),
+                        GameResult(winner="TeamC", loser="TeamD", min_margin=1, max_margin=None),
+                    ],
+                ],
+            },
+        }
+
+    def test_no_seed_atoms_leaves_placeholder(self):
+        """Without seed_atoms, a seed_required scenario is left as an unresolved placeholder."""
+        sc = HomeGameScenario(conditions=(self._SEED_REQUIRED,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamA", [rnd])
+        will_host = result["first_round"]["will_host"]
+        assert len(will_host) == 1
+        assert will_host[0]["conditions"][0]["kind"] == "seed_required"
+
+    def test_seed_atoms_expands_into_one_entry_per_atom(self):
+        """With seed_atoms supplied, a seed_required scenario expands into one entry per atom."""
+        sc = HomeGameScenario(conditions=(self._SEED_REQUIRED,), explanation="Higher seed")
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamA", [rnd], seed_atoms=self._seed_atoms())
+        will_host = result["first_round"]["will_host"]
+        assert len(will_host) == 2
+
+    def test_expanded_entries_have_game_result_conditions(self):
+        """Expanded entries carry real game_result-typed conditions instead of seed_required."""
+        sc = HomeGameScenario(conditions=(self._SEED_REQUIRED,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamA", [rnd], seed_atoms=self._seed_atoms())
+        will_host = result["first_round"]["will_host"]
+        types_by_entry = [{c["type"] for c in entry["conditions"]} for entry in will_host]
+        assert types_by_entry[0] == {"game_result"}
+        assert types_by_entry[1] == {"game_result"}
+
+    def test_expanded_entries_preserve_explanation(self):
+        """Every expanded entry keeps the original scenario's explanation."""
+        sc = HomeGameScenario(conditions=(self._SEED_REQUIRED,), explanation="Higher seed")
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamA", [rnd], seed_atoms=self._seed_atoms())
+        assert all(entry["explanation"] == "Higher seed" for entry in result["first_round"]["will_host"])
+
+    def test_expanded_entry_title_uses_rendered_atom(self):
+        """Expanded entry titles read as a rendered game description, not a seed placeholder."""
+        sc = HomeGameScenario(conditions=(self._SEED_REQUIRED,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamA", [rnd], seed_atoms=self._seed_atoms())
+        titles = [entry["title"] for entry in result["first_round"]["will_host"]]
+        assert "TeamA beats TeamB" in titles[0]
+
+    def test_missing_atoms_for_team_leaves_placeholder(self):
+        """A team/seed with no entry in seed_atoms falls back to the placeholder."""
+        sc = HomeGameScenario(conditions=(self._SEED_REQUIRED,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamZ", [rnd], seed_atoms=self._seed_atoms())
+        will_host = result["first_round"]["will_host"]
+        assert len(will_host) == 1
+        assert will_host[0]["conditions"][0]["kind"] == "seed_required"
+
+    def test_remaining_conditions_after_seed_required_are_appended(self):
+        """Conditions after the seed_required placeholder are AND-appended to each expanded atom."""
+        advances = HomeGameCondition(kind="advances", round_name="Semifinals", region=None, seed=None, team_name=None)
+        sc = HomeGameScenario(conditions=(self._SEED_REQUIRED, advances), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamA", [rnd], seed_atoms=self._seed_atoms())
+        for entry in result["first_round"]["will_host"]:
+            types = [c["type"] for c in entry["conditions"]]
+            assert types[-1] == "home_game_condition"
+            assert entry["conditions"][-1]["team_name"] == "TeamA"
 
 
 class TestRenderTeamMatchups:
@@ -793,20 +877,20 @@ class TestRenderTeamMatchups:
             opponent_region=3,
             opponent_seed=2,
             home=True,
-            p_conditional=0.5,
-            p_conditional_weighted=None,
-            p_marginal=0.25,
-            p_marginal_weighted=None,
+            p_given_reach=0.5,
+            p_given_reach_weighted=None,
+            p_overall=0.25,
+            p_overall_weighted=None,
             explanation=explanation,
         )
         return RoundMatchups(
             round_name="First Round",
             p_reach=0.5,
-            p_host_conditional=None,
-            p_host_marginal=None,
+            p_host_given_reach=None,
+            p_host_overall=None,
             p_reach_weighted=None,
-            p_host_conditional_weighted=None,
-            p_host_marginal_weighted=None,
+            p_host_given_reach_weighted=None,
+            p_host_overall_weighted=None,
             entries=(entry,),
         )
 
@@ -1437,11 +1521,11 @@ class TestRenderPrePlayoffTeamHomeScenariosEmptyWillHost:
             will_host=(),
             will_not_host=(sc_away,),
             p_reach=None,
-            p_host_conditional=None,
-            p_host_marginal=None,
+            p_host_given_reach=None,
+            p_host_overall=None,
             p_reach_weighted=None,
-            p_host_conditional_weighted=None,
-            p_host_marginal_weighted=None,
+            p_host_given_reach_weighted=None,
+            p_host_overall_weighted=None,
         )
         result = render_pre_playoff_team_home_scenarios("Team", [rnd], {})
         assert "Will Host Quarterfinals" not in result
@@ -1456,11 +1540,11 @@ class TestRenderPrePlayoffTeamHomeScenariosEmptyWillHost:
             will_host=(sc_home,),
             will_not_host=(),
             p_reach=None,
-            p_host_conditional=None,
-            p_host_marginal=None,
+            p_host_given_reach=None,
+            p_host_overall=None,
             p_reach_weighted=None,
-            p_host_conditional_weighted=None,
-            p_host_marginal_weighted=None,
+            p_host_given_reach_weighted=None,
+            p_host_overall_weighted=None,
         )
         result = render_pre_playoff_team_home_scenarios("Team", [rnd], {})
         assert "Will Host First Round" in result

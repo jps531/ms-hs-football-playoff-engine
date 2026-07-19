@@ -2206,17 +2206,17 @@ def build_pre_playoff_home_scenarios(
     qf_host = compute_quarterfinal_home_odds(region, region_odds, slots, season, **kw)
     sf_host = compute_semifinal_home_odds(region, region_odds, slots, season, **kw)
 
-    # 4. Compute R1 hosting marginal probability: sum p_seed for seeds that are
+    # 4. Compute R1 overall hosting probability: sum p_seed for seeds that are
     #    the designated home team in their R1 bracket slot.
     half_slots = half_slots_for_region(region, slots)
     is_1a_4a = len(half_slots) == 8
-    pm_r1 = 0.0
+    overall_r1 = 0.0
     for s in achievable_seeds:
         idx = slot_index_for(region, s, half_slots)
         if idx is None:
             continue
         if was_home_r1(region, s, half_slots[idx]):
-            pm_r1 += getattr(team_odds, f"p{s}", 0.0)
+            overall_r1 += getattr(team_odds, f"p{s}", 0.0)
 
     tay_ba = ba[team]
     p_reach: dict[str, float] = {
@@ -2224,8 +2224,8 @@ def build_pre_playoff_home_scenarios(
         "Quarterfinals": tay_ba.quarterfinals,
         "Semifinals": tay_ba.semifinals,
     }
-    pm: dict[str, float] = {
-        "First Round": pm_r1,
+    overall: dict[str, float] = {
+        "First Round": overall_r1,
         "Quarterfinals": qf_host[team],
         "Semifinals": sf_host[team],
     }
@@ -2233,9 +2233,9 @@ def build_pre_playoff_home_scenarios(
     if is_1a_4a:
         r2_host = compute_second_round_home_odds(region, region_odds, slots, season, **kw)
         p_reach["Second Round"] = tay_ba.second_round
-        pm["Second Round"] = r2_host[team]
+        overall["Second Round"] = r2_host[team]
 
-    pc: dict[str, float] = {rn: pm[rn] / p_reach[rn] for rn in p_reach if p_reach[rn] > 0.0}
+    given_reach: dict[str, float] = {rn: overall[rn] / p_reach[rn] for rn in p_reach if p_reach[rn] > 0.0}
 
     # 5. Enumerate home scenarios with pre-computed odds.
     home_scenarios = enumerate_home_game_scenarios(
@@ -2245,8 +2245,8 @@ def build_pre_playoff_home_scenarios(
         season=season,
         achievable_seeds=achievable_seeds,
         p_reach_by_round=p_reach,
-        p_host_marginal_by_round=pm,
-        p_host_conditional_by_round=pc,
+        p_host_overall_by_round=overall,
+        p_host_given_reach_by_round=given_reach,
         team_lookup=team_lookup,
     )
 

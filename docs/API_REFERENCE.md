@@ -25,7 +25,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 **Response fields per team** (`teams[]`):
 - `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus margin-weighted variants `p1_weighted`–`p_playoffs_weighted`
 - `bracket_odds` — probability of advancing to each playoff round (`second_round` through `champion`), unweighted and weighted. `null` for on-demand/simulate paths.
-- `home_game_odds` — conditional probability of hosting each round (`first_round` through `semifinals`), unweighted and weighted. `null` for on-demand/simulate paths.
+- `home_game_odds` — P(hosts round | reaches round) for each round (`first_round` through `semifinals`), unweighted and weighted. `null` for on-demand/simulate paths.
 - `clinched`, `eliminated`, `coin_flip_needed`
 
 **Top-level response fields**:
@@ -68,12 +68,12 @@ Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, an
 **Response fields per team** (`teams[]`):
 
 Each team has four round entries (`first_round`, `second_round`, `quarterfinals`, `semifinals`), each with:
-- `conditional` — P(hosts round | reaches round). `null` if the team cannot reach this round.
-- `marginal` — P(hosts round) = conditional × P(reaches round).
-- `conditional_weighted` — Elo-weighted version of `conditional`. `null` if the team cannot reach this round.
-- `marginal_weighted` — Elo-weighted version of `marginal`.
+- `p_host_given_reach` — P(hosts round | reaches round). `null` if the team cannot reach this round.
+- `p_host_overall` — P(hosts round) = p_host_given_reach × P(reaches round).
+- `p_host_given_reach_weighted` — Elo-weighted version of `p_host_given_reach`. `null` if the team cannot reach this round.
+- `p_host_overall_weighted` — Elo-weighted version of `p_host_overall`.
 
-For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` is always `null` (teams go directly to quarterfinals). Weighted fields (`conditional_weighted`, `marginal_weighted`) are populated on both GET and simulate paths when Elo ratings are available for the season; `null` for seasons with no ratings data.
+For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` is always `null` (teams go directly to quarterfinals). Weighted fields (`p_host_given_reach_weighted`, `p_host_overall_weighted`) are populated on both GET and simulate paths when Elo ratings are available for the season; `null` for seasons with no ratings data.
 
 ## Bracket — `/bracket`
 
@@ -87,7 +87,7 @@ For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` 
 - All 32 bracket slots are always returned. Eliminated teams appear with `school` populated and zero odds for all remaining rounds.
 - Advancement odds: `second_round`, `quarterfinals`, `semifinals`, `finals`, `champion` (non-weighted, 50/50 matchups).
 - Weighted advancement: `second_round_weighted`, `quarterfinals_weighted`, `semifinals_weighted`, `finals_weighted`, `champion_weighted` — Elo-weighted. `null` when no Elo ratings exist for the season.
-- `hosting` — nested object with four round entries (`first_round`, `second_round`, `quarterfinals`, `semifinals`), each with the same `conditional`/`marginal`/`conditional_weighted`/`marginal_weighted` fields as the hosting endpoint. For 5A–7A, `hosting.second_round` is `null` (no second round). Weighted hosting fields follow the same `null` rule as weighted advancement.
+- `hosting` — nested object with four round entries (`first_round`, `second_round`, `quarterfinals`, `semifinals`), each with the same `p_host_given_reach`/`p_host_overall`/`p_host_given_reach_weighted`/`p_host_overall_weighted` fields as the hosting endpoint. For 5A–7A, `hosting.second_round` is `null` (no second round). Weighted hosting fields follow the same `null` rule as weighted advancement.
 
 **`bracket_layout`** — pre-built bracket tree enriched with per-game participants and results so the UI does not need to cross-reference other response fields.
 
@@ -100,7 +100,7 @@ Each `BracketGame` node:
 - `feeds_from` — set on R2+ nodes; indices into the previous round's game list.
 - `round` — the round name for this game: `"first_round"`, `"second_round"` (1A–4A only), `"quarterfinals"`, or `"semifinals"`.
 - `participant_a`, `participant_b` — `{ region, seed, school }` objects identifying the two teams. `participant_a` corresponds to the `home` format slot on R1 nodes and to the `feeds_from[0]` winner on R2+ nodes — positional only, not a hosting indicator. `school` is `null` when the team is not yet known. Both are `null` pre-playoff.
-- `home_team` — `{ region, seed, school }` identifying who hosts this game. Always set on R1 nodes (region/seed known from the bracket format; `school` null until seedings clinch). Set on R2+ nodes when one participant's conditional hosting odds are 1.0; `null` when hosting is not yet determined or no participants are known.
+- `home_team` — `{ region, seed, school }` identifying who hosts this game. Always set on R1 nodes (region/seed known from the bracket format; `school` null until seedings clinch). Set on R2+ nodes when one participant's `p_host_given_reach` hosting odds are 1.0; `null` when hosting is not yet determined or no participants are known.
 - `result` — set when the game has a confirmed or simulated outcome (see below). `null` when not yet played.
 
 `BracketGameResult`:
