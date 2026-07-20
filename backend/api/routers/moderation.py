@@ -15,22 +15,11 @@ from backend.api.db import get_conn
 from backend.api.models.requests import ModerationDecisionRequest
 from backend.api.models.responses import SubmissionDetail, SubmissionSummary
 from backend.helpers.image_helpers import LogoType, promote_submission_logo
+from backend.helpers.submission_helpers import build_submission_summary
 
 _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/moderation", tags=["moderation"])
-
-
-def _row_to_summary(row: tuple) -> SubmissionSummary:
-    """Map a DB row (id, type, status, school, submitted_at, reviewed_at) to SubmissionSummary."""
-    return SubmissionSummary(
-        id=row[0],
-        type=row[1],
-        status=row[2],
-        school=row[3],
-        submitted_at=row[4],
-        reviewed_at=row[5],
-    )
 
 
 def _row_to_detail(row: tuple) -> SubmissionDetail:
@@ -70,7 +59,7 @@ async def list_submissions(
                 (type, type, status_filter, status_filter, limit, offset),
             )
         ).fetchall()
-    return [_row_to_summary(r) for r in rows]
+    return [build_submission_summary(r) for r in rows]
 
 
 @router.get("/submissions/{submission_id}", responses={404: {"description": "Not found"}})

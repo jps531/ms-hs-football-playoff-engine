@@ -22,6 +22,28 @@ router = APIRouter(prefix="/api/v1", tags=["meta"])
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
+def _row_to_team_model(r) -> TeamModel:
+    """Map a schools_effective/school_seasons join row to a TeamModel."""
+    return TeamModel(
+        school=r[0],
+        display_name=r[1],
+        season=r[2],
+        class_=r[3],
+        region=r[4],
+        city=r[5] or "",
+        mascot=r[6] or "",
+        primary_color=r[7] or "",
+        secondary_color=r[8] or "",
+        logo_primary=logo_url(r[9] or ""),
+        logo_secondary=logo_url(r[10] or ""),
+        logo_tertiary=logo_url(r[11] or ""),
+        latitude=r[12],
+        longitude=r[13],
+        zip=r[14],
+        secondary_color_hex=r[15],
+    )
+
+
 @router.get("/seasons")
 async def list_seasons() -> list[SeasonModel]:
     """Return all seasons that have at least one school enrolled."""
@@ -84,27 +106,7 @@ async def list_teams(
     """).format(where_clause)
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
-        return [
-            TeamModel(
-                school=r[0],
-                display_name=r[1],
-                season=r[2],
-                class_=r[3],
-                region=r[4],
-                city=r[5] or "",
-                mascot=r[6] or "",
-                primary_color=r[7] or "",
-                secondary_color=r[8] or "",
-                logo_primary=logo_url(r[9] or ""),
-                logo_secondary=logo_url(r[10] or ""),
-                logo_tertiary=logo_url(r[11] or ""),
-                latitude=r[12],
-                longitude=r[13],
-                zip=r[14],
-                secondary_color_hex=r[15],
-            )
-            async for r in rows
-        ]
+        return [_row_to_team_model(r) async for r in rows]
 
 
 @router.get("/teams/{team}", responses=_404)
@@ -128,24 +130,7 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
     if r is None:
         raise HTTPException(status_code=404, detail=f"Team '{team}' not found for season {season}")
 
-    return TeamModel(
-        school=r[0],
-        display_name=r[1],
-        season=r[2],
-        class_=r[3],
-        region=r[4],
-        city=r[5] or "",
-        mascot=r[6] or "",
-        primary_color=r[7] or "",
-        secondary_color=r[8] or "",
-        logo_primary=logo_url(r[9] or ""),
-        logo_secondary=logo_url(r[10] or ""),
-        logo_tertiary=logo_url(r[11] or ""),
-        latitude=r[12],
-        longitude=r[13],
-        zip=r[14],
-        secondary_color_hex=r[15],
-    )
+    return _row_to_team_model(r)
 
 
 _HELMET_SELECT = """

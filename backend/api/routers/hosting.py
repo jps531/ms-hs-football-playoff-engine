@@ -131,6 +131,34 @@ def _attach_hosting_scenarios(
     return updated
 
 
+_HostingOddsRowParts = tuple[
+    str,
+    StandingsOdds,
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+]
+
+
+def _unpack_hosting_odds_row(r) -> _HostingOddsRowParts:
+    """Unpack a school-first region_standings hosting-odds row into its component parts.
+
+    Expects columns in the order: school, odds_1st..odds_playoffs, odds_playoffs
+    (duplicated), clinched, eliminated, home_(r1,r2,qf,sf), home_(...)_weighted,
+    adv_(r1,r2,qf,sf), adv_(...)_weighted — i.e. the shape shared by
+    ``_load_region_odds`` and ``_load_all_regions_hosting_odds`` (the latter with
+    a leading ``region`` column stripped off before calling this).
+    """
+    school = r[0]
+    odds = standings_odds_from_row(school, r[1], r[2], r[3], r[4], r[5], r[7], r[8])
+    home = (r[9], r[10], r[11], r[12])
+    home_w = (r[13], r[14], r[15], r[16])
+    adv = (r[17], r[18], r[19], r[20])
+    adv_w = (r[21], r[22], r[23], r[24])
+    return school, odds, home, home_w, adv, adv_w
+
+
 async def _load_region_odds(
     conn, season: int, clazz: int, region: int, as_of: date
 ) -> tuple[
@@ -165,13 +193,12 @@ async def _load_region_odds(
     adv: dict[str, tuple[float, float, float, float]] = {}
     adv_w: dict[str, tuple[float, float, float, float]] = {}
     async for r in rows:
-        result[r[0]] = standings_odds_from_row(
-            r[0], r[1], r[2], r[3], r[4], r[5], r[7], r[8],
-        )
-        home_p_host_given_reach[r[0]] = (r[9], r[10], r[11], r[12])    # r1, r2, qf, sf p_host_given_reach
-        home_p_host_given_reach_w[r[0]] = (r[13], r[14], r[15], r[16]) # weighted
-        adv[r[0]] = (r[17], r[18], r[19], r[20])          # p_playoffs, r2, qf, sf advancement
-        adv_w[r[0]] = (r[21], r[22], r[23], r[24])        # weighted advancement
+        school, odds, home, home_w, a, a_w = _unpack_hosting_odds_row(r)
+        result[school] = odds
+        home_p_host_given_reach[school] = home
+        home_p_host_given_reach_w[school] = home_w
+        adv[school] = a
+        adv_w[school] = a_w
     return (result, home_p_host_given_reach, home_p_host_given_reach_w, adv, adv_w) if result else None
 
 
@@ -209,14 +236,12 @@ async def _load_all_regions_hosting_odds(
         if reg not in by_region:
             by_region[reg] = ({}, {}, {}, {}, {})
         result, home_p_host_given_reach, home_p_host_given_reach_w, adv, adv_w = by_region[reg]
-        school = r[1]
-        result[school] = standings_odds_from_row(
-            school, r[2], r[3], r[4], r[5], r[6], r[8], r[9],
-        )
-        home_p_host_given_reach[school] = (r[10], r[11], r[12], r[13])
-        home_p_host_given_reach_w[school] = (r[14], r[15], r[16], r[17])
-        adv[school] = (r[18], r[19], r[20], r[21])
-        adv_w[school] = (r[22], r[23], r[24], r[25])
+        school, odds, home, home_w, a, a_w = _unpack_hosting_odds_row(r[1:])
+        result[school] = odds
+        home_p_host_given_reach[school] = home
+        home_p_host_given_reach_w[school] = home_w
+        adv[school] = a
+        adv_w[school] = a_w
     return by_region
 
 

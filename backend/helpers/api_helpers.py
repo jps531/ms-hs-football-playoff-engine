@@ -830,19 +830,14 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
         if o.eliminated and eliminated_hosting is not None and school in eliminated_hosting:
             r1_det, r2_det, qf_det, sf_det = eliminated_hosting[school]
 
-            def _det(val: float | None) -> RoundHostingOdds:
-                """Wrap a deterministic hosting value as RoundHostingOdds (p_host_overall = p_host_given_reach since p_reach = 1)."""
-                return RoundHostingOdds(
-                    p_host_given_reach=val,
-                    p_host_overall=val if val is not None else 0.0,
-                    p_host_given_reach_weighted=val,
-                    p_host_overall_weighted=val if val is not None else 0.0,
-                )
-
-            r1_odds = _det(r1_det)
-            r2_odds = _det(r2_det) if is_1a_4a else RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
-            qf_odds = _det(qf_det)
-            sf_odds = _det(sf_det)
+            r1_odds = _det_round_hosting(r1_det)
+            r2_odds = (
+                _det_round_hosting(r2_det)
+                if is_1a_4a
+                else RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
+            )
+            qf_odds = _det_round_hosting(qf_det)
+            sf_odds = _det_round_hosting(sf_det)
         elif use_stored:
             r1_given_reach, r2_given_reach, qf_given_reach, sf_given_reach = home_p_host_given_reach.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]
             a_r1, a_r2, a_qf, a_sf = stored_adv.get(school, (0.0, 0.0, 0.0, 0.0))  # type: ignore[union-attr]

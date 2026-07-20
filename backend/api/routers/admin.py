@@ -37,7 +37,14 @@ from backend.api.models.responses import (
     PlayoffFormatSeedResult,
 )
 from backend.helpers.api_helpers import build_helmet_from_row
-from backend.helpers.query_helpers import build_set_clause, require_nonempty_update, require_school_exists
+from backend.helpers.query_helpers import (
+    build_set_clause,
+    require_game_exists,
+    require_helmet_design_exists,
+    require_location_exists,
+    require_nonempty_update,
+    require_school_exists,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -270,11 +277,7 @@ async def clear_school_override(school: str, field: str) -> None:
 async def set_game_override(school: str, date: date_type, body: SetGameOverrideRequest) -> OverrideAuditRow:
     """Set a manual override on a game field (e.g. fix a miscategorized region game or wrong score)."""
     async with get_conn() as conn:
-        row = await (
-            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date))
-        ).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Game for '{school}' on {date} not found")
+        await require_game_exists(conn, school, date)
         await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, date, body.field, body.value))
     _log.info("admin: set game override school=%s date=%s field=%s", school, date, body.field)
     return OverrideAuditRow(source=f"game:{school}:{date}", key=body.field, value=body.value)
@@ -288,11 +291,7 @@ async def clear_game_override(school: str, date: date_type, field: str) -> None:
             status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_GAME_OVERRIDE_FIELDS)}"
         )
     async with get_conn() as conn:
-        row = await (
-            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date))
-        ).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Game for '{school}' on {date} not found")
+        await require_game_exists(conn, school, date)
         await conn.execute("SELECT clear_game_override(%s, %s, %s)", (school, date, field))
     _log.info("admin: cleared game override school=%s date=%s field=%s", school, date, field)
 
@@ -306,17 +305,9 @@ async def clear_game_override(school: str, date: date_type, field: str) -> None:
 async def set_game_helmet(school: str, date: date_type, body: SetGameHelmetRequest) -> dict:
     """Assign (or clear) the helmet design worn by *school* in a specific game."""
     async with get_conn() as conn:
-        row = await (
-            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, date))
-        ).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Game for '{school}' on {date} not found")
+        await require_game_exists(conn, school, date)
         if body.helmet_design_id is not None:
-            hrow = await (
-                await conn.execute("SELECT 1 FROM helmet_designs WHERE id = %s", (body.helmet_design_id,))
-            ).fetchone()
-            if hrow is None:
-                raise HTTPException(status_code=404, detail=f"Helmet design {body.helmet_design_id} not found")
+            await require_helmet_design_exists(conn, body.helmet_design_id)
         await conn.execute(
             "UPDATE games SET helmet_design_id = %s WHERE school = %s AND date = %s",
             (body.helmet_design_id, school, date),
@@ -452,9 +443,7 @@ async def patch_location(location_id: int, body: PatchLocationRequest) -> Locati
     update_data = body.model_dump(exclude_unset=True)
     require_nonempty_update(update_data)
     async with get_conn() as conn:
-        row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Location {location_id} not found")
+        await require_location_exists(conn, location_id)
         set_clause = build_set_clause(update_data)
         query = sql.SQL(
             "UPDATE locations SET {} WHERE id = %s RETURNING id, name, city, home_team, latitude, longitude"
@@ -468,9 +457,7 @@ async def patch_location(location_id: int, body: PatchLocationRequest) -> Locati
 async def set_location_override(location_id: int, body: SetLocationOverrideRequest) -> OverrideAuditRow:
     """Set a manual override on a location field."""
     async with get_conn() as conn:
-        row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Location {location_id} not found")
+        await require_location_exists(conn, location_id)
         await conn.execute("SELECT set_location_override(%s, %s, %s)", (location_id, body.field, body.value))
     return OverrideAuditRow(source=f"location:{location_id}", key=body.field, value=body.value)
 
@@ -483,9 +470,7 @@ async def clear_location_override(location_id: int, field: str) -> None:
             status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_LOCATION_OVERRIDE_FIELDS)}"
         )
     async with get_conn() as conn:
-        row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Location {location_id} not found")
+        await require_location_exists(conn, location_id)
         await conn.execute("SELECT clear_location_override(%s, %s)", (location_id, field))
 
 
@@ -542,9 +527,7 @@ async def patch_helmet_design(design_id: int, body: PatchHelmetDesignRequest) ->
 
     # model_dump() recursively converts nested models to dicts, so years_worn is already list[dict]
     async with get_conn() as conn:
-        row = await (await conn.execute("SELECT 1 FROM helmet_designs WHERE id = %s", (design_id,))).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
+        await require_helmet_design_exists(conn, design_id)
 
         set_clause = build_set_clause(update_data)
         update_query = sql.SQL("UPDATE helmet_designs SET {} WHERE id = %s").format(set_clause)
@@ -558,8 +541,6 @@ async def patch_helmet_design(design_id: int, body: PatchHelmetDesignRequest) ->
 async def delete_helmet_design(design_id: int) -> None:
     """Delete a helmet design. Any games referencing it will have helmet_design_id set to NULL."""
     async with get_conn() as conn:
-        row = await (await conn.execute("SELECT 1 FROM helmet_designs WHERE id = %s", (design_id,))).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
+        await require_helmet_design_exists(conn, design_id)
         await conn.execute("DELETE FROM helmet_designs WHERE id = %s", (design_id,))
     _log.info("admin: deleted helmet_design id=%s", design_id)

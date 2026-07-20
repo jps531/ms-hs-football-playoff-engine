@@ -14,7 +14,13 @@ from backend.api.models.responses import (
     UserAdminRow,
     UserProfileResponse,
 )
-from backend.helpers.query_helpers import build_set_clause, require_nonempty_update, require_school_exists
+from backend.helpers.query_helpers import (
+    build_set_clause,
+    require_game_exists,
+    require_nonempty_update,
+    require_school_exists,
+)
+from backend.helpers.submission_helpers import build_submission_summary
 from backend.helpers.user_helpers import assert_active_changeable, assert_role_changeable
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
@@ -23,6 +29,18 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _row_to_admin_row(r) -> UserAdminRow:
+    """Map an (id, email, display_name, role, is_active, created_at) row to UserAdminRow."""
+    return UserAdminRow(
+        id=r[0],
+        email=r[1],
+        display_name=r[2],
+        role=r[3],
+        is_active=r[4],
+        created_at=r[5],
+    )
 
 
 async def _get_user_row(conn, user_id: int) -> dict:
@@ -182,11 +200,7 @@ async def mark_attended(school: str, game_date: date, current_user: CurrentUser)
     """Mark a game as attended (idempotent)."""
     user_id: int = current_user["db_id"]
     async with get_conn() as conn:
-        exists = await (
-            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, game_date))
-        ).fetchone()
-        if exists is None:
-            raise HTTPException(status_code=404, detail=f"Game for '{school}' on {game_date} not found")
+        await require_game_exists(conn, school, game_date)
         await conn.execute(
             "INSERT INTO user_attended_games (user_id, school, date) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
             (user_id, school, game_date),
@@ -223,17 +237,7 @@ async def list_my_submissions(current_user: CurrentUser) -> list[SubmissionSumma
                 (user_id,),
             )
         ).fetchall()
-    return [
-        SubmissionSummary(
-            id=r[0],
-            type=r[1],
-            status=r[2],
-            school=r[3],
-            submitted_at=r[4],
-            reviewed_at=r[5],
-        )
-        for r in rows
-    ]
+    return [build_submission_summary(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -250,17 +254,7 @@ async def list_users(_: OwnerAuth) -> list[UserAdminRow]:
                 "SELECT id, email, display_name, role, is_active, created_at FROM users ORDER BY created_at DESC"
             )
         ).fetchall()
-    return [
-        UserAdminRow(
-            id=r[0],
-            email=r[1],
-            display_name=r[2],
-            role=r[3],
-            is_active=r[4],
-            created_at=r[5],
-        )
-        for r in rows
-    ]
+    return [_row_to_admin_row(r) for r in rows]
 
 
 @router.patch(
@@ -287,14 +281,7 @@ async def set_user_role(user_id: int, body: SetUserRoleRequest, _: OwnerAuth) ->
             )
         ).fetchone()
     assert updated is not None
-    return UserAdminRow(
-        id=updated[0],
-        email=updated[1],
-        display_name=updated[2],
-        role=updated[3],
-        is_active=updated[4],
-        created_at=updated[5],
-    )
+    return _row_to_admin_row(updated)
 
 
 @router.patch(
@@ -316,11 +303,4 @@ async def set_user_active(user_id: int, body: SetUserActiveRequest, _: OwnerAuth
             )
         ).fetchone()
     assert updated is not None
-    return UserAdminRow(
-        id=updated[0],
-        email=updated[1],
-        display_name=updated[2],
-        role=updated[3],
-        is_active=updated[4],
-        created_at=updated[5],
-    )
+    return _row_to_admin_row(updated)

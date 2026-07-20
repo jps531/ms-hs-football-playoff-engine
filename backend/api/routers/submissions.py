@@ -32,7 +32,7 @@ from backend.helpers.image_helpers import (
     upload_submission_logo,
     validate_upload,
 )
-from backend.helpers.query_helpers import require_school_exists
+from backend.helpers.query_helpers import require_game_exists, require_school_exists
 
 router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 
@@ -264,18 +264,7 @@ async def submit_score(request: Request, body: SubmitScoreRequest, current_user:
     """
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
-
-        game_row = await (
-            await conn.execute(
-                "SELECT 1 FROM games WHERE school = %s AND date = %s",
-                (body.school, body.date),
-            )
-        ).fetchone()
-        if game_row is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Game for '{body.school}' on {body.date} not found",
-            )
+        await require_game_exists(conn, body.school, body.date)
 
         user_id = optional_user_id(current_user)
         payload = {

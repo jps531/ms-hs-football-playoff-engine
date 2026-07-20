@@ -11,6 +11,29 @@ async def require_school_exists(conn, school: str) -> None:
         raise HTTPException(status_code=404, detail=f"School '{school}' not found")
 
 
+async def require_game_exists(conn, school: str, game_date) -> None:
+    """Raise HTTP 404 if no game exists for *school* on *game_date*."""
+    row = await (
+        await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, game_date))
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Game for '{school}' on {game_date} not found")
+
+
+async def require_location_exists(conn, location_id: int) -> None:
+    """Raise HTTP 404 if no location exists with *location_id*."""
+    row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Location {location_id} not found")
+
+
+async def require_helmet_design_exists(conn, design_id: int) -> None:
+    """Raise HTTP 404 if no helmet design exists with *design_id*."""
+    row = await (await conn.execute("SELECT 1 FROM helmet_designs WHERE id = %s", (design_id,))).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
+
+
 def and_join_conditions(conditions: list[str]) -> sql.Composed:
     """Join raw SQL condition strings with ``AND``, for a dynamic ``WHERE`` clause."""
     return sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
