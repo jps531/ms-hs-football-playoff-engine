@@ -10,12 +10,11 @@ from backend.api.db import get_conn
 from backend.api.models.requests import LiveWinProbRequest, OTWinProbRequest
 from backend.api.models.responses import (
     GameModel,
-    HelmetDesignModel,
     LiveWinProbResponse,
     OTWinProbResponse,
     PreGameWinProbResponse,
-    VenueModel,
 )
+from backend.helpers.api_helpers import build_game_models
 from backend.helpers.win_probability import (
     EloConfig,
     compute_in_game_win_prob,
@@ -27,37 +26,6 @@ router = APIRouter(prefix="/api/v1", tags=["games"])
 
 SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
-
-_HELMET_COLS = (
-    "id",
-    "school",
-    "year_first_worn",
-    "year_last_worn",
-    "years_worn",
-    "image_left",
-    "image_right",
-    "photo",
-    "color",
-    "finish",
-    "facemask_color",
-    "logo",
-    "stripe",
-    "tags",
-    "notes",
-)
-
-
-def _build_helmet(*fields) -> HelmetDesignModel | None:
-    """Build a HelmetDesignModel from a flat sequence of helmet_designs columns.
-
-    Expects fields in the same order as ``_HELMET_COLS``. Returns None when
-    the first field (id) is None, which indicates no helmet has been designated
-    for this team in this game.
-    """
-    hid = fields[0]
-    if hid is None:
-        return None
-    return HelmetDesignModel(**dict(zip(_HELMET_COLS, fields)))
 
 
 @router.get("/games")
@@ -117,64 +85,8 @@ async def list_games(
         ORDER BY g.date, g.school
     """).format(where_clause)
     async with get_conn() as conn:
-        rows = await conn.execute(query, params)
-        seen_pairs: set[frozenset] = set()
-        games: list[GameModel] = []
-        async for (
-            school,
-            opponent,
-            game_date,
-            pf,
-            pa,
-            location,
-            region_game,
-            status,
-            gseason,
-            v_name,
-            v_city,
-            v_lat,
-            v_lon,
-            *rest,
-        ) in rows:
-            ha_fields = tuple(rest[:15])
-            hb_fields = tuple(rest[15:30])
-            g_round, g_kickoff, g_overtime, g_final, g_quarter, g_clock, g_source = rest[30:37]
-            # De-duplicate symmetric game pairs when not team-filtered
-            if team is None:
-                pair = frozenset([school, opponent])
-                if pair in seen_pairs:
-                    continue
-                seen_pairs.add(pair)
-                if school > opponent:
-                    school, opponent = opponent, school
-                    pf, pa = pa, pf
-                    location = {"home": "away", "away": "home"}.get(location, location)
-                    ha_fields, hb_fields = hb_fields, ha_fields
-            venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
-            games.append(
-                GameModel(
-                    season=gseason,
-                    date=game_date,
-                    team_a=school,
-                    team_b=opponent,
-                    score_a=pf,
-                    score_b=pa,
-                    location_a=location,
-                    is_region_game=region_game,
-                    status=status,
-                    final=g_final,
-                    round=g_round,
-                    kickoff_time=g_kickoff,
-                    overtime=g_overtime,
-                    game_quarter=g_quarter,
-                    game_clock=g_clock,
-                    source=g_source,
-                    venue=venue,
-                    helmet_a=_build_helmet(*ha_fields),
-                    helmet_b=_build_helmet(*hb_fields),
-                )
-            )
-    return games
+        rows = [r async for r in await conn.execute(query, params)]
+    return build_game_models(rows, team_filter=team)
 
 
 @router.get("/games/probability", responses=_404)

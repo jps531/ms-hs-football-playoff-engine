@@ -12,6 +12,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from fastapi import HTTPException
+
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
     BracketAdvancementOdds,
@@ -21,7 +23,11 @@ from backend.api.models.responses import (
     BracketParticipant,
     BracketSlotHosting,
     ChampionshipGame,
+    GameModel,
+    HelmetDesignModel,
     HomeGameOdds,
+    KeyInsightConditionModel,
+    KeyInsightModel,
     RecordModel,
     RemainingGameModel,
     RoundHostingOdds,
@@ -30,7 +36,9 @@ from backend.api.models.responses import (
     SeedingOddsModel,
     TeamBracketEntry,
     TeamHostingEntry,
+    TeamRankEntry,
     TeamStandingsEntry,
+    VenueModel,
 )
 from backend.helpers.bracket_home_odds import (
     compute_bracket_advancement_odds,
@@ -56,8 +64,10 @@ from backend.helpers.data_classes import (
     RemainingGame,
     StandingsOdds,
 )
+from backend.helpers.insights import deserialize_insights
 from backend.helpers.scenario_renderer import render_scenario_title
-from backend.helpers.scenario_serializers import serialize_atom
+from backend.helpers.scenario_serializers import deserialize_complete_scenarios, deserialize_remaining_games, serialize_atom
+from backend.helpers.scenarios import determine_odds, determine_scenarios
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 # ---------------------------------------------------------------------------
@@ -141,6 +151,113 @@ def compute_remaining_games(teams: list[str], completed: list[CompletedGame]) ->
         RemainingGame(a=min(*pair), b=max(*pair))
         for pair in sorted(all_pairs - done_pairs, key=lambda p: tuple(sorted(p)))
     ]
+
+
+# ---------------------------------------------------------------------------
+# Game listing (/games endpoint)
+# ---------------------------------------------------------------------------
+
+HELMET_FIELD_COLS = (
+    "id",
+    "school",
+    "year_first_worn",
+    "year_last_worn",
+    "years_worn",
+    "image_left",
+    "image_right",
+    "photo",
+    "color",
+    "finish",
+    "facemask_color",
+    "logo",
+    "stripe",
+    "tags",
+    "notes",
+)
+
+
+def _build_helmet_from_fields(*fields) -> HelmetDesignModel | None:
+    """Build a HelmetDesignModel from a flat sequence of helmet_designs columns.
+
+    Expects fields in the same order as ``HELMET_FIELD_COLS``. Returns None when
+    the first field (id) is None, which indicates no helmet has been designated
+    for this team in this game.
+    """
+    if fields[0] is None:
+        return None
+    return HelmetDesignModel(**dict(zip(HELMET_FIELD_COLS, fields)))
+
+
+def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameModel]:
+    """Transform raw ``/games`` join rows into a list of ``GameModel``.
+
+    Each row is ``(school, opponent, date, points_for, points_against, location,
+    region_game, status, season, venue_name, venue_city, venue_lat, venue_lon,
+    *15 helmet_a fields, *15 helmet_b fields, round, kickoff, overtime, final,
+    quarter, clock, source)``.
+
+    When *team_filter* is ``None``, symmetric game pairs (school/opponent both
+    appearing as separate rows) are deduplicated to one entry, canonicalised so
+    ``team_a`` is alphabetically first — swapping scores, location, and helmets
+    to match.  When *team_filter* is set, every row is kept from that team's
+    perspective with no deduplication or canonicalisation.
+    """
+    seen_pairs: set[frozenset] = set()
+    games: list[GameModel] = []
+    for (
+        school,
+        opponent,
+        game_date,
+        pf,
+        pa,
+        location,
+        region_game,
+        status,
+        gseason,
+        v_name,
+        v_city,
+        v_lat,
+        v_lon,
+        *rest,
+    ) in rows:
+        ha_fields = tuple(rest[:15])
+        hb_fields = tuple(rest[15:30])
+        g_round, g_kickoff, g_overtime, g_final, g_quarter, g_clock, g_source = rest[30:37]
+        if team_filter is None:
+            pair = frozenset([school, opponent])
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            if school > opponent:
+                school, opponent = opponent, school
+                pf, pa = pa, pf
+                location = {"home": "away", "away": "home"}.get(location, location)
+                ha_fields, hb_fields = hb_fields, ha_fields
+        venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
+        games.append(
+            GameModel(
+                season=gseason,
+                date=game_date,
+                team_a=school,
+                team_b=opponent,
+                score_a=pf,
+                score_b=pa,
+                location_a=location,
+                is_region_game=region_game,
+                status=status,
+                final=g_final,
+                round=g_round,
+                kickoff_time=g_kickoff,
+                overtime=g_overtime,
+                game_quarter=g_quarter,
+                game_clock=g_clock,
+                source=g_source,
+                venue=venue,
+                helmet_a=_build_helmet_from_fields(*ha_fields),
+                helmet_b=_build_helmet_from_fields(*hb_fields),
+            )
+        )
+    return games
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +585,65 @@ def build_seeding_by_region(
 # Response builders — hosting
 # ---------------------------------------------------------------------------
 
+_HOSTING_SEED_ATTRS = ((1, "p1"), (2, "p2"), (3, "p3"), (4, "p4"))
+_HOSTING_ROUND_NAMES = ("First Round", "Second Round", "Quarterfinals", "Semifinals")
+
+
+def resolve_hosting_scenario_inputs(
+    odds: StandingsOdds, entry: TeamHostingEntry,
+) -> tuple[
+    int | None, list[int] | None,
+    dict[str, float] | None, dict[str, float] | None, dict[str, float] | None,
+    dict[str, float] | None, dict[str, float] | None, dict[str, float] | None,
+]:
+    """Resolve seed/achievable-seeds and per-round probability dicts for scenario enumeration.
+
+    A seed is considered clinched at ``CLINCHED_THRESHOLD`` probability; otherwise
+    every seed with nonzero probability is returned as an achievable seed.
+    ``p_reach[_weighted]`` is derived as ``p_host_overall / p_host_given_reach`` per
+    round — the probability of *reaching* that round, backed out from the
+    already-computed hosting odds (no extra DB round-trip needed).  Returns
+    ``(seed, achievable_seeds, p_reach, p_host_given_reach, p_host_overall,
+    p_reach_weighted, p_host_given_reach_weighted, p_host_overall_weighted)``,
+    with each dict ``None`` when empty (ready to pass straight to
+    ``enumerate_home_game_scenarios``).
+    """
+    seed: int | None = None
+    for s, attr in _HOSTING_SEED_ATTRS:
+        if getattr(odds, attr, 0.0) >= CLINCHED_THRESHOLD:
+            seed = s
+            break
+    achievable_seeds: list[int] | None = None
+    if seed is None:
+        achievable_seeds = [s for s, attr in _HOSTING_SEED_ATTRS if getattr(odds, attr, 0.0) > 0]
+
+    rounds = (entry.first_round, entry.second_round, entry.quarterfinals, entry.semifinals)
+    p_reach: dict[str, float] = {}
+    p_host_given_reach: dict[str, float] = {}
+    p_host_overall: dict[str, float] = {}
+    p_reach_w: dict[str, float] = {}
+    p_host_given_reach_w: dict[str, float] = {}
+    p_host_overall_w: dict[str, float] = {}
+    for rname, rnd in zip(_HOSTING_ROUND_NAMES, rounds):
+        if rnd.p_host_overall is not None and rnd.p_host_given_reach:
+            p_reach[rname] = rnd.p_host_overall / rnd.p_host_given_reach
+        if rnd.p_host_given_reach is not None:
+            p_host_given_reach[rname] = rnd.p_host_given_reach
+        if rnd.p_host_overall is not None:
+            p_host_overall[rname] = rnd.p_host_overall
+        if rnd.p_host_overall_weighted is not None and rnd.p_host_given_reach_weighted:
+            p_reach_w[rname] = rnd.p_host_overall_weighted / rnd.p_host_given_reach_weighted
+        if rnd.p_host_given_reach_weighted is not None:
+            p_host_given_reach_w[rname] = rnd.p_host_given_reach_weighted
+        if rnd.p_host_overall_weighted is not None:
+            p_host_overall_w[rname] = rnd.p_host_overall_weighted
+
+    return (
+        seed, achievable_seeds,
+        p_reach or None, p_host_given_reach or None, p_host_overall or None,
+        p_reach_w or None, p_host_given_reach_w or None, p_host_overall_w or None,
+    )
+
 
 def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (stored) and simulate (on-the-fly) paths
     region_odds: dict[str, StandingsOdds],
@@ -732,6 +908,105 @@ def build_hosting_entries(  # NOSONAR — wide interface needed to cover GET (st
             )
         )
     return entries
+
+
+# ---------------------------------------------------------------------------
+# Response builders — rankings
+# ---------------------------------------------------------------------------
+
+# 0-indexed column positions for RANKINGS_SELECT (backend/api/routers/rankings.py):
+#   0-2:   school, class, region
+#   3-8:   wins, losses, ties, region_wins, region_losses, region_ties
+#   9:     as_of_date
+#   10-14: odds_1st–odds_playoffs
+#   15-19: odds_1st_weighted–odds_playoffs_weighted
+#   20-24: odds_second_round–odds_champion
+#   25-29: odds_second_round_weighted–odds_champion_weighted
+#   30-33: odds_first_round_home–odds_semifinals_home
+#   34-37: odds_first_round_home_weighted–odds_semifinals_home_weighted
+RANKINGS_SORT_COL: dict[str, int] = {
+    "odds_1st": 10,
+    "odds_2nd": 11,
+    "odds_3rd": 12,
+    "odds_4th": 13,
+    "odds_playoffs": 14,
+    "odds_1st_weighted": 15,
+    "odds_2nd_weighted": 16,
+    "odds_3rd_weighted": 17,
+    "odds_4th_weighted": 18,
+    "odds_playoffs_weighted": 19,
+    "odds_second_round": 20,
+    "odds_quarterfinals": 21,
+    "odds_semifinals": 22,
+    "odds_finals": 23,
+    "odds_champion": 24,
+    "odds_second_round_weighted": 25,
+    "odds_quarterfinals_weighted": 26,
+    "odds_semifinals_weighted": 27,
+    "odds_finals_weighted": 28,
+    "odds_champion_weighted": 29,
+    "odds_first_round_home": 30,
+    "odds_second_round_home": 31,
+    "odds_quarterfinals_home": 32,
+    "odds_semifinals_home": 33,
+    "odds_first_round_home_weighted": 34,
+    "odds_second_round_home_weighted": 35,
+    "odds_quarterfinals_home_weighted": 36,
+    "odds_semifinals_home_weighted": 37,
+}
+
+
+def build_rank_entry(row: tuple, sort_col: str) -> TeamRankEntry:
+    """Build a ``TeamRankEntry`` from a ``region_standings`` row using the ``RANKINGS_SORT_COL`` layout."""
+    return TeamRankEntry(
+        school=row[0],
+        class_=row[1],
+        region=row[2],
+        as_of_date=row[9],
+        record=RecordModel(
+            wins=row[3],
+            losses=row[4],
+            ties=row[5],
+            region_wins=row[6],
+            region_losses=row[7],
+            region_ties=row[8],
+        ),
+        seeding_odds=SeedingOddsModel(
+            p1=row[10],
+            p2=row[11],
+            p3=row[12],
+            p4=row[13],
+            p_playoffs=row[14],
+            p1_weighted=row[15],
+            p2_weighted=row[16],
+            p3_weighted=row[17],
+            p4_weighted=row[18],
+            p_playoffs_weighted=row[19],
+        ),
+        bracket=BracketAdvancementOdds(
+            second_round=row[20],
+            quarterfinals=row[21],
+            semifinals=row[22],
+            finals=row[23],
+            champion=row[24],
+            second_round_weighted=row[25],
+            quarterfinals_weighted=row[26],
+            semifinals_weighted=row[27],
+            finals_weighted=row[28],
+            champion_weighted=row[29],
+        ),
+        home=HomeGameOdds(
+            first_round=row[30],
+            second_round=row[31],
+            quarterfinals=row[32],
+            semifinals=row[33],
+            first_round_weighted=row[34],
+            second_round_weighted=row[35],
+            quarterfinals_weighted=row[36],
+            semifinals_weighted=row[37],
+        ),
+        sort_value=row[RANKINGS_SORT_COL[sort_col]],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1146,6 +1421,87 @@ async def _load_and_build_playoff_bracket_state(
     )
     state.confirmed_game_results = confirmed_game_results
     return state
+
+
+async def load_scenarios_snapshot(
+    conn, season: int, clazz: int, region: int, as_of: date
+) -> tuple[list[RemainingGame], list[dict], list[KeyInsightModel], date] | None:
+    """Load remaining_games, complete_scenarios, and key_insights from region_scenarios.
+
+    Centralized here (rather than in the standings router) so both the
+    standings and hosting routers can share it without one reaching into the
+    other's private functions.
+    """
+    row = await (
+        await conn.execute(
+            """
+        SELECT remaining_games, complete_scenarios, key_insights, as_of_date
+        FROM region_scenarios
+        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
+        ORDER BY as_of_date DESC LIMIT 1
+        """,
+            (season, str(clazz), region, as_of),
+        )
+    ).fetchone()
+    if row is None:
+        return None
+    remaining = deserialize_remaining_games(row[0])
+    complete = deserialize_complete_scenarios(row[1])
+    raw_insights = deserialize_insights(row[2] or [])
+    key_insights = [
+        KeyInsightModel(
+            insight_type=ins.insight_type,
+            team=ins.team,
+            seed=ins.seed,
+            conditions=[KeyInsightConditionModel(winner=c.winner, loser=c.loser) for c in ins.conditions],
+            rendered=ins.rendered,
+            r_computed=ins.r_computed,
+        )
+        for ins in raw_insights
+    ]
+    return remaining, complete, key_insights, row[3]
+
+
+async def recompute_scenarios_from_games(
+    conn, season: int, clazz: int, region: int, as_of: date
+) -> tuple[list[str], list[CompletedGame], list[RemainingGame], dict[str, StandingsOdds], set[str]]:
+    """Build completed/remaining game lists from raw game data and recompute odds.
+
+    Centralized here (rather than in the standings router) so both the
+    standings and hosting routers can share it without one reaching into the
+    other's private functions.
+    """
+    team_rows = await conn.execute(
+        "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s AND is_active = TRUE ORDER BY school",
+        (season, clazz, region),
+    )
+    teams = [r[0] async for r in team_rows]
+    if not teams:
+        raise HTTPException(status_code=404, detail=f"No teams found for {clazz}A Region {region} season {season}")
+
+    game_rows = await conn.execute(
+        """
+        SELECT school, opponent, points_for, points_against, date
+        FROM games_effective
+        WHERE season = %s AND region_game = TRUE AND final = TRUE AND date <= %s
+          AND school = ANY(%s)
+        ORDER BY date
+        """,
+        (season, as_of, teams),
+    )
+    completed = parse_completed_games([r async for r in game_rows])
+    remaining = compute_remaining_games(teams, completed)
+
+    results = determine_scenarios(teams, completed, remaining)
+    odds = determine_odds(
+        teams,
+        results.first_counts,
+        results.second_counts,
+        results.third_counts,
+        results.fourth_counts,
+        results.denom,
+    )
+    return teams, completed, remaining, odds, results.coinflip_teams
 
 
 # ---------------------------------------------------------------------------

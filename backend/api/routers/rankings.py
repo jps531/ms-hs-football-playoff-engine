@@ -8,15 +8,8 @@ from fastapi import APIRouter, Path, Query
 from psycopg.sql import SQL, Identifier
 
 from backend.api.db import get_conn
-from backend.api.models.responses import (
-    BracketAdvancementOdds,
-    HomeGameOdds,
-    RankingsResponse,
-    RecordModel,
-    SeedingOddsModel,
-    TeamRankEntry,
-)
-from backend.helpers.api_helpers import today
+from backend.api.models.responses import RankingsResponse
+from backend.helpers.api_helpers import build_rank_entry, today
 
 router = APIRouter(prefix="/api/v1/rankings", tags=["rankings"])
 
@@ -89,91 +82,6 @@ _SELECT = """
     WHERE season = %s AND class = %s AND as_of_date <= %s
 """
 
-# Map each enum value to its 0-indexed position in _SELECT output rows.
-_COL: dict[str, int] = {
-    "odds_1st": 10,
-    "odds_2nd": 11,
-    "odds_3rd": 12,
-    "odds_4th": 13,
-    "odds_playoffs": 14,
-    "odds_1st_weighted": 15,
-    "odds_2nd_weighted": 16,
-    "odds_3rd_weighted": 17,
-    "odds_4th_weighted": 18,
-    "odds_playoffs_weighted": 19,
-    "odds_second_round": 20,
-    "odds_quarterfinals": 21,
-    "odds_semifinals": 22,
-    "odds_finals": 23,
-    "odds_champion": 24,
-    "odds_second_round_weighted": 25,
-    "odds_quarterfinals_weighted": 26,
-    "odds_semifinals_weighted": 27,
-    "odds_finals_weighted": 28,
-    "odds_champion_weighted": 29,
-    "odds_first_round_home": 30,
-    "odds_second_round_home": 31,
-    "odds_quarterfinals_home": 32,
-    "odds_semifinals_home": 33,
-    "odds_first_round_home_weighted": 34,
-    "odds_second_round_home_weighted": 35,
-    "odds_quarterfinals_home_weighted": 36,
-    "odds_semifinals_home_weighted": 37,
-}
-
-
-def _row_to_entry(row: tuple, sort_col: str) -> TeamRankEntry:
-    """Build a ``TeamRankEntry`` from a ``region_standings`` result row using the column layout defined in ``_SELECT``."""
-    return TeamRankEntry(
-        school=row[0],
-        class_=row[1],
-        region=row[2],
-        as_of_date=row[9],
-        record=RecordModel(
-            wins=row[3],
-            losses=row[4],
-            ties=row[5],
-            region_wins=row[6],
-            region_losses=row[7],
-            region_ties=row[8],
-        ),
-        seeding_odds=SeedingOddsModel(
-            p1=row[10],
-            p2=row[11],
-            p3=row[12],
-            p4=row[13],
-            p_playoffs=row[14],
-            p1_weighted=row[15],
-            p2_weighted=row[16],
-            p3_weighted=row[17],
-            p4_weighted=row[18],
-            p_playoffs_weighted=row[19],
-        ),
-        bracket=BracketAdvancementOdds(
-            second_round=row[20],
-            quarterfinals=row[21],
-            semifinals=row[22],
-            finals=row[23],
-            champion=row[24],
-            second_round_weighted=row[25],
-            quarterfinals_weighted=row[26],
-            semifinals_weighted=row[27],
-            finals_weighted=row[28],
-            champion_weighted=row[29],
-        ),
-        home=HomeGameOdds(
-            first_round=row[30],
-            second_round=row[31],
-            quarterfinals=row[32],
-            semifinals=row[33],
-            first_round_weighted=row[34],
-            second_round_weighted=row[35],
-            quarterfinals_weighted=row[36],
-            semifinals_weighted=row[37],
-        ),
-        sort_value=row[_COL[sort_col]],
-    )
-
 
 @router.get("/{clazz}")
 async def get_rankings(
@@ -216,5 +124,5 @@ async def get_rankings(
         season=season,
         class_=clazz,
         sort_by=sort_col,
-        teams=[_row_to_entry(row, sort_col) for row in rows],
+        teams=[build_rank_entry(row, sort_col) for row in rows],
     )

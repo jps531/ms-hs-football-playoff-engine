@@ -8,20 +8,16 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
-from backend.api.models.responses import (
-    ComputationStateModel,
-    KeyInsightConditionModel,
-    KeyInsightModel,
-    StandingsResponse,
-)
+from backend.api.models.responses import ComputationStateModel, StandingsResponse
 from backend.helpers.api_helpers import (
     DISPLAY_THRESHOLD,
     build_team_entries,
-    compute_remaining_games,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
+    load_scenarios_snapshot,
     parse_completed_games,
     records_from_completed,
+    recompute_scenarios_from_games,
     remaining_to_models,
     results_to_applied,
     scenarios_to_entries,
@@ -29,12 +25,9 @@ from backend.helpers.api_helpers import (
     standings_odds_from_row,
     today,
 )
-from backend.helpers.data_classes import CompletedGame, RemainingGame, StandingsOdds
-from backend.helpers.insights import deserialize_insights
+from backend.helpers.data_classes import StandingsOdds
 from backend.helpers.scenario_renderer import atoms_from_complete_scenarios, team_scenarios_as_dict
-from backend.helpers.scenario_serializers import deserialize_complete_scenarios, deserialize_remaining_games
 from backend.helpers.scenario_updater import apply_region_game_results
-from backend.helpers.scenarios import determine_odds, determine_scenarios
 
 router = APIRouter(prefix="/api/v1", tags=["standings"])
 
@@ -128,77 +121,6 @@ async def _load_computation_state(
     )
 
 
-async def _load_scenarios_snapshot(
-    conn, season: int, clazz: int, region: int, as_of: date
-) -> tuple[list[RemainingGame], list[dict], list[KeyInsightModel], date] | None:
-    """Load remaining_games, complete_scenarios, and key_insights from region_scenarios."""
-    row = await (
-        await conn.execute(
-            """
-        SELECT remaining_games, complete_scenarios, key_insights, as_of_date
-        FROM region_scenarios
-        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
-        ORDER BY as_of_date DESC LIMIT 1
-        """,
-            (season, str(clazz), region, as_of),
-        )
-    ).fetchone()
-    if row is None:
-        return None
-    remaining = deserialize_remaining_games(row[0])
-    complete = deserialize_complete_scenarios(row[1])
-    raw_insights = deserialize_insights(row[2] or [])
-    key_insights = [
-        KeyInsightModel(
-            insight_type=ins.insight_type,
-            team=ins.team,
-            seed=ins.seed,
-            conditions=[KeyInsightConditionModel(winner=c.winner, loser=c.loser) for c in ins.conditions],
-            rendered=ins.rendered,
-            r_computed=ins.r_computed,
-        )
-        for ins in raw_insights
-    ]
-    return remaining, complete, key_insights, row[3]
-
-
-async def _recompute_from_games(
-    conn, season: int, clazz: int, region: int, as_of: date
-) -> tuple[list[str], list[CompletedGame], list[RemainingGame], dict[str, StandingsOdds], set[str]]:
-    """Build completed/remaining game lists from raw game data and recompute odds."""
-    team_rows = await conn.execute(
-        "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s AND is_active = TRUE ORDER BY school",
-        (season, clazz, region),
-    )
-    teams = [r[0] async for r in team_rows]
-    if not teams:
-        raise HTTPException(status_code=404, detail=f"No teams found for {clazz}A Region {region} season {season}")
-
-    game_rows = await conn.execute(
-        """
-        SELECT school, opponent, points_for, points_against, date
-        FROM games_effective
-        WHERE season = %s AND region_game = TRUE AND final = TRUE AND date <= %s
-          AND school = ANY(%s)
-        ORDER BY date
-        """,
-        (season, as_of, teams),
-    )
-    completed = parse_completed_games([r async for r in game_rows])
-    remaining = compute_remaining_games(teams, completed)
-
-    results = determine_scenarios(teams, completed, remaining)
-    odds = determine_odds(
-        teams,
-        results.first_counts,
-        results.second_counts,
-        results.third_counts,
-        results.fourth_counts,
-        results.denom,
-    )
-    return teams, completed, remaining, odds, results.coinflip_teams
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -220,20 +142,20 @@ async def get_standings(
     as_of = date or today()
     async with get_conn() as conn:
         standings_rows = await _load_standings_snapshot(conn, season, clazz, region, as_of)
-        scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
+        scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
         computation_state = await _load_computation_state(conn, season, clazz, region, as_of)
 
         if standings_rows is not None and scenarios_data is not None:
             remaining, complete_scenarios, key_insights, snapshot_date = scenarios_data
             team_entries = build_team_entries(standings_rows, None, None)
         elif standings_rows is not None:
-            _, _, remaining, _, _ = await _recompute_from_games(conn, season, clazz, region, as_of)
+            _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
             snapshot_date = standings_rows[0][15]
             complete_scenarios = None
             key_insights = None
             team_entries = build_team_entries(standings_rows, None, None)
         else:
-            teams, completed, remaining, odds_map, coinflip_teams = await _recompute_from_games(
+            teams, completed, remaining, odds_map, coinflip_teams = await recompute_scenarios_from_games(
                 conn, season, clazz, region, as_of
             )
             records = records_from_completed(teams, completed)
@@ -303,11 +225,11 @@ async def simulate_standings(
     """
     as_of = date or today()
     async with get_conn() as conn:
-        scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
+        scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
         if scenarios_data is not None:
             remaining, complete_scenarios, _, snapshot_date = scenarios_data
         else:
-            _, _, remaining, _, _ = await _recompute_from_games(conn, season, clazz, region, as_of)
+            _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
             complete_scenarios = None
             snapshot_date = as_of
 

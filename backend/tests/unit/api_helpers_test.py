@@ -9,6 +9,7 @@ from backend.api.models.responses import (
     BracketSlotHosting,
     RoundHostingOdds,
     TeamBracketEntry,
+    TeamHostingEntry,
 )
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
@@ -22,8 +23,10 @@ from backend.helpers.api_helpers import (
     build_bracket_entries_from_odds_map,
     build_bracket_layout,
     build_enriched_bracket_layout,
+    build_game_models,
     build_hosting_entries,
     build_playoff_bracket_state,
+    build_rank_entry,
     build_seeding_by_region,
     build_team_entries,
     clinched_school,
@@ -33,6 +36,7 @@ from backend.helpers.api_helpers import (
     parse_completed_games,
     records_from_completed,
     remaining_to_models,
+    resolve_hosting_scenario_inputs,
     results_to_applied,
     scenarios_to_entries,
     standings_from_odds,
@@ -677,6 +681,115 @@ _ROW_BETA = (
 )
 
 
+_HELMET_EMPTY = (None,) * 15  # id=None means "no helmet designated"
+
+
+def _game_row(
+    school: str,
+    opponent: str,
+    game_date=_DATE,
+    pf: int | None = 21,
+    pa: int | None = 14,
+    location: str | None = "home",
+    region_game: bool = True,
+    status: str = "final",
+    season: int = 2025,
+    venue_name: str | None = None,
+    helmet_a=_HELMET_EMPTY,
+    helmet_b=_HELMET_EMPTY,
+    final: bool = True,
+) -> tuple:
+    """Build a raw /games join row tuple matching build_game_models' expected shape."""
+    return (
+        school, opponent, game_date, pf, pa, location, region_game, status, season,
+        venue_name, None, None, None,
+        *helmet_a, *helmet_b,
+        None, None, None, final, None, None, None,
+    )
+
+
+class TestBuildGameModels:
+    """build_game_models dedupes symmetric pairs, canonicalises team order, and builds GameModel."""
+
+    def test_single_row_maps_fields(self):
+        """A single row (no dedup needed) maps straight through to GameModel fields."""
+        row = _game_row("Alpha", "Beta", pf=21, pa=14, location="home")
+        result = build_game_models([row], team_filter=None)
+        assert len(result) == 1
+        g = result[0]
+        assert (g.team_a, g.team_b) == ("Alpha", "Beta")
+        assert (g.score_a, g.score_b) == (21, 14)
+        assert g.location_a == "home"
+
+    def test_symmetric_pair_deduplicated(self):
+        """Both perspectives of the same game collapse to a single GameModel."""
+        rows = [
+            _game_row("Alpha", "Beta", pf=21, pa=14, location="home"),
+            _game_row("Beta", "Alpha", pf=14, pa=21, location="away"),
+        ]
+        result = build_game_models(rows, team_filter=None)
+        assert len(result) == 1
+
+    def test_canonical_order_swaps_when_school_after_opponent(self):
+        """When the row's school sorts after its opponent, fields are swapped to canonical order."""
+        row = _game_row("Zeta", "Alpha", pf=21, pa=14, location="home")
+        result = build_game_models([row], team_filter=None)
+        g = result[0]
+        assert (g.team_a, g.team_b) == ("Alpha", "Zeta")
+        assert (g.score_a, g.score_b) == (14, 21)
+        assert g.location_a == "away"  # flipped from Zeta's home to Alpha's away
+
+    def test_no_dedup_or_canonicalization_with_team_filter(self):
+        """With a team_filter, every row is kept as-is (perspective of the filtered team)."""
+        rows = [
+            _game_row("Zeta", "Alpha", pf=21, pa=14, location="home"),
+        ]
+        result = build_game_models(rows, team_filter="Zeta")
+        g = result[0]
+        assert (g.team_a, g.team_b) == ("Zeta", "Alpha")
+        assert g.location_a == "home"
+
+    def test_venue_none_when_no_venue_name(self):
+        """A row with no venue name produces venue=None."""
+        row = _game_row("Alpha", "Beta", venue_name=None)
+        result = build_game_models([row], team_filter=None)
+        assert result[0].venue is None
+
+    def test_venue_built_when_venue_name_present(self):
+        """A row with a venue name produces a populated VenueModel."""
+        row = _game_row("Alpha", "Beta", venue_name="Memorial Stadium")
+        result = build_game_models([row], team_filter=None)
+        assert result[0].venue is not None
+        assert result[0].venue.name == "Memorial Stadium"
+
+    def test_no_helmet_when_id_is_none(self):
+        """Helmet fields with id=None produce helmet_a/helmet_b=None."""
+        row = _game_row("Alpha", "Beta")
+        result = build_game_models([row], team_filter=None)
+        assert result[0].helmet_a is None
+        assert result[0].helmet_b is None
+
+    def test_helmet_built_when_id_present(self):
+        """Helmet fields with a non-None id produce a populated HelmetDesignModel."""
+        helmet_a = (7, "Alpha", 2020, None, None, None, None, None, "Red", None, None, None, None, [], None)
+        row = _game_row("Alpha", "Beta", helmet_a=helmet_a)
+        result = build_game_models([row], team_filter=None)
+        assert result[0].helmet_a is not None
+        assert result[0].helmet_a.id == 7
+        assert result[0].helmet_a.color == "Red"
+
+    def test_helmets_swapped_with_school_order(self):
+        """When school/opponent are swapped for canonical order, helmets swap with them."""
+        helmet_zeta = (1, "Zeta", 2019, None, None, None, None, None, "Blue", None, None, None, None, [], None)
+        helmet_alpha = (2, "Alpha", 2018, None, None, None, None, None, "Green", None, None, None, None, [], None)
+        row = _game_row("Zeta", "Alpha", helmet_a=helmet_zeta, helmet_b=helmet_alpha)
+        result = build_game_models([row], team_filter=None)
+        g = result[0]
+        # team_a is now Alpha, so helmet_a should be Alpha's helmet
+        assert g.helmet_a.color == "Green"
+        assert g.helmet_b.color == "Blue"
+
+
 class TestBuildTeamEntries:
     """build_team_entries constructs TeamStandingsEntry from DB rows with optional overrides."""
 
@@ -1060,6 +1173,81 @@ _REGION1_ODDS_1A = {
     "Camp": _odds("Camp", p3=1.0, p_playoffs=1.0),
     "Dog": _odds("Dog", p4=1.0, p_playoffs=1.0),
 }
+
+
+def _hosting_entry(
+    school: str = "Able",
+    *,
+    fr: RoundHostingOdds | None = None,
+    sr: RoundHostingOdds | None = None,
+    qf: RoundHostingOdds | None = None,
+    sf: RoundHostingOdds | None = None,
+) -> TeamHostingEntry:
+    """Build a TeamHostingEntry with RoundHostingOdds fixtures (all-None round by default)."""
+    empty = RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
+    return TeamHostingEntry(
+        school=school,
+        first_round=fr or empty,
+        second_round=sr or empty,
+        quarterfinals=qf or empty,
+        semifinals=sf or empty,
+    )
+
+
+class TestResolveHostingScenarioInputs:
+    """resolve_hosting_scenario_inputs derives seed/achievable-seeds and per-round probability dicts."""
+
+    def test_clinched_seed_returned_no_achievable_seeds(self):
+        """A seed at/above CLINCHED_THRESHOLD is returned as `seed`; achievable_seeds is None."""
+        odds = _odds("Able", p2=0.999, p_playoffs=1.0)
+        seed, achievable, *_ = resolve_hosting_scenario_inputs(odds, _hosting_entry())
+        assert seed == 2
+        assert achievable is None
+
+    def test_unclinched_returns_achievable_seeds(self):
+        """Below the clinch threshold, every seed with nonzero probability is achievable."""
+        odds = _odds("Able", p1=0.3, p2=0.5, p3=0.2, p4=0.0, p_playoffs=1.0)
+        seed, achievable, *_ = resolve_hosting_scenario_inputs(odds, _hosting_entry())
+        assert seed is None
+        assert achievable == [1, 2, 3]
+
+    def test_p_reach_derived_from_overall_over_given_reach(self):
+        """p_reach[round] = p_host_overall / p_host_given_reach for that round."""
+        odds = _odds("Able", p1=1.0, p_playoffs=1.0)
+        entry = _hosting_entry(fr=RoundHostingOdds(p_host_given_reach=0.5, p_host_overall=0.25))
+        _, _, p_reach, p_given_reach, p_overall, *_ = resolve_hosting_scenario_inputs(odds, entry)
+        assert p_reach["First Round"] == pytest.approx(0.5)
+        assert p_given_reach["First Round"] == pytest.approx(0.5)
+        assert p_overall["First Round"] == pytest.approx(0.25)
+
+    def test_zero_given_reach_skips_p_reach_division(self):
+        """A zero p_host_given_reach does not raise ZeroDivisionError; p_reach is simply omitted."""
+        odds = _odds("Able", p1=1.0, p_playoffs=1.0)
+        entry = _hosting_entry(fr=RoundHostingOdds(p_host_given_reach=0.0, p_host_overall=0.0))
+        _, _, p_reach, *_ = resolve_hosting_scenario_inputs(odds, entry)
+        assert p_reach is None
+
+    def test_all_none_rounds_return_none_dicts(self):
+        """When no round has any hosting odds set, every probability dict is None (not {})."""
+        odds = _odds("Able", p1=1.0, p_playoffs=1.0)
+        result = resolve_hosting_scenario_inputs(odds, _hosting_entry())
+        _, _, p_reach, p_given_reach, p_overall, p_reach_w, p_given_reach_w, p_overall_w = result
+        assert (p_reach, p_given_reach, p_overall) == (None, None, None)
+        assert (p_reach_w, p_given_reach_w, p_overall_w) == (None, None, None)
+
+    def test_weighted_dicts_derived_independently(self):
+        """Weighted p_reach/p_host_given_reach/p_host_overall come from the *_weighted fields."""
+        odds = _odds("Able", p1=1.0, p_playoffs=1.0)
+        entry = _hosting_entry(
+            fr=RoundHostingOdds(
+                p_host_given_reach=None, p_host_overall=None,
+                p_host_given_reach_weighted=0.4, p_host_overall_weighted=0.2,
+            )
+        )
+        *_, p_reach_w, p_given_reach_w, p_overall_w = resolve_hosting_scenario_inputs(odds, entry)
+        assert p_reach_w["First Round"] == pytest.approx(0.5)
+        assert p_given_reach_w["First Round"] == pytest.approx(0.4)
+        assert p_overall_w["First Round"] == pytest.approx(0.2)
 
 
 class TestBuildHostingEntries:
@@ -2492,3 +2680,59 @@ class TestApplyRoundCeilings:
         result = _apply_round_ceilings([e1, e2], {(1, 2): "quarterfinals"})
         assert result[0] is e1
         assert result[1].semifinals == 0.0
+
+
+# ---------------------------------------------------------------------------
+# TestBuildRankEntry
+# ---------------------------------------------------------------------------
+
+
+def _rankings_row() -> tuple:
+    """Build a 38-column region_standings row matching rankings.py's _SELECT column order."""
+    return (
+        "Taylorsville",  # 0 school
+        5,  # 1 class
+        2,  # 2 region
+        8, 2, 0, 4, 1, 0,  # 3-8 wins, losses, ties, region_wins, region_losses, region_ties
+        _DATE,  # 9 as_of_date
+        0.9, 0.05, 0.03, 0.02, 1.0,  # 10-14 odds_1st-odds_playoffs
+        0.85, 0.08, 0.04, 0.03, 0.99,  # 15-19 weighted
+        0.7, 0.5, 0.3, 0.1, 0.05,  # 20-24 second_round-champion
+        0.65, 0.45, 0.25, 0.09, 0.04,  # 25-29 weighted
+        0.6, 0.4, 0.2, 0.1,  # 30-33 home odds
+        0.55, 0.35, 0.15, 0.08,  # 34-37 weighted home odds
+    )
+
+
+class TestBuildRankEntry:
+    """build_rank_entry maps a region_standings row into a TeamRankEntry."""
+
+    def test_identity_and_record_fields(self):
+        """school/class_/region/as_of_date and the record block map to the correct columns."""
+        entry = build_rank_entry(_rankings_row(), "odds_1st")
+        assert (entry.school, entry.class_, entry.region) == ("Taylorsville", 5, 2)
+        assert entry.as_of_date == _DATE
+        assert (entry.record.wins, entry.record.losses) == (8, 2)
+        assert (entry.record.region_wins, entry.record.region_losses) == (4, 1)
+
+    def test_seeding_odds_mapped(self):
+        """seeding_odds pulls from the unweighted and weighted odds_1st-odds_playoffs columns."""
+        entry = build_rank_entry(_rankings_row(), "odds_1st")
+        assert entry.seeding_odds.p1 == pytest.approx(0.9)
+        assert entry.seeding_odds.p1_weighted == pytest.approx(0.85)
+        assert entry.seeding_odds.p_playoffs == pytest.approx(1.0)
+
+    def test_bracket_and_home_odds_mapped(self):
+        """bracket and home blocks pull from their respective column ranges."""
+        entry = build_rank_entry(_rankings_row(), "odds_1st")
+        assert entry.bracket.second_round == pytest.approx(0.7)
+        assert entry.bracket.champion_weighted == pytest.approx(0.04)
+        assert entry.home.first_round == pytest.approx(0.6)
+        assert entry.home.semifinals_weighted == pytest.approx(0.08)
+
+    def test_sort_value_uses_requested_column(self):
+        """sort_value is pulled from whichever column name is passed as sort_col."""
+        row = _rankings_row()
+        assert build_rank_entry(row, "odds_1st").sort_value == pytest.approx(0.9)
+        assert build_rank_entry(row, "odds_champion").sort_value == pytest.approx(0.05)
+        assert build_rank_entry(row, "odds_semifinals_home_weighted").sort_value == pytest.approx(0.08)

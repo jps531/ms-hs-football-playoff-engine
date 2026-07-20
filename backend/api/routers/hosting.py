@@ -16,7 +16,10 @@ from backend.helpers.api_helpers import (
     _load_format_slots,
     build_hosting_entries,
     build_seeding_by_region,
+    load_scenarios_snapshot,
     parse_completed_games,
+    recompute_scenarios_from_games,
+    resolve_hosting_scenario_inputs,
     results_to_applied,
     standings_odds_from_row,
     today,
@@ -47,13 +50,11 @@ async def _compute_seed_atoms_if_pre_playoff(
     can occur) or when the remaining-game count exceeds ``DISPLAY_THRESHOLD``
     (the same combinatorial-blowup guard standings scenario enumeration uses).
     """
-    from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
-
-    scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
+    scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
     if scenarios_data is not None:
         remaining, _, _, _ = scenarios_data
     else:
-        _, _, remaining, _, _ = await _recompute_from_games(conn, season, clazz, region, as_of)
+        _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
 
     if not remaining or len(remaining) > DISPLAY_THRESHOLD:
         return None
@@ -102,46 +103,11 @@ def _attach_hosting_scenarios(
             updated.append(entry)
             continue
 
-        # Resolve seed (clinched) or achievable seed list (pre-playoff).
-        seed: int | None = None
-        achievable_seeds: list[int] | None = None
-        for s, attr in ((1, "p1"), (2, "p2"), (3, "p3"), (4, "p4")):
-            prob = getattr(odds, attr, 0.0)
-            if prob >= 0.999:
-                seed = s
-                break
-        if seed is None:
-            achievable_seeds = [
-                s for s, attr in ((1, "p1"), (2, "p2"), (3, "p3"), (4, "p4"))
-                if getattr(odds, attr, 0.0) > 0
-            ]
-
-        # Extract probability dicts from the already-computed TeamHostingEntry.
-        _ROUND_MAP = [
-            ("First Round", entry.first_round),
-            ("Second Round", entry.second_round),
-            ("Quarterfinals", entry.quarterfinals),
-            ("Semifinals", entry.semifinals),
-        ]
-        p_reach: dict[str, float] = {}
-        p_host_given_reach: dict[str, float] = {}
-        p_host_overall: dict[str, float] = {}
-        p_reach_w: dict[str, float] = {}
-        p_host_given_reach_w: dict[str, float] = {}
-        p_host_overall_w: dict[str, float] = {}
-        for rname, rnd in _ROUND_MAP:
-            if rnd.p_host_overall is not None and rnd.p_host_given_reach:
-                p_reach[rname] = rnd.p_host_overall / rnd.p_host_given_reach
-            if rnd.p_host_given_reach is not None:
-                p_host_given_reach[rname] = rnd.p_host_given_reach
-            if rnd.p_host_overall is not None:
-                p_host_overall[rname] = rnd.p_host_overall
-            if rnd.p_host_overall_weighted is not None and rnd.p_host_given_reach_weighted:
-                p_reach_w[rname] = rnd.p_host_overall_weighted / rnd.p_host_given_reach_weighted
-            if rnd.p_host_given_reach_weighted is not None:
-                p_host_given_reach_w[rname] = rnd.p_host_given_reach_weighted
-            if rnd.p_host_overall_weighted is not None:
-                p_host_overall_w[rname] = rnd.p_host_overall_weighted
+        (
+            seed, achievable_seeds,
+            p_reach, p_host_given_reach, p_host_overall,
+            p_reach_w, p_host_given_reach_w, p_host_overall_w,
+        ) = resolve_hosting_scenario_inputs(odds, entry)
 
         home_scenarios = enumerate_home_game_scenarios(
             region=region,
@@ -149,12 +115,12 @@ def _attach_hosting_scenarios(
             slots=slots,
             season=season,
             achievable_seeds=achievable_seeds,
-            p_reach_by_round=p_reach or None,
-            p_host_given_reach_by_round=p_host_given_reach or None,
-            p_host_overall_by_round=p_host_overall or None,
-            p_reach_weighted_by_round=p_reach_w or None,
-            p_host_given_reach_weighted_by_round=p_host_given_reach_w or None,
-            p_host_overall_weighted_by_round=p_host_overall_w or None,
+            p_reach_by_round=p_reach,
+            p_host_given_reach_by_round=p_host_given_reach,
+            p_host_overall_by_round=p_host_overall,
+            p_reach_weighted_by_round=p_reach_w,
+            p_host_given_reach_weighted_by_round=p_host_given_reach_w,
+            p_host_overall_weighted_by_round=p_host_overall_w,
         )
         updated.append(
             entry.model_copy(
@@ -365,8 +331,6 @@ async def simulate_class_hosting(
 
     Pass ``include_scenarios=true`` to include hosting condition text per team.
     """
-    from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
-
     as_of = date or today()
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, clazz)
@@ -387,11 +351,11 @@ async def simulate_class_hosting(
             raise HTTPException(status_code=404, detail=f"No teams found for {clazz}A season {season}")
 
         sentinel_region = next(iter(sorted(regions_in_class)))
-        scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, sentinel_region, as_of)
+        scenarios_data = await load_scenarios_snapshot(conn, season, clazz, sentinel_region, as_of)
         if scenarios_data is not None:
             sentinel_remaining, _, _, _ = scenarios_data
         else:
-            _, _, sentinel_remaining, _, _ = await _recompute_from_games(conn, season, clazz, sentinel_region, as_of)
+            _, _, sentinel_remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, sentinel_region, as_of)
 
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
 
@@ -446,11 +410,11 @@ async def simulate_class_hosting(
                     )
 
             for reg, reg_teams in sorted(regions_in_class.items()):
-                reg_scenarios = await _load_scenarios_snapshot(conn, season, clazz, reg, as_of)
+                reg_scenarios = await load_scenarios_snapshot(conn, season, clazz, reg, as_of)
                 if reg_scenarios is not None:
                     reg_remaining, _, _, _ = reg_scenarios
                 else:
-                    _, _, reg_remaining, _, _ = await _recompute_from_games(conn, season, clazz, reg, as_of)
+                    _, _, reg_remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, reg, as_of)
 
                 game_rows = await conn.execute(
                     """
@@ -507,19 +471,17 @@ async def simulate_hosting(
     include_scenarios: IncludeScenariosQ = False,
 ) -> HostingResponse:
     """Apply hypothetical game results and return updated hosting odds."""
-    from backend.api.routers.standings import _load_scenarios_snapshot, _recompute_from_games
-
     as_of = date or today()
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
 
-        scenarios_data = await _load_scenarios_snapshot(conn, season, clazz, region, as_of)
+        scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
         if scenarios_data is not None:
             remaining, _, _, _ = scenarios_data
         else:
-            _, _, remaining, _, _ = await _recompute_from_games(conn, season, clazz, region, as_of)
+            _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
 
         team_rows = await conn.execute(
             "SELECT school FROM school_seasons WHERE season=%s AND class=%s AND region=%s AND is_active=TRUE ORDER BY school",

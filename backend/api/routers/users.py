@@ -14,6 +14,7 @@ from backend.api.models.responses import (
     UserAdminRow,
     UserProfileResponse,
 )
+from backend.helpers.user_helpers import assert_active_changeable, assert_role_changeable
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
@@ -279,8 +280,7 @@ async def set_user_role(user_id: int, body: SetUserRoleRequest, _: OwnerAuth) ->
         ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
-        if row[3] == "owner":
-            raise HTTPException(status_code=409, detail="Cannot change the role of the owner account")
+        assert_role_changeable(row[3])
         updated = await (
             await conn.execute(
                 "UPDATE users SET role = %s, updated_at = NOW() WHERE id = %s "
@@ -309,8 +309,7 @@ async def set_user_active(user_id: int, body: SetUserActiveRequest, _: OwnerAuth
         row = await (await conn.execute("SELECT role FROM users WHERE id = %s", (user_id,))).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
-        if row[0] == "owner" and not body.is_active:
-            raise HTTPException(status_code=409, detail="Cannot deactivate the owner account")
+        assert_active_changeable(row[0], body.is_active)
         updated = await (
             await conn.execute(
                 "UPDATE users SET is_active = %s, updated_at = NOW() WHERE id = %s "
