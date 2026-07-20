@@ -116,6 +116,19 @@ def _elo_expected(r_a: float, r_b: float, scale: float) -> float:
     return 1.0 / (1.0 + 10.0 ** ((r_b - r_a) / scale))
 
 
+def compute_hfa_adjustment(location_a: str | None, hfa_points: float) -> float:
+    """Return the signed home-field-advantage points adjustment for team_a.
+
+    ``+hfa_points`` when team_a is at home, ``-hfa_points`` when away, ``0.0``
+    for neutral-site or unknown location.
+    """
+    if location_a == "home":
+        return hfa_points
+    elif location_a == "away":
+        return -hfa_points
+    return 0.0
+
+
 def compute_pregame_win_prob(
     elo_a: float,
     elo_b: float,
@@ -128,12 +141,7 @@ def compute_pregame_win_prob(
     team_a's perspective.
     """
     cfg = config or EloConfig()
-    if location_a == "home":
-        r_a_adj = elo_a + cfg.hfa_points
-    elif location_a == "away":
-        r_a_adj = elo_a - cfg.hfa_points
-    else:
-        r_a_adj = elo_a
+    r_a_adj = elo_a + compute_hfa_adjustment(location_a, cfg.hfa_points)
     return _elo_expected(r_a_adj, elo_b, cfg.scale)
 
 

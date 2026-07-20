@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
-from backend.api.models.requests import GameResultRequest, SimulateBracketRequest
+from backend.api.models.requests import BracketGameResultRequest, GameResultRequest, SimulateBracketRequest
 from backend.api.models.responses import ClassHostingResponse, HostingResponse
 from backend.helpers.api_helpers import (
     _load_and_build_playoff_bracket_state,
@@ -17,8 +17,9 @@ from backend.helpers.api_helpers import (
     build_seeding_by_region,
     filter_to_team_or_404,
     has_displayable_scenarios,
+    load_active_region_teams,
+    load_completed_region_games,
     load_scenarios_snapshot,
-    parse_completed_games,
     recompute_scenarios_from_games,
     resolve_hosting_scenario_inputs,
     results_to_applied,
@@ -42,6 +43,25 @@ IncludeScenariosQ = Annotated[bool, Query()]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
+def _to_school_only_results(results: list[BracketGameResultRequest]) -> list[GameResultRequest]:
+    """Convert ParticipantRef-based bracket results to GameResultRequest, dropping slot-ref-only entries.
+
+    Regular-season simulation only understands school-name matchups; results
+    identified purely by (region, seed) slot refs, or by round (no specific
+    loser), don't map to a specific regular-season game and are skipped.
+    """
+    return [
+        GameResultRequest(
+            winner=r.winner.school,
+            loser=r.loser.school,
+            winner_score=r.winner_score,
+            loser_score=r.loser_score,
+        )
+        for r in results
+        if r.winner.school is not None and r.loser is not None and r.loser.school is not None
+    ]
+
+
 async def _compute_seed_atoms_if_pre_playoff(
     conn, season: int, clazz: int, region: int, as_of: date, teams: list[str] | None = None,
 ) -> dict | None:
@@ -62,22 +82,9 @@ async def _compute_seed_atoms_if_pre_playoff(
         return None
 
     if teams is None:
-        team_rows = await conn.execute(
-            "SELECT school FROM school_seasons WHERE season=%s AND class=%s AND region=%s AND is_active=TRUE ORDER BY school",
-            (season, clazz, region),
-        )
-        teams = [r[0] async for r in team_rows]
+        teams = await load_active_region_teams(conn, season, clazz, region)
 
-    game_rows = await conn.execute(
-        """
-        SELECT school, opponent, points_for, points_against, date
-        FROM games_effective
-        WHERE season=%s AND region_game=TRUE AND final=TRUE AND date<=%s AND school=ANY(%s)
-        ORDER BY date
-        """,
-        (season, as_of, teams),
-    )
-    completed = parse_completed_games([r async for r in game_rows])
+    completed = await load_completed_region_games(conn, season, as_of, teams)
     return build_scenario_atoms(teams, completed, remaining)
 
 
@@ -419,19 +426,10 @@ async def simulate_class_hosting(
             all_db_seeding: list[tuple] = [(r[0], r[1], r[2], r[3], r[4], r[5]) async for r in db_seeding_rows]
 
             results_by_region: dict[int, list[GameResultRequest]] = {}
-            for r in body.results:
-                if r.winner.school is None or r.loser.school is None:
-                    continue  # slot refs don't map to regular-season games
-                reg = school_to_region.get(r.winner.school) or school_to_region.get(r.loser.school)
+            for gr in _to_school_only_results(body.results):
+                reg = school_to_region.get(gr.winner) or school_to_region.get(gr.loser)
                 if reg is not None:
-                    results_by_region.setdefault(reg, []).append(
-                        GameResultRequest(
-                            winner=r.winner.school,
-                            loser=r.loser.school,
-                            winner_score=r.winner_score,
-                            loser_score=r.loser_score,
-                        )
-                    )
+                    results_by_region.setdefault(reg, []).append(gr)
 
             for reg, reg_teams in sorted(regions_in_class.items()):
                 reg_scenarios = await load_scenarios_snapshot(conn, season, clazz, reg, as_of)
@@ -440,16 +438,7 @@ async def simulate_class_hosting(
                 else:
                     _, _, reg_remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, reg, as_of)
 
-                game_rows = await conn.execute(
-                    """
-                    SELECT school, opponent, points_for, points_against, date
-                    FROM games_effective
-                    WHERE season=%s AND region_game=TRUE AND final=TRUE AND date<=%s AND school=ANY(%s)
-                    ORDER BY date
-                    """,
-                    (season, as_of, reg_teams),
-                )
-                completed = parse_completed_games([r async for r in game_rows])
+                completed = await load_completed_region_games(conn, season, as_of, reg_teams)
                 reg_new_results = results_to_applied(results_by_region.get(reg, []))
                 _, odds_map = apply_region_game_results(reg_teams, completed, reg_remaining, reg_new_results)
                 odds_by_region[reg] = odds_map
@@ -507,33 +496,9 @@ async def simulate_hosting(
         else:
             _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
 
-        team_rows = await conn.execute(
-            "SELECT school FROM school_seasons WHERE season=%s AND class=%s AND region=%s AND is_active=TRUE ORDER BY school",
-            (season, clazz, region),
-        )
-        teams = [r[0] async for r in team_rows]
-
-        game_rows = await conn.execute(
-            """
-            SELECT school, opponent, points_for, points_against, date
-            FROM games_effective
-            WHERE season=%s AND region_game=TRUE AND final=TRUE AND date<=%s AND school=ANY(%s)
-            ORDER BY date
-            """,
-            (season, as_of, teams),
-        )
-        completed = parse_completed_games([r async for r in game_rows])
-        school_results = [
-            GameResultRequest(
-                winner=r.winner.school,
-                loser=r.loser.school,
-                winner_score=r.winner_score,
-                loser_score=r.loser_score,
-            )
-            for r in body.results
-            if r.winner.school is not None and r.loser.school is not None
-        ]
-        new_results = results_to_applied(school_results)
+        teams = await load_active_region_teams(conn, season, clazz, region)
+        completed = await load_completed_region_games(conn, season, as_of, teams)
+        new_results = results_to_applied(_to_school_only_results(body.results))
 
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
 

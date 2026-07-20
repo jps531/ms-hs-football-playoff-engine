@@ -14,8 +14,9 @@ from backend.helpers.api_helpers import (
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
     filter_to_team_or_404,
+    load_active_region_teams,
+    load_completed_region_games,
     load_scenarios_snapshot,
-    parse_completed_games,
     records_from_completed,
     recompute_scenarios_from_games,
     remaining_to_models,
@@ -231,23 +232,8 @@ async def simulate_standings(
             complete_scenarios = None
             snapshot_date = as_of
 
-        team_rows = await conn.execute(
-            "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s AND is_active = TRUE ORDER BY school",
-            (season, clazz, region),
-        )
-        teams = [r[0] async for r in team_rows]
-
-        game_rows = await conn.execute(
-            """
-            SELECT school, opponent, points_for, points_against, date
-            FROM games_effective
-            WHERE season = %s AND region_game = TRUE AND final = TRUE AND date <= %s
-              AND school = ANY(%s)
-            ORDER BY date
-            """,
-            (season, as_of, teams),
-        )
-        completed = parse_completed_games([r async for r in game_rows])
+        teams = await load_active_region_teams(conn, season, clazz, region)
+        completed = await load_completed_region_games(conn, season, as_of, teams)
 
         new_results = results_to_applied(body.results)
         _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)

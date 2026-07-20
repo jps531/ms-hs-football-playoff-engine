@@ -1485,6 +1485,38 @@ async def _load_and_build_playoff_bracket_state(
     return state
 
 
+async def load_active_region_teams(conn, season: int, clazz: int, region: int) -> list[str]:
+    """Return active school names for a region/season/class, ordered by school name.
+
+    Centralized here (rather than duplicated per-router) so the standings and
+    hosting routers, plus ``recompute_scenarios_from_games`` below, share one
+    query instead of each re-declaring it.
+    """
+    rows = await conn.execute(
+        "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s AND is_active = TRUE ORDER BY school",
+        (season, clazz, region),
+    )
+    return [r[0] async for r in rows]
+
+
+async def load_completed_region_games(conn, season: int, as_of: date, teams: list[str]) -> list[CompletedGame]:
+    """Return parsed completed region games for *teams* on or before *as_of*.
+
+    Centralized here for the same reason as ``load_active_region_teams``.
+    """
+    rows = await conn.execute(
+        """
+        SELECT school, opponent, points_for, points_against, date
+        FROM games_effective
+        WHERE season = %s AND region_game = TRUE AND final = TRUE AND date <= %s
+          AND school = ANY(%s)
+        ORDER BY date
+        """,
+        (season, as_of, teams),
+    )
+    return parse_completed_games([r async for r in rows])
+
+
 async def load_scenarios_snapshot(
     conn, season: int, clazz: int, region: int, as_of: date
 ) -> tuple[list[RemainingGame], list[dict], list[KeyInsightModel], date] | None:
@@ -1533,25 +1565,11 @@ async def recompute_scenarios_from_games(
     standings and hosting routers can share it without one reaching into the
     other's private functions.
     """
-    team_rows = await conn.execute(
-        "SELECT school FROM school_seasons WHERE season = %s AND class = %s AND region = %s AND is_active = TRUE ORDER BY school",
-        (season, clazz, region),
-    )
-    teams = [r[0] async for r in team_rows]
+    teams = await load_active_region_teams(conn, season, clazz, region)
     if not teams:
         raise HTTPException(status_code=404, detail=f"No teams found for {clazz}A Region {region} season {season}")
 
-    game_rows = await conn.execute(
-        """
-        SELECT school, opponent, points_for, points_against, date
-        FROM games_effective
-        WHERE season = %s AND region_game = TRUE AND final = TRUE AND date <= %s
-          AND school = ANY(%s)
-        ORDER BY date
-        """,
-        (season, as_of, teams),
-    )
-    completed = parse_completed_games([r async for r in game_rows])
+    completed = await load_completed_region_games(conn, season, as_of, teams)
     remaining = compute_remaining_games(teams, completed)
 
     results = determine_scenarios(teams, completed, remaining)

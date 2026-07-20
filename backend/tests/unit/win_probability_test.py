@@ -17,6 +17,7 @@ from backend.helpers.win_probability import (
     _mov_multiplier,
     _ot_score_distribution,
     compute_elo_ratings,
+    compute_hfa_adjustment,
     compute_in_game_win_prob,
     compute_ot_win_prob,
     compute_pregame_win_prob,
@@ -178,6 +179,26 @@ class TestEloInternals:
         """Unknown school returns the 1A fallback prior."""
         result = _class_prior("OOSTeam", {}, EloConfig())
         assert result == pytest.approx(EloConfig().class_ratings[0])
+
+
+class TestComputeHfaAdjustment:
+    """Tests for compute_hfa_adjustment (shared by compute_pregame_win_prob and the /games/probability response)."""
+
+    def test_home_returns_positive_hfa(self):
+        """team_a at home returns +hfa_points."""
+        assert compute_hfa_adjustment("home", 65.0) == pytest.approx(65.0)
+
+    def test_away_returns_negative_hfa(self):
+        """team_a on the road returns -hfa_points."""
+        assert compute_hfa_adjustment("away", 65.0) == pytest.approx(-65.0)
+
+    def test_neutral_returns_zero(self):
+        """An explicit 'neutral' location returns 0.0."""
+        assert compute_hfa_adjustment("neutral", 65.0) == 0.0
+
+    def test_none_returns_zero(self):
+        """A missing/None location returns 0.0."""
+        assert compute_hfa_adjustment(None, 65.0) == 0.0
 
 
 class TestComputePregameWinProb:

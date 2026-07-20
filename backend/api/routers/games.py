@@ -18,6 +18,7 @@ from backend.helpers.api_helpers import build_game_models
 from backend.helpers.query_helpers import and_join_conditions
 from backend.helpers.win_probability import (
     EloConfig,
+    compute_hfa_adjustment,
     compute_in_game_win_prob,
     compute_ot_win_prob,
     compute_pregame_win_prob,
@@ -139,12 +140,7 @@ async def pregame_win_probability(
     cfg = EloConfig()
     elo_a, elo_date_a = row_a
     elo_b, elo_date_b = row_b
-    if location == "home":
-        hfa = cfg.hfa_points
-    elif location == "away":
-        hfa = -cfg.hfa_points
-    else:
-        hfa = 0.0
+    hfa = compute_hfa_adjustment(location, cfg.hfa_points)
     p = compute_pregame_win_prob(elo_a, elo_b, location, cfg)
 
     return PreGameWinProbResponse(
