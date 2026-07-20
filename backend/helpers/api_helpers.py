@@ -633,6 +633,18 @@ def build_seeding_by_region(
     return result
 
 
+def select_sentinel_region(regions_in_class: dict[int, list[str]]) -> int:
+    """Pick a representative ("sentinel") region to determine playoff-vs-regular-season mode for a class.
+
+    All regions within a class share the same season schedule (same number of
+    weeks, same playoff start date), so any single region's remaining-game
+    count is a valid proxy for whether the *whole class* has entered the
+    playoffs yet. The lowest-numbered region is chosen — arbitrary but
+    deterministic, so repeated calls with the same input always agree.
+    """
+    return min(regions_in_class)
+
+
 # ---------------------------------------------------------------------------
 # Response builders — hosting
 # ---------------------------------------------------------------------------

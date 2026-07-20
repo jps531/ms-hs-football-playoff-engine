@@ -22,6 +22,7 @@ from backend.helpers.api_helpers import (
     recompute_scenarios_from_games,
     resolve_hosting_scenario_inputs,
     results_to_applied,
+    select_sentinel_region,
     standings_odds_from_row,
     today,
 )
@@ -373,7 +374,7 @@ async def simulate_class_hosting(
         if not regions_in_class:
             raise HTTPException(status_code=404, detail=f"No teams found for {clazz}A season {season}")
 
-        sentinel_region = next(iter(sorted(regions_in_class)))
+        sentinel_region = select_sentinel_region(regions_in_class)
         scenarios_data = await load_scenarios_snapshot(conn, season, clazz, sentinel_region, as_of)
         if scenarios_data is not None:
             sentinel_remaining, _, _, _ = scenarios_data

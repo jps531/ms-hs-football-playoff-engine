@@ -15,7 +15,12 @@ from backend.api.db import get_conn
 from backend.api.models.requests import ModerationDecisionRequest
 from backend.api.models.responses import SubmissionDetail, SubmissionSummary
 from backend.helpers.image_helpers import LogoType, promote_submission_logo
-from backend.helpers.submission_helpers import build_submission_summary
+from backend.helpers.submission_helpers import (
+    build_color_overrides,
+    build_location_overrides,
+    build_score_overrides,
+    build_submission_summary,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -191,30 +196,17 @@ async def _apply_submission(conn: Any, row: tuple) -> None:
         pass  # Moderator creates the helmet_design record manually.
 
     elif stype == "colors":
-        primary = payload.get("primary_color")
-        secondary_list: list[dict] = payload.get("secondary_colors", [])
-        if primary:
-            await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, "primary_color", primary["name"]))
-            await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, "primary_color_hex", primary["hex"]))
-        if secondary_list:
-            names_csv = ", ".join(c["name"] for c in secondary_list)
-            hex_csv = ", ".join(c["hex"] for c in secondary_list)
-            await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, "secondary_color", names_csv))
-            await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, "secondary_color_hex", hex_csv))
+        for field, value in build_color_overrides(payload):
+            await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, field, value))
 
     elif stype == "location":
-        await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, "latitude", str(payload["latitude"])))
-        await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, "longitude", str(payload["longitude"])))
+        for field, value in build_location_overrides(payload):
+            await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, field, value))
 
     elif stype == "score":
-        game_date: str = payload["date"]
-        await conn.execute(
-            "SELECT set_game_override(%s, %s, %s, %s)", (school, game_date, "points_for", str(payload["points_for"]))
-        )
-        await conn.execute(
-            "SELECT set_game_override(%s, %s, %s, %s)",
-            (school, game_date, "points_against", str(payload["points_against"])),
-        )
+        game_date, overrides = build_score_overrides(payload)
+        for field, value in overrides:
+            await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, game_date, field, value))
 
     elif stype == "feedback":
         pass  # No DB action on approval.

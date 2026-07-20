@@ -45,6 +45,7 @@ from backend.helpers.api_helpers import (
     resolve_hosting_scenario_inputs,
     results_to_applied,
     scenarios_to_entries,
+    select_sentinel_region,
     standings_from_odds,
     standings_odds_from_row,
     within_display_threshold,
@@ -1386,6 +1387,24 @@ class TestResolveHostingScenarioInputs:
         assert p_reach_w["First Round"] == pytest.approx(0.5)
         assert p_given_reach_w["First Round"] == pytest.approx(0.4)
         assert p_overall_w["First Round"] == pytest.approx(0.2)
+
+
+class TestSelectSentinelRegion:
+    """select_sentinel_region picks a deterministic representative region for a class."""
+
+    def test_picks_lowest_numbered_region(self):
+        """The lowest region number is chosen regardless of dict insertion order."""
+        regions = {3: ["Team A"], 1: ["Team B"], 2: ["Team C"]}
+        assert select_sentinel_region(regions) == 1
+
+    def test_single_region_class(self):
+        """A class with only one region returns that region."""
+        assert select_sentinel_region({4: ["Team A", "Team B"]}) == 4
+
+    def test_deterministic_across_calls(self):
+        """Repeated calls on the same input always agree."""
+        regions = {5: [], 2: [], 8: []}
+        assert select_sentinel_region(regions) == select_sentinel_region(regions) == 2
 
 
 class TestBuildHostingEntries:
