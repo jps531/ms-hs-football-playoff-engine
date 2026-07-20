@@ -14,6 +14,7 @@ from backend.api.models.responses import (
     UserAdminRow,
     UserProfileResponse,
 )
+from backend.helpers.query_helpers import build_set_clause, require_nonempty_update, require_school_exists
 from backend.helpers.user_helpers import assert_active_changeable, assert_role_changeable
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
@@ -87,17 +88,16 @@ async def get_my_profile(current_user: CurrentUser) -> UserProfileResponse:
         return await _build_profile(conn, user)
 
 
-@router.patch("/me", responses={404: {"description": "User not found"}})
+@router.patch("/me", responses={404: {"description": "User not found"}, 422: {"description": "No fields provided"}})
 async def patch_my_profile(body: PatchUserRequest, current_user: CurrentUser) -> UserProfileResponse:
     """Update mutable profile fields."""
     user_id: int = current_user["db_id"]
     updates = body.model_dump(exclude_none=True)
-    if updates:
-        set_clause = sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(k)) for k in updates)
-        query = sql.SQL("UPDATE users SET {}, updated_at = NOW() WHERE id = %s").format(set_clause)
-        async with get_conn() as conn:
-            await conn.execute(query, list(updates.values()) + [user_id])
+    require_nonempty_update(updates)
+    set_clause = build_set_clause(updates)
+    query = sql.SQL("UPDATE users SET {}, updated_at = NOW() WHERE id = %s").format(set_clause)
     async with get_conn() as conn:
+        await conn.execute(query, list(updates.values()) + [user_id])
         user = await _get_user_row(conn, user_id)
         return await _build_profile(conn, user)
 
@@ -130,9 +130,7 @@ async def follow_team(school: str, current_user: CurrentUser) -> None:
     """Follow a team (idempotent)."""
     user_id: int = current_user["db_id"]
     async with get_conn() as conn:
-        exists = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))).fetchone()
-        if exists is None:
-            raise HTTPException(status_code=404, detail=f"School '{school}' not found")
+        await require_school_exists(conn, school)
         await conn.execute(
             "INSERT INTO user_followed_teams (user_id, school) VALUES (%s, %s) ON CONFLICT DO NOTHING",
             (user_id, school),

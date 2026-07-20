@@ -13,9 +13,10 @@ from backend.api.models.responses import (
     SeasonModel,
     SeasonStructureResponse,
     TeamModel,
-    YearsWornRange,
 )
+from backend.helpers.api_helpers import build_helmet_from_row
 from backend.helpers.image_helpers import logo_url
+from backend.helpers.query_helpers import and_join_conditions
 
 router = APIRouter(prefix="/api/v1", tags=["meta"])
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
@@ -70,7 +71,7 @@ async def list_teams(
         conditions.append("ss.region = %s")
         params.append(region)
 
-    where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+    where_clause = and_join_conditions(conditions)
     query = sql.SQL("""
         SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
                s.city, s.mascot, s.primary_color, s.secondary_color,
@@ -147,30 +148,6 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
     )
 
 
-def _row_to_helmet(r) -> HelmetDesignModel:
-    """Map a raw DB row tuple to a HelmetDesignModel."""
-    years_worn = None
-    if r[4] is not None:
-        years_worn = [YearsWornRange(start=span["start"], end=span["end"]) for span in r[4]]
-    return HelmetDesignModel(
-        id=r[0],
-        school=r[1],
-        year_first_worn=r[2],
-        year_last_worn=r[3],
-        years_worn=years_worn,
-        image_left=r[5],
-        image_right=r[6],
-        photo=r[7],
-        color=r[8],
-        finish=r[9],
-        facemask_color=r[10],
-        logo=r[11],
-        stripe=r[12],
-        tags=list(r[13] or []),
-        notes=r[14],
-    )
-
-
 _HELMET_SELECT = """
     SELECT id, school, year_first_worn, year_last_worn, years_worn,
            image_left, image_right, photo, color, finish,
@@ -191,12 +168,12 @@ async def list_team_helmets(
         conditions.append("year_first_worn <= %s AND (year_last_worn IS NULL OR year_last_worn >= %s)")
         params.extend([year, year])
 
-    where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+    where_clause = and_join_conditions(conditions)
     query = sql.SQL(_HELMET_SELECT + " WHERE {} ORDER BY year_first_worn").format(where_clause)
 
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
-        results = [_row_to_helmet(r) async for r in rows]
+        results = [build_helmet_from_row(r) async for r in rows]
 
     if not results and year is None:
         async with get_conn() as conn:
@@ -231,11 +208,11 @@ async def list_helmets(
         params.append(tag)
 
     if conditions:
-        where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+        where_clause = and_join_conditions(conditions)
         query = sql.SQL(_HELMET_SELECT + " WHERE {} ORDER BY school, year_first_worn").format(where_clause)
     else:
         query = sql.SQL(_HELMET_SELECT + " ORDER BY school, year_first_worn")
 
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
-        return [_row_to_helmet(r) async for r in rows]
+        return [build_helmet_from_row(r) async for r in rows]

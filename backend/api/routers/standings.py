@@ -3,17 +3,17 @@
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Path, Query, Request
 
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
 from backend.api.models.responses import ComputationStateModel, StandingsResponse
 from backend.helpers.api_helpers import (
-    DISPLAY_THRESHOLD,
     build_team_entries,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
+    filter_to_team_or_404,
     load_scenarios_snapshot,
     parse_completed_games,
     records_from_completed,
@@ -24,6 +24,7 @@ from backend.helpers.api_helpers import (
     standings_from_odds,
     standings_odds_from_row,
     today,
+    within_display_threshold,
 )
 from backend.helpers.data_classes import StandingsOdds
 from backend.helpers.scenario_renderer import atoms_from_complete_scenarios, team_scenarios_as_dict
@@ -164,7 +165,7 @@ async def get_standings(
             complete_scenarios = None
             key_insights = None
 
-    scenarios_available = len(remaining) <= DISPLAY_THRESHOLD
+    scenarios_available = within_display_threshold(remaining)
 
     ts: dict | None = None
     if include_team_scenarios and complete_scenarios and scenarios_available:
@@ -201,10 +202,7 @@ async def get_team_standings(
 ) -> StandingsResponse:
     """Return standings filtered to a single *team* (same data, subset of teams list)."""
     response = await get_standings(clazz, region, season=season, date=date, include_team_scenarios=include_team_scenarios)
-    response.teams = [t for t in response.teams if t.school == team]
-    if not response.teams:
-        raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")
-    return response
+    return filter_to_team_or_404(response, team, clazz, region)
 
 
 @router.post("/standings/{clazz}/{region}/simulate", responses=_404)
@@ -258,7 +256,7 @@ async def simulate_standings(
     records = records_from_completed(teams, completed)
     team_entries = standings_from_odds(odds_map, set(), records)
 
-    scenarios_available = len(updated_remaining) <= DISPLAY_THRESHOLD
+    scenarios_available = within_display_threshold(updated_remaining)
 
     filtered_scenarios: list[dict] | None = None
     ts: dict | None = None
@@ -301,7 +299,4 @@ async def simulate_team_standings(
 ) -> StandingsResponse:
     """What-if standings filtered to a single *team*."""
     response = await simulate_standings(request, clazz, region, body, season=season, date=date, include_team_scenarios=include_team_scenarios)
-    response.teams = [t for t in response.teams if t.school == team]
-    if not response.teams:
-        raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")
-    return response
+    return filter_to_team_or_404(response, team, clazz, region)

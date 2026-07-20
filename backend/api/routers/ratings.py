@@ -8,6 +8,7 @@ from psycopg import sql
 
 from backend.api.db import get_conn
 from backend.api.models.responses import EloSnapshot, EloTrendResponse, TeamRatingModel
+from backend.helpers.query_helpers import and_join_conditions
 
 router = APIRouter(prefix="/api/v1", tags=["ratings"])
 
@@ -42,7 +43,7 @@ async def list_ratings(
         conditions.append("tr.school = %s")
         params.append(team)
 
-    where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+    where_clause = and_join_conditions(conditions)
 
     if as_of is not None:
         params.append(as_of)

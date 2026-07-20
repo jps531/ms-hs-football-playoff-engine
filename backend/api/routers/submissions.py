@@ -15,7 +15,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 
-from backend.api.auth import OptionalUser
+from backend.api.auth import OptionalUser, optional_user_id
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import (
@@ -32,6 +32,7 @@ from backend.helpers.image_helpers import (
     upload_submission_logo,
     validate_upload,
 )
+from backend.helpers.query_helpers import require_school_exists
 
 router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 
@@ -70,13 +71,6 @@ class _HelmetForm:
         self.additional_notes = additional_notes
 
 
-async def _require_school(conn, school: str) -> None:
-    """Raise HTTP 404 if the school does not exist in the database."""
-    row = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))).fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"School '{school}' not found")
-
-
 @router.post("/logos", status_code=status.HTTP_201_CREATED, responses=_404)
 @limiter.limit("3/minute")
 async def submit_logo(
@@ -93,7 +87,7 @@ async def submit_logo(
     production folder upon moderator approval.
     """
     async with get_conn() as conn:
-        await _require_school(conn, school)
+        await require_school_exists(conn, school)
 
     contents = await file.read()
     validate_upload(file.content_type, len(contents))
@@ -103,7 +97,7 @@ async def submit_logo(
     finally:
         os.unlink(tmp_path)
 
-    user_id = current_user["db_id"] if current_user else None
+    user_id = optional_user_id(current_user)
     payload = {"logo_type": logo_type, "cloudinary_path": cloudinary_path}
     async with get_conn() as conn:
         row = await (
@@ -140,7 +134,7 @@ async def submit_helmet(
         )
 
     async with get_conn() as conn:
-        await _require_school(conn, form.school)
+        await require_school_exists(conn, form.school)
 
     payload: dict[str, Any] = {
         "year_first_worn": form.year_first_worn,
@@ -161,7 +155,7 @@ async def submit_helmet(
         if val is not None:
             payload[key] = val
 
-    user_id = current_user["db_id"] if current_user else None
+    user_id = optional_user_id(current_user)
     # Insert first so we get the submission_id for Cloudinary path construction.
     async with get_conn() as conn:
         row = await (
@@ -218,9 +212,9 @@ async def submit_helmet(
 @limiter.limit("10/minute")
 async def submit_colors(request: Request, body: SubmitColorsRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit a school color correction for moderator review."""
-    user_id = current_user["db_id"] if current_user else None
+    user_id = optional_user_id(current_user)
     async with get_conn() as conn:
-        await _require_school(conn, body.school)
+        await require_school_exists(conn, body.school)
 
         payload: dict[str, Any] = {}
         if body.primary_color is not None:
@@ -243,9 +237,9 @@ async def submit_colors(request: Request, body: SubmitColorsRequest, current_use
 @limiter.limit("10/minute")
 async def submit_location(request: Request, body: SubmitLocationRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit corrected GPS coordinates for a school."""
-    user_id = current_user["db_id"] if current_user else None
+    user_id = optional_user_id(current_user)
     async with get_conn() as conn:
-        await _require_school(conn, body.school)
+        await require_school_exists(conn, body.school)
 
         payload = {"latitude": body.latitude, "longitude": body.longitude}
         row = await (
@@ -269,7 +263,7 @@ async def submit_score(request: Request, body: SubmitScoreRequest, current_user:
     Both the school and the game (school + date) must already exist in the database.
     """
     async with get_conn() as conn:
-        await _require_school(conn, body.school)
+        await require_school_exists(conn, body.school)
 
         game_row = await (
             await conn.execute(
@@ -283,7 +277,7 @@ async def submit_score(request: Request, body: SubmitScoreRequest, current_user:
                 detail=f"Game for '{body.school}' on {body.date} not found",
             )
 
-        user_id = current_user["db_id"] if current_user else None
+        user_id = optional_user_id(current_user)
         payload = {
             "date": body.date.isoformat(),
             "points_for": body.points_for,
@@ -304,7 +298,7 @@ async def submit_score(request: Request, body: SubmitScoreRequest, current_user:
 @limiter.limit("10/minute")
 async def submit_feedback(request: Request, body: SubmitFeedbackRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
     """Submit general feedback for moderator review."""
-    user_id = current_user["db_id"] if current_user else None
+    user_id = optional_user_id(current_user)
     payload = {"subject": body.subject, "message": body.message}
     async with get_conn() as conn:
         row = await (

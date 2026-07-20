@@ -10,12 +10,13 @@ from backend.api.limiter import limiter
 from backend.api.models.requests import GameResultRequest, SimulateBracketRequest
 from backend.api.models.responses import ClassHostingResponse, HostingResponse
 from backend.helpers.api_helpers import (
-    DISPLAY_THRESHOLD,
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     _load_format_slots,
     build_hosting_entries,
     build_seeding_by_region,
+    filter_to_team_or_404,
+    has_displayable_scenarios,
     load_scenarios_snapshot,
     parse_completed_games,
     recompute_scenarios_from_games,
@@ -56,7 +57,7 @@ async def _compute_seed_atoms_if_pre_playoff(
     else:
         _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
 
-    if not remaining or len(remaining) > DISPLAY_THRESHOLD:
+    if not has_displayable_scenarios(remaining):
         return None
 
     if teams is None:
@@ -311,10 +312,7 @@ async def get_team_hosting(
 ) -> HostingResponse:
     """Return hosting odds for a single *team*."""
     response = await get_hosting(clazz, region, season=season, date=date, include_scenarios=include_scenarios)
-    response.teams = [t for t in response.teams if t.school == team]
-    if not response.teams:
-        raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")
-    return response
+    return filter_to_team_or_404(response, team, clazz, region)
 
 
 @router.post("/hosting/{clazz}/simulate", responses=_404)
@@ -434,7 +432,7 @@ async def simulate_class_hosting(
                 seeding_by_region = build_seeding_by_region(reg, odds_map, other_seeding)
                 matchup_fn_by_region[reg] = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
 
-                if include_scenarios and reg_remaining and len(reg_remaining) <= DISPLAY_THRESHOLD:
+                if include_scenarios and has_displayable_scenarios(reg_remaining):
                     seed_atoms_by_region[reg] = build_scenario_atoms(reg_teams, completed, reg_remaining)
 
     region_responses = []
@@ -559,7 +557,7 @@ async def simulate_hosting(
         eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
     )
     if include_scenarios:
-        seed_atoms = build_scenario_atoms(teams, completed, remaining) if remaining and len(remaining) <= DISPLAY_THRESHOLD else None
+        seed_atoms = build_scenario_atoms(teams, completed, remaining) if has_displayable_scenarios(remaining) else None
         entries = _attach_hosting_scenarios(entries, odds_map, slots, season, region, seed_atoms=seed_atoms)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
@@ -578,7 +576,4 @@ async def simulate_team_hosting(
 ) -> HostingResponse:
     """What-if hosting odds for a single *team*."""
     response = await simulate_hosting(request, clazz, region, body, season=season, date=date, include_scenarios=include_scenarios)
-    response.teams = [t for t in response.teams if t.school == team]
-    if not response.teams:
-        raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")
-    return response
+    return filter_to_team_or_404(response, team, clazz, region)

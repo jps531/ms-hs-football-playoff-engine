@@ -35,8 +35,9 @@ from backend.api.models.responses import (
     LocationModel,
     OverrideAuditRow,
     PlayoffFormatSeedResult,
-    YearsWornRange,
 )
+from backend.helpers.api_helpers import build_helmet_from_row
+from backend.helpers.query_helpers import build_set_clause, require_nonempty_update, require_school_exists
 
 _log = logging.getLogger(__name__)
 
@@ -52,30 +53,6 @@ _HELMET_SELECT = """
     FROM helmet_designs
     WHERE id = %s
 """
-
-
-def _row_to_helmet(r) -> HelmetDesignModel:
-    """Map a raw DB row tuple from _HELMET_SELECT to a HelmetDesignModel."""
-    years_worn = None
-    if r[4] is not None:
-        years_worn = [YearsWornRange(start=s["start"], end=s["end"]) for s in r[4]]
-    return HelmetDesignModel(
-        id=r[0],
-        school=r[1],
-        year_first_worn=r[2],
-        year_last_worn=r[3],
-        years_worn=years_worn,
-        image_left=r[5],
-        image_right=r[6],
-        photo=r[7],
-        color=r[8],
-        finish=r[9],
-        facemask_color=r[10],
-        logo=r[11],
-        stripe=r[12],
-        tags=list(r[13] or []),
-        notes=r[14],
-    )
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_moderator)])
@@ -265,9 +242,7 @@ async def list_all_overrides() -> list[OverrideAuditRow]:
 async def set_school_override(school: str, body: SetSchoolOverrideRequest) -> OverrideAuditRow:
     """Set a manual override on a school field. Wins over pipeline-written values via schools_effective."""
     async with get_conn() as conn:
-        row = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"School '{school}' not found")
+        await require_school_exists(conn, school)
         await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, body.field, body.value))
     _log.info("admin: set school override school=%s field=%s", school, body.field)
     return OverrideAuditRow(source=f"school:{school}", key=body.field, value=body.value)
@@ -281,9 +256,7 @@ async def clear_school_override(school: str, field: str) -> None:
             status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_SCHOOL_OVERRIDE_FIELDS)}"
         )
     async with get_conn() as conn:
-        row = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"School '{school}' not found")
+        await require_school_exists(conn, school)
         await conn.execute("SELECT clear_school_override(%s, %s)", (school, field))
     _log.info("admin: cleared school override school=%s field=%s", school, field)
 
@@ -477,13 +450,12 @@ async def create_location(body: CreateLocationRequest) -> LocationDetailModel:
 async def patch_location(location_id: int, body: PatchLocationRequest) -> LocationDetailModel:
     """Update fields on an existing venue."""
     update_data = body.model_dump(exclude_unset=True)
-    if not update_data:
-        raise HTTPException(status_code=422, detail="No fields provided to update")
+    require_nonempty_update(update_data)
     async with get_conn() as conn:
         row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Location {location_id} not found")
-        set_clause = sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(k)) for k in update_data)
+        set_clause = build_set_clause(update_data)
         query = sql.SQL(
             "UPDATE locations SET {} WHERE id = %s RETURNING id, name, city, home_team, latitude, longitude"
         ).format(set_clause)
@@ -526,9 +498,7 @@ async def clear_location_override(location_id: int, field: str) -> None:
 async def create_helmet_design(body: CreateHelmetDesignRequest) -> HelmetDesignModel:
     """Create a new helmet design record. Upload images separately via POST /api/v1/images/helmets/{id}/{type}."""
     async with get_conn() as conn:
-        school_row = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (body.school,))).fetchone()
-        if school_row is None:
-            raise HTTPException(status_code=404, detail=f"School '{body.school}' not found")
+        await require_school_exists(conn, body.school)
 
         years_worn_json = (
             [{"start": r.start, "end": r.end} for r in body.years_worn] if body.years_worn is not None else None
@@ -561,15 +531,14 @@ async def create_helmet_design(body: CreateHelmetDesignRequest) -> HelmetDesignM
         detail_row = await (await conn.execute(_HELMET_SELECT, (id_row[0],))).fetchone()
     assert detail_row is not None
     _log.info("admin: created helmet_design id=%s school=%s year=%s", id_row[0], body.school, body.year_first_worn)
-    return _row_to_helmet(detail_row)
+    return build_helmet_from_row(detail_row)
 
 
 @router.patch("/helmets/{design_id}", responses=_404)
 async def patch_helmet_design(design_id: int, body: PatchHelmetDesignRequest) -> HelmetDesignModel:
     """Update metadata fields on a helmet design. Image columns are managed via /images/helmets/."""
     update_data = body.model_dump(exclude_unset=True)
-    if not update_data:
-        raise HTTPException(status_code=422, detail="No fields provided to update")
+    require_nonempty_update(update_data)
 
     # model_dump() recursively converts nested models to dicts, so years_worn is already list[dict]
     async with get_conn() as conn:
@@ -577,12 +546,12 @@ async def patch_helmet_design(design_id: int, body: PatchHelmetDesignRequest) ->
         if row is None:
             raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
 
-        set_clause = sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(k)) for k in update_data)
+        set_clause = build_set_clause(update_data)
         update_query = sql.SQL("UPDATE helmet_designs SET {} WHERE id = %s").format(set_clause)
         await conn.execute(update_query, list(update_data.values()) + [design_id])
         detail_row = await (await conn.execute(_HELMET_SELECT, (design_id,))).fetchone()
     assert detail_row is not None
-    return _row_to_helmet(detail_row)
+    return build_helmet_from_row(detail_row)
 
 
 @router.delete("/helmets/{design_id}", status_code=204, responses=_404)

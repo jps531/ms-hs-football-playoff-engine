@@ -15,6 +15,7 @@ from backend.api.models.responses import (
     PreGameWinProbResponse,
 )
 from backend.helpers.api_helpers import build_game_models
+from backend.helpers.query_helpers import and_join_conditions
 from backend.helpers.win_probability import (
     EloConfig,
     compute_in_game_win_prob,
@@ -61,7 +62,7 @@ async def list_games(
         conditions.append("g.date <= %s")
         params.append(date_to)
 
-    where_clause = sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
+    where_clause = and_join_conditions(conditions)
     query = sql.SQL("""
         SELECT g.school, g.opponent, g.date, g.points_for, g.points_against,
                g.location, g.region_game, g.game_status, g.season,

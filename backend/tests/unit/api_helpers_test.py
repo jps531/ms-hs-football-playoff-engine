@@ -1,8 +1,10 @@
 """Unit tests for backend.helpers.api_helpers."""
 
+from dataclasses import dataclass, field
 from datetime import date
 
 import pytest
+from fastapi import HTTPException
 
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
@@ -24,6 +26,8 @@ from backend.helpers.api_helpers import (
     build_bracket_layout,
     build_enriched_bracket_layout,
     build_game_models,
+    build_helmet_from_fields,
+    build_helmet_from_row,
     build_hosting_entries,
     build_playoff_bracket_state,
     build_rank_entry,
@@ -33,6 +37,8 @@ from backend.helpers.api_helpers import (
     compute_remaining_games,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
+    filter_to_team_or_404,
+    has_displayable_scenarios,
     parse_completed_games,
     records_from_completed,
     remaining_to_models,
@@ -41,6 +47,7 @@ from backend.helpers.api_helpers import (
     scenarios_to_entries,
     standings_from_odds,
     standings_odds_from_row,
+    within_display_threshold,
 )
 from backend.helpers.data_classes import BracketOdds, CompletedGame, GameResult, RemainingGame, StandingsOdds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
@@ -478,6 +485,93 @@ class TestStandingsOddsFromRow:
 
 
 # ---------------------------------------------------------------------------
+# TestDisplayThresholdPredicates
+# ---------------------------------------------------------------------------
+
+
+class TestWithinDisplayThreshold:
+    """within_display_threshold: len(remaining) <= DISPLAY_THRESHOLD, empty list counts as within."""
+
+    def test_empty_list_is_within_threshold(self):
+        """Zero remaining games is trivially within threshold."""
+        assert within_display_threshold([]) is True
+
+    def test_at_threshold_is_within(self):
+        """Exactly DISPLAY_THRESHOLD games is within threshold."""
+        assert within_display_threshold(list(range(DISPLAY_THRESHOLD))) is True
+
+    def test_over_threshold_is_not_within(self):
+        """More than DISPLAY_THRESHOLD games is not within threshold."""
+        assert within_display_threshold(list(range(DISPLAY_THRESHOLD + 1))) is False
+
+
+class TestHasDisplayableScenarios:
+    """has_displayable_scenarios: non-empty AND len(remaining) <= DISPLAY_THRESHOLD."""
+
+    def test_empty_list_has_no_displayable_scenarios(self):
+        """Zero remaining games means nothing to display (unlike within_display_threshold)."""
+        assert has_displayable_scenarios([]) is False
+
+    def test_at_threshold_is_displayable(self):
+        """A non-empty list at exactly DISPLAY_THRESHOLD is displayable."""
+        assert has_displayable_scenarios(list(range(DISPLAY_THRESHOLD))) is True
+
+    def test_over_threshold_is_not_displayable(self):
+        """More than DISPLAY_THRESHOLD games is not displayable."""
+        assert has_displayable_scenarios(list(range(DISPLAY_THRESHOLD + 1))) is False
+
+
+# ---------------------------------------------------------------------------
+# TestFilterToTeamOr404
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _FakeTeamEntry:
+    """Minimal stand-in for a TeamStandingsEntry/TeamHostingEntry (only .school is used)."""
+
+    school: str
+
+
+@dataclass
+class _FakeTeamsResponse:
+    """Minimal stand-in for StandingsResponse/HostingResponse (only .teams is used)."""
+
+    teams: list[_FakeTeamEntry] = field(default_factory=list)
+
+
+class TestFilterToTeamOr404:
+    """filter_to_team_or_404 narrows response.teams to one school or raises HTTP 404."""
+
+    def test_matching_team_narrows_list(self):
+        """teams is filtered down to only the entry matching the requested school."""
+        response = _FakeTeamsResponse(teams=[_FakeTeamEntry("Alpha"), _FakeTeamEntry("Beta")])
+        result = filter_to_team_or_404(response, "Alpha", clazz=5, region=2)
+        assert [t.school for t in result.teams] == ["Alpha"]
+
+    def test_returns_same_response_object(self):
+        """The same response instance is returned (mutated in place), not a copy."""
+        response = _FakeTeamsResponse(teams=[_FakeTeamEntry("Alpha")])
+        result = filter_to_team_or_404(response, "Alpha", clazz=5, region=2)
+        assert result is response
+
+    def test_missing_team_raises_404(self):
+        """A school not present in teams raises HTTP 404."""
+        response = _FakeTeamsResponse(teams=[_FakeTeamEntry("Alpha")])
+        with pytest.raises(HTTPException) as exc_info:
+            filter_to_team_or_404(response, "Zeta", clazz=5, region=2)
+        assert exc_info.value.status_code == 404
+        assert "Zeta" in exc_info.value.detail
+
+    def test_404_detail_includes_class_and_region(self):
+        """The 404 detail message includes the class and region for context."""
+        response = _FakeTeamsResponse(teams=[])
+        with pytest.raises(HTTPException) as exc_info:
+            filter_to_team_or_404(response, "Alpha", clazz=3, region=7)
+        assert "3A Region 7" in exc_info.value.detail
+
+
+# ---------------------------------------------------------------------------
 # TestRemainingToModels
 # ---------------------------------------------------------------------------
 
@@ -706,6 +800,50 @@ def _game_row(
         *helmet_a, *helmet_b,
         None, None, None, final, None, None, None,
     )
+
+
+class TestBuildHelmetFromFields:
+    """build_helmet_from_fields maps flat helmet_designs columns to a HelmetDesignModel."""
+
+    def test_none_id_returns_none(self):
+        """A None id (no helmet designated) returns None rather than a model."""
+        assert build_helmet_from_fields(*_HELMET_EMPTY) is None
+
+    def test_fields_mapped_in_order(self):
+        """Fields map positionally per HELMET_FIELD_COLS order."""
+        fields = (7, "Taylorsville", 2020, None, None, None, None, None, "Red", None, None, None, None, [], "note")
+        result = build_helmet_from_fields(*fields)
+        assert result is not None
+        assert (result.id, result.school, result.year_first_worn) == (7, "Taylorsville", 2020)
+        assert result.color == "Red"
+        assert result.notes == "note"
+
+    def test_years_worn_coerced_from_dicts(self):
+        """A years_worn field of raw {"start", "end"} dicts coerces into YearsWornRange models."""
+        fields = (
+            1, "Taylorsville", 2018, 2020, [{"start": 2018, "end": 2020}],
+            None, None, None, None, None, None, None, None, [], None,
+        )
+        result = build_helmet_from_fields(*fields)
+        assert result is not None
+        assert result.years_worn is not None
+        assert (result.years_worn[0].start, result.years_worn[0].end) == (2018, 2020)
+
+
+class TestBuildHelmetFromRow:
+    """build_helmet_from_row wraps build_helmet_from_fields, asserting a real (non-None-id) row."""
+
+    def test_returns_model_for_real_row(self):
+        """A row with a real id returns a HelmetDesignModel."""
+        row = (3, "Taylorsville", 2021, None, None, None, None, None, None, None, None, None, None, [], None)
+        result = build_helmet_from_row(row)
+        assert result.id == 3
+        assert result.school == "Taylorsville"
+
+    def test_none_id_raises_assertion(self):
+        """A row with id=None violates the 'known existing helmet' contract and raises."""
+        with pytest.raises(AssertionError):
+            build_helmet_from_row(_HELMET_EMPTY)
 
 
 class TestBuildGameModels:

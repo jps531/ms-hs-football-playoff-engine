@@ -188,3 +188,8 @@ async def get_optional_user(
 
 
 OptionalUser = Annotated[dict | None, Depends(get_optional_user)]
+
+
+def optional_user_id(current_user: dict | None) -> int | None:
+    """Return ``current_user["db_id"]``, or ``None`` for an anonymous caller."""
+    return current_user["db_id"] if current_user else None

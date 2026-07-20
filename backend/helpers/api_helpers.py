@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import TypeVar
 
 from fastapi import HTTPException
 
@@ -79,6 +80,25 @@ DISPLAY_THRESHOLD = 6
 
 CLINCHED_THRESHOLD = 0.999
 """Minimum seeding probability required to consider a seed position clinched."""
+
+
+def within_display_threshold(remaining: list) -> bool:
+    """True when *remaining* has few enough games to enumerate/display scenarios for.
+
+    An empty list counts as within threshold (there's simply nothing to enumerate).
+    """
+    return len(remaining) <= DISPLAY_THRESHOLD
+
+
+def has_displayable_scenarios(remaining: list) -> bool:
+    """True when *remaining* is non-empty and within ``DISPLAY_THRESHOLD``.
+
+    Unlike ``within_display_threshold``, an empty list returns False — used where
+    "no remaining games" means there's nothing left to compute (already decided),
+    as opposed to "trivially available".
+    """
+    return bool(remaining) and len(remaining) <= DISPLAY_THRESHOLD
+
 
 # ---------------------------------------------------------------------------
 # Shared request-time seams
@@ -154,7 +174,7 @@ def compute_remaining_games(teams: list[str], completed: list[CompletedGame]) ->
 
 
 # ---------------------------------------------------------------------------
-# Game listing (/games endpoint)
+# Helmet row mapping (shared by admin/meta/games routers)
 # ---------------------------------------------------------------------------
 
 HELMET_FIELD_COLS = (
@@ -176,16 +196,33 @@ HELMET_FIELD_COLS = (
 )
 
 
-def _build_helmet_from_fields(*fields) -> HelmetDesignModel | None:
+def build_helmet_from_fields(*fields) -> HelmetDesignModel | None:
     """Build a HelmetDesignModel from a flat sequence of helmet_designs columns.
 
     Expects fields in the same order as ``HELMET_FIELD_COLS``. Returns None when
     the first field (id) is None, which indicates no helmet has been designated
-    for this team in this game.
+    (e.g. for this team in this game).
     """
     if fields[0] is None:
         return None
     return HelmetDesignModel(**dict(zip(HELMET_FIELD_COLS, fields)))
+
+
+def build_helmet_from_row(row: tuple) -> HelmetDesignModel:
+    """Build a HelmetDesignModel from a helmet_designs row keyed on a known id.
+
+    Unlike ``build_helmet_from_fields``, asserts the row represents a real
+    helmet — for use when the row comes from a query scoped to a known,
+    existing helmet id (as opposed to an optional per-game helmet reference).
+    """
+    helmet = build_helmet_from_fields(*row)
+    assert helmet is not None
+    return helmet
+
+
+# ---------------------------------------------------------------------------
+# Game listing (/games endpoint)
+# ---------------------------------------------------------------------------
 
 
 def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameModel]:
@@ -253,8 +290,8 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
                 game_clock=g_clock,
                 source=g_source,
                 venue=venue,
-                helmet_a=_build_helmet_from_fields(*ha_fields),
-                helmet_b=_build_helmet_from_fields(*hb_fields),
+                helmet_a=build_helmet_from_fields(*ha_fields),
+                helmet_b=build_helmet_from_fields(*hb_fields),
             )
         )
     return games
@@ -388,6 +425,21 @@ def standings_odds_from_row(
         clinched=bool(clinched),
         eliminated=bool(eliminated),
     )
+
+
+_TeamsResponse = TypeVar("_TeamsResponse")
+
+
+def filter_to_team_or_404(response: _TeamsResponse, team: str, clazz: int, region: int) -> _TeamsResponse:
+    """Narrow ``response.teams`` to the single school matching *team*; raise HTTP 404 if none match.
+
+    Used by the single-team standings/hosting endpoints, which delegate to the
+    full-region handler and then filter the result down to one team.
+    """
+    response.teams = [t for t in response.teams if t.school == team]  # type: ignore[attr-defined]
+    if not response.teams:  # type: ignore[attr-defined]
+        raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")
+    return response
 
 
 # ---------------------------------------------------------------------------
