@@ -195,6 +195,9 @@ HELMET_FIELD_COLS = (
     "notes",
 )
 
+HELMET_DESIGNS_SELECT = f"SELECT {', '.join(HELMET_FIELD_COLS)} FROM helmet_designs"
+"""Base SELECT for helmet_designs, column order matching HELMET_FIELD_COLS. Callers append their own WHERE/ORDER BY."""
+
 
 def build_helmet_from_fields(*fields) -> HelmetDesignModel | None:
     """Build a HelmetDesignModel from a flat sequence of helmet_designs columns.

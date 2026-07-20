@@ -1,6 +1,6 @@
 """Image upload endpoints for school logos and helmet designs."""
 
-import os
+from functools import partial
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -13,11 +13,11 @@ from backend.helpers.image_helpers import (
     HelmetImageType,
     LogoType,
     logo_url,
-    save_temp,
+    save_and_upload,
     upload_helmet,
     upload_logo,
-    validate_upload,
 )
+from backend.helpers.query_helpers import require_school_exists, set_school_logo_column
 
 router = APIRouter(prefix="/api/v1/images", tags=["images"], dependencies=[Depends(require_moderator)])
 
@@ -38,24 +38,12 @@ async def upload_school_logo(
 ) -> ImageUploadResponse:
     """Upload a logo for *school* and update the DB."""
     async with get_conn() as conn:
-        row = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"School '{school}' not found")
+        await require_school_exists(conn, school)
 
-    contents = await file.read()
-    validate_upload(file.content_type, len(contents))
-    tmp_path = save_temp(file.filename, contents)
-    try:
-        path = upload_logo(tmp_path, school, logo_type)
-    finally:
-        os.unlink(tmp_path)
+    path = await save_and_upload(file, partial(upload_logo, school_name=school, logo_type=logo_type))
 
-    col = sql.Identifier(f"logo_{logo_type}")
     async with get_conn() as conn:
-        await conn.execute(
-            sql.SQL("UPDATE schools SET {} = %s WHERE school = %s").format(col),
-            (path, school),
-        )
+        await set_school_logo_column(conn, school, logo_type, path)
 
     return ImageUploadResponse(path=path, url=logo_url(path))
 
@@ -78,13 +66,9 @@ async def upload_helmet_image(
             raise HTTPException(status_code=404, detail=f"Helmet design {helmet_design_id} not found")
         school, year = row[0], row[1]
 
-    contents = await file.read()
-    validate_upload(file.content_type, len(contents))
-    tmp_path = save_temp(file.filename, contents)
-    try:
-        path = upload_helmet(tmp_path, school, year, image_type, helmet_design_id)
-    finally:
-        os.unlink(tmp_path)
+    path = await save_and_upload(
+        file, partial(upload_helmet, school_name=school, year=year, image_type=image_type, helmet_id=helmet_design_id)
+    )
 
     col = sql.Identifier(_HELMET_COL[image_type])
     async with get_conn() as conn:

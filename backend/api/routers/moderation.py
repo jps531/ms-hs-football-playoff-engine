@@ -8,13 +8,13 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from psycopg import sql
 
 from backend.api.auth import ModeratorAuth
 from backend.api.db import get_conn
 from backend.api.models.requests import ModerationDecisionRequest
 from backend.api.models.responses import SubmissionDetail, SubmissionSummary
 from backend.helpers.image_helpers import LogoType, promote_submission_logo
+from backend.helpers.query_helpers import set_school_logo_column
 from backend.helpers.submission_helpers import (
     build_color_overrides,
     build_location_overrides,
@@ -186,11 +186,7 @@ async def _apply_submission(conn: Any, row: tuple) -> None:
         logo_type: LogoType = payload["logo_type"]
         staging_path: str = payload["cloudinary_path"]
         production_path = promote_submission_logo(staging_path, logo_type)
-        col = sql.Identifier(f"logo_{logo_type}")
-        await conn.execute(
-            sql.SQL("UPDATE schools SET {} = %s WHERE school = %s").format(col),
-            (production_path, school),
-        )
+        await set_school_logo_column(conn, school, logo_type, production_path)
 
     elif stype == "helmet":
         pass  # Moderator creates the helmet_design record manually.

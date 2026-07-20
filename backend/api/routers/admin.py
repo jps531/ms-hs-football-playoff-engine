@@ -36,7 +36,7 @@ from backend.api.models.responses import (
     OverrideAuditRow,
     PlayoffFormatSeedResult,
 )
-from backend.helpers.api_helpers import build_helmet_from_row
+from backend.helpers.api_helpers import HELMET_DESIGNS_SELECT, build_helmet_from_row
 from backend.helpers.query_helpers import (
     build_set_clause,
     require_game_exists,
@@ -53,13 +53,7 @@ _SCHOOL_OVERRIDE_FIELDS = frozenset(SchoolOverrideField.__args__)  # type: ignor
 _GAME_OVERRIDE_FIELDS = frozenset(GameOverrideField.__args__)  # type: ignore[attr-defined]
 _LOCATION_OVERRIDE_FIELDS = frozenset(LocationOverrideField.__args__)  # type: ignore[attr-defined]
 
-_HELMET_SELECT = """
-    SELECT id, school, year_first_worn, year_last_worn, years_worn,
-           image_left, image_right, photo, color, finish,
-           facemask_color, logo, stripe, tags, notes
-    FROM helmet_designs
-    WHERE id = %s
-"""
+_HELMET_SELECT = HELMET_DESIGNS_SELECT + " WHERE id = %s"
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_moderator)])

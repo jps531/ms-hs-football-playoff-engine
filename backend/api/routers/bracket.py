@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateBracketRequest
-from backend.api.models.responses import BracketResponse
+from backend.api.models.responses import BracketResponse, TeamBracketEntry
 from backend.helpers.api_helpers import (
     _apply_round_ceilings,
     _load_and_build_playoff_bracket_state,
@@ -54,6 +54,24 @@ async def _load_all_region_odds(conn, season: int, clazz: int, as_of: date) -> d
     return by_region
 
 
+def _invert_school_to_seed(school_to_seed: dict[str, tuple[int, int]]) -> dict[tuple[int, int], str]:
+    """Invert a school -> (region, seed) map into (region, seed) -> school."""
+    return {(r, s): sch for sch, (r, s) in school_to_seed.items()}
+
+
+def _build_p_host_given_reach_by_team(entries: list[TeamBracketEntry]) -> dict[str, dict[str, float | None]]:
+    """Extract per-round p_host_given_reach for each clinched entry with hosting odds."""
+    return {
+        e.school: {
+            "first_round": e.hosting.first_round.p_host_given_reach,
+            "second_round": e.hosting.second_round.p_host_given_reach if e.hosting.second_round else None,
+            "quarterfinals": e.hosting.quarterfinals.p_host_given_reach,
+            "semifinals": e.hosting.semifinals.p_host_given_reach,
+        }
+        for e in entries if e.school and e.hosting
+    }
+
+
 @router.get("/bracket", responses=_404)
 async def get_bracket(
     season: SeasonQ,
@@ -94,16 +112,8 @@ async def get_bracket(
             eliminated_hosting=state.eliminated_hosting_map,
             school_to_seed=state.school_to_seed,
         )
-        seed_to_school = {(r, s): sch for sch, (r, s) in state.school_to_seed.items()}
-        p_host_given_reach_by_team = {
-            e.school: {
-                "first_round": e.hosting.first_round.p_host_given_reach,
-                "second_round": e.hosting.second_round.p_host_given_reach if e.hosting.second_round else None,
-                "quarterfinals": e.hosting.quarterfinals.p_host_given_reach,
-                "semifinals": e.hosting.semifinals.p_host_given_reach,
-            }
-            for e in entries if e.school and e.hosting
-        }
+        seed_to_school = _invert_school_to_seed(state.school_to_seed)
+        p_host_given_reach_by_team = _build_p_host_given_reach_by_team(entries)
         bracket_layout = build_enriched_bracket_layout(
             build_bracket_layout(slots), seed_to_school,
             state.confirmed_game_results, simulated_results=[],
@@ -174,7 +184,7 @@ async def simulate_bracket(
             school_to_seed=state.school_to_seed,
         )
         entries = _apply_round_ceilings(entries, state.round_ceiling)
-        seed_to_school = {(r, s): sch for sch, (r, s) in state.school_to_seed.items()}
+        seed_to_school = _invert_school_to_seed(state.school_to_seed)
         simulated: list[tuple[str, str | None, int | None, int | None, str | None]] = []
         for r in body.results:
             w = _resolve_ref_to_school(r.winner, seed_to_school)
@@ -185,15 +195,7 @@ async def simulate_bracket(
             else:
                 if w is not None:
                     simulated.append((w, None, r.winner_score or 12, r.loser_score or 0, r.round))
-        p_host_given_reach_by_team = {
-            e.school: {
-                "first_round": e.hosting.first_round.p_host_given_reach,
-                "second_round": e.hosting.second_round.p_host_given_reach if e.hosting.second_round else None,
-                "quarterfinals": e.hosting.quarterfinals.p_host_given_reach,
-                "semifinals": e.hosting.semifinals.p_host_given_reach,
-            }
-            for e in entries if e.school and e.hosting
-        }
+        p_host_given_reach_by_team = _build_p_host_given_reach_by_team(entries)
         bracket_layout = build_enriched_bracket_layout(
             build_bracket_layout(slots), seed_to_school,
             state.confirmed_game_results, simulated,

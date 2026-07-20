@@ -2,11 +2,12 @@
 
 import os
 import tempfile
+from collections.abc import Callable
 from typing import Literal
 
 import cloudinary
 import cloudinary.uploader
-from fastapi import HTTPException, status
+from fastapi import HTTPException, UploadFile, status
 
 LogoType = Literal["primary", "secondary", "tertiary"]
 HelmetImageType = Literal["left", "right", "photo"]
@@ -36,6 +37,22 @@ def save_temp(filename: str | None, contents: bytes) -> str:
     tmp.write(contents)
     tmp.close()
     return tmp.name
+
+
+async def save_and_upload(file: UploadFile, upload_fn: Callable[[str], str]) -> str:
+    """Read, validate, and temp-save *file*, call ``upload_fn(tmp_path)``, then clean up.
+
+    *upload_fn* should be a closure/partial with all upload-specific arguments
+    (school, logo_type, submission_id, etc.) already bound except the local file path.
+    The temp file is removed whether or not the upload succeeds.
+    """
+    contents = await file.read()
+    validate_upload(file.content_type, len(contents))
+    tmp_path = save_temp(file.filename, contents)
+    try:
+        return upload_fn(tmp_path)
+    finally:
+        os.unlink(tmp_path)
 
 
 def _configure() -> None:

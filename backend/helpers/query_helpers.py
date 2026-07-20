@@ -34,6 +34,15 @@ async def require_helmet_design_exists(conn, design_id: int) -> None:
         raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
 
 
+async def set_school_logo_column(conn, school: str, logo_type: str, path: str) -> None:
+    """Write *path* into the ``schools.logo_{logo_type}`` column for *school*."""
+    col = sql.Identifier(f"logo_{logo_type}")
+    await conn.execute(
+        sql.SQL("UPDATE schools SET {} = %s WHERE school = %s").format(col),
+        (path, school),
+    )
+
+
 def and_join_conditions(conditions: list[str]) -> sql.Composed:
     """Join raw SQL condition strings with ``AND``, for a dynamic ``WHERE`` clause."""
     return sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)

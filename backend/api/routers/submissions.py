@@ -10,7 +10,7 @@ until a moderator approves them via ``/api/v1/moderation/submissions/{id}/approv
 """
 
 import json
-import os
+from functools import partial
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -27,10 +27,9 @@ from backend.api.models.requests import (
 from backend.api.models.responses import SubmissionCreatedResponse
 from backend.helpers.image_helpers import (
     LogoType,
-    save_temp,
+    save_and_upload,
     upload_submission_helmet_image,
     upload_submission_logo,
-    validate_upload,
 )
 from backend.helpers.query_helpers import require_game_exists, require_school_exists
 
@@ -89,13 +88,7 @@ async def submit_logo(
     async with get_conn() as conn:
         await require_school_exists(conn, school)
 
-    contents = await file.read()
-    validate_upload(file.content_type, len(contents))
-    tmp_path = save_temp(file.filename, contents)
-    try:
-        cloudinary_path = upload_submission_logo(tmp_path, school, logo_type)
-    finally:
-        os.unlink(tmp_path)
+    cloudinary_path = await save_and_upload(file, partial(upload_submission_logo, school_name=school, logo_type=logo_type))
 
     user_id = optional_user_id(current_user)
     payload = {"logo_type": logo_type, "cloudinary_path": cloudinary_path}
@@ -169,30 +162,19 @@ async def submit_helmet(
     submitted_at = row[1]
 
     # Upload images and collect Cloudinary paths.
-    tmp_paths: list[str] = []
     image_paths: list[str] = []
     logo_image_path: str | None = None
-    try:
-        for i, img in enumerate(images):
-            contents = await img.read()
-            validate_upload(img.content_type, len(contents))
-            tmp = save_temp(img.filename, contents)
-            tmp_paths.append(tmp)
-            path = upload_submission_helmet_image(tmp, form.school, submission_id, i)
-            image_paths.append(path)
+    for i, img in enumerate(images):
+        path = await save_and_upload(
+            img, partial(upload_submission_helmet_image, school_name=form.school, submission_id=submission_id, index=i)
+        )
+        image_paths.append(path)
 
-        if logo_image is not None:
-            contents = await logo_image.read()
-            validate_upload(logo_image.content_type, len(contents))
-            tmp = save_temp(logo_image.filename, contents)
-            tmp_paths.append(tmp)
-            logo_image_path = upload_submission_helmet_image(tmp, form.school, submission_id, len(images))
-    finally:
-        for p in tmp_paths:
-            try:
-                os.unlink(p)
-            except OSError:
-                pass
+    if logo_image is not None:
+        logo_image_path = await save_and_upload(
+            logo_image,
+            partial(upload_submission_helmet_image, school_name=form.school, submission_id=submission_id, index=len(images)),
+        )
 
     # Update payload with collected paths.
     payload["image_paths"] = image_paths

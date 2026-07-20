@@ -14,7 +14,7 @@ from backend.api.models.responses import (
     SeasonStructureResponse,
     TeamModel,
 )
-from backend.helpers.api_helpers import build_helmet_from_row
+from backend.helpers.api_helpers import HELMET_DESIGNS_SELECT, build_helmet_from_row
 from backend.helpers.image_helpers import logo_url
 from backend.helpers.query_helpers import and_join_conditions
 
@@ -133,12 +133,7 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
     return _row_to_team_model(r)
 
 
-_HELMET_SELECT = """
-    SELECT id, school, year_first_worn, year_last_worn, years_worn,
-           image_left, image_right, photo, color, finish,
-           facemask_color, logo, stripe, tags, notes
-    FROM helmet_designs
-"""
+_HELMET_SELECT = HELMET_DESIGNS_SELECT
 
 
 @router.get("/teams/{team}/helmets", responses=_404)
