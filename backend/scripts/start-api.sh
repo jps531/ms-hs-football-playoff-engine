@@ -19,6 +19,7 @@ if [ ! -f .env.non-docker.local ]; then
 fi
 
 set -a
+# shellcheck disable=SC1091  # local env file, not present in lint environment
 source .env.non-docker.local
 set +a
 
@@ -27,7 +28,7 @@ echo $! > "$PIDFILE"
 
 echo "Starting API on http://localhost:$PORT ..."
 
-for i in $(seq 1 20); do
+for _ in $(seq 1 20); do
     if lsof -i ":$PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
         echo "Ready. Swagger UI: http://localhost:$PORT/docs"
         echo "Logs: tail -f $LOG  |  Stop: backend/scripts/stop-api.sh"

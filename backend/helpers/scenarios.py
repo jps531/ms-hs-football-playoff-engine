@@ -244,7 +244,8 @@ def determine_scenarios(
             outcome_mask = 0
             for bit_index, rem_game in enumerate(remaining):
                 p = _win_prob_fn(rem_game.a, rem_game.b, None, rem_game.location_a)
-                if random.random() < p:
+                # Statistical Monte Carlo sampling only — not security-sensitive.
+                if random.random() < p:  # NOSONAR
                     outcome_mask |= 1 << bit_index
             local_flips: list[list[str]] = []
             final_order = resolve_standings_for_mask(

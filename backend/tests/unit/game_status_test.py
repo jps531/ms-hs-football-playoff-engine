@@ -1,5 +1,7 @@
 """Tests for game status parsing utilities in data_helpers.py."""
 
+import pytest
+
 from backend.helpers.data_classes import GameStatus
 from backend.helpers.data_helpers import (
     game_seconds_remaining,
@@ -12,96 +14,36 @@ from backend.helpers.data_helpers import (
 # ---------------------------------------------------------------------------
 
 
-class TestNormalizeGameStatus:
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, GameStatus.NOT_STARTED),  # no status yet
+        ("", GameStatus.NOT_STARTED),  # empty string
+        ("Final", GameStatus.FINAL),
+        ("Final - Forfeit", GameStatus.FINAL_FORFEIT),
+        ("End 1Q", GameStatus.END_1Q),
+        ("Halftime", GameStatus.HALFTIME),
+        ("End 3Q", GameStatus.END_3Q),
+        ("End 4Q", GameStatus.END_4Q),
+        ("Postponed", GameStatus.POSTPONED),
+        ("Canceled", GameStatus.CANCELED),
+        ("Cancelled", GameStatus.CANCELED),  # alternate (double-l) spelling
+        ("Suspended", GameStatus.SUSPENDED),
+        ("8:00 1Q", GameStatus.IN_PROGRESS),  # regulation clock, Q1
+        ("0:24 4Q", GameStatus.IN_PROGRESS),  # regulation clock, Q4
+        ("OT", GameStatus.IN_PROGRESS),  # bare OT (no number)
+        ("1OT", GameStatus.IN_PROGRESS),
+        ("2OT", GameStatus.IN_PROGRESS),
+        ("3OT", GameStatus.IN_PROGRESS),
+        ("End OT", GameStatus.END_OT),  # bare OT (no number)
+        ("End 1OT", GameStatus.END_OT),
+        ("End 2OT", GameStatus.END_OT),
+        ("Unknown Status", GameStatus.NOT_STARTED),  # unrecognized string falls back
+    ],
+)
+def test_normalize_game_status(raw, expected):
     """normalize_game_status maps raw scraper strings to canonical GameStatus values."""
-
-    def test_none_returns_not_started(self):
-        """None input maps to NOT_STARTED."""
-        assert normalize_game_status(None) == GameStatus.NOT_STARTED
-
-    def test_empty_string_returns_not_started(self):
-        """Empty string maps to NOT_STARTED."""
-        assert normalize_game_status("") == GameStatus.NOT_STARTED
-
-    def test_final(self):
-        """'Final' maps to FINAL."""
-        assert normalize_game_status("Final") == GameStatus.FINAL
-
-    def test_final_forfeit(self):
-        """'Final - Forfeit' maps to FINAL_FORFEIT."""
-        assert normalize_game_status("Final - Forfeit") == GameStatus.FINAL_FORFEIT
-
-    def test_end_1q(self):
-        """'End 1Q' maps to END_1Q."""
-        assert normalize_game_status("End 1Q") == GameStatus.END_1Q
-
-    def test_halftime(self):
-        """'Halftime' maps to HALFTIME."""
-        assert normalize_game_status("Halftime") == GameStatus.HALFTIME
-
-    def test_end_3q(self):
-        """'End 3Q' maps to END_3Q."""
-        assert normalize_game_status("End 3Q") == GameStatus.END_3Q
-
-    def test_end_4q(self):
-        """'End 4Q' maps to END_4Q."""
-        assert normalize_game_status("End 4Q") == GameStatus.END_4Q
-
-    def test_postponed(self):
-        """'Postponed' maps to POSTPONED."""
-        assert normalize_game_status("Postponed") == GameStatus.POSTPONED
-
-    def test_canceled(self):
-        """'Canceled' maps to CANCELED."""
-        assert normalize_game_status("Canceled") == GameStatus.CANCELED
-
-    def test_cancelled_alternate_spelling(self):
-        """'Cancelled' (double-l) also maps to CANCELED."""
-        assert normalize_game_status("Cancelled") == GameStatus.CANCELED
-
-    def test_suspended(self):
-        """'Suspended' maps to SUSPENDED."""
-        assert normalize_game_status("Suspended") == GameStatus.SUSPENDED
-
-    def test_reg_clock_q1(self):
-        """Regulation clock string in Q1 maps to IN_PROGRESS."""
-        assert normalize_game_status("8:00 1Q") == GameStatus.IN_PROGRESS
-
-    def test_reg_clock_q4(self):
-        """Regulation clock string in Q4 maps to IN_PROGRESS."""
-        assert normalize_game_status("0:24 4Q") == GameStatus.IN_PROGRESS
-
-    def test_ot_bare(self):
-        """'OT' (no number) maps to IN_PROGRESS."""
-        assert normalize_game_status("OT") == GameStatus.IN_PROGRESS
-
-    def test_ot_numbered_1(self):
-        """'1OT' maps to IN_PROGRESS."""
-        assert normalize_game_status("1OT") == GameStatus.IN_PROGRESS
-
-    def test_ot_numbered_2(self):
-        """'2OT' maps to IN_PROGRESS."""
-        assert normalize_game_status("2OT") == GameStatus.IN_PROGRESS
-
-    def test_ot_numbered_3(self):
-        """'3OT' maps to IN_PROGRESS."""
-        assert normalize_game_status("3OT") == GameStatus.IN_PROGRESS
-
-    def test_end_ot_bare(self):
-        """'End OT' maps to END_OT."""
-        assert normalize_game_status("End OT") == GameStatus.END_OT
-
-    def test_end_ot_numbered_1(self):
-        """'End 1OT' maps to END_OT."""
-        assert normalize_game_status("End 1OT") == GameStatus.END_OT
-
-    def test_end_ot_numbered_2(self):
-        """'End 2OT' maps to END_OT."""
-        assert normalize_game_status("End 2OT") == GameStatus.END_OT
-
-    def test_unrecognized_string_returns_not_started(self):
-        """An unrecognized string falls back to NOT_STARTED."""
-        assert normalize_game_status("Unknown Status") == GameStatus.NOT_STARTED
+    assert normalize_game_status(raw) == expected
 
 
 # ---------------------------------------------------------------------------

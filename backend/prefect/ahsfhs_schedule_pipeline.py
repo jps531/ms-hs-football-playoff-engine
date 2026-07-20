@@ -25,23 +25,6 @@ from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.web_helpers import fetch_article_text_from_ahsfhs
 
 # -------------------------
-# Constants
-# -------------------------
-
-
-# Matches lines like:
-# "Fri., Aug. 29", "Thu., Oct. 3", "Sat, Sep 5", "Aug. 29" (weekday optional)
-DATE_LINE_RE = re.compile(
-    r"""^\s*
-        (?:(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*[.,]?\s+)?   # optional weekday
-        ([A-Z]{3,9})\.?,?\s+                            # month
-        (\d{1,2})\b                                     # day
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-
-
-# -------------------------
 # Prefect tasks & flow
 # -------------------------
 

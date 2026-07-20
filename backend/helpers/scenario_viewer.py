@@ -82,7 +82,7 @@ def _common_game_winners(masks: list[int], remaining: list[RemainingGame]) -> li
     for i, rg in enumerate(remaining):
         bits = {(m >> i) & 1 for m in masks}
         if len(bits) == 1:
-            if list(bits)[0] == 1:
+            if next(iter(bits)) == 1:
                 result.append((rg.a, rg.b))
             else:
                 result.append((rg.b, rg.a))

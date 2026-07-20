@@ -859,6 +859,7 @@ def test_r2_home_deterministic_seed1_always_true() -> None:
     """Seed 1 hosts R2 against any opponent (seeds 2-4 are all worse) → True."""
     half = half_slots_for_region(1, SLOTS_1A_4A_2025)
     idx = slot_index_for(1, 1, half)  # R1s1 at idx=0
+    assert idx is not None
     assert _r2_home_if_deterministic(1, 1, idx, half, ODD_SEASON) is True
     assert _r2_home_if_deterministic(1, 1, idx, half, EVEN_SEASON) is True
 
@@ -867,6 +868,7 @@ def test_r2_home_deterministic_seed4_always_false() -> None:
     """Seed 4 never hosts R2 (opponents are seeds 2 and 3, both better) → False."""
     half = half_slots_for_region(2, SLOTS_1A_4A_2025)
     idx = slot_index_for(2, 4, half)  # R2s4 at idx=0
+    assert idx is not None
     assert _r2_home_if_deterministic(2, 4, idx, half, ODD_SEASON) is False
     assert _r2_home_if_deterministic(2, 4, idx, half, EVEN_SEASON) is False
 
@@ -875,6 +877,7 @@ def test_r2_home_deterministic_seed2_ambiguous() -> None:
     """Seed 2 (R1s2) whose R2 opponent can be seed 1 or seed 4 → None (ambiguous)."""
     half = half_slots_for_region(1, SLOTS_1A_4A_2025)
     idx = slot_index_for(1, 2, half)  # R1s2 at idx=5; opp slot: R3s1 vs R4s4
+    assert idx is not None
     # Odd year: R3s1 → r2_home=False (seed 1 hosts); R4s4 → r2_home=True (seed 2 hosts)
     assert _r2_home_if_deterministic(1, 2, idx, half, ODD_SEASON) is None
     # Even year: same ambiguity in this bracket configuration

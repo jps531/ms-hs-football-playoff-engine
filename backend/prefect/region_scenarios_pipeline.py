@@ -925,7 +925,7 @@ def get_region_finish_scenarios(
                             first_round_home_overall[school] = 1.0 if hs in home_seeds else 0.0
                         break
         for school, o in odds_weighted.items():
-            if o.clinched and o.eliminated and first_round_home_overall_w.get(school, 0.0) == 0.0:
+            if o.clinched and o.eliminated and not first_round_home_overall_w.get(school):
                 for rc in sorted(round_snapshots, reverse=True):
                     od = round_snapshots.get(rc, {}).get(region, {}).get(school)
                     if od is not None and od.p_playoffs > 0:

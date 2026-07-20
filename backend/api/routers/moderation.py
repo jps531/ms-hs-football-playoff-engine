@@ -87,7 +87,11 @@ async def get_submission(moderator: ModeratorAuth, submission_id: int) -> Submis
 
 @router.post(
     "/submissions/{submission_id}/approve",
-    responses={404: {"description": "Not found"}, 409: {"description": "Already reviewed"}},
+    responses={
+        404: {"description": "Not found"},
+        409: {"description": "Already reviewed"},
+        422: {"description": "Submission is missing a school"},
+    },
 )
 async def approve_submission(
     moderator: ModeratorAuth,
@@ -181,6 +185,9 @@ async def _apply_submission(conn: Any, row: tuple) -> None:
     stype: str = row[1]
     school: str | None = row[3]
     payload: dict = row[6]
+
+    if school is None:
+        raise HTTPException(status_code=422, detail="Submission is missing a school")
 
     if stype == "logo":
         logo_type: LogoType = payload["logo_type"]

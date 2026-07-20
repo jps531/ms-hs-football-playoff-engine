@@ -216,6 +216,7 @@ uv sync --dev
 uv run ruff check .          # lint
 uv run ruff check --fix .    # auto-fix safe issues
 uv run ruff format .         # format (black-compatible)
+uv run pyright               # pyright
 ```
 
 ### Testing

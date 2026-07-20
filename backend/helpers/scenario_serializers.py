@@ -10,6 +10,8 @@ Round-trip guarantee:
     deserialize_complete_scenarios(serialize_complete_scenarios(cs)) == cs
 """
 
+from typing import cast
+
 from backend.helpers.data_classes import (
     GameResult,
     HomeGameCondition,
@@ -60,7 +62,7 @@ def serialize_condition(cond) -> dict:
     raise TypeError(f"Cannot serialize condition of type {type(cond).__name__!r}")
 
 
-def deserialize_condition(d: dict) -> GameResult | MarginCondition | PDRankCondition:
+def deserialize_condition(d: dict) -> GameResult | MarginCondition | PDRankCondition | HomeGameCondition:
     """Deserialize a dict produced by serialize_condition back to a dataclass."""
     t = d["type"]
     if t == "game_result":
@@ -125,7 +127,7 @@ def serialize_home_game_scenario(sc: HomeGameScenario) -> dict:
 def deserialize_home_game_scenario(d: dict) -> HomeGameScenario:
     """Deserialize a dict produced by serialize_home_game_scenario back to a HomeGameScenario."""
     return HomeGameScenario(
-        conditions=tuple(deserialize_condition(c) for c in d["conditions"]),
+        conditions=tuple(cast(HomeGameCondition, deserialize_condition(c)) for c in d["conditions"]),
         explanation=d["explanation"],
     )
 

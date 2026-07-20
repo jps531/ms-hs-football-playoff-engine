@@ -1,6 +1,7 @@
 """Render playoff scenario atoms as human-readable text."""
 
 from dataclasses import replace
+from typing import cast
 
 from backend.helpers.data_classes import (
     CoinFlipResult,
@@ -695,8 +696,8 @@ def team_home_scenarios_as_dict(
         if cond.team_name is not None:
             return cond
         if cond.region is None:
-            return replace(cond, team_name=team_name)  # target team itself
-        return replace(cond, team_name=f"Region {cond.region} #{cond.seed} Seed")
+            return cast(HomeGameCondition, replace(cond, team_name=team_name))  # target team itself
+        return cast(HomeGameCondition, replace(cond, team_name=f"Region {cond.region} #{cond.seed} Seed"))
 
     def _scenario_dict(sc: HomeGameScenario, team_name: str) -> dict:
         """Serialise a single ``HomeGameScenario`` to a plain dict."""

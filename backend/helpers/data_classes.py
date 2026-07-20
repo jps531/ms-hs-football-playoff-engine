@@ -949,6 +949,23 @@ class StandingsOdds:
     eliminated: bool  # True when p_playoffs <= 0.001
 
 
+@dataclass
+class StoredHostingOdds:
+    """DB-snapshot p_host_given_reach and bracket-advancement odds for a region, keyed by school.
+
+    Each dict value is a ``(r1, r2, qf, sf)`` tuple:
+        index 0 → R1 / p_playoffs
+        index 1 → R2 / odds_second_round
+        index 2 → QF / odds_quarterfinals
+        index 3 → SF / odds_semifinals
+    """
+
+    given_reach: dict[str, tuple[float, float, float, float]]
+    given_reach_weighted: dict[str, tuple[float, float, float, float]]
+    advancement: dict[str, tuple[float, float, float, float]]
+    advancement_weighted: dict[str, tuple[float, float, float, float]]
+
+
 # --- Data classes for playoff home-game scenarios ---
 
 

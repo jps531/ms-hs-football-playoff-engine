@@ -1,5 +1,8 @@
 """Small SQL-fragment builders and DB-backed validation helpers shared across routers."""
 
+from collections.abc import Sequence
+from typing import LiteralString
+
 from fastapi import HTTPException
 from psycopg import sql
 
@@ -43,7 +46,7 @@ async def set_school_logo_column(conn, school: str, logo_type: str, path: str) -
     )
 
 
-def and_join_conditions(conditions: list[str]) -> sql.Composed:
+def and_join_conditions(conditions: Sequence[LiteralString]) -> sql.Composed:
     """Join raw SQL condition strings with ``AND``, for a dynamic ``WHERE`` clause."""
     return sql.SQL(" AND ").join(sql.SQL(c) for c in conditions)
 

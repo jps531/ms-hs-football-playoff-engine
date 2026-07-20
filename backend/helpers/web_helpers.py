@@ -104,9 +104,11 @@ def _extract_next_data(html: str) -> dict:
     """
     soup = BeautifulSoup(html, "html.parser")
     script = soup.find("script", id="__NEXT_DATA__")
-    if not script or not script.string:
-        raise RuntimeError("Search page missing __NEXT_DATA__")
-    return json.loads(script.string)
+    if script is not None:
+        content = script.get_text()
+        if content:
+            return json.loads(content)
+    raise RuntimeError("Search page missing __NEXT_DATA__")
 
 
 def _iter_dicts(obj):

@@ -865,106 +865,12 @@ def _check_scenario(key):
     assert sc.get("eliminated", []) == elim, f"scenario {key}: wrong eliminated"
 
 
-def test_scenario_1a():
-    """Scenario 1a: GRE>Gentry AND YZ beats KOS by 1-6 AND YZ>Gentry AND LOU>GRE."""
-    _check_scenario("1a")
+@pytest.mark.parametrize("key", list(_EXPECTED_SCENARIOS))
+def test_scenario(key):
+    """Assert title, seeds 1-4, and eliminated list for each named division scenario.
 
-
-def test_scenario_1b():
-    """Scenario 1b: GRE>Gentry AND YZ beats KOS by 7-10 AND YZ>Gentry AND LOU>GRE."""
-    _check_scenario("1b")
-
-
-def test_scenario_1c():
-    """Scenario 1c: GRE>Gentry AND YZ beats KOS by 11+ AND YZ>Gentry AND LOU>GRE."""
-    _check_scenario("1c")
-
-
-def test_scenario_2():
-    """Scenario 2: Gentry>GRE AND YZ>KOS AND YZ>Gentry AND LOU>GRE."""
-    _check_scenario("2")
-
-
-def test_scenario_3():
-    """Scenario 3: GRE>Gentry AND KOS>YZ AND YZ>Gentry AND LOU>GRE."""
-    _check_scenario("3")
-
-
-def test_scenario_4a():
-    """Scenario 4a: Gentry>GRE by exactly 1 AND KOS>YZ AND YZ>Gentry by 1-4 AND LOU>GRE."""
-    _check_scenario("4a")
-
-
-def test_scenario_4b():
-    """Scenario 4b: Gentry>GRE by exactly 1 AND KOS>YZ AND YZ>Gentry by 5+ AND LOU>GRE."""
-    _check_scenario("4b")
-
-
-def test_scenario_4c():
-    """Scenario 4c: Gentry>GRE by 5+ AND KOS>YZ AND YZ>Gentry by exactly 1 AND LOU>GRE."""
-    _check_scenario("4c")
-
-
-def test_scenario_4d():
-    """Scenario 4d: Gentry>GRE by 7-10 AND KOS>YZ AND YZ>Gentry by 12+ AND LOU>GRE."""
-    _check_scenario("4d")
-
-
-def test_scenario_4e():
-    """Scenario 4e: Gentry>GRE by exactly 9 AND KOS>YZ by 1-11 AND YZ>Gentry by 9-10 AND LOU>GRE."""
-    _check_scenario("4e")
-
-
-def test_scenario_4f():
-    """Scenario 4f: Gentry>GRE by exactly 10 AND KOS>YZ AND YZ>Gentry by exactly 9 AND LOU>GRE."""
-    _check_scenario("4f")
-
-
-def test_scenario_5():
-    """Scenario 5: GRE>Gentry AND Gentry>YZ AND LOU>GRE."""
-    _check_scenario("5")
-
-
-def test_scenario_6():
-    """Scenario 6: Gentry>GRE AND Gentry>YZ (LOU/GRE result irrelevant)."""
-    _check_scenario("6")
-
-
-def test_scenario_7():
-    """Scenario 7: GRE>Gentry AND YZ>KOS AND YZ>Gentry AND GRE>LOU."""
-    _check_scenario("7")
-
-
-def test_scenario_8():
-    """Scenario 8: Gentry>GRE AND YZ>KOS AND YZ>Gentry AND GRE>LOU."""
-    _check_scenario("8")
-
-
-def test_scenario_9a():
-    """Scenario 9a: GRE>Gentry AND KOS>YZ AND YZ>Gentry AND GRE>LOU by 1-8."""
-    _check_scenario("9a")
-
-
-def test_scenario_9b():
-    """Scenario 9b: GRE>Gentry AND KOS>YZ AND YZ>Gentry AND GRE>LOU by 9+."""
-    _check_scenario("9b")
-
-
-def test_scenario_10():
-    """Scenario 10: Gentry>GRE AND KOS>YZ AND YZ>Gentry AND GRE>LOU."""
-    _check_scenario("10")
-
-
-def test_scenario_11():
-    """Scenario 11: GRE>Gentry AND YZ>KOS AND Gentry>YZ AND GRE>LOU."""
-    _check_scenario("11")
-
-
-def test_scenario_12a():
-    """Scenario 12a: GRE>Gentry AND KOS>YZ AND Gentry>YZ AND GRE>LOU by 1-8."""
-    _check_scenario("12a")
-
-
-def test_scenario_12b():
-    """Scenario 12b: GRE>Gentry AND KOS>YZ AND Gentry>YZ AND GRE>LOU by 9+."""
-    _check_scenario("12b")
+    See ``_EXPECTED_SCENARIOS`` above for the game-result conditions each key
+    (e.g. ``"4a"``, ``"9b"``) corresponds to — the expected ``title`` string
+    spells out the exact condition.
+    """
+    _check_scenario(key)

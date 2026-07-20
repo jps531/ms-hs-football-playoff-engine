@@ -50,7 +50,14 @@ from backend.helpers.api_helpers import (
     standings_odds_from_row,
     within_display_threshold,
 )
-from backend.helpers.data_classes import BracketOdds, CompletedGame, GameResult, RemainingGame, StandingsOdds
+from backend.helpers.data_classes import (
+    BracketOdds,
+    CompletedGame,
+    GameResult,
+    RemainingGame,
+    StandingsOdds,
+    StoredHostingOdds,
+)
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
 
 # ---------------------------------------------------------------------------
@@ -660,6 +667,7 @@ class TestScenariosToEntries:
             }
         ]
         result = scenarios_to_entries(scenarios)
+        assert result is not None
         assert result[0].conditions == [
             {
                 "type": "game_result",
@@ -674,6 +682,7 @@ class TestScenariosToEntries:
         """conditions is None when the scenario dict has no conditions_atom."""
         scenarios = [{"scenario_num": 1, "sub_label": "1", "game_winners": [], "seeding": ["Alpha", "Beta"]}]
         result = scenarios_to_entries(scenarios)
+        assert result is not None
         assert result[0].conditions is None
 
 
@@ -924,6 +933,7 @@ class TestBuildGameModels:
         row = _game_row("Zeta", "Alpha", helmet_a=helmet_zeta, helmet_b=helmet_alpha)
         result = build_game_models([row], team_filter=None)
         g = result[0]
+        assert g.helmet_a is not None and g.helmet_b is not None
         # team_a is now Alpha, so helmet_a should be Alpha's helmet
         assert g.helmet_a.color == "Green"
         assert g.helmet_b.color == "Blue"
@@ -1355,6 +1365,7 @@ class TestResolveHostingScenarioInputs:
         odds = _odds("Able", p1=1.0, p_playoffs=1.0)
         entry = _hosting_entry(fr=RoundHostingOdds(p_host_given_reach=0.5, p_host_overall=0.25))
         _, _, p_reach, p_given_reach, p_overall, *_ = resolve_hosting_scenario_inputs(odds, entry)
+        assert p_reach is not None and p_given_reach is not None and p_overall is not None
         assert p_reach["First Round"] == pytest.approx(0.5)
         assert p_given_reach["First Round"] == pytest.approx(0.5)
         assert p_overall["First Round"] == pytest.approx(0.25)
@@ -1384,6 +1395,7 @@ class TestResolveHostingScenarioInputs:
             )
         )
         *_, p_reach_w, p_given_reach_w, p_overall_w = resolve_hosting_scenario_inputs(odds, entry)
+        assert p_reach_w is not None and p_given_reach_w is not None and p_overall_w is not None
         assert p_reach_w["First Round"] == pytest.approx(0.5)
         assert p_given_reach_w["First Round"] == pytest.approx(0.4)
         assert p_overall_w["First Round"] == pytest.approx(0.2)
@@ -1489,8 +1501,12 @@ class TestBuildHostingEntries:
             region=1,
             season=2025,
             clazz=1,
-            home_p_host_given_reach=home_p_host_given_reach,
-            stored_adv=stored_adv,
+            stored=StoredHostingOdds(
+                given_reach=home_p_host_given_reach,
+                given_reach_weighted={},
+                advancement=stored_adv,
+                advancement_weighted={},
+            ),
         )
         by_school = {e.school: e for e in result}
         able = by_school["Able"]
@@ -1513,8 +1529,12 @@ class TestBuildHostingEntries:
             region=1,
             season=2025,
             clazz=5,
-            home_p_host_given_reach=home_p_host_given_reach,
-            stored_adv=stored_adv,
+            stored=StoredHostingOdds(
+                given_reach=home_p_host_given_reach,
+                given_reach_weighted={},
+                advancement=stored_adv,
+                advancement_weighted={},
+            ),
         )
         for entry in result:
             assert entry.second_round.p_host_given_reach is None
@@ -1531,8 +1551,12 @@ class TestBuildHostingEntries:
             region=1,
             season=2025,
             clazz=1,
-            home_p_host_given_reach=home_p_host_given_reach,
-            stored_adv=stored_adv,
+            stored=StoredHostingOdds(
+                given_reach=home_p_host_given_reach,
+                given_reach_weighted={},
+                advancement=stored_adv,
+                advancement_weighted={},
+            ),
         )
         able = result[0]
         assert able.second_round.p_host_given_reach is None
@@ -1905,7 +1929,7 @@ class TestBuildHostingEntries:
 
 def _game_result(winner: str, loser: str) -> BracketGameResultRequest:
     """Convenience constructor for BracketGameResultRequest with school-name refs."""
-    return BracketGameResultRequest(winner=winner, loser=loser)
+    return BracketGameResultRequest(winner=ParticipantRef(school=winner), loser=ParticipantRef(school=loser))
 
 
 def _school_to_seed_4teams() -> dict[str, tuple[int, int]]:
@@ -2189,18 +2213,20 @@ class TestParticipantRefValidation:
 
     def test_bracket_game_result_accepts_string_winner(self):
         """BracketGameResultRequest coerces string winner/loser to ParticipantRef."""
-        r = BracketGameResultRequest(winner="Team A", loser="Team B")
+        r = BracketGameResultRequest(winner="Team A", loser="Team B")  # type: ignore[arg-type]
         assert r.winner.school == "Team A"
+        assert r.loser is not None
         assert r.loser.school == "Team B"
 
     def test_bracket_game_result_accepts_slot_ref(self):
         """BracketGameResultRequest accepts slot-ref dicts."""
         r = BracketGameResultRequest(
-            winner={"region": 1, "seed": 1},
-            loser={"region": 2, "seed": 4},
+            winner={"region": 1, "seed": 1},  # type: ignore[arg-type]
+            loser={"region": 2, "seed": 4},  # type: ignore[arg-type]
         )
         assert r.winner.region == 1
         assert r.winner.seed == 1
+        assert r.loser is not None
         assert r.loser.region == 2
 
 
@@ -2400,6 +2426,7 @@ class TestBuildEnrichedBracketLayout:
         """Participant region and seed match the format slot."""
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
         game = layout.halves["N"][0][0]  # R1S1 (home) vs R2S4 (away)
+        assert game.participant_a is not None and game.participant_b is not None
         assert game.participant_a.region == 1
         assert game.participant_a.seed == 1
         assert game.participant_b.region == 2
@@ -2409,6 +2436,7 @@ class TestBuildEnrichedBracketLayout:
         """School is None for all participants when seed_to_school is not provided."""
         layout = build_enriched_bracket_layout(self._layout(), None, [], [])
         for game in layout.halves["N"][0]:
+            assert game.participant_a is not None and game.participant_b is not None
             assert game.participant_a.school is None
             assert game.participant_b.school is None
 
@@ -2418,6 +2446,7 @@ class TestBuildEnrichedBracketLayout:
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
         game = layout.halves["N"][0][0]  # R1S1 vs R2S4
         assert game.result is not None
+        assert game.result.loser is not None
         assert game.result.winner.school == "R1S1"
         assert game.result.loser.school == "R2S4"
         assert game.result.winner_score == 28
@@ -2427,7 +2456,9 @@ class TestBuildEnrichedBracketLayout:
         """Confirmed results have simulated=False."""
         confirmed = [("R1S1", "R2S4", 28, 14)]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
-        assert layout.halves["N"][0][0].result.simulated is False
+        game = layout.halves["N"][0][0]
+        assert game.result is not None
+        assert game.result.simulated is False
 
     def test_no_result_when_game_not_yet_played(self):
         """Game nodes with no matching result have result=None."""
@@ -2535,6 +2566,7 @@ class TestBuildEnrichedBracketLayout:
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
         for game in layout.halves["N"][0]:
             assert game.home_team is not None
+            assert game.participant_a is not None
             assert game.home_team.region == game.participant_a.region
             assert game.home_team.seed == game.participant_a.seed
 
@@ -2593,7 +2625,9 @@ class TestBuildEnrichedBracketLayout:
         """Winner-only game results have simulated=True."""
         simulated = [("R1S1", None, 12, 0, "first_round")]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
-        assert layout.halves["N"][0][0].result.simulated is True
+        game = layout.halves["N"][0][0]
+        assert game.result is not None
+        assert game.result.simulated is True
 
     def test_confirmed_result_takes_priority_over_winner_only(self):
         """A confirmed DB result is not replaced by a winner-only simulated entry."""
@@ -2601,6 +2635,7 @@ class TestBuildEnrichedBracketLayout:
         simulated = [("R1S1", None, 12, 0, "first_round")]
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, simulated)
         r1_game = layout.halves["N"][0][0]
+        assert r1_game.result is not None
         assert r1_game.result.winner.school == "R2S4"
         assert r1_game.result.simulated is False
 
@@ -2678,7 +2713,7 @@ class TestBuildPlayoffBracketStateLoserless:
 
     def _loserless_result(self, winner: str, round_: str) -> BracketGameResultRequest:
         """Build a submitted result naming only the winner and target round, no loser."""
-        return BracketGameResultRequest(winner=winner, round=round_)
+        return BracketGameResultRequest(winner=ParticipantRef(school=winner), round=round_)
 
     def _state(self, submitted):
         """Build playoff bracket state from ``submitted`` results over the 5A-7A layout."""
@@ -2815,6 +2850,7 @@ class TestApplyRoundCeilings:
         entry = self._entry(1, 4)
         result = _apply_round_ceilings([entry], {(1, 4): "second_round"})
         out = result[0]
+        assert out.hosting is not None
         assert out.hosting.second_round.p_host_given_reach == pytest.approx(0.7)  # preserved
         assert out.hosting.quarterfinals.p_host_given_reach is None
         assert out.hosting.quarterfinals.p_host_overall == 0.0
@@ -2826,6 +2862,7 @@ class TestApplyRoundCeilings:
         entry = self._entry(2, 1)
         result = _apply_round_ceilings([entry], {(2, 1): "quarterfinals"})
         out = result[0]
+        assert out.hosting is not None
         assert out.hosting.quarterfinals.p_host_given_reach == pytest.approx(0.5)
         assert out.hosting.semifinals.p_host_given_reach is None
         assert out.hosting.semifinals.p_host_overall == 0.0

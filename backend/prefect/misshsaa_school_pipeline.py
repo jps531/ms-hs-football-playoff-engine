@@ -123,19 +123,28 @@ def _parse_directory_html(html: str) -> list[dict]:
 
     for item in soup.select(".kn-list-item-container"):
         type_el = item.select_one(".field_32 .kn-detail-body")
-        if not type_el or type_el.get_text(strip=True) not in _HS_TYPES:
+        if type_el is None:
+            continue
+        if type_el.get_text(strip=True) not in _HS_TYPES:
             continue
 
         name_el = item.select_one(".kn-label-none.field_1")
         mascot_el = item.select_one(".field_37 .kn-detail-body")
         colors_el = item.select_one(".field_38 .kn-detail-body")
 
-        if not name_el:
+        if name_el is None:
             continue
 
         name = name_el.get_text(strip=True)
-        mascot = _normalize_mascot(mascot_el.get_text(strip=True) if mascot_el else "")
-        colors_text = colors_el.get_text(strip=True) if colors_el else ""
+
+        mascot_text = ""
+        if mascot_el is not None:
+            mascot_text = mascot_el.get_text(strip=True)
+        mascot = _normalize_mascot(mascot_text)
+
+        colors_text = ""
+        if colors_el is not None:
+            colors_text = colors_el.get_text(strip=True)
 
         primary, secondary = _parse_colors(colors_text)
 

@@ -27,7 +27,7 @@ from backend.helpers.api_helpers import (
     standings_odds_from_row,
     today,
 )
-from backend.helpers.data_classes import FormatSlot, StandingsOdds
+from backend.helpers.data_classes import FormatSlot, MatchupProbFn, StandingsOdds, StoredHostingOdds
 from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
 from backend.helpers.scenario_renderer import team_home_scenarios_as_dict
 from backend.helpers.scenario_updater import apply_region_game_results
@@ -284,10 +284,12 @@ async def get_class_hosting(
         region_odds, home_p_host_given_reach, home_p_host_given_reach_w, stored_adv, stored_adv_w = all_loaded[region]
         entries = build_hosting_entries(
             region_odds, slots, region, season, clazz,
-            home_p_host_given_reach=home_p_host_given_reach,
-            home_p_host_given_reach_w=home_p_host_given_reach_w,
-            stored_adv=stored_adv,
-            stored_adv_w=stored_adv_w,
+            stored=StoredHostingOdds(
+                given_reach=home_p_host_given_reach,
+                given_reach_weighted=home_p_host_given_reach_w,
+                advancement=stored_adv,
+                advancement_weighted=stored_adv_w,
+            ),
         )
         if include_scenarios:
             entries = _attach_hosting_scenarios(
@@ -324,10 +326,12 @@ async def get_hosting(
 
     entries = build_hosting_entries(
         region_odds, slots, region, season, clazz,
-        home_p_host_given_reach=home_p_host_given_reach,
-        home_p_host_given_reach_w=home_p_host_given_reach_w,
-        stored_adv=stored_adv,
-        stored_adv_w=stored_adv_w,
+        stored=StoredHostingOdds(
+            given_reach=home_p_host_given_reach,
+            given_reach_weighted=home_p_host_given_reach_w,
+            advancement=stored_adv,
+            advancement_weighted=stored_adv_w,
+        ),
     )
     if include_scenarios:
         entries = _attach_hosting_scenarios(entries, region_odds, slots, season, region, seed_atoms=seed_atoms)
@@ -394,7 +398,7 @@ async def simulate_class_hosting(
         cross_region_wins: dict[tuple[int, int], int] | None = None
         odds_by_region: dict[int, dict[str, StandingsOdds]] = {}
         wins_by_team: dict[str, int] = {}
-        matchup_fn_by_region: dict[int, object] = {}
+        matchup_fn_by_region: dict[int, MatchupProbFn | None] = {}
         eliminated_hosting_map: dict[str, tuple] = {}
         seed_atoms_by_region: dict[int, dict | None] = {}
 
@@ -410,8 +414,7 @@ async def simulate_class_hosting(
             wins_by_team = state.wins_by_team
             eliminated_hosting_map = state.eliminated_hosting_map
             odds_by_region = dict(state.all_region_odds)
-            shared_matchup_fn = state.matchup_fn
-            matchup_fn_by_region = {reg: shared_matchup_fn for reg in odds_by_region}
+            matchup_fn_by_region = dict.fromkeys(odds_by_region, state.matchup_fn)
         else:
             # Regular-season mode: per-region simulation.
             db_seeding_rows = await conn.execute(

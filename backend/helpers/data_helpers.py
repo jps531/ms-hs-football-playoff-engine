@@ -24,10 +24,14 @@ from backend.helpers.data_classes import (
 # -------------------------
 
 SPACE_RE = re.compile(r"\s+")
-_NCES_GRADE_RANGE_RE = re.compile(r"\s*\(\d+-\d+\)\s*$")
-_NCES_PREMOD_RE = re.compile(r"\s+(?:public|memorial)\b", re.IGNORECASE)
+
+# The three patterns below assume *s* has already had internal whitespace runs
+# collapsed to single spaces (see normalize_nces_school_name), so a literal " "
+# stands in for what would otherwise be an unbounded (and backtracking-prone) \s*/\s+.
+_NCES_GRADE_RANGE_RE = re.compile(r" \(\d+-\d+\)$")
+_NCES_PREMOD_RE = re.compile(r" (?:public|memorial)\b", re.IGNORECASE)
 _NCES_SUFFIX_RE = re.compile(
-    r"\s+(senior high school|senior high sch|secondary school|middle-high school|middle high school|attendance center|high school|senior high|school|hs|high)\s*$",
+    r" (?:senior high school|senior high sch|secondary school|middle-high school|middle high school|attendance center|high school|senior high|school|hs|high)$",
     re.IGNORECASE,
 )
 _NCES_NAME_REMAPS = {
@@ -266,7 +270,7 @@ def normalize_nces_school_name(s: str) -> str:
     Returns:
         Normalized title-case name ready for ``_norm()`` + ``_ratio()`` matching.
     """
-    s = s.strip()
+    s = SPACE_RE.sub(" ", s.strip())
     s = _NCES_GRADE_RANGE_RE.sub("", s)
     s = _NCES_PREMOD_RE.sub("", s).strip()
     s = _NCES_SUFFIX_RE.sub("", s).strip()
@@ -772,8 +776,11 @@ def _parse_colors(raw: str) -> tuple[str, str]:
     if not raw:
         return "", ""
 
-    raw = re.sub(r"\s*\([^)]*\)", "", raw).strip()
-    parts = re.split(r"\s*(?:and|[&/,@\-])\s*", raw.strip(), flags=re.IGNORECASE)
+    # Collapse whitespace runs to single spaces up front so the patterns below can use
+    # a bounded " ?" instead of an unbounded \s* (which backtracks superlinearly).
+    raw = SPACE_RE.sub(" ", raw.strip())
+    raw = re.sub(r" ?\([^)]*\)", "", raw).strip()
+    parts = re.split(r" ?(?:and|[&/,@\-]) ?", raw, flags=re.IGNORECASE)
 
     colors: list[str] = []
     for part in parts:
