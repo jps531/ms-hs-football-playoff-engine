@@ -162,7 +162,7 @@ Re-run steps 3-4 if schools move or rebrand. Re-run step 2 if MHSAA reclassifies
 
 To backfill a **completed historical season** after steps 1-6, continue with the steps below.
 
-The `playoff_formats` and `playoff_format_slots` tables (which define the bracket structure) are **automatically seeded for 2025 and 2026** when the database is created — the seed files are mounted as `docker-entrypoint-initdb.d` volumes in `docker-compose.yml` (`05_playoff_formats_2025.sql`, `06_playoff_formats_2026.sql`). No manual step is needed. See [New Season Setup](#new-season-setup) below for adding a future season.
+The `playoff_formats` and `playoff_format_slots` tables (which define the bracket structure) are **automatically seeded for 2025 and 2026** when the database is created — `sql/seeds/playoff_formats_2025.sql` and `sql/seeds/playoff_formats_2026.sql` are mounted as `docker-entrypoint-initdb.d` volumes in `docker-compose.yml` (with numeric prefixes, `05_`/`06_`, added at the mount target to control init order — the source filenames themselves have no prefix). No manual step is needed. See [New Season Setup](#new-season-setup) below for adding a future season.
 
 #### Once per week (regular season)
 

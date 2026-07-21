@@ -1,5 +1,10 @@
 # Plan: X/Twitter Live Score Ingestion Pipeline
 
+> **STATUS: Not implemented.** This is a design proposal, not a description of
+> shipped functionality. None of the files, tables, env vars, or Docker
+> services described below exist in the codebase yet. See the project roadmap
+> for when this is planned to be picked up.
+
 ## Context
 
 MHSAA football games are played on various days — primarily Thursdays and Fridays during regular season and playoffs, with weather-delay makeups possible any day, and State Championship games played throughout the day (not just evenings). Score data currently enters the DB only via AHSFHS scheduled scrapers. This pipeline adds near-real-time ingestion from X/Twitter using the Filtered Stream API, activated dynamically based on whether the DB has games scheduled for today.

@@ -2,6 +2,8 @@
 
 All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running.
 
+**Rate limits**: simulate endpoints (Standings, Hosting, Bracket) and most Submissions endpoints are IP-rate-limited via `slowapi` and return `429` when exceeded. Limits are noted per-row below.
+
 ## Meta
 
 | Method | Path | Description |
@@ -17,10 +19,10 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`. See [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for the full computation model. |
-| GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team |
-| POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds |
-| POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |
+| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team, per-seed scenario breakdown to each team entry). See [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for the full computation model. |
+| GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team. Same params. |
+| POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds. Same `include_team_scenarios` param. Rate limited: 10/minute. |
+| POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team. Rate limited: 10/minute. |
 
 **Response fields per team** (`teams[]`):
 - `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus margin-weighted variants `p1_weighted`–`p_playoffs_weighted`
@@ -60,10 +62,12 @@ Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, an
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{clazz}/{region}` | Playoff home-game odds per round (1st round through semifinals), computed on-demand from seeding odds + bracket format |
-| GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team |
-| POST | `/{clazz}/{region}/simulate` | Apply hypothetical results and return updated hosting odds. See simulate input format under Bracket. |
-| POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team |
+| GET | `/{clazz}` | Playoff home-game odds per round for every region in a class, in one call. Params: `season`, `date`, `include_scenarios` (bool, default `false` — adds hosting-condition text per team). Returns `{ season, class_, as_of_date, regions: [...] }`, one region-shaped entry (see below) per region in the class. |
+| GET | `/{clazz}/{region}` | Playoff home-game odds per round (1st round through semifinals), computed on-demand from seeding odds + bracket format. Params: `season`, `date`, `include_scenarios` (bool, default `false` — adds hosting-condition text per team). |
+| GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team. Same params. |
+| POST | `/{clazz}/simulate` | Apply hypothetical results and return updated hosting odds for every region in the class. Same query params as `GET /{clazz}`, plus a request body (see simulate input format under Bracket). Rate limited: 10/minute. |
+| POST | `/{clazz}/{region}/simulate` | Apply hypothetical results and return updated hosting odds. See simulate input format under Bracket. Rate limited: 10/minute. |
+| POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team. Rate limited: 10/minute. |
 
 **Response fields per team** (`teams[]`):
 
@@ -80,7 +84,7 @@ For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Advancement odds for every seed slot in a class. Params: `season`, `class`, `date` |
-| POST | `/simulate` | Apply hypothetical bracket results and return updated odds |
+| POST | `/simulate` | Apply hypothetical bracket results and return updated odds. Rate limited: 10/minute. |
 
 **Response fields per slot** (`teams[]`):
 - `region`, `seed` — bracket slot identifier. `school` is set only when a team has clinched that seed; otherwise `null`.
@@ -143,7 +147,7 @@ A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Co
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Game schedule; filter by `season`, `class`, `region`, `team`, `date_from`, `date_to` |
-| GET | `/probability` | Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location` |
+| GET | `/probability` | Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location`, `as_of` (optional — pins both teams' Elo ratings to the most recent snapshot on or before this date; defaults to the latest available) |
 | POST | `/probability/live` | In-game win probability. Body: `pregame_prob`, `current_margin`, `seconds_remaining` |
 | POST | `/probability/overtime` | MSHAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
 
@@ -190,6 +194,7 @@ Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and
 | Method | Path | Description |
 |--------|------|-------------|
 | PATCH | `/school-seasons/{school}/{season}` | Toggle `is_active` for a school in a season (pipeline never writes this column). Body: `{ "is_active": false }` |
+| PUT | `/school-seasons/{school}/{season}` | Create or overwrite a `school_seasons` row with explicit `class`, `region`, and `is_active` (upsert — safe to re-run). Creates the parent `schools` row if it doesn't exist. Use for mid-cycle changes the Regions pipeline can't handle: consolidations, closures, new schools. Requires moderator+. Body: `{ "class": 5, "region": 2, "is_active": true, "copy_identity_from": "Old School Name" }` — `copy_identity_from` is optional; when supplied, copies mascot, colors, city, zip, latitude, and longitude from that school into the new school's base columns immediately, before the MHSAA identity and NCES pipelines have run. 404s if the source school does not exist. See [SEASON_SETUP.md](SEASON_SETUP.md) for a worked consolidation example. |
 
 **Locations CRUD** — the pipeline never writes this table; venues are otherwise seeded by SQL only.
 
@@ -209,12 +214,12 @@ Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and
 
 ## Images — `/images`
 
-Upload images to Cloudinary and write the resulting path back to the database. Returns `{ "path": "...", "url": "https://..." }`.
+Upload images to Cloudinary and write the resulting path back to the database. Returns `{ "path": "...", "url": "https://..." }`. Every endpoint in this router requires moderator+ (`Authorization: Bearer <token>`) — there is no anonymous image upload path.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/logos/{school}/{logo_type}` | Upload a school logo (`primary`, `secondary`, or `tertiary`). Updates `schools.logo_{type}`. |
-| POST | `/helmets/{helmet_design_id}/{image_type}` | Upload a helmet image (`left`, `right`, or `photo`). Looks up school and year from the existing `helmet_designs` row, uploads to `helmets/{type}/{School}_{year}_{id}`, and updates the corresponding column. |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/logos/{school}/{logo_type}` | Bearer (moderator+) | Upload a school logo (`primary`, `secondary`, or `tertiary`). Updates `schools.logo_{type}`. |
+| POST | `/helmets/{helmet_design_id}/{image_type}` | Bearer (moderator+) | Upload a helmet image (`left`, `right`, or `photo`). Looks up school and year from the existing `helmet_designs` row, uploads to `helmets/{type}/{School}_{year}_{id}`, and updates the corresponding column. |
 
 ## Auth — `/auth`
 
@@ -249,12 +254,12 @@ If a valid `Authorization: Bearer <token>` header is included, the submission is
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/logos` | optional Bearer | Submit a school logo for moderator review. Multipart: `school`, `logo_type` (`primary`/`secondary`/`tertiary`), `file`. Image is staged on Cloudinary and promoted to production on approval. 404 if school not found. |
-| POST | `/helmets` | optional Bearer | Submit a helmet design for moderator review. Multipart: `school`, `year_first_worn`, `description`, plus optional metadata fields and up to 5 reference images (`images`) and an optional logo image (`logo_image`). Moderator creates the helmet record manually from the submitted info. 404 if school not found. |
-| POST | `/colors` | optional Bearer | Submit a school color correction. Body: `school`, optional `primary_color` `{name, hex}`, optional `secondary_colors` array. Auto-applied on approval via `set_school_override`. 404 if school not found. |
-| POST | `/locations` | optional Bearer | Submit corrected GPS coordinates for a school. Body: `school`, `latitude`, `longitude`. Auto-applied on approval via `set_school_override`. 404 if school not found. |
-| POST | `/scores` | optional Bearer | Submit a corrected game score. Body: `school`, `date`, `points_for`, `points_against`. Both the school and the game row must already exist. Auto-applied on approval via `set_game_override`. 404 if school or game not found. |
-| POST | `/feedback` | optional Bearer | Submit general feedback (no school required). Body: `subject`, `message`. No DB action is taken on approval. |
+| POST | `/logos` | optional Bearer | Submit a school logo for moderator review. Multipart: `school`, `logo_type` (`primary`/`secondary`/`tertiary`), `file`. Image is staged on Cloudinary and promoted to production on approval. 404 if school not found. Rate limited: 3/minute. |
+| POST | `/helmets` | optional Bearer | Submit a helmet design for moderator review. Multipart: `school`, `year_first_worn`, `description`, plus optional metadata fields and up to 5 reference images (`images`) and an optional logo image (`logo_image`). Moderator creates the helmet record manually from the submitted info. 404 if school not found. Rate limited: 3/minute. |
+| POST | `/colors` | optional Bearer | Submit a school color correction. Body: `school`, optional `primary_color` `{name, hex}`, optional `secondary_colors` array. Auto-applied on approval via `set_school_override`. 404 if school not found. Rate limited: 10/minute. |
+| POST | `/locations` | optional Bearer | Submit corrected GPS coordinates for a school. Body: `school`, `latitude`, `longitude`. Auto-applied on approval via `set_school_override`. 404 if school not found. Rate limited: 10/minute. |
+| POST | `/scores` | optional Bearer | Submit a corrected game score. Body: `school`, `date`, `points_for`, `points_against`. Both the school and the game row must already exist. Auto-applied on approval via `set_game_override`. 404 if school or game not found. Rate limited: 10/minute. |
+| POST | `/feedback` | optional Bearer | Submit general feedback (no school required). Body: `subject`, `message`. No DB action is taken on approval. Rate limited: 10/minute. |
 
 ## Moderation — `/moderation`
 

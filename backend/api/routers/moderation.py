@@ -1,7 +1,7 @@
 """Moderator endpoints for reviewing and acting on user submissions.
 
-All endpoints require the ``X-Moderator-Key`` header to match the
-``MODERATOR_API_KEY`` environment variable.
+All endpoints require a valid Auth0-issued ``Authorization: Bearer`` token
+belonging to a user with the ``moderator`` or ``owner`` role.
 """
 
 import logging
