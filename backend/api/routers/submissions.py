@@ -88,7 +88,9 @@ async def submit_logo(
     async with get_conn() as conn:
         await require_school_exists(conn, school)
 
-    cloudinary_path = await save_and_upload(file, partial(upload_submission_logo, school_name=school, logo_type=logo_type))
+    cloudinary_path = await save_and_upload(
+        file, partial(upload_submission_logo, school_name=school, logo_type=logo_type)
+    )
 
     user_id = optional_user_id(current_user)
     payload = {"logo_type": logo_type, "cloudinary_path": cloudinary_path}
@@ -122,7 +124,7 @@ async def submit_helmet(
     """
     if len(images) > _MAX_HELMET_IMAGES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"At most {_MAX_HELMET_IMAGES} images may be uploaded per submission",
         )
 
@@ -173,7 +175,9 @@ async def submit_helmet(
     if logo_image is not None:
         logo_image_path = await save_and_upload(
             logo_image,
-            partial(upload_submission_helmet_image, school_name=form.school, submission_id=submission_id, index=len(images)),
+            partial(
+                upload_submission_helmet_image, school_name=form.school, submission_id=submission_id, index=len(images)
+            ),
         )
 
     # Update payload with collected paths.
@@ -192,7 +196,9 @@ async def submit_helmet(
 
 @router.post("/colors", status_code=status.HTTP_201_CREATED, responses=_404)
 @limiter.limit("10/minute")
-async def submit_colors(request: Request, body: SubmitColorsRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
+async def submit_colors(
+    request: Request, body: SubmitColorsRequest, current_user: OptionalUser = None
+) -> SubmissionCreatedResponse:
     """Submit a school color correction for moderator review."""
     user_id = optional_user_id(current_user)
     async with get_conn() as conn:
@@ -217,7 +223,9 @@ async def submit_colors(request: Request, body: SubmitColorsRequest, current_use
 
 @router.post("/locations", status_code=status.HTTP_201_CREATED, responses=_404)
 @limiter.limit("10/minute")
-async def submit_location(request: Request, body: SubmitLocationRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
+async def submit_location(
+    request: Request, body: SubmitLocationRequest, current_user: OptionalUser = None
+) -> SubmissionCreatedResponse:
     """Submit corrected GPS coordinates for a school."""
     user_id = optional_user_id(current_user)
     async with get_conn() as conn:
@@ -239,7 +247,9 @@ async def submit_location(request: Request, body: SubmitLocationRequest, current
     "/scores", status_code=status.HTTP_201_CREATED, responses={404: {"description": "School or game not found"}}
 )
 @limiter.limit("10/minute")
-async def submit_score(request: Request, body: SubmitScoreRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
+async def submit_score(
+    request: Request, body: SubmitScoreRequest, current_user: OptionalUser = None
+) -> SubmissionCreatedResponse:
     """Submit a corrected game score for moderator review.
 
     Both the school and the game (school + date) must already exist in the database.
@@ -267,7 +277,9 @@ async def submit_score(request: Request, body: SubmitScoreRequest, current_user:
 
 @router.post("/feedback", status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
-async def submit_feedback(request: Request, body: SubmitFeedbackRequest, current_user: OptionalUser = None) -> SubmissionCreatedResponse:
+async def submit_feedback(
+    request: Request, body: SubmitFeedbackRequest, current_user: OptionalUser = None
+) -> SubmissionCreatedResponse:
     """Submit general feedback for moderator review."""
     user_id = optional_user_id(current_user)
     payload = {"subject": body.subject, "message": body.message}

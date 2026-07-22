@@ -20,6 +20,7 @@ from backend.helpers.scenario_renderer import (
     _render_margin_condition,
     _render_pre_playoff_block,
     _winner_label,
+    atoms_from_complete_scenarios,
     division_scenarios_as_dict,
     render_pre_playoff_team_home_scenarios,
     render_team_home_scenarios,
@@ -865,6 +866,56 @@ class TestTeamHomeScenariosAsDictSeedAtomsExpansion:
             types = [c["type"] for c in entry["conditions"]]
             assert types[-1] == "home_game_condition"
             assert entry["conditions"][-1]["team_name"] == "TeamA"
+
+    def test_first_condition_not_seed_required_is_left_unexpanded(self):
+        """seed_atoms is supplied, but the scenario's first condition isn't a seed_required
+        placeholder — _expand_scenario falls back to a single unexpanded entry."""
+        advances = HomeGameCondition(kind="advances", round_name="Quarterfinals", region=None, seed=None, team_name=None)
+        sc = HomeGameScenario(conditions=(advances,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = team_home_scenarios_as_dict("TeamA", [rnd], seed_atoms=self._seed_atoms())
+        will_host = result["first_round"]["will_host"]
+        assert len(will_host) == 1
+        assert will_host[0]["conditions"][0]["kind"] == "advances"
+
+
+class TestAtomsFromCompleteScenarios:
+    """atoms_from_complete_scenarios reconstructs a team/seed atom dict from stored scenarios."""
+
+    def test_conditions_atom_present_is_used_directly(self):
+        """When a scenario has conditions_atom, it's used as-is (not rebuilt from game_winners)."""
+        atom = [GameResult(winner="TeamA", loser="TeamB", min_margin=1, max_margin=None)]
+        scenarios = [{"conditions_atom": atom, "seeding": ("TeamA", "TeamB")}]
+        result = atoms_from_complete_scenarios(scenarios)
+        assert result["TeamA"][1] == [atom]
+        assert result["TeamB"][2] == [atom]
+
+    def test_missing_conditions_atom_falls_back_to_game_winners(self):
+        """Without conditions_atom, the atom is rebuilt as GameResults from game_winners."""
+        scenarios = [{"game_winners": [("TeamA", "TeamB")], "seeding": ("TeamA", "TeamB")}]
+        result = atoms_from_complete_scenarios(scenarios)
+        rebuilt_atom = result["TeamA"][1][0]
+        assert rebuilt_atom == [GameResult(winner="TeamA", loser="TeamB")]
+
+    def test_multiple_scenarios_accumulate_atoms_for_same_team_seed(self):
+        """Two scenarios that both seat TeamA at #1 append both atoms to the same list."""
+        scenarios = [
+            {"conditions_atom": [GameResult("TeamA", "TeamB")], "seeding": ("TeamA", "TeamB")},
+            {"conditions_atom": [GameResult("TeamA", "TeamC")], "seeding": ("TeamA", "TeamC")},
+        ]
+        result = atoms_from_complete_scenarios(scenarios)
+        assert len(result["TeamA"][1]) == 2
+
+    def test_seeding_index_maps_to_one_based_seed_number(self):
+        """seeding[0] is seed 1, seeding[1] is seed 2, etc."""
+        scenarios = [{"conditions_atom": [], "seeding": ("TeamA", "TeamB", "TeamC")}]
+        result = atoms_from_complete_scenarios(scenarios)
+        assert set(result.keys()) == {"TeamA", "TeamB", "TeamC"}
+        assert 1 in result["TeamA"] and 2 in result["TeamB"] and 3 in result["TeamC"]
+
+    def test_empty_scenarios_list_returns_empty_dict(self):
+        """No scenarios produces an empty atoms dict."""
+        assert atoms_from_complete_scenarios([]) == {}
 
 
 class TestRenderTeamMatchups:

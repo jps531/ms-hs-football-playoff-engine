@@ -20,12 +20,12 @@ def validate_upload(content_type: str | None, size: int) -> None:
     """Raise HTTP 422 if *content_type*/*size* describe a disallowed image upload."""
     if size > MAX_UPLOAD_FILE_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"File exceeds maximum allowed size of {MAX_UPLOAD_FILE_BYTES // 1024 // 1024} MB",
         )
     if content_type not in ALLOWED_UPLOAD_MIME_TYPES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Unsupported file type '{content_type}'. Allowed: {sorted(ALLOWED_UPLOAD_MIME_TYPES)}",
         )
 

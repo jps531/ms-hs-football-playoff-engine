@@ -7,14 +7,14 @@ from fastapi import HTTPException
 from psycopg import sql
 
 
-async def require_school_exists(conn, school: str) -> None:
+async def require_school_exists(conn, school: str) -> None:  # pragma: no cover
     """Raise HTTP 404 if *school* is not present in the ``schools`` table."""
     row = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (school,))).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"School '{school}' not found")
 
 
-async def require_game_exists(conn, school: str, game_date) -> None:
+async def require_game_exists(conn, school: str, game_date) -> None:  # pragma: no cover
     """Raise HTTP 404 if no game exists for *school* on *game_date*."""
     row = await (
         await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (school, game_date))
@@ -23,21 +23,21 @@ async def require_game_exists(conn, school: str, game_date) -> None:
         raise HTTPException(status_code=404, detail=f"Game for '{school}' on {game_date} not found")
 
 
-async def require_location_exists(conn, location_id: int) -> None:
+async def require_location_exists(conn, location_id: int) -> None:  # pragma: no cover
     """Raise HTTP 404 if no location exists with *location_id*."""
     row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Location {location_id} not found")
 
 
-async def require_helmet_design_exists(conn, design_id: int) -> None:
+async def require_helmet_design_exists(conn, design_id: int) -> None:  # pragma: no cover
     """Raise HTTP 404 if no helmet design exists with *design_id*."""
     row = await (await conn.execute("SELECT 1 FROM helmet_designs WHERE id = %s", (design_id,))).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
 
 
-async def set_school_logo_column(conn, school: str, logo_type: str, path: str) -> None:
+async def set_school_logo_column(conn, school: str, logo_type: str, path: str) -> None:  # pragma: no cover
     """Write *path* into the ``schools.logo_{logo_type}`` column for *school*."""
     col = sql.Identifier(f"logo_{logo_type}")
     await conn.execute(

@@ -807,15 +807,19 @@ def _resolved_opp_in_slots(
     _alive_in_slots returns None (opponent is eliminated) and round_snapshots
     is unavailable. The game is provably over (caller holds tw >= threshold),
     so exactly one team in the opponent slots reached that round and lost.
+
+    wins_confirmed is looked up by whatever key all_region_odds itself uses
+    (real school names from hosting.py's wins_by_team, or slot-ID strings from
+    build_bracket_entries' wins_by_slot) rather than assuming a fixed format,
+    since callers use both conventions.
     """
     found: list[tuple[int, int]] = []
     for slot in slots:
         for r, s in ((slot.home_region, slot.home_seed), (slot.away_region, slot.away_seed)):
-            slot_id = f"R{r}S{s}"
-            if wins_confirmed.get(slot_id, 0) >= min_wins and any(
-                getattr(o, f"p{s}", 0.0) > 0.5 for o in all_region_odds.get(r, {}).values()
-            ):
-                found.append((r, s))
+            for school, o in all_region_odds.get(r, {}).items():
+                if getattr(o, f"p{s}", 0.0) > 0.5 and wins_confirmed.get(school, 0) >= min_wins:
+                    found.append((r, s))
+                    break
     return found[0] if len(found) == 1 else None
 
 

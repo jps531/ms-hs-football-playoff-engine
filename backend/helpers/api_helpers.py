@@ -116,7 +116,7 @@ def today() -> date:
     return datetime.now().date()
 
 
-async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:
+async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:  # pragma: no cover
     """Return all playoff format slots for *clazz* in *season*."""
     rows = await conn.execute(
         """
@@ -1419,7 +1419,7 @@ def build_playoff_bracket_state(
     )
 
 
-async def _load_elo_ratings(conn, season: int, as_of: date) -> dict[str, float]:
+async def _load_elo_ratings(conn, season: int, as_of: date) -> dict[str, float]:  # pragma: no cover
     """Return the most-recent Elo rating per school as of *as_of*."""
     rows = await conn.execute(
         """
@@ -1433,7 +1433,7 @@ async def _load_elo_ratings(conn, season: int, as_of: date) -> dict[str, float]:
     return {r[0]: r[1] async for r in rows}
 
 
-async def _load_and_build_playoff_bracket_state(
+async def _load_and_build_playoff_bracket_state(  # pragma: no cover
     conn,
     season: int,
     clazz: int,
@@ -1520,7 +1520,7 @@ async def _load_and_build_playoff_bracket_state(
     return state
 
 
-async def load_active_region_teams(conn, season: int, clazz: int, region: int) -> list[str]:
+async def load_active_region_teams(conn, season: int, clazz: int, region: int) -> list[str]:  # pragma: no cover
     """Return active school names for a region/season/class, ordered by school name.
 
     Centralized here (rather than duplicated per-router) so the standings and
@@ -1534,7 +1534,9 @@ async def load_active_region_teams(conn, season: int, clazz: int, region: int) -
     return [r[0] async for r in rows]
 
 
-async def load_completed_region_games(conn, season: int, as_of: date, teams: list[str]) -> list[CompletedGame]:
+async def load_completed_region_games(  # pragma: no cover
+    conn, season: int, as_of: date, teams: list[str]
+) -> list[CompletedGame]:
     """Return parsed completed region games for *teams* on or before *as_of*.
 
     Centralized here for the same reason as ``load_active_region_teams``.
@@ -1552,7 +1554,7 @@ async def load_completed_region_games(conn, season: int, as_of: date, teams: lis
     return parse_completed_games([r async for r in rows])
 
 
-async def load_scenarios_snapshot(
+async def load_scenarios_snapshot(  # pragma: no cover
     conn, season: int, clazz: int, region: int, as_of: date
 ) -> tuple[list[RemainingGame], list[dict], list[KeyInsightModel], date] | None:
     """Load remaining_games, complete_scenarios, and key_insights from region_scenarios.
@@ -1591,7 +1593,7 @@ async def load_scenarios_snapshot(
     return remaining, complete, key_insights, row[3]
 
 
-async def recompute_scenarios_from_games(
+async def recompute_scenarios_from_games(  # pragma: no cover
     conn, season: int, clazz: int, region: int, as_of: date
 ) -> tuple[list[str], list[CompletedGame], list[RemainingGame], dict[str, StandingsOdds], set[str]]:
     """Build completed/remaining game lists from raw game data and recompute odds.

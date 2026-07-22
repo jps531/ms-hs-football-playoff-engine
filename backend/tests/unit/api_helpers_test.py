@@ -21,6 +21,7 @@ from backend.helpers.api_helpers import (
     _collect_possible_opponents,
     _resolve_ref_to_school,
     _resolve_ref_to_slot_id,
+    _slot_odds_for_region,
     build_bracket_entries,
     build_bracket_entries_from_odds_map,
     build_bracket_layout,
@@ -35,6 +36,7 @@ from backend.helpers.api_helpers import (
     build_team_entries,
     clinched_school,
     compute_remaining_games,
+    eliminated_team_hosting,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
     filter_to_team_or_404,
@@ -48,15 +50,18 @@ from backend.helpers.api_helpers import (
     select_sentinel_region,
     standings_from_odds,
     standings_odds_from_row,
+    today,
     within_display_threshold,
 )
 from backend.helpers.data_classes import (
     BracketOdds,
     CompletedGame,
     GameResult,
+    MarginCondition,
     RemainingGame,
     StandingsOdds,
     StoredHostingOdds,
+    equal_matchup_prob,
 )
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
 
@@ -122,6 +127,18 @@ class TestConstants:
     def test_clinched_threshold(self):
         """CLINCHED_THRESHOLD should be 0.999."""
         assert CLINCHED_THRESHOLD == pytest.approx(0.999)
+
+
+class TestToday:
+    """today() is a thin, injectable seam over datetime.now().date()."""
+
+    def test_returns_a_date_instance(self):
+        """Return type is a plain date, not a datetime."""
+        assert type(today()) is date
+
+    def test_matches_current_date(self):
+        """The returned date matches the real current date."""
+        assert today() == date.today()
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +421,18 @@ class TestFilterScenariosBySimulation:
         """Empty simulated_results leaves complete_scenarios unchanged."""
         scenarios = self._bucketed_scenarios()
         assert filter_scenarios_by_simulation(scenarios, []) == scenarios
+
+    def test_non_game_result_atom_entries_are_skipped(self):
+        """A conditions_atom mixing a MarginCondition with a GameResult still filters
+        correctly — _margin_ok skips the non-GameResult entry instead of erroring."""
+        margin_cond = MarginCondition(add=(("Stringer", "Resurrection"),), sub=(), op=">=", threshold=10)
+        scenario = self._scenario(
+            "a",
+            [margin_cond, GameResult("Lumberton", "Taylorsville", min_margin=1, max_margin=12)],
+        )
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=12, loser_score=7)]
+        result = filter_scenarios_by_simulation([scenario], body)
+        assert result == [scenario]
 
 
 # ---------------------------------------------------------------------------
@@ -1477,6 +1506,24 @@ class TestBuildHostingEntries:
         zero = next(e for e in result if e.school == "Zero")
         assert zero.second_round.p_host_given_reach is None
 
+    def test_eliminated_hosting_override_used_for_eliminated_team(self):
+        """An eliminated team present in eliminated_hosting gets the deterministic
+        override tuple (r1, r2, qf, sf) instead of computed probabilistic odds
+        (lines 858-867, and _det_round_hosting via this path).
+        """
+        region_odds = dict(_REGION1_ODDS_1A)
+        region_odds["Dog"] = _odds("Dog", p4=0.0, p_playoffs=0.0, eliminated=True)
+        result = build_hosting_entries(
+            region_odds, SLOTS_1A_4A_2025, region=1, season=2025, clazz=1,
+            eliminated_hosting={"Dog": (1.0, 0.0, None, None)},
+        )
+        dog = next(e for e in result if e.school == "Dog")
+        assert dog.first_round.p_host_given_reach == pytest.approx(1.0)
+        assert dog.second_round.p_host_given_reach == pytest.approx(0.0)
+        assert dog.quarterfinals.p_host_given_reach is None
+        assert dog.quarterfinals.p_host_overall == pytest.approx(0.0)
+        assert dog.semifinals.p_host_given_reach is None
+
     # ------------------------------------------------------------------
     # Stored-odds path (home_p_host_given_reach + stored_adv provided)
     # ------------------------------------------------------------------
@@ -2020,6 +2067,43 @@ class TestBuildPlayoffBracketState:
         )
         assert state.matchup_fn is not None
 
+    def test_unresolvable_winner_name_gets_no_win_credit(self):
+        """A winner ref naming a school not in school_to_seed resolves via
+        _resolve_ref_to_school but is skipped (lines 1339->1337, 1349->1351) —
+        no win credit and no submitted_winners membership.
+        """
+        state = self._base_state(submitted=[_game_result("NotClinchedYet", "AlphaS1")])
+        assert state.wins_by_team.get("NotClinchedYet", 0) == 0
+        # AlphaS1 was the named loser here but the "winner" side is unresolvable,
+        # so AlphaS1 still gets marked eliminated via the loser branch.
+        assert state.all_region_odds[1]["AlphaS1"].eliminated is True
+
+    def test_unresolvable_loser_name_is_not_marked_eliminated(self):
+        """A loser ref naming a school not in school_to_seed is skipped
+        (line 1353->1347) — no seed gets added to losers_known for it."""
+        state = self._base_state(submitted=[_game_result("AlphaS1", "NotClinchedYet")])
+        # The only real seed here is the winner (AlphaS1), which is not eliminated;
+        # no exception is raised trying to mark the unresolvable loser's seed.
+        assert state.all_region_odds[1]["AlphaS1"].eliminated is False
+
+    def test_unresolvable_loserless_winner_sets_no_ceiling(self):
+        """A loser-less result whose winner ref is unresolvable does not reach
+        _collect_possible_opponents (line 1355->1347) — round_ceiling stays empty.
+        """
+        layout = build_bracket_layout(SLOTS_5A_7A_2025)
+        state = build_playoff_bracket_state(
+            school_to_seed=_school_to_seed_4teams(),
+            db_wins={},
+            db_losers=set(),
+            submitted_results=[BracketGameResultRequest(winner=ParticipantRef(school="NotClinchedYet"), round="quarterfinals")],
+            elo_ratings={},
+            slots=SLOTS_5A_7A_2025,
+            season=2025,
+            clazz=5,
+            layout=layout,
+        )
+        assert state.round_ceiling == {}
+
 
 # ---------------------------------------------------------------------------
 # TestBuildBracketEntries
@@ -2122,6 +2206,139 @@ class TestBuildBracketEntries:
         r1s1_base = next(e for e in baseline if e.region == 1 and e.seed == 1)
         r1s1 = next(e for e in result if e.region == 1 and e.seed == 1)
         assert r1s1.quarterfinals > r1s1_base.quarterfinals
+
+    def test_slot_odds_for_region_skips_school_with_no_seed_above_half(self):
+        """A school with no p{s} > 0.5 (undecided seed) is skipped rather than
+        assigned to a slot (line 2001->1999 false branch), while other schools
+        in the same region with a clinched seed are still included.
+        """
+        source = {
+            "Undecided": _odds("Undecided", p1=0.4, p2=0.3, p3=0.3, p_playoffs=1.0),
+            "Clinched": _odds("Clinched", p1=1.0, p_playoffs=1.0, clinched=True),
+        }
+        slot_odds = _slot_odds_for_region(1, source)
+        assert "R1S1" in slot_odds
+        assert len(slot_odds) == 1  # only the clinched school got a slot
+
+    def test_win_prob_fn_weighted_populates_weighted_hosting_fields(self):
+        """win_prob_fn_weighted turns on the entire weighted-hosting computation path
+        in build_bracket_entries (line 2266) and _p_host_odds_from_overall's have_w
+        branches (lines 2051, 2053) — otherwise every *_weighted hosting field is None.
+        """
+        by_region = self._by_region()
+        result = build_bracket_entries(
+            by_region, SLOTS_5A_7A_2025, season=2025, clazz=5,
+            win_prob_fn_weighted=equal_matchup_prob,
+        )
+        seed1 = next(e for e in result if e.region == 1 and e.seed == 1)
+        assert seed1.hosting.quarterfinals.p_host_overall_weighted is not None
+        assert seed1.hosting.semifinals.p_host_overall_weighted is not None
+        assert seed1.quarterfinals_weighted is not None
+
+    def test_win_prob_fn_weighted_zero_advancement_gives_zero_overall_weighted(self):
+        """An eliminated team still holding its seed slot has zero advancement in
+        both the unweighted and weighted odds, hitting the have_w-but-not-adv_w_pos
+        branch (line 2053): p_host_overall_weighted=0.0 rather than a positive value.
+        Requires all_region_odds so the school-based (not synthetic) slot path is used.
+        """
+        by_region = self._by_region()
+        by_region[1]["T1S4"] = _odds("T1S4", p4=1.0, p_playoffs=0.0, eliminated=True)
+        result = build_bracket_entries(
+            by_region, SLOTS_5A_7A_2025, season=2025, clazz=5,
+            all_region_odds=by_region, win_prob_fn_weighted=equal_matchup_prob,
+        )
+        seed4 = next(e for e in result if e.region == 1 and e.seed == 4)
+        assert seed4.hosting.quarterfinals.p_host_overall_weighted == pytest.approx(0.0)
+
+    def test_wins_by_team_with_all_region_odds_boosts_slot(self):
+        """wins_by_team (school-keyed) combined with all_region_odds resolves the
+        school->slot mapping internally (lines 2239-2245) and feeds the confirmed
+        win into advancement odds the same way wins_by_slot does directly.
+        """
+        by_region = self._by_region()
+        baseline = build_bracket_entries(by_region, SLOTS_5A_7A_2025)
+        result = build_bracket_entries(
+            by_region, SLOTS_5A_7A_2025,
+            wins_by_team={"T1S1": 1}, all_region_odds=by_region,
+        )
+        r1s1_base = next(e for e in baseline if e.region == 1 and e.seed == 1)
+        r1s1 = next(e for e in result if e.region == 1 and e.seed == 1)
+        assert r1s1.quarterfinals > r1s1_base.quarterfinals
+
+    def test_eliminated_hosting_maps_to_slot_via_school_to_slot(self):
+        """eliminated_hosting (school-keyed) is mapped to a slot-ID key via the
+        school_to_slot dict, which is only populated when wins_by_team and
+        all_region_odds are both supplied (lines 2253-2258). The resulting
+        eliminated_by_slot entry drives _hosting_for_slot's deterministic
+        override (lines 2084-2085) instead of computed hosting odds.
+        """
+        by_region = self._by_region()
+        result = build_bracket_entries(
+            by_region, SLOTS_5A_7A_2025, season=2025, clazz=5,
+            wins_by_team={"T1S1": 1}, all_region_odds=by_region,
+            eliminated_hosting={"T1S1": (0.0, None, 0.0, 0.0)},
+        )
+        r1s1 = next(e for e in result if e.region == 1 and e.seed == 1)
+        assert r1s1.hosting.first_round.p_host_given_reach == pytest.approx(0.0)
+        assert r1s1.hosting.quarterfinals.p_host_given_reach == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# TestEliminatedTeamHosting
+# ---------------------------------------------------------------------------
+
+
+class TestEliminatedTeamHosting:
+    """eliminated_team_hosting produces a deterministic (r1, r2, qf, sf) tuple for
+    a team eliminated in round rounds_played, resolving each round's opponent via
+    _find_bracket_survivor as rounds_played increases.
+    """
+
+    def test_resolves_qf_opponent_5a7a(self):
+        """5A-7A: a team eliminated after 2 rounds (rounds_played=2) resolves its QF
+        opponent via _find_bracket_survivor (lines 1165-1204's QF branch), producing
+        a non-None qf value while sf stays None (round not yet played).
+        """
+        result = eliminated_team_hosting(
+            region=1, seed=1, rounds_played=2, slots=SLOTS_5A_7A_2025,
+            seed_to_school={(2, 2): "Opp"}, wins_by_team={"Opp": 1},
+            season=2025, clazz=5,
+        )
+        r1, r2, qf, sf = result
+        assert r1 == pytest.approx(1.0)  # R1s1 hosts R1
+        assert r2 is None  # 5A-7A has no second round
+        assert qf is not None
+        assert sf is None  # rounds_played=2 < rounds_for_sf=3
+
+    def test_resolves_r2_and_sf_1a4a(self):
+        """1A-4A: a team eliminated after 4 rounds resolves R2 (line 1165-1173) and
+        SF (near line 1199-1204) opponents via _find_bracket_survivor.
+        """
+        # North half slot layout (indices 0-7): [0] (1,1)v(2,4) [1] (3,2)v(4,3)
+        # [2] (2,1)v(1,4) [3] (4,2)v(3,3) [4] (3,1)v(4,4) [5] (1,2)v(2,3)
+        # [6] (4,1)v(3,4) [7] (2,2)v(1,3). R1s1 (idx 0): R2 opp in [1], QF opp in
+        # [2,3], SF opp in [4-7].
+        result = eliminated_team_hosting(
+            region=1, seed=1, rounds_played=4, slots=SLOTS_1A_4A_2025,
+            seed_to_school={(3, 2): "R2Opp", (2, 1): "QFOpp", (4, 1): "SFOpp"},
+            wins_by_team={"R2Opp": 1, "QFOpp": 2, "SFOpp": 3},
+            season=2025, clazz=1,
+        )
+        r1, r2, qf, sf = result
+        assert r1 == pytest.approx(1.0)
+        assert r2 is not None
+        assert qf is not None
+        assert sf is not None
+
+    def test_returns_partial_when_survivor_not_found(self):
+        """When no confirmed-win candidate exists in the QF opponent slots,
+        _find_bracket_survivor returns None and the tuple stops at qf=None."""
+        result = eliminated_team_hosting(
+            region=1, seed=1, rounds_played=2, slots=SLOTS_5A_7A_2025,
+            seed_to_school={}, wins_by_team={},
+            season=2025, clazz=5,
+        )
+        assert result == (1.0, None, None, None)
 
 
 # ---------------------------------------------------------------------------
@@ -2593,6 +2810,24 @@ class TestBuildEnrichedBracketLayout:
         assert qf_game.home_team is not None
         assert qf_game.home_team.school == "R1S1"
 
+    def test_home_team_falls_back_to_participant_b_hosting(self):
+        """When participant_a's given_reach doesn't clear the 0.99 threshold (or is
+        absent) but participant_b's does, home_team falls through to participant_b
+        (lines 1812->1814 false arm, then 1815-1817).
+
+        N[1][0] (quarterfinals) feeds from N[0][0] (R1S1 vs R2S4) and N[0][1]
+        (R2S2 vs R1S3). Confirming both R1 games resolves both QF participants;
+        the hosting dict only marks R2S2 (participant_b) as a deterministic host.
+        """
+        hosting = {"R2S2": {"first_round": 1.0, "quarterfinals": 1.0, "semifinals": None, "second_round": None}}
+        confirmed = [("R1S1", "R2S4", 28, 14), ("R2S2", "R1S3", 21, 10)]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [], p_host_given_reach_by_team=hosting)
+        qf_game = layout.halves["N"][1][0]
+        assert qf_game.participant_a is not None and qf_game.participant_a.school == "R1S1"
+        assert qf_game.participant_b is not None and qf_game.participant_b.school == "R2S2"
+        assert qf_game.home_team is not None
+        assert qf_game.home_team.school == "R2S2"
+
     def test_home_team_null_on_r2_without_hosting_lookup(self):
         """R2+ nodes have home_team=None when no p_host_given_reach_by_team is provided."""
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
@@ -2757,6 +2992,39 @@ class TestBuildPlayoffBracketStateLoserless:
         assert state.all_region_odds[2]["R2S1"].eliminated is False
         assert state.all_region_odds[1]["R1S4"].eliminated is False
 
+    def test_second_loserless_result_keeps_more_restrictive_ceiling(self):
+        """A second loser-less result whose opponent pool overlaps with the first's
+        does not overwrite an already-more-restrictive (earlier-round) ceiling
+        (lines 1358-1371's "keep existing" branch).
+
+        North half slots: [0] R1S1/R2S4  [1] R2S2/R1S3  [2] R2S1/R1S4  [3] R1S2/R2S3.
+        R1S1's semifinals opponent pool is the *other* quarter: {R2S1, R1S4, R1S2,
+        R2S3} (slots 2-3). R2S1's quarterfinals opponent pool (adjacent slot 3) is
+        {R1S2, R2S3} — a subset of R1S1's semifinals pool. Submitting R2S1's
+        quarterfinals result first sets R1S2/R2S3 to "quarterfinals"; R1S1's
+        semifinals result (proposing the later round "semifinals") must not
+        overwrite them.
+        """
+        state = self._state([
+            self._loserless_result("R2S1", "quarterfinals"),
+            self._loserless_result("R1S1", "semifinals"),
+        ])
+        assert state.round_ceiling.get((1, 2)) == "quarterfinals"
+        assert state.round_ceiling.get((2, 3)) == "quarterfinals"
+
+    def test_second_loserless_result_upgrades_less_restrictive_ceiling(self):
+        """Submitting the wider (R1S1 semifinals) result first, then the narrower
+        (R2S1 quarterfinals) one, upgrades the overlapping seeds' ceiling to the
+        more restrictive round (the "new_idx < existing_idx" True arm of lines
+        1360-1371). See test above for the opponent-pool layout.
+        """
+        state = self._state([
+            self._loserless_result("R1S1", "semifinals"),
+            self._loserless_result("R2S1", "quarterfinals"),
+        ])
+        assert state.round_ceiling.get((1, 2)) == "quarterfinals"
+        assert state.round_ceiling.get((2, 3)) == "quarterfinals"
+
 
 # ---------------------------------------------------------------------------
 # TestApplyRoundCeilings
@@ -2866,6 +3134,21 @@ class TestApplyRoundCeilings:
         assert out.hosting.quarterfinals.p_host_given_reach == pytest.approx(0.5)
         assert out.hosting.semifinals.p_host_given_reach is None
         assert out.hosting.semifinals.p_host_overall == 0.0
+
+    def test_semifinals_ceiling_leaves_hosting_untouched(self):
+        """semifinals ceiling has no rounds after it in _HOSTING_ROUNDS_AFTER
+        (empty list), so the hosting-update block is skipped entirely (line
+        1908->1926) — hosting odds are unchanged even though finals/champion
+        advancement is zeroed.
+        """
+        entry = self._entry(1, 1)
+        result = _apply_round_ceilings([entry], {(1, 1): "semifinals"})
+        out = result[0]
+        assert out.finals == 0.0
+        assert out.champion == 0.0
+        assert out.hosting is not None
+        assert out.hosting.semifinals.p_host_given_reach == pytest.approx(0.3)
+        assert out.hosting.quarterfinals.p_host_given_reach == pytest.approx(0.5)
 
     def test_entry_without_ceiling_unmodified_alongside_ceilinged(self):
         """Entries without a ceiling are untouched when mixed with ceilinged entries."""

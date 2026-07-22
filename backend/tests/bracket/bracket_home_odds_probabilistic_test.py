@@ -46,9 +46,11 @@ import pytest
 from backend.helpers.bracket_home_odds import (
     MatchupProbFn,
     _alive_in_slots,
+    _historical_seed,
     _p_home_in_r2,
     _p_team_reach,
     _r2_home_if_deterministic,
+    _resolved_opp_in_slots,
     compute_bracket_advancement_odds,
     compute_quarterfinal_home_odds,
     compute_second_round_home_odds,
@@ -1085,6 +1087,21 @@ def test_sf_deterministic_seed1_r2_away_vs_r1s1() -> None:
     assert result["R2s1"] == pytest.approx(0.0)
 
 
+def test_sf_deterministic_falls_through_when_opponent_unresolved() -> None:
+    """rounds_completed/all_region_odds qualify for the deterministic path, but no
+    alive team is found among the SF opponent candidate slots (line 1134->1138) —
+    falls through to the probabilistic branch instead of taking the deterministic
+    "opponent found" shortcut. With an empty all_region_odds, every downstream
+    opponent candidate also reads as not-alive, so the probabilistic branch itself
+    zeroes out — this test pins that combined behavior as a regression guard.
+    """
+    result = compute_semifinal_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
+        rounds_completed=2, all_region_odds={},
+    )
+    assert result["R1s1"] == pytest.approx(0.0)
+
+
 def test_sf_deterministic_falls_through_without_all_region_odds() -> None:
     """Without all_region_odds, falls through to probabilistic even when rounds_completed=2."""
     result = compute_semifinal_home_odds(
@@ -1187,6 +1204,157 @@ def test_p_team_reach_one_win_less_than_one() -> None:
     half = [SLOTS_5A_7A_2025[s] for s in range(4)]
     result = _p_team_reach(1, 1, 0, 1, half, equal_matchup_prob)
     assert 0.0 < result < 1.0
+
+
+def test_p_team_reach_skip_wins_three_short_circuits_qf() -> None:
+    """skip_wins=3 forces p_r1=p_r2=p_qf=1.0 (line 265 among them), so a team already
+    confirmed through the QF has probability 1.0 of "reaching" the QF via num_wins=3.
+    """
+    half = [SLOTS_5A_7A_2025[s] for s in range(4)]
+    result = _p_team_reach(1, 1, 0, 3, half, equal_matchup_prob, skip_wins=3)
+    assert result == pytest.approx(1.0, abs=1e-9)
+
+
+def test_p_team_reach_skip_wins_four_short_circuits_sf() -> None:
+    """skip_wins=4 forces every stage including p_sf_win=1.0 (line 309), so a team
+    already confirmed through the SF has probability 1.0 of "reaching" it via num_wins=4.
+    Requires an 8-slot 1A-4A half (SF opponent comes from the opposite quarter).
+    """
+    half = half_slots_for_region(1, SLOTS_1A_4A_2025)
+    idx = slot_index_for(1, 1, half)
+    result = _p_team_reach(1, 1, idx, 4, half, equal_matchup_prob, skip_wins=4)
+    assert result == pytest.approx(1.0, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 8b: _historical_seed — multi-snapshot search and exhaustion
+# ---------------------------------------------------------------------------
+
+
+def test_historical_seed_searches_older_snapshot_when_newest_lacks_team() -> None:
+    """The newest round_snapshots entry doesn't have the team alive; the search
+    continues to an older snapshot (line 845->843) and finds it there.
+    """
+    not_alive = StandingsOdds(school="A", p1=0.0, p2=0.0, p3=0.0, p4=0.0,
+                              p_playoffs=0.0, final_playoffs=0.0, clinched=False, eliminated=True)
+    round_snapshots = {
+        2: {1: {"A": not_alive}},
+        1: {1: {"A": _locked("A", 2)}},
+    }
+    seed = _historical_seed("A", 1, round_snapshots)
+    assert seed == 2
+
+
+def test_historical_seed_returns_none_when_never_alive() -> None:
+    """The team never appears alive in any snapshot — returns None (line 847)."""
+    not_alive = StandingsOdds(school="A", p1=0.0, p2=0.0, p3=0.0, p4=0.0,
+                              p_playoffs=0.0, final_playoffs=0.0, clinched=False, eliminated=True)
+    round_snapshots = {2: {1: {"A": not_alive}}, 1: {1: {"A": not_alive}}}
+    assert _historical_seed("A", 1, round_snapshots) is None
+
+
+# ---------------------------------------------------------------------------
+# Scenario 8c: _resolved_opp_in_slots — last-resort wins_confirmed fallback
+# ---------------------------------------------------------------------------
+#
+# Used when the opponent is eliminated (so _alive_in_slots's p_playoffs>0
+# check fails) but wins_confirmed proves they reached this round. Unlike
+# _alive_in_slots, it does not require p_playoffs>0 — only a confirmed win
+# count and a locked seed probability.
+
+_R2_OPP_SLOTS = [FormatSlot(slot=1, home_region=2, home_seed=1, away_region=3, away_seed=4, north_south="N")]
+
+
+def _eliminated_locked(school: str, seed: int) -> StandingsOdds:
+    """A team with a locked seed probability but p_playoffs=0 (lost in a later round)."""
+    return StandingsOdds(
+        school=school,
+        p1=1.0 if seed == 1 else 0.0,
+        p2=1.0 if seed == 2 else 0.0,
+        p3=1.0 if seed == 3 else 0.0,
+        p4=1.0 if seed == 4 else 0.0,
+        p_playoffs=0.0,
+        final_playoffs=0.0,
+        clinched=True,
+        eliminated=True,
+    )
+
+
+def test_resolved_opp_in_slots_finds_unique_confirmed_winner() -> None:
+    """Exactly one candidate meets both wins_confirmed and locked-seed thresholds.
+
+    wins_confirmed is keyed by the same school name used in all_region_odds
+    (matching hosting.py's wins_by_team convention), not a slot-ID string.
+    """
+    all_odds = {2: {"R2s1": _eliminated_locked("R2s1", 1)}}
+    wins_confirmed = {"R2s1": 1}
+    result = _resolved_opp_in_slots(_R2_OPP_SLOTS, all_odds, wins_confirmed, 1)
+    assert result == (2, 1)
+
+
+def test_resolved_opp_in_slots_returns_none_when_no_candidate_qualifies() -> None:
+    """No candidate has enough confirmed wins — returns None."""
+    all_odds = {2: {"R2s1": _eliminated_locked("R2s1", 1)}}
+    wins_confirmed: dict[str, int] = {}
+    assert _resolved_opp_in_slots(_R2_OPP_SLOTS, all_odds, wins_confirmed, 1) is None
+
+
+def test_resolved_opp_in_slots_returns_none_when_multiple_candidates_qualify() -> None:
+    """Both candidates in the slot qualify — ambiguous, returns None."""
+    all_odds = {
+        2: {"R2s1": _eliminated_locked("R2s1", 1)},
+        3: {"R3s4": _eliminated_locked("R3s4", 4)},
+    }
+    wins_confirmed = {"R2s1": 1, "R3s4": 1}
+    assert _resolved_opp_in_slots(_R2_OPP_SLOTS, all_odds, wins_confirmed, 1) is None
+
+
+def test_resolved_opp_in_slots_works_with_arbitrary_school_names() -> None:
+    """Confirms the fix: wins_confirmed keyed by a real, non-slot-ID-shaped school
+    name (as hosting.py's wins_by_team always is) still resolves correctly.
+    """
+    all_odds = {2: {"Taylorsville": _eliminated_locked("Taylorsville", 1)}}
+    wins_confirmed = {"Taylorsville": 1}
+    result = _resolved_opp_in_slots(_R2_OPP_SLOTS, all_odds, wins_confirmed, 1)
+    assert result == (2, 1)
+
+
+def test_r2_deterministic_uses_resolved_opp_in_slots_fallback() -> None:
+    """compute_second_round_home_odds falls all the way to _resolved_opp_in_slots
+    (line 909) when the opponent is eliminated and no round_snapshots are given,
+    but wins_confirmed proves they reached and lost R1.
+
+    5A-7A North: slot 1 = R1s1 (home) vs R2s4; slot 2 = R2s2 (home) vs R1s3 —
+    R1s1's R2 opponent candidates are R2s2 / R1s3 (adjacent slot pair).
+
+    wins_confirmed is keyed by school name throughout (matching hosting.py's
+    wins_by_team convention) — both "R1s1" (read by compute_second_round_home_odds
+    itself to gate entry into the deterministic path) and "R2s2" (read internally
+    by _resolved_opp_in_slots for the opponent lookup) use the same real school name.
+    """
+    all_odds = {2: {"R2s2": _eliminated_locked("R2s2", 2)}}
+    result = compute_second_round_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
+        rounds_completed=1, all_region_odds=all_odds, wins_confirmed={"R1s1": 1, "R2s2": 1},
+    )
+    # R1s1 (seed 1) vs R2s2 (seed 2): golden rule -> better seed (R1s1) hosts.
+    assert result["R1s1"] == pytest.approx(1.0)
+
+
+def test_qf_deterministic_uses_resolved_opp_in_slots_fallback_5a7a() -> None:
+    """compute_quarterfinal_home_odds falls back to _resolved_opp_in_slots (line 1051)
+    for the QF opponent itself when both _alive_in_slots and round_snapshots fail.
+
+    5A-7A has qf_offset=1 (QF reached after one win, no R2), so this exercises the
+    QF-opponent resolution block directly without needing R2-ambiguity setup.
+    """
+    all_odds = {2: {"R2s2": _eliminated_locked("R2s2", 2)}}
+    result = compute_quarterfinal_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
+        rounds_completed=1, all_region_odds=all_odds, wins_confirmed={"R1s1": 1, "R2s2": 1},
+    )
+    # R1s1 (seed 1) vs R2s2 (seed 2): golden rule -> better seed (R1s1) hosts.
+    assert result["R1s1"] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1410,6 +1578,31 @@ def test_r2_snapshots_find_eliminated_opponent() -> None:
     assert result_with["R1s1"] == pytest.approx(1.0)     # fix: seed 1 hosted R2
 
 
+def test_qf_wins_confirmed_resolves_ambiguous_team_r2h() -> None:
+    """Same as Bug 2 above, but resolved via wins_confirmed/_resolved_opp_in_slots
+    (line 1043) instead of round_snapshots — (4,4) is eliminated (not alive in
+    all_region_odds) but wins_confirmed (keyed by school name, matching hosting.py's
+    wins_by_team convention) proves they won R1 in that slot.
+    """
+    all_odds = {
+        1: {"R1s2": _locked("R1s2", 2)},
+        4: {"R4s1": _locked("R4s1", 1), "R4s4": _eliminated_locked("R4s4", 4)},
+    }
+    region_odds = {"R1s2": _locked("R1s2", 2)}
+
+    result_without = compute_quarterfinal_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
+        all_region_odds={1: {"R1s2": _locked("R1s2", 2)}, 4: {"R4s1": _locked("R4s1", 1)}},
+    )
+    result_with = compute_quarterfinal_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
+        all_region_odds=all_odds, wins_confirmed={"R1s2": 2, "R4s4": 1},
+    )
+
+    assert result_without["R1s2"] == pytest.approx(0.0)  # (4,1) is only alive QF opp; seed 1 hosts
+    assert result_with["R1s2"] == pytest.approx(0.0)      # resolved r2h=True; (4,1) still hosts QF
+
+
 def test_qf_snapshots_resolve_ambiguous_team_r2h() -> None:
     """Bug 2: round_snapshots resolves a team's ambiguous r2_home_if_deterministic=None.
 
@@ -1433,6 +1626,32 @@ def test_qf_snapshots_resolve_ambiguous_team_r2h() -> None:
 
     assert result_without["R1s2"] == pytest.approx(0.0)  # (4,1) is only alive QF opp; seed 1 hosts
     assert result_with["R1s2"] == pytest.approx(0.0)    # snapshots confirm r2h=True; (4,1) hosts QF
+
+
+def test_qf_wins_confirmed_resolves_ambiguous_opp_r2h() -> None:
+    """Same as Bug 2b above, but resolved via wins_confirmed/_resolved_opp_in_slots
+    (line 1063) instead of round_snapshots — (2,1) is eliminated (not alive in
+    all_region_odds) but wins_confirmed (keyed by school name, matching hosting.py's
+    wins_by_team convention) proves they won R1 in that slot.
+    """
+    all_odds = {
+        1: {"R1s1": _locked("R1s1", 1)},
+        4: {"R4s2": _locked("R4s2", 2)},
+        2: {"R2s1": _eliminated_locked("R2s1", 1)},
+    }
+    region_odds = {"R1s1": _locked("R1s1", 1)}
+
+    result_without = compute_quarterfinal_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
+        all_region_odds={1: {"R1s1": _locked("R1s1", 1)}, 4: {"R4s2": _locked("R4s2", 2)}},
+    )
+    result_with = compute_quarterfinal_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
+        all_region_odds=all_odds, wins_confirmed={"R1s1": 2, "R2s1": 1},
+    )
+
+    assert result_without["R1s1"] == pytest.approx(1.0)  # R4s2 only alive QF opp; seed 1 hosts
+    assert result_with["R1s1"] == pytest.approx(0.0)      # resolved opp_r2h=False; opp hosts QF instead
 
 
 def test_qf_snapshots_resolve_ambiguous_opp_r2h() -> None:

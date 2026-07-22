@@ -1,5 +1,6 @@
 """Tests for image URL assembly and Cloudinary upload helpers in image_helpers.py."""
 
+import asyncio
 import os
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ from backend.helpers.image_helpers import (
     _configure,
     logo_url,
     promote_submission_logo,
+    save_and_upload,
     save_temp,
     upload_helmet,
     upload_logo,
@@ -18,6 +20,20 @@ from backend.helpers.image_helpers import (
     upload_submission_logo,
     validate_upload,
 )
+
+
+class _FakeUploadFile:
+    """Minimal stand-in for FastAPI's UploadFile, exposing only what save_and_upload reads."""
+
+    def __init__(self, filename: str | None, content_type: str | None, contents: bytes):
+        """Store the fields save_and_upload reads: filename, content_type, and raw bytes."""
+        self.filename = filename
+        self.content_type = content_type
+        self._contents = contents
+
+    async def read(self) -> bytes:
+        """Return the fixed byte contents, mirroring UploadFile.read()."""
+        return self._contents
 
 
 @pytest.fixture
@@ -251,6 +267,69 @@ class TestSaveTemp:
             assert path.endswith(".png")
         finally:
             os.unlink(path)
+
+
+class TestSaveAndUpload:
+    """save_and_upload reads, validates, temp-saves, uploads, and always cleans up."""
+
+    def test_returns_upload_fn_result(self):
+        """The return value is whatever upload_fn(tmp_path) returns."""
+        file = _FakeUploadFile("logo.png", "image/png", b"fake-image-bytes")
+        result = asyncio.run(save_and_upload(file, lambda path: "logos/primary/Taylorsville"))
+        assert result == "logos/primary/Taylorsville"
+
+    def test_upload_fn_receives_path_to_saved_contents(self):
+        """upload_fn is called with a path whose contents match the uploaded file."""
+        file = _FakeUploadFile("logo.png", "image/png", b"fake-image-bytes")
+        seen_contents = {}
+
+        def upload_fn(path: str) -> str:
+            """Record the temp file's contents at upload time and return a fixed path."""
+            with open(path, "rb") as f:
+                seen_contents["data"] = f.read()
+            return "ok"
+
+        asyncio.run(save_and_upload(file, upload_fn))
+        assert seen_contents["data"] == b"fake-image-bytes"
+
+    def test_temp_file_removed_after_successful_upload(self):
+        """The temp file no longer exists once save_and_upload returns."""
+        file = _FakeUploadFile("logo.png", "image/png", b"data")
+        captured_path = {}
+
+        def upload_fn(path: str) -> str:
+            """Record the temp file path so the test can assert it's cleaned up."""
+            captured_path["path"] = path
+            return "ok"
+
+        asyncio.run(save_and_upload(file, upload_fn))
+        assert not os.path.exists(captured_path["path"])
+
+    def test_temp_file_removed_even_when_upload_fn_raises(self):
+        """The finally block cleans up the temp file even if upload_fn raises."""
+        file = _FakeUploadFile("logo.png", "image/png", b"data")
+        captured_path = {}
+
+        def upload_fn(path: str) -> str:
+            """Record the temp file path, then raise to simulate an upload failure."""
+            captured_path["path"] = path
+            raise RuntimeError("upload failed")
+
+        with pytest.raises(RuntimeError):
+            asyncio.run(save_and_upload(file, upload_fn))
+        assert not os.path.exists(captured_path["path"])
+
+    def test_disallowed_content_type_raises_422_before_upload(self):
+        """validate_upload rejects the file before upload_fn is ever called."""
+        file = _FakeUploadFile("doc.pdf", "application/pdf", b"data")
+
+        def upload_fn(path: str) -> str:
+            """Fail the test if called — validation should reject the file first."""
+            raise AssertionError("upload_fn should not be called for a rejected file")
+
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(save_and_upload(file, upload_fn))
+        assert exc_info.value.status_code == 422
 
 
 class TestLogoUrl:
