@@ -407,8 +407,8 @@ class TestFilterScenariosBySimulation:
         result = filter_scenarios_by_simulation(self._bucketed_scenarios(), body)
         assert {sc["sub_label"] for sc in result} == {"a", "b"}
 
-    def test_scenario_without_conditions_atom_is_unaffected(self):
-        """A scenario with conditions_atom=None is filtered purely on game_winners."""
+    def test_scenario_without_conditions_atom_is_filtered_by_game_winners(self):
+        """A scenario with conditions_atom=None is filtered (kept/dropped) purely on game_winners."""
         scenario = {
             "scenario_num": 1,
             "sub_label": "",
@@ -418,7 +418,24 @@ class TestFilterScenariosBySimulation:
         }
         body = [_GameResult("Lumberton", "Taylorsville", winner_score=12, loser_score=7)]
         result = filter_scenarios_by_simulation([scenario], body)
-        assert result == [scenario]
+        assert len(result) == 1
+
+    def test_none_atom_materialized_and_stripped_when_game_winners_match(self):
+        """When conditions_atom is None (the implicit "every game_winners pair, default
+        margin" case), a game_winners pair matching a submitted result is stripped just
+        like an explicit atom would be — otherwise the redundant condition resurfaces via
+        atoms_from_complete_scenarios' None fallback (the exact bug report scenario)."""
+        scenario = {
+            "scenario_num": 1,
+            "sub_label": "",
+            "game_winners": [("Lumberton", "Taylorsville"), ("Resurrection", "Stringer")],
+            "conditions_atom": None,
+            "seeding": ("Lumberton", "Taylorsville", "Resurrection", "Stringer"),
+        }
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=11, loser_score=0)]
+        result = filter_scenarios_by_simulation([scenario], body)
+        assert len(result) == 1
+        assert result[0]["conditions_atom"] == [GameResult("Resurrection", "Stringer", min_margin=1, max_margin=None)]
 
     def test_empty_body_returns_all_scenarios(self):
         """Empty simulated_results leaves complete_scenarios unchanged."""

@@ -357,6 +357,11 @@ def filter_scenarios_by_simulation(
     Conditions whose pair matches a submitted result are already-decided facts,
     not remaining contingencies, so they're stripped from each surviving
     scenario's ``conditions_atom`` (leaving ``[]`` when nothing is left to decide).
+    A scenario with ``conditions_atom=None`` implicitly means "every game_winners
+    pair, default margin" (see ``atoms_from_complete_scenarios``'s fallback); when
+    such a scenario's ``game_winners`` includes a submitted pair, that implicit
+    atom is materialized and stripped the same way so the redundancy doesn't
+    resurface through the fallback path.
     """
     simulated_pairs = {(r.winner, r.loser) for r in simulated_results}
     if not simulated_pairs:
@@ -383,11 +388,16 @@ def filter_scenarios_by_simulation(
 
     result = []
     for sc in complete_scenarios:
-        if not all(pair in sc.get("game_winners", []) for pair in simulated_pairs) or not _margin_ok(sc):
+        game_winners = sc.get("game_winners", [])
+        if not all(pair in game_winners for pair in simulated_pairs) or not _margin_ok(sc):
             continue
+        # Every simulated pair is guaranteed to be in game_winners by the check above,
+        # so a None atom (implicitly "every game_winners pair, default margin") always
+        # has something to strip here — materialize it explicitly before stripping.
         atom = sc.get("conditions_atom")
-        if atom is not None:
-            sc = {**sc, "conditions_atom": _strip_known_conditions(atom, simulated_pairs)}
+        if atom is None:
+            atom = [GameResult(winner=w, loser=l) for w, l in game_winners]
+        sc = {**sc, "conditions_atom": _strip_known_conditions(atom, simulated_pairs)}
         result.append(sc)
     return result
 
