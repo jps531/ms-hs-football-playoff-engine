@@ -6,9 +6,21 @@ have no real second round, so their round 2 is the Quarterfinals; 1A-4A
 brackets have a real Second Round as round 2, with Quarterfinals as round 3).
 """
 
+import logging
+
+import pytest
+
+import backend.prefect.ahsfhs_schedule_pipeline as pipeline
 from backend.prefect.ahsfhs_schedule_pipeline import parse_ahsfhs_schedule
 
 SEASON = 2025
+
+
+@pytest.fixture(autouse=True)
+def _stub_run_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """parse_ahsfhs_schedule calls Prefect's get_run_logger(), which requires a live
+    flow/task run context; stub it so the pure parsing logic is testable in isolation."""
+    monkeypatch.setattr(pipeline, "get_run_logger", lambda: logging.getLogger("test"))
 
 
 def _schedule_text(game_line: str) -> str:
