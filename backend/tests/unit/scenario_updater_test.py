@@ -15,6 +15,7 @@ from backend.helpers.data_classes import (
 from backend.helpers.scenario_updater import (
     apply_bracket_game_results,
     apply_region_game_results,
+    merge_applied_results,
 )
 
 # ---------------------------------------------------------------------------
@@ -134,6 +135,53 @@ class TestApplyRegionGameResults:
         # Alpha can no longer finish 1st (1-1 at best, Beta is 0-1 but plays Gamma).
         # Gamma is now 1-0 so they can reach 1st — Alpha cannot clinch 1st.
         assert odds["Alpha"].p1 < 1.0
+
+
+# ---------------------------------------------------------------------------
+# merge_applied_results
+# ---------------------------------------------------------------------------
+
+
+class TestMergeAppliedResults:
+    """Tests for merge_applied_results — the shared completed/remaining merge helper."""
+
+    def test_applied_pair_removed_from_remaining(self):
+        """The applied game's pair is dropped from the returned remaining list."""
+        new_result = AppliedGameResult(team_a="Alpha", team_b="Gamma", score_a=21, score_b=0)
+        _, new_remaining = merge_applied_results(COMPLETED, REMAINING, [new_result])
+        pairs = {(rg.a, rg.b) for rg in new_remaining}
+        assert pairs == {("Beta", "Gamma")}
+
+    def test_applied_result_added_to_completed(self):
+        """The applied game is appended to completed as a CompletedGame."""
+        new_result = AppliedGameResult(team_a="Alpha", team_b="Gamma", score_a=21, score_b=0)
+        new_completed, _ = merge_applied_results(COMPLETED, REMAINING, [new_result])
+        assert len(new_completed) == len(COMPLETED) + 1
+        added = new_completed[-1]
+        assert (added.a, added.b) == ("Alpha", "Gamma")
+        assert added.res_a == 1
+
+    def test_no_new_results_returns_inputs_unchanged(self):
+        """Passing no new_results leaves completed/remaining as their original contents."""
+        new_completed, new_remaining = merge_applied_results(COMPLETED, REMAINING, [])
+        assert new_completed == COMPLETED
+        assert new_remaining == REMAINING
+
+    def test_unknown_pair_still_added_to_completed(self):
+        """A result for a pair not in remaining is appended to completed without raising,
+        and remaining is unaffected since there's nothing matching to remove."""
+        new_result = AppliedGameResult(team_a="Alpha", team_b="Beta", score_a=14, score_b=7)
+        new_completed, new_remaining = merge_applied_results(COMPLETED, REMAINING, [new_result])
+        assert len(new_completed) == len(COMPLETED) + 1
+        assert new_remaining == REMAINING
+
+    def test_apply_region_game_results_matches_merge_applied_results(self):
+        """apply_region_game_results' internal merge is consistent with the extracted helper."""
+        new_result = AppliedGameResult(team_a="Alpha", team_b="Gamma", score_a=21, score_b=0)
+        merged_completed, merged_remaining = merge_applied_results(COMPLETED, REMAINING, [new_result])
+        _, odds_via_apply = apply_region_game_results(TEAMS, COMPLETED, REMAINING, [new_result])
+        _, odds_via_merge_then_direct = apply_region_game_results(TEAMS, merged_completed, merged_remaining, [])
+        assert odds_via_apply["Alpha"].p1 == pytest.approx(odds_via_merge_then_direct["Alpha"].p1)
 
 
 # ---------------------------------------------------------------------------

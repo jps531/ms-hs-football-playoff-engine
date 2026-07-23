@@ -10,12 +10,6 @@ param conventions, and should read from dated snapshots (falling back to the
 latest snapshot ≤ `date`, same as existing standings behavior). Add each to the
 README API Reference tables and cover with tests per the existing patterns.
 
-Naming contract used throughout (also a rename task, see §7):
-- `p_reach` — probability of reaching a given playoff round/game
-- `p_host_given_reach` — probability of hosting that game, conditional on reaching it
-- `p_host_overall` — `p_reach × p_host_given_reach`
-- Never use the words "conditional" or "marginal" in field names, docs, or UI copy.
-
 ---
 
 ## 1. `GET /standings/summary` — statewide summary (grand view)
@@ -237,19 +231,16 @@ pairs; optional `date`.
   If condition derivation is expensive, ship the three probabilities first and
   add conditions in a follow-up — but keep the fields in the schema as null.
 
-**Two related fixes while in this code:**
-1. **Rename** hosting/bracket response fields to the naming contract:
-   `home_game_odds` entries become `p_host_given_reach` (+ `_weighted`), and
-   anywhere docs/fields say "conditional probability of hosting," use the
-   contract names. Advancement odds may keep their round-keyed shape but
-   document them as `p_reach` semantics.
-2. **Simulate parity:** `bracket_odds` and `home_game_odds` are currently
-   `null` on simulate paths. The UI's simulate mode re-resolves hosting and
-   advancement odds after each pick (this is a core feature on the bracket
-   page). At minimum, `POST /bracket/simulate` and the hosting simulate
-   endpoints must return real (non-null) advancement + hosting numbers;
-   standings simulate may keep them null if computing them there is
-   prohibitive, but document which paths return what.
+**Existing building blocks:** `enumerate_team_matchups()`
+(`backend/helpers/home_game_scenarios.py`) and `team_matchups_as_dict()`
+(`backend/helpers/scenario_renderer.py`) already compute per-team, per-round
+`p_reach`/`p_host_given_reach`/`p_host_overall` with this exact consistency
+guarantee, and the structured-condition types backing
+`reach_conditions`/`host_conditions` already exist and are serialized
+elsewhere (`ScenarioEntry.conditions`, `KeyInsightModel.conditions`). Neither
+is currently called from any router. Implementing this endpoint is largely
+inverting that team-keyed data into the slot-keyed shape above and renaming
+the condition fields, not computing from scratch.
 
 ---
 

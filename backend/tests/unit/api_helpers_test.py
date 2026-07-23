@@ -8,7 +8,9 @@ from fastapi import HTTPException
 
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
+    BracketAdvancementOdds,
     BracketSlotHosting,
+    HomeGameOdds,
     RoundHostingOdds,
     TeamBracketEntry,
     TeamHostingEntry,
@@ -33,6 +35,7 @@ from backend.helpers.api_helpers import (
     build_playoff_bracket_state,
     build_rank_entry,
     build_seeding_by_region,
+    build_standings_bracket_home_odds,
     build_team_entries,
     clinched_school,
     compute_remaining_games,
@@ -424,7 +427,11 @@ class TestFilterScenariosBySimulation:
 
     def test_non_game_result_atom_entries_are_skipped(self):
         """A conditions_atom mixing a MarginCondition with a GameResult still filters
-        correctly — _margin_ok skips the non-GameResult entry instead of erroring."""
+        correctly — _margin_ok skips the non-GameResult entry instead of erroring.
+
+        The GameResult condition matching the submitted pair is a now-decided fact,
+        so it's stripped from the surviving scenario's conditions_atom; the unrelated
+        MarginCondition is untouched."""
         margin_cond = MarginCondition(add=(("Stringer", "Resurrection"),), sub=(), op=">=", threshold=10)
         scenario = self._scenario(
             "a",
@@ -432,7 +439,40 @@ class TestFilterScenariosBySimulation:
         )
         body = [_GameResult("Lumberton", "Taylorsville", winner_score=12, loser_score=7)]
         result = filter_scenarios_by_simulation([scenario], body)
-        assert result == [scenario]
+        assert len(result) == 1
+        assert result[0]["conditions_atom"] == [margin_cond]
+
+    def test_condition_matching_submitted_pair_is_stripped(self):
+        """A GameResult condition for a submitted (winner, loser) pair is removed from
+        conditions_atom, leaving only the still-contingent condition."""
+        scenario = self._scenario(
+            "a",
+            [
+                GameResult("Lumberton", "Taylorsville", min_margin=1, max_margin=12),
+                GameResult("Stringer", "Resurrection", min_margin=1, max_margin=None),
+            ],
+        )
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=11, loser_score=0)]
+        result = filter_scenarios_by_simulation([scenario], body)
+        assert len(result) == 1
+        assert result[0]["conditions_atom"] == [GameResult("Stringer", "Resurrection", min_margin=1, max_margin=None)]
+
+    def test_condition_stripped_to_empty_atom(self):
+        """When every condition in an atom is satisfied by submitted results, conditions_atom
+        becomes an empty list (not None) — the scenario is fully decided."""
+        scenario = self._scenario("a", [GameResult("Lumberton", "Taylorsville", min_margin=1, max_margin=12)])
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=11, loser_score=0)]
+        result = filter_scenarios_by_simulation([scenario], body)
+        assert len(result) == 1
+        assert result[0]["conditions_atom"] == []
+
+    def test_stripping_does_not_mutate_original_scenario(self):
+        """The input scenario dict's conditions_atom is left untouched (a new dict is returned)."""
+        atom = [GameResult("Lumberton", "Taylorsville", min_margin=1, max_margin=12)]
+        scenario = self._scenario("a", atom)
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=11, loser_score=0)]
+        filter_scenarios_by_simulation([scenario], body)
+        assert scenario["conditions_atom"] == atom
 
 
 # ---------------------------------------------------------------------------
@@ -713,6 +753,23 @@ class TestScenariosToEntries:
         result = scenarios_to_entries(scenarios)
         assert result is not None
         assert result[0].conditions is None
+
+    def test_conditions_field_empty_list_when_conditions_atom_empty(self):
+        """conditions is [] (not None) when conditions_atom is an empty list — e.g. a
+        scenario fully decided by simulated results with nothing left to show."""
+        scenarios = [
+            {
+                "scenario_num": 1,
+                "sub_label": "a",
+                "game_winners": [("Lumberton", "Taylorsville")],
+                "conditions_atom": [],
+                "seeding": ["Lumberton", "Taylorsville"],
+            }
+        ]
+        result = scenarios_to_entries(scenarios)
+        assert result is not None
+        assert result[0].conditions == []
+        assert result[0].title == ""
 
 
 # ---------------------------------------------------------------------------
@@ -1059,6 +1116,35 @@ class TestStandingsFromOdds:
         """Teams absent from records default to all-zero record."""
         result = standings_from_odds(self._ODDS, set(), {})
         assert result[0].record.region_wins == 0
+
+    def test_bracket_home_odds_default_to_none(self):
+        """Without bracket_home_odds_by_school, bracket_odds/home_game_odds stay None."""
+        result = standings_from_odds(self._ODDS, set(), self._RECORDS)
+        alpha = next(e for e in result if e.school == "Alpha")
+        assert alpha.bracket_odds is None
+        assert alpha.home_game_odds is None
+
+    def test_bracket_home_odds_populated_when_provided(self):
+        """Schools present in bracket_home_odds_by_school get their bracket_odds/home_game_odds set."""
+        bracket_odds = BracketAdvancementOdds(
+            second_round=0.7, quarterfinals=0.5, semifinals=0.3, finals=0.2, champion=0.1,
+            second_round_weighted=0.7, quarterfinals_weighted=0.5, semifinals_weighted=0.3,
+            finals_weighted=0.2, champion_weighted=0.1,
+        )
+        home_game_odds = HomeGameOdds(
+            first_round=0.6, second_round=0.4, quarterfinals=0.3, semifinals=0.2,
+            first_round_weighted=0.6, second_round_weighted=0.4, quarterfinals_weighted=0.3, semifinals_weighted=0.2,
+        )
+        result = standings_from_odds(
+            self._ODDS, set(), self._RECORDS,
+            bracket_home_odds_by_school={"Alpha": (bracket_odds, home_game_odds)},
+        )
+        alpha = next(e for e in result if e.school == "Alpha")
+        beta = next(e for e in result if e.school == "Beta")
+        assert alpha.bracket_odds is bracket_odds
+        assert alpha.home_game_odds is home_game_odds
+        assert beta.bracket_odds is None
+        assert beta.home_game_odds is None
 
 
 # ---------------------------------------------------------------------------
@@ -3213,3 +3299,78 @@ class TestBuildRankEntry:
         assert build_rank_entry(row, "odds_1st").sort_value == pytest.approx(0.9)
         assert build_rank_entry(row, "odds_champion").sort_value == pytest.approx(0.05)
         assert build_rank_entry(row, "odds_semifinals_home_weighted").sort_value == pytest.approx(0.08)
+
+
+# ---------------------------------------------------------------------------
+# TestBuildStandingsBracketHomeOdds
+# ---------------------------------------------------------------------------
+
+
+class TestBuildStandingsBracketHomeOdds:
+    """build_standings_bracket_home_odds computes per-school BracketAdvancementOdds/HomeGameOdds
+    for the standings-simulate path (a regular-season what-if, not mid-playoff progress)."""
+
+    def test_empty_slots_returns_empty_dict(self):
+        """No playoff format configured -> empty result, not an error."""
+        result = build_standings_bracket_home_odds(1, _REGION1_ODDS_5A, {1: _REGION1_ODDS_5A}, [], 2025, 5)
+        assert result == {}
+
+    def test_empty_all_region_odds_returns_empty_dict(self):
+        """No standings snapshot data at all -> empty result, not an error."""
+        result = build_standings_bracket_home_odds(1, _REGION1_ODDS_5A, {}, SLOTS_5A_7A_2025, 2025, 5)
+        assert result == {}
+
+    def test_returns_entry_per_team(self):
+        """One (BracketAdvancementOdds, HomeGameOdds) tuple per team in region_odds."""
+        result = build_standings_bracket_home_odds(1, _REGION1_ODDS_5A, {1: _REGION1_ODDS_5A}, SLOTS_5A_7A_2025, 2025, 5)
+        assert set(result) == set(_REGION1_ODDS_5A)
+
+    def test_bracket_odds_values_in_range(self):
+        """Advancement probabilities are valid probabilities."""
+        result = build_standings_bracket_home_odds(1, _REGION1_ODDS_5A, {1: _REGION1_ODDS_5A}, SLOTS_5A_7A_2025, 2025, 5)
+        bracket_odds, _ = result["Alpha"]
+        for value in (
+            bracket_odds.second_round,
+            bracket_odds.quarterfinals,
+            bracket_odds.semifinals,
+            bracket_odds.finals,
+            bracket_odds.champion,
+        ):
+            assert 0.0 <= value <= 1.0
+
+    def test_home_game_odds_first_round_matches_seed_hosting(self):
+        """Seeds 1/2 host round 1 (probability 1.0); seeds 3/4 do not (0.0)."""
+        result = build_standings_bracket_home_odds(1, _REGION1_ODDS_5A, {1: _REGION1_ODDS_5A}, SLOTS_5A_7A_2025, 2025, 5)
+        assert result["Alpha"][1].first_round == pytest.approx(1.0)
+        assert result["Gamma"][1].first_round == pytest.approx(0.0)
+
+    def test_5a_7a_second_round_home_defaults_to_zero(self):
+        """5A-7A classes have no second round -> home_game_odds.second_round is 0.0."""
+        result = build_standings_bracket_home_odds(1, _REGION1_ODDS_5A, {1: _REGION1_ODDS_5A}, SLOTS_5A_7A_2025, 2025, 5)
+        assert result["Alpha"][1].second_round == pytest.approx(0.0)
+
+    def test_1a_4a_second_round_home_odds_populated(self):
+        """1A-4A classes populate a valid second_round home probability."""
+        result = build_standings_bracket_home_odds(1, _REGION1_ODDS_1A, {1: _REGION1_ODDS_1A}, SLOTS_1A_4A_2025, 2025, 1)
+        assert 0.0 <= result["Able"][1].second_round <= 1.0
+
+    def test_weighted_defaults_to_unweighted_without_matchup_fn(self):
+        """Without a weighted win-prob function, *_weighted fields equal the unweighted values."""
+        result = build_standings_bracket_home_odds(1, _REGION1_ODDS_5A, {1: _REGION1_ODDS_5A}, SLOTS_5A_7A_2025, 2025, 5)
+        bracket_odds, home_game_odds = result["Alpha"]
+        assert bracket_odds.champion_weighted == pytest.approx(bracket_odds.champion)
+        assert home_game_odds.quarterfinals_weighted == pytest.approx(home_game_odds.quarterfinals)
+
+    def test_weighted_uses_matchup_fn_when_provided(self):
+        """A weighted win-prob function that favors the 1-seed produces a different champion_weighted."""
+
+        def _skewed(region1: int, seed1: int, region2: int, seed2: int) -> float:
+            """Give the region-1 seed-1 team a 0.9 win probability; everyone else 0.5."""
+            return 0.9 if (region1, seed1) == (1, 1) else 0.5
+
+        result = build_standings_bracket_home_odds(
+            1, _REGION1_ODDS_5A, {1: _REGION1_ODDS_5A}, SLOTS_5A_7A_2025, 2025, 5,
+            win_prob_fn_weighted=_skewed,
+        )
+        bracket_odds, _ = result["Alpha"]
+        assert bracket_odds.champion_weighted != pytest.approx(bracket_odds.champion)

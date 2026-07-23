@@ -74,7 +74,7 @@ from backend.helpers.scenario_serializers import (
     deserialize_remaining_games,
     serialize_atom,
 )
-from backend.helpers.scenarios import determine_odds, determine_scenarios
+from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 # ---------------------------------------------------------------------------
@@ -337,6 +337,11 @@ def filter_remaining_after_simulation(
     return [rg for rg in remaining if {rg.a, rg.b} not in applied_pairs]
 
 
+def _strip_known_conditions(atom: list, simulated_pairs: set[tuple[str, str]]) -> list:
+    """Drop ``GameResult`` conditions whose (winner, loser) pair is already a submitted fact."""
+    return [c for c in atom if not (isinstance(c, GameResult) and (c.winner, c.loser) in simulated_pairs)]
+
+
 def filter_scenarios_by_simulation(
     complete_scenarios: list[dict],
     simulated_results,
@@ -348,6 +353,10 @@ def filter_scenarios_by_simulation(
     in the scenario's ``conditions_atom`` for that same pair must accept the
     resulting margin (min_margin/max_margin), so mutually-exclusive margin-bucket
     sub-scenarios collapse to the one branch the real score actually falls in.
+
+    Conditions whose pair matches a submitted result are already-decided facts,
+    not remaining contingencies, so they're stripped from each surviving
+    scenario's ``conditions_atom`` (leaving ``[]`` when nothing is left to decide).
     """
     simulated_pairs = {(r.winner, r.loser) for r in simulated_results}
     if not simulated_pairs:
@@ -372,11 +381,15 @@ def filter_scenarios_by_simulation(
                 return False
         return True
 
-    return [
-        sc
-        for sc in complete_scenarios
-        if all(pair in sc.get("game_winners", []) for pair in simulated_pairs) and _margin_ok(sc)
-    ]
+    result = []
+    for sc in complete_scenarios:
+        if not all(pair in sc.get("game_winners", []) for pair in simulated_pairs) or not _margin_ok(sc):
+            continue
+        atom = sc.get("conditions_atom")
+        if atom is not None:
+            sc = {**sc, "conditions_atom": _strip_known_conditions(atom, simulated_pairs)}
+        result.append(sc)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -478,7 +491,7 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
                 tiebreaker_groups=sc.get("tiebreaker_groups"),
                 coinflip_groups=sc.get("coinflip_groups"),
                 outcomes={team: str(idx + 1) for idx, team in enumerate(seeding)},
-                conditions=serialize_atom(conditions_atom) if conditions_atom else None,
+                conditions=serialize_atom(conditions_atom) if conditions_atom is not None else None,
             )
         )
     return result
@@ -569,16 +582,22 @@ def standings_from_odds(
     odds_map: dict[str, StandingsOdds],
     coinflip_teams: set[str],
     records: dict[str, tuple],
+    bracket_home_odds_by_school: dict[str, tuple[BracketAdvancementOdds, HomeGameOdds]] | None = None,
 ) -> list[TeamStandingsEntry]:
     """Build standings entries from on-demand computation when no DB snapshot is available.
 
     Teams are returned sorted alphabetically.  Overall W/L/T default to 0 when
-    not available (see ``records_from_completed``).
+    not available (see ``records_from_completed``).  When *bracket_home_odds_by_school*
+    contains an entry for a school, ``bracket_odds``/``home_game_odds`` are populated
+    from it; otherwise they stay ``None`` (e.g. no playoff format configured).
     """
     entries = []
     for school in sorted(odds_map):
         rec = records.get(school, (0, 0, 0, 0, 0, 0))
         o = odds_map[school]
+        bracket_odds, home_game_odds = (
+            bracket_home_odds_by_school[school] if bracket_home_odds_by_school and school in bracket_home_odds_by_school else (None, None)
+        )
         entries.append(
             TeamStandingsEntry(
                 school=school,
@@ -591,12 +610,102 @@ def standings_from_odds(
                     region_ties=rec[5],
                 ),
                 odds=SeedingOddsModel(p1=o.p1, p2=o.p2, p3=o.p3, p4=o.p4, p_playoffs=o.p_playoffs),
+                bracket_odds=bracket_odds,
+                home_game_odds=home_game_odds,
                 clinched=o.clinched,
                 eliminated=o.eliminated,
                 coin_flip_needed=school in coinflip_teams,
             )
         )
     return entries
+
+
+def build_standings_bracket_home_odds(
+    region: int,
+    region_odds: dict[str, StandingsOdds],
+    all_region_odds: dict[int, dict[str, StandingsOdds]],
+    slots: list[FormatSlot],
+    season: int,
+    clazz: int,
+    win_prob_fn_weighted: MatchupProbFn | None = None,
+) -> dict[str, tuple[BracketAdvancementOdds, HomeGameOdds]]:
+    """Compute per-school bracket advancement + home-game odds for a standings simulate response.
+
+    Mirrors the on-the-fly fallback branch of ``build_hosting_entries``, but every
+    underlying ``compute_*`` call is already keyed by school name (not bracket slot
+    ID) when *region_odds* is school-keyed, so no slot-to-school mapping is needed.
+    This is a regular-season what-if (hypothetical remaining-game results), not
+    mid-playoff bracket progress, so ``rounds_completed``/``wins_confirmed``/
+    ``cross_region_wins`` are left at their defaults.
+
+    Returns ``{}`` when *slots*/*all_region_odds* are unavailable (e.g. no playoff
+    format configured for the season/class) so callers can leave the fields null
+    instead of erroring.
+    """
+    if not slots or not all_region_odds:
+        return {}
+
+    is_1a_4a = clazz <= 4
+    r1_home_seeds = frozenset(s.home_seed for s in slots if s.home_region == region)
+
+    adv = compute_bracket_advancement_odds(region, region_odds, slots)
+    r1_home = compute_first_round_home_odds(r1_home_seeds, region_odds)
+    r2_home = (
+        compute_second_round_home_odds(region, region_odds, slots, season, all_region_odds=all_region_odds)
+        if is_1a_4a
+        else {}
+    )
+    qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season, all_region_odds=all_region_odds)
+    sf_home = compute_semifinal_home_odds(region, region_odds, slots, season, all_region_odds=all_region_odds)
+
+    if win_prob_fn_weighted is not None:
+        adv_w = compute_bracket_advancement_odds(region, region_odds, slots, win_prob_fn=win_prob_fn_weighted)
+        r2_home_w = (
+            compute_second_round_home_odds(
+                region, region_odds, slots, season, win_prob_fn=win_prob_fn_weighted, all_region_odds=all_region_odds
+            )
+            if is_1a_4a
+            else {}
+        )
+        qf_home_w = compute_quarterfinal_home_odds(
+            region, region_odds, slots, season, win_prob_fn=win_prob_fn_weighted, all_region_odds=all_region_odds
+        )
+        sf_home_w = compute_semifinal_home_odds(
+            region, region_odds, slots, season, win_prob_fn=win_prob_fn_weighted, all_region_odds=all_region_odds
+        )
+    else:
+        adv_w = r2_home_w = qf_home_w = sf_home_w = None
+
+    result: dict[str, tuple[BracketAdvancementOdds, HomeGameOdds]] = {}
+    for school in region_odds:
+        a = adv.get(school)
+        if a is None:
+            continue
+        a_w = adv_w.get(school) if adv_w else None
+        bracket_odds = BracketAdvancementOdds(
+            second_round=a.second_round,
+            quarterfinals=a.quarterfinals,
+            semifinals=a.semifinals,
+            finals=a.finals,
+            champion=a.champion,
+            second_round_weighted=a_w.second_round if a_w else a.second_round,
+            quarterfinals_weighted=a_w.quarterfinals if a_w else a.quarterfinals,
+            semifinals_weighted=a_w.semifinals if a_w else a.semifinals,
+            finals_weighted=a_w.finals if a_w else a.finals,
+            champion_weighted=a_w.champion if a_w else a.champion,
+        )
+        home_game_odds = HomeGameOdds(
+            first_round=r1_home.get(school, 0.0),
+            second_round=r2_home.get(school, 0.0),
+            quarterfinals=qf_home.get(school, 0.0),
+            semifinals=sf_home.get(school, 0.0),
+            first_round_weighted=r1_home.get(school, 0.0),
+            second_round_weighted=(r2_home_w if r2_home_w is not None else r2_home).get(school, 0.0),
+            quarterfinals_weighted=(qf_home_w if qf_home_w is not None else qf_home).get(school, 0.0),
+            semifinals_weighted=(sf_home_w if sf_home_w is not None else sf_home).get(school, 0.0),
+        )
+        result[school] = (bracket_odds, home_game_odds)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1417,6 +1526,28 @@ def build_playoff_bracket_state(
         confirmed_game_results=[],
         round_ceiling=round_ceiling,
     )
+
+
+async def _load_all_region_odds(conn, season: int, clazz: int, as_of: date) -> dict[int, dict[str, StandingsOdds]]:  # pragma: no cover
+    """Return {region: {school: StandingsOdds}} for all regions in *clazz*."""
+    rows = await conn.execute(
+        """
+        SELECT DISTINCT ON (school)
+            school, region, odds_1st, odds_2nd, odds_3rd, odds_4th,
+            odds_playoffs, clinched, eliminated
+        FROM region_standings
+        WHERE season = %s AND class = %s AND as_of_date <= %s
+        ORDER BY school, as_of_date DESC
+        """,
+        (season, clazz, as_of),
+    )
+    by_region: dict[int, dict[str, StandingsOdds]] = {}
+    async for r in rows:
+        school, region = r[0], r[1]
+        by_region.setdefault(region, {})[school] = standings_odds_from_row(
+            school, r[2], r[3], r[4], r[5], r[6], r[7], r[8],
+        )
+    return by_region
 
 
 async def _load_elo_ratings(conn, season: int, as_of: date) -> dict[str, float]:  # pragma: no cover

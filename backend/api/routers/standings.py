@@ -10,6 +10,10 @@ from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
 from backend.api.models.responses import ComputationStateModel, StandingsResponse
 from backend.helpers.api_helpers import (
+    _load_all_region_odds,
+    _load_elo_ratings,
+    _load_format_slots,
+    build_standings_bracket_home_odds,
     build_team_entries,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
@@ -30,6 +34,7 @@ from backend.helpers.api_helpers import (
 from backend.helpers.data_classes import StandingsOdds
 from backend.helpers.scenario_renderer import atoms_from_complete_scenarios, team_scenarios_as_dict
 from backend.helpers.scenario_updater import apply_region_game_results
+from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["standings"])
 
@@ -239,8 +244,17 @@ async def simulate_standings(
         _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
         updated_remaining = filter_remaining_after_simulation(remaining, body.results)
 
+        slots = await _load_format_slots(conn, season, clazz)
+        elo_ratings = await _load_elo_ratings(conn, season, as_of)
+        by_region = await _load_all_region_odds(conn, season, clazz, as_of)
+
     records = records_from_completed(teams, completed)
-    team_entries = standings_from_odds(odds_map, set(), records)
+    by_region[region] = odds_map
+    matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
+    bracket_home_odds_by_school = build_standings_bracket_home_odds(
+        region, odds_map, by_region, slots, season, clazz, win_prob_fn_weighted=matchup_fn
+    )
+    team_entries = standings_from_odds(odds_map, set(), records, bracket_home_odds_by_school=bracket_home_odds_by_school)
 
     scenarios_available = within_display_threshold(updated_remaining)
 

@@ -38,34 +38,17 @@ from backend.helpers.scenarios import determine_odds, determine_scenarios
 # -------------------------
 
 
-def apply_region_game_results(
-    teams: list[str],
+def merge_applied_results(
     completed: list[CompletedGame],
     remaining: list[RemainingGame],
     new_results: list[AppliedGameResult],
-    ignore_margins: bool = False,
-) -> tuple[ScenarioResults, dict[str, StandingsOdds]]:
-    """Apply hypothetical game results to existing region state and return updated odds.
+) -> tuple[list[CompletedGame], list[RemainingGame]]:
+    """Fold hypothetical ``new_results`` into ``completed``/``remaining``, keeping both in sync.
 
-    Converts each ``AppliedGameResult`` into a ``CompletedGame``, removes the
-    corresponding ``RemainingGame`` entries, and re-runs ``determine_scenarios``
-    plus ``determine_odds``.
-
-    Args:
-        teams: All team names in the region (alphabetically sorted).
-        completed: Finalized region games already played.
-        remaining: Unplayed region game pairs.
-        new_results: Hypothetical game results to apply.  Each result must
-            correspond to a game currently in ``remaining``; results whose pair
-            does not appear in ``remaining`` are still accepted (the pair is
-            added to completed) but no ``RemainingGame`` entry is removed.
-        ignore_margins: Skip margin-sensitive enumeration.  Appropriate when
-            ``len(remaining) - len(new_results) >= 7`` or when score data is
-            unavailable.
-
-    Returns:
-        ``(ScenarioResults, dict[str, StandingsOdds])`` reflecting the state
-        after applying the new results.
+    Converts each ``AppliedGameResult`` into a ``CompletedGame`` and removes the
+    corresponding ``RemainingGame`` entries.  Results whose pair does not appear
+    in ``remaining`` are still accepted (the pair is added to completed) but no
+    ``RemainingGame`` entry is removed.
     """
     applied_pairs: set[tuple[str, str]] = set()
     new_completed_games: list[CompletedGame] = []
@@ -99,6 +82,39 @@ def apply_region_game_results(
 
     new_remaining = [rg for rg in remaining if (rg.a, rg.b) not in applied_pairs]
     all_completed = completed + new_completed_games
+    return all_completed, new_remaining
+
+
+def apply_region_game_results(
+    teams: list[str],
+    completed: list[CompletedGame],
+    remaining: list[RemainingGame],
+    new_results: list[AppliedGameResult],
+    ignore_margins: bool = False,
+) -> tuple[ScenarioResults, dict[str, StandingsOdds]]:
+    """Apply hypothetical game results to existing region state and return updated odds.
+
+    Converts each ``AppliedGameResult`` into a ``CompletedGame``, removes the
+    corresponding ``RemainingGame`` entries, and re-runs ``determine_scenarios``
+    plus ``determine_odds``.
+
+    Args:
+        teams: All team names in the region (alphabetically sorted).
+        completed: Finalized region games already played.
+        remaining: Unplayed region game pairs.
+        new_results: Hypothetical game results to apply.  Each result must
+            correspond to a game currently in ``remaining``; results whose pair
+            does not appear in ``remaining`` are still accepted (the pair is
+            added to completed) but no ``RemainingGame`` entry is removed.
+        ignore_margins: Skip margin-sensitive enumeration.  Appropriate when
+            ``len(remaining) - len(new_results) >= 7`` or when score data is
+            unavailable.
+
+    Returns:
+        ``(ScenarioResults, dict[str, StandingsOdds])`` reflecting the state
+        after applying the new results.
+    """
+    all_completed, new_remaining = merge_applied_results(completed, remaining, new_results)
 
     scenario_results = determine_scenarios(teams, all_completed, new_remaining, ignore_margins=ignore_margins)
     odds = determine_odds(

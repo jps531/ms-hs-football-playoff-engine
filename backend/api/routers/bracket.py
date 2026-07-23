@@ -11,6 +11,7 @@ from backend.api.models.requests import SimulateBracketRequest
 from backend.api.models.responses import BracketResponse, TeamBracketEntry
 from backend.helpers.api_helpers import (
     _apply_round_ceilings,
+    _load_all_region_odds,
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     _load_format_slots,
@@ -19,10 +20,9 @@ from backend.helpers.api_helpers import (
     build_bracket_entries,
     build_bracket_layout,
     build_enriched_bracket_layout,
-    standings_odds_from_row,
     today,
 )
-from backend.helpers.data_classes import MatchupProbFn, StandingsOdds
+from backend.helpers.data_classes import MatchupProbFn
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["bracket"])
@@ -30,28 +30,6 @@ router = APIRouter(prefix="/api/v1", tags=["bracket"])
 SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 ClassQ = Annotated[int, Query(alias="class", ge=1, le=7)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
-
-
-async def _load_all_region_odds(conn, season: int, clazz: int, as_of: date) -> dict[int, dict[str, StandingsOdds]]:
-    """Return {region: {school: StandingsOdds}} for all regions in *clazz*."""
-    rows = await conn.execute(
-        """
-        SELECT DISTINCT ON (school)
-            school, region, odds_1st, odds_2nd, odds_3rd, odds_4th,
-            odds_playoffs, clinched, eliminated
-        FROM region_standings
-        WHERE season = %s AND class = %s AND as_of_date <= %s
-        ORDER BY school, as_of_date DESC
-        """,
-        (season, clazz, as_of),
-    )
-    by_region: dict[int, dict[str, StandingsOdds]] = {}
-    async for r in rows:
-        school, region = r[0], r[1]
-        by_region.setdefault(region, {})[school] = standings_odds_from_row(
-            school, r[2], r[3], r[4], r[5], r[6], r[7], r[8],
-        )
-    return by_region
 
 
 def _invert_school_to_seed(school_to_seed: dict[str, tuple[int, int]]) -> dict[tuple[int, int], str]:

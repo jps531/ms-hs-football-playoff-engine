@@ -30,7 +30,7 @@ from backend.helpers.api_helpers import (
 from backend.helpers.data_classes import FormatSlot, MatchupProbFn, StandingsOdds, StoredHostingOdds
 from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
 from backend.helpers.scenario_renderer import team_home_scenarios_as_dict
-from backend.helpers.scenario_updater import apply_region_game_results
+from backend.helpers.scenario_updater import apply_region_game_results, merge_applied_results
 from backend.helpers.scenario_viewer import build_scenario_atoms
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
@@ -450,8 +450,10 @@ async def simulate_class_hosting(
                 seeding_by_region = build_seeding_by_region(reg, odds_map, other_seeding)
                 matchup_fn_by_region[reg] = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
 
-                if include_scenarios and has_displayable_scenarios(reg_remaining):
-                    seed_atoms_by_region[reg] = build_scenario_atoms(reg_teams, completed, reg_remaining)
+                if include_scenarios:
+                    scenario_completed, scenario_remaining = merge_applied_results(completed, reg_remaining, reg_new_results)
+                    if has_displayable_scenarios(scenario_remaining):
+                        seed_atoms_by_region[reg] = build_scenario_atoms(reg_teams, scenario_completed, scenario_remaining)
 
     region_responses = []
     for reg in sorted(odds_by_region):
@@ -509,6 +511,7 @@ async def simulate_hosting(
         cross_region_wins: dict[tuple[int, int], int] | None = None
         wins_by_team: dict[str, int] = {}
         eliminated_hosting_map: dict[str, tuple] = {}
+        scenario_completed, scenario_remaining = completed, remaining
 
         if not remaining:
             # Playoff mode: delegate to shared bracket-state builder.
@@ -525,6 +528,7 @@ async def simulate_hosting(
             matchup_fn_w = state.matchup_fn
         else:
             # Regular-season mode: simulate remaining region games.
+            scenario_completed, scenario_remaining = merge_applied_results(completed, remaining, new_results)
             _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
             wins_by_team = {}
 
@@ -551,7 +555,11 @@ async def simulate_hosting(
         eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
     )
     if include_scenarios:
-        seed_atoms = build_scenario_atoms(teams, completed, remaining) if has_displayable_scenarios(remaining) else None
+        seed_atoms = (
+            build_scenario_atoms(teams, scenario_completed, scenario_remaining)
+            if has_displayable_scenarios(scenario_remaining)
+            else None
+        )
         entries = _attach_hosting_scenarios(entries, odds_map, slots, season, region, seed_atoms=seed_atoms)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
