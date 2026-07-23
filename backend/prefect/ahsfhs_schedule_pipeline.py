@@ -138,9 +138,9 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str, cl
         if round_text:
             round_text = round_text.replace("1st Round Playoffs", "First Round")
             if clazz >= 5:
-                round_text = round_text.replace("2nd Round Playoffs", "Second Round")
-            else:
                 round_text = round_text.replace("2nd Round Playoffs", "Quarterfinals")
+            else:
+                round_text = round_text.replace("2nd Round Playoffs", "Second Round")
             round_text = round_text.replace("3rd Round Playoffs", "Quarterfinals")
             round_text = round_text.replace("Semi-finals Playoffs", "Semifinals")
 
