@@ -174,7 +174,13 @@ class AssignChampionshipVenueRequest(BaseModel):
     """Request body for assigning a venue to championship games."""
 
     season: int
-    location_id: int
+    location: str = Field(
+        description=(
+            "Venue as the admin would pick/type it — matched case-insensitively and exactly "
+            "against either locations.name (e.g. 'M.M. Roberts Stadium') or locations.home_team "
+            "(e.g. 'Southern Miss'). Must resolve to exactly one location."
+        )
+    )
     class_: int | None = Field(default=None, alias="class", ge=1, le=7)
 
     model_config = {"populate_by_name": True}

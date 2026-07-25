@@ -2334,6 +2334,7 @@ class TestBuildBracketEntries:
             win_prob_fn_weighted=equal_matchup_prob,
         )
         seed1 = next(e for e in result if e.region == 1 and e.seed == 1)
+        assert seed1.hosting is not None
         assert seed1.hosting.quarterfinals.p_host_overall_weighted is not None
         assert seed1.hosting.semifinals.p_host_overall_weighted is not None
         assert seed1.quarterfinals_weighted is not None
@@ -2351,6 +2352,7 @@ class TestBuildBracketEntries:
             all_region_odds=by_region, win_prob_fn_weighted=equal_matchup_prob,
         )
         seed4 = next(e for e in result if e.region == 1 and e.seed == 4)
+        assert seed4.hosting is not None
         assert seed4.hosting.quarterfinals.p_host_overall_weighted == pytest.approx(0.0)
 
     def test_wins_by_team_with_all_region_odds_boosts_slot(self):
@@ -2382,6 +2384,7 @@ class TestBuildBracketEntries:
             eliminated_hosting={"T1S1": (0.0, None, 0.0, 0.0)},
         )
         r1s1 = next(e for e in result if e.region == 1 and e.seed == 1)
+        assert r1s1.hosting is not None
         assert r1s1.hosting.first_round.p_host_given_reach == pytest.approx(0.0)
         assert r1s1.hosting.quarterfinals.p_host_given_reach == pytest.approx(0.0)
 

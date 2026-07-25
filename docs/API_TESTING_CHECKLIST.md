@@ -111,7 +111,7 @@ Take a mid-season snapshot (`?date=` week before the final week) and POST a `sim
 
 ## Admin (`/api/v1/admin`)
 
-**14. `GET /locations` returns all venues**
+**14. `GET /locations` returns all venues** ✅
 The response should include M.M. Roberts Stadium (the usual championship site). If it's missing, the `locations` table wasn't seeded during init.
 
 **15. `POST /playoff-format?dry_run=true` reports the right counts**
@@ -121,7 +121,10 @@ POST a known season's format (e.g. 2025) in dry-run mode. The response should sh
 Run the same POST twice without `dry_run`. The second call should succeed (no 500) and return the same `classes_inserted` / `slots_inserted` counts — ON CONFLICT DO NOTHING should swallow the duplicates silently.
 
 **17. `POST /championship-venue?dry_run=true` lists the right games**
-After the championship games are ingested, call with `?dry_run=true`. The `games` list in the response should contain exactly one row per class (7 rows for a full season). If a class is missing, the AHSFHS scraper didn't import that game yet.
+Body now takes `location` (not `location_id`) — a venue name or home_team string, e.g. `{"season": 2025, "location": "M.M. Roberts Stadium"}` or `{"season": 2025, "location": "Southern Miss"}`. After the championship games are ingested, call with `?dry_run=true`. The `games` list in the response should contain exactly one row per class (7 rows for a full season). If a class is missing, the AHSFHS scraper didn't import that game yet.
+
+**17a. Unknown/ambiguous `location` values are rejected**
+`{"location": "Nonexistent Stadium"}` should 404. If two seeded locations ever share the same `home_team` (or a string matches one location's `name` and a different location's `home_team`), the call should 409 with a detail message listing the conflicting location names.
 
 **18. `POST /championship-venue` and re-run is safe**
-Apply the venue assignment, then call it again. The second call should 404 with "No unassigned Championship Game rows found" — confirming the `location_id IS NULL` filter prevents double-assignment.
+Apply the venue assignment, then call it again with the same `location`. The second call should 404 with "No unassigned Championship Game rows found" — confirming the `location_id IS NULL` filter prevents double-assignment.

@@ -2,10 +2,11 @@
 
 import asyncio
 import os
+from typing import cast
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 
 from backend.helpers.image_helpers import (
     MAX_UPLOAD_FILE_BYTES,
@@ -34,6 +35,11 @@ class _FakeUploadFile:
     async def read(self) -> bytes:
         """Return the fixed byte contents, mirroring UploadFile.read()."""
         return self._contents
+
+
+def _fake_upload_file(filename: str | None, content_type: str | None, contents: bytes) -> UploadFile:
+    """Build a _FakeUploadFile typed as UploadFile for passing to save_and_upload."""
+    return cast(UploadFile, _FakeUploadFile(filename, content_type, contents))
 
 
 @pytest.fixture
@@ -274,13 +280,13 @@ class TestSaveAndUpload:
 
     def test_returns_upload_fn_result(self):
         """The return value is whatever upload_fn(tmp_path) returns."""
-        file = _FakeUploadFile("logo.png", "image/png", b"fake-image-bytes")
+        file = _fake_upload_file("logo.png", "image/png", b"fake-image-bytes")
         result = asyncio.run(save_and_upload(file, lambda path: "logos/primary/Taylorsville"))
         assert result == "logos/primary/Taylorsville"
 
     def test_upload_fn_receives_path_to_saved_contents(self):
         """upload_fn is called with a path whose contents match the uploaded file."""
-        file = _FakeUploadFile("logo.png", "image/png", b"fake-image-bytes")
+        file = _fake_upload_file("logo.png", "image/png", b"fake-image-bytes")
         seen_contents = {}
 
         def upload_fn(path: str) -> str:
@@ -294,7 +300,7 @@ class TestSaveAndUpload:
 
     def test_temp_file_removed_after_successful_upload(self):
         """The temp file no longer exists once save_and_upload returns."""
-        file = _FakeUploadFile("logo.png", "image/png", b"data")
+        file = _fake_upload_file("logo.png", "image/png", b"data")
         captured_path = {}
 
         def upload_fn(path: str) -> str:
@@ -307,7 +313,7 @@ class TestSaveAndUpload:
 
     def test_temp_file_removed_even_when_upload_fn_raises(self):
         """The finally block cleans up the temp file even if upload_fn raises."""
-        file = _FakeUploadFile("logo.png", "image/png", b"data")
+        file = _fake_upload_file("logo.png", "image/png", b"data")
         captured_path = {}
 
         def upload_fn(path: str) -> str:
@@ -321,7 +327,7 @@ class TestSaveAndUpload:
 
     def test_disallowed_content_type_raises_422_before_upload(self):
         """validate_upload rejects the file before upload_fn is ever called."""
-        file = _FakeUploadFile("doc.pdf", "application/pdf", b"data")
+        file = _fake_upload_file("doc.pdf", "application/pdf", b"data")
 
         def upload_fn(path: str) -> str:
             """Fail the test if called — validation should reject the file first."""

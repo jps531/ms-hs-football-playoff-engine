@@ -1222,6 +1222,7 @@ def test_p_team_reach_skip_wins_four_short_circuits_sf() -> None:
     """
     half = half_slots_for_region(1, SLOTS_1A_4A_2025)
     idx = slot_index_for(1, 1, half)
+    assert idx is not None
     result = _p_team_reach(1, 1, idx, 4, half, equal_matchup_prob, skip_wins=4)
     assert result == pytest.approx(1.0, abs=1e-9)
 

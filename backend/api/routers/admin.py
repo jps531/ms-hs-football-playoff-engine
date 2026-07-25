@@ -44,6 +44,7 @@ from backend.helpers.query_helpers import (
     require_location_exists,
     require_nonempty_update,
     require_school_exists,
+    resolve_location_by_name_or_team,
 )
 
 _log = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ _HELMET_SELECT = HELMET_DESIGNS_SELECT + " WHERE id = %s"
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_moderator)])
 
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
+_409: dict[int | str, dict[str, Any]] = {409: {"description": "Conflict"}}
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +152,7 @@ async def seed_playoff_format(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/championship-venue", responses=_404)
+@router.post("/championship-venue", responses={404: {"description": "Not found"}, 409: {"description": "Conflict"}})
 async def assign_championship_venue(
     body: AssignChampionshipVenueRequest,
     dry_run: Annotated[bool, Query()] = False,
@@ -158,32 +160,28 @@ async def assign_championship_venue(
     """Assign a venue to all Championship Game rows for a season.
 
     Championship games arrive from the scraper with ``location_id = NULL``.
-    This endpoint sets ``location_id`` and ``location = 'neutral'``.
+    ``location`` is resolved case-insensitively against ``locations.name`` or
+    ``locations.home_team`` (exact match); if it matches zero locations this
+    returns 404, if it matches more than one it returns 409 listing the
+    conflicting names. On a match, this endpoint sets ``location_id`` and
+    ``location = 'neutral'`` on the affected games.
 
     Pass ``?dry_run=true`` to preview affected rows without writing.
     """
     async with get_conn() as conn:
-        loc_row = await (
-            await conn.execute(
-                "SELECT id, name FROM locations WHERE id = $1",
-                (body.location_id,),
-            )
-        ).fetchone()
-        if loc_row is None:
-            raise HTTPException(status_code=404, detail=f"Location id {body.location_id} not found")
-        location_name = loc_row[1]
+        location_id, location_name = await resolve_location_by_name_or_team(conn, body.location)
 
         find_sql = """
             SELECT g.school, g.date, g.opponent, ss.class
             FROM games g
             JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
-            WHERE g.season = $1
+            WHERE g.season = %s
               AND g.round = 'Championship Game'
               AND g.location_id IS NULL
         """
         find_params: list = [body.season]
         if body.class_ is not None:
-            find_sql += " AND ss.class = $2"
+            find_sql += " AND ss.class = %s"
             find_params.append(body.class_)
         find_sql += " ORDER BY ss.class, g.date, g.school"
 
@@ -199,21 +197,22 @@ async def assign_championship_venue(
 
         if not dry_run:
             _log.info(
-                "admin: assigning championship venue location_id=%s season=%s class=%s games=%s",
-                body.location_id,
+                "admin: assigning championship venue location_id=%s location=%s season=%s class=%s games=%s",
+                location_id,
+                body.location,
                 body.season,
                 body.class_,
                 len(games),
             )
             for game in games:
                 await conn.execute(
-                    "UPDATE games SET location_id = $1, location = 'neutral' WHERE school = $2 AND date = $3",
-                    (body.location_id, game.school, game.date),
+                    "UPDATE games SET location_id = %s, location = 'neutral' WHERE school = %s AND date = %s",
+                    (location_id, game.school, game.date),
                 )
 
     return AssignChampionshipVenueResult(
         season=body.season,
-        location_id=body.location_id,
+        location_id=location_id,
         location_name=location_name,
         games_updated=len(games),
         games=games,
@@ -404,9 +403,6 @@ async def upsert_school_season(school: str, season: int, body: UpsertSchoolSeaso
 # ---------------------------------------------------------------------------
 # Locations CRUD + overrides
 # ---------------------------------------------------------------------------
-
-
-_409: dict[int | str, dict[str, Any]] = {409: {"description": "Conflict"}}
 
 
 @router.post("/locations", status_code=201, responses=_409)

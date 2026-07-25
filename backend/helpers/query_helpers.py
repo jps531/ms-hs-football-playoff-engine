@@ -30,6 +30,29 @@ async def require_location_exists(conn, location_id: int) -> None:  # pragma: no
         raise HTTPException(status_code=404, detail=f"Location {location_id} not found")
 
 
+async def resolve_location_by_name_or_team(conn, location: str) -> tuple[int, str]:  # pragma: no cover
+    """Resolve *location* to a single locations row, matching case-insensitively and exactly
+    against either ``locations.name`` or ``locations.home_team``.
+
+    Returns ``(id, name)``. Raises HTTP 404 if nothing matches, HTTP 409 if ambiguous.
+    """
+    rows = await (
+        await conn.execute(
+            "SELECT id, name FROM locations WHERE LOWER(name) = LOWER(%s) OR LOWER(home_team) = LOWER(%s)",
+            (location, location),
+        )
+    ).fetchall()
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Location '{location}' not found (checked name and home_team)")
+    if len(rows) > 1:
+        names = ", ".join(sorted(r[1] for r in rows))
+        raise HTTPException(
+            status_code=409,
+            detail=f"Location '{location}' is ambiguous — matches multiple locations: {names}",
+        )
+    return rows[0][0], rows[0][1]
+
+
 async def require_helmet_design_exists(conn, design_id: int) -> None:  # pragma: no cover
     """Raise HTTP 404 if no helmet design exists with *design_id*."""
     row = await (await conn.execute("SELECT 1 FROM helmet_designs WHERE id = %s", (design_id,))).fetchone()
