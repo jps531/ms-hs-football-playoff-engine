@@ -126,5 +126,5 @@ Body now takes `location` (not `location_id`) — a venue name or home_team stri
 **17a. Unknown/ambiguous `location` values are rejected**
 `{"location": "Nonexistent Stadium"}` should 404. If two seeded locations ever share the same `home_team` (or a string matches one location's `name` and a different location's `home_team`), the call should 409 with a detail message listing the conflicting location names.
 
-**18. `POST /championship-venue` and re-run is safe**
-Apply the venue assignment, then call it again with the same `location`. The second call should 404 with "No unassigned Championship Game rows found" — confirming the `location_id IS NULL` filter prevents double-assignment.
+**18. `POST /championship-venue` overwrites an existing assignment**
+Apply the venue assignment, then call it again with a *different* `location`. The second call should succeed and reassign every matching Championship Game row to the new venue — this endpoint always overwrites, so it can be re-run to correct a mistake or reflect a venue change. It only 404s if no Championship Game rows exist at all for the given season/class.

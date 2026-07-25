@@ -157,14 +157,17 @@ async def assign_championship_venue(
     body: AssignChampionshipVenueRequest,
     dry_run: Annotated[bool, Query()] = False,
 ) -> AssignChampionshipVenueResult:
-    """Assign a venue to all Championship Game rows for a season.
+    """Assign a venue to all Championship Game rows for a season, overwriting any
+    venue already assigned.
 
     Championship games arrive from the scraper with ``location_id = NULL``.
     ``location`` is resolved case-insensitively against ``locations.name`` or
     ``locations.home_team`` (exact match); if it matches zero locations this
     returns 404, if it matches more than one it returns 409 listing the
     conflicting names. On a match, this endpoint sets ``location_id`` and
-    ``location = 'neutral'`` on the affected games.
+    ``location = 'neutral'`` on all matching Championship Game rows, including
+    ones that already had a venue assigned — safe to re-run to correct a
+    mistake or reflect a venue change.
 
     Pass ``?dry_run=true`` to preview affected rows without writing.
     """
@@ -177,7 +180,6 @@ async def assign_championship_venue(
             JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
             WHERE g.season = %s
               AND g.round = 'Championship Game'
-              AND g.location_id IS NULL
         """
         find_params: list = [body.season]
         if body.class_ is not None:
@@ -191,7 +193,7 @@ async def assign_championship_venue(
         if not games:
             raise HTTPException(
                 status_code=404,
-                detail=f"No unassigned Championship Game rows found for season {body.season}"
+                detail=f"No Championship Game rows found for season {body.season}"
                 + (f" class {body.class_}A" if body.class_ else ""),
             )
 
