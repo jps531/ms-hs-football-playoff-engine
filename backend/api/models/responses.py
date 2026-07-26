@@ -407,6 +407,7 @@ class BracketGame(BaseModel):
     participant_b: BracketParticipant | None = None
     home_team: BracketParticipant | None = None
     result: BracketGameResult | None = None
+    venue: VenueModel | None = None
 
 
 class ChampionshipGame(BaseModel):
@@ -416,6 +417,7 @@ class ChampionshipGame(BaseModel):
     north_participant: BracketParticipant | None = None
     south_participant: BracketParticipant | None = None
     result: BracketGameResult | None = None
+    venue: VenueModel | None = None
 
 
 class BracketLayout(BaseModel):
@@ -591,9 +593,19 @@ class AssignChampionshipVenueResult(BaseModel):
     season: int
     location_id: int
     location_name: str
+    classes: list[int]
     games_updated: int
     games: list[ChampionshipGameRow]
     dry_run: bool
+
+
+class ChampionshipVenueAssignment(BaseModel):
+    """One season/class's currently assigned championship venue."""
+
+    season: int
+    class_: int
+    location_id: int
+    location_name: str
 
 
 # ---------------------------------------------------------------------------

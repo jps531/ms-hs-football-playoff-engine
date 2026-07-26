@@ -30,6 +30,7 @@ from backend.api.models.requests import (
 from backend.api.models.responses import (
     AssignChampionshipVenueResult,
     ChampionshipGameRow,
+    ChampionshipVenueAssignment,
     HelmetDesignModel,
     LocationDetailModel,
     LocationModel,
@@ -152,27 +153,57 @@ async def seed_playoff_format(
 # ---------------------------------------------------------------------------
 
 
+def _default_classes_for_season(season: int) -> list[int]:
+    """MHSAA class count by year, used when school_seasons has no rows yet for *season*."""
+    if season <= 1983:
+        max_class = 4
+    elif season <= 2008:
+        max_class = 5
+    elif season <= 2022:
+        max_class = 6
+    else:
+        max_class = 7
+    return list(range(1, max_class + 1))
+
+
 @router.post("/championship-venue", responses={404: {"description": "Not found"}, 409: {"description": "Conflict"}})
 async def assign_championship_venue(
     body: AssignChampionshipVenueRequest,
     dry_run: Annotated[bool, Query()] = False,
 ) -> AssignChampionshipVenueResult:
-    """Assign a venue to all Championship Game rows for a season, overwriting any
-    venue already assigned.
+    """Assign a venue to a season's championship game(s), independent of whether
+    that season's Championship Game rows exist in ``games`` yet.
 
-    Championship games arrive from the scraper with ``location_id = NULL``.
     ``location`` is resolved case-insensitively against ``locations.name`` or
     ``locations.home_team`` (exact match); if it matches zero locations this
     returns 404, if it matches more than one it returns 409 listing the
-    conflicting names. On a match, this endpoint sets ``location_id`` and
-    ``location = 'neutral'`` on all matching Championship Game rows, including
-    ones that already had a venue assigned — safe to re-run to correct a
-    mistake or reflect a venue change.
+    conflicting names.
+
+    If ``class`` is omitted, the venue is assigned to every class in the
+    season: classes are read from ``school_seasons`` if that season has been
+    set up, otherwise from the historical MHSAA class count for that year.
+
+    On a match, this upserts ``championship_venues`` for the resolved
+    class(es) — the source of truth, usable even before that season's games
+    have been scraped — and also mirrors ``location_id``/``location='neutral'``
+    onto any Championship Game rows that already exist in ``games``. Safe to
+    re-run to correct a mistake or reflect a venue change.
 
     Pass ``?dry_run=true`` to preview affected rows without writing.
     """
     async with get_conn() as conn:
         location_id, location_name = await resolve_location_by_name_or_team(conn, body.location)
+
+        if body.class_ is not None:
+            classes = [body.class_]
+        else:
+            class_rows = await conn.execute(
+                "SELECT DISTINCT class FROM school_seasons WHERE season = %s ORDER BY class",
+                (body.season,),
+            )
+            classes = [r[0] async for r in class_rows]
+            if not classes:
+                classes = _default_classes_for_season(body.season)
 
         find_sql = """
             SELECT g.school, g.date, g.opponent, ss.class
@@ -180,32 +211,30 @@ async def assign_championship_venue(
             JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
             WHERE g.season = %s
               AND g.round = 'Championship Game'
+              AND ss.class = ANY(%s)
+            ORDER BY ss.class, g.date, g.school
         """
-        find_params: list = [body.season]
-        if body.class_ is not None:
-            find_sql += " AND ss.class = %s"
-            find_params.append(body.class_)
-        find_sql += " ORDER BY ss.class, g.date, g.school"
-
-        game_rows = await conn.execute(find_sql, find_params)
+        game_rows = await conn.execute(find_sql, (body.season, classes))
         games = [ChampionshipGameRow(school=r[0], date=r[1], opponent=r[2], class_=r[3]) async for r in game_rows]
-
-        if not games:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No Championship Game rows found for season {body.season}"
-                + (f" class {body.class_}A" if body.class_ else ""),
-            )
 
         if not dry_run:
             _log.info(
-                "admin: assigning championship venue location_id=%s location=%s season=%s class=%s games=%s",
+                "admin: assigning championship venue location_id=%s location=%s season=%s classes=%s games=%s",
                 location_id,
                 body.location,
                 body.season,
-                body.class_,
+                classes,
                 len(games),
             )
+            for clazz in classes:
+                await conn.execute(
+                    """
+                    INSERT INTO championship_venues (season, class, location_id)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (season, class) DO UPDATE SET location_id = EXCLUDED.location_id
+                    """,
+                    (body.season, clazz, location_id),
+                )
             for game in games:
                 await conn.execute(
                     "UPDATE games SET location_id = %s, location = 'neutral' WHERE school = %s AND date = %s",
@@ -216,10 +245,34 @@ async def assign_championship_venue(
         season=body.season,
         location_id=location_id,
         location_name=location_name,
+        classes=classes,
         games_updated=len(games),
         games=games,
         dry_run=dry_run,
     )
+
+
+@router.get("/championship-venue")
+async def list_championship_venues(
+    season: Annotated[int | None, Query()] = None,
+) -> list[ChampionshipVenueAssignment]:
+    """Return all currently assigned championship venues, optionally filtered by season."""
+    async with get_conn() as conn:
+        sql_str = """
+            SELECT cv.season, cv.class, cv.location_id, l.name
+            FROM championship_venues cv
+            JOIN locations l ON l.id = cv.location_id
+        """
+        params: list = []
+        if season is not None:
+            sql_str += " WHERE cv.season = %s"
+            params.append(season)
+        sql_str += " ORDER BY cv.season DESC, cv.class"
+        rows = await conn.execute(sql_str, params)
+        return [
+            ChampionshipVenueAssignment(season=r[0], class_=r[1], location_id=r[2], location_name=r[3])
+            async for r in rows
+        ]
 
 
 # ---------------------------------------------------------------------------

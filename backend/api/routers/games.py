@@ -67,7 +67,8 @@ async def list_games(
     query = sql.SQL("""
         SELECT g.school, g.opponent, g.date, g.points_for, g.points_against,
                g.location, g.region_game, g.game_status, g.season,
-               l.name, l.city, l.latitude, l.longitude,
+               COALESCE(l.name, cvl.name), COALESCE(l.city, cvl.city),
+               COALESCE(l.latitude, cvl.latitude), COALESCE(l.longitude, cvl.longitude),
                hd_a.id, hd_a.school, hd_a.year_first_worn, hd_a.year_last_worn, hd_a.years_worn,
                hd_a.image_left, hd_a.image_right, hd_a.photo, hd_a.color, hd_a.finish,
                hd_a.facemask_color, hd_a.logo, hd_a.stripe, hd_a.tags, hd_a.notes,
@@ -79,6 +80,9 @@ async def list_games(
         FROM games_effective g
         JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season
         LEFT JOIN locations l ON g.location_id = l.id
+        LEFT JOIN championship_venues cv
+          ON g.round = 'Championship Game' AND cv.season = g.season AND cv.class = ss.class
+        LEFT JOIN locations cvl ON cvl.id = cv.location_id
         LEFT JOIN helmet_designs hd_a ON hd_a.id = g.helmet_design_id
         LEFT JOIN games_effective g_opp
           ON g_opp.school = g.opponent AND g_opp.date = g.date AND g_opp.season = g.season

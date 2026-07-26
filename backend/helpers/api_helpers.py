@@ -1335,6 +1335,7 @@ class PlayoffBracketState:
     matchup_fn: MatchupProbFn | None
     confirmed_game_results: list[tuple[str, str, int | None, int | None]]
     round_ceiling: dict[tuple[int, int], str]
+    game_venues: dict[frozenset, VenueModel]
 
 
 # Advancement round order for ceiling comparisons and _apply_round_ceilings.
@@ -1535,6 +1536,7 @@ def build_playoff_bracket_state(
         matchup_fn=matchup_fn,
         confirmed_game_results=[],
         round_ceiling=round_ceiling,
+        game_venues={},
     )
 
 
@@ -1646,6 +1648,19 @@ async def _load_and_build_playoff_bracket_state(  # pragma: no cover
     async for winner, loser, winner_score, loser_score in game_rows:
         confirmed_game_results.append((winner, loser, winner_score, loser_score))
 
+    venue_rows = await conn.execute(
+        """
+        SELECT g.school, g.opponent, l.name, l.city, l.latitude, l.longitude
+        FROM games_effective g
+        JOIN locations l ON l.id = g.location_id
+        WHERE g.season = %s AND g.round IS NOT NULL AND g.school = ANY(%s)
+        """,
+        (season, list(school_to_seed.keys())),
+    )
+    game_venues: dict[frozenset, VenueModel] = {}
+    async for school, opponent, name, city, lat, lon in venue_rows:
+        game_venues[frozenset((school, opponent))] = VenueModel(name=name, city=city, latitude=lat, longitude=lon)
+
     state = build_playoff_bracket_state(
         school_to_seed,
         db_wins,
@@ -1658,7 +1673,61 @@ async def _load_and_build_playoff_bracket_state(  # pragma: no cover
         layout=build_bracket_layout(slots),
     )
     state.confirmed_game_results = confirmed_game_results
+    state.game_venues = game_venues
     return state
+
+
+async def load_championship_venue(conn, season: int, clazz: int) -> VenueModel | None:  # pragma: no cover
+    """Resolve the championship venue for (season, clazz): an explicit games-row
+    location wins if set, otherwise fall back to championship_venues."""
+    row = await (
+        await conn.execute(
+            """
+            SELECT l.name, l.city, l.latitude, l.longitude
+            FROM games_effective g
+            JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+            JOIN locations l ON l.id = g.location_id
+            WHERE g.season = %s AND ss.class = %s AND g.round = 'Championship Game'
+              AND g.location_id IS NOT NULL
+            LIMIT 1
+            """,
+            (season, clazz),
+        )
+    ).fetchone()
+    if row is None:
+        row = await (
+            await conn.execute(
+                """
+                SELECT l.name, l.city, l.latitude, l.longitude
+                FROM championship_venues cv
+                JOIN locations l ON l.id = cv.location_id
+                WHERE cv.season = %s AND cv.class = %s
+                """,
+                (season, clazz),
+            )
+        ).fetchone()
+    if row is None:
+        return None
+    return VenueModel(name=row[0], city=row[1], latitude=row[2], longitude=row[3])
+
+
+async def load_home_venues(conn) -> dict[str, VenueModel]:  # pragma: no cover
+    """Bulk-load each school's presumptive home venue: a locations row whose
+    home_team matches, if one exists, otherwise the school's own city/lat/long
+    from the schools table (most schools have no locations row at all — that
+    table is mostly just the handful of neutral championship stadiums)."""
+    rows = await conn.execute(
+        """
+        SELECT s.school,
+               COALESCE(l.name, s.school) AS venue_name,
+               COALESCE(l.city, s.city) AS venue_city,
+               COALESCE(l.latitude, s.latitude) AS venue_lat,
+               COALESCE(l.longitude, s.longitude) AS venue_lon
+        FROM schools s
+        LEFT JOIN locations l ON l.home_team = s.school
+        """
+    )
+    return {r[0]: VenueModel(name=r[1], city=r[2], latitude=r[3], longitude=r[4]) async for r in rows}
 
 
 async def load_active_region_teams(conn, season: int, clazz: int, region: int) -> list[str]:  # pragma: no cover
@@ -1810,6 +1879,8 @@ def build_enriched_bracket_layout(
     confirmed_results: Sequence[tuple[str, str, int | None, int | None]],
     simulated_results: Sequence[tuple[str, str | None, int | None, int | None, str | None]],
     p_host_given_reach_by_team: dict[str, dict[str, float | None]] | None = None,
+    game_venues: dict[frozenset, VenueModel] | None = None,
+    home_venue_by_team: dict[str, VenueModel] | None = None,
 ) -> BracketLayout:
     """Enrich a ``BracketLayout`` with per-game participants and results.
 
@@ -1957,6 +2028,12 @@ def build_enriched_bracket_layout(
                             if b_given_reach is not None and b_given_reach > 0.99:
                                 home_team = p_b
 
+                venue: VenueModel | None = None
+                if p_a and p_a.school and p_b and p_b.school:
+                    venue = (game_venues or {}).get(frozenset((p_a.school, p_b.school)))
+                if venue is None and home_team and home_team.school:
+                    venue = (home_venue_by_team or {}).get(home_team.school)
+
                 enriched_games.append(
                     BracketGame(
                         slot=game.slot,
@@ -1966,6 +2043,7 @@ def build_enriched_bracket_layout(
                         participant_b=p_b,
                         home_team=home_team,
                         result=result,
+                        venue=venue,
                     )
                 )
                 cur_round_winners.append(winner_p)

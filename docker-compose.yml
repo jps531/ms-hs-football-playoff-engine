@@ -110,6 +110,7 @@ services:
       - ./sql/seeds/locations_championship_stadiums.sql:/docker-entrypoint-initdb.d/04_locations_championship_stadiums.sql:ro
       - ./sql/seeds/playoff_formats_2025.sql:/docker-entrypoint-initdb.d/05_playoff_formats_2025.sql:ro
       - ./sql/seeds/playoff_formats_2026.sql:/docker-entrypoint-initdb.d/06_playoff_formats_2026.sql:ro
+      - ./sql/seeds/championship_venues_history.sql:/docker-entrypoint-initdb.d/07_championship_venues_history.sql:ro
     networks:
       - mshsfootball
     healthcheck:

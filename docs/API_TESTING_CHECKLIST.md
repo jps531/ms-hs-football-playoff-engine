@@ -43,6 +43,9 @@ Each game should appear exactly once. If you see the same matchup twice on the s
 **7. All completed games have `status = "Final"` and `final: true`** ✅
 After backfill, every game from before the season's end should have `final: true` and `status: "Final"`. Spot-check a known Week 1 game — score, status, and `final` should all be populated. Playoff games should have a non-null `round` (e.g. `"first_round"`, `"quarterfinals"`). Regular-season games should have `round: null`. Check that `overtime` is `0` for non-OT games and `> 0` for overtime results.
 
+**7a. Championship Game venue falls back to `championship_venues` when `location_id` is `NULL`**
+Find (or seed) a Championship Game row with `location_id IS NULL` for a season/class that has a `championship_venues` entry (e.g. via the historical seed). `GET /api/v1/games?season=YYYY&class=N` for that game should still show the correct `venue` — populated via the fallback join, not left `null`.
+
 ---
 
 ## Bracket (`GET /api/v1/bracket?season=YYYY&class=5`)
@@ -76,6 +79,12 @@ Run `POST /api/v1/bracket/simulate?season=YYYY&class=5&date=YYYY-10-01` (before 
 
 **9h. Mixed school-name and slot-ref in the same request works**
 `POST /api/v1/bracket/simulate` (playoff mode) with `{"results": [{"winner": "School A", "loser": {"region": 2, "seed": 4}}]}`. The slot-ref loser's slot should show `0.0` advancement odds.
+
+**9i. `championship.venue` shows up even before the championship game exists**
+For a season/class with a `championship_venues` entry (e.g. from the historical seed, or set via `POST /admin/championship-venue`) but no scraped Championship Game row yet, `bracket_layout.championship.venue` should still be populated. If a real Championship Game row later exists with an explicit `location_id`, that takes priority over `championship_venues`.
+
+**9j. Per-game `venue` on non-championship rounds: explicit override vs. assumed home venue**
+Manually set `location`/`location_id` overrides (via `PUT /admin/games/{school}/{date}/overrides`) on a scheduled semifinal-round game between two known participants, then hit `/bracket` for that season/class — `BracketGame.venue` for that game should reflect the override. For any other game where `home_team` is determined but no explicit `games` row venue exists, `venue` should fall back to that team's usual venue: a `locations` row if one exists for their `home_team`, otherwise their own `schools` city/lat/long (not `null`).
 
 ---
 
@@ -121,10 +130,16 @@ POST a known season's format (e.g. 2025) in dry-run mode. The response should sh
 Run the same POST twice without `dry_run`. The second call should succeed (no 500) and return the same `classes_inserted` / `slots_inserted` counts — ON CONFLICT DO NOTHING should swallow the duplicates silently.
 
 **17. `POST /championship-venue?dry_run=true` lists the right games**
-Body now takes `location` (not `location_id`) — a venue name or home_team string, e.g. `{"season": 2025, "location": "M.M. Roberts Stadium"}` or `{"season": 2025, "location": "Southern Miss"}`. After the championship games are ingested, call with `?dry_run=true`. The `games` list in the response should contain exactly one row per class (7 rows for a full season). If a class is missing, the AHSFHS scraper didn't import that game yet.
+Body now takes `location` (not `location_id`) — a venue name or home_team string, e.g. `{"season": 2025, "location": "M.M. Roberts Stadium"}` or `{"season": 2025, "location": "Southern Miss"}`. After the championship games are ingested, call with `?dry_run=true`. The `games` list in the response should contain exactly one row per class (7 rows for a full season). If a class is missing, the AHSFHS scraper didn't import that game yet. The response's `classes` field should list every class the venue was assigned to (all classes for that season when `class` is omitted).
 
 **17a. Unknown/ambiguous `location` values are rejected**
 `{"location": "Nonexistent Stadium"}` should 404. If two seeded locations ever share the same `home_team` (or a string matches one location's `name` and a different location's `home_team`), the call should 409 with a detail message listing the conflicting location names.
 
+**17b. `POST /championship-venue` works even with no `games` rows yet**
+Call for a future/unscraped season (no Championship Game rows in `games`, ideally no `school_seasons` rows either). Should succeed (no 404), `classes` should come from the hardcoded MHSAA class-count-by-year fallback, `games: []`, `games_updated: 0`. Then `GET /admin/championship-venue?season=<that season>` should show the assignment.
+
 **18. `POST /championship-venue` overwrites an existing assignment**
-Apply the venue assignment, then call it again with a *different* `location`. The second call should succeed and reassign every matching Championship Game row to the new venue — this endpoint always overwrites, so it can be re-run to correct a mistake or reflect a venue change. It only 404s if no Championship Game rows exist at all for the given season/class.
+Apply the venue assignment, then call it again with a *different* `location`. The second call should succeed and reassign every matching Championship Game row to the new venue, and update `championship_venues` — this endpoint always overwrites, so it can be re-run to correct a mistake or reflect a venue change. It no longer 404s when no Championship Game rows exist for the given season/class — that's expected for a season not yet scraped.
+
+**19. `GET /championship-venue` lists current assignments**
+Call with no params — should return every seeded/assigned `(season, class)` row, including the historical 1992–2026 seed data. Call with `?season=2023` — should return only that season's rows (classes 1–7), each with the correct `location_name` (e.g. `Vaught-Hemingway Stadium` for 2023).

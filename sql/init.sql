@@ -383,6 +383,24 @@ CREATE TABLE IF NOT EXISTS playoff_format_slots (
 
 
 -- ---------------------------------------------------------------------------
+-- Championship game venues
+-- ---------------------------------------------------------------------------
+-- One row per season/class combination recording which location hosted (or
+-- will host) that class's championship game. Independent of `games` — can be
+-- set before the season's Championship Game rows exist. Readers that display
+-- a championship game's venue should treat an explicit games.location_id as
+-- authoritative when present and fall back to this table otherwise (see
+-- games.py and the bracket router).
+
+CREATE TABLE IF NOT EXISTS championship_venues (
+  season      INTEGER NOT NULL,
+  class       INTEGER NOT NULL,  -- MHSAA classification
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  PRIMARY KEY (season, class)
+);
+
+
+-- ---------------------------------------------------------------------------
 -- User accounts and sessions
 -- ---------------------------------------------------------------------------
 

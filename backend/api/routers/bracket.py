@@ -20,6 +20,8 @@ from backend.helpers.api_helpers import (
     build_bracket_entries,
     build_bracket_layout,
     build_enriched_bracket_layout,
+    load_championship_venue,
+    load_home_venues,
     today,
 )
 from backend.helpers.data_classes import MatchupProbFn
@@ -78,6 +80,8 @@ async def get_bracket(
         state = await _load_and_build_playoff_bracket_state(
             conn, season, class_, as_of, [], elo_ratings, slots
         )
+        venue = await load_championship_venue(conn, season, class_)
+        home_venues = await load_home_venues(conn) if state is not None else {}
 
     if state is not None:
         entries = build_bracket_entries(
@@ -96,6 +100,8 @@ async def get_bracket(
             build_bracket_layout(slots), seed_to_school,
             state.confirmed_game_results, simulated_results=[],
             p_host_given_reach_by_team=p_host_given_reach_by_team,
+            game_venues=state.game_venues,
+            home_venue_by_team=home_venues,
         )
     else:
         matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
@@ -105,6 +111,7 @@ async def get_bracket(
             win_prob_fn_weighted=matchup_fn,
         )
         bracket_layout = build_bracket_layout(slots)
+    bracket_layout.championship.venue = venue
     return BracketResponse(
         season=season, class_=class_,
         bracket_layout=bracket_layout,
@@ -149,6 +156,8 @@ async def simulate_bracket(
             )
         if state is None:
             matchup_fn_pre = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
+        venue = await load_championship_venue(conn, season, class_)
+        home_venues = await load_home_venues(conn) if state is not None else {}
 
     if state is not None:
         entries = build_bracket_entries(
@@ -178,6 +187,8 @@ async def simulate_bracket(
             build_bracket_layout(slots), seed_to_school,
             state.confirmed_game_results, simulated,
             p_host_given_reach_by_team=p_host_given_reach_by_team,
+            game_venues=state.game_venues,
+            home_venue_by_team=home_venues,
         )
     else:
         slot_wins: dict[str, int] = {}
@@ -191,6 +202,7 @@ async def simulate_bracket(
         )
         bracket_layout = build_bracket_layout(slots)
 
+    bracket_layout.championship.venue = venue
     return BracketResponse(
         season=season, class_=class_,
         bracket_layout=bracket_layout,
