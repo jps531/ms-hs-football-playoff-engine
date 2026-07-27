@@ -195,6 +195,49 @@ class TeamStandingsEntry(BaseModel):
     coin_flip_needed: bool
 
 
+class TeamStatusModel(BaseModel):
+    """One team's current status within a region, for the summary status strip."""
+
+    school: str
+    status: str  # "clinched" | "alive" | "eliminated"
+
+
+class RegionLeaderModel(BaseModel):
+    """The current #1 team in a region, by actual current standing."""
+
+    school: str
+    region_wins: int
+    region_losses: int
+
+
+class RegionSummaryCard(BaseModel):
+    """One region's compact summary card for the statewide grand view."""
+
+    region: int
+    leader: RegionLeaderModel
+    num_teams: int
+    num_clinched: int
+    num_eliminated: int
+    teams_alive: int
+    volatility: float
+    statuses: list[TeamStatusModel]
+
+
+class ClassSummary(BaseModel):
+    """One classification's regions within the statewide standings summary."""
+
+    class_: int
+    regions: list[RegionSummaryCard]
+
+
+class StandingsSummaryResponse(BaseModel):
+    """Statewide standings summary: one card per region across every class."""
+
+    season: int
+    as_of_date: date
+    classes: list[ClassSummary]
+
+
 class ScenarioGameOutcome(BaseModel):
     """The result of one remaining game in a scenario."""
 

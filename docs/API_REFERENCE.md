@@ -17,8 +17,14 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 ## Standings — `/standings`
 
+Team ordering across every endpoint below reflects actual current standing:
+the MHSAA tiebreaker procedure applied to completed games (head-to-head,
+point differential, etc.), with any team that has mathematically clinched a
+specific seed pinned to that exact position — not alphabetical order.
+
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/summary` | Statewide summary: one card per region across every class. Params: `season` (required), `date` (optional, default latest). Returns `leader`, `num_teams`, `num_clinched`, `num_eliminated`, `teams_alive`, `volatility`, and per-team `statuses` for every region. No scenario data is read. |
 | GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team, per-seed scenario breakdown to each team entry). See [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for the full computation model. |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team. Same params. |
 | POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds. Same `include_team_scenarios` param. Rate limited: 10/minute. |

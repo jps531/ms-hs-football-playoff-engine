@@ -1,20 +1,31 @@
 """Standings, seeding odds, and scenario endpoints."""
 
+from collections import defaultdict
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path, Query, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
-from backend.api.models.responses import ComputationStateModel, StandingsResponse
+from backend.api.models.responses import (
+    ClassSummary,
+    ComputationStateModel,
+    RegionLeaderModel,
+    RegionSummaryCard,
+    StandingsResponse,
+    StandingsSummaryResponse,
+    TeamStandingsEntry,
+    TeamStatusModel,
+)
 from backend.helpers.api_helpers import (
     _load_all_region_odds,
     _load_elo_ratings,
     _load_format_slots,
     build_standings_bracket_home_odds,
     build_team_entries,
+    current_standings_order,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
     filter_to_team_or_404,
@@ -23,17 +34,19 @@ from backend.helpers.api_helpers import (
     load_scenarios_snapshot,
     recompute_scenarios_from_games,
     records_from_completed,
+    region_volatility,
     remaining_to_models,
     results_to_applied,
     scenarios_to_entries,
     standings_from_odds,
     standings_odds_from_row,
+    team_status,
     today,
     within_display_threshold,
 )
 from backend.helpers.data_classes import StandingsOdds
 from backend.helpers.scenario_renderer import atoms_from_complete_scenarios, team_scenarios_as_dict
-from backend.helpers.scenario_updater import apply_region_game_results
+from backend.helpers.scenario_updater import apply_region_game_results, merge_applied_results
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["standings"])
@@ -63,6 +76,28 @@ def _odds_from_rows(standings_rows: list[tuple]) -> tuple[dict, dict]:
             school, row[16], row[17], row[18], row[19], row[20], row[12], row[13],
         )
     return odds, weighted
+
+
+def _reorder_team_entries(team_entries: list[TeamStandingsEntry], order: list[str]) -> list[TeamStandingsEntry]:
+    """Re-emit *team_entries* in *order*, dropping any school not present in *order*."""
+    by_school = {e.school: e for e in team_entries}
+    return [by_school[s] for s in order if s in by_school]
+
+
+_SUMMARY_SELECT = """
+    SELECT * FROM (
+        SELECT DISTINCT ON (school)
+            school, class, region,
+            wins, losses, ties, region_wins, region_losses, region_ties,
+            as_of_date,
+            odds_1st, odds_2nd, odds_3rd, odds_4th, odds_playoffs,
+            clinched, eliminated
+        FROM region_standings
+        WHERE season = %s AND as_of_date <= %s
+        ORDER BY school, as_of_date DESC
+    ) latest
+    ORDER BY class, region, school
+"""
 
 
 async def _load_standings_snapshot(conn, season: int, clazz: int, region: int, as_of: date) -> list[tuple] | None:
@@ -133,6 +168,70 @@ async def _load_computation_state(
 # ---------------------------------------------------------------------------
 
 
+@router.get("/standings/summary", responses=_404)
+async def get_standings_summary(season: SeasonQ, date: DateQ = None) -> StandingsSummaryResponse:
+    """Statewide summary: one card per region across every class for *season*.
+
+    Reads the latest region_standings snapshot on or before *date* (defaults
+    to today) for every school in the season, then groups by (class, region)
+    to build each card. No scenario data is read — clinched/eliminated/leader/
+    volatility all derive from the stored seeding-odds snapshot plus completed
+    region games only.
+    """
+    as_of_date = date or today()
+    async with get_conn() as conn:
+        rows = [r async for r in await conn.execute(_SUMMARY_SELECT, (season, as_of_date))]
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"Season {season} not found")
+        all_schools = [r[0] for r in rows]
+        completed_games = await load_completed_region_games(conn, season, as_of_date, all_schools)
+
+    by_class_region: dict[tuple[int, int], list[tuple]] = defaultdict(list)
+    for row in rows:
+        by_class_region[(row[1], row[2])].append(row)
+
+    school_to_cr = {row[0]: (row[1], row[2]) for row in rows}
+    completed_by_region: dict[tuple[int, int], list] = defaultdict(list)
+    for g in completed_games:
+        cr = school_to_cr.get(g.a)
+        if cr:
+            completed_by_region[cr].append(g)
+
+    latest_seen = max(row[9] for row in rows)
+    by_class: dict[int, list[RegionSummaryCard]] = defaultdict(list)
+    for (clazz, region), region_rows in sorted(by_class_region.items()):
+        teams = [r[0] for r in region_rows]
+        odds_by_school = {
+            r[0]: standings_odds_from_row(r[0], r[10], r[11], r[12], r[13], r[14], r[15], r[16])
+            for r in region_rows
+        }
+        records = {r[0]: (r[6], r[7]) for r in region_rows}
+        order = current_standings_order(teams, completed_by_region[(clazz, region)], odds_by_school)
+
+        statuses = [
+            TeamStatusModel(school=s, status=team_status(odds_by_school[s].clinched, odds_by_school[s].eliminated))
+            for s in order
+        ]
+        leader = order[0]
+        by_class[clazz].append(
+            RegionSummaryCard(
+                region=region,
+                leader=RegionLeaderModel(
+                    school=leader, region_wins=records[leader][0], region_losses=records[leader][1]
+                ),
+                num_teams=len(region_rows),
+                num_clinched=sum(1 for o in odds_by_school.values() if o.clinched),
+                num_eliminated=sum(1 for o in odds_by_school.values() if o.eliminated),
+                teams_alive=sum(1 for o in odds_by_school.values() if not o.clinched and not o.eliminated),
+                volatility=region_volatility(odds_by_school),
+                statuses=statuses,
+            )
+        )
+
+    classes = [ClassSummary(class_=c, regions=regions) for c, regions in sorted(by_class.items())]
+    return StandingsSummaryResponse(season=season, as_of_date=latest_seen, classes=classes)
+
+
 @router.get("/standings/{clazz}/{region}", responses=_404)
 async def get_standings(
     clazz: ClazzPath,
@@ -152,15 +251,22 @@ async def get_standings(
         scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
         computation_state = await _load_computation_state(conn, season, clazz, region, as_of)
 
+        odds_for_order: dict[str, StandingsOdds]
         if standings_rows is not None and scenarios_data is not None:
             remaining, complete_scenarios, key_insights, snapshot_date = scenarios_data
             team_entries = build_team_entries(standings_rows, None, None)
+            teams = [r[0] for r in standings_rows]
+            completed = await load_completed_region_games(conn, season, as_of, teams)
+            odds_for_order, _ = _odds_from_rows(standings_rows)
         elif standings_rows is not None:
             _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
             snapshot_date = standings_rows[0][15]
             complete_scenarios = None
             key_insights = None
             team_entries = build_team_entries(standings_rows, None, None)
+            teams = [r[0] for r in standings_rows]
+            completed = await load_completed_region_games(conn, season, as_of, teams)
+            odds_for_order, _ = _odds_from_rows(standings_rows)
         else:
             teams, completed, remaining, odds_map, coinflip_teams = await recompute_scenarios_from_games(
                 conn, season, clazz, region, as_of
@@ -170,6 +276,9 @@ async def get_standings(
             snapshot_date = as_of
             complete_scenarios = None
             key_insights = None
+            odds_for_order = odds_map
+
+    team_entries = _reorder_team_entries(team_entries, current_standings_order(teams, completed, odds_for_order))
 
     scenarios_available = within_display_threshold(remaining)
 
@@ -255,6 +364,9 @@ async def simulate_standings(
         region, odds_map, by_region, slots, season, clazz, win_prob_fn_weighted=matchup_fn
     )
     team_entries = standings_from_odds(odds_map, set(), records, bracket_home_odds_by_school=bracket_home_odds_by_school)
+
+    all_completed, _ = merge_applied_results(completed, remaining, new_results)
+    team_entries = _reorder_team_entries(team_entries, current_standings_order(teams, all_completed, odds_map))
 
     scenarios_available = within_display_threshold(updated_remaining)
 

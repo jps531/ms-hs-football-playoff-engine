@@ -39,6 +39,7 @@ from backend.helpers.api_helpers import (
     build_team_entries,
     clinched_school,
     compute_remaining_games,
+    current_standings_order,
     eliminated_team_hosting,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
@@ -46,6 +47,7 @@ from backend.helpers.api_helpers import (
     has_displayable_scenarios,
     parse_completed_games,
     records_from_completed,
+    region_volatility,
     remaining_to_models,
     resolve_hosting_scenario_inputs,
     results_to_applied,
@@ -53,6 +55,7 @@ from backend.helpers.api_helpers import (
     select_sentinel_region,
     standings_from_odds,
     standings_odds_from_row,
+    team_status,
     today,
     within_display_threshold,
 )
@@ -576,6 +579,128 @@ class TestStandingsOddsFromRow:
         result = standings_odds_from_row("Taylorsville", 0.1, 0.2, 0.3, 0.4, 0.9, None, None)
         assert result.clinched is False
         assert result.eliminated is False
+
+
+class TestCurrentStandingsOrder:
+    """current_standings_order: tiebreak-over-completed-games order with clinched-seed pins."""
+
+    @staticmethod
+    def _odds(p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, clinched=False, eliminated=False):
+        return StandingsOdds(
+            school="",
+            p1=p1,
+            p2=p2,
+            p3=p3,
+            p4=p4,
+            p_playoffs=p_playoffs,
+            final_playoffs=p_playoffs,
+            clinched=clinched,
+            eliminated=eliminated,
+        )
+
+    def test_distinct_records_sort_by_wins(self):
+        """A team with a better completed-game record sorts ahead of a worse one."""
+        teams = ["Alpha", "Beta"]
+        completed = [
+            CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=10, pa_a=0, pa_b=10),
+        ]
+        odds = {"Alpha": self._odds(), "Beta": self._odds()}
+        assert current_standings_order(teams, completed, odds) == ["Alpha", "Beta"]
+
+    def test_tied_record_broken_by_head_to_head(self):
+        """Two teams tied overall are ordered by their actual head-to-head result, not alphabetically."""
+        teams = ["Alpha", "Beta", "Delta", "Gamma"]
+        completed = [
+            # Beta beats Alpha head-to-head; each also beats/loses to a distinct
+            # outside opponent so both land on the same 1-1 record (same tie
+            # bucket) without forming a 3-way cycle.
+            CompletedGame(a="Alpha", b="Beta", res_a=-1, pd_a=-7, pa_a=14, pa_b=7),
+            CompletedGame(a="Alpha", b="Gamma", res_a=1, pd_a=7, pa_a=7, pa_b=14),
+            CompletedGame(a="Beta", b="Delta", res_a=-1, pd_a=-7, pa_a=14, pa_b=7),
+        ]
+        odds = {t: self._odds() for t in teams}
+        order = current_standings_order(teams, completed, odds)
+        # Alpha and Beta are tied 1-1; Beta won head-to-head, so Beta ranks ahead
+        # of Alpha despite losing alphabetically.
+        assert order.index("Beta") < order.index("Alpha")
+
+    def test_clinched_seed_pins_team_ahead_of_better_record(self):
+        """A team that has clinched seed 1 is pinned there even if another team's completed-game record is better."""
+        teams = ["Alpha", "Beta"]
+        completed = [
+            CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=10, pa_a=0, pa_b=10),
+        ]
+        odds = {
+            "Alpha": self._odds(),
+            "Beta": self._odds(p1=1.0, p_playoffs=1.0, clinched=True),
+        }
+        assert current_standings_order(teams, completed, odds) == ["Beta", "Alpha"]
+
+    def test_single_team_region(self):
+        """A one-team region trivially orders to itself."""
+        assert current_standings_order(["Alpha"], [], {"Alpha": self._odds()}) == ["Alpha"]
+
+
+class TestRegionVolatility:
+    """region_volatility: mean normalized Shannon entropy over non-eliminated teams."""
+
+    @staticmethod
+    def _odds(p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, eliminated=False):
+        return StandingsOdds(
+            school="",
+            p1=p1,
+            p2=p2,
+            p3=p3,
+            p4=p4,
+            p_playoffs=p_playoffs,
+            final_playoffs=p_playoffs,
+            clinched=False,
+            eliminated=eliminated,
+        )
+
+    def test_fully_clinched_team_scores_zero(self):
+        """A team with a point-mass distribution (fully decided) contributes zero entropy."""
+        odds = {"Alpha": self._odds(p1=1.0, p_playoffs=1.0)}
+        assert region_volatility(odds) == pytest.approx(0.0)
+
+    def test_all_eliminated_region_scores_zero(self):
+        """No non-eliminated teams means the region is fully decided -> 0.0."""
+        odds = {"Alpha": self._odds(p_playoffs=0.0, eliminated=True)}
+        assert region_volatility(odds) == pytest.approx(0.0)
+
+    def test_empty_input_scores_zero(self):
+        """An empty region has no volatility."""
+        assert region_volatility({}) == pytest.approx(0.0)
+
+    def test_eliminated_teams_excluded_from_mean(self):
+        """An eliminated team's distribution does not drag down the mean for alive teams."""
+        alive = self._odds(p1=0.25, p2=0.25, p3=0.25, p4=0.25, p_playoffs=1.0)
+        odds_with_eliminated = {
+            "Alpha": alive,
+            "Beta": self._odds(p_playoffs=0.0, eliminated=True),
+        }
+        odds_alive_only = {"Alpha": alive}
+        assert region_volatility(odds_with_eliminated) == pytest.approx(region_volatility(odds_alive_only))
+
+
+class TestTeamStatus:
+    """team_status: derive 'clinched' | 'alive' | 'eliminated' from the two boolean flags."""
+
+    def test_neither_flag_is_alive(self):
+        """Neither clinched nor eliminated means the team is still alive."""
+        assert team_status(False, False) == "alive"
+
+    def test_clinched_flag_is_clinched(self):
+        """clinched=True, eliminated=False maps to 'clinched'."""
+        assert team_status(True, False) == "clinched"
+
+    def test_eliminated_flag_is_eliminated(self):
+        """clinched=False, eliminated=True maps to 'eliminated'."""
+        assert team_status(False, True) == "eliminated"
+
+    def test_both_flags_true_prefers_eliminated(self):
+        """The degenerate both-true case (shouldn't happen) resolves to 'eliminated'."""
+        assert team_status(True, True) == "eliminated"
 
 
 # ---------------------------------------------------------------------------

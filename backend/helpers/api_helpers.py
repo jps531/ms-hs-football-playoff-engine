@@ -8,6 +8,7 @@ the bracket and hosting routers can share them without duplication.
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -75,6 +76,7 @@ from backend.helpers.scenario_serializers import (
     serialize_atom,
 )
 from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
+from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 # ---------------------------------------------------------------------------
@@ -457,6 +459,71 @@ def standings_odds_from_row(
         clinched=bool(clinched),
         eliminated=bool(eliminated),
     )
+
+
+def current_standings_order(
+    teams: list[str],
+    completed: list[CompletedGame],
+    odds_by_school: dict[str, StandingsOdds],
+) -> list[str]:
+    """Return region teams ordered by actual current standing.
+
+    Runs the full MHSAA tiebreaker procedure (``resolve_standings_for_mask``)
+    over *completed* games only (no remaining games, no outcome branching —
+    cheap, O(bucket^2) per tie group, no combinatorial enumeration), then
+    overlays clinched-seed pins via ``clinched_school``: any team that has
+    clinched a specific seed is placed at that exact position, since it's
+    mathematically certain regardless of tiebreak order among the rest.
+    Remaining slots are filled, in order, from the tiebreak-derived order
+    (skipping already-pinned teams).
+    """
+    pinned: dict[int, str] = {}
+    for seed in range(1, min(4, len(teams)) + 1):
+        school = clinched_school(odds_by_school, seed)
+        if school is not None:
+            pinned[seed] = school
+
+    tiebreak_order = resolve_standings_for_mask(teams, completed, remaining=[], outcome_mask=0, margins={})
+
+    pinned_schools = set(pinned.values())
+    fill_order = iter(s for s in tiebreak_order if s not in pinned_schools)
+
+    order: list[str] = []
+    for i in range(1, len(teams) + 1):
+        order.append(pinned[i] if i in pinned else next(fill_order))
+    return order
+
+
+def region_volatility(odds_by_school: dict[str, StandingsOdds]) -> float:
+    """Mean normalized Shannon entropy of ``[p1,p2,p3,p4,1-p_playoffs]`` over non-eliminated teams.
+
+    Normalized by ``log(5)`` so a uniform distribution scores 1.0 and a fully
+    decided outcome scores 0.0. Uses unweighted odds. Returns 0.0 when there
+    are no non-eliminated teams (region fully decided) or the input is empty.
+    """
+    entropies = []
+    for odds in odds_by_school.values():
+        if odds.eliminated:
+            continue
+        dist = (odds.p1, odds.p2, odds.p3, odds.p4, 1 - odds.p_playoffs)
+        entropy = -sum(p * math.log(p) for p in dist if p > 0) / math.log(5)
+        entropies.append(min(1.0, max(0.0, entropy)))
+
+    if not entropies:
+        return 0.0
+    return sum(entropies) / len(entropies)
+
+
+def team_status(clinched: bool, eliminated: bool) -> str:
+    """Return ``'clinched' | 'alive' | 'eliminated'`` from the two ``region_standings`` flags.
+
+    ``eliminated`` takes precedence in the (should-never-happen) case both are true.
+    """
+    if eliminated:
+        return "eliminated"
+    if clinched:
+        return "clinched"
+    return "alive"
 
 
 _TeamsResponse = TypeVar("_TeamsResponse")
