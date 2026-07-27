@@ -10,8 +10,11 @@ from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateRegionRequest
 from backend.api.models.responses import (
+    ClassRegionStandings,
+    ClassStandingsResponse,
     ClassSummary,
     ComputationStateModel,
+    RecordModel,
     RegionLeaderModel,
     RegionSummaryCard,
     StandingsResponse,
@@ -40,6 +43,7 @@ from backend.helpers.api_helpers import (
     scenarios_to_entries,
     standings_from_odds,
     standings_odds_from_row,
+    team_clinched_seed,
     team_status,
     today,
     within_display_threshold,
@@ -97,6 +101,27 @@ _SUMMARY_SELECT = """
         ORDER BY school, as_of_date DESC
     ) latest
     ORDER BY class, region, school
+"""
+
+_CLASS_SELECT = """
+    SELECT * FROM (
+        SELECT DISTINCT ON (school)
+            school, wins, losses, ties, region_wins, region_losses, region_ties,
+            odds_1st, odds_2nd, odds_3rd, odds_4th, odds_playoffs,
+            clinched, eliminated, coin_flip_needed, as_of_date,
+            odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted, odds_playoffs_weighted,
+            odds_second_round, odds_quarterfinals, odds_semifinals, odds_finals, odds_champion,
+            odds_second_round_weighted, odds_quarterfinals_weighted, odds_semifinals_weighted,
+            odds_finals_weighted, odds_champion_weighted,
+            odds_first_round_home, odds_second_round_home, odds_quarterfinals_home, odds_semifinals_home,
+            odds_first_round_home_weighted, odds_second_round_home_weighted,
+            odds_quarterfinals_home_weighted, odds_semifinals_home_weighted,
+            region
+        FROM region_standings
+        WHERE season = %s AND class = %s AND as_of_date <= %s
+        ORDER BY school, as_of_date DESC
+    ) latest
+    ORDER BY region, school
 """
 
 
@@ -205,11 +230,19 @@ async def get_standings_summary(season: SeasonQ, date: DateQ = None) -> Standing
             r[0]: standings_odds_from_row(r[0], r[10], r[11], r[12], r[13], r[14], r[15], r[16])
             for r in region_rows
         }
-        records = {r[0]: (r[6], r[7]) for r in region_rows}
+        records = {
+            r[0]: RecordModel(wins=r[3], losses=r[4], ties=r[5], region_wins=r[6], region_losses=r[7], region_ties=r[8])
+            for r in region_rows
+        }
         order = current_standings_order(teams, completed_by_region[(clazz, region)], odds_by_school)
 
         statuses = [
-            TeamStatusModel(school=s, status=team_status(odds_by_school[s].clinched, odds_by_school[s].eliminated))
+            TeamStatusModel(
+                school=s,
+                status=team_status(odds_by_school[s].clinched, odds_by_school[s].eliminated),
+                clinched_seed=team_clinched_seed(odds_by_school[s]),
+                record=records[s],
+            )
             for s in order
         ]
         leader = order[0]
@@ -217,7 +250,9 @@ async def get_standings_summary(season: SeasonQ, date: DateQ = None) -> Standing
             RegionSummaryCard(
                 region=region,
                 leader=RegionLeaderModel(
-                    school=leader, region_wins=records[leader][0], region_losses=records[leader][1]
+                    school=leader,
+                    region_wins=records[leader].region_wins,
+                    region_losses=records[leader].region_losses,
                 ),
                 num_teams=len(region_rows),
                 num_clinched=sum(1 for o in odds_by_school.values() if o.clinched),
@@ -230,6 +265,47 @@ async def get_standings_summary(season: SeasonQ, date: DateQ = None) -> Standing
 
     classes = [ClassSummary(class_=c, regions=regions) for c, regions in sorted(by_class.items())]
     return StandingsSummaryResponse(season=season, as_of_date=latest_seen, classes=classes)
+
+
+@router.get("/standings/{clazz}", responses=_404)
+async def get_class_standings(clazz: ClazzPath, season: SeasonQ, date: DateQ = None) -> ClassStandingsResponse:
+    """Full standings tables (teams[] only, no scenarios) for every region in *clazz*A.
+
+    Reads the latest region_standings snapshot on or before *date* (defaults
+    to today) for every school in the class — same per-team detail as
+    ``GET /standings/{clazz}/{region}`` (odds, bracket_odds, home_game_odds,
+    clinched, eliminated, coin_flip_needed), minus scenarios and
+    computation_state.
+    """
+    as_of_date = date or today()
+    async with get_conn() as conn:
+        rows = [r async for r in await conn.execute(_CLASS_SELECT, (season, clazz, as_of_date))]
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"{clazz}A not found for season {season}")
+        all_schools = [r[0] for r in rows]
+        completed_games = await load_completed_region_games(conn, season, as_of_date, all_schools)
+
+    by_region: dict[int, list[tuple]] = defaultdict(list)
+    for row in rows:
+        by_region[row[39]].append(row)
+
+    school_to_region = {row[0]: row[39] for row in rows}
+    completed_by_region: dict[int, list] = defaultdict(list)
+    for g in completed_games:
+        r = school_to_region.get(g.a)
+        if r is not None:
+            completed_by_region[r].append(g)
+
+    latest_seen = max(row[15] for row in rows)
+    regions = []
+    for region, region_rows in sorted(by_region.items()):
+        team_entries = build_team_entries(region_rows, None, None)
+        teams = [r[0] for r in region_rows]
+        odds_by_school, _ = _odds_from_rows(region_rows)
+        order = current_standings_order(teams, completed_by_region[region], odds_by_school)
+        regions.append(ClassRegionStandings(region=region, teams=_reorder_team_entries(team_entries, order)))
+
+    return ClassStandingsResponse(season=season, class_=clazz, as_of_date=latest_seen, regions=regions)
 
 
 @router.get("/standings/{clazz}/{region}", responses=_404)

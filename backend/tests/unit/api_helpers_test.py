@@ -55,6 +55,7 @@ from backend.helpers.api_helpers import (
     select_sentinel_region,
     standings_from_odds,
     standings_odds_from_row,
+    team_clinched_seed,
     team_status,
     today,
     within_display_threshold,
@@ -701,6 +702,41 @@ class TestTeamStatus:
     def test_both_flags_true_prefers_eliminated(self):
         """The degenerate both-true case (shouldn't happen) resolves to 'eliminated'."""
         assert team_status(True, True) == "eliminated"
+
+
+class TestTeamClinchedSeed:
+    """team_clinched_seed: which seed (1-4) a team has individually clinched, if any."""
+
+    @staticmethod
+    def _odds(p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0):
+        return StandingsOdds(
+            school="",
+            p1=p1,
+            p2=p2,
+            p3=p3,
+            p4=p4,
+            p_playoffs=p_playoffs,
+            final_playoffs=p_playoffs,
+            clinched=p_playoffs >= 0.999,
+            eliminated=p_playoffs <= 0.001,
+        )
+
+    def test_clinched_seed_one(self):
+        """p1 at/above the clinch threshold returns seed 1."""
+        assert team_clinched_seed(self._odds(p1=1.0, p_playoffs=1.0)) == 1
+
+    def test_clinched_seed_three(self):
+        """p3 at/above the clinch threshold returns seed 3, not just seed 1."""
+        assert team_clinched_seed(self._odds(p3=1.0, p_playoffs=1.0)) == 3
+
+    def test_no_seed_clinched_returns_none(self):
+        """A team still alive with probability spread across seeds returns None."""
+        odds = self._odds(p1=0.25, p2=0.25, p3=0.25, p4=0.25, p_playoffs=1.0)
+        assert team_clinched_seed(odds) is None
+
+    def test_eliminated_team_returns_none(self):
+        """An eliminated team (all seed odds near zero) has clinched nothing."""
+        assert team_clinched_seed(self._odds()) is None
 
 
 # ---------------------------------------------------------------------------

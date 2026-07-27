@@ -200,6 +200,8 @@ class TeamStatusModel(BaseModel):
 
     school: str
     status: str  # "clinched" | "alive" | "eliminated"
+    clinched_seed: int | None = None
+    record: RecordModel
 
 
 class RegionLeaderModel(BaseModel):
@@ -290,6 +292,22 @@ class StandingsResponse(BaseModel):
     team_scenarios: dict[str, Any] | None = None
     key_insights: list[KeyInsightModel] | None = None
     computation_state: ComputationStateModel | None = None
+
+
+class ClassRegionStandings(BaseModel):
+    """One region's full standings table within the class view (no scenarios)."""
+
+    region: int
+    teams: list[TeamStandingsEntry]
+
+
+class ClassStandingsResponse(BaseModel):
+    """Full standings tables for every region in one class, one request."""
+
+    season: int
+    class_: int
+    as_of_date: date
+    regions: list[ClassRegionStandings]
 
 
 # ---------------------------------------------------------------------------

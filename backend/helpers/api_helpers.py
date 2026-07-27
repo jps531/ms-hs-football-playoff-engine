@@ -494,6 +494,18 @@ def current_standings_order(
     return order
 
 
+def team_clinched_seed(odds: StandingsOdds) -> int | None:
+    """Return the seed (1-4) this team has individually clinched, or ``None``.
+
+    Unlike ``clinched_school`` (which resolves one *slot* to a school across
+    a whole region), this checks one team's own p1-p4 odds independently.
+    """
+    for seed, p in ((1, odds.p1), (2, odds.p2), (3, odds.p3), (4, odds.p4)):
+        if p >= CLINCHED_THRESHOLD:
+            return seed
+    return None
+
+
 def region_volatility(odds_by_school: dict[str, StandingsOdds]) -> float:
     """Mean normalized Shannon entropy of ``[p1,p2,p3,p4,1-p_playoffs]`` over non-eliminated teams.
 
