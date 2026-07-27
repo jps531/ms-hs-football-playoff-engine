@@ -1,14 +1,18 @@
 """Unit tests for scenario_renderer using Region 3-7A data."""
 
+from datetime import date
+
 import pytest
 
 from backend.helpers.data_classes import (
+    CoinFlipResult,
     CompletedGame,
     GameResult,
     HomeGameCondition,
     HomeGameScenario,
     MarginCondition,
     MatchupEntry,
+    PDRankCondition,
     RemainingGame,
     RoundHomeScenarios,
     RoundMatchups,
@@ -20,7 +24,9 @@ from backend.helpers.scenario_renderer import (
     _render_margin_condition,
     _render_pre_playoff_block,
     _winner_label,
+    atom_condition_dicts,
     atoms_from_complete_scenarios,
+    classify_margin,
     division_scenarios_as_dict,
     render_pre_playoff_team_home_scenarios,
     render_team_home_scenarios,
@@ -870,7 +876,9 @@ class TestTeamHomeScenariosAsDictSeedAtomsExpansion:
     def test_first_condition_not_seed_required_is_left_unexpanded(self):
         """seed_atoms is supplied, but the scenario's first condition isn't a seed_required
         placeholder — _expand_scenario falls back to a single unexpanded entry."""
-        advances = HomeGameCondition(kind="advances", round_name="Quarterfinals", region=None, seed=None, team_name=None)
+        advances = HomeGameCondition(
+            kind="advances", round_name="Quarterfinals", region=None, seed=None, team_name=None
+        )
         sc = HomeGameScenario(conditions=(advances,), explanation=None)
         rnd = _rhs(will_host=(sc,))
         result = team_home_scenarios_as_dict("TeamA", [rnd], seed_atoms=self._seed_atoms())
@@ -916,6 +924,93 @@ class TestAtomsFromCompleteScenarios:
     def test_empty_scenarios_list_returns_empty_dict(self):
         """No scenarios produces an empty atoms dict."""
         assert atoms_from_complete_scenarios([]) == {}
+
+
+class TestClassifyMargin:
+    """classify_margin buckets a GameResult margin range into a named margin_class."""
+
+    def test_plain_win_loss_is_none(self):
+        """An unconstrained condition (min_margin=1, max_margin=None) has no margin_class."""
+        assert classify_margin(1, None) is None
+
+    def test_one_score_bucket(self):
+        """A margin range entirely within 1-8 buckets as one_score."""
+        assert classify_margin(3, 6) == "one_score"
+
+    def test_two_plus_scores_bucket(self):
+        """A margin range starting at 9+ buckets as two_plus_scores."""
+        assert classify_margin(9, None) == "two_plus_scores"
+
+    def test_bucketing_uses_min_margin_as_the_binding_threshold(self):
+        """A range starting below the two-score threshold buckets as one_score even if unbounded above."""
+        assert classify_margin(4, None) == "one_score"
+
+
+class TestAtomConditionDicts:
+    """atom_condition_dicts converts one AND-group of conditions to the §8 condition-dict shape."""
+
+    _DATES = {("Petal", "Stringer"): date(2025, 10, 17), ("Mize", "Raleigh"): date(2025, 10, 17)}
+
+    def test_game_result_uses_winner_perspective(self):
+        """A plain GameResult becomes a game_result dict from the winner's perspective."""
+        atom = [GameResult(winner="Petal", loser="Stringer")]
+        out = atom_condition_dicts(atom, self._DATES)
+        assert out == [
+            {
+                "type": "game_result",
+                "school": "Petal",
+                "date": date(2025, 10, 17),
+                "opponent": "Stringer",
+                "required_result": "win",
+                "margin_class": None,
+            }
+        ]
+
+    def test_game_result_date_unresolvable_is_none(self):
+        """A pair missing from game_dates resolves to date=None rather than raising."""
+        atom = [GameResult(winner="Petal", loser="Stringer")]
+        out = atom_condition_dicts(atom, {})
+        assert out[0]["date"] is None
+
+    def test_game_result_margin_bounds_set_margin_class(self):
+        """A margin-bounded GameResult carries the classified margin_class."""
+        atom = [GameResult(winner="Petal", loser="Stringer", min_margin=9, max_margin=None)]
+        out = atom_condition_dicts(atom, self._DATES)
+        assert out[0]["margin_class"] == "two_plus_scores"
+
+    def test_margin_condition_becomes_margin_sum(self):
+        """A multi-game MarginCondition becomes a margin_sum dict with per-game references."""
+        atom = [MarginCondition(add=(("Mize", "Raleigh"),), sub=(("Petal", "Stringer"),), op=">=", threshold=10)]
+        out = atom_condition_dicts(atom, self._DATES)
+        assert out == [
+            {
+                "type": "margin_sum",
+                "games": [
+                    {"school": "Mize", "date": date(2025, 10, 17), "opponent": "Raleigh"},
+                    {"school": "Petal", "date": date(2025, 10, 17), "opponent": "Stringer"},
+                ],
+                "op": ">=",
+                "threshold": 10,
+            }
+        ]
+
+    def test_coin_flip_becomes_description_only(self):
+        """A CoinFlipResult (not tied to any remaining game) becomes a coin_flip dict with text only."""
+        atom = [CoinFlipResult(winner="Petal", loser="Stringer")]
+        out = atom_condition_dicts(atom, {})
+        assert out == [{"type": "coin_flip", "description": "Petal wins coin flip vs Stringer"}]
+
+    def test_pd_rank_becomes_description_only(self):
+        """A PDRankCondition becomes a pd_rank dict with text only."""
+        atom = [PDRankCondition(team="Petal", rank=1, group=("Petal", "Stringer"))]
+        out = atom_condition_dicts(atom, {})
+        assert out == [{"type": "pd_rank", "description": "Petal finishes 1st in point differential"}]
+
+    def test_multi_condition_atom_preserves_order(self):
+        """An AND-group with multiple conditions returns one dict per condition, in order."""
+        atom = [GameResult(winner="Petal", loser="Stringer"), GameResult(winner="Mize", loser="Raleigh")]
+        out = atom_condition_dicts(atom, self._DATES)
+        assert [d["school"] for d in out] == ["Petal", "Mize"]
 
 
 class TestRenderTeamMatchups:

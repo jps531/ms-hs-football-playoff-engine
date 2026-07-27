@@ -1,6 +1,7 @@
 """Render playoff scenario atoms as human-readable text."""
 
 from dataclasses import replace
+from datetime import date
 from typing import cast
 
 from backend.helpers.data_classes import (
@@ -215,6 +216,91 @@ def render_team_scenarios(
         lines.append("")
 
     return "\n".join(lines).rstrip()
+
+
+# ---------------------------------------------------------------------------
+# margin_class taxonomy
+# ---------------------------------------------------------------------------
+
+# Ascending (min_margin threshold, label) pairs. The underlying margin scale
+# used throughout the engine is capped at 12 ("12 or more" — see
+# `scenarios.py`'s `product(range(1, 13), ...)` enumeration), so finer buckets
+# beyond two aren't distinguishable from stored data. Tune freely — this is a
+# display taxonomy, not a computation input.
+_MARGIN_CLASS_BUCKETS: list[tuple[int, str]] = [
+    (1, "one_score"),
+    (9, "two_plus_scores"),
+]
+
+
+def classify_margin(min_margin: int, max_margin: int | None) -> str | None:
+    """Bucket a ``GameResult`` margin range into a named ``margin_class``.
+
+    Returns ``None`` for a plain win/loss condition (``min_margin=1,
+    max_margin=None``) — margin doesn't factor into it, so there's nothing to
+    classify. Otherwise buckets by ``min_margin`` (the binding "wins by at
+    least N" threshold).
+    """
+    if min_margin <= 1 and max_margin is None:
+        return None
+    label = _MARGIN_CLASS_BUCKETS[0][1]
+    for threshold, name in _MARGIN_CLASS_BUCKETS:
+        if min_margin >= threshold:
+            label = name
+    return label
+
+
+# ---------------------------------------------------------------------------
+# Path condition dicts (for the §8 `paths` API contract)
+# ---------------------------------------------------------------------------
+
+
+def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | None]) -> list[dict]:
+    """Convert one minimized atom (AND-group of conditions) to condition dicts.
+
+    Produces the plain-dict shape backing ``PathConditionModel``: the common
+    ``GameResult`` case becomes a single-game ``"game_result"`` dict
+    (``school`` is always the winner, ``required_result`` always ``"win"`` —
+    callers needing the loser's perspective invert it); a multi-game
+    ``MarginCondition`` becomes a ``"margin_sum"`` dict since it doesn't
+    reduce to one school/opponent pair; tiebreaker-only
+    ``CoinFlipResult``/``PDRankCondition`` (not tied to any remaining game)
+    become ``"coin_flip"``/``"pd_rank"`` dicts carrying only descriptive text.
+
+    Args:
+        atom: One AND-group of conditions from a ``scenario_atoms`` entry.
+        game_dates: Canonical ``(lower, higher)`` team-name pair -> scheduled
+            date (or ``None`` when unresolvable).
+
+    Returns:
+        List of condition dicts, one per input condition, JSON-serializable
+        and directly constructible into ``PathConditionModel``.
+    """
+    result: list[dict] = []
+    for cond in atom:
+        if isinstance(cond, GameResult):
+            pair = cast(tuple[str, str], tuple(sorted((cond.winner, cond.loser))))
+            result.append(
+                {
+                    "type": "game_result",
+                    "school": cond.winner,
+                    "date": game_dates.get(pair),
+                    "opponent": cond.loser,
+                    "required_result": "win",
+                    "margin_class": classify_margin(cond.min_margin, cond.max_margin),
+                }
+            )
+        elif isinstance(cond, MarginCondition):
+            games = []
+            for a, b in list(cond.add) + list(cond.sub):
+                pair = cast(tuple[str, str], tuple(sorted((a, b))))
+                games.append({"school": a, "date": game_dates.get(pair), "opponent": b})
+            result.append({"type": "margin_sum", "games": games, "op": cond.op, "threshold": cond.threshold})
+        elif isinstance(cond, CoinFlipResult):
+            result.append({"type": "coin_flip", "description": str(cond)})
+        elif isinstance(cond, PDRankCondition):
+            result.append({"type": "pd_rank", "description": str(cond)})
+    return result
 
 
 # ---------------------------------------------------------------------------

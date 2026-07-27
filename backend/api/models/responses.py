@@ -5,6 +5,15 @@ from typing import Any
 
 from pydantic import BaseModel
 
+# Alias used where a field is literally named `date` and also needs a default
+# value (e.g. `date: date | None = None`): in a class body, an annotated
+# assignment binds the value to the target name *before* evaluating the
+# annotation, so a same-named bare `date` annotation resolves to the
+# just-assigned `None` instead of the `datetime.date` class. Fields that omit
+# the default (`date: date | None`, no `= None`) aren't affected and don't
+# need this alias.
+_Date = date
+
 # ---------------------------------------------------------------------------
 # Shared primitives
 # ---------------------------------------------------------------------------
@@ -182,6 +191,62 @@ class ComputationStateModel(BaseModel):
     margin_computed_at: datetime | None
 
 
+class PathGameRefModel(BaseModel):
+    """A game reference (school/date/opponent) used inside a ``margin_sum`` condition."""
+
+    school: str
+    date: date | None
+    opponent: str
+
+
+class PathConditionModel(BaseModel):
+    """One atomic condition within a scenario path's AND-group.
+
+    ``type`` discriminates the condition kind (mirrors
+    ``scenario_serializers.serialize_condition``'s tagged shape): ``"game_result"``
+    is the common single-game case with ``school``/``date``/``opponent``/
+    ``required_result`` populated; ``"margin_sum"`` carries a linear margin
+    constraint across multiple games via ``games``/``op``/``threshold`` instead of
+    a single school/opponent; ``"coin_flip"`` and ``"pd_rank"`` cover
+    tiebreaker-only conditions with no associated remaining game (``description``
+    carries the fallback text since there's nothing to map to a schedule row).
+    """
+
+    type: str = "game_result"  # "game_result" | "margin_sum" | "coin_flip" | "pd_rank"
+    school: str | None = None
+    date: _Date | None = None
+    opponent: str | None = None
+    required_result: str | None = None  # "win" | "loss"
+    margin_class: str | None = None
+    games: list[PathGameRefModel] | None = None  # populated for "margin_sum"
+    op: str | None = None  # populated for "margin_sum"
+    threshold: int | None = None  # populated for "margin_sum"
+    description: str | None = None  # human-readable fallback for coin_flip / pd_rank
+
+
+class PathOutcomeModel(BaseModel):
+    """The seeding/playoff outcome a scenario path leads to."""
+
+    type: str  # "seed" | "playoffs" | "eliminated"
+    value: int | None = None  # seed number when type == "seed"
+
+
+class ScenarioPathModel(BaseModel):
+    """One minimized path (OR-of-AND conditions) to a specific outcome for a team.
+
+    ``p`` is the outcome's existing unweighted seeding probability (``p1``-``p4``
+    for a seed outcome, ``p_playoffs`` for playoffs, ``1 - p_playoffs`` for
+    eliminated) — not a per-branch probability. ``conditions`` OR-groups are
+    already ordered broadest/most-likely-first by the underlying boolean
+    minimizer (``_sort_atom_list``).
+    """
+
+    outcome: PathOutcomeModel
+    p: float
+    conditions: list[list[PathConditionModel]]
+    human_text: str
+
+
 class TeamStandingsEntry(BaseModel):
     """Per-team odds row in a region standings response."""
 
@@ -193,6 +258,7 @@ class TeamStandingsEntry(BaseModel):
     clinched: bool
     eliminated: bool
     coin_flip_needed: bool
+    paths: list[ScenarioPathModel] | None = None
 
 
 class TeamStatusModel(BaseModel):
@@ -257,7 +323,9 @@ class ScenarioEntry(BaseModel):
     tiebreaker_groups: list[list[str]] | None = None
     coinflip_groups: list[list[str]] | None = None
     outcomes: dict[str, str]  # team → seed number ("1"–"4")
-    conditions: list[dict] | None = None  # structured form of `title` (GameResult/MarginCondition/PDRankCondition dicts)
+    conditions: list[dict] | None = (
+        None  # structured form of `title` (GameResult/MarginCondition/PDRankCondition dicts)
+    )
 
 
 class KeyInsightConditionModel(BaseModel):
@@ -289,7 +357,6 @@ class StandingsResponse(BaseModel):
     remaining_games: list[RemainingGameModel]
     teams: list[TeamStandingsEntry]
     scenarios: list[ScenarioEntry] | None = None
-    team_scenarios: dict[str, Any] | None = None
     key_insights: list[KeyInsightModel] | None = None
     computation_state: ComputationStateModel | None = None
 

@@ -9,8 +9,10 @@ The engine produces three distinct things for each class/region/date snapshot:
 1. **Seeding odds** — per-team probabilities of finishing 1st, 2nd, 3rd, 4th, and making playoffs. Always computed and stored, regardless of how many games remain.
 
 2. **Scenario data** — the explicit list of game outcomes that lead to each seeding result. Two layers:
-   - `scenario_atoms`: a compact per-team, per-seed boolean expression (e.g., "Pearl beats Petal AND wins by ≥3"). Used to generate human-readable scenario text.
+   - `scenario_atoms`: a compact per-team, per-seed boolean expression (e.g., "Pearl beats Petal AND wins by ≥3"). Used to generate human-readable scenario text, and read directly by the API (`include_team_scenarios=true`) to build the `paths` field described below.
    - `complete_scenarios`: the full cross-product enumeration of all outcome combinations, each paired with its resulting seeding. Drives the rendered scenario list shown in the UI.
+
+   **`paths` (API-level, not separately stored):** `GET /standings/{clazz}/{region}?include_team_scenarios=true` exposes each team's `scenario_atoms` entry as a `paths` list — one entry per achievable outcome (a specific seed, "playoffs" regardless of seed, or "eliminated"), each with its OR-of-AND conditions and the outcome's existing `p1`–`p4`/`p_playoffs` probability. This is computed at request time from the stored `scenario_atoms` (plus a live lookup of each condition's game date) — no separate column. The "playoffs" outcome doesn't exist as its own `scenario_atoms` bucket; it's derived by unioning the per-seed atom lists and re-running the same boolean minimizer (`_simplify_atom_list`) used internally by `build_scenario_atoms`. See `backend.helpers.api_helpers.build_team_paths`.
 
 3. **Key insights** — simple, unconditionally-true conditional statements extracted from `scenario_atoms` (e.g., "Taylorsville clinches 1st seed: Taylorsville beats Stringer" or "Murrah is eliminated: Starkville beats Terry"). Each insight has 1–3 `GameResult` conditions and is margin-verified before storage. Stored at all tiers where atoms exist (R ≤ 10). Shown at all R values: as a headlines banner at R ≤ 6 alongside the full scenario list, and as the only scenario-level content at R 7–10.
 

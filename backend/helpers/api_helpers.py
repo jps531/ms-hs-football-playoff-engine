@@ -31,11 +31,14 @@ from backend.api.models.responses import (
     HomeGameOdds,
     KeyInsightConditionModel,
     KeyInsightModel,
+    PathConditionModel,
+    PathOutcomeModel,
     RecordModel,
     RemainingGameModel,
     RoundHostingOdds,
     ScenarioEntry,
     ScenarioGameOutcome,
+    ScenarioPathModel,
     SeedingOddsModel,
     TeamBracketEntry,
     TeamHostingEntry,
@@ -69,12 +72,14 @@ from backend.helpers.data_classes import (
     StoredHostingOdds,
 )
 from backend.helpers.insights import deserialize_insights
-from backend.helpers.scenario_renderer import render_scenario_title
+from backend.helpers.scenario_renderer import _render_atom, atom_condition_dicts, render_scenario_title
 from backend.helpers.scenario_serializers import (
     deserialize_complete_scenarios,
     deserialize_remaining_games,
+    deserialize_scenario_atoms,
     serialize_atom,
 )
+from backend.helpers.scenario_viewer import _simplify_atom_list
 from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
 from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
@@ -685,7 +690,9 @@ def standings_from_odds(
         rec = records.get(school, (0, 0, 0, 0, 0, 0))
         o = odds_map[school]
         bracket_odds, home_game_odds = (
-            bracket_home_odds_by_school[school] if bracket_home_odds_by_school and school in bracket_home_odds_by_school else (None, None)
+            bracket_home_odds_by_school[school]
+            if bracket_home_odds_by_school and school in bracket_home_odds_by_school
+            else (None, None)
         )
         entries.append(
             TeamStandingsEntry(
@@ -1619,7 +1626,9 @@ def build_playoff_bracket_state(
     )
 
 
-async def _load_all_region_odds(conn, season: int, clazz: int, as_of: date) -> dict[int, dict[str, StandingsOdds]]:  # pragma: no cover
+async def _load_all_region_odds(
+    conn, season: int, clazz: int, as_of: date
+) -> dict[int, dict[str, StandingsOdds]]:  # pragma: no cover
     """Return {region: {school: StandingsOdds}} for all regions in *clazz*."""
     rows = await conn.execute(
         """
@@ -1636,7 +1645,14 @@ async def _load_all_region_odds(conn, season: int, clazz: int, as_of: date) -> d
     async for r in rows:
         school, region = r[0], r[1]
         by_region.setdefault(region, {})[school] = standings_odds_from_row(
-            school, r[2], r[3], r[4], r[5], r[6], r[7], r[8],
+            school,
+            r[2],
+            r[3],
+            r[4],
+            r[5],
+            r[6],
+            r[7],
+            r[8],
         )
     return by_region
 
@@ -1880,6 +1896,137 @@ async def load_scenarios_snapshot(  # pragma: no cover
         for ins in raw_insights
     ]
     return remaining, complete, key_insights, row[3]
+
+
+async def load_scenario_atoms(  # pragma: no cover
+    conn, season: int, clazz: int, region: int, as_of: date
+) -> dict | None:
+    """Load the minimized per-team, per-seed ``scenario_atoms`` snapshot.
+
+    Separate from ``load_scenarios_snapshot`` (which reads the sibling
+    ``complete_scenarios``/``remaining_games``/``key_insights`` columns off
+    the same row) so callers that don't need the §8 ``paths`` structure avoid
+    the extra deserialization cost, and so the widely-shared
+    ``load_scenarios_snapshot`` tuple shape doesn't need to change for every
+    caller (standings *and* hosting routers).
+    """
+    row = await (
+        await conn.execute(
+            """
+        SELECT scenario_atoms
+        FROM region_scenarios
+        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
+        ORDER BY as_of_date DESC LIMIT 1
+        """,
+            (season, str(clazz), region, as_of),
+        )
+    ).fetchone()
+    if row is None:
+        return None
+    return deserialize_scenario_atoms(row[0])
+
+
+async def load_remaining_game_dates(  # pragma: no cover
+    conn, season: int, remaining: list[RemainingGame]
+) -> dict[tuple[str, str], date | None]:
+    """Resolve each remaining-game ``(a, b)`` pair to its scheduled date.
+
+    ``RemainingGame`` doesn't carry a date (see its docstring), so §8 ``paths``
+    conditions — which need to address a game by ``(school, date)`` — resolve
+    it here via a direct query against the *specific* pairs already known from
+    *remaining*, rather than widening ``RemainingGame`` itself (which would
+    change equality/hash semantics for every existing caller that compares or
+    dedupes ``RemainingGame`` instances).
+    """
+    if not remaining:
+        return {}
+    schools = sorted({rg.a for rg in remaining} | {rg.b for rg in remaining})
+    rows = await conn.execute(
+        """
+        SELECT DISTINCT ON (LEAST(school, opponent), GREATEST(school, opponent))
+            LEAST(school, opponent), GREATEST(school, opponent), date
+        FROM games_effective
+        WHERE season = %s AND region_game = TRUE AND school = ANY(%s) AND opponent = ANY(%s)
+        ORDER BY LEAST(school, opponent), GREATEST(school, opponent)
+        """,
+        (season, schools, schools),
+    )
+    fetched = [r async for r in rows]
+    return {(a, b): d for a, b, d in fetched}
+
+
+def build_team_paths(
+    team: str,
+    seed_map: dict[int, list[list]],
+    game_dates: dict[tuple[str, str], date | None],
+    odds: StandingsOdds | None,
+    playoff_seeds: int = 4,
+) -> list[ScenarioPathModel]:
+    """Build the §8 ``paths`` list for one team from its raw ``scenario_atoms`` entry.
+
+    Emits one ``ScenarioPathModel`` per achievable seed (``outcome.type ==
+    "seed"``), one aggregate ``"playoffs"`` path (any seed) derived by
+    unioning the per-seed atom OR-groups and re-simplifying with the same
+    boolean minimizer (``_simplify_atom_list``) ``build_scenario_atoms`` uses
+    internally, and one ``"eliminated"`` path when applicable.
+
+    ``p`` on each path is the team's existing unweighted seeding probability
+    (``p1``-``p4`` / ``p_playoffs`` / ``1 - p_playoffs``) rather than a new
+    per-branch probability — the §8 contract only calls for unweighted ``p``
+    to order *paths* (not individual OR-branches) by likelihood, and each
+    path's ``conditions`` list is already ordered broadest/most-likely-first
+    by the minimizer's own ``_sort_atom_list`` step.
+
+    Args:
+        team: School name.
+        seed_map: This team's ``scenario_atoms[team]`` entry — seed number
+            (``playoff_seeds + 1`` for eliminated) -> list of atoms.
+        game_dates: ``(a, b)`` pair -> scheduled date, from
+            ``load_remaining_game_dates``.
+        odds: The team's ``StandingsOdds``; ``None`` yields ``p=0.0`` on every
+            path (only expected when odds are unavailable for some reason).
+        playoff_seeds: Number of playoff seeds (default 4).
+    """
+
+    def _human_text(outcome_label: str, atoms: list[list]) -> str:
+        if not atoms:
+            return (
+                f"{team} is eliminated."
+                if outcome_label == "elimination"
+                else f"{team} has already clinched {outcome_label}."
+            )
+        branches = [_render_atom(a) or "already secured" for a in atoms]
+        return f"{team} reaches {outcome_label} if " + " — or if ".join(branches) + "."
+
+    def _build_path(atoms: list[list], outcome: PathOutcomeModel, p: float, outcome_label: str) -> ScenarioPathModel:
+        conditions = [[PathConditionModel(**d) for d in atom_condition_dicts(atom, game_dates)] for atom in atoms]
+        return ScenarioPathModel(
+            outcome=outcome, p=p, conditions=conditions, human_text=_human_text(outcome_label, atoms)
+        )
+
+    paths: list[ScenarioPathModel] = []
+    playoff_atoms: list[list] = []
+
+    for seed in range(1, playoff_seeds + 1):
+        if seed not in seed_map:
+            continue
+        seed_atoms = seed_map[seed]
+        playoff_atoms.extend(seed_atoms)
+        p = getattr(odds, f"p{seed}") if odds else 0.0
+        paths.append(_build_path(seed_atoms, PathOutcomeModel(type="seed", value=seed), p, f"the #{seed} seed"))
+
+    if playoff_atoms:
+        merged = _simplify_atom_list(playoff_atoms)
+        p_playoffs = odds.p_playoffs if odds else 0.0
+        paths.append(_build_path(merged, PathOutcomeModel(type="playoffs"), p_playoffs, "the playoffs"))
+
+    elim_seed = playoff_seeds + 1
+    if elim_seed in seed_map:
+        elim_atoms = seed_map[elim_seed]
+        p_elim = (1.0 - odds.p_playoffs) if odds else 0.0
+        paths.append(_build_path(elim_atoms, PathOutcomeModel(type="eliminated"), p_elim, "elimination"))
+
+    return paths
 
 
 async def recompute_scenarios_from_games(  # pragma: no cover

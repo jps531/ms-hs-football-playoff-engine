@@ -4,81 +4,11 @@ Context: the frontend (Next.js, not yet built) needs several read endpoints that
 don't exist yet. The existing per-region/per-team API is complete; every gap
 below is a **statewide or cross-region aggregation read** over snapshot tables
 that are already populated (`region_standings`, `region_scenarios`,
-`team_ratings`, `games`), plus two contract fixes. All new endpoints are
+`team_ratings`, `games`), plus one contract fix. All new endpoints are
 **public GET reads** (no auth), follow the existing `season` + `date` query
 param conventions, and should read from dated snapshots (falling back to the
 latest snapshot ≤ `date`, same as existing standings behavior). Add each to the
 README API Reference tables and cover with tests per the existing patterns.
-
----
-
-## 1. `GET /standings/summary` — statewide summary (grand view)
-
-**UI purpose:** The standings "grand view" — a grid of compact cards, one per
-region across every class, showing at a glance: leader, clinch/elimination
-counts, and how unsettled the race is. Must load in ONE request.
-
-**Params:** `season` (required), `date` (optional, default latest).
-
-**Response:**
-```json
-{
-  "season": 2025,
-  "as_of_date": "2025-10-14",
-  "classes": [
-    {
-      "class": "4A",
-      "regions": [
-        {
-          "region": 3,
-          "leader": {"school": "Taylorsville", "region_wins": 5, "region_losses": 0},
-          "num_teams": 6,
-          "num_clinched": 1,
-          "num_eliminated": 2,
-          "teams_alive": 3,
-          "volatility": 0.62,
-          "statuses": [
-            {"school": "Taylorsville", "status": "clinched"},
-            {"school": "Heidelberg", "status": "alive"},
-            {"school": "Mize", "status": "eliminated"}
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-- `leader` = current #1 by the same ordering the standings endpoint uses.
-- `statuses` is ordered by current standing (drives a per-team status dot strip
-  in the UI). `status` ∈ `clinched | alive | eliminated`.
-- `volatility` ∈ [0,1]: how unsettled the region is. Suggested definition:
-  mean over non-eliminated teams of the normalized Shannon entropy of each
-  team's seed distribution `[p1, p2, p3, p4, 1 − p_playoffs]` (entropy / log 5).
-  Fully decided region → 0. Put the formula in one helper with a docstring;
-  it may get tuned later. Use unweighted odds.
-
-**Implementation:** one query over the latest `region_standings` snapshot per
-region for the season/date; no scenario data needed. Should be fast enough to
-compute per request; cacheable.
-
----
-
-## 2. `GET /standings/{clazz}` — all regions in a class (class view)
-
-**UI purpose:** The standings "class view": full standings tables for every
-region in one class, one request. Same table shape the UI already gets from
-`GET /standings/{clazz}/{region}`, minus scenarios.
-
-**Params:** `season` (required), `date` (optional).
-
-**Response:** `{"class": "4A", "as_of_date": ..., "regions": [ <existing
-per-region standings response, WITHOUT the scenarios and computation_state
-blocks — teams[] with odds/bracket_odds/home_game_odds/clinched/eliminated/
-coin_flip_needed only> ]}`
-
-**Implementation:** reuse the existing per-region read path in a loop or single
-query; explicitly exclude scenario payloads (they're large and the class view
-doesn't render them).
 
 ---
 
@@ -244,56 +174,6 @@ the condition fields, not computing from scratch.
 
 ---
 
-## 8. Structured per-team scenario conditions (contract check)
-
-**UI purpose:** three features consume MINIMIZED per-team conditions (stored
-in `region_scenarios.scenario_atoms`):
-- condition "chips" (e.g., [beats Stringer] AND [Mize loses to Raleigh]),
-- a team-page "Paths" module (all achievable outcomes, best→worst, each with
-  its conditions),
-- "Play this out" — converting a scenario's conditions into simulate-mode
-  picks via URL.
-
-The standings response currently exposes `scenarios` as complete outcome
-enumerations (`game_winners` → `outcomes`) — right for the region scenario
-explorer, but NOT sufficient for the above. Verify/expose the minimized
-per-team form with this structure (on both
-`GET /standings/{clazz}/{region}` per team and the `/teams/{team}` variant):
-
-```json
-"paths": [
-  {
-    "outcome": {"type": "seed", "value": 1},
-    "p": 0.41,
-    "conditions": [
-      [
-        {"school": "Taylorsville", "date": "2025-10-17",
-         "opponent": "Stringer", "required_result": "win",
-         "margin_class": null},
-        {"school": "Mize", "date": "2025-10-17",
-         "opponent": "Raleigh", "required_result": "loss",
-         "margin_class": null}
-      ],
-      [ ...alternative AND-group... ]
-    ],
-    "human_text": "Taylorsville clinches the 1 seed with a win, or if Mize loses"
-  }
-]
-```
-- Outer array = OR groups; inner array = ANDed atomic conditions. An
-  unconditional/clinched outcome has `conditions: []`.
-- Each atom references a game by its composite key (`school`, `date`) so the
-  frontend can map conditions to simulate picks and to schedule rows.
-- `outcome.type` ∈ `seed | playoffs | eliminated`; include `p` (unweighted)
-  so the UI can order OR branches by likelihood ("Play this out" picks the
-  most probable branch).
-- `margin_class` carries margin-sensitive conditions when applicable (use the
-  existing margin bucket vocabulary); null otherwise.
-- Keep `human_text` as fallback copy, but the structured form is the contract —
-  the frontend must never parse English.
-
----
-
 ## 9. `GET /seasons/{season}/dates` — timeline scrubber data
 
 **UI purpose:** a global timeline scrubber (app shell chrome) needs the set of
@@ -321,10 +201,8 @@ valid dates to snap to, without downloading full schedules.
 
 ## Priority order for implementation
 
-1. §1 + §2 (blocks two of three standings views — the app's core surface)
-2. §8 (blocks chips/Paths/"play this out" — verify before frontend starts)
-3. §4 (blocks game pages + scoreboard)
-4. §3 (home page feed)
-5. §7 (playoff game pages + naming contract; do renames early to avoid churn)
-6. §6, §9 (small; timeline completeness)
-7. §5 (home page modules; depends on §4)
+1. §4 (blocks game pages + scoreboard)
+2. §3 (home page feed)
+3. §7 (playoff game pages + naming contract; do renames early to avoid churn)
+4. §6, §9 (small; timeline completeness)
+5. §5 (home page modules; depends on §4)
