@@ -1,7 +1,7 @@
 """Unit tests for backend.helpers.api_helpers."""
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -1077,6 +1077,15 @@ def _game_row(
     helmet_a=_HELMET_EMPTY,
     helmet_b=_HELMET_EMPTY,
     final: bool = True,
+    game_quarter: int | None = None,
+    game_clock: str | None = None,
+    pregame_prob: float | None = None,
+    pregame_prob_computed_at=None,
+    ot_start_for: int | None = None,
+    ot_start_against: int | None = None,
+    ot_next_possession: str | None = None,
+    elo_school: float | None = None,
+    elo_opponent: float | None = None,
 ) -> tuple:
     """Build a raw /games join row tuple matching build_game_models' expected shape."""
     return (
@@ -1099,9 +1108,16 @@ def _game_row(
         None,
         None,
         final,
+        game_quarter,
+        game_clock,
         None,
-        None,
-        None,
+        pregame_prob,
+        pregame_prob_computed_at,
+        ot_start_for,
+        ot_start_against,
+        ot_next_possession,
+        elo_school,
+        elo_opponent,
     )
 
 
@@ -1243,6 +1259,67 @@ class TestBuildGameModels:
         # team_a is now Alpha, so helmet_a should be Alpha's helmet
         assert g.helmet_a.color == "Green"
         assert g.helmet_b.color == "Blue"
+
+
+class TestBuildGameModelsProbabilities:
+    """build_game_models wires pregame_prob/live_prob/prob_as_of via compute_embedded_game_probs."""
+
+    def test_persisted_pregame_prob_used_directly(self):
+        """A row with a persisted pregame_prob uses it as-is (no elo needed)."""
+        computed_at = datetime(2025, 10, 10, 12, 0, 0)
+        row = _game_row(
+            "Alpha", "Beta", pregame_prob=0.65, pregame_prob_computed_at=computed_at, status="final"
+        )
+        result = build_game_models([row], team_filter=None)
+        assert result[0].pregame_prob == 0.65
+        assert result[0].prob_as_of == computed_at
+        assert result[0].live_prob is None
+
+    def test_pregame_prob_computed_from_elo_when_not_persisted(self):
+        """A not-yet-final row with elo ratings computes pregame_prob on the fly."""
+        row = _game_row(
+            "Alpha", "Beta", location="home", status="not_started", elo_school=1200.0, elo_opponent=1000.0
+        )
+        result = build_game_models([row], team_filter=None)
+        assert result[0].pregame_prob is not None
+        assert result[0].pregame_prob > 0.5  # Alpha (elo_school) is favored and at home
+
+    def test_probabilities_none_when_unrated(self):
+        """No persisted value and no elo ratings leaves both probabilities None."""
+        row = _game_row("Alpha", "Beta", status="not_started")
+        result = build_game_models([row], team_filter=None)
+        assert result[0].pregame_prob is None
+        assert result[0].live_prob is None
+        assert result[0].prob_as_of is None
+
+    def test_live_prob_present_for_in_progress_game(self):
+        """An in-progress row with a persisted pregame_prob gets a non-null live_prob."""
+        row = _game_row(
+            "Alpha",
+            "Beta",
+            status="in_progress",
+            pregame_prob=0.5,
+            game_quarter=3,
+            game_clock="5:00",
+            pf=14,
+            pa=7,
+        )
+        result = build_game_models([row], team_filter=None)
+        assert result[0].live_prob is not None
+
+    def test_probabilities_flipped_on_canonical_swap(self):
+        """When school/opponent are swapped for canonical order, probabilities flip via 1 - p."""
+        row = _game_row("Zeta", "Alpha", pregame_prob=0.7, status="final")
+        result = build_game_models([row], team_filter=None)
+        g = result[0]
+        assert (g.team_a, g.team_b) == ("Alpha", "Zeta")
+        assert g.pregame_prob == pytest.approx(0.3)
+
+    def test_no_swap_with_team_filter(self):
+        """With a team_filter, probabilities are kept as-is (already that team's perspective)."""
+        row = _game_row("Zeta", "Alpha", pregame_prob=0.7, status="final")
+        result = build_game_models([row], team_filter="Zeta")
+        assert result[0].pregame_prob == 0.7
 
 
 class TestBuildTeamEntries:

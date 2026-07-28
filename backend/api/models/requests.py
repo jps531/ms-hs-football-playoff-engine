@@ -28,6 +28,13 @@ GameOverrideField = Literal[
     "region_game",
     "round",
     "kickoff_time",
+    "game_status",
+    "game_quarter",
+    "game_clock",
+    "overtime",
+    "ot_period_start_score_for",
+    "ot_period_start_score_against",
+    "ot_next_possession",
 ]
 
 LocationOverrideField = Literal["home_team", "latitude", "longitude"]

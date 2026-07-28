@@ -603,6 +603,9 @@ class GameModel(BaseModel):
     venue: VenueModel | None = None
     helmet_a: HelmetDesignModel | None = None
     helmet_b: HelmetDesignModel | None = None
+    pregame_prob: float | None = None
+    live_prob: float | None = None
+    prob_as_of: datetime | None = None
 
 
 class PreGameWinProbResponse(BaseModel):

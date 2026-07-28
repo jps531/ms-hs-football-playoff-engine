@@ -8,6 +8,7 @@ imports here.
 Public API
 ----------
 EloConfig                — tunable model parameters
+initial_elo_ratings()    — season-opening Elo rating per school (class prior + carryover)
 compute_elo_ratings()    — build Elo ratings + date snapshots from game history
 compute_rpi()            — compute RPI for each team (display-only)
 make_win_prob_fn()       — factory: returns a WinProbFn closure
@@ -15,6 +16,7 @@ make_win_prob_fn_from_ratings() — alternate factory using pre-computed ratings
 make_matchup_prob_fn()        — bridge: seed-based MatchupProbFn from Elo ratings
 compute_in_game_win_prob()    — regulation in-game win probability (Gaussian model)
 compute_ot_win_prob()         — OT mid-possession win probability (discrete model)
+compute_embedded_game_probs() — pregame/live/prob_as_of triple for GET /games rows
 win_prob_with_factors()       — returns a full WinProbFactors breakdown for display
 """
 
@@ -22,7 +24,7 @@ import bisect
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 
 from backend.helpers.data_classes import (
     Game,
@@ -33,6 +35,9 @@ from backend.helpers.data_classes import (
     WinProbFactors,
     WinProbFn,
 )
+from backend.helpers.data_helpers import game_seconds_remaining
+
+_LIVE_STATUSES = frozenset({"in_progress", "end_1q", "halftime", "end_3q", "end_4q", "end_ot"})
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -162,6 +167,23 @@ def _mov_multiplier(margin: int, elo_diff_winner: float, mov_exponent: float) ->
 # ---------------------------------------------------------------------------
 
 
+def initial_elo_ratings(
+    schools: list[School],
+    config: EloConfig,
+    prior_ratings: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Return each school's season-opening Elo rating (class prior blended with carryover).
+
+    This is the rating a team enters its *first* game of the season with — used
+    by ``compute_elo_ratings`` as the seed, and reused by the pregame-probability
+    backfill for a team's first game (no in-season snapshot yet exists for it).
+    """
+    return {
+        s.school: _apply_carryover(config.class_ratings[s.class_ - 1], s.school, prior_ratings, config.carryover_factor)
+        for s in schools
+    }
+
+
 def compute_elo_ratings(
     games: list[Game],
     schools: list[School],
@@ -204,10 +226,7 @@ def compute_elo_ratings(
     schools_by_name: dict[str, School] = {s.school: s for s in schools}
 
     # Seed every known school — blend with prior-season rating when available
-    ratings: dict[str, float] = {
-        s.school: _apply_carryover(config.class_ratings[s.class_ - 1], s.school, prior_ratings, config.carryover_factor)
-        for s in schools
-    }
+    ratings: dict[str, float] = initial_elo_ratings(schools, config, prior_ratings)
     games_count: dict[str, int] = defaultdict(int)
 
     # Filter to final, scored games with a known result
@@ -706,6 +725,103 @@ def compute_ot_win_prob(
 
     # If tied after both possessions → another OT → use stateless pregame probability
     return max(0.0, min(1.0, p_a_wins_direct + p_another_ot * pregame_prob_a))
+
+
+# ---------------------------------------------------------------------------
+# Embedded GET /games probability fields
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EmbeddedProbInputs:
+    """Raw per-row fields needed to compute ``GET /games`` probability fields.
+
+    ``elo_school``/``elo_opponent`` are the pre-game Elo snapshot values (the
+    caller is responsible for the strictly-before-game-date lookup — see
+    ``compute_embedded_game_probs``'s docstring). ``score_for``/``score_against``,
+    ``location``, and the ``ot_*`` fields are all from the row's own school's
+    perspective, matching ``games`` table conventions.
+    """
+
+    elo_school: float | None
+    elo_opponent: float | None
+    location: str | None
+    status: str | None
+    score_for: int | None
+    score_against: int | None
+    game_quarter: int | None
+    game_clock: str | None
+    persisted_pregame_prob: float | None
+    persisted_computed_at: datetime | None
+    ot_period_start_score_for: int | None
+    ot_period_start_score_against: int | None
+    ot_next_possession: str | None
+
+
+def compute_embedded_game_probs(
+    inputs: EmbeddedProbInputs,
+    config: EloConfig | None = None,
+    in_game_config: InGameConfig | None = None,
+) -> tuple[float | None, float | None, datetime | None]:
+    """Return ``(pregame_prob, live_prob, prob_as_of)`` for a ``GET /games`` row.
+
+    ``pregame_prob`` prefers ``inputs.persisted_pregame_prob`` (written at
+    finalization from the game-date Elo snapshot); falls back to computing it
+    from ``inputs.elo_school``/``elo_opponent`` (e.g. for not-yet-final games),
+    and is ``None`` if neither is available.
+
+    ``live_prob`` is ``None`` unless ``inputs.status`` is an in-progress state.
+    In regulation it routes through ``compute_in_game_win_prob`` using
+    ``game_seconds_remaining``. In overtime (``game_quarter > 4``) it uses
+    ``ot_period_start_score_for/against`` and ``ot_next_possession`` to
+    reconstruct how many points the side that already possessed this period
+    scored, then routes through ``compute_ot_win_prob``; when neither side has
+    possessed yet this period (or that state is incomplete), it falls back to
+    ``pregame_prob`` — each OT period is memoryless by design.
+    """
+    if inputs.persisted_pregame_prob is not None:
+        pregame_prob = inputs.persisted_pregame_prob
+        pregame_as_of = inputs.persisted_computed_at
+    elif inputs.elo_school is not None and inputs.elo_opponent is not None:
+        pregame_prob = compute_pregame_win_prob(inputs.elo_school, inputs.elo_opponent, inputs.location, config)
+        pregame_as_of = None
+    else:
+        return None, None, None
+
+    if inputs.status not in _LIVE_STATUSES:
+        return pregame_prob, None, pregame_as_of
+
+    ig_cfg = in_game_config or InGameConfig()
+    now = datetime.now(UTC)
+    game_quarter = inputs.game_quarter
+    score_for, score_against = inputs.score_for, inputs.score_against
+
+    if game_quarter is not None and game_quarter > 4:
+        ot_start_for = inputs.ot_period_start_score_for
+        ot_start_against = inputs.ot_period_start_score_against
+        if (
+            inputs.ot_next_possession in ("for", "against")
+            and ot_start_for is not None
+            and ot_start_against is not None
+            and score_for is not None
+            and score_against is not None
+        ):
+            if inputs.ot_next_possession == "against":
+                # "for" side already possessed this period; "against" has not.
+                live_prob = compute_ot_win_prob(pregame_prob, score_for - ot_start_for, ig_cfg)
+            else:
+                # "against" side already possessed this period; "for" has not.
+                p_against = compute_ot_win_prob(1.0 - pregame_prob, score_against - ot_start_against, ig_cfg)
+                live_prob = 1.0 - p_against
+        else:
+            live_prob = pregame_prob
+    elif score_for is not None and score_against is not None and game_quarter is not None and inputs.game_clock is not None:
+        seconds_remaining = game_seconds_remaining(game_quarter, inputs.game_clock)
+        live_prob = compute_in_game_win_prob(pregame_prob, score_for - score_against, seconds_remaining, ig_cfg)
+    else:
+        live_prob = pregame_prob
+
+    return pregame_prob, live_prob, now
 
 
 # ---------------------------------------------------------------------------

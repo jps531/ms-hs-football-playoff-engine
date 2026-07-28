@@ -165,6 +165,13 @@ A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Co
 
 Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinals"` — `null` for regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
 
+Each game also includes embedded win probability, always from `team_a`'s perspective (so `P(team_b) = 1 - P(team_a)`):
+- `pregame_prob` (float | null) — Elo-based pregame win probability. For final games this is the value persisted at finalization (computed from ratings as of the game's own date — never a later snapshot, so it never reflects the game's own result). For not-yet-final games it's computed on the fly from the latest available ratings. `null` if either team is unrated.
+- `live_prob` (float | null) — non-null only while the game is in progress (`status` is one of the in-progress states). Regulation games route through the in-game model using `game_quarter`/`game_clock`; overtime games (`game_quarter > 4`) route through the OT model using the manually-tracked `ot_period_start_score_for`/`ot_period_start_score_against`/`ot_next_possession` state (see below) — `null`/incomplete OT state falls back to `pregame_prob`.
+- `prob_as_of` (timestamp | null) — when `pregame_prob` was computed (persisted finalization time), or now if `live_prob` is set.
+
+**Live-game state is currently manual-only** — no automated live-score pipeline exists yet, so `game_quarter`, `game_clock`, `game_status`, `overtime`, and the `ot_*` fields only change via the admin override endpoints below (see "Games (manual-only columns)").
+
 ## Ratings — `/ratings`
 
 | Method | Path | Description |
@@ -190,7 +197,7 @@ Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and
 | GET | `/overrides` | Audit all active manual overrides across schools, locations, and games |
 | PUT | `/schools/{school}/overrides` | Set one override field on a school. Body: `{ "field": "display_name", "value": "West Jones" }`. Valid fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude` |
 | DELETE | `/schools/{school}/overrides/{field}` | Clear one override field, restoring the pipeline-written value |
-| PUT | `/games/{school}/{date}/overrides` | Set one override field on a game row (e.g. fix a miscategorized region game or a wrong score). Valid fields: `location`, `location_id`, `points_for`, `points_against`, `region_game`, `round`, `kickoff_time` |
+| PUT | `/games/{school}/{date}/overrides` | Set one override field on a game row (e.g. fix a miscategorized region game or a wrong score, or manually drive a game's live state — see below). Valid fields: `location`, `location_id`, `points_for`, `points_against`, `region_game`, `round`, `kickoff_time`, `game_status`, `game_quarter`, `game_clock`, `overtime`, `ot_period_start_score_for`, `ot_period_start_score_against`, `ot_next_possession` |
 | DELETE | `/games/{school}/{date}/overrides/{field}` | Clear one override field on a game row |
 | PUT | `/locations/{id}/overrides` | Set one override field on a venue. Valid fields: `home_team`, `latitude`, `longitude` |
 | DELETE | `/locations/{id}/overrides/{field}` | Clear one override field on a venue |

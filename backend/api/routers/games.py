@@ -76,7 +76,10 @@ async def list_games(
                hd_b.image_left, hd_b.image_right, hd_b.photo, hd_b.color, hd_b.finish,
                hd_b.facemask_color, hd_b.logo, hd_b.stripe, hd_b.tags, hd_b.notes,
                g.round, g.kickoff_time, g.overtime, g.final,
-               g.game_quarter, g.game_clock, g.source
+               g.game_quarter, g.game_clock, g.source,
+               g.pregame_prob, g.pregame_prob_computed_at,
+               g.ot_period_start_score_for, g.ot_period_start_score_against, g.ot_next_possession,
+               elo_school.elo, elo_opponent.elo
         FROM games_effective g
         JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season
         LEFT JOIN locations l ON g.location_id = l.id
@@ -87,6 +90,18 @@ async def list_games(
         LEFT JOIN games_effective g_opp
           ON g_opp.school = g.opponent AND g_opp.date = g.date AND g_opp.season = g.season
         LEFT JOIN helmet_designs hd_b ON hd_b.id = g_opp.helmet_design_id
+        LEFT JOIN LATERAL (
+          SELECT elo FROM team_ratings
+          WHERE g.pregame_prob IS NULL
+            AND school = g.school AND season = g.season AND as_of_date < g.date
+          ORDER BY as_of_date DESC LIMIT 1
+        ) elo_school ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT elo FROM team_ratings
+          WHERE g.pregame_prob IS NULL
+            AND school = g.opponent AND season = g.season AND as_of_date < g.date
+          ORDER BY as_of_date DESC LIMIT 1
+        ) elo_opponent ON TRUE
         WHERE {}
         ORDER BY g.date, g.school
     """).format(where_clause)

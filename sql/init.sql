@@ -120,6 +120,11 @@ CREATE TABLE IF NOT EXISTS games (
   round           TEXT,
   kickoff_time    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   overtime        INTEGER DEFAULT 0,
+  pregame_prob    REAL,
+  pregame_prob_computed_at TIMESTAMPTZ,
+  ot_period_start_score_for     INTEGER,
+  ot_period_start_score_against INTEGER,
+  ot_next_possession TEXT CHECK (ot_next_possession IS NULL OR ot_next_possession IN ('for', 'against')),
   overrides       JSONB NOT NULL DEFAULT '{}'::jsonb,
   helmet_design_id INTEGER REFERENCES helmet_designs(id) ON DELETE SET NULL,
   FOREIGN KEY (school, season) REFERENCES school_seasons(school, season),
@@ -170,9 +175,12 @@ CREATE OR REPLACE VIEW games_effective AS
 SELECT
   school, date, season, opponent,
   COALESCE(overrides->>'result',      result)      AS result,
-  final, overtime,
+  final,
+  COALESCE((overrides->>'overtime')::int,         overtime)       AS overtime,
   COALESCE(overrides->>'game_status', game_status) AS game_status,
-  game_quarter, game_clock, source,
+  COALESCE((overrides->>'game_quarter')::smallint, game_quarter)  AS game_quarter,
+  COALESCE(overrides->>'game_clock',               game_clock)    AS game_clock,
+  source,
   helmet_design_id,
   COALESCE(overrides->>'location',                location)       AS location,
   COALESCE((overrides->>'location_id')::int,      location_id)    AS location_id,
@@ -181,7 +189,11 @@ SELECT
   COALESCE((overrides->>'region_game')::boolean,  region_game)    AS region_game,
   COALESCE(overrides->>'round',                   round)          AS round,
   COALESCE((overrides->>'kickoff_time')::timestamptz, kickoff_time) AS kickoff_time,
-  overrides
+  overrides,
+  pregame_prob, pregame_prob_computed_at,
+  COALESCE((overrides->>'ot_period_start_score_for')::int,     ot_period_start_score_for)     AS ot_period_start_score_for,
+  COALESCE((overrides->>'ot_period_start_score_against')::int, ot_period_start_score_against) AS ot_period_start_score_against,
+  COALESCE(overrides->>'ot_next_possession',      ot_next_possession) AS ot_next_possession
 FROM games;
 
 

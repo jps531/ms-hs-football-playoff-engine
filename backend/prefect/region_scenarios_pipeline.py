@@ -56,7 +56,9 @@ from backend.helpers.scenarios import (
 from backend.helpers.win_probability import (
     EloConfig,
     compute_elo_ratings,
+    compute_pregame_win_prob,
     compute_rpi,
+    initial_elo_ratings,
     make_matchup_prob_fn,
     make_win_prob_fn_from_ratings,
 )
@@ -305,6 +307,96 @@ def write_elo_game_date_snapshots(
         conn.commit()
 
     return len(data)
+
+
+def compute_pregame_prob_rows(
+    games: list[Game],
+    elo_snapshots: list[tuple[date, dict[str, float], dict[str, int]]],
+    initial_ratings: dict[str, float],
+    elo_cfg: EloConfig,
+) -> list[tuple[str, date, float]]:
+    """Return ``(school, date, pregame_prob)`` rows to persist for every final game.
+
+    Pure Python — no DB access — so it's directly unit-testable. Uses the Elo
+    rating from the snapshot *strictly before* the game's own date (never the
+    game's own date's snapshot, which already reflects that game's result —
+    the same leakage ``compute_embedded_game_probs`` avoids on the read
+    path). A team's first game of the season falls back to
+    ``initial_ratings`` (the season-opening class-prior/carryover rating),
+    since no in-season snapshot exists yet.
+
+    Deduplicates contests the same way ``compute_elo_ratings`` does, so each
+    final game produces exactly one row per mirror side (school and opponent).
+    """
+    snapshot_dates = [snap[0] for snap in elo_snapshots]
+
+    def _ratings_before(target: date) -> dict[str, float]:
+        idx = bisect.bisect_left(snapshot_dates, target) - 1
+        if idx < 0:
+            return initial_ratings
+        return elo_snapshots[idx][1]
+
+    valid = [
+        g
+        for g in games
+        if g.final
+        and g.result in ("W", "L", "T")
+        and g.points_for is not None
+        and g.points_against is not None
+        and g.opponent is not None
+    ]
+
+    processed: set[tuple[str, str, str]] = set()
+    rows: list[tuple[str, date, float]] = []
+    for g in valid:
+        opponent: str = g.opponent  # type: ignore[assignment]  # filtered above
+        pair_key = (min(g.school, opponent), max(g.school, opponent), str(g.date))
+        if pair_key in processed:
+            continue
+        processed.add(pair_key)
+
+        ratings = _ratings_before(g.date)
+        elo_school = ratings.get(g.school)
+        elo_opponent = ratings.get(opponent)
+        if elo_school is None or elo_opponent is None:
+            continue  # unrated team — leave pregame_prob null, same as /games/probability's 404 contract
+
+        p_school = compute_pregame_win_prob(elo_school, elo_opponent, g.location, elo_cfg)
+        rows.append((g.school, g.date, p_school))
+        rows.append((opponent, g.date, 1.0 - p_school))
+
+    return rows
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Write {season} Pregame Win Probabilities")
+def write_pregame_probabilities(
+    games: list[Game],
+    elo_snapshots: list[tuple[date, dict[str, float], dict[str, int]]],
+    initial_ratings: dict[str, float],
+    season: int,
+    elo_cfg: EloConfig,
+) -> int:
+    """Persist ``pregame_prob`` onto both mirror rows of every final game.
+
+    See ``compute_pregame_prob_rows`` for the (pure, unit-tested) selection
+    and lookup logic; this task just writes the resulting rows.
+    """
+    rows = compute_pregame_prob_rows(games, elo_snapshots, initial_ratings, elo_cfg)
+    if not rows:
+        return 0
+
+    sql = """
+        UPDATE games AS g
+        SET pregame_prob = v.prob, pregame_prob_computed_at = NOW()
+        FROM (VALUES %s) AS v(school, game_date, prob)
+        WHERE g.school = v.school AND g.date = v.game_date::date
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, rows, template="(%s, %s, %s)", page_size=500)
+        conn.commit()
+
+    return len(rows)
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Completed Region Games for {teams}")
@@ -1165,6 +1257,12 @@ def region_scenarios_data_flow(
     )
     logger.info("Wrote team ratings for %d teams; %d historical game-date snapshot rows", len(elo_ratings), n_snap)
 
+    initial_ratings = initial_elo_ratings(all_schools, elo_cfg, prior_elo or None)
+    n_pregame = write_pregame_probabilities(
+        quote(all_games), quote(elo_snapshots), quote(initial_ratings), season, elo_cfg
+    )
+    logger.info("Wrote pregame_prob for %d game rows", n_pregame)
+
     # Cache quoted versions to avoid re-quoting on every loop iteration.
     q_elo_ratings = quote(elo_ratings)
     q_elo_snapshots = quote(elo_snapshots)
@@ -1257,6 +1355,12 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         quote(elo_snapshots), season, skip_date=today, known_schools=quote(ms_schools)
     )
     logger.info("Wrote %d Elo game-date snapshot rows for season %d", n_snap, season)
+
+    initial_ratings = initial_elo_ratings(all_schools, elo_cfg, prior_elo or None)
+    n_pregame = write_pregame_probabilities(
+        quote(all_games), quote(elo_snapshots), quote(initial_ratings), season, elo_cfg
+    )
+    logger.info("Wrote pregame_prob for %d game rows", n_pregame)
 
     if not elo_snapshots:
         logger.info("No game-date snapshots — nothing to backfill.")

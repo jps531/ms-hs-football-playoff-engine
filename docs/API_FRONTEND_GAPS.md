@@ -123,7 +123,7 @@ table is already dated; this is exposure, not computation.)
 
 ---
 
-## 7. `GET /bracket/slots/{slot}` — playoff game/slot outlook (+ naming/simulate fixes)
+## 7. `GET /bracket/slots/{slot}` — playoff game/slot outlook
 
 **UI purpose:** the playoff game page for a future/TBD matchup: every team
 still alive for that slot, ordered by chance of reaching it, each with a
@@ -203,6 +203,6 @@ valid dates to snap to, without downloading full schedules.
 
 1. §4 (blocks game pages + scoreboard)
 2. §3 (home page feed)
-3. §7 (playoff game pages + naming contract; do renames early to avoid churn)
+3. §7 (playoff game pages + naming contract)
 4. §6, §9 (small; timeline completeness)
 5. §5 (home page modules; depends on §4)

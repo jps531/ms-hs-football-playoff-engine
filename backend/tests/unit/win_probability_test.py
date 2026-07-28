@@ -4,19 +4,22 @@ All tests are pure Python — no DB, no Prefect, no I/O.
 Fixtures are built inline from Game and School dataclasses.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
 from backend.helpers.data_classes import Game, GameStatus, InGameConfig, School, StandingsOdds, WinProbFactors
+from backend.helpers.data_helpers import game_seconds_remaining
 from backend.helpers.win_probability import (
     EloConfig,
+    EmbeddedProbInputs,
     _apply_carryover,
     _class_prior,
     _elo_expected,
     _mov_multiplier,
     _ot_score_distribution,
     compute_elo_ratings,
+    compute_embedded_game_probs,
     compute_hfa_adjustment,
     compute_in_game_win_prob,
     compute_ot_win_prob,
@@ -1212,3 +1215,161 @@ class TestEloCarryover:
     def test_apply_carryover_no_prior(self):
         """_apply_carryover returns the class_prior when prior_ratings is None."""
         assert _apply_carryover(1200.0, "Beta", None, 0.5) == pytest.approx(1200.0)
+
+
+# ---------------------------------------------------------------------------
+# compute_embedded_game_probs
+# ---------------------------------------------------------------------------
+
+
+def _inputs(**overrides) -> EmbeddedProbInputs:
+    """Build EmbeddedProbInputs with not-yet-final defaults, overridden per test."""
+    defaults = dict(
+        elo_school=None,
+        elo_opponent=None,
+        location=None,
+        status=None,
+        score_for=None,
+        score_against=None,
+        game_quarter=None,
+        game_clock=None,
+        persisted_pregame_prob=None,
+        persisted_computed_at=None,
+        ot_period_start_score_for=None,
+        ot_period_start_score_against=None,
+        ot_next_possession=None,
+    )
+    defaults.update(overrides)
+    return EmbeddedProbInputs(**defaults)
+
+
+class TestComputeEmbeddedGameProbs:
+    """compute_embedded_game_probs: pregame/live/prob_as_of for a GET /games row."""
+
+    def test_no_elo_and_no_persisted_returns_all_none(self):
+        """An unrated matchup with no persisted value returns (None, None, None)."""
+        result = compute_embedded_game_probs(_inputs(status="not_started"))
+        assert result == (None, None, None)
+
+    def test_computed_pregame_when_not_persisted(self):
+        """With no persisted value, pregame_prob is computed from the given Elo ratings."""
+        pregame_prob, live_prob, prob_as_of = compute_embedded_game_probs(
+            _inputs(elo_school=1200.0, elo_opponent=1100.0, location="home", status="not_started")
+        )
+        assert pregame_prob == pytest.approx(compute_pregame_win_prob(1200.0, 1100.0, "home"))
+        assert live_prob is None
+        assert prob_as_of is None
+
+    def test_persisted_pregame_used_when_present(self):
+        """A persisted pregame_prob is used as-is, ignoring any Elo inputs."""
+        computed_at = date(2025, 10, 10)
+        pregame_prob, live_prob, prob_as_of = compute_embedded_game_probs(
+            _inputs(
+                persisted_pregame_prob=0.7,
+                persisted_computed_at=computed_at,
+                elo_school=1000.0,
+                elo_opponent=2000.0,  # would give a very different computed value
+                status="final",
+            )
+        )
+        assert pregame_prob == 0.7
+        assert prob_as_of == computed_at
+
+    def test_not_live_status_returns_live_prob_none(self):
+        """A terminal/not-started status never produces a live_prob."""
+        _, live_prob, _ = compute_embedded_game_probs(
+            _inputs(persisted_pregame_prob=0.5, status="final")
+        )
+        assert live_prob is None
+
+    def test_regulation_live_prob_computed(self):
+        """An in-progress regulation game routes through compute_in_game_win_prob."""
+        pregame_prob, live_prob, prob_as_of = compute_embedded_game_probs(
+            _inputs(
+                persisted_pregame_prob=0.6,
+                status="in_progress",
+                game_quarter=2,
+                game_clock="6:00",
+                score_for=14,
+                score_against=7,
+            )
+        )
+        expected = compute_in_game_win_prob(0.6, 7, game_seconds_remaining(2, "6:00"))
+        assert live_prob == pytest.approx(expected)
+        assert isinstance(prob_as_of, datetime)
+
+    def test_ot_next_possession_against_uses_for_side_delta(self):
+        """When 'for' already possessed, live_prob uses their scored OT margin directly."""
+        _, live_prob, _ = compute_embedded_game_probs(
+            _inputs(
+                persisted_pregame_prob=0.5,
+                status="in_progress",
+                game_quarter=5,
+                score_for=26,
+                score_against=20,
+                ot_period_start_score_for=20,
+                ot_period_start_score_against=20,
+                ot_next_possession="against",
+            )
+        )
+        assert live_prob == pytest.approx(compute_ot_win_prob(0.5, 6))
+
+    def test_ot_next_possession_for_uses_against_side_delta(self):
+        """When 'against' already possessed, live_prob is 1 - their OT win prob."""
+        _, live_prob, _ = compute_embedded_game_probs(
+            _inputs(
+                persisted_pregame_prob=0.5,
+                status="in_progress",
+                game_quarter=5,
+                score_for=20,
+                score_against=27,
+                ot_period_start_score_for=20,
+                ot_period_start_score_against=20,
+                ot_next_possession="for",
+            )
+        )
+        assert live_prob == pytest.approx(1.0 - compute_ot_win_prob(0.5, 7))
+
+    def test_ot_no_possession_yet_falls_back_to_pregame(self):
+        """A fresh OT period (nobody has possessed) is memoryless: live_prob == pregame_prob."""
+        pregame_prob, live_prob, _ = compute_embedded_game_probs(
+            _inputs(persisted_pregame_prob=0.42, status="in_progress", game_quarter=5)
+        )
+        assert live_prob == pregame_prob
+
+    def test_ot_incomplete_state_falls_back_to_pregame(self):
+        """Missing OT period-start data falls back to pregame_prob rather than erroring."""
+        pregame_prob, live_prob, _ = compute_embedded_game_probs(
+            _inputs(
+                persisted_pregame_prob=0.42,
+                status="in_progress",
+                game_quarter=5,
+                score_for=26,
+                score_against=20,
+                ot_next_possession="against",
+                # ot_period_start_score_for/against intentionally left None
+            )
+        )
+        assert live_prob == pregame_prob
+
+    def test_missing_clock_in_regulation_falls_back_to_pregame(self):
+        """A regulation in-progress row missing game_clock falls back to pregame_prob."""
+        pregame_prob, live_prob, _ = compute_embedded_game_probs(
+            _inputs(
+                persisted_pregame_prob=0.55,
+                status="in_progress",
+                game_quarter=2,
+                score_for=7,
+                score_against=0,
+                game_clock=None,
+            )
+        )
+        assert live_prob == pregame_prob
+
+    def test_end_ot_status_is_live(self):
+        """END_OT (period just ended tied) is treated as an in-progress status."""
+        pregame_prob, live_prob, prob_as_of = compute_embedded_game_probs(
+            _inputs(persisted_pregame_prob=0.3, status="end_ot", game_quarter=5)
+        )
+        assert live_prob == pregame_prob
+        assert prob_as_of is not None

@@ -82,7 +82,12 @@ from backend.helpers.scenario_serializers import (
 from backend.helpers.scenario_viewer import _simplify_atom_list
 from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
 from backend.helpers.tiebreakers import resolve_standings_for_mask
-from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
+from backend.helpers.win_probability import (
+    EloConfig,
+    EmbeddedProbInputs,
+    compute_embedded_game_probs,
+    make_matchup_prob_fn,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -247,13 +252,20 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
     Each row is ``(school, opponent, date, points_for, points_against, location,
     region_game, status, season, venue_name, venue_city, venue_lat, venue_lon,
     *15 helmet_a fields, *15 helmet_b fields, round, kickoff, overtime, final,
-    quarter, clock, source)``.
+    quarter, clock, source, pregame_prob, pregame_prob_computed_at,
+    ot_period_start_score_for, ot_period_start_score_against, ot_next_possession,
+    elo_school, elo_opponent)``.
 
     When *team_filter* is ``None``, symmetric game pairs (school/opponent both
     appearing as separate rows) are deduplicated to one entry, canonicalised so
     ``team_a`` is alphabetically first — swapping scores, location, and helmets
     to match.  When *team_filter* is set, every row is kept from that team's
     perspective with no deduplication or canonicalisation.
+
+    ``pregame_prob``/``live_prob`` are always relative to ``team_a`` of the
+    resulting row (same convention as ``score_a``/``location_a``); when a pair
+    is canonicalised the raw row's probabilities are flipped via ``1 - p``
+    rather than recomputed, since the underlying Elo model is symmetric.
     """
     seen_pairs: set[frozenset] = set()
     games: list[GameModel] = []
@@ -276,6 +288,34 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
         ha_fields = tuple(rest[:15])
         hb_fields = tuple(rest[15:30])
         g_round, g_kickoff, g_overtime, g_final, g_quarter, g_clock, g_source = rest[30:37]
+        (
+            persisted_pregame_prob,
+            persisted_computed_at,
+            ot_start_for,
+            ot_start_against,
+            ot_next_possession,
+            elo_school,
+            elo_opponent,
+        ) = rest[37:44]
+
+        pregame_prob, live_prob, prob_as_of = compute_embedded_game_probs(
+            EmbeddedProbInputs(
+                elo_school=elo_school,
+                elo_opponent=elo_opponent,
+                location=location,
+                status=status,
+                score_for=pf,
+                score_against=pa,
+                game_quarter=g_quarter,
+                game_clock=g_clock,
+                persisted_pregame_prob=persisted_pregame_prob,
+                persisted_computed_at=persisted_computed_at,
+                ot_period_start_score_for=ot_start_for,
+                ot_period_start_score_against=ot_start_against,
+                ot_next_possession=ot_next_possession,
+            )
+        )
+
         if team_filter is None:
             pair = frozenset([school, opponent])
             if pair in seen_pairs:
@@ -286,6 +326,10 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
                 pf, pa = pa, pf
                 location = {"home": "away", "away": "home"}.get(location, location)
                 ha_fields, hb_fields = hb_fields, ha_fields
+                if pregame_prob is not None:
+                    pregame_prob = 1.0 - pregame_prob
+                if live_prob is not None:
+                    live_prob = 1.0 - live_prob
         venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
         games.append(
             GameModel(
@@ -308,6 +352,9 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
                 venue=venue,
                 helmet_a=build_helmet_from_fields(*ha_fields),
                 helmet_b=build_helmet_from_fields(*hb_fields),
+                pregame_prob=pregame_prob,
+                live_prob=live_prob,
+                prob_as_of=prob_as_of,
             )
         )
     return games
