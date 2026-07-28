@@ -1988,21 +1988,36 @@ def build_team_paths(
         playoff_seeds: Number of playoff seeds (default 4).
     """
 
-    def _human_text(outcome_label: str, atoms: list[list]) -> str:
-        if not atoms:
-            return (
-                f"{team} is eliminated."
-                if outcome_label == "elimination"
-                else f"{team} has already clinched {outcome_label}."
-            )
-        branches = [_render_atom(a) or "already secured" for a in atoms]
-        return f"{team} reaches {outcome_label} if " + " — or if ".join(branches) + "."
+    def _human_text(outcome: PathOutcomeModel, atoms: list[list]) -> str:
+        unconditional = atoms == [[]]
+        if outcome.type == "seed":
+            subject = f"the #{outcome.value} seed"
+            if unconditional:
+                return f"{team} has already clinched {subject}."
+            branches = [_render_atom(a) for a in atoms]
+            return f"{team} finishes as {subject} if " + " — or if ".join(branches) + "."
+        if outcome.type == "playoffs":
+            if unconditional:
+                return f"{team} has already clinched a playoff spot."
+            branches = [_render_atom(a) for a in atoms]
+            return f"{team} makes the playoffs if " + " — or if ".join(branches) + "."
+        # outcome.type == "eliminated"
+        if unconditional:
+            return f"{team} has already been eliminated."
+        branches = [_render_atom(a) for a in atoms]
+        return f"{team} is eliminated if " + " — or if ".join(branches) + "."
 
-    def _build_path(atoms: list[list], outcome: PathOutcomeModel, p: float, outcome_label: str) -> ScenarioPathModel:
+    def _build_path(atoms: list[list], outcome: PathOutcomeModel, p: float) -> ScenarioPathModel:
+        # Atoms sourced from the DB-backed `scenario_atoms` snapshot are already
+        # minimized (build_scenario_atoms' own Step 6), so this is a no-op there;
+        # atoms rebuilt from `complete_scenarios` for the simulate path (via
+        # atoms_from_complete_scenarios) are NOT pre-minimized, so this is load-
+        # bearing there — without it, a game irrelevant to this outcome can show
+        # up as two redundant "either winner" OR-branches instead of collapsing
+        # away (see _simplify_atom_list's "Rule 2 — Game elimination").
+        atoms = _simplify_atom_list(atoms)
         conditions = [[PathConditionModel(**d) for d in atom_condition_dicts(atom, game_dates)] for atom in atoms]
-        return ScenarioPathModel(
-            outcome=outcome, p=p, conditions=conditions, human_text=_human_text(outcome_label, atoms)
-        )
+        return ScenarioPathModel(outcome=outcome, p=p, conditions=conditions, human_text=_human_text(outcome, atoms))
 
     paths: list[ScenarioPathModel] = []
     playoff_atoms: list[list] = []
@@ -2010,21 +2025,18 @@ def build_team_paths(
     for seed in range(1, playoff_seeds + 1):
         if seed not in seed_map:
             continue
-        seed_atoms = seed_map[seed]
-        playoff_atoms.extend(seed_atoms)
+        playoff_atoms.extend(seed_map[seed])
         p = getattr(odds, f"p{seed}") if odds else 0.0
-        paths.append(_build_path(seed_atoms, PathOutcomeModel(type="seed", value=seed), p, f"the #{seed} seed"))
+        paths.append(_build_path(seed_map[seed], PathOutcomeModel(type="seed", value=seed), p))
 
     if playoff_atoms:
-        merged = _simplify_atom_list(playoff_atoms)
         p_playoffs = odds.p_playoffs if odds else 0.0
-        paths.append(_build_path(merged, PathOutcomeModel(type="playoffs"), p_playoffs, "the playoffs"))
+        paths.append(_build_path(playoff_atoms, PathOutcomeModel(type="playoffs"), p_playoffs))
 
     elim_seed = playoff_seeds + 1
     if elim_seed in seed_map:
-        elim_atoms = seed_map[elim_seed]
         p_elim = (1.0 - odds.p_playoffs) if odds else 0.0
-        paths.append(_build_path(elim_atoms, PathOutcomeModel(type="eliminated"), p_elim, "elimination"))
+        paths.append(_build_path(seed_map[elim_seed], PathOutcomeModel(type="eliminated"), p_elim))
 
     return paths
 

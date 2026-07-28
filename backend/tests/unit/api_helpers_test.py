@@ -3778,3 +3778,129 @@ class TestBuildTeamPaths:
     def test_seed_map_missing_team_returns_empty_list(self):
         """A team with no scenario_atoms entry at all (e.g. R=0, unplayed edge case) gets no paths."""
         assert build_team_paths("Nonexistent", {}, {}, None) == []
+
+    def test_unminimized_atoms_from_simulate_path_collapse_to_unconditional(self):
+        """A game irrelevant to the outcome — two raw atoms, opposite unconstrained winners — collapses to [[]].
+
+        Reproduces the bug reported against the live /simulate endpoint: after
+        simulating an unrelated result, atoms_from_complete_scenarios() (which
+        does NOT minimize) fed Richton's already-clinched #4 seed two atoms —
+        one per possible Stringer/Resurrection outcome — instead of the correct
+        unconditional `[[]]`. build_team_paths must minimize regardless of
+        whether its atoms came from build_scenario_atoms() (already minimal)
+        or this kind of unminimized reconstruction.
+        """
+        odds = StandingsOdds(
+            school="Richton",
+            p1=0,
+            p2=0,
+            p3=0,
+            p4=1.0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=False,
+        )
+        seed_map = {
+            4: [
+                [GameResult(winner="Stringer", loser="Resurrection")],
+                [GameResult(winner="Resurrection", loser="Stringer")],
+            ]
+        }
+        paths = build_team_paths("Richton", seed_map, {}, odds, playoff_seeds=4)
+        seed_path = next(p for p in paths if p.outcome.type == "seed")
+        assert seed_path.conditions == [[]]
+        assert seed_path.human_text == "Richton has already clinched the #4 seed."
+
+    def test_human_text_seed_unconditional(self):
+        """An unconditional (already-clinched) seed path uses clinched phrasing, no 'if'."""
+        odds = StandingsOdds(
+            school="Richton",
+            p1=0,
+            p2=0,
+            p3=0,
+            p4=1.0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=False,
+        )
+        paths = build_team_paths("Richton", {4: [[]]}, {}, odds, playoff_seeds=4)
+        assert paths[0].human_text == "Richton has already clinched the #4 seed."
+
+    def test_human_text_seed_conditional_uses_neutral_finishes_as(self):
+        """A conditional seed path reads 'finishes as' rather than the achievement-toned 'reaches'."""
+        odds = StandingsOdds(
+            school="Taylorsville",
+            p1=0.5,
+            p2=0.5,
+            p3=0,
+            p4=0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=False,
+        )
+        seed_map = {2: [[GameResult(winner="Resurrection", loser="Stringer")]]}
+        paths = build_team_paths("Taylorsville", seed_map, {}, odds, playoff_seeds=4)
+        assert paths[0].human_text == "Taylorsville finishes as the #2 seed if Resurrection beats Stringer."
+
+    def test_human_text_playoffs_unconditional(self):
+        """An unconditional playoffs path reads 'has already clinched a playoff spot.'"""
+        odds = StandingsOdds(
+            school="Richton",
+            p1=0,
+            p2=0,
+            p3=0,
+            p4=1.0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=False,
+        )
+        paths = build_team_paths("Richton", {4: [[]]}, {}, odds, playoff_seeds=4)
+        playoffs_path = next(p for p in paths if p.outcome.type == "playoffs")
+        assert playoffs_path.human_text == "Richton has already clinched a playoff spot."
+
+    def test_human_text_playoffs_conditional_uses_makes(self):
+        """A conditional playoffs path uses the achievement-appropriate verb 'makes'."""
+        odds = StandingsOdds(
+            school="Alpha",
+            p1=0.5,
+            p2=0,
+            p3=0,
+            p4=0,
+            p_playoffs=0.5,
+            final_playoffs=0.5,
+            clinched=False,
+            eliminated=False,
+        )
+        seed_map = {
+            1: [[GameResult(winner="A", loser="B")]],
+            5: [[GameResult(winner="B", loser="A")]],
+        }
+        paths = build_team_paths("Alpha", seed_map, {}, odds, playoff_seeds=4)
+        playoffs_path = next(p for p in paths if p.outcome.type == "playoffs")
+        assert playoffs_path.human_text == "Alpha makes the playoffs if A beats B."
+
+    def test_human_text_eliminated_unconditional(self):
+        """An unconditional elimination path reads 'has already been eliminated.'"""
+        odds = StandingsOdds(
+            school="Meridian",
+            p1=0,
+            p2=0,
+            p3=0,
+            p4=0,
+            p_playoffs=0.0,
+            final_playoffs=0.0,
+            clinched=False,
+            eliminated=True,
+        )
+        paths = build_team_paths("Meridian", {5: [[]]}, {}, odds, playoff_seeds=4)
+        assert paths[0].human_text == "Meridian has already been eliminated."
+
+    def test_human_text_eliminated_conditional_uses_is_eliminated(self):
+        """A conditional elimination path (real fixture data) reads '{team} is eliminated if …'."""
+        paths = build_team_paths("Pearl", _PATHS_ATOMS_3_7A["Pearl"], {}, _PATHS_ODDS_3_7A["Pearl"])
+        elim_path = next(p for p in paths if p.outcome.type == "eliminated")
+        assert elim_path.human_text.startswith("Pearl is eliminated if ")
