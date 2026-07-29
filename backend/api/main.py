@@ -25,6 +25,7 @@ from backend.api.routers import (
     games,
     hosting,
     images,
+    insights,
     meta,
     moderation,
     rankings,
@@ -82,6 +83,7 @@ app.include_router(hosting.router)
 app.include_router(bracket.router)
 app.include_router(games.router)
 app.include_router(ratings.router)
+app.include_router(insights.router)
 app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(submissions.router)

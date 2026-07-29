@@ -13,9 +13,10 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import TypeVar
+from typing import LiteralString, TypeVar
 
 from fastapi import HTTPException
+from psycopg import sql
 
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
@@ -29,6 +30,7 @@ from backend.api.models.responses import (
     GameModel,
     HelmetDesignModel,
     HomeGameOdds,
+    InsightModel,
     KeyInsightConditionModel,
     KeyInsightModel,
     PathConditionModel,
@@ -71,7 +73,8 @@ from backend.helpers.data_classes import (
     StandingsOdds,
     StoredHostingOdds,
 )
-from backend.helpers.insights import deserialize_insights
+from backend.helpers.insights import _conditions_frozenset, deserialize_insights
+from backend.helpers.query_helpers import and_join_conditions
 from backend.helpers.scenario_renderer import _render_atom, atom_condition_dicts, render_scenario_title
 from backend.helpers.scenario_serializers import (
     deserialize_complete_scenarios,
@@ -1971,6 +1974,117 @@ async def load_scenario_atoms(  # pragma: no cover
     if row is None:
         return None
     return deserialize_scenario_atoms(row[0])
+
+
+def _insight_kind(insight_type: str, seed: int | None) -> str | None:
+    """Map a KeyInsight's (insight_type, seed) to the feed's machine-readable `kind` tag."""
+    if insight_type == "clinch_seed" and seed is not None:
+        return f"clinch_seed_{seed}"
+    if insight_type in ("clinch_playoffs", "already_clinched"):
+        return "clinch_playoffs"
+    if insight_type in ("eliminated_if", "already_eliminated"):
+        return "eliminated"
+    return None
+
+
+def _insight_teams(insight) -> list[str]:
+    """Every school named in a KeyInsight: the subject team, then each condition's winner/loser."""
+    teams = [insight.team]
+    for cond in insight.conditions:
+        teams.extend((cond.winner, cond.loser))
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for t in teams:
+        if t not in seen:
+            seen.add(t)
+            ordered.append(t)
+    return ordered
+
+
+def _insights_from_snapshot_rows(
+    rows: list[tuple[str, int, date, list[dict] | None]],
+    since: date | None,
+    team: str | None,
+    limit: int,
+) -> list[InsightModel]:
+    """Dedup + filter raw ``region_scenarios`` rows into the newest-first insights feed.
+
+    *rows* must be pre-sorted by ``(class, region, as_of_date)`` ascending
+    (one row per snapshot). ``region_scenarios.key_insights`` persists the
+    same insight across every consecutive snapshot until it resolves, so this
+    keeps only the first appearance of each distinct insight, keyed
+    structurally on ``(class, region, team, insight_type, seed, conditions)``
+    so a wording change to ``_render_insight`` doesn't fragment the dedup.
+    """
+    first_seen: dict[tuple, tuple] = {}  # dedup_key -> (as_of_date, class, region, insight)
+    for row_class, row_region, as_of_date, key_insights_json in rows:
+        for insight in deserialize_insights(key_insights_json or []):
+            dedup_key = (
+                row_class,
+                row_region,
+                insight.team,
+                insight.insight_type,
+                insight.seed,
+                _conditions_frozenset(insight.conditions),
+            )
+            if dedup_key not in first_seen:
+                first_seen[dedup_key] = (as_of_date, row_class, row_region, insight)
+
+    feed: list[InsightModel] = []
+    for as_of_date, row_class, row_region, insight in first_seen.values():
+        if since is not None and as_of_date < since:
+            continue
+        teams = _insight_teams(insight)
+        if team is not None and team not in teams:
+            continue
+        feed.append(
+            InsightModel(
+                as_of_date=as_of_date,
+                class_=int(row_class),
+                region=row_region,
+                teams=teams,
+                human_text=insight.rendered,
+                kind=_insight_kind(insight.insight_type, insight.seed),
+            )
+        )
+
+    feed.sort(key=lambda i: (i.as_of_date, i.class_, i.region, i.teams[0]), reverse=True)
+    return feed[:limit]
+
+
+async def load_insight_feed(  # pragma: no cover
+    conn,
+    season: int,
+    since: date | None,
+    clazz: int | None,
+    region: int | None,
+    team: str | None,
+    limit: int,
+) -> list[InsightModel]:
+    """Build the statewide, deduped, newest-first key-insights feed for *season*."""
+    conditions: list[LiteralString] = ["season = %s"]
+    params: list = [season]
+    if clazz is not None:
+        conditions.append("class = %s")
+        params.append(str(clazz))
+    if region is not None:
+        conditions.append("region = %s")
+        params.append(region)
+
+    where_clause = and_join_conditions(conditions)
+    rows = [
+        r
+        async for r in await conn.execute(
+            sql.SQL("""
+        SELECT class, region, as_of_date, key_insights
+        FROM region_scenarios
+        WHERE {}
+        ORDER BY class, region, as_of_date
+        """).format(where_clause),
+            params,
+        )
+    ]
+    return _insights_from_snapshot_rows(rows, since, team, limit)
 
 
 async def load_remaining_game_dates(  # pragma: no cover

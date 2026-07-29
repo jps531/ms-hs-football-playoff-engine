@@ -306,6 +306,23 @@ class StandingsSummaryResponse(BaseModel):
     classes: list[ClassSummary]
 
 
+class InsightModel(BaseModel):
+    """One deduped key insight in the statewide insights feed."""
+
+    as_of_date: date
+    class_: int
+    region: int
+    teams: list[str]
+    human_text: str
+    kind: str | None = None
+
+
+class InsightsResponse(BaseModel):
+    """Statewide, deduped, newest-first feed of key insights."""
+
+    insights: list[InsightModel]
+
+
 class ScenarioGameOutcome(BaseModel):
     """The result of one remaining game in a scenario."""
 

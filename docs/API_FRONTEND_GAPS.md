@@ -50,39 +50,6 @@ structural equality); skip re-appearances. Order the response newest-first.
 
 ---
 
-## 4. Win probability on game rows (+ live)
-
-**UI purpose:** game pages and the scoreboard grid render a pregame "tug of
-war" probability bar and a live-updating probability per game. Today the
-frontend would need 1–2 extra calls per game (`/games/probability` takes team
-names; `/probability/live` requires the caller to compute `seconds_remaining`).
-A scoreboard polling 40 live games cannot make 80 calls per tick.
-
-**Change:** embed probability directly in `GET /games` responses. Games are
-school-perspective rows (two per contest), so all probabilities are **from the
-perspective of the row's `school`**:
-
-- `pregame_prob` (float | null) — Elo-based P(school wins), computed from
-  `team_ratings` **as of the game date** (snapshots exist via backfill), with
-  the existing home-field/location adjustment. Null if either team unrated.
-- `live_prob` (float | null) — only non-null when the game is in progress:
-  derive `seconds_remaining` server-side from `game_quarter` + `game_clock`
-  (12-minute quarters), route through the existing live model; when
-  `overtime > 0`, route through the existing OT model instead.
-- `prob_as_of` (timestamp) — when the probability was computed, so the UI can
-  show staleness ("as of 8:47 · Q3").
-
-Keep the existing `/games/probability*` endpoints unchanged (still useful for
-hypothetical matchups).
-
-**Implementation notes:** pregame prob for FINAL games must use ratings as of
-the game date, NOT current ratings — this is what makes the upset ledger (§5)
-and historical timeline honest. Consider persisting `pregame_prob` onto the
-game row when the score pipeline marks it final, to avoid recompute; live
-values stay computed-at-read.
-
----
-
 ## 5. `GET /games/upsets` + `GET /ratings/movers`
 
 **UI purpose:** two home-page modules.
@@ -201,8 +168,7 @@ valid dates to snap to, without downloading full schedules.
 
 ## Priority order for implementation
 
-1. §4 (blocks game pages + scoreboard)
-2. §3 (home page feed)
-3. §7 (playoff game pages + naming contract)
-4. §6, §9 (small; timeline completeness)
-5. §5 (home page modules; depends on §4)
+1. §3 (home page feed)
+2. §7 (playoff game pages + naming contract)
+3. §6, §9 (small; timeline completeness)
+4. §5 (home page modules; depends on §4)
