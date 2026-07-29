@@ -949,7 +949,10 @@ class TestClassifyMargin:
 class TestAtomConditionDicts:
     """atom_condition_dicts converts one AND-group of conditions to the §8 condition-dict shape."""
 
-    _DATES = {("Petal", "Stringer"): date(2025, 10, 17), ("Mize", "Raleigh"): date(2025, 10, 17)}
+    _DATES: dict[tuple[str, str], date | None] = {
+        ("Petal", "Stringer"): date(2025, 10, 17),
+        ("Mize", "Raleigh"): date(2025, 10, 17),
+    }
 
     def test_game_result_uses_winner_perspective(self):
         """A plain GameResult becomes a game_result dict from the winner's perspective."""

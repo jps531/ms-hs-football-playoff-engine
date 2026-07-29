@@ -116,14 +116,14 @@ async def pregame_win_probability(
     team_b: Annotated[str, Query()],
     season: SeasonQ,
     location: Annotated[str | None, Query()] = None,
-    as_of: Annotated[date | None, Query(description="Use Elo ratings as of this date. Defaults to the latest available.")] = None,
+    date: Annotated[date | None, Query(description="Use Elo ratings as of this date. Defaults to the latest available.")] = None,
 ) -> PreGameWinProbResponse:
     """Return pre-game win probability using Elo ratings stored for *season*.
 
     ``location`` should be ``"home"``, ``"away"``, or ``"neutral"`` from *team_a*'s perspective.
     Omit for a neutral-site game.
 
-    ``as_of`` pins both teams' ratings to the most recent snapshot on or before
+    ``date`` pins both teams' ratings to the most recent snapshot on or before
     that date, so you can compare the same matchup at different points in the
     season.  Omit to use the latest stored rating.
     """
@@ -132,10 +132,10 @@ async def pregame_win_probability(
         WHERE school = %s AND season = %s {date_filter}
         ORDER BY as_of_date DESC LIMIT 1
     """
-    if as_of is not None:
+    if date is not None:
         query = _sql.format(date_filter="AND as_of_date <= %s")
-        params_a = (team_a, season, as_of)
-        params_b = (team_b, season, as_of)
+        params_a = (team_a, season, date)
+        params_b = (team_b, season, date)
     else:
         query = _sql.format(date_filter="")
         params_a = (team_a, season)
@@ -147,13 +147,13 @@ async def pregame_win_probability(
 
     if row_a is None:
         detail = f"No Elo rating for '{team_a}' in season {season}"
-        if as_of:
-            detail += f" on or before {as_of}"
+        if date:
+            detail += f" on or before {date}"
         raise HTTPException(status_code=404, detail=detail)
     if row_b is None:
         detail = f"No Elo rating for '{team_b}' in season {season}"
-        if as_of:
-            detail += f" on or before {as_of}"
+        if date:
+            detail += f" on or before {date}"
         raise HTTPException(status_code=404, detail=detail)
 
     cfg = EloConfig()

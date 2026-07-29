@@ -2003,7 +2003,8 @@ def _insight_teams(insight) -> list[str]:
 
 def _insights_from_snapshot_rows(
     rows: list[tuple[str, int, date, list[dict] | None]],
-    since: date | None,
+    date_from: date | None,
+    date_to: date | None,
     team: str | None,
     limit: int,
 ) -> list[InsightModel]:
@@ -2015,9 +2016,18 @@ def _insights_from_snapshot_rows(
     keeps only the first appearance of each distinct insight, keyed
     structurally on ``(class, region, team, insight_type, seed, conditions)``
     so a wording change to ``_render_insight`` doesn't fragment the dedup.
+
+    ``date_to`` bounds *which snapshots are considered* before the dedup walk
+    runs (timeline-scrubbing: "state of the feed as of T") — an insight that
+    only first appears after ``date_to`` is excluded entirely, rather than
+    having its date clipped. ``date_from`` is a simple post-dedup filter on
+    the computed first-appearance date (polling: "what's new since I last
+    checked").
     """
     first_seen: dict[tuple, tuple] = {}  # dedup_key -> (as_of_date, class, region, insight)
     for row_class, row_region, as_of_date, key_insights_json in rows:
+        if date_to is not None and as_of_date > date_to:
+            continue
         for insight in deserialize_insights(key_insights_json or []):
             dedup_key = (
                 row_class,
@@ -2032,7 +2042,7 @@ def _insights_from_snapshot_rows(
 
     feed: list[InsightModel] = []
     for as_of_date, row_class, row_region, insight in first_seen.values():
-        if since is not None and as_of_date < since:
+        if date_from is not None and as_of_date < date_from:
             continue
         teams = _insight_teams(insight)
         if team is not None and team not in teams:
@@ -2055,7 +2065,8 @@ def _insights_from_snapshot_rows(
 async def load_insight_feed(  # pragma: no cover
     conn,
     season: int,
-    since: date | None,
+    date_from: date | None,
+    date_to: date | None,
     clazz: int | None,
     region: int | None,
     team: str | None,
@@ -2070,6 +2081,9 @@ async def load_insight_feed(  # pragma: no cover
     if region is not None:
         conditions.append("region = %s")
         params.append(region)
+    if date_to is not None:
+        conditions.append("as_of_date <= %s")
+        params.append(date_to)
 
     where_clause = and_join_conditions(conditions)
     rows = [
@@ -2084,7 +2098,7 @@ async def load_insight_feed(  # pragma: no cover
             params,
         )
     ]
-    return _insights_from_snapshot_rows(rows, since, team, limit)
+    return _insights_from_snapshot_rows(rows, date_from, date_to, team, limit)
 
 
 async def load_remaining_game_dates(  # pragma: no cover
@@ -2150,6 +2164,7 @@ def build_team_paths(
     """
 
     def _human_text(outcome: PathOutcomeModel, atoms: list[list]) -> str:
+        """Render a human-readable sentence describing this outcome's OR-groups of atoms."""
         unconditional = atoms == [[]]
         if outcome.type == "seed":
             subject = f"the #{outcome.value} seed"
@@ -2169,6 +2184,7 @@ def build_team_paths(
         return f"{team} is eliminated if " + " — or if ".join(branches) + "."
 
     def _build_path(atoms: list[list], outcome: PathOutcomeModel, p: float) -> ScenarioPathModel:
+        """Simplify ``atoms``, convert them to condition dicts, and wrap them in a ``ScenarioPathModel``."""
         # Atoms sourced from the DB-backed `scenario_atoms` snapshot are already
         # minimized (build_scenario_atoms' own Step 6), so this is a no-op there;
         # atoms rebuilt from `complete_scenarios` for the simulate path (via

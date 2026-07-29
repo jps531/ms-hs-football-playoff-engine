@@ -598,6 +598,7 @@ class TestCurrentStandingsOrder:
 
     @staticmethod
     def _odds(p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, clinched=False, eliminated=False):
+        """Build a StandingsOdds for test use."""
         return StandingsOdds(
             school="",
             p1=p1,
@@ -658,6 +659,7 @@ class TestRegionVolatility:
 
     @staticmethod
     def _odds(p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, eliminated=False):
+        """Build a StandingsOdds for test use."""
         return StandingsOdds(
             school="",
             p1=p1,
@@ -720,6 +722,7 @@ class TestTeamClinchedSeed:
 
     @staticmethod
     def _odds(p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0):
+        """Build a StandingsOdds for test use."""
         return StandingsOdds(
             school="",
             p1=p1,

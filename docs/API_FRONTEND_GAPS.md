@@ -4,49 +4,18 @@ Context: the frontend (Next.js, not yet built) needs several read endpoints that
 don't exist yet. The existing per-region/per-team API is complete; every gap
 below is a **statewide or cross-region aggregation read** over snapshot tables
 that are already populated (`region_standings`, `region_scenarios`,
-`team_ratings`, `games`), plus one contract fix. All new endpoints are
-**public GET reads** (no auth), follow the existing `season` + `date` query
-param conventions, and should read from dated snapshots (falling back to the
-latest snapshot ≤ `date`, same as existing standings behavior). Add each to the
-README API Reference tables and cover with tests per the existing patterns.
+`team_ratings`, `games`). All new endpoints are **public GET reads** (no auth),
+follow the existing `season` + `date` query param conventions, and should read
+from dated snapshots (falling back to the latest snapshot ≤ `date`, same as
+existing standings behavior). Add each to the README API Reference tables and
+cover with tests per the existing patterns.
 
----
-
-## 3. `GET /insights` — statewide key-insights feed
-
-**UI purpose:** Home page "insights feed": plain-English clinch/elimination
-facts from across ALL regions, newest first ("Taylorsville clinched Region
-3-4A last night"). Insights currently exist only inside per-region standings
-responses (`region_scenarios.key_insights`).
-
-**Params:** `season` (required), `since` (optional date), `limit` (default 50),
-optional `clazz`, `region`, `team` filters.
-
-**Response:**
-```json
-{
-  "insights": [
-    {
-      "as_of_date": "2025-10-14",
-      "class": "4A",
-      "region": 3,
-      "teams": ["Taylorsville"],
-      "human_text": "Taylorsville clinches 1st seed: Taylorsville beats Stringer",
-      "kind": "clinch_seed_1"
-    }
-  ]
-}
-```
-- `teams` = every school named in the insight (UI renders helmet chips + links).
-- `kind` = machine tag if derivable from the stored insight structure
-  (`clinch_seed_N`, `clinch_playoffs`, `eliminated`, ...); `null` if not.
-
-**Dedup semantics (important):** the same insight text persists across
-consecutive snapshots until resolved. The feed must show each insight ONCE,
-dated to the FIRST snapshot where it appeared. Implementation: for each
-region, walk `region_scenarios` snapshots in date order and emit an insight
-with the `as_of_date` of the first snapshot containing it (string or
-structural equality); skip re-appearances. Order the response newest-first.
+(§3 `GET /insights` and §6 `date` on `GET /ratings` — both originally listed
+here — have since shipped and are documented in `API_REFERENCE.md`; a repo-wide
+sweep also confirmed every other snapshot-backed endpoint already supports
+`date`/`date_from`/`date_to`, and `/rankings`, `/ratings`, and
+`/games/probability` were renamed from `as_of` to `date` for naming
+consistency.)
 
 ---
 
@@ -75,18 +44,6 @@ winner's perspective). Depends on §4's dated pregame probabilities.
 `{"risers": [{"school", "class", "region", "elo_before", "elo_after",
 "delta"}...], "fallers": [...]}` sorted by |delta|. Reads two dated
 `team_ratings` snapshots; teams present in only one snapshot are excluded.
-
----
-
-## 6. `date` param on `GET /ratings`
-
-**UI purpose:** the app has a GLOBAL timeline mode — every surface can be
-viewed "as of" a past date via `?date=`. `/ratings` is the only major read
-without a `date` param, which breaks time travel on the ratings page.
-
-**Change:** add optional `date` to `GET /ratings`; resolve to the latest
-`team_ratings` snapshot ≤ date, matching standings behavior exactly. (The
-table is already dated; this is exposure, not computation.)
 
 ---
 
@@ -168,7 +125,6 @@ valid dates to snap to, without downloading full schedules.
 
 ## Priority order for implementation
 
-1. §3 (home page feed)
-2. §7 (playoff game pages + naming contract)
-3. §6, §9 (small; timeline completeness)
-4. §5 (home page modules; depends on §4)
+1. §7 (playoff game pages + naming contract)
+2. §9 (small; timeline completeness)
+3. §5 (home page modules; depends on §4)

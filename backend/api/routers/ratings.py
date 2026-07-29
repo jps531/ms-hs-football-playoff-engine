@@ -22,12 +22,12 @@ async def list_ratings(
     class_: Annotated[int | None, Query(alias="class", ge=1, le=7)] = None,
     region: Annotated[int | None, Query(ge=1, le=8)] = None,
     team: Annotated[str | None, Query()] = None,
-    as_of: Annotated[date | None, Query()] = None,
+    date: Annotated[date | None, Query()] = None,
 ) -> list[TeamRatingModel]:
     """Return Elo and RPI for teams matching the given filters.
 
-    Without ``as_of``, returns all stored snapshots for the season (one row per
-    school per pipeline run), sorted by Elo descending.  With ``as_of``, returns
+    Without ``date``, returns all stored snapshots for the season (one row per
+    school per pipeline run), sorted by Elo descending.  With ``date``, returns
     one row per school — the most recent snapshot on or before that date —
     also sorted by Elo descending.
     """
@@ -45,8 +45,8 @@ async def list_ratings(
 
     where_clause = and_join_conditions(conditions)
 
-    if as_of is not None:
-        params.append(as_of)
+    if date is not None:
+        params.append(date)
         query = sql.SQL("""
             SELECT * FROM (
                 SELECT DISTINCT ON (tr.school)

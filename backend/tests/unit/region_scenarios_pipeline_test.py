@@ -9,7 +9,7 @@ from datetime import date
 
 import pytest
 
-from backend.helpers.data_classes import Game
+from backend.helpers.data_classes import Game, GameStatus
 from backend.helpers.win_probability import EloConfig, compute_pregame_win_prob
 from backend.prefect.region_scenarios_pipeline import compute_pregame_prob_rows
 
@@ -26,6 +26,7 @@ def _game(
     pf: int | None = 21,
     pa: int | None = 14,
 ) -> Game:
+    """Build a minimal final (or in-progress) ``Game`` for a given school/opponent/date."""
     return Game(
         school=school,
         date=game_date,
@@ -37,7 +38,7 @@ def _game(
         kickoff_time=None,
         opponent=opponent,
         result=result,
-        game_status="final" if final else "",
+        game_status=GameStatus.FINAL if final else None,
         source=None,
         location=location,
         region_game=True,

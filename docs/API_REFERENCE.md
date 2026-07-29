@@ -52,7 +52,7 @@ Cross-region ranked list of teams for a given class, sorted by any single odds m
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{clazz}` | All teams in a class ranked by the chosen odds metric. Required params: `season`, `sort_by`. Optional: `as_of`, `region`, `min_odds`, `limit` |
+| GET | `/{clazz}` | All teams in a class ranked by the chosen odds metric. Required params: `season`, `sort_by`. Optional: `date`, `region`, `min_odds`, `limit` |
 
 **`sort_by` values** (any `region_standings` odds column):
 
@@ -63,7 +63,7 @@ Cross-region ranked list of teams for a given class, sorted by any single odds m
 *Home-game odds* — `odds_first_round_home`, `odds_second_round_home`, `odds_quarterfinals_home`, `odds_semifinals_home` and their `_weighted` variants
 
 **Optional params:**
-- `as_of` — use the most recent snapshot on or before this date (defaults to today)
+- `date` — use the most recent snapshot on or before this date (defaults to today)
 - `region` — restrict to one region within the class
 - `min_odds` — exclude teams with `sort_by` value ≤ this threshold (e.g. `0.001` drops eliminated teams)
 - `limit` — max teams returned; 1–200, default 25
@@ -159,7 +159,7 @@ A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Co
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Game schedule; filter by `season`, `class`, `region`, `team`, `date_from`, `date_to` |
-| GET | `/probability` | Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location`, `as_of` (optional — pins both teams' Elo ratings to the most recent snapshot on or before this date; defaults to the latest available) |
+| GET | `/probability` | Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location`, `date` (optional — pins both teams' Elo ratings to the most recent snapshot on or before this date; defaults to the latest available) |
 | POST | `/probability/live` | In-game win probability. Body: `pregame_prob`, `current_margin`, `seconds_remaining` |
 | POST | `/probability/overtime` | MSHAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
 
@@ -176,7 +176,7 @@ Each game also includes embedded win probability, always from `team_a`'s perspec
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending. Without `as_of`: all stored snapshots for the season (one row per school per pipeline run). With `as_of`: one row per school — the most recent snapshot on or before that date. |
+| GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending. Without `date`: all stored snapshots for the season (one row per school per pipeline run). With `date`: one row per school — the most recent snapshot on or before that date. |
 | GET | `/{team}/trend` | Elo time-series for one team. Optional `date_from` / `date_to` |
 
 Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and `computed_at` (timestamp) for freshness tracking.

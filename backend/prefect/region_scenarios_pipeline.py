@@ -331,6 +331,7 @@ def compute_pregame_prob_rows(
     snapshot_dates = [snap[0] for snap in elo_snapshots]
 
     def _ratings_before(target: date) -> dict[str, float]:
+        """Return the latest ratings snapshot strictly before ``target``, or ``initial_ratings`` if none exists."""
         idx = bisect.bisect_left(snapshot_dates, target) - 1
         if idx < 0:
             return initial_ratings

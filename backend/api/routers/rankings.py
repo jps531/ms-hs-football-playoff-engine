@@ -88,20 +88,20 @@ async def get_rankings(
     clazz: ClazzPath,
     sort_by: OddsField,
     season: SeasonQ,
-    as_of: DateQ = None,
+    date: DateQ = None,
     region: RegionQ = None,
     min_odds: MinOddsQ = 0.0,
     limit: LimitQ = 25,
 ) -> RankingsResponse:
     """Return teams in *clazz*A ranked by a single odds metric.
 
-    Picks the most recent snapshot on or before *as_of* (defaults to today)
+    Picks the most recent snapshot on or before *date* (defaults to today)
     for each school, then filters and sorts by the chosen field.  Use
     *region* to restrict to one region within the class, *min_odds* to
     suppress near-zero entries (e.g. ``min_odds=0.001`` omits eliminated
     teams), and *limit* to control the result count (max 200).
     """
-    as_of_date = as_of or today()
+    as_of_date = date or today()
     sort_col = sort_by.value  # safe: constrained to a closed enum of column names
 
     base_params: list[Any] = [season, clazz, as_of_date]
