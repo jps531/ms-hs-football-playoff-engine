@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS helmet_designs (
   stripe          TEXT,                      -- description, e.g. 'single center stripe'
   tags            TEXT[],                    -- queryable metadata tags
   notes           TEXT,                      -- free-text catch-all
-  is_primary      BOOLEAN NOT NULL DEFAULT FALSE -- default display design for the school
+  is_primary      BOOLEAN NOT NULL DEFAULT FALSE, -- default display design for the school
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_helmet_designs_school
@@ -54,6 +55,22 @@ CREATE INDEX IF NOT EXISTS idx_helmet_designs_school
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_helmet_designs_primary_per_school
   ON helmet_designs (school) WHERE is_primary;
+
+-- Whether a design (by its years_worn/year_first_worn/year_last_worn columns)
+-- was worn during p_season. Prefers the precise non-contiguous years_worn
+-- spans when set; falls back to the year_first_worn-year_last_worn outer
+-- bound (open-ended when year_last_worn is NULL) only when years_worn is NULL.
+CREATE OR REPLACE FUNCTION helmet_covers_season(
+  p_years_worn JSONB, p_year_first_worn INT, p_year_last_worn INT, p_season INT
+) RETURNS BOOLEAN AS $$
+  SELECT CASE
+    WHEN p_years_worn IS NOT NULL THEN EXISTS (
+      SELECT 1 FROM jsonb_array_elements(p_years_worn) elem
+      WHERE (elem->>'start')::int <= p_season AND (elem->>'end')::int >= p_season
+    )
+    ELSE p_year_first_worn <= p_season AND (p_year_last_worn IS NULL OR p_year_last_worn >= p_season)
+  END;
+$$ LANGUAGE sql IMMUTABLE;
 
 
 -- ---------------------------------------------------------------------------
@@ -465,7 +482,7 @@ CREATE TABLE IF NOT EXISTS user_attended_games (
 -- ---------------------------------------------------------------------------
 
 CREATE TYPE submission_type AS ENUM (
-    'logo', 'helmet', 'colors', 'location', 'score', 'feedback'
+    'logo', 'helmet', 'colors', 'location', 'score', 'feedback', 'helmet_assignment'
 );
 
 CREATE TYPE submission_status AS ENUM ('pending', 'approved', 'rejected');
@@ -480,7 +497,8 @@ CREATE TABLE IF NOT EXISTS submissions (
     moderator_notes TEXT,
     reviewed_at     TIMESTAMPTZ,
     submitted_at    TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ         NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+    helmet_design_id INTEGER            REFERENCES helmet_designs(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_submissions_type
@@ -951,12 +969,13 @@ COMMENT ON TABLE submissions IS
   'Polymorphic user submission queue. One row per submission regardless of type. '
   'Type-specific fields live in the payload JSONB column. '
   'Approved submissions are auto-applied to live DB tables via the moderation endpoint; '
-  'helmet submissions are informational only (moderator creates the mockup manually).';
+  'helmet submissions are informational only (moderator creates the mockup manually, '
+  'optionally linking it back via helmet_design_id).';
 
 COMMENT ON COLUMN submissions.id IS
   'Auto-incrementing surrogate key.';
 COMMENT ON COLUMN submissions.type IS
-  'Discriminator. One of: logo, helmet, colors, location, score, feedback. '
+  'Discriminator. One of: logo, helmet, colors, location, score, feedback, helmet_assignment. '
   'Determines the shape of the payload column and the apply-on-approve logic.';
 COMMENT ON COLUMN submissions.status IS
   'Moderation state. Starts as pending; transitions to approved or rejected '
@@ -968,11 +987,15 @@ COMMENT ON COLUMN submissions.payload IS
   'JSONB object whose shape varies by type. '
   'logo: {logo_type, cloudinary_path} — cloudinary_path points to the staging area. '
   'helmet: {year_first_worn, description, year_last_worn?, currently_worn?, color?, '
-  '         finish?, facemask_color?, logo_description?, stripe?, additional_notes?, image_paths[]}. '
+  '         finish?, facemask_color?, logo_description?, stripe?, additional_notes?, '
+  '         image_paths[], image_labels[]?, other_note?} — image_labels, when present, is '
+  '         parallel to image_paths (one of left/right/front/logo/other per image). '
   'colors: {primary_color?: {name, hex}, secondary_colors?: [{name, hex}]}. '
   'location: {latitude, longitude}. '
   'score: {date, points_for, points_against}. '
-  'feedback: {subject, message}.';
+  'feedback: {subject, message}. '
+  'helmet_assignment: {date, helmet_design_id} — which design the school (school column) wore '
+  '                    in the game on date.';
 COMMENT ON COLUMN submissions.moderator_notes IS
   'Optional annotation written by the moderator at review time. '
   'Used for rejection reasons or internal notes on approved submissions.';
@@ -985,6 +1008,10 @@ COMMENT ON COLUMN submissions.updated_at IS
 COMMENT ON COLUMN submissions.user_id IS
   'FK to users(id). NULL for anonymous submissions or if the user account is later deleted. '
   'SET NULL on user delete so submission history is not lost.';
+COMMENT ON COLUMN submissions.helmet_design_id IS
+  'FK to helmet_designs(id). Set when a moderator creates a helmet design record from this '
+  '(type=''helmet'') submission via POST /admin/helmets with from_submission_id. NULL for all '
+  'other types and for helmet submissions not yet linked to a design.';
 
 
 -- users

@@ -313,6 +313,7 @@ class CreateHelmetDesignRequest(BaseModel):
     tags: list[str] = []
     notes: str | None = None
     is_primary: bool = False
+    from_submission_id: int | None = None
 
 
 class PatchHelmetDesignRequest(BaseModel):
@@ -373,6 +374,14 @@ class SubmitScoreRequest(BaseModel):
     date: date_type
     points_for: int = Field(ge=0)
     points_against: int = Field(ge=0)
+
+
+class SubmitHelmetAssignmentRequest(BaseModel):
+    """Submit or confirm which helmet design a school wore in a specific game."""
+
+    school: str
+    date: date_type
+    helmet_design_id: int
 
 
 class SubmitFeedbackRequest(BaseModel):

@@ -33,6 +33,8 @@ from backend.helpers.api_helpers import (
     build_game_models,
     build_helmet_from_fields,
     build_helmet_from_row,
+    build_helmet_game_worn,
+    build_helmet_stats_fields,
     build_hosting_entries,
     build_playoff_bracket_state,
     build_rank_entry,
@@ -1064,7 +1066,8 @@ _ROW_BETA = (
 )
 
 
-_HELMET_EMPTY = (None,) * 16  # id=None means "no helmet designated"
+_HELMET_EMPTY = (None,) * 17  # id=None means "no helmet designated"
+_HELMET_CREATED_AT = datetime(2025, 1, 1)
 
 
 def _game_row(
@@ -1151,6 +1154,7 @@ class TestBuildHelmetFromFields:
             [],
             "note",
             True,
+            _HELMET_CREATED_AT,
         )
         result = build_helmet_from_fields(*fields)
         assert result is not None
@@ -1158,6 +1162,7 @@ class TestBuildHelmetFromFields:
         assert result.color == "Red"
         assert result.notes == "note"
         assert result.is_primary is True
+        assert result.created_at == _HELMET_CREATED_AT
 
     def test_years_worn_coerced_from_dicts(self):
         """A years_worn field of raw {"start", "end"} dicts coerces into YearsWornRange models."""
@@ -1178,6 +1183,7 @@ class TestBuildHelmetFromFields:
             [],
             None,
             False,
+            _HELMET_CREATED_AT,
         )
         result = build_helmet_from_fields(*fields)
         assert result is not None
@@ -1190,7 +1196,25 @@ class TestBuildHelmetFromRow:
 
     def test_returns_model_for_real_row(self):
         """A row with a real id returns a HelmetDesignModel."""
-        row = (3, "Taylorsville", 2021, None, None, None, None, None, None, None, None, None, None, [], None, False)
+        row = (
+            3,
+            "Taylorsville",
+            2021,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            [],
+            None,
+            False,
+            _HELMET_CREATED_AT,
+        )
         result = build_helmet_from_row(row)
         assert result.id == 3
         assert result.school == "Taylorsville"
@@ -1199,6 +1223,86 @@ class TestBuildHelmetFromRow:
         """A row with id=None violates the 'known existing helmet' contract and raises."""
         with pytest.raises(AssertionError):
             build_helmet_from_row(_HELMET_EMPTY)
+
+
+class TestBuildHelmetStatsFields:
+    """build_helmet_stats_fields splits a HELMET_STATS_SELECT row into helmet fields + stats."""
+
+    def test_maps_base_fields_and_stats(self):
+        """Base helmet fields map as usual; the trailing 5 columns become a HelmetStatsModel."""
+        helmet_fields = (
+            7,
+            "Taylorsville",
+            2020,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "Red",
+            None,
+            None,
+            None,
+            None,
+            [],
+            None,
+            False,
+            _HELMET_CREATED_AT,
+        )
+        result = build_helmet_stats_fields(*helmet_fields, 7, 6, 1, 0, 11)
+        assert result["id"] == 7
+        assert result["school"] == "Taylorsville"
+        stats = result["stats"]
+        assert (stats.appearances, stats.games_tracked) == (7, 7)
+        assert (stats.wins, stats.losses, stats.ties) == (6, 1, 0)
+        assert stats.games_played == 11
+
+    def test_zero_stats_for_untracked_design(self):
+        """A design with no assigned games gets all-zero stats, not null."""
+        helmet_fields = (
+            9,
+            "Taylorsville",
+            2022,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            [],
+            None,
+            False,
+            _HELMET_CREATED_AT,
+        )
+        result = build_helmet_stats_fields(*helmet_fields, 0, 0, 0, 0, 0)
+        stats = result["stats"]
+        assert (stats.appearances, stats.games_tracked, stats.wins, stats.losses, stats.ties, stats.games_played) == (
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+
+
+class TestBuildHelmetGameWorn:
+    """build_helmet_game_worn maps a games_effective row to a HelmetGameWorn."""
+
+    def test_maps_fields_in_order(self):
+        """Fields map positionally: school, date, opponent, points_for, points_against, result, round."""
+        row = ("Taylorsville", _DATE, "Petal", 21, 14, "W", "first_round")
+        result = build_helmet_game_worn(row)
+        assert result.school == "Taylorsville"
+        assert result.date == _DATE
+        assert result.opponent == "Petal"
+        assert (result.points_for, result.points_against) == (21, 14)
+        assert result.result == "W"
+        assert result.round == "first_round"
 
 
 class TestBuildGameModels:
@@ -1264,7 +1368,25 @@ class TestBuildGameModels:
 
     def test_helmet_built_when_id_present(self):
         """Helmet fields with a non-None id produce a populated HelmetDesignModel."""
-        helmet_a = (7, "Alpha", 2020, None, None, None, None, None, "Red", None, None, None, None, [], None, False)
+        helmet_a = (
+            7,
+            "Alpha",
+            2020,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "Red",
+            None,
+            None,
+            None,
+            None,
+            [],
+            None,
+            False,
+            _HELMET_CREATED_AT,
+        )
         row = _game_row("Alpha", "Beta", helmet_a=helmet_a)
         result = build_game_models([row], team_filter=None)
         assert result[0].helmet_a is not None
@@ -1274,7 +1396,25 @@ class TestBuildGameModels:
 
     def test_helmets_swapped_with_school_order(self):
         """When school/opponent are swapped for canonical order, helmets swap with them."""
-        helmet_zeta = (1, "Zeta", 2019, None, None, None, None, None, "Blue", None, None, None, None, [], None, False)
+        helmet_zeta = (
+            1,
+            "Zeta",
+            2019,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "Blue",
+            None,
+            None,
+            None,
+            None,
+            [],
+            None,
+            False,
+            _HELMET_CREATED_AT,
+        )
         helmet_alpha = (
             2,
             "Alpha",
@@ -1292,6 +1432,7 @@ class TestBuildGameModels:
             [],
             None,
             True,
+            _HELMET_CREATED_AT,
         )
         row = _game_row("Zeta", "Alpha", helmet_a=helmet_zeta, helmet_b=helmet_alpha)
         result = build_game_models([row], team_filter=None)
@@ -3692,8 +3833,14 @@ class TestApplyRoundCeilings:
 # ---------------------------------------------------------------------------
 
 
-def _rankings_row() -> tuple:
-    """Build a 38-column region_standings row matching rankings.py's _SELECT column order."""
+def _rankings_row(
+    elo: float | None = 1450.0,
+    rpi: float | None = 0.62,
+    rank: int = 3,
+    rank_prev: int | None = 5,
+) -> tuple:
+    """Build a 42-column ranked-teams row matching rankings.py's _ranked_teams_query column order
+    (38 region_standings/odds columns, then elo, rpi, rank, rank_prev)."""
     return (
         "Taylorsville",  # 0 school
         5,  # 1 class
@@ -3733,6 +3880,10 @@ def _rankings_row() -> tuple:
         0.35,
         0.15,
         0.08,  # 34-37 weighted home odds
+        elo,
+        rpi,  # 38-39 elo, rpi
+        rank,
+        rank_prev,  # 40-41 rank, rank_prev
     )
 
 
@@ -3768,6 +3919,35 @@ class TestBuildRankEntry:
         assert build_rank_entry(row, "odds_1st").sort_value == pytest.approx(0.9)
         assert build_rank_entry(row, "odds_champion").sort_value == pytest.approx(0.05)
         assert build_rank_entry(row, "odds_semifinals_home_weighted").sort_value == pytest.approx(0.08)
+
+    def test_elo_and_rpi_always_populated(self):
+        """elo/rpi are exposed on every entry regardless of which column sort_col names."""
+        entry = build_rank_entry(_rankings_row(elo=1500.0, rpi=0.7), "odds_champion")
+        assert entry.elo == pytest.approx(1500.0)
+        assert entry.rpi == pytest.approx(0.7)
+
+    def test_elo_and_rpi_usable_as_sort_col(self):
+        """sort_value pulls from elo/rpi when they're the requested sort column."""
+        row = _rankings_row(elo=1500.0, rpi=0.7)
+        assert build_rank_entry(row, "elo").sort_value == pytest.approx(1500.0)
+        assert build_rank_entry(row, "rpi").sort_value == pytest.approx(0.7)
+
+    def test_rank_delta_positive_when_moved_up(self):
+        """A team ranked better now than previously gets a positive rank_delta."""
+        entry = build_rank_entry(_rankings_row(rank=2, rank_prev=5), "elo")
+        assert (entry.rank, entry.rank_prev, entry.rank_delta) == (2, 5, 3)
+
+    def test_rank_delta_negative_when_moved_down(self):
+        """A team ranked worse now than previously gets a negative rank_delta."""
+        entry = build_rank_entry(_rankings_row(rank=7, rank_prev=3), "elo")
+        assert (entry.rank, entry.rank_prev, entry.rank_delta) == (7, 3, -4)
+
+    def test_rank_prev_and_delta_none_on_first_snapshot(self):
+        """A team with no previous snapshot gets rank_prev=None and rank_delta=None, not an error."""
+        entry = build_rank_entry(_rankings_row(rank=1, rank_prev=None), "elo")
+        assert entry.rank == 1
+        assert entry.rank_prev is None
+        assert entry.rank_delta is None
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 """Navigation and metadata endpoints: seasons, structure, teams."""
 
-from typing import Annotated, Any, LiteralString
+from typing import Annotated, Any, Literal, LiteralString
 
 from fastapi import APIRouter, HTTPException, Query
 from psycopg import sql
@@ -10,6 +10,8 @@ from backend.api.models.responses import (
     ChampionshipVenueModel,
     ClassStructure,
     HelmetDesignModel,
+    HelmetDetailModel,
+    HelmetListItemModel,
     LocationDetailModel,
     RegionSummary,
     SeasonDatesResponse,
@@ -19,8 +21,11 @@ from backend.api.models.responses import (
 )
 from backend.helpers.api_helpers import (
     HELMET_DESIGNS_SELECT,
+    HELMET_STATS_SELECT,
     build_helmet_from_fields,
     build_helmet_from_row,
+    build_helmet_game_worn,
+    build_helmet_stats_fields,
     build_season_dates,
 )
 from backend.helpers.image_helpers import logo_url
@@ -213,11 +218,14 @@ async def resolve_team_helmet(
     """Resolve the default helmet design to display for *team* in *season*.
 
     Fallback order: the school's primary design covering *season*, else the
-    most recently introduced design covering *season*, else ``null``. Does
-    not consider per-game assignments — those are explicit on each game row
-    (``GET /games``'s ``helmet_a``/``helmet_b``) and take precedence over this
-    endpoint when present; callers should only fall back here when a game has
-    no explicit assignment, or for contexts (team headers) with no single game.
+    most recently introduced design covering *season*, else ``null``. "Covering
+    *season*" respects non-contiguous wear (``years_worn``) via
+    ``helmet_covers_season()`` when set, not just the year_first_worn/
+    year_last_worn outer bound. Does not consider per-game assignments —
+    those are explicit on each game row (``GET /games``'s ``helmet_a``/
+    ``helmet_b``) and take precedence over this endpoint when present; callers
+    should only fall back here when a game has no explicit assignment, or for
+    contexts (team headers) with no single game.
     """
     async with get_conn() as conn:
         check = await conn.execute("SELECT 1 FROM schools WHERE school = %s", (team,))
@@ -226,11 +234,10 @@ async def resolve_team_helmet(
 
         query = sql.SQL(
             HELMET_DESIGNS_SELECT
-            + " WHERE school = %s AND year_first_worn <= %s"
-            + " AND (year_last_worn IS NULL OR year_last_worn >= %s)"
+            + " WHERE school = %s AND helmet_covers_season(years_worn, year_first_worn, year_last_worn, %s)"
             + " ORDER BY is_primary DESC, year_first_worn DESC LIMIT 1"
         )
-        row = await (await conn.execute(query, (team, season, season))).fetchone()
+        row = await (await conn.execute(query, (team, season))).fetchone()
 
     return build_helmet_from_fields(*row) if row is not None else None
 
@@ -241,32 +248,65 @@ async def list_helmets(
     color: Annotated[str | None, Query()] = None,
     finish: Annotated[str | None, Query()] = None,
     tag: Annotated[str | None, Query()] = None,
-) -> list[HelmetDesignModel]:
-    """Return helmet designs across all teams with optional filters."""
+    sort: Annotated[Literal["created_at"] | None, Query()] = None,
+) -> list[HelmetListItemModel]:
+    """Return helmet designs across all teams with optional filters, badged with
+    a win/loss ``stats`` object (games with an explicit assignment only —
+    never inferred). ``sort=created_at`` orders newest-added first; otherwise
+    ordered by school, then year introduced."""
     conditions: list[LiteralString] = []
     params: list = []
     if team is not None:
-        conditions.append("school = %s")
+        conditions.append("hd.school = %s")
         params.append(team)
     if color is not None:
-        conditions.append("color ILIKE %s")
+        conditions.append("hd.color ILIKE %s")
         params.append(color)
     if finish is not None:
-        conditions.append("finish ILIKE %s")
+        conditions.append("hd.finish ILIKE %s")
         params.append(finish)
     if tag is not None:
-        conditions.append("%s = ANY(tags)")
+        conditions.append("%s = ANY(hd.tags)")
         params.append(tag)
 
+    order_by = "hd.created_at DESC" if sort == "created_at" else "hd.school, hd.year_first_worn"
     if conditions:
         where_clause = and_join_conditions(conditions)
-        query = sql.SQL(_HELMET_SELECT + " WHERE {} ORDER BY school, year_first_worn").format(where_clause)
+        query = sql.SQL(HELMET_STATS_SELECT + " WHERE {} ORDER BY " + order_by).format(where_clause)
     else:
-        query = sql.SQL(_HELMET_SELECT + " ORDER BY school, year_first_worn")
+        query = sql.SQL(HELMET_STATS_SELECT + " ORDER BY " + order_by)
 
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
-        return [build_helmet_from_row(r) async for r in rows]
+        return [HelmetListItemModel(**build_helmet_stats_fields(*r)) async for r in rows]
+
+
+@router.get("/helmets/{design_id}", responses=_404)
+async def get_helmet_detail(design_id: int) -> HelmetDetailModel:
+    """Return a single helmet design with full stats and the games it was worn in.
+
+    Stats count only games with an explicit ``helmet_design_id`` assignment —
+    games where the design would merely be inferred as the team's primary are
+    never counted. ``games_played`` is the school's total final games across
+    the seasons this design spans (see ``helmet_covers_season``), so the UI
+    can render e.g. "6–1 in 7 tracked games (of 11 played)"."""
+    async with get_conn() as conn:
+        row = await (await conn.execute(HELMET_STATS_SELECT + " WHERE hd.id = %s", (design_id,))).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
+
+        games_rows = await conn.execute(
+            """
+            SELECT school, date, opponent, points_for, points_against, result, round
+            FROM games_effective
+            WHERE helmet_design_id = %s
+            ORDER BY date
+            """,
+            (design_id,),
+        )
+        games_worn = [build_helmet_game_worn(r) async for r in games_rows]
+
+    return HelmetDetailModel(**build_helmet_stats_fields(*row), games_worn=games_worn)
 
 
 @router.get("/championships")

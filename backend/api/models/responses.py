@@ -192,6 +192,44 @@ class HelmetDesignModel(BaseModel):
     tags: list[str] = []
     notes: str | None = None
     is_primary: bool = False
+    created_at: datetime
+
+
+class HelmetStatsModel(BaseModel):
+    """Win/loss record for a helmet design, counted only from games with an
+    explicit ``helmet_design_id`` assignment (never inferred)."""
+
+    appearances: int
+    games_tracked: int
+    wins: int
+    losses: int
+    ties: int
+    games_played: int
+
+
+class HelmetGameWorn(BaseModel):
+    """One game a helmet design was explicitly worn in."""
+
+    school: str
+    date: _Date
+    opponent: str
+    points_for: int | None
+    points_against: int | None
+    result: str | None
+    round: str | None
+
+
+class HelmetListItemModel(HelmetDesignModel):
+    """A helmet design list entry, badged with its win/loss record."""
+
+    stats: HelmetStatsModel
+
+
+class HelmetDetailModel(HelmetDesignModel):
+    """A single helmet design with full stats and the games it was worn in."""
+
+    stats: HelmetStatsModel
+    games_worn: list[HelmetGameWorn]
 
 
 # ---------------------------------------------------------------------------
@@ -460,7 +498,7 @@ class ClassStandingsResponse(BaseModel):
 
 
 class TeamRankEntry(BaseModel):
-    """One team in a rankings response, with all odds and a convenience sort_value field."""
+    """One team in a rankings response, with all odds, Elo/RPI, and a convenience sort_value field."""
 
     school: str
     class_: int
@@ -470,15 +508,28 @@ class TeamRankEntry(BaseModel):
     seeding_odds: SeedingOddsModel
     bracket: BracketAdvancementOdds
     home: HomeGameOdds
+    elo: float | None
+    rpi: float | None
     sort_value: float
+    rank: int
+    rank_prev: int | None
+    rank_delta: int | None
 
 
 class RankingsResponse(BaseModel):
-    """Ranked list of teams for a class, sorted by a single odds metric."""
+    """Ranked list of teams for a class, sorted by a single odds metric or Elo/RPI."""
 
     season: int
     class_: int
     sort_by: str
+    teams: list[TeamRankEntry]
+
+
+class StatewideRankingsResponse(BaseModel):
+    """Top teams statewide, ranked by Elo (the only metric comparable across class sizes)."""
+
+    season: int
+    sort_by: str = "elo"
     teams: list[TeamRankEntry]
 
 
@@ -918,6 +969,16 @@ class SubmissionCreatedResponse(BaseModel):
     submitted_at: datetime
 
 
+class HelmetAssignmentAlreadyConfirmed(BaseModel):
+    """Returned instead of SubmissionCreatedResponse when a helmet-assignment submission
+    exactly matches the game's current assignment — no new submission is queued."""
+
+    already_confirmed: bool = True
+    school: str
+    date: _Date
+    helmet_design_id: int
+
+
 class SubmissionSummary(BaseModel):
     """A submission row as returned in list views."""
 
@@ -927,6 +988,7 @@ class SubmissionSummary(BaseModel):
     school: str | None
     submitted_at: datetime
     reviewed_at: datetime | None
+    helmet_design_id: int | None = None
 
 
 class SubmissionDetail(SubmissionSummary):

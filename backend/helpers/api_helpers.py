@@ -13,7 +13,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import LiteralString, TypeVar
+from typing import Any, LiteralString, TypeVar
 
 from fastapi import HTTPException
 from psycopg import sql
@@ -29,6 +29,8 @@ from backend.api.models.responses import (
     ChampionshipGame,
     GameModel,
     HelmetDesignModel,
+    HelmetGameWorn,
+    HelmetStatsModel,
     HomeGameOdds,
     InsightModel,
     KeyInsightConditionModel,
@@ -229,6 +231,7 @@ HELMET_FIELD_COLS = (
     "tags",
     "notes",
     "is_primary",
+    "created_at",
 )
 
 HELMET_DESIGNS_SELECT = f"SELECT {', '.join(HELMET_FIELD_COLS)} FROM helmet_designs"
@@ -259,6 +262,74 @@ def build_helmet_from_row(row: tuple) -> HelmetDesignModel:
     return helmet
 
 
+HELMET_STATS_SELECT = (
+    "SELECT "
+    + ", ".join(f"hd.{c}" for c in HELMET_FIELD_COLS)
+    + ", COALESCE(gs.appearances, 0), COALESCE(gs.wins, 0), COALESCE(gs.losses, 0), COALESCE(gs.ties, 0), "
+    "COALESCE(gp.games_played, 0) "
+    "FROM helmet_designs hd "
+    "LEFT JOIN ("
+    "  SELECT helmet_design_id,"
+    "         COUNT(*) AS appearances,"
+    "         COUNT(*) FILTER (WHERE result = 'W') AS wins,"
+    "         COUNT(*) FILTER (WHERE result = 'L') AS losses,"
+    "         COUNT(*) FILTER (WHERE result = 'T') AS ties"
+    "  FROM games_effective"
+    "  WHERE helmet_design_id IS NOT NULL"
+    "  GROUP BY helmet_design_id"
+    ") gs ON gs.helmet_design_id = hd.id "
+    "LEFT JOIN LATERAL ("
+    "  SELECT COUNT(*) AS games_played"
+    "  FROM games_effective g2"
+    "  WHERE g2.school = hd.school AND g2.final"
+    "    AND helmet_covers_season(hd.years_worn, hd.year_first_worn, hd.year_last_worn, g2.season)"
+    ") gp ON TRUE"
+)
+"""Base SELECT joining helmet_designs (aliased ``hd``) to aggregate win/loss stats and
+a season-window ``games_played`` denominator. Column order: HELMET_FIELD_COLS (``hd.``-
+prefixed) followed by (appearances, wins, losses, ties, games_played). Stats count only
+games with an explicit ``helmet_design_id`` assignment — never inferred. Callers append
+their own WHERE/ORDER BY."""
+
+
+def build_helmet_stats_fields(*fields) -> dict:
+    """Split a HELMET_STATS_SELECT row into base helmet fields plus a ``stats`` entry.
+
+    Returns a dict suitable for ``HelmetListItemModel(**...)`` or
+    ``HelmetDetailModel(**..., games_worn=[...])``. ``appearances`` and
+    ``games_tracked`` are the same underlying count (games rows with this
+    design's ``helmet_design_id``) exposed under both keys.
+    """
+    n = len(HELMET_FIELD_COLS)
+    helmet_fields, stats_fields = fields[:n], fields[n:]
+    appearances, wins, losses, ties, games_played = stats_fields
+    base: dict[str, Any] = dict(zip(HELMET_FIELD_COLS, helmet_fields))
+    base["stats"] = HelmetStatsModel(
+        appearances=appearances,
+        games_tracked=appearances,
+        wins=wins,
+        losses=losses,
+        ties=ties,
+        games_played=games_played,
+    )
+    return base
+
+
+def build_helmet_game_worn(row: tuple) -> HelmetGameWorn:
+    """Build a HelmetGameWorn from a ``(school, date, opponent, points_for,
+    points_against, result, round)`` games_effective row."""
+    school, date_, opponent, points_for, points_against, result, round_ = row
+    return HelmetGameWorn(
+        school=school,
+        date=date_,
+        opponent=opponent,
+        points_for=points_for,
+        points_against=points_against,
+        result=result,
+        round=round_,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Game listing (/games endpoint)
 # ---------------------------------------------------------------------------
@@ -269,7 +340,7 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
 
     Each row is ``(school, opponent, date, points_for, points_against, location,
     region_game, status, season, venue_name, venue_city, venue_lat, venue_lon,
-    *16 helmet_a fields, *16 helmet_b fields, round, kickoff, overtime, final,
+    *17 helmet_a fields, *17 helmet_b fields, round, kickoff, overtime, final,
     quarter, clock, source, pregame_prob, pregame_prob_computed_at,
     ot_period_start_score_for, ot_period_start_score_against, ot_next_possession,
     elo_school, elo_opponent)``.
@@ -303,9 +374,9 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
         v_lon,
         *rest,
     ) in rows:
-        ha_fields = tuple(rest[:16])
-        hb_fields = tuple(rest[16:32])
-        g_round, g_kickoff, g_overtime, g_final, g_quarter, g_clock, g_source = rest[32:39]
+        ha_fields = tuple(rest[:17])
+        hb_fields = tuple(rest[17:34])
+        g_round, g_kickoff, g_overtime, g_final, g_quarter, g_clock, g_source = rest[34:41]
         (
             persisted_pregame_prob,
             persisted_computed_at,
@@ -314,7 +385,7 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
             ot_next_possession,
             elo_school,
             elo_opponent,
-        ) = rest[39:46]
+        ) = rest[41:48]
 
         pregame_prob, live_prob, prob_as_of = compute_embedded_game_probs(
             EmbeddedProbInputs(
@@ -1309,7 +1380,7 @@ def build_hosting_entries(
 # Response builders — rankings
 # ---------------------------------------------------------------------------
 
-# 0-indexed column positions for RANKINGS_SELECT (backend/api/routers/rankings.py):
+# 0-indexed column positions for the ranked-teams query (backend/api/routers/rankings.py):
 #   0-2:   school, class, region
 #   3-8:   wins, losses, ties, region_wins, region_losses, region_ties
 #   9:     as_of_date
@@ -1319,6 +1390,9 @@ def build_hosting_entries(
 #   25-29: odds_second_round_weighted–odds_champion_weighted
 #   30-33: odds_first_round_home–odds_semifinals_home
 #   34-37: odds_first_round_home_weighted–odds_semifinals_home_weighted
+#   38-39: elo, rpi
+#   40:    rank
+#   41:    rank_prev
 RANKINGS_SORT_COL: dict[str, int] = {
     "odds_1st": 10,
     "odds_2nd": 11,
@@ -1348,11 +1422,16 @@ RANKINGS_SORT_COL: dict[str, int] = {
     "odds_second_round_home_weighted": 35,
     "odds_quarterfinals_home_weighted": 36,
     "odds_semifinals_home_weighted": 37,
+    "elo": 38,
+    "rpi": 39,
 }
 
 
 def build_rank_entry(row: tuple, sort_col: str) -> TeamRankEntry:
-    """Build a ``TeamRankEntry`` from a ``region_standings`` row using the ``RANKINGS_SORT_COL`` layout."""
+    """Build a ``TeamRankEntry`` from a ranked-teams row using the ``RANKINGS_SORT_COL`` layout,
+    plus trailing ``elo``, ``rpi``, ``rank``, ``rank_prev`` columns."""
+    rank: int = row[40]
+    rank_prev: int | None = row[41]
     return TeamRankEntry(
         school=row[0],
         class_=row[1],
@@ -1400,7 +1479,12 @@ def build_rank_entry(row: tuple, sort_col: str) -> TeamRankEntry:
             quarterfinals_weighted=row[36],
             semifinals_weighted=row[37],
         ),
+        elo=row[38],
+        rpi=row[39],
         sort_value=row[RANKINGS_SORT_COL[sort_col]],
+        rank=rank,
+        rank_prev=rank_prev,
+        rank_delta=(rank_prev - rank) if rank_prev is not None else None,
     )
 
 

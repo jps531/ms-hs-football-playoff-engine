@@ -12,7 +12,7 @@ backend work but frontend-blocking.
 
 ---
 
-## 1. Helmet detail + stats exposure
+## 1. Helmet detail + stats exposure ✅
 
 **UI purpose:** helmet browser detail page (/helmets/{id}) shows a design's
 images, metadata, appearances, W-L record when worn, and the list of games it
@@ -72,7 +72,7 @@ integrity rule enforceable client-side too).
 
 ---
 
-## 4. helmet_assignment submission type (the "confirm" flow)
+## 4. helmet_assignment submission type (the "confirm" flow) ✅
 
 **UI purpose:** on final game pages, logged-in users one-tap confirm that a
 team wore its primary helmet ("Wearing their usual? ✓") or pick a different
@@ -93,7 +93,7 @@ design from that team's list. This is the crowd-sourced coverage engine for
 
 ---
 
-## 5. Submission image slot labels
+## 5. Submission image slot labels ✅
 
 **UI purpose:** the helmet submission form presents labeled upload slots
 (Left side, Right side, Front, Logo 2D/flat, Other) so moderators know which
@@ -108,7 +108,7 @@ caption the gallery. Allowed values: `left`, `right`, `front`, `logo`,
 
 ---
 
-## 6. Needs-mockup lane linkage
+## 6. Needs-mockup lane linkage ✅
 
 **UI purpose:** the moderation UI's "needs mockup" tab lists approved helmet
 submissions that don't yet have a created helmet design record.
@@ -168,7 +168,7 @@ road trip this week"), (c) the attended-games miles stat.
 
 ---
 
-## 9. Rankings/ratings reconciliation
+## 9. Rankings/ratings reconciliation ✅
 
 **UI purpose:** the Rankings page treats rankings = positions, ratings =
 numbers. There are reportedly both "ratings" and "rankings" endpoints now —
@@ -203,9 +203,9 @@ reconcile before frontend work:
 1. §2 + §3 (primary helmet + game-row helmet info — blocks game page and
    team header display logic) ✅
 2. §7 (championships read — trivial exposure, unblocks an entire page) ✅
-3. §1 (helmet detail/stats — blocks browser detail page)
-4. §4 + §5 + §6 (submission/moderation helmet loop — ship together)
+3. §1 (helmet detail/stats — blocks browser detail page) ✅
+4. §4 + §5 + §6 (submission/moderation helmet loop — ship together) ✅
 5. §8 (roadmap + travel insights — target the playoffs window)
 6. §9 (reconciliation — a decision more than a build; do before Rankings
-   page implementation)
+   page implementation) ✅
 7. §10 (hardening — required before public launch, independent of Figma)

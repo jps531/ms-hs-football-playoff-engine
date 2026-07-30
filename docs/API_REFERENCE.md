@@ -15,8 +15,11 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
 | GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
 | GET | `/teams/{team}/helmets/resolved` | The single default helmet design to display for a team in a season — see "Primary helmet & display resolution order" below. Params: `season` (required) |
-| GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag` |
+| GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag`, `sort` (`created_at` for newest-added first; default order is `school`, `year_first_worn`) |
+| GET | `/helmets/{id}` | Single helmet design with full metadata, images, `stats`, and `games_worn` — see below |
 | GET | `/championships` | Championship venue history (back to 1992) for the almanac page. Optional `season`, `class` filters |
+
+**`GET /helmets` / `GET /helmets/{id}`** — every design (list items and the detail record) carries `created_at` and a `stats` object: `{appearances, games_tracked, wins, losses, ties, games_played}`. `appearances`/`games_tracked` are the same count — games with an explicit `helmet_design_id` assignment for this design (a design that's merely inferred as a team's primary is never counted, per the integrity rule below). `wins`/`losses`/`ties` are counted among those assigned games that have a result. `games_played` is the school's total **final** games across the seasons this design spans (see `helmet_covers_season` below), so the UI can render e.g. "6–1 in 7 tracked games (of 11 played)". `GET /helmets/{id}` additionally returns `games_worn: [{school, date, opponent, points_for, points_against, result, round}]` for every explicitly-assigned game, oldest first. 404 if the id doesn't exist.
 
 **`GET /championships`** — response: `[{season, class_, location: {id, name, city, home_team, latitude, longitude}, has_games}, ...]`, ordered newest season first. `has_games` is `true` once that season/class's Championship Game has been imported into `/games` (so the UI can link through to the game page); pre-import seasons return `has_games: false` and render as pure almanac entries.
 
@@ -60,13 +63,14 @@ specific seed pinned to that exact position — not alphabetical order.
 
 ## Rankings — `/rankings`
 
-Cross-region ranked list of teams for a given class, sorted by any single odds metric. Equivalent to a `SELECT DISTINCT ON (school) … ORDER BY <metric> DESC` across `region_standings`, but served as a typed API response.
+Cross-region ranked list of teams for a given class (or statewide), sorted by any single odds metric or by Elo/RPI rating — the reconciliation point between "rankings" (positions) and "ratings" (numbers): every entry carries both, regardless of which one is the active sort key. Equivalent to a `SELECT DISTINCT ON (school) … ORDER BY <metric> DESC` across `region_standings` (joined to `team_ratings` for `elo`/`rpi`), but served as a typed API response with server-computed rank and rank movement.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{clazz}` | All teams in a class ranked by the chosen odds metric. Required params: `season`, `sort_by`. Optional: `date`, `region`, `min_odds`, `limit` |
+| GET | `/{clazz}` | All teams in a class ranked by the chosen metric. Required params: `season`, `sort_by`. Optional: `date`, `region`, `min_odds`, `limit` |
+| GET | `/statewide` | Top teams across all classes, ranked by Elo (the only metric that's meaningfully comparable across class sizes — playoff-odds columns aren't, since each class runs its own bracket). Params: `season` (required), `date`, `limit` (default 25) |
 
-**`sort_by` values** (any `region_standings` odds column):
+**`sort_by` values** (`/{clazz}` only):
 
 *Seeding odds* — `odds_1st`, `odds_2nd`, `odds_3rd`, `odds_4th`, `odds_playoffs` and their `_weighted` variants
 
@@ -74,13 +78,17 @@ Cross-region ranked list of teams for a given class, sorted by any single odds m
 
 *Home-game odds* — `odds_first_round_home`, `odds_second_round_home`, `odds_quarterfinals_home`, `odds_semifinals_home` and their `_weighted` variants
 
-**Optional params:**
+*Rating* — `elo`, `rpi` (sourced from `team_ratings`, joined in on matching `season`/`as_of_date`)
+
+**Optional params (`/{clazz}`):**
 - `date` — use the most recent snapshot on or before this date (defaults to today)
-- `region` — restrict to one region within the class
-- `min_odds` — exclude teams with `sort_by` value ≤ this threshold (e.g. `0.001` drops eliminated teams)
+- `region` — restricts which rows are *returned*; never changes a team's `rank`, which always reflects position within the full class (this endpoint is cross-region by design)
+- `min_odds` — exclude teams with `sort_by` value ≤ this threshold (e.g. `0.001` drops eliminated teams). No natural equivalent for `elo`/`rpi`; a no-op there at the default of `0.0`
 - `limit` — max teams returned; 1–200, default 25
 
-Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, and `sort_value` (the value of the ranked metric for that team).
+Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, `elo`, `rpi`, `sort_value` (the value of the ranked metric for that team), `rank` (1-indexed position for the chosen `sort_by`, among the full class for `/{clazz}` or the full state for `/statewide`), and `rank_prev`/`rank_delta` against the previous snapshot (`rank_delta = rank_prev - rank`, positive meaning the team moved up) — both `null` on a class's/state's first-ever snapshot of the season, so the frontend's movement column has no false "unchanged" reading before there's anything to compare against.
+
+**How this is ranked** (for the `/statewide` list's "How this is ranked" link): Elo rating, carried over season-to-season blended with a classification prior (1A=1000 … 7A=1300, step 50) and updated with a margin-of-victory multiplier — see the `COMMENT ON COLUMN team_ratings.elo` in `sql/init.sql` for the full model.
 
 ## Hosting — `/hosting`
 
@@ -251,16 +259,18 @@ Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/helmets` | Create a new helmet design record. Body: `school` (required), `year_first_worn` (required), plus optional `year_last_worn`, `years_worn`, `color`, `finish`, `facemask_color`, `logo`, `stripe`, `tags`, `notes`, `is_primary` (default `false`). Returns full record including generated `id` |
+| POST | `/helmets` | Create a new helmet design record. Body: `school` (required), `year_first_worn` (required), plus optional `year_last_worn`, `years_worn`, `color`, `finish`, `facemask_color`, `logo`, `stripe`, `tags`, `notes`, `is_primary` (default `false`), `from_submission_id` (links the design back to the helmet submission it was created from — sets `submissions.helmet_design_id`; 404 if the submission doesn't exist, 422 if it isn't a `helmet`-type submission, 409 if already linked). Returns full record including generated `id` |
 | PATCH | `/helmets/{id}` | Partial update of any metadata field (not image columns), including `is_primary`. Only provided fields are written |
 | DELETE | `/helmets/{id}` | Delete a helmet design. Any games referencing it have `helmet_design_id` set to NULL automatically |
 
 **Primary helmet & display resolution order** — `is_primary` marks a school's default design; the DB enforces at most one primary per school (partial unique index), and setting `is_primary: true` via `POST`/`PATCH` atomically clears any existing primary for that school first. This is the single source of truth for how the frontend and OG share-card rendering should pick a helmet to display, in order:
 
 1. The game's explicit `helmet_design_id` assignment (`GET /games`'s `helmet_a`/`helmet_b`, or `PUT /games/{school}/{date}/helmet`) — never overridden by primary/fallback logic.
-2. The school's primary design whose `year_first_worn`–`year_last_worn` range covers the relevant season — `GET /teams/{team}/helmets/resolved?season=`.
+2. The school's primary design that covers the relevant season — `GET /teams/{team}/helmets/resolved?season=`.
 3. If no primary covers that season, the most recently introduced design that does (same endpoint — steps 2 and 3 are resolved together server-side).
 4. If nothing covers that season, `null` — render the silhouette fallback client-side; never guess.
+
+"Covers the season" is decided by the Postgres helper `helmet_covers_season()`: when a design's `years_worn` (non-contiguous spans, e.g. a throwback worn 2001–2005 and again in 2007) is set, a season counts only if it falls inside one of those spans; otherwise it falls back to the `year_first_worn`–`year_last_worn` outer bound (open-ended when `year_last_worn` is `null`). The same function backs `stats.games_played` on `GET /helmets`/`GET /helmets/{id}` below.
 
 ## Images — `/images`
 
@@ -305,10 +315,11 @@ If a valid `Authorization: Bearer <token>` header is included, the submission is
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/logos` | optional Bearer | Submit a school logo for moderator review. Multipart: `school`, `logo_type` (`primary`/`secondary`/`tertiary`), `file`. Image is staged on Cloudinary and promoted to production on approval. 404 if school not found. Rate limited: 3/minute. |
-| POST | `/helmets` | optional Bearer | Submit a helmet design for moderator review. Multipart: `school`, `year_first_worn`, `description`, plus optional metadata fields and up to 5 reference images (`images`) and an optional logo image (`logo_image`). Moderator creates the helmet record manually from the submitted info. 404 if school not found. Rate limited: 3/minute. |
+| POST | `/helmets` | optional Bearer | Submit a helmet design for moderator review. Multipart: `school`, `year_first_worn`, `description`, plus optional metadata fields, `other_note`, up to 5 reference images (`images`), optional `image_labels` (parallel to `images` — one of `left`/`right`/`front`/`logo`/`other` per image; 422 if the length doesn't match or a label is invalid), and an optional logo image (`logo_image`). Moderator creates the helmet record manually from the submitted info (see `from_submission_id` under Helmet designs CRUD). 404 if school not found. Rate limited: 3/minute. |
 | POST | `/colors` | optional Bearer | Submit a school color correction. Body: `school`, optional `primary_color` `{name, hex}`, optional `secondary_colors` array. Auto-applied on approval via `set_school_override`. 404 if school not found. Rate limited: 10/minute. |
 | POST | `/locations` | optional Bearer | Submit corrected GPS coordinates for a school. Body: `school`, `latitude`, `longitude`. Auto-applied on approval via `set_school_override`. 404 if school not found. Rate limited: 10/minute. |
 | POST | `/scores` | optional Bearer | Submit a corrected game score. Body: `school`, `date`, `points_for`, `points_against`. Both the school and the game row must already exist. Auto-applied on approval via `set_game_override`. 404 if school or game not found. Rate limited: 10/minute. |
+| POST | `/helmet-assignments` | optional Bearer | Submit or confirm which helmet a school wore in a game — the crowd-sourced input to §1's helmet stats. Body: `school`, `date`, `helmet_design_id`. 404 if the school, game, or design doesn't exist, or the design belongs to a different school. Auto-applied on approval the same way as `PUT /admin/games/{school}/{date}/helmet`. If the game's helmet is already set to the submitted design, no submission is queued — responds `200` with `{ "already_confirmed": true, ... }` instead of `201`. Rate limited: 10/minute. |
 | POST | `/feedback` | optional Bearer | Submit general feedback (no school required). Body: `subject`, `message`. No DB action is taken on approval. Rate limited: 10/minute. |
 
 ## Moderation — `/moderation`
@@ -317,7 +328,9 @@ Requires a valid `Authorization: Bearer <token>` header with `moderator` or `own
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/submissions` | List submissions. Optional query params: `type` (`logo`/`helmet`/`colors`/`location`/`score`/`feedback`), `status_filter` (`pending`/`approved`/`rejected`), `limit` (default 50), `offset` |
+| GET | `/submissions` | List submissions. Optional query params: `type` (`logo`/`helmet`/`colors`/`location`/`score`/`feedback`/`helmet_assignment`), `status_filter` (`pending`/`approved`/`rejected`), `unlinked` (bool — restricts to submissions with/without a linked `helmet_design_id`; `type=helmet&status_filter=approved&unlinked=true` is the "needs mockup" tab), `limit` (default 50), `offset` |
 | GET | `/submissions/{id}` | Get a single submission with its full payload. 404 if not found. |
 | POST | `/submissions/{id}/approve` | Approve a pending submission and auto-apply it to the live database. Optional body: `{ "notes": "..." }`. 404 if not found; 409 if already reviewed. |
 | POST | `/submissions/{id}/reject` | Reject a pending submission. No changes are applied to the database. Optional body: `{ "notes": "..." }`. 404 if not found; 409 if already reviewed. |
+
+List and detail responses both include `helmet_design_id` — `null` except on `helmet`-type submissions once a moderator has created the design record via `from_submission_id`.

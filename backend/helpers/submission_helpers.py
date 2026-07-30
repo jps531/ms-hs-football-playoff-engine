@@ -10,7 +10,7 @@ from backend.api.models.responses import SubmissionSummary
 
 
 def build_submission_summary(row: tuple) -> SubmissionSummary:
-    """Map a (id, type, status, school, submitted_at, reviewed_at) row to SubmissionSummary."""
+    """Map a (id, type, status, school, submitted_at, reviewed_at, helmet_design_id) row to SubmissionSummary."""
     return SubmissionSummary(
         id=row[0],
         type=row[1],
@@ -18,6 +18,7 @@ def build_submission_summary(row: tuple) -> SubmissionSummary:
         school=row[3],
         submitted_at=row[4],
         reviewed_at=row[5],
+        helmet_design_id=row[6],
     )
 
 
@@ -55,3 +56,8 @@ def build_score_overrides(payload: dict) -> tuple[str, list[tuple[str, str]]]:
         ("points_against", str(payload["points_against"])),
     ]
     return game_date, overrides
+
+
+def build_helmet_assignment_override(payload: dict) -> tuple[str, int]:
+    """Return (game_date, helmet_design_id) for an approved 'helmet_assignment' submission."""
+    return payload["date"], payload["helmet_design_id"]

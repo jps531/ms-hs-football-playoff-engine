@@ -524,11 +524,43 @@ async def clear_location_override(location_id: int, field: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/helmets", status_code=201, responses=_404)
+@router.post(
+    "/helmets",
+    status_code=201,
+    responses={
+        404: {"description": "Not found"},
+        409: {"description": "Submission already linked to a helmet design"},
+        422: {"description": "Submission is not a helmet submission"},
+    },
+)
 async def create_helmet_design(body: CreateHelmetDesignRequest) -> HelmetDesignModel:
-    """Create a new helmet design record. Upload images separately via POST /api/v1/images/helmets/{id}/{type}."""
+    """Create a new helmet design record. Upload images separately via POST /api/v1/images/helmets/{id}/{type}.
+
+    Pass ``from_submission_id`` to link this design back to the helmet submission it was
+    created from (sets ``submissions.helmet_design_id`` in the same transaction) — 404 if the
+    submission doesn't exist, 422 if it isn't a helmet-type submission, 409 if it's already
+    linked to a different design.
+    """
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
+
+        if body.from_submission_id is not None:
+            sub_row = await (
+                await conn.execute(
+                    "SELECT type, helmet_design_id FROM submissions WHERE id = %s", (body.from_submission_id,)
+                )
+            ).fetchone()
+            if sub_row is None:
+                raise HTTPException(status_code=404, detail=f"Submission {body.from_submission_id} not found")
+            if sub_row[0] != "helmet":
+                raise HTTPException(
+                    status_code=422, detail=f"Submission {body.from_submission_id} is not a helmet submission"
+                )
+            if sub_row[1] is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Submission {body.from_submission_id} is already linked to helmet design {sub_row[1]}",
+                )
 
         years_worn_json = (
             [{"start": r.start, "end": r.end} for r in body.years_worn] if body.years_worn is not None else None
@@ -563,6 +595,11 @@ async def create_helmet_design(body: CreateHelmetDesignRequest) -> HelmetDesignM
             )
         ).fetchone()
         assert id_row is not None
+        if body.from_submission_id is not None:
+            await conn.execute(
+                "UPDATE submissions SET helmet_design_id = %s, updated_at = NOW() WHERE id = %s",
+                (id_row[0], body.from_submission_id),
+            )
         detail_row = await (await conn.execute(_HELMET_SELECT, (id_row[0],))).fetchone()
     assert detail_row is not None
     _log.info("admin: created helmet_design id=%s school=%s year=%s", id_row[0], body.school, body.year_first_worn)

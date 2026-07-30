@@ -14,9 +14,10 @@ from backend.api.db import get_conn
 from backend.api.models.requests import ModerationDecisionRequest
 from backend.api.models.responses import SubmissionDetail, SubmissionSummary
 from backend.helpers.image_helpers import LogoType, promote_submission_logo
-from backend.helpers.query_helpers import set_school_logo_column
+from backend.helpers.query_helpers import require_helmet_design_exists, set_school_logo_column
 from backend.helpers.submission_helpers import (
     build_color_overrides,
+    build_helmet_assignment_override,
     build_location_overrides,
     build_score_overrides,
     build_submission_summary,
@@ -28,7 +29,8 @@ router = APIRouter(prefix="/api/v1/moderation", tags=["moderation"])
 
 
 def _row_to_detail(row: tuple) -> SubmissionDetail:
-    """Map a DB row (id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes) to SubmissionDetail."""
+    """Map a DB row (id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes,
+    helmet_design_id) to SubmissionDetail."""
     return SubmissionDetail(
         id=row[0],
         type=row[1],
@@ -38,6 +40,7 @@ def _row_to_detail(row: tuple) -> SubmissionDetail:
         reviewed_at=row[5],
         payload=row[6],
         moderator_notes=row[7],
+        helmet_design_id=row[8],
     )
 
 
@@ -46,22 +49,29 @@ async def list_submissions(
     moderator: ModeratorAuth,
     type: str | None = None,
     status_filter: str | None = None,
+    unlinked: bool | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[SubmissionSummary]:
-    """List submissions, optionally filtered by type and/or status."""
+    """List submissions, optionally filtered by type, status, and/or helmet_design_id linkage.
+
+    ``unlinked=true`` restricts to submissions with no linked helmet design (``helmet_design_id
+    IS NULL``); ``unlinked=false`` restricts to linked ones. Combined with
+    ``type=helmet&status_filter=approved``, this is the moderation UI's "needs mockup" tab.
+    """
     async with get_conn() as conn:
         rows = await (
             await conn.execute(
                 """
-                SELECT id, type, status, school, submitted_at, reviewed_at
+                SELECT id, type, status, school, submitted_at, reviewed_at, helmet_design_id
                 FROM submissions
                 WHERE (type::text = %s OR %s IS NULL)
                   AND (status::text = %s OR %s IS NULL)
+                  AND (%s IS NULL OR (helmet_design_id IS NULL) = %s)
                 ORDER BY submitted_at DESC
                 LIMIT %s OFFSET %s
                 """,
-                (type, type, status_filter, status_filter, limit, offset),
+                (type, type, status_filter, status_filter, unlinked, unlinked, limit, offset),
             )
         ).fetchall()
     return [build_submission_summary(r) for r in rows]
@@ -74,7 +84,7 @@ async def get_submission(moderator: ModeratorAuth, submission_id: int) -> Submis
         row = await (
             await conn.execute(
                 """
-                SELECT id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes
+                SELECT id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes, helmet_design_id
                 FROM submissions WHERE id = %s
                 """,
                 (submission_id,),
@@ -107,7 +117,7 @@ async def approve_submission(
         row = await (
             await conn.execute(
                 """
-                SELECT id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes
+                SELECT id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes, helmet_design_id
                 FROM submissions WHERE id = %s
                 """,
                 (submission_id,),
@@ -126,7 +136,7 @@ async def approve_submission(
                 UPDATE submissions
                    SET status = 'approved', reviewed_at = NOW(), moderator_notes = %s, updated_at = NOW()
                  WHERE id = %s
-                RETURNING id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes
+                RETURNING id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes, helmet_design_id
                 """,
                 (body.notes, submission_id),
             )
@@ -164,7 +174,7 @@ async def reject_submission(
                 UPDATE submissions
                    SET status = 'rejected', reviewed_at = NOW(), moderator_notes = %s, updated_at = NOW()
                  WHERE id = %s
-                RETURNING id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes
+                RETURNING id, type, status, school, submitted_at, reviewed_at, payload, moderator_notes, helmet_design_id
                 """,
                 (body.notes, submission_id),
             )
@@ -213,3 +223,11 @@ async def _apply_submission(conn: Any, row: tuple) -> None:
 
     elif stype == "feedback":
         pass  # No DB action on approval.
+
+    elif stype == "helmet_assignment":
+        game_date, helmet_design_id = build_helmet_assignment_override(payload)
+        await require_helmet_design_exists(conn, helmet_design_id)
+        await conn.execute(
+            "UPDATE games SET helmet_design_id = %s WHERE school = %s AND date = %s",
+            (helmet_design_id, school, game_date),
+        )

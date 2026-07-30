@@ -4,6 +4,7 @@ from datetime import datetime
 
 from backend.helpers.submission_helpers import (
     build_color_overrides,
+    build_helmet_assignment_override,
     build_location_overrides,
     build_score_overrides,
     build_submission_summary,
@@ -14,10 +15,10 @@ class TestBuildSubmissionSummary:
     """build_submission_summary maps a submissions row to a SubmissionSummary."""
 
     def test_fields_mapped_in_order(self):
-        """Fields map positionally: id, type, status, school, submitted_at, reviewed_at."""
+        """Fields map positionally: id, type, status, school, submitted_at, reviewed_at, helmet_design_id."""
         submitted = datetime(2025, 9, 1, 12, 0)
         reviewed = datetime(2025, 9, 2, 8, 30)
-        row = (7, "logo", "approved", "Taylorsville", submitted, reviewed)
+        row = (7, "logo", "approved", "Taylorsville", submitted, reviewed, None)
         result = build_submission_summary(row)
         assert result.id == 7
         assert result.type == "logo"
@@ -25,14 +26,22 @@ class TestBuildSubmissionSummary:
         assert result.school == "Taylorsville"
         assert result.submitted_at == submitted
         assert result.reviewed_at == reviewed
+        assert result.helmet_design_id is None
 
     def test_none_school_and_reviewed_at_allowed(self):
         """A None school (e.g. feedback submissions) and unreviewed submission pass through."""
         submitted = datetime(2025, 9, 1, 12, 0)
-        row = (3, "feedback", "pending", None, submitted, None)
+        row = (3, "feedback", "pending", None, submitted, None, None)
         result = build_submission_summary(row)
         assert result.school is None
         assert result.reviewed_at is None
+
+    def test_helmet_design_id_passed_through(self):
+        """A linked helmet submission carries its helmet_design_id through."""
+        submitted = datetime(2025, 9, 1, 12, 0)
+        row = (9, "helmet", "approved", "Taylorsville", submitted, submitted, 42)
+        result = build_submission_summary(row)
+        assert result.helmet_design_id == 42
 
 
 class TestBuildColorOverrides:
@@ -92,3 +101,13 @@ class TestBuildScoreOverrides:
         game_date, overrides = build_score_overrides({"date": "2025-09-05", "points_for": 21, "points_against": 14})
         assert game_date == "2025-09-05"
         assert overrides == [("points_for", "21"), ("points_against", "14")]
+
+
+class TestBuildHelmetAssignmentOverride:
+    """build_helmet_assignment_override maps a 'helmet_assignment' submission payload to (game_date, helmet_design_id)."""
+
+    def test_returns_date_and_helmet_design_id(self):
+        """Returns the game_date and helmet_design_id straight from the payload."""
+        game_date, helmet_design_id = build_helmet_assignment_override({"date": "2025-09-05", "helmet_design_id": 42})
+        assert game_date == "2025-09-05"
+        assert helmet_design_id == 42

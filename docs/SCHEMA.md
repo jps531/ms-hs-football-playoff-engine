@@ -41,6 +41,7 @@ erDiagram
         text tags
         text notes
         boolean is_primary
+        timestamptz created_at
     }
     school_seasons {
         text school PK,FK
@@ -185,6 +186,7 @@ erDiagram
         timestamptz reviewed_at
         timestamptz submitted_at
         timestamptz updated_at
+        int helmet_design_id FK
     }
     users {
         int id PK
@@ -224,5 +226,6 @@ erDiagram
     school_seasons ||--o{ region_standings : "has odds in"
     locations ||--o{ games : "hosted at"
     helmet_designs ||--o{ games : "worn in"
+    helmet_designs ||--o{ submissions : "linked from"
     playoff_formats ||--o{ playoff_format_slots : "has slots"
 ```
