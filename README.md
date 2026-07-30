@@ -264,6 +264,7 @@ Key endpoints summary:
 - `/api/v1/bracket` — bracket advancement odds per (region, seed) slot, including Elo-weighted advancement, non-weighted and weighted hosting odds per round; simulate endpoint (playoff mode only, same winner/loser format) returns the same full set of fields
 - `/api/v1/bracket/slots/{slot}` — every team still alive for one bracket slot/round pre-clinch, ranked by chance of reaching it, with raw + Elo-weighted reach/hosting odds
 - `/api/v1/ratings` — Elo and RPI snapshots per team
+- `/api/v1/seasons/{season}/dates` — notable dates for a timeline scrubber: game dates (round, week, game count) plus standalone standings/ratings snapshot dates
 
 ## Disclaimer
 

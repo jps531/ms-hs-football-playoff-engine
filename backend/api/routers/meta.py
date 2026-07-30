@@ -10,11 +10,12 @@ from backend.api.models.responses import (
     ClassStructure,
     HelmetDesignModel,
     RegionSummary,
+    SeasonDatesResponse,
     SeasonModel,
     SeasonStructureResponse,
     TeamModel,
 )
-from backend.helpers.api_helpers import HELMET_DESIGNS_SELECT, build_helmet_from_row
+from backend.helpers.api_helpers import HELMET_DESIGNS_SELECT, build_helmet_from_row, build_season_dates
 from backend.helpers.image_helpers import logo_url
 from backend.helpers.query_helpers import and_join_conditions
 
@@ -75,6 +76,25 @@ async def get_season_structure(season: int) -> SeasonStructureResponse:
 
     classes = [ClassStructure(class_=c, regions=regions) for c, regions in sorted(by_class.items())]
     return SeasonStructureResponse(season=season, classes=classes)
+
+
+@router.get("/seasons/{season}/dates", responses=_404)
+async def get_season_dates(season: int) -> SeasonDatesResponse:
+    """Return the notable dates for *season* (games and standings/ratings snapshots), for a timeline scrubber."""
+    async with get_conn() as conn:
+        rows = await conn.execute(
+            "SELECT date, round, school, opponent FROM games_effective WHERE season = %s", (season,)
+        )
+        game_rows = [tuple(r) async for r in rows]
+        snap_rows = await conn.execute(
+            "SELECT DISTINCT as_of_date FROM region_standings WHERE season = %s", (season,)
+        )
+        snapshot_dates = {r[0] async for r in snap_rows}
+
+    if not game_rows and not snapshot_dates:
+        raise HTTPException(status_code=404, detail=f"Season {season} not found")
+
+    return SeasonDatesResponse(season=season, dates=build_season_dates(game_rows, snapshot_dates))
 
 
 @router.get("/teams")

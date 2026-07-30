@@ -41,6 +41,7 @@ from backend.api.models.responses import (
     ScenarioEntry,
     ScenarioGameOutcome,
     ScenarioPathModel,
+    SeasonDateEntry,
     SeedingOddsModel,
     SlotOutlookTeam,
     TeamBracketEntry,
@@ -3144,3 +3145,60 @@ def build_slot_outlook_teams(
 
     teams.sort(key=lambda t: t.p_reach, reverse=True)
     return teams
+
+
+# ---------------------------------------------------------------------------
+# Season timeline (GET /seasons/{season}/dates)
+# ---------------------------------------------------------------------------
+
+
+def build_season_dates(
+    game_rows: list[tuple[date, str | None, str, str]],
+    snapshot_dates: set[date],
+) -> list[SeasonDateEntry]:
+    """Build the notable-dates list for a season's timeline scrubber.
+
+    *game_rows* is ``(date, round, school, opponent)`` tuples straight from
+    ``games_effective`` (two rows per in-state contest); *snapshot_dates* is
+    every distinct ``region_standings.as_of_date`` for the season. A date
+    covered by both is emitted once, as ``kind="games"``.
+
+    Assumes a single date doesn't span two different playoff round names
+    statewide (true in practice: all classes advance on the same weekly
+    playoff cadence) — if violated, the last non-null round seen for that
+    date wins, with no error.
+    """
+    by_date: dict[date, dict] = {}
+    for d, round_name, school, opponent in game_rows:
+        entry = by_date.setdefault(d, {"round": None, "contests": set()})
+        if round_name:
+            entry["round"] = round_name
+        entry["contests"].add(frozenset({school, opponent}))
+
+    regular_dates = sorted(d for d, v in by_date.items() if v["round"] is None)
+    week_by_date = {d: i + 1 for i, d in enumerate(regular_dates)}
+    playoff_dates = sorted(d for d, v in by_date.items() if v["round"] is not None)
+    first_playoff_date = playoff_dates[0] if playoff_dates else None
+
+    entries: list[SeasonDateEntry] = []
+    for d, v in by_date.items():
+        round_name = v["round"]
+        entries.append(
+            SeasonDateEntry(
+                date=d,
+                kind="games",
+                week=week_by_date.get(d) if round_name is None else None,
+                round=round_name.lower().replace(" ", "_") if round_name else None,
+                num_games=len(v["contests"]),
+            )
+        )
+
+    for d in snapshot_dates - set(by_date):
+        week = None
+        if first_playoff_date is None or d < first_playoff_date:
+            prior = [wd for wd in regular_dates if wd <= d]
+            week = week_by_date[prior[-1]] if prior else None
+        entries.append(SeasonDateEntry(date=d, kind="snapshot", week=week))
+
+    entries.sort(key=lambda e: e.date)
+    return entries

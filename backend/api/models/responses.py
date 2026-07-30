@@ -94,6 +94,32 @@ class SeasonStructureResponse(BaseModel):
     classes: list[ClassStructure]
 
 
+class SeasonDateEntry(BaseModel):
+    """One notable date for a season's timeline scrubber.
+
+    ``kind`` is ``"games"`` (at least one game was played) or ``"snapshot"``
+    (a standings/ratings pipeline run with no game that day). A date with
+    both is represented once, as ``"games"``. ``week`` is a 1-indexed,
+    derived regular-season week number; ``null`` for playoff dates and for
+    snapshot dates that fall during/after the playoffs. ``round`` is set
+    only for playoff game dates. ``num_games`` is set only for ``"games"``
+    dates.
+    """
+
+    date: date
+    kind: str  # "games" | "snapshot"
+    week: int | None = None
+    round: str | None = None
+    num_games: int | None = None
+
+
+class SeasonDatesResponse(BaseModel):
+    """The set of notable dates for a season, for a timeline scrubber."""
+
+    season: int
+    dates: list[SeasonDateEntry]
+
+
 class ImageUploadResponse(BaseModel):
     """Result of a Cloudinary image upload."""
 

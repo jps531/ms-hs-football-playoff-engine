@@ -10,10 +10,17 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 |--------|------|-------------|
 | GET | `/seasons` | List all seasons that have enrolled teams |
 | GET | `/seasons/{season}/structure` | All classes and regions with team counts for a season |
+| GET | `/seasons/{season}/dates` | Notable dates for a timeline scrubber: game dates (round, week, game count) and standalone standings/ratings snapshot dates |
 | GET | `/teams` | List teams; `season` required, optional `class` and `region` filters |
 | GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
 | GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
 | GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag` |
+
+**`GET /seasons/{season}/dates`** — response: `{season, dates: [...]}`. Each entry:
+- `date`, `kind` (`"games"` or `"snapshot"`). A date with both a game and a snapshot appears once, as `"games"`.
+- `week` — derived 1-indexed regular-season week number; `null` for playoff dates and for snapshot dates during/after the playoffs.
+- `round` — set only for playoff game dates (`first_round`, `second_round`, `quarterfinals`, `semifinals`, `championship_game`); `null` otherwise.
+- `num_games` — set only for `"games"` dates; deduplicated contest count (not the raw per-school row count).
 
 ## Standings — `/standings`
 
