@@ -6,8 +6,8 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from backend.api.db import get_conn
-from backend.api.models.responses import InsightsResponse
-from backend.helpers.api_helpers import load_insight_feed
+from backend.api.models.responses import InsightsResponse, TravelInsightsResponse
+from backend.helpers.api_helpers import load_insight_feed, load_travel_insights, today
 
 router = APIRouter(prefix="/api/v1", tags=["insights"])
 
@@ -46,3 +46,15 @@ async def get_insights(
     async with get_conn() as conn:
         insights = await load_insight_feed(conn, season, date_from, date_to, clazz, region, team, limit)
     return InsightsResponse(insights=insights)
+
+
+@router.get("/insights/travel")
+async def get_travel_insights(season: SeasonQ, date_to: DateToQ = None) -> TravelInsightsResponse:
+    """Statewide travel highlights, computed live from games + venue data — separate from the
+    region-scoped `/insights` feed above (that feed's snapshot/dedup model doesn't fit a
+    statewide, always-current computation). Returns 0-2 entries: the single longest road trip
+    in the current week, and the school with the farthest cumulative regular-season travel.
+    """
+    async with get_conn() as conn:
+        travel = await load_travel_insights(conn, season, date_to)
+    return TravelInsightsResponse(season=season, as_of_date=date_to or today(), insights=travel)

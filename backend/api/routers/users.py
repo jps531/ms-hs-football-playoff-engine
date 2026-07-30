@@ -13,7 +13,9 @@ from backend.api.models.responses import (
     SubmissionSummary,
     UserAdminRow,
     UserProfileResponse,
+    VenueModel,
 )
+from backend.helpers.api_helpers import load_home_venues, venue_distance_miles
 from backend.helpers.query_helpers import (
     build_set_clause,
     require_game_exists,
@@ -173,22 +175,54 @@ async def unfollow_team(school: str, current_user: CurrentUser) -> None:
 
 @router.get("/me/attended-games")
 async def list_attended_games(current_user: CurrentUser) -> list[AttendedGameModel]:
-    """Return all games the authenticated user has marked as attended."""
+    """Return all games the authenticated user has marked as attended.
+
+    ``distance_miles`` is straight-line from the attended school's own campus (the trip that
+    team made) to the game's venue: an explicit ``locations`` row if one is set, else the
+    attended school's own venue for a home game, else the opponent's venue for an away game
+    (via ``load_home_venues``'s campus fallback) — ``null`` only for an unresolvable neutral-site game.
+    """
     user_id: int = current_user["db_id"]
     async with get_conn() as conn:
         rows = await (
             await conn.execute(
                 """
-                SELECT uag.school, uag.date, g.opponent, g.result
+                SELECT uag.school, uag.date, g.opponent, g.result, g.location,
+                       l.name, l.city, l.latitude, l.longitude
                 FROM user_attended_games uag
                 JOIN games_effective g ON g.school = uag.school AND g.date = uag.date
+                LEFT JOIN locations l ON g.location_id = l.id
                 WHERE uag.user_id = %s
                 ORDER BY uag.date DESC
                 """,
                 (user_id,),
             )
         ).fetchall()
-    return [AttendedGameModel(school=r[0], date=r[1], opponent=r[2], result=r[3]) for r in rows]
+
+        venues = await load_home_venues(conn) if rows else {}
+
+    results = []
+    for school, game_date, opponent, result, location, l_name, l_city, l_lat, l_lon in rows:
+        anchor = venues.get(school)
+        if l_name is not None:
+            venue = VenueModel(name=l_name, city=l_city, latitude=l_lat, longitude=l_lon)
+        elif location == "home":
+            venue = anchor
+        elif location == "away":
+            venue = venues.get(opponent)
+        else:
+            venue = None
+        results.append(
+            AttendedGameModel(
+                school=school,
+                date=game_date,
+                opponent=opponent,
+                result=result,
+                venue=venue,
+                distance_miles=venue_distance_miles(anchor, venue),
+            )
+        )
+    return results
 
 
 @router.put(

@@ -14,10 +14,13 @@ from backend.api.models.responses import (
     HelmetListItemModel,
     LocationDetailModel,
     RegionSummary,
+    RoadmapGame,
+    RoadmapResponse,
     SeasonDatesResponse,
     SeasonModel,
     SeasonStructureResponse,
     TeamModel,
+    VenueModel,
 )
 from backend.helpers.api_helpers import (
     HELMET_DESIGNS_SELECT,
@@ -27,6 +30,9 @@ from backend.helpers.api_helpers import (
     build_helmet_game_worn,
     build_helmet_stats_fields,
     build_season_dates,
+    load_championship_venue,
+    load_home_venues,
+    venue_distance_miles,
 )
 from backend.helpers.image_helpers import logo_url
 from backend.helpers.query_helpers import and_join_conditions
@@ -240,6 +246,77 @@ async def resolve_team_helmet(
         row = await (await conn.execute(query, (team, season))).fetchone()
 
     return build_helmet_from_fields(*row) if row is not None else None
+
+
+@router.get("/teams/{team}/roadmap", responses=_404)
+async def get_team_roadmap(team: str, season: Annotated[int, Query(ge=1980, le=2040)]) -> RoadmapResponse:
+    """Return *team*'s playoff roadmap for *season*: each playoff game with the straight-line
+    distance traveled, plus cumulative and championship-venue mileage.
+
+    Home games always show ``distance_miles: 0`` (no travel). Away/neutral games only get a
+    distance when the game has an explicit venue on record — never guessed. ``championship_distance_miles``
+    is computed from the season/class's known championship venue independent of whether *team*
+    has actually reached (or is scheduled for) the championship game.
+    """
+    async with get_conn() as conn:
+        clazz_row = await (
+            await conn.execute("SELECT class FROM school_seasons WHERE school = %s AND season = %s", (team, season))
+        ).fetchone()
+        if clazz_row is None:
+            raise HTTPException(status_code=404, detail=f"Team '{team}' not found for season {season}")
+        clazz = clazz_row[0]
+
+        venues = await load_home_venues(conn)
+        team_venue = venues.get(team)
+
+        game_rows = await conn.execute(
+            """
+            SELECT g.round, g.date, g.opponent, g.location,
+                   COALESCE(l.name, cvl.name), COALESCE(l.city, cvl.city),
+                   COALESCE(l.latitude, cvl.latitude), COALESCE(l.longitude, cvl.longitude)
+            FROM games_effective g
+            JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+            LEFT JOIN locations l ON g.location_id = l.id
+            LEFT JOIN championship_venues cv
+              ON g.round = 'Championship Game' AND cv.season = g.season AND cv.class = ss.class
+            LEFT JOIN locations cvl ON cvl.id = cv.location_id
+            WHERE g.school = %s AND g.season = %s AND g.round IS NOT NULL
+            ORDER BY g.date
+            """,
+            (team, season),
+        )
+
+        games: list[RoadmapGame] = []
+        total_miles = 0.0
+        async for round_, game_date, opponent, location, v_name, v_city, v_lat, v_lon in game_rows:
+            if location == "home":
+                hop_venue = team_venue
+                distance = 0.0
+            else:
+                hop_venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
+                distance = venue_distance_miles(team_venue, hop_venue)
+            if distance is not None:
+                total_miles += distance
+            games.append(
+                RoadmapGame(
+                    round=round_,
+                    date=game_date,
+                    opponent=opponent,
+                    location=hop_venue,
+                    is_home=location == "home",
+                    distance_miles=distance,
+                )
+            )
+
+        championship_venue = await load_championship_venue(conn, season, clazz)
+
+    return RoadmapResponse(
+        school=team,
+        season=season,
+        games=games,
+        total_miles=total_miles,
+        championship_distance_miles=venue_distance_miles(team_venue, championship_venue),
+    )
 
 
 @router.get("/helmets")

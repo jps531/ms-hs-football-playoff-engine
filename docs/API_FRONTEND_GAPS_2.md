@@ -138,7 +138,20 @@ return `has_games: false` and render as pure almanac entries.
 
 ---
 
-## 8. Travel/distance logic + roadmap + travel insights
+## 8. Travel/distance logic + roadmap + travel insights ✅
+
+**Implementation notes** (deviations from the spec above, decided during
+scoping): `GET /insights/travel` is a separate sibling endpoint rather than
+bundled into the existing `/insights` feed — that feed's region-scoped,
+snapshot-persistence model (`InsightModel.class_`/`region` required,
+dedup-until-resolved semantics) doesn't fit a statewide, always-live
+computation; forcing it in would have meant weakening that model's contract
+for an unrelated feature. Computed live at request time rather than via a
+new Prefect pipeline snapshot table — "regenerate per snapshot date" is
+satisfied by recomputing fresh per request, since travel data has no
+staleness concern. Haversine implemented directly (no new dependency),
+matching this codebase's convention of hand-rolling every other well-known
+formula (Elo, RPI, tiebreakers).
 
 **UI purpose:** three consumers of one distance system: (a) the playoff
 roadmap map view on team pages ("Road to Jackson" polyline with per-hop
@@ -210,7 +223,7 @@ reconcile before frontend work:
 2. §7 (championships read — trivial exposure, unblocks an entire page) ✅
 3. §1 (helmet detail/stats — blocks browser detail page) ✅
 4. §4 + §5 + §6 (submission/moderation helmet loop — ship together) ✅
-5. §8 (roadmap + travel insights — target the playoffs window)
+5. §8 (roadmap + travel insights — target the playoffs window) ✅
 6. §9 (reconciliation — a decision more than a build; do before Rankings
    page implementation) ✅
 7. §10 (hardening — required before public launch, independent of Figma) ✅

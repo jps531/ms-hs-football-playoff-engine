@@ -15,6 +15,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
 | GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
 | GET | `/teams/{team}/helmets/resolved` | The single default helmet design to display for a team in a season — see "Primary helmet & display resolution order" below. Params: `season` (required) |
+| GET | `/teams/{team}/roadmap` | The team's playoff roadmap for a season — see below. Params: `season` (required) |
 | GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag`, `sort` (`created_at` for newest-added first; default order is `school`, `year_first_worn`) |
 | GET | `/helmets/{id}` | Single helmet design with full metadata, images, `stats`, and `games_worn` — see below |
 | GET | `/championships` | Championship venue history (back to 1992) for the almanac page. Optional `season`, `class` filters |
@@ -22,6 +23,8 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 **`GET /helmets` / `GET /helmets/{id}`** — every design (list items and the detail record) carries `created_at` and a `stats` object: `{appearances, games_tracked, wins, losses, ties, games_played}`. `appearances`/`games_tracked` are the same count — games with an explicit `helmet_design_id` assignment for this design (a design that's merely inferred as a team's primary is never counted, per the integrity rule below). `wins`/`losses`/`ties` are counted among those assigned games that have a result. `games_played` is the school's total **final** games across the seasons this design spans (see `helmet_covers_season` below), so the UI can render e.g. "6–1 in 7 tracked games (of 11 played)". `GET /helmets/{id}` additionally returns `games_worn: [{school, date, opponent, points_for, points_against, result, round}]` for every explicitly-assigned game, oldest first. 404 if the id doesn't exist.
 
 **`GET /championships`** — response: `[{season, class_, location: {id, name, city, home_team, latitude, longitude}, has_games}, ...]`, ordered newest season first. `has_games` is `true` once that season/class's Championship Game has been imported into `/games` (so the UI can link through to the game page); pre-import seasons return `has_games: false` and render as pure almanac entries.
+
+**`GET /teams/{team}/roadmap`** — response: `{school, season, games: [{round, date, opponent, location, is_home, distance_miles}], total_miles, championship_distance_miles}`. All distances are straight-line miles, never driving distance. Home games always show `distance_miles: 0` (no travel). Away/neutral games only get a distance when the game has an explicit venue on record (the same `locations`-row-only resolution `GET /games` uses) — otherwise `location`/`distance_miles` are both `null` and the UI should render a dotted skip rather than guess. `total_miles` sums the known hops. `championship_distance_miles` is computed independently from the season/class's known championship venue (see `GET /championships`), so it's populated even before the team has clinched a spot there.
 
 **`GET /seasons/{season}/dates`** — response: `{season, dates: [...]}`. Each entry:
 - `date`, `kind` (`"games"` or `"season_start"` — one entry, one day before the season's first game, always `week: 0`).
@@ -213,6 +216,13 @@ Each game also includes embedded win probability, always from `team_a`'s perspec
 
 Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and `computed_at` (timestamp) for freshness tracking.
 
+## Insights — `/insights`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/insights` | Statewide, deduped, newest-first feed of key playoff-scenario insights (clinch/elimination facts). Params: `season` (required), `date_from`/`date_to`, `class`, `region`, `team`, `limit` (default 50). Read from pre-computed `region_scenarios` snapshots — an empty list is normal for a season with no snapshots yet. |
+| GET | `/insights/travel` | Statewide travel highlights, computed live (not snapshot-based — a deliberately separate model from `/insights` above, since travel is statewide and has no scenario to dedupe against). Params: `season` (required), `date_to`. Returns 0-2 entries: `travel_longest_week` (the single longest road trip in the current Monday-Sunday week) and `travel_longest_season` (farthest cumulative **regular-season** away-game mileage). Each entry has `school`, `opponent`/`date` (both `null` for the season-cumulative kind — no single trip), `distance_miles`, `human_text`. All distances are straight-line, never driving distance. Venue resolution per away game: an explicit `locations` row wins, else the opponent's home venue (campus-coordinate fallback) — a kind is simply omitted if nothing in scope resolves. |
+
 ## Admin — `/admin`
 
 **Season setup**
@@ -302,9 +312,11 @@ Authentication is handled by **Auth0**. Users log in via Auth0 and receive an RS
 | GET | `/me/followed-teams` | Bearer | List followed school names. |
 | PUT | `/me/followed-teams/{school}` | Bearer | Follow a team (idempotent). 404 if school not found. |
 | DELETE | `/me/followed-teams/{school}` | Bearer | Unfollow. |
-| GET | `/me/attended-games` | Bearer | List attended games with opponent and result. |
+| GET | `/me/attended-games` | Bearer | List attended games with opponent, result, `venue`, and `distance_miles`. |
 | PUT | `/me/attended-games/{school}/{date}` | Bearer | Mark a game as attended (idempotent). 404 if game not found. |
 | DELETE | `/me/attended-games/{school}/{date}` | Bearer | Remove attendance record. |
+
+**`GET /me/attended-games`** — `distance_miles` is straight-line from the attended school's own campus to the game's venue (the trip that team made, not the viewing user's location). Venue resolution: an explicit `locations` row wins; else the attended school's own venue for a home game; else the opponent's venue for an away game (campus-coordinate fallback, same as the travel insights above); `null` only for an unresolvable neutral-site game. Home games always show `distance_miles: 0`.
 | GET | `/me/submissions` | Bearer | List own submissions. |
 | GET | `/` | Owner | List all user accounts (admin view). |
 | PATCH | `/{user_id}/role` | Owner | Promote/demote to `user` or `moderator` (cannot set `owner`). |

@@ -1,7 +1,7 @@
 """Pydantic response models for the playoff engine REST API."""
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -164,6 +164,27 @@ class TeamModel(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     zip: str | None = None
+
+
+class RoadmapGame(BaseModel):
+    """One playoff game on a team's roadmap, with the straight-line distance traveled."""
+
+    round: str
+    date: date
+    opponent: str
+    location: VenueModel | None
+    is_home: bool
+    distance_miles: float | None
+
+
+class RoadmapResponse(BaseModel):
+    """A team's playoff roadmap for a season: each game plus cumulative and championship mileage."""
+
+    school: str
+    season: int
+    games: list[RoadmapGame]
+    total_miles: float
+    championship_distance_miles: float | None
 
 
 class YearsWornRange(BaseModel):
@@ -419,6 +440,29 @@ class InsightsResponse(BaseModel):
     """Statewide, deduped, newest-first feed of key insights."""
 
     insights: list[InsightModel]
+
+
+class TravelInsight(BaseModel):
+    """One live-computed statewide travel highlight (longest road trip this week/season).
+
+    ``opponent``/``date`` identify the single trip for ``travel_longest_week``; they're
+    ``null`` for ``travel_longest_season``, which sums many games with no single opponent/date.
+    """
+
+    kind: Literal["travel_longest_week", "travel_longest_season"]
+    school: str
+    opponent: str | None
+    date: date | None
+    distance_miles: float
+    human_text: str
+
+
+class TravelInsightsResponse(BaseModel):
+    """Statewide travel highlights, computed live — separate from the region-scoped /insights feed."""
+
+    season: int
+    as_of_date: date
+    insights: list[TravelInsight]
 
 
 class ScenarioGameOutcome(BaseModel):
@@ -1026,6 +1070,8 @@ class AttendedGameModel(BaseModel):
     date: date
     opponent: str
     result: str | None
+    venue: VenueModel | None
+    distance_miles: float | None
 
 
 class UserAdminRow(BaseModel):

@@ -16,6 +16,7 @@ from backend.api.models.responses import (
     RoundHostingOdds,
     TeamBracketEntry,
     TeamHostingEntry,
+    VenueModel,
 )
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
@@ -50,6 +51,7 @@ from backend.helpers.api_helpers import (
     filter_scenarios_by_simulation,
     filter_to_team_or_404,
     has_displayable_scenarios,
+    haversine_miles,
     parse_completed_games,
     records_from_completed,
     region_volatility,
@@ -64,6 +66,7 @@ from backend.helpers.api_helpers import (
     team_clinched_seed,
     team_status,
     today,
+    venue_distance_miles,
     within_display_threshold,
 )
 from backend.helpers.data_classes import (
@@ -4243,3 +4246,44 @@ class TestBuildTeamPaths:
         paths = build_team_paths("Pearl", _PATHS_ATOMS_3_7A["Pearl"], {}, _PATHS_ODDS_3_7A["Pearl"])
         elim_path = next(p for p in paths if p.outcome.type == "eliminated")
         assert elim_path.human_text.startswith("Pearl is eliminated if ")
+
+
+class TestHaversineMiles:
+    """haversine_miles computes straight-line great-circle distance."""
+
+    def test_same_point_is_zero(self):
+        """Identical coordinates are zero miles apart."""
+        assert haversine_miles(32.2988, -90.1848, 32.2988, -90.1848) == pytest.approx(0.0)
+
+    def test_one_degree_latitude_is_about_69_miles(self):
+        """One degree of latitude at the equator is a well-known ~69.1 mile reference distance."""
+        result = haversine_miles(0.0, 0.0, 1.0, 0.0)
+        assert result == pytest.approx(69.1, rel=0.01)
+
+    def test_symmetric(self):
+        """Distance is the same in either direction."""
+        a_to_b = haversine_miles(32.2988, -90.1848, 32.3643, -88.7037)
+        b_to_a = haversine_miles(32.3643, -88.7037, 32.2988, -90.1848)
+        assert a_to_b == pytest.approx(b_to_a)
+
+
+class TestVenueDistanceMiles:
+    """venue_distance_miles wraps haversine_miles, returning None when either venue is unresolved."""
+
+    def test_both_resolved_returns_distance(self):
+        """Two venues with coordinates produce a real distance."""
+        a = VenueModel(name="A", city=None, latitude=0.0, longitude=0.0)
+        b = VenueModel(name="B", city=None, latitude=1.0, longitude=0.0)
+        assert venue_distance_miles(a, b) == pytest.approx(69.1, rel=0.01)
+
+    def test_none_venue_returns_none(self):
+        """Either side being None (unresolved venue) returns None, not an error."""
+        a = VenueModel(name="A", city=None, latitude=0.0, longitude=0.0)
+        assert venue_distance_miles(a, None) is None
+        assert venue_distance_miles(None, a) is None
+
+    def test_missing_coordinates_returns_none(self):
+        """A venue with a name but no lat/lon (never geocoded) returns None, not a crash."""
+        a = VenueModel(name="A", city=None, latitude=0.0, longitude=0.0)
+        b = VenueModel(name="B", city=None, latitude=None, longitude=None)
+        assert venue_distance_miles(a, b) is None

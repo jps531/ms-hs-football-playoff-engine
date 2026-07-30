@@ -52,6 +52,7 @@ from backend.api.models.responses import (
     TeamHostingEntry,
     TeamRankEntry,
     TeamStandingsEntry,
+    TravelInsight,
     VenueModel,
 )
 from backend.helpers.bracket_home_odds import (
@@ -2019,6 +2020,28 @@ async def load_home_venues(conn) -> dict[str, VenueModel]:  # pragma: no cover
     return {r[0]: VenueModel(name=r[1], city=r[2], latitude=r[3], longitude=r[4]) async for r in rows}
 
 
+_EARTH_RADIUS_MILES = 3958.8
+
+
+def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Straight-line (great-circle) distance in miles between two points.
+
+    Every distance in this product is straight-line, never driving distance — label it as such in the UI.
+    """
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * _EARTH_RADIUS_MILES * math.asin(math.sqrt(a))
+
+
+def venue_distance_miles(a: VenueModel | None, b: VenueModel | None) -> float | None:
+    """Distance between two venues, or None if either is unresolved / missing coordinates."""
+    if a is None or b is None or a.latitude is None or a.longitude is None or b.latitude is None or b.longitude is None:
+        return None
+    return haversine_miles(a.latitude, a.longitude, b.latitude, b.longitude)
+
+
 async def load_active_region_teams(conn, season: int, clazz: int, region: int) -> list[str]:  # pragma: no cover
     """Return active school names for a region/season/class, ordered by school name.
 
@@ -3534,6 +3557,84 @@ def week_window(d: date) -> tuple[date, date]:
     """Return the Monday-Sunday window containing *d* (same bucketing as ``build_season_dates``)."""
     start = d - timedelta(days=d.weekday())
     return start, start + timedelta(days=6)
+
+
+def _resolve_away_venue(
+    opponent: str, l_name: str | None, l_city: str | None, l_lat: float | None, l_lon: float | None, venues: dict
+) -> VenueModel | None:
+    """Resolve an away game's venue: an explicit locations row wins, else the opponent's
+    home venue via ``load_home_venues``'s campus fallback."""
+    if l_name is not None:
+        return VenueModel(name=l_name, city=l_city, latitude=l_lat, longitude=l_lon)
+    return venues.get(opponent)
+
+
+async def load_travel_insights(conn, season: int, date_to: date | None) -> list[TravelInsight]:  # pragma: no cover
+    """Live-computed statewide travel highlights: the single longest road trip this week, and
+    the school with the farthest cumulative regular-season away-game travel so far. Returns
+    0-2 entries — a kind is omitted when no away game in scope has a resolvable distance.
+    """
+    as_of = date_to or today()
+    week_start, week_end = week_window(as_of)
+    venues = await load_home_venues(conn)
+
+    week_rows = await conn.execute(
+        """
+        SELECT g.school, g.opponent, g.date, l.name, l.city, l.latitude, l.longitude
+        FROM games_effective g
+        LEFT JOIN locations l ON g.location_id = l.id
+        WHERE g.season = %s AND g.location = 'away' AND g.date BETWEEN %s AND %s
+        """,
+        (season, week_start, week_end),
+    )
+    best_week: TravelInsight | None = None
+    async for school, opponent, game_date, l_name, l_city, l_lat, l_lon in week_rows:
+        distance = venue_distance_miles(
+            venues.get(school), _resolve_away_venue(opponent, l_name, l_city, l_lat, l_lon, venues)
+        )
+        if distance is not None and (best_week is None or distance > best_week.distance_miles):
+            best_week = TravelInsight(
+                kind="travel_longest_week",
+                school=school,
+                opponent=opponent,
+                date=game_date,
+                distance_miles=distance,
+                human_text=f"Longest road trip this week: {school} traveled ~{distance:.0f} mi to {opponent}",
+            )
+
+    season_rows = await conn.execute(
+        """
+        SELECT g.school, g.opponent, l.name, l.city, l.latitude, l.longitude
+        FROM games_effective g
+        LEFT JOIN locations l ON g.location_id = l.id
+        WHERE g.season = %s AND g.location = 'away' AND g.round IS NULL AND g.date <= %s
+        """,
+        (season, as_of),
+    )
+    season_totals: dict[str, float] = {}
+    async for school, opponent, l_name, l_city, l_lat, l_lon in season_rows:
+        distance = venue_distance_miles(
+            venues.get(school), _resolve_away_venue(opponent, l_name, l_city, l_lat, l_lon, venues)
+        )
+        if distance is not None:
+            season_totals[school] = season_totals.get(school, 0.0) + distance
+
+    best_season: TravelInsight | None = None
+    if season_totals:
+        top_school = max(season_totals, key=lambda s: season_totals[s])
+        best_season = TravelInsight(
+            kind="travel_longest_season",
+            school=top_school,
+            opponent=None,
+            date=None,
+            distance_miles=season_totals[top_school],
+            human_text=(
+                f"Farthest traveled this season: {top_school} has covered "
+                f"~{season_totals[top_school]:.0f} mi on the road"
+            ),
+        )
+
+    return [insight for insight in (best_week, best_season) if insight is not None]
 
 
 def build_movers_response(
