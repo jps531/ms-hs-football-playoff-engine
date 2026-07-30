@@ -186,15 +186,20 @@ reconcile before frontend work:
 
 ---
 
-## 10. Pre-launch hardening (backend, frontend-blocking)
+## 10. Pre-launch hardening (backend, frontend-blocking) ✅
 
 - **Anonymous submission endpoints:** rate limiting (per-IP) and max upload
   size/content-type validation on all `POST /submissions/*` — the public
-  submission UI makes these endpoints discoverable day one.
+  submission UI makes these endpoints discoverable day one. ✅ (already in
+  place — slowapi per-IP limits on every submission route, `validate_upload()`
+  enforces a 10MB/jpeg-png-webp-gif cap on every upload path)
 - **Prefect cookie auth:** extend the nginx `auth_request` verify endpoint
   to accept the web app's session cookie alongside Bearer JWT, so the admin
   dashboard's Prefect link works in a browser and the ModHeader workaround
-  retires. (Pairs with the /admin route group.)
+  retires. (Pairs with the /admin route group.) ✅ (`POST/DELETE
+  /api/v1/auth/session` mints/clears a signed session cookie; nginx forwards
+  it to the verify endpoint alongside `Authorization`; ModHeader still works
+  as a fallback)
 
 ---
 
@@ -208,4 +213,4 @@ reconcile before frontend work:
 5. §8 (roadmap + travel insights — target the playoffs window)
 6. §9 (reconciliation — a decision more than a build; do before Rankings
    page implementation) ✅
-7. §10 (hardening — required before public launch, independent of Figma)
+7. §10 (hardening — required before public launch, independent of Figma) ✅

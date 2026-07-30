@@ -12,7 +12,7 @@ import time
 import urllib.request
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2AuthorizationCodeBearer
 from jose import JWTError, jwt
 
@@ -20,6 +20,11 @@ AUTH0_DOMAIN = os.environ["AUTH0_DOMAIN"]
 AUTH0_AUDIENCE = os.environ["AUTH0_AUDIENCE"]
 _ISSUER = f"https://{AUTH0_DOMAIN}/"
 _ALGORITHMS = ["RS256"]
+
+SESSION_SECRET_KEY = os.environ["SESSION_SECRET_KEY"]
+_SESSION_ALGORITHM = "HS256"
+SESSION_COOKIE_NAME = "session"
+SESSION_COOKIE_MAX_AGE = 60 * 60 * 24  # 24h, matches the Auth0 access token lifetime noted in README.md
 
 _jwks_cache: dict | None = None
 _jwks_fetched_at: float = 0.0
@@ -193,3 +198,51 @@ OptionalUser = Annotated[dict | None, Depends(get_optional_user)]
 def optional_user_id(current_user: dict | None) -> int | None:
     """Return ``current_user["db_id"]``, or ``None`` for an anonymous caller."""
     return current_user["db_id"] if current_user else None
+
+
+# ---------------------------------------------------------------------------
+# Session cookie (first-party alternative to Bearer for browser navigation,
+# e.g. the Prefect UI link — browsers can't attach an Authorization header to
+# a plain navigation/iframe request, but they do send cookies automatically)
+# ---------------------------------------------------------------------------
+
+
+def mint_session_token(db_id: int, role: str) -> str:
+    """Sign a short-lived session token (HS256, app-owned secret) carrying db_id/role."""
+    payload = {"db_id": db_id, "role": role, "exp": int(time.time()) + SESSION_COOKIE_MAX_AGE}
+    return jwt.encode(payload, SESSION_SECRET_KEY, algorithm=_SESSION_ALGORITHM)
+
+
+def _decode_session_token(token: str) -> dict | None:
+    """Verify a session token; return its claims, or None if invalid/expired/tampered."""
+    try:
+        return jwt.decode(token, SESSION_SECRET_KEY, algorithms=[_SESSION_ALGORITHM])
+    except JWTError:
+        return None
+
+
+async def get_moderator_via_cookie_or_bearer(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_optional_bearer)],
+) -> dict:
+    """Authorize via session cookie OR Bearer token — used by the nginx auth_request verify
+    endpoint so both a first-party session cookie and the Bearer/ModHeader workaround work."""
+    session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if session_token:
+        claims = _decode_session_token(session_token)
+        if claims is not None and claims.get("role") in ("moderator", "owner"):
+            return claims
+
+    if credentials is not None:
+        payload = await get_current_user(credentials.credentials)
+        if payload.get("role") in ("moderator", "owner"):
+            return payload
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Moderator access required")
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Moderator authentication required (session cookie or Bearer token)",
+    )
+
+
+ModeratorCookieOrBearerAuth = Annotated[dict, Depends(get_moderator_via_cookie_or_bearer)]

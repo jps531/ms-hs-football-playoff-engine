@@ -62,9 +62,11 @@ This starts nginx (`localhost:80`), Prefect server/worker (internal), and a loca
 
 > **nginx reverse proxy**: All traffic enters through nginx on port 80. The Prefect UI is accessible at `http://localhost/prefect/` but requires a valid moderator `Authorization: Bearer <token>` header.
 
-#### Accessing the Prefect UI (temporary workaround)
+#### Accessing the Prefect UI
 
-Browsers can't set custom headers on navigation requests, so until an admin frontend exists, use the **[ModHeader](https://modheader.com)** browser extension (Chrome/Firefox):
+**Session cookie (recommended)**: in a browser, open Swagger UI (`/docs`), authorize with a moderator/owner account, then use "Try it out" on `POST /api/v1/auth/session` to mint a cookie. Since Swagger UI is served from the same origin as the API, the browser keeps the cookie automatically — navigate to `http://localhost/prefect/` in that same tab and it just works. Cookie lasts 24h; re-run the same request (or `POST` again) to refresh it, or `DELETE /api/v1/auth/session` to log out. This is real cookie auth today, even without an admin frontend yet — a future frontend just needs to call `POST /session` once right after Auth0 login completes.
+
+**ModHeader (fallback)**: browsers can't set custom headers on navigation requests, so the Bearer-token path still needs the **[ModHeader](https://modheader.com)** browser extension (Chrome/Firefox) if you'd rather not use the session cookie:
 
 1. Install ModHeader and add a request header:
    - **Name**: `Authorization`
@@ -74,8 +76,6 @@ Browsers can't set custom headers on navigation requests, so until an admin fron
 3. Navigate to `http://localhost/prefect/`
 
 Auth0 access tokens expire (typically after 24 hours), so you'll need to copy a fresh token from Swagger UI when that happens.
-
-> **Future**: once an admin frontend exists, this will be replaced by cookie-based session auth so the Prefect UI is accessible via a normal link after logging in.
 
 #### Configure Auth0
 

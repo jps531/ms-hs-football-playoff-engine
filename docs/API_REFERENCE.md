@@ -287,7 +287,11 @@ Authentication is handled by **Auth0**. Users log in via Auth0 and receive an RS
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/verify-moderator` | Bearer (moderator+) | Internal endpoint called by nginx `auth_request` to gate the Prefect UI. Returns 200 for moderator/owner, 401/403 otherwise. Not shown in Swagger. |
+| GET | `/verify-moderator` | Bearer or session cookie (moderator+) | Internal endpoint called by nginx `auth_request` to gate the Prefect UI. Returns 200 for moderator/owner via either credential, 401/403 otherwise. Not shown in Swagger. |
+| POST | `/session` | Bearer | Mint a first-party session cookie for the caller (any authenticated user — role is checked at verify time, not mint time). Sets an httponly, `SameSite=Lax` cookie (`secure` outside local dev). Call once after Auth0 login completes; needed for contexts a Bearer header can't reach, e.g. navigating to the Prefect UI link. |
+| DELETE | `/session` | none | Clear the session cookie. Bearer-token access is unaffected. |
+
+**Session cookie**: `SESSION_SECRET_KEY`-signed (HS256, app-owned — separate from Auth0's RS256), 24h expiry, carries `db_id`/`role`. This is additive to the Bearer flow, not a replacement — see `nginx/nginx.conf`'s `/internal/auth/verify-moderator` location, which now forwards both `Authorization` and `Cookie` to the verify endpoint.
 
 ## Users — `/users`
 
