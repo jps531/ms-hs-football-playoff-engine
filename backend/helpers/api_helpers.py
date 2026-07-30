@@ -3188,26 +3188,24 @@ def build_season_dates(
         entry["by_class"][class_].add(round_name)
         entry["contests"].add(frozenset({school, opponent}))
 
-    # Global Monday-Sunday week pool: any date with at least one regular-season
-    # (round is None) row anywhere in the state stays in the pool, so a class
-    # already in the playoffs doesn't drop that calendar week from another
-    # class's numbering (e.g. 5A-7A's last regular-season week).
-    regular_dates = {
-        d for d, v in by_date.items() if any(None in rounds for rounds in v["by_class"].values())
-    }
-    week_starts = sorted({d - timedelta(days=d.weekday()) for d in regular_dates})
+    # Global Monday-Sunday week pool spans every date with a game, regular
+    # season or playoffs, so week numbers count continuously through the
+    # whole season (season_start is a hardcoded week 0 below, not part of
+    # this pool -- it would otherwise land in week 1's Monday-Sunday window).
+    week_starts = sorted({d - timedelta(days=d.weekday()) for d in by_date})
     week_by_start = {ws: i + 1 for i, ws in enumerate(week_starts)}
 
     def week_for(d: date) -> int:
+        """Look up the dense-ranked week number for the Monday-anchored week containing *d*."""
         return week_by_start[d - timedelta(days=d.weekday())]
 
     entries: list[SeasonDateEntry] = []
     for d, v in by_date.items():
         num_games = len(v["contests"])
         all_rounds = {r for rounds in v["by_class"].values() for r in rounds}
+        week = week_for(d)
 
         if all_rounds == {None}:
-            week = week_for(d)
             entries.append(
                 SeasonDateEntry(
                     date=d, kind="games", week=week, round=None,
@@ -3219,19 +3217,19 @@ def build_season_dates(
             (only_round,) = all_rounds
             entries.append(
                 SeasonDateEntry(
-                    date=d, kind="games", week=None, round=only_round.lower().replace(" ", "_"),
+                    date=d, kind="games", week=week, round=only_round.lower().replace(" ", "_"),
                     num_games=num_games, description=only_round,
                 )
             )
             continue
 
-        # Ambiguous: classes disagree on round/week for this date. No machine
-        # round/week, but compose a human description from each per-class group.
+        # Ambiguous: classes disagree on round for this date. No machine
+        # round, but compose a human description from each per-class group.
         labels_by_class: dict[str, list[int]] = defaultdict(list)
         for class_, rounds in v["by_class"].items():
             if len(rounds) == 1:
                 (only_round,) = rounds
-                label = f"Week {week_for(d)}" if only_round is None else only_round
+                label = f"Week {week}" if only_round is None else only_round
             else:
                 label = "Unresolved"
             labels_by_class[label].append(class_)
@@ -3241,14 +3239,16 @@ def build_season_dates(
         )
         entries.append(
             SeasonDateEntry(
-                date=d, kind="games", week=None, round=None,
+                date=d, kind="games", week=week, round=None,
                 num_games=num_games, description=description,
             )
         )
 
     if by_date:
         season_start = min(by_date) - timedelta(days=1)
-        entries.append(SeasonDateEntry(date=season_start, kind="season_start", description="Season Start"))
+        entries.append(
+            SeasonDateEntry(date=season_start, kind="season_start", week=0, description="Season Start")
+        )
 
     entries.sort(key=lambda e: e.date)
     return entries

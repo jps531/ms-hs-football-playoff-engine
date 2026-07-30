@@ -98,20 +98,25 @@ class SeasonDateEntry(BaseModel):
     """One notable date for a season's timeline scrubber.
 
     ``kind`` is ``"games"`` (at least one game was played) or
-    ``"season_start"`` (one day before the season's first game). ``week`` is
-    a 1-indexed, derived regular-season week number (Monday-Sunday); ``null``
-    for playoff dates. ``round`` is set only for playoff game dates.
-    ``num_games`` is set only for ``"games"`` dates (deduplicated contest
-    count, statewide unless the optional ``class`` param scopes the request).
+    ``"season_start"`` (one day before the season's first game, always
+    ``week: 0``). ``week`` is a derived, 1-indexed, Monday-Sunday-bucketed
+    week number that counts continuously through the whole season —
+    regular season *and* playoffs — so it's always populated for
+    ``"games"`` dates; it is **not** a signal for "is this a playoff date"
+    (use ``round is not None`` for that). ``round`` is set only for
+    unambiguous playoff game dates. ``num_games`` is set only for
+    ``"games"`` dates (deduplicated contest count, statewide unless the
+    optional ``class`` param scopes the request).
 
     1A-4A and 5A-7A run offset playoff schedules, so a single date can be a
-    playoff date for one group of classes and still regular season for
-    another. When that happens (and no ``class`` param was given to resolve
-    it), ``round``/``week`` are both ``null`` for that date rather than
-    guessing — but ``description`` still gives a human label, e.g.
-    ``"Week 22 (5A-7A) / First Round (1A-4A)"``. On an unambiguous date,
-    ``description`` is just the single label (``"Week 13"``,
-    ``"First Round"``). Scoped to one ``class``, every date is unambiguous.
+    playoff date for one group of classes and still regular season (or a
+    different round) for another. When that happens (and no ``class`` param
+    was given to resolve it), ``round`` is ``null`` for that date rather
+    than guessing — ``week`` is still populated — but ``description`` still
+    gives a human label, e.g. ``"Week 11 (5A-7A) / First Round (1A-4A)"``.
+    On an unambiguous date, ``description`` is just the single label
+    (``"Week 13"``, ``"First Round"``). Scoped to one ``class``, every date
+    is unambiguous.
     """
 
     date: date
