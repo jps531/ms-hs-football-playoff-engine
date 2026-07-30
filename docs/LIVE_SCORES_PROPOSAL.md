@@ -206,7 +206,7 @@ Add as extra entries in `aliases` array.
 | M. S. Palmer | "Palmer", "MS Palmer" | |
 | Tupelo Christian | "TC", "Tupelo Christian Prep" | |
 | North Pontotoc | "North Pont" | |
-| Desoto Central | "DeSoto", "DeSoto Central" | |
+| DeSoto Central | "DeSoto" | |
 
 ### Frequently Misspelled
 Add misspellings as extra entries in `extra_aliases` array.

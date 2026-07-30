@@ -228,7 +228,7 @@ def to_normal_case(s: str) -> str:
 
     Applies Python's str.title() then fixes common patterns: ``Mc``-prefixed
     surnames, possessive ``'s`` capitalization, ``D'Iber`` for D'Iberville,
-    and bare ``St`` -> ``St.``.
+    bare ``St`` -> ``St.``, and ``Desoto`` -> ``DeSoto`` for DeSoto Central.
 
     Args:
         s: Raw string to normalize.
@@ -243,6 +243,7 @@ def to_normal_case(s: str) -> str:
     t = re.sub(r"(['’])S\b", r"\1s", t)
     t = re.sub(r"\bDiber", "D'Iber", t)
     t = re.sub(r"\bSt\b(?!\.)", "St.", t)
+    t = re.sub(r"\bDesoto\b", "DeSoto", t)
     return t
 
 

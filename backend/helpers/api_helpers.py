@@ -33,6 +33,8 @@ from backend.api.models.responses import (
     InsightModel,
     KeyInsightConditionModel,
     KeyInsightModel,
+    MoverModel,
+    MoversResponse,
     PathConditionModel,
     PathOutcomeModel,
     RecordModel,
@@ -3267,3 +3269,35 @@ def build_season_dates(
 
     entries.sort(key=lambda e: e.date)
     return entries
+
+
+# ---------------------------------------------------------------------------
+# Upsets (GET /games/upsets) and Movers (GET /ratings/movers)
+# ---------------------------------------------------------------------------
+
+
+def week_window(d: date) -> tuple[date, date]:
+    """Return the Monday-Sunday window containing *d* (same bucketing as ``build_season_dates``)."""
+    start = d - timedelta(days=d.weekday())
+    return start, start + timedelta(days=6)
+
+
+def build_movers_response(
+    rows: list[tuple[str, int, int, float, float]], limit: int
+) -> MoversResponse:
+    """Split before/after Elo snapshot rows into risers/fallers sorted by |delta|.
+
+    *rows* are ``(school, class_, region, elo_before, elo_after)`` tuples, one
+    per school present in both snapshots (teams present in only one snapshot
+    should already be excluded by the caller's query).
+    """
+    movers = [
+        MoverModel(
+            school=school, class_=class_, region=region,
+            elo_before=elo_before, elo_after=elo_after, delta=elo_after - elo_before,
+        )
+        for school, class_, region, elo_before, elo_after in rows
+    ]
+    risers = sorted((m for m in movers if m.delta > 0), key=lambda m: m.delta, reverse=True)[:limit]
+    fallers = sorted((m for m in movers if m.delta < 0), key=lambda m: m.delta)[:limit]
+    return MoversResponse(risers=risers, fallers=fallers)

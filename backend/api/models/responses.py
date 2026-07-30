@@ -115,8 +115,12 @@ class SeasonDateEntry(BaseModel):
     than guessing — ``week`` is still populated — but ``description`` still
     gives a human label, e.g. ``"Week 11 (5A-7A) / First Round (1A-4A)"``.
     On an unambiguous date, ``description`` is just the single label
-    (``"Week 13"``, ``"First Round"``). Scoped to one ``class``, every date
-    is unambiguous.
+    (``"Week 13"``, ``"First Round"``) — except the championship, where an
+    unscoped ``description`` reads ``"Championship Games"`` (plural; a
+    statewide date usually covers several classes' separate games) while
+    scoped to one ``class`` it stays ``"Championship Game"`` (singular).
+    ``round`` is ``"championship_game"`` either way. Scoped to one
+    ``class``, every date is unambiguous.
     """
 
     date: date
@@ -712,6 +716,26 @@ class PreGameWinProbResponse(BaseModel):
     p_team_a: float
 
 
+class UpsetModel(BaseModel):
+    """A finished game the model rated as an upset for the winner."""
+
+    school: str
+    opponent: str
+    date: date
+    points_for: int
+    points_against: int
+    pregame_prob: float
+    class_: int
+    region: int
+    region_game: bool
+
+
+class UpsetsResponse(BaseModel):
+    """Finished games sorted by the winner's pregame win probability, ascending."""
+
+    upsets: list[UpsetModel]
+
+
 class LiveWinProbResponse(BaseModel):
     """In-game win probability (regulation)."""
 
@@ -739,6 +763,24 @@ class TeamRatingModel(BaseModel):
     as_of_date: date
     games_played: int
     computed_at: datetime
+
+
+class MoverModel(BaseModel):
+    """A team's Elo change between two rating snapshots."""
+
+    school: str
+    class_: int
+    region: int
+    elo_before: float
+    elo_after: float
+    delta: float
+
+
+class MoversResponse(BaseModel):
+    """Biggest Elo risers/fallers between two rating snapshots."""
+
+    risers: list[MoverModel]
+    fallers: list[MoverModel]
 
 
 class EloSnapshot(BaseModel):

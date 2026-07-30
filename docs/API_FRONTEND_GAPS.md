@@ -21,7 +21,7 @@ has also shipped; see its use below and in `API_REFERENCE.md`.)
 
 ---
 
-## 1. `GET /bracket/slots/{slot}` — playoff slot probabilities
+## 1. `GET /bracket/slots/{slot}` — playoff slot probabilities ✅
 
 **UI purpose:** the playoff game page for a future/TBD matchup: every team
 still alive for that slot, ordered by chance of reaching it, each with a
@@ -129,7 +129,7 @@ estimating or building; don't bundle it into §2's scope.
 
 ---
 
-## 4. `GET /seasons/{season}/dates` — timeline scrubber data
+## 4. `GET /seasons/{season}/dates` — timeline scrubber data ✅
 
 **UI purpose:** a global timeline scrubber (app shell chrome) needs the set of
 valid dates to snap to, without downloading full schedules.
@@ -154,7 +154,7 @@ valid dates to snap to, without downloading full schedules.
 
 ---
 
-## 5. `GET /games/upsets` + `GET /ratings/movers`
+## 5. `GET /games/upsets` + `GET /ratings/movers` ✅
 
 **UI purpose:** two home-page modules.
 - **Upset ledger:** finished games where the winner had a low pregame
@@ -185,11 +185,11 @@ probabilities (already shipped; see `API_REFERENCE.md`).
 
 ## Priority order for implementation
 
-1. §1 (playoff game pages + naming contract — ship the three probabilities
+1. §1 (playoff game pages + naming contract — ship the three probabilities ✅
    first, `reach_conditions`/`host_conditions` as `null`)
-2. §4 (small; timeline completeness)
+2. §4 (small; timeline completeness) ✅
 3. §5 (home page modules; depends on already-shipped `/games/probability`
-   dated pregame probabilities)
+   dated pregame probabilities) ✅
 4. §2 (`host_conditions` follow-up, once §1 ships)
 5. §3 (`reach_conditions` — separate, undesigned effort; scope before
    estimating)

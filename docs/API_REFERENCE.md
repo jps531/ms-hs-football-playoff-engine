@@ -21,7 +21,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 - `week` — derived 1-indexed week number (Monday-Sunday buckets, so e.g. Thursday/Friday/Saturday games in the same MHSAA week share one number), counting continuously through the whole season **including the playoffs**. Always populated for `"games"` dates — it is not a signal for "is this a playoff date"; use `round is not null` for that instead.
 - `round` — set only for unambiguous playoff game dates (`first_round`, `second_round`, `quarterfinals`, `semifinals`, `championship_game`); `null` for regular-season dates and for dates where classes disagree (see `description` below).
 - `num_games` — set only for `"games"` dates; deduplicated contest count (not the raw per-school row count), statewide unless scoped by `class`.
-- `description` — always populated for `"games"` dates. 1A-4A and 5A-7A run offset playoff schedules, so a single date can be a playoff date for one group of classes and still regular season (or a different round) for another (e.g. late in the regular season, 1A-4A may already be in the First Round while 5A-7A has one more regular-season week). Pass `class` to resolve `round` unambiguously for one classification (`week` is always unambiguous); unscoped, a disagreeing date leaves `round` `null` but `description` still composes a human label per group, e.g. `"Week 11 (5A-7A) / First Round (1A-4A)"`. On an unambiguous date, `description` is just the single label (e.g. `"Week 13"`, `"First Round"`).
+- `description` — always populated for `"games"` dates. 1A-4A and 5A-7A run offset playoff schedules, so a single date can be a playoff date for one group of classes and still regular season (or a different round) for another (e.g. late in the regular season, 1A-4A may already be in the First Round while 5A-7A has one more regular-season week). Pass `class` to resolve `round` unambiguously for one classification (`week` is always unambiguous); unscoped, a disagreeing date leaves `round` `null` but `description` still composes a human label per group, e.g. `"Week 11 (5A-7A) / First Round (1A-4A)"`. On an unambiguous date, `description` is just the single label (e.g. `"Week 13"`, `"First Round"`) — except the championship, where an unscoped `description` reads `"Championship Games"` (plural, since a statewide date usually covers several classes' separate games) while `class`-scoped stays `"Championship Game"` (singular). `round` is unaffected either way (`"championship_game"`).
 
 ## Standings — `/standings`
 
@@ -177,6 +177,7 @@ A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Co
 | GET | `/probability` | Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location`, `date` (optional — pins both teams' Elo ratings to the most recent snapshot on or before this date; defaults to the latest available) |
 | POST | `/probability/live` | In-game win probability. Body: `pregame_prob`, `current_margin`, `seconds_remaining` |
 | POST | `/probability/overtime` | MSHAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
+| GET | `/upsets` | Finished games sorted by the winner's pregame win probability, ascending (biggest upsets first). Params: `season` (required), `date_from`/`date_to` (optional, independent bounds — without either, defaults to the week containing the most recent final game so newly-finalized upsets appear immediately), `limit` (default 10) |
 
 Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinals"` — `null` for regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
 
@@ -193,6 +194,7 @@ Each game also includes embedded win probability, always from `team_a`'s perspec
 |--------|------|-------------|
 | GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending. Without `date`: all stored snapshots for the season (one row per school per pipeline run). With `date`: one row per school — the most recent snapshot on or before that date. |
 | GET | `/{team}/trend` | Elo time-series for one team. Optional `date_from` / `date_to` |
+| GET | `/movers` | Biggest Elo risers/fallers between two rating snapshots. Params: `season` (required), `date_from`/`date_to` (optional — both given: used as the before/after snapshot targets directly; only `date_to`: paired with the snapshot immediately before it; only `date_from`: paired with the latest snapshot overall; neither: the two most recent snapshot dates for the season), `limit` (default 10, applied per direction). Teams present in only one snapshot are excluded. Returns `{"risers": [...], "fallers": [...]}`, each entry with `school`, `class_`, `region`, `elo_before`, `elo_after`, `delta` |
 
 Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and `computed_at` (timestamp) for freshness tracking.
 

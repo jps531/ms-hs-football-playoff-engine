@@ -86,6 +86,12 @@ def test_to_normal_case_st_already_dotted_unchanged() -> None:
     assert "St.." not in result
 
 
+def test_to_normal_case_desoto_central() -> None:
+    """to_normal_case capitalizes the internal S in DeSoto Central."""
+    assert to_normal_case("DESOTO CENTRAL") == "DeSoto Central"
+    assert to_normal_case("desoto central") == "DeSoto Central"
+
+
 # ---------------------------------------------------------------------------
 # _norm
 # ---------------------------------------------------------------------------

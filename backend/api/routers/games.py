@@ -13,8 +13,10 @@ from backend.api.models.responses import (
     LiveWinProbResponse,
     OTWinProbResponse,
     PreGameWinProbResponse,
+    UpsetModel,
+    UpsetsResponse,
 )
-from backend.helpers.api_helpers import build_game_models
+from backend.helpers.api_helpers import build_game_models, week_window
 from backend.helpers.query_helpers import and_join_conditions
 from backend.helpers.win_probability import (
     EloConfig,
@@ -173,6 +175,69 @@ async def pregame_win_probability(
         hfa_adjustment=hfa,
         p_team_a=p,
     )
+
+
+@router.get("/games/upsets")
+async def games_upsets(
+    season: SeasonQ,
+    date_from: Annotated[date | None, Query()] = None,
+    date_to: Annotated[date | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> UpsetsResponse:
+    """Return finished games sorted by the winner's pregame win probability, ascending.
+
+    ``date_from``/``date_to`` are independent optional bounds. Without either,
+    defaults to the week containing the most recent final game -- so newly
+    finalized games appear immediately rather than waiting for the rest of
+    the week to finish.
+    """
+    async with get_conn() as conn:
+        if date_from is None and date_to is None:
+            max_final = await (
+                await conn.execute(
+                    "SELECT MAX(date) FROM games_effective WHERE season = %s AND final = TRUE",
+                    (season,),
+                )
+            ).fetchone()
+            if max_final is None or max_final[0] is None:
+                return UpsetsResponse(upsets=[])
+            date_from, date_to = week_window(max_final[0])
+
+        conditions: list[LiteralString] = [
+            "g.season = %s",
+            "g.final = TRUE",
+            "g.points_for > g.points_against",
+            "g.pregame_prob IS NOT NULL",
+        ]
+        params: list = [season]
+        if date_from is not None:
+            conditions.append("g.date >= %s")
+            params.append(date_from)
+        if date_to is not None:
+            conditions.append("g.date <= %s")
+            params.append(date_to)
+        params.append(limit)
+
+        where_clause = and_join_conditions(conditions)
+        query = sql.SQL("""
+            SELECT g.school, g.opponent, g.date, g.points_for, g.points_against,
+                   g.pregame_prob, ss.class, ss.region, g.region_game
+            FROM games_effective g
+            JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+            WHERE {}
+            ORDER BY g.pregame_prob ASC
+            LIMIT %s
+        """).format(where_clause)
+        rows = await conn.execute(query, params)
+        upsets = [
+            UpsetModel(
+                school=school, opponent=opponent, date=game_date,
+                points_for=pf, points_against=pa, pregame_prob=prob,
+                class_=class_, region=region, region_game=region_game,
+            )
+            async for school, opponent, game_date, pf, pa, prob, class_, region, region_game in rows
+        ]
+    return UpsetsResponse(upsets=upsets)
 
 
 @router.post("/games/probability/live")

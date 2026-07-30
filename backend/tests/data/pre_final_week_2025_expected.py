@@ -2803,18 +2803,18 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
         },
     },
     # Region 1-7A  (3 remaining games, denom=8)
-    # Teams (alphabetical): Desoto Central, Hernando, Horn Lake, Lewisburg, Southaven, Tupelo
+    # Teams (alphabetical): DeSoto Central, Hernando, Horn Lake, Lewisburg, Southaven, Tupelo
     # Cutoff: 2025-10-31
-    # Actual seeds: Tupelo / Horn Lake / Desoto Central / Hernando
+    # Actual seeds: Tupelo / Horn Lake / DeSoto Central / Hernando
     (7, 1): {
         "denom": 8,
-        "first_counts": Counter({"Tupelo": 4, "Desoto Central": 4}),
-        "second_counts": Counter({"Tupelo": 4, "Desoto Central": 2, "Horn Lake": 2}),
-        "third_counts": Counter({"Horn Lake": 3, "Hernando": 3, "Desoto Central": 2}),
+        "first_counts": Counter({"Tupelo": 4, "DeSoto Central": 4}),
+        "second_counts": Counter({"Tupelo": 4, "DeSoto Central": 2, "Horn Lake": 2}),
+        "third_counts": Counter({"Horn Lake": 3, "Hernando": 3, "DeSoto Central": 2}),
         "fourth_counts": Counter({"Southaven": 4, "Horn Lake": 3, "Hernando": 1}),
         "odds": {
-            "Desoto Central": StandingsOdds(
-                school="Desoto Central",
+            "DeSoto Central": StandingsOdds(
+                school="DeSoto Central",
                 p1=0.5,
                 p2=0.25,
                 p3=0.25,
