@@ -254,15 +254,21 @@ class PathConditionModel(BaseModel):
     a single school/opponent; ``"coin_flip"`` and ``"pd_rank"`` cover
     tiebreaker-only conditions with no associated remaining game (``description``
     carries the fallback text since there's nothing to map to a schedule row).
-    ``"bracket_advances"``/``"seed_required"`` mirror ``HomeGameCondition``
-    (used for bracket-slot ``host_conditions``): ``school`` carries the team
-    name (``HomeGameCondition.team_name``), ``region``/``seed`` identify the
-    bracket position the condition is about, ``round_name`` is set only for
-    ``"bracket_advances"``, and ``description`` carries a rendered sentence
-    (e.g. "Taylorsville advances to Quarterfinals").
+    ``"bracket_advances"``/``"seed_required"``/``"bracket_win"`` mirror
+    ``HomeGameCondition`` (used for bracket-slot ``host_conditions`` and
+    ``reach_conditions``): ``school`` carries the team name
+    (``HomeGameCondition.team_name``), ``region``/``seed`` identify the
+    bracket position the condition is about, ``round_name`` is set for
+    ``"bracket_advances"``/``"bracket_win"``, and ``description`` carries a
+    rendered sentence (e.g. "Taylorsville advances to Quarterfinals" for
+    ``bracket_advances``, used in ``host_conditions``; "Beats Richton in the
+    First Round" for ``bracket_win``, used in ``reach_conditions`` — the
+    conditions under which a team *reaches* a round at all, as opposed to
+    ``host_conditions``' "conditions under which they'd host, given they
+    reached").
     """
 
-    type: str = "game_result"  # "game_result" | "margin_sum" | "coin_flip" | "pd_rank" | "bracket_advances" | "seed_required"
+    type: str = "game_result"  # "game_result" | "margin_sum" | "coin_flip" | "pd_rank" | "bracket_advances" | "seed_required" | "bracket_win"
     school: str | None = None
     date: _Date | None = None
     opponent: str | None = None
@@ -271,10 +277,10 @@ class PathConditionModel(BaseModel):
     games: list[PathGameRefModel] | None = None  # populated for "margin_sum"
     op: str | None = None  # populated for "margin_sum"
     threshold: int | None = None  # populated for "margin_sum"
-    description: str | None = None  # human-readable fallback for coin_flip / pd_rank / bracket_advances / seed_required
-    region: int | None = None  # populated for "bracket_advances" / "seed_required"
-    seed: int | None = None  # populated for "bracket_advances" / "seed_required"
-    round_name: str | None = None  # populated for "bracket_advances" only
+    description: str | None = None  # human-readable fallback for coin_flip / pd_rank / bracket_advances / seed_required / bracket_win
+    region: int | None = None  # populated for "bracket_advances" / "seed_required" / "bracket_win"
+    seed: int | None = None  # populated for "bracket_advances" / "seed_required" / "bracket_win"
+    round_name: str | None = None  # populated for "bracket_advances" / "bracket_win"
 
 
 class PathOutcomeModel(BaseModel):
@@ -568,13 +574,16 @@ class SlotOutlookTeam(BaseModel):
     ``p_host_overall`` is always ``p_reach * p_host_given_reach``, computed
     server-side for consistency. ``*_weighted`` fields use Elo-based win
     probabilities; ``null`` when no Elo ratings exist for the season.
-    ``host_conditions`` is ``null`` unless the request passed
-    ``include_conditions=true``; when present it's the OR-of-AND-groups of
-    conditions under which this team would host, given it reaches the round
-    (an empty list means "computed, but this team never hosts"). Each group
-    is a list of ``PathConditionModel``. ``reach_conditions`` is always
-    ``null`` for now — structured condition derivation for it is a separate,
-    undesigned follow-up (see docs/API_FRONTEND_GAPS.md §3).
+    ``host_conditions``/``reach_conditions`` are ``null`` unless the request
+    passed ``include_conditions=true``. ``host_conditions`` is the
+    OR-of-AND-groups of conditions under which this team would host, given
+    it reaches the round (an empty list means "computed, but this team
+    never hosts"). ``reach_conditions`` is the OR-of-AND-groups of
+    conditions under which this team reaches the round *at all* — i.e. wins
+    every round strictly before it (an unconditional, already-guaranteed
+    reach — e.g. ``first_round``, which requires no prior win — is
+    represented as a single empty AND-group, ``[[]]``). Each group is a list
+    of ``PathConditionModel``.
     """
 
     school: str

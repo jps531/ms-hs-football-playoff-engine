@@ -971,22 +971,29 @@ class StoredHostingOdds:
 
 @dataclass(frozen=True)
 class HomeGameCondition:
-    """A single condition within a playoff home-game scenario.
+    """A single condition within a playoff home-game or reach scenario.
 
-    Represents either a requirement that a specific team advances to a given
-    round ("advances") or that the target team achieves a specific seed before
-    the bracket is set ("seed_required").
+    Represents a requirement that a specific team advances to a given round
+    ("advances"), that the target team achieves a specific seed before the
+    bracket is set ("seed_required"), or that the target team must defeat a
+    specific bracket-position opponent to progress ("wins_round" — used for
+    ``reach_conditions``, distinct from "advances" which states a fact about
+    an *other* team's progress relevant to a hosting tiebreak).
 
     Attributes:
         kind:       ``"advances"`` — the named team must win through to
-                    ``round_name``; or ``"seed_required"`` — the target team
+                    ``round_name``; ``"seed_required"`` — the target team
                     must have finished with the given seed (used when the
-                    playoff bracket is not yet set).
-        round_name: The round being advanced to (e.g. ``"Quarterfinals"``).
-                    ``None`` for ``kind="seed_required"``.
-        region:     The team's region number.  ``None`` means the condition
-                    refers to the target team itself (whose region is already
-                    known from context).
+                    playoff bracket is not yet set); or ``"wins_round"`` —
+                    the target team must beat the named opponent in
+                    ``round_name`` to progress.
+        round_name: The round being advanced to/played in (e.g.
+                    ``"Quarterfinals"``). ``None`` for ``kind="seed_required"``.
+        region:     The opponent's region number. ``None`` means the
+                    condition refers to the target team itself (whose region
+                    is already known from context) — only possible for
+                    ``kind="advances"``; ``"wins_round"`` always names an
+                    opponent, so ``region`` is never ``None`` for it.
         seed:       The team's region seed (1 = best).
         team_name:  Resolved school name when known; ``None`` means the
                     renderer should display ``"Region {region} #{seed} Seed"``.

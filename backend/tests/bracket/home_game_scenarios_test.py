@@ -60,6 +60,8 @@ from backend.helpers.data_classes import (
 from backend.helpers.home_game_scenarios import (
     _explain_r2,
     enumerate_home_game_scenarios,
+    enumerate_reach_scenarios,
+    enumerate_reach_scenarios_for_team,
     enumerate_team_matchups,
 )
 from backend.helpers.scenario_renderer import (
@@ -1773,3 +1775,135 @@ class TestNoContradictoryQFConditions:
             for seed in range(1, 5):
                 result = enumerate_home_game_scenarios(region, seed, SLOTS_1A_4A_2025, 2024)
                 _assert_no_contradictions(result, f"1A-4A Region {region} #{seed} (2024)")
+
+
+# ---------------------------------------------------------------------------
+# 14. enumerate_reach_scenarios / enumerate_reach_scenarios_for_team
+#     (reach_conditions -- API_FRONTEND_GAPS.md §3)
+# ---------------------------------------------------------------------------
+
+
+class TestEnumerateReachScenarios:
+    """Coverage for the OR-of-AND win requirements to reach a given round."""
+
+    def test_first_round_is_unconditional(self):
+        """Reaching your own First Round game needs nothing -- a single empty AND-group."""
+        assert enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "First Round") == [[]]
+
+    def test_second_round_single_group_fixed_opponent(self):
+        """Second Round only needs an R1 win; the R1 opponent is always fixed (no branching)."""
+        groups = enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "Second Round")
+        assert len(groups) == 1
+        (group,) = groups
+        assert len(group) == 1
+        assert group[0].kind == "wins_round"
+        assert group[0].round_name == "First Round"
+
+    def test_quarterfinals_two_groups_1a_4a(self):
+        """Quarterfinals needs R1 (fixed) x R2 (2 candidates) = 2 groups for a 1A-4A team."""
+        groups = enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "Quarterfinals")
+        assert len(groups) == 2
+        for group in groups:
+            assert [c.round_name for c in group] == ["First Round", "Second Round"]
+
+    def test_quarterfinals_one_group_5a_7a(self):
+        """5A-7A has no Second Round, so Quarterfinals only needs the fixed R1 win."""
+        groups = enumerate_reach_scenarios(1, 2, SLOTS_5A_7A_2025, "Quarterfinals")
+        assert len(groups) == 1
+        assert [c.round_name for c in groups[0]] == ["First Round"]
+
+    def test_semifinals_eight_groups_1a_4a(self):
+        """Semifinals needs R1 (fixed) x R2 (2) x QF (4) = 8 groups for a 1A-4A team."""
+        groups = enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "Semifinals")
+        assert len(groups) == 8
+        for group in groups:
+            assert [c.round_name for c in group] == ["First Round", "Second Round", "Quarterfinals"]
+
+    def test_semifinals_two_groups_5a_7a(self):
+        """5A-7A Semifinals needs R1 (fixed) x QF (2 candidates) = 2 groups."""
+        groups = enumerate_reach_scenarios(1, 2, SLOTS_5A_7A_2025, "Semifinals")
+        assert len(groups) == 2
+        for group in groups:
+            assert [c.round_name for c in group] == ["First Round", "Quarterfinals"]
+
+    def test_semifinals_four_unique_qf_candidates(self):
+        """The QF candidate pool itself has 4 unique (region, seed) pairs (not duplicated within
+        the pool before cross-producting) -- each legitimately appears in 2 of the 8 groups,
+        once per Second Round candidate it's paired with."""
+        groups = enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "Semifinals")
+        qf_candidates = [(c.region, c.seed) for group in groups for c in group if c.round_name == "Quarterfinals"]
+        assert len(set(qf_candidates)) == 4
+        assert len(qf_candidates) == 8
+
+    def test_all_conditions_are_wins_round_kind(self):
+        """Every condition produced is kind='wins_round' with a non-None opponent region/seed."""
+        groups = enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "Semifinals")
+        for group in groups:
+            for cond in group:
+                assert cond.kind == "wins_round"
+                assert cond.region is not None
+                assert cond.seed is not None
+
+    def test_team_lookup_resolves_names(self):
+        """A known (region, seed) resolves to its school name via team_lookup."""
+        lookup = _team_lookup_for_class(1)
+        groups = enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "Second Round", team_lookup=lookup)
+        (group,) = groups
+        assert group[0].region == 6 and group[0].seed == 3
+        assert group[0].team_name == "Shaw"
+
+    def test_team_lookup_omitted_leaves_team_name_none(self):
+        """Without team_lookup, team_name stays unresolved (None) at construction time."""
+        groups = enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "Second Round")
+        (group,) = groups
+        assert group[0].team_name is None
+
+    def test_unknown_region_seed_raises(self):
+        """An unknown (region, seed) pair raises ValueError."""
+        with pytest.raises(ValueError, match="not found"):
+            enumerate_reach_scenarios(99, 1, SLOTS_1A_4A_2025, "Quarterfinals")
+
+
+class TestEnumerateReachScenariosForTeam:
+    """Coverage for the pre-clinch wrapper around enumerate_reach_scenarios."""
+
+    def test_clinched_seed_matches_plain_enumeration(self):
+        """A concrete seed produces the exact same output as enumerate_reach_scenarios."""
+        direct = enumerate_reach_scenarios(5, 2, SLOTS_1A_4A_2025, "Quarterfinals")
+        via_wrapper = enumerate_reach_scenarios_for_team(5, 2, SLOTS_1A_4A_2025, "Quarterfinals")
+        assert direct == via_wrapper
+
+    def test_preclinch_prepends_seed_required_per_achievable_seed(self):
+        """Each achievable seed's groups get a seed_required condition prepended."""
+        groups = enumerate_reach_scenarios_for_team(
+            5, None, SLOTS_1A_4A_2025, "Quarterfinals", achievable_seeds=[1, 2],
+        )
+        # 2 achievable seeds x 2 QF groups per seed = 4 total.
+        assert len(groups) == 4
+        for group in groups:
+            assert group[0].kind == "seed_required"
+            assert group[0].seed in (1, 2)
+            assert all(c.kind == "wins_round" for c in group[1:])
+
+    def test_preclinch_merges_across_achievable_seeds(self):
+        """Groups from every achievable seed appear in the merged result."""
+        groups = enumerate_reach_scenarios_for_team(
+            5, None, SLOTS_1A_4A_2025, "Second Round", achievable_seeds=[1, 2, 3],
+        )
+        seeds_seen = {group[0].seed for group in groups}
+        assert seeds_seen == {1, 2, 3}
+
+    def test_preclinch_first_round_still_just_seed_required(self):
+        """Pre-clinch First Round has one group per achievable seed, each just seed_required."""
+        groups = enumerate_reach_scenarios_for_team(
+            5, None, SLOTS_1A_4A_2025, "First Round", achievable_seeds=[1, 2],
+        )
+        assert len(groups) == 2
+        for group in groups:
+            assert len(group) == 1
+            assert group[0].kind == "seed_required"
+
+    def test_empty_achievable_seeds_raises(self):
+        """seed=None with no achievable_seeds raises ValueError."""
+        with pytest.raises(ValueError, match="achievable_seeds"):
+            enumerate_reach_scenarios_for_team(5, None, SLOTS_1A_4A_2025, "Quarterfinals", achievable_seeds=[])

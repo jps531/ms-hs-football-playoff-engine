@@ -79,7 +79,7 @@ from backend.helpers.data_classes import (
     StandingsOdds,
     StoredHostingOdds,
 )
-from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
+from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios, enumerate_reach_scenarios_for_team
 from backend.helpers.insights import _conditions_frozenset, deserialize_insights
 from backend.helpers.query_helpers import and_join_conditions
 from backend.helpers.scenario_renderer import (
@@ -87,6 +87,7 @@ from backend.helpers.scenario_renderer import (
     _render_atom,
     atom_condition_dicts,
     build_host_conditions,
+    build_reach_conditions,
     render_scenario_title,
 )
 from backend.helpers.scenario_serializers import (
@@ -3081,8 +3082,8 @@ def _compute_hosting_overall(
 def _host_conditions_for_team(
     school: str,
     region: int,
-    odds: StandingsOdds,
-    candidate_seeds: Sequence[int],
+    seed: int | None,
+    achievable_seeds: list[int] | None,
     slots: list[FormatSlot],
     season: int,
     round_name: str,
@@ -3099,7 +3100,6 @@ def _host_conditions_for_team(
     applicable to this bracket depth (shouldn't happen — callers only reach
     here for rounds already validated by ``_resolve_slot_group``).
     """
-    seed, achievable_seeds = resolve_seed_and_achievable(odds, candidate_seeds=candidate_seeds)
     round_scenarios_list = enumerate_home_game_scenarios(
         region=region, seed=seed, slots=slots, season=season,
         achievable_seeds=achievable_seeds, team_lookup=team_lookup,
@@ -3109,6 +3109,36 @@ def _host_conditions_for_team(
         return []
     dicts = build_host_conditions(
         school, matched, seed_atoms_by_region.get(region), game_dates_by_region.get(region, {}),
+    )
+    return [[PathConditionModel(**d) for d in group] for group in dicts]
+
+
+def _reach_conditions_for_team(
+    school: str,
+    region: int,
+    seed: int | None,
+    achievable_seeds: list[int] | None,
+    slots: list[FormatSlot],
+    round_name: str,
+    team_lookup: dict[tuple[int, int], str],
+    seed_atoms_by_region: dict[int, dict | None],
+    game_dates_by_region: dict[int, dict[tuple[str, str], date | None]],
+) -> list[list[PathConditionModel]]:
+    """Compute one team's ``reach_conditions`` for *round_name*, given *include_conditions=True*.
+
+    Enumerates the OR-of-AND win requirements to reach *round_name* (cheap/pure
+    — see ``enumerate_reach_scenarios_for_team``) and renders them as
+    ``PathConditionModel`` OR-of-AND groups. Always non-empty (unlike
+    ``host_conditions``, which can legitimately be ``[]`` for a team that
+    never hosts) — reaching the round is, by construction, only computed for
+    teams with ``p_reach > 0``.
+    """
+    and_groups = enumerate_reach_scenarios_for_team(
+        region=region, seed=seed, slots=slots, target_round=_ROUND_TITLE[round_name],
+        achievable_seeds=achievable_seeds, team_lookup=team_lookup,
+    )
+    dicts = build_reach_conditions(
+        school, and_groups, seed_atoms_by_region.get(region), game_dates_by_region.get(region, {}),
     )
     return [[PathConditionModel(**d) for d in group] for group in dicts]
 
@@ -3185,11 +3215,19 @@ def build_slot_outlook_teams(
             p_reach, p_host_overall = vals["p_reach"], vals["p_host_overall"]
             p_host_given_reach = p_host_overall / p_reach if p_reach > 0 else None
             host_conditions = None
+            reach_conditions = None
             if compute_conditions:
                 region = acc_region[school]
+                team_seed, achievable_seeds = resolve_seed_and_achievable(
+                    by_region[region][school], candidate_seeds=[acc_seed[school]]
+                )
                 host_conditions = _host_conditions_for_team(
-                    school, region, by_region[region][school], [acc_seed[school]],
+                    school, region, team_seed, achievable_seeds,
                     slots, season, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
+                )
+                reach_conditions = _reach_conditions_for_team(
+                    school, region, team_seed, achievable_seeds,
+                    slots, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
                 )
             teams.append(
                 SlotOutlookTeam(
@@ -3201,6 +3239,7 @@ def build_slot_outlook_teams(
                     p_host_given_reach_weighted=p_host_given_reach if weighted else None,
                     p_host_overall_weighted=p_host_overall if weighted else None,
                     host_conditions=host_conditions,
+                    reach_conditions=reach_conditions,
                 )
             )
     else:
@@ -3250,10 +3289,16 @@ def build_slot_outlook_teams(
                     else None
                 )
                 host_conditions = None
+                reach_conditions = None
                 if compute_conditions:
+                    team_seed, achievable_seeds = resolve_seed_and_achievable(o, candidate_seeds=candidate_seeds)
                     host_conditions = _host_conditions_for_team(
-                        school, region, o, candidate_seeds,
+                        school, region, team_seed, achievable_seeds,
                         slots, season, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
+                    )
+                    reach_conditions = _reach_conditions_for_team(
+                        school, region, team_seed, achievable_seeds,
+                        slots, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
                     )
                 teams.append(
                     SlotOutlookTeam(
@@ -3265,6 +3310,7 @@ def build_slot_outlook_teams(
                         p_host_given_reach_weighted=p_host_given_reach_w,
                         p_host_overall_weighted=p_host_overall_w,
                         host_conditions=host_conditions,
+                        reach_conditions=reach_conditions,
                     )
                 )
 

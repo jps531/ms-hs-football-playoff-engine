@@ -28,8 +28,10 @@ from backend.helpers.scenario_renderer import (
     atom_condition_dicts,
     atoms_from_complete_scenarios,
     build_host_conditions,
+    build_reach_conditions,
     classify_margin,
     division_scenarios_as_dict,
+    expand_and_render_conditions,
     home_condition_to_path_dict,
     render_pre_playoff_team_home_scenarios,
     render_team_home_scenarios,
@@ -938,6 +940,19 @@ class TestHomeConditionToPathDict:
             "description": "TeamA finishes as the #1 seed",
         }
 
+    def test_wins_round_condition(self):
+        """kind='wins_round' maps to type='bracket_win' with the opponent's region/seed/round_name."""
+        cond = HomeGameCondition(kind="wins_round", round_name="First Round", region=6, seed=3, team_name="Shaw")
+        out = home_condition_to_path_dict(cond)
+        assert out == {
+            "type": "bracket_win",
+            "school": "Shaw",
+            "region": 6,
+            "seed": 3,
+            "round_name": "First Round",
+            "description": "Beats Shaw in the First Round",
+        }
+
 
 class TestBuildHostConditions:
     """build_host_conditions renders a team's will_host scenarios as PathConditionModel OR-of-AND dicts."""
@@ -1027,6 +1042,94 @@ class TestBuildHostConditions:
             "round_name": "Semifinals",
             "description": "TeamA advances to Semifinals",
         }
+
+
+class TestExpandAndRenderConditions:
+    """expand_and_render_conditions renders AND-groups of HomeGameCondition -- shared by
+    build_host_conditions (from HomeGameScenario.conditions) and build_reach_conditions
+    (from enumerate_reach_scenarios_for_team)."""
+
+    def test_empty_groups_list_returns_empty_list(self):
+        """No AND-groups at all returns []."""
+        assert expand_and_render_conditions("TeamA", [], None, {}) == []
+
+    def test_empty_and_group_is_unconditional(self):
+        """An empty inner list (unconditional) passes through as an empty list."""
+        assert expand_and_render_conditions("TeamA", [[]], None, {}) == [[]]
+
+    def test_wins_round_condition_renders_via_home_condition_to_path_dict(self):
+        """A wins_round condition (already resolved) renders as a bracket_win dict."""
+        cond = HomeGameCondition(kind="wins_round", round_name="First Round", region=6, seed=3, team_name="Shaw")
+        result = expand_and_render_conditions("TeamA", [[cond]], None, {})
+        assert result == [
+            [
+                {
+                    "type": "bracket_win",
+                    "school": "Shaw",
+                    "region": 6,
+                    "seed": 3,
+                    "round_name": "First Round",
+                    "description": "Beats Shaw in the First Round",
+                }
+            ]
+        ]
+
+    def test_multiple_groups_all_rendered(self):
+        """Each AND-group in the input produces one corresponding output group."""
+        cond_a = HomeGameCondition(kind="wins_round", round_name="First Round", region=6, seed=3, team_name="Shaw")
+        cond_b = HomeGameCondition(kind="wins_round", round_name="First Round", region=7, seed=1, team_name="Bogue Chitto")
+        result = expand_and_render_conditions("TeamA", [[cond_a], [cond_b]], None, {})
+        assert len(result) == 2
+        assert result[0][0]["school"] == "Shaw"
+        assert result[1][0]["school"] == "Bogue Chitto"
+
+    def test_seed_required_expansion_still_works(self):
+        """A leading seed_required placeholder still expands via atom_condition_dicts (unchanged
+        from build_host_conditions' prior behavior, now routed through the shared function)."""
+        seed_required = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name=None)
+        seed_atoms = {
+            "TeamA": {1: [[GameResult(winner="TeamA", loser="TeamB", min_margin=1, max_margin=None)]]},
+        }
+        dates: dict[tuple[str, str], date | None] = {("TeamA", "TeamB"): date(2025, 10, 17)}
+        result = expand_and_render_conditions("TeamA", [[seed_required]], seed_atoms, dates)
+        assert result == [
+            [
+                {
+                    "type": "game_result",
+                    "school": "TeamA",
+                    "date": date(2025, 10, 17),
+                    "opponent": "TeamB",
+                    "required_result": "win",
+                    "margin_class": None,
+                }
+            ]
+        ]
+
+
+class TestBuildReachConditions:
+    """build_reach_conditions renders reach-scenario AND-groups (from
+    enumerate_reach_scenarios_for_team) as PathConditionModel OR-of-AND dicts."""
+
+    def test_delegates_to_expand_and_render_conditions(self):
+        """build_reach_conditions produces the same output as calling
+        expand_and_render_conditions directly (thin wrapper, no extra logic)."""
+        cond = HomeGameCondition(kind="wins_round", round_name="Quarterfinals", region=8, seed=1, team_name="Taylorsville")
+        and_groups = [[cond]]
+        assert build_reach_conditions("TeamA", and_groups, None, {}) == expand_and_render_conditions(
+            "TeamA", and_groups, None, {}
+        )
+
+    def test_unconditional_first_round_reach(self):
+        """The [[]] convention (unconditional reach, e.g. First Round) passes through as [[]]."""
+        assert build_reach_conditions("TeamA", [[]], None, {}) == [[]]
+
+    def test_multi_round_and_group_renders_in_order(self):
+        """A multi-condition AND-group (one per prior round) renders each condition in order."""
+        r1 = HomeGameCondition(kind="wins_round", round_name="First Round", region=6, seed=3, team_name="Shaw")
+        r2 = HomeGameCondition(kind="wins_round", round_name="Second Round", region=7, seed=1, team_name="Bogue Chitto")
+        result = build_reach_conditions("TeamA", [[r1, r2]], None, {})
+        assert len(result) == 1
+        assert [d["round_name"] for d in result[0]] == ["First Round", "Second Round"]
 
 
 class TestAtomsFromCompleteScenarios:

@@ -115,17 +115,23 @@ pipeline already used for hosting explanations in
 
 ---
 
-## 3. `reach_conditions` for `GET /bracket/slots/{slot}` (undesigned — separate effort)
+## 3. `reach_conditions` for `GET /bracket/slots/{slot}` ✅
 
 **UI purpose:** the conditions under which a team reaches the slot's round at
 all — distinct from §2's "conditions under which they'd host, given they
 reached."
 
-No structured-condition type for this exists anywhere in the codebase today
-— neither §8's regular-season-game atoms nor `HomeGameCondition` (which only
-models hosting/advancement facts about *other* bracket positions, not the
-reasons a specific team advances). This needs its own design pass before
-estimating or building; don't bundle it into §2's scope.
+Shipped as full per-opponent enumeration (matching §2's level of detail): a
+new `HomeGameCondition` kind (`"wins_round"`, rendered as `PathConditionModel`
+type `"bracket_win"`) expresses "the team must beat this specific opponent in
+this round," reusing the existing bracket-navigation primitives
+(`opponent_slots`/`slot_index_for`/`half_slots_for_region`) already used for
+`host_conditions`' opponent-pool enumeration. Bounded by bracket depth (up to
+8 OR'd paths for a 1A-4A team reaching the semifinals), since it doesn't
+recurse into justifying how each candidate opponent reaches their own slot —
+only this team's own path is explained. See `enumerate_reach_scenarios`/
+`enumerate_reach_scenarios_for_team` (`backend/helpers/home_game_scenarios.py`)
+and `build_reach_conditions` (`backend/helpers/scenario_renderer.py`).
 
 ---
 
@@ -192,4 +198,4 @@ probabilities (already shipped; see `API_REFERENCE.md`).
    dated pregame probabilities) ✅
 4. §2 (`host_conditions` follow-up, once §1 ships) ✅
 5. §3 (`reach_conditions` — separate, undesigned effort; scope before
-   estimating)
+   estimating) ✅

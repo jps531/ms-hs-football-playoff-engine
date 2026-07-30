@@ -341,6 +341,15 @@ def home_condition_to_path_dict(cond: HomeGameCondition) -> dict:
             "seed": cond.seed,
             "description": f"{cond.team_name} finishes as the #{cond.seed} seed",
         }
+    if cond.kind == "wins_round":
+        return {
+            "type": "bracket_win",
+            "school": cond.team_name,
+            "region": cond.region,
+            "seed": cond.seed,
+            "round_name": cond.round_name,
+            "description": f"Beats {cond.team_name} in the {cond.round_name}",
+        }
     # kind == "advances"
     return {
         "type": "bracket_advances",
@@ -352,28 +361,28 @@ def home_condition_to_path_dict(cond: HomeGameCondition) -> dict:
     }
 
 
-def build_host_conditions(
+def expand_and_render_conditions(
     team: str,
-    round_scenarios: RoundHomeScenarios,
+    and_groups: list[list[HomeGameCondition]],
     seed_atoms: dict[str, dict[int, list[list]]] | None,
     game_dates: dict[tuple[str, str], date | None],
 ) -> list[list[dict]]:
-    """Return *team*'s ``will_host`` scenarios for one round as ``PathConditionModel`` OR-of-AND groups.
+    """Render AND-groups of ``HomeGameCondition`` as ``PathConditionModel`` OR-of-AND dicts.
 
-    Mirrors ``team_home_scenarios_as_dict``'s ``will_host`` + seed-atom
-    expansion pipeline, but emits ``atom_condition_dicts``/
-    ``home_condition_to_path_dict`` dicts (this endpoint's contract) instead
-    of ``serialize_atom``/``serialize_condition`` (``TeamHostingEntry.scenarios``'
-    contract). A pre-playoff ``seed_required`` placeholder is expanded into
-    the real regular-season game atom(s) that produce that seed when
-    *seed_atoms* covers it; otherwise it's left as an unexpanded, descriptive
-    condition. An empty inner list means a scenario is unconditional (matches
-    ``HomeGameScenario.conditions``' own "empty = unconditional" convention).
-    Returns ``[]`` when the team never hosts this round.
+    Shared by ``build_host_conditions`` (``host_conditions``, sourced from
+    ``HomeGameScenario.conditions``) and ``build_reach_conditions``
+    (``reach_conditions``, sourced from ``enumerate_reach_scenarios_for_team``)
+    — both need the same "expand a leading ``seed_required`` placeholder into
+    the real regular-season game atom(s), when known; otherwise resolve and
+    render each condition directly" logic. A pre-playoff ``seed_required``
+    placeholder is expanded via ``atom_condition_dicts`` (the same
+    §8 ``paths`` dict shape) when *seed_atoms* covers it; otherwise it's left
+    as an unexpanded, descriptive condition. An empty inner list means a
+    group is unconditional (matches ``HomeGameScenario.conditions``' own
+    "empty = unconditional" convention). Returns ``[]`` given no groups.
     """
     result: list[list[dict]] = []
-    for sc in round_scenarios.will_host:
-        conds = sc.conditions
+    for conds in and_groups:
         if not conds:
             result.append([])
             continue
@@ -392,6 +401,40 @@ def build_host_conditions(
             resolved = [_resolve_home_condition_team_name(c, team) for c in conds]
             result.append([home_condition_to_path_dict(c) for c in resolved])
     return result
+
+
+def build_host_conditions(
+    team: str,
+    round_scenarios: RoundHomeScenarios,
+    seed_atoms: dict[str, dict[int, list[list]]] | None,
+    game_dates: dict[tuple[str, str], date | None],
+) -> list[list[dict]]:
+    """Return *team*'s ``will_host`` scenarios for one round as ``PathConditionModel`` OR-of-AND groups.
+
+    Mirrors ``team_home_scenarios_as_dict``'s ``will_host`` + seed-atom
+    expansion pipeline, but emits ``atom_condition_dicts``/
+    ``home_condition_to_path_dict`` dicts (this endpoint's contract) instead
+    of ``serialize_atom``/``serialize_condition`` (``TeamHostingEntry.scenarios``'
+    contract) — see ``expand_and_render_conditions`` for the shared expansion
+    logic. Returns ``[]`` when the team never hosts this round.
+    """
+    return expand_and_render_conditions(team, [list(sc.conditions) for sc in round_scenarios.will_host], seed_atoms, game_dates)
+
+
+def build_reach_conditions(
+    team: str,
+    and_groups: list[list[HomeGameCondition]],
+    seed_atoms: dict[str, dict[int, list[list]]] | None,
+    game_dates: dict[tuple[str, str], date | None],
+) -> list[list[dict]]:
+    """Return *team*'s reach-scenario AND-groups (from
+    ``enumerate_reach_scenarios_for_team``) as ``PathConditionModel``
+    OR-of-AND groups — see ``expand_and_render_conditions`` for the shared
+    expansion logic. Returns ``[[]]`` when reaching the round is
+    unconditional (e.g. First Round); never ``[]`` for a team that can reach
+    the round at all.
+    """
+    return expand_and_render_conditions(team, and_groups, seed_atoms, game_dates)
 
 
 # ---------------------------------------------------------------------------

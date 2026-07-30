@@ -442,3 +442,110 @@ class TestBuildSlotOutlookTeamsHostConditions:
         assert r1s1.host_conditions is not None
         schools = {c.school for group in r1s1.host_conditions for c in group}
         assert any(s and s.startswith("Region ") and s.endswith(" Seed") for s in schools)
+
+
+# ---------------------------------------------------------------------------
+# build_slot_outlook_teams -- reach_conditions (include_conditions=True path)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSlotOutlookTeamsReachConditions:
+    """Coverage for reach_conditions, populated only when seed_atoms_by_region is passed."""
+
+    def test_seed_atoms_by_region_omitted_leaves_reach_conditions_none(self):
+        """Without seed_atoms_by_region (include_conditions=False), reach_conditions stays None."""
+        by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
+        teams = build_slot_outlook_teams(1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON)
+        assert teams is not None
+        assert all(t.reach_conditions is None for t in teams)
+
+    def test_first_round_reach_is_unconditional(self):
+        """Reaching First Round needs nothing beyond the seed itself -- a single empty AND-group."""
+        by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
+        teams = build_slot_outlook_teams(
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        for t in teams:
+            assert t.reach_conditions == [[]]
+
+    def test_clinched_quarterfinal_reach_group_count(self):
+        """A clinched team's reach_conditions for Quarterfinals has the expected group count
+        (1 fixed First Round opponent x <= 2 Second Round candidates)."""
+        by_region = {
+            1: {"R1S1": _locked("R1S1", 1)},
+            2: {"R2S4": _locked("R2S4", 4)},
+            3: {"R3S2": _locked("R3S2", 2)},
+            4: {"R4S3": _locked("R4S3", 3)},
+        }
+        teams = build_slot_outlook_teams(
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
+            game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        r1s1 = next(t for t in teams if t.school == "R1S1")
+        assert r1s1.reach_conditions is not None
+        assert len(r1s1.reach_conditions) == 2
+        for group in r1s1.reach_conditions:
+            assert [c.type for c in group] == ["bracket_win", "bracket_win"]
+            assert [c.round_name for c in group] == ["First Round", "Second Round"]
+
+    def test_reach_conditions_never_empty_for_a_returned_team(self):
+        """Every team present in teams[] (p_reach > 0) gets a non-empty reach_conditions --
+        unlike host_conditions, which can legitimately be [] for a team that never hosts."""
+        by_region = {
+            1: {"R1S1": _locked("R1S1", 1)},
+            2: {"R2S4": _locked("R2S4", 4)},
+            3: {"R3S2": _locked("R3S2", 2)},
+            4: {"R4S3": _locked("R4S3", 3)},
+        }
+        teams = build_slot_outlook_teams(
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
+            game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        for t in teams:
+            assert t.reach_conditions
+            for group in t.reach_conditions:
+                assert group  # every group for QF reach has at least one condition (R1 win)
+
+    def test_unclinched_position_reference_falls_back(self):
+        """A reach condition referencing another unclinched bracket position falls back to a label."""
+        by_region = {
+            1: {"R1S1": _locked("R1S1", 1)},
+            2: {"R2S4": _locked("R2S4", 4)},
+            3: {"R3S2": _locked("R3S2", 2)},
+            4: {"R4S3": _locked("R4S3", 3)},
+        }
+        teams = build_slot_outlook_teams(
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
+            game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        r1s1 = next(t for t in teams if t.school == "R1S1")
+        assert r1s1.reach_conditions is not None
+        schools = {c.school for group in r1s1.reach_conditions for c in group}
+        assert any(s and s.startswith("Region ") and s.endswith(" Seed") for s in schools)
+
+    def test_preclinch_seed_required_prepended(self):
+        """A pre-clinch team's reach_conditions groups each get a seed_required condition first."""
+        by_region = {
+            1: {"Alpha": _odds("Alpha", p1=0.6, p3=0.4)},
+            2: {"Beta": _locked("Beta", 4)},
+        }
+        teams = build_slot_outlook_teams(
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        alpha = next(t for t in teams if t.school == "Alpha")
+        assert alpha.reach_conditions is not None
+        (group,) = alpha.reach_conditions
+        (cond,) = group
+        assert cond.type == "seed_required"
+        assert cond.school == "Alpha"
+        assert cond.seed == 1

@@ -827,6 +827,138 @@ def enumerate_home_game_scenarios(
     return results
 
 
+def enumerate_reach_scenarios(
+    region: int,
+    seed: int,
+    slots: list[FormatSlot],
+    target_round: str,
+    team_lookup: dict[tuple[int, int], str] | None = None,
+) -> list[list[HomeGameCondition]]:
+    """Return the OR-of-AND win requirements for (region, seed) to reach *target_round*.
+
+    Reaching a round means playing in it -- i.e. having won every round
+    strictly before it, not winning the target round itself (mirrors
+    ``BracketOdds``' own "P(playing in round N)" semantics). Each prior
+    round's opponent may be ambiguous (one of several candidates from the
+    adjacent bracket slot(s) at that stage); this enumerates every
+    combination as a separate AND-group, one ``HomeGameCondition(kind=
+    "wins_round")`` per prior round -- without recursing into how each
+    candidate opponent reaches their own slot (that's a separate team's own
+    reach conditions, not this team's).
+
+    Args:
+        region, seed: The team's identity (seed must already be resolved --
+            see ``enumerate_reach_scenarios_for_team`` for the pre-playoff,
+            seed-uncertain wrapper).
+        slots: All first-round ``FormatSlot`` objects for the class/season.
+        target_round: Display round name, e.g. ``"Quarterfinals"`` (Title
+            Case, matching this module's other ``_enumerate_*`` functions --
+            not the API's snake_case query-param spelling).
+        team_lookup: Optional ``(region, seed) -> school name`` mapping,
+            substituted for the generic ``"Region X #Y Seed"`` label when an
+            opponent candidate's occupant is already known.
+
+    Returns:
+        ``[[]]`` (a single unconditional, empty AND-group) when
+        *target_round* is ``"First Round"`` -- nothing must be won to reach
+        your own first game. Otherwise one ``list[HomeGameCondition]`` per
+        combination of prior-round opponents, each condition's ``round_name``
+        set to the round it must be won in.
+
+    Raises:
+        ValueError: If ``(region, seed)`` is not found in *slots*.
+    """
+    half_slots = half_slots_for_region(region, slots)
+    is_1a_4a = len(half_slots) == 8
+    slot_idx = slot_index_for(region, seed, half_slots)
+    if slot_idx is None:
+        raise ValueError(f"(region={region}, seed={seed}) not found in provided slots")
+    team_slot = half_slots[slot_idx]
+
+    prior_rounds: list[tuple[str, list[tuple[int, int]]]] = []
+
+    if target_round != "First Round":
+        is_home = (region, seed) == (team_slot.home_region, team_slot.home_seed)
+        r1_opponent = (
+            (team_slot.away_region, team_slot.away_seed)
+            if is_home
+            else (team_slot.home_region, team_slot.home_seed)
+        )
+        prior_rounds.append(("First Round", [r1_opponent]))
+
+    if is_1a_4a and target_round in ("Quarterfinals", "Semifinals"):
+        adj = opponent_slots(slot_idx, round_offset=1, half_slots=half_slots)[0]
+        prior_rounds.append(
+            ("Second Round", [(adj.home_region, adj.home_seed), (adj.away_region, adj.away_seed)])
+        )
+
+    if target_round == "Semifinals":
+        qf_round_offset = 2 if is_1a_4a else 1
+        qf_opp_slots = opponent_slots(slot_idx, round_offset=qf_round_offset, half_slots=half_slots)
+        seen: set[tuple[int, int]] = set()
+        qf_candidates: list[tuple[int, int]] = []
+        for opp_slot in qf_opp_slots:
+            for candidate in ((opp_slot.home_region, opp_slot.home_seed), (opp_slot.away_region, opp_slot.away_seed)):
+                if candidate not in seen:
+                    seen.add(candidate)
+                    qf_candidates.append(candidate)
+        prior_rounds.append(("Quarterfinals", qf_candidates))
+
+    if not prior_rounds:
+        return [[]]
+
+    and_groups: list[list[HomeGameCondition]] = [[]]
+    for round_label, candidates in prior_rounds:
+        and_groups = [
+            [
+                *group,
+                HomeGameCondition(
+                    kind="wins_round", round_name=round_label, region=r, seed=s,
+                    team_name=_team_label(r, s, team_lookup),
+                ),
+            ]
+            for group in and_groups
+            for r, s in candidates
+        ]
+    return and_groups
+
+
+def enumerate_reach_scenarios_for_team(
+    region: int,
+    seed: int | None,
+    slots: list[FormatSlot],
+    target_round: str,
+    achievable_seeds: list[int] | None = None,
+    team_lookup: dict[tuple[int, int], str] | None = None,
+) -> list[list[HomeGameCondition]]:
+    """Pre-clinch-aware wrapper around ``enumerate_reach_scenarios``.
+
+    Mirrors ``enumerate_home_game_scenarios``'s pre-playoff extension: when
+    *seed* is ``None``, pass *achievable_seeds* -- each achievable seed's
+    reach scenarios get a ``HomeGameCondition(kind="seed_required")``
+    prepended, then all seeds' results are merged into one list.
+
+    Raises:
+        ValueError: If ``seed`` is ``None`` and ``achievable_seeds`` is
+            empty or not provided.
+    """
+    if seed is not None:
+        return enumerate_reach_scenarios(region, seed, slots, target_round, team_lookup)
+
+    if not achievable_seeds:
+        raise ValueError("achievable_seeds must be non-empty when seed is None")
+
+    half_slots = half_slots_for_region(region, slots)
+    all_groups: list[list[HomeGameCondition]] = []
+    for s in achievable_seeds:
+        if slot_index_for(region, s, half_slots) is None:
+            continue
+        seed_cond = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=s, team_name=None)
+        for group in enumerate_reach_scenarios(region, s, slots, target_round, team_lookup):
+            all_groups.append([seed_cond, *group])
+    return all_groups
+
+
 # ---------------------------------------------------------------------------
 # Matchup enumeration helpers (opponent-centric view)
 # ---------------------------------------------------------------------------
