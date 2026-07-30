@@ -369,6 +369,32 @@ def _enumerate_r2(
     )
 
 
+def _r2_options_for(
+    s: int,
+    idx: int,
+    half_slots: list[FormatSlot],
+) -> list[tuple[bool, tuple[int, int] | None]]:
+    """Return ``(r2_home, r1_winner_candidate)`` pairs describing a team's own R2 ambiguity.
+
+    A team's R2 opponent is the winner of its single adjacent first-round
+    slot; since R2 home is purely seed-based, its own R2 home status is
+    determined once that winner is known (hence only *s*, the team's own
+    seed, and *idx*, its slot index, are needed — not its region). When both
+    possible winners of that adjacent slot produce the *same* R2 home
+    status, there's no real ambiguity and a single ``(value, None)`` entry
+    is returned. Otherwise two entries are returned, each tagged with the
+    ``(region, seed)`` of the adjacent-slot winner that produces that value
+    — the caller decides whether that identity actually needs to be
+    surfaced as a condition (see ``_enumerate_qf``).
+    """
+    adj = opponent_slots(idx, round_offset=1, half_slots=half_slots)[0]
+    candidates = [(adj.home_region, adj.home_seed), (adj.away_region, adj.away_seed)]
+    options = [_r2_home_status(s, opp_s) for _, opp_s in candidates]
+    if options[0] == options[1]:
+        return [(options[0], None)]
+    return [(options[0], candidates[0]), (options[1], candidates[1])]
+
+
 def _enumerate_qf(
     region: int,
     seed: int,
@@ -395,13 +421,24 @@ def _enumerate_qf(
     * R2 home status (1A-4A only; seed-based, so deterministic once the
       candidate is known).
 
-    When a QF opponent's R2 home status depends on *which* of two possible
-    R2 rivals they faced (i.e. the two sub-cases give different R2 home
-    values) **and** those sub-cases produce different QF hosting outcomes,
-    the function enumerates both sub-cases and attaches an additional
-    condition identifying which team won R1 in the opponent's adjacent slot.
-    When both sub-cases produce the same QF outcome the scenarios are
-    collapsed to a single entry (no extra condition needed).
+    Both the *target team's own* R2 home status and the *opponent's* can be
+    ambiguous pre-computation (``_r2_options_for``) — each depends on which
+    of two possible rivals won an earlier, still-hypothetical adjacent
+    first-round game.  For each opponent, this function builds the full
+    outcome grid across every combination of the target's own and the
+    opponent's R2 ambiguity (1, 2, or 4 cells) and emits the minimal set of
+    scenarios that unambiguously covers every cell: unconditional if the
+    whole grid agrees on the hosting outcome; qualified by only the team's
+    own R1-winner condition if the outcome depends solely on that axis; only
+    the opponent's if it depends solely on that axis; both if the outcome
+    genuinely depends on both jointly (rare, but possible — e.g. two
+    same-seed teams whose relative home-game counts only tie-break one way
+    for some rival combinations). A condition is only dropped when *every*
+    cell sharing the other axis' value agrees on the hosting outcome —
+    dropping it based on a partial match (as an earlier version of this
+    function did for the target's own axis) is exactly what previously let
+    contradictory scenarios reach both ``will_host`` and ``will_not_host``
+    for the same stated conditions.
 
     Then calls ``qf_home_team`` and groups results.
 
@@ -422,169 +459,74 @@ def _enumerate_qf(
     round_offset = 2 if is_1a_4a else 1
     opp_slot_list = opponent_slots(slot_idx, round_offset=round_offset, half_slots=half_slots)
 
-    # Team's own R1/R2 home status
     team_slot = half_slots[slot_idx]
     r1_home_team = was_home_r1(region, seed, team_slot)
-    # For 1A-4A R2: the target team's R2 opponent is the winner of the single
-    # adjacent slot.  Since R2 home is seed-based, the team is home in R2
-    # whenever their seed is ≤ any possible R2 opponent's seed.  Rather than
-    # iterating over R2 sub-cases (which would explode combinations), we use
-    # the pessimistic/optimistic approach: if the team's seed is strictly
-    # better than both possible R2 opponents they were always home; if worse,
-    # always away; if mixed, we enumerate both.
-    #
-    # In practice, with seeds 1-4 and the bracket structure, cases are almost
-    # always unambiguous. We handle the mixed case by generating separate
-    # scenarios per R2 outcome.
-
-    if is_1a_4a:
-        adj_slots = opponent_slots(slot_idx, round_offset=1, half_slots=half_slots)
-        adj_slot = adj_slots[0]
-        r2_opp_candidates = [
-            (adj_slot.home_region, adj_slot.home_seed),
-            (adj_slot.away_region, adj_slot.away_seed),
-        ]
-        # Determine R2 home status for each possible R2 opponent
-        r2_home_options: list[bool] = [_r2_home_status(seed, opp_s) for _, opp_s in r2_opp_candidates]
-        r2_home_unique = list(dict.fromkeys(r2_home_options))  # deduplicate, preserve order
-    else:
-        r2_home_unique = [False]  # 5A-7A has no R2; pass False as placeholder
+    team_r2_options = _r2_options_for(seed, slot_idx, half_slots) if is_1a_4a else [(False, None)]
 
     will_host: list[HomeGameScenario] = []
     will_not_host: list[HomeGameScenario] = []
 
     team_cond = _advances(None, None, None, round_name)
 
-    # Enumerate all (QF opponent, R2 home status for team) combinations.
-    # For 5A-7A r2_home_unique = [False] (sentinel), so the outer loop runs once.
-    for r2_home_team_val in r2_home_unique:
-        for opp_slot in opp_slot_list:
-            for opp_r, opp_s in (
-                (opp_slot.home_region, opp_slot.home_seed),
-                (opp_slot.away_region, opp_slot.away_seed),
-            ):
-                opp_r1_home = was_home_r1(opp_r, opp_s, opp_slot)
-                if is_1a_4a:
-                    r2_home_t = r2_home_team_val
-                    # Opponent's R2 opponent comes from THEIR adjacent slot.
-                    # Their R2 home status (seed-based) may depend on which of
-                    # the two possible R2 opponents they face.  When both give
-                    # the same QF outcome for the target team, collapse to a
-                    # single scenario.  When they differ, enumerate both sub-
-                    # cases and add a condition identifying which team won R1 in
-                    # the adjacent slot (to clarify the path to the fan).
-                    opp_adj = opponent_slots(
-                        slot_index_for(opp_r, opp_s, half_slots),  # type: ignore[arg-type]
-                        round_offset=1,
-                        half_slots=half_slots,
-                    )[0]
-                    opp_r2_home_opts = [
-                        _r2_home_status(opp_s, opp_adj.home_seed),
-                        _r2_home_status(opp_s, opp_adj.away_seed),
-                    ]
-                    if len(set(opp_r2_home_opts)) == 1:
-                        # Unambiguous: same R2 home result regardless of R2 rival.
-                        opp_r2_sub_cases: list[tuple[bool, HomeGameCondition | None]] = [(opp_r2_home_opts[0], None)]
-                    else:
-                        # Ambiguous: check whether the two sub-cases produce
-                        # different QF hosting outcomes for the target team.
-                        qf_out_0 = qf_home_team(
-                            region,
-                            seed,
-                            r1_home_team,
-                            r2_home_t,
-                            opp_r,
-                            opp_s,
-                            opp_r1_home,
-                            opp_r2_home_opts[0],
-                            season,
-                        )
-                        qf_out_1 = qf_home_team(
-                            region,
-                            seed,
-                            r1_home_team,
-                            r2_home_t,
-                            opp_r,
-                            opp_s,
-                            opp_r1_home,
-                            opp_r2_home_opts[1],
-                            season,
-                        )
-                        if qf_out_0 == qf_out_1:
-                            # Different R2 paths, same QF result: no split.
-                            opp_r2_sub_cases = [(opp_r2_home_opts[0], None)]
-                        else:
-                            # Different R2 paths produce different QF results:
-                            # enumerate both, conditioned on who won R1 in the
-                            # opponent's adjacent slot.
-                            opp_r2_sub_cases = [
-                                (
-                                    opp_r2_home_opts[0],
-                                    _advances(
-                                        _team_label(
-                                            opp_adj.home_region,
-                                            opp_adj.home_seed,
-                                            team_lookup,
-                                        ),
-                                        opp_adj.home_region,
-                                        opp_adj.home_seed,
-                                        _ROUND_NAMES_1A_4A[1],
-                                    ),
-                                ),
-                                (
-                                    opp_r2_home_opts[1],
-                                    _advances(
-                                        _team_label(
-                                            opp_adj.away_region,
-                                            opp_adj.away_seed,
-                                            team_lookup,
-                                        ),
-                                        opp_adj.away_region,
-                                        opp_adj.away_seed,
-                                        _ROUND_NAMES_1A_4A[1],
-                                    ),
-                                ),
-                            ]
-                else:
-                    r2_home_t = False  # 5A-7A sentinel
-                    opp_r2_sub_cases = [(False, None)]
+    for opp_slot in opp_slot_list:
+        for opp_r, opp_s in (
+            (opp_slot.home_region, opp_slot.home_seed),
+            (opp_slot.away_region, opp_slot.away_seed),
+        ):
+            opp_r1_home = was_home_r1(opp_r, opp_s, opp_slot)
+            if is_1a_4a:
+                opp_idx = slot_index_for(opp_r, opp_s, half_slots)
+                opp_r2_options = _r2_options_for(opp_s, opp_idx, half_slots)  # type: ignore[arg-type]
+            else:
+                opp_r2_options = [(False, None)]
 
-                opp_name = _team_label(opp_r, opp_s, team_lookup)
-                opp_cond = _advances(opp_name, opp_r, opp_s, round_name)
+            opp_name = _team_label(opp_r, opp_s, team_lookup)
+            opp_cond = _advances(opp_name, opp_r, opp_s, round_name)
 
-                for opp_r2_home, r1_winner_cond in opp_r2_sub_cases:
+            # Full outcome grid across both teams' own R2 ambiguity.
+            cells: list[tuple[tuple[int, int] | None, tuple[int, int] | None, bool, str]] = []
+            for t_r2, t_cand in team_r2_options:
+                for o_r2, o_cand in opp_r2_options:
                     home_r, home_s = qf_home_team(
-                        region,
-                        seed,
-                        r1_home_team,
-                        r2_home_t,
-                        opp_r,
-                        opp_s,
-                        opp_r1_home,
-                        opp_r2_home,
-                        season,
+                        region, seed, r1_home_team, t_r2, opp_r, opp_s, opp_r1_home, o_r2, season,
                     )
                     is_home = home_r == region and home_s == seed
                     explanation = _explain_qf(
                         region,
                         seed,
                         r1_home_team,
-                        r2_home_t if is_1a_4a else None,
+                        t_r2 if is_1a_4a else None,
                         opp_r,
                         opp_s,
                         opp_r1_home,
-                        opp_r2_home if is_1a_4a else None,
+                        o_r2 if is_1a_4a else None,
                         season,
                     )
-                    if r1_winner_cond is not None:
-                        conditions: tuple[HomeGameCondition, ...] = (team_cond, r1_winner_cond, opp_cond)
-                    else:
-                        conditions = (team_cond, opp_cond)
-                    scenario = HomeGameScenario(
-                        conditions=conditions,
-                        explanation=explanation,
-                    )
-                    (will_host if is_home else will_not_host).append(scenario)
+                    cells.append((t_cand, o_cand, is_home, explanation))
+
+            emitted: set[tuple] = set()
+            for t_cand, o_cand, is_home, explanation in cells:
+                same_opp_axis = [c for c in cells if c[1] == o_cand]
+                same_team_axis = [c for c in cells if c[0] == t_cand]
+                drop_both = all(c[2] == is_home for c in cells)
+                drop_team = not drop_both and all(c[2] == is_home for c in same_opp_axis)
+                drop_opp = not drop_both and not drop_team and all(c[2] == is_home for c in same_team_axis)
+
+                extra: list[HomeGameCondition] = []
+                if t_cand is not None and not drop_team and not drop_both:
+                    t_region, t_seed = t_cand
+                    extra.append(_advances(_team_label(t_region, t_seed, team_lookup), t_region, t_seed, _ROUND_NAMES_1A_4A[1]))
+                if o_cand is not None and not drop_opp and not drop_both:
+                    o_region, o_seed = o_cand
+                    extra.append(_advances(_team_label(o_region, o_seed, team_lookup), o_region, o_seed, _ROUND_NAMES_1A_4A[1]))
+
+                key = (tuple((c.region, c.seed) for c in extra), is_home)
+                if key in emitted:
+                    continue  # already covered by an earlier, equally (or more) general cell
+                emitted.add(key)
+                conditions: tuple[HomeGameCondition, ...] = (team_cond, *extra, opp_cond)
+                scenario = HomeGameScenario(conditions=conditions, explanation=explanation)
+                (will_host if is_home else will_not_host).append(scenario)
 
     return RoundHomeScenarios(
         round_name=round_name,

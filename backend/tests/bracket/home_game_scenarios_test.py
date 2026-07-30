@@ -1121,6 +1121,160 @@ class TestTaylorsville2025:
 
 
 # ---------------------------------------------------------------------------
+# 12b. Leake County 2025 ground truth (1A Region 5 #2 seed) -- regression
+#      fixture for the QF contradiction bug (target team's own R2 ambiguity
+#      wasn't disambiguated). Leake County's own adjacent R1 game (Bogue
+#      Chitto vs Richton) is genuinely ambiguous, unlike Taylorsville's
+#      (whose #1 seed is always home in R2 regardless of opponent) -- so this
+#      is the case that actually exercises the fixed code path.
+# ---------------------------------------------------------------------------
+
+
+class TestLeakeCounty2025:
+    """Exact expected QF home-game scenarios for Leake County, 1A Region 5 #2 seed, 2025.
+
+    Cross-checked against Taylorsville's own (already correct) conditions:
+    Taylorsville hosts Leake County when "Richton advances to Second Round";
+    by symmetry Leake County must host Taylorsville when "Bogue Chitto
+    advances to Second Round" instead -- these are two sides of the same
+    real-world fact and must not overlap.
+    """
+
+    @staticmethod
+    def _result() -> list[RoundHomeScenarios]:
+        """Run enumeration with the full 1A-2025 team-name lookup."""
+        lookup = _team_lookup_for_class(1)
+        return enumerate_home_game_scenarios(5, 2, SLOTS_1A_4A_2025, SEASON, team_lookup=lookup)
+
+    def test_qf_four_will_host_scenarios(self):
+        """QF has exactly four will-host paths."""
+        qf = self._result()[2]
+        assert qf.round_name == "Quarterfinals"
+        assert len(qf.will_host) == 4
+
+    def test_qf_three_will_not_host_scenarios(self):
+        """QF has exactly three will-not-host paths."""
+        qf = self._result()[2]
+        assert len(qf.will_not_host) == 3
+
+    def test_qf_no_contradiction_with_taylorsville(self):
+        """No condition set appears in both will_host and will_not_host (the reported bug)."""
+        qf = self._result()[2]
+        host_keys = {tuple((c.region, c.seed) for c in sc.conditions) for sc in qf.will_host}
+        not_host_keys = {tuple((c.region, c.seed) for c in sc.conditions) for sc in qf.will_not_host}
+        assert host_keys & not_host_keys == set()
+
+    def test_qf_will_host_taylorsville_via_bogue_chitto(self):
+        """Leake County hosts Taylorsville when Bogue Chitto (R7#1) advances to Second Round.
+
+        Bogue Chitto winning R1 means Leake County was away in its own R2
+        (1 home game entering QF) vs Taylorsville's 2 -- fewer home games,
+        Leake County hosts. This is the mirror image of Taylorsville's own
+        "hosts Leake County when Richton advances" condition.
+        """
+        qf = self._result()[2]
+        sc = next(sc for sc in qf.will_host if any(c.region == 8 and c.seed == 1 for c in sc.conditions))
+        r2_cond_names = {c.team_name for c in sc.conditions if c.round_name == "Second Round"}
+        assert r2_cond_names == {"Bogue Chitto"}
+
+    def test_qf_will_host_taylorsville_via_bogue_chitto_explanation(self):
+        """Fewer home games (1 vs 2) -- Leake County hosts."""
+        qf = self._result()[2]
+        sc = next(sc for sc in qf.will_host if any(c.region == 8 and c.seed == 1 for c in sc.conditions))
+        assert sc.explanation == "Fewer home games played (1 vs 2) — target team hosts"
+
+    def test_qf_will_not_host_taylorsville_via_richton(self):
+        """Leake County is away vs Taylorsville when Richton (R8#4) advances to Second Round.
+
+        Richton winning R1 means Leake County was home in its own R2 (2 home
+        games, tied with Taylorsville's 2) -- equal home games sends the
+        tiebreak to seed, so Taylorsville (#1) hosts instead.
+        """
+        qf = self._result()[2]
+        sc = next(sc for sc in qf.will_not_host if any(c.region == 8 and c.seed == 1 for c in sc.conditions))
+        r2_cond_names = {c.team_name for c in sc.conditions if c.round_name == "Second Round"}
+        assert r2_cond_names == {"Richton"}
+
+    def test_qf_will_not_host_taylorsville_via_richton_explanation(self):
+        """Equal home games, higher seed (#1) hosts -- Taylorsville, not Leake County."""
+        qf = self._result()[2]
+        sc = next(sc for sc in qf.will_not_host if any(c.region == 8 and c.seed == 1 for c in sc.conditions))
+        assert sc.explanation == "Higher seed (#1) hosts"
+
+    def test_qf_will_host_ethel_same_region_unconditional(self):
+        """Leake County hosts Ethel (same region, higher seed) with no extra conditions."""
+        qf = self._result()[2]
+        sc = next(sc for sc in qf.will_host if any(c.region == 5 and c.seed == 3 for c in sc.conditions))
+        assert len(sc.conditions) == 2  # team_cond + opp_cond only, no Second Round disambiguator
+        assert sc.explanation == "Same-region game — higher seed (#2) hosts"
+
+    def test_qf_will_not_host_west_lincoln_unconditional(self):
+        """Leake County is always away vs West Lincoln (R7#4), regardless of either team's R2 path."""
+        qf = self._result()[2]
+        matches = [sc for sc in qf.will_not_host if any(c.region == 7 and c.seed == 4 for c in sc.conditions)]
+        assert len(matches) == 1
+        assert len(matches[0].conditions) == 2  # unconditional beyond the matchup itself
+        assert matches[0].explanation == "Fewer home games played (0 vs 1) — opponent hosts"
+
+    def test_qf_south_delta_three_scenarios(self):
+        """South Delta (R6#2) has exactly 3 scenarios: 2 will-host, 1 will-not-host."""
+        qf = self._result()[2]
+        south_delta_scenarios = [
+            sc for sc in list(qf.will_host) + list(qf.will_not_host)
+            if any(c.region == 6 and c.seed == 2 for c in sc.conditions)
+        ]
+        assert len(south_delta_scenarios) == 3
+
+    def test_qf_will_host_south_delta_via_bogue_chitto_only(self):
+        """Leake County hosts South Delta when Bogue Chitto advances -- South Delta's own
+        R2 path doesn't matter here (outcome is constant across it), so only Leake
+        County's own disambiguator is attached."""
+        qf = self._result()[2]
+        sc = next(
+            sc for sc in qf.will_host
+            if any(c.region == 6 and c.seed == 2 for c in sc.conditions)
+            and any(c.team_name == "Bogue Chitto" for c in sc.conditions)
+        )
+        r2_cond_names = {c.team_name for c in sc.conditions if c.round_name == "Second Round"}
+        assert r2_cond_names == {"Bogue Chitto"}
+        assert sc.explanation == "Equal seed (#2) — region tiebreak: odd year, lower region# hosts (Region 5)"
+
+    def test_qf_will_host_south_delta_via_west_lincoln_only(self):
+        """Leake County hosts South Delta when West Lincoln advances -- Leake County's own
+        R2 path doesn't matter here, so only South Delta's own disambiguator is attached."""
+        qf = self._result()[2]
+        sc = next(
+            sc for sc in qf.will_host
+            if any(c.region == 6 and c.seed == 2 for c in sc.conditions)
+            and any(c.team_name == "West Lincoln" for c in sc.conditions)
+        )
+        r2_cond_names = {c.team_name for c in sc.conditions if c.round_name == "Second Round"}
+        assert r2_cond_names == {"West Lincoln"}
+        assert sc.explanation == "Fewer home games played (1 vs 2) — target team hosts"
+
+    def test_qf_will_not_host_south_delta_needs_both_disambiguators(self):
+        """South Delta hosts (Leake County away) only when BOTH Richton and Taylorsville
+        advance to Second Round -- the one cell where the outcome genuinely depends on
+        both teams' own R2 paths jointly, so both disambiguators must be kept."""
+        qf = self._result()[2]
+        sc = next(sc for sc in qf.will_not_host if any(c.region == 6 and c.seed == 2 for c in sc.conditions))
+        r2_cond_names = {c.team_name for c in sc.conditions if c.round_name == "Second Round"}
+        assert r2_cond_names == {"Richton", "Taylorsville"}
+        assert sc.explanation == "Fewer home games played (1 vs 2) — opponent hosts"
+
+    def test_qf_will_host_team_names_resolved(self):
+        """Team names in QF conditions should be resolved from team_lookup."""
+        qf = self._result()[2]
+        all_names = {
+            c.team_name
+            for sc in list(qf.will_host) + list(qf.will_not_host)
+            for c in sc.conditions
+            if c.team_name is not None
+        }
+        assert {"Taylorsville", "West Lincoln", "South Delta", "Ethel", "Bogue Chitto", "Richton"} <= all_names
+
+
+# ---------------------------------------------------------------------------
 # 12. Even-year tiebreak (lines 198-199, 231-232 in home_game_scenarios.py;
 #     lines 570, 608 in bracket_home_odds.py)
 # ---------------------------------------------------------------------------
@@ -1570,3 +1724,52 @@ class TestRender1APostFirstRound:
             "2025 bracket: Biggersville (R1#1) was away in QF — Okolona (R3#3) hosted"
         )
         assert _actual_home(1, "quarterfinals", 3, 3) is True, "2025 bracket: Okolona (R3#3) was home in QF"
+
+
+# ---------------------------------------------------------------------------
+# 13. No-contradiction invariant -- regression guard for the bug where a
+#     team's own R2 ambiguity wasn't disambiguated, letting the identical
+#     condition tuple appear in both will_host and will_not_host (see
+#     TestLeakeCounty2025). Checked across every region/seed in both bracket
+#     formats and both season parities, not just the two hand-verified teams.
+# ---------------------------------------------------------------------------
+
+
+def _assert_no_contradictions(result: list[RoundHomeScenarios], label: str) -> None:
+    """Assert no condition-tuple appears in both will_host and will_not_host, any round."""
+    for rnd in result:
+        host_keys = {tuple((c.kind, c.region, c.seed) for c in sc.conditions) for sc in rnd.will_host}
+        not_host_keys = {tuple((c.kind, c.region, c.seed) for c in sc.conditions) for sc in rnd.will_not_host}
+        overlap = host_keys & not_host_keys
+        assert not overlap, f"{label} {rnd.round_name}: contradictory conditions {overlap}"
+
+
+class TestNoContradictoryQFConditions:
+    """No condition-tuple may describe both a will_host and a will_not_host scenario.
+
+    This is the general invariant the reported bug violated -- checked here
+    across every region/seed in both bracket formats and both season
+    parities, since the bug only manifested for #2/#3 seeds specifically and
+    a test scoped to one team (as TestTaylorsville2025 was) can't catch it.
+    """
+
+    def test_no_contradictions_1a_4a_2025(self):
+        """Every 1A-4A region/seed combination is free of contradictions, every round."""
+        for region in range(1, 9):
+            for seed in range(1, 5):
+                result = enumerate_home_game_scenarios(region, seed, SLOTS_1A_4A_2025, SEASON)
+                _assert_no_contradictions(result, f"1A-4A Region {region} #{seed} (2025)")
+
+    def test_no_contradictions_5a_7a_2025(self):
+        """Every 5A-7A region/seed combination is free of contradictions, every round."""
+        for region in range(1, 5):
+            for seed in range(1, 5):
+                result = enumerate_home_game_scenarios(region, seed, SLOTS_5A_7A_2025, SEASON)
+                _assert_no_contradictions(result, f"5A-7A Region {region} #{seed} (2025)")
+
+    def test_no_contradictions_1a_4a_even_year(self):
+        """Even-year odd/even region tiebreak path is also free of contradictions."""
+        for region in range(1, 9):
+            for seed in range(1, 5):
+                result = enumerate_home_game_scenarios(region, seed, SLOTS_1A_4A_2025, 2024)
+                _assert_no_contradictions(result, f"1A-4A Region {region} #{seed} (2024)")
