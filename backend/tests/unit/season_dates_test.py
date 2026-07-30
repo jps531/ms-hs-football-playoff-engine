@@ -99,12 +99,18 @@ class TestGamesDatesUnambiguous:
         assert e.week == 1  # only date in the pool -> week 1, not null: weeks count through the playoffs
         assert e.description == "First Round"
 
-    def test_championship_game_round_normalizes_but_description_stays_raw(self):
-        """The normalized snake_case `round` and the human-readable `description` diverge as expected."""
+    def test_championship_game_round_normalizes_and_description_pluralizes_unscoped(self):
+        """The normalized snake_case `round` stays singular; unscoped, `description` pluralizes."""
         rows: list[GameRow] = [(CHAMPIONSHIP, "Championship Game", 7, "Alpha", "Beta")]
         e = _entries_by_date(rows)[CHAMPIONSHIP]
         assert e.round == "championship_game"
         assert e.week == 1
+        assert e.description == "Championship Games"
+
+    def test_championship_game_description_stays_singular_when_scoped_to_one_class(self):
+        """Scoped to a single class, the championship description stays singular -- it's one game."""
+        rows: list[GameRow] = [(CHAMPIONSHIP, "Championship Game", 7, "Alpha", "Beta")]
+        e = {entry.date: entry for entry in build_season_dates(rows, class_filter=7)}[CHAMPIONSHIP]
         assert e.description == "Championship Game"
 
 
@@ -238,6 +244,7 @@ class TestContinuousWeekNumbering:
 
         assert entries[date(2025, 12, 4)].week == 15
         assert entries[date(2025, 12, 4)].round == "championship_game"
+        assert entries[date(2025, 12, 4)].description == "Championship Games"
 
 
 class TestOrdering:

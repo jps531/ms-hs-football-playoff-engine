@@ -108,7 +108,7 @@ async def get_season_dates(
     if not game_rows:
         raise HTTPException(status_code=404, detail=f"Season {season} not found")
 
-    return SeasonDatesResponse(season=season, dates=build_season_dates(game_rows))
+    return SeasonDatesResponse(season=season, dates=build_season_dates(game_rows, class_filter=class_))
 
 
 @router.get("/teams")

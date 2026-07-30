@@ -3169,18 +3169,33 @@ def _format_class_range(classes: list[int]) -> str:
     return ", ".join(f"{run[0]}A" if len(run) == 1 else f"{run[0]}A-{run[-1]}A" for run in runs)
 
 
+def _pluralize_round_label(label: str, class_filter: int | None) -> str:
+    """Pluralize "Championship Game" -> "Championship Games" for unscoped (statewide) descriptions.
+
+    A statewide championship date is really several classes' separate games;
+    scoped to one class (*class_filter* set), it's genuinely a single game.
+    """
+    if class_filter is None and label == "Championship Game":
+        return "Championship Games"
+    return label
+
+
 def build_season_dates(
     game_rows: list[tuple[date, str | None, int, str, str]],
+    class_filter: int | None = None,
 ) -> list[SeasonDateEntry]:
     """Build the notable-dates list for a season's timeline scrubber.
 
     *game_rows* is ``(date, round, class_, school, opponent)`` tuples from
     ``games_effective`` joined to ``school_seasons`` (two rows per in-state
-    contest). If the caller already scoped the query to one class, every
-    date resolves unambiguously. Otherwise, 1A-4A and 5A-7A run offset
-    playoff schedules, so a single date can mean different things per class
-    (see ``SeasonDateEntry``'s docstring) — handled per-date below by
-    falling back to a composed ``description`` when classes disagree.
+    contest), already filtered to *class_filter* if the caller scoped the
+    query to one class — in which case every date resolves unambiguously.
+    Otherwise, 1A-4A and 5A-7A run offset playoff schedules, so a single date
+    can mean different things per class (see ``SeasonDateEntry``'s
+    docstring) — handled per-date below by falling back to a composed
+    ``description`` when classes disagree. *class_filter* is also used to
+    decide singular vs. plural wording for the championship (see
+    ``_pluralize_round_label``); it does not filter *game_rows* itself.
     """
     by_date: dict[date, dict] = {}
     for d, round_name, class_, school, opponent in game_rows:
@@ -3218,7 +3233,7 @@ def build_season_dates(
             entries.append(
                 SeasonDateEntry(
                     date=d, kind="games", week=week, round=only_round.lower().replace(" ", "_"),
-                    num_games=num_games, description=only_round,
+                    num_games=num_games, description=_pluralize_round_label(only_round, class_filter),
                 )
             )
             continue
@@ -3229,7 +3244,7 @@ def build_season_dates(
         for class_, rounds in v["by_class"].items():
             if len(rounds) == 1:
                 (only_round,) = rounds
-                label = f"Week {week}" if only_round is None else only_round
+                label = f"Week {week}" if only_round is None else _pluralize_round_label(only_round, class_filter)
             else:
                 label = "Unresolved"
             labels_by_class[label].append(class_)
