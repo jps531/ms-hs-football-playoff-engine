@@ -533,13 +533,17 @@ async def create_helmet_design(body: CreateHelmetDesignRequest) -> HelmetDesignM
         years_worn_json = (
             [{"start": r.start, "end": r.end} for r in body.years_worn] if body.years_worn is not None else None
         )
+        if body.is_primary:
+            await conn.execute(
+                "UPDATE helmet_designs SET is_primary = FALSE WHERE school = %s AND is_primary", (body.school,)
+            )
         id_row = await (
             await conn.execute(
                 """
             INSERT INTO helmet_designs
                 (school, year_first_worn, year_last_worn, years_worn,
-                 color, finish, facemask_color, logo, stripe, tags, notes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 color, finish, facemask_color, logo, stripe, tags, notes, is_primary)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
                 (
@@ -554,6 +558,7 @@ async def create_helmet_design(body: CreateHelmetDesignRequest) -> HelmetDesignM
                     body.stripe,
                     body.tags,
                     body.notes,
+                    body.is_primary,
                 ),
             )
         ).fetchone()
@@ -573,6 +578,16 @@ async def patch_helmet_design(design_id: int, body: PatchHelmetDesignRequest) ->
     # model_dump() recursively converts nested models to dicts, so years_worn is already list[dict]
     async with get_conn() as conn:
         await require_helmet_design_exists(conn, design_id)
+
+        if update_data.get("is_primary"):
+            await conn.execute(
+                """
+                UPDATE helmet_designs SET is_primary = FALSE
+                WHERE is_primary AND id != %s
+                  AND school = (SELECT school FROM helmet_designs WHERE id = %s)
+                """,
+                (design_id, design_id),
+            )
 
         set_clause = build_set_clause(update_data)
         update_query = sql.SQL("UPDATE helmet_designs SET {} WHERE id = %s").format(set_clause)

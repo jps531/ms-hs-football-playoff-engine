@@ -312,6 +312,7 @@ class CreateHelmetDesignRequest(BaseModel):
     stripe: str | None = None
     tags: list[str] = []
     notes: str | None = None
+    is_primary: bool = False
 
 
 class PatchHelmetDesignRequest(BaseModel):
@@ -327,6 +328,7 @@ class PatchHelmetDesignRequest(BaseModel):
     stripe: str | None = None
     tags: list[str] | None = None
     notes: str | None = None
+    is_primary: bool | None = None
 
 
 # ---------------------------------------------------------------------------

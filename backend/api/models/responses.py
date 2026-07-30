@@ -191,6 +191,7 @@ class HelmetDesignModel(BaseModel):
     stripe: str | None = None
     tags: list[str] = []
     notes: str | None = None
+    is_primary: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -892,6 +893,15 @@ class ChampionshipVenueAssignment(BaseModel):
     class_: int
     location_id: int
     location_name: str
+
+
+class ChampionshipVenueModel(BaseModel):
+    """One season/class's championship venue, for the public almanac view."""
+
+    season: int
+    class_: int
+    location: LocationDetailModel
+    has_games: bool
 
 
 # ---------------------------------------------------------------------------

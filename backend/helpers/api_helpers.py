@@ -228,6 +228,7 @@ HELMET_FIELD_COLS = (
     "stripe",
     "tags",
     "notes",
+    "is_primary",
 )
 
 HELMET_DESIGNS_SELECT = f"SELECT {', '.join(HELMET_FIELD_COLS)} FROM helmet_designs"
@@ -268,7 +269,7 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
 
     Each row is ``(school, opponent, date, points_for, points_against, location,
     region_game, status, season, venue_name, venue_city, venue_lat, venue_lon,
-    *15 helmet_a fields, *15 helmet_b fields, round, kickoff, overtime, final,
+    *16 helmet_a fields, *16 helmet_b fields, round, kickoff, overtime, final,
     quarter, clock, source, pregame_prob, pregame_prob_computed_at,
     ot_period_start_score_for, ot_period_start_score_against, ot_next_possession,
     elo_school, elo_opponent)``.
@@ -302,9 +303,9 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
         v_lon,
         *rest,
     ) in rows:
-        ha_fields = tuple(rest[:15])
-        hb_fields = tuple(rest[15:30])
-        g_round, g_kickoff, g_overtime, g_final, g_quarter, g_clock, g_source = rest[30:37]
+        ha_fields = tuple(rest[:16])
+        hb_fields = tuple(rest[16:32])
+        g_round, g_kickoff, g_overtime, g_final, g_quarter, g_clock, g_source = rest[32:39]
         (
             persisted_pregame_prob,
             persisted_computed_at,
@@ -313,7 +314,7 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
             ot_next_possession,
             elo_school,
             elo_opponent,
-        ) = rest[37:44]
+        ) = rest[39:46]
 
         pregame_prob, live_prob, prob_as_of = compute_embedded_game_probs(
             EmbeddedProbInputs(

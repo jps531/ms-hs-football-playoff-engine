@@ -1064,7 +1064,7 @@ _ROW_BETA = (
 )
 
 
-_HELMET_EMPTY = (None,) * 15  # id=None means "no helmet designated"
+_HELMET_EMPTY = (None,) * 16  # id=None means "no helmet designated"
 
 
 def _game_row(
@@ -1134,12 +1134,30 @@ class TestBuildHelmetFromFields:
 
     def test_fields_mapped_in_order(self):
         """Fields map positionally per HELMET_FIELD_COLS order."""
-        fields = (7, "Taylorsville", 2020, None, None, None, None, None, "Red", None, None, None, None, [], "note")
+        fields = (
+            7,
+            "Taylorsville",
+            2020,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "Red",
+            None,
+            None,
+            None,
+            None,
+            [],
+            "note",
+            True,
+        )
         result = build_helmet_from_fields(*fields)
         assert result is not None
         assert (result.id, result.school, result.year_first_worn) == (7, "Taylorsville", 2020)
         assert result.color == "Red"
         assert result.notes == "note"
+        assert result.is_primary is True
 
     def test_years_worn_coerced_from_dicts(self):
         """A years_worn field of raw {"start", "end"} dicts coerces into YearsWornRange models."""
@@ -1159,6 +1177,7 @@ class TestBuildHelmetFromFields:
             None,
             [],
             None,
+            False,
         )
         result = build_helmet_from_fields(*fields)
         assert result is not None
@@ -1171,7 +1190,7 @@ class TestBuildHelmetFromRow:
 
     def test_returns_model_for_real_row(self):
         """A row with a real id returns a HelmetDesignModel."""
-        row = (3, "Taylorsville", 2021, None, None, None, None, None, None, None, None, None, None, [], None)
+        row = (3, "Taylorsville", 2021, None, None, None, None, None, None, None, None, None, None, [], None, False)
         result = build_helmet_from_row(row)
         assert result.id == 3
         assert result.school == "Taylorsville"
@@ -1245,17 +1264,35 @@ class TestBuildGameModels:
 
     def test_helmet_built_when_id_present(self):
         """Helmet fields with a non-None id produce a populated HelmetDesignModel."""
-        helmet_a = (7, "Alpha", 2020, None, None, None, None, None, "Red", None, None, None, None, [], None)
+        helmet_a = (7, "Alpha", 2020, None, None, None, None, None, "Red", None, None, None, None, [], None, False)
         row = _game_row("Alpha", "Beta", helmet_a=helmet_a)
         result = build_game_models([row], team_filter=None)
         assert result[0].helmet_a is not None
         assert result[0].helmet_a.id == 7
         assert result[0].helmet_a.color == "Red"
+        assert result[0].helmet_a.is_primary is False
 
     def test_helmets_swapped_with_school_order(self):
         """When school/opponent are swapped for canonical order, helmets swap with them."""
-        helmet_zeta = (1, "Zeta", 2019, None, None, None, None, None, "Blue", None, None, None, None, [], None)
-        helmet_alpha = (2, "Alpha", 2018, None, None, None, None, None, "Green", None, None, None, None, [], None)
+        helmet_zeta = (1, "Zeta", 2019, None, None, None, None, None, "Blue", None, None, None, None, [], None, False)
+        helmet_alpha = (
+            2,
+            "Alpha",
+            2018,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "Green",
+            None,
+            None,
+            None,
+            None,
+            [],
+            None,
+            True,
+        )
         row = _game_row("Zeta", "Alpha", helmet_a=helmet_zeta, helmet_b=helmet_alpha)
         result = build_game_models([row], team_filter=None)
         g = result[0]
@@ -1263,6 +1300,8 @@ class TestBuildGameModels:
         # team_a is now Alpha, so helmet_a should be Alpha's helmet
         assert g.helmet_a.color == "Green"
         assert g.helmet_b.color == "Blue"
+        assert g.helmet_a.is_primary is True
+        assert g.helmet_b.is_primary is False
 
 
 class TestBuildGameModelsProbabilities:

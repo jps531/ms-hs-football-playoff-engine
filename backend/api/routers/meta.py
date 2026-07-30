@@ -7,15 +7,22 @@ from psycopg import sql
 
 from backend.api.db import get_conn
 from backend.api.models.responses import (
+    ChampionshipVenueModel,
     ClassStructure,
     HelmetDesignModel,
+    LocationDetailModel,
     RegionSummary,
     SeasonDatesResponse,
     SeasonModel,
     SeasonStructureResponse,
     TeamModel,
 )
-from backend.helpers.api_helpers import HELMET_DESIGNS_SELECT, build_helmet_from_row, build_season_dates
+from backend.helpers.api_helpers import (
+    HELMET_DESIGNS_SELECT,
+    build_helmet_from_fields,
+    build_helmet_from_row,
+    build_season_dates,
+)
 from backend.helpers.image_helpers import logo_url
 from backend.helpers.query_helpers import and_join_conditions
 
@@ -198,6 +205,36 @@ async def list_team_helmets(
     return results
 
 
+@router.get("/teams/{team}/helmets/resolved", responses=_404)
+async def resolve_team_helmet(
+    team: str,
+    season: Annotated[int, Query(ge=1980, le=2040)],
+) -> HelmetDesignModel | None:
+    """Resolve the default helmet design to display for *team* in *season*.
+
+    Fallback order: the school's primary design covering *season*, else the
+    most recently introduced design covering *season*, else ``null``. Does
+    not consider per-game assignments — those are explicit on each game row
+    (``GET /games``'s ``helmet_a``/``helmet_b``) and take precedence over this
+    endpoint when present; callers should only fall back here when a game has
+    no explicit assignment, or for contexts (team headers) with no single game.
+    """
+    async with get_conn() as conn:
+        check = await conn.execute("SELECT 1 FROM schools WHERE school = %s", (team,))
+        if await check.fetchone() is None:
+            raise HTTPException(status_code=404, detail=f"Team '{team}' not found")
+
+        query = sql.SQL(
+            HELMET_DESIGNS_SELECT
+            + " WHERE school = %s AND year_first_worn <= %s"
+            + " AND (year_last_worn IS NULL OR year_last_worn >= %s)"
+            + " ORDER BY is_primary DESC, year_first_worn DESC LIMIT 1"
+        )
+        row = await (await conn.execute(query, (team, season, season))).fetchone()
+
+    return build_helmet_from_fields(*row) if row is not None else None
+
+
 @router.get("/helmets")
 async def list_helmets(
     team: Annotated[str | None, Query()] = None,
@@ -230,3 +267,50 @@ async def list_helmets(
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
         return [build_helmet_from_row(r) async for r in rows]
+
+
+@router.get("/championships")
+async def list_championships(
+    season: Annotated[int | None, Query()] = None,
+    class_: Annotated[int | None, Query(alias="class", ge=1, le=7)] = None,
+) -> list[ChampionshipVenueModel]:
+    """Return championship venue history, optionally filtered by season and/or class.
+
+    Each entry's ``has_games`` is true when that season/class's Championship Game has
+    been imported into ``games`` (so the UI can link through to the game page);
+    pre-import seasons return ``has_games: false`` and render as pure almanac entries.
+    """
+    conditions: list[LiteralString] = []
+    params: list = []
+    if season is not None:
+        conditions.append("cv.season = %s")
+        params.append(season)
+    if class_ is not None:
+        conditions.append("cv.class = %s")
+        params.append(class_)
+
+    query = """
+        SELECT cv.season, cv.class, l.id, l.name, l.city, l.home_team, l.latitude, l.longitude,
+               EXISTS (
+                 SELECT 1 FROM games g
+                 JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+                 WHERE g.season = cv.season AND ss.class = cv.class AND g.round = 'Championship Game'
+               ) AS has_games
+        FROM championship_venues cv
+        JOIN locations l ON l.id = cv.location_id
+    """
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY cv.season DESC, cv.class"
+
+    async with get_conn() as conn:
+        rows = await conn.execute(query, params)
+        return [
+            ChampionshipVenueModel(
+                season=r[0],
+                class_=r[1],
+                location=LocationDetailModel(id=r[2], name=r[3], city=r[4], home_team=r[5], latitude=r[6], longitude=r[7]),
+                has_games=r[8],
+            )
+            async for r in rows
+        ]

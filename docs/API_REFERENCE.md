@@ -14,7 +14,11 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | GET | `/teams` | List teams; `season` required, optional `class` and `region` filters |
 | GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
 | GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
+| GET | `/teams/{team}/helmets/resolved` | The single default helmet design to display for a team in a season — see "Primary helmet & display resolution order" below. Params: `season` (required) |
 | GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag` |
+| GET | `/championships` | Championship venue history (back to 1992) for the almanac page. Optional `season`, `class` filters |
+
+**`GET /championships`** — response: `[{season, class_, location: {id, name, city, home_team, latitude, longitude}, has_games}, ...]`, ordered newest season first. `has_games` is `true` once that season/class's Championship Game has been imported into `/games` (so the UI can link through to the game page); pre-import seasons return `has_games: false` and render as pure almanac entries.
 
 **`GET /seasons/{season}/dates`** — response: `{season, dates: [...]}`. Each entry:
 - `date`, `kind` (`"games"` or `"season_start"` — one entry, one day before the season's first game, always `week: 0`).
@@ -182,6 +186,8 @@ A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Co
 
 Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinals"` — `null` for regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
 
+Each game also includes `helmet_a` / `helmet_b` — the full helmet design record (see `/helmets` below) worn by `team_a`/`team_b` in that game, or `null`. These are populated **only** from that team's explicit `helmet_design_id` assignment on the game (see `PUT /games/{school}/{date}/helmet` below) — never inferred from a school's primary or most-recent design. A `null` value means the frontend should apply the resolution order documented under "Helmet designs CRUD" to pick a fallback for display.
+
 Each game also includes embedded win probability, always from `team_a`'s perspective (so `P(team_b) = 1 - P(team_a)`):
 - `pregame_prob` (float | null) — Elo-based pregame win probability. For final games this is the value persisted at finalization (computed from ratings as of the game's own date — never a later snapshot, so it never reflects the game's own result). For not-yet-final games it's computed on the fly from the latest available ratings. `null` if either team is unrated.
 - `live_prob` (float | null) — non-null only while the game is in progress (`status` is one of the in-progress states). Regulation games route through the in-game model using `game_quarter`/`game_clock`; overtime games (`game_quarter > 4`) route through the OT model using the manually-tracked `ot_period_start_score_for`/`ot_period_start_score_against`/`ot_next_possession` state (see below) — `null`/incomplete OT state falls back to `pregame_prob`.
@@ -245,9 +251,16 @@ Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/helmets` | Create a new helmet design record. Body: `school` (required), `year_first_worn` (required), plus optional `year_last_worn`, `years_worn`, `color`, `finish`, `facemask_color`, `logo`, `stripe`, `tags`, `notes`. Returns full record including generated `id` |
-| PATCH | `/helmets/{id}` | Partial update of any metadata field (not image columns). Only provided fields are written |
+| POST | `/helmets` | Create a new helmet design record. Body: `school` (required), `year_first_worn` (required), plus optional `year_last_worn`, `years_worn`, `color`, `finish`, `facemask_color`, `logo`, `stripe`, `tags`, `notes`, `is_primary` (default `false`). Returns full record including generated `id` |
+| PATCH | `/helmets/{id}` | Partial update of any metadata field (not image columns), including `is_primary`. Only provided fields are written |
 | DELETE | `/helmets/{id}` | Delete a helmet design. Any games referencing it have `helmet_design_id` set to NULL automatically |
+
+**Primary helmet & display resolution order** — `is_primary` marks a school's default design; the DB enforces at most one primary per school (partial unique index), and setting `is_primary: true` via `POST`/`PATCH` atomically clears any existing primary for that school first. This is the single source of truth for how the frontend and OG share-card rendering should pick a helmet to display, in order:
+
+1. The game's explicit `helmet_design_id` assignment (`GET /games`'s `helmet_a`/`helmet_b`, or `PUT /games/{school}/{date}/helmet`) — never overridden by primary/fallback logic.
+2. The school's primary design whose `year_first_worn`–`year_last_worn` range covers the relevant season — `GET /teams/{team}/helmets/resolved?season=`.
+3. If no primary covers that season, the most recently introduced design that does (same endpoint — steps 2 and 3 are resolved together server-side).
+4. If nothing covers that season, `null` — render the silhouette fallback client-side; never guess.
 
 ## Images — `/images`
 

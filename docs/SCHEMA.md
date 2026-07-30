@@ -40,6 +40,7 @@ erDiagram
         text stripe
         text tags
         text notes
+        boolean is_primary
     }
     school_seasons {
         text school PK,FK

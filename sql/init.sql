@@ -45,11 +45,15 @@ CREATE TABLE IF NOT EXISTS helmet_designs (
   logo            TEXT,                      -- description, e.g. 'outlined script W'
   stripe          TEXT,                      -- description, e.g. 'single center stripe'
   tags            TEXT[],                    -- queryable metadata tags
-  notes           TEXT                       -- free-text catch-all
+  notes           TEXT,                      -- free-text catch-all
+  is_primary      BOOLEAN NOT NULL DEFAULT FALSE -- default display design for the school
 );
 
 CREATE INDEX IF NOT EXISTS idx_helmet_designs_school
   ON helmet_designs (school);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_helmet_designs_primary_per_school
+  ON helmet_designs (school) WHERE is_primary;
 
 
 -- ---------------------------------------------------------------------------
