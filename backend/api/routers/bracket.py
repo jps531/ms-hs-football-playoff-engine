@@ -1,6 +1,7 @@
 """Bracket advancement odds endpoints."""
 
 from datetime import date
+from datetime import date as _date
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
@@ -11,18 +12,23 @@ from backend.api.models.requests import SimulateBracketRequest
 from backend.api.models.responses import BracketResponse, SlotOutlookResponse, TeamBracketEntry
 from backend.helpers.api_helpers import (
     _apply_round_ceilings,
+    _candidate_seeds_by_region,
+    _compute_seed_atoms_if_pre_playoff,
     _load_all_region_odds,
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     _load_format_slots,
     _resolve_ref_to_school,
     _resolve_ref_to_slot_id,
+    _resolve_slot_group,
     build_bracket_entries,
     build_bracket_layout,
     build_enriched_bracket_layout,
     build_slot_outlook_teams,
+    clinched_school,
     load_championship_venue,
     load_home_venues,
+    load_remaining_game_dates,
     today,
 )
 from backend.helpers.data_classes import MatchupProbFn
@@ -36,6 +42,7 @@ RoundQ = Annotated[
     Literal["first_round", "second_round", "quarterfinals", "semifinals"],
     Query(),
 ]
+IncludeConditionsQ = Annotated[bool, Query()]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
@@ -131,6 +138,7 @@ async def get_bracket_slot(
     class_: ClassQ,
     round: RoundQ = "first_round",
     date: Annotated[date | None, Query()] = None,
+    include_conditions: IncludeConditionsQ = False,
 ) -> SlotOutlookResponse:
     """Return every team still alive for one bracket slot's game, ranked by chance of reaching it.
 
@@ -142,9 +150,18 @@ async def get_bracket_slot(
     Unlike ``GET /bracket``, which shows one occupant per (region, seed) slot,
     this returns every team still mathematically alive for the slot pre-clinch.
     ``p_host_overall`` is always ``p_reach * p_host_given_reach``.
-    ``reach_conditions``/``host_conditions`` are always ``null`` for now.
+
+    Pass ``include_conditions=true`` to populate each team's
+    ``host_conditions`` (the conditions under which they'd host, given they
+    reach the round) — mirroring ``/hosting``'s ``include_scenarios``, this is
+    opt-in since it runs the same combinatorially-guarded scenario-atom
+    computation, once per region feeding this slot. ``reach_conditions`` is
+    always ``null`` for now — a separate, undesigned follow-up.
     """
     as_of = date or today()
+    seed_atoms_by_region: dict[int, dict | None] = {}
+    game_dates_by_region: dict[int, dict[tuple[str, str], _date | None]] = {}
+    team_lookup: dict[tuple[int, int], str] = {}
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, class_)
         if not slots:
@@ -156,6 +173,29 @@ async def get_bracket_slot(
         state = await _load_and_build_playoff_bracket_state(
             conn, season, class_, as_of, [], elo_ratings, slots
         )
+
+        if include_conditions:
+            group_slots = _resolve_slot_group(slot, round, slots)
+            if group_slots is not None:
+                if round == "first_round":
+                    seeds_by_region = {
+                        group_slots[0].home_region: {group_slots[0].home_seed},
+                        group_slots[0].away_region: {group_slots[0].away_seed},
+                    }
+                else:
+                    seeds_by_region = _candidate_seeds_by_region(group_slots)
+                for region, seeds in seeds_by_region.items():
+                    seed_atoms, remaining = await _compute_seed_atoms_if_pre_playoff(
+                        conn, season, class_, region, as_of
+                    )
+                    seed_atoms_by_region[region] = seed_atoms
+                    game_dates_by_region[region] = (
+                        await load_remaining_game_dates(conn, season, remaining) if seed_atoms is not None else {}
+                    )
+                    for seed in seeds:
+                        occupant = clinched_school(by_region.get(region, {}), seed)
+                        if occupant is not None:
+                            team_lookup[(region, seed)] = occupant
 
     if state is not None:
         win_prob_fn_weighted = state.matchup_fn
@@ -174,6 +214,9 @@ async def get_bracket_slot(
         wins_confirmed=wins_confirmed,
         all_region_odds=all_region_odds,
         cross_region_wins=cross_region_wins,
+        seed_atoms_by_region=seed_atoms_by_region if include_conditions else None,
+        game_dates_by_region=game_dates_by_region if include_conditions else None,
+        team_lookup=team_lookup if include_conditions else None,
     )
     if teams is None:
         raise HTTPException(

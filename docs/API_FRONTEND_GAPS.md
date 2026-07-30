@@ -85,7 +85,7 @@ are still genuinely new work, not a reshape of existing output:
 
 ---
 
-## 2. `host_conditions` for `GET /bracket/slots/{slot}` (follow-up)
+## 2. `host_conditions` for `GET /bracket/slots/{slot}` (follow-up) ✅
 
 **UI purpose:** the conditions under which a team would host, if it reaches
 the slot's round — nested under each team in §1's response once available.
@@ -190,6 +190,6 @@ probabilities (already shipped; see `API_REFERENCE.md`).
 2. §4 (small; timeline completeness) ✅
 3. §5 (home page modules; depends on already-shipped `/games/probability`
    dated pregame probabilities) ✅
-4. §2 (`host_conditions` follow-up, once §1 ships)
+4. §2 (`host_conditions` follow-up, once §1 ships) ✅
 5. §3 (`reach_conditions` — separate, undesigned effort; scope before
    estimating)

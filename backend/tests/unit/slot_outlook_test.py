@@ -22,7 +22,7 @@ from backend.helpers.bracket_home_odds import (
     compute_semifinal_home_odds,
     equal_matchup_prob,
 )
-from backend.helpers.data_classes import StandingsOdds
+from backend.helpers.data_classes import GameResult, StandingsOdds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
 
 SEASON = 2025
@@ -342,3 +342,103 @@ class TestBuildSlotOutlookTeamsInvalid:
         """Requesting second_round for the 5A-7A format (which has none) returns None."""
         by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
         assert build_slot_outlook_teams(1, "second_round", by_region, SLOTS_5A_7A_2025, SEASON) is None
+
+
+# ---------------------------------------------------------------------------
+# build_slot_outlook_teams -- host_conditions (include_conditions=True path)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSlotOutlookTeamsHostConditions:
+    """Coverage for host_conditions, populated only when seed_atoms_by_region is passed."""
+
+    def test_seed_atoms_by_region_omitted_leaves_host_conditions_none(self):
+        """Without seed_atoms_by_region (include_conditions=False), host_conditions stays None."""
+        by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
+        teams = build_slot_outlook_teams(1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON)
+        assert teams is not None
+        assert all(t.host_conditions is None for t in teams)
+
+    def test_clinched_home_seed_has_unconditional_host_conditions(self):
+        """A clinched home-seed team's host_conditions is a single empty AND-group (unconditional)."""
+        by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
+        teams = build_slot_outlook_teams(
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        alpha = next(t for t in teams if t.school == "Alpha")
+        assert alpha.host_conditions == [[]]
+
+    def test_clinched_away_seed_never_hosts(self):
+        """A clinched away-seed team's host_conditions is an empty list (never hosts this round)."""
+        by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
+        teams = build_slot_outlook_teams(
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        beta = next(t for t in teams if t.school == "Beta")
+        assert beta.host_conditions == []
+
+    def test_preclinch_seed_required_expands_with_seed_atoms(self):
+        """A pre-clinch team's seed_required condition expands into a game_result dict via seed_atoms."""
+        by_region = {
+            1: {"Alpha": _odds("Alpha", p1=0.6, p3=0.4)},
+            2: {"Beta": _locked("Beta", 4)},
+        }
+        seed_atoms_by_region = {
+            1: {"Alpha": {1: [[GameResult(winner="Alpha", loser="Gamma", min_margin=1, max_margin=None)]]}},
+            2: None,
+        }
+        teams = build_slot_outlook_teams(
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region=seed_atoms_by_region, game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        alpha = next(t for t in teams if t.school == "Alpha")
+        assert alpha.host_conditions is not None
+        (group,) = alpha.host_conditions
+        (cond,) = group
+        assert cond.type == "game_result"
+        assert cond.school == "Alpha"
+        assert cond.opponent == "Gamma"
+        assert cond.required_result == "win"
+
+    def test_preclinch_no_seed_atoms_leaves_placeholder(self):
+        """A pre-clinch team with seed_atoms_by_region[region]=None keeps an unexpanded seed_required condition."""
+        by_region = {
+            1: {"Alpha": _odds("Alpha", p1=0.6, p3=0.4)},
+            2: {"Beta": _locked("Beta", 4)},
+        }
+        teams = build_slot_outlook_teams(
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        alpha = next(t for t in teams if t.school == "Alpha")
+        assert alpha.host_conditions is not None
+        (group,) = alpha.host_conditions
+        (cond,) = group
+        assert cond.type == "seed_required"
+        assert cond.school == "Alpha"
+        assert cond.seed == 1
+
+    def test_later_round_condition_referencing_unclinched_position_falls_back(self):
+        """A later-round host condition about another (region, seed) not in team_lookup falls back to a label."""
+        by_region = {
+            1: {"R1S1": _locked("R1S1", 1)},
+            2: {"R2S4": _locked("R2S4", 4)},
+            3: {"R3S2": _locked("R3S2", 2)},
+            4: {"R4S3": _locked("R4S3", 3)},
+        }
+        teams = build_slot_outlook_teams(
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
+            game_dates_by_region={}, team_lookup={},
+        )
+        assert teams is not None
+        r1s1 = next(t for t in teams if t.school == "R1S1")
+        assert r1s1.host_conditions is not None
+        schools = {c.school for group in r1s1.host_conditions for c in group}
+        assert any(s and s.startswith("Region ") and s.endswith(" Seed") for s in schools)

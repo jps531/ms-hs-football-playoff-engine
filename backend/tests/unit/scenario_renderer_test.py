@@ -23,11 +23,14 @@ from backend.helpers.scenario_renderer import (
     _render_home_scenario_block,
     _render_margin_condition,
     _render_pre_playoff_block,
+    _resolve_home_condition_team_name,
     _winner_label,
     atom_condition_dicts,
     atoms_from_complete_scenarios,
+    build_host_conditions,
     classify_margin,
     division_scenarios_as_dict,
+    home_condition_to_path_dict,
     render_pre_playoff_team_home_scenarios,
     render_team_home_scenarios,
     render_team_matchups,
@@ -885,6 +888,145 @@ class TestTeamHomeScenariosAsDictSeedAtomsExpansion:
         will_host = result["first_round"]["will_host"]
         assert len(will_host) == 1
         assert will_host[0]["conditions"][0]["kind"] == "advances"
+
+
+class TestResolveHomeConditionTeamName:
+    """_resolve_home_condition_team_name fills an unset team_name, or leaves an already-set one alone."""
+
+    def test_already_set_team_name_returned_unchanged(self):
+        """A condition with team_name already set is returned as-is."""
+        cond = HomeGameCondition(kind="advances", round_name="Semifinals", region=3, seed=1, team_name="Oak Grove")
+        assert _resolve_home_condition_team_name(cond, "TeamA") is cond
+
+    def test_region_none_resolves_to_target_team(self):
+        """region=None refers to the target team itself."""
+        cond = HomeGameCondition(kind="advances", round_name="Semifinals", region=None, seed=None, team_name=None)
+        resolved = _resolve_home_condition_team_name(cond, "TeamA")
+        assert resolved.team_name == "TeamA"
+
+    def test_region_set_falls_back_to_region_seed_label(self):
+        """region set but unresolved falls back to 'Region X #Y Seed'."""
+        cond = HomeGameCondition(kind="advances", round_name="Semifinals", region=3, seed=2, team_name=None)
+        resolved = _resolve_home_condition_team_name(cond, "TeamA")
+        assert resolved.team_name == "Region 3 #2 Seed"
+
+
+class TestHomeConditionToPathDict:
+    """home_condition_to_path_dict converts a resolved HomeGameCondition to a PathConditionModel dict."""
+
+    def test_advances_condition(self):
+        """kind='advances' maps to type='bracket_advances' with region/seed/round_name populated."""
+        cond = HomeGameCondition(kind="advances", round_name="Quarterfinals", region=3, seed=2, team_name="Oak Grove")
+        out = home_condition_to_path_dict(cond)
+        assert out == {
+            "type": "bracket_advances",
+            "school": "Oak Grove",
+            "region": 3,
+            "seed": 2,
+            "round_name": "Quarterfinals",
+            "description": "Oak Grove advances to Quarterfinals",
+        }
+
+    def test_seed_required_condition(self):
+        """kind='seed_required' maps to type='seed_required' with school/seed/description only."""
+        cond = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name="TeamA")
+        out = home_condition_to_path_dict(cond)
+        assert out == {
+            "type": "seed_required",
+            "school": "TeamA",
+            "seed": 1,
+            "description": "TeamA finishes as the #1 seed",
+        }
+
+
+class TestBuildHostConditions:
+    """build_host_conditions renders a team's will_host scenarios as PathConditionModel OR-of-AND dicts."""
+
+    _DATES: dict[tuple[str, str], date | None] = {("TeamA", "TeamB"): date(2025, 10, 17)}
+
+    def _seed_atoms(self):
+        """Two atoms for TeamA's #1 seed: outright win, or narrow loss + a second team losing."""
+        return {
+            "TeamA": {
+                1: [
+                    [GameResult(winner="TeamA", loser="TeamB", min_margin=1, max_margin=None)],
+                ],
+            },
+        }
+
+    def test_no_will_host_returns_empty_list(self):
+        """A round with no will_host scenarios means the team never hosts — returns []."""
+        rnd = _rhs(will_host=())
+        assert build_host_conditions("TeamA", rnd, None, {}) == []
+
+    def test_unconditional_scenario_is_an_empty_and_group(self):
+        """A scenario with no conditions (unconditional host) becomes an empty inner list."""
+        sc = HomeGameScenario(conditions=(), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        assert build_host_conditions("TeamA", rnd, None, {}) == [[]]
+
+    def test_resolved_condition_without_seed_atoms(self):
+        """A post-playoff (already-determined) condition renders directly via home_condition_to_path_dict."""
+        cond = HomeGameCondition(kind="advances", round_name="Semifinals", region=None, seed=None, team_name=None)
+        sc = HomeGameScenario(conditions=(cond,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = build_host_conditions("TeamA", rnd, None, {})
+        assert result == [
+            [
+                {
+                    "type": "bracket_advances",
+                    "school": "TeamA",
+                    "region": None,
+                    "seed": None,
+                    "round_name": "Semifinals",
+                    "description": "TeamA advances to Semifinals",
+                }
+            ]
+        ]
+
+    def test_seed_required_expands_via_atom_condition_dicts(self):
+        """A pre-playoff seed_required placeholder expands into atom_condition_dicts-shaped conditions."""
+        seed_required = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name=None)
+        sc = HomeGameScenario(conditions=(seed_required,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = build_host_conditions("TeamA", rnd, self._seed_atoms(), self._DATES)
+        assert result == [
+            [
+                {
+                    "type": "game_result",
+                    "school": "TeamA",
+                    "date": date(2025, 10, 17),
+                    "opponent": "TeamB",
+                    "required_result": "win",
+                    "margin_class": None,
+                }
+            ]
+        ]
+
+    def test_seed_required_without_matching_atoms_left_unexpanded(self):
+        """No seed_atoms entry for this team/seed leaves the placeholder as a descriptive condition."""
+        seed_required = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name=None)
+        sc = HomeGameScenario(conditions=(seed_required,), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = build_host_conditions("TeamZ", rnd, self._seed_atoms(), self._DATES)
+        assert result == [[{"type": "seed_required", "school": "TeamZ", "seed": 1, "description": "TeamZ finishes as the #1 seed"}]]
+
+    def test_remaining_conditions_appended_to_each_expanded_atom(self):
+        """A condition following seed_required is AND-appended to every expanded atom's group."""
+        seed_required = HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=1, team_name=None)
+        advances = HomeGameCondition(kind="advances", round_name="Semifinals", region=None, seed=None, team_name=None)
+        sc = HomeGameScenario(conditions=(seed_required, advances), explanation=None)
+        rnd = _rhs(will_host=(sc,))
+        result = build_host_conditions("TeamA", rnd, self._seed_atoms(), self._DATES)
+        assert len(result) == 1
+        assert result[0][-1] == {
+            "type": "bracket_advances",
+            "school": "TeamA",
+            "region": None,
+            "seed": None,
+            "round_name": "Semifinals",
+            "description": "TeamA advances to Semifinals",
+        }
 
 
 class TestAtomsFromCompleteScenarios:

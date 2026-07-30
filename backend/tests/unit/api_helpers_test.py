@@ -53,6 +53,7 @@ from backend.helpers.api_helpers import (
     region_volatility,
     remaining_to_models,
     resolve_hosting_scenario_inputs,
+    resolve_seed_and_achievable,
     results_to_applied,
     scenarios_to_entries,
     select_sentinel_region,
@@ -1771,6 +1772,45 @@ def _hosting_entry(
         quarterfinals=qf or empty,
         semifinals=sf or empty,
     )
+
+
+class TestResolveSeedAndAchievable:
+    """resolve_seed_and_achievable derives (clinched_seed, achievable_seeds), optionally restricted."""
+
+    def test_clinched_seed_returned_no_achievable_seeds(self):
+        """A seed at/above CLINCHED_THRESHOLD is returned as `seed`; achievable_seeds is None."""
+        odds = _odds("Able", p2=0.999, p_playoffs=1.0)
+        seed, achievable = resolve_seed_and_achievable(odds)
+        assert seed == 2
+        assert achievable is None
+
+    def test_unclinched_returns_achievable_seeds(self):
+        """Below the clinch threshold, every seed with nonzero probability is achievable."""
+        odds = _odds("Able", p1=0.3, p2=0.5, p3=0.2, p4=0.0, p_playoffs=1.0)
+        seed, achievable = resolve_seed_and_achievable(odds)
+        assert seed is None
+        assert achievable == [1, 2, 3]
+
+    def test_candidate_seeds_restricts_achievable_set(self):
+        """achievable_seeds only includes seeds within candidate_seeds, even if others have probability."""
+        odds = _odds("Able", p1=0.2, p2=0.3, p3=0.1, p4=0.4, p_playoffs=1.0)
+        seed, achievable = resolve_seed_and_achievable(odds, candidate_seeds=[1, 2])
+        assert seed is None
+        assert achievable == [1, 2]
+
+    def test_candidate_seeds_restricts_clinch_check(self):
+        """A seed clinched outside candidate_seeds is not returned as `seed`."""
+        odds = _odds("Able", p4=1.0, p_playoffs=1.0)
+        seed, achievable = resolve_seed_and_achievable(odds, candidate_seeds=[1, 2])
+        assert seed is None
+        assert achievable == []
+
+    def test_no_nonzero_candidate_seed_returns_empty_achievable_list(self):
+        """No candidate seed with nonzero probability returns (None, []) rather than raising."""
+        odds = _odds("Able", p1=1.0, p_playoffs=1.0)
+        seed, achievable = resolve_seed_and_achievable(odds, candidate_seeds=[3, 4])
+        assert seed is None
+        assert achievable == []
 
 
 class TestResolveHostingScenarioInputs:

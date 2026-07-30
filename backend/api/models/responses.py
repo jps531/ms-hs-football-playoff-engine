@@ -254,9 +254,15 @@ class PathConditionModel(BaseModel):
     a single school/opponent; ``"coin_flip"`` and ``"pd_rank"`` cover
     tiebreaker-only conditions with no associated remaining game (``description``
     carries the fallback text since there's nothing to map to a schedule row).
+    ``"bracket_advances"``/``"seed_required"`` mirror ``HomeGameCondition``
+    (used for bracket-slot ``host_conditions``): ``school`` carries the team
+    name (``HomeGameCondition.team_name``), ``region``/``seed`` identify the
+    bracket position the condition is about, ``round_name`` is set only for
+    ``"bracket_advances"``, and ``description`` carries a rendered sentence
+    (e.g. "Taylorsville advances to Quarterfinals").
     """
 
-    type: str = "game_result"  # "game_result" | "margin_sum" | "coin_flip" | "pd_rank"
+    type: str = "game_result"  # "game_result" | "margin_sum" | "coin_flip" | "pd_rank" | "bracket_advances" | "seed_required"
     school: str | None = None
     date: _Date | None = None
     opponent: str | None = None
@@ -265,7 +271,10 @@ class PathConditionModel(BaseModel):
     games: list[PathGameRefModel] | None = None  # populated for "margin_sum"
     op: str | None = None  # populated for "margin_sum"
     threshold: int | None = None  # populated for "margin_sum"
-    description: str | None = None  # human-readable fallback for coin_flip / pd_rank
+    description: str | None = None  # human-readable fallback for coin_flip / pd_rank / bracket_advances / seed_required
+    region: int | None = None  # populated for "bracket_advances" / "seed_required"
+    seed: int | None = None  # populated for "bracket_advances" / "seed_required"
+    round_name: str | None = None  # populated for "bracket_advances" only
 
 
 class PathOutcomeModel(BaseModel):
@@ -559,8 +568,13 @@ class SlotOutlookTeam(BaseModel):
     ``p_host_overall`` is always ``p_reach * p_host_given_reach``, computed
     server-side for consistency. ``*_weighted`` fields use Elo-based win
     probabilities; ``null`` when no Elo ratings exist for the season.
-    ``reach_conditions``/``host_conditions`` are always ``null`` for now —
-    structured condition derivation is a follow-up (see docs/API_FRONTEND_GAPS.md §2/§3).
+    ``host_conditions`` is ``null`` unless the request passed
+    ``include_conditions=true``; when present it's the OR-of-AND-groups of
+    conditions under which this team would host, given it reaches the round
+    (an empty list means "computed, but this team never hosts"). Each group
+    is a list of ``PathConditionModel``. ``reach_conditions`` is always
+    ``null`` for now — structured condition derivation for it is a separate,
+    undesigned follow-up (see docs/API_FRONTEND_GAPS.md §3).
     """
 
     school: str

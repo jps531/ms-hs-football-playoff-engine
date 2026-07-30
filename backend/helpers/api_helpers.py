@@ -79,16 +79,23 @@ from backend.helpers.data_classes import (
     StandingsOdds,
     StoredHostingOdds,
 )
+from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
 from backend.helpers.insights import _conditions_frozenset, deserialize_insights
 from backend.helpers.query_helpers import and_join_conditions
-from backend.helpers.scenario_renderer import _render_atom, atom_condition_dicts, render_scenario_title
+from backend.helpers.scenario_renderer import (
+    _ROUND_KEY,
+    _render_atom,
+    atom_condition_dicts,
+    build_host_conditions,
+    render_scenario_title,
+)
 from backend.helpers.scenario_serializers import (
     deserialize_complete_scenarios,
     deserialize_remaining_games,
     deserialize_scenario_atoms,
     serialize_atom,
 )
-from backend.helpers.scenario_viewer import _simplify_atom_list
+from backend.helpers.scenario_viewer import _simplify_atom_list, build_scenario_atoms
 from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
 from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.helpers.win_probability import (
@@ -921,6 +928,30 @@ def select_sentinel_region(regions_in_class: dict[int, list[str]]) -> int:
 
 _HOSTING_SEED_ATTRS = ((1, "p1"), (2, "p2"), (3, "p3"), (4, "p4"))
 _HOSTING_ROUND_NAMES = ("First Round", "Second Round", "Quarterfinals", "Semifinals")
+_ROUND_TITLE = {v: k for k, v in _ROUND_KEY.items()}  # snake_case -> Title Case, for RoundHomeScenarios lookup
+
+
+def resolve_seed_and_achievable(
+    odds: StandingsOdds, candidate_seeds: Sequence[int] = (1, 2, 3, 4),
+) -> tuple[int | None, list[int] | None]:
+    """Return ``(clinched_seed, achievable_seeds)`` for *odds*, restricted to *candidate_seeds*.
+
+    A seed is "clinched" at ``CLINCHED_THRESHOLD`` probability, in which case
+    ``achievable_seeds`` is ``None`` (pass ``seed=<clinched>`` to
+    ``enumerate_home_game_scenarios``). Otherwise returns ``(None, [seeds in
+    candidate_seeds with nonzero probability])`` — ready to pass straight to
+    ``enumerate_home_game_scenarios`` as ``achievable_seeds``.
+    """
+    seed_attrs = [(s, attr) for s, attr in _HOSTING_SEED_ATTRS if s in candidate_seeds]
+    seed: int | None = None
+    for s, attr in seed_attrs:
+        if getattr(odds, attr, 0.0) >= CLINCHED_THRESHOLD:
+            seed = s
+            break
+    achievable_seeds: list[int] | None = None
+    if seed is None:
+        achievable_seeds = [s for s, attr in seed_attrs if getattr(odds, attr, 0.0) > 0]
+    return seed, achievable_seeds
 
 
 def resolve_hosting_scenario_inputs(
@@ -938,8 +969,6 @@ def resolve_hosting_scenario_inputs(
 ]:
     """Resolve seed/achievable-seeds and per-round probability dicts for scenario enumeration.
 
-    A seed is considered clinched at ``CLINCHED_THRESHOLD`` probability; otherwise
-    every seed with nonzero probability is returned as an achievable seed.
     ``p_reach[_weighted]`` is derived as ``p_host_overall / p_host_given_reach`` per
     round — the probability of *reaching* that round, backed out from the
     already-computed hosting odds (no extra DB round-trip needed).  Returns
@@ -948,14 +977,7 @@ def resolve_hosting_scenario_inputs(
     with each dict ``None`` when empty (ready to pass straight to
     ``enumerate_home_game_scenarios``).
     """
-    seed: int | None = None
-    for s, attr in _HOSTING_SEED_ATTRS:
-        if getattr(odds, attr, 0.0) >= CLINCHED_THRESHOLD:
-            seed = s
-            break
-    achievable_seeds: list[int] | None = None
-    if seed is None:
-        achievable_seeds = [s for s, attr in _HOSTING_SEED_ATTRS if getattr(odds, attr, 0.0) > 0]
+    seed, achievable_seeds = resolve_seed_and_achievable(odds)
 
     rounds = (entry.first_round, entry.second_round, entry.quarterfinals, entry.semifinals)
     p_reach: dict[str, float] = {}
@@ -988,6 +1010,36 @@ def resolve_hosting_scenario_inputs(
         p_host_given_reach_w or None,
         p_host_overall_w or None,
     )
+
+
+async def _compute_seed_atoms_if_pre_playoff(
+    conn, season: int, clazz: int, region: int, as_of: date, teams: list[str] | None = None,
+) -> tuple[dict | None, list[RemainingGame]]:
+    """Return a ``build_scenario_atoms`` dict for *region* (or ``None`` when it doesn't apply), plus its remaining games.
+
+    The ``seed_atoms`` dict is ``None`` when the region has no remaining games
+    (fully decided — every team's seed is already clinched, so no
+    ``seed_required`` placeholder can occur) or when the remaining-game count
+    exceeds ``DISPLAY_THRESHOLD`` (the same combinatorial-blowup guard
+    standings scenario enumeration uses). The ``remaining`` games list is
+    always returned (even when ``seed_atoms`` is ``None``) so callers can
+    build ``game_dates`` for §8-style condition expansion without a second
+    snapshot fetch.
+    """
+    scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
+    if scenarios_data is not None:
+        remaining, _, _, _ = scenarios_data
+    else:
+        _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
+
+    if not has_displayable_scenarios(remaining):
+        return None, remaining
+
+    if teams is None:
+        teams = await load_active_region_teams(conn, season, clazz, region)
+
+    completed = await load_completed_region_games(conn, season, as_of, teams)
+    return build_scenario_atoms(teams, completed, remaining), remaining
 
 
 def build_hosting_entries(
@@ -3026,6 +3078,41 @@ def _compute_hosting_overall(
     )
 
 
+def _host_conditions_for_team(
+    school: str,
+    region: int,
+    odds: StandingsOdds,
+    candidate_seeds: Sequence[int],
+    slots: list[FormatSlot],
+    season: int,
+    round_name: str,
+    team_lookup: dict[tuple[int, int], str],
+    seed_atoms_by_region: dict[int, dict | None],
+    game_dates_by_region: dict[int, dict[tuple[str, str], date | None]],
+) -> list[list[PathConditionModel]]:
+    """Compute one team's ``host_conditions`` for *round_name*, given *include_conditions=True*.
+
+    Enumerates home-game scenarios for the team across all applicable rounds
+    (cheap/pure — see ``enumerate_home_game_scenarios``), then picks out the
+    one matching *round_name* and renders its ``will_host`` conditions as
+    ``PathConditionModel`` OR-of-AND groups. Returns ``[]`` if the round isn't
+    applicable to this bracket depth (shouldn't happen — callers only reach
+    here for rounds already validated by ``_resolve_slot_group``).
+    """
+    seed, achievable_seeds = resolve_seed_and_achievable(odds, candidate_seeds=candidate_seeds)
+    round_scenarios_list = enumerate_home_game_scenarios(
+        region=region, seed=seed, slots=slots, season=season,
+        achievable_seeds=achievable_seeds, team_lookup=team_lookup,
+    )
+    matched = next((r for r in round_scenarios_list if r.round_name == _ROUND_TITLE[round_name]), None)
+    if matched is None:
+        return []
+    dicts = build_host_conditions(
+        school, matched, seed_atoms_by_region.get(region), game_dates_by_region.get(region, {}),
+    )
+    return [[PathConditionModel(**d) for d in group] for group in dicts]
+
+
 def build_slot_outlook_teams(
     slot: int,
     round_name: str,
@@ -3036,6 +3123,9 @@ def build_slot_outlook_teams(
     wins_confirmed: dict[str, int] | None = None,
     all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
     cross_region_wins: dict[tuple[int, int], int] | None = None,
+    seed_atoms_by_region: dict[int, dict | None] | None = None,
+    game_dates_by_region: dict[int, dict[tuple[str, str], date | None]] | None = None,
+    team_lookup: dict[tuple[int, int], str] | None = None,
 ) -> list[SlotOutlookTeam] | None:
     """Build the ranked candidate-team list for one bracket slot/round.
 
@@ -3048,6 +3138,15 @@ def build_slot_outlook_teams(
     every team still mathematically alive for the slot its own probability,
     not just the current favorite.
 
+    ``host_conditions`` is only computed (non-``None``) when
+    *seed_atoms_by_region* is passed (i.e. the caller resolved
+    ``include_conditions=True``) — this mirrors ``/hosting``'s
+    ``include_scenarios`` opt-in, since the underlying scenario-atom
+    computation is combinatorially expensive. *team_lookup* should map every
+    ``(region, seed)`` position relevant to this slot-group to its clinched
+    occupant's school name (unclinched positions are simply omitted — see
+    ``_resolve_home_condition_team_name``'s ``"Region X #Y Seed"`` fallback).
+
     Returns ``None`` if *slot* isn't a known first-round slot, or *round_name*
     is ``"second_round"`` for a class with no second round (5A-7A) — callers
     should turn that into a 404.
@@ -3056,12 +3155,18 @@ def build_slot_outlook_teams(
     if group_slots is None:
         return None
 
+    compute_conditions = seed_atoms_by_region is not None
+    team_lookup = team_lookup or {}
+    game_dates_by_region = game_dates_by_region or {}
+
     teams: list[SlotOutlookTeam] = []
     weighted = win_prob_fn_weighted is not None
 
     if round_name == "first_round":
         target = group_slots[0]
         acc: dict[str, dict[str, float]] = {}
+        acc_region: dict[str, int] = {}
+        acc_seed: dict[str, int] = {}
         for region, seed, is_home in (
             (target.home_region, target.home_seed, True),
             (target.away_region, target.away_seed, False),
@@ -3074,9 +3179,18 @@ def build_slot_outlook_teams(
                 entry = acc.setdefault(school, {"p_reach": 0.0, "p_host_overall": 0.0})
                 entry["p_reach"] += p_seed
                 entry["p_host_overall"] += p_seed * host_given_reach
+                acc_region[school] = region
+                acc_seed[school] = seed
         for school, vals in acc.items():
             p_reach, p_host_overall = vals["p_reach"], vals["p_host_overall"]
             p_host_given_reach = p_host_overall / p_reach if p_reach > 0 else None
+            host_conditions = None
+            if compute_conditions:
+                region = acc_region[school]
+                host_conditions = _host_conditions_for_team(
+                    school, region, by_region[region][school], [acc_seed[school]],
+                    slots, season, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
+                )
             teams.append(
                 SlotOutlookTeam(
                     school=school,
@@ -3086,6 +3200,7 @@ def build_slot_outlook_teams(
                     p_reach_weighted=p_reach if weighted else None,
                     p_host_given_reach_weighted=p_host_given_reach if weighted else None,
                     p_host_overall_weighted=p_host_overall if weighted else None,
+                    host_conditions=host_conditions,
                 )
             )
     else:
@@ -3115,7 +3230,8 @@ def build_slot_outlook_teams(
                 else None
             )
             for school, o in region_odds.items():
-                if not any(getattr(o, f"p{s}") > 0.0 for s in seeds):
+                candidate_seeds = [s for s in seeds if getattr(o, f"p{s}") > 0.0]
+                if not candidate_seeds:
                     continue
                 bo = adv.get(school)
                 if bo is None:
@@ -3133,6 +3249,12 @@ def build_slot_outlook_teams(
                     if (p_host_overall_w is not None and p_reach_w and p_reach_w > 0)
                     else None
                 )
+                host_conditions = None
+                if compute_conditions:
+                    host_conditions = _host_conditions_for_team(
+                        school, region, o, candidate_seeds,
+                        slots, season, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
+                    )
                 teams.append(
                     SlotOutlookTeam(
                         school=school,
@@ -3142,6 +3264,7 @@ def build_slot_outlook_teams(
                         p_reach_weighted=p_reach_w,
                         p_host_given_reach_weighted=p_host_given_reach_w,
                         p_host_overall_weighted=p_host_overall_w,
+                        host_conditions=host_conditions,
                     )
                 )
 

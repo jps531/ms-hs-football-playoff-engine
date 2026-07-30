@@ -250,6 +250,14 @@ def classify_margin(min_margin: int, max_margin: int | None) -> str | None:
     return label
 
 
+_ROUND_KEY = {
+    "First Round": "first_round",
+    "Second Round": "second_round",
+    "Quarterfinals": "quarterfinals",
+    "Semifinals": "semifinals",
+}
+
+
 # ---------------------------------------------------------------------------
 # Path condition dicts (for the §8 `paths` API contract)
 # ---------------------------------------------------------------------------
@@ -300,6 +308,89 @@ def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | No
             result.append({"type": "coin_flip", "description": str(cond)})
         elif isinstance(cond, PDRankCondition):
             result.append({"type": "pd_rank", "description": str(cond)})
+    return result
+
+
+def _resolve_home_condition_team_name(cond: HomeGameCondition, team_name: str) -> HomeGameCondition:
+    """Return a copy of *cond* with an unset ``team_name`` resolved to a display label.
+
+    ``region is None`` means the condition is about the target team itself
+    (resolved to *team_name*); otherwise it's about another bracket position,
+    which falls back to ``"Region X #Y Seed"`` when that position's occupant
+    isn't yet clinched (no ``team_lookup`` entry was available upstream).
+    """
+    if cond.team_name is not None:
+        return cond
+    if cond.region is None:
+        return cast(HomeGameCondition, replace(cond, team_name=team_name))
+    return cast(HomeGameCondition, replace(cond, team_name=f"Region {cond.region} #{cond.seed} Seed"))
+
+
+def home_condition_to_path_dict(cond: HomeGameCondition) -> dict:
+    """Convert one *resolved* ``HomeGameCondition`` to a ``PathConditionModel``-compatible dict.
+
+    Expects ``cond.team_name`` to already be resolved (see
+    ``_resolve_home_condition_team_name``) — unlike ``_render_condition_label``,
+    which renders a generic ``"Team ..."`` placeholder for later text
+    substitution, this produces the final ``description`` directly.
+    """
+    if cond.kind == "seed_required":
+        return {
+            "type": "seed_required",
+            "school": cond.team_name,
+            "seed": cond.seed,
+            "description": f"{cond.team_name} finishes as the #{cond.seed} seed",
+        }
+    # kind == "advances"
+    return {
+        "type": "bracket_advances",
+        "school": cond.team_name,
+        "region": cond.region,
+        "seed": cond.seed,
+        "round_name": cond.round_name,
+        "description": f"{cond.team_name} advances to {cond.round_name}",
+    }
+
+
+def build_host_conditions(
+    team: str,
+    round_scenarios: RoundHomeScenarios,
+    seed_atoms: dict[str, dict[int, list[list]]] | None,
+    game_dates: dict[tuple[str, str], date | None],
+) -> list[list[dict]]:
+    """Return *team*'s ``will_host`` scenarios for one round as ``PathConditionModel`` OR-of-AND groups.
+
+    Mirrors ``team_home_scenarios_as_dict``'s ``will_host`` + seed-atom
+    expansion pipeline, but emits ``atom_condition_dicts``/
+    ``home_condition_to_path_dict`` dicts (this endpoint's contract) instead
+    of ``serialize_atom``/``serialize_condition`` (``TeamHostingEntry.scenarios``'
+    contract). A pre-playoff ``seed_required`` placeholder is expanded into
+    the real regular-season game atom(s) that produce that seed when
+    *seed_atoms* covers it; otherwise it's left as an unexpanded, descriptive
+    condition. An empty inner list means a scenario is unconditional (matches
+    ``HomeGameScenario.conditions``' own "empty = unconditional" convention).
+    Returns ``[]`` when the team never hosts this round.
+    """
+    result: list[list[dict]] = []
+    for sc in round_scenarios.will_host:
+        conds = sc.conditions
+        if not conds:
+            result.append([])
+            continue
+        first = conds[0]
+        atoms = (
+            seed_atoms.get(team, {}).get(first.seed, [])
+            if seed_atoms and first.kind == "seed_required" and first.region is None and first.seed is not None
+            else []
+        )
+        if atoms:
+            remaining_resolved = [_resolve_home_condition_team_name(c, team) for c in conds[1:]]
+            remaining_dicts = [home_condition_to_path_dict(c) for c in remaining_resolved]
+            for atom in atoms:
+                result.append(atom_condition_dicts(atom, game_dates) + remaining_dicts)
+        else:
+            resolved = [_resolve_home_condition_team_name(c, team) for c in conds]
+            result.append([home_condition_to_path_dict(c) for c in resolved])
     return result
 
 
@@ -777,17 +868,9 @@ def team_home_scenarios_as_dict(
         Structured dict ready for JSON serialisation.
     """
 
-    def _resolve_condition(cond: HomeGameCondition, team_name: str) -> HomeGameCondition:
-        """Return a copy of *cond* with an unset ``team_name`` resolved to a display label."""
-        if cond.team_name is not None:
-            return cond
-        if cond.region is None:
-            return cast(HomeGameCondition, replace(cond, team_name=team_name))  # target team itself
-        return cast(HomeGameCondition, replace(cond, team_name=f"Region {cond.region} #{cond.seed} Seed"))
-
     def _scenario_dict(sc: HomeGameScenario, team_name: str) -> dict:
         """Serialise a single ``HomeGameScenario`` to a plain dict."""
-        resolved = [_resolve_condition(c, team_name) for c in sc.conditions]
+        resolved = [_resolve_home_condition_team_name(c, team_name) for c in sc.conditions]
         return {
             "conditions": [serialize_condition(c) for c in resolved],
             "explanation": sc.explanation,
@@ -814,7 +897,7 @@ def team_home_scenarios_as_dict(
             return [_scenario_dict(sc, team_name)]
 
         remaining = conds[1:]
-        remaining_resolved = [_resolve_condition(c, team_name) for c in remaining]
+        remaining_resolved = [_resolve_home_condition_team_name(c, team_name) for c in remaining]
         remaining_serialized = [serialize_condition(c) for c in remaining_resolved]
         remaining_labels = [_substitute_team_placeholder(_render_condition_label(c), team_name) for c in remaining]
 
@@ -828,13 +911,6 @@ def team_home_scenarios_as_dict(
                 }
             )
         return expanded
-
-    _ROUND_KEY = {
-        "First Round": "first_round",
-        "Second Round": "second_round",
-        "Quarterfinals": "quarterfinals",
-        "Semifinals": "semifinals",
-    }
 
     result: dict[str, dict] = {}
     for rnd in home_scenarios:

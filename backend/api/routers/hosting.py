@@ -10,6 +10,7 @@ from backend.api.limiter import limiter
 from backend.api.models.requests import BracketGameResultRequest, GameResultRequest, SimulateBracketRequest
 from backend.api.models.responses import ClassHostingResponse, HostingResponse
 from backend.helpers.api_helpers import (
+    _compute_seed_atoms_if_pre_playoff,
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     _load_format_slots,
@@ -60,32 +61,6 @@ def _to_school_only_results(results: list[BracketGameResultRequest]) -> list[Gam
         for r in results
         if r.winner.school is not None and r.loser is not None and r.loser.school is not None
     ]
-
-
-async def _compute_seed_atoms_if_pre_playoff(
-    conn, season: int, clazz: int, region: int, as_of: date, teams: list[str] | None = None,
-) -> dict | None:
-    """Return a ``build_scenario_atoms`` dict for *region*, or ``None`` when it doesn't apply.
-
-    Returns ``None`` when the region has no remaining games (fully decided —
-    every team's seed is already clinched, so no ``seed_required`` placeholder
-    can occur) or when the remaining-game count exceeds ``DISPLAY_THRESHOLD``
-    (the same combinatorial-blowup guard standings scenario enumeration uses).
-    """
-    scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
-    if scenarios_data is not None:
-        remaining, _, _, _ = scenarios_data
-    else:
-        _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
-
-    if not has_displayable_scenarios(remaining):
-        return None
-
-    if teams is None:
-        teams = await load_active_region_teams(conn, season, clazz, region)
-
-    completed = await load_completed_region_games(conn, season, as_of, teams)
-    return build_scenario_atoms(teams, completed, remaining)
 
 
 def _attach_hosting_scenarios(
@@ -274,7 +249,9 @@ async def get_class_hosting(
         seed_atoms_by_region: dict[int, dict | None] = {}
         if include_scenarios:
             for region in all_loaded:
-                seed_atoms_by_region[region] = await _compute_seed_atoms_if_pre_playoff(conn, season, clazz, region, as_of)
+                seed_atoms_by_region[region], _ = await _compute_seed_atoms_if_pre_playoff(
+                    conn, season, clazz, region, as_of
+                )
 
     if not all_loaded:
         raise HTTPException(status_code=404, detail=f"No data for {clazz}A season {season}")
@@ -322,7 +299,9 @@ async def get_hosting(
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
-        seed_atoms = await _compute_seed_atoms_if_pre_playoff(conn, season, clazz, region, as_of) if include_scenarios else None
+        seed_atoms = None
+        if include_scenarios:
+            seed_atoms, _ = await _compute_seed_atoms_if_pre_playoff(conn, season, clazz, region, as_of)
 
     entries = build_hosting_entries(
         region_odds, slots, region, season, clazz,
