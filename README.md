@@ -262,6 +262,7 @@ Key endpoints summary:
 - `/api/v1/standings/summary` — statewide grand-view summary: leader, clinch/elimination counts, and volatility per region across every class
 - `/api/v1/hosting/{clazz}/{region}` — playoff hosting odds (p_host_given_reach + p_host_overall, raw + Elo-weighted) per round; simulate endpoint accepts winner/loser school names
 - `/api/v1/bracket` — bracket advancement odds per (region, seed) slot, including Elo-weighted advancement, non-weighted and weighted hosting odds per round; simulate endpoint (playoff mode only, same winner/loser format) returns the same full set of fields
+- `/api/v1/bracket/slots/{slot}` — every team still alive for one bracket slot/round pre-clinch, ranked by chance of reaching it, with raw + Elo-weighted reach/hosting odds
 - `/api/v1/ratings` — Elo and RPI snapshots per team
 
 ## Disclaimer

@@ -42,6 +42,7 @@ from backend.api.models.responses import (
     ScenarioGameOutcome,
     ScenarioPathModel,
     SeedingOddsModel,
+    SlotOutlookTeam,
     TeamBracketEntry,
     TeamHostingEntry,
     TeamRankEntry,
@@ -53,7 +54,9 @@ from backend.helpers.bracket_home_odds import (
     compute_quarterfinal_home_odds,
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
+    equal_matchup_prob,
     half_slots_for_region,
+    opponent_slot_indices,
     opponent_slots,
     overall_home_odds,
     qf_home_team,
@@ -2941,3 +2944,203 @@ def build_bracket_entries(
         hosting_by_slot=hosting_by_slot if compute_hosting else None,
         seed_to_school=seed_to_school,
     )
+
+
+def _resolve_slot_group(slot: int, round_name: str, slots: list[FormatSlot]) -> list[FormatSlot] | None:
+    """Return the first-round slots whose winners feed the *round_name* game anchored at *slot*.
+
+    ``playoff_format_slots`` only identifies first-round games; a later round's
+    game is the merge of a binary group of first-round slots (adjacent pairs
+    feed the same second-round game, pairs of those feed the round after, and
+    so on — see the ``bracket_home_odds`` module docstring). Returns ``None``
+    if *slot* isn't a known first-round slot, or if *round_name* is
+    ``"second_round"`` for a class with no second round (5A-7A) — callers
+    should turn either case into a 404.
+    """
+    target = next((s for s in slots if s.slot == slot), None)
+    if target is None:
+        return None
+    if round_name == "first_round":
+        return [target]
+
+    half_slots = half_slots_for_region(target.home_region, slots)
+    is_1a_4a = len(half_slots) == 8
+    if round_name == "second_round":
+        if not is_1a_4a:
+            return None
+        offset = 1
+    elif round_name == "quarterfinals":
+        offset = 2 if is_1a_4a else 1
+    else:  # semifinals
+        offset = 3 if is_1a_4a else 2
+
+    team_idx = slot_index_for(target.home_region, target.home_seed, half_slots)
+    if team_idx is None:
+        return None
+    group_size = 2 ** (offset - 1)
+    own_start = (team_idx // group_size) * group_size
+    own_indices = set(range(own_start, own_start + group_size))
+    indices = sorted(own_indices | set(opponent_slot_indices(team_idx, offset)))
+    return [half_slots[i] for i in indices]
+
+
+def _candidate_seeds_by_region(group_slots: list[FormatSlot]) -> dict[int, set[int]]:
+    """Return ``{region: {seed, ...}}`` for every (region, seed) position in *group_slots*."""
+    seeds_by_region: dict[int, set[int]] = defaultdict(set)
+    for s in group_slots:
+        seeds_by_region[s.home_region].add(s.home_seed)
+        seeds_by_region[s.away_region].add(s.away_seed)
+    return dict(seeds_by_region)
+
+
+def _compute_hosting_overall(
+    round_name: str,
+    region: int,
+    region_odds: dict[str, StandingsOdds],
+    slots: list[FormatSlot],
+    season: int,
+    win_prob_fn: MatchupProbFn,
+    wins_confirmed: dict[str, int] | None,
+    all_region_odds: dict[int, dict[str, StandingsOdds]] | None,
+    cross_region_wins: dict[tuple[int, int], int] | None,
+) -> dict[str, float]:
+    """Dispatch to the round-appropriate ``compute_*_home_odds`` function."""
+    if round_name == "second_round":
+        return compute_second_round_home_odds(
+            region, region_odds, slots, season,
+            win_prob_fn=win_prob_fn, all_region_odds=all_region_odds, wins_confirmed=wins_confirmed,
+        )
+    if round_name == "quarterfinals":
+        return compute_quarterfinal_home_odds(
+            region, region_odds, slots, season,
+            win_prob_fn=win_prob_fn, all_region_odds=all_region_odds,
+            wins_confirmed=wins_confirmed, cross_region_wins=cross_region_wins,
+        )
+    return compute_semifinal_home_odds(
+        region, region_odds, slots, season,
+        win_prob_fn=win_prob_fn, all_region_odds=all_region_odds,
+        wins_confirmed=wins_confirmed, cross_region_wins=cross_region_wins,
+    )
+
+
+def build_slot_outlook_teams(
+    slot: int,
+    round_name: str,
+    by_region: dict[int, dict[str, StandingsOdds]],
+    slots: list[FormatSlot],
+    season: int,
+    win_prob_fn_weighted: MatchupProbFn | None = None,
+    wins_confirmed: dict[str, int] | None = None,
+    all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
+    cross_region_wins: dict[tuple[int, int], int] | None = None,
+) -> list[SlotOutlookTeam] | None:
+    """Build the ranked candidate-team list for one bracket slot/round.
+
+    Unlike ``build_bracket_entries`` (which collapses each ``(region, seed)``
+    slot to a single "most likely occupant" for the single-occupant
+    ``TeamBracketEntry`` shape), this calls ``compute_bracket_advancement_odds``
+    and the round-appropriate ``compute_*_home_odds`` directly on the real
+    school-keyed *by_region* odds, which already marginalize each school's
+    advancement/hosting probability over its own seed uncertainty — giving
+    every team still mathematically alive for the slot its own probability,
+    not just the current favorite.
+
+    Returns ``None`` if *slot* isn't a known first-round slot, or *round_name*
+    is ``"second_round"`` for a class with no second round (5A-7A) — callers
+    should turn that into a 404.
+    """
+    group_slots = _resolve_slot_group(slot, round_name, slots)
+    if group_slots is None:
+        return None
+
+    teams: list[SlotOutlookTeam] = []
+    weighted = win_prob_fn_weighted is not None
+
+    if round_name == "first_round":
+        target = group_slots[0]
+        acc: dict[str, dict[str, float]] = {}
+        for region, seed, is_home in (
+            (target.home_region, target.home_seed, True),
+            (target.away_region, target.away_seed, False),
+        ):
+            host_given_reach = 1.0 if is_home else 0.0
+            for school, o in by_region.get(region, {}).items():
+                p_seed = getattr(o, f"p{seed}")
+                if p_seed <= 0.0:
+                    continue
+                entry = acc.setdefault(school, {"p_reach": 0.0, "p_host_overall": 0.0})
+                entry["p_reach"] += p_seed
+                entry["p_host_overall"] += p_seed * host_given_reach
+        for school, vals in acc.items():
+            p_reach, p_host_overall = vals["p_reach"], vals["p_host_overall"]
+            p_host_given_reach = p_host_overall / p_reach if p_reach > 0 else None
+            teams.append(
+                SlotOutlookTeam(
+                    school=school,
+                    p_reach=p_reach,
+                    p_host_given_reach=p_host_given_reach,
+                    p_host_overall=p_host_overall,
+                    p_reach_weighted=p_reach if weighted else None,
+                    p_host_given_reach_weighted=p_host_given_reach if weighted else None,
+                    p_host_overall_weighted=p_host_overall if weighted else None,
+                )
+            )
+    else:
+        seeds_by_region = _candidate_seeds_by_region(group_slots)
+        for region, seeds in seeds_by_region.items():
+            region_odds = by_region.get(region)
+            if not region_odds:
+                continue
+            adv = compute_bracket_advancement_odds(region, region_odds, slots, wins_confirmed=wins_confirmed)
+            host_overall = _compute_hosting_overall(
+                round_name, region, region_odds, slots, season,
+                equal_matchup_prob, wins_confirmed, all_region_odds, cross_region_wins,
+            )
+            adv_w = (
+                compute_bracket_advancement_odds(
+                    region, region_odds, slots, win_prob_fn=win_prob_fn_weighted, wins_confirmed=wins_confirmed
+                )
+                if weighted
+                else None
+            )
+            host_overall_w = (
+                _compute_hosting_overall(
+                    round_name, region, region_odds, slots, season,
+                    win_prob_fn_weighted, wins_confirmed, all_region_odds, cross_region_wins,
+                )
+                if weighted
+                else None
+            )
+            for school, o in region_odds.items():
+                if not any(getattr(o, f"p{s}") > 0.0 for s in seeds):
+                    continue
+                bo = adv.get(school)
+                if bo is None:
+                    continue
+                p_reach = getattr(bo, round_name)
+                if p_reach <= 0.0:
+                    continue
+                p_host_overall = host_overall.get(school, 0.0)
+                p_host_given_reach = p_host_overall / p_reach if p_reach > 0 else None
+
+                p_reach_w = getattr(adv_w[school], round_name) if adv_w and school in adv_w else None
+                p_host_overall_w = host_overall_w.get(school) if host_overall_w else None
+                p_host_given_reach_w = (
+                    p_host_overall_w / p_reach_w
+                    if (p_host_overall_w is not None and p_reach_w and p_reach_w > 0)
+                    else None
+                )
+                teams.append(
+                    SlotOutlookTeam(
+                        school=school,
+                        p_reach=p_reach,
+                        p_host_given_reach=p_host_given_reach,
+                        p_host_overall=p_host_overall,
+                        p_reach_weighted=p_reach_w,
+                        p_host_given_reach_weighted=p_host_given_reach_w,
+                        p_host_overall_weighted=p_host_overall_w,
+                    )
+                )
+
+    teams.sort(key=lambda t: t.p_reach, reverse=True)
+    return teams

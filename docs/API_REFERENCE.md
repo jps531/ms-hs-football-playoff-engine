@@ -96,7 +96,14 @@ For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Advancement odds for every seed slot in a class. Params: `season`, `class`, `date` |
+| GET | `/slots/{slot}` | Every team still alive for one bracket slot/round, ranked by chance of reaching it. Params: `season`, `class`, `round` (default `first_round`), `date` |
 | POST | `/simulate` | Apply hypothetical bracket results and return updated odds. Rate limited: 10/minute. |
+
+**`GET /slots/{slot}`** — `slot` is a first-round slot number from `playoff_format_slots`. `round` addresses the derived round-2+ game implied by the group of first-round slots feeding it (`second_round` is 1A-4A only; requesting it for 5A-7A returns 404). Unlike `GET /`, which shows one occupant per `(region, seed)` slot, this returns every team still mathematically alive for the slot pre-clinch, each with:
+- `school`, `p_reach` — probability the team plays in this slot's game.
+- `p_host_given_reach`, `p_host_overall` — `p_host_overall` is always `p_reach * p_host_given_reach`, computed server-side for consistency.
+- `p_reach_weighted`, `p_host_given_reach_weighted`, `p_host_overall_weighted` — Elo-weighted counterparts; `null` when no Elo ratings exist for the season.
+- `reach_conditions`, `host_conditions` — always `null` for now; structured condition derivation is a follow-up.
 
 **Response fields per slot** (`teams[]`):
 - `region`, `seed` — bracket slot identifier. `school` is set only when a team has clinched that seed; otherwise `null`.

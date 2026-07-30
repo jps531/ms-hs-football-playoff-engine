@@ -508,6 +508,39 @@ class TeamBracketEntry(BaseModel):
     hosting: BracketSlotHosting | None = None
 
 
+class SlotOutlookTeam(BaseModel):
+    """One candidate team's outlook for a single bracket slot/round.
+
+    ``p_reach`` is the probability the team plays in this slot's game;
+    ``p_host_overall`` is always ``p_reach * p_host_given_reach``, computed
+    server-side for consistency. ``*_weighted`` fields use Elo-based win
+    probabilities; ``null`` when no Elo ratings exist for the season.
+    ``reach_conditions``/``host_conditions`` are always ``null`` for now —
+    structured condition derivation is a follow-up (see docs/API_FRONTEND_GAPS.md §2/§3).
+    """
+
+    school: str
+    p_reach: float
+    p_host_given_reach: float | None
+    p_host_overall: float
+    p_reach_weighted: float | None = None
+    p_host_given_reach_weighted: float | None = None
+    p_host_overall_weighted: float | None = None
+    reach_conditions: list[list[PathConditionModel]] | None = None
+    host_conditions: list[list[PathConditionModel]] | None = None
+
+
+class SlotOutlookResponse(BaseModel):
+    """Every team still alive for one bracket slot/round, ranked by chance of reaching it."""
+
+    season: int
+    class_: int
+    round: str
+    slot: int
+    as_of_date: date
+    teams: list[SlotOutlookTeam]
+
+
 class BracketParticipant(BaseModel):
     """A team occupying one side of a bracket game slot."""
 

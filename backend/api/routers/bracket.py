@@ -1,14 +1,14 @@
 """Bracket advancement odds endpoints."""
 
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateBracketRequest
-from backend.api.models.responses import BracketResponse, TeamBracketEntry
+from backend.api.models.responses import BracketResponse, SlotOutlookResponse, TeamBracketEntry
 from backend.helpers.api_helpers import (
     _apply_round_ceilings,
     _load_all_region_odds,
@@ -20,6 +20,7 @@ from backend.helpers.api_helpers import (
     build_bracket_entries,
     build_bracket_layout,
     build_enriched_bracket_layout,
+    build_slot_outlook_teams,
     load_championship_venue,
     load_home_venues,
     today,
@@ -31,6 +32,10 @@ router = APIRouter(prefix="/api/v1", tags=["bracket"])
 
 SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 ClassQ = Annotated[int, Query(alias="class", ge=1, le=7)]
+RoundQ = Annotated[
+    Literal["first_round", "second_round", "quarterfinals", "semifinals"],
+    Query(),
+]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 
 
@@ -116,6 +121,67 @@ async def get_bracket(
         season=season, class_=class_,
         bracket_layout=bracket_layout,
         teams=entries,
+    )
+
+
+@router.get("/bracket/slots/{slot}", responses=_404)
+async def get_bracket_slot(
+    slot: Annotated[int, Path(ge=1)],
+    season: SeasonQ,
+    class_: ClassQ,
+    round: RoundQ = "first_round",
+    date: Annotated[date | None, Query()] = None,
+) -> SlotOutlookResponse:
+    """Return every team still alive for one bracket slot's game, ranked by chance of reaching it.
+
+    ``slot`` identifies a first-round slot from ``playoff_format_slots``.
+    ``round`` (default ``first_round``) addresses the derived round-2+ game
+    implied by the group of first-round slots feeding it; ``second_round`` is
+    only valid for 1A-4A (5A-7A goes straight from First Round to Quarterfinals).
+
+    Unlike ``GET /bracket``, which shows one occupant per (region, seed) slot,
+    this returns every team still mathematically alive for the slot pre-clinch.
+    ``p_host_overall`` is always ``p_reach * p_host_given_reach``.
+    ``reach_conditions``/``host_conditions`` are always ``null`` for now.
+    """
+    as_of = date or today()
+    async with get_conn() as conn:
+        slots = await _load_format_slots(conn, season, class_)
+        if not slots:
+            raise HTTPException(status_code=404, detail=f"No playoff format for {class_}A season {season}")
+        by_region = await _load_all_region_odds(conn, season, class_, as_of)
+        if not by_region:
+            raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
+        elo_ratings = await _load_elo_ratings(conn, season, as_of)
+        state = await _load_and_build_playoff_bracket_state(
+            conn, season, class_, as_of, [], elo_ratings, slots
+        )
+
+    if state is not None:
+        win_prob_fn_weighted = state.matchup_fn
+        wins_confirmed = state.wins_by_team
+        all_region_odds = state.all_region_odds
+        cross_region_wins = state.cross_region_wins
+    else:
+        win_prob_fn_weighted = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
+        wins_confirmed = None
+        all_region_odds = None
+        cross_region_wins = None
+
+    teams = build_slot_outlook_teams(
+        slot, round, by_region, slots, season,
+        win_prob_fn_weighted=win_prob_fn_weighted,
+        wins_confirmed=wins_confirmed,
+        all_region_odds=all_region_odds,
+        cross_region_wins=cross_region_wins,
+    )
+    if teams is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No slot {slot} for {class_}A season {season}, or no {round} for this class",
+        )
+    return SlotOutlookResponse(
+        season=season, class_=class_, round=round, slot=slot, as_of_date=as_of, teams=teams,
     )
 
 
