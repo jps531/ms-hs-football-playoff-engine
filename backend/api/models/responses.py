@@ -97,20 +97,29 @@ class SeasonStructureResponse(BaseModel):
 class SeasonDateEntry(BaseModel):
     """One notable date for a season's timeline scrubber.
 
-    ``kind`` is ``"games"`` (at least one game was played) or ``"snapshot"``
-    (a standings/ratings pipeline run with no game that day). A date with
-    both is represented once, as ``"games"``. ``week`` is a 1-indexed,
-    derived regular-season week number; ``null`` for playoff dates and for
-    snapshot dates that fall during/after the playoffs. ``round`` is set
-    only for playoff game dates. ``num_games`` is set only for ``"games"``
-    dates.
+    ``kind`` is ``"games"`` (at least one game was played) or
+    ``"season_start"`` (one day before the season's first game). ``week`` is
+    a 1-indexed, derived regular-season week number (Monday-Sunday); ``null``
+    for playoff dates. ``round`` is set only for playoff game dates.
+    ``num_games`` is set only for ``"games"`` dates (deduplicated contest
+    count, statewide unless the optional ``class`` param scopes the request).
+
+    1A-4A and 5A-7A run offset playoff schedules, so a single date can be a
+    playoff date for one group of classes and still regular season for
+    another. When that happens (and no ``class`` param was given to resolve
+    it), ``round``/``week`` are both ``null`` for that date rather than
+    guessing — but ``description`` still gives a human label, e.g.
+    ``"Week 22 (5A-7A) / First Round (1A-4A)"``. On an unambiguous date,
+    ``description`` is just the single label (``"Week 13"``,
+    ``"First Round"``). Scoped to one ``class``, every date is unambiguous.
     """
 
     date: date
-    kind: str  # "games" | "snapshot"
+    kind: str  # "games" | "season_start"
     week: int | None = None
     round: str | None = None
     num_games: int | None = None
+    description: str | None = None
 
 
 class SeasonDatesResponse(BaseModel):

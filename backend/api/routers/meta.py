@@ -79,22 +79,36 @@ async def get_season_structure(season: int) -> SeasonStructureResponse:
 
 
 @router.get("/seasons/{season}/dates", responses=_404)
-async def get_season_dates(season: int) -> SeasonDatesResponse:
-    """Return the notable dates for *season* (games and standings/ratings snapshots), for a timeline scrubber."""
-    async with get_conn() as conn:
-        rows = await conn.execute(
-            "SELECT date, round, school, opponent FROM games_effective WHERE season = %s", (season,)
-        )
-        game_rows = [tuple(r) async for r in rows]
-        snap_rows = await conn.execute(
-            "SELECT DISTINCT as_of_date FROM region_standings WHERE season = %s", (season,)
-        )
-        snapshot_dates = {r[0] async for r in snap_rows}
+async def get_season_dates(
+    season: int,
+    class_: Annotated[int | None, Query(alias="class", ge=1, le=7)] = None,
+) -> SeasonDatesResponse:
+    """Return the notable game dates for *season*, for a timeline scrubber.
 
-    if not game_rows and not snapshot_dates:
+    Pass ``class`` to scope ``round``/``week`` to one classification and
+    resolve them unambiguously — 1A-4A and 5A-7A run offset playoff
+    schedules, so a date can otherwise be a playoff date for one group of
+    classes and still regular season for another (see ``SeasonDateEntry``).
+    """
+    query = (
+        "SELECT g.date, g.round, ss.class, g.school, g.opponent "
+        "FROM games_effective g "
+        "JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season "
+        "WHERE g.season = %s"
+    )
+    params: list = [season]
+    if class_ is not None:
+        query += " AND ss.class = %s"
+        params.append(class_)
+
+    async with get_conn() as conn:
+        rows = await conn.execute(query, params)
+        game_rows = [tuple(r) async for r in rows]
+
+    if not game_rows:
         raise HTTPException(status_code=404, detail=f"Season {season} not found")
 
-    return SeasonDatesResponse(season=season, dates=build_season_dates(game_rows, snapshot_dates))
+    return SeasonDatesResponse(season=season, dates=build_season_dates(game_rows))
 
 
 @router.get("/teams")

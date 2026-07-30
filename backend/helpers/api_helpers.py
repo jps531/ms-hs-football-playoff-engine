@@ -12,7 +12,7 @@ import math
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import LiteralString, TypeVar
 
 from fastapi import HTTPException
@@ -3152,53 +3152,103 @@ def build_slot_outlook_teams(
 # ---------------------------------------------------------------------------
 
 
+def _format_class_range(classes: list[int]) -> str:
+    """Collapse a sorted list of class numbers into MHSAA-style shorthand.
+
+    Contiguous runs render as ``"{lo}A-{hi}A"`` (``"{lo}A"`` for a single
+    class); non-contiguous runs are comma-joined, e.g. ``[1, 3] -> "1A, 3A"``.
+    """
+    if not classes:
+        return ""
+    runs: list[list[int]] = [[classes[0]]]
+    for c in classes[1:]:
+        if c == runs[-1][-1] + 1:
+            runs[-1].append(c)
+        else:
+            runs.append([c])
+    return ", ".join(f"{run[0]}A" if len(run) == 1 else f"{run[0]}A-{run[-1]}A" for run in runs)
+
+
 def build_season_dates(
-    game_rows: list[tuple[date, str | None, str, str]],
-    snapshot_dates: set[date],
+    game_rows: list[tuple[date, str | None, int, str, str]],
 ) -> list[SeasonDateEntry]:
     """Build the notable-dates list for a season's timeline scrubber.
 
-    *game_rows* is ``(date, round, school, opponent)`` tuples straight from
-    ``games_effective`` (two rows per in-state contest); *snapshot_dates* is
-    every distinct ``region_standings.as_of_date`` for the season. A date
-    covered by both is emitted once, as ``kind="games"``.
-
-    Assumes a single date doesn't span two different playoff round names
-    statewide (true in practice: all classes advance on the same weekly
-    playoff cadence) — if violated, the last non-null round seen for that
-    date wins, with no error.
+    *game_rows* is ``(date, round, class_, school, opponent)`` tuples from
+    ``games_effective`` joined to ``school_seasons`` (two rows per in-state
+    contest). If the caller already scoped the query to one class, every
+    date resolves unambiguously. Otherwise, 1A-4A and 5A-7A run offset
+    playoff schedules, so a single date can mean different things per class
+    (see ``SeasonDateEntry``'s docstring) — handled per-date below by
+    falling back to a composed ``description`` when classes disagree.
     """
     by_date: dict[date, dict] = {}
-    for d, round_name, school, opponent in game_rows:
-        entry = by_date.setdefault(d, {"round": None, "contests": set()})
-        if round_name:
-            entry["round"] = round_name
+    for d, round_name, class_, school, opponent in game_rows:
+        entry = by_date.setdefault(d, {"by_class": defaultdict(set), "contests": set()})
+        entry["by_class"][class_].add(round_name)
         entry["contests"].add(frozenset({school, opponent}))
 
-    regular_dates = sorted(d for d, v in by_date.items() if v["round"] is None)
-    week_by_date = {d: i + 1 for i, d in enumerate(regular_dates)}
-    playoff_dates = sorted(d for d, v in by_date.items() if v["round"] is not None)
-    first_playoff_date = playoff_dates[0] if playoff_dates else None
+    # Global Monday-Sunday week pool: any date with at least one regular-season
+    # (round is None) row anywhere in the state stays in the pool, so a class
+    # already in the playoffs doesn't drop that calendar week from another
+    # class's numbering (e.g. 5A-7A's last regular-season week).
+    regular_dates = {
+        d for d, v in by_date.items() if any(None in rounds for rounds in v["by_class"].values())
+    }
+    week_starts = sorted({d - timedelta(days=d.weekday()) for d in regular_dates})
+    week_by_start = {ws: i + 1 for i, ws in enumerate(week_starts)}
+
+    def week_for(d: date) -> int:
+        return week_by_start[d - timedelta(days=d.weekday())]
 
     entries: list[SeasonDateEntry] = []
     for d, v in by_date.items():
-        round_name = v["round"]
+        num_games = len(v["contests"])
+        all_rounds = {r for rounds in v["by_class"].values() for r in rounds}
+
+        if all_rounds == {None}:
+            week = week_for(d)
+            entries.append(
+                SeasonDateEntry(
+                    date=d, kind="games", week=week, round=None,
+                    num_games=num_games, description=f"Week {week}",
+                )
+            )
+            continue
+        if len(all_rounds) == 1:
+            (only_round,) = all_rounds
+            entries.append(
+                SeasonDateEntry(
+                    date=d, kind="games", week=None, round=only_round.lower().replace(" ", "_"),
+                    num_games=num_games, description=only_round,
+                )
+            )
+            continue
+
+        # Ambiguous: classes disagree on round/week for this date. No machine
+        # round/week, but compose a human description from each per-class group.
+        labels_by_class: dict[str, list[int]] = defaultdict(list)
+        for class_, rounds in v["by_class"].items():
+            if len(rounds) == 1:
+                (only_round,) = rounds
+                label = f"Week {week_for(d)}" if only_round is None else only_round
+            else:
+                label = "Unresolved"
+            labels_by_class[label].append(class_)
+        groups = sorted(labels_by_class.items(), key=lambda kv: min(kv[1]))
+        description = " / ".join(
+            f"{label} ({_format_class_range(sorted(classes))})" for label, classes in groups
+        )
         entries.append(
             SeasonDateEntry(
-                date=d,
-                kind="games",
-                week=week_by_date.get(d) if round_name is None else None,
-                round=round_name.lower().replace(" ", "_") if round_name else None,
-                num_games=len(v["contests"]),
+                date=d, kind="games", week=None, round=None,
+                num_games=num_games, description=description,
             )
         )
 
-    for d in snapshot_dates - set(by_date):
-        week = None
-        if first_playoff_date is None or d < first_playoff_date:
-            prior = [wd for wd in regular_dates if wd <= d]
-            week = week_by_date[prior[-1]] if prior else None
-        entries.append(SeasonDateEntry(date=d, kind="snapshot", week=week))
+    if by_date:
+        season_start = min(by_date) - timedelta(days=1)
+        entries.append(SeasonDateEntry(date=season_start, kind="season_start", description="Season Start"))
 
     entries.sort(key=lambda e: e.date)
     return entries

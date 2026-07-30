@@ -2,131 +2,162 @@
 
 from datetime import date
 
-from backend.helpers.api_helpers import build_season_dates
+from backend.helpers.api_helpers import _format_class_range, build_season_dates
 
-WEEK8A = date(2025, 10, 10)
-WEEK8B = date(2025, 10, 11)
-WEEK9 = date(2025, 10, 17)
+# 2025-08-28 is a Thursday, 08-29 Friday, 08-30 Saturday -- all in the same Mon-Sun week.
+WEEK1_THU = date(2025, 8, 28)
+WEEK1_FRI = date(2025, 8, 29)
+WEEK1_SAT = date(2025, 8, 30)
+WEEK2_FRI = date(2025, 9, 5)
 FIRST_ROUND = date(2025, 11, 7)
-QUARTERFINALS = date(2025, 11, 14)
+CHAMPIONSHIP = date(2025, 12, 5)
 
 
-def _entries_by_date(game_rows, snapshot_dates):
-    return {e.date: e for e in build_season_dates(game_rows, snapshot_dates)}
+def _entries_by_date(game_rows):
+    return {e.date: e for e in build_season_dates(game_rows)}
 
 
-class TestGamesDates:
+class TestFormatClassRange:
+    def test_single_class(self):
+        assert _format_class_range([3]) == "3A"
+
+    def test_contiguous_run(self):
+        assert _format_class_range([1, 2, 3, 4]) == "1A-4A"
+
+    def test_multiple_contiguous_runs(self):
+        assert _format_class_range([5, 6, 7]) == "5A-7A"
+
+    def test_non_contiguous_falls_back_to_comma_list(self):
+        assert _format_class_range([1, 3]) == "1A, 3A"
+
+    def test_empty_list(self):
+        assert _format_class_range([]) == ""
+
+
+class TestGamesDatesUnambiguous:
+    def test_thu_fri_sat_collapse_into_one_monday_anchored_week(self):
+        rows = [
+            (WEEK1_THU, None, 1, "Alpha", "Beta"),
+            (WEEK1_FRI, None, 1, "Gamma", "Delta"),
+            (WEEK1_SAT, None, 1, "Epsilon", "Zeta"),
+        ]
+        entries = _entries_by_date(rows)
+        assert entries[WEEK1_THU].week == 1
+        assert entries[WEEK1_FRI].week == 1
+        assert entries[WEEK1_SAT].week == 1
+
     def test_num_games_dedupes_the_two_school_perspective_rows(self):
         rows = [
-            (WEEK8A, None, "Alpha", "Beta"),
-            (WEEK8A, None, "Beta", "Alpha"),
-            (WEEK8A, None, "Gamma", "Delta"),
-            (WEEK8A, None, "Delta", "Gamma"),
+            (WEEK1_THU, None, 1, "Alpha", "Beta"),
+            (WEEK1_THU, None, 1, "Beta", "Alpha"),
+            (WEEK1_THU, None, 1, "Gamma", "Delta"),
+            (WEEK1_THU, None, 1, "Delta", "Gamma"),
         ]
-        entries = _entries_by_date(rows, set())
-        assert entries[WEEK8A].kind == "games"
-        assert entries[WEEK8A].num_games == 2
-        assert entries[WEEK8A].round is None
+        entries = _entries_by_date(rows)
+        assert entries[WEEK1_THU].kind == "games"
+        assert entries[WEEK1_THU].num_games == 2
+        assert entries[WEEK1_THU].round is None
+        assert entries[WEEK1_THU].description == "Week 1"
 
     def test_one_sided_row_still_counts_as_one_game(self):
-        """An out-of-state opponent with no mirrored row in this DB still counts once."""
-        rows = [(WEEK8A, None, "Alpha", "Out Of State School")]
-        entries = _entries_by_date(rows, set())
-        assert entries[WEEK8A].num_games == 1
+        rows = [(WEEK1_THU, None, 1, "Alpha", "Out Of State School")]
+        assert _entries_by_date(rows)[WEEK1_THU].num_games == 1
 
-    def test_playoff_date_has_round_and_no_week(self):
-        rows = [(FIRST_ROUND, "First Round", "Alpha", "Beta")]
-        entries = _entries_by_date(rows, set())
-        assert entries[FIRST_ROUND].round == "first_round"
-        assert entries[FIRST_ROUND].week is None
-
-    def test_championship_game_round_normalizes_to_snake_case(self):
-        rows = [(date(2025, 12, 5), "Championship Game", "Alpha", "Beta")]
-        entries = _entries_by_date(rows, set())
-        assert entries[date(2025, 12, 5)].round == "championship_game"
-
-    def test_regular_season_weeks_are_dense_ranked_ascending(self):
+    def test_distinct_weeks_are_dense_ranked_ascending(self):
         rows = [
-            (WEEK8A, None, "Alpha", "Beta"),
-            (WEEK9, None, "Gamma", "Delta"),
+            (WEEK1_THU, None, 1, "Alpha", "Beta"),
+            (WEEK2_FRI, None, 1, "Gamma", "Delta"),
         ]
-        entries = _entries_by_date(rows, set())
-        assert entries[WEEK8A].week == 1
-        assert entries[WEEK9].week == 2
+        entries = _entries_by_date(rows)
+        assert entries[WEEK1_THU].week == 1
+        assert entries[WEEK2_FRI].week == 2
 
-    def test_mixed_round_values_on_one_date_last_non_null_wins_without_error(self):
-        """Documented simplification: doesn't validate a single date has one round statewide."""
+    def test_clean_playoff_date_all_classes_agree(self):
         rows = [
-            (FIRST_ROUND, "First Round", "Alpha", "Beta"),
-            (FIRST_ROUND, "Second Round", "Gamma", "Delta"),
+            (FIRST_ROUND, "First Round", 1, "Alpha", "Beta"),
+            (FIRST_ROUND, "First Round", 2, "Gamma", "Delta"),
         ]
-        entries = _entries_by_date(rows, set())
-        assert entries[FIRST_ROUND].round == "second_round"
+        e = _entries_by_date(rows)[FIRST_ROUND]
+        assert e.round == "first_round"
+        assert e.week is None
+        assert e.description == "First Round"
+
+    def test_championship_game_round_normalizes_but_description_stays_raw(self):
+        rows = [(CHAMPIONSHIP, "Championship Game", 7, "Alpha", "Beta")]
+        e = _entries_by_date(rows)[CHAMPIONSHIP]
+        assert e.round == "championship_game"
+        assert e.description == "Championship Game"
 
 
-class TestSnapshotDates:
-    def test_snapshot_only_date_between_game_dates_inherits_prior_week(self):
+class TestCrossClassAmbiguity:
+    """1A-4A and 5A-7A run offset playoff schedules: a date can mean different things per class."""
+
+    def test_regular_season_vs_playoff_split_is_ambiguous_unscoped(self):
         rows = [
-            (WEEK8A, None, "Alpha", "Beta"),
-            (WEEK9, None, "Gamma", "Delta"),
+            (FIRST_ROUND, None, 6, "Alpha5A7A", "Beta5A7A"),  # 5A-7A: still regular season
+            (FIRST_ROUND, "First Round", 1, "Gamma1A4A", "Delta1A4A"),  # 1A-4A: playoffs
         ]
-        mid_week_snapshot = date(2025, 10, 14)
-        entries = _entries_by_date(rows, {mid_week_snapshot})
-        e = entries[mid_week_snapshot]
-        assert e.kind == "snapshot"
-        assert e.week == 1  # inherits WEEK8A's week, not WEEK9's
+        e = _entries_by_date(rows)[FIRST_ROUND]
+        assert e.round is None
+        assert e.week is None
+        assert e.num_games == 2
+        assert "First Round (1A)" in e.description
+        assert "Week 1 (6A)" in e.description
+        assert e.description.count(" / ") == 1
 
-    def test_snapshot_during_playoffs_has_no_week(self):
+    def test_two_different_playoff_rounds_on_the_same_date_is_ambiguous(self):
         rows = [
-            (WEEK8A, None, "Alpha", "Beta"),
-            (FIRST_ROUND, "First Round", "Alpha", "Beta"),
+            (date(2025, 11, 14), "First Round", 6, "Alpha", "Beta"),
+            (date(2025, 11, 14), "Second Round", 1, "Gamma", "Delta"),
         ]
-        during_playoffs_snapshot = date(2025, 11, 10)
-        entries = _entries_by_date(rows, {during_playoffs_snapshot})
-        assert entries[during_playoffs_snapshot].kind == "snapshot"
-        assert entries[during_playoffs_snapshot].week is None
+        e = _entries_by_date(rows)[date(2025, 11, 14)]
+        assert e.round is None
+        assert e.week is None
+        assert "First Round (6A)" in e.description
+        assert "Second Round (1A)" in e.description
 
-    def test_snapshot_before_any_regular_season_date_has_no_week(self):
-        rows = [(WEEK9, None, "Gamma", "Delta")]
-        early_snapshot = date(2025, 10, 1)
-        entries = _entries_by_date(rows, {early_snapshot})
-        assert entries[early_snapshot].week is None
+    def test_scoping_to_one_class_removes_the_ambiguity(self):
+        """Pre-filtering game_rows to a single class (as the router does via `class`) always resolves cleanly."""
+        rows = [(FIRST_ROUND, None, 6, "Alpha5A7A", "Beta5A7A")]
+        e = _entries_by_date(rows)[FIRST_ROUND]
+        assert e.round is None
+        assert e.week == 1
+        assert e.description == "Week 1"
 
-    def test_snapshot_coinciding_with_a_games_date_is_not_duplicated(self):
-        rows = [(WEEK8A, None, "Alpha", "Beta")]
-        entries = build_season_dates(rows, {WEEK8A})
-        matching = [e for e in entries if e.date == WEEK8A]
-        assert len(matching) == 1
-        assert matching[0].kind == "games"
+    def test_disagreeing_classes_grouped_together_in_description(self):
+        rows = [
+            (FIRST_ROUND, "First Round", 1, "A", "B"),
+            (FIRST_ROUND, "First Round", 2, "C", "D"),
+            (FIRST_ROUND, "First Round", 3, "E", "F"),
+            (FIRST_ROUND, "First Round", 4, "G", "H"),
+            (FIRST_ROUND, None, 6, "I", "J"),
+        ]
+        e = _entries_by_date(rows)[FIRST_ROUND]
+        assert "First Round (1A-4A)" in e.description
+        assert "Week 1 (6A)" in e.description
 
-    def test_no_game_rows_or_snapshots_returns_empty_list(self):
-        assert build_season_dates([], set()) == []
+
+class TestSeasonStart:
+    def test_season_start_is_one_day_before_the_first_game(self):
+        rows = [(WEEK2_FRI, None, 1, "Alpha", "Beta"), (WEEK1_THU, None, 1, "Gamma", "Delta")]
+        entries = build_season_dates(rows)
+        start = entries[0]
+        assert start.date == date(2025, 8, 27)
+        assert start.kind == "season_start"
+        assert start.description == "Season Start"
+        assert start.week is None
+        assert start.round is None
+        assert start.num_games is None
+
+    def test_no_rows_produces_no_season_start_entry(self):
+        assert build_season_dates([]) == []
 
 
-class TestSpecExampleReproduction:
-    """Reproduces the exact three-row example from docs/API_FRONTEND_GAPS.md §4."""
-
-    def test_full_example(self):
-        d1, d2, d3 = date(2025, 10, 10), date(2025, 10, 14), date(2025, 11, 7)
-        game_rows = [(d1, None, f"School{i}A", f"School{i}B") for i in range(112)]
-        game_rows += [(d3, "First Round", f"PSchool{i}A", f"PSchool{i}B") for i in range(96)]
-        entries = _entries_by_date(game_rows, {d2})
-
-        assert entries[d1].kind == "games"
-        assert entries[d1].week == 1
-        assert entries[d1].num_games == 112
-        assert entries[d1].round is None
-
-        assert entries[d2].kind == "snapshot"
-        assert entries[d2].week == 1
-
-        assert entries[d3].kind == "games"
-        assert entries[d3].week is None
-        assert entries[d3].round == "first_round"
-        assert entries[d3].num_games == 96
-
-    def test_results_sorted_by_date_ascending(self):
-        d1, d2, d3 = date(2025, 10, 10), date(2025, 10, 14), date(2025, 11, 7)
-        rows = [(d3, "First Round", "A", "B"), (d1, None, "C", "D")]
-        entries = build_season_dates(rows, {d2})
-        assert [e.date for e in entries] == [d1, d2, d3]
+class TestOrdering:
+    def test_entries_sorted_by_date_ascending(self):
+        rows = [
+            (FIRST_ROUND, "First Round", 1, "A", "B"),
+            (WEEK1_THU, None, 1, "C", "D"),
+        ]
+        entries = build_season_dates(rows)
+        assert [e.date for e in entries] == [date(2025, 8, 27), WEEK1_THU, FIRST_ROUND]
