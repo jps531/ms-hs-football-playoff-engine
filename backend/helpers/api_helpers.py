@@ -1007,7 +1007,8 @@ _ROUND_TITLE = {v: k for k, v in _ROUND_KEY.items()}  # snake_case -> Title Case
 
 
 def resolve_seed_and_achievable(
-    odds: StandingsOdds, candidate_seeds: Sequence[int] = (1, 2, 3, 4),
+    odds: StandingsOdds,
+    candidate_seeds: Sequence[int] = (1, 2, 3, 4),
 ) -> tuple[int | None, list[int] | None]:
     """Return ``(clinched_seed, achievable_seeds)`` for *odds*, restricted to *candidate_seeds*.
 
@@ -1088,7 +1089,12 @@ def resolve_hosting_scenario_inputs(
 
 
 async def _compute_seed_atoms_if_pre_playoff(
-    conn, season: int, clazz: int, region: int, as_of: date, teams: list[str] | None = None,
+    conn,
+    season: int,
+    clazz: int,
+    region: int,
+    as_of: date,
+    teams: list[str] | None = None,
 ) -> tuple[dict | None, list[RemainingGame]]:
     """Return a ``build_scenario_atoms`` dict for *region* (or ``None`` when it doesn't apply), plus its remaining games.
 
@@ -3172,19 +3178,34 @@ def _compute_hosting_overall(
     """Dispatch to the round-appropriate ``compute_*_home_odds`` function."""
     if round_name == "second_round":
         return compute_second_round_home_odds(
-            region, region_odds, slots, season,
-            win_prob_fn=win_prob_fn, all_region_odds=all_region_odds, wins_confirmed=wins_confirmed,
+            region,
+            region_odds,
+            slots,
+            season,
+            win_prob_fn=win_prob_fn,
+            all_region_odds=all_region_odds,
+            wins_confirmed=wins_confirmed,
         )
     if round_name == "quarterfinals":
         return compute_quarterfinal_home_odds(
-            region, region_odds, slots, season,
-            win_prob_fn=win_prob_fn, all_region_odds=all_region_odds,
-            wins_confirmed=wins_confirmed, cross_region_wins=cross_region_wins,
+            region,
+            region_odds,
+            slots,
+            season,
+            win_prob_fn=win_prob_fn,
+            all_region_odds=all_region_odds,
+            wins_confirmed=wins_confirmed,
+            cross_region_wins=cross_region_wins,
         )
     return compute_semifinal_home_odds(
-        region, region_odds, slots, season,
-        win_prob_fn=win_prob_fn, all_region_odds=all_region_odds,
-        wins_confirmed=wins_confirmed, cross_region_wins=cross_region_wins,
+        region,
+        region_odds,
+        slots,
+        season,
+        win_prob_fn=win_prob_fn,
+        all_region_odds=all_region_odds,
+        wins_confirmed=wins_confirmed,
+        cross_region_wins=cross_region_wins,
     )
 
 
@@ -3210,14 +3231,21 @@ def _host_conditions_for_team(
     here for rounds already validated by ``_resolve_slot_group``).
     """
     round_scenarios_list = enumerate_home_game_scenarios(
-        region=region, seed=seed, slots=slots, season=season,
-        achievable_seeds=achievable_seeds, team_lookup=team_lookup,
+        region=region,
+        seed=seed,
+        slots=slots,
+        season=season,
+        achievable_seeds=achievable_seeds,
+        team_lookup=team_lookup,
     )
     matched = next((r for r in round_scenarios_list if r.round_name == _ROUND_TITLE[round_name]), None)
     if matched is None:
         return []
     dicts = build_host_conditions(
-        school, matched, seed_atoms_by_region.get(region), game_dates_by_region.get(region, {}),
+        school,
+        matched,
+        seed_atoms_by_region.get(region),
+        game_dates_by_region.get(region, {}),
     )
     return [[PathConditionModel(**d) for d in group] for group in dicts]
 
@@ -3243,11 +3271,18 @@ def _reach_conditions_for_team(
     teams with ``p_reach > 0``.
     """
     and_groups = enumerate_reach_scenarios_for_team(
-        region=region, seed=seed, slots=slots, target_round=_ROUND_TITLE[round_name],
-        achievable_seeds=achievable_seeds, team_lookup=team_lookup,
+        region=region,
+        seed=seed,
+        slots=slots,
+        target_round=_ROUND_TITLE[round_name],
+        achievable_seeds=achievable_seeds,
+        team_lookup=team_lookup,
     )
     dicts = build_reach_conditions(
-        school, and_groups, seed_atoms_by_region.get(region), game_dates_by_region.get(region, {}),
+        school,
+        and_groups,
+        seed_atoms_by_region.get(region),
+        game_dates_by_region.get(region, {}),
     )
     return [[PathConditionModel(**d) for d in group] for group in dicts]
 
@@ -3331,12 +3366,27 @@ def build_slot_outlook_teams(
                     by_region[region][school], candidate_seeds=[acc_seed[school]]
                 )
                 host_conditions = _host_conditions_for_team(
-                    school, region, team_seed, achievable_seeds,
-                    slots, season, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
+                    school,
+                    region,
+                    team_seed,
+                    achievable_seeds,
+                    slots,
+                    season,
+                    round_name,
+                    team_lookup,
+                    seed_atoms_by_region,
+                    game_dates_by_region,
                 )
                 reach_conditions = _reach_conditions_for_team(
-                    school, region, team_seed, achievable_seeds,
-                    slots, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
+                    school,
+                    region,
+                    team_seed,
+                    achievable_seeds,
+                    slots,
+                    round_name,
+                    team_lookup,
+                    seed_atoms_by_region,
+                    game_dates_by_region,
                 )
             teams.append(
                 SlotOutlookTeam(
@@ -3359,8 +3409,15 @@ def build_slot_outlook_teams(
                 continue
             adv = compute_bracket_advancement_odds(region, region_odds, slots, wins_confirmed=wins_confirmed)
             host_overall = _compute_hosting_overall(
-                round_name, region, region_odds, slots, season,
-                equal_matchup_prob, wins_confirmed, all_region_odds, cross_region_wins,
+                round_name,
+                region,
+                region_odds,
+                slots,
+                season,
+                equal_matchup_prob,
+                wins_confirmed,
+                all_region_odds,
+                cross_region_wins,
             )
             adv_w = (
                 compute_bracket_advancement_odds(
@@ -3371,8 +3428,15 @@ def build_slot_outlook_teams(
             )
             host_overall_w = (
                 _compute_hosting_overall(
-                    round_name, region, region_odds, slots, season,
-                    win_prob_fn_weighted, wins_confirmed, all_region_odds, cross_region_wins,
+                    round_name,
+                    region,
+                    region_odds,
+                    slots,
+                    season,
+                    win_prob_fn_weighted,
+                    wins_confirmed,
+                    all_region_odds,
+                    cross_region_wins,
                 )
                 if weighted
                 else None
@@ -3402,12 +3466,27 @@ def build_slot_outlook_teams(
                 if compute_conditions:
                     team_seed, achievable_seeds = resolve_seed_and_achievable(o, candidate_seeds=candidate_seeds)
                     host_conditions = _host_conditions_for_team(
-                        school, region, team_seed, achievable_seeds,
-                        slots, season, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
+                        school,
+                        region,
+                        team_seed,
+                        achievable_seeds,
+                        slots,
+                        season,
+                        round_name,
+                        team_lookup,
+                        seed_atoms_by_region,
+                        game_dates_by_region,
                     )
                     reach_conditions = _reach_conditions_for_team(
-                        school, region, team_seed, achievable_seeds,
-                        slots, round_name, team_lookup, seed_atoms_by_region, game_dates_by_region,
+                        school,
+                        region,
+                        team_seed,
+                        achievable_seeds,
+                        slots,
+                        round_name,
+                        team_lookup,
+                        seed_atoms_by_region,
+                        game_dates_by_region,
                     )
                 teams.append(
                     SlotOutlookTeam(
@@ -3503,8 +3582,12 @@ def build_season_dates(
         if all_rounds == {None}:
             entries.append(
                 SeasonDateEntry(
-                    date=d, kind="games", week=week, round=None,
-                    num_games=num_games, description=f"Week {week}",
+                    date=d,
+                    kind="games",
+                    week=week,
+                    round=None,
+                    num_games=num_games,
+                    description=f"Week {week}",
                 )
             )
             continue
@@ -3512,8 +3595,12 @@ def build_season_dates(
             (only_round,) = all_rounds
             entries.append(
                 SeasonDateEntry(
-                    date=d, kind="games", week=week, round=only_round.lower().replace(" ", "_"),
-                    num_games=num_games, description=_pluralize_round_label(only_round, class_filter),
+                    date=d,
+                    kind="games",
+                    week=week,
+                    round=only_round.lower().replace(" ", "_"),
+                    num_games=num_games,
+                    description=_pluralize_round_label(only_round, class_filter),
                 )
             )
             continue
@@ -3529,21 +3616,21 @@ def build_season_dates(
                 label = "Unresolved"
             labels_by_class[label].append(class_)
         groups = sorted(labels_by_class.items(), key=lambda kv: min(kv[1]))
-        description = " / ".join(
-            f"{label} ({_format_class_range(sorted(classes))})" for label, classes in groups
-        )
+        description = " / ".join(f"{label} ({_format_class_range(sorted(classes))})" for label, classes in groups)
         entries.append(
             SeasonDateEntry(
-                date=d, kind="games", week=week, round=None,
-                num_games=num_games, description=description,
+                date=d,
+                kind="games",
+                week=week,
+                round=None,
+                num_games=num_games,
+                description=description,
             )
         )
 
     if by_date:
         season_start = min(by_date) - timedelta(days=1)
-        entries.append(
-            SeasonDateEntry(date=season_start, kind="season_start", week=0, description="Season Start")
-        )
+        entries.append(SeasonDateEntry(date=season_start, kind="season_start", week=0, description="Season Start"))
 
     entries.sort(key=lambda e: e.date)
     return entries
@@ -3606,7 +3693,7 @@ async def load_travel_insights(
                     opponent=opponent,
                     date=game_date,
                     distance_miles=distance,
-                    human_text=f"Longest road trip: {school} traveled ~{distance:.0f} mi to {opponent}",
+                    human_text=f"{school} traveled ~{distance:.0f} mi to {opponent}",
                 )
             )
     trips.sort(key=lambda t: t.distance_miles, reverse=True)
@@ -3646,9 +3733,7 @@ async def load_travel_insights(
     return trips[:limit], cumulative[:limit]
 
 
-def build_movers_response(
-    rows: list[tuple[str, int, int, float, float]], limit: int
-) -> MoversResponse:
+def build_movers_response(rows: list[tuple[str, int, int, float, float]], limit: int) -> MoversResponse:
     """Split before/after Elo snapshot rows into risers/fallers sorted by |delta|.
 
     *rows* are ``(school, class_, region, elo_before, elo_after)`` tuples, one
@@ -3657,8 +3742,12 @@ def build_movers_response(
     """
     movers = [
         MoverModel(
-            school=school, class_=class_, region=region,
-            elo_before=elo_before, elo_after=elo_after, delta=elo_after - elo_before,
+            school=school,
+            class_=class_,
+            region=region,
+            elo_before=elo_before,
+            elo_after=elo_after,
+            delta=elo_after - elo_before,
         )
         for school, class_, region, elo_before, elo_after in rows
     ]
