@@ -1,3 +1,14 @@
+# MHSAA Region Tiebreaker Procedure
+
+Raw MHSAA rule text (source handbook, not independently re-verified against a specific edition — confirm against the current handbook before relying on it for a rules dispute). This is the policy the tiebreaker engine implements; see [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for how it's computed and stored, and [PLAYOFF_HOME_RULES.md](PLAYOFF_HOME_RULES.md) for the related playoff home-site rules.
+
+<!-- Steps 2-3 below carry a likely page-break/OCR artifact from the source
+     document: "designated" is immediately followed by a "3." list marker and
+     then "games." on its own line, mirroring the "designated region games"
+     phrasing used in steps 1 and 4. Left as originally transcribed rather
+     than silently rewritten — verify against the current MHSAA handbook
+     before treating the exact wording of steps 2-3 as authoritative. -->
+
 1.	Head-to-head competition in the designated region games between the tied teams: three or more teams this will be combined records of the teams involved in the tie.
 2.	How the tied teams did against the highest ranked or seeded teams in the designated
 3.	games.

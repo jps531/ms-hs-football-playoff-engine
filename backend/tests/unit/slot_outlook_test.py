@@ -313,6 +313,39 @@ class TestBuildSlotOutlookTeamsLaterRounds:
         alpha = next(t for t in teams if t.school == "Alpha")
         assert alpha.p_reach > 0.0
 
+    def test_eliminated_school_with_zero_seed_odds_excluded(self):
+        """A school with zero probability on every seed (fully eliminated, no
+        candidate seed at all) is excluded from the slot outlook entirely."""
+        by_region = {
+            1: {"R1S1": _locked("R1S1", 1), "Zero": _odds("Zero")},
+            2: {"R2S4": _locked("R2S4", 4)},
+            3: {"R3S2": _locked("R3S2", 2)},
+            4: {"R4S3": _locked("R4S3", 3)},
+        }
+        teams = build_slot_outlook_teams(1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON)
+        assert teams is not None
+        assert "Zero" not in {t.school for t in teams}
+        assert "R1S1" in {t.school for t in teams}
+
+    def test_eliminated_school_with_stale_positive_seed_prob_excluded(self):
+        """A school flagged eliminated but with a leftover positive seed
+        probability (a stale/inconsistent snapshot) has p_reach forced to 0.0
+        by the eliminated branch of compute_bracket_advancement_odds, and is
+        excluded from the outlook despite passing the candidate-seed check."""
+        stale = StandingsOdds(
+            school="Stale", p1=1.0, p2=0.0, p3=0.0, p4=0.0,
+            p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=True,
+        )
+        by_region = {
+            1: {"Stale": stale},
+            2: {"R2S4": _locked("R2S4", 4)},
+            3: {"R3S2": _locked("R3S2", 2)},
+            4: {"R4S3": _locked("R4S3", 3)},
+        }
+        teams = build_slot_outlook_teams(1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON)
+        assert teams is not None
+        assert "Stale" not in {t.school for t in teams}
+
     def test_weighted_fn_populates_weighted_fields(self):
         """Passing a weighted win-probability function populates the *_weighted fields."""
         by_region = {1: {"R1S1": _locked("R1S1", 1)}, 2: {"R2S4": _locked("R2S4", 4)}}

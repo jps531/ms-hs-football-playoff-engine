@@ -20,6 +20,7 @@ from psycopg import sql
 
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
+    AttendedGameModel,
     BracketAdvancementOdds,
     BracketGame,
     BracketGameResult,
@@ -40,7 +41,10 @@ from backend.api.models.responses import (
     PathConditionModel,
     PathOutcomeModel,
     RecordModel,
+    RegionLeaderModel,
+    RegionSummaryCard,
     RemainingGameModel,
+    RoadmapGame,
     RoundHostingOdds,
     ScenarioEntry,
     ScenarioGameOutcome,
@@ -52,6 +56,7 @@ from backend.api.models.responses import (
     TeamHostingEntry,
     TeamRankEntry,
     TeamStandingsEntry,
+    TeamStatusModel,
     TravelCumulativeEntry,
     TravelTripEntry,
     VenueModel,
@@ -93,6 +98,7 @@ from backend.helpers.scenario_renderer import (
     build_host_conditions,
     build_reach_conditions,
     render_scenario_title,
+    team_home_scenarios_as_dict,
 )
 from backend.helpers.scenario_serializers import (
     deserialize_complete_scenarios,
@@ -147,6 +153,19 @@ def has_displayable_scenarios(remaining: list) -> bool:
 def today() -> date:
     """Return today's date (injectable seam for tests)."""
     return datetime.now().date()
+
+
+def default_classes_for_season(season: int) -> list[int]:
+    """MHSAA class count by year, used when school_seasons has no rows yet for *season*."""
+    if season <= 1983:
+        max_class = 4
+    elif season <= 2008:
+        max_class = 5
+    elif season <= 2022:
+        max_class = 6
+    else:
+        max_class = 7
+    return list(range(1, max_class + 1))
 
 
 async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:  # pragma: no cover
@@ -701,6 +720,73 @@ def filter_to_team_or_404(response: _TeamsResponse, team: str, clazz: int, regio
 # ---------------------------------------------------------------------------
 
 
+def group_rows_and_completed_by_region(
+    rows: list[tuple], completed_games: list[CompletedGame], key_fn
+) -> tuple[dict, dict]:
+    """Group standings rows and completed games by a region key derived from each row.
+
+    *key_fn* extracts the grouping key from a row (e.g. ``lambda r: r[39]`` for a
+    single region number, or ``lambda r: (r[1], r[2])`` for a (class, region)
+    pair). Completed games are joined onto a key via each row's school
+    (``row[0]``) matching the completed game's ``.a`` team.
+    """
+    rows_by_key: dict = defaultdict(list)
+    for row in rows:
+        rows_by_key[key_fn(row)].append(row)
+
+    school_to_key = {row[0]: key_fn(row) for row in rows}
+    completed_by_key: dict = defaultdict(list)
+    for g in completed_games:
+        key = school_to_key.get(g.a)
+        if key is not None:
+            completed_by_key[key].append(g)
+    return rows_by_key, completed_by_key
+
+
+def build_region_summary_card(
+    region: int, region_rows: list[tuple], completed_for_region: list[CompletedGame]
+) -> RegionSummaryCard:
+    """Build one statewide-summary card for a region from its `_SUMMARY_SELECT` rows.
+
+    *region_rows* columns: 0=school, 3-8=wins/losses/ties/region_wins/region_losses/
+    region_ties, 10-14=odds_1st..odds_playoffs, 15=clinched, 16=eliminated.
+    """
+    teams = [r[0] for r in region_rows]
+    odds_by_school = {
+        r[0]: standings_odds_from_row(r[0], r[10], r[11], r[12], r[13], r[14], r[15], r[16]) for r in region_rows
+    }
+    records = {
+        r[0]: RecordModel(wins=r[3], losses=r[4], ties=r[5], region_wins=r[6], region_losses=r[7], region_ties=r[8])
+        for r in region_rows
+    }
+    order = current_standings_order(teams, completed_for_region, odds_by_school)
+
+    statuses = [
+        TeamStatusModel(
+            school=s,
+            status=team_status(odds_by_school[s].clinched, odds_by_school[s].eliminated),
+            clinched_seed=team_clinched_seed(odds_by_school[s]),
+            record=records[s],
+        )
+        for s in order
+    ]
+    leader = order[0]
+    return RegionSummaryCard(
+        region=region,
+        leader=RegionLeaderModel(
+            school=leader,
+            region_wins=records[leader].region_wins,
+            region_losses=records[leader].region_losses,
+        ),
+        num_teams=len(region_rows),
+        num_clinched=sum(1 for o in odds_by_school.values() if o.clinched),
+        num_eliminated=sum(1 for o in odds_by_school.values() if o.eliminated),
+        teams_alive=sum(1 for o in odds_by_school.values() if not o.clinched and not o.eliminated),
+        volatility=region_volatility(odds_by_school),
+        statuses=statuses,
+    )
+
+
 def remaining_to_models(remaining: list[RemainingGame]) -> list[RemainingGameModel]:
     """Convert ``RemainingGame`` dataclasses to ``RemainingGameModel`` response objects."""
     return [RemainingGameModel(team_a=r.a, team_b=r.b, location_a=r.location_a) for r in remaining]
@@ -1086,6 +1172,57 @@ def resolve_hosting_scenario_inputs(
         p_host_given_reach_w or None,
         p_host_overall_w or None,
     )
+
+
+def attach_hosting_scenarios(
+    entries: list[TeamHostingEntry],
+    region_odds: dict[str, StandingsOdds],
+    slots: list[FormatSlot],
+    season: int,
+    region: int,
+    seed_atoms: dict | None = None,
+) -> list[TeamHostingEntry]:
+    """Return a new list of ``TeamHostingEntry`` with hosting scenario conditions attached.
+
+    Calls ``enumerate_home_game_scenarios`` per team (pure/fast) and serialises
+    the result via ``team_home_scenarios_as_dict``. Probability annotations are
+    derived from the entry's ``RoundHostingOdds`` fields so no extra DB round-trip
+    is needed. *seed_atoms* (from ``_compute_seed_atoms_if_pre_playoff``), when
+    provided, expands pre-playoff ``seed_required`` placeholders into the real
+    underlying game conditions.
+    """
+    updated = []
+    for entry in entries:
+        odds = region_odds.get(entry.school)
+        if odds is None:
+            updated.append(entry)
+            continue
+
+        (
+            seed, achievable_seeds,
+            p_reach, p_host_given_reach, p_host_overall,
+            p_reach_w, p_host_given_reach_w, p_host_overall_w,
+        ) = resolve_hosting_scenario_inputs(odds, entry)
+
+        home_scenarios = enumerate_home_game_scenarios(
+            region=region,
+            seed=seed,
+            slots=slots,
+            season=season,
+            achievable_seeds=achievable_seeds,
+            p_reach_by_round=p_reach,
+            p_host_given_reach_by_round=p_host_given_reach,
+            p_host_overall_by_round=p_host_overall,
+            p_reach_weighted_by_round=p_reach_w,
+            p_host_given_reach_weighted_by_round=p_host_given_reach_w,
+            p_host_overall_weighted_by_round=p_host_overall_w,
+        )
+        updated.append(
+            entry.model_copy(
+                update={"scenarios": team_home_scenarios_as_dict(entry.school, home_scenarios, seed_atoms=seed_atoms)}
+            )
+        )
+    return updated
 
 
 async def _compute_seed_atoms_if_pre_playoff(
@@ -1496,6 +1633,111 @@ def build_rank_entry(row: tuple, sort_col: str) -> TeamRankEntry:
     )
 
 
+# Row columns selected by build_ranked_teams_query — see build_rank_entry's row-position docstring.
+_RANK_COLUMNS = """
+    rs.school, rs.class, rs.region,
+    rs.wins, rs.losses, rs.ties, rs.region_wins, rs.region_losses, rs.region_ties,
+    rs.as_of_date,
+    rs.odds_1st, rs.odds_2nd, rs.odds_3rd, rs.odds_4th, rs.odds_playoffs,
+    rs.odds_1st_weighted, rs.odds_2nd_weighted, rs.odds_3rd_weighted, rs.odds_4th_weighted, rs.odds_playoffs_weighted,
+    rs.odds_second_round, rs.odds_quarterfinals, rs.odds_semifinals, rs.odds_finals, rs.odds_champion,
+    rs.odds_second_round_weighted, rs.odds_quarterfinals_weighted, rs.odds_semifinals_weighted,
+    rs.odds_finals_weighted, rs.odds_champion_weighted,
+    rs.odds_first_round_home, rs.odds_second_round_home, rs.odds_quarterfinals_home, rs.odds_semifinals_home,
+    rs.odds_first_round_home_weighted, rs.odds_second_round_home_weighted,
+    rs.odds_quarterfinals_home_weighted, rs.odds_semifinals_home_weighted,
+    tr.elo, tr.rpi
+"""
+
+_RANK_FROM_JOIN = """
+    FROM region_standings rs
+    LEFT JOIN team_ratings tr ON tr.school = rs.school AND tr.season = rs.season AND tr.as_of_date = rs.as_of_date
+"""
+
+
+async def resolve_snapshot_dates(  # pragma: no cover
+    conn, season: int, as_of_date: date, clazz: int | None = None
+) -> tuple[date | None, date | None]:
+    """Return (current, previous) region_standings snapshot dates for *season* (optionally scoped to
+    *clazz*) on or before *as_of_date*.
+
+    ``current`` is the most recent snapshot on or before *as_of_date* — None if no snapshot exists yet.
+    ``previous`` is the snapshot immediately before ``current`` — None on a class's/state's first-ever
+    snapshot. team_ratings shares the same as_of_date per pipeline run (see its table comment), so this
+    single date pair is valid for both region_standings and team_ratings columns.
+    """
+    conditions = "season = %s"
+    params: list[Any] = [season]
+    if clazz is not None:
+        conditions += " AND class = %s"
+        params.append(clazz)
+
+    current_row = await (
+        await conn.execute(
+            f"SELECT MAX(as_of_date) FROM region_standings WHERE {conditions} AND as_of_date <= %s",
+            (*params, as_of_date),
+        )
+    ).fetchone()
+    current = current_row[0] if current_row else None
+    if current is None:
+        return None, None
+
+    prev_row = await (
+        await conn.execute(
+            f"SELECT MAX(as_of_date) FROM region_standings WHERE {conditions} AND as_of_date < %s",
+            (*params, current),
+        )
+    ).fetchone()
+    return current, (prev_row[0] if prev_row else None)
+
+
+def build_ranked_teams_query(sort_col: str, clazz_filter: bool, region_filter: bool, has_prev: bool) -> sql.Composed:
+    """Build the ranked-teams query: current snapshot ranked by *sort_col*, optionally joined to the
+    previous snapshot's rank for the same schools. *clazz_filter*/*region_filter* add the corresponding
+    ``AND`` conditions; callers pass matching params in the same order the placeholders appear.
+    """
+    snap_where = "rs.season = %s" + (" AND rs.class = %s" if clazz_filter else "") + " AND rs.as_of_date = %s"
+    col = sql.Identifier(sort_col)
+
+    prev_cte = ""
+    rank_prev_select = "NULL::bigint AS rank_prev"
+    prev_join = ""
+    if has_prev:
+        prev_cte = f"""
+            , prev_snap AS (
+                SELECT {_RANK_COLUMNS} {_RANK_FROM_JOIN}
+                WHERE {snap_where}
+            ),
+            prev_ranked AS (
+                SELECT school, ROW_NUMBER() OVER (ORDER BY {{col}} DESC) AS rank
+                FROM prev_snap
+            )
+        """
+        rank_prev_select = "pr.rank AS rank_prev"
+        prev_join = "LEFT JOIN prev_ranked pr ON pr.school = cr.school"
+
+    region_clause = " AND cr.region = %s" if region_filter else ""
+
+    query = f"""
+        WITH current_snap AS (
+            SELECT {_RANK_COLUMNS} {_RANK_FROM_JOIN}
+            WHERE {snap_where}
+        ),
+        current_ranked AS (
+            SELECT *, ROW_NUMBER() OVER (ORDER BY {{col}} DESC) AS rank
+            FROM current_snap
+        )
+        {prev_cte}
+        SELECT cr.*, {rank_prev_select}
+        FROM current_ranked cr
+        {prev_join}
+        WHERE cr.{{col}} > %s{region_clause}
+        ORDER BY cr.rank
+        LIMIT %s
+    """
+    return sql.SQL(query).format(col=col)
+
+
 # ---------------------------------------------------------------------------
 # Participant reference resolution helpers
 # ---------------------------------------------------------------------------
@@ -1516,6 +1758,43 @@ def _resolve_ref_to_slot_id(ref: ParticipantRef) -> str | None:
     if ref.region is not None and ref.seed is not None:
         return f"R{ref.region}S{ref.seed}"
     return None
+
+
+def build_simulated_bracket_results(
+    results: list[BracketGameResultRequest], seed_to_school: dict[tuple[int, int], str]
+) -> list[tuple[str, str | None, int, int, str | None]]:
+    """Convert ``POST /bracket/simulate`` results (playoff mode) into ``(winner, loser,
+    winner_score, loser_score, round)`` tuples for ``build_enriched_bracket_layout``.
+
+    Resolves school-name or (region, seed) slot refs via *seed_to_school*.
+    Results whose winner can't be resolved to a known school are dropped; a
+    named loser that can't be resolved also drops that result (round-based
+    results, which have no loser ref, only need the winner). Missing scores
+    default to 12/0 (forfeit), matching the API's documented default.
+    """
+    simulated: list[tuple[str, str | None, int, int, str | None]] = []
+    for r in results:
+        winner = _resolve_ref_to_school(r.winner, seed_to_school)
+        if winner is None:
+            continue
+        if r.loser is not None:
+            loser = _resolve_ref_to_school(r.loser, seed_to_school)
+            if loser is not None:
+                simulated.append((winner, loser, r.winner_score or 12, r.loser_score or 0, None))
+        else:
+            simulated.append((winner, None, r.winner_score or 12, r.loser_score or 0, r.round))
+    return simulated
+
+
+def build_slot_win_counts(results: list[BracketGameResultRequest]) -> dict[str, int]:
+    """Count wins per (region, seed) slot ID from ``POST /bracket/simulate`` results
+    (pre-clinching mode, where only slot refs — not school names — are meaningful)."""
+    slot_wins: dict[str, int] = {}
+    for r in results:
+        slot_id = _resolve_ref_to_slot_id(r.winner)
+        if slot_id:
+            slot_wins[slot_id] = slot_wins.get(slot_id, 0) + 1
+    return slot_wins
 
 
 # ---------------------------------------------------------------------------
@@ -2122,6 +2401,46 @@ async def load_scenarios_snapshot(  # pragma: no cover
     return remaining, complete, key_insights, row[3]
 
 
+async def resolve_remaining_games(  # pragma: no cover
+    conn, season: int, clazz: int, region: int, as_of: date
+) -> list[RemainingGame]:
+    """Return a region's remaining games: from the stored region_scenarios snapshot if one
+    exists on or before *as_of*, otherwise recomputed on demand from raw game data.
+
+    Used by simulate endpoints that only need the remaining-games list (not the
+    full scenario/odds bundle ``load_scenarios_snapshot`` provides) to decide
+    whether a region has entered playoff mode (no games remaining).
+    """
+    scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
+    if scenarios_data is not None:
+        remaining, _, _, _ = scenarios_data
+        return remaining
+    _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
+    return remaining
+
+
+async def load_other_region_seeding(  # pragma: no cover
+    conn, season: int, clazz: int, as_of: date, exclude_region: int
+) -> list[tuple[str, int, float, float, float, float]]:
+    """Return (school, region, odds_1st, odds_2nd, odds_3rd, odds_4th) rows for every region
+    in *clazz* except *exclude_region*, from the most recent region_standings snapshot.
+
+    Used to build a matchup-probability function for a simulated region that
+    accounts for the strength of every other region's seeding (see
+    ``build_seeding_by_region``).
+    """
+    rows = await conn.execute(
+        """
+        SELECT DISTINCT ON (school) school, region, odds_1st, odds_2nd, odds_3rd, odds_4th
+        FROM region_standings
+        WHERE season = %s AND class = %s AND region != %s AND as_of_date <= %s
+        ORDER BY school, as_of_date DESC
+        """,
+        (season, clazz, exclude_region, as_of),
+    )
+    return [(r[0], r[1], r[2], r[3], r[4], r[5]) async for r in rows]
+
+
 async def load_scenario_atoms(  # pragma: no cover
     conn, season: int, clazz: int, region: int, as_of: date
 ) -> dict | None:
@@ -2418,6 +2737,188 @@ async def recompute_scenarios_from_games(  # pragma: no cover
         results.denom,
     )
     return teams, completed, remaining, odds, results.coinflip_teams
+
+
+def _odds_from_rows(standings_rows: list[tuple]) -> tuple[dict, dict]:
+    """Build (odds, weighted_odds) StandingsOdds dicts from standings DB rows.
+
+    Row columns 7-11 are unweighted p1-p_playoffs; 16-20 are weighted.
+    """
+    odds: dict[str, StandingsOdds] = {}
+    weighted: dict[str, StandingsOdds] = {}
+    for row in standings_rows:
+        school = row[0]
+        odds[school] = standings_odds_from_row(
+            school,
+            row[7],
+            row[8],
+            row[9],
+            row[10],
+            row[11],
+            row[12],
+            row[13],
+        )
+        weighted[school] = standings_odds_from_row(
+            school,
+            row[16],
+            row[17],
+            row[18],
+            row[19],
+            row[20],
+            row[12],
+            row[13],
+        )
+    return odds, weighted
+
+
+_HostingOddsRowParts = tuple[
+    str,
+    StandingsOdds,
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+]
+
+
+def _unpack_hosting_odds_row(r) -> _HostingOddsRowParts:
+    """Unpack a school-first region_standings hosting-odds row into its component parts.
+
+    Expects columns in the order: school, odds_1st..odds_playoffs, odds_playoffs
+    (duplicated), clinched, eliminated, home_(r1,r2,qf,sf), home_(...)_weighted,
+    adv_(r1,r2,qf,sf), adv_(...)_weighted — i.e. the shape shared by hosting.py's
+    ``_load_region_odds`` and ``_load_all_regions_hosting_odds`` (the latter with
+    a leading ``region`` column stripped off before calling this). Note this is a
+    different row layout than ``_odds_from_rows`` above — a different query for a
+    different purpose (home/advancement odds vs. weighted seeding odds) — so the
+    two aren't merged despite the superficially similar name.
+    """
+    school = r[0]
+    odds = standings_odds_from_row(school, r[1], r[2], r[3], r[4], r[5], r[7], r[8])
+    home = (r[9], r[10], r[11], r[12])
+    home_w = (r[13], r[14], r[15], r[16])
+    adv = (r[17], r[18], r[19], r[20])
+    adv_w = (r[21], r[22], r[23], r[24])
+    return school, odds, home, home_w, adv, adv_w
+
+
+async def _load_standings_snapshot(  # pragma: no cover
+    conn, season: int, clazz: int, region: int, as_of: date
+) -> list[tuple] | None:
+    """Load region_standings rows for the most recent snapshot on or before *as_of*.
+
+    Row positions (0-indexed):
+      0-6:   school, wins, losses, ties, region_wins, region_losses, region_ties
+      7-11:  odds_1st–odds_playoffs (unweighted seeding)
+      12-14: clinched, eliminated, coin_flip_needed
+      15:    as_of_date
+      16-20: odds_1st_weighted–odds_playoffs_weighted
+      21-25: odds_second_round–odds_champion (bracket advancement, unweighted)
+      26-30: odds_second_round_weighted–odds_champion_weighted
+      31-34: odds_first_round_home–odds_semifinals_home (unweighted)
+      35-38: odds_first_round_home_weighted–odds_semifinals_home_weighted
+    """
+    rows = await conn.execute(
+        """
+        SELECT DISTINCT ON (school)
+            school, wins, losses, ties, region_wins, region_losses, region_ties,
+            odds_1st, odds_2nd, odds_3rd, odds_4th, odds_playoffs,
+            clinched, eliminated, coin_flip_needed, as_of_date,
+            odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted, odds_playoffs_weighted,
+            odds_second_round, odds_quarterfinals, odds_semifinals, odds_finals, odds_champion,
+            odds_second_round_weighted, odds_quarterfinals_weighted, odds_semifinals_weighted,
+            odds_finals_weighted, odds_champion_weighted,
+            odds_first_round_home, odds_second_round_home, odds_quarterfinals_home, odds_semifinals_home,
+            odds_first_round_home_weighted, odds_second_round_home_weighted,
+            odds_quarterfinals_home_weighted, odds_semifinals_home_weighted
+        FROM region_standings
+        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
+        ORDER BY school, as_of_date DESC
+        """,
+        (season, clazz, region, as_of),
+    )
+    result = [r async for r in rows]
+    return result if result else None
+
+
+@dataclass
+class StandingsSnapshot:
+    """Resolved region-standings data for one of three data paths, unified into a
+    single shape for the ``GET /standings/{clazz}/{region}`` handler to render.
+
+    Which path produced this snapshot depends on what's been pre-computed by the
+    pipeline: a full stored snapshot with scenarios, a stored snapshot without
+    scenarios (recompute scenarios on demand), or no stored snapshot at all
+    (recompute everything on demand).
+    """
+
+    team_entries: list[TeamStandingsEntry]
+    teams: list[str]
+    completed: list[CompletedGame]
+    odds_for_order: dict[str, StandingsOdds]
+    snapshot_date: date
+    complete_scenarios: list[dict] | None
+    key_insights: list[KeyInsightModel] | None
+    remaining: list[RemainingGame]
+    scenario_atoms: dict | None
+
+
+async def resolve_standings_snapshot(  # pragma: no cover
+    conn, season: int, clazz: int, region: int, as_of: date, include_team_scenarios: bool
+) -> StandingsSnapshot:
+    """Resolve the region-standings snapshot for ``GET /standings/{clazz}/{region}``.
+
+    Tries, in order: (1) a stored region_standings snapshot with a matching
+    region_scenarios row — the common case once the pipeline has run; (2) a
+    stored region_standings snapshot with no scenarios row yet (recompute just
+    the scenario/remaining-games half on demand); (3) no stored snapshot at all
+    (recompute standings and scenarios entirely on demand, e.g. for a season the
+    pipeline hasn't processed).
+    """
+    standings_rows = await _load_standings_snapshot(conn, season, clazz, region, as_of)
+    scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
+
+    odds_for_order: dict[str, StandingsOdds]
+    scenario_atoms: dict | None = None
+    if standings_rows is not None and scenarios_data is not None:
+        remaining, complete_scenarios, key_insights, snapshot_date = scenarios_data
+        team_entries = build_team_entries(standings_rows, None, None)
+        teams = [r[0] for r in standings_rows]
+        completed = await load_completed_region_games(conn, season, as_of, teams)
+        odds_for_order, _ = _odds_from_rows(standings_rows)
+        if include_team_scenarios:
+            scenario_atoms = await load_scenario_atoms(conn, season, clazz, region, as_of)
+    elif standings_rows is not None:
+        _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
+        snapshot_date = standings_rows[0][15]
+        complete_scenarios = None
+        key_insights = None
+        team_entries = build_team_entries(standings_rows, None, None)
+        teams = [r[0] for r in standings_rows]
+        completed = await load_completed_region_games(conn, season, as_of, teams)
+        odds_for_order, _ = _odds_from_rows(standings_rows)
+    else:
+        teams, completed, remaining, odds_map, coinflip_teams = await recompute_scenarios_from_games(
+            conn, season, clazz, region, as_of
+        )
+        records = records_from_completed(teams, completed)
+        team_entries = standings_from_odds(odds_map, coinflip_teams, records)
+        snapshot_date = as_of
+        complete_scenarios = None
+        key_insights = None
+        odds_for_order = odds_map
+
+    return StandingsSnapshot(
+        team_entries=team_entries,
+        teams=teams,
+        completed=completed,
+        odds_for_order=odds_for_order,
+        snapshot_date=snapshot_date,
+        complete_scenarios=complete_scenarios,
+        key_insights=key_insights,
+        remaining=remaining,
+        scenario_atoms=scenario_atoms,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3655,6 +4156,81 @@ def resolve_away_venue(
     if l_name is not None:
         return VenueModel(name=l_name, city=l_city, latitude=l_lat, longitude=l_lon)
     return venues.get(opponent)
+
+
+def build_roadmap_games(
+    game_rows: list[tuple], team_venue: VenueModel | None, venues: dict[str, VenueModel]
+) -> tuple[list[RoadmapGame], float]:
+    """Build a team's roadmap game list and total mileage from its season's game rows.
+
+    *game_rows* is ``(round, date, opponent, location, venue_name, venue_city,
+    venue_lat, venue_lon)`` tuples, one per game, ordered by date. Home games
+    always show 0 distance. Away games resolve via ``resolve_away_venue``
+    (explicit venue, else the opponent's home venue). Neutral games only get a
+    distance when an explicit venue is on record (or, for the championship
+    game, via the ``cv``/``cvl`` join already folded into *venue_name* etc. by
+    the caller's query).
+    """
+    games: list[RoadmapGame] = []
+    total_miles = 0.0
+    for round_, game_date, opponent, location, v_name, v_city, v_lat, v_lon in game_rows:
+        if location == "home":
+            hop_venue = team_venue
+            distance = 0.0
+        elif location == "away":
+            hop_venue = resolve_away_venue(opponent, v_name, v_city, v_lat, v_lon, venues)
+            distance = venue_distance_miles(team_venue, hop_venue)
+        else:
+            hop_venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
+            distance = venue_distance_miles(team_venue, hop_venue)
+        if distance is not None:
+            total_miles += distance
+        games.append(
+            RoadmapGame(
+                round=round_,
+                date=game_date,
+                opponent=opponent,
+                location=hop_venue,
+                is_home=location == "home",
+                distance_miles=distance,
+            )
+        )
+    return games, total_miles
+
+
+def build_attended_game_models(rows: list[tuple], venues: dict[str, VenueModel]) -> list[AttendedGameModel]:
+    """Build a user's attended-games list from ``user_attended_games`` join rows.
+
+    *rows* is ``(school, date, opponent, result, location, venue_name,
+    venue_city, venue_lat, venue_lon)`` tuples. ``distance_miles`` is
+    straight-line from the attended school's own campus (the trip that team
+    made) to the resolved venue: an explicit ``locations`` row wins, else the
+    attended school's own venue for a home game, else the opponent's venue for
+    an away game (``venues``' campus fallback) — ``None`` only for an
+    unresolvable neutral-site game.
+    """
+    results = []
+    for school, game_date, opponent, result, location, l_name, l_city, l_lat, l_lon in rows:
+        anchor = venues.get(school)
+        if l_name is not None:
+            venue = VenueModel(name=l_name, city=l_city, latitude=l_lat, longitude=l_lon)
+        elif location == "home":
+            venue = anchor
+        elif location == "away":
+            venue = venues.get(opponent)
+        else:
+            venue = None
+        results.append(
+            AttendedGameModel(
+                school=school,
+                date=game_date,
+                opponent=opponent,
+                result=result,
+                venue=venue,
+                distance_miles=venue_distance_miles(anchor, venue),
+            )
+        )
+    return results
 
 
 async def load_travel_insights(

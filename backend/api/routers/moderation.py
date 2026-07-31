@@ -5,7 +5,6 @@ belonging to a user with the ``moderator`` or ``owner`` role.
 """
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
@@ -13,15 +12,7 @@ from backend.api.auth import ModeratorAuth
 from backend.api.db import get_conn
 from backend.api.models.requests import ModerationDecisionRequest
 from backend.api.models.responses import SubmissionDetail, SubmissionSummary
-from backend.helpers.image_helpers import LogoType, promote_submission_logo
-from backend.helpers.query_helpers import require_helmet_design_exists, set_school_logo_column
-from backend.helpers.submission_helpers import (
-    build_color_overrides,
-    build_helmet_assignment_override,
-    build_location_overrides,
-    build_score_overrides,
-    build_submission_summary,
-)
+from backend.helpers.submission_helpers import apply_submission, build_submission_summary
 
 _log = logging.getLogger(__name__)
 
@@ -128,7 +119,7 @@ async def approve_submission(
         if row[2] != "pending":
             raise HTTPException(status_code=409, detail=f"Submission {submission_id} has already been {row[2]}")
 
-        await _apply_submission(conn, row)
+        await apply_submission(conn, row)
 
         updated = await (
             await conn.execute(
@@ -182,52 +173,3 @@ async def reject_submission(
     assert updated is not None
     _log.info("moderation: user %s rejected submission %s type=%s", moderator["db_id"], submission_id, row[1])
     return _row_to_detail(updated)
-
-
-async def _apply_submission(conn: Any, row: tuple) -> None:
-    """Apply an approved submission to the live database.
-
-    Called inside the same connection as the status UPDATE so both succeed or
-    fail together.  Cloudinary operations that precede the DB write are
-    idempotent (overwrite=True), so partial failures can be safely retried by
-    re-approving the submission.
-    """
-    stype: str = row[1]
-    school: str | None = row[3]
-    payload: dict = row[6]
-
-    if school is None:
-        raise HTTPException(status_code=422, detail="Submission is missing a school")
-
-    if stype == "logo":
-        logo_type: LogoType = payload["logo_type"]
-        staging_path: str = payload["cloudinary_path"]
-        production_path = promote_submission_logo(staging_path, logo_type)
-        await set_school_logo_column(conn, school, logo_type, production_path)
-
-    elif stype == "helmet":
-        pass  # Moderator creates the helmet_design record manually.
-
-    elif stype == "colors":
-        for field, value in build_color_overrides(payload):
-            await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, field, value))
-
-    elif stype == "location":
-        for field, value in build_location_overrides(payload):
-            await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, field, value))
-
-    elif stype == "score":
-        game_date, overrides = build_score_overrides(payload)
-        for field, value in overrides:
-            await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, game_date, field, value))
-
-    elif stype == "feedback":
-        pass  # No DB action on approval.
-
-    elif stype == "helmet_assignment":
-        game_date, helmet_design_id = build_helmet_assignment_override(payload)
-        await require_helmet_design_exists(conn, helmet_design_id)
-        await conn.execute(
-            "UPDATE games SET helmet_design_id = %s WHERE school = %s AND date = %s",
-            (helmet_design_id, school, game_date),
-        )

@@ -17,7 +17,7 @@ from backend.api.models.responses import (
     UpsetsResponse,
 )
 from backend.helpers.api_helpers import build_game_models, week_window
-from backend.helpers.query_helpers import and_join_conditions
+from backend.helpers.query_helpers import and_join_conditions, append_optional_filters
 from backend.helpers.win_probability import (
     EloConfig,
     compute_hfa_adjustment,
@@ -30,6 +30,16 @@ router = APIRouter(prefix="/api/v1", tags=["games"])
 
 SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
+
+
+def _require_elo_row(row: tuple | None, team: str, season: int, date: date | None) -> tuple:
+    """Raise HTTP 404 with a consistent message if *row* (an Elo lookup result) is None."""
+    if row is None:
+        detail = f"No Elo rating for '{team}' in season {season}"
+        if date:
+            detail += f" on or before {date}"
+        raise HTTPException(status_code=404, detail=detail)
+    return row
 
 
 @router.get("/games")
@@ -49,21 +59,15 @@ async def list_games(
     # Build the base query joining back to school_seasons for class/region filters
     conditions: list[LiteralString] = ["g.season = %s"]
     params: list = [season]
-    if class_ is not None:
-        conditions.append("ss.class = %s")
-        params.append(class_)
-    if region is not None:
-        conditions.append("ss.region = %s")
-        params.append(region)
-    if team is not None:
-        conditions.append("g.school = %s")
-        params.append(team)
-    if date_from is not None:
-        conditions.append("g.date >= %s")
-        params.append(date_from)
-    if date_to is not None:
-        conditions.append("g.date <= %s")
-        params.append(date_to)
+    append_optional_filters(
+        conditions,
+        params,
+        ("ss.class = %s", class_),
+        ("ss.region = %s", region),
+        ("g.school = %s", team),
+        ("g.date >= %s", date_from),
+        ("g.date <= %s", date_to),
+    )
 
     where_clause = and_join_conditions(conditions)
     query = sql.SQL("""
@@ -147,16 +151,8 @@ async def pregame_win_probability(
         row_a = await (await conn.execute(query, params_a)).fetchone()
         row_b = await (await conn.execute(query, params_b)).fetchone()
 
-    if row_a is None:
-        detail = f"No Elo rating for '{team_a}' in season {season}"
-        if date:
-            detail += f" on or before {date}"
-        raise HTTPException(status_code=404, detail=detail)
-    if row_b is None:
-        detail = f"No Elo rating for '{team_b}' in season {season}"
-        if date:
-            detail += f" on or before {date}"
-        raise HTTPException(status_code=404, detail=detail)
+    row_a = _require_elo_row(row_a, team_a, season, date)
+    row_b = _require_elo_row(row_b, team_b, season, date)
 
     cfg = EloConfig()
     elo_a, elo_date_a = row_a
@@ -210,12 +206,7 @@ async def games_upsets(
             "g.pregame_prob IS NOT NULL",
         ]
         params: list = [season]
-        if date_from is not None:
-            conditions.append("g.date >= %s")
-            params.append(date_from)
-        if date_to is not None:
-            conditions.append("g.date <= %s")
-            params.append(date_to)
+        append_optional_filters(conditions, params, ("g.date >= %s", date_from), ("g.date <= %s", date_to))
         params.append(limit)
 
         where_clause = and_join_conditions(conditions)

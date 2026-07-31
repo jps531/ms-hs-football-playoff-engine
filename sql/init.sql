@@ -229,10 +229,9 @@ FROM games;
 -- finding the most recent row with as_of_date <= X.
 --
 -- Unweighted odds treat all remaining outcomes as equally likely.
--- Weighted odds apply per-game win probability estimated from scoring margins.
---
--- Columns marked "Not yet implemented" default to 0.0 and are placeholders
--- for future bracket-odds and home-game-odds features.
+-- Weighted odds apply per-game win probability derived from Elo ratings
+-- (see region_scenarios_pipeline.py / bracket_home_odds.py). Both variants
+-- are fully computed and written by the pipeline on every run.
 
 CREATE TABLE IF NOT EXISTS region_standings (
   school          TEXT NOT NULL,
@@ -647,7 +646,7 @@ COMMENT ON COLUMN locations.latitude IS
 COMMENT ON COLUMN locations.longitude IS
   'Longitude of the venue in decimal degrees.';
 COMMENT ON COLUMN locations.overrides IS
-  'User-managed JSONB patch applied on read via the locations_v view. Any key here shadows '
+  'User-managed JSONB patch applied on read via the locations_effective view. Any key here shadows '
   'the corresponding raw column (home_team, latitude, longitude). '
   'Written only through set_location_override() / clear_location_override(); never by the pipeline.';
 
@@ -703,10 +702,14 @@ COMMENT ON COLUMN games.kickoff_time IS
 COMMENT ON COLUMN games.overtime IS
   'Number of overtime periods played. 0 for regulation finishes.';
 COMMENT ON COLUMN games.overrides IS
-  'User-managed JSONB patch applied on read via the games_v view. Any key here shadows '
-  'the corresponding raw column (home_team, latitude, longitude, location, location_id, '
-  'points_for, points_against, region_game, round, kickoff_time). '
-  'Written only through set_game_override() / clear_game_override(); never by the pipeline.';
+  'User-managed JSONB patch applied on read via the games_effective view. Any key here shadows '
+  'the corresponding raw column (result, overtime, game_status, game_quarter, game_clock, '
+  'location, location_id, points_for, points_against, region_game, round, kickoff_time, '
+  'ot_period_start_score_for, ot_period_start_score_against, ot_next_possession). '
+  'Written only through set_game_override() / clear_game_override(); never by the pipeline. '
+  'Note: this view coalesces a ''result'' override, but the admin API does not currently expose '
+  '''result'' as a settable field (see GameOverrideField in backend/api/models/requests.py) — '
+  'a result correction today goes through points_for/points_against instead.';
 COMMENT ON COLUMN games.helmet_design_id IS
   'FK to helmet_designs(id). The helmet design this school wore in this game. '
   'NULL until manually designated. Not written by any pipeline — updated manually only.';
@@ -754,13 +757,13 @@ COMMENT ON COLUMN region_standings.odds_4th IS
 
 COMMENT ON COLUMN region_standings.odds_1st_weighted IS
   'Like odds_1st but each scenario is weighted by the product of per-game win probabilities '
-  'derived from scoring margin. Not yet implemented — placeholder 0.0.';
+  'derived from Elo ratings. Computed by determine_odds() in region_scenarios_pipeline.py.';
 COMMENT ON COLUMN region_standings.odds_2nd_weighted IS
-  'Weighted version of odds_2nd. Not yet implemented.';
+  'Elo-weighted version of odds_2nd.';
 COMMENT ON COLUMN region_standings.odds_3rd_weighted IS
-  'Weighted version of odds_3rd. Not yet implemented.';
+  'Elo-weighted version of odds_3rd.';
 COMMENT ON COLUMN region_standings.odds_4th_weighted IS
-  'Weighted version of odds_4th. Not yet implemented.';
+  'Elo-weighted version of odds_4th.';
 
 COMMENT ON COLUMN region_standings.odds_playoffs IS
   'Probability of finishing in the top 4 (making the playoffs). '
@@ -775,28 +778,28 @@ COMMENT ON COLUMN region_standings.coin_flip_needed IS
 
 COMMENT ON COLUMN region_standings.odds_second_round IS
   'Probability of advancing past the first round of the playoffs. '
-  'Not yet implemented — placeholder 0.0.';
+  'Computed by compute_bracket_odds() in helpers/scenarios.py as p_playoffs * 0.5^rounds_needed.';
 COMMENT ON COLUMN region_standings.odds_quarterfinals IS
-  'Probability of reaching the quarterfinals. Not yet implemented.';
+  'Probability of reaching the quarterfinals.';
 COMMENT ON COLUMN region_standings.odds_semifinals IS
-  'Probability of reaching the semifinals. Not yet implemented.';
+  'Probability of reaching the semifinals.';
 COMMENT ON COLUMN region_standings.odds_finals IS
-  'Probability of reaching the state championship game. Not yet implemented.';
+  'Probability of reaching the state championship game.';
 COMMENT ON COLUMN region_standings.odds_champion IS
-  'Probability of winning the state championship. Not yet implemented.';
+  'Probability of winning the state championship.';
 
 COMMENT ON COLUMN region_standings.odds_playoffs_weighted IS
-  'Weighted version of odds_playoffs. Not yet implemented.';
+  'Elo-weighted version of odds_playoffs.';
 COMMENT ON COLUMN region_standings.odds_second_round_weighted IS
-  'Weighted version of odds_second_round. Not yet implemented.';
+  'Elo-weighted version of odds_second_round.';
 COMMENT ON COLUMN region_standings.odds_quarterfinals_weighted IS
-  'Weighted version of odds_quarterfinals. Not yet implemented.';
+  'Elo-weighted version of odds_quarterfinals.';
 COMMENT ON COLUMN region_standings.odds_semifinals_weighted IS
-  'Weighted version of odds_semifinals. Not yet implemented.';
+  'Elo-weighted version of odds_semifinals.';
 COMMENT ON COLUMN region_standings.odds_finals_weighted IS
-  'Weighted version of odds_finals. Not yet implemented.';
+  'Elo-weighted version of odds_finals.';
 COMMENT ON COLUMN region_standings.odds_champion_weighted IS
-  'Weighted version of odds_champion. Not yet implemented.';
+  'Elo-weighted version of odds_champion.';
 
 COMMENT ON COLUMN region_standings.odds_first_round_home IS
   'p_host_given_reach probability of hosting the first-round playoff game: P(hosts R1 | reaches R1). '
@@ -809,13 +812,15 @@ COMMENT ON COLUMN region_standings.odds_semifinals_home IS
   'p_host_given_reach probability of hosting a semifinal game: P(hosts SF | reaches SF).';
 
 COMMENT ON COLUMN region_standings.odds_first_round_home_weighted IS
-  'Weighted version of odds_first_round_home (Elo-weighted seeding odds). Not yet implemented.';
+  'Elo-weighted version of odds_first_round_home. Computed by helpers/bracket_home_odds.py '
+  'using Elo-derived matchup probabilities (e.g. compute_second_round_home_odds() for the '
+  'analogous second-round column).';
 COMMENT ON COLUMN region_standings.odds_second_round_home_weighted IS
-  'Weighted version of odds_second_round_home. Not yet implemented.';
+  'Elo-weighted version of odds_second_round_home.';
 COMMENT ON COLUMN region_standings.odds_quarterfinals_home_weighted IS
-  'Weighted version of odds_quarterfinals_home. Not yet implemented.';
+  'Elo-weighted version of odds_quarterfinals_home.';
 COMMENT ON COLUMN region_standings.odds_semifinals_home_weighted IS
-  'Weighted version of odds_semifinals_home. Not yet implemented.';
+  'Elo-weighted version of odds_semifinals_home.';
 
 
 -- team_ratings
@@ -965,6 +970,26 @@ COMMENT ON COLUMN playoff_format_slots.away_seed IS
 COMMENT ON COLUMN playoff_format_slots.north_south IS
   'Which half of the bracket this slot belongs to (N=North, S=South). '
   'Used to apply the state-championship home-site rule: South hosts in odd years.';
+
+
+-- championship_venues
+
+COMMENT ON TABLE championship_venues IS
+  'One row per season/class recording which location hosted (or will host) that class''s '
+  'championship game. Independent of games — can be set before the season''s Championship '
+  'Game rows exist. Read via GET /api/v1/championships and written via the admin '
+  'championship-venue endpoints. Readers displaying a championship game''s venue should treat '
+  'an explicit games.location_id as authoritative when present and fall back to this table '
+  'otherwise (see games.py and the bracket router).';
+
+COMMENT ON COLUMN championship_venues.season IS
+  'Four-digit season year. Part of the primary key with class.';
+COMMENT ON COLUMN championship_venues.class IS
+  'MHSAA classification (1-7). Part of the primary key with season.';
+COMMENT ON COLUMN championship_venues.location_id IS
+  'FK to locations(id). The venue hosting this season/class''s championship game. '
+  'Set via POST /api/v1/admin/championship-venue, which also stamps the venue onto '
+  'the matching Championship Game rows in games.location_id.';
 
 
 -- submissions

@@ -53,11 +53,89 @@ async def resolve_location_by_name_or_team(conn, location: str) -> tuple[int, st
     return rows[0][0], rows[0][1]
 
 
+async def upsert_school_season(  # pragma: no cover
+    conn,
+    school: str,
+    season: int,
+    class_: int,
+    region: int,
+    is_active: bool,
+    copy_identity_from: str | None,
+) -> None:
+    """Create or overwrite a school_seasons row with explicit class, region, and is_active.
+
+    Creates the parent schools row if it does not already exist. Overwrites
+    class and region on conflict, so this is safe to re-run. Use for mid-cycle
+    changes the Regions pipeline cannot handle: consolidations, closures, new
+    schools.
+
+    When *copy_identity_from* is supplied, copies mascot, colors, city, zip,
+    latitude, and longitude from that school into *school*'s base columns
+    immediately, before the MHSAA identity and NCES pipelines have run. Raises
+    HTTP 404 if the source school does not exist.
+    """
+    await conn.execute(
+        "INSERT INTO schools (school) VALUES (%s) ON CONFLICT (school) DO NOTHING",
+        (school,),
+    )
+    await conn.execute(
+        """
+        INSERT INTO school_seasons (school, season, class, region, is_active)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (school, season) DO UPDATE SET
+            class     = EXCLUDED.class,
+            region    = EXCLUDED.region,
+            is_active = EXCLUDED.is_active
+        """,
+        (school, season, class_, region, is_active),
+    )
+    if copy_identity_from:
+        src = await (await conn.execute("SELECT 1 FROM schools WHERE school = %s", (copy_identity_from,))).fetchone()
+        if src is None:
+            raise HTTPException(status_code=404, detail=f"Source school '{copy_identity_from}' not found")
+        await conn.execute(
+            """
+            UPDATE schools s SET
+                mascot              = COALESCE(NULLIF(e.mascot, ''),              s.mascot),
+                primary_color       = COALESCE(NULLIF(e.primary_color, ''),       s.primary_color),
+                secondary_color     = COALESCE(NULLIF(e.secondary_color, ''),     s.secondary_color),
+                primary_color_hex   = COALESCE(NULLIF(e.primary_color_hex, ''),   s.primary_color_hex),
+                secondary_color_hex = COALESCE(NULLIF(e.secondary_color_hex, ''), s.secondary_color_hex),
+                city                = COALESCE(s.city,      e.city),
+                zip                 = COALESCE(s.zip,       e.zip),
+                latitude            = COALESCE(s.latitude,  e.latitude),
+                longitude           = COALESCE(s.longitude, e.longitude)
+            FROM schools_effective e
+            WHERE s.school = %s AND e.school = %s
+            """,
+            (school, copy_identity_from),
+        )
+
+
 async def require_helmet_design_exists(conn, design_id: int) -> None:  # pragma: no cover
     """Raise HTTP 404 if no helmet design exists with *design_id*."""
     row = await (await conn.execute("SELECT 1 FROM helmet_designs WHERE id = %s", (design_id,))).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Helmet design {design_id} not found")
+
+
+def validate_submission_for_helmet_link(sub_row: tuple | None, submission_id: int) -> None:
+    """Validate a fetched ``(type, helmet_design_id)`` submissions row before linking it to a new
+    helmet design via ``POST /admin/helmets``'s ``from_submission_id``.
+
+    Raises HTTP 404 if *sub_row* is ``None`` (no such submission), HTTP 422 if
+    it isn't a helmet-type submission, HTTP 409 if it's already linked to a
+    different design.
+    """
+    if sub_row is None:
+        raise HTTPException(status_code=404, detail=f"Submission {submission_id} not found")
+    if sub_row[0] != "helmet":
+        raise HTTPException(status_code=422, detail=f"Submission {submission_id} is not a helmet submission")
+    if sub_row[1] is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Submission {submission_id} is already linked to helmet design {sub_row[1]}",
+        )
 
 
 async def set_school_logo_column(conn, school: str, logo_type: str, path: str) -> None:  # pragma: no cover
@@ -67,6 +145,38 @@ async def set_school_logo_column(conn, school: str, logo_type: str, path: str) -
         sql.SQL("UPDATE schools SET {} = %s WHERE school = %s").format(col),
         (path, school),
     )
+
+
+# helmet_designs image column per HelmetImageType ('left'/'right'/'photo') — not a simple
+# f-string prefix like set_school_logo_column's, since 'photo' maps to itself.
+HELMET_IMAGE_COLUMNS: dict[str, str] = {"left": "image_left", "right": "image_right", "photo": "photo"}
+
+
+async def set_helmet_image_column(conn, helmet_design_id: int, image_type: str, path: str) -> None:  # pragma: no cover
+    """Write *path* into the appropriate ``helmet_designs`` image column for *helmet_design_id*."""
+    col = sql.Identifier(HELMET_IMAGE_COLUMNS[image_type])
+    await conn.execute(
+        sql.SQL("UPDATE helmet_designs SET {} = %s WHERE id = %s").format(col),
+        (path, helmet_design_id),
+    )
+
+
+def append_optional_filters(
+    conditions: list[LiteralString], params: list, *pairs: tuple[LiteralString, object]
+) -> None:
+    """Append ``(sql_fragment, value)`` pairs to *conditions*/*params* in place, skipping any
+    pair whose value is ``None``.
+
+    Dedupes the repeated ``if x is not None: conditions.append(...); params.append(x)``
+    idiom used to build a dynamic ``WHERE`` clause from optional query params.
+    Mandatory conditions (e.g. a required ``season`` filter) should be added to
+    *conditions*/*params* directly by the caller before calling this — only the
+    optional tail belongs here.
+    """
+    for sql_fragment, value in pairs:
+        if value is not None:
+            conditions.append(sql_fragment)
+            params.append(value)
 
 
 def and_join_conditions(conditions: Sequence[LiteralString]) -> sql.Composed:
@@ -87,3 +197,9 @@ def require_nonempty_update(update_data: dict) -> None:
     """Raise HTTP 422 if *update_data* (from ``body.model_dump(exclude_unset/none=True)``) is empty."""
     if not update_data:
         raise HTTPException(status_code=422, detail="No fields provided to update")
+
+
+def validate_override_field(field: str, valid_fields: frozenset[str]) -> None:
+    """Raise HTTP 422 if *field* is not one of *valid_fields* (a DELETE .../overrides/{field} path param)."""
+    if field not in valid_fields:
+        raise HTTPException(status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(valid_fields)}")

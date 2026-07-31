@@ -29,6 +29,7 @@ The following data model describes how data is stored and controlled in this app
 | `region_computation_state` | Tracks background margin-sensitivity upgrade status per region (the two-phase computation model for regions with 5–6 games remaining). |
 | `playoff_formats` | Bracket template per class/season: size, number of regions, rounds. |
 | `playoff_format_slots` | First-round matchup slots. Adjacent pairs implicitly define the bracket tree for round-2 and beyond. |
+| `championship_venues` | One row per season/class recording which location hosts (or hosted) that class's championship game. Independent of `games` — can be set before that season's Championship Game rows exist; an explicit `games.location_id` wins over this table when both are present. |
 | `submissions` | User-submitted corrections and new assets (logos, helmet designs, colors, GPS coordinates, scores, feedback). Rows enter the queue with `status='pending'` and are approved or rejected by a moderator via the moderation API. Approved submissions are auto-applied to the live tables (except helmet submissions, which require manual mockup creation). Has an optional `user_id` FK for linking submissions to registered users. |
 | `users` | Registered user accounts with role (`user`/`moderator`/`owner`), profile fields (display name, phone, hometown), and a favorite team FK. Identity is managed by Auth0; `auth0_id` stores the Auth0 `sub` claim. Rows are lazy-provisioned on first authenticated request. |
 | `user_followed_teams` | Many-to-many join between users and the schools they follow. |
@@ -260,6 +261,7 @@ Key endpoints summary:
 - `/api/v1/standings/{clazz}/{region}` — seeding odds + scenarios + bracket/home-game odds snapshots
 - `/api/v1/standings/{clazz}` — full standings tables for every region in one class, no scenarios
 - `/api/v1/standings/summary` — statewide grand-view summary: leader, clinch/elimination counts, and volatility per region across every class
+- `/api/v1/rankings/{clazz}` — cross-region ranked list of teams sorted by any odds metric or Elo/RPI, with rank movement vs. the previous snapshot
 - `/api/v1/hosting/{clazz}/{region}` — playoff hosting odds (p_host_given_reach + p_host_overall, raw + Elo-weighted) per round; simulate endpoint accepts winner/loser school names
 - `/api/v1/bracket` — bracket advancement odds per (region, seed) slot, including Elo-weighted advancement, non-weighted and weighted hosting odds per round; simulate endpoint (playoff mode only, same winner/loser format) returns the same full set of fields
 - `/api/v1/bracket/slots/{slot}` — every team still alive for one bracket slot/round pre-clinch, ranked by chance of reaching it, with raw + Elo-weighted reach/hosting odds

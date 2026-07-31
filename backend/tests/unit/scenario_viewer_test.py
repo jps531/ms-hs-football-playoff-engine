@@ -4,7 +4,14 @@ from itertools import product
 
 import pytest
 
-from backend.helpers.data_classes import CoinFlipResult, CompletedGame, GameResult, MarginCondition, RemainingGame
+from backend.helpers.data_classes import (
+    CoinFlipResult,
+    CompletedGame,
+    FormatSlot,
+    GameResult,
+    MarginCondition,
+    RemainingGame,
+)
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_renderer import _render_margin_condition
 from backend.helpers.scenario_viewer import (
@@ -12,6 +19,7 @@ from backend.helpers.scenario_viewer import (
     _derive_atom,
     _eval_mc,
     _find_combined_atom,
+    _find_tiebreaker_groups,
     _format_team_list,
     _minimize_game_winner_atom,
     _simplify_atom_list,
@@ -2745,3 +2753,52 @@ class TestBuildPrePlayoffHomeScenariosEdgeCases:
         assert r1.round_name == "First Round"
         # Brandon can be seed 3 or 4 (away teams) → will_not_host is non-empty
         assert len(r1.will_not_host) > 0
+
+    def test_achievable_seed_with_no_matching_slot_is_skipped(self):
+        """An achievable seed with no corresponding slot in this region's bracket
+        half (a data inconsistency between the seeding odds and the format) is
+        skipped when accumulating R1 overall hosting probability, rather than
+        raising. Slots 6/7 (region 3's seed-3/4 away slots in SLOTS_5A_7A_2025)
+        are re-pointed to phantom regions so region 3 has no seed-3/4 slot at all,
+        while Brandon (per the away-seed test above) can still achieve seed 3/4."""
+        custom_slots = [
+            FormatSlot(slot=1, home_region=1, home_seed=1, away_region=2, away_seed=4, north_south="N"),
+            FormatSlot(slot=2, home_region=2, home_seed=2, away_region=1, away_seed=3, north_south="N"),
+            FormatSlot(slot=3, home_region=2, home_seed=1, away_region=1, away_seed=4, north_south="N"),
+            FormatSlot(slot=4, home_region=1, home_seed=2, away_region=2, away_seed=3, north_south="N"),
+            FormatSlot(slot=5, home_region=3, home_seed=1, away_region=4, away_seed=4, north_south="S"),
+            FormatSlot(slot=6, home_region=4, home_seed=2, away_region=13, away_seed=3, north_south="S"),
+            FormatSlot(slot=7, home_region=4, home_seed=1, away_region=14, away_seed=4, north_south="S"),
+            FormatSlot(slot=8, home_region=3, home_seed=2, away_region=4, away_seed=3, north_south="S"),
+        ]
+        home_scenarios, _ = build_pre_playoff_home_scenarios(
+            team="Brandon",
+            region=3,
+            season=2025,
+            slots=custom_slots,
+            teams=teams_3_7a,
+            completed=expected_3_7a_completed_games,
+            remaining=expected_3_7a_remaining_games,
+        )
+        assert len(home_scenarios) == 3
+        assert home_scenarios[0].round_name == "First Round"
+
+
+class TestFindTiebreakerGroups:
+    """_find_tiebreaker_groups finds maximal spans of mutually-swapped team positions."""
+
+    def test_matching_orders_produce_no_groups(self):
+        """Identical orderings have no swapped positions -- no groups."""
+        assert _find_tiebreaker_groups(["A", "B", "C"], ["A", "B", "C"]) == []
+
+    def test_adjacent_swap_forms_one_group(self):
+        """A simple adjacent-pair swap forms one 2-team group."""
+        groups = _find_tiebreaker_groups(["A", "B", "C"], ["B", "A", "C"])
+        assert groups == [["A", "B"]]
+
+    def test_non_convergent_suffix_returns_no_group(self):
+        """When the trailing positions never resolve to the same team set (the
+        two orderings disagree on which teams occupy the tail at all), the scan
+        runs off the end of the list without converging and no group is formed."""
+        groups = _find_tiebreaker_groups(["A", "B", "C"], ["A", "B", "D"])
+        assert groups == []

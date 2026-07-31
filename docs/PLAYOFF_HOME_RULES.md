@@ -1,3 +1,7 @@
+# MHSAA Playoff Home-Site Rules
+
+Raw MHSAA rule text describing which team hosts each playoff round. Seeds referenced here come from the region tiebreaker procedure in [SCENARIO_RULES.md](SCENARIO_RULES.md); see [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for how the engine turns these rules into the `hosting`/`home_game_odds` fields served by the API.
+
 When two teams from the same region meet in the football playoffs, the higher seed will always be the home team, no matter what round.
 
 1. First round (and second round for 1A-4A) – higher seed hosts.

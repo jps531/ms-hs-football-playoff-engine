@@ -1863,6 +1863,27 @@ class TestEnumerateReachScenarios:
         with pytest.raises(ValueError, match="not found"):
             enumerate_reach_scenarios(99, 1, SLOTS_1A_4A_2025, "Quarterfinals")
 
+    def test_duplicate_qf_candidate_across_slots_deduplicated(self):
+        """A malformed/synthetic slots list where the same (region, seed) appears
+        in both QF-opponent slots is deduplicated rather than counted twice."""
+        synthetic_slots = [
+            FormatSlot(slot=1, home_region=1, home_seed=1, away_region=2, away_seed=4, north_south="N"),
+            FormatSlot(slot=2, home_region=3, home_seed=2, away_region=4, away_seed=3, north_south="N"),
+            FormatSlot(slot=3, home_region=9, home_seed=9, away_region=1, away_seed=4, north_south="N"),
+            FormatSlot(slot=4, home_region=9, home_seed=9, away_region=3, away_seed=3, north_south="N"),
+            FormatSlot(slot=5, home_region=3, home_seed=1, away_region=4, away_seed=4, north_south="N"),
+            FormatSlot(slot=6, home_region=1, home_seed=2, away_region=2, away_seed=3, north_south="N"),
+            FormatSlot(slot=7, home_region=4, home_seed=1, away_region=3, away_seed=4, north_south="N"),
+            FormatSlot(slot=8, home_region=2, home_seed=2, away_region=1, away_seed=3, north_south="N"),
+        ]
+        groups = enumerate_reach_scenarios(1, 1, synthetic_slots, "Semifinals")
+        qf_candidates = [(c.region, c.seed) for group in groups for c in group if c.round_name == "Quarterfinals"]
+        # (9,9) appears in both QF-opponent slots but must be deduplicated to one
+        # logical candidate -- 3 unique candidates, not 4 -- each appearing the
+        # same number of times (once per Second Round candidate it's paired with).
+        assert set(qf_candidates) == {(9, 9), (1, 4), (3, 3)}
+        assert qf_candidates.count((9, 9)) == qf_candidates.count((1, 4)) == qf_candidates.count((3, 3))
+
 
 class TestEnumerateReachScenariosForTeam:
     """Coverage for the pre-clinch wrapper around enumerate_reach_scenarios."""
@@ -1907,3 +1928,12 @@ class TestEnumerateReachScenariosForTeam:
         """seed=None with no achievable_seeds raises ValueError."""
         with pytest.raises(ValueError, match="achievable_seeds"):
             enumerate_reach_scenarios_for_team(5, None, SLOTS_1A_4A_2025, "Quarterfinals", achievable_seeds=[])
+
+    def test_achievable_seed_with_no_matching_slot_is_skipped(self):
+        """An achievable seed that doesn't correspond to any slot in this region's
+        half is skipped rather than raising, while valid seeds still contribute."""
+        groups = enumerate_reach_scenarios_for_team(
+            5, None, SLOTS_1A_4A_2025, "Quarterfinals", achievable_seeds=[1, 99],
+        )
+        seeds_seen = {group[0].seed for group in groups}
+        assert seeds_seen == {1}

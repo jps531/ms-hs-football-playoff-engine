@@ -14,23 +14,21 @@ from backend.helpers.api_helpers import (
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     _load_format_slots,
+    _unpack_hosting_odds_row,
+    attach_hosting_scenarios,
     build_hosting_entries,
     build_seeding_by_region,
     filter_to_team_or_404,
     has_displayable_scenarios,
     load_active_region_teams,
     load_completed_region_games,
-    load_scenarios_snapshot,
-    recompute_scenarios_from_games,
-    resolve_hosting_scenario_inputs,
+    load_other_region_seeding,
+    resolve_remaining_games,
     results_to_applied,
     select_sentinel_region,
-    standings_odds_from_row,
     today,
 )
-from backend.helpers.data_classes import FormatSlot, MatchupProbFn, StandingsOdds, StoredHostingOdds
-from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios
-from backend.helpers.scenario_renderer import team_home_scenarios_as_dict
+from backend.helpers.data_classes import MatchupProbFn, StandingsOdds, StoredHostingOdds
 from backend.helpers.scenario_updater import apply_region_game_results, merge_applied_results
 from backend.helpers.scenario_viewer import build_scenario_atoms
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
@@ -61,85 +59,6 @@ def _to_school_only_results(results: list[BracketGameResultRequest]) -> list[Gam
         for r in results
         if r.winner.school is not None and r.loser is not None and r.loser.school is not None
     ]
-
-
-def _attach_hosting_scenarios(
-    entries: list,
-    region_odds: dict[str, StandingsOdds],
-    slots: list[FormatSlot],
-    season: int,
-    region: int,
-    seed_atoms: dict | None = None,
-) -> list:
-    """Return a new list of TeamHostingEntry with hosting scenario conditions attached.
-
-    Calls ``enumerate_home_game_scenarios`` per team (pure/fast) and serialises
-    the result via ``team_home_scenarios_as_dict``.  Probability annotations are
-    derived from the entry's ``RoundHostingOdds`` fields so no extra DB round-trip
-    is needed.  *seed_atoms* (from ``_compute_seed_atoms_if_pre_playoff``), when
-    provided, expands pre-playoff ``seed_required`` placeholders into the real
-    underlying game conditions.
-    """
-    updated = []
-    for entry in entries:
-        odds = region_odds.get(entry.school)
-        if odds is None:
-            updated.append(entry)
-            continue
-
-        (
-            seed, achievable_seeds,
-            p_reach, p_host_given_reach, p_host_overall,
-            p_reach_w, p_host_given_reach_w, p_host_overall_w,
-        ) = resolve_hosting_scenario_inputs(odds, entry)
-
-        home_scenarios = enumerate_home_game_scenarios(
-            region=region,
-            seed=seed,
-            slots=slots,
-            season=season,
-            achievable_seeds=achievable_seeds,
-            p_reach_by_round=p_reach,
-            p_host_given_reach_by_round=p_host_given_reach,
-            p_host_overall_by_round=p_host_overall,
-            p_reach_weighted_by_round=p_reach_w,
-            p_host_given_reach_weighted_by_round=p_host_given_reach_w,
-            p_host_overall_weighted_by_round=p_host_overall_w,
-        )
-        updated.append(
-            entry.model_copy(
-                update={"scenarios": team_home_scenarios_as_dict(entry.school, home_scenarios, seed_atoms=seed_atoms)}
-            )
-        )
-    return updated
-
-
-_HostingOddsRowParts = tuple[
-    str,
-    StandingsOdds,
-    tuple[float, float, float, float],
-    tuple[float, float, float, float],
-    tuple[float, float, float, float],
-    tuple[float, float, float, float],
-]
-
-
-def _unpack_hosting_odds_row(r) -> _HostingOddsRowParts:
-    """Unpack a school-first region_standings hosting-odds row into its component parts.
-
-    Expects columns in the order: school, odds_1st..odds_playoffs, odds_playoffs
-    (duplicated), clinched, eliminated, home_(r1,r2,qf,sf), home_(...)_weighted,
-    adv_(r1,r2,qf,sf), adv_(...)_weighted — i.e. the shape shared by
-    ``_load_region_odds`` and ``_load_all_regions_hosting_odds`` (the latter with
-    a leading ``region`` column stripped off before calling this).
-    """
-    school = r[0]
-    odds = standings_odds_from_row(school, r[1], r[2], r[3], r[4], r[5], r[7], r[8])
-    home = (r[9], r[10], r[11], r[12])
-    home_w = (r[13], r[14], r[15], r[16])
-    adv = (r[17], r[18], r[19], r[20])
-    adv_w = (r[21], r[22], r[23], r[24])
-    return school, odds, home, home_w, adv, adv_w
 
 
 async def _load_region_odds(
@@ -269,7 +188,7 @@ async def get_class_hosting(
             ),
         )
         if include_scenarios:
-            entries = _attach_hosting_scenarios(
+            entries = attach_hosting_scenarios(
                 entries, region_odds, slots, season, region, seed_atoms=seed_atoms_by_region.get(region)
             )
         region_responses.append(
@@ -313,7 +232,7 @@ async def get_hosting(
         ),
     )
     if include_scenarios:
-        entries = _attach_hosting_scenarios(entries, region_odds, slots, season, region, seed_atoms=seed_atoms)
+        entries = attach_hosting_scenarios(entries, region_odds, slots, season, region, seed_atoms=seed_atoms)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 
@@ -365,11 +284,7 @@ async def simulate_class_hosting(
             raise HTTPException(status_code=404, detail=f"No teams found for {clazz}A season {season}")
 
         sentinel_region = select_sentinel_region(regions_in_class)
-        scenarios_data = await load_scenarios_snapshot(conn, season, clazz, sentinel_region, as_of)
-        if scenarios_data is not None:
-            sentinel_remaining, _, _, _ = scenarios_data
-        else:
-            _, _, sentinel_remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, sentinel_region, as_of)
+        sentinel_remaining = await resolve_remaining_games(conn, season, clazz, sentinel_region, as_of)
 
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
 
@@ -414,11 +329,7 @@ async def simulate_class_hosting(
                     results_by_region.setdefault(reg, []).append(gr)
 
             for reg, reg_teams in sorted(regions_in_class.items()):
-                reg_scenarios = await load_scenarios_snapshot(conn, season, clazz, reg, as_of)
-                if reg_scenarios is not None:
-                    reg_remaining, _, _, _ = reg_scenarios
-                else:
-                    _, _, reg_remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, reg, as_of)
+                reg_remaining = await resolve_remaining_games(conn, season, clazz, reg, as_of)
 
                 completed = await load_completed_region_games(conn, season, as_of, reg_teams)
                 reg_new_results = results_to_applied(results_by_region.get(reg, []))
@@ -447,7 +358,7 @@ async def simulate_class_hosting(
             eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
         )
         if include_scenarios:
-            entries = _attach_hosting_scenarios(
+            entries = attach_hosting_scenarios(
                 entries, reg_odds, slots, season, reg, seed_atoms=seed_atoms_by_region.get(reg)
             )
         region_responses.append(
@@ -474,11 +385,7 @@ async def simulate_hosting(
         if not slots:
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
 
-        scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
-        if scenarios_data is not None:
-            remaining, _, _, _ = scenarios_data
-        else:
-            _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
+        remaining = await resolve_remaining_games(conn, season, clazz, region, as_of)
 
         teams = await load_active_region_teams(conn, season, clazz, region)
         completed = await load_completed_region_games(conn, season, as_of, teams)
@@ -511,16 +418,7 @@ async def simulate_hosting(
             _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
             wins_by_team = {}
 
-            other_rows = await conn.execute(
-                """
-                SELECT DISTINCT ON (school) school, region, odds_1st, odds_2nd, odds_3rd, odds_4th
-                FROM region_standings
-                WHERE season = %s AND class = %s AND region != %s AND as_of_date <= %s
-                ORDER BY school, as_of_date DESC
-                """,
-                (season, clazz, region, as_of),
-            )
-            other_region_rows = [(r[0], r[1], r[2], r[3], r[4], r[5]) async for r in other_rows]
+            other_region_rows = await load_other_region_seeding(conn, season, clazz, as_of, region)
             seeding_by_region = build_seeding_by_region(region, odds_map, other_region_rows)
             matchup_fn_w = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
 
@@ -539,7 +437,7 @@ async def simulate_hosting(
             if has_displayable_scenarios(scenario_remaining)
             else None
         )
-        entries = _attach_hosting_scenarios(entries, odds_map, slots, season, region, seed_atoms=seed_atoms)
+        entries = attach_hosting_scenarios(entries, odds_map, slots, season, region, seed_atoms=seed_atoms)
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 

@@ -1,7 +1,9 @@
 """Unit tests for backend.helpers.api_helpers."""
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -9,7 +11,11 @@ from fastapi import HTTPException
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
     BracketAdvancementOdds,
+    BracketGame,
+    BracketLayout,
+    BracketParticipant,
     BracketSlotHosting,
+    ChampionshipGame,
     HomeGameOdds,
     PathConditionModel,
     PathOutcomeModel,
@@ -24,9 +30,14 @@ from backend.helpers.api_helpers import (
     PlayoffBracketState,
     _apply_round_ceilings,
     _collect_possible_opponents,
+    _compute_seed_atoms_if_pre_playoff,
+    _find_bracket_survivor,
     _resolve_ref_to_school,
     _resolve_ref_to_slot_id,
     _slot_odds_for_region,
+    _unpack_hosting_odds_row,
+    attach_hosting_scenarios,
+    build_attended_game_models,
     build_bracket_entries,
     build_bracket_entries_from_odds_map,
     build_bracket_layout,
@@ -39,25 +50,36 @@ from backend.helpers.api_helpers import (
     build_hosting_entries,
     build_playoff_bracket_state,
     build_rank_entry,
+    build_ranked_teams_query,
+    build_region_summary_card,
+    build_roadmap_games,
     build_seeding_by_region,
+    build_simulated_bracket_results,
+    build_slot_win_counts,
     build_standings_bracket_home_odds,
     build_team_entries,
     build_team_paths,
     clinched_school,
     compute_remaining_games,
     current_standings_order,
+    default_classes_for_season,
     eliminated_team_hosting,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
     filter_to_team_or_404,
+    group_rows_and_completed_by_region,
     has_displayable_scenarios,
     haversine_miles,
+    load_other_region_seeding,
+    load_travel_insights,
     parse_completed_games,
     records_from_completed,
     region_volatility,
     remaining_to_models,
     resolve_hosting_scenario_inputs,
+    resolve_remaining_games,
     resolve_seed_and_achievable,
+    resolve_snapshot_dates,
     results_to_applied,
     scenarios_to_entries,
     select_sentinel_region,
@@ -1508,6 +1530,29 @@ class TestBuildGameModelsProbabilities:
         result = build_game_models([row], team_filter="Zeta")
         assert result[0].pregame_prob == 0.7
 
+    def test_live_prob_flipped_on_canonical_swap(self):
+        """When school/opponent are swapped for canonical order, live_prob also flips via 1 - p."""
+        row = _game_row(
+            "Zeta",
+            "Alpha",
+            status="in_progress",
+            pregame_prob=0.5,
+            game_quarter=3,
+            game_clock="5:00",
+            pf=14,
+            pa=7,
+        )
+        result = build_game_models([row], team_filter=None)
+        g = result[0]
+        assert (g.team_a, g.team_b) == ("Alpha", "Zeta")
+        assert g.live_prob is not None
+        # Same game viewed directly from Alpha's perspective (Alpha < Zeta, so no swap needed).
+        unswapped_row = _game_row(
+            "Alpha", "Zeta", status="in_progress", pregame_prob=0.5, game_quarter=3, game_clock="5:00", pf=7, pa=14
+        )
+        unswapped = build_game_models([unswapped_row], team_filter=None)
+        assert g.live_prob == pytest.approx(unswapped[0].live_prob)
+
 
 class TestBuildTeamEntries:
     """build_team_entries constructs TeamStandingsEntry from DB rows with optional overrides."""
@@ -2932,6 +2977,66 @@ class TestBuildBracketEntries:
         assert r1s1.hosting.first_round.p_host_given_reach == pytest.approx(0.0)
         assert r1s1.hosting.quarterfinals.p_host_given_reach == pytest.approx(0.0)
 
+    def test_wins_by_team_school_without_clinched_seed_is_skipped(self):
+        """A school in all_region_odds with no p{s} > 0.5 (undecided seed) is
+        skipped when merging wins_by_team into slot wins — it never reaches a
+        slot ID, so its confirmed wins have no effect on any entry."""
+        by_region = self._by_region()
+        region1_odds = dict(by_region[1])
+        region1_odds["Undecided"] = _odds("Undecided", p1=0.4, p2=0.3, p3=0.3, p_playoffs=1.0)
+        all_region_odds = {**by_region, 1: region1_odds}
+        baseline = build_bracket_entries(by_region, SLOTS_5A_7A_2025)
+        result = build_bracket_entries(
+            by_region,
+            SLOTS_5A_7A_2025,
+            wins_by_team={"Undecided": 5},
+            all_region_odds=all_region_odds,
+        )
+        for seed in (1, 2, 3, 4):
+            base_e = next(e for e in baseline if e.region == 1 and e.seed == seed)
+            e = next(e for e in result if e.region == 1 and e.seed == seed)
+            assert e.quarterfinals == pytest.approx(base_e.quarterfinals)
+
+    def test_wins_by_slot_does_not_override_wins_by_team_derived_slot(self):
+        """When both wins_by_team (+ all_region_odds) and wins_by_slot supply the
+        same slot ID, the wins_by_team-derived value takes precedence — the
+        directly-supplied wins_by_slot value is only a fallback for slots not
+        already resolved from wins_by_team."""
+        by_region = self._by_region()
+        via_wins_by_team = build_bracket_entries(
+            by_region,
+            SLOTS_5A_7A_2025,
+            wins_by_team={"T1S1": 3},
+            all_region_odds=by_region,
+        )
+        combined = build_bracket_entries(
+            by_region,
+            SLOTS_5A_7A_2025,
+            wins_by_team={"T1S1": 3},
+            all_region_odds=by_region,
+            wins_by_slot={"R1S1": 1},
+        )
+        expected = next(e for e in via_wins_by_team if e.region == 1 and e.seed == 1)
+        actual = next(e for e in combined if e.region == 1 and e.seed == 1)
+        assert actual.quarterfinals == pytest.approx(expected.quarterfinals)
+
+    def test_hosting_skips_seed_with_no_advancement_odds(self):
+        """A seed slot with no computed advancement odds (region odds cover only
+        3 of 4 seeds) is skipped in the hosting-computation loop rather than
+        raising, and produces no entry for that slot at all."""
+        by_region = self._by_region()
+        region1_odds = {
+            "T1S1": _odds("T1S1", p1=1.0, p_playoffs=1.0, clinched=True),
+            "T1S2": _odds("T1S2", p2=1.0, p_playoffs=1.0, clinched=True),
+            "T1S3": _odds("T1S3", p3=1.0, p_playoffs=1.0, clinched=True),
+        }
+        all_region_odds = {**by_region, 1: region1_odds}
+        result = build_bracket_entries(
+            by_region, SLOTS_5A_7A_2025, season=2025, clazz=5, all_region_odds=all_region_odds
+        )
+        assert not any(e.region == 1 and e.seed == 4 for e in result)
+        assert len(result) == 15
+
 
 # ---------------------------------------------------------------------------
 # TestEliminatedTeamHosting
@@ -3003,6 +3108,114 @@ class TestEliminatedTeamHosting:
             clazz=5,
         )
         assert result == (1.0, None, None, None)
+
+    def test_idx_none_returns_all_none(self):
+        """When (region, seed) isn't found in the bracket half, every field is None."""
+        result = eliminated_team_hosting(
+            region=1,
+            seed=99,
+            rounds_played=1,
+            slots=SLOTS_5A_7A_2025,
+            seed_to_school={},
+            wins_by_team={},
+            season=2025,
+            clazz=5,
+        )
+        assert result == (None, None, None, None)
+
+    def test_no_r2_survivor_1a4a_stops_at_r2(self):
+        """1A-4A: rounds_played=2 with no confirmed R2-opponent winner stops at r2=None."""
+        result = eliminated_team_hosting(
+            region=1,
+            seed=1,
+            rounds_played=2,
+            slots=SLOTS_1A_4A_2025,
+            seed_to_school={},
+            wins_by_team={},
+            season=2025,
+            clazz=1,
+        )
+        assert result == (1.0, None, None, None)
+
+    def test_rounds_played_less_than_3_stops_at_r2(self):
+        """1A-4A: R2 opponent resolves, but rounds_played=2 < 3 stops before qf."""
+        result = eliminated_team_hosting(
+            region=1,
+            seed=1,
+            rounds_played=2,
+            slots=SLOTS_1A_4A_2025,
+            seed_to_school={(3, 2): "R2Opp"},
+            wins_by_team={"R2Opp": 1},
+            season=2025,
+            clazz=1,
+        )
+        r1, r2, qf, sf = result
+        assert r1 == pytest.approx(1.0)
+        assert r2 is not None
+        assert qf is None
+        assert sf is None
+
+    def test_no_sf_survivor_1a4a_stops_at_sf(self):
+        """1A-4A: qf resolves, but no confirmed SF-opponent winner stops at sf=None."""
+        result = eliminated_team_hosting(
+            region=1,
+            seed=1,
+            rounds_played=4,
+            slots=SLOTS_1A_4A_2025,
+            seed_to_school={(3, 2): "R2Opp", (2, 1): "QFOpp"},
+            wins_by_team={"R2Opp": 1, "QFOpp": 2},
+            season=2025,
+            clazz=1,
+        )
+        r1, r2, qf, sf = result
+        assert r1 == pytest.approx(1.0)
+        assert r2 is not None
+        assert qf is not None
+        assert sf is None
+
+    def test_qf_opponent_of_opponent_r2_resolved(self):
+        """1A-4A: the QF opponent's own R2 opponent is found and factored into qf_home_team."""
+        result = eliminated_team_hosting(
+            region=1,
+            seed=1,
+            rounds_played=3,
+            slots=SLOTS_1A_4A_2025,
+            seed_to_school={(3, 2): "R2Opp", (2, 1): "QFOpp", (4, 2): "OppOfOpp"},
+            wins_by_team={"R2Opp": 1, "QFOpp": 2, "OppOfOpp": 1},
+            season=2025,
+            clazz=1,
+        )
+        r1, r2, qf, sf = result
+        assert r1 == pytest.approx(1.0)
+        assert r2 is not None
+        assert qf is not None
+        assert sf is None
+
+
+class TestFindBracketSurvivor:
+    """_find_bracket_survivor picks the (region, seed) with the most confirmed wins >= min_wins."""
+
+    _SEED_TO_SCHOOL = {(1, 1): "Alpha", (2, 4): "Beta"}
+
+    def test_continues_past_non_improving_candidate(self):
+        """A later slot's team with fewer wins than the current best doesn't replace it."""
+        result = _find_bracket_survivor(
+            [SLOTS_5A_7A_2025[0]],  # (1,1) vs (2,4)
+            min_wins=1,
+            seed_to_school=self._SEED_TO_SCHOOL,
+            wins_by_team={"Alpha": 2, "Beta": 1},
+        )
+        assert result == (1, 1)
+
+    def test_returns_none_when_no_candidate_meets_min_wins(self):
+        """No school in the slots has enough confirmed wins -> None."""
+        result = _find_bracket_survivor(
+            [SLOTS_5A_7A_2025[0]],
+            min_wins=3,
+            seed_to_school=self._SEED_TO_SCHOOL,
+            wins_by_team={"Alpha": 2, "Beta": 1},
+        )
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -3190,6 +3403,12 @@ class TestBuildBracketLayout:
         north_r1_slots = [g.slot for g in layout.halves["N"][0]]
         expected = sorted(s.slot for s in SLOTS_1A_4A_2025 if s.north_south == "N")
         assert north_r1_slots == expected
+
+    def test_empty_half_is_skipped(self):
+        """When slots only cover one north_south value, the other half is absent entirely."""
+        north_only = [s for s in SLOTS_5A_7A_2025 if s.north_south == "N"]
+        layout = build_bracket_layout(north_only)
+        assert set(layout.halves.keys()) == {"N"}
 
 
 # ---------------------------------------------------------------------------
@@ -3496,6 +3715,19 @@ class TestBuildEnrichedBracketLayout:
         assert qf_game.home_team is not None
         assert qf_game.home_team.school == "R2S2"
 
+    def test_home_team_none_when_neither_participant_hosts_deterministically(self):
+        """home_team stays None when both participants' given_reach fail the 0.99
+        threshold (participant_a's fails, then participant_b's is absent/fails too)."""
+        hosting = {"R1S1": {"first_round": 1.0, "quarterfinals": 0.5, "semifinals": None, "second_round": None}}
+        confirmed = [("R1S1", "R2S4", 28, 14), ("R2S2", "R1S3", 21, 10)]
+        layout = build_enriched_bracket_layout(
+            self._layout(), self._S2S, confirmed, [], p_host_given_reach_by_team=hosting
+        )
+        qf_game = layout.halves["N"][1][0]
+        assert qf_game.participant_a is not None and qf_game.participant_a.school == "R1S1"
+        assert qf_game.participant_b is not None and qf_game.participant_b.school == "R2S2"
+        assert qf_game.home_team is None
+
     def test_home_team_null_on_r2_without_hosting_lookup(self):
         """R2+ nodes have home_team=None when no p_host_given_reach_by_team is provided."""
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])
@@ -3550,6 +3782,29 @@ class TestBuildEnrichedBracketLayout:
         qf_game = layout.halves["N"][1][0]
         assert qf_game.result is None
 
+    def test_duplicate_confirmed_pair_keeps_first_entry(self):
+        """A second confirmed result for the same pair is skipped (first write wins)."""
+        confirmed = [
+            ("R1S1", "R2S4", 28, 14),
+            ("R1S1", "R2S4", 99, 99),  # duplicate pair, different scores — should be ignored
+        ]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, confirmed, [])
+        result = layout.halves["N"][0][0].result
+        assert result is not None
+        assert result.winner_score == 28
+        assert result.loser_score == 14
+
+    def test_duplicate_winner_only_entry_keeps_first(self):
+        """A second winner-only simulated entry for the same (winner, round) is skipped."""
+        simulated = [
+            ("R1S1", None, 12, 0, "first_round"),
+            ("R1S1", None, 999, 0, "first_round"),  # duplicate winner/round — should be ignored
+        ]
+        layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], simulated)
+        game = layout.halves["N"][0][0]
+        assert game.result is not None
+        assert game.result.winner_score == 12
+
 
 # ---------------------------------------------------------------------------
 # TestCollectPossibleOpponents
@@ -3590,6 +3845,28 @@ class TestCollectPossibleOpponents:
         """Returns empty set for first_round (not a valid loser-less round)."""
         opponents = _collect_possible_opponents(self._layout(), 1, 1, "first_round")
         assert opponents == set()
+
+    def test_bye_slot_skipped_in_r1_seed_collection(self):
+        """A R1 game with a bye (participant_b=None) on the opponent branch
+        contributes only its non-None participant, not a (None) tuple."""
+        r1_games = [
+            BracketGame(
+                slot=1,
+                participant_a=BracketParticipant(region=1, seed=1),
+                participant_b=BracketParticipant(region=1, seed=2),
+                home_team=BracketParticipant(region=1, seed=1),
+            ),
+            BracketGame(
+                slot=2,
+                participant_a=BracketParticipant(region=2, seed=2),
+                participant_b=None,
+                home_team=BracketParticipant(region=2, seed=2),
+            ),
+        ]
+        sf_game = [BracketGame(feeds_from=[0, 1], round="semifinals")]
+        layout = BracketLayout(halves={"N": [r1_games, sf_game]}, championship=ChampionshipGame())
+        opponents = _collect_possible_opponents(layout, 1, 1, "semifinals")
+        assert opponents == {(2, 2)}
 
 
 # ---------------------------------------------------------------------------
@@ -4287,3 +4564,729 @@ class TestVenueDistanceMiles:
         a = VenueModel(name="A", city=None, latitude=0.0, longitude=0.0)
         b = VenueModel(name="B", city=None, latitude=None, longitude=None)
         assert venue_distance_miles(a, b) is None
+
+
+class TestResolveRemainingGames:
+    """resolve_remaining_games prefers the stored region_scenarios snapshot, falling back to on-demand recompute."""
+
+    @patch("backend.helpers.api_helpers.recompute_scenarios_from_games", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.load_scenarios_snapshot", new_callable=AsyncMock)
+    def test_uses_stored_snapshot_when_available(self, mock_load_scenarios, mock_recompute):
+        """A stored region_scenarios row supplies remaining without recomputing."""
+        stored_remaining = [RemainingGame(a="Alpha", b="Beta")]
+        mock_load_scenarios.return_value = (stored_remaining, [], [], date(2025, 10, 1))
+
+        result = asyncio.run(resolve_remaining_games(object(), 2025, 5, 2, date(2025, 10, 3)))
+
+        assert result == stored_remaining
+        mock_recompute.assert_not_awaited()
+
+    @patch("backend.helpers.api_helpers.recompute_scenarios_from_games", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.load_scenarios_snapshot", new_callable=AsyncMock)
+    def test_recomputes_when_no_stored_snapshot(self, mock_load_scenarios, mock_recompute):
+        """No region_scenarios row falls back to recompute_scenarios_from_games."""
+        mock_load_scenarios.return_value = None
+        recomputed_remaining = [RemainingGame(a="Gamma", b="Delta")]
+        mock_recompute.return_value = (["Gamma", "Delta"], [], recomputed_remaining, {}, set())
+        conn = object()
+
+        result = asyncio.run(resolve_remaining_games(conn, 2025, 5, 2, date(2025, 10, 3)))
+
+        assert result == recomputed_remaining
+        mock_recompute.assert_awaited_once_with(conn, 2025, 5, 2, date(2025, 10, 3))
+
+
+class TestComputeSeedAtomsIfPrePlayoff:
+    """_compute_seed_atoms_if_pre_playoff builds seed atoms from a stored snapshot
+    or on-demand recompute, short-circuiting when there's nothing displayable."""
+
+    @patch("backend.helpers.api_helpers.recompute_scenarios_from_games", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.load_scenarios_snapshot", new_callable=AsyncMock)
+    def test_no_remaining_games_returns_none_atoms(self, mock_load_scenarios, mock_recompute):
+        """An empty remaining-games list (fully decided region) short-circuits to (None, [])."""
+        mock_load_scenarios.return_value = ([], [], [], date(2025, 10, 1))
+
+        result = asyncio.run(_compute_seed_atoms_if_pre_playoff(object(), 2025, 5, 2, date(2025, 10, 3)))
+
+        assert result == (None, [])
+        mock_recompute.assert_not_awaited()
+
+    @patch("backend.helpers.api_helpers.load_completed_region_games", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.load_active_region_teams", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.recompute_scenarios_from_games", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.load_scenarios_snapshot", new_callable=AsyncMock)
+    def test_uses_stored_snapshot_and_provided_teams(
+        self, mock_load_scenarios, mock_recompute, mock_load_teams, mock_load_completed
+    ):
+        """With a stored snapshot and explicit teams, no team lookup is needed;
+        seed atoms are built from the completed games and remaining games."""
+        remaining = [RemainingGame(a="Alpha", b="Beta")]
+        mock_load_scenarios.return_value = (remaining, [], [], date(2025, 10, 1))
+        mock_load_completed.return_value = [_completed("Alpha", "Beta", 21, 14)]
+        conn = object()
+
+        atoms, result_remaining = asyncio.run(
+            _compute_seed_atoms_if_pre_playoff(conn, 2025, 5, 2, date(2025, 10, 3), teams=["Alpha", "Beta"])
+        )
+
+        assert result_remaining == remaining
+        assert atoms is not None
+        mock_recompute.assert_not_awaited()
+        mock_load_teams.assert_not_awaited()
+        mock_load_completed.assert_awaited_once_with(conn, 2025, date(2025, 10, 3), ["Alpha", "Beta"])
+
+    @patch("backend.helpers.api_helpers.load_completed_region_games", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.load_active_region_teams", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.recompute_scenarios_from_games", new_callable=AsyncMock)
+    @patch("backend.helpers.api_helpers.load_scenarios_snapshot", new_callable=AsyncMock)
+    def test_no_stored_snapshot_recomputes_and_loads_teams(
+        self, mock_load_scenarios, mock_recompute, mock_load_teams, mock_load_completed
+    ):
+        """No stored snapshot falls back to recompute; omitted teams triggers a team lookup."""
+        remaining = [RemainingGame(a="Gamma", b="Delta")]
+        mock_load_scenarios.return_value = None
+        mock_recompute.return_value = (["Gamma", "Delta"], [], remaining, {}, set())
+        mock_load_teams.return_value = ["Gamma", "Delta"]
+        mock_load_completed.return_value = []
+        conn = object()
+
+        atoms, result_remaining = asyncio.run(
+            _compute_seed_atoms_if_pre_playoff(conn, 2025, 5, 2, date(2025, 10, 3))
+        )
+
+        assert result_remaining == remaining
+        assert atoms is not None
+        mock_recompute.assert_awaited_once_with(conn, 2025, 5, 2, date(2025, 10, 3))
+        mock_load_teams.assert_awaited_once_with(conn, 2025, 5, 2)
+
+
+class TestLoadOtherRegionSeeding:
+    """load_other_region_seeding returns (school, region, p1-p4) rows excluding one region."""
+
+    def test_shapes_rows_and_excludes_region(self):
+        """The query is called with the exclude_region param and rows are reshaped into 6-tuples."""
+
+        class FakeRows:
+            """Minimal async-iterable stand-in for an asyncpg row cursor."""
+
+            def __init__(self, items):
+                """Wrap items in a synchronous iterator to drive from __anext__."""
+                self._iter = iter(items)
+
+            def __aiter__(self):
+                """Return self as the async iterator."""
+                return self
+
+            async def __anext__(self):
+                """Yield the next item, converting StopIteration to StopAsyncIteration."""
+                try:
+                    return next(self._iter)
+                except StopIteration:
+                    raise StopAsyncIteration
+
+        class FakeConn:
+            """Minimal stand-in for an asyncpg connection recording the last execute() params."""
+
+            def __init__(self):
+                """Initialise with no recorded call yet."""
+                self.last_call: tuple | None = None
+
+            async def execute(self, sql, params):
+                """Record params and return a fixed FakeRows result set."""
+                self.last_call = params
+                return FakeRows([("Alpha", 1, 0.4, 0.3, 0.2, 0.1, "extra_col_ignored")])
+
+        conn = FakeConn()
+        result = asyncio.run(load_other_region_seeding(conn, 2025, 5, date(2025, 10, 3), exclude_region=2))
+
+        assert result == [("Alpha", 1, 0.4, 0.3, 0.2, 0.1)]
+        assert conn.last_call == (2025, 5, 2, date(2025, 10, 3))
+
+
+class _FakeRows:
+    """Minimal async-iterable stand-in for an asyncpg row cursor."""
+
+    def __init__(self, items):
+        """Wrap items in a synchronous iterator to drive from __anext__."""
+        self._iter = iter(items)
+
+    def __aiter__(self):
+        """Return self as the async iterator."""
+        return self
+
+    async def __anext__(self):
+        """Yield the next item, converting StopIteration to StopAsyncIteration."""
+        try:
+            return next(self._iter)
+        except StopIteration:
+            raise StopAsyncIteration
+
+
+class _SequencedFakeConn:
+    """Stand-in asyncpg connection returning a different fixed result set per execute() call, in order."""
+
+    def __init__(self, result_sets: list[list[tuple]]):
+        """Store the queue of result sets to return, one per execute() call."""
+        self._result_sets = list(result_sets)
+        self.calls: list[tuple] = []
+
+    async def execute(self, sql, params):
+        """Record (sql, params) and pop the next queued result set."""
+        self.calls.append((sql, params))
+        return _FakeRows(self._result_sets.pop(0))
+
+
+class TestLoadTravelInsights:
+    """load_travel_insights ranks individual away trips and cumulative away mileage
+    by straight-line distance, computed live from games_effective."""
+
+    _VENUES = {
+        "Home": VenueModel(name="Home", city="Home City", latitude=0.0, longitude=0.0),
+        "Away": VenueModel(name="Away", city="Away City", latitude=1.0, longitude=1.0),
+        "Far": VenueModel(name="Far", city="Far City", latitude=10.0, longitude=10.0),
+    }
+
+    @patch("backend.helpers.api_helpers.load_home_venues", new_callable=AsyncMock)
+    def test_trips_ranked_by_distance_descending(self, mock_venues):
+        """Multiple away trips are sorted longest-distance-first."""
+        mock_venues.return_value = self._VENUES
+        conn = _SequencedFakeConn(
+            [
+                [
+                    ("Home", "Away", date(2025, 10, 2), None, None, None, None),
+                    ("Home", "Far", date(2025, 10, 3), None, None, None, None),
+                ],
+                [],
+            ]
+        )
+        trips, cumulative = asyncio.run(
+            load_travel_insights(conn, 2025, date(2025, 9, 29), date(2025, 10, 5), limit=10)
+        )
+        assert [t.opponent for t in trips] == ["Far", "Away"]
+        assert trips[0].distance_miles > trips[1].distance_miles
+        assert cumulative == []
+
+    @patch("backend.helpers.api_helpers.load_home_venues", new_callable=AsyncMock)
+    def test_cumulative_mileage_accumulates_across_games(self, mock_venues):
+        """A school's cumulative distance sums across multiple away games in the window."""
+        mock_venues.return_value = self._VENUES
+        conn = _SequencedFakeConn(
+            [
+                [],
+                [
+                    ("Home", "Away", None, None, None, None),
+                    ("Home", "Far", None, None, None, None),
+                ],
+            ]
+        )
+        trips, cumulative = asyncio.run(load_travel_insights(conn, 2025, None, date(2025, 10, 5), limit=10))
+        assert trips == []
+        assert len(cumulative) == 1
+        assert cumulative[0].school == "Home"
+        away_leg = haversine_miles(0.0, 0.0, 1.0, 1.0)
+        far_leg = haversine_miles(0.0, 0.0, 10.0, 10.0)
+        assert cumulative[0].distance_miles == pytest.approx(away_leg + far_leg)
+
+    @patch("backend.helpers.api_helpers.load_home_venues", new_callable=AsyncMock)
+    def test_explicit_locations_row_overrides_opponent_venue(self, mock_venues):
+        """An explicit locations row (l_name set) is used over the opponent's home venue."""
+        mock_venues.return_value = self._VENUES
+        conn = _SequencedFakeConn(
+            [
+                [("Home", "Away", date(2025, 10, 2), "Neutral Site", "Neutral City", 5.0, 5.0)],
+                [],
+            ]
+        )
+        trips, _ = asyncio.run(load_travel_insights(conn, 2025, date(2025, 9, 29), date(2025, 10, 5), limit=10))
+        assert len(trips) == 1
+        expected = haversine_miles(0.0, 0.0, 5.0, 5.0)
+        assert trips[0].distance_miles == pytest.approx(expected)
+
+    @patch("backend.helpers.api_helpers.load_home_venues", new_callable=AsyncMock)
+    def test_unresolvable_venue_is_skipped(self, mock_venues):
+        """A trip whose venue can't be resolved (unknown school on either side) is skipped, not errored."""
+        mock_venues.return_value = self._VENUES
+        conn = _SequencedFakeConn(
+            [[("Unknown", "AlsoUnknown", date(2025, 10, 2), None, None, None, None)], []]
+        )
+        trips, _ = asyncio.run(load_travel_insights(conn, 2025, date(2025, 9, 29), date(2025, 10, 5), limit=10))
+        assert trips == []
+
+    @patch("backend.helpers.api_helpers.load_home_venues", new_callable=AsyncMock)
+    def test_cumulative_unresolvable_venue_is_skipped(self, mock_venues):
+        """A cumulative-mileage row whose venue can't be resolved is skipped, not errored."""
+        mock_venues.return_value = self._VENUES
+        conn = _SequencedFakeConn([[], [("Unknown", "AlsoUnknown", None, None, None, None)]])
+        _, cumulative = asyncio.run(load_travel_insights(conn, 2025, None, date(2025, 10, 5), limit=10))
+        assert cumulative == []
+
+    @patch("backend.helpers.api_helpers.load_home_venues", new_callable=AsyncMock)
+    def test_limit_caps_both_lists(self, mock_venues):
+        """Both trips and cumulative lists are capped at limit, longest first."""
+        mock_venues.return_value = self._VENUES
+        conn = _SequencedFakeConn(
+            [
+                [
+                    ("Home", "Away", date(2025, 10, 2), None, None, None, None),
+                    ("Home", "Far", date(2025, 10, 3), None, None, None, None),
+                ],
+                [],
+            ]
+        )
+        trips, _ = asyncio.run(load_travel_insights(conn, 2025, date(2025, 9, 29), date(2025, 10, 5), limit=1))
+        assert len(trips) == 1
+        assert trips[0].opponent == "Far"
+
+    @patch("backend.helpers.api_helpers.load_home_venues", new_callable=AsyncMock)
+    def test_no_date_from_defaults_cumulative_to_season_to_date(self, mock_venues):
+        """Omitting date_from leaves the cumulative query with no lower-bound param."""
+        mock_venues.return_value = self._VENUES
+        conn = _SequencedFakeConn([[], []])
+        asyncio.run(load_travel_insights(conn, 2025, None, date(2025, 10, 5), limit=10))
+        cumulative_sql, cumulative_params = conn.calls[1]
+        assert "g.date >= %s" not in cumulative_sql
+        assert cumulative_params == [2025, date(2025, 10, 5)]
+
+
+def _summary_row(
+    school: str,
+    clazz: int,
+    region: int,
+    wins: int = 5,
+    losses: int = 2,
+    ties: int = 0,
+    region_wins: int = 3,
+    region_losses: int = 1,
+    region_ties: int = 0,
+    odds: tuple[float, float, float, float, float] = (0.4, 0.3, 0.2, 0.1, 0.7),
+    clinched: bool = False,
+    eliminated: bool = False,
+) -> tuple:
+    """A 17-column row matching standings.py's _SUMMARY_SELECT column order."""
+    return (
+        school, clazz, region,
+        wins, losses, ties, region_wins, region_losses, region_ties,
+        date(2025, 10, 1),
+        *odds,
+        clinched, eliminated,
+    )  # fmt: skip
+
+
+class TestGroupRowsAndCompletedByRegion:
+    """group_rows_and_completed_by_region groups rows and joins completed games by a row-derived key."""
+
+    def test_groups_rows_by_key(self):
+        """Rows are grouped under the key key_fn returns for each row."""
+        rows = [_summary_row("Alpha", 5, 1), _summary_row("Beta", 5, 1), _summary_row("Gamma", 5, 2)]
+        rows_by_key, _ = group_rows_and_completed_by_region(rows, [], key_fn=lambda r: (r[1], r[2]))
+        assert set(rows_by_key) == {(5, 1), (5, 2)}
+        assert len(rows_by_key[(5, 1)]) == 2
+        assert len(rows_by_key[(5, 2)]) == 1
+
+    def test_completed_games_joined_via_school_a(self):
+        """A completed game is attached to the key of the row whose school matches game.a."""
+        rows = [_summary_row("Alpha", 5, 1), _summary_row("Gamma", 5, 2)]
+        completed = [CompletedGame(a="Alpha", b="Beta", res_a=1, pd_a=7, pa_a=14, pa_b=21)]
+        _, completed_by_key = group_rows_and_completed_by_region(rows, completed, key_fn=lambda r: (r[1], r[2]))
+        assert completed_by_key[(5, 1)] == completed
+        assert completed_by_key[(5, 2)] == []
+
+    def test_completed_game_for_unknown_school_dropped(self):
+        """A completed game whose .a school isn't in any row is silently skipped, not an error."""
+        rows = [_summary_row("Alpha", 5, 1)]
+        completed = [CompletedGame(a="Zeta", b="Beta", res_a=1, pd_a=7, pa_a=14, pa_b=21)]
+        _, completed_by_key = group_rows_and_completed_by_region(rows, completed, key_fn=lambda r: (r[1], r[2]))
+        assert completed_by_key[(5, 1)] == []
+
+    def test_single_int_key_fn(self):
+        """key_fn can return a plain int (e.g. region alone), not just a tuple."""
+        rows = [_summary_row("Alpha", 5, 1), _summary_row("Beta", 5, 2)]
+        rows_by_key, _ = group_rows_and_completed_by_region(rows, [], key_fn=lambda r: r[2])
+        assert set(rows_by_key) == {1, 2}
+
+
+class TestBuildRegionSummaryCard:
+    """build_region_summary_card assembles one region's statewide-summary card."""
+
+    def test_leader_is_first_in_standings_order(self):
+        """The team first in current_standings_order becomes the card's leader."""
+        rows = [
+            _summary_row("Alpha", 5, 1, region_wins=3, region_losses=0, odds=(0.9, 0.1, 0.0, 0.0, 1.0), clinched=True),
+            _summary_row("Beta", 5, 1, region_wins=1, region_losses=2, odds=(0.1, 0.3, 0.3, 0.3, 0.5)),
+        ]
+        card = build_region_summary_card(1, rows, [])
+        assert card.region == 1
+        assert card.leader.school == "Alpha"
+        assert card.leader.region_wins == 3
+        assert card.leader.region_losses == 0
+
+    def test_counts_clinched_eliminated_alive(self):
+        """num_clinched/num_eliminated/teams_alive tally each team's odds-derived status."""
+        rows = [
+            _summary_row("Alpha", 5, 1, odds=(0.99, 0.0, 0.0, 0.0, 1.0), clinched=True),
+            _summary_row("Beta", 5, 1, odds=(0.0, 0.0, 0.0, 0.0, 0.0), eliminated=True),
+            _summary_row("Gamma", 5, 1, odds=(0.3, 0.3, 0.2, 0.1, 0.9)),
+        ]
+        card = build_region_summary_card(1, rows, [])
+        assert card.num_teams == 3
+        assert card.num_clinched == 1
+        assert card.num_eliminated == 1
+        assert card.teams_alive == 1
+
+    def test_statuses_follow_standings_order_and_carry_records(self):
+        """Each status entry's record matches its row's wins/losses/ties fields."""
+        rows = [_summary_row("Alpha", 5, 1, wins=8, losses=1, ties=1, region_wins=4, region_losses=0)]
+        card = build_region_summary_card(1, rows, [])
+        assert len(card.statuses) == 1
+        status = card.statuses[0]
+        assert status.school == "Alpha"
+        assert status.record.wins == 8
+        assert status.record.losses == 1
+        assert status.record.ties == 1
+        assert status.record.region_wins == 4
+
+
+class TestResolveSnapshotDates:
+    """resolve_snapshot_dates returns (current, previous) region_standings snapshot dates."""
+
+    class _FakeConn:
+        """Returns queued fetchone() results in call order."""
+
+        def __init__(self, results: list[tuple | None]):
+            """Queue the fetchone() results to return in call order."""
+            self._results = list(results)
+            self.queries: list[tuple] = []
+
+        async def execute(self, query, params):
+            """Record the query/params pair and return self for chaining."""
+            self.queries.append((query, params))
+            return self
+
+        async def fetchone(self):
+            """Pop and return the next queued result."""
+            return self._results.pop(0)
+
+    def test_no_snapshot_returns_none_none(self):
+        """No stored snapshot on or before as_of_date returns (None, None) without a second query."""
+        conn = self._FakeConn([(None,)])
+        result = asyncio.run(resolve_snapshot_dates(conn, 2025, date(2025, 10, 3)))
+        assert result == (None, None)
+        assert len(conn.queries) == 1
+
+    def test_current_with_no_previous(self):
+        """A first-ever snapshot returns (current, None)."""
+        conn = self._FakeConn([(date(2025, 10, 1),), (None,)])
+        result = asyncio.run(resolve_snapshot_dates(conn, 2025, date(2025, 10, 3)))
+        assert result == (date(2025, 10, 1), None)
+
+    def test_current_and_previous(self):
+        """Two stored snapshots return both dates."""
+        conn = self._FakeConn([(date(2025, 10, 8),), (date(2025, 10, 1),)])
+        result = asyncio.run(resolve_snapshot_dates(conn, 2025, date(2025, 10, 10)))
+        assert result == (date(2025, 10, 8), date(2025, 10, 1))
+
+    def test_clazz_filter_adds_condition_and_param(self):
+        """Passing clazz adds a class = %s condition and includes clazz in both queries' params."""
+        conn = self._FakeConn([(date(2025, 10, 1),), (None,)])
+        asyncio.run(resolve_snapshot_dates(conn, 2025, date(2025, 10, 3), clazz=5))
+        first_query, first_params = conn.queries[0]
+        assert "class = %s" in first_query
+        assert first_params == (2025, 5, date(2025, 10, 3))
+
+
+class TestBuildRankedTeamsQuery:
+    """build_ranked_teams_query composes the ranked-teams SQL for the requested filter combination."""
+
+    def test_no_filters_no_prev(self):
+        """Without clazz/region filters or a previous snapshot, rank_prev is a NULL literal, no prev CTE."""
+        composed = build_ranked_teams_query("elo", clazz_filter=False, region_filter=False, has_prev=False)
+        text = composed.as_string(None)
+        assert "NULL::bigint AS rank_prev" in text
+        assert "prev_snap" not in text
+        assert "rs.class = %s" not in text
+        assert "cr.region = %s" not in text
+
+    def test_clazz_filter_adds_condition(self):
+        """clazz_filter=True adds the class condition to the snapshot WHERE clause."""
+        composed = build_ranked_teams_query("elo", clazz_filter=True, region_filter=False, has_prev=False)
+        assert "rs.class = %s" in composed.as_string(None)
+
+    def test_region_filter_adds_condition(self):
+        """region_filter=True adds the post-rank region condition."""
+        composed = build_ranked_teams_query("elo", clazz_filter=True, region_filter=True, has_prev=False)
+        assert "cr.region = %s" in composed.as_string(None)
+
+    def test_has_prev_adds_prev_cte_and_join(self):
+        """has_prev=True adds the previous-snapshot CTE and joins it for rank_prev."""
+        composed = build_ranked_teams_query("elo", clazz_filter=False, region_filter=False, has_prev=True)
+        text = composed.as_string(None)
+        assert "prev_snap" in text
+        assert "prev_ranked" in text
+        assert "pr.rank AS rank_prev" in text
+
+    def test_sort_col_is_quoted_identifier(self):
+        """The sort column is embedded as a quoted SQL identifier, not raw-interpolated."""
+        composed = build_ranked_teams_query("odds_playoffs", clazz_filter=False, region_filter=False, has_prev=False)
+        assert '"odds_playoffs"' in composed.as_string(None)
+
+
+class TestBuildRoadmapGames:
+    """build_roadmap_games builds a team's roadmap and total mileage from its season's game rows."""
+
+    _HOME = VenueModel(name="Home Field", city="Taylorsville", latitude=31.0, longitude=-89.0)
+
+    def test_home_game_is_zero_distance(self):
+        """A home game always shows 0 distance, using the team's own venue for location."""
+        rows = [("first_round", date(2025, 11, 1), "Beta", "home", None, None, None, None)]
+        games, total_miles = build_roadmap_games(rows, self._HOME, {})
+        assert games[0].distance_miles == 0.0
+        assert games[0].is_home is True
+        assert games[0].location == self._HOME
+        assert total_miles == 0.0
+
+    def test_away_game_resolves_via_explicit_venue(self):
+        """An away game with an explicit venue on record uses that venue's coordinates."""
+        rows = [(None, date(2025, 9, 5), "Beta", "away", "Beta Field", "Beta City", 32.0, -89.0)]
+        games, total_miles = build_roadmap_games(rows, self._HOME, {})
+        assert games[0].location is not None
+        assert games[0].location.name == "Beta Field"
+        assert total_miles > 0.0
+
+    def test_away_game_falls_back_to_opponent_home_venue(self):
+        """An away game with no explicit venue falls back to the opponent's home venue."""
+        opponent_venue = VenueModel(name="Beta Field", city="Beta City", latitude=32.0, longitude=-89.0)
+        rows = [(None, date(2025, 9, 5), "Beta", "away", None, None, None, None)]
+        games, _ = build_roadmap_games(rows, self._HOME, {"Beta": opponent_venue})
+        assert games[0].location == opponent_venue
+
+    def test_neutral_game_with_no_venue_is_unresolved(self):
+        """A neutral-site game with no explicit venue on record resolves to null location/distance."""
+        rows = [(None, date(2025, 9, 5), "Beta", "neutral", None, None, None, None)]
+        games, total_miles = build_roadmap_games(rows, self._HOME, {})
+        assert games[0].location is None
+        assert games[0].distance_miles is None
+        assert total_miles == 0.0
+
+    def test_neutral_game_with_explicit_venue_resolves(self):
+        """A neutral-site game with an explicit venue (e.g. championship game) resolves normally."""
+        rows = [("championship_game", date(2025, 12, 6), "Beta", "neutral", "Neutral Site", "City", 33.0, -90.0)]
+        games, total_miles = build_roadmap_games(rows, self._HOME, {})
+        assert games[0].location is not None
+        assert games[0].location.name == "Neutral Site"
+        assert total_miles > 0.0
+
+    def test_total_miles_sums_across_games(self):
+        """total_miles accumulates distance across every game with a resolvable distance."""
+        rows = [
+            ("first_round", date(2025, 11, 1), "Beta", "home", None, None, None, None),
+            (None, date(2025, 9, 5), "Gamma", "away", "Gamma Field", "Gamma City", 32.0, -89.0),
+        ]
+        games, total_miles = build_roadmap_games(rows, self._HOME, {})
+        assert total_miles == games[1].distance_miles
+        assert games[0].distance_miles == 0.0
+
+    def test_round_is_preserved_none_for_regular_season(self):
+        """round passes through unchanged — None for regular-season games."""
+        rows = [(None, date(2025, 9, 5), "Beta", "home", None, None, None, None)]
+        games, _ = build_roadmap_games(rows, self._HOME, {})
+        assert games[0].round is None
+
+
+def _bracket_result(
+    winner_school: str | None = None,
+    winner_region: int | None = None,
+    winner_seed: int | None = None,
+    loser_school: str | None = None,
+    loser_region: int | None = None,
+    loser_seed: int | None = None,
+    round_: str | None = None,
+    winner_score: int | None = None,
+    loser_score: int | None = None,
+) -> BracketGameResultRequest:
+    """Build a BracketGameResultRequest from either school names or (region, seed) slot refs."""
+    winner = ParticipantRef(school=winner_school, region=winner_region, seed=winner_seed)
+    loser = (
+        None
+        if loser_school is None and loser_region is None and loser_seed is None and round_ is not None
+        else ParticipantRef(school=loser_school, region=loser_region, seed=loser_seed)
+    )
+    return BracketGameResultRequest(
+        winner=winner, loser=loser, round=round_, winner_score=winner_score, loser_score=loser_score
+    )
+
+
+class TestBuildSimulatedBracketResults:
+    """build_simulated_bracket_results resolves simulate-request results to bracket-layout tuples."""
+
+    def test_school_vs_school(self):
+        """Both participants identified by school name resolve directly."""
+        results = [_bracket_result(winner_school="Alpha", loser_school="Beta", winner_score=21, loser_score=14)]
+        out = build_simulated_bracket_results(results, {})
+        assert out == [("Alpha", "Beta", 21, 14, None)]
+
+    def test_slot_refs_resolved_via_seed_to_school(self):
+        """(region, seed) refs resolve to schools via the seed_to_school map."""
+        results = [_bracket_result(winner_region=1, winner_seed=1, loser_region=1, loser_seed=2)]
+        out = build_simulated_bracket_results(results, {(1, 1): "Alpha", (1, 2): "Beta"})
+        assert out == [("Alpha", "Beta", 12, 0, None)]
+
+    def test_unresolvable_winner_drops_result(self):
+        """A winner slot ref with no matching seed_to_school entry drops the result entirely."""
+        results = [_bracket_result(winner_region=8, winner_seed=4, loser_school="Beta")]
+        assert build_simulated_bracket_results(results, {}) == []
+
+    def test_unresolvable_loser_drops_result(self):
+        """A resolvable winner but unresolvable loser also drops the result."""
+        results = [_bracket_result(winner_school="Alpha", loser_region=8, loser_seed=4)]
+        assert build_simulated_bracket_results(results, {}) == []
+
+    def test_round_based_result_no_loser(self):
+        """A round-based result (loser=None) carries the round through, loser=None."""
+        results = [_bracket_result(winner_school="Alpha", round_="quarterfinals")]
+        out = build_simulated_bracket_results(results, {})
+        assert out == [("Alpha", None, 12, 0, "quarterfinals")]
+
+    def test_default_scores_are_12_0(self):
+        """Missing winner_score/loser_score default to 12/0 (forfeit convention)."""
+        results = [_bracket_result(winner_school="Alpha", loser_school="Beta")]
+        out = build_simulated_bracket_results(results, {})
+        assert out == [("Alpha", "Beta", 12, 0, None)]
+
+
+class TestBuildSlotWinCounts:
+    """build_slot_win_counts tallies wins per (region, seed) slot ID (pre-clinching mode)."""
+
+    def test_counts_slot_ref_wins(self):
+        """A slot-ref winner increments its slot ID's count."""
+        results = [_bracket_result(winner_region=1, winner_seed=1, loser_region=1, loser_seed=2)]
+        assert build_slot_win_counts(results) == {"R1S1": 1}
+
+    def test_school_name_winner_ignored(self):
+        """A school-name winner (no region/seed) contributes nothing — only slot refs count here."""
+        results = [_bracket_result(winner_school="Alpha", loser_school="Beta")]
+        assert build_slot_win_counts(results) == {}
+
+    def test_multiple_wins_for_same_slot_accumulate(self):
+        """The same slot winning multiple rounds accumulates its count."""
+        results = [
+            _bracket_result(winner_region=1, winner_seed=1, round_="second_round"),
+            _bracket_result(winner_region=1, winner_seed=1, round_="quarterfinals"),
+        ]
+        assert build_slot_win_counts(results) == {"R1S1": 2}
+
+    def test_empty_results_returns_empty_dict(self):
+        """No bracket results yields an empty count dict."""
+        assert build_slot_win_counts([]) == {}
+
+
+class TestBuildAttendedGameModels:
+    """build_attended_game_models resolves each attended game's venue and distance."""
+
+    _HOME = VenueModel(name="Home Field", city="Taylorsville", latitude=31.0, longitude=-89.0)
+
+    def test_explicit_venue_wins(self):
+        """An explicit locations row (l_name set) is used regardless of location."""
+        rows = [("Alpha", date(2025, 9, 5), "Beta", "W", "away", "Beta Field", "Beta City", 32.0, -89.0)]
+        result = build_attended_game_models(rows, {"Alpha": self._HOME})
+        assert result[0].venue is not None
+        assert result[0].venue.name == "Beta Field"
+
+    def test_home_game_falls_back_to_own_venue(self):
+        """A home game with no explicit venue row uses the attended school's own venue."""
+        rows = [("Alpha", date(2025, 9, 5), "Beta", "W", "home", None, None, None, None)]
+        result = build_attended_game_models(rows, {"Alpha": self._HOME})
+        assert result[0].venue == self._HOME
+        assert result[0].distance_miles == 0.0
+
+    def test_away_game_falls_back_to_opponent_venue(self):
+        """An away game with no explicit venue row falls back to the opponent's home venue."""
+        opponent_venue = VenueModel(name="Beta Field", city="Beta City", latitude=32.0, longitude=-89.0)
+        rows = [("Alpha", date(2025, 9, 5), "Beta", "L", "away", None, None, None, None)]
+        result = build_attended_game_models(rows, {"Alpha": self._HOME, "Beta": opponent_venue})
+        assert result[0].venue == opponent_venue
+
+    def test_neutral_game_with_no_venue_is_unresolved(self):
+        """A neutral-site game with no explicit venue resolves to null venue/distance."""
+        rows = [("Alpha", date(2025, 9, 5), "Beta", "W", "neutral", None, None, None, None)]
+        result = build_attended_game_models(rows, {"Alpha": self._HOME})
+        assert result[0].venue is None
+        assert result[0].distance_miles is None
+
+    def test_fields_passed_through(self):
+        """school/date/opponent/result pass through unchanged from the row."""
+        rows = [("Alpha", date(2025, 9, 5), "Beta", "W", "home", None, None, None, None)]
+        result = build_attended_game_models(rows, {"Alpha": self._HOME})
+        assert result[0].school == "Alpha"
+        assert result[0].date == date(2025, 9, 5)
+        assert result[0].opponent == "Beta"
+        assert result[0].result == "W"
+
+
+class TestUnpackHostingOddsRow:
+    """_unpack_hosting_odds_row splits a hosting-odds row into (school, odds, home, home_w, adv, adv_w)."""
+
+    def test_unpacks_all_parts(self):
+        """Each of the six parts is sliced from the expected column range."""
+        row = (
+            "Alpha", 0.4, 0.3, 0.2, 0.1, 0.7, 0.7, False, False,  # 0-8: school..clinched/eliminated
+            1.0, 0.5, 0.3, 0.2,  # 9-12: home
+            0.9, 0.4, 0.25, 0.15,  # 13-16: home_weighted
+            0.7, 0.5, 0.3, 0.2,  # 17-20: adv
+            0.6, 0.4, 0.25, 0.15,  # 21-24: adv_weighted
+        )
+        school, odds, home, home_w, adv, adv_w = _unpack_hosting_odds_row(row)
+        assert school == "Alpha"
+        assert odds.p1 == 0.4
+        assert odds.p_playoffs == 0.7
+        assert home == (1.0, 0.5, 0.3, 0.2)
+        assert home_w == (0.9, 0.4, 0.25, 0.15)
+        assert adv == (0.7, 0.5, 0.3, 0.2)
+        assert adv_w == (0.6, 0.4, 0.25, 0.15)
+
+
+class TestAttachHostingScenarios:
+    """attach_hosting_scenarios annotates each clinched entry's `scenarios` field."""
+
+    def test_entry_with_no_odds_passed_through_unchanged(self):
+        """A school not present in region_odds is returned as-is (scenarios stays None)."""
+        entries = build_hosting_entries(_REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5)
+        result = attach_hosting_scenarios(entries, {}, SLOTS_5A_7A_2025, season=2025, region=1)
+        assert result == entries
+        assert all(e.scenarios is None for e in result)
+
+    def test_clinched_entry_gets_scenarios_populated(self):
+        """A clinched entry (present in region_odds) gets a non-None scenarios dict."""
+        entries = build_hosting_entries(_REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5)
+        result = attach_hosting_scenarios(entries, _REGION1_ODDS_5A, SLOTS_5A_7A_2025, season=2025, region=1)
+        by_school = {e.school: e for e in result if e.school}
+        assert by_school["Alpha"].scenarios is not None
+
+    def test_does_not_mutate_input_entries(self):
+        """Returned entries are new objects (model_copy), not in-place mutations."""
+        entries = build_hosting_entries(_REGION1_ODDS_5A, SLOTS_5A_7A_2025, region=1, season=2025, clazz=5)
+        original_scenarios = [e.scenarios for e in entries]
+        attach_hosting_scenarios(entries, _REGION1_ODDS_5A, SLOTS_5A_7A_2025, season=2025, region=1)
+        assert [e.scenarios for e in entries] == original_scenarios
+
+
+class TestDefaultClassesForSeason:
+    """default_classes_for_season returns 1..N for the MHSAA class count in effect that year."""
+
+    def test_pre_1984_is_four_classes(self):
+        """Seasons before 1984 use the original four-class structure."""
+        assert default_classes_for_season(1983) == [1, 2, 3, 4]
+
+    def test_1984_to_2008_is_five_classes(self):
+        """1984-2008 (inclusive) use five classes."""
+        assert default_classes_for_season(1984) == [1, 2, 3, 4, 5]
+        assert default_classes_for_season(2008) == [1, 2, 3, 4, 5]
+
+    def test_2009_to_2022_is_six_classes(self):
+        """2009-2022 use six classes."""
+        assert default_classes_for_season(2009) == [1, 2, 3, 4, 5, 6]
+        assert default_classes_for_season(2022) == [1, 2, 3, 4, 5, 6]
+
+    def test_2023_onward_is_seven_classes(self):
+        """2023 onward use seven classes."""
+        assert default_classes_for_season(2023) == [1, 2, 3, 4, 5, 6, 7]
+        assert default_classes_for_season(2026) == [1, 2, 3, 4, 5, 6, 7]

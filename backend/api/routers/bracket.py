@@ -18,20 +18,20 @@ from backend.helpers.api_helpers import (
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     _load_format_slots,
-    _resolve_ref_to_school,
-    _resolve_ref_to_slot_id,
     _resolve_slot_group,
     build_bracket_entries,
     build_bracket_layout,
     build_enriched_bracket_layout,
+    build_simulated_bracket_results,
     build_slot_outlook_teams,
+    build_slot_win_counts,
     clinched_school,
     load_championship_venue,
     load_home_venues,
     load_remaining_game_dates,
     today,
 )
-from backend.helpers.data_classes import MatchupProbFn
+from backend.helpers.data_classes import FormatSlot, MatchupProbFn
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["bracket"])
@@ -62,6 +62,22 @@ def _build_p_host_given_reach_by_team(entries: list[TeamBracketEntry]) -> dict[s
         }
         for e in entries if e.school and e.hosting
     }
+
+
+def _seeds_by_region_for_slot(group_slots: list[FormatSlot], round: str) -> dict[int, set[int]]:
+    """Return the candidate ``{region: {seed, ...}}`` map for a bracket slot group.
+
+    For ``first_round``, exactly the two (region, seed) positions occupying the
+    group's single slot (home and away). For later rounds, every seed that
+    could reach the slot via any first-round matchup in the group (see
+    ``_candidate_seeds_by_region``).
+    """
+    if round == "first_round":
+        return {
+            group_slots[0].home_region: {group_slots[0].home_seed},
+            group_slots[0].away_region: {group_slots[0].away_seed},
+        }
+    return _candidate_seeds_by_region(group_slots)
 
 
 @router.get("/bracket", responses=_404)
@@ -177,13 +193,7 @@ async def get_bracket_slot(
         if include_conditions:
             group_slots = _resolve_slot_group(slot, round, slots)
             if group_slots is not None:
-                if round == "first_round":
-                    seeds_by_region = {
-                        group_slots[0].home_region: {group_slots[0].home_seed},
-                        group_slots[0].away_region: {group_slots[0].away_seed},
-                    }
-                else:
-                    seeds_by_region = _candidate_seeds_by_region(group_slots)
+                seeds_by_region = _seeds_by_region_for_slot(group_slots, round)
                 for region, seeds in seeds_by_region.items():
                     seed_atoms, remaining = await _compute_seed_atoms_if_pre_playoff(
                         conn, season, class_, region, as_of
@@ -281,16 +291,7 @@ async def simulate_bracket(
         )
         entries = _apply_round_ceilings(entries, state.round_ceiling)
         seed_to_school = _invert_school_to_seed(state.school_to_seed)
-        simulated: list[tuple[str, str | None, int | None, int | None, str | None]] = []
-        for r in body.results:
-            w = _resolve_ref_to_school(r.winner, seed_to_school)
-            if r.loser is not None:
-                lo = _resolve_ref_to_school(r.loser, seed_to_school)
-                if w is not None and lo is not None:
-                    simulated.append((w, lo, r.winner_score or 12, r.loser_score or 0, None))
-            else:
-                if w is not None:
-                    simulated.append((w, None, r.winner_score or 12, r.loser_score or 0, r.round))
+        simulated = build_simulated_bracket_results(body.results, seed_to_school)
         p_host_given_reach_by_team = _build_p_host_given_reach_by_team(entries)
         bracket_layout = build_enriched_bracket_layout(
             build_bracket_layout(slots), seed_to_school,
@@ -300,11 +301,7 @@ async def simulate_bracket(
             home_venue_by_team=home_venues,
         )
     else:
-        slot_wins: dict[str, int] = {}
-        for r in body.results:
-            w_sid = _resolve_ref_to_slot_id(r.winner)
-            if w_sid:
-                slot_wins[w_sid] = slot_wins.get(w_sid, 0) + 1
+        slot_wins = build_slot_win_counts(body.results)
         entries = build_bracket_entries(
             by_region, slots, season=season, clazz=class_,
             win_prob_fn_weighted=matchup_fn_pre, wins_by_slot=slot_wins,

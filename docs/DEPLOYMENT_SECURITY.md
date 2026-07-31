@@ -9,18 +9,9 @@ Items already fixed in code are **not** listed here — see git history for thos
 
 ### TLS / HTTPS
 
-- [ ] Configure TLS termination (Certbot/Let's Encrypt or a load balancer cert).
-- [ ] Once TLS is live, add `Strict-Transport-Security` to `nginx/nginx.conf`:
-  ```nginx
-  add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-  ```
-- [ ] Redirect all HTTP traffic to HTTPS:
-  ```nginx
-  server {
-      listen 80;
-      return 301 https://$host$request_uri;
-  }
-  ```
+- [x] Configure TLS termination (Certbot/Let's Encrypt or a load balancer cert). Live in production via Let's Encrypt — see [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#ssl-with-lets-encrypt).
+- [x] Once TLS is live, add `Strict-Transport-Security` to `nginx/nginx.conf` — present in `nginx/nginx.conf`.
+- [x] Redirect all HTTP traffic to HTTPS — present in `nginx/nginx.conf` (`listen 80; return 301 https://$host$request_uri;`).
 
 ### Environment Variables
 

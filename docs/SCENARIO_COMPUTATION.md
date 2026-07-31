@@ -1,6 +1,6 @@
 # Scenario Computation Model
 
-This document describes how the tiebreaker engine decides what to compute and store at each stage of the season, and what gets exposed to the frontend.
+This document describes how the tiebreaker engine decides what to compute and store at each stage of the season, and what gets exposed to the frontend. For the underlying MHSAA policy this engine implements, see [SCENARIO_RULES.md](SCENARIO_RULES.md) (region tiebreaker procedure) and [PLAYOFF_HOME_RULES.md](PLAYOFF_HOME_RULES.md) (playoff home-site rules).
 
 ## Background: What Gets Computed
 

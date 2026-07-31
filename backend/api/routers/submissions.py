@@ -9,7 +9,6 @@ Submissions enter a moderation queue and are not applied to the live database
 until a moderator approves them via ``/api/v1/moderation/submissions/{id}/approve``.
 """
 
-import json
 from functools import partial
 from typing import Annotated, Any
 
@@ -33,6 +32,18 @@ from backend.helpers.image_helpers import (
     upload_submission_logo,
 )
 from backend.helpers.query_helpers import require_game_exists, require_helmet_design_exists, require_school_exists
+from backend.helpers.submission_helpers import (
+    build_colors_payload,
+    build_feedback_payload,
+    build_helmet_assignment_payload,
+    build_helmet_image_fields,
+    build_helmet_initial_payload,
+    build_location_payload,
+    build_logo_payload,
+    build_score_payload,
+    insert_submission,
+    update_submission_payload,
+)
 
 router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 
@@ -97,17 +108,11 @@ async def submit_logo(
     )
 
     user_id = optional_user_id(current_user)
-    payload = {"logo_type": logo_type, "cloudinary_path": cloudinary_path}
+    payload = build_logo_payload(logo_type, cloudinary_path)
     async with get_conn() as conn:
-        row = await (
-            await conn.execute(
-                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('logo', %s, %s, %s) RETURNING id, submitted_at",
-                (school, user_id, json.dumps(payload)),
-            )
-        ).fetchone()
-    assert row is not None
+        submission_id, submitted_at = await insert_submission(conn, "logo", school, user_id, payload)
 
-    return SubmissionCreatedResponse(id=row[0], type="logo", school=school, submitted_at=row[1])
+    return SubmissionCreatedResponse(id=submission_id, type="logo", school=school, submitted_at=submitted_at)
 
 
 @router.post("/helmets", status_code=status.HTTP_201_CREATED, responses=_404)
@@ -150,38 +155,24 @@ async def submit_helmet(
     async with get_conn() as conn:
         await require_school_exists(conn, form.school)
 
-    payload: dict[str, Any] = {
-        "year_first_worn": form.year_first_worn,
-        "description": form.description,
-    }
-    if form.year_last_worn is not None:
-        payload["year_last_worn"] = form.year_last_worn
-    if form.currently_worn:
-        payload["currently_worn"] = form.currently_worn
-    for key, val in [
-        ("color", form.color),
-        ("finish", form.finish),
-        ("facemask_color", form.facemask_color),
-        ("logo_description", form.logo_description),
-        ("stripe", form.stripe),
-        ("additional_notes", form.additional_notes),
-        ("other_note", form.other_note),
-    ]:
-        if val is not None:
-            payload[key] = val
+    payload = build_helmet_initial_payload(
+        year_first_worn=form.year_first_worn,
+        description=form.description,
+        year_last_worn=form.year_last_worn,
+        currently_worn=form.currently_worn,
+        color=form.color,
+        finish=form.finish,
+        facemask_color=form.facemask_color,
+        logo_description=form.logo_description,
+        stripe=form.stripe,
+        additional_notes=form.additional_notes,
+        other_note=form.other_note,
+    )
 
     user_id = optional_user_id(current_user)
     # Insert first so we get the submission_id for Cloudinary path construction.
     async with get_conn() as conn:
-        row = await (
-            await conn.execute(
-                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('helmet', %s, %s, %s) RETURNING id, submitted_at",
-                (form.school, user_id, json.dumps(payload)),
-            )
-        ).fetchone()
-    assert row is not None
-    submission_id: int = row[0]
-    submitted_at = row[1]
+        submission_id, submitted_at = await insert_submission(conn, "helmet", form.school, user_id, payload)
 
     # Upload images and collect Cloudinary paths.
     image_paths: list[str] = []
@@ -201,17 +192,10 @@ async def submit_helmet(
         )
 
     # Update payload with collected paths.
-    payload["image_paths"] = image_paths
-    if image_labels:
-        payload["image_labels"] = image_labels
-    if logo_image_path is not None:
-        payload["logo_image_path"] = logo_image_path
+    payload.update(build_helmet_image_fields(image_paths, image_labels, logo_image_path))
 
     async with get_conn() as conn:
-        await conn.execute(
-            "UPDATE submissions SET payload = %s, updated_at = NOW() WHERE id = %s",
-            (json.dumps(payload), submission_id),
-        )
+        await update_submission_payload(conn, submission_id, payload)
 
     return SubmissionCreatedResponse(id=submission_id, type="helmet", school=form.school, submitted_at=submitted_at)
 
@@ -225,22 +209,10 @@ async def submit_colors(
     user_id = optional_user_id(current_user)
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
+        payload = build_colors_payload(body)
+        submission_id, submitted_at = await insert_submission(conn, "colors", body.school, user_id, payload)
 
-        payload: dict[str, Any] = {}
-        if body.primary_color is not None:
-            payload["primary_color"] = body.primary_color.model_dump()
-        if body.secondary_colors:
-            payload["secondary_colors"] = [c.model_dump() for c in body.secondary_colors]
-
-        row = await (
-            await conn.execute(
-                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('colors', %s, %s, %s) RETURNING id, submitted_at",
-                (body.school, user_id, json.dumps(payload)),
-            )
-        ).fetchone()
-        assert row is not None
-
-    return SubmissionCreatedResponse(id=row[0], type="colors", school=body.school, submitted_at=row[1])
+    return SubmissionCreatedResponse(id=submission_id, type="colors", school=body.school, submitted_at=submitted_at)
 
 
 @router.post("/locations", status_code=status.HTTP_201_CREATED, responses=_404)
@@ -252,17 +224,10 @@ async def submit_location(
     user_id = optional_user_id(current_user)
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
+        payload = build_location_payload(body)
+        submission_id, submitted_at = await insert_submission(conn, "location", body.school, user_id, payload)
 
-        payload = {"latitude": body.latitude, "longitude": body.longitude}
-        row = await (
-            await conn.execute(
-                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('location', %s, %s, %s) RETURNING id, submitted_at",
-                (body.school, user_id, json.dumps(payload)),
-            )
-        ).fetchone()
-        assert row is not None
-
-    return SubmissionCreatedResponse(id=row[0], type="location", school=body.school, submitted_at=row[1])
+    return SubmissionCreatedResponse(id=submission_id, type="location", school=body.school, submitted_at=submitted_at)
 
 
 @router.post(
@@ -281,20 +246,10 @@ async def submit_score(
         await require_game_exists(conn, body.school, body.date)
 
         user_id = optional_user_id(current_user)
-        payload = {
-            "date": body.date.isoformat(),
-            "points_for": body.points_for,
-            "points_against": body.points_against,
-        }
-        row = await (
-            await conn.execute(
-                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('score', %s, %s, %s) RETURNING id, submitted_at",
-                (body.school, user_id, json.dumps(payload)),
-            )
-        ).fetchone()
-        assert row is not None
+        payload = build_score_payload(body)
+        submission_id, submitted_at = await insert_submission(conn, "score", body.school, user_id, payload)
 
-    return SubmissionCreatedResponse(id=row[0], type="score", school=body.school, submitted_at=row[1])
+    return SubmissionCreatedResponse(id=submission_id, type="score", school=body.school, submitted_at=submitted_at)
 
 
 @router.post("/helmet-assignments", status_code=status.HTTP_201_CREATED, responses=_404)
@@ -340,16 +295,12 @@ async def submit_helmet_assignment(
             )
 
         user_id = optional_user_id(current_user)
-        payload = {"date": body.date.isoformat(), "helmet_design_id": body.helmet_design_id}
-        row = await (
-            await conn.execute(
-                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('helmet_assignment', %s, %s, %s) RETURNING id, submitted_at",
-                (body.school, user_id, json.dumps(payload)),
-            )
-        ).fetchone()
-        assert row is not None
+        payload = build_helmet_assignment_payload(body)
+        submission_id, submitted_at = await insert_submission(conn, "helmet_assignment", body.school, user_id, payload)
 
-    return SubmissionCreatedResponse(id=row[0], type="helmet_assignment", school=body.school, submitted_at=row[1])
+    return SubmissionCreatedResponse(
+        id=submission_id, type="helmet_assignment", school=body.school, submitted_at=submitted_at
+    )
 
 
 @router.post("/feedback", status_code=status.HTTP_201_CREATED)
@@ -359,14 +310,8 @@ async def submit_feedback(
 ) -> SubmissionCreatedResponse:
     """Submit general feedback for moderator review."""
     user_id = optional_user_id(current_user)
-    payload = {"subject": body.subject, "message": body.message}
+    payload = build_feedback_payload(body)
     async with get_conn() as conn:
-        row = await (
-            await conn.execute(
-                "INSERT INTO submissions (type, school, user_id, payload) VALUES ('feedback', NULL, %s, %s) RETURNING id, submitted_at",
-                (user_id, json.dumps(payload)),
-            )
-        ).fetchone()
-    assert row is not None
+        submission_id, submitted_at = await insert_submission(conn, "feedback", None, user_id, payload)
 
-    return SubmissionCreatedResponse(id=row[0], type="feedback", school=None, submitted_at=row[1])
+    return SubmissionCreatedResponse(id=submission_id, type="feedback", school=None, submitted_at=submitted_at)

@@ -13,9 +13,8 @@ from backend.api.models.responses import (
     SubmissionSummary,
     UserAdminRow,
     UserProfileResponse,
-    VenueModel,
 )
-from backend.helpers.api_helpers import load_home_venues, venue_distance_miles
+from backend.helpers.api_helpers import build_attended_game_models, load_home_venues
 from backend.helpers.query_helpers import (
     build_set_clause,
     require_game_exists,
@@ -201,28 +200,7 @@ async def list_attended_games(current_user: CurrentUser) -> list[AttendedGameMod
 
         venues = await load_home_venues(conn) if rows else {}
 
-    results = []
-    for school, game_date, opponent, result, location, l_name, l_city, l_lat, l_lon in rows:
-        anchor = venues.get(school)
-        if l_name is not None:
-            venue = VenueModel(name=l_name, city=l_city, latitude=l_lat, longitude=l_lon)
-        elif location == "home":
-            venue = anchor
-        elif location == "away":
-            venue = venues.get(opponent)
-        else:
-            venue = None
-        results.append(
-            AttendedGameModel(
-                school=school,
-                date=game_date,
-                opponent=opponent,
-                result=result,
-                venue=venue,
-                distance_miles=venue_distance_miles(anchor, venue),
-            )
-        )
-    return results
+    return build_attended_game_models(rows, venues)
 
 
 @router.put(

@@ -46,3 +46,7 @@ AUTH0_AUDIENCE=<Identifier from Step 1>
 ```
 
 Keep the **Client ID** and **Client Secret** from Step 2 handy — you'll enter them in the Swagger UI Authorize dialog when promoting yourself to owner.
+
+## What Auth0 covers vs. what this app builds
+
+Auth0 handles email verification, password reset, password change, and Universal Login session management out of the box — none of that needs to be built here. This app's own auth code (`backend/api/auth.py`) is limited to validating the RS256 JWT against Auth0's JWKS endpoint, lazy-provisioning `users` rows, role checks (`user`/`moderator`/`owner`), and the first-party session cookie described in the README's "Accessing the Prefect UI" section.

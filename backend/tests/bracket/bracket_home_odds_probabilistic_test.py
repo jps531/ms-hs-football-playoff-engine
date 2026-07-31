@@ -1776,6 +1776,32 @@ def test_r2_eliminated_team_that_won_r1_computes_hosting() -> None:
     assert result_with["EliminatedS1"] == pytest.approx(1.0)      # snapshot recovers seed 1 → hosted
 
 
+def test_r2_eliminated_team_alive_but_seed_ambiguous_in_snapshot_returns_zero() -> None:
+    """A team alive in round_snapshots[1] (passing _school_reached_rc) but with no
+    seed > 0.5 there (an ambiguous snapshot) has no recoverable historical seed,
+    so R2 hosting is 0.0 rather than raising or guessing a seed."""
+    region_odds = {"EliminatedS1": _elim_clinched("EliminatedS1")}
+    all_odds = _multi_alive_odds({(3, 2): "R3s2"})
+    ambiguous_snap = {
+        1: {
+            1: {
+                "EliminatedS1": StandingsOdds(
+                    school="EliminatedS1", p1=0.4, p2=0.3, p3=0.3, p4=0.0,
+                    p_playoffs=1.0, final_playoffs=1.0, clinched=False, eliminated=False,
+                )
+            }
+        }
+    }
+
+    result = compute_second_round_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=2, all_region_odds=all_odds,
+        round_snapshots=ambiguous_snap,
+    )
+
+    assert result["EliminatedS1"] == pytest.approx(0.0)
+
+
 def test_r2_eliminated_team_that_lost_r1_returns_zero() -> None:
     """Eliminated team not alive in any round_snapshots[1] entry returns 0.
 
@@ -1793,6 +1819,29 @@ def test_r2_eliminated_team_that_lost_r1_returns_zero() -> None:
     )
 
     assert result["EliminatedS1"] == pytest.approx(0.0)
+
+
+def test_r2_eliminated_team_and_eliminated_opponent_both_recovered_via_snapshots() -> None:
+    """Path B's own opponent-lookup also falls back to round_snapshots (line 938).
+
+    Region 1 seed 1 was eliminated in R2 (recovered via round_snapshots[1], same
+    as test_r2_eliminated_team_that_won_r1_computes_hosting), but this time the
+    R2 opponent (3,2) is ALSO already eliminated in all_region_odds — absent from
+    it entirely — so Path B's own _alive_in_slots call finds nothing and must
+    fall back to round_snapshots[1] (where (3,2) was still alive) to resolve the
+    opponent and compute r2_home_team.
+    """
+    region_odds = {"EliminatedS1": _elim_clinched("EliminatedS1")}
+    all_odds: dict[int, dict[str, StandingsOdds]] = {}
+    r1_snap = _multi_alive_odds({(1, 1): "EliminatedS1", (3, 2): "R3s2"})
+
+    result_without_snapshot_opponent = compute_second_round_home_odds(
+        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
+        rounds_completed=2, all_region_odds=all_odds,
+        round_snapshots={1: r1_snap},
+    )
+
+    assert result_without_snapshot_opponent["EliminatedS1"] == pytest.approx(1.0)
 
 
 def test_qf_eliminated_team_that_won_r2_computes_hosting() -> None:

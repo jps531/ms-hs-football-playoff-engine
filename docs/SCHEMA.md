@@ -174,6 +174,11 @@ erDiagram
         int away_seed
         text north_south
     }
+    championship_venues {
+        int season PK
+        int class PK
+        int location_id FK
+    }
 
     submissions {
         int id PK
@@ -228,4 +233,5 @@ erDiagram
     helmet_designs ||--o{ games : "worn in"
     helmet_designs ||--o{ submissions : "linked from"
     playoff_formats ||--o{ playoff_format_slots : "has slots"
+    locations ||--o{ championship_venues : "hosts"
 ```

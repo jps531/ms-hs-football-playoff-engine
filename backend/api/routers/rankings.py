@@ -6,11 +6,10 @@ from enum import StrEnum
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Path, Query
-from psycopg.sql import SQL, Composed, Identifier
 
 from backend.api.db import get_conn
 from backend.api.models.responses import RankingsResponse, StatewideRankingsResponse
-from backend.helpers.api_helpers import build_rank_entry, today
+from backend.helpers.api_helpers import build_rank_entry, build_ranked_teams_query, resolve_snapshot_dates, today
 
 router = APIRouter(prefix="/api/v1/rankings", tags=["rankings"])
 
@@ -72,109 +71,6 @@ class RankSortField(StrEnum):
 #   40:    rank (1-indexed position among the full class/state for the chosen sort column)
 #   41:    rank_prev (same position as of the previous snapshot; NULL on a team's first-ever snapshot)
 
-_RANK_COLUMNS = """
-    rs.school, rs.class, rs.region,
-    rs.wins, rs.losses, rs.ties, rs.region_wins, rs.region_losses, rs.region_ties,
-    rs.as_of_date,
-    rs.odds_1st, rs.odds_2nd, rs.odds_3rd, rs.odds_4th, rs.odds_playoffs,
-    rs.odds_1st_weighted, rs.odds_2nd_weighted, rs.odds_3rd_weighted, rs.odds_4th_weighted, rs.odds_playoffs_weighted,
-    rs.odds_second_round, rs.odds_quarterfinals, rs.odds_semifinals, rs.odds_finals, rs.odds_champion,
-    rs.odds_second_round_weighted, rs.odds_quarterfinals_weighted, rs.odds_semifinals_weighted,
-    rs.odds_finals_weighted, rs.odds_champion_weighted,
-    rs.odds_first_round_home, rs.odds_second_round_home, rs.odds_quarterfinals_home, rs.odds_semifinals_home,
-    rs.odds_first_round_home_weighted, rs.odds_second_round_home_weighted,
-    rs.odds_quarterfinals_home_weighted, rs.odds_semifinals_home_weighted,
-    tr.elo, tr.rpi
-"""
-
-_RANK_FROM_JOIN = """
-    FROM region_standings rs
-    LEFT JOIN team_ratings tr ON tr.school = rs.school AND tr.season = rs.season AND tr.as_of_date = rs.as_of_date
-"""
-
-
-async def _resolve_snapshot_dates(
-    conn, season: int, as_of_date: date, clazz: int | None = None
-) -> tuple[date | None, date | None]:
-    """Return (current, previous) region_standings snapshot dates for *season* (optionally scoped to
-    *clazz*) on or before *as_of_date*.
-
-    ``current`` is the most recent snapshot on or before *as_of_date* — None if no snapshot exists yet.
-    ``previous`` is the snapshot immediately before ``current`` — None on a class's/state's first-ever
-    snapshot. team_ratings shares the same as_of_date per pipeline run (see its table comment), so this
-    single date pair is valid for both region_standings and team_ratings columns.
-    """
-    conditions = "season = %s"
-    params: list[Any] = [season]
-    if clazz is not None:
-        conditions += " AND class = %s"
-        params.append(clazz)
-
-    current_row = await (
-        await conn.execute(
-            f"SELECT MAX(as_of_date) FROM region_standings WHERE {conditions} AND as_of_date <= %s",
-            (*params, as_of_date),
-        )
-    ).fetchone()
-    current = current_row[0] if current_row else None
-    if current is None:
-        return None, None
-
-    prev_row = await (
-        await conn.execute(
-            f"SELECT MAX(as_of_date) FROM region_standings WHERE {conditions} AND as_of_date < %s",
-            (*params, current),
-        )
-    ).fetchone()
-    return current, (prev_row[0] if prev_row else None)
-
-
-def _ranked_teams_query(sort_col: str, clazz_filter: bool, region_filter: bool, has_prev: bool) -> Composed:
-    """Build the ranked-teams query: current snapshot ranked by *sort_col*, optionally joined to the
-    previous snapshot's rank for the same schools. *clazz_filter*/*region_filter* add the corresponding
-    ``AND`` conditions; callers pass matching params in the same order the placeholders appear.
-    """
-    snap_where = "rs.season = %s" + (" AND rs.class = %s" if clazz_filter else "") + " AND rs.as_of_date = %s"
-    col = Identifier(sort_col)
-
-    prev_cte = ""
-    rank_prev_select = "NULL::bigint AS rank_prev"
-    prev_join = ""
-    if has_prev:
-        prev_cte = f"""
-            , prev_snap AS (
-                SELECT {_RANK_COLUMNS} {_RANK_FROM_JOIN}
-                WHERE {snap_where}
-            ),
-            prev_ranked AS (
-                SELECT school, ROW_NUMBER() OVER (ORDER BY {{col}} DESC) AS rank
-                FROM prev_snap
-            )
-        """
-        rank_prev_select = "pr.rank AS rank_prev"
-        prev_join = "LEFT JOIN prev_ranked pr ON pr.school = cr.school"
-
-    region_clause = " AND cr.region = %s" if region_filter else ""
-
-    query = f"""
-        WITH current_snap AS (
-            SELECT {_RANK_COLUMNS} {_RANK_FROM_JOIN}
-            WHERE {snap_where}
-        ),
-        current_ranked AS (
-            SELECT *, ROW_NUMBER() OVER (ORDER BY {{col}} DESC) AS rank
-            FROM current_snap
-        )
-        {prev_cte}
-        SELECT cr.*, {rank_prev_select}
-        FROM current_ranked cr
-        {prev_join}
-        WHERE cr.{{col}} > %s{region_clause}
-        ORDER BY cr.rank
-        LIMIT %s
-    """
-    return SQL(query).format(col=col)
-
 
 @router.get("/statewide")
 async def get_statewide_rankings(
@@ -192,12 +88,12 @@ async def get_statewide_rankings(
     sort_col = "elo"
 
     async with get_conn() as conn:
-        current, previous = await _resolve_snapshot_dates(conn, season, as_of_date)
+        current, previous = await resolve_snapshot_dates(conn, season, as_of_date)
         if current is None:
             return StatewideRankingsResponse(season=season, teams=[])
 
         has_prev = previous is not None
-        query = _ranked_teams_query(sort_col, clazz_filter=False, region_filter=False, has_prev=has_prev)
+        query = build_ranked_teams_query(sort_col, clazz_filter=False, region_filter=False, has_prev=has_prev)
         params: list[Any] = [season, current]
         if has_prev:
             params += [season, previous]
@@ -232,12 +128,14 @@ async def get_rankings(
     sort_col = sort_by.value  # safe: constrained to a closed enum of column names
 
     async with get_conn() as conn:
-        current, previous = await _resolve_snapshot_dates(conn, season, as_of_date, clazz=clazz)
+        current, previous = await resolve_snapshot_dates(conn, season, as_of_date, clazz=clazz)
         if current is None:
             return RankingsResponse(season=season, class_=clazz, sort_by=sort_col, teams=[])
 
         has_prev = previous is not None
-        query = _ranked_teams_query(sort_col, clazz_filter=True, region_filter=region is not None, has_prev=has_prev)
+        query = build_ranked_teams_query(
+            sort_col, clazz_filter=True, region_filter=region is not None, has_prev=has_prev
+        )
         params: list[Any] = [season, clazz, current]
         if has_prev:
             params += [season, clazz, previous]

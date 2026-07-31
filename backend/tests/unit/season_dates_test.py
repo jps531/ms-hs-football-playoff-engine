@@ -167,6 +167,20 @@ class TestCrossClassAmbiguity:
         assert "First Round (1A-4A)" in e.description
         assert "Week 1 (6A)" in e.description
 
+    def test_class_with_two_rounds_on_same_date_labeled_unresolved(self):
+        """A single class with two distinct round values on the same date (dirty
+        data) is labeled 'Unresolved' in the composed description rather than
+        picking one of the conflicting rounds."""
+        rows: list[GameRow] = [
+            (FIRST_ROUND, "First Round", 1, "A", "B"),
+            (FIRST_ROUND, "Second Round", 1, "C", "D"),  # same class, conflicting round
+            (FIRST_ROUND, None, 6, "I", "J"),
+        ]
+        e = _entries_by_date(rows)[FIRST_ROUND]
+        assert e.description is not None
+        assert "Unresolved (1A)" in e.description
+        assert "Week 1 (6A)" in e.description
+
 
 class TestSeasonStart:
     """Coverage for the synthetic season_start entry."""

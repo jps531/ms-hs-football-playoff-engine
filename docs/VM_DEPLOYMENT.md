@@ -65,6 +65,8 @@ docker compose --env-file .env.local --profile local-db up --build -d
 
 ## SSL with Let's Encrypt
 
+HTTPS is live in production via this setup (Certbot-issued Let's Encrypt cert, HSTS header, and HTTP→HTTPS redirect in `nginx/nginx.conf`).
+
 Run once after DNS is resolving to your static IP. Bring the stack down first to free port 80:
 
 ```

@@ -321,8 +321,9 @@ class TestSaveAndUpload:
             captured_path["path"] = path
             raise RuntimeError("upload failed")
 
+        coro = save_and_upload(file, upload_fn)
         with pytest.raises(RuntimeError):
-            asyncio.run(save_and_upload(file, upload_fn))
+            asyncio.run(coro)
         assert not os.path.exists(captured_path["path"])
 
     def test_disallowed_content_type_raises_422_before_upload(self):
@@ -333,8 +334,9 @@ class TestSaveAndUpload:
             """Fail the test if called — validation should reject the file first."""
             raise AssertionError("upload_fn should not be called for a rejected file")
 
+        coro = save_and_upload(file, upload_fn)
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.run(save_and_upload(file, upload_fn))
+            asyncio.run(coro)
         assert exc_info.value.status_code == 422
 
 

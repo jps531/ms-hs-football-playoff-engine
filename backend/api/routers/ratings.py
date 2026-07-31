@@ -9,7 +9,7 @@ from psycopg import sql
 from backend.api.db import get_conn
 from backend.api.models.responses import EloSnapshot, EloTrendResponse, MoversResponse, TeamRatingModel
 from backend.helpers.api_helpers import build_movers_response
-from backend.helpers.query_helpers import and_join_conditions
+from backend.helpers.query_helpers import and_join_conditions, append_optional_filters
 
 router = APIRouter(prefix="/api/v1", tags=["ratings"])
 
@@ -34,15 +34,9 @@ async def list_ratings(
     """
     conditions: list[LiteralString] = ["tr.season = %s"]
     params: list = [season]
-    if class_ is not None:
-        conditions.append("ss.class = %s")
-        params.append(class_)
-    if region is not None:
-        conditions.append("ss.region = %s")
-        params.append(region)
-    if team is not None:
-        conditions.append("tr.school = %s")
-        params.append(team)
+    append_optional_filters(
+        conditions, params, ("ss.class = %s", class_), ("ss.region = %s", region), ("tr.school = %s", team)
+    )
 
     where_clause = and_join_conditions(conditions)
 

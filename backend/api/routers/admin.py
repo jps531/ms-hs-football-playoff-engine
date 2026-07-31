@@ -37,7 +37,7 @@ from backend.api.models.responses import (
     OverrideAuditRow,
     PlayoffFormatSeedResult,
 )
-from backend.helpers.api_helpers import HELMET_DESIGNS_SELECT, build_helmet_from_row
+from backend.helpers.api_helpers import HELMET_DESIGNS_SELECT, build_helmet_from_row, default_classes_for_season
 from backend.helpers.query_helpers import (
     build_set_clause,
     require_game_exists,
@@ -46,7 +46,10 @@ from backend.helpers.query_helpers import (
     require_nonempty_update,
     require_school_exists,
     resolve_location_by_name_or_team,
+    validate_override_field,
+    validate_submission_for_helmet_link,
 )
+from backend.helpers.query_helpers import upsert_school_season as upsert_school_season_row
 
 _log = logging.getLogger(__name__)
 
@@ -153,19 +156,6 @@ async def seed_playoff_format(
 # ---------------------------------------------------------------------------
 
 
-def _default_classes_for_season(season: int) -> list[int]:
-    """MHSAA class count by year, used when school_seasons has no rows yet for *season*."""
-    if season <= 1983:
-        max_class = 4
-    elif season <= 2008:
-        max_class = 5
-    elif season <= 2022:
-        max_class = 6
-    else:
-        max_class = 7
-    return list(range(1, max_class + 1))
-
-
 @router.post("/championship-venue", responses={404: {"description": "Not found"}, 409: {"description": "Conflict"}})
 async def assign_championship_venue(
     body: AssignChampionshipVenueRequest,
@@ -203,7 +193,7 @@ async def assign_championship_venue(
             )
             classes = [r[0] async for r in class_rows]
             if not classes:
-                classes = _default_classes_for_season(body.season)
+                classes = default_classes_for_season(body.season)
 
         find_sql = """
             SELECT g.school, g.date, g.opponent, ss.class
@@ -306,10 +296,7 @@ async def set_school_override(school: str, body: SetSchoolOverrideRequest) -> Ov
 @router.delete("/schools/{school}/overrides/{field}", status_code=204, responses=_404)
 async def clear_school_override(school: str, field: str) -> None:
     """Remove a manual override from a school field, restoring the pipeline-written value."""
-    if field not in _SCHOOL_OVERRIDE_FIELDS:
-        raise HTTPException(
-            status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_SCHOOL_OVERRIDE_FIELDS)}"
-        )
+    validate_override_field(field, _SCHOOL_OVERRIDE_FIELDS)
     async with get_conn() as conn:
         await require_school_exists(conn, school)
         await conn.execute("SELECT clear_school_override(%s, %s)", (school, field))
@@ -334,10 +321,7 @@ async def set_game_override(school: str, date: date_type, body: SetGameOverrideR
 @router.delete("/games/{school}/{date}/overrides/{field}", status_code=204, responses=_404)
 async def clear_game_override(school: str, date: date_type, field: str) -> None:
     """Remove a manual override from a game field, restoring the pipeline-written value."""
-    if field not in _GAME_OVERRIDE_FIELDS:
-        raise HTTPException(
-            status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_GAME_OVERRIDE_FIELDS)}"
-        )
+    validate_override_field(field, _GAME_OVERRIDE_FIELDS)
     async with get_conn() as conn:
         await require_game_exists(conn, school, date)
         await conn.execute("SELECT clear_game_override(%s, %s, %s)", (school, date, field))
@@ -400,47 +384,11 @@ async def upsert_school_season(school: str, season: int, body: UpsertSchoolSeaso
     the source school does not exist.
     """
     async with get_conn() as conn:
-        await conn.execute(
-            "INSERT INTO schools (school) VALUES (%s) ON CONFLICT (school) DO NOTHING",
-            (school,),
+        await upsert_school_season_row(
+            conn, school, season, body.class_, body.region, body.is_active, body.copy_identity_from
         )
-        await conn.execute(
-            """
-            INSERT INTO school_seasons (school, season, class, region, is_active)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (school, season) DO UPDATE SET
-                class     = EXCLUDED.class,
-                region    = EXCLUDED.region,
-                is_active = EXCLUDED.is_active
-            """,
-            (school, season, body.class_, body.region, body.is_active),
-        )
-        if body.copy_identity_from:
-            src = await (
-                await conn.execute(
-                    "SELECT 1 FROM schools WHERE school = %s", (body.copy_identity_from,)
-                )
-            ).fetchone()
-            if src is None:
-                raise HTTPException(status_code=404, detail=f"Source school '{body.copy_identity_from}' not found")
-            await conn.execute(
-                """
-                UPDATE schools s SET
-                    mascot              = COALESCE(NULLIF(e.mascot, ''),              s.mascot),
-                    primary_color       = COALESCE(NULLIF(e.primary_color, ''),       s.primary_color),
-                    secondary_color     = COALESCE(NULLIF(e.secondary_color, ''),     s.secondary_color),
-                    primary_color_hex   = COALESCE(NULLIF(e.primary_color_hex, ''),   s.primary_color_hex),
-                    secondary_color_hex = COALESCE(NULLIF(e.secondary_color_hex, ''), s.secondary_color_hex),
-                    city                = COALESCE(s.city,      e.city),
-                    zip                 = COALESCE(s.zip,       e.zip),
-                    latitude            = COALESCE(s.latitude,  e.latitude),
-                    longitude           = COALESCE(s.longitude, e.longitude)
-                FROM schools_effective e
-                WHERE s.school = %s AND e.school = %s
-                """,
-                (school, body.copy_identity_from),
-            )
-            _log.info("admin: copied identity from '%s' to '%s'", body.copy_identity_from, school)
+    if body.copy_identity_from:
+        _log.info("admin: copied identity from '%s' to '%s'", body.copy_identity_from, school)
     _log.info(
         "admin: upsert school_season school=%s season=%s class=%s region=%s is_active=%s",
         school, season, body.class_, body.region, body.is_active,
@@ -510,10 +458,7 @@ async def set_location_override(location_id: int, body: SetLocationOverrideReque
 @router.delete("/locations/{location_id}/overrides/{field}", status_code=204, responses=_404)
 async def clear_location_override(location_id: int, field: str) -> None:
     """Remove a manual override from a location field."""
-    if field not in _LOCATION_OVERRIDE_FIELDS:
-        raise HTTPException(
-            status_code=422, detail=f"Invalid override field '{field}'. Valid: {sorted(_LOCATION_OVERRIDE_FIELDS)}"
-        )
+    validate_override_field(field, _LOCATION_OVERRIDE_FIELDS)
     async with get_conn() as conn:
         await require_location_exists(conn, location_id)
         await conn.execute("SELECT clear_location_override(%s, %s)", (location_id, field))
@@ -550,17 +495,7 @@ async def create_helmet_design(body: CreateHelmetDesignRequest) -> HelmetDesignM
                     "SELECT type, helmet_design_id FROM submissions WHERE id = %s", (body.from_submission_id,)
                 )
             ).fetchone()
-            if sub_row is None:
-                raise HTTPException(status_code=404, detail=f"Submission {body.from_submission_id} not found")
-            if sub_row[0] != "helmet":
-                raise HTTPException(
-                    status_code=422, detail=f"Submission {body.from_submission_id} is not a helmet submission"
-                )
-            if sub_row[1] is not None:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Submission {body.from_submission_id} is already linked to helmet design {sub_row[1]}",
-                )
+            validate_submission_for_helmet_link(sub_row, body.from_submission_id)
 
         years_worn_json = (
             [{"start": r.start, "end": r.end} for r in body.years_worn] if body.years_worn is not None else None

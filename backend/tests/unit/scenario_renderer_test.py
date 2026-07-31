@@ -1260,6 +1260,16 @@ class TestAtomConditionDicts:
         out = atom_condition_dicts(atom, self._DATES)
         assert [d["school"] for d in out] == ["Petal", "Mize"]
 
+    def test_unrecognized_condition_type_produces_no_dict_but_loop_continues(self):
+        """A condition object of an unrecognized type matches none of the isinstance
+        branches and is silently skipped, while later conditions in the same atom
+        still get processed (the loop continues rather than stopping)."""
+        atom = [object(), GameResult(winner="Mize", loser="Raleigh")]
+        out = atom_condition_dicts(atom, self._DATES)
+        assert len(out) == 1
+        assert out[0]["type"] == "game_result"
+        assert out[0]["school"] == "Mize"
+
 
 class TestRenderTeamMatchups:
     """Synthetic tests for render_team_matchups explanation branch (lines 633→634, 633→635)."""

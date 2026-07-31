@@ -4,7 +4,6 @@ from functools import partial
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from psycopg import sql
 
 from backend.api.auth import require_moderator
 from backend.api.db import get_conn
@@ -17,17 +16,11 @@ from backend.helpers.image_helpers import (
     upload_helmet,
     upload_logo,
 )
-from backend.helpers.query_helpers import require_school_exists, set_school_logo_column
+from backend.helpers.query_helpers import require_school_exists, set_helmet_image_column, set_school_logo_column
 
 router = APIRouter(prefix="/api/v1/images", tags=["images"], dependencies=[Depends(require_moderator)])
 
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
-
-_HELMET_COL: dict[HelmetImageType, str] = {
-    "left": "image_left",
-    "right": "image_right",
-    "photo": "photo",
-}
 
 
 @router.post("/logos/{school}/{logo_type}", responses=_404)
@@ -70,11 +63,7 @@ async def upload_helmet_image(
         file, partial(upload_helmet, school_name=school, year=year, image_type=image_type, helmet_id=helmet_design_id)
     )
 
-    col = sql.Identifier(_HELMET_COL[image_type])
     async with get_conn() as conn:
-        await conn.execute(
-            sql.SQL("UPDATE helmet_designs SET {} = %s WHERE id = %s").format(col),
-            (path, helmet_design_id),
-        )
+        await set_helmet_image_column(conn, helmet_design_id, image_type, path)
 
     return ImageUploadResponse(path=path, url=logo_url(path))

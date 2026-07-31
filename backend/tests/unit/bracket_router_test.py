@@ -1,7 +1,12 @@
 """Unit tests for pure helpers in backend.api.routers.bracket."""
 
 from backend.api.models.responses import BracketSlotHosting, RoundHostingOdds, TeamBracketEntry
-from backend.api.routers.bracket import _build_p_host_given_reach_by_team, _invert_school_to_seed
+from backend.api.routers.bracket import (
+    _build_p_host_given_reach_by_team,
+    _invert_school_to_seed,
+    _seeds_by_region_for_slot,
+)
+from backend.helpers.data_classes import FormatSlot
 
 
 class TestInvertSchoolToSeed:
@@ -81,3 +86,30 @@ class TestBuildPHostGivenReachByTeam:
         """An entry with hosting=None is excluded from the result even if clinched."""
         entries = [_entry("Alpha", None)]
         assert _build_p_host_given_reach_by_team(entries) == {}
+
+
+def _slot(slot: int, home_region: int, home_seed: int, away_region: int, away_seed: int) -> FormatSlot:
+    """Build a minimal FormatSlot for testing _seeds_by_region_for_slot."""
+    return FormatSlot(
+        slot=slot, home_region=home_region, home_seed=home_seed,
+        away_region=away_region, away_seed=away_seed, north_south="N",
+    )
+
+
+class TestSeedsByRegionForSlot:
+    """_seeds_by_region_for_slot returns the candidate (region -> seeds) map for a slot group."""
+
+    def test_first_round_uses_only_the_single_slots_two_positions(self):
+        """first_round returns exactly the group's one slot's home/away (region, seed) positions."""
+        group = [_slot(1, home_region=1, home_seed=1, away_region=2, away_seed=4)]
+        result = _seeds_by_region_for_slot(group, "first_round")
+        assert result == {1: {1}, 2: {4}}
+
+    def test_later_round_delegates_to_candidate_seeds_by_region(self):
+        """A non-first_round group unions seeds across every slot in the group (both R1 games feeding it)."""
+        group = [
+            _slot(1, home_region=1, home_seed=1, away_region=1, away_seed=4),
+            _slot(2, home_region=1, home_seed=2, away_region=1, away_seed=3),
+        ]
+        result = _seeds_by_region_for_slot(group, "second_round")
+        assert result == {1: {1, 2, 3, 4}}

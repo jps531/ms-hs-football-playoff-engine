@@ -225,11 +225,14 @@ Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and
 
 ## Admin — `/admin`
 
+Every endpoint in this router requires moderator+ (`Authorization: Bearer <token>`) via a router-level dependency — there is no anonymous or plain-`user` access to any `/admin/*` route, even where a per-row "Auth" note isn't repeated below.
+
 **Season setup**
 
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/playoff-format` | Seed `playoff_formats` + `playoff_format_slots` for a new season. Idempotent. `?dry_run=true` to preview counts without writing |
+| GET | `/championship-venue` | List all currently assigned championship venues (`season`, `class_`, `location_id`, `location_name`). Optional `season` filter. |
 | POST | `/championship-venue` | Set `location_id = neutral` on all Championship Game rows for a season. `?dry_run=true` to preview affected rows without writing |
 
 **Overrides** — the three base tables (`schools`, `games`, `locations`) each have an `overrides` JSONB column that wins over the pipeline-written value on read (via the `*_effective` views). Use these endpoints instead of raw SQL when you need to correct a pipeline error without touching the source data.
@@ -319,8 +322,8 @@ Authentication is handled by **Auth0**. Users log in via Auth0 and receive an RS
 **`GET /me/attended-games`** — `distance_miles` is straight-line from the attended school's own campus to the game's venue (the trip that team made, not the viewing user's location). Venue resolution: an explicit `locations` row wins; else the attended school's own venue for a home game; else the opponent's venue for an away game (campus-coordinate fallback, same as the travel insights above); `null` only for an unresolvable neutral-site game. Home games always show `distance_miles: 0`.
 | GET | `/me/submissions` | Bearer | List own submissions. |
 | GET | `/` | Owner | List all user accounts (admin view). |
-| PATCH | `/{user_id}/role` | Owner | Promote/demote to `user` or `moderator` (cannot set `owner`). |
-| PATCH | `/{user_id}/active` | Owner | Activate or deactivate an account. |
+| PATCH | `/{user_id}/role` | Owner | Promote/demote to `user` or `moderator` (cannot set `owner`). 409 if this would demote the only owner. |
+| PATCH | `/{user_id}/active` | Owner | Activate or deactivate an account. 409 if this would deactivate the owner. |
 
 ## Submissions — `/submissions`
 

@@ -14,13 +14,11 @@ from backend.api.models.responses import (
     HelmetListItemModel,
     LocationDetailModel,
     RegionSummary,
-    RoadmapGame,
     RoadmapResponse,
     SeasonDatesResponse,
     SeasonModel,
     SeasonStructureResponse,
     TeamModel,
-    VenueModel,
 )
 from backend.helpers.api_helpers import (
     HELMET_DESIGNS_SELECT,
@@ -29,14 +27,14 @@ from backend.helpers.api_helpers import (
     build_helmet_from_row,
     build_helmet_game_worn,
     build_helmet_stats_fields,
+    build_roadmap_games,
     build_season_dates,
     load_championship_venue,
     load_home_venues,
-    resolve_away_venue,
     venue_distance_miles,
 )
 from backend.helpers.image_helpers import logo_url
-from backend.helpers.query_helpers import and_join_conditions
+from backend.helpers.query_helpers import and_join_conditions, require_school_exists
 
 router = APIRouter(prefix="/api/v1", tags=["meta"])
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
@@ -210,9 +208,7 @@ async def list_team_helmets(
 
     if not results and year is None:
         async with get_conn() as conn:
-            check = await conn.execute("SELECT 1 FROM schools WHERE school = %s", (team,))
-            if await check.fetchone() is None:
-                raise HTTPException(status_code=404, detail=f"Team '{team}' not found")
+            await require_school_exists(conn, team)
 
     return results
 
@@ -235,9 +231,7 @@ async def resolve_team_helmet(
     contexts (team headers) with no single game.
     """
     async with get_conn() as conn:
-        check = await conn.execute("SELECT 1 FROM schools WHERE school = %s", (team,))
-        if await check.fetchone() is None:
-            raise HTTPException(status_code=404, detail=f"Team '{team}' not found")
+        await require_school_exists(conn, team)
 
         query = sql.SQL(
             HELMET_DESIGNS_SELECT
@@ -291,30 +285,7 @@ async def get_team_roadmap(team: str, season: Annotated[int, Query(ge=1980, le=2
             (team, season),
         )
 
-        games: list[RoadmapGame] = []
-        total_miles = 0.0
-        async for round_, game_date, opponent, location, v_name, v_city, v_lat, v_lon in game_rows:
-            if location == "home":
-                hop_venue = team_venue
-                distance = 0.0
-            elif location == "away":
-                hop_venue = resolve_away_venue(opponent, v_name, v_city, v_lat, v_lon, venues)
-                distance = venue_distance_miles(team_venue, hop_venue)
-            else:
-                hop_venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
-                distance = venue_distance_miles(team_venue, hop_venue)
-            if distance is not None:
-                total_miles += distance
-            games.append(
-                RoadmapGame(
-                    round=round_,
-                    date=game_date,
-                    opponent=opponent,
-                    location=hop_venue,
-                    is_home=location == "home",
-                    distance_miles=distance,
-                )
-            )
+        games, total_miles = build_roadmap_games([r async for r in game_rows], team_venue, venues)
 
         championship_venue = await load_championship_venue(conn, season, clazz)
 

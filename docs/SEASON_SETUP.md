@@ -18,9 +18,11 @@ When MHSAA reclassifies schools (every two years) or the bracket structure chang
 
 After the championship games are ingested by the AHSFHS pipeline, assign the venue:
 
-1. `GET /api/v1/admin/locations` to find the correct `location_id` for the venue.
-2. `POST /api/v1/admin/championship-venue` with `{ "season": YYYY, "location_id": N }`.
+1. `GET /api/v1/admin/locations` if you need to double-check the venue's name/`home_team` as it's stored.
+2. `POST /api/v1/admin/championship-venue` with `{ "season": YYYY, "location": "Venue Name or School Name" }` — `location` is matched case-insensitively against `locations.name` or `locations.home_team` and must resolve to exactly one venue (404 if it matches none, 409 if it matches more than one). Add `"class": N` to target a single class; omit it to assign the venue to every class in the season.
 3. Use `?dry_run=true` first to confirm which game rows will be updated.
+
+This upserts `championship_venues` (the source of truth, usable even before that season's Championship Game rows exist) and mirrors the venue onto any existing Championship Game rows in `games`. Use `GET /api/v1/admin/championship-venue?season=YYYY` to review current assignments.
 
 ## School consolidations, closures, and mid-cycle changes
 
