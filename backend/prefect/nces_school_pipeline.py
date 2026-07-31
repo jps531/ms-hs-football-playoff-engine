@@ -27,7 +27,13 @@ _NCES_URL = (
     "https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_ADMINDATA_PUBLICSCH_2223/MapServer/1/query"
 )
 _NCES_PARAMS = {
-    "where": "LSTATE = 'MS'",
+    # GSHI (highest grade offered) restricted to 9-12 so elementary/middle schools never
+    # enter the fuzzy-match candidate pool — e.g. without this, "Pearl River Elementary
+    # School" (Choctaw, Neshoba County) can out-rank or overwrite the correct match for
+    # "Pearl River Central" (the actual HS football school, Carriere) since NCES has no
+    # single-school-per-name guarantee and district-mate elementary/middle schools often
+    # share a strong name prefix with their own high school too.
+    "where": "LSTATE = 'MS' AND GSHI IN ('09','10','11','12')",
     "outFields": "SCH_NAME,LCITY,LZIP,LATCOD,LONCOD",
     "f": "json",
     "resultRecordCount": 1000,
@@ -83,32 +89,57 @@ def fetch_nces_schools() -> list[dict]:
 def match_nces_to_db(nces_records: list[dict], db_schools: list[School]) -> list[dict]:
     """Fuzzy-match each NCES record to a canonical DB school name.
 
-    Returns a list of dicts ready for the update query, one entry per
-    successfully matched school.  Unmatched records are logged and skipped.
+    Returns a list of dicts ready for the update query, at most one per DB school — if more
+    than one NCES record clears the match threshold for the same DB school (e.g. a
+    same-named school elsewhere in the state that the GSHI grade-span filter didn't already
+    exclude), the highest-scoring one wins rather than whichever happens to be processed
+    last. Unmatched/superseded records are logged and skipped.
     """
     logger = get_run_logger()
     db_norms = {_norm(s.school): s.school for s in db_schools}
 
-    matched: list[dict] = []
+    best_by_school: dict[str, tuple[float, dict]] = {}
     unmatched: list[str] = []
 
     for rec in nces_records:
         normalized = _norm(normalize_nces_school_name(rec["nces_name"]))
         best_key = max(db_norms, key=lambda k, n=normalized: _ratio(n, k))
         best_score = _ratio(normalized, best_key)
-        if best_score >= _MATCH_THRESHOLD:
-            matched.append(
-                {
-                    "school": db_norms[best_key],
-                    "city": rec["city"],
-                    "zip": rec["zip"],
-                    "latitude": rec["latitude"],
-                    "longitude": rec["longitude"],
-                }
-            )
-            logger.debug("NCES %r → %r (score %.2f)", rec["nces_name"], db_norms[best_key], best_score)
-        else:
+        if best_score < _MATCH_THRESHOLD:
             unmatched.append(rec["nces_name"])
+            continue
+
+        school = db_norms[best_key]
+        existing = best_by_school.get(school)
+        if existing is not None and existing[0] >= best_score:
+            logger.debug(
+                "NCES %r → %r (score %.2f) superseded by a stronger match (score %.2f)",
+                rec["nces_name"],
+                school,
+                best_score,
+                existing[0],
+            )
+            continue
+        if existing is not None:
+            logger.debug(
+                "NCES %r → %r (score %.2f) supersedes an earlier weaker match (score %.2f)",
+                rec["nces_name"],
+                school,
+                best_score,
+                existing[0],
+            )
+        else:
+            logger.debug("NCES %r → %r (score %.2f)", rec["nces_name"], school, best_score)
+        best_by_school[school] = (
+            best_score,
+            {
+                "school": school,
+                "city": rec["city"],
+                "zip": rec["zip"],
+                "latitude": rec["latitude"],
+                "longitude": rec["longitude"],
+            },
+        )
 
     if unmatched:
         logger.warning(
@@ -117,6 +148,7 @@ def match_nces_to_db(nces_records: list[dict], db_schools: list[School]) -> list
             _MATCH_THRESHOLD,
             unmatched,
         )
+    matched = [entry for _, entry in best_by_school.values()]
     logger.info("Matched %d / %d NCES records to DB schools", len(matched), len(nces_records))
     return matched
 

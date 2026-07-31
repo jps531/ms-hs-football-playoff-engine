@@ -168,7 +168,9 @@ CREATE INDEX IF NOT EXISTS idx_games_helmet_design
 
 CREATE OR REPLACE VIEW schools_effective AS
 SELECT
-  school, city, zip,
+  school,
+  COALESCE(overrides->>'city', city) AS city,
+  COALESCE(overrides->>'zip',  zip)  AS zip,
   COALESCE((overrides->>'latitude')::float,    latitude)        AS latitude,
   COALESCE((overrides->>'longitude')::float,   longitude)       AS longitude,
   COALESCE(overrides->>'mascot',               mascot)              AS mascot,
@@ -554,12 +556,14 @@ COMMENT ON COLUMN schools.logo_tertiary IS
   'Cloudinary path for the tertiary/alternate school logo. Empty when not yet uploaded.';
 COMMENT ON COLUMN schools.overrides IS
   'User-managed JSONB patch applied on read via the schools_effective view. Any key here shadows '
-  'the corresponding raw column (latitude, longitude, mascot, primary_color, secondary_color, ' 
+  'the corresponding raw column (city, zip, latitude, longitude, mascot, primary_color, secondary_color, '
   'primary_color_hex, secondary_color_hex). '
   'Known override keys: display_name (frontend-only label; falls back to school when absent), '
   'logo_primary, logo_secondary, logo_tertiary (Cloudinary paths; empty string when absent), '
+  'city, zip (e.g. a school whose NCES mailing city differs from its community/school name), '
   'latitude, longitude, mascot, primary_color, secondary_color, primary_color_hex, secondary_color_hex. '
-  'Written only through set_school_override() / clear_school_override(); never by the pipeline.';
+  'Written only through set_school_override() / clear_school_override(); never by the pipeline — the '
+  'NCES pipeline checks overrides ? ''city'' / ''zip'' before writing so an override is never clobbered.';
 
 
 -- helmet_designs

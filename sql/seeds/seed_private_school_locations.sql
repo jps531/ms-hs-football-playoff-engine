@@ -1,11 +1,16 @@
 -- Geographic data for schools not reachable by the NCES pipeline:
--- private/parochial schools (not in the NCES public school dataset)
--- and Enterprise Lincoln (ambiguous name shared with Enterprise Clarke).
+-- private/parochial schools (not in the NCES public school dataset),
+-- and public schools whose NCES name scores just under the fuzzy-match
+-- threshold against their ambiguous/county-disambiguated DB name
+-- (Enterprise Lincoln and Enterprise Clarke both share NCES's plain
+-- "Enterprise High School" record; neither name clears 0.75 alone).
 --
 -- Run once after the AHSFHS schedule pipeline has populated the schools table.
 -- Safe to re-run (updates are idempotent).
 
 UPDATE schools SET city = 'Brookhaven',    zip = 39601, latitude =  31.473294, longitude =  -90.384857 WHERE school = 'Enterprise Lincoln';
+UPDATE schools SET city = 'Enterprise',    zip = 39330, latitude =  32.172116, longitude =  -88.820102 WHERE school = 'Enterprise Clarke';
+UPDATE schools SET city = 'French Camp',   zip = 39745, latitude =  33.289260, longitude =  -89.401880 WHERE school = 'French Camp';
 UPDATE schools SET city = 'Hattiesburg',   zip = 39401, latitude =  31.285334, longitude =  -89.311145 WHERE school = 'Presbyterian Christian';
 UPDATE schools SET city = 'Pascagoula',    zip = 39567, latitude =  30.366031, longitude =  -88.559577 WHERE school = 'Resurrection';
 UPDATE schools SET city = 'Hattiesburg',   zip = 39401, latitude =  31.322615, longitude =  -89.294269 WHERE school = 'Sacred Heart';
