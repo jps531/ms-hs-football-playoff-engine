@@ -18,6 +18,7 @@ LimitQ = Annotated[int, Query(ge=1, le=200)]
 ClazzQ = Annotated[int | None, Query(alias="class", ge=1, le=7)]
 RegionQ = Annotated[int | None, Query(ge=1, le=8)]
 TeamQ = Annotated[str | None, Query()]
+TravelLimitQ = Annotated[int, Query(ge=1, le=50)]
 
 
 @router.get("/insights")
@@ -49,12 +50,28 @@ async def get_insights(
 
 
 @router.get("/insights/travel")
-async def get_travel_insights(season: SeasonQ, date_to: DateToQ = None) -> TravelInsightsResponse:
+async def get_travel_insights(
+    season: SeasonQ,
+    date_from: DateFromQ = None,
+    date_to: DateToQ = None,
+    limit: TravelLimitQ = 10,
+) -> TravelInsightsResponse:
     """Statewide travel highlights, computed live from games + venue data — separate from the
     region-scoped `/insights` feed above (that feed's snapshot/dedup model doesn't fit a
-    statewide, always-current computation). Returns 0-2 entries: the single longest road trip
-    in the current week, and the school with the farthest cumulative regular-season travel.
+    statewide, always-current computation).
+
+    ``longest_trips`` ranks individual away games by distance; ``longest_cumulative`` ranks
+    schools by total away-game mileage, each capped at ``limit``. Without ``date_from``, trips
+    default to the current Monday-Sunday week and cumulative defaults to season-to-date;
+    passing ``date_from``/``date_to`` scopes both to that explicit range instead (e.g. "longest
+    trip in October").
     """
     async with get_conn() as conn:
-        travel = await load_travel_insights(conn, season, date_to)
-    return TravelInsightsResponse(season=season, as_of_date=date_to or today(), insights=travel)
+        trips, cumulative = await load_travel_insights(conn, season, date_from, date_to, limit)
+    return TravelInsightsResponse(
+        season=season,
+        date_from=date_from,
+        date_to=date_to or today(),
+        longest_trips=trips,
+        longest_cumulative=cumulative,
+    )

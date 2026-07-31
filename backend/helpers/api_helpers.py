@@ -52,7 +52,8 @@ from backend.api.models.responses import (
     TeamHostingEntry,
     TeamRankEntry,
     TeamStandingsEntry,
-    TravelInsight,
+    TravelCumulativeEntry,
+    TravelTripEntry,
     VenueModel,
 )
 from backend.helpers.bracket_home_odds import (
@@ -3559,7 +3560,7 @@ def week_window(d: date) -> tuple[date, date]:
     return start, start + timedelta(days=6)
 
 
-def _resolve_away_venue(
+def resolve_away_venue(
     opponent: str, l_name: str | None, l_city: str | None, l_lat: float | None, l_lon: float | None, venues: dict
 ) -> VenueModel | None:
     """Resolve an away game's venue: an explicit locations row wins, else the opponent's
@@ -3569,72 +3570,80 @@ def _resolve_away_venue(
     return venues.get(opponent)
 
 
-async def load_travel_insights(conn, season: int, date_to: date | None) -> list[TravelInsight]:  # pragma: no cover
-    """Live-computed statewide travel highlights: the single longest road trip this week, and
-    the school with the farthest cumulative regular-season away-game travel so far. Returns
-    0-2 entries — a kind is omitted when no away game in scope has a resolvable distance.
+async def load_travel_insights(
+    conn, season: int, date_from: date | None, date_to: date | None, limit: int
+) -> tuple[list[TravelTripEntry], list[TravelCumulativeEntry]]:
+    """Live-computed statewide travel highlights: individual away games ranked by straight-line
+    distance traveled, and schools ranked by cumulative regular-season away-game mileage.
+
+    Trip window defaults to the current Monday-Sunday week (ending at ``date_to`` or today) when
+    ``date_from`` is omitted; cumulative window defaults to season-to-date (no lower bound) when
+    ``date_from`` is omitted. An explicit ``date_from``/``date_to`` overrides both defaults with
+    that literal range. Each list is capped at ``limit``, longest first.
     """
-    as_of = date_to or today()
-    week_start, week_end = week_window(as_of)
+    effective_to = date_to or today()
+    trip_start, trip_end = (date_from, effective_to) if date_from is not None else week_window(effective_to)
     venues = await load_home_venues(conn)
 
-    week_rows = await conn.execute(
+    trip_rows = await conn.execute(
         """
         SELECT g.school, g.opponent, g.date, l.name, l.city, l.latitude, l.longitude
         FROM games_effective g
         LEFT JOIN locations l ON g.location_id = l.id
         WHERE g.season = %s AND g.location = 'away' AND g.date BETWEEN %s AND %s
         """,
-        (season, week_start, week_end),
+        (season, trip_start, trip_end),
     )
-    best_week: TravelInsight | None = None
-    async for school, opponent, game_date, l_name, l_city, l_lat, l_lon in week_rows:
+    trips: list[TravelTripEntry] = []
+    async for school, opponent, game_date, l_name, l_city, l_lat, l_lon in trip_rows:
         distance = venue_distance_miles(
-            venues.get(school), _resolve_away_venue(opponent, l_name, l_city, l_lat, l_lon, venues)
+            venues.get(school), resolve_away_venue(opponent, l_name, l_city, l_lat, l_lon, venues)
         )
-        if distance is not None and (best_week is None or distance > best_week.distance_miles):
-            best_week = TravelInsight(
-                kind="travel_longest_week",
-                school=school,
-                opponent=opponent,
-                date=game_date,
-                distance_miles=distance,
-                human_text=f"Longest road trip this week: {school} traveled ~{distance:.0f} mi to {opponent}",
+        if distance is not None:
+            trips.append(
+                TravelTripEntry(
+                    school=school,
+                    opponent=opponent,
+                    date=game_date,
+                    distance_miles=distance,
+                    human_text=f"Longest road trip: {school} traveled ~{distance:.0f} mi to {opponent}",
+                )
             )
+    trips.sort(key=lambda t: t.distance_miles, reverse=True)
+
+    cumulative_where = "g.season = %s AND g.location = 'away' AND g.round IS NULL AND g.date <= %s"
+    cumulative_params: list = [season, effective_to]
+    if date_from is not None:
+        cumulative_where += " AND g.date >= %s"
+        cumulative_params.append(date_from)
 
     season_rows = await conn.execute(
-        """
+        f"""
         SELECT g.school, g.opponent, l.name, l.city, l.latitude, l.longitude
         FROM games_effective g
         LEFT JOIN locations l ON g.location_id = l.id
-        WHERE g.season = %s AND g.location = 'away' AND g.round IS NULL AND g.date <= %s
+        WHERE {cumulative_where}
         """,
-        (season, as_of),
+        cumulative_params,
     )
     season_totals: dict[str, float] = {}
     async for school, opponent, l_name, l_city, l_lat, l_lon in season_rows:
         distance = venue_distance_miles(
-            venues.get(school), _resolve_away_venue(opponent, l_name, l_city, l_lat, l_lon, venues)
+            venues.get(school), resolve_away_venue(opponent, l_name, l_city, l_lat, l_lon, venues)
         )
         if distance is not None:
             season_totals[school] = season_totals.get(school, 0.0) + distance
 
-    best_season: TravelInsight | None = None
-    if season_totals:
-        top_school = max(season_totals, key=lambda s: season_totals[s])
-        best_season = TravelInsight(
-            kind="travel_longest_season",
-            school=top_school,
-            opponent=None,
-            date=None,
-            distance_miles=season_totals[top_school],
-            human_text=(
-                f"Farthest traveled this season: {top_school} has covered "
-                f"~{season_totals[top_school]:.0f} mi on the road"
-            ),
+    cumulative = [
+        TravelCumulativeEntry(
+            school=school,
+            distance_miles=total,
+            human_text=f"{school} has covered ~{total:.0f} mi on the road",
         )
+        for school, total in sorted(season_totals.items(), key=lambda kv: kv[1], reverse=True)
+    ]
 
-    return [insight for insight in (best_week, best_season) if insight is not None]
+    return trips[:limit], cumulative[:limit]
 
 
 def build_movers_response(

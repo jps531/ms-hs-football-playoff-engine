@@ -32,6 +32,7 @@ from backend.helpers.api_helpers import (
     build_season_dates,
     load_championship_venue,
     load_home_venues,
+    resolve_away_venue,
     venue_distance_miles,
 )
 from backend.helpers.image_helpers import logo_url
@@ -250,13 +251,17 @@ async def resolve_team_helmet(
 
 @router.get("/teams/{team}/roadmap", responses=_404)
 async def get_team_roadmap(team: str, season: Annotated[int, Query(ge=1980, le=2040)]) -> RoadmapResponse:
-    """Return *team*'s playoff roadmap for *season*: each playoff game with the straight-line
-    distance traveled, plus cumulative and championship-venue mileage.
+    """Return *team*'s full-season roadmap for *season* (regular season plus playoffs) with the
+    straight-line distance traveled for each game, plus cumulative and championship-venue mileage.
 
-    Home games always show ``distance_miles: 0`` (no travel). Away/neutral games only get a
-    distance when the game has an explicit venue on record — never guessed. ``championship_distance_miles``
-    is computed from the season/class's known championship venue independent of whether *team*
-    has actually reached (or is scheduled for) the championship game.
+    Home games always show ``distance_miles: 0`` (no travel). Away games resolve to an explicit
+    venue on record, else fall back to the opponent's home venue (same campus-coordinate fallback
+    as ``load_home_venues``). Neutral games only get a distance when the game has an explicit venue
+    on record — no team's campus is a reasonable stand-in for a true neutral site — except the
+    championship game, whose venue is resolved from the season/class's known championship venue.
+    ``championship_distance_miles`` is computed the same way, independent of whether *team* has
+    actually reached (or is scheduled for) the championship game. Regular-season games have
+    ``round: null``.
     """
     async with get_conn() as conn:
         clazz_row = await (
@@ -280,7 +285,7 @@ async def get_team_roadmap(team: str, season: Annotated[int, Query(ge=1980, le=2
             LEFT JOIN championship_venues cv
               ON g.round = 'Championship Game' AND cv.season = g.season AND cv.class = ss.class
             LEFT JOIN locations cvl ON cvl.id = cv.location_id
-            WHERE g.school = %s AND g.season = %s AND g.round IS NOT NULL
+            WHERE g.school = %s AND g.season = %s
             ORDER BY g.date
             """,
             (team, season),
@@ -292,6 +297,9 @@ async def get_team_roadmap(team: str, season: Annotated[int, Query(ge=1980, le=2
             if location == "home":
                 hop_venue = team_venue
                 distance = 0.0
+            elif location == "away":
+                hop_venue = resolve_away_venue(opponent, v_name, v_city, v_lat, v_lon, venues)
+                distance = venue_distance_miles(team_venue, hop_venue)
             else:
                 hop_venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
                 distance = venue_distance_miles(team_venue, hop_venue)

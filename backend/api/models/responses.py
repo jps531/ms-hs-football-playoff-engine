@@ -1,7 +1,7 @@
 """Pydantic response models for the playoff engine REST API."""
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -167,9 +167,10 @@ class TeamModel(BaseModel):
 
 
 class RoadmapGame(BaseModel):
-    """One playoff game on a team's roadmap, with the straight-line distance traveled."""
+    """One game on a team's roadmap, with the straight-line distance traveled. ``round`` is
+    ``None`` for regular-season games."""
 
-    round: str
+    round: str | None
     date: date
     opponent: str
     location: VenueModel | None
@@ -178,7 +179,7 @@ class RoadmapGame(BaseModel):
 
 
 class RoadmapResponse(BaseModel):
-    """A team's playoff roadmap for a season: each game plus cumulative and championship mileage."""
+    """A team's full-season roadmap: each game plus cumulative and championship mileage."""
 
     school: str
     season: int
@@ -442,27 +443,38 @@ class InsightsResponse(BaseModel):
     insights: list[InsightModel]
 
 
-class TravelInsight(BaseModel):
-    """One live-computed statewide travel highlight (longest road trip this week/season).
+class TravelTripEntry(BaseModel):
+    """One away game, ranked by straight-line distance traveled."""
 
-    ``opponent``/``date`` identify the single trip for ``travel_longest_week``; they're
-    ``null`` for ``travel_longest_season``, which sums many games with no single opponent/date.
-    """
-
-    kind: Literal["travel_longest_week", "travel_longest_season"]
     school: str
-    opponent: str | None
-    date: date | None
+    opponent: str
+    date: date
+    distance_miles: float
+    human_text: str
+
+
+class TravelCumulativeEntry(BaseModel):
+    """One school's total away-game mileage in the requested window."""
+
+    school: str
     distance_miles: float
     human_text: str
 
 
 class TravelInsightsResponse(BaseModel):
-    """Statewide travel highlights, computed live — separate from the region-scoped /insights feed."""
+    """Statewide travel highlights, computed live — separate from the region-scoped /insights feed.
+
+    ``longest_trips`` ranks individual away games by distance; ``longest_cumulative`` ranks
+    schools by total away-game mileage across the window. Both default to a fixed window
+    (the current Monday-Sunday week for trips, season-to-date for cumulative) when
+    ``date_from``/``date_to`` aren't given.
+    """
 
     season: int
-    as_of_date: date
-    insights: list[TravelInsight]
+    date_from: date | None
+    date_to: date
+    longest_trips: list[TravelTripEntry]
+    longest_cumulative: list[TravelCumulativeEntry]
 
 
 class ScenarioGameOutcome(BaseModel):
