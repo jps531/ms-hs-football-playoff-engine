@@ -12,13 +12,16 @@ from backend.api.auth import require_moderator
 from backend.api.db import get_conn
 from backend.api.models.requests import (
     AssignChampionshipVenueRequest,
+    BulkRecomputeColorsRequest,
     CreateHelmetDesignRequest,
     CreateLocationRequest,
+    CreateTeamLogoRequest,
     GameOverrideField,
     LocationOverrideField,
     PatchHelmetDesignRequest,
     PatchLocationRequest,
     PatchSchoolSeasonRequest,
+    PatchTeamLogoRequest,
     PlayoffFormatRequest,
     SchoolOverrideField,
     SetGameHelmetRequest,
@@ -29,15 +32,25 @@ from backend.api.models.requests import (
 )
 from backend.api.models.responses import (
     AssignChampionshipVenueResult,
+    BulkColorRecomputeResult,
     ChampionshipGameRow,
     ChampionshipVenueAssignment,
+    ColorVariantsRecomputeResult,
     HelmetDesignModel,
     LocationDetailModel,
     LocationModel,
     OverrideAuditRow,
     PlayoffFormatSeedResult,
+    TeamLogoModel,
 )
-from backend.helpers.api_helpers import HELMET_DESIGNS_SELECT, build_helmet_from_row, default_classes_for_season
+from backend.helpers.api_helpers import (
+    HELMET_DESIGNS_SELECT,
+    build_helmet_from_row,
+    current_season,
+    default_classes_for_season,
+)
+from backend.helpers.color_variants import recompute_color_variants
+from backend.helpers.logo_helpers import TEAM_LOGOS_SELECT, build_logo_from_row, sync_logo_cache
 from backend.helpers.query_helpers import (
     build_set_clause,
     require_game_exists,
@@ -45,9 +58,11 @@ from backend.helpers.query_helpers import (
     require_location_exists,
     require_nonempty_update,
     require_school_exists,
+    require_team_logo_exists,
     resolve_location_by_name_or_team,
     validate_override_field,
     validate_submission_for_helmet_link,
+    validate_submission_for_logo_asset,
 )
 from backend.helpers.query_helpers import upsert_school_season as upsert_school_season_row
 
@@ -58,7 +73,11 @@ _SCHOOL_OVERRIDE_FIELDS = frozenset(SchoolOverrideField.__args__)  # type: ignor
 _GAME_OVERRIDE_FIELDS = frozenset(GameOverrideField.__args__)  # type: ignore[attr-defined]
 _LOCATION_OVERRIDE_FIELDS = frozenset(LocationOverrideField.__args__)  # type: ignore[attr-defined]
 
+# School override fields that feed color_variants — writing one of these must trigger a recompute.
+_COLOR_HEX_OVERRIDE_FIELDS = frozenset({"primary_color_hex", "secondary_color_hex"})
+
 _HELMET_SELECT = HELMET_DESIGNS_SELECT + " WHERE id = %s"
+_TEAM_LOGO_SELECT = TEAM_LOGOS_SELECT + " WHERE id = %s"
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_moderator)])
@@ -289,6 +308,8 @@ async def set_school_override(school: str, body: SetSchoolOverrideRequest) -> Ov
     async with get_conn() as conn:
         await require_school_exists(conn, school)
         await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, body.field, body.value))
+        if body.field in _COLOR_HEX_OVERRIDE_FIELDS:
+            await recompute_color_variants(conn, school)
     _log.info("admin: set school override school=%s field=%s", school, body.field)
     return OverrideAuditRow(source=f"school:{school}", key=body.field, value=body.value)
 
@@ -300,7 +321,49 @@ async def clear_school_override(school: str, field: str) -> None:
     async with get_conn() as conn:
         await require_school_exists(conn, school)
         await conn.execute("SELECT clear_school_override(%s, %s)", (school, field))
+        if field in _COLOR_HEX_OVERRIDE_FIELDS:
+            await recompute_color_variants(conn, school)
     _log.info("admin: cleared school override school=%s field=%s", school, field)
+
+
+@router.post("/schools/{school}/recompute-colors", responses=_404)
+async def recompute_school_colors(school: str) -> ColorVariantsRecomputeResult:
+    """Manually recompute color_variants for one school (e.g. after a data repair)."""
+    async with get_conn() as conn:
+        await require_school_exists(conn, school)
+        variants = await recompute_color_variants(conn, school)
+    _log.info("admin: recomputed color_variants school=%s", school)
+    return ColorVariantsRecomputeResult(school=school, color_variants=variants)
+
+
+@router.post("/schools/recompute-colors")
+async def bulk_recompute_school_colors(body: BulkRecomputeColorsRequest) -> BulkColorRecomputeResult:
+    """Recompute color_variants for a batch of schools, or every school if none are given.
+
+    Intended for use after an algorithm_version bump — re-clamps every school's
+    colors under the new algorithm in one pass.
+    """
+    async with get_conn() as conn:
+        if body.schools is not None:
+            target_schools = body.schools
+        else:
+            rows = await conn.execute("SELECT school FROM schools ORDER BY school")
+            target_schools = [r[0] async for r in rows]
+
+        clamp_failed_schools: list[str] = []
+        for school in target_schools:
+            variants = await recompute_color_variants(conn, school)
+            if variants and _any_clamp_failed(variants):
+                clamp_failed_schools.append(school)
+
+    _log.info("admin: bulk recomputed color_variants for %d schools", len(target_schools))
+    return BulkColorRecomputeResult(recomputed=len(target_schools), clamp_failed_schools=clamp_failed_schools)
+
+
+def _any_clamp_failed(variants: dict) -> bool:
+    """Return True if any surface in a color_variants blob has clamp_failed set."""
+    blobs = ([variants["primary"]] if variants.get("primary") else []) + variants.get("secondary", [])
+    return any(blob[mode]["clamp_failed"] for blob in blobs for mode in ("light", "dark"))
 
 
 # ---------------------------------------------------------------------------
@@ -576,3 +639,130 @@ async def delete_helmet_design(design_id: int) -> None:
         await require_helmet_design_exists(conn, design_id)
         await conn.execute("DELETE FROM helmet_designs WHERE id = %s", (design_id,))
     _log.info("admin: deleted helmet_design id=%s", design_id)
+
+
+# ---------------------------------------------------------------------------
+# Team logo asset CRUD
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/logos",
+    status_code=201,
+    responses={
+        404: {"description": "Not found"},
+        422: {"description": "Submission is not an accepted-pending-asset logo submission"},
+    },
+)
+async def create_team_logo(body: CreateTeamLogoRequest) -> TeamLogoModel:
+    """Create a new team_logos record. Upload the asset separately via
+    POST /api/v1/images/team-logos/{id}.
+
+    Pass ``from_submission_id`` to close the loop back to the reference
+    submission it was cut from — 404 if the submission doesn't exist, 422 if
+    it isn't a logo submission or isn't in the accepted_pending_asset state.
+    Unlike helmets (where the submission carries the FK to the design),
+    team_logos carries the FK to the submission, so closing the loop here
+    also flips the submission's status to approved in the same transaction.
+    """
+    async with get_conn() as conn:
+        await require_school_exists(conn, body.school)
+
+        if body.from_submission_id is not None:
+            sub_row = await (
+                await conn.execute("SELECT type, status FROM submissions WHERE id = %s", (body.from_submission_id,))
+            ).fetchone()
+            validate_submission_for_logo_asset(sub_row, body.from_submission_id)
+
+        if body.is_primary:
+            await conn.execute(
+                "UPDATE team_logos SET is_primary = FALSE WHERE school = %s AND logo_type = %s AND is_primary",
+                (body.school, body.logo_type),
+            )
+        id_row = await (
+            await conn.execute(
+                """
+                INSERT INTO team_logos
+                    (school, logo_type, year_start, year_end, is_primary, has_keyline, notes, source_submission_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    body.school,
+                    body.logo_type,
+                    body.year_start,
+                    body.year_end,
+                    body.is_primary,
+                    body.has_keyline,
+                    body.notes,
+                    body.from_submission_id,
+                ),
+            )
+        ).fetchone()
+        assert id_row is not None
+
+        if body.from_submission_id is not None:
+            await conn.execute(
+                "UPDATE submissions SET status = 'approved', reviewed_at = NOW(), updated_at = NOW() WHERE id = %s",
+                (body.from_submission_id,),
+            )
+
+        await sync_logo_cache(conn, body.school, body.logo_type, current_season())
+        detail_row = await (await conn.execute(_TEAM_LOGO_SELECT, (id_row[0],))).fetchone()
+    assert detail_row is not None
+    _log.info("admin: created team_logo id=%s school=%s logo_type=%s", id_row[0], body.school, body.logo_type)
+    return build_logo_from_row(detail_row)
+
+
+@router.patch("/logos/{logo_id}", responses=_404)
+async def patch_team_logo(logo_id: int, body: PatchTeamLogoRequest) -> TeamLogoModel:
+    """Update years, primary flag, keyline flag, or notes on a team_logos row.
+    Image column is managed via /images/team-logos/."""
+    update_data = body.model_dump(exclude_unset=True)
+    require_nonempty_update(update_data)
+
+    async with get_conn() as conn:
+        await require_team_logo_exists(conn, logo_id)
+
+        if update_data.get("is_primary"):
+            await conn.execute(
+                """
+                UPDATE team_logos SET is_primary = FALSE
+                WHERE is_primary AND id != %s
+                  AND school = (SELECT school FROM team_logos WHERE id = %s)
+                  AND logo_type = (SELECT logo_type FROM team_logos WHERE id = %s)
+                """,
+                (logo_id, logo_id, logo_id),
+            )
+
+        set_clause = build_set_clause(update_data)
+        update_query = sql.SQL("UPDATE team_logos SET {}, updated_at = NOW() WHERE id = %s").format(set_clause)
+        await conn.execute(update_query, list(update_data.values()) + [logo_id])
+        detail_row = await (await conn.execute(_TEAM_LOGO_SELECT, (logo_id,))).fetchone()
+        assert detail_row is not None
+        model = build_logo_from_row(detail_row)
+        await sync_logo_cache(conn, model.school, model.logo_type, current_season())
+    return model
+
+
+@router.delete("/logos/{logo_id}", status_code=204, responses=_404)
+async def delete_team_logo(logo_id: int) -> None:
+    """Delete a team_logos row."""
+    async with get_conn() as conn:
+        detail_row = await (await conn.execute(_TEAM_LOGO_SELECT, (logo_id,))).fetchone()
+        if detail_row is None:
+            raise HTTPException(status_code=404, detail=f"Team logo {logo_id} not found")
+        model = build_logo_from_row(detail_row)
+        await conn.execute("DELETE FROM team_logos WHERE id = %s", (logo_id,))
+        await sync_logo_cache(conn, model.school, model.logo_type, current_season())
+    _log.info("admin: deleted team_logo id=%s", logo_id)
+
+
+@router.get("/logos/needs-recut")
+async def list_logos_needing_recut() -> list[TeamLogoModel]:
+    """Published logo assets with has_keyline = FALSE — the re-cut backlog."""
+    async with get_conn() as conn:
+        rows = await conn.execute(
+            TEAM_LOGOS_SELECT + " WHERE has_keyline = FALSE AND image_url IS NOT NULL ORDER BY school, logo_type"
+        )
+        return [build_logo_from_row(r) async for r in rows]

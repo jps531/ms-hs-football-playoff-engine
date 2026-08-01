@@ -161,6 +161,7 @@ class TeamModel(BaseModel):
     primary_color: str
     secondary_color: str
     secondary_color_hex: str | None = None
+    color_variants: dict | None = None
     latitude: float | None = None
     longitude: float | None = None
     zip: str | None = None
@@ -252,6 +253,25 @@ class HelmetDetailModel(HelmetDesignModel):
 
     stats: HelmetStatsModel
     games_worn: list[HelmetGameWorn]
+
+
+class TeamLogoModel(BaseModel):
+    """A single published logo asset version for a school. Mirrors HelmetDesignModel —
+    history is keyed by (school, logo_type), is_primary disambiguates concurrent marks
+    within one logo_type."""
+
+    id: int | None = None
+    school: str
+    logo_type: str
+    image_url: str | None = None
+    year_start: int | None = None
+    year_end: int | None = None
+    is_primary: bool = False
+    has_keyline: bool = False
+    notes: str | None = None
+    source_submission_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 # ---------------------------------------------------------------------------
@@ -963,6 +983,20 @@ class OverrideAuditRow(BaseModel):
     value: str
 
 
+class ColorVariantsRecomputeResult(BaseModel):
+    """Result of recomputing color_variants for a single school."""
+
+    school: str
+    color_variants: dict | None
+
+
+class BulkColorRecomputeResult(BaseModel):
+    """Result of recomputing color_variants for a batch of schools."""
+
+    recomputed: int
+    clamp_failed_schools: list[str]
+
+
 class PlayoffFormatSeedResult(BaseModel):
     """Result of seeding a playoff bracket format."""
 
@@ -1052,6 +1086,28 @@ class SubmissionDetail(SubmissionSummary):
 
     payload: dict
     moderator_notes: str | None
+
+
+class ColorVariantsPreview(BaseModel):
+    """Primary + secondary color_variants blobs for a preview (no computed_at/algorithm_version — ephemeral)."""
+
+    primary: dict | None
+    secondary: list[dict]
+
+
+class ColorSubmissionPreview(BaseModel):
+    """Current vs. proposed WCAG color variants for a pending 'colors' submission.
+
+    Computed on demand via the same compute_color_variants() call approval
+    uses, so it never drifts from what actually gets persisted on approve —
+    but it is itself never persisted (never computed on read only governs the
+    team-facing color_variants column; this preview is inherently ephemeral).
+    """
+
+    submission_id: int
+    school: str
+    current: ColorVariantsPreview
+    proposed: ColorVariantsPreview
 
 
 # ---------------------------------------------------------------------------

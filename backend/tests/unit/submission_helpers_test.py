@@ -27,11 +27,13 @@ from backend.helpers.submission_helpers import (
     build_helmet_initial_payload,
     build_location_overrides,
     build_location_payload,
-    build_logo_payload,
+    build_logo_image_fields,
+    build_logo_initial_payload,
     build_score_overrides,
     build_score_payload,
     build_submission_summary,
     insert_submission,
+    resolve_approval_status,
     update_submission_payload,
 )
 
@@ -179,17 +181,14 @@ class TestApplySubmission:
             asyncio.run(coro)
         assert exc_info.value.status_code == 422
 
-    @patch("backend.helpers.submission_helpers.set_school_logo_column", new_callable=AsyncMock)
-    @patch("backend.helpers.submission_helpers.promote_submission_logo")
-    def test_logo_promotes_and_sets_column(self, mock_promote, mock_set_column):
-        """A 'logo' submission promotes the staged Cloudinary asset and writes the logo column."""
-        mock_promote.return_value = "logos/primary/Taylorsville"
+    def test_logo_is_a_no_op(self):
+        """A 'logo' submission makes no DB writes — the moderator creates the team_logos
+        row and uploads the asset manually, mirroring how 'helmet' submissions work."""
         conn = FakeConn()
-        payload = {"logo_type": "primary", "cloudinary_path": "staging/abc123"}
+        payload = {"logo_type": "primary", "cloudinary_path": "logos/submissions/primary/Taylorsville_1"}
         row = _submission_row("logo", "Taylorsville", payload)
         asyncio.run(apply_submission(conn, row))
-        mock_promote.assert_called_once_with("staging/abc123", "primary")
-        mock_set_column.assert_awaited_once_with(conn, "Taylorsville", "primary", "logos/primary/Taylorsville")
+        assert conn.calls == []
 
     def test_helmet_is_a_no_op(self):
         """A 'helmet' submission makes no DB writes — the moderator creates the design manually."""
@@ -205,7 +204,8 @@ class TestApplySubmission:
         asyncio.run(apply_submission(conn, row))
         assert conn.calls == []
 
-    def test_colors_sets_school_overrides(self):
+    @patch("backend.helpers.submission_helpers.recompute_color_variants", new_callable=AsyncMock)
+    def test_colors_sets_school_overrides(self, mock_recompute):
         """A 'colors' submission calls set_school_override once per (field, value) pair."""
         conn = FakeConn()
         payload = {"primary_color": {"name": "Red", "hex": "#FF0000"}}
@@ -217,6 +217,15 @@ class TestApplySubmission:
             "SELECT set_school_override(%s, %s, %s)",
             ("Taylorsville", "primary_color_hex", "#FF0000"),
         )
+
+    @patch("backend.helpers.submission_helpers.recompute_color_variants", new_callable=AsyncMock)
+    def test_colors_recomputes_color_variants_after_overrides(self, mock_recompute):
+        """A 'colors' submission recomputes color_variants after writing the overrides, on the same connection."""
+        conn = FakeConn()
+        payload = {"primary_color": {"name": "Red", "hex": "#FF0000"}}
+        row = _submission_row("colors", "Taylorsville", payload)
+        asyncio.run(apply_submission(conn, row))
+        mock_recompute.assert_awaited_once_with(conn, "Taylorsville")
 
     def test_location_sets_school_overrides(self):
         """A 'location' submission calls set_school_override for latitude and longitude."""
@@ -350,15 +359,48 @@ class TestBuildFeedbackPayload:
         assert build_feedback_payload(body) == {"subject": "Bug report", "message": "Something's wrong"}
 
 
-class TestBuildLogoPayload:
-    """build_logo_payload maps a logo_type/staging path pair to a payload dict."""
+class TestBuildLogoInitialPayload:
+    """build_logo_initial_payload builds the pre-upload payload for a 'logo' submission."""
 
-    def test_maps_fields(self):
-        """logo_type/cloudinary_path map directly into the payload dict."""
-        assert build_logo_payload("primary", "logos/submissions/primary/Taylorsville/abc") == {
-            "logo_type": "primary",
-            "cloudinary_path": "logos/submissions/primary/Taylorsville/abc",
+    def test_maps_logo_type(self):
+        """logo_type maps directly into the payload dict."""
+        assert build_logo_initial_payload("primary") == {"logo_type": "primary"}
+
+    def test_secondary_and_tertiary_pass_through(self):
+        """Non-primary logo_type values pass through unchanged."""
+        assert build_logo_initial_payload("secondary") == {"logo_type": "secondary"}
+        assert build_logo_initial_payload("tertiary") == {"logo_type": "tertiary"}
+
+
+class TestBuildLogoImageFields:
+    """build_logo_image_fields builds the payload field merged in after image upload."""
+
+    def test_maps_cloudinary_path(self):
+        """cloudinary_path maps directly into the payload dict."""
+        assert build_logo_image_fields("logos/submissions/primary/Taylorsville_1") == {
+            "cloudinary_path": "logos/submissions/primary/Taylorsville_1",
         }
+
+
+class TestResolveApprovalStatus:
+    """resolve_approval_status picks the post-approval status per submission type."""
+
+    def test_logo_moves_to_accepted_pending_asset(self):
+        """'logo' submissions move to accepted_pending_asset, not approved."""
+        assert resolve_approval_status("logo") == "accepted_pending_asset"
+
+    def test_helmet_moves_straight_to_approved(self):
+        """'helmet' submissions move straight to approved, unchanged from today."""
+        assert resolve_approval_status("helmet") == "approved"
+
+    def test_colors_moves_straight_to_approved(self):
+        """'colors' submissions move straight to approved, unchanged from today."""
+        assert resolve_approval_status("colors") == "approved"
+
+    def test_location_score_feedback_helmet_assignment_move_straight_to_approved(self):
+        """Every other submission type moves straight to approved, unchanged from today."""
+        for stype in ("location", "score", "feedback", "helmet_assignment"):
+            assert resolve_approval_status(stype) == "approved"
 
 
 class TestBuildHelmetInitialPayload:

@@ -155,6 +155,16 @@ def today() -> date:
     return datetime.now().date()
 
 
+def current_season() -> int:
+    """The MHSAA season currently in progress.
+
+    A season runs July of year N through June of year N+1 and is named for
+    its starting year (e.g. July 2025-June 2026 is the 2025 season).
+    """
+    t = today()
+    return t.year if t.month >= 7 else t.year - 1
+
+
 def default_classes_for_season(season: int) -> list[int]:
     """MHSAA class count by year, used when school_seasons has no rows yet for *season*."""
     if season <= 1983:

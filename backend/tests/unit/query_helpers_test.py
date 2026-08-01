@@ -13,9 +13,11 @@ from backend.helpers.query_helpers import (
     build_set_clause,
     require_nonempty_update,
     set_helmet_image_column,
+    set_team_logo_image_column,
     upsert_school_season,
     validate_override_field,
     validate_submission_for_helmet_link,
+    validate_submission_for_logo_asset,
 )
 
 
@@ -174,6 +176,46 @@ class TestValidateSubmissionForHelmetLink:
         validate_submission_for_helmet_link(("helmet", None), 42)
 
 
+class TestValidateSubmissionForLogoAsset:
+    """validate_submission_for_logo_asset checks a fetched submissions row before creating
+    a team_logos row from it."""
+
+    def test_none_row_raises_404(self):
+        """A missing submission (row=None) raises HTTP 404."""
+        with pytest.raises(HTTPException) as exc_info:
+            validate_submission_for_logo_asset(None, 42)
+        assert exc_info.value.status_code == 404
+
+    def test_wrong_type_raises_422(self):
+        """A non-'logo' submission type raises HTTP 422."""
+        with pytest.raises(HTTPException) as exc_info:
+            validate_submission_for_logo_asset(("helmet", "accepted_pending_asset"), 42)
+        assert exc_info.value.status_code == 422
+
+    def test_still_pending_raises_422(self):
+        """A logo submission not yet accepted (status still 'pending') raises HTTP 422."""
+        with pytest.raises(HTTPException) as exc_info:
+            validate_submission_for_logo_asset(("logo", "pending"), 42)
+        assert exc_info.value.status_code == 422
+        assert "pending" in exc_info.value.detail
+
+    def test_already_approved_raises_422(self):
+        """A logo submission already turned into an asset (status 'approved') raises HTTP 422."""
+        with pytest.raises(HTTPException) as exc_info:
+            validate_submission_for_logo_asset(("logo", "approved"), 42)
+        assert exc_info.value.status_code == 422
+
+    def test_rejected_raises_422(self):
+        """A rejected logo submission raises HTTP 422."""
+        with pytest.raises(HTTPException) as exc_info:
+            validate_submission_for_logo_asset(("logo", "rejected"), 42)
+        assert exc_info.value.status_code == 422
+
+    def test_accepted_pending_asset_raises_nothing(self):
+        """A logo submission in the accepted_pending_asset state passes validation."""
+        validate_submission_for_logo_asset(("logo", "accepted_pending_asset"), 42)
+
+
 class TestAppendOptionalFilters:
     """append_optional_filters appends (sql, value) pairs whose value is not None."""
 
@@ -234,3 +276,17 @@ class TestSetHelmetImageColumn:
         sql_text = conn.calls[0][0].as_string(None)
         assert "photo" in sql_text
         assert "image_photo" not in sql_text
+
+
+class TestSetTeamLogoImageColumn:
+    """set_team_logo_image_column writes team_logos.image_url and bumps updated_at."""
+
+    def test_writes_image_url_and_bumps_updated_at(self):
+        """The write includes both image_url and an updated_at bump."""
+        conn = FakeConn()
+        asyncio.run(set_team_logo_image_column(conn, 42, "logos/primary/Taylorsville_42"))
+        sql_text, params = conn.calls[0]
+        assert "team_logos" in sql_text
+        assert "image_url" in sql_text
+        assert "updated_at" in sql_text
+        assert params == ("logos/primary/Taylorsville_42", 42)

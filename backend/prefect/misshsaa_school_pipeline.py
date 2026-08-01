@@ -16,6 +16,7 @@ from playwright.sync_api import sync_playwright
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_batch
 
+from backend.helpers.color_variants import recompute_color_variants_sync
 from backend.helpers.data_classes import School
 from backend.helpers.data_helpers import (
     _color_to_hex,
@@ -293,6 +294,28 @@ def apply_seed_identity() -> int:
     return total
 
 
+@task(task_run_name="Recompute Color Variants")
+def recompute_all_colors() -> int:
+    """Recompute color_variants for every school, using schools_effective as the source hex.
+
+    Runs over the full table rather than only the schools update_rows() just wrote, because
+    apply_seed_identity() (which precedes this task in the flow) also writes color hex for
+    schools absent from the MHSAA directory, via a raw SQL file with no Python-side list of
+    which rows it touched. Recompute is idempotent and cheap (~450 schools), so there is no
+    meaningful cost to being unconditionally thorough here.
+    """
+    logger = get_run_logger()
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT school FROM schools ORDER BY school")
+            schools = [row[0] for row in cur.fetchall()]
+        for school in schools:
+            recompute_color_variants_sync(conn, school)
+        conn.commit()
+    logger.info("Recomputed color_variants for %d schools", len(schools))
+    return len(schools)
+
+
 def get_existing_schools() -> list[School]:
     """Fetch the distinct list of all schools from the database."""
     q = "SELECT DISTINCT school, 0, 0, 0 FROM schools"
@@ -318,4 +341,18 @@ def misshsaa_school_data_flow() -> int:
     matched = match_directory_to_db(directory_records, db_schools)
     updated = update_rows(matched)
     apply_seed_identity()
+    recompute_all_colors()
     return updated
+
+
+@flow(name="Recompute School Color Variants")
+def recompute_school_colors_flow() -> int:
+    """Recompute color_variants for every school, without re-scraping the MHSAA directory.
+
+    Run this manually to backfill color_variants for existing rows (e.g. right
+    after the color_variants column is added to a database), or after an
+    algorithm_version bump — it's a lighter-weight alternative to a full
+    misshsaa_school_data_flow() run when nothing about the underlying colors
+    has changed.
+    """
+    return recompute_all_colors()

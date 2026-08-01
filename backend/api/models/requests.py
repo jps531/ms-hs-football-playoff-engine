@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from backend.helpers.image_helpers import LogoType
+
 # ---------------------------------------------------------------------------
 # Override field type aliases — used in request bodies and DELETE path validation
 # ---------------------------------------------------------------------------
@@ -205,6 +207,12 @@ class SetSchoolOverrideRequest(BaseModel):
     value: str
 
 
+class BulkRecomputeColorsRequest(BaseModel):
+    """Recompute color_variants for a set of schools, or every school if omitted."""
+
+    schools: list[str] | None = None
+
+
 class SetGameOverrideRequest(BaseModel):
     """Set one key in a game row's overrides JSONB, shadowing the pipeline-written value."""
 
@@ -330,6 +338,31 @@ class PatchHelmetDesignRequest(BaseModel):
     tags: list[str] | None = None
     notes: str | None = None
     is_primary: bool | None = None
+
+
+class CreateTeamLogoRequest(BaseModel):
+    """Create a new team_logos record. Upload the asset separately via
+    POST /api/v1/images/team-logos/{id}."""
+
+    school: str
+    logo_type: LogoType
+    year_start: int | None = None
+    year_end: int | None = None
+    is_primary: bool = False
+    has_keyline: bool = False
+    notes: str | None = None
+    from_submission_id: int | None = None
+
+
+class PatchTeamLogoRequest(BaseModel):
+    """Partial update for a team_logos row — only provided fields are written.
+    Image column is managed via /images/team-logos/."""
+
+    year_start: int | None = None
+    year_end: int | None = None
+    is_primary: bool | None = None
+    has_keyline: bool | None = None
+    notes: str | None = None
 
 
 # ---------------------------------------------------------------------------

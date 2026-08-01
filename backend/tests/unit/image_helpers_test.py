@@ -12,13 +12,13 @@ from backend.helpers.image_helpers import (
     MAX_UPLOAD_FILE_BYTES,
     _configure,
     logo_url,
-    promote_submission_logo,
     save_and_upload,
     save_temp,
     upload_helmet,
     upload_logo,
     upload_submission_helmet_image,
     upload_submission_logo,
+    upload_team_logo,
     validate_upload,
 )
 
@@ -135,55 +135,65 @@ class TestUploadHelmet:
 
 
 class TestUploadSubmissionLogo:
-    """upload_submission_logo stages to logos/submissions/{logo_type}/{school}."""
+    """upload_submission_logo stages to logos/submissions/{logo_type}/{school}_{submission_id},
+    keyed by submission id so concurrent pending submissions never clobber each other."""
 
     def test_returns_staged_path(self, cloudinary_env):
         """Return value is the staged Cloudinary path (not the production path)."""
         with patch("cloudinary.config"), patch("cloudinary.uploader.upload"):
-            result = upload_submission_logo("/tmp/logo.png", "Taylorsville", "primary")
-        assert result == "logos/submissions/primary/Taylorsville"
+            result = upload_submission_logo("/tmp/logo.png", "Taylorsville", "primary", 5)
+        assert result == "logos/submissions/primary/Taylorsville_5"
 
     def test_spaces_replaced_with_underscores(self, cloudinary_env):
         """School names with spaces are normalized to underscores in the path."""
         with patch("cloudinary.config"), patch("cloudinary.uploader.upload"):
-            result = upload_submission_logo("/tmp/logo.png", "South Panola", "tertiary")
-        assert result == "logos/submissions/tertiary/South_Panola"
+            result = upload_submission_logo("/tmp/logo.png", "South Panola", "tertiary", 12)
+        assert result == "logos/submissions/tertiary/South_Panola_12"
 
     def test_upload_called_with_correct_args(self, cloudinary_env):
         """cloudinary.uploader.upload receives the correct staged public_id and folder."""
         with patch("cloudinary.config"), patch("cloudinary.uploader.upload") as mock_upload:
-            upload_submission_logo("/tmp/logo.png", "Taylorsville", "secondary")
+            upload_submission_logo("/tmp/logo.png", "Taylorsville", "secondary", 7)
         mock_upload.assert_called_once_with(
             "/tmp/logo.png",
-            public_id="logos/submissions/secondary/Taylorsville",
+            public_id="logos/submissions/secondary/Taylorsville_7",
             asset_folder="logos/submissions/secondary",
             overwrite=True,
             invalidate=True,
         )
 
+    def test_two_submissions_same_school_and_type_get_distinct_paths(self, cloudinary_env):
+        """The collision this signature fixes: two pending submissions for the same
+        school+logo_type must not share a staging path."""
+        with patch("cloudinary.config"), patch("cloudinary.uploader.upload"):
+            first = upload_submission_logo("/tmp/a.png", "Taylorsville", "primary", 5)
+            second = upload_submission_logo("/tmp/b.png", "Taylorsville", "primary", 6)
+        assert first != second
 
-class TestPromoteSubmissionLogo:
-    """promote_submission_logo renames staged path to production path via Cloudinary rename."""
 
-    def test_returns_production_path(self, cloudinary_env):
-        """Return value is the production path after promotion."""
-        with patch("cloudinary.config"), patch("cloudinary.uploader.rename"):
-            result = promote_submission_logo("logos/submissions/primary/Taylorsville", "primary")
-        assert result == "logos/primary/Taylorsville"
+class TestUploadTeamLogo:
+    """upload_team_logo uploads a genuinely new published asset to logos/{logo_type}/{school}_{id}."""
 
-    def test_tertiary_logo_type(self, cloudinary_env):
-        """Tertiary logo type is preserved in the promoted production path."""
-        with patch("cloudinary.config"), patch("cloudinary.uploader.rename"):
-            result = promote_submission_logo("logos/submissions/tertiary/West_Point", "tertiary")
-        assert result == "logos/tertiary/West_Point"
+    def test_returns_expected_public_id(self, cloudinary_env):
+        """Return value encodes school and team_logo_id in the path."""
+        with patch("cloudinary.config"), patch("cloudinary.uploader.upload"):
+            result = upload_team_logo("/tmp/logo.png", "Taylorsville", "primary", 42)
+        assert result == "logos/primary/Taylorsville_42"
 
-    def test_rename_called_with_correct_args(self, cloudinary_env):
-        """cloudinary.uploader.rename receives the staged and production paths."""
-        with patch("cloudinary.config"), patch("cloudinary.uploader.rename") as mock_rename:
-            promote_submission_logo("logos/submissions/secondary/South_Panola", "secondary")
-        mock_rename.assert_called_once_with(
-            "logos/submissions/secondary/South_Panola",
-            "logos/secondary/South_Panola",
+    def test_spaces_replaced_with_underscores(self, cloudinary_env):
+        """School names with spaces are normalized to underscores in the path."""
+        with patch("cloudinary.config"), patch("cloudinary.uploader.upload"):
+            result = upload_team_logo("/tmp/logo.png", "South Panola", "secondary", 7)
+        assert result == "logos/secondary/South_Panola_7"
+
+    def test_upload_called_with_correct_args(self, cloudinary_env):
+        """cloudinary.uploader.upload receives the correct public_id and folder."""
+        with patch("cloudinary.config"), patch("cloudinary.uploader.upload") as mock_upload:
+            upload_team_logo("/tmp/logo.png", "Taylorsville", "tertiary", 1)
+        mock_upload.assert_called_once_with(
+            "/tmp/logo.png",
+            public_id="logos/tertiary/Taylorsville_1",
+            asset_folder="logos/tertiary",
             overwrite=True,
             invalidate=True,
         )

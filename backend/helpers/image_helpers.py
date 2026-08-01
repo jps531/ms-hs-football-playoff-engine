@@ -93,15 +93,18 @@ def upload_helmet(local_path: str, school_name: str, year: int, image_type: Helm
     return public_id
 
 
-def upload_submission_logo(local_path: str, school_name: str, logo_type: LogoType) -> str:
-    """Upload a logo to the staging area and return the Cloudinary path to store in the DB.
+def upload_submission_logo(local_path: str, school_name: str, logo_type: LogoType, submission_id: int) -> str:
+    """Upload a logo reference for a submission and return the Cloudinary path to store in the DB.
 
-    Staged path: ``logos/submissions/{logo_type}/{school_normalized}``.
-    Call :func:`promote_submission_logo` after moderator approval to move it to production.
+    Path: ``logos/submissions/{logo_type}/{school_normalized}_{submission_id}`` — keyed by
+    submission id (not just school+logo_type) so a second pending submission for the same
+    school/logo_type never clobbers a prior one's staged reference. References persist
+    indefinitely as evidence; they are never promoted/renamed into production — a moderator
+    uploads a brand-new asset against a real team_logos row via :func:`upload_team_logo` instead.
     """
     _configure()
     name = school_name.replace(" ", "_")
-    public_id = f"logos/submissions/{logo_type}/{name}"
+    public_id = f"logos/submissions/{logo_type}/{name}_{submission_id}"
     cloudinary.uploader.upload(
         local_path,
         public_id=public_id,
@@ -112,22 +115,25 @@ def upload_submission_logo(local_path: str, school_name: str, logo_type: LogoTyp
     return public_id
 
 
-def promote_submission_logo(staging_path: str, logo_type: LogoType) -> str:
-    """Rename a staged logo from ``logos/submissions/…`` to the live ``logos/…`` folder.
+def upload_team_logo(local_path: str, school_name: str, logo_type: LogoType, team_logo_id: int) -> str:
+    """Upload a published logo asset and return the path to store in team_logos.image_url.
 
-    Uses Cloudinary's server-side rename so there is no window where the asset is missing.
-    Returns the new production path.
+    Path: ``logos/{logo_type}/{school_normalized}_{team_logo_id}``. Distinct from
+    :func:`upload_logo` (the legacy school-column-only path) — this one is keyed by
+    team_logos.id, since a school can now have multiple historical assets per logo_type.
+    A genuinely new upload, not a rename of any submitted reference.
     """
     _configure()
-    school_segment = staging_path.split("/")[-1]
-    target_path = f"logos/{logo_type}/{school_segment}"
-    cloudinary.uploader.rename(
-        staging_path,
-        target_path,
+    name = school_name.replace(" ", "_")
+    public_id = f"logos/{logo_type}/{name}_{team_logo_id}"
+    cloudinary.uploader.upload(
+        local_path,
+        public_id=public_id,
+        asset_folder=f"logos/{logo_type}",
         overwrite=True,
         invalidate=True,
     )
-    return target_path
+    return public_id
 
 
 def upload_submission_helmet_image(

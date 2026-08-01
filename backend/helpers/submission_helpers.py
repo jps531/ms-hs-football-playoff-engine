@@ -15,8 +15,8 @@ from typing import Any
 from fastapi import HTTPException
 
 from backend.api.models.responses import SubmissionSummary
-from backend.helpers.image_helpers import LogoType, promote_submission_logo
-from backend.helpers.query_helpers import require_helmet_design_exists, set_school_logo_column
+from backend.helpers.color_variants import recompute_color_variants
+from backend.helpers.query_helpers import require_helmet_design_exists
 
 
 def build_submission_summary(row: tuple) -> SubmissionSummary:
@@ -73,6 +73,18 @@ def build_helmet_assignment_override(payload: dict) -> tuple[str, int]:
     return payload["date"], payload["helmet_design_id"]
 
 
+def resolve_approval_status(stype: str) -> str:
+    """Return the submission_status an 'approve' action should set for *stype*.
+
+    'logo' submissions move to 'accepted_pending_asset' — approving a
+    reference does not publish an asset, it queues moderator work (the
+    moderator creates the real team_logos row and asset separately, mirroring
+    how 'helmet' submissions already work). Every other type goes straight to
+    'approved', preserving today's behavior.
+    """
+    return "accepted_pending_asset" if stype == "logo" else "approved"
+
+
 async def apply_submission(conn: Any, row: tuple) -> None:
     """Apply an approved submission to the live database.
 
@@ -89,10 +101,7 @@ async def apply_submission(conn: Any, row: tuple) -> None:
         raise HTTPException(status_code=422, detail="Submission is missing a school")
 
     if stype == "logo":
-        logo_type: LogoType = payload["logo_type"]
-        staging_path: str = payload["cloudinary_path"]
-        production_path = promote_submission_logo(staging_path, logo_type)
-        await set_school_logo_column(conn, school, logo_type, production_path)
+        pass  # Moderator creates the team_logos row and uploads the asset manually.
 
     elif stype == "helmet":
         pass  # Moderator creates the helmet_design record manually.
@@ -100,6 +109,7 @@ async def apply_submission(conn: Any, row: tuple) -> None:
     elif stype == "colors":
         for field, value in build_color_overrides(payload):
             await conn.execute("SELECT set_school_override(%s, %s, %s)", (school, field, value))
+        await recompute_color_variants(conn, school)
 
     elif stype == "location":
         for field, value in build_location_overrides(payload):
@@ -161,9 +171,19 @@ def build_feedback_payload(body: Any) -> dict[str, Any]:
     return {"subject": body.subject, "message": body.message}
 
 
-def build_logo_payload(logo_type: str, cloudinary_path: str) -> dict[str, Any]:
-    """Build a 'logo' submission payload from the uploaded logo type and staging path."""
-    return {"logo_type": logo_type, "cloudinary_path": cloudinary_path}
+def build_logo_initial_payload(logo_type: str) -> dict[str, Any]:
+    """Build a 'logo' submission's initial payload, before the reference image is uploaded.
+
+    Mirrors build_helmet_initial_payload's two-phase split: the submission row
+    is inserted first (to get an id the staged image path can be keyed on),
+    then build_logo_image_fields merges in the resulting path.
+    """
+    return {"logo_type": logo_type}
+
+
+def build_logo_image_fields(cloudinary_path: str) -> dict[str, Any]:
+    """Build the payload field to merge into a 'logo' submission after its reference image is uploaded."""
+    return {"cloudinary_path": cloudinary_path}
 
 
 def build_helmet_initial_payload(

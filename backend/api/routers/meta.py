@@ -18,6 +18,7 @@ from backend.api.models.responses import (
     SeasonDatesResponse,
     SeasonModel,
     SeasonStructureResponse,
+    TeamLogoModel,
     TeamModel,
 )
 from backend.helpers.api_helpers import (
@@ -33,7 +34,8 @@ from backend.helpers.api_helpers import (
     load_home_venues,
     venue_distance_miles,
 )
-from backend.helpers.image_helpers import logo_url
+from backend.helpers.image_helpers import LogoType, logo_url
+from backend.helpers.logo_helpers import TEAM_LOGOS_SELECT, build_logo_from_row
 from backend.helpers.query_helpers import and_join_conditions, require_school_exists
 
 router = APIRouter(prefix="/api/v1", tags=["meta"])
@@ -59,6 +61,7 @@ def _row_to_team_model(r) -> TeamModel:
         longitude=r[13],
         zip=r[14],
         secondary_color_hex=r[15],
+        color_variants=r[16],
     )
 
 
@@ -149,7 +152,8 @@ async def list_teams(
         SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
                s.city, s.mascot, s.primary_color, s.secondary_color,
                s.logo_primary, s.logo_secondary, s.logo_tertiary,
-               s.latitude, s.longitude, s.zip, s.secondary_color_hex
+               s.latitude, s.longitude, s.zip, s.secondary_color_hex,
+               s.color_variants
         FROM schools_effective s
         JOIN school_seasons ss ON s.school = ss.school
         WHERE {}
@@ -169,7 +173,8 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
             SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
                    s.city, s.mascot, s.primary_color, s.secondary_color,
                    s.logo_primary, s.logo_secondary, s.logo_tertiary,
-                   s.latitude, s.longitude, s.zip, s.secondary_color_hex
+                   s.latitude, s.longitude, s.zip, s.secondary_color_hex,
+                   s.color_variants
             FROM schools_effective s
             JOIN school_seasons ss ON s.school = ss.school
             WHERE s.school = %s AND ss.season = %s
@@ -241,6 +246,72 @@ async def resolve_team_helmet(
         row = await (await conn.execute(query, (team, season))).fetchone()
 
     return build_helmet_from_fields(*row) if row is not None else None
+
+
+@router.get("/teams/{team}/logos", responses=_404)
+async def list_team_logos(
+    team: str,
+    logo_type: Annotated[LogoType | None, Query()] = None,
+    year: Annotated[int | None, Query()] = None,
+) -> list[TeamLogoModel]:
+    """Return logo asset history for *team*, optionally filtered by logo_type and/or year.
+
+    Mirrors GET /teams/{team}/helmets: ``year`` uses the same simplified
+    outer-bound check the helmet endpoint uses (year_start <= year AND
+    (year_end IS NULL OR year_end >= year)), not the full logo_covers_season
+    — currently equivalent since logos have no non-contiguous-span case, but
+    this is "the" documented semantics for that filter.
+    """
+    conditions: list[LiteralString] = ["school = %s"]
+    params: list = [team]
+    if logo_type is not None:
+        conditions.append("logo_type = %s")
+        params.append(logo_type)
+    if year is not None:
+        conditions.append("(year_start IS NULL OR year_start <= %s) AND (year_end IS NULL OR year_end >= %s)")
+        params.extend([year, year])
+
+    where_clause = and_join_conditions(conditions)
+    query = sql.SQL(TEAM_LOGOS_SELECT + " WHERE {} ORDER BY logo_type, year_start").format(where_clause)
+
+    async with get_conn() as conn:
+        rows = await conn.execute(query, params)
+        results = [build_logo_from_row(r) async for r in rows]
+
+    if not results and year is None and logo_type is None:
+        async with get_conn() as conn:
+            await require_school_exists(conn, team)
+
+    return results
+
+
+@router.get("/teams/{team}/logos/resolved", responses=_404)
+async def resolve_team_logo(
+    team: str,
+    season: Annotated[int, Query(ge=1980, le=2040)],
+    logo_type: Annotated[LogoType, Query()] = "primary",
+) -> TeamLogoModel | None:
+    """Resolve the logo asset to display for *team*/*logo_type* in *season*.
+
+    Fallback order: the row that is both is_primary and covers *season* via
+    logo_covers_season(), else the row with the most recent year_start that
+    covers *season*, else null. year_start is nullable (unlike helmets'
+    NOT NULL year_first_worn), so the ORDER BY needs NULLS LAST — otherwise
+    Postgres's default NULLS FIRST for DESC would put the unbounded-past
+    ("current") row ahead of more specific historical matches, inverting the
+    intended preference.
+    """
+    async with get_conn() as conn:
+        await require_school_exists(conn, team)
+
+        query = sql.SQL(
+            TEAM_LOGOS_SELECT
+            + " WHERE school = %s AND logo_type = %s AND logo_covers_season(year_start, year_end, %s)"
+            + " ORDER BY is_primary DESC, year_start DESC NULLS LAST LIMIT 1"
+        )
+        row = await (await conn.execute(query, (team, logo_type, season))).fetchone()
+
+    return build_logo_from_row(row) if row is not None else None
 
 
 @router.get("/teams/{team}/roadmap", responses=_404)

@@ -61,6 +61,7 @@ from backend.helpers.api_helpers import (
     build_team_paths,
     clinched_school,
     compute_remaining_games,
+    current_season,
     current_standings_order,
     default_classes_for_season,
     eliminated_team_hosting,
@@ -185,6 +186,30 @@ class TestToday:
     def test_matches_current_date(self):
         """The returned date matches the real current date."""
         assert today() == date.today()
+
+
+class TestCurrentSeason:
+    """current_season() names a season by its starting year: July N-June N+1 is season N."""
+
+    def test_july_first_day_of_season_is_that_year(self, monkeypatch):
+        """July 1 is the first day of the new season — season == that year."""
+        monkeypatch.setattr("backend.helpers.api_helpers.today", lambda: date(2025, 7, 1))
+        assert current_season() == 2025
+
+    def test_june_last_day_of_season_is_prior_year(self, monkeypatch):
+        """June 30 is still the prior season, one day before it rolls over."""
+        monkeypatch.setattr("backend.helpers.api_helpers.today", lambda: date(2026, 6, 30))
+        assert current_season() == 2025
+
+    def test_december_is_within_the_season_that_started_in_july(self, monkeypatch):
+        """A December date is mid-season for the year it started in, not the calendar year."""
+        monkeypatch.setattr("backend.helpers.api_helpers.today", lambda: date(2025, 12, 15))
+        assert current_season() == 2025
+
+    def test_january_is_still_the_prior_years_season(self, monkeypatch):
+        """A January date belongs to the season that started the previous July."""
+        monkeypatch.setattr("backend.helpers.api_helpers.today", lambda: date(2026, 1, 15))
+        assert current_season() == 2025
 
 
 # ---------------------------------------------------------------------------

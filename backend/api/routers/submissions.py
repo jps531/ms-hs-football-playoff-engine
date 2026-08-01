@@ -39,7 +39,8 @@ from backend.helpers.submission_helpers import (
     build_helmet_image_fields,
     build_helmet_initial_payload,
     build_location_payload,
-    build_logo_payload,
+    build_logo_image_fields,
+    build_logo_initial_payload,
     build_score_payload,
     insert_submission,
     update_submission_payload,
@@ -96,21 +97,29 @@ async def submit_logo(
 ) -> SubmissionCreatedResponse:
     """Submit a school logo for moderator review.
 
-    The image is uploaded to the Cloudinary staging area
-    (``logos/submissions/{logo_type}/{school}``) and will be moved to the
-    production folder upon moderator approval.
+    The image is a reference only — never auto-published. It's uploaded to
+    the Cloudinary staging area (``logos/submissions/{logo_type}/{school}_{id}``,
+    keyed by this submission's id) and persists there indefinitely as
+    evidence; a moderator recreates it to a standard format as a new
+    ``team_logos`` asset after accepting the submission.
     """
     async with get_conn() as conn:
         await require_school_exists(conn, school)
 
-    cloudinary_path = await save_and_upload(
-        file, partial(upload_submission_logo, school_name=school, logo_type=logo_type)
-    )
-
     user_id = optional_user_id(current_user)
-    payload = build_logo_payload(logo_type, cloudinary_path)
+    payload = build_logo_initial_payload(logo_type)
+    # Insert first so we get the submission_id for Cloudinary path construction.
     async with get_conn() as conn:
         submission_id, submitted_at = await insert_submission(conn, "logo", school, user_id, payload)
+
+    cloudinary_path = await save_and_upload(
+        file,
+        partial(upload_submission_logo, school_name=school, logo_type=logo_type, submission_id=submission_id),
+    )
+    payload.update(build_logo_image_fields(cloudinary_path))
+
+    async with get_conn() as conn:
+        await update_submission_payload(conn, submission_id, payload)
 
     return SubmissionCreatedResponse(id=submission_id, type="logo", school=school, submitted_at=submitted_at)
 

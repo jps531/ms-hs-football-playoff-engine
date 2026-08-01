@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS schools (
   logo_primary        TEXT,
   logo_secondary      TEXT,
   logo_tertiary       TEXT,
-  overrides           JSONB NOT NULL DEFAULT '{}'::jsonb
+  overrides           JSONB NOT NULL DEFAULT '{}'::jsonb,
+  color_variants      JSONB
 );
 
 
@@ -70,6 +71,56 @@ CREATE OR REPLACE FUNCTION helmet_covers_season(
     )
     ELSE p_year_first_worn <= p_season AND (p_year_last_worn IS NULL OR p_year_last_worn >= p_season)
   END;
+$$ LANGUAGE sql IMMUTABLE;
+
+
+-- ---------------------------------------------------------------------------
+-- Team logo asset history (static per asset, spans multiple seasons)
+-- ---------------------------------------------------------------------------
+-- One row per published logo asset version per school. A school has three
+-- independent, concurrently-versioned logo lines (primary/secondary/tertiary
+-- — e.g. athletic mark vs. school seal vs. wordmark), each with its own
+-- year-scoped history — history is keyed by (school, logo_type), not just
+-- school. is_primary disambiguates concurrent marks *within* one logo_type
+-- (a second, independent dimension from logo_type, not a restatement of
+-- it) — same semantics as helmet_designs.is_primary.
+--
+-- Simpler than helmet_designs deliberately: no years_worn-equivalent for
+-- non-contiguous spans in this pass — a single year_start/year_end range
+-- per row is enough for logos today. year_end IS NULL uniqueness (at most
+-- one "current" row per (school, logo_type)) is service-layer only, not
+-- DB-enforced — same caveat helmet_designs' own history makes for messy
+-- backfilled data. is_primary uniqueness, unlike that, IS DB-enforced below.
+
+CREATE TABLE IF NOT EXISTS team_logos (
+  id                    SERIAL PRIMARY KEY,
+  school                TEXT    NOT NULL REFERENCES schools(school),
+  logo_type             TEXT    NOT NULL CHECK (logo_type IN ('primary', 'secondary', 'tertiary')),
+  image_url             TEXT,                      -- Cloudinary path of the published asset
+  year_start            INTEGER,                   -- NULL = unknown / as far back as known
+  year_end              INTEGER,                   -- NULL = current, still in use
+  is_primary            BOOLEAN NOT NULL DEFAULT FALSE,
+  has_keyline           BOOLEAN NOT NULL DEFAULT FALSE, -- whether the asset has the standard keyline baked in
+  notes                 TEXT,                      -- e.g. "wordmark variant", "pre-consolidation"
+  source_submission_id  INTEGER,                   -- provenance, nullable; FK added below submissions
+                                                     -- (submissions is defined later in this file)
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_logos_school_type
+  ON team_logos (school, logo_type, year_start, year_end);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_logos_primary_per_school_type
+  ON team_logos (school, logo_type) WHERE is_primary;
+
+-- Whether year_start/year_end covers p_season. NULL start = unbounded past,
+-- NULL end = unbounded future/current.
+CREATE OR REPLACE FUNCTION logo_covers_season(
+  p_year_start INT, p_year_end INT, p_season INT
+) RETURNS BOOLEAN AS $$
+  SELECT (p_year_start IS NULL OR p_year_start <= p_season)
+     AND (p_year_end   IS NULL OR p_year_end   >= p_season);
 $$ LANGUAGE sql IMMUTABLE;
 
 
@@ -182,7 +233,8 @@ SELECT
   COALESCE(overrides->>'logo_tertiary',  logo_tertiary,  '') AS logo_tertiary,
   COALESCE(overrides->>'primary_color_hex',    primary_color_hex)   AS primary_color_hex,
   COALESCE(overrides->>'secondary_color_hex',  secondary_color_hex) AS secondary_color_hex,
-  overrides
+  overrides,
+  color_variants
 FROM schools;
 
 CREATE OR REPLACE VIEW locations_effective AS
@@ -486,7 +538,16 @@ CREATE TYPE submission_type AS ENUM (
     'logo', 'helmet', 'colors', 'location', 'score', 'feedback', 'helmet_assignment'
 );
 
-CREATE TYPE submission_status AS ENUM ('pending', 'approved', 'rejected');
+-- 'accepted_pending_asset' is a terminal-ish state between pending and
+-- approved: the moderator has accepted the reference (e.g. a submitted logo
+-- image) but the published asset doesn't exist yet — see
+-- resolve_approval_status() in backend/helpers/submission_helpers.py.
+-- MANUAL STEP on any live DB that predates this: CREATE TYPE only runs on a
+-- fresh install via this file; an existing DB needs, as its own statement
+-- (Postgres forbids using a freshly-added enum value in the same
+-- transaction that adds it):
+--   ALTER TYPE submission_status ADD VALUE IF NOT EXISTS 'accepted_pending_asset';
+CREATE TYPE submission_status AS ENUM ('pending', 'approved', 'rejected', 'accepted_pending_asset');
 
 CREATE TABLE IF NOT EXISTS submissions (
     id              SERIAL              PRIMARY KEY,
@@ -512,6 +573,19 @@ CREATE INDEX IF NOT EXISTS idx_submissions_pending
     ON submissions (submitted_at DESC) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_submissions_user_id
     ON submissions (user_id) WHERE user_id IS NOT NULL;
+
+-- team_logos.source_submission_id -> submissions(id): added here (not inline on
+-- team_logos' own CREATE TABLE, above) because team_logos is defined earlier in
+-- this file, next to helmet_designs, and submissions doesn't exist yet at that
+-- point. ADD CONSTRAINT has no IF NOT EXISTS form, so guard it the same way this
+-- file keeps every other statement safely re-runnable.
+DO $$ BEGIN
+  ALTER TABLE team_logos
+    ADD CONSTRAINT team_logos_source_submission_id_fkey
+    FOREIGN KEY (source_submission_id) REFERENCES submissions(id) ON DELETE SET NULL;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 
 -- ---------------------------------------------------------------------------
@@ -546,6 +620,15 @@ COMMENT ON COLUMN schools.primary_color_hex IS
   'Hex code for the school''s primary team color (e.g. "#006400"). Derived from primary_color.';
 COMMENT ON COLUMN schools.secondary_color_hex IS
   'Hex code for the school''s secondary team color (e.g. "#FFD700"). Derived from secondary_color.';
+COMMENT ON COLUMN schools.color_variants IS
+  'Precomputed WCAG-safe light/dark, text/ui variants of primary_color_hex/secondary_color_hex '
+  '(the effective hex values, i.e. after overrides). Shape: {"primary": {...}|null, "secondary": [...], '
+  '"computed_at": ISO8601, "algorithm_version": int}. primary is a single variant blob; secondary is a '
+  'JSON ARRAY of variant blobs, one per comma-separated hex in secondary_color_hex (up to 5). Never '
+  'computed on read — written only by backend.helpers.color_variants.recompute_color_variants(). This '
+  'is derived/computed output, not a user override: it is never written through set_school_override() '
+  'and is not merged by schools_effective (there is nothing to override — it already reflects the '
+  'effective color by construction).';
 COMMENT ON COLUMN schools.logo_primary IS
   'Cloudinary path for the primary school logo (e.g. "logos/primary/Taylorsville"). '
   'Assembled into a full URL at read time via CLOUDINARY_BASE_URL. Empty when not yet uploaded.';
@@ -607,6 +690,54 @@ COMMENT ON COLUMN helmet_designs.tags IS
 COMMENT ON COLUMN helmet_designs.notes IS
   'Free-text catch-all for details that do not fit a structured column '
   '(e.g. "worn only for rivalry games", "limited-edition homecoming helmet").';
+
+
+-- team_logos
+
+COMMENT ON TABLE team_logos IS
+  'One row per published logo asset version per school. Mirrors helmet_designs: a '
+  'submitted image is a reference only (see submissions.payload''s logo shape); the '
+  'published asset here is always recreated by a moderator to a standard format. '
+  'History is keyed by (school, logo_type) — a school''s primary/secondary/tertiary logo '
+  'lines each get independent year-scoped history. Never computed on read: resolution '
+  '(GET /teams/{team}/logos/resolved) queries this table directly, and '
+  'schools.logo_primary/secondary/tertiary are kept in sync as cached pointers by '
+  'backend.helpers.logo_helpers.sync_logo_cache(), called after every write here.';
+
+COMMENT ON COLUMN team_logos.school IS
+  'FK to schools(school).';
+COMMENT ON COLUMN team_logos.logo_type IS
+  'Which of the school''s three logo slots this row versions: primary, secondary, or '
+  'tertiary. Independent of is_primary — see table comment.';
+COMMENT ON COLUMN team_logos.image_url IS
+  'Cloudinary path of the published asset. NULL until a moderator uploads one via '
+  'POST /api/v1/images/team-logos/{id}.';
+COMMENT ON COLUMN team_logos.year_start IS
+  'First season (inclusive) this asset was in use. NULL = unknown / as far back as known.';
+COMMENT ON COLUMN team_logos.year_end IS
+  'Last season (inclusive) this asset was in use. NULL = current, still in use. At most '
+  'one row per (school, logo_type) should have year_end IS NULL — enforced in the '
+  'service layer (sync_logo_cache / the admin CRUD endpoints), not a DB constraint, '
+  'since historical data will be messy during backfill.';
+COMMENT ON COLUMN team_logos.is_primary IS
+  'Disambiguates concurrent marks within one logo_type when a team has more than one '
+  'active row for it (e.g. mid-transition between two "primary" marks). At most one '
+  'is_primary row per (school, logo_type) is DB-enforced via '
+  'idx_team_logos_primary_per_school_type.';
+COMMENT ON COLUMN team_logos.has_keyline IS
+  'Whether the published asset has the standard white keyline baked in. FALSE on '
+  'backfilled pre-standard assets — flags them for the re-cut backlog '
+  '(GET /admin/logos/needs-recut).';
+COMMENT ON COLUMN team_logos.notes IS
+  'Free-text catch-all (e.g. "wordmark variant", "pre-consolidation").';
+COMMENT ON COLUMN team_logos.source_submission_id IS
+  'FK to submissions(id). Set when this row was created from an accepted logo '
+  'submission via POST /admin/logos with from_submission_id — closes the loop from '
+  'published asset back to the contributor''s reference. The direction is reversed '
+  'from helmet_designs: submissions carries the FK to helmet_designs, but team_logos '
+  'carries the FK to submissions, since there is no per-type link column on '
+  'submissions (see submissions.status comment) — creating this row also flips the '
+  'source submission''s status to approved in the same transaction.';
 
 
 -- school_seasons
@@ -998,8 +1129,9 @@ COMMENT ON TABLE submissions IS
   'Polymorphic user submission queue. One row per submission regardless of type. '
   'Type-specific fields live in the payload JSONB column. '
   'Approved submissions are auto-applied to live DB tables via the moderation endpoint; '
-  'helmet submissions are informational only (moderator creates the mockup manually, '
-  'optionally linking it back via helmet_design_id).';
+  'helmet and logo submissions are informational only — the moderator creates the real '
+  'record manually (helmet_designs via POST /admin/helmets, team_logos via POST /admin/logos), '
+  'each optionally linking back to the source submission.';
 
 COMMENT ON COLUMN submissions.id IS
   'Auto-incrementing surrogate key.';
@@ -1007,14 +1139,19 @@ COMMENT ON COLUMN submissions.type IS
   'Discriminator. One of: logo, helmet, colors, location, score, feedback, helmet_assignment. '
   'Determines the shape of the payload column and the apply-on-approve logic.';
 COMMENT ON COLUMN submissions.status IS
-  'Moderation state. Starts as pending; transitions to approved or rejected '
-  'by a moderator via POST /api/v1/moderation/submissions/{id}/approve|reject.';
+  'Moderation state. Starts as pending; transitions via '
+  'POST /api/v1/moderation/submissions/{id}/approve|reject. approve() sets status via '
+  'resolve_approval_status(type): logo submissions move to accepted_pending_asset (the '
+  'reference is accepted but no asset exists yet — see team_logos.source_submission_id for '
+  'how the loop closes); every other type moves straight to approved. reject() is allowed '
+  'from pending or accepted_pending_asset.';
 COMMENT ON COLUMN submissions.school IS
   'FK to schools(school). NULL only for feedback-type submissions. '
   'SET NULL on school delete so feedback-linked rows are not lost.';
 COMMENT ON COLUMN submissions.payload IS
   'JSONB object whose shape varies by type. '
-  'logo: {logo_type, cloudinary_path} — cloudinary_path points to the staging area. '
+  'logo: {logo_type, cloudinary_path} — cloudinary_path points to the submission''s permanent '
+  '      reference image, keyed by submission id; never promoted/renamed into production. '
   'helmet: {year_first_worn, description, year_last_worn?, currently_worn?, color?, '
   '         finish?, facemask_color?, logo_description?, stripe?, additional_notes?, '
   '         image_paths[], image_labels[]?, other_note?} — image_labels, when present, is '

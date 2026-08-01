@@ -138,6 +138,37 @@ def validate_submission_for_helmet_link(sub_row: tuple | None, submission_id: in
         )
 
 
+async def require_team_logo_exists(conn, team_logo_id: int) -> None:  # pragma: no cover
+    """Raise HTTP 404 if no team_logos row exists with *team_logo_id*."""
+    row = await (await conn.execute("SELECT 1 FROM team_logos WHERE id = %s", (team_logo_id,))).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Team logo {team_logo_id} not found")
+
+
+def validate_submission_for_logo_asset(sub_row: tuple | None, submission_id: int) -> None:
+    """Validate a fetched ``(type, status)`` submissions row before creating a new team_logos
+    row from it via ``POST /admin/logos``'s ``from_submission_id``.
+
+    Raises HTTP 404 if *sub_row* is ``None`` (no such submission), HTTP 422 if
+    it isn't a logo-type submission, HTTP 422 if it isn't in the
+    ``accepted_pending_asset`` state (not yet accepted, already turned into an
+    asset, or rejected). Unlike the helmet link check, this has no 409 case —
+    ``status`` alone already distinguishes "not yet accepted" from "already
+    turned into an asset" (status would already be ``approved`` by then), since
+    team_logos carries the FK to submissions (not the reverse, as with
+    helmets), so there is no separate "already linked" state to detect here.
+    """
+    if sub_row is None:
+        raise HTTPException(status_code=404, detail=f"Submission {submission_id} not found")
+    if sub_row[0] != "logo":
+        raise HTTPException(status_code=422, detail=f"Submission {submission_id} is not a logo submission")
+    if sub_row[1] != "accepted_pending_asset":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Submission {submission_id} is not accepted-pending-asset (status={sub_row[1]!r})",
+        )
+
+
 async def set_school_logo_column(conn, school: str, logo_type: str, path: str) -> None:  # pragma: no cover
     """Write *path* into the ``schools.logo_{logo_type}`` column for *school*."""
     col = sql.Identifier(f"logo_{logo_type}")
@@ -158,6 +189,15 @@ async def set_helmet_image_column(conn, helmet_design_id: int, image_type: str, 
     await conn.execute(
         sql.SQL("UPDATE helmet_designs SET {} = %s WHERE id = %s").format(col),
         (path, helmet_design_id),
+    )
+
+
+async def set_team_logo_image_column(conn, team_logo_id: int, path: str) -> None:  # pragma: no cover
+    """Write *path* into ``team_logos.image_url`` for *team_logo_id*. Unlike helmets,
+    there's a single image column — no image_type dimension needed."""
+    await conn.execute(
+        "UPDATE team_logos SET image_url = %s, updated_at = NOW() WHERE id = %s",
+        (path, team_logo_id),
     )
 
 
