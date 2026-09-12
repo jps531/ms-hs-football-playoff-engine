@@ -189,20 +189,31 @@ def find_ahsfhs_schedule_for_schools(schools: list[School], season: int) -> list
     Return a list of dicts with ashsfhs schedule data for the given schools.
     """
     records: list[Game] = []
+    logger = get_run_logger()
+    failed_schools: list[str] = []
 
     for school in schools:
         url = f"https://www.ahsfhs.org/MISSISSIPPI/teams/gamesbyyear.asp?Team={update_school_name_for_ahsfhs_search(school.school)}&Year={season}"
 
-        text = fetch_article_text_from_ahsfhs(url)
-
-        schedule = parse_ahsfhs_schedule(
-            text or "", season=season, school_name=school.school, url=url, clazz=school.class_
-        )
+        try:
+            text = fetch_article_text_from_ahsfhs(url)
+            schedule = parse_ahsfhs_schedule(
+                text or "", season=season, school_name=school.school, url=url, clazz=school.class_
+            )
+        except Exception:
+            logger.error("Failed to fetch/parse AHSFHS schedule for %r via %s; skipping", school.school, url, exc_info=True)
+            failed_schools.append(school.school)
+            continue
 
         records.extend(schedule)
 
         # Be polite to AHSFHS
         time.sleep(0.3)
+
+    if failed_schools:
+        logger.warning(
+            "Skipped %d school(s) due to fetch/parse errors: %s", len(failed_schools), ", ".join(failed_schools)
+        )
 
     return records
 
@@ -320,6 +331,7 @@ def get_existing_schools(season: int) -> list[School]:
         FROM school_seasons ss
         JOIN schools_effective s USING (school)
         WHERE ss.season = %s
+          AND ss.is_active = TRUE
     """
     schools: list[School] = []
     with get_database_connection() as conn:
