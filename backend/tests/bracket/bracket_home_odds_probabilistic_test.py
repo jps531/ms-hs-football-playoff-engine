@@ -301,6 +301,28 @@ def test_r2_linearity_uniform_equals_seed_average_1a4a() -> None:
     assert result_uniform[school] == pytest.approx(weighted, abs=1e-9)
 
 
+def test_sf_linearity_uniform_equals_seed_average_5a7a() -> None:
+    """SF uniform p_seed overall value equals the average of the four locked-seed overall values.
+
+    Regression test: with no seed exceeding p > 0.5 (e.g. a tightly tied region),
+    compute_semifinal_home_odds must fall through to the probabilistic loop
+    instead of returning 0.0 for a still-alive team (p_playoffs > 0).
+    """
+    region = 1
+    school = "TeamA"
+    uniform_odds = {school: _uniform(school)}
+    result_uniform = compute_semifinal_home_odds(region, uniform_odds, SLOTS_5A_7A_2025, ODD_SEASON)
+
+    weighted = 0.0
+    for seed in range(1, 5):
+        locked_odds = {school: _locked(school, seed)}
+        r = compute_semifinal_home_odds(region, locked_odds, SLOTS_5A_7A_2025, ODD_SEASON)
+        weighted += 0.25 * r[school]
+
+    assert result_uniform[school] == pytest.approx(weighted, abs=1e-9)
+    assert result_uniform[school] > 0.0
+
+
 # ---------------------------------------------------------------------------
 # Scenario 2: Some seeds locked — mixed region_odds
 # ---------------------------------------------------------------------------

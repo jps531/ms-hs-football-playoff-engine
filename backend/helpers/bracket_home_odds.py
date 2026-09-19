@@ -1139,7 +1139,7 @@ def compute_semifinal_home_odds(
                     result[school] = 1.0 if sf_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
                     continue
 
-        if seed is None or o.p_playoffs <= 0:
+        if o.p_playoffs <= 0:
             result[school] = 0.0
             continue
 
