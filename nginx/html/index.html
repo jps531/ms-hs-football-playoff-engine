@@ -3,24 +3,546 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MS HS Football Analytics</title>
+  <title>MS HS Football Playoff Scenarios</title>
+  <meta name="description" content="Region standings, seeding odds, and playoff scenarios for Mississippi high school football.">
   <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --surface-2: #f0f2f5;
+      --border: #dde1e7;
+      --text: #1a1d23;
+      --muted: #5c6470;
+      --accent: #7a1e2c;
+      --accent-soft: #f6e8ea;
+      --good: #1f7a3d;
+      --good-soft: #e3f3e8;
+      --bad: #a32020;
+      --bad-soft: #fbe6e6;
+      --warn: #8a5a00;
+      --warn-soft: #fff3d6;
+      --bar: #7a1e2c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121418;
+        --surface: #1b1e24;
+        --surface-2: #23272f;
+        --border: #333943;
+        --text: #e8eaed;
+        --muted: #9aa3ae;
+        --accent: #e38a97;
+        --accent-soft: #3a2228;
+        --good: #6fcf8f;
+        --good-soft: #1d3326;
+        --bad: #f08a8a;
+        --bad-soft: #3a1f1f;
+        --warn: #f0c060;
+        --warn-soft: #3a3020;
+        --bar: #e38a97;
+      }
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      height: 100%;
-      background: #FFFFFF;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
-    img {
-      max-width: 90vw;
-      max-height: 90vh;
-      object-fit: contain;
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px 48px; }
+
+    header {
+      display: flex; align-items: center; gap: 14px;
+      padding: 20px 0 12px;
     }
+    header img { width: 56px; height: 56px; object-fit: contain; flex: none; }
+    header h1 { font-size: 1.35rem; line-height: 1.2; }
+    header p { color: var(--muted); font-size: 0.9rem; }
+
+    .controls {
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: end;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 16px;
+    }
+    @media (min-width: 700px) {
+      .controls { position: sticky; top: 0; z-index: 5; }
+    }
+    .controls label { display: flex; flex-direction: column; font-size: 0.8rem; color: var(--muted); gap: 4px; }
+    .controls select {
+      font: inherit; color: var(--text); background: var(--surface-2);
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 120px; max-width: 100%;
+    }
+    .controls .team-select { flex: 1 1 200px; }
+    .controls .team-select select { width: 100%; }
+    .asof { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
+
+    .notice {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px; color: var(--muted);
+    }
+    .notice.error { color: var(--bad); }
+
+    .region {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      margin-bottom: 18px; overflow: hidden;
+    }
+    .region-head {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+      padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+    }
+    .region-head h2 { font-size: 1.1rem; }
+    .region-head .meta { color: var(--muted); font-size: 0.85rem; }
+    .region-body { padding: 12px 14px; display: grid; gap: 16px; }
+    .region-body > * { min-width: 0; }
+    h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
+
+    .table-scroll { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+    th, td { padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.78rem; }
+    th:first-child, td:first-child { text-align: left; }
+    tr:last-child td { border-bottom: 0; }
+    tr.selected td { background: var(--accent-soft); }
+    td.team { font-weight: 600; }
+    td.dim { color: var(--muted); }
+    .pct { position: relative; }
+    .pct span { position: relative; }
+    .pct .fill {
+      position: absolute; left: 0; top: 4px; bottom: 4px; background: var(--bar); opacity: 0.14; border-radius: 3px;
+    }
+
+    .badge {
+      display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+      margin-left: 6px; vertical-align: 1px;
+    }
+    .badge.clinched { background: var(--good-soft); color: var(--good); }
+    .badge.eliminated { background: var(--bad-soft); color: var(--bad); }
+    .badge.coin { background: var(--warn-soft); color: var(--warn); }
+
+    ul.plain { list-style: none; display: grid; gap: 4px; }
+    ul.plain li { padding-left: 14px; position: relative; }
+    ul.plain li::before { content: "•"; position: absolute; left: 2px; color: var(--muted); }
+    .games { display: flex; flex-wrap: wrap; gap: 6px; }
+    .game { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; font-size: 0.88rem; }
+
+    .teams-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); }
+    .team-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .team-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .team-card h4 { font-size: 1rem; margin-bottom: 6px; }
+    .outcome { margin-top: 8px; }
+    .outcome:first-of-type { margin-top: 0; }
+    .outcome-label { font-weight: 600; font-size: 0.9rem; }
+    .outcome-label .p { color: var(--muted); font-weight: 400; }
+    .outcome-label.elim { color: var(--bad); }
+    .outcome-label.clinch { color: var(--good); }
+    .outcome ol { padding-left: 22px; font-size: 0.9rem; }
+    .outcome ol li { margin-top: 2px; }
+    .or { color: var(--muted); font-size: 0.75rem; }
+
+    details > summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; color: var(--accent); }
+    details[open] > summary { margin-bottom: 8px; }
+    .scen-table td:nth-child(2) { white-space: normal; text-align: left; min-width: 220px; }
+    .scen-table th:nth-child(2) { text-align: left; }
+    .scen-table td.seed, .scen-table th.seed { text-align: left; }
+    .scen-table td.mine { font-weight: 700; color: var(--accent); }
+
+    footer { color: var(--muted); font-size: 0.8rem; margin-top: 24px; }
+    footer a { color: inherit; }
   </style>
 </head>
 <body>
-  <img src="/static/splash.png" alt="MS HS Football Analytics">
+  <div class="wrap">
+    <header>
+      <img src="/static/splash.png" alt="">
+      <div>
+        <h1>Mississippi High School Football — Region Scenarios</h1>
+        <p>Standings, seeding odds, and what each team needs to clinch a playoff seed.</p>
+      </div>
+    </header>
+
+    <div class="controls">
+      <label>Season
+        <select id="season"></select>
+      </label>
+      <label>Class
+        <select id="class"></select>
+      </label>
+      <label class="team-select">Team
+        <select id="team"><option value="">All teams</option></select>
+      </label>
+      <span class="asof" id="asof"></span>
+    </div>
+
+    <main id="content"><div class="notice">Loading…</div></main>
+
+    <footer>
+      Odds treat every remaining region game as a coin flip. Scenarios follow the MHSAA tiebreaker procedure
+      and are listed once six or fewer region games remain. Seeds are not official until announced by the MHSAA.
+    </footer>
+  </div>
+
+  <script>
+  (() => {
+    const API = "/api/v1";
+    const SCENARIO_GAME_LIMIT = 6;
+    const els = {
+      season: document.getElementById("season"),
+      clazz: document.getElementById("class"),
+      team: document.getElementById("team"),
+      asof: document.getElementById("asof"),
+      content: document.getElementById("content"),
+    };
+    const state = { season: null, clazz: null, team: "", structure: null, teams: [], regions: [] };
+    let loadToken = 0;
+
+    // ---------------------------------------------------------------- helpers
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const pct = (p) => {
+      if (p == null) return "—";
+      const v = p * 100;
+      if (v <= 0) return "—";
+      if (v >= 100) return "100%";
+      if (v < 0.1) return "<0.1%";
+      if (v > 99.9) return ">99.9%";
+      return v.toFixed(1) + "%";
+    };
+    const pctPlain = (p) => (p * 100).toFixed(1) + "%";
+    const wl = (w, l, t) => `${w}–${l}${t ? "–" + t : ""}`;
+    const fmtDate = (d) => {
+      if (!d) return "";
+      const [y, m, day] = d.split("-").map(Number);
+      return new Date(y, m - 1, day).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    };
+
+    async function getJSON(path) {
+      const res = await fetch(API + path, { headers: { Accept: "application/json" } });
+      if (!res.ok) {
+        const err = new Error(`${res.status} ${res.statusText}`);
+        err.status = res.status;
+        throw err;
+      }
+      return res.json();
+    }
+
+    function readUrl() {
+      const q = new URLSearchParams(location.search);
+      return { season: Number(q.get("season")) || null, clazz: Number(q.get("class")) || null, team: q.get("team") || "" };
+    }
+    function writeUrl() {
+      const q = new URLSearchParams();
+      if (state.season) q.set("season", state.season);
+      if (state.clazz) q.set("class", state.clazz);
+      if (state.team) q.set("team", state.team);
+      history.replaceState(null, "", "?" + q.toString());
+    }
+
+    // ---------------------------------------------------------------- loading
+    async function init() {
+      const want = readUrl();
+      try {
+        const seasons = (await getJSON("/seasons")).map((s) => s.season).sort((a, b) => b - a);
+        if (!seasons.length) return showNotice("No seasons available yet.");
+        els.season.innerHTML = seasons.map((s) => `<option value="${s}">${s}</option>`).join("");
+        state.season = seasons.includes(want.season) ? want.season : seasons[0];
+        els.season.value = state.season;
+        state.team = want.team;
+        await loadSeason(want.clazz);
+      } catch (e) {
+        showNotice("Couldn't load seasons. Please try again later.", true);
+      }
+    }
+
+    async function loadSeason(preferredClass) {
+      showNotice("Loading…");
+      [state.structure, state.teams] = await Promise.all([
+        getJSON(`/seasons/${state.season}/structure`),
+        getJSON(`/teams?season=${state.season}`).catch(() => []),
+      ]);
+      populateTeams();
+      const teamRow = state.teams.find((t) => t.school === state.team);
+      if (teamRow) preferredClass = teamRow.class_;
+      const classes = state.structure.classes.map((c) => c.class_).sort((a, b) => b - a);
+      els.clazz.innerHTML = classes.map((c) => `<option value="${c}">${c}A</option>`).join("");
+      state.clazz = classes.includes(preferredClass) ? preferredClass : classes[0];
+      els.clazz.value = state.clazz;
+      await loadClass();
+    }
+
+    async function loadClass() {
+      const token = ++loadToken;
+      writeUrl();
+      showNotice("Loading regions…");
+      els.asof.textContent = "";
+      const cls = state.structure.classes.find((c) => c.class_ === state.clazz);
+      const regionNums = (cls ? cls.regions.map((r) => r.region) : []).sort((a, b) => a - b);
+
+      const results = await Promise.all(
+        regionNums.map((r) =>
+          getJSON(`/standings/${state.clazz}/${r}?season=${state.season}&include_team_scenarios=true`)
+            .then((data) => ({ region: r, data }))
+            .catch((error) => ({ region: r, error }))
+        )
+      );
+      if (token !== loadToken) return; // a newer selection superseded this one
+
+      state.regions = results;
+      render();
+    }
+
+    // Every team in the season, grouped by class, so a team can be found
+    // without knowing its class first.
+    function populateTeams() {
+      const byClass = new Map();
+      for (const t of state.teams) {
+        if (!byClass.has(t.class_)) byClass.set(t.class_, []);
+        byClass.get(t.class_).push(t);
+      }
+      const groups = [...byClass.keys()].sort((a, b) => b - a).map((c) => {
+        const opts = byClass.get(c)
+          .sort((a, b) => a.school.localeCompare(b.school))
+          .map((t) => `<option value="${esc(t.school)}">${esc(t.school)}</option>`);
+        return `<optgroup label="${c}A">${opts.join("")}</optgroup>`;
+      });
+      if (state.team && !state.teams.some((t) => t.school === state.team)) state.team = "";
+      els.team.innerHTML = `<option value="">All teams</option>` + groups.join("");
+      els.team.value = state.team;
+    }
+
+    // ---------------------------------------------------------------- rendering
+    function showNotice(msg, isError) {
+      els.content.innerHTML = `<div class="notice${isError ? " error" : ""}">${esc(msg)}</div>`;
+    }
+
+    function render() {
+      let regions = state.regions;
+      if (state.team) regions = regions.filter((r) => r.data && r.data.teams.some((t) => t.school === state.team));
+      if (!regions.length) return showNotice("No standings data for this class yet.");
+
+      const dates = state.regions.filter((r) => r.data).map((r) => r.data.as_of_date).sort();
+      els.asof.textContent = dates.length ? `Updated ${fmtDate(dates[dates.length - 1])}` : "";
+
+      els.content.innerHTML = regions.map(renderRegion).join("");
+      if (state.team) {
+        const card = els.content.querySelector(".team-card.selected");
+        if (card) card.scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    function renderRegion({ region, data, error }) {
+      const title = `Region ${region}-${state.clazz}A`;
+      if (error) {
+        const msg = error.status === 404 ? "No standings available yet." : "Couldn't load this region.";
+        return `<section class="region"><div class="region-head"><h2>${title}</h2></div><div class="region-body"><p class="dim">${msg}</p></div></section>`;
+      }
+      const remaining = data.remaining_games || [];
+      const remainingLabel = remaining.length === 0
+        ? "Region play complete"
+        : `${remaining.length} region game${remaining.length === 1 ? "" : "s"} remaining`;
+
+      return `
+        <section class="region" id="region-${region}">
+          <div class="region-head">
+            <h2>${title}</h2>
+            <span class="meta">${remainingLabel} · as of ${fmtDate(data.as_of_date)}</span>
+          </div>
+          <div class="region-body">
+            ${renderStandings(data)}
+            ${remaining.length ? renderRemaining(remaining) : ""}
+            ${renderInsights(data)}
+            ${remaining.length ? renderTeamScenarios(data) + renderRegionScenarios(data) : ""}
+          </div>
+        </section>`;
+    }
+
+    function renderStandings(data) {
+      const rows = data.teams.map((t) => {
+        const r = t.record;
+        const o = t.odds;
+        const cells = [o.p1, o.p2, o.p3, o.p4, o.p_playoffs].map(
+          (p) => `<td class="pct"><span class="fill" style="width:${Math.round((p || 0) * 100)}%"></span><span>${pct(p)}</span></td>`
+        );
+        const sel = t.school === state.team ? ' class="selected"' : "";
+        return `<tr${sel}>
+          <td class="team">${esc(t.school)}${statusBadges(t)}</td>
+          <td>${wl(r.region_wins, r.region_losses, r.region_ties)}</td>
+          <td class="dim">${wl(r.wins, r.losses, r.ties)}</td>
+          ${cells.join("")}
+        </tr>`;
+      });
+      return `
+        <div>
+          <h3>Standings &amp; seeding odds</h3>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Team</th><th>Region</th><th>Overall</th><th>#1</th><th>#2</th><th>#3</th><th>#4</th><th>Playoffs</th></tr></thead>
+            <tbody>${rows.join("")}</tbody>
+          </table></div>
+        </div>`;
+    }
+
+    function clinchedSeed(t) {
+      const o = t.odds;
+      for (const s of [1, 2, 3, 4]) if (o["p" + s] >= 0.9999) return s;
+      return null;
+    }
+
+    function statusBadges(t) {
+      let out = "";
+      const seed = clinchedSeed(t);
+      if (seed) out += `<span class="badge clinched">#${seed} seed</span>`;
+      else if (t.clinched) out += `<span class="badge clinched">Clinched</span>`;
+      if (t.eliminated) out += `<span class="badge eliminated">Eliminated</span>`;
+      if (t.coin_flip_needed) out += `<span class="badge coin">Coin flip</span>`;
+      return out;
+    }
+
+    function renderRemaining(remaining) {
+      // location_a is from team_a's perspective; show "visitor @ host" when known.
+      const games = remaining.map((g) => {
+        const a = esc(g.team_a), b = esc(g.team_b);
+        const text = g.location_a === "home" ? `${b} @ ${a}` : g.location_a === "away" ? `${a} @ ${b}` : `${a} vs ${b}`;
+        return `<span class="game">${text}</span>`;
+      });
+      return `<div><h3>Remaining region games</h3><div class="games">${games.join("")}</div></div>`;
+    }
+
+    function renderInsights(data) {
+      let insights = data.key_insights || [];
+      if (state.team) insights = insights.filter((i) => i.team === state.team);
+      if (!insights.length) return "";
+      return `<div><h3>Key insights</h3><ul class="plain">${insights.map((i) => `<li>${esc(i.rendered)}</li>`).join("")}</ul></div>`;
+    }
+
+    function renderTeamScenarios(data) {
+      if (!data.scenarios_available) {
+        return `<div><h3>Team scenarios</h3><p class="dim">Detailed scenarios appear once ${SCENARIO_GAME_LIMIT} or fewer region games remain (currently ${data.remaining_games.length}).</p></div>`;
+      }
+      let teams = data.teams;
+      if (state.team) teams = teams.filter((t) => t.school === state.team);
+      const cards = teams.map(renderTeamCard).join("");
+      return `<div><h3>Team scenarios</h3><div class="teams-grid">${cards}</div></div>`;
+    }
+
+    function renderTeamCard(t) {
+      const paths = t.paths || [];
+      const sel = t.school === state.team ? " selected" : "";
+      let body;
+      if (!paths.length) {
+        body = t.eliminated
+          ? `<div class="outcome-label elim">Eliminated</div>`
+          : clinchedSeed(t)
+          ? `<div class="outcome-label clinch">Clinched #${clinchedSeed(t)} seed</div>`
+          : `<p class="dim">No scenario detail available.</p>`;
+      } else {
+        const seedPaths = paths.filter((p) => p.outcome.type === "seed");
+        const elim = paths.find((p) => p.outcome.type === "eliminated");
+        const playoffs = paths.find((p) => p.outcome.type === "playoffs");
+        const shown = [...seedPaths];
+        // The aggregate "makes the playoffs" path only adds information when the
+        // team can land on more than one seed and can still miss the playoffs.
+        if (playoffs && elim && seedPaths.length > 1) shown.push(playoffs);
+        if (elim) shown.push(elim);
+        body = shown.map(renderOutcome).join("");
+      }
+      return `<div class="team-card${sel}"><h4>${esc(t.school)}</h4>${body}</div>`;
+    }
+
+    function outcomeName(o) {
+      if (o.type === "seed") return `#${o.value} seed`;
+      if (o.type === "playoffs") return "Makes playoffs";
+      return "Eliminated";
+    }
+
+    function renderOutcome(path) {
+      const branches = path.branch_texts || [];
+      const unconditional = !branches.length && path.conditions.length === 1 && path.conditions[0].length === 0;
+      const cls = path.outcome.type === "eliminated" ? " elim" : unconditional ? " clinch" : "";
+      if (unconditional) {
+        const label = path.outcome.type === "eliminated" ? "Eliminated" : `Clinched ${outcomeName(path.outcome).toLowerCase().replace(/^makes /, "")}`;
+        return `<div class="outcome"><div class="outcome-label${cls}">${esc(label)} <span class="p">(${pctPlain(path.p)})</span></div></div>`;
+      }
+      // Older API responses lack branch_texts — fall back to the sentence form.
+      const list = branches.length
+        ? `<ol>${branches.map((b) => `<li>${esc(b)}</li>`).join("")}</ol>`
+        : `<p>${esc(path.human_text)}</p>`;
+      return `<div class="outcome">
+        <div class="outcome-label${cls}">${esc(outcomeName(path.outcome))} if: <span class="p">(${pctPlain(path.p)})</span>${branches.length > 1 ? ' <span class="or">any one of</span>' : ""}</div>
+        ${list}
+      </div>`;
+    }
+
+    // Mirrors scenario_renderer.division_scenarios_as_dict: drop entries whose
+    // rendered conditions and seeding repeat an earlier one, then renumber so
+    // dedup leaves no gaps (sub-scenarios of one original number stay grouped).
+    function dedupeScenarios(scenarios) {
+      const seen = new Set();
+      const out = [];
+      let num = 0;
+      let prevOrig = null;
+      for (const s of scenarios) {
+        const bySeed = {};
+        for (const [team, seed] of Object.entries(s.outcomes)) bySeed[seed] = team;
+        const cond = s.title || s.game_winners.map((g) => `${g.winner} beats ${g.loser}`).join(" AND ");
+        const seeding = Object.keys(bySeed).sort((a, b) => a - b).map((k) => bySeed[k]);
+        const key = JSON.stringify([cond, seeding]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (s.scenario_num !== prevOrig) {
+          num += 1;
+          prevOrig = s.scenario_num;
+        }
+        out.push({ label: `${num}${s.sub_label || ""}`, cond, bySeed });
+      }
+      return out;
+    }
+
+    function renderRegionScenarios(data) {
+      const scenarios = data.scenarios_available ? dedupeScenarios(data.scenarios || []) : [];
+      if (!scenarios.length) return "";
+      const rows = scenarios.map(({ label, cond, bySeed }) => {
+        const seeds = [1, 2, 3, 4].map((n) => {
+          const team = bySeed[String(n)];
+          const hl = team && team === state.team ? ' class="seed mine"' : ' class="seed"';
+          return `<td${hl}>${esc(team || "—")}</td>`;
+        });
+        return `<tr><td>${esc(label)}</td><td>${esc(cond) || '<span class="dim">Any results</span>'}</td>${seeds.join("")}</tr>`;
+      });
+      return `
+        <details>
+          <summary>All region scenarios (${scenarios.length})</summary>
+          <div class="table-scroll"><table class="scen-table">
+            <thead><tr><th>#</th><th>If…</th><th class="seed">1st</th><th class="seed">2nd</th><th class="seed">3rd</th><th class="seed">4th</th></tr></thead>
+            <tbody>${rows.join("")}</tbody>
+          </table></div>
+        </details>`;
+    }
+
+    // ---------------------------------------------------------------- events
+    els.season.addEventListener("change", async () => {
+      state.season = Number(els.season.value);
+      state.team = "";
+      try { await loadSeason(state.clazz); } catch { showNotice("Couldn't load that season.", true); }
+    });
+    els.clazz.addEventListener("change", () => {
+      state.clazz = Number(els.clazz.value);
+      state.team = "";
+      els.team.value = "";
+      loadClass();
+    });
+    els.team.addEventListener("change", () => {
+      state.team = els.team.value;
+      const teamRow = state.teams.find((t) => t.school === state.team);
+      if (teamRow && teamRow.class_ !== state.clazz) {
+        state.clazz = teamRow.class_;
+        els.clazz.value = state.clazz;
+        loadClass();
+        return;
+      }
+      writeUrl();
+      render();
+    });
+
+    init();
+  })();
+  </script>
 </body>
 </html>

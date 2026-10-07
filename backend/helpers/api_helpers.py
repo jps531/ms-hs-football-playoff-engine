@@ -2697,7 +2697,13 @@ def build_team_paths(
         # away (see _simplify_atom_list's "Rule 2 — Game elimination").
         atoms = _simplify_atom_list(atoms)
         conditions = [[PathConditionModel(**d) for d in atom_condition_dicts(atom, game_dates)] for atom in atoms]
-        return ScenarioPathModel(outcome=outcome, p=p, conditions=conditions, human_text=_human_text(outcome, atoms))
+        return ScenarioPathModel(
+            outcome=outcome,
+            p=p,
+            conditions=conditions,
+            human_text=_human_text(outcome, atoms),
+            branch_texts=[] if atoms == [[]] else [_render_atom(a) for a in atoms],
+        )
 
     paths: list[ScenarioPathModel] = []
     playoff_atoms: list[list] = []

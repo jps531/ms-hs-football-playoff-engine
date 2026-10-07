@@ -59,6 +59,7 @@ specific seed pinned to that exact position — not alphabetical order.
   - `p` — the outcome's existing unweighted probability (`p1`–`p4` / `p_playoffs` / `1 - p_playoffs`) — not a per-branch probability
   - `conditions` — OR-of-AND-groups (outer array = alternative paths, inner array = conditions that must all hold), already ordered broadest/most-likely-first by the boolean minimizer. Each condition is tagged by `type`: `"game_result"` (the common case — `school`/`date`/`opponent`/`required_result`/`margin_class`, `school` always from the winner's perspective), `"margin_sum"` (a linear margin constraint spanning multiple games — `games`/`op`/`threshold` instead of a single school/opponent), or `"coin_flip"`/`"pd_rank"` (tiebreaker-only, not tied to any remaining game — `description` text only). `date` is `null` when the underlying game's date can't be resolved. `margin_class` is `null` except at R≤5 (margin-sensitive tier) — see SCENARIO_COMPUTATION.md.
   - `human_text` — fallback copy only; the structured `conditions` form is the contract, not this string
+  - `branch_texts` — one plain-English clause per OR-group in `conditions` (index-aligned), rendered by the same renderer as `human_text`; empty when the outcome is unconditional. Display copy only, like `human_text`
 
 **Top-level response fields**:
 - `scenarios` — when `scenarios_available` is `true`, each entry includes `game_winners` (which team wins each remaining game to produce this seeding), `tiebreaker_groups`, `coinflip_groups`, and `outcomes` (team → seed number)

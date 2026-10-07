@@ -4489,6 +4489,48 @@ class TestBuildTeamPaths:
         paths = build_team_paths("Taylorsville", seed_map, {}, odds, playoff_seeds=4)
         assert paths[0].human_text == "Taylorsville finishes as the #2 seed if Resurrection beats Stringer."
 
+    def test_branch_texts_one_per_or_group(self):
+        """branch_texts renders each OR-group as its own clause, index-aligned with conditions."""
+        odds = StandingsOdds(
+            school="Taylorsville",
+            p1=0,
+            p2=0.75,
+            p3=0,
+            p4=0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=False,
+        )
+        seed_map = {
+            2: [
+                [GameResult(winner="Resurrection", loser="Stringer")],
+                [GameResult(winner="Stringer", loser="Resurrection"), GameResult(winner="Taylorsville", loser="Bay")],
+            ]
+        }
+        paths = build_team_paths("Taylorsville", seed_map, {}, odds, playoff_seeds=4)
+        assert paths[0].branch_texts == [
+            "Resurrection beats Stringer",
+            "Stringer beats Resurrection AND Taylorsville beats Bay",
+        ]
+        assert len(paths[0].branch_texts) == len(paths[0].conditions)
+
+    def test_branch_texts_empty_when_unconditional(self):
+        """An unconditional outcome has no branches to list."""
+        odds = StandingsOdds(
+            school="Richton",
+            p1=0,
+            p2=0,
+            p3=0,
+            p4=1.0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=False,
+        )
+        paths = build_team_paths("Richton", {4: [[]]}, {}, odds, playoff_seeds=4)
+        assert all(p.branch_texts == [] for p in paths)
+
     def test_human_text_playoffs_unconditional(self):
         """An unconditional playoffs path reads 'has already clinched a playoff spot.'"""
         odds = StandingsOdds(

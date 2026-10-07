@@ -378,13 +378,16 @@ class ScenarioPathModel(BaseModel):
     for a seed outcome, ``p_playoffs`` for playoffs, ``1 - p_playoffs`` for
     eliminated) — not a per-branch probability. ``conditions`` OR-groups are
     already ordered broadest/most-likely-first by the underlying boolean
-    minimizer (``_sort_atom_list``).
+    minimizer (``_sort_atom_list``). ``branch_texts`` renders each OR-group in
+    ``conditions`` as one plain-English clause, index-aligned with it (empty
+    when the outcome is unconditional).
     """
 
     outcome: PathOutcomeModel
     p: float
     conditions: list[list[PathConditionModel]]
     human_text: str
+    branch_texts: list[str] = []
 
 
 class TeamStandingsEntry(BaseModel):
