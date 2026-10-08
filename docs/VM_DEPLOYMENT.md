@@ -67,7 +67,7 @@ docker compose --env-file .env.local --profile local-db up --build -d
 
 HTTPS is live in production via this setup (Certbot-issued Let's Encrypt cert, HSTS header, and HTTP→HTTPS redirect in `nginx/nginx.conf`).
 
-Renewals run in **webroot** mode: Certbot drops a challenge token in `/var/www/certbot` on the host, and nginx (which mounts that directory read-only) serves it on port 80 ahead of the HTTPS redirect. nginx keeps running the whole time, so Certbot's timer can renew unattended. The `www.mshsfootball.com` lines below assume a DNS record for `www` points at this instance; drop that `-d` flag if it doesn't, or validation fails.
+Renewals run in **webroot** mode: Certbot drops a challenge token in `/var/www/certbot` on the host, and nginx (which mounts that directory read-only) serves it on port 80 ahead of the HTTPS redirect. nginx keeps running the whole time, so Certbot's timer can renew unattended.
 
 ### First certificate (new instance)
 
@@ -76,7 +76,7 @@ nginx won't start until certificate files exist, so the very first certificate i
 ```
 docker compose --env-file .env.local --profile local-db down
 sudo apt install certbot -y
-sudo certbot certonly --standalone -d mshsfootball.com -d www.mshsfootball.com
+sudo certbot certonly --standalone -d mshsfootball.com
 ```
 
 ### Switch renewals to webroot
@@ -87,10 +87,14 @@ Create the webroot, bring the stack up, and re-issue once through it. That recor
 sudo mkdir -p /var/www/certbot
 docker compose --env-file .env.local --profile local-db up --build -d
 sudo certbot certonly --webroot -w /var/www/certbot --cert-name mshsfootball.com \
-  -d mshsfootball.com -d www.mshsfootball.com --force-renewal
+  -d mshsfootball.com --force-renewal
 ```
 
 The same command repairs an instance whose certificate has already expired: nginx starts fine with an expired certificate, and the challenge is served over plain HTTP.
+
+### Adding www (optional)
+
+`nginx.conf` answers for `www.mshsfootball.com`, but the certificate only covers it once DNS does. Add an A record for `www` pointing at the static IP, wait until `dig +short www.mshsfootball.com` returns it, then re-run the webroot command above with `-d www.mshsfootball.com` added. Certbot validates every name or none, so a `www` without DNS fails the whole request (`NXDOMAIN looking up A`).
 
 ### Reload nginx after each renewal
 
