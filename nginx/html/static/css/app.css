@@ -165,6 +165,20 @@ button { font: inherit; color: inherit; }
 }
 .site-header__home:hover { color: var(--text-primary); }
 .site-header__home img { width: 34px; height: auto; }
+.team-search { flex: 1 1 auto; display: flex; justify-content: flex-end; max-width: 20rem; margin-left: auto; }
+.team-search input {
+  width: 100%; min-height: 44px; padding: 0 12px;
+  font: inherit; font-size: 15px;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.team-search input::placeholder { color: var(--text-secondary); }
+@media (max-width: 40em) {
+  .site-header { gap: 10px; }
+  .site-header__home span { display: none; }
+  .theme-toggle { font-size: 13px; }
+}
 .theme-toggle {
   min-height: 44px; padding: 0 4px;
   background: none; border: 0; cursor: pointer;
@@ -246,6 +260,36 @@ button { font: inherit; color: inherit; }
 
 /* ------------------------------------------------------------ provenance */
 
+.mode { display: inline-flex; align-items: center; gap: 4px; }
+
+/* The provenance line as controls: each select reads as part of the
+   sentence, with a dotted underline and caret marking it as changeable. */
+.provenance--controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px;
+  font-size: 13px;
+}
+.provenance--controls .sep { color: var(--text-secondary); }
+.ctl { display: inline-flex; align-items: center; gap: 4px; }
+.inline-select select {
+  appearance: none;
+  field-sizing: content; /* hug the chosen option instead of the longest one */
+  min-height: 44px;
+  padding: 0 14px 0 2px;
+  border: 0; border-radius: 4px;
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237B7A7B' stroke-width='1.5'/%3E%3C/svg%3E")
+    no-repeat right 2px center / 9px 6px;
+  color: var(--text-primary);
+  font: inherit; font-weight: 600;
+  text-decoration: underline dotted var(--connector);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.ctl--mode.mode--tossup select { font-style: italic; }
+.inline-select option { font-style: normal; color: initial; }
+.mode--tossup { font-style: italic; }
+.mode__glyph { width: 13px; height: 13px; flex: none; }
+
 .provenance {
   font-size: 12px; line-height: 16px; font-weight: 500;
   letter-spacing: 0.02em;
@@ -295,18 +339,19 @@ button { font: inherit; color: inherit; }
   object-fit: contain;
   vertical-align: middle;
 }
+.mark--generic .helmet__shell { stroke: #FFFFFF; }
+.mark--generic.mark--pale .helmet__shell { stroke: var(--neutral-400); }
+.dark .mark--generic.mark--pale .helmet__shell { stroke: #FFFFFF; }
+/* No team colors on record: initials in a neutral squircle. */
 .mark--initials {
   display: inline-grid; place-items: center;
-  border-radius: 50%;
-  background: var(--team-light, var(--neutral-500));
-  color: var(--team-ink-light, #FFFFFF);
+  border-radius: 30%;
+  background: var(--neutral-200);
+  color: var(--neutral-800);
   font-size: 10px; line-height: 1; font-weight: 700;
   letter-spacing: -0.02em;
 }
-.dark .mark--initials {
-  background: var(--team-dark, var(--neutral-500));
-  color: var(--team-ink-dark, var(--neutral-900));
-}
+.dark .mark--initials { background: var(--neutral-700); color: var(--neutral-50); }
 /* Logos at 48px and up get a footprint-normalizing container. */
 .mark--lg { width: 48px; height: 48px; }
 .mark--lg.mark--logo {
@@ -370,6 +415,7 @@ button { font: inherit; color: inherit; }
 .region-head .title { margin-top: 4px; }
 .region-head .headline { margin-top: 20px; }
 .region-head .provenance { margin-top: 16px; }
+.region-head .provenance--controls, .entry-head .provenance--controls { margin-top: 8px; }
 
 .standings { margin-top: 14px; width: 100%; border-collapse: collapse; }
 .standings caption { text-align: left; }
@@ -391,6 +437,11 @@ button { font: inherit; color: inherit; }
 .standings .col-odds { width: 4.4em; padding-inline: 3px; }
 .standings .col-rec { white-space: nowrap; }
 .standings tr.is-eliminated .team-name { color: var(--text-secondary); }
+/* The picked team: a rule in the identity green, not a fill (a fill would
+   match the lowest odds-ramp slot and hide those cells). */
+.standings tr.is-focus > :first-child { box-shadow: inset 3px 0 0 var(--accent-identity); }
+.standings tr.is-focus .team-name { font-weight: 600; }
+.focus-note { margin-bottom: 8px; font-size: 14px; color: var(--text-secondary); }
 
 .row-toggle {
   display: flex; align-items: center; gap: 8px;

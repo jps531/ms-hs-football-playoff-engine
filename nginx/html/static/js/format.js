@@ -192,3 +192,22 @@ export function teamUiColors(team) {
     dark: clampToSurface(raw, DARK_SURFACE, 3),
   };
 }
+
+/**
+ * Raw team colors for the generic helmet: shell = primary, stripe = first
+ * secondary. Artwork, so never clamped (brief §5.5).
+ */
+export function teamRawColors(team) {
+  const variants = team?.color_variants;
+  const shell = variants?.primary?.raw ?? null;
+  if (!hexToRgb(shell)) return null;
+  const secondary = variants?.secondary?.[0]?.raw
+    ?? String(team?.secondary_color_hex ?? "").split(",")[0].trim();
+  return { shell: shell.toUpperCase(), stripe: hexToRgb(secondary) ? secondary.toUpperCase() : "#FFFFFF" };
+}
+
+/** True when a color is too pale to read against white without an outline. */
+export function isPale(hex) {
+  return contrastRatio(hex, "#FFFFFF") < 1.6;
+}
+

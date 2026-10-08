@@ -33,14 +33,30 @@ test("status: only the highest badge, eliminated first", () => {
   assert.equal(text(badge), "Eliminated");
 });
 
-test("team mark: helmet, then logo, then initials on the team color", () => {
-  assert.match(teamMark("Oxford", { helmet_url: "h.png", logo_primary: "l.png" }), /mark--helmet[^>]*src="h.png"[^>]*alt=""/);
-  assert.match(teamMark("Oxford", { logo_primary: "l.png" }), /mark--logo/);
-  const initials = teamMark("Wilkinson County", { color_variants: { primary: { light: { ui: "#2A3EAD" }, dark: { ui: "#6E80E6" } } } });
-  assert.match(initials, /--team-light:#2A3EAD;--team-dark:#6E80E6/);
-  assert.equal(text(initials), "W");
-  assert.doesNotMatch(teamMark("A", { logo_primary: "l.png" }), /mark--lg/);
-  assert.match(teamMark("A", { logo_primary: "l.png" }, { size: 48 }), /mark--lg/);
+test("team mark: helmet image, else a generic helmet in team colors, else a squircle", () => {
+  assert.match(teamMark("Oxford", { helmet_url: "h.png" }), /mark--helmet[^>]*src="h.png"[^>]*alt=""/);
+  const colors = { color_variants: { primary: { raw: "#B22234" }, secondary: [{ raw: "#ffc72c" }] } };
+  const generic = teamMark("Oxford", colors);
+  assert.match(generic, /mark--generic/);
+  assert.match(generic, /fill="#B22234"/); // shell is the raw primary: artwork, never clamped
+  assert.match(generic, /stroke="#FFC72C"/); // crown stripe is the first secondary
+  assert.match(generic, /aria-hidden="true"/);
+  assert.match(teamMark("Oxford", { color_variants: { primary: { raw: "#2A3EAD" } } }), /stroke="#FFFFFF"/);
+  assert.match(teamMark("Oxford", { color_variants: { primary: { raw: "#FFFFFF" } } }), /mark--pale/);
+  assert.doesNotMatch(generic, /mark--pale/);
+  const squircle = teamMark("Wilkinson County", { logo_primary: "l.png" });
+  assert.match(squircle, /mark--initials/); // logos aren't used at mark size
+  assert.equal(text(squircle), "W");
+});
+
+test("provenance carries the odds mode by glyph and type, not color", () => {
+  const projected = provenance({ label: "Week 9", date: "x", mode: "projected" }, () => "Oct 24");
+  assert.equal(text(projected), "Through Week 9 · Oct 24 · Projected");
+  assert.match(projected, /mode--projected"><svg/);
+  const tossup = provenance({ label: "Week 9", mode: "tossup" }, () => "");
+  assert.match(tossup, /mode--tossup"><svg/);
+  assert.equal(text(tossup), "Through Week 9 · Toss-up");
+  assert.doesNotMatch(provenance({ label: "Week 9", mode: "bogus" }, () => ""), /mode/);
 });
 
 test("chip: subject team named, margin range shown", () => {

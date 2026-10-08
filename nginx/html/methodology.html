@@ -21,7 +21,7 @@
 <body>
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header">
-    <a class="site-header__home" href="/">
+    <a class="site-header__home" href="/" aria-label="Mississippi High School Football, all regions">
       <img src="/static/mark.png" alt="" width="34" height="29">
       <span>Mississippi High School Football</span>
     </a>
@@ -44,15 +44,37 @@
         A region with six games left has 64 ways those games can finish. We
         build the final standings for each one, break any ties, and count how
         often each team lands in each seed. A team that finishes first in 16
-        of the 64 has a 25% chance at the region title.
+        of the 64 has a 25% toss-up chance at the region title.
       </p>
       <p>
-        In that count, every remaining game is a toss-up: each team is given an
-        even chance to win it. The odds describe the shape of the race, not a
-        prediction of who’s better. Early in the season, when a region has more
-        than 15 games left and there are too many outcomes to list, we
-        simulate the rest of the schedule 50,000 times instead, using each
-        team’s Elo rating to decide who wins each game.
+        Early in the season, when a region has more than 15 games left and
+        there are too many outcomes to list, we simulate the rest of the
+        schedule 50,000 times instead, using each team’s Elo rating to decide
+        who wins each game.
+      </p>
+
+      <h2>Projected and toss-up odds</h2>
+      <p>
+        Every outcome can be counted two ways, and you can switch between them
+        at the top of each region.
+      </p>
+      <p>
+        <strong>Projected</strong> weights each outcome by how likely it is.
+        Every team carries an Elo rating built from its results, with extra
+        credit for margin of victory and a carryover from last season, and
+        those ratings, plus home-field advantage, set each team’s chance of
+        winning each remaining game. A 70% favorite’s win counts for more
+        than its upset loss.
+      </p>
+      <p>
+        <strong>Toss-up</strong> treats every remaining game as a coin flip, so
+        each outcome counts the same. It describes the shape of the race
+        rather than who’s better: how many of the possible endings put a team
+        in, regardless of how likely any one game is.
+      </p>
+      <p>
+        Clinched and eliminated mean the same thing in both. A team that’s in
+        no matter what is 100% either way.
       </p>
 
       <h2>Breaking ties the way the MHSAA does</h2>

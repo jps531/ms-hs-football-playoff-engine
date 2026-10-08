@@ -247,7 +247,7 @@ open htmlcov/index.html
 
 The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no build step. It follows [docs/2026_INTERIM_UI_BRIEF.md](docs/2026_INTERIM_UI_BRIEF.md): pick a class, pick a region, read that region's race.
 
-- `index.html` — the class region list (`/?class=7`) and region view (`/?class=7&region=2`), rendered by `static/js/app.js` from the public `/api/v1` endpoints
+- `index.html` — the class region list (`/?class=7`) and region view (`/?class=7&region=2`), rendered by `static/js/app.js` from the public `/api/v1` endpoints. Optional parameters: `season`, `week` (a past week's snapshot; omitted = latest), `odds=tossup` (default is Projected, the Elo-weighted columns), and `team` (highlights that team and shows only its scenarios — set by the header's team search)
 - `methodology.html` — served at `/methodology`
 - `static/js/format.js`, `components.js`, `scenarios.js` — pure, DOM-free modules (honest odds rounding, the odds ramp, badges, condition chips, outcome cards), tested with Node's built-in runner:
 

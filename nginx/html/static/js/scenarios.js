@@ -3,6 +3,31 @@
 
 import { ordinalWord } from "./format.js";
 
+const ODDS_KEYS = ["p1", "p2", "p3", "p4", "p_playoffs"];
+
+/**
+ * True when the snapshot carries Projected (Elo-weighted) odds. Weighted
+ * fields default to 0 when ratings weren't available, and every region has
+ * playoff teams, so an all-zero playoff column means "not computed".
+ */
+export function hasProjectedOdds(teams) {
+  return (teams ?? []).some((t) => (t.odds?.p_playoffs_weighted ?? 0) > 0);
+}
+
+/** A team's p1-p4 / p_playoffs in the chosen mode ("projected" or "tossup"). */
+export function oddsFor(entry, mode) {
+  const o = entry.odds ?? {};
+  return Object.fromEntries(ODDS_KEYS.map((k) => [k, mode === "projected" ? o[`${k}_weighted`] ?? 0 : o[k]]));
+}
+
+/** Probability of one path outcome (seed / playoffs / eliminated) in the chosen mode. */
+export function outcomeProbability(entry, outcome, mode) {
+  const o = oddsFor(entry, mode);
+  if (outcome.type === "seed") return o[`p${outcome.value}`];
+  if (outcome.type === "playoffs") return o.p_playoffs;
+  return 1 - o.p_playoffs;
+}
+
 export function isUnconditional(path) {
   return path.conditions.length === 1 && path.conditions[0].length === 0;
 }
@@ -17,7 +42,7 @@ export function isUnconditional(path) {
  * (the playoffs path unions every seed and can run to a dozen-plus
  * alternatives where elimination is a single condition).
  */
-export function outcomeCards(teamEntries) {
+export function outcomeCards(teamEntries, mode = "tossup") {
   const groups = { title: [], playoffs: [], seeding: [] };
   for (const t of teamEntries) {
     const paths = t.paths ?? [];
@@ -25,7 +50,9 @@ export function outcomeCards(teamEntries) {
     const playoffs = paths.find((p) => p.outcome.type === "playoffs");
     const eliminated = paths.find((p) => p.outcome.type === "eliminated");
     const conditionalSeeds = seedPaths.filter((p) => !isUnconditional(p));
-    const card = (title, path) => ({ team: t.school, title, p: path.p, groups: path.conditions });
+    const card = (title, path) => ({
+      team: t.school, title, p: outcomeProbability(t, path.outcome, mode), groups: path.conditions,
+    });
 
     for (const p of conditionalSeeds) {
       if (p.outcome.value === 1) groups.title.push(card(`${t.school} wins the region`, p));

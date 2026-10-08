@@ -21,10 +21,15 @@
 <body>
   <a class="skip-link" href="#app">Skip to content</a>
   <header class="site-header">
-    <a class="site-header__home" href="/">
+    <a class="site-header__home" href="/" aria-label="Mississippi High School Football, all regions">
       <img src="/static/mark.png" alt="" width="34" height="29">
       <span>Mississippi High School Football</span>
     </a>
+    <form class="team-search" role="search">
+      <label for="team-search" class="visually-hidden">Find a team</label>
+      <input id="team-search" type="search" list="team-options" placeholder="Find a team" autocomplete="off" enterkeyhint="go">
+      <datalist id="team-options"></datalist>
+    </form>
     <button type="button" class="theme-toggle" id="theme-toggle">Dark theme</button>
   </header>
 
