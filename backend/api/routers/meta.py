@@ -62,7 +62,24 @@ def _row_to_team_model(r) -> TeamModel:
         zip=r[14],
         secondary_color_hex=r[15],
         color_variants=r[16],
+        helmet_url=logo_url(r[17]) if r[17] else None,
     )
+
+
+# The team's default helmet image for its season, resolved in the same order as
+# GET /teams/{team}/helmets/resolved (primary design covering the season, else
+# the most recently introduced one). Prefers the right-side view, which faces
+# toward a team name set to its right; falls back to the left-side view.
+_RESOLVED_HELMET_JOIN: LiteralString = """
+    LEFT JOIN LATERAL (
+        SELECT COALESCE(hd.image_right, hd.image_left) AS helmet_image
+        FROM helmet_designs hd
+        WHERE hd.school = s.school
+          AND helmet_covers_season(hd.years_worn, hd.year_first_worn, hd.year_last_worn, ss.season)
+        ORDER BY hd.is_primary DESC, hd.year_first_worn DESC
+        LIMIT 1
+    ) h ON TRUE
+"""
 
 
 @router.get("/seasons")
@@ -148,17 +165,22 @@ async def list_teams(
         params.append(region)
 
     where_clause = and_join_conditions(conditions)
-    query = sql.SQL("""
+    query = sql.SQL(
+        """
         SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
                s.city, s.mascot, s.primary_color, s.secondary_color,
                s.logo_primary, s.logo_secondary, s.logo_tertiary,
                s.latitude, s.longitude, s.zip, s.secondary_color_hex,
-               s.color_variants
+               s.color_variants, h.helmet_image
         FROM schools_effective s
         JOIN school_seasons ss ON s.school = ss.school
+        """
+        + _RESOLVED_HELMET_JOIN
+        + """
         WHERE {}
         ORDER BY ss.class, ss.region, s.school
-    """).format(where_clause)
+    """
+    ).format(where_clause)
     async with get_conn() as conn:
         rows = await conn.execute(query, params)
         return [_row_to_team_model(r) async for r in rows]
@@ -174,9 +196,12 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
                    s.city, s.mascot, s.primary_color, s.secondary_color,
                    s.logo_primary, s.logo_secondary, s.logo_tertiary,
                    s.latitude, s.longitude, s.zip, s.secondary_color_hex,
-                   s.color_variants
+                   s.color_variants, h.helmet_image
             FROM schools_effective s
             JOIN school_seasons ss ON s.school = ss.school
+            """
+            + _RESOLVED_HELMET_JOIN
+            + """
             WHERE s.school = %s AND ss.season = %s
             """,
             (team, season),

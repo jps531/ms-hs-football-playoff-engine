@@ -243,6 +243,20 @@ uv run pytest --cov-report=html
 open htmlcov/index.html
 ```
 
+### Frontend (2026 interim UI)
+
+The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no build step. It follows [docs/2026_INTERIM_UI_BRIEF.md](docs/2026_INTERIM_UI_BRIEF.md): pick a class, pick a region, read that region's race.
+
+- `index.html` — the class region list (`/?class=7`) and region view (`/?class=7&region=2`), rendered by `static/js/app.js` from the public `/api/v1` endpoints
+- `methodology.html` — served at `/methodology`
+- `static/js/format.js`, `components.js`, `scenarios.js` — pure, DOM-free modules (honest odds rounding, the odds ramp, badges, condition chips, outcome cards), tested with Node's built-in runner:
+
+```
+node --test nginx/tests/*.test.mjs
+```
+
+Inter is self-hosted (`static/fonts/`, SIL OFL); Nippo, the display face, loads from Fontshare's CDN.
+
 ### Docstring coverage
 
 Check that all public functions and modules have docstrings:

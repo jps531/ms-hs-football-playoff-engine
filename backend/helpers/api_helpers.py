@@ -2402,7 +2402,12 @@ async def load_scenarios_snapshot(  # pragma: no cover
             insight_type=ins.insight_type,
             team=ins.team,
             seed=ins.seed,
-            conditions=[KeyInsightConditionModel(winner=c.winner, loser=c.loser) for c in ins.conditions],
+            conditions=[
+                KeyInsightConditionModel(
+                    winner=c.winner, loser=c.loser, min_margin=c.min_margin, max_margin=c.max_margin
+                )
+                for c in ins.conditions
+            ],
             rendered=ins.rendered,
             r_computed=ins.r_computed,
         )
@@ -2697,13 +2702,7 @@ def build_team_paths(
         # away (see _simplify_atom_list's "Rule 2 — Game elimination").
         atoms = _simplify_atom_list(atoms)
         conditions = [[PathConditionModel(**d) for d in atom_condition_dicts(atom, game_dates)] for atom in atoms]
-        return ScenarioPathModel(
-            outcome=outcome,
-            p=p,
-            conditions=conditions,
-            human_text=_human_text(outcome, atoms),
-            branch_texts=[] if atoms == [[]] else [_render_atom(a) for a in atoms],
-        )
+        return ScenarioPathModel(outcome=outcome, p=p, conditions=conditions, human_text=_human_text(outcome, atoms))
 
     paths: list[ScenarioPathModel] = []
     playoff_atoms: list[list] = []

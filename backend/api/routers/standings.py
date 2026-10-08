@@ -47,6 +47,7 @@ from backend.helpers.api_helpers import (
     today,
     within_display_threshold,
 )
+from backend.helpers.headline import build_region_headline
 from backend.helpers.scenario_renderer import atoms_from_complete_scenarios
 from backend.helpers.scenario_updater import apply_region_game_results, merge_applied_results
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
@@ -248,6 +249,7 @@ async def get_standings(
         scenarios=scenarios_to_entries(snapshot.complete_scenarios) if scenarios_available else None,
         key_insights=snapshot.key_insights if snapshot.key_insights else None,
         computation_state=computation_state,
+        headline=build_region_headline(team_entries, snapshot.key_insights, len(snapshot.remaining)),
     )
 
 
