@@ -35,6 +35,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/html:/usr/share/nginx/html:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Certbot webroot: renewal writes HTTP-01 challenge tokens here on the host
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - api
       - prefect-server
