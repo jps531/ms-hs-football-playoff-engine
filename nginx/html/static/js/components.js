@@ -64,24 +64,36 @@ export function provenance({ label, date, live = false, mode = null } = {}, form
 
 // --------------------------------------------------------- status badge
 
-/** The single highest status for a standings row, or null. */
-export function teamStatus(entry) {
-  if (!entry) return null;
-  if (entry.eliminated) return { kind: "eliminated", label: "Eliminated" };
+/**
+ * Every status that applies to a standings row, most important first: the
+ * clinch (the specific seed when locked) or elimination, then a pending
+ * coin flip, which can sit alongside a clinch.
+ */
+export function teamStatuses(entry) {
+  if (!entry) return [];
+  const statuses = [];
   const o = entry.odds ?? {};
-  for (const seed of [1, 2, 3, 4]) {
-    if (isCertain(o[`p${seed}`])) return { kind: "clinched", label: `Clinched #${seed}` };
-  }
-  if (entry.coin_flip_needed) return { kind: "coinflip", label: "Coin flip" };
-  if (entry.clinched) return { kind: "clinched", label: "Clinched" };
-  return null;
+  const seed = [1, 2, 3, 4].find((s) => isCertain(o[`p${s}`]));
+  if (entry.eliminated) statuses.push({ kind: "eliminated", label: "Eliminated" });
+  else if (seed) statuses.push({ kind: "clinched", label: `Clinched #${seed}` });
+  else if (entry.clinched) statuses.push({ kind: "clinched", label: "Clinched" });
+  if (entry.coin_flip_needed) statuses.push({ kind: "coinflip", label: "Coin flip" });
+  return statuses;
 }
 
-export function statusBadge(entry) {
-  const status = teamStatus(entry);
-  if (!status) return "";
-  const icon = { clinched: ICONS.check, eliminated: ICONS.cross, coinflip: ICONS.coin }[status.kind];
-  return `<span class="badge badge--${status.kind}">${icon}${esc(status.label)}</span>`;
+const BADGE_ICONS = { clinched: ICONS.check, eliminated: ICONS.cross, coinflip: ICONS.coin };
+
+export function statusBadges(entry) {
+  return teamStatuses(entry)
+    .map((st) => `<span class="badge badge--${st.kind}">${BADGE_ICONS[st.kind]}${esc(st.label)}</span>`)
+    .join("");
+}
+
+/** A small "i" button that opens an inline note (never hover-only). */
+export function infoButton(controls, label) {
+  return `<button type="button" class="info-button" aria-expanded="false" aria-controls="${esc(controls)}">`
+    + '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".9" fill="currentColor" stroke="none"/></svg>'
+    + `<span class="visually-hidden">${esc(label)}</span></button>`;
 }
 
 // ---------------------------------------------------------- team identity

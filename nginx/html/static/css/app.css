@@ -108,7 +108,7 @@ body {
 }
 /* Tabular figures on every numeric style (brief §4) — scoped, because Inter's
    tnum feature also widens hyphens and would space out prose and titles. */
-.standings, .odds, .detail__stat, .region-link__leader .muted, .region-link__alive, .provenance {
+.standings, .odds, .detail__stat, .provenance {
   font-variant-numeric: tabular-nums;
 }
 h1, h2, h3, h4, p, ol, ul, figure { margin: 0; }
@@ -262,6 +262,22 @@ button { font: inherit; color: inherit; }
 
 .mode { display: inline-flex; align-items: center; gap: 4px; }
 
+.info-button {
+  display: inline-grid; place-items: center;
+  width: 32px; height: 44px; margin-left: -4px;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--text-secondary);
+}
+.info-button svg { width: 15px; height: 15px; }
+.info-button:hover, .info-button[aria-expanded="true"] { color: var(--text-primary); }
+.mode-help {
+  max-width: 36rem; margin-top: 4px; padding: 10px 14px;
+  border-left: 2px solid var(--connector);
+  font-size: 14px; line-height: 20px; color: var(--text-secondary);
+}
+.mode-help p + p { margin-top: 6px; }
+.mode-help strong { color: var(--text-primary); font-weight: 600; }
+
 /* The provenance line as controls: each select reads as part of the
    sentence, with a dotted underline and caret marking it as changeable. */
 .provenance--controls {
@@ -269,6 +285,7 @@ button { font: inherit; color: inherit; }
   font-size: 13px;
 }
 .provenance--controls .sep { color: var(--text-secondary); }
+.provenance--controls .seg { display: inline-flex; align-items: center; gap: 6px; }
 .ctl { display: inline-flex; align-items: center; gap: 4px; }
 .inline-select select {
   appearance: none;
@@ -383,27 +400,28 @@ button { font: inherit; color: inherit; }
 .odds--4 { background: var(--odds-4); }
 .odds--5 { background: var(--odds-5); }
 
-/* ------------------------------------------------------- entry: region list */
-
 .entry-head { padding-block: 40px 24px; }
-.region-list { border-top: 1px solid var(--border); }
-.region-list li { border-bottom: 1px solid var(--border); }
-.region-link {
-  display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr) auto;
-  align-items: center; gap: 4px 20px;
-  min-height: 60px; padding: 10px 4px;
+
+/* ------------------------------------------- class view: region tables */
+
+.region-blocks {
+  display: grid; gap: 36px 56px;
+  grid-template-columns: repeat(auto-fill, minmax(min(26rem, 100%), 1fr));
+  align-items: start;
+}
+.region-block__title { font-size: 20px; line-height: 26px; font-weight: 600; }
+.region-block__title a { color: inherit; text-decoration: none; display: inline-flex; min-height: 44px; align-items: center; }
+.region-block__title a:hover { text-decoration: underline; }
+.standings--compact { margin-top: 0; }
+.standings--compact th, .standings--compact td { padding: 4px 4px; }
+.standings--compact .col-odds { width: 4.2em; }
+.team-link {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 40px;
   color: inherit; text-decoration: none;
 }
-.region-link:hover { color: inherit; background: var(--surface-raised); }
-.region-link__name { font-size: 20px; line-height: 26px; font-weight: 600; }
-.region-link__leader { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 15px; }
-.region-link__leader .team-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.region-link__alive { font-size: 14px; color: var(--text-secondary); white-space: nowrap; }
-@media (max-width: 34em) {
-  .region-link { grid-template-columns: minmax(0, 1fr) auto; }
-  .region-link__leader { grid-column: 1 / -1; grid-row: 2; }
-}
+.team-link:hover .team-name { text-decoration: underline; }
+.standings .team-link .team-name { font-weight: 500; }
 
 /* ---------------------------------------------------------- region view */
 
@@ -465,6 +483,14 @@ button { font: inherit; color: inherit; }
 .detail__stat { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
 .detail__note { margin-top: 10px; font-size: 14px; line-height: 20px; color: var(--text-secondary); max-width: 34rem; }
 
+/* Playoff path inside an expanded row. */
+.path { margin-top: 14px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.path caption { text-align: left; font-weight: 600; padding-bottom: 6px; }
+.path th, .path td { padding: 4px 14px 4px 0; text-align: right; border: 0; }
+.path th[scope="row"], .path thead th:first-child { text-align: left; font-weight: 400; }
+.path thead th { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.standings tr.detail .path td, .standings tr.detail .path th { padding: 4px 14px 4px 0; }
+
 /* Narrow (or zoomed) viewports keep two odds columns: 1st and Playoffs. */
 @media (max-width: 40em) {
   .standings .col-mid, .standings .col-overall { display: none; }
@@ -477,14 +503,23 @@ button { font: inherit; color: inherit; }
 .section { margin-top: 56px; }
 .section > .section-title + * { margin-top: 16px; }
 
+.games { max-width: 40rem; }
 .games li {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
-  padding: 10px 0;
+  display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); align-items: center; gap: 4px 12px;
+  padding: 10px 0 10px 10px;
   border-bottom: 1px solid var(--border);
 }
 .games li:first-child { border-top: 1px solid var(--border); }
+.games li.is-focus { box-shadow: inset 3px 0 0 var(--accent-identity); }
+.games__date { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.games__match { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
+.games__side { display: inline-flex; align-items: center; gap: 8px; }
+.games__score { font-variant-numeric: tabular-nums; font-weight: 500; }
+.games__side.is-winner .team-name, .games__side.is-winner .games__score { font-weight: 600; }
 .games .vs { color: var(--text-secondary); font-size: 14px; }
-.games { max-width: 38rem; }
+@media (max-width: 30em) {
+  .games li { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ------------------------------------------------------------ scenarios */
 

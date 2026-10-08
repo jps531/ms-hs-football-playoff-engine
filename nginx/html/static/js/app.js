@@ -5,12 +5,13 @@
 // Every parameter is optional; omitted ones fall back to the current season,
 // the latest week, and Projected odds.
 
-import { escapeHtml as esc, formatPct, recordText, shortDate } from "./format.js";
+import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate } from "./format.js";
 import {
-  oddsCell, provenance, statusBadge, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
-  ODDS_MODES, modeLabel,
+  oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
+  ODDS_MODES, modeLabel, infoButton,
 } from "./components.js";
 import { outcomeCards, insightCards, oddsFor, hasProjectedOdds } from "./scenarios.js";
+import { standingPositions, playoffPath, regionGames } from "./standings.js";
 
 const API = "/api/v1";
 const CLASSES = [1, 2, 3, 4, 5, 6, 7];
@@ -144,6 +145,9 @@ function store(key, value) {
 // ------------------------------------------------------------- render
 
 let renderToken = 0;
+// Set when the team search jumps to a team, so the page scrolls to its row;
+// picking a row in place leaves the scroll position alone.
+let scrollToFocus = false;
 async function render() {
   const token = ++renderToken;
   route = readRoute();
@@ -160,7 +164,8 @@ async function render() {
     const html = route.region ? await regionView(ctx) : await classView(ctx);
     if (token !== renderToken) return;
     app.innerHTML = html;
-    if (route.team && route.region) focusTeamRow();
+    if (scrollToFocus && route.team && route.region) focusTeamRow();
+    scrollToFocus = false;
   } catch (err) {
     if (token !== renderToken) return;
     app.innerHTML = notice(
@@ -244,6 +249,7 @@ function findTeam(text) {
 function goToTeam(team) {
   teamSearch.value = "";
   teamSearch.blur();
+  scrollToFocus = true;
   navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school }), { scroll: true });
 }
 
@@ -295,12 +301,22 @@ function controlsLine(ctx, weeks, { asOf, mode, projectedAvailable }) {
   if (projectedAvailable) {
     parts.push(`<span class="ctl ctl--mode mode--${mode}">${ODDS_MODES[mode].glyph}${select("odds", "Odds", [
       { value: "projected", label: "Projected" }, { value: "tossup", label: "Toss-up" },
-    ], mode)}</span>`);
+    ], mode)}${infoButton("mode-help", "What Projected and Toss-up mean")}</span>`);
   } else if (mode) {
-    parts.push(modeLabel("tossup"));
+    parts.push(`<span class="ctl">${modeLabel("tossup")}${infoButton("mode-help", "What Toss-up means")}</span>`);
   }
-  return `<p class="provenance provenance--controls">${parts.join(sep)}</p>`;
+  const help = mode ? MODE_HELP : "";
+  // Each separator travels with the segment after it, so a wrapped line
+  // never ends on a dangling dot.
+  const segs = parts.map((part, i) => (i === 0 ? part : `<span class="seg">${sep}${part}</span>`));
+  return `<p class="provenance provenance--controls">${segs.join("")}</p>${help}`;
 }
+
+const MODE_HELP = `<div class="mode-help" id="mode-help" hidden>
+  <p><strong>Projected</strong> weighs every way the season can finish by how likely it is, using each team’s Elo rating and home-field advantage to set its chance of winning each game.</p>
+  <p><strong>Toss-up</strong> counts every way the season can finish equally, as if each remaining game were a coin flip.</p>
+  <p><a href="/methodology">More on how the odds work</a></p>
+</div>`;
 
 app.addEventListener("change", (e) => {
   const control = e.target.closest("[data-control]");
@@ -332,40 +348,57 @@ function oddsMode(ctx) {
 }
 
 // ------------------------------------------------------ class view (entry)
+// Every region in the class as a condensed standings table: position,
+// team, region record, and odds of the title and a playoff spot.
 
 async function classView(ctx) {
   const { season, clazz } = ctx;
   const weeks = await playedWeeks(season, clazz);
   const date = dateParam(ctx, weeks);
-  const [summary, teams] = await Promise.all([
-    getJSON(`/standings/summary?season=${season}${date ? `&date=${date}` : ""}`),
+  const [data, teams] = await Promise.all([
+    getJSON(`/standings/${clazz}?season=${season}${date ? `&date=${date}` : ""}`),
     teamsBySchool(season),
   ]);
-  const cls = summary.classes.find((c) => c.class_ === clazz);
+  const allTeams = data.regions.flatMap((r) => r.teams);
+  const projectedAvailable = hasProjectedOdds(allTeams);
+  const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
 
   const head = `<div class="page entry-head">
     <h1 class="title"><span class="title__word">Class</span> <span class="title__num">${clazz}A</span></h1>
-    ${controlsLine(ctx, weeks, { asOf: summary.as_of_date, mode: null, projectedAvailable: false })}
+    ${controlsLine(ctx, weeks, { asOf: data.as_of_date, mode, projectedAvailable })}
   </div>`;
-  if (!cls || !cls.regions.length) {
-    return head + notice("No standings have been published for this class yet.");
-  }
+  if (!data.regions.length) return head + notice("No standings have been published for this class yet.");
 
-  const rows = cls.regions.map((r) => {
-    const leader = r.leader;
-    const leaderHtml = leader
-      ? `${teamMark(leader.school, teams[leader.school])}<span class="team-name">${esc(leader.school)}</span>
-         <span class="muted">${esc(recordText(leader.region_wins, leader.region_losses))}</span>`
-      : '<span class="muted">No games yet</span>';
-    const alive = `${r.teams_alive} ${r.teams_alive === 1 ? "team" : "teams"} alive`;
-    return `<li><a class="region-link" href="${esc(hrefWith({ region: r.region, team: null }))}">
-      <span class="region-link__name">Region ${r.region}</span>
-      <span class="region-link__leader"><span class="visually-hidden">Leader:</span>${leaderHtml}</span>
-      <span class="region-link__alive">${esc(alive)}</span>
-    </a></li>`;
+  const blocks = data.regions.map((r) => {
+    const positions = standingPositions(r.teams);
+    const rows = r.teams.map((t, i) => {
+      const o = oddsFor(t, mode);
+      const rec = t.record;
+      return `<tr class="${t.eliminated ? "is-eliminated" : ""}">
+        <td class="col-pos">${positions[i]}</td>
+        <th scope="row" class="col-team"><a class="team-link" href="${esc(hrefWith({ region: r.region, team: t.school }))}">${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t)}</span></a></th>
+        <td class="col-rec">${esc(recordText(rec.region_wins, rec.region_losses, rec.region_ties))}</td>
+        <td class="col-odds">${oddsCell(o.p1)}</td>
+        <td class="col-odds">${oddsCell(o.p_playoffs)}</td>
+      </tr>`;
+    });
+    return `<section class="region-block" aria-labelledby="region-${r.region}">
+      <h2 class="region-block__title" id="region-${r.region}"><a href="${esc(hrefWith({ region: r.region, team: null }))}">Region ${r.region}</a></h2>
+      <table class="standings standings--compact">
+        <caption class="visually-hidden">Region ${r.region}-${clazz}A standings</caption>
+        <thead><tr>
+          <th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>
+          <th scope="col" class="col-team">Team</th>
+          <th scope="col" class="col-rec">Region</th>
+          <th scope="col" class="col-odds">1st</th>
+          <th scope="col" class="col-odds">Playoffs</th>
+        </tr></thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+    </section>`;
   });
 
-  return `${head}<div class="page"><ol class="region-list">${rows.join("")}</ol></div>`;
+  return `${head}<div class="page region-blocks">${blocks.join("")}</div>`;
 }
 
 // ------------------------------------------------------------ region view
@@ -374,10 +407,12 @@ async function regionView(ctx) {
   const { season, clazz, region } = ctx;
   const weeks = await playedWeeks(season, clazz);
   const date = dateParam(ctx, weeks);
-  const [data, teams] = await Promise.all([
+  const [data, teams, games] = await Promise.all([
     getJSON(`/standings/${clazz}/${region}?season=${season}&include_team_scenarios=true${date ? `&date=${date}` : ""}`),
     teamsBySchool(season),
+    getJSON(`/games?season=${season}&class=${clazz}&region=${region}`).catch(() => []),
   ]);
+  const { results, dateFor } = regionGames(games, data.as_of_date);
 
   const projectedAvailable = hasProjectedOdds(data.teams);
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
@@ -399,9 +434,10 @@ async function regionView(ctx) {
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
       ${controlsLine(ctx, weeks, { asOf: data.as_of_date, mode, projectedAvailable })}
     </header>
-    ${standingsTable(data, teams, mode, focus)}
-    ${remaining.length ? remainingGames(remaining, teams) : ""}
+    ${standingsTable(data, teams, mode, focus, clazz)}
+    ${remaining.length ? remainingGames(remaining, teams, dateFor) : ""}
     ${remaining.length ? scenariosSection(data, teams, cardProv, mode, focus) : ""}
+    ${results.length ? completedGames(results, teams, focus) : ""}
   </div>`;
 }
 
@@ -413,7 +449,8 @@ const ODDS_COLUMNS = [
   { key: "p_playoffs", label: "Playoffs", mid: false },
 ];
 
-function standingsTable(data, teams, mode, focus) {
+function standingsTable(data, teams, mode, focus, clazz) {
+  const positions = standingPositions(data.teams);
   const rows = data.teams.map((t, i) => {
     const r = t.record;
     const o = oddsFor(t, mode);
@@ -424,24 +461,24 @@ function standingsTable(data, teams, mode, focus) {
     );
     const cls = [t.eliminated ? "is-eliminated" : "", focused ? "is-focus" : ""].filter(Boolean).join(" ");
     return `<tr class="${cls}"${focused ? ' id="focus-row"' : ""}>
-        <td class="col-pos">${i + 1}</td>
+        <td class="col-pos">${positions[i]}</td>
         <th scope="row" class="col-team">
-          <button type="button" class="row-toggle" aria-expanded="${focused}" aria-controls="${detailId}">
-            ${chevronIcon}${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadge(t)}</span>
+          <button type="button" class="row-toggle" data-team="${esc(t.school)}" aria-expanded="${focused}" aria-controls="${detailId}">
+            ${chevronIcon}${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t)}</span>
           </button>
         </th>
         <td class="col-rec">${esc(recordText(r.region_wins, r.region_losses, r.region_ties))}</td>
         <td class="col-rec col-overall">${esc(recordText(r.wins, r.losses, r.ties))}</td>
         ${cells.join("")}
       </tr>
-      <tr class="detail${focused ? " is-focus" : ""}" id="${detailId}"${focused ? "" : " hidden"}><td colspan="9">${rowDetail(t, mode)}</td></tr>`;
+      <tr class="detail${focused ? " is-focus" : ""}" id="${detailId}"${focused ? "" : " hidden"}><td colspan="9">${focused ? rowDetail(t, mode, clazz) : ""}</td></tr>`;
   });
 
   const oddsHeads = ODDS_COLUMNS.map(
     (c) => `<th scope="col" class="col-odds${c.mid ? " col-mid" : ""}">${c.label}</th>`,
   );
   return `<table class="standings">
-    <caption class="visually-hidden">Standings and ${mode === "projected" ? "projected" : "toss-up"} odds of finishing in each playoff position. Select a team for details.</caption>
+    <caption class="visually-hidden">Standings and ${mode === "projected" ? "projected" : "toss-up"} odds of finishing in each playoff position. Select a team to see its playoff path and scenarios.</caption>
     <thead><tr>
       <th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>
       <th scope="col" class="col-team">Team</th>
@@ -453,23 +490,31 @@ function standingsTable(data, teams, mode, focus) {
   </table>`;
 }
 
-/** Expanded row: the numbers that don't fit the row itself. */
-function rowDetail(t, mode) {
+/** Expanded row: seed odds, then the team's road through the bracket. */
+function rowDetail(t, mode, clazz) {
   const r = t.record;
   const o = oddsFor(t, mode);
   const stats = ODDS_COLUMNS.map(
     (c) => `<span class="detail__stat">${c.label} ${oddsCell(o[c.key])}</span>`,
   );
   const notes = [`Overall record ${recordText(r.wins, r.losses, r.ties)}.`];
-  const host = mode === "projected" ? t.home_game_odds?.first_round_weighted : t.home_game_odds?.first_round;
-  const reach = o.p_playoffs;
-  if (host != null && reach > 0 && !t.eliminated) {
-    notes.push(
-      `Hosts a first-round game: ${formatPct(host)} if they get there, ${formatPct(host * reach)} overall.`,
-    );
-  }
   if (t.coin_flip_needed) notes.push("A coin flip may be needed to settle a tie involving this team.");
-  return `<div class="detail__grid">${stats.join("")}</div><p class="detail__note">${esc(notes.join(" "))}</p>`;
+
+  const path = t.eliminated ? [] : playoffPath(t, mode, clazz);
+  const pathTable = path.length
+    ? `<table class="path">
+        <caption>Playoff path</caption>
+        <thead><tr><th scope="col">Round</th><th scope="col">Reaches</th><th scope="col">Hosts if there</th><th scope="col">Hosts overall</th></tr></thead>
+        <tbody>${path.map((p) => `<tr>
+          <th scope="row">${esc(p.round)}</th>
+          <td>${oddsCell(p.reach)}</td>
+          <td>${p.neutral ? '<span class="muted">Neutral</span>' : p.hostIfReach == null ? "" : esc(formatPct(p.hostIfReach))}</td>
+          <td>${p.hostOverall == null ? "" : esc(formatPct(p.hostOverall))}</td>
+        </tr>`).join("")}</tbody>
+      </table>`
+    : "";
+  return `<div class="detail__grid">${stats.join("")}</div>
+    <p class="detail__note">${esc(notes.join(" "))}</p>${pathTable}`;
 }
 
 function focusTeamRow() {
@@ -477,6 +522,13 @@ function focusTeamRow() {
 }
 
 app.addEventListener("click", (e) => {
+  const info = e.target.closest(".info-button");
+  if (info) {
+    const open = info.getAttribute("aria-expanded") === "true";
+    info.setAttribute("aria-expanded", String(!open));
+    document.getElementById(info.getAttribute("aria-controls")).hidden = open;
+    return;
+  }
   const toggle = e.target.closest(".row-toggle");
   if (!toggle) {
     const link = e.target.closest("a[href^='/?']");
@@ -486,24 +538,45 @@ app.addEventListener("click", (e) => {
     }
     return;
   }
-  const open = toggle.getAttribute("aria-expanded") === "true";
-  toggle.setAttribute("aria-expanded", String(!open));
-  document.getElementById(toggle.getAttribute("aria-controls")).hidden = open;
+  // Picking a row selects that team (its playoff path opens and the
+  // scenarios narrow to it); picking it again clears the selection.
+  const selected = toggle.getAttribute("aria-expanded") === "true";
+  navigate(hrefWith({ team: selected ? null : toggle.dataset.team }));
 });
 
-function remainingGames(games, teams) {
+function remainingGames(games, teams, dateFor) {
   // location_a is team_a's perspective. Away team listed first.
-  const items = games.map((g) => {
+  const rows = games.map((g) => {
     let first = g.team_a;
     let second = g.team_b;
     let joiner = "vs";
     if (g.location_a === "home") { first = g.team_b; second = g.team_a; joiner = "at"; }
     else if (g.location_a === "away") joiner = "at";
-    return `<li>${teamLabel(first, teams)}<span class="vs">${joiner}</span>${teamLabel(second, teams)}</li>`;
+    return { date: dateFor(g.team_a, g.team_b), first, second, joiner };
   });
+  rows.sort((x, y) => (x.date ?? "9999").localeCompare(y.date ?? "9999"));
+  const items = rows.map((g) => `<li>
+      <span class="games__date">${g.date ? esc(gameDate(g.date)) : ""}</span>
+      <span class="games__match">${teamLabel(g.first, teams)}<span class="vs">${g.joiner}</span>${teamLabel(g.second, teams)}</span>
+    </li>`);
   return `<section class="section" aria-labelledby="games-title">
     <h2 class="section-title" id="games-title">Remaining games</h2>
     <ul class="games">${items.join("")}</ul>
+  </section>`;
+}
+
+function completedGames(results, teams, focus) {
+  const items = results.map((g) => {
+    const mine = focus && (g.winner === focus || g.loser === focus);
+    const score = (name, pts, won) => `<span class="games__side${won ? " is-winner" : ""}">${teamLabel(name, teams)}<span class="games__score">${pts}</span></span>`;
+    return `<li${mine ? ' class="is-focus"' : ""}>
+      <span class="games__date">${esc(gameDate(g.date))}</span>
+      <span class="games__match">${score(g.winner, g.winnerScore, !g.tie)}<span class="vs">${g.tie ? "tied" : "beat"}</span>${score(g.loser, g.loserScore, false)}</span>
+    </li>`;
+  });
+  return `<section class="section" aria-labelledby="results-title">
+    <h2 class="section-title" id="results-title">Completed games</h2>
+    <ul class="games games--results">${items.join("")}</ul>
   </section>`;
 }
 

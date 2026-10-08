@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  oddsCell, provenance, teamStatus, statusBadge, teamMark, conditionChip, conditionGroups, classScrubber,
+  oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -21,16 +21,23 @@ test("provenance: segments own their separators", () => {
   assert.ok(!text(provenance({ label: "Week 9" }, fmt)).includes("·"));
 });
 
-test("status: only the highest badge, eliminated first", () => {
+test("statuses: every one that applies, the clinch first", () => {
   const odds = (p1, p2 = 0, p3 = 0, p4 = 0) => ({ p1, p2, p3, p4, p_playoffs: p1 + p2 + p3 + p4 });
-  assert.deepEqual(teamStatus({ odds: odds(1.0000000000000027), clinched: true }), { kind: "clinched", label: "Clinched #1" });
-  assert.deepEqual(teamStatus({ odds: odds(0, 0.5, 0.5), clinched: true }), { kind: "clinched", label: "Clinched" });
-  assert.deepEqual(teamStatus({ odds: odds(0, 0.5, 0.5), clinched: true, coin_flip_needed: true }), { kind: "coinflip", label: "Coin flip" });
-  assert.deepEqual(teamStatus({ odds: odds(0), eliminated: true, coin_flip_needed: true }), { kind: "eliminated", label: "Eliminated" });
-  assert.equal(teamStatus({ odds: odds(0.5, 0.5) }), null);
-  const badge = statusBadge({ odds: odds(0), eliminated: true });
-  assert.match(badge, /<svg/); // icon + text, never color alone
-  assert.equal(text(badge), "Eliminated");
+  const labels = (e) => teamStatuses(e).map((st) => st.label);
+  assert.deepEqual(labels({ odds: odds(1.0000000000000027), clinched: true }), ["Clinched #1"]);
+  assert.deepEqual(labels({ odds: odds(0, 0.5, 0.5), clinched: true }), ["Clinched"]);
+  assert.deepEqual(labels({ odds: odds(0, 0.5, 0.5), clinched: true, coin_flip_needed: true }), ["Clinched", "Coin flip"]);
+  assert.deepEqual(labels({ odds: odds(0), eliminated: true, coin_flip_needed: true }), ["Eliminated", "Coin flip"]);
+  assert.deepEqual(labels({ odds: odds(0.5, 0.5) }), []);
+  const badges = statusBadges({ odds: odds(0, 1), clinched: true, coin_flip_needed: true });
+  assert.equal((badges.match(/<svg/g) || []).length, 2); // icon + text, never color alone
+  assert.equal(text(badges), "Clinched #2 Coin flip");
+});
+
+test("info button discloses a note instead of relying on hover", () => {
+  const html = infoButton("mode-help", "What Projected means");
+  assert.match(html, /<button type="button"[^>]*aria-expanded="false" aria-controls="mode-help"/);
+  assert.equal(text(html), "What Projected means");
 });
 
 test("team mark: helmet image, else a generic helmet in team colors, else a squircle", () => {
