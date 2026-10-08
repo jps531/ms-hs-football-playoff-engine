@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { standingPositions, playoffPath, regionGames } from "../html/static/js/standings.js";
+import {
+  standingPositions, playoffPath, regionGames, displayOrder, regionComplete,
+} from "../html/static/js/standings.js";
 
 const rec = (w, l, t = 0) => ({ record: { region_wins: w, region_losses: l, region_ties: t } });
 
@@ -70,4 +72,34 @@ test("a past week's view treats later results as still to play", () => {
 test("tied games are marked", () => {
   const { results } = regionGames([{ date: "2025-10-24", team_a: "A", team_b: "B", score_a: 14, score_b: 14, final: true, is_region_game: true }], null);
   assert.equal(results[0].tie, true);
+});
+
+const team = (school, w, l, p1w, p1 = p1w) => ({
+  school,
+  record: { region_wins: w, region_losses: l, region_ties: 0 },
+  odds: { p1, p2: 0, p3: 0, p4: 0, p_playoffs: 1, p1_weighted: p1w, p2_weighted: 0, p3_weighted: 0, p4_weighted: 0, p_playoffs_weighted: 1 },
+});
+
+test("teams level on record are ordered by projected 1st odds; others keep the API order", () => {
+  const api = [team("A", 3, 1, 0.2), team("B", 3, 1, 0.7), team("C", 2, 2, 0.1), team("D", 1, 3, 0), team("E", 1, 3, 0)];
+  assert.deepEqual(displayOrder(api).map((t) => t.school), ["B", "A", "C", "D", "E"]);
+});
+
+test("ties in projected 1st odds fall through to later seeds, then the API order", () => {
+  const a = team("A", 0, 0, 0.25);
+  const b = { ...team("B", 0, 0, 0.25), odds: { ...team("B", 0, 0, 0.25).odds, p2_weighted: 0.5 } };
+  const c = team("C", 0, 0, 0.25);
+  assert.deepEqual(displayOrder([a, b, c]).map((t) => t.school), ["B", "A", "C"]);
+});
+
+test("display order falls back to toss-up odds without projected odds", () => {
+  const noW = (t) => ({ ...t, odds: { ...t.odds, p1_weighted: 0, p_playoffs_weighted: 0 } });
+  const api = [noW(team("A", 2, 0, 0, 0.3)), noW(team("B", 2, 0, 0, 0.6))];
+  assert.deepEqual(displayOrder(api).map((t) => t.school), ["B", "A"]);
+});
+
+test("a region is complete once every team has played all the others", () => {
+  assert.equal(regionComplete([team("A", 2, 0, 1), team("B", 1, 1, 0), team("C", 0, 2, 0)]), true);
+  assert.equal(regionComplete([team("A", 2, 0, 1), team("B", 1, 0, 0), team("C", 0, 1, 0)]), false);
+  assert.equal(regionComplete([]), false);
 });

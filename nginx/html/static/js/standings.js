@@ -24,6 +24,48 @@ export function standingPositions(entries) {
 }
 
 /**
+ * Teams in display order: the API's order (MHSAA tiebreakers on completed
+ * games, clinched seeds pinned), except that teams level on region record
+ * are ordered by their projected odds of finishing 1st, then 2nd, 3rd, 4th,
+ * and making the playoffs. Early in a season the tiebreakers often can't
+ * separate level teams, so the odds give the more meaningful order. Falls
+ * back to toss-up odds when a snapshot has no projected odds.
+ */
+export function displayOrder(entries) {
+  const weighted = entries.some((e) => (e.odds?.p_playoffs_weighted ?? 0) > 0);
+  const keys = ["p1", "p2", "p3", "p4", "p_playoffs"].map((k) => (weighted ? `${k}_weighted` : k));
+  const byOdds = (a, b) => {
+    for (const k of keys) {
+      const d = (b.odds?.[k] ?? 0) - (a.odds?.[k] ?? 0);
+      if (d) return d;
+    }
+    return 0; // Array.prototype.sort is stable: keep the API's order
+  };
+  const out = [];
+  let run = [];
+  for (const e of entries) {
+    if (run.length && winPct(run[0].record) !== winPct(e.record)) {
+      out.push(...run.sort(byOdds));
+      run = [];
+    }
+    run.push(e);
+  }
+  return out.concat(run.sort(byOdds));
+}
+
+/**
+ * Whether region play is over, judged from records alone (for views without
+ * a remaining-games list): every team has played each of the others once.
+ */
+export function regionComplete(entries) {
+  const n = entries.length;
+  return n > 1 && entries.every((e) => {
+    const r = e.record;
+    return r.region_wins + r.region_losses + r.region_ties >= n - 1;
+  });
+}
+
+/**
  * A team's road through the playoff bracket, one row per round:
  * { round, reach, neutral, hostIfReach, hostOverall }. Hosting applies
  * through the semifinals; the championship is at a neutral site. 5A-7A skip the second

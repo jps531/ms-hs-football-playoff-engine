@@ -63,6 +63,9 @@
 
   --scrubber-selected-bg: var(--brand-700);
   --scrubber-selected-text: #FFFFFF;
+  --link: var(--interactive);
+  --link-hover: var(--interactive-hover);
+  --header-h: 68px;
 
   --font-display: "Nippo", "Inter", system-ui, sans-serif;
   --font-text: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -92,6 +95,8 @@
 
   --scrubber-selected-bg: var(--brand-400);
   --scrubber-selected-text: var(--neutral-900);
+  --link: var(--brand-400);
+  --link-hover: var(--brand-300);
 
   color-scheme: dark;
 }
@@ -113,10 +118,10 @@ body {
 }
 h1, h2, h3, h4, p, ol, ul, figure { margin: 0; }
 ol, ul { padding: 0; list-style: none; }
-a { color: var(--interactive); text-underline-offset: 3px; }
-.dark a { color: var(--brand-400); }
-a:hover { color: var(--interactive-hover); }
-.dark a:hover { color: var(--brand-300); }
+/* Link color comes from a theme token rather than a ".dark a" rule, so
+   components that set color: inherit (team names, titles) win in both themes. */
+a { color: var(--link); text-underline-offset: 3px; }
+a:hover { color: var(--link-hover); }
 button { font: inherit; color: inherit; }
 
 :focus-visible {
@@ -153,15 +158,24 @@ button { font: inherit; color: inherit; }
   .site-header, .page, .site-footer, .scrubber-bar__inner { padding-inline: 32px; }
 }
 
+.site-header-bar { background: var(--surface-page); }
 .site-header {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding-block: 14px 10px;
+}
+/* On wide screens the header (name + team search) stays pinned above the
+   class scrubber. Phones let it scroll away: vertical space is scarce there
+   and the scrubber alone stays pinned. */
+@media (min-width: 48em) {
+  .site-header-bar { position: sticky; top: 0; z-index: 11; }
+  .site-header { height: var(--header-h); padding-block: 0; }
+  :root { --scrubber-top: var(--header-h); }
 }
 .site-header__home {
   display: inline-flex; align-items: center; gap: 10px;
   min-height: 44px;
   color: var(--text-primary); text-decoration: none;
-  font-weight: 600; font-size: 15px; line-height: 20px;
+  font-size: 16px; line-height: 20px;
 }
 .site-header__home:hover { color: var(--text-primary); }
 .site-header__home img { width: 34px; height: auto; }
@@ -199,7 +213,7 @@ button { font: inherit; color: inherit; }
 /* ---------------------------------------------------------- class scrubber */
 
 .scrubber-bar {
-  position: sticky; top: 0; z-index: 10;
+  position: sticky; top: var(--scrubber-top, 0); z-index: 10;
   background: var(--surface-page);
   border-bottom: 1px solid var(--border);
 }
@@ -233,14 +247,17 @@ button { font: inherit; color: inherit; }
 
 /* -------------------------------------------------------------- typography */
 
+/* Nippo carries the page's titles and headers (the site name, page titles
+   including their class/region designation, and section headers); Inter
+   carries everything people read or compare. Nippo's only weight is Bold. */
+.title, .section-title, .sub-title, .region-block__title, .article h2, .site-header__home span {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
 .title {
   font-size: 32px; line-height: 36px;
-  font-weight: 700;
   letter-spacing: -0.01em;
 }
-.title__word { font-family: var(--font-display); }
-/* Nippo never renders a number: the class/region designation is Inter. */
-.title__num { font-family: var(--font-text); letter-spacing: -0.01em; }
 @media (max-width: 30em) {
   .title { font-size: 28px; line-height: 32px; }
 }
@@ -251,8 +268,8 @@ button { font: inherit; color: inherit; }
   text-wrap: pretty;
 }
 
-.section-title { font-size: 24px; line-height: 30px; font-weight: 600; }
-.sub-title { font-size: 20px; line-height: 26px; font-weight: 600; }
+.section-title { font-size: 24px; line-height: 30px; }
+.sub-title { font-size: 20px; line-height: 26px; }
 .prose { max-width: 38rem; }
 .prose p + p { margin-top: 16px; }
 .muted { color: var(--text-secondary); }
@@ -409,7 +426,7 @@ button { font: inherit; color: inherit; }
   grid-template-columns: repeat(auto-fill, minmax(min(26rem, 100%), 1fr));
   align-items: start;
 }
-.region-block__title { font-size: 20px; line-height: 26px; font-weight: 600; }
+.region-block__title { font-size: 20px; line-height: 26px; }
 .region-block__title a { color: inherit; text-decoration: none; display: inline-flex; min-height: 44px; align-items: center; }
 .region-block__title a:hover { text-decoration: underline; }
 .standings--compact { margin-top: 0; }
@@ -618,7 +635,7 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 
 .article { padding-block: 40px 0; }
 .article .prose { margin-top: 20px; }
-.article h2 { margin-top: 36px; font-size: 20px; line-height: 26px; font-weight: 600; }
+.article h2 { margin-top: 36px; font-size: 20px; line-height: 26px; }
 .article h2 + p { margin-top: 8px; }
 .article ol.steps { list-style: decimal; padding-left: 1.4em; margin-top: 8px; }
 .article ol.steps li + li { margin-top: 6px; }

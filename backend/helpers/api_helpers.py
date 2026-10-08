@@ -121,6 +121,22 @@ from backend.helpers.win_probability import (
 # ---------------------------------------------------------------------------
 
 DISPLAY_THRESHOLD = 6
+
+# A region_standings row belongs on public read paths only while its school is
+# active for that season. The pipeline already skips inactive schools when it
+# computes, but a school marked inactive after earlier snapshots were written
+# would otherwise keep surfacing through its last (stale) row. Append to a
+# WHERE clause on an unaliased ``region_standings``; aliased queries join
+# ``ACTIVE_SCHOOL_JOIN_RS`` instead.
+ACTIVE_SCHOOL_FILTER = (
+    " AND EXISTS (SELECT 1 FROM school_seasons active"
+    " WHERE active.school = region_standings.school"
+    " AND active.season = region_standings.season AND active.is_active)"
+)
+ACTIVE_SCHOOL_JOIN_RS = (
+    " JOIN school_seasons active"
+    " ON active.school = rs.school AND active.season = rs.season AND active.is_active"
+)
 """Maximum remaining games for which the human-readable scenario list is shown."""
 
 CLINCHED_THRESHOLD = 0.999
@@ -1659,10 +1675,13 @@ _RANK_COLUMNS = """
     tr.elo, tr.rpi
 """
 
-_RANK_FROM_JOIN = """
+_RANK_FROM_JOIN = (
+    """
     FROM region_standings rs
     LEFT JOIN team_ratings tr ON tr.school = rs.school AND tr.season = rs.season AND tr.as_of_date = rs.as_of_date
 """
+    + ACTIVE_SCHOOL_JOIN_RS
+)
 
 
 async def resolve_snapshot_dates(  # pragma: no cover
@@ -2127,7 +2146,9 @@ async def _load_all_region_odds(
             school, region, odds_1st, odds_2nd, odds_3rd, odds_4th,
             odds_playoffs, clinched, eliminated
         FROM region_standings
-        WHERE season = %s AND class = %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
         ORDER BY school, as_of_date DESC
         """,
         (season, clazz, as_of),
@@ -2183,7 +2204,9 @@ async def _load_and_build_playoff_bracket_state(  # pragma: no cover
                     WHEN rs.odds_3rd > 0.99 THEN 3
                     WHEN rs.odds_4th > 0.99 THEN 4
                END AS seed
-        FROM region_standings rs
+        FROM region_standings rs"""
+        + ACTIVE_SCHOOL_JOIN_RS
+        + """
         WHERE rs.season = %s AND rs.class = %s
           AND rs.clinched = TRUE
           AND (rs.odds_1st > 0.99 OR rs.odds_2nd > 0.99 OR rs.odds_3rd > 0.99 OR rs.odds_4th > 0.99)
@@ -2448,7 +2471,9 @@ async def load_other_region_seeding(  # pragma: no cover
         """
         SELECT DISTINCT ON (school) school, region, odds_1st, odds_2nd, odds_3rd, odds_4th
         FROM region_standings
-        WHERE season = %s AND class = %s AND region != %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND region != %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
         ORDER BY school, as_of_date DESC
         """,
         (season, clazz, exclude_region, as_of),
@@ -2847,7 +2872,9 @@ async def _load_standings_snapshot(  # pragma: no cover
             odds_first_round_home_weighted, odds_second_round_home_weighted,
             odds_quarterfinals_home_weighted, odds_semifinals_home_weighted
         FROM region_standings
-        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
         ORDER BY school, as_of_date DESC
         """,
         (season, clazz, region, as_of),

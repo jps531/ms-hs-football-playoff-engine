@@ -20,6 +20,7 @@ from backend.api.models.responses import (
     TeamStandingsEntry,
 )
 from backend.helpers.api_helpers import (
+    ACTIVE_SCHOOL_FILTER,
     _load_all_region_odds,
     _load_elo_ratings,
     _load_format_slots,
@@ -69,7 +70,8 @@ def _reorder_team_entries(team_entries: list[TeamStandingsEntry], order: list[st
     return [by_school[s] for s in order if s in by_school]
 
 
-_SUMMARY_SELECT = """
+_SUMMARY_SELECT = (
+    """
     SELECT * FROM (
         SELECT DISTINCT ON (school)
             school, class, region,
@@ -78,13 +80,17 @@ _SUMMARY_SELECT = """
             odds_1st, odds_2nd, odds_3rd, odds_4th, odds_playoffs,
             clinched, eliminated
         FROM region_standings
-        WHERE season = %s AND as_of_date <= %s
+        WHERE season = %s AND as_of_date <= %s"""
+    + ACTIVE_SCHOOL_FILTER
+    + """
         ORDER BY school, as_of_date DESC
     ) latest
     ORDER BY class, region, school
 """
+)
 
-_CLASS_SELECT = """
+_CLASS_SELECT = (
+    """
     SELECT * FROM (
         SELECT DISTINCT ON (school)
             school, wins, losses, ties, region_wins, region_losses, region_ties,
@@ -99,11 +105,14 @@ _CLASS_SELECT = """
             odds_quarterfinals_home_weighted, odds_semifinals_home_weighted,
             region
         FROM region_standings
-        WHERE season = %s AND class = %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND as_of_date <= %s"""
+    + ACTIVE_SCHOOL_FILTER
+    + """
         ORDER BY school, as_of_date DESC
     ) latest
     ORDER BY region, school
 """
+)
 
 
 async def _load_computation_state(

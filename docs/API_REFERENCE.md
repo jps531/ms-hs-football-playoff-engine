@@ -35,6 +35,8 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 ## Standings — `/standings`
 
+Schools marked inactive for a season (`school_seasons.is_active = false`) are left out of every standings, rankings, hosting, and bracket read, and out of `GET /teams`, even if snapshots were written for them before they were marked inactive.
+
 Team ordering across every endpoint below reflects actual current standing:
 the MHSAA tiebreaker procedure applied to completed games (head-to-head,
 point differential, etc.), with any team that has mathematically clinched a

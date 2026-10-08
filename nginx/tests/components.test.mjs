@@ -23,15 +23,23 @@ test("provenance: segments own their separators", () => {
 
 test("statuses: every one that applies, the clinch first", () => {
   const odds = (p1, p2 = 0, p3 = 0, p4 = 0) => ({ p1, p2, p3, p4, p_playoffs: p1 + p2 + p3 + p4 });
-  const labels = (e) => teamStatuses(e).map((st) => st.label);
+  const done = { regionComplete: true };
+  const labels = (e, opts = done) => teamStatuses(e, opts).map((st) => st.label);
   assert.deepEqual(labels({ odds: odds(1.0000000000000027), clinched: true }), ["Clinched #1"]);
   assert.deepEqual(labels({ odds: odds(0, 0.5, 0.5), clinched: true }), ["Clinched"]);
   assert.deepEqual(labels({ odds: odds(0, 0.5, 0.5), clinched: true, coin_flip_needed: true }), ["Clinched", "Coin flip"]);
   assert.deepEqual(labels({ odds: odds(0), eliminated: true, coin_flip_needed: true }), ["Eliminated", "Coin flip"]);
   assert.deepEqual(labels({ odds: odds(0.5, 0.5) }), []);
-  const badges = statusBadges({ odds: odds(0, 1), clinched: true, coin_flip_needed: true });
+  const badges = statusBadges({ odds: odds(0, 1), clinched: true, coin_flip_needed: true }, done);
   assert.equal((badges.match(/<svg/g) || []).length, 2); // icon + text, never color alone
   assert.equal(text(badges), "Clinched #2 Coin flip");
+});
+
+test("coin flip shows only once region play is complete", () => {
+  const entry = { odds: { p1: 0.5, p2: 0.5, p3: 0, p4: 0, p_playoffs: 1 }, clinched: true, coin_flip_needed: true };
+  assert.deepEqual(teamStatuses(entry).map((st) => st.label), ["Clinched"]);
+  assert.deepEqual(teamStatuses(entry, { regionComplete: false }).map((st) => st.label), ["Clinched"]);
+  assert.equal(text(statusBadges(entry)), "Clinched");
 });
 
 test("info button discloses a note instead of relying on hover", () => {

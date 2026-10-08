@@ -11,7 +11,7 @@ import {
   ODDS_MODES, modeLabel, infoButton,
 } from "./components.js";
 import { outcomeCards, insightCards, oddsFor, hasProjectedOdds } from "./scenarios.js";
-import { standingPositions, playoffPath, regionGames } from "./standings.js";
+import { standingPositions, playoffPath, regionGames, displayOrder, regionComplete } from "./standings.js";
 
 const API = "/api/v1";
 const CLASSES = [1, 2, 3, 4, 5, 6, 7];
@@ -294,7 +294,11 @@ function controlsLine(ctx, weeks, { asOf, mode, projectedAvailable }) {
     const options = [...weeks].reverse().map((w) => ({ value: w.week, label: w.label }));
     const shown = weeks.find((w) => w.week === chosen);
     parts.push(`<span class="ctl">Through ${select("week", "Through week", options, chosen)}</span>`);
-    if (shown) parts.push(`<span>${esc(shortDate(shown.lastDate))}</span>`);
+    // The date is what the data actually covers. When the newest snapshot
+    // predates the chosen week's games (e.g. no post-round playoff snapshot
+    // was written), say so instead of implying the week's date.
+    if (shown && asOf && asOf < shown.lastDate) parts.push(`<span>Latest update ${esc(shortDate(asOf))}</span>`);
+    else if (shown) parts.push(`<span>${esc(shortDate(shown.lastDate))}</span>`);
   } else if (asOf) {
     parts.push(`<span>Updated ${esc(shortDate(asOf))}</span>`);
   }
@@ -364,19 +368,21 @@ async function classView(ctx) {
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
 
   const head = `<div class="page entry-head">
-    <h1 class="title"><span class="title__word">Class</span> <span class="title__num">${clazz}A</span></h1>
+    <h1 class="title">Class ${clazz}A</h1>
     ${controlsLine(ctx, weeks, { asOf: data.as_of_date, mode, projectedAvailable })}
   </div>`;
   if (!data.regions.length) return head + notice("No standings have been published for this class yet.");
 
   const blocks = data.regions.map((r) => {
-    const positions = standingPositions(r.teams);
-    const rows = r.teams.map((t, i) => {
+    const ordered = displayOrder(r.teams);
+    const positions = standingPositions(ordered);
+    const complete = regionComplete(ordered);
+    const rows = ordered.map((t, i) => {
       const o = oddsFor(t, mode);
       const rec = t.record;
       return `<tr class="${t.eliminated ? "is-eliminated" : ""}">
         <td class="col-pos">${positions[i]}</td>
-        <th scope="row" class="col-team"><a class="team-link" href="${esc(hrefWith({ region: r.region, team: t.school }))}">${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t)}</span></a></th>
+        <th scope="row" class="col-team"><a class="team-link" href="${esc(hrefWith({ region: r.region, team: t.school }))}">${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t, { regionComplete: complete })}</span></a></th>
         <td class="col-rec">${esc(recordText(rec.region_wins, rec.region_losses, rec.region_ties))}</td>
         <td class="col-odds">${oddsCell(o.p1)}</td>
         <td class="col-odds">${oddsCell(o.p_playoffs)}</td>
@@ -430,7 +436,7 @@ async function regionView(ctx) {
   return `<div class="page">
     <header class="region-head">
       <a class="region-head__back" href="${esc(hrefWith({ region: null, team: null }))}">All ${clazz}A regions</a>
-      <h1 class="title"><span class="title__word">Region</span> <span class="title__num">${region}-${clazz}A</span></h1>
+      <h1 class="title">Region ${region}-${clazz}A</h1>
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
       ${controlsLine(ctx, weeks, { asOf: data.as_of_date, mode, projectedAvailable })}
     </header>
@@ -450,8 +456,10 @@ const ODDS_COLUMNS = [
 ];
 
 function standingsTable(data, teams, mode, focus, clazz) {
-  const positions = standingPositions(data.teams);
-  const rows = data.teams.map((t, i) => {
+  const ordered = displayOrder(data.teams);
+  const positions = standingPositions(ordered);
+  const complete = !(data.remaining_games ?? []).length;
+  const rows = ordered.map((t, i) => {
     const r = t.record;
     const o = oddsFor(t, mode);
     const detailId = `detail-${i}`;
@@ -464,14 +472,14 @@ function standingsTable(data, teams, mode, focus, clazz) {
         <td class="col-pos">${positions[i]}</td>
         <th scope="row" class="col-team">
           <button type="button" class="row-toggle" data-team="${esc(t.school)}" aria-expanded="${focused}" aria-controls="${detailId}">
-            ${chevronIcon}${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t)}</span>
+            ${chevronIcon}${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t, { regionComplete: complete })}</span>
           </button>
         </th>
         <td class="col-rec">${esc(recordText(r.region_wins, r.region_losses, r.region_ties))}</td>
         <td class="col-rec col-overall">${esc(recordText(r.wins, r.losses, r.ties))}</td>
         ${cells.join("")}
       </tr>
-      <tr class="detail${focused ? " is-focus" : ""}" id="${detailId}"${focused ? "" : " hidden"}><td colspan="9">${focused ? rowDetail(t, mode, clazz) : ""}</td></tr>`;
+      <tr class="detail${focused ? " is-focus" : ""}" id="${detailId}"${focused ? "" : " hidden"}><td colspan="9">${focused ? rowDetail(t, mode, clazz, complete) : ""}</td></tr>`;
   });
 
   const oddsHeads = ODDS_COLUMNS.map(
@@ -491,16 +499,18 @@ function standingsTable(data, teams, mode, focus, clazz) {
 }
 
 /** Expanded row: seed odds, then the team's road through the bracket. */
-function rowDetail(t, mode, clazz) {
+function rowDetail(t, mode, clazz, complete) {
   const r = t.record;
   const o = oddsFor(t, mode);
   const stats = ODDS_COLUMNS.map(
     (c) => `<span class="detail__stat">${c.label} ${oddsCell(o[c.key])}</span>`,
   );
   const notes = [`Overall record ${recordText(r.wins, r.losses, r.ties)}.`];
-  if (t.coin_flip_needed) notes.push("A coin flip may be needed to settle a tie involving this team.");
+  if (complete && t.coin_flip_needed) notes.push("A coin flip is needed to settle a tie involving this team.");
 
-  const path = t.eliminated ? [] : playoffPath(t, mode, clazz);
+  // Teams that made the playoffs keep their path after elimination: it
+  // records how far they got.
+  const path = t.eliminated && !t.clinched ? [] : playoffPath(t, mode, clazz);
   const pathTable = path.length
     ? `<table class="path">
         <caption>Playoff path</caption>

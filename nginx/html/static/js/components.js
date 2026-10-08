@@ -66,10 +66,12 @@ export function provenance({ label, date, live = false, mode = null } = {}, form
 
 /**
  * Every status that applies to a standings row, most important first: the
- * clinch (the specific seed when locked) or elimination, then a pending
- * coin flip, which can sit alongside a clinch.
+ * clinch (the specific seed when locked) or elimination, then a coin flip,
+ * which can sit alongside a clinch. The coin flip shows only once region play
+ * is complete: before that, possible coin-flip ties are everywhere and almost
+ * always get settled on the field.
  */
-export function teamStatuses(entry) {
+export function teamStatuses(entry, { regionComplete = false } = {}) {
   if (!entry) return [];
   const statuses = [];
   const o = entry.odds ?? {};
@@ -77,14 +79,14 @@ export function teamStatuses(entry) {
   if (entry.eliminated) statuses.push({ kind: "eliminated", label: "Eliminated" });
   else if (seed) statuses.push({ kind: "clinched", label: `Clinched #${seed}` });
   else if (entry.clinched) statuses.push({ kind: "clinched", label: "Clinched" });
-  if (entry.coin_flip_needed) statuses.push({ kind: "coinflip", label: "Coin flip" });
+  if (regionComplete && entry.coin_flip_needed) statuses.push({ kind: "coinflip", label: "Coin flip" });
   return statuses;
 }
 
 const BADGE_ICONS = { clinched: ICONS.check, eliminated: ICONS.cross, coinflip: ICONS.coin };
 
-export function statusBadges(entry) {
-  return teamStatuses(entry)
+export function statusBadges(entry, options) {
+  return teamStatuses(entry, options)
     .map((st) => `<span class="badge badge--${st.kind}">${BADGE_ICONS[st.kind]}${esc(st.label)}</span>`)
     .join("");
 }

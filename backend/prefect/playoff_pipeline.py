@@ -60,6 +60,8 @@ def fetch_actual_seedings(season: int, clazz: int) -> dict[str, tuple[int, int]]
                 WHEN rs.odds_4th  > 0.99 THEN 4
             END AS seed
         FROM region_standings rs
+        JOIN school_seasons active
+          ON active.school = rs.school AND active.season = rs.season AND active.is_active
         WHERE rs.season  = %s
           AND rs.class   = %s
           AND rs.clinched = TRUE

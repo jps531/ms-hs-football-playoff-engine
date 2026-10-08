@@ -155,7 +155,9 @@ async def list_teams(
     region: Annotated[int | None, Query()] = None,
 ) -> list[TeamModel]:
     """Return teams for *season*, optionally filtered by class and region."""
-    conditions: list[LiteralString] = ["ss.season = %s"]
+    # Inactive schools (closed, merged, or not fielding a team) stay out of the
+    # public list, matching the standings endpoints.
+    conditions: list[LiteralString] = ["ss.season = %s", "ss.is_active"]
     params: list = [season]
     if class_ is not None:
         conditions.append("ss.class = %s")
