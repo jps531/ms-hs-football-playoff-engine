@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
+  gameCard, outcomeScenarioCard,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -104,4 +105,27 @@ test("scenario card titles read as a condition ending in IF", async () => {
   const html = scenarioCard({ title: "Stringer clinches the region", groups: [[{ type: "game_result", school: "Stringer", opponent: "Lumberton" }]], teams: {} });
   assert.match(text(html), /^Stringer clinches the region IF/);
   assert.match(html, /region\u00a0<span class="scenario__if">IF</); // non-breaking: IF never wraps alone
+});
+
+test("game card: visitor on top with the joiner, winner bolded, a readable summary", () => {
+  const html = gameCard({ away: "Taylorsville", home: "Stringer", joiner: "at", awayScore: 0, homeScore: 48, winner: "Stringer" }, {}, { focus: "Stringer" });
+  assert.match(html, /class="game-card is-focus"/);
+  assert.ok(text(html).startsWith("Taylorsville 0, Stringer 48"));
+  assert.ok(html.indexOf("Taylorsville") < html.indexOf(">at<"));
+  assert.match(html, /game-card__team is-winner"><span class="team">.*Stringer/);
+  const upcoming = gameCard({ away: "A", home: "B", joiner: "vs" }, {});
+  assert.ok(text(upcoming).startsWith("A vs B"));
+  assert.doesNotMatch(upcoming, /game-card__score/);
+});
+
+test("scenario box lists the seeds, who's out, then IF and the conditions", () => {
+  const html = outcomeScenarioCard({
+    label: "Scenario 2A",
+    seeds: [{ seed: 1, team: "A" }, { seed: 2, team: "B" }],
+    out: ["C"],
+    groups: [[{ type: "game_result", school: "A", opponent: "B", required_result: "win", min_margin: 1, max_margin: null }]],
+  }, {}, { focus: "C" });
+  // Initials marks repeat each name in the text.
+  assert.match(text(html), /^Scenario 2A 1 A A 2 B B Out C IF A A beats B$/);
+  assert.match(html, /<strong>C<\/strong>/);
 });

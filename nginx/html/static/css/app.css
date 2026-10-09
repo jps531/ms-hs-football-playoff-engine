@@ -113,7 +113,7 @@ body {
 }
 /* Tabular figures on every numeric style (brief §4) — scoped, because Inter's
    tnum feature also widens hyphens and would space out prose and titles. */
-.standings, .odds, .detail__stat, .provenance {
+.standings, .odds, .provenance, .game-card {
   font-variant-numeric: tabular-nums;
 }
 h1, h2, h3, h4, p, ol, ul, figure { margin: 0; }
@@ -191,21 +191,37 @@ button { font: inherit; color: inherit; }
 @media (max-width: 40em) {
   .site-header { gap: 10px; }
   .site-header__home span { display: none; }
-  .theme-select select { font-size: 13px; }
 }
-.theme-select select {
-  appearance: none;
-  min-height: 44px;
-  padding: 0 16px 0 4px;
-  border: 0; background: transparent
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237B7A7B' stroke-width='1.5'/%3E%3C/svg%3E")
-    no-repeat right 2px center / 9px 6px;
+
+/* Light / System / Dark: a segmented control matching the class scrubber.
+   Each choice is a 44px touch target; the selected one is filled. */
+.theme-toggle {
+  flex: none;
+  display: inline-flex; gap: 2px;
+  padding: 3px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.theme-toggle__item {
+  display: grid; place-items: center;
+  width: 44px; height: 38px;
+  padding: 0; border: 0; border-radius: 9px;
+  background: transparent;
   color: var(--text-secondary);
-  font: inherit; font-size: 14px;
   cursor: pointer;
 }
-.theme-select select:hover { color: var(--text-primary); }
-.theme-select option { color: initial; }
+.theme-toggle__item svg { width: 20px; height: 20px; }
+.theme-toggle__item:hover { color: var(--text-primary); }
+.theme-toggle__item[aria-checked="true"] {
+  background: var(--scrubber-selected-bg);
+  color: var(--scrubber-selected-text);
+}
+.theme-toggle__item:focus-visible { outline-offset: -2px; }
+@media (max-width: 30em) {
+  .theme-toggle__item { width: 38px; }
+  .theme-toggle__item svg { width: 18px; height: 18px; }
+}
 
 .site-footer {
   padding-block: 48px 40px;
@@ -476,6 +492,8 @@ button { font: inherit; color: inherit; }
 .standings tbody th { font-weight: 400; }
 .standings .col-odds { width: 4.4em; padding-inline: 3px; }
 .standings .col-rec { white-space: nowrap; }
+/* Records and odds sit centered under centered headers. */
+.standings .col-rec, .standings .col-odds { text-align: center; }
 .standings tr.is-eliminated .team-name { color: var(--text-secondary); }
 /* The picked team: a rule in the identity green, not a fill (a fill would
    match the lowest odds-ramp slot and hide those cells). */
@@ -500,18 +518,40 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .row-toggle__chev { transition: none; }
 }
-.standings tr.detail td { text-align: left; padding: 4px 6px 18px 2.6em; }
-.detail__grid { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; }
-.detail__stat { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+/* Expanded row: Record, Seeding odds, and Playoff path panels side by side,
+   wrapping to a stack on narrow screens. */
+.standings tr.detail td { text-align: left; padding: 12px 6px 24px 2.6em; }
+.detail__panels {
+  display: grid; gap: 24px 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), auto));
+  justify-content: space-between;
+  align-items: start;
+}
+.detail__title { font-family: var(--font-display); font-weight: 700; font-size: 17px; line-height: 22px; }
+.detail__sub { margin-top: 16px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--text-secondary); }
+.detail__records { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 14px; color: var(--text-secondary); }
+.detail__records strong { color: var(--text-primary); font-weight: 600; font-size: 16px; margin-right: 2px; }
 .detail__note { margin-top: 10px; font-size: 14px; line-height: 20px; color: var(--text-secondary); max-width: 34rem; }
+.detail__odds { display: grid; gap: 6px; margin: 8px 0 0; font-size: 14px; }
+.detail__odds div { display: grid; grid-template-columns: 4.6em auto; align-items: center; }
+.detail__odds dt { color: var(--text-secondary); }
+.detail__odds dd { margin: 0; }
+.sched { margin-top: 6px; display: grid; gap: 6px; font-size: 14px; }
+.sched li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sched .mark { width: 20px; height: 20px; }
+.sched__joiner { min-width: 1.4em; color: var(--text-secondary); font-size: 13px; }
+.sched__result { margin-left: 4px; font-weight: 600; white-space: nowrap; }
+.sched__wl { font-weight: 600; }
+.sched__wl--L, .sched__wl--T { color: var(--text-secondary); }
+.sched__date { margin-left: 4px; color: var(--text-secondary); font-size: 13px; }
 
 /* Playoff path inside an expanded row. */
-.path { margin-top: 14px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
-.path caption { text-align: left; font-weight: 600; padding-bottom: 6px; }
+.path { margin-top: 8px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .path th, .path td { padding: 4px 14px 4px 0; text-align: right; border: 0; }
 .path th[scope="row"], .path thead th:first-child { text-align: left; font-weight: 400; }
 .path thead th { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
 .standings tr.detail .path td, .standings tr.detail .path th { padding: 4px 14px 4px 0; }
+.standings tr.detail .path thead th { text-align: left; }
 
 /* Narrow (or zoomed) viewports keep two odds columns: 1st and Playoffs. */
 @media (max-width: 40em) {
@@ -521,27 +561,38 @@ button { font: inherit; color: inherit; }
   .standings .col-pos { display: none; }
   .standings tr.detail td { padding-left: 6px; }
 }
+@media (max-width: 40em) {
+  .standings tr.detail td { padding-left: 6px; }
+}
 
 .section { margin-top: 56px; }
 .section > .section-title + * { margin-top: 16px; }
 
-.games { max-width: 40rem; }
-.games li {
-  display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); align-items: center; gap: 4px 12px;
-  padding: 10px 0 10px 10px;
-  border-bottom: 1px solid var(--border);
+/* Region games: a card per game, grouped under each game day. */
+.game-day + .game-day { margin-top: 24px; }
+.game-day__title {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 15px; line-height: 20px;
+  letter-spacing: 0.04em; text-transform: uppercase;
 }
-.games li:first-child { border-top: 1px solid var(--border); }
-.games li.is-focus { box-shadow: inset 3px 0 0 var(--accent-identity); }
-.games__date { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.games__match { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
-.games__side { display: inline-flex; align-items: center; gap: 8px; }
-.games__score { font-variant-numeric: tabular-nums; font-weight: 500; }
-.games__side.is-winner .team-name, .games__side.is-winner .games__score { font-weight: 600; }
-.games .vs { color: var(--text-secondary); font-size: 14px; }
-@media (max-width: 30em) {
-  .games li { grid-template-columns: minmax(0, 1fr); }
+.game-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
+  margin-top: 10px;
 }
+.game-card {
+  display: grid; gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.game-card.is-focus { border-color: var(--accent-identity); box-shadow: inset 3px 0 0 var(--accent-identity); }
+.game-card__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.game-card__team { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.game-card__score { font-weight: 500; }
+.game-card__team.is-winner .team-name, .game-card__team.is-winner .game-card__score { font-weight: 700; }
+.game-card__joiner { color: var(--text-secondary); font-size: 14px; }
 
 /* ------------------------------------------------------------ scenarios */
 
@@ -555,16 +606,20 @@ details.scenario-group > summary {
   list-style: none;
 }
 details.scenario-group > summary::-webkit-details-marker { display: none; }
-details.scenario-group > summary .sub-title::before {
+details.scenario-group > summary .sub-title::before,
+details.scenario-group > summary .section-title::before {
   content: ""; display: inline-block;
   width: 0; height: 0; margin-right: 10px; vertical-align: 3px;
   border-left: 6px solid currentColor; border-block: 5px solid transparent;
   transition: transform 120ms ease-out;
 }
-details.scenario-group[open] > summary .sub-title::before { transform: rotate(90deg); }
+details.scenario-group[open] > summary .sub-title::before,
+details.scenario-group[open] > summary .section-title::before { transform: rotate(90deg); }
+details.scenario-group > summary { flex-wrap: wrap; }
 details.scenario-group[open] > summary { margin-bottom: 6px; }
 @media (prefers-reduced-motion: reduce) {
-  details.scenario-group > summary .sub-title::before { transition: none; }
+  details.scenario-group > summary .sub-title::before,
+  details.scenario-group > summary .section-title::before { transition: none; }
 }
 .scenario-grid {
   display: grid; gap: 16px;
@@ -590,6 +645,27 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   color: var(--text-secondary);
 }
 .scenario .provenance { margin-top: 4px; }
+
+/* A complete scenario: the seeds it produces, then the results behind it. */
+.outcome__seeds { display: grid; gap: 6px; margin-top: 12px; font-size: 14px; }
+.outcome__seeds li { display: flex; align-items: center; gap: 10px; }
+.outcome__seeds li.is-focus .team-name { font-weight: 700; }
+.outcome__seed {
+  display: inline-grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--surface-raised);
+  font-size: 12px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.outcome__out { margin-top: 8px; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.outcome__out-label { font-weight: 600; margin-right: 2px; }
+.outcome__out strong { color: var(--text-primary); }
+.outcome__if {
+  margin-top: 14px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+.outcome .scenario__body { margin-top: 8px; }
 .scenario__body { margin-top: 16px; }
 
 /* Condition chips and the explicit AND / OR grammar. */

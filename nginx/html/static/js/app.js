@@ -8,11 +8,14 @@
 import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate } from "./format.js";
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
-  ODDS_MODES, modeLabel, infoButton,
+  ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard,
 } from "./components.js";
-import { outcomeCards, insightCards, oddsFor, hasProjectedOdds } from "./scenarios.js";
+import {
+  outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
+} from "./scenarios.js";
 import {
   standingPositions, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
+  orient, byDay, teamSchedule,
 } from "./standings.js";
 
 const API = "/api/v1";
@@ -429,7 +432,10 @@ async function regionView(ctx) {
     shortDate,
   );
 
-  const remaining = data.remaining_games ?? [];
+  const remaining = (data.remaining_games ?? []).map((g) => ({
+    date: dateFor(g.team_a, g.team_b), ...orient(g.team_a, g.team_b, g.location_a),
+  }));
+  const schedule = { results, remaining };
   return `<div class="page">
     <header class="region-head">
       <a class="region-head__back" href="${esc(hrefWith({ region: null, team: null }))}">All ${clazz}A regions</a>
@@ -437,10 +443,11 @@ async function regionView(ctx) {
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
       ${controlsLine(ctx, weeks, { asOf: data.as_of_date, mode, projectedAvailable })}
     </header>
-    ${standingsTable(data, teams, mode, focus, clazz)}
-    ${remaining.length ? remainingGames(remaining, teams, dateFor) : ""}
+    ${standingsTable(data, teams, mode, focus, clazz, schedule)}
+    ${remaining.length ? gamesSection("remaining", "Remaining games", remaining, teams, focus) : ""}
     ${remaining.length ? scenariosSection(data, teams, cardProv, mode, focus) : ""}
-    ${results.length ? completedGames(results, teams, focus) : ""}
+    ${data.scenarios?.length ? allScenariosSection(data.scenarios, teams, focus) : ""}
+    ${results.length ? gamesSection("results", "Completed games", results, teams, focus) : ""}
   </div>`;
 }
 
@@ -452,7 +459,7 @@ const ODDS_COLUMNS = [
   { key: "p_playoffs", label: "Playoffs", mid: false },
 ];
 
-function standingsTable(data, teams, mode, focus, clazz) {
+function standingsTable(data, teams, mode, focus, clazz, games) {
   const ordered = displayOrder(data.teams);
   const positions = standingPositions(ordered);
   const complete = !(data.remaining_games ?? []).length;
@@ -476,7 +483,7 @@ function standingsTable(data, teams, mode, focus, clazz) {
         <td class="col-rec col-overall">${esc(recordText(r.wins, r.losses, r.ties))}</td>
         ${cells.join("")}
       </tr>
-      <tr class="detail${focused ? " is-focus" : ""}" id="${detailId}"${focused ? "" : " hidden"}><td colspan="9">${focused ? rowDetail(t, mode, clazz, complete) : ""}</td></tr>`;
+      <tr class="detail${focused ? " is-focus" : ""}" id="${detailId}"${focused ? "" : " hidden"}><td colspan="9">${focused ? rowDetail(t, mode, clazz, complete, teams, games) : ""}</td></tr>`;
   });
 
   const oddsHeads = ODDS_COLUMNS.map(
@@ -495,33 +502,60 @@ function standingsTable(data, teams, mode, focus, clazz) {
   </table>`;
 }
 
-/** Expanded row: seed odds, then the team's road through the bracket. */
-function rowDetail(t, mode, clazz, complete) {
+/**
+ * Expanded row, three panels side by side (stacked on phones): the team's
+ * record and region schedule, its seeding odds, and its road through the
+ * bracket.
+ */
+function rowDetail(t, mode, clazz, complete, teams, games) {
   const r = t.record;
   const o = oddsFor(t, mode);
-  const stats = ODDS_COLUMNS.map(
-    (c) => `<span class="detail__stat">${c.label} ${oddsCell(o[c.key])}</span>`,
-  );
-  const notes = [`Overall record ${recordText(r.wins, r.losses, r.ties)}.`];
-  if (complete && t.coin_flip_needed) notes.push("A coin flip is needed to settle a tie involving this team.");
+  const { completed, upcoming } = teamSchedule(t.school, games.results, games.remaining);
+
+  const opponent = (g) => `<span class="sched__joiner">${esc(g.joiner)}</span>${teamLabel(g.opponent, teams)}`;
+  const schedList = (title, rows) => (rows.length
+    ? `<h4 class="detail__sub">${title}</h4><ul class="sched">${rows.join("")}</ul>`
+    : "");
+  const playedRows = completed.map((g) => `<li>${opponent(g)}`
+    + `<span class="sched__result">${esc(`${g.scoreFor}–${g.scoreAgainst}`)} <span class="sched__wl sched__wl--${g.result}">${g.result}</span></span></li>`);
+  const upcomingRows = upcoming.map((g) => `<li>${opponent(g)}${g.date ? `<span class="sched__date">${esc(gameDate(g.date))}</span>` : ""}</li>`);
+  const coinFlip = complete && t.coin_flip_needed
+    ? '<p class="detail__note">A coin flip is needed to settle a tie involving this team.</p>'
+    : "";
+  const record = `<section class="detail__panel" aria-label="Record">
+      <h3 class="detail__title">Record</h3>
+      <p class="detail__records">
+        <span><strong>${esc(recordText(r.region_wins, r.region_losses, r.region_ties))}</strong> Region</span>
+        <span><strong>${esc(recordText(r.wins, r.losses, r.ties))}</strong> Overall</span>
+      </p>
+      ${coinFlip}
+      ${schedList("Completed region games", playedRows)}
+      ${schedList("Remaining region games", upcomingRows)}
+    </section>`;
+
+  const seeding = `<section class="detail__panel" aria-label="Seeding odds">
+      <h3 class="detail__title">Seeding odds</h3>
+      <dl class="detail__odds">${ODDS_COLUMNS.map((c) => `<div><dt>${c.label}</dt><dd>${oddsCell(o[c.key])}</dd></div>`).join("")}</dl>
+    </section>`;
 
   // Teams that made the playoffs keep their path after elimination: it
   // records how far they got.
   const path = t.eliminated && !t.clinched ? [] : playoffPath(t, mode, clazz);
-  const pathTable = path.length
-    ? `<table class="path">
-        <caption>Playoff path</caption>
-        <thead><tr><th scope="col">Round</th><th scope="col">Reaches</th><th scope="col">Hosts if there</th><th scope="col">Hosts overall</th></tr></thead>
-        <tbody>${path.map((p) => `<tr>
-          <th scope="row">${esc(p.round)}</th>
-          <td>${oddsCell(p.reach)}</td>
-          <td>${p.neutral ? '<span class="muted">Neutral</span>' : p.hostIfReach == null ? "" : esc(formatPct(p.hostIfReach))}</td>
-          <td>${p.hostOverall == null ? "" : esc(formatPct(p.hostOverall))}</td>
-        </tr>`).join("")}</tbody>
-      </table>`
+  const pathPanel = path.length
+    ? `<section class="detail__panel detail__panel--path" aria-label="Playoff path">
+        <h3 class="detail__title">Playoff path</h3>
+        <table class="path">
+          <thead><tr><th scope="col">Round</th><th scope="col">Reaches</th><th scope="col">Hosts if there</th><th scope="col">Hosts overall</th></tr></thead>
+          <tbody>${path.map((p) => `<tr>
+            <th scope="row">${esc(p.round)}</th>
+            <td>${oddsCell(p.reach)}</td>
+            <td>${p.neutral ? '<span class="muted">Neutral</span>' : p.hostIfReach == null ? "" : esc(formatPct(p.hostIfReach))}</td>
+            <td>${p.hostOverall == null ? "" : esc(formatPct(p.hostOverall))}</td>
+          </tr>`).join("")}</tbody>
+        </table>
+      </section>`
     : "";
-  return `<div class="detail__grid">${stats.join("")}</div>
-    <p class="detail__note">${esc(notes.join(" "))}</p>${pathTable}`;
+  return `<div class="detail__panels">${record}${seeding}${pathPanel}</div>`;
 }
 
 function focusTeamRow() {
@@ -551,39 +585,15 @@ app.addEventListener("click", (e) => {
   navigate(hrefWith({ team: selected ? null : toggle.dataset.team }));
 });
 
-function remainingGames(games, teams, dateFor) {
-  // location_a is team_a's perspective. Away team listed first.
-  const rows = games.map((g) => {
-    let first = g.team_a;
-    let second = g.team_b;
-    let joiner = "vs";
-    if (g.location_a === "home") { first = g.team_b; second = g.team_a; joiner = "at"; }
-    else if (g.location_a === "away") joiner = "at";
-    return { date: dateFor(g.team_a, g.team_b), first, second, joiner };
-  });
-  rows.sort((x, y) => (x.date ?? "9999").localeCompare(y.date ?? "9999"));
-  const items = rows.map((g) => `<li>
-      <span class="games__date">${g.date ? esc(gameDate(g.date)) : ""}</span>
-      <span class="games__match">${teamLabel(g.first, teams)}<span class="vs">${g.joiner}</span>${teamLabel(g.second, teams)}</span>
-    </li>`);
-  return `<section class="section" aria-labelledby="games-title">
-    <h2 class="section-title" id="games-title">Remaining games</h2>
-    <ul class="games">${items.join("")}</ul>
-  </section>`;
-}
-
-function completedGames(results, teams, focus) {
-  const items = results.map((g) => {
-    const mine = focus && (g.winner === focus || g.loser === focus);
-    const score = (name, pts, won) => `<span class="games__side${won ? " is-winner" : ""}">${teamLabel(name, teams)}<span class="games__score">${pts}</span></span>`;
-    return `<li${mine ? ' class="is-focus"' : ""}>
-      <span class="games__date">${esc(gameDate(g.date))}</span>
-      <span class="games__match">${score(g.winner, g.winnerScore, !g.tie)}<span class="vs">${g.tie ? "tied" : "beat"}</span>${score(g.loser, g.loserScore, false)}</span>
-    </li>`;
-  });
-  return `<section class="section" aria-labelledby="results-title">
-    <h2 class="section-title" id="results-title">Completed games</h2>
-    <ul class="games games--results">${items.join("")}</ul>
+/** Region games as a card grid under a heading for each game day. */
+function gamesSection(id, title, games, teams, focus) {
+  const days = byDay(games).map(({ date, items }) => `<div class="game-day">
+      <h3 class="game-day__title">${date ? esc(gameDate(date)) : "Date to be announced"}</h3>
+      <ul class="game-grid">${items.map((g) => gameCard(g, teams, { focus })).join("")}</ul>
+    </div>`);
+  return `<section class="section" aria-labelledby="${id}-title">
+    <h2 class="section-title" id="${id}-title">${title}</h2>
+    ${days.join("")}
   </section>`;
 }
 
@@ -604,19 +614,14 @@ function scenariosSection(data, teams, prov, mode, focus) {
     const title = forFocus(g.title);
     const playoffs = forFocus(g.playoffs);
     const seeding = forFocus(g.seeding);
+    // Every group folds away. Seeding matters less than who's in, and can
+    // run long, so it starts closed — unless it's all there is, or the
+    // reader picked one team.
     const parts = [
-      ["The region title", title],
-      ["Playoff spots", playoffs],
-    ].filter(([, cards]) => cards.length).map(([label, cards]) => `<div class="scenario-group">
-        <h3 class="sub-title">${label}</h3>${grid(cards)}</div>`);
-    // Seeding matters less than who's in, and can run long, so it starts
-    // closed — unless it's all there is, or the reader picked one team.
-    if (seeding.length) {
-      const open = !parts.length || focus;
-      parts.push(`<details class="scenario-group"${open ? " open" : ""}>
-        <summary><h3 class="sub-title">Seeding</h3><span class="muted">${seeding.length} outcomes</span></summary>
-        ${grid(seeding)}</details>`);
-    }
+      ["The region title", title, true],
+      ["Playoff spots", playoffs, true],
+    ].filter(([, cards]) => cards.length).map(([label, cards, open]) => collapsible(label, cards.length, grid(cards), open));
+    if (seeding.length) parts.push(collapsible("Seeding", seeding.length, grid(seeding), !parts.length || focus));
     body = parts.length
       ? parts.join("")
       : `<p class="prose muted">${focus ? `Nothing left to decide for ${esc(focus)}.` : "Every remaining outcome is already settled."}</p>`;
@@ -633,6 +638,28 @@ function scenariosSection(data, teams, prov, mode, focus) {
     <h2 class="section-title" id="scen-title">What has to happen</h2>
     ${focusNote}
     ${body}
+  </section>`;
+}
+
+/** A foldable group of cards with a count beside its heading. */
+function collapsible(label, count, body, open) {
+  return `<details class="scenario-group"${open ? " open" : ""}>
+    <summary><h3 class="sub-title">${label}</h3><span class="muted">${count} ${count === 1 ? "outcome" : "outcomes"}</span></summary>
+    ${body}</details>`;
+}
+
+/**
+ * Every distinct way the region can finish, one box each. Long lists start
+ * folded so they don't bury the completed games below.
+ */
+function allScenariosSection(scenarios, teams, focus) {
+  const cards = completeScenarioCards(scenarios);
+  const open = cards.length <= 12;
+  return `<section class="section" aria-labelledby="all-scen-title">
+    <details class="scenario-group scenario-group--section"${open ? " open" : ""}>
+      <summary><h2 class="section-title" id="all-scen-title">Scenarios</h2><span class="muted">${cards.length} ${cards.length === 1 ? "way" : "ways"} the region can finish</span></summary>
+      <div class="scenario-grid">${cards.map((c) => outcomeScenarioCard(c, teams, { focus })).join("")}</div>
+    </details>
   </section>`;
 }
 

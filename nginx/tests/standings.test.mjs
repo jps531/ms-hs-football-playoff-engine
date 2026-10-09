@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   standingPositions, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
+  orient, byDay, teamSchedule,
 } from "../html/static/js/standings.js";
 
 const rec = (w, l, t = 0) => ({ record: { region_wins: w, region_losses: l, region_ties: t } });
@@ -11,8 +12,9 @@ test("teams level on region record share a position, competition style", () => {
   assert.deepEqual(standingPositions([rec(4, 0), rec(3, 1), rec(2, 2)]), [1, 2, 3]);
 });
 
-test("ties use winning percentage, and teams without games are level", () => {
-  assert.deepEqual(standingPositions([rec(2, 1), rec(1, 1, 1), rec(1, 1)]), [1, 2, 2]); // .667, .500, .500
+test("only identical records share a position, and teams without games are level", () => {
+  assert.deepEqual(standingPositions([rec(2, 1), rec(1, 1, 1), rec(1, 1)]), [1, 2, 3]);
+  assert.deepEqual(standingPositions([rec(2, 0), rec(1, 0), rec(1, 0)]), [1, 2, 2]);
   assert.deepEqual(standingPositions([rec(0, 0), rec(0, 0), rec(0, 0)]), [1, 1, 1]);
 });
 
@@ -54,9 +56,9 @@ test("region games split into results and remaining dates", () => {
     { date: "2025-09-05", team_a: "Oxford", team_b: "Tupelo", score_a: 7, score_b: 3, final: true, is_region_game: false },
   ];
   const { results, dateFor } = regionGames(games, "2025-10-31");
-  assert.deepEqual(results.map((r) => [r.winner, r.winnerScore, r.loser, r.loserScore]), [
-    ["Starkville", 28, "Murrah", 21], // newest first, winner first
-    ["Oxford", 35, "Clinton", 14],
+  assert.deepEqual(results.map((r) => [r.away, r.awayScore, r.home, r.homeScore, r.winner]), [
+    ["Oxford", 35, "Clinton", 14, "Oxford"], // oldest first
+    ["Murrah", 21, "Starkville", 28, "Starkville"],
   ]);
   assert.equal(dateFor("Madison Central", "Clinton"), "2025-10-31"); // either order
   assert.equal(dateFor("Oxford", "Tupelo"), null); // non-region games ignored
@@ -72,12 +74,66 @@ test("a past week's view treats later results as still to play", () => {
 test("tied games are marked", () => {
   const { results } = regionGames([{ date: "2025-10-24", team_a: "A", team_b: "B", score_a: 14, score_b: 14, final: true, is_region_game: true }], null);
   assert.equal(results[0].tie, true);
+  assert.equal(results[0].winner, null);
+});
+
+test("the visitor is listed first, with vs at a neutral or unknown site", () => {
+  assert.deepEqual(orient("A", "B", "home"), { away: "B", home: "A", joiner: "at" });
+  assert.deepEqual(orient("A", "B", "away"), { away: "A", home: "B", joiner: "at" });
+  assert.deepEqual(orient("A", "B", "neutral"), { away: "A", home: "B", joiner: "vs" });
+  assert.deepEqual(orient("A", "B", null), { away: "A", home: "B", joiner: "vs" });
+});
+
+test("results put the visitor's score with the visitor", () => {
+  const { results } = regionGames([
+    { date: "2025-10-24", team_a: "Home", team_b: "Road", score_a: 10, score_b: 21, location_a: "home", final: true, is_region_game: true },
+  ], null);
+  assert.deepEqual(
+    [results[0].away, results[0].awayScore, results[0].home, results[0].homeScore, results[0].joiner],
+    ["Road", 21, "Home", 10, "at"],
+  );
+});
+
+test("games group by day, oldest first, undated last", () => {
+  const days = byDay([{ date: "2025-10-08", n: 1 }, { date: null, n: 2 }, { date: "2025-10-01", n: 3 }, { date: "2025-10-08", n: 4 }]);
+  assert.deepEqual(days.map((d) => [d.date, d.items.map((i) => i.n)]), [
+    ["2025-10-01", [3]], ["2025-10-08", [1, 4]], [null, [2]],
+  ]);
+});
+
+test("a team's schedule reads from its own side", () => {
+  const results = [
+    { date: "2025-10-01", away: "Taylorsville", home: "Stringer", joiner: "at", awayScore: 0, homeScore: 48, winner: "Stringer", tie: false },
+    { date: "2025-10-08", away: "Stringer", home: "Richton", joiner: "at", awayScore: 7, homeScore: 14, winner: "Richton", tie: false },
+    { date: "2025-10-08", away: "Lumberton", home: "Magee", joiner: "at", awayScore: 7, homeScore: 14, winner: "Magee", tie: false },
+  ];
+  const remaining = [
+    { date: "2025-10-15", away: "Stringer", home: "Lumberton", joiner: "at" },
+    { date: "2025-10-22", away: "Resurrection", home: "Stringer", joiner: "vs" },
+  ];
+  const { completed, upcoming } = teamSchedule("Stringer", results, remaining);
+  assert.deepEqual(completed.map((g) => [g.joiner, g.opponent, g.scoreFor, g.scoreAgainst, g.result]), [
+    ["vs", "Taylorsville", 48, 0, "W"],
+    ["at", "Richton", 7, 14, "L"],
+  ]);
+  assert.deepEqual(upcoming.map((g) => [g.joiner, g.opponent]), [["at", "Lumberton"], ["vs", "Resurrection"]]);
 });
 
 const team = (school, w, l, p1w, p1 = p1w) => ({
   school,
   record: { region_wins: w, region_losses: l, region_ties: 0 },
   odds: { p1, p2: 0, p3: 0, p4: 0, p_playoffs: 1, p1_weighted: p1w, p2_weighted: 0, p3_weighted: 0, p4_weighted: 0, p_playoffs_weighted: 1 },
+});
+
+test("more games over .500 rank higher, and more games under rank lower", () => {
+  const api = [team("A", 0, 2, 0), team("B", 1, 0, 0.9), team("C", 0, 1, 0), team("D", 2, 0, 0.1), team("E", 0, 0, 0.5)];
+  assert.deepEqual(displayOrder(api).map((t) => t.school), ["D", "B", "E", "C", "A"]);
+});
+
+test("level records break on 1st odds, then playoff odds", () => {
+  const withPlayoffs = (t, p) => ({ ...t, odds: { ...t.odds, p_playoffs_weighted: p } });
+  const api = [withPlayoffs(team("A", 1, 1, 0.2), 0.5), withPlayoffs(team("B", 1, 1, 0.2), 0.8)];
+  assert.deepEqual(displayOrder(api).map((t) => t.school), ["B", "A"]);
 });
 
 test("teams level on record are ordered by projected 1st odds; others keep the API order", () => {

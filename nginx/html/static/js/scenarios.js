@@ -1,7 +1,7 @@
 // Turns the API's per-team paths and key insights into the outcome cards the
 // region view shows. Pure data shaping, no DOM, so it runs under `node --test`.
 
-import { ordinalWord } from "./format.js";
+import { ordinalWord, joinNames } from "./format.js";
 
 const ODDS_KEYS = ["p1", "p2", "p3", "p4", "p_playoffs"];
 
@@ -107,4 +107,71 @@ export function insightCards(insights) {
       cards.get(key).groups.push(toGroup(i));
     });
   return [...cards.values()];
+}
+
+/**
+ * The region's complete scenarios — every distinct way the standings can
+ * finish — as cards: { label, seeds: [{ seed, team }], out, groups },
+ * numbered in order with duplicates removed.
+ * `seeds` are the playoff seeds (1-4), `out` the rest in finishing order,
+ * and `groups` is one AND-group of conditions in the chip format. Game
+ * results become team chips; margin and point-differential conditions keep
+ * the API's wording (its title joins the same conditions with " AND ").
+ */
+export function completeScenarioCards(scenarios, playoffSeeds = 4) {
+  const cards = (scenarios ?? []).map((sc) => {
+    const phrases = (sc.title ?? "").split(" AND ");
+    const source = sc.conditions?.length
+      ? sc.conditions
+      : (sc.game_winners ?? []).map((g) => ({ type: "game_result", winner: g.winner, loser: g.loser, min_margin: 1, max_margin: null }));
+    const conditions = source.map((c, i) => (c.type === "game_result"
+      ? {
+        type: "game_result", school: c.winner, opponent: c.loser, required_result: "win",
+        min_margin: c.min_margin ?? 1, max_margin: c.max_margin ?? null,
+      }
+      : { type: "text", description: phrases[i] ?? "" }));
+    for (const group of sc.coinflip_groups ?? []) {
+      if (group.length > 1) conditions.push({ type: "coin_flip", description: `A coin flip settles the tie ${group.length === 2 ? "between" : "among"} ${joinNames(group)}` });
+    }
+    const order = Object.entries(sc.outcomes ?? {})
+      .map(([team, seed]) => ({ team, seed: Number(seed) }))
+      .sort((a, b) => a.seed - b.seed);
+    return {
+      label: `Scenario ${sc.scenario_num}${(sc.sub_label ?? "").toUpperCase()}`,
+      seeds: order.filter((o) => o.seed <= playoffSeeds),
+      out: order.filter((o) => o.seed > playoffSeeds).map((o) => o.team),
+      groups: conditions.length ? [conditions] : [],
+      num: sc.scenario_num,
+    };
+  });
+  return renumber(dedupe(cards));
+}
+
+/**
+ * Drop scenarios that read the same as an earlier one. The API can split
+ * one scenario over a game that changes nothing (its conditions leave that
+ * game out), which would show two identical boxes.
+ */
+function dedupe(cards) {
+  const seen = new Set();
+  return cards.filter((c) => {
+    const key = JSON.stringify([c.seeds, c.out, c.groups]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Number what's left 1, 2, 3…, lettering a scenario's variants A, B, and so on. */
+function renumber(cards) {
+  const groups = [];
+  for (const c of cards) {
+    const last = groups[groups.length - 1];
+    if (last && last[0].num === c.num) last.push(c);
+    else groups.push([c]);
+  }
+  return groups.flatMap((group, i) => group.map(({ num, ...c }, k) => ({
+    ...c,
+    label: `Scenario ${i + 1}${group.length > 1 ? String.fromCharCode(65 + k) : ""}`,
+  })));
 }

@@ -31,14 +31,20 @@
         <input id="team-search" type="search" list="team-options" placeholder="Find a team" autocomplete="off" enterkeyhint="go">
         <datalist id="team-options"></datalist>
       </form>
-      <label class="theme-select">
-        <span class="visually-hidden">Theme</span>
-        <select id="theme-select">
-          <option value="system">System theme</option>
-          <option value="light">Light theme</option>
-          <option value="dark">Dark theme</option>
-        </select>
-      </label>
+      <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="false" tabindex="-1" data-theme="light" title="Light">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg>
+          <span class="visually-hidden">Light</span>
+        </button>
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="true" tabindex="0" data-theme="system" title="Match this device">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 15H2.8V3.8h15.4V8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.4 15v3.4M5.6 18.6h5.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.00 5.40 L10.79 7.51 L13.04 7.61 L11.28 9.02 L11.88 11.19 L10.00 9.95 L8.12 11.19 L8.72 9.02 L6.96 7.61 L9.21 7.51Z" fill="currentColor"/><rect x="15.2" y="9.6" width="6" height="10.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <span class="visually-hidden">System</span>
+        </button>
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="false" tabindex="-1" data-theme="dark" title="Dark">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.6A8.6 8.6 0 1 1 9.4 3.6a6.8 6.8 0 0 0 11 11Z" fill="currentColor"/></svg>
+          <span class="visually-hidden">Dark</span>
+        </button>
+      </div>
     </header>
   </div>
 

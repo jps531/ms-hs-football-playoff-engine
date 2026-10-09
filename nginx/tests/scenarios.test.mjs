@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  outcomeCards, insightCards, oddsFor, hasProjectedOdds, outcomeProbability,
-} from "../html/static/js/scenarios.js";
+  outcomeCards, insightCards, oddsFor, hasProjectedOdds, outcomeProbability, completeScenarioCards } from "../html/static/js/scenarios.js";
 
 const cond = (w, l) => [{ type: "game_result", school: w, opponent: l }];
 const seed = (value, p, groups) => ({ outcome: { type: "seed", value }, p, conditions: groups });
@@ -97,4 +96,55 @@ test("insights proving the same outcome merge into one card, joined by OR", () =
   const cards = insightCards([elim("Lumberton"), elim("Resurrection"), { ...elim("X"), team: "Bay" }]);
   assert.deepEqual(cards.map((c) => [c.title, c.groups.length]), [["Richton is eliminated", 2], ["Bay is eliminated", 1]]);
   assert.equal(cards[0].groups[1][1].opponent, "Resurrection");
+});
+
+test("complete scenarios become labeled boxes: seeds, who's out, and the results behind them", () => {
+  const [card] = completeScenarioCards([{
+    scenario_num: 2, sub_label: "a",
+    title: "Stringer beats Richton by 8 or more AND Stringer's margin and Lumberton's margin combined total 10 or more AND Lumberton beats Magee",
+    game_winners: [{ winner: "Stringer", loser: "Richton" }, { winner: "Lumberton", loser: "Magee" }],
+    conditions: [
+      { type: "game_result", winner: "Stringer", loser: "Richton", min_margin: 8, max_margin: null },
+      { type: "margin_condition", add: [["Richton", "Stringer"], ["Lumberton", "Magee"]], sub: [], op: ">=", threshold: 10 },
+      { type: "game_result", winner: "Lumberton", loser: "Magee", min_margin: 1, max_margin: null },
+    ],
+    coinflip_groups: [["Magee", "Richton"]],
+    outcomes: { Lumberton: "2", Stringer: "1", Magee: "4", Richton: "3", Taylorsville: "5" },
+  }]);
+  assert.equal(card.label, "Scenario 1"); // numbered by position on the page
+  assert.deepEqual(card.seeds.map((s) => [s.seed, s.team]), [[1, "Stringer"], [2, "Lumberton"], [3, "Richton"], [4, "Magee"]]);
+  assert.deepEqual(card.out, ["Taylorsville"]);
+  const [group] = card.groups;
+  assert.deepEqual(group.map((c) => c.type), ["game_result", "text", "game_result", "coin_flip"]);
+  assert.equal(group[0].min_margin, 8);
+  assert.equal(group[1].description, "Stringer's margin and Lumberton's margin combined total 10 or more");
+  assert.equal(group[3].description, "A coin flip settles the tie between Magee and Richton");
+});
+
+test("scenarios without structured conditions fall back to their game winners", () => {
+  const [card] = completeScenarioCards([{
+    scenario_num: 1, sub_label: "", title: "A beats B",
+    game_winners: [{ winner: "A", loser: "B" }], conditions: null, outcomes: { A: "1", B: "2" },
+  }]);
+  assert.equal(card.label, "Scenario 1");
+  assert.deepEqual(card.groups, [[{ type: "game_result", school: "A", opponent: "B", required_result: "win", min_margin: 1, max_margin: null }]]);
+});
+
+test("scenarios that read the same are merged, and the rest renumbered", () => {
+  const sc = (num, sub, title, outcomes) => ({
+    scenario_num: num, sub_label: sub, title,
+    game_winners: [], conditions: [{ type: "game_result", winner: title.split(" beats ")[0], loser: title.split(" beats ")[1], min_margin: 1, max_margin: null }],
+    outcomes,
+  });
+  const x = { A: "1", B: "2" };
+  const y = { B: "1", A: "2" };
+  const cards = completeScenarioCards([
+    sc(1, "", "A beats B", x),
+    sc(2, "a", "B beats A", y),
+    sc(2, "b", "B beats C", y),
+    sc(3, "a", "B beats A", y), // same as 2a
+    sc(3, "b", "B beats C", y), // same as 2b
+    sc(4, "", "C beats A", y),
+  ]);
+  assert.deepEqual(cards.map((c) => c.label), ["Scenario 1", "Scenario 2A", "Scenario 2B", "Scenario 3"]);
 });

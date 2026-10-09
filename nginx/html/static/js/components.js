@@ -184,6 +184,56 @@ export function scenarioCard({ title, p = null, groups, provenanceHtml = "", tea
   </article>`;
 }
 
+// ------------------------------------------------------------- game card
+
+/**
+ * One region game: the visitor on top with "at" (or "vs" at a neutral
+ * site), the home team below. Finished games add each side's score and
+ * bold the winner. `game` is { away, home, joiner, awayScore?, homeScore?,
+ * winner? }; `focus` outlines the card when the picked team plays in it.
+ */
+export function gameCard(game, teams, { focus = null } = {}) {
+  const played = game.awayScore != null && game.homeScore != null;
+  const side = (name, score) => {
+    const won = played && game.winner === name;
+    return `<span class="game-card__team${won ? " is-winner" : ""}">${teamLabel(name, teams)}`
+      + `${played ? `<span class="game-card__score">${esc(score)}</span>` : ""}</span>`;
+  };
+  const mine = focus && (game.away === focus || game.home === focus);
+  const label = played
+    ? `${game.away} ${game.awayScore}, ${game.home} ${game.homeScore}`
+    : `${game.away} ${game.joiner} ${game.home}`;
+  return `<li class="game-card${mine ? " is-focus" : ""}">
+    <span class="visually-hidden">${esc(label)}</span>
+    <div class="game-card__row" aria-hidden="true">${side(game.away, game.awayScore)}<span class="game-card__joiner">${esc(game.joiner)}</span></div>
+    <div class="game-card__row" aria-hidden="true">${side(game.home, game.homeScore)}</div>
+  </li>`;
+}
+
+// ---------------------------------------------------- complete scenario
+
+/**
+ * One complete scenario: its label, the seeds it produces (and who misses
+ * out), then the results that produce it. `focus` highlights the picked
+ * team's line.
+ */
+export function outcomeScenarioCard({ label, seeds, out, groups }, teams, { focus = null } = {}) {
+  const seedRows = seeds.map(({ seed, team }) => `<li${team === focus ? ' class="is-focus"' : ""}>`
+    + `<span class="outcome__seed">${seed}</span>${teamLabel(team, teams)}</li>`);
+  const outLine = out.length
+    ? `<p class="outcome__out"><span class="outcome__out-label">Out</span> ${out.map((t) => (t === focus ? `<strong>${esc(t)}</strong>` : esc(t))).join(", ")}</p>`
+    : "";
+  const body = groups.length
+    ? `<p class="outcome__if">IF</p><div class="scenario__body">${conditionGroups(groups, teams)}</div>`
+    : "";
+  return `<article class="scenario outcome">
+    <h4 class="scenario__title">${esc(label)}</h4>
+    <ol class="outcome__seeds" aria-label="Seeds">${seedRows.join("")}</ol>
+    ${outLine}
+    ${body}
+  </article>`;
+}
+
 // -------------------------------------------------------- class scrubber
 
 /**

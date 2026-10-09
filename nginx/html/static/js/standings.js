@@ -8,49 +8,56 @@ function winPct(r) {
   return games ? (r.region_wins + 0.5 * r.region_ties) / games : null;
 }
 
+/** Same region record: identical wins, losses, and ties. */
+function sameRecord(a, b) {
+  return a.region_wins === b.region_wins
+    && a.region_losses === b.region_losses
+    && a.region_ties === b.region_ties;
+}
+
 /**
  * Standings positions with ties shared, competition style: two teams level
- * at the top are both 1, and the next team is 3. Teams arrive already in
- * tiebreaker order; "level" means the same region winning percentage.
+ * at the top are both 1, and the next team is 3. Teams arrive in display
+ * order; "level" means the same region record.
  */
 export function standingPositions(entries) {
   const positions = [];
   entries.forEach((e, i) => {
     const prev = entries[i - 1];
-    const tied = prev && winPct(prev.record) === winPct(e.record);
+    const tied = prev && sameRecord(prev.record, e.record);
     positions.push(tied ? positions[i - 1] : i + 1);
   });
   return positions;
 }
 
 /**
- * Teams in display order: the API's order (MHSAA tiebreakers on completed
- * games, clinched seeds pinned), except that teams level on region record
- * are ordered by their projected odds of finishing 1st, then 2nd, 3rd, 4th,
- * and making the playoffs. Early in a season the tiebreakers often can't
- * separate level teams, so the odds give the more meaningful order. Falls
- * back to toss-up odds when a snapshot has no projected odds.
+ * Teams in display order:
+ *   1. region winning percentage (a team without games counts as .500);
+ *   2. games over .500, so 2-0 sits above 1-0 and 0-2 below 0-1;
+ *   3. odds of finishing 1st, then of making the playoffs, then of
+ *      finishing 2nd, 3rd, and 4th — projected odds, or toss-up odds when
+ *      a snapshot has none;
+ *   4. the API's order (MHSAA tiebreakers on completed games).
+ * Early in a season the tiebreakers often can't separate level teams, so the
+ * odds give the more meaningful order; once region play is over, the odds
+ * already reflect the tiebreakers.
  */
 export function displayOrder(entries) {
   const weighted = entries.some((e) => (e.odds?.p_playoffs_weighted ?? 0) > 0);
-  const keys = ["p1", "p2", "p3", "p4", "p_playoffs"].map((k) => (weighted ? `${k}_weighted` : k));
-  const byOdds = (a, b) => {
+  const keys = ["p1", "p_playoffs", "p2", "p3", "p4"].map((k) => (weighted ? `${k}_weighted` : k));
+  const net = (r) => r.region_wins - r.region_losses;
+  const compare = (a, b) => {
+    const pct = (winPct(b.record) ?? 0.5) - (winPct(a.record) ?? 0.5);
+    if (pct) return pct;
+    const games = net(b.record) - net(a.record);
+    if (games) return games;
     for (const k of keys) {
       const d = (b.odds?.[k] ?? 0) - (a.odds?.[k] ?? 0);
       if (d) return d;
     }
     return 0; // Array.prototype.sort is stable: keep the API's order
   };
-  const out = [];
-  let run = [];
-  for (const e of entries) {
-    if (run.length && winPct(run[0].record) !== winPct(e.record)) {
-      out.push(...run.sort(byOdds));
-      run = [];
-    }
-    run.push(e);
-  }
-  return out.concat(run.sort(byOdds));
+  return [...entries].sort(compare);
 }
 
 /**
@@ -100,11 +107,24 @@ export function playoffPath(entry, mode, clazz) {
 const pairKey = (a, b) => [a, b].sort().join("\u0000");
 
 /**
+ * Who's the visitor: { away, home, joiner }. `location_a` is team_a's side
+ * ("home" / "away" / "neutral" / null). The visitor is listed first with
+ * "at"; at a neutral or unknown site the teams keep their order with "vs".
+ */
+export function orient(teamA, teamB, locationA) {
+  if (locationA === "home") return { away: teamB, home: teamA, joiner: "at" };
+  if (locationA === "away") return { away: teamA, home: teamB, joiner: "at" };
+  return { away: teamA, home: teamB, joiner: "vs" };
+}
+
+/**
  * Split a region's games into finished results and remaining dates.
  * `games` are /games rows (one per contest); only region games count, and
  * results are limited to those played on or before `asOf` so a past week
- * shows that week's picture. Results come newest first; `dates` maps a
- * remaining matchup (either team order) to its scheduled date.
+ * shows that week's picture. Results come oldest first, each with the
+ * visitor first ({ away, home, awayScore, homeScore, joiner }) as well as
+ * { winner, loser, tie }; `dateFor` maps a remaining matchup (either team
+ * order) to its scheduled date.
  */
 export function regionGames(games, asOf) {
   const results = [];
@@ -113,21 +133,70 @@ export function regionGames(games, asOf) {
     if (!g.is_region_game) continue;
     const played = g.final && g.score_a != null && g.score_b != null;
     if (played && (!asOf || g.date <= asOf)) {
-      const aWon = g.score_a >= g.score_b;
+      const side = orient(g.team_a, g.team_b, g.location_a);
+      const score = { [g.team_a]: g.score_a, [g.team_b]: g.score_b };
+      const tie = g.score_a === g.score_b;
       results.push({
         date: g.date,
-        winner: aWon ? g.team_a : g.team_b,
-        loser: aWon ? g.team_b : g.team_a,
-        winnerScore: Math.max(g.score_a, g.score_b),
-        loserScore: Math.min(g.score_a, g.score_b),
-        tie: g.score_a === g.score_b,
+        ...side,
+        awayScore: score[side.away],
+        homeScore: score[side.home],
+        winner: tie ? null : g.score_a > g.score_b ? g.team_a : g.team_b,
+        loser: tie ? null : g.score_a > g.score_b ? g.team_b : g.team_a,
+        tie,
       });
     } else if (g.date) {
       dates.set(pairKey(g.team_a, g.team_b), g.date);
     }
   }
-  results.sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0));
+  results.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
   return { results, dateFor: (a, b) => dates.get(pairKey(a, b)) ?? null };
+}
+
+/**
+ * Group items by their `date`, oldest day first, undated items last:
+ * [{ date, items }]. Order within a day is kept.
+ */
+export function byDay(items) {
+  const days = new Map();
+  for (const item of items) {
+    const key = item.date ?? null;
+    if (!days.has(key)) days.set(key, []);
+    days.get(key).push(item);
+  }
+  return [...days.entries()]
+    .sort(([a], [b]) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : a < b ? -1 : 1))
+    .map(([date, list]) => ({ date, items: list }));
+}
+
+/**
+ * One team's region schedule, from its own side: completed games as
+ * { date, opponent, joiner, scoreFor, scoreAgainst, result } (W / L / T),
+ * and remaining games as { date, opponent, joiner }. The joiner is "at" for
+ * road games and "vs" otherwise. Both lists run oldest first.
+ */
+export function teamSchedule(team, results, remaining) {
+  const sideOf = (g) => {
+    if (g.home === team) return { opponent: g.away, joiner: "vs" };
+    return { opponent: g.home, joiner: g.joiner === "at" ? "at" : "vs" };
+  };
+  const completed = results
+    .filter((g) => g.away === team || g.home === team)
+    .map((g) => {
+      const mine = g.home === team ? g.homeScore : g.awayScore;
+      const theirs = g.home === team ? g.awayScore : g.homeScore;
+      return {
+        date: g.date,
+        ...sideOf(g),
+        scoreFor: mine,
+        scoreAgainst: theirs,
+        result: g.tie ? "T" : g.winner === team ? "W" : "L",
+      };
+    });
+  const upcoming = remaining
+    .filter((g) => g.away === team || g.home === team)
+    .map((g) => ({ date: g.date, ...sideOf(g) }));
+  return { completed, upcoming };
 }
 
 /**
