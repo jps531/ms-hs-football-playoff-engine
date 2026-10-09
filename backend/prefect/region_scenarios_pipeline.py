@@ -220,6 +220,53 @@ def fetch_prior_season_elo(prior_season: int) -> dict[str, float]:
             return {row[0]: row[1] for row in cur.fetchall()}
 
 
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Playoff Start Dates")
+def fetch_playoff_start_dates(season: int) -> dict[int, date]:
+    """Return ``{class: date of its first completed playoff game}`` for *season*.
+
+    Playoff games are final games with a ``round`` set, the same rule
+    ``playoff_pipeline.fetch_completed_playoff_games`` uses. Classes with no
+    completed playoff game are absent.
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ss.class, MIN(g.date)
+                FROM games_effective g
+                JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+                WHERE g.season = %s AND g.final = TRUE AND g.round IS NOT NULL
+                GROUP BY ss.class
+                """,
+                (season,),
+            )
+            return {row[0]: row[1] for row in cur.fetchall()}
+
+
+def classes_in_playoffs(playoff_starts: dict[int, date], as_of: date) -> set[int]:
+    """Return the classes whose playoffs have begun on or before *as_of*.
+
+    From a class's first completed playoff game on, its ``region_standings``
+    rows belong to ``playoff_bracket_update``, which knows how many rounds
+    each team has survived. The regular-season computations here would write
+    rows as if no playoff game had been played, and the snapshot tables
+    overwrite on (school, season, as_of_date), so they must leave those
+    classes alone.
+    """
+    return {c for c, start in playoff_starts.items() if start <= as_of}
+
+
+def run_playoff_bracket_update(season: int) -> None:
+    """Run the playoff bracket update as a subflow (rewrites every playoff-date row).
+
+    Imported here rather than at module level because ``playoff_pipeline``
+    imports this module.
+    """
+    from backend.prefect.playoff_pipeline import playoff_bracket_update
+
+    playoff_bracket_update(season=season)
+
+
 @task(retries=2, retry_delay_seconds=10, task_run_name="Write {season} Team Ratings")
 def write_team_ratings(
     elo_ratings: dict[str, float],
@@ -1268,33 +1315,37 @@ def region_scenarios_data_flow(
     q_elo_ratings = quote(elo_ratings)
     q_elo_snapshots = quote(elo_snapshots)
 
+    def _regions_for(c: int) -> list[int]:
+        """Return valid region numbers for class c (1–8 for 1A–4A; 1–4 for 5A–7A)."""
+        return list(range(1, 9)) if c <= 4 else list(range(1, 5))
+
+    # Classes already in the playoffs belong to the playoff bracket update,
+    # which runs at the end of this flow; computing them here would write
+    # rows that ignore every playoff result.
+    in_playoffs = classes_in_playoffs(fetch_playoff_start_dates(season), flow_run_date)
+    if clazz is None or region is None:
+        targets = [(c, r) for c in range(1, 8) for r in _regions_for(c)]
+    else:
+        targets = [(clazz, region)]
+    skipped = sorted({c for c, _ in targets if c in in_playoffs})
+    if skipped:
+        logger.info("Classes in the playoffs, left to the playoff bracket update: %s", skipped)
+    targets = [(c, r) for c, r in targets if c not in in_playoffs]
+
     # -----------------------------------------------------------------------
     # Phase 1: enumerate seeding odds for every region.
     # All regions must finish before we can build the per-class matchup fn.
     # -----------------------------------------------------------------------
     seeding: dict[tuple[int, int], RegionSeedingData] = {}
-    if clazz is None or region is None:
-        for c in [1, 2, 3, 4]:
-            for r in [1, 2, 3, 4, 5, 6, 7, 8]:
-                seeding[(c, r)] = get_region_seeding_odds(c, r, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
-        for c in [5, 6, 7]:
-            for r in [1, 2, 3, 4]:
-                seeding[(c, r)] = get_region_seeding_odds(c, r, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
-    else:
-        seeding[(clazz, region)] = get_region_seeding_odds(
-            clazz, region, season, q_elo_ratings, q_elo_snapshots, elo_cfg
-        )
+    for c, r in targets:
+        seeding[(c, r)] = get_region_seeding_odds(c, r, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
 
     # -----------------------------------------------------------------------
     # Build one MatchupProbFn per class using all-region weighted seeding odds.
     # expected_elo[region, seed] = Σ_t  P(t achieves seed)  ×  elo[t]
     # -----------------------------------------------------------------------
-    def _regions_for(c: int) -> list[int]:
-        """Return valid region numbers for class c (1–8 for 1A–4A; 1–4 for 5A–7A)."""
-        return list(range(1, 9)) if c <= 4 else list(range(1, 5))
-
     matchup_fns: dict[int, MatchupProbFn] = {}
-    for c in {clazz} if clazz is not None else {1, 2, 3, 4, 5, 6, 7}:
+    for c in sorted({c for c, _ in targets}):
         class_weighted_odds = {r: seeding[(c, r)].odds_weighted for r in _regions_for(c) if (c, r) in seeding}
         matchup_fns[c] = make_matchup_prob_fn(elo_ratings, class_weighted_odds, elo_cfg)
 
@@ -1302,19 +1353,14 @@ def region_scenarios_data_flow(
     # Phase 2: compute bracket/home odds and write all results to DB.
     # -----------------------------------------------------------------------
     scenario_dicts: dict = {}
-    if clazz is None or region is None:
-        for c in [1, 2, 3, 4]:
-            scenario_dicts[c] = {}
-            for r in [1, 2, 3, 4, 5, 6, 7, 8]:
-                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, quote(seeding[(c, r)]), matchup_fns[c])
-        for c in [5, 6, 7]:
-            scenario_dicts[c] = {}
-            for r in [1, 2, 3, 4]:
-                scenario_dicts[c][r] = get_region_finish_scenarios(c, r, season, quote(seeding[(c, r)]), matchup_fns[c])
-    else:
-        scenario_dicts.setdefault(clazz, {})[region] = get_region_finish_scenarios(
-            clazz, region, season, quote(seeding[(clazz, region)]), matchup_fns[clazz]
+    for c, r in targets:
+        scenario_dicts.setdefault(c, {})[r] = get_region_finish_scenarios(
+            c, r, season, quote(seeding[(c, r)]), matchup_fns[c]
         )
+
+    # Last, so playoff-aware rows are what's left for every playoff date.
+    if skipped:
+        run_playoff_bracket_update(season)
     return scenario_dicts
 
 
@@ -1376,9 +1422,19 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         idx = bisect.bisect_right(snap_dates, cutoff) - 1
         return elo_snapshots[idx][1] if idx >= 0 else elo_ratings
 
-    class_regions: dict[int, list[int]] = {c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)}
+    all_class_regions: dict[int, list[int]] = {
+        c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)
+    }
+    playoff_starts = fetch_playoff_start_dates(season)
 
     for cutoff_date in snap_dates:
+        # From a class's first playoff game on, its dates are written by the
+        # playoff bracket update below; snapshots computed here would ignore
+        # the playoff results and overwrite (or shadow) the playoff-aware rows.
+        in_playoffs = classes_in_playoffs(playoff_starts, cutoff_date)
+        class_regions = {c: regions for c, regions in all_class_regions.items() if c not in in_playoffs}
+        if not class_regions:
+            continue
         logger.info("Backfilling region standings/scenarios for %s", cutoff_date)
         ratings_at = _ratings_at_cutoff(cutoff_date)
         q_ratings_at = quote(ratings_at)
@@ -1410,5 +1466,10 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
                 get_region_finish_scenarios(
                     c, r, season, quote(seeding[(c, r)]), matchup_fns[c], as_of_date=cutoff_date
                 )
+
+    # Last, so every playoff date ends with playoff-aware rows no matter what
+    # this backfill (or an earlier run) wrote.
+    if playoff_starts:
+        run_playoff_bracket_update(season)
 
     logger.info("Backfill complete for season %d: %d dates processed", season, len(snap_dates))
