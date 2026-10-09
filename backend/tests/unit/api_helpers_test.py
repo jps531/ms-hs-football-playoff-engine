@@ -551,6 +551,21 @@ class TestFilterScenariosBySimulation:
         assert len(result) == 1
         assert result[0]["conditions_atom"] == []
 
+    def test_game_absent_from_game_winners_keeps_scenario(self):
+        """A merged scenario omits games irrelevant to its seeding; simulating either
+        result of such a game keeps it, with its own conditions untouched."""
+        scenario = self._scenario("a", [GameResult("Lumberton", "Taylorsville", min_margin=1, max_margin=12)])
+        for winner, loser in (("Richton", "Purvis"), ("Purvis", "Richton")):
+            result = filter_scenarios_by_simulation([scenario], [_GameResult(winner, loser)])
+            assert len(result) == 1
+            assert result[0]["conditions_atom"] == scenario["conditions_atom"]
+
+    def test_opposite_winner_drops_scenario(self):
+        """A simulated result whose reverse is in game_winners drops the scenario."""
+        scenario = self._scenario("a", None)
+        result = filter_scenarios_by_simulation([scenario], [_GameResult("Taylorsville", "Lumberton")])
+        assert result == []
+
     def test_stripping_does_not_mutate_original_scenario(self):
         """The input scenario dict's conditions_atom is left untouched (a new dict is returned)."""
         atom = [GameResult("Lumberton", "Taylorsville", min_margin=1, max_margin=12)]

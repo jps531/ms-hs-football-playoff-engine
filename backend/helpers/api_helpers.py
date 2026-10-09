@@ -522,7 +522,10 @@ def filter_scenarios_by_simulation(
 ) -> list[dict]:
     """Keep only scenarios consistent with every simulated (winner, loser[, margin]) result.
 
-    A scenario must have every simulated pair among its ``game_winners``. If a
+    A scenario is dropped when its ``game_winners`` names the opposite winner for a
+    simulated game.  A game absent from ``game_winners`` doesn't affect that
+    scenario's seeding (merged scenarios omit such games), so either result keeps
+    it. If a
     simulated result also carries an explicit score, any ``GameResult`` condition
     in the scenario's ``conditions_atom`` for that same pair must accept the
     resulting margin (min_margin/max_margin), so mutually-exclusive margin-bucket
@@ -560,14 +563,14 @@ def filter_scenarios_by_simulation(
                 return False
         return True
 
+    reversed_pairs = {(l, w) for w, l in simulated_pairs}
     result = []
     for sc in complete_scenarios:
         game_winners = sc.get("game_winners", [])
-        if not all(pair in game_winners for pair in simulated_pairs) or not _margin_ok(sc):
+        if any(pair in reversed_pairs for pair in game_winners) or not _margin_ok(sc):
             continue
-        # Every simulated pair is guaranteed to be in game_winners by the check above,
-        # so a None atom (implicitly "every game_winners pair, default margin") always
-        # has something to strip here — materialize it explicitly before stripping.
+        # A None atom implicitly means "every game_winners pair, default margin" —
+        # materialize it explicitly so submitted pairs can be stripped.
         atom = sc.get("conditions_atom")
         if atom is None:
             atom = [GameResult(winner=w, loser=l) for w, l in game_winners]

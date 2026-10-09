@@ -33,8 +33,8 @@ Known 2025 seeds: Oxford / Germantown / Madison Central / Starkville
 Eliminated: Clinton, Murrah
 
 Scenario keys: 1, 2, 3a, 3b
-  (enumerate_division_scenarios deduplicates scenarios with identical conditions
-   and seeding, so formerly-duplicate 4a/4b are suppressed.)
+  (enumerate_division_scenarios merges margin-sensitive masks that differ only in
+   the irrelevant Germantown–Murrah game, so there is no duplicate 4a/4b.)
 
 Teams (alphabetical): Clinton, Germantown, Madison Central, Murrah, Oxford, Starkville
 """

@@ -1749,7 +1749,8 @@ def enumerate_division_scenarios(
     Each returned dict has:
     - ``scenario_num`` (int): primary scenario number.
     - ``sub_label`` (str): ``''`` for single scenarios; ``'a'``, ``'b'``, … for
-      sub-scenarios within a margin-sensitive mask.
+      sub-scenarios within a margin-sensitive mask (or group of masks that differ
+      only in games irrelevant to the seeding and so read identically).
     - ``game_winners`` (list[tuple[str, str]]): (winner, loser) pairs for each
       relevant game.  Games that don't affect the seeding are omitted.
     - ``conditions_atom`` (list | None): the raw condition atom (GameResult /
@@ -1903,8 +1904,43 @@ def enumerate_division_scenarios(
             for mask in flip_masks:
                 entries.append((mask, "coinflip", seeding, mask, flip_mask_relevant_groups_ds[mask]))
 
+    # Margin-sensitive masks: resolve each mask's ordered sub-scenarios, then merge
+    # masks whose sub-scenarios read identically (same seedings and same condition
+    # atoms).  Masks that differ only in a game irrelevant to the seeding would
+    # otherwise become separately numbered scenarios with identical displays.
+    ms_by_signature: dict[tuple, list[int]] = defaultdict(list)
+    ms_subs: dict[int, list[tuple]] = {}  # mask -> [(seeding, conditions_atom)]
     for mask, sub_list in ms.items():
-        entries.append((mask, "multi", None, mask, sub_list))
+        sub_list_sorted = sorted(
+            sub_list,
+            key=lambda x: tuple(min(m[pair] for m in x[1]) for pair in pairs),
+        )
+        subs = []
+        for seeding, margins_list in sub_list_sorted:
+            conditions_atom = None
+            if scenario_atoms:
+                conditions_atom = _find_combined_atom(
+                    seeding,
+                    playoff_seeds,
+                    mask,
+                    margins_list[0],
+                    scenario_atoms,
+                    remaining,
+                )
+            subs.append((seeding, conditions_atom))
+        ms_subs[mask] = subs
+        if any(atom is None for _, atom in subs):
+            # Without atoms the game winners are the only description; keep per-mask.
+            signature: tuple = ("mask", mask)
+        else:
+            signature = tuple(sorted((seeding, tuple(atom)) for seeding, atom in subs))
+        ms_by_signature[signature].append(mask)
+
+    for masks in ms_by_signature.values():
+        for group in _valid_merge_groups(masks):
+            min_mask = min(group)
+            game_winners = _common_game_winners(group, remaining)
+            entries.append((min_mask, "multi", None, game_winners, ms_subs[min_mask]))
 
     entries.sort(key=lambda e: e[0])
 
@@ -1957,30 +1993,15 @@ def enumerate_division_scenarios(
                     }
                 )
         else:
-            _, _, _, mask, sub_list = entry
+            _, _, _, group_game_winners, subs = entry
             scenario_num += 1
-            sub_list_sorted = sorted(
-                sub_list,
-                key=lambda x: tuple(min(m[pair] for m in x[1]) for pair in pairs),
-            )
-            mask_game_winners = _game_winners_for_mask(mask, remaining)
-            for k, (seeding, margins_list) in enumerate(sub_list_sorted):
+            for k, (seeding, conditions_atom) in enumerate(subs):
                 sub_label = chr(ord("a") + k)
-                conditions_atom = None
-                if scenario_atoms:
-                    conditions_atom = _find_combined_atom(
-                        seeding,
-                        playoff_seeds,
-                        mask,
-                        margins_list[0],
-                        scenario_atoms,
-                        remaining,
-                    )
                 scenarios.append(
                     {
                         "scenario_num": scenario_num,
                         "sub_label": sub_label,
-                        "game_winners": mask_game_winners,
+                        "game_winners": group_game_winners,
                         "conditions_atom": conditions_atom,
                         "tiebreaker_groups": None,
                         "coinflip_groups": None,

@@ -2802,3 +2802,58 @@ class TestFindTiebreakerGroups:
         runs off the end of the list without converging and no group is formed."""
         groups = _find_tiebreaker_groups(["A", "B", "C"], ["A", "B", "D"])
         assert groups == []
+
+
+# ---------------------------------------------------------------------------
+# Margin-sensitive masks differing only in an irrelevant game are merged
+# ---------------------------------------------------------------------------
+
+
+class TestMarginSensitiveIrrelevantGameMerge:
+    """2025 Region 2-7A pre-final-week: Germantown–Murrah never changes the seeding.
+
+    The margin-sensitive Clinton-beats-Madison-Central / Oxford-beats-Starkville
+    outcome used to be numbered once per Germantown–Murrah winner (3a/3b and
+    4a/4b with identical conditions and seedings).  It must now be one scenario.
+    """
+
+    _FIXTURE = REGION_RESULTS_2025[(7, 2)]
+    _CUTOFF = "2025-10-31"
+
+    @classmethod
+    def setup_class(cls):
+        """Enumerate division scenarios with Germantown–Murrah, Clinton–MC and Oxford–Starkville remaining."""
+        games = cls._FIXTURE["games"]
+        teams = teams_from_games(games)
+        completed = get_completed_games(expand_results([g for g in games if g["date"] <= cls._CUTOFF]))
+        remaining = [RemainingGame(*sorted([g["winner"], g["loser"]])) for g in games if g["date"] > cls._CUTOFF]
+        cls.scenarios = enumerate_division_scenarios(teams, completed, remaining)
+
+    def test_numbering_is_dense(self):
+        """Labels are 1, 2, 3a, 3b — no duplicate 4a/4b."""
+        labels = [f"{sc['scenario_num']}{sc['sub_label']}" for sc in self.scenarios]
+        assert labels == ["1", "2", "3a", "3b"]
+
+    def test_no_two_scenarios_read_the_same(self):
+        """No two scenarios share both conditions and seeding."""
+        keys = [
+            (tuple(sc["conditions_atom"] or ()), tuple(sc["game_winners"]), sc["seeding"]) for sc in self.scenarios
+        ]
+        assert len(keys) == len(set(keys))
+
+    def test_merged_scenario_omits_irrelevant_game(self):
+        """The merged scenario's game_winners drops Germantown–Murrah and keeps the deciding games."""
+        for sc in self.scenarios:
+            if sc["scenario_num"] == 3:
+                assert sc["game_winners"] == [("Clinton", "Madison Central"), ("Oxford", "Starkville")]
+
+    def test_sub_scenario_conditions_and_seedings(self):
+        """3a is the 1–7 margin bucket (MC #4); 3b is 8+ (Clinton #4)."""
+        sub = {sc["sub_label"]: sc for sc in self.scenarios if sc["scenario_num"] == 3}
+        assert sub["a"]["conditions_atom"] == [
+            GameResult("Clinton", "Madison Central", 1, 8),
+            GameResult("Oxford", "Starkville", 1, None),
+        ]
+        assert sub["a"]["seeding"][:4] == ("Oxford", "Germantown", "Starkville", "Madison Central")
+        assert sub["b"]["conditions_atom"] == [GameResult("Clinton", "Madison Central", 8, None)]
+        assert sub["b"]["seeding"][:4] == ("Oxford", "Germantown", "Starkville", "Clinton")
