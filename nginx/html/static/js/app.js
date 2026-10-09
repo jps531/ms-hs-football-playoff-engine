@@ -11,7 +11,9 @@ import {
   ODDS_MODES, modeLabel, infoButton,
 } from "./components.js";
 import { outcomeCards, insightCards, oddsFor, hasProjectedOdds } from "./scenarios.js";
-import { standingPositions, playoffPath, regionGames, displayOrder, regionComplete } from "./standings.js";
+import {
+  standingPositions, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
+} from "./standings.js";
 
 const API = "/api/v1";
 const CLASSES = [1, 2, 3, 4, 5, 6, 7];
@@ -339,12 +341,7 @@ app.addEventListener("change", (e) => {
 
 /** Snapshot date to request for the chosen week (null = latest). */
 function dateParam(ctx, weeks) {
-  if (!ctx.week || !weeks.length) return null;
-  const latest = weeks[weeks.length - 1];
-  const w = weeks.find((x) => x.week === ctx.week);
-  // The latest week means "now"; snapshots dated after the week's games but
-  // before the next week's are what "through week N" shows.
-  return w && w !== latest ? w.end : null;
+  return snapshotDate(weeks, ctx.week, ctx.season !== ctx.currentSeason);
 }
 
 function oddsMode(ctx) {

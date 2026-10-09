@@ -129,3 +129,23 @@ export function regionGames(games, asOf) {
   results.sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0));
   return { results, dateFor: (a, b) => dates.get(pairKey(a, b)) ?? null };
 }
+
+/**
+ * The snapshot date to request for a chosen week, or null for "latest".
+ * `weeks` are played weeks oldest first ({ week, end }), `week` the chosen
+ * week number (null = the newest). Snapshots dated after a week's games but
+ * before the next week's are what "through week N" shows, so a week maps to
+ * its Sunday.
+ *
+ * In the current season the newest week means "now", so it asks for the
+ * latest snapshot. A past season is pinned to its last week instead: any
+ * snapshot written for it later (a stray manual run, say) is not the
+ * season's final word and must not stand in for it.
+ */
+export function snapshotDate(weeks, week, pastSeason) {
+  if (!weeks.length) return null;
+  const latest = weeks[weeks.length - 1];
+  const chosen = (week && weeks.find((w) => w.week === week)) || latest;
+  if (pastSeason) return chosen.end;
+  return chosen === latest ? null : chosen.end;
+}

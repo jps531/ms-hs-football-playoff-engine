@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  standingPositions, playoffPath, regionGames, displayOrder, regionComplete,
+  standingPositions, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
 } from "../html/static/js/standings.js";
 
 const rec = (w, l, t = 0) => ({ record: { region_wins: w, region_losses: l, region_ties: t } });
@@ -102,4 +102,28 @@ test("a region is complete once every team has played all the others", () => {
   assert.equal(regionComplete([team("A", 2, 0, 1), team("B", 1, 1, 0), team("C", 0, 2, 0)]), true);
   assert.equal(regionComplete([team("A", 2, 0, 1), team("B", 1, 0, 0), team("C", 0, 1, 0)]), false);
   assert.equal(regionComplete([]), false);
+});
+
+const WEEKS = [
+  { week: 10, end: "2025-11-02" },
+  { week: 11, end: "2025-11-09" },
+  { week: 15, end: "2025-12-07" },
+];
+
+test("current season: the newest week means the latest snapshot; earlier weeks pin to their Sunday", () => {
+  assert.equal(snapshotDate(WEEKS, null, false), null);
+  assert.equal(snapshotDate(WEEKS, 15, false), null);
+  assert.equal(snapshotDate(WEEKS, 11, false), "2025-11-09");
+});
+
+test("past season: even the final week pins to its date, so later stray snapshots can't stand in", () => {
+  assert.equal(snapshotDate(WEEKS, null, true), "2025-12-07");
+  assert.equal(snapshotDate(WEEKS, 15, true), "2025-12-07");
+  assert.equal(snapshotDate(WEEKS, 10, true), "2025-11-02");
+});
+
+test("no played weeks or an unknown week falls back sensibly", () => {
+  assert.equal(snapshotDate([], 3, true), null);
+  assert.equal(snapshotDate(WEEKS, 99, false), null);
+  assert.equal(snapshotDate(WEEKS, 99, true), "2025-12-07");
 });
