@@ -1,3 +1,5 @@
+import { isCertain } from "./format.js";
+
 // Standings-table data shaping: tie-aware positions, a team's round-by-round
 // playoff path, and matching region games to scores and dates. No DOM, so it
 // runs under `node --test`.
@@ -8,23 +10,18 @@ function winPct(r) {
   return games ? (r.region_wins + 0.5 * r.region_ties) / games : null;
 }
 
-/** Same region record: identical wins, losses, and ties. */
-function sameRecord(a, b) {
-  return a.region_wins === b.region_wins
-    && a.region_losses === b.region_losses
-    && a.region_ties === b.region_ties;
-}
-
 /**
  * Standings positions with ties shared, competition style: two teams level
  * at the top are both 1, and the next team is 3. Teams arrive in display
- * order; "level" means the same region record.
+ * order; "level" means the same region winning percentage, so 2-0 and 1-0
+ * share a position (the 2-0 team listed first). A team without games counts
+ * as .500, as it does for the order.
  */
 export function standingPositions(entries) {
   const positions = [];
   entries.forEach((e, i) => {
     const prev = entries[i - 1];
-    const tied = prev && sameRecord(prev.record, e.record);
+    const tied = prev && (winPct(prev.record) ?? 0.5) === (winPct(e.record) ?? 0.5);
     positions.push(tied ? positions[i - 1] : i + 1);
   });
   return positions;
@@ -104,6 +101,37 @@ export function playoffPath(entry, mode, clazz) {
     }));
 }
 
+const ROUND_TITLES = {
+  "First round": "First Round",
+  "Second round": "Second Round",
+  Quarterfinals: "Quarterfinals",
+  Semifinals: "Semifinals",
+  "Championship game": "Championship Game",
+};
+
+/**
+ * Where a playoff team stands once the bracket is underway, read from its
+ * round-by-round odds (reached rounds are certain, a round after a loss is
+ * zero): { kind: "champion" | "lost" | "advanced", label }, or null when
+ * the team isn't in the playoffs or hasn't played a playoff game yet.
+ */
+export function playoffStatus(entry, clazz) {
+  if (!isCertain(entry?.odds?.p_playoffs)) return null;
+  const path = playoffPath(entry, "tossup", clazz);
+  if (!path.length) return null;
+  if (isCertain(path[path.length - 1].reach)) return { kind: "champion", label: "State Champion" };
+  const rounds = path.slice(0, -1); // through the championship game
+  let i = -1;
+  rounds.forEach((r, k) => { if (isCertain(r.reach)) i = k; });
+  if (i < 0) return null;
+  const next = path[i + 1];
+  if (next.reach != null && next.reach <= 1e-9) {
+    return { kind: "lost", label: `Lost in ${ROUND_TITLES[rounds[i].round]}` };
+  }
+  if (i === 0) return null; // in the bracket, first round still to play
+  return { kind: "advanced", label: `Advanced to ${ROUND_TITLES[rounds[i].round]}` };
+}
+
 const pairKey = (a, b) => [a, b].sort().join("\u0000");
 
 /**
@@ -123,8 +151,9 @@ export function orient(teamA, teamB, locationA) {
  * results are limited to those played on or before `asOf` so a past week
  * shows that week's picture. Results come oldest first, each with the
  * visitor first ({ away, home, awayScore, homeScore, joiner }) as well as
- * { winner, loser, tie }; `dateFor` maps a remaining matchup (either team
- * order) to its scheduled date.
+ * { winner, loser, tie }. `upcoming(a, b)` gives a remaining matchup (either
+ * team order) as it's scheduled: { date, away, home, joiner }, or null when
+ * the schedule doesn't list it.
  */
 export function regionGames(games, asOf) {
   const results = [];
@@ -145,12 +174,12 @@ export function regionGames(games, asOf) {
         loser: tie ? null : g.score_a > g.score_b ? g.team_b : g.team_a,
         tie,
       });
-    } else if (g.date) {
-      dates.set(pairKey(g.team_a, g.team_b), g.date);
+    } else {
+      dates.set(pairKey(g.team_a, g.team_b), { date: g.date ?? null, ...orient(g.team_a, g.team_b, g.location_a) });
     }
   }
   results.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
-  return { results, dateFor: (a, b) => dates.get(pairKey(a, b)) ?? null };
+  return { results, upcoming: (a, b) => dates.get(pairKey(a, b)) ?? null };
 }
 
 /**

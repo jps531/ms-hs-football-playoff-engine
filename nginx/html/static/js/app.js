@@ -30,6 +30,7 @@ const resultsPopup = document.getElementById("team-results-popup");
 const resultsList = document.getElementById("team-results");
 const resultsEmpty = resultsPopup?.querySelector(".team-results__empty");
 const searchStatus = document.getElementById("team-search-status");
+const contextBar = document.getElementById("context-bar");
 
 // --------------------------------------------------------------- data
 
@@ -83,7 +84,9 @@ function weekEnd(iso) {
 
 /**
  * Played weeks for the season (and class, so 1A-4A / 5A-7A playoff rounds
- * label correctly), oldest first: [{ week, label, lastDate, end }].
+ * label correctly), oldest first: [{ week, label, firstDate, lastDate, end }].
+ * A game day counts once it's over: today's games don't, since their
+ * results only reach the numbers in the next morning's update.
  */
 async function playedWeeks(season, clazz) {
   let dates;
@@ -95,10 +98,26 @@ async function playedWeeks(season, clazz) {
   const now = today();
   const weeks = new Map();
   for (const d of dates) {
-    if (d.kind !== "games" || d.date > now) continue;
-    weeks.set(d.week, { week: d.week, label: d.description, lastDate: d.date, end: weekEnd(d.date) });
+    if (d.kind !== "games" || d.date >= now) continue;
+    const prev = weeks.get(d.week);
+    weeks.set(d.week, {
+      week: d.week, label: d.description, firstDate: prev?.firstDate ?? d.date, lastDate: d.date, end: weekEnd(d.date),
+    });
   }
   return [...weeks.values()].sort((a, b) => a.week - b.week);
+}
+
+// The newest snapshot seen per season and class. A week whose games haven't
+// reached an update yet would only reload the same numbers, so the week list
+// stops at the week this snapshot covers.
+const latestAsOf = new Map();
+
+/** Note the latest snapshot (when `date` was null) and trim weeks past it. */
+function weeksUpToLatest(ctx, weeks, date, asOf) {
+  const key = `${ctx.season}:${ctx.clazz}`;
+  if (!date && asOf) latestAsOf.set(key, asOf);
+  const latest = latestAsOf.get(key);
+  return latest ? weeks.filter((w) => w.firstDate <= latest) : weeks;
 }
 
 // ------------------------------------------------------------- routing
@@ -173,10 +192,12 @@ async function render() {
     const html = route.region ? await regionView(ctx) : await classView(ctx);
     if (token !== renderToken) return;
     app.innerHTML = html;
+    showContext(nextContext);
     if (scrollToFocus && route.team && route.region) focusTeamRow();
     scrollToFocus = false;
   } catch (err) {
     if (token !== renderToken) return;
+    showContext(null);
     app.innerHTML = notice(
       err?.status === 404
         ? "There’s nothing published for this yet. Try another week or season, or check back once region play is underway."
@@ -186,6 +207,38 @@ async function render() {
     if (token === renderToken) app.removeAttribute("aria-busy");
   }
   document.title = pageTitle(route.clazz, route.region);
+}
+
+// ---------------------------------------------------------- context bar
+// Once the page title scrolls under the header, a slim bar takes its place
+// saying what's on screen (region, week, date, odds mode), so a screenshot
+// from anywhere down the page still carries its context. It repeats the
+// visible title and controls, so it's hidden from screen readers.
+
+let nextContext = null; // set by the view being rendered
+let headObserver = null;
+
+function contextHtml(title, summary, mode) {
+  const sep = '<span class="sep" aria-hidden="true">·</span>';
+  const parts = [`<span class="context-bar__title">${esc(title)}</span>`];
+  if (summary?.week) parts.push(`<span>${esc(summary.week)}</span>`);
+  if (summary?.date) parts.push(`<span>${esc(summary.date)}</span>`);
+  if (mode) parts.push(modeLabel(mode));
+  return parts.join(sep);
+}
+
+function showContext(html) {
+  headObserver?.disconnect();
+  contextBar.classList.remove("is-shown");
+  contextBar.querySelector(".context-bar__inner").innerHTML = html ?? "";
+  const head = html && app.querySelector(".region-head, .entry-head");
+  if (!head) return;
+  const headerH = document.querySelector(".site-header-bar").getBoundingClientRect().height;
+  headObserver = new IntersectionObserver(([entry]) => {
+    const above = !entry.isIntersecting && entry.boundingClientRect.top < headerH;
+    contextBar.classList.toggle("is-shown", above);
+  }, { rootMargin: `-${Math.round(headerH)}px 0px 0px 0px` });
+  headObserver.observe(head);
 }
 
 function pageTitle(clazz, region) {
@@ -343,14 +396,18 @@ function select(name, label, options, selected) {
   return `<label class="inline-select"><span class="visually-hidden">${esc(label)}</span><select data-control="${name}">${opts.join("")}</select></label>`;
 }
 
+/** What the controls line shows, for the context bar: { week, date }. */
+let controlsSummary = null;
+
 function controlsLine(ctx, weeks, { asOf, mode, projectedAvailable }) {
+  controlsSummary = { week: null, date: asOf ? `Updated ${shortDate(asOf)}` : null };
   const sep = '<span class="sep" aria-hidden="true">·</span>';
   const parts = [];
   parts.push(select("season", "Season", ctx.seasons.map((s) => ({ value: s, label: `${s} season` })), ctx.season));
   if (weeks.length) {
     // Without an explicit week, show the week the snapshot actually covers,
     // which can trail the calendar (e.g. before the morning recompute).
-    const covered = asOf ? [...weeks].reverse().find((w) => w.lastDate <= asOf) : null;
+    const covered = asOf ? [...weeks].reverse().find((w) => w.firstDate <= asOf) : null;
     const chosen = ctx.week && weeks.some((w) => w.week === ctx.week)
       ? ctx.week
       : (covered ?? weeks[weeks.length - 1]).week;
@@ -360,8 +417,13 @@ function controlsLine(ctx, weeks, { asOf, mode, projectedAvailable }) {
     // The date is what the data actually covers. When the newest snapshot
     // predates the chosen week's games (e.g. no post-round playoff snapshot
     // was written), say so instead of implying the week's date.
-    if (shown && asOf && asOf < shown.lastDate) parts.push(`<span>Latest update ${esc(shortDate(asOf))}</span>`);
-    else if (shown) parts.push(`<span>${esc(shortDate(shown.lastDate))}</span>`);
+    if (shown && asOf && asOf < shown.lastDate) {
+      parts.push(`<span>Latest update ${esc(shortDate(asOf))}</span>`);
+      controlsSummary = { week: shown.label, date: `Latest update ${shortDate(asOf)}` };
+    } else if (shown) {
+      parts.push(`<span>${esc(shortDate(shown.lastDate))}</span>`);
+      controlsSummary = { week: shown.label, date: shortDate(shown.lastDate) };
+    }
   } else if (asOf) {
     parts.push(`<span>Updated ${esc(shortDate(asOf))}</span>`);
   }
@@ -421,14 +483,16 @@ async function classView(ctx) {
     getJSON(`/standings/${clazz}?season=${season}${date ? `&date=${date}` : ""}`),
     teamsBySchool(season),
   ]);
+  const shownWeeks = weeksUpToLatest(ctx, weeks, date, data.as_of_date);
   const allTeams = data.regions.flatMap((r) => r.teams);
   const projectedAvailable = hasProjectedOdds(allTeams);
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
 
   const head = `<div class="page entry-head">
     <h1 class="title">Class ${clazz}A</h1>
-    ${controlsLine(ctx, weeks, { asOf: data.as_of_date, mode, projectedAvailable })}
+    ${controlsLine(ctx, shownWeeks, { asOf: data.as_of_date, mode, projectedAvailable })}
   </div>`;
+  nextContext = contextHtml(`Class ${clazz}A`, controlsSummary, mode);
   if (!data.regions.length) return head + notice("No standings have been published for this class yet.");
 
   const blocks = data.regions.map((r) => {
@@ -440,7 +504,7 @@ async function classView(ctx) {
       const rec = t.record;
       return `<tr class="${t.eliminated ? "is-eliminated" : ""}">
         <td class="col-pos">${positions[i]}</td>
-        <th scope="row" class="col-team"><a class="team-link" href="${esc(hrefWith({ region: r.region, team: t.school }))}">${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t, { regionComplete: complete })}</span></a></th>
+        <th scope="row" class="col-team"><a class="team-link" href="${esc(hrefWith({ region: r.region, team: t.school }))}">${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t, { regionComplete: complete, clazz })}</span></a></th>
         <td class="col-rec">${esc(recordText(rec.region_wins, rec.region_losses, rec.region_ties))}</td>
         <td class="col-odds">${oddsCell(o.p1)}</td>
         <td class="col-odds">${oddsCell(o.p_playoffs)}</td>
@@ -476,7 +540,8 @@ async function regionView(ctx) {
     teamsBySchool(season),
     getJSON(`/games?season=${season}&class=${clazz}&region=${region}`).catch(() => []),
   ]);
-  const { results, dateFor } = regionGames(games, data.as_of_date);
+  const { results, upcoming } = regionGames(games, data.as_of_date);
+  const shownWeeks = weeksUpToLatest(ctx, weeks, date, data.as_of_date);
 
   const projectedAvailable = hasProjectedOdds(data.teams);
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
@@ -484,22 +549,28 @@ async function regionView(ctx) {
 
   // Cards carry the same provenance as plain text, so a cropped screenshot
   // of one still says what it shows.
-  const shownWeek = [...weeks].reverse().find((w) => w.lastDate <= data.as_of_date);
+  const shownWeek = [...shownWeeks].reverse().find((w) => w.firstDate <= data.as_of_date);
   const cardProv = provenance(
     { label: shownWeek?.label, date: shownWeek?.lastDate ?? data.as_of_date, mode },
     shortDate,
   );
 
-  const remaining = (data.remaining_games ?? []).map((g) => ({
-    date: dateFor(g.team_a, g.team_b), ...orient(g.team_a, g.team_b, g.location_a),
-  }));
+  // Home and away come from the schedule when it lists the game; the
+  // standings' remaining-games list often doesn't know the site.
+  const remaining = (data.remaining_games ?? []).map((g) => {
+    const listed = upcoming(g.team_a, g.team_b);
+    if (listed && (listed.joiner === "at" || !g.location_a)) return listed;
+    return { date: listed?.date ?? null, ...orient(g.team_a, g.team_b, g.location_a) };
+  });
   const schedule = { results, remaining };
+  const controls = controlsLine(ctx, shownWeeks, { asOf: data.as_of_date, mode, projectedAvailable });
+  nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode);
   return `<div class="page">
     <header class="region-head">
       <a class="region-head__back" href="${esc(hrefWith({ region: null, team: null }))}">All ${clazz}A regions</a>
       <h1 class="title">Region ${region}-${clazz}A</h1>
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
-      ${controlsLine(ctx, weeks, { asOf: data.as_of_date, mode, projectedAvailable })}
+      ${controls}
     </header>
     ${standingsTable(data, teams, mode, focus, clazz, schedule)}
     ${remaining.length ? gamesSection("remaining", "Remaining games", remaining, teams, focus) : ""}
@@ -534,7 +605,7 @@ function standingsTable(data, teams, mode, focus, clazz, games) {
         <td class="col-pos">${positions[i]}</td>
         <th scope="row" class="col-team">
           <button type="button" class="row-toggle" data-team="${esc(t.school)}" aria-expanded="${focused}" aria-controls="${detailId}">
-            ${chevronIcon}${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t, { regionComplete: complete })}</span>
+            ${chevronIcon}${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t, { regionComplete: complete, clazz })}</span>
           </button>
         </th>
         <td class="col-rec">${esc(recordText(r.region_wins, r.region_losses, r.region_ties))}</td>

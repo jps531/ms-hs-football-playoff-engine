@@ -11,11 +11,16 @@ never claims anything the scenario engine hasn't proven.
 Precedence, most specific first:
 
 1. Every playoff seed is locked: name the champion and the rest of the field.
-2. The region title is still open: lead with the simplest proven way for a
-   contender to clinch it, else say how many teams can still win it.
-3. The title is decided: say so, then lead with the simplest proven way to
-   clinch one of the remaining playoff spots, else name who's still chasing
-   them.
+2. The region title is still open: lead with the simplest proven way for the
+   favorite to clinch it, else say how many teams can still win it.
+3. The title is decided: say so, then lead with the simplest proven way for
+   the likeliest chaser to clinch one of the remaining playoff spots, else
+   name who's still chasing them.
+
+Only the favorite (the team likeliest to get there, by Projected odds when the
+snapshot has them, else Toss-up) can headline a clinch. A long shot's simple
+path ("wins its last two") would otherwise lead the page over the team most
+likely to finish on top.
 """
 
 from typing import NamedTuple
@@ -118,9 +123,33 @@ def _path_clinches(teams: list[TeamStandingsEntry], outcome_type: str, seed: int
     return found
 
 
+def _uses_projected(teams: list[TeamStandingsEntry]) -> bool:
+    """Whether the snapshot carries Projected (Elo-weighted) odds.
+
+    Weighted odds default to 0 when ratings weren't available, and every
+    region sends someone to the playoffs, so an all-zero column means none.
+    """
+    return any(t.odds.p_playoffs_weighted > 0 for t in teams)
+
+
+def _favorites(by_team: dict[str, TeamStandingsEntry], likelihood) -> set[str]:
+    """The team(s) likeliest to achieve the outcome (several when level)."""
+    if not by_team:
+        return set()
+    best = max(likelihood(t) for t in by_team.values())
+    if best <= 0:
+        return set()
+    return {name for name, t in by_team.items() if likelihood(t) >= best - 1e-9}
+
+
 def _simplest(candidates: list[_Clinch], by_team: dict[str, TeamStandingsEntry], likelihood) -> _Clinch | None:
-    """Pick the simplest clinch: fewest conditions, then the most likely team."""
-    eligible = [c for c in candidates if c.team in by_team]
+    """Pick the favorite's simplest clinch (fewest conditions), or None.
+
+    Clinches for any other team are ignored, so the headline never leads with
+    a long shot just because its path happens to be short.
+    """
+    favorites = _favorites(by_team, likelihood)
+    eligible = [c for c in candidates if c.team in favorites]
     if not eligible:
         return None
     return min(eligible, key=lambda c: (len(c.results), -likelihood(by_team[c.team])))
@@ -174,6 +203,15 @@ def build_region_headline(
     insights = key_insights or []
     by_team = {t.school: t for t in teams}
     paths_usable = 0 < remaining_games <= _PATHS_MARGIN_ACCURATE_MAX_R
+    projected = _uses_projected(teams)
+
+    def p_title(e: TeamStandingsEntry) -> float:
+        """Odds of winning the region, in the default display mode."""
+        return e.odds.p1_weighted if projected else e.odds.p1
+
+    def p_in(e: TeamStandingsEntry) -> float:
+        """Odds of making the playoffs, in the default display mode."""
+        return e.odds.p_playoffs_weighted if projected else e.odds.p_playoffs
 
     holders: dict[int, str] = {}
     for entry in teams:
@@ -193,7 +231,7 @@ def build_region_headline(
         candidates = _insight_clinches(insights, lambda i: i.insight_type == "clinch_seed" and i.seed == 1)
         if paths_usable:
             candidates += _path_clinches(teams, "seed", 1)
-        clinch = _simplest(candidates, by_team, likelihood=lambda e: e.odds.p1)
+        clinch = _simplest(candidates, by_team, likelihood=p_title)
         if clinch is not None:
             return _phrase_with_help(clinch, "clinches the region") + "."
         contenders = [t for t in teams if t.odds.p1 > 0]
@@ -216,7 +254,7 @@ def build_region_headline(
     candidates = _insight_clinches(insights, lambda i: i.insight_type in ("clinch_playoffs", "clinch_seed"))
     if paths_usable:
         candidates += _path_clinches(chasers, "playoffs", None)
-    clinch = _simplest(candidates, {t.school: t for t in chasers}, likelihood=lambda e: e.odds.p_playoffs)
+    clinch = _simplest(candidates, {t.school: t for t in chasers}, likelihood=p_in)
     spot_noun = "the last playoff spot" if open_spots == 1 else f"the last {_count(open_spots)} playoff spots"
     if clinch is not None:
         achievement = "clinches the last playoff spot" if open_spots == 1 else "clinches a playoff spot"

@@ -129,3 +129,16 @@ test("scenario box lists the seeds, who's out, then IF and the conditions", () =
   assert.match(text(html), /^Scenario 2A 1 A A 2 B B Out C IF A A beats B$/);
   assert.match(html, /<strong>C<\/strong>/);
 });
+
+test("in the playoffs the run replaces the clinch; teams that missed stay Eliminated", () => {
+  const bracket = (r) => ({ second_round: r[0], quarterfinals: r[1], semifinals: r[2], finals: r[3], champion: r[4] });
+  const lost = { clinched: true, eliminated: true, odds: { p1: 1, p_playoffs: 1 }, bracket_odds: bracket([0, 0, 0, 0, 0]) };
+  assert.deepEqual(teamStatuses(lost, { clazz: 2 }).map((st) => [st.kind, st.label]), [["eliminated", "Lost in First Round"]]);
+  const alive = { clinched: true, odds: { p2: 1, p_playoffs: 1 }, bracket_odds: bracket([1, 1, 1, 0.5, 0.2]) };
+  assert.deepEqual(teamStatuses(alive, { clazz: 2 }).map((st) => st.label), ["Advanced to Semifinals"]);
+  const champ = { clinched: true, odds: { p1: 1, p_playoffs: 1 }, bracket_odds: bracket([1, 1, 1, 1, 1]) };
+  assert.deepEqual(teamStatuses(champ, { clazz: 2 }).map((st) => [st.kind, st.label]), [["champion", "State Champion"]]);
+  const missed = { eliminated: true, odds: { p_playoffs: 0 }, bracket_odds: bracket([0, 0, 0, 0, 0]) };
+  assert.deepEqual(teamStatuses(missed, { clazz: 2 }).map((st) => st.label), ["Eliminated"]);
+  assert.match(statusBadges(champ, { clazz: 2 }), /badge--champion/);
+});

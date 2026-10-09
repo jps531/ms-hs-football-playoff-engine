@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   standingPositions, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
-  orient, byDay, teamSchedule,
+  orient, byDay, teamSchedule, playoffStatus,
 } from "../html/static/js/standings.js";
 
 const rec = (w, l, t = 0) => ({ record: { region_wins: w, region_losses: l, region_ties: t } });
@@ -12,10 +12,11 @@ test("teams level on region record share a position, competition style", () => {
   assert.deepEqual(standingPositions([rec(4, 0), rec(3, 1), rec(2, 2)]), [1, 2, 3]);
 });
 
-test("only identical records share a position, and teams without games are level", () => {
-  assert.deepEqual(standingPositions([rec(2, 1), rec(1, 1, 1), rec(1, 1)]), [1, 2, 3]);
-  assert.deepEqual(standingPositions([rec(2, 0), rec(1, 0), rec(1, 0)]), [1, 2, 2]);
+test("positions follow winning percentage: 2-0 and 1-0 are both first", () => {
+  assert.deepEqual(standingPositions([rec(2, 0), rec(1, 0), rec(1, 0), rec(0, 2)]), [1, 1, 1, 4]);
+  assert.deepEqual(standingPositions([rec(2, 1), rec(1, 1, 1), rec(1, 1)]), [1, 2, 2]); // .667, .500, .500
   assert.deepEqual(standingPositions([rec(0, 0), rec(0, 0), rec(0, 0)]), [1, 1, 1]);
+  assert.deepEqual(standingPositions([rec(1, 1), rec(0, 0)]), [1, 1]); // no games counts as .500
 });
 
 const entry = {
@@ -55,20 +56,20 @@ test("region games split into results and remaining dates", () => {
     { date: "2025-10-31", team_a: "Clinton", team_b: "Madison Central", score_a: null, score_b: null, final: false, is_region_game: true },
     { date: "2025-09-05", team_a: "Oxford", team_b: "Tupelo", score_a: 7, score_b: 3, final: true, is_region_game: false },
   ];
-  const { results, dateFor } = regionGames(games, "2025-10-31");
+  const { results, upcoming } = regionGames(games, "2025-10-31");
   assert.deepEqual(results.map((r) => [r.away, r.awayScore, r.home, r.homeScore, r.winner]), [
     ["Oxford", 35, "Clinton", 14, "Oxford"], // oldest first
     ["Murrah", 21, "Starkville", 28, "Starkville"],
   ]);
-  assert.equal(dateFor("Madison Central", "Clinton"), "2025-10-31"); // either order
-  assert.equal(dateFor("Oxford", "Tupelo"), null); // non-region games ignored
+  assert.equal(upcoming("Madison Central", "Clinton").date, "2025-10-31"); // either order
+  assert.equal(upcoming("Oxford", "Tupelo"), null); // non-region games ignored
 });
 
 test("a past week's view treats later results as still to play", () => {
   const games = [{ date: "2025-10-24", team_a: "Murrah", team_b: "Starkville", score_a: 21, score_b: 28, final: true, is_region_game: true }];
-  const { results, dateFor } = regionGames(games, "2025-10-20");
+  const { results, upcoming } = regionGames(games, "2025-10-20");
   assert.equal(results.length, 0);
-  assert.equal(dateFor("Starkville", "Murrah"), "2025-10-24");
+  assert.equal(upcoming("Starkville", "Murrah").date, "2025-10-24");
 });
 
 test("tied games are marked", () => {
@@ -182,4 +183,38 @@ test("no played weeks or an unknown week falls back sensibly", () => {
   assert.equal(snapshotDate([], 3, true), null);
   assert.equal(snapshotDate(WEEKS, 99, false), null);
   assert.equal(snapshotDate(WEEKS, 99, true), "2025-12-07");
+});
+
+test("remaining games keep the schedule's home team, listed second with at", () => {
+  const { upcoming } = regionGames([
+    { date: "2025-10-31", team_a: "Stringer", team_b: "Lumberton", score_a: null, score_b: null, location_a: "home", final: false, is_region_game: true },
+  ], "2025-10-24");
+  assert.deepEqual(upcoming("Lumberton", "Stringer"), { date: "2025-10-31", away: "Lumberton", home: "Stringer", joiner: "at" });
+});
+
+const playoffTeam = (reach) => ({
+  odds: { p_playoffs: 1 },
+  bracket_odds: {
+    second_round: reach[0], quarterfinals: reach[1], semifinals: reach[2], finals: reach[3], champion: reach[4],
+  },
+});
+
+test("playoff run: lost in a round, advanced to the next, or state champion", () => {
+  assert.deepEqual(playoffStatus(playoffTeam([0, 0, 0, 0, 0]), 3), { kind: "lost", label: "Lost in First Round" });
+  assert.deepEqual(playoffStatus(playoffTeam([1, 0, 0, 0, 0]), 3), { kind: "lost", label: "Lost in Second Round" });
+  assert.deepEqual(playoffStatus(playoffTeam([1, 1, 0.5, 0.2, 0.1]), 3), { kind: "advanced", label: "Advanced to Quarterfinals" });
+  assert.deepEqual(playoffStatus(playoffTeam([1, 1, 1, 1, 0.5]), 3), { kind: "advanced", label: "Advanced to Championship Game" });
+  assert.deepEqual(playoffStatus(playoffTeam([1, 1, 1, 1, 0]), 3), { kind: "lost", label: "Lost in Championship Game" });
+  assert.deepEqual(playoffStatus(playoffTeam([1, 1, 1, 1, 1]), 3), { kind: "champion", label: "State Champion" });
+});
+
+test("playoff run: 5A-7A skip the second round", () => {
+  assert.deepEqual(playoffStatus(playoffTeam([null, 0, 0, 0, 0]), 6), { kind: "lost", label: "Lost in First Round" });
+  assert.deepEqual(playoffStatus(playoffTeam([null, 1, 0.5, 0.2, 0.1]), 6), { kind: "advanced", label: "Advanced to Quarterfinals" });
+});
+
+test("no playoff run before the bracket starts or for teams that missed it", () => {
+  assert.equal(playoffStatus(playoffTeam([0.6, 0.4, 0.2, 0.1, 0.05]), 3), null);
+  assert.equal(playoffStatus({ ...playoffTeam([0, 0, 0, 0, 0]), odds: { p_playoffs: 0 } }, 3), null);
+  assert.equal(playoffStatus({ odds: { p_playoffs: 1 } }, 3), null);
 });

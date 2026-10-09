@@ -4,6 +4,7 @@
 import {
   escapeHtml as esc, formatPct, oddsBucket, initials, teamUiColors, teamRawColors, isPale, marginText, isCertain,
 } from "./format.js";
+import { playoffStatus } from "./standings.js";
 
 // ----------------------------------------------------------------- icons
 // Icons appear only where they carry meaning (brief §2.1).
@@ -70,20 +71,26 @@ export function provenance({ label, date, live = false, mode = null } = {}, form
  * which can sit alongside a clinch. The coin flip shows only once region play
  * is complete: before that, possible coin-flip ties are everywhere and almost
  * always get settled on the field.
+ *
+ * Once a playoff team has played in the bracket (`clazz` given), its run
+ * replaces the clinch: "Advanced to Semifinals", "Lost in First Round",
+ * "State Champion". Teams that missed the playoffs stay "Eliminated".
  */
-export function teamStatuses(entry, { regionComplete = false } = {}) {
+export function teamStatuses(entry, { regionComplete = false, clazz = null } = {}) {
   if (!entry) return [];
   const statuses = [];
   const o = entry.odds ?? {};
   const seed = [1, 2, 3, 4].find((s) => isCertain(o[`p${s}`]));
-  if (entry.eliminated) statuses.push({ kind: "eliminated", label: "Eliminated" });
+  const run = clazz ? playoffStatus(entry, clazz) : null;
+  if (run) statuses.push({ kind: run.kind === "lost" ? "eliminated" : run.kind === "champion" ? "champion" : "clinched", label: run.label });
+  else if (entry.eliminated) statuses.push({ kind: "eliminated", label: "Eliminated" });
   else if (seed) statuses.push({ kind: "clinched", label: `Clinched #${seed}` });
   else if (entry.clinched) statuses.push({ kind: "clinched", label: "Clinched" });
   if (regionComplete && entry.coin_flip_needed) statuses.push({ kind: "coinflip", label: "Coin flip" });
   return statuses;
 }
 
-const BADGE_ICONS = { clinched: ICONS.check, eliminated: ICONS.cross, coinflip: ICONS.coin };
+const BADGE_ICONS = { clinched: ICONS.check, champion: ICONS.check, eliminated: ICONS.cross, coinflip: ICONS.coin };
 
 export function statusBadges(entry, options) {
   return teamStatuses(entry, options)

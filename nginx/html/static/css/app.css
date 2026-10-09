@@ -158,18 +158,13 @@ button { font: inherit; color: inherit; }
   .site-header, .page, .site-footer, .scrubber-bar__inner { padding-inline: 32px; }
 }
 
-.site-header-bar { background: var(--surface-page); }
+/* The header (name, team search, theme) stays pinned at every width; the
+   class scrubber scrolls away under it, and the context bar takes over
+   once the page title is out of view. */
+.site-header-bar { position: sticky; top: 0; z-index: 11; background: var(--surface-page); }
 .site-header {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding-block: 14px 10px;
-}
-/* On wide screens the header (name + team search) stays pinned above the
-   class scrubber. Phones let it scroll away: vertical space is scarce there
-   and the scrubber alone stays pinned. */
-@media (min-width: 48em) {
-  .site-header-bar { position: sticky; top: 0; z-index: 11; }
-  .site-header { height: var(--header-h); padding-block: 0; }
-  :root { --scrubber-top: var(--header-h); }
+  height: var(--header-h);
 }
 .site-header__home {
   display: inline-flex; align-items: center; gap: 10px;
@@ -265,10 +260,42 @@ button { font: inherit; color: inherit; }
 /* ---------------------------------------------------------- class scrubber */
 
 .scrubber-bar {
-  position: sticky; top: var(--scrubber-top, 0); z-index: 10;
   background: var(--surface-page);
   border-bottom: 1px solid var(--border);
 }
+
+/* What's on screen, pinned under the header once the title scrolls away.
+   Fixed rather than sticky so showing it never shifts the page. */
+.context-bar {
+  position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 10;
+  background: var(--surface-page);
+  border-block: 1px solid var(--border);
+  visibility: hidden; opacity: 0; transform: translateY(-6px);
+  transition: opacity 120ms ease-out, transform 120ms ease-out, visibility 0s linear 120ms;
+}
+.context-bar.is-shown {
+  visibility: visible; opacity: 1; transform: none;
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .context-bar, .context-bar.is-shown { transition: none; transform: none; }
+}
+.context-bar__inner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
+  margin-inline: auto; max-width: 68rem;
+  padding: 8px 16px;
+  font-size: 13px; line-height: 18px;
+}
+@media (min-width: 48em) {
+  .context-bar__inner { padding-inline: 32px; }
+}
+.context-bar__title {
+  font-family: var(--font-display); font-weight: 700;
+  font-variant-numeric: normal; /* tnum would space out the hyphen in "2-7A" */
+  font-size: 15px; letter-spacing: 0;
+  color: var(--text-primary);
+}
+.context-bar .sep { color: var(--text-secondary); }
 .scrubber-bar__inner { padding-block: 8px; }
 .scrubber {
   display: inline-flex; gap: 2px;
@@ -413,7 +440,7 @@ button { font: inherit; color: inherit; }
   vertical-align: 1px;
 }
 .badge svg { width: 12px; height: 12px; flex: none; }
-.badge--clinched { background: var(--state-clinched); color: #FFFFFF; }
+.badge--clinched, .badge--champion { background: var(--state-clinched); color: #FFFFFF; }
 .badge--eliminated { background: var(--state-eliminated); color: #FFFFFF; }
 .badge--coinflip { background: var(--state-coinflip); color: var(--neutral-900); }
 
@@ -590,10 +617,10 @@ button { font: inherit; color: inherit; }
 }
 @media (max-width: 22em) {
   .standings .col-pos { display: none; }
-  .standings tr.detail td { padding-left: 6px; }
 }
+/* Keep the expanded panels clear of the picked row's green rule. */
 @media (max-width: 40em) {
-  .standings tr.detail td { padding-left: 6px; }
+  .standings tr.detail td { padding-left: 16px; padding-right: 10px; }
 }
 
 .section { margin-top: 56px; }

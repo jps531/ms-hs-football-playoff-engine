@@ -4090,26 +4090,33 @@ def build_season_dates(
 
     *game_rows* is ``(date, round, class_, school, opponent)`` tuples from
     ``games_effective`` joined to ``school_seasons`` (two rows per in-state
-    contest), already filtered to *class_filter* if the caller scoped the
-    query to one class — in which case every date resolves unambiguously.
-    Otherwise, 1A-4A and 5A-7A run offset playoff schedules, so a single date
-    can mean different things per class (see ``SeasonDateEntry``'s
-    docstring) — handled per-date below by falling back to a composed
-    ``description`` when classes disagree. *class_filter* is also used to
-    decide singular vs. plural wording for the championship (see
-    ``_pluralize_round_label``); it does not filter *game_rows* itself.
+    contest), for every class. With *class_filter* set, only that class's
+    dates are returned, and every date resolves unambiguously. Otherwise,
+    1A-4A and 5A-7A run offset playoff schedules, so a single date can mean
+    different things per class (see ``SeasonDateEntry``'s docstring) —
+    handled per-date below by falling back to a composed ``description``
+    when classes disagree. *class_filter* also decides singular vs. plural
+    wording for the championship (see ``_pluralize_round_label``).
+
+    Week numbers always come from the statewide schedule, so the same
+    calendar week has the same number for every class even when one class
+    had no games in an earlier week.
     """
+    # Global Monday-Sunday week pool spans every date with a game in any
+    # class, regular season or playoffs, so week numbers count continuously
+    # through the whole season (season_start is a hardcoded week 0 below,
+    # not part of this pool -- it would otherwise land in week 1's
+    # Monday-Sunday window).
+    week_starts = sorted({row[0] - timedelta(days=row[0].weekday()) for row in game_rows})
+
     by_date: dict[date, dict] = {}
     for d, round_name, class_, school, opponent in game_rows:
+        if class_filter is not None and class_ != class_filter:
+            continue
         entry = by_date.setdefault(d, {"by_class": defaultdict(set), "contests": set()})
         entry["by_class"][class_].add(round_name)
         entry["contests"].add(frozenset({school, opponent}))
 
-    # Global Monday-Sunday week pool spans every date with a game, regular
-    # season or playoffs, so week numbers count continuously through the
-    # whole season (season_start is a hardcoded week 0 below, not part of
-    # this pool -- it would otherwise land in week 1's Monday-Sunday window).
-    week_starts = sorted({d - timedelta(days=d.weekday()) for d in by_date})
     week_by_start = {ws: i + 1 for i, ws in enumerate(week_starts)}
 
     def week_for(d: date) -> int:

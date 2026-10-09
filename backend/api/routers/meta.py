@@ -127,22 +127,20 @@ async def get_season_dates(
     schedules, so a date can otherwise be a playoff date for one group of
     classes and still regular season for another (see ``SeasonDateEntry``).
     """
+    # Every class is read even when one is requested: week numbers come from
+    # the statewide schedule, so they agree across classes.
     query = (
         "SELECT g.date, g.round, ss.class, g.school, g.opponent "
         "FROM games_effective g "
         "JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season "
         "WHERE g.season = %s"
     )
-    params: list = [season]
-    if class_ is not None:
-        query += " AND ss.class = %s"
-        params.append(class_)
 
     async with get_conn() as conn:
-        rows = await conn.execute(query, params)
+        rows = await conn.execute(query, [season])
         game_rows = [tuple(r) async for r in rows]
 
-    if not game_rows:
+    if not game_rows or (class_ is not None and not any(r[2] == class_ for r in game_rows)):
         raise HTTPException(status_code=404, detail=f"Season {season} not found")
 
     return SeasonDatesResponse(season=season, dates=build_season_dates(game_rows, class_filter=class_))

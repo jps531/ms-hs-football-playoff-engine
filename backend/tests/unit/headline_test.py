@@ -28,12 +28,29 @@ def _entry(
     clinched: bool = False,
     eliminated: bool = False,
     paths: list[ScenarioPathModel] | None = None,
+    pw: tuple[float, float, float, float] | None = None,
 ) -> TeamStandingsEntry:
-    """A standings entry with the given seed odds; playoff odds are their sum."""
+    """A standings entry with the given seed odds; playoff odds are their sum.
+
+    *pw* sets the Projected (weighted) seed odds; omitted, they're all zero,
+    as in a snapshot computed without Elo ratings.
+    """
+    w = pw or (0, 0, 0, 0)
     return TeamStandingsEntry(
         school=school,
         record=RecordModel(wins=0, losses=0, ties=0, region_wins=record[0], region_losses=record[1], region_ties=0),
-        odds=SeedingOddsModel(p1=p[0], p2=p[1], p3=p[2], p4=p[3], p_playoffs=sum(p)),
+        odds=SeedingOddsModel(
+            p1=p[0],
+            p2=p[1],
+            p3=p[2],
+            p4=p[3],
+            p_playoffs=sum(p),
+            p1_weighted=w[0],
+            p2_weighted=w[1],
+            p3_weighted=w[2],
+            p4_weighted=w[3],
+            p_playoffs_weighted=sum(w),
+        ),
         clinched=clinched,
         eliminated=eliminated,
         coin_flip_needed=False,
@@ -116,34 +133,75 @@ class TestTitleOpen:
 
     def test_clinch_with_outside_help_says_also(self):
         """Outside results the clinch also needs are named with "also"."""
-        insights = [_insight("clinch_seed", "Mize", [("Mize", "Taylorsville"), ("Stringer", "Bay")], seed=1)]
+        insights = [_insight("clinch_seed", "Taylorsville", [("Taylorsville", "Mize"), ("Stringer", "Bay")], seed=1)]
         assert build_region_headline(self._teams(), insights, 3) == (
-            "Mize clinches the region with a win over Taylorsville if Stringer also beats Bay."
+            "Taylorsville clinches the region with a win over Mize if Stringer also beats Bay."
         )
 
     def test_clinch_needing_only_others(self):
         """A clinch that depends only on other games reads "if X beats Y"."""
-        insights = [_insight("clinch_seed", "Mize", [("Stringer", "Taylorsville")], seed=1)]
+        insights = [_insight("clinch_seed", "Taylorsville", [("Stringer", "Mize")], seed=1)]
         assert (
             build_region_headline(self._teams(), insights, 3)
-            == "Mize clinches the region if Stringer beats Taylorsville."
+            == "Taylorsville clinches the region if Stringer beats Mize."
         )
 
     def test_margin_conditions_are_stated(self):
         """A required winning margin is part of the sentence, never dropped."""
-        insights = [_insight("clinch_seed", "Mize", [("Mize", "Taylorsville", 8, None)], seed=1)]
+        insights = [_insight("clinch_seed", "Taylorsville", [("Taylorsville", "Mize", 8, None)], seed=1)]
         assert build_region_headline(self._teams(), insights, 3) == (
-            "Mize clinches the region with a win over Taylorsville by 8 or more — no help needed."
+            "Taylorsville clinches the region with a win over Mize by 8 or more — no help needed."
         )
 
-    def test_fewest_conditions_wins_then_likeliest_team(self):
-        """The simplest clinch leads; ties go to the team likelier to win the title."""
+    def test_favorites_simplest_clinch_leads(self):
+        """Of the favorite's ways to clinch, the one with the fewest conditions leads."""
         insights = [
-            _insight("clinch_seed", "Mize", [("Mize", "Taylorsville"), ("Stringer", "Bay")], seed=1),
-            _insight("clinch_seed", "Mize", [("Mize", "Taylorsville")], seed=1),
+            _insight("clinch_seed", "Taylorsville", [("Taylorsville", "Mize"), ("Stringer", "Bay")], seed=1),
             _insight("clinch_seed", "Taylorsville", [("Taylorsville", "Mize")], seed=1),
         ]
+        assert build_region_headline(self._teams(), insights, 3) == (
+            "Taylorsville clinches the region with a win over Mize — no help needed."
+        )
+
+    def test_long_shot_clinch_does_not_headline(self):
+        """A simpler clinch for a less likely team doesn't lead over the favorite."""
+        insights = [
+            _insight("clinch_seed", "Mize", [("Mize", "Taylorsville")], seed=1),
+            _insight("clinch_seed", "Taylorsville", [("Taylorsville", "Mize"), ("Stringer", "Bay")], seed=1),
+        ]
         assert build_region_headline(self._teams(), insights, 3).startswith("Taylorsville clinches the region")
+        only_long_shot = [_insight("clinch_seed", "Mize", [("Mize", "Taylorsville")], seed=1)]
+        assert build_region_headline(self._teams(), only_long_shot, 3) == (
+            "Two teams can still win the region, and Taylorsville leads at 4–0."
+        )
+
+    def test_favorite_follows_projected_odds_when_available(self):
+        """With Projected odds the favorite is the Projected favorite, not the Toss-up one."""
+        teams = [
+            _entry("Resurrection", (0.4, 0.3, 0.3, 0), record=(2, 0), pw=(0.09, 0.41, 0.44, 0.06)),
+            _entry("Stringer", (0.3, 0.4, 0.3, 0), record=(1, 0), pw=(0.68, 0.19, 0.11, 0.02)),
+            _entry("Lumberton", (0.3, 0.3, 0.4, 0), record=(1, 0), pw=(0.23, 0.35, 0.34, 0.08)),
+        ]
+        insights = [
+            _insight("clinch_seed", "Lumberton", [("Lumberton", "Resurrection"), ("Lumberton", "Stringer")], seed=1),
+            _insight(
+                "clinch_seed", "Resurrection", [("Resurrection", "Lumberton"), ("Resurrection", "Stringer")], seed=1
+            ),
+        ]
+        assert build_region_headline(teams, insights, 4) == (
+            "Three teams can still win the region, and Resurrection leads at 2–0."
+        )
+        insights.append(
+            _insight(
+                "clinch_seed",
+                "Stringer",
+                [("Stringer", "Resurrection"), ("Stringer", "Lumberton"), ("Stringer", "Richton")],
+                seed=1,
+            )
+        )
+        assert build_region_headline(teams, insights, 4) == (
+            "Stringer clinches the region with wins over Resurrection, Lumberton and Richton — no help needed."
+        )
 
     def test_ignores_insights_for_other_seeds(self):
         """Only #1-seed clinches count while the title is open."""
@@ -297,8 +355,6 @@ def test_engine_region_1_7a_title_from_exact_path():
     assert _engine_headline(7, 1) == "DeSoto Central clinches the region with a win over Tupelo — no help needed."
 
 
-def test_engine_region_3_7a_outside_help():
-    """3-7A: a clinch that also depends on other games names them."""
-    assert _engine_headline(7, 3) == (
-        "Northwest Rankin clinches the region with a win over Petal if Pearl also beats Oak Grove and Meridian beats Brandon."
-    )
+def test_engine_region_3_7a_long_shot_not_featured():
+    """3-7A: Northwest Rankin (18%) has a clinch path but Petal (51%) is the favorite, so no clinch leads."""
+    assert _engine_headline(7, 3).startswith("Four teams can still win the region")
