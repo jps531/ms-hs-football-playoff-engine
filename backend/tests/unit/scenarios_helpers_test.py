@@ -327,3 +327,39 @@ class TestDetermineScenariosMonteCarlo:
         r = self._run(n_samples=2_000)
         for team in self.TEAMS:
             assert r.first_counts[team] > 0, f"{team} never seeded 1st in 2000 samples"
+
+    def _counts(self, r):
+        """Collect every seed-count mapping from a result for equality checks."""
+        return [
+            dict(c)
+            for c in (
+                r.first_counts,
+                r.second_counts,
+                r.third_counts,
+                r.fourth_counts,
+                r.first_counts_weighted,
+                r.second_counts_weighted,
+                r.third_counts_weighted,
+                r.fourth_counts_weighted,
+            )
+        ]
+
+    def test_identical_inputs_give_identical_results(self):
+        """Sampling is seeded from the inputs, so repeat runs match exactly."""
+        assert self._counts(self._run(n_samples=500)) == self._counts(self._run(n_samples=500))
+
+    def test_remaining_game_order_does_not_change_results(self):
+        """Games are sampled in a canonical order, so input order is irrelevant."""
+        remaining = self._make_remaining()
+        forward = determine_scenarios(self.TEAMS, completed=[], remaining=remaining, n_samples=500)
+        backward = determine_scenarios(self.TEAMS, completed=[], remaining=remaining[::-1], n_samples=500)
+        assert self._counts(forward) == self._counts(backward)
+
+    def test_explicit_seed_overrides_derived_seed(self):
+        """An explicit seed is reproducible, and different seeds give different samples."""
+        remaining = self._make_remaining()
+        r1 = determine_scenarios(self.TEAMS, completed=[], remaining=remaining, n_samples=500, seed=1)
+        r1_again = determine_scenarios(self.TEAMS, completed=[], remaining=remaining, n_samples=500, seed=1)
+        r2 = determine_scenarios(self.TEAMS, completed=[], remaining=remaining, n_samples=500, seed=2)
+        assert self._counts(r1) == self._counts(r1_again)
+        assert self._counts(r1) != self._counts(r2)
