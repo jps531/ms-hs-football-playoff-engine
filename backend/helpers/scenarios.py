@@ -5,6 +5,7 @@ for each using margin-sensitive threshold detection, and accumulates per-team
 per-seed counts. No Prefect or database dependencies.
 """
 
+import hashlib
 import logging
 import random
 from collections import defaultdict
@@ -132,6 +133,30 @@ def _accumulate_slots(
                 fourth_counts_weighted[team] += w_share
 
 
+def _monte_carlo_seed(teams: list[str], completed: list[CompletedGame], remaining: list[RemainingGame]) -> int:
+    """Derive a stable RNG seed from a region's inputs.
+
+    Hashes the sorted teams, completed games, and remaining games so the same
+    inputs always produce the same seed, regardless of list order or process.
+    Python's built-in ``hash()`` is salted per process, so SHA-256 is used.
+
+    Args:
+        teams: List of all team names in the region.
+        completed: List of CompletedGame instances for finished region games.
+        remaining: List of RemainingGame instances for unplayed region games.
+
+    Returns:
+        A 64-bit integer seed for ``random.Random``.
+    """
+    parts = [
+        "teams:" + "|".join(sorted(teams)),
+        "completed:" + "|".join(sorted(repr(g) for g in completed)),
+        "remaining:" + "|".join(sorted(repr(g) for g in remaining)),
+    ]
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big")
+
+
 def determine_scenarios(
     teams: list[str],
     completed: list[CompletedGame],
@@ -139,6 +164,7 @@ def determine_scenarios(
     win_prob_fn: WinProbFn | None = None,
     ignore_margins: bool = False,
     n_samples: int | None = None,
+    seed: int | None = None,
 ) -> ScenarioResults:
     """Enumerate all seeding scenarios for a region and compute seed-count totals.
 
@@ -155,7 +181,9 @@ def determine_scenarios(
     enumeration.  Each sample draws outcomes from Bernoulli(p) per game using
     ``win_prob_fn``, so sample frequency is Elo-weighted by construction.
     Implies ``ignore_margins=True``.  Use for large R (>15) where 2^R full
-    enumeration is prohibitively slow.
+    enumeration is prohibitively slow.  Sampling is deterministic: the RNG is
+    seeded from the inputs (or ``seed``) and games are drawn in a canonical
+    order, so identical inputs always produce identical results.
 
     Args:
         teams: List of all team names in the region.
@@ -172,6 +200,8 @@ def determine_scenarios(
             ``ignore_margins`` rendering mode.
         n_samples: When set, use Monte Carlo sampling with this many draws
             instead of exhaustive 2^R enumeration.  Forces ``ignore_margins``.
+        seed: Optional RNG seed for Monte Carlo sampling.  Defaults to a hash
+            of ``teams``, ``completed``, and ``remaining``.
 
     Returns:
         A ``ScenarioResults`` instance with unweighted and weighted seed counts,
@@ -240,18 +270,22 @@ def determine_scenarios(
         # Each game is drawn Bernoulli(p); sample frequency is Elo-weighted by
         # construction, so weighted and unweighted counts are both accumulated
         # uniformly (each sample contributes weight 1.0 / n_samples).
+        # Seeded RNG plus a canonical game order keeps the result reproducible
+        # for identical inputs.
+        mc_remaining = sorted(remaining, key=lambda g: (g.a, g.b, g.location_a or ""))
+        rng = random.Random(seed if seed is not None else _monte_carlo_seed(teams, completed, remaining))  # NOSONAR
+        win_probs = [_win_prob_fn(g.a, g.b, None, g.location_a) for g in mc_remaining]
         for _ in range(n_samples):
             outcome_mask = 0
-            for bit_index, rem_game in enumerate(remaining):
-                p = _win_prob_fn(rem_game.a, rem_game.b, None, rem_game.location_a)
+            for bit_index, p in enumerate(win_probs):
                 # Statistical Monte Carlo sampling only — not security-sensitive.
-                if random.random() < p:  # NOSONAR
+                if rng.random() < p:  # NOSONAR
                     outcome_mask |= 1 << bit_index
             local_flips: list[list[str]] = []
             final_order = resolve_standings_for_mask(
                 teams,
                 completed,
-                remaining,
+                mc_remaining,
                 outcome_mask,
                 margins=base_margins,
                 base_margin_default=7,
