@@ -181,7 +181,7 @@ The API reads its data from these pre-computed snapshots; run this pipeline befo
 
 > **Season parameter:** This pipeline defaults to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
 
-Run this after each round concludes (first round, second round, semifinals, finals). The Region Scenarios Pipeline does **not** need to re-run during the playoffs — seedings are fully determined at that point.
+Run this after each round concludes (first round, second round, semifinals, finals). The scheduled Region Scenarios Pipeline also runs it automatically: from a class's first completed playoff game on, that pipeline leaves the class's `region_standings` rows alone and finishes by running Playoff Bracket Update. (Its regular-season odds ignore playoff results, and a newer row would hide the playoff-aware ones.)
 
 #### Once per season (after importing a full historical season)
 
@@ -189,7 +189,7 @@ After the pre-season setup steps (1–6) have completed for a season, run the fo
 
 7. **Backfill Historical Snapshots** (Custom Run, target season) — writes `team_ratings`, `region_standings`, `region_scenarios`, and `region_computation_state` rows for every unique game-date in the season so the timeline API can serve historical odds for any past date without recomputation. Only needs to run once per season (or again after re-importing a full season's games). Both the seeding odds and W/L records in each snapshot are historically accurate — the `get_standings_for_region` stored proc applies a date filter to all aggregations.
 
-8. **Playoff Bracket Update** (Custom Run, target season) — self-backfilling: reads all completed playoff games and writes one `region_standings` snapshot per playoff round date, overwriting the backfill's regular-season-style odds for playoff dates with deterministic 1.0/0.0 seedings. Requires step 6 to have populated `region_standings` with `clinched` flags first.
+8. **Playoff Bracket Update** (Custom Run, target season) — self-backfilling: reads all completed playoff games and writes one `region_standings` snapshot per playoff round date with deterministic 1.0/0.0 seedings. Requires step 6 to have populated `region_standings` with `clinched` flags first. Step 7 now runs this itself as its last step (and skips each class's playoff dates beforehand), so a separate run is only needed to refresh playoff rows on their own.
 
 > **Season parameter:** Both pipelines default to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
 
