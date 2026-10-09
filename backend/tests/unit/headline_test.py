@@ -82,7 +82,7 @@ class TestSettledField:
         """With region play over, the champion "won" the region."""
         assert (
             build_region_headline(self._teams(), None, 0)
-            == "A won the region, with B, C and D joining it in the playoffs."
+            == "A won the region, with B, C and D joining them in the playoffs."
         )
 
     def test_settled_with_games_left_uses_present_perfect(self):

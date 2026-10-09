@@ -98,3 +98,10 @@ test("class scrubber is one tab stop with the selection checked", () => {
   assert.match(classScrubber([1, 2, 3], null), /tabindex="0" data-class="1"/);
   assert.match(html, /role="radiogroup"/);
 });
+
+test("scenario card titles read as a condition ending in IF", async () => {
+  const { scenarioCard } = await import("../html/static/js/components.js");
+  const html = scenarioCard({ title: "Stringer clinches the region", groups: [[{ type: "game_result", school: "Stringer", opponent: "Lumberton" }]], teams: {} });
+  assert.match(text(html), /^Stringer clinches the region IF/);
+  assert.match(html, /region\u00a0<span class="scenario__if">IF</); // non-breaking: IF never wraps alone
+});

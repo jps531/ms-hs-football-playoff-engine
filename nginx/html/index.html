@@ -31,7 +31,14 @@
         <input id="team-search" type="search" list="team-options" placeholder="Find a team" autocomplete="off" enterkeyhint="go">
         <datalist id="team-options"></datalist>
       </form>
-      <button type="button" class="theme-toggle" id="theme-toggle">Dark theme</button>
+      <label class="theme-select">
+        <span class="visually-hidden">Theme</span>
+        <select id="theme-select">
+          <option value="system">System theme</option>
+          <option value="light">Light theme</option>
+          <option value="dark">Dark theme</option>
+        </select>
+      </label>
     </header>
   </div>
 
@@ -46,6 +53,7 @@
   <footer class="site-footer">
     <p><a href="/methodology">How the odds and scenarios are calculated</a></p>
     <p>Seeds aren’t official until the MHSAA announces them. Odds are estimates for fans, not for wagering.</p>
+    <p>Scores from <a href="https://www.ahsfhs.org/">AHSFHS</a>. Updated daily at 9:15 AM Central. © 2025–2026 Paul Sullivan. All rights reserved.</p>
   </footer>
 
   <script src="/static/js/theme.js" defer></script>

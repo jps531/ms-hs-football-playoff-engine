@@ -91,16 +91,20 @@ export function insightCards(insights) {
     return null;
   };
   const rank = { clinch_seed: 0, clinch_playoffs: 1, eliminated_if: 2 };
-  return (insights ?? [])
+  const toGroup = (i) => i.conditions.map((c) => ({
+    type: "game_result", school: c.winner, opponent: c.loser, required_result: "win",
+    min_margin: c.min_margin, max_margin: c.max_margin,
+  }));
+  // Several insights can prove the same outcome different ways; each one is
+  // enough on its own, so they become one card with the ways joined by OR.
+  const cards = new Map();
+  (insights ?? [])
     .filter((i) => i.conditions?.length && titleFor(i))
     .sort((a, b) => rank[a.insight_type] - rank[b.insight_type] || (a.seed ?? 9) - (b.seed ?? 9))
-    .map((i) => ({
-      team: i.team,
-      title: titleFor(i),
-      p: null,
-      groups: [i.conditions.map((c) => ({
-        type: "game_result", school: c.winner, opponent: c.loser, required_result: "win",
-        min_margin: c.min_margin, max_margin: c.max_margin,
-      }))],
-    }));
+    .forEach((i) => {
+      const key = `${i.insight_type}|${i.team}|${i.seed ?? ""}`;
+      if (!cards.has(key)) cards.set(key, { team: i.team, title: titleFor(i), p: null, groups: [] });
+      cards.get(key).groups.push(toGroup(i));
+    });
+  return [...cards.values()];
 }

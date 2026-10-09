@@ -26,7 +26,14 @@
         <img src="/static/mark.png" alt="" width="34" height="29">
         <span>Mississippi High School Football</span>
       </a>
-      <button type="button" class="theme-toggle" id="theme-toggle">Dark theme</button>
+      <label class="theme-select">
+        <span class="visually-hidden">Theme</span>
+        <select id="theme-select">
+          <option value="system">System theme</option>
+          <option value="light">Light theme</option>
+          <option value="dark">Dark theme</option>
+        </select>
+      </label>
     </header>
   </div>
 
@@ -52,7 +59,8 @@
         Early in the season, when a region has more than 15 games left and
         there are too many outcomes to list, we simulate the rest of the
         schedule 50,000 times instead, using each team’s Elo rating to decide
-        who wins each game.
+        who wins each game. Until a region gets down to 15 games, both odds
+        modes below show those simulated numbers.
       </p>
 
       <h2>Projected and toss-up odds</h2>
@@ -80,7 +88,11 @@
       </p>
 
       <h2>Breaking ties the way the MHSAA does</h2>
-      <p>When teams finish with the same region record, they’re separated in this order:</p>
+      <p>
+        When teams finish with the same region record, they’re separated in
+        this order, following the region tiebreaker procedure in the
+        <a href="https://www.misshsaa.com/wp-content/uploads/2026/06/2026-27-MHSAA-Handbook-Final-V6.pdf">2026–27 MHSAA Handbook</a>:
+      </p>
       <ol class="steps">
         <li>Head-to-head results among the tied teams.</li>
         <li>Results against the highest-finishing teams in the region, working down.</li>
@@ -93,8 +105,10 @@
         Because steps 3 and 4 depend on the score, not just the winner, some
         races turn on margin of victory. Once five or fewer region games remain,
         we work through every winning margin as well, which is why a scenario
-        can read “Raleigh beats Magee by 8–10.” When a tie could only be settled
-        by a coin flip, the team is marked with a coin.
+        can read “Raleigh beats Magee by 8–10.” While games remain, a tie that
+        would come down to a coin flip counts each way the flip could go
+        equally. Once region play is over, a team whose tie can only be
+        settled by a coin flip is marked with a coin.
       </p>
 
       <h2>What the scenarios mean</h2>
@@ -119,18 +133,83 @@
         99%.
       </p>
 
+      <h2>Rules, not AI</h2>
+      <p>
+        No AI model produces any number, scenario, or headline on this site.
+        Every result comes from fixed, written-down rules: counting every way
+        the remaining games can go, applying the MHSAA tiebreakers to each one,
+        and, for Projected odds, Elo ratings computed from game results. Even
+        the sentence at the top of each region is assembled from those proven
+        facts by a template, not written by a language model.
+      </p>
+      <p>
+        Given the same games, the rules give the same answer every time, with
+        one exception: early in the season, when a region has more than 15
+        games left, its odds come from a 50,000-run random simulation, so they
+        can shift by a fraction of a percent between updates even when no new
+        games have been played. AI coding tools helped build the website and
+        its code; they play no part in calculating the results.
+      </p>
+
+      <h2>Where the scores come from</h2>
+      <p>
+        Schedules and scores come from
+        <a href="https://www.ahsfhs.org/">AHSFHS</a>, the source of
+        truth this site relies on for Mississippi high school football results.
+        Region and classification assignments come from the MHSAA. When a
+        score is wrong at the source, it’s wrong here until it’s corrected.
+      </p>
+
+      <h2>When it updates</h2>
+      <p>
+        Every morning, the latest scores are pulled at 9:00 AM Central, and the
+        standings, odds, scenarios, and playoff brackets are recalculated at
+        9:15 AM Central. Results from a Friday night show up Saturday morning.
+        The line under each region’s headline says which week the numbers
+        cover.
+      </p>
+
       <h2>What this isn’t</h2>
       <p>
         Seeds aren’t official until the MHSAA announces them. Forfeits, score
-        corrections, and late schedule changes can move things, and the numbers
-        are recalculated every morning. These are estimates for fans and are
-        not meant for wagering of any kind.
+        corrections, and late schedule changes can move things.
       </p>
+
+      <h2>Not for gambling</h2>
+      <p>
+        The odds on this site are statistical estimates for information and
+        entertainment only. They’re meant to help fans understand how a
+        playoff race might unfold. Do not use them to place bets or wagers of
+        any kind.
+      </p>
+      <p>
+        They don’t account for injuries, weather, travel, or anything else that
+        happens on game day. High school seasons are short, so a single game
+        can swing a race. The model hasn’t been validated for predictive
+        accuracy against outside benchmarks. A 70% chance of finishing first
+        means the team finishes first in 70% of the ways the season can
+        play out, counted the way the odds mode describes. It is not a
+        guarantee, a line, or an edge.
+      </p>
+      <p>
+        This site, its operators, and its developers accept no responsibility,
+        legal or otherwise, for any losses arising from the use of these
+        numbers for gambling, sports betting, or wagering of any kind, legal
+        or illegal. Use for betting is entirely at your own risk; nothing here
+        is gambling advice, a betting service, or a prediction market. Sports
+        betting is heavily regulated in Mississippi, and wagering on high
+        school athletic events may be illegal under state and federal law.
+      </p>
+
+      <h2>About the author</h2>
+      <!-- AUTHOR BIO: replace the placeholder paragraph below with your bio. -->
+      <p class="muted">Author bio coming soon.</p>
     </div>
   </main>
 
   <footer class="site-footer">
     <p><a href="/">Back to the region races</a></p>
+    <p>© 2025–2026 Paul Sullivan. All rights reserved.</p>
   </footer>
 
   <script src="/static/js/theme.js" defer></script>

@@ -186,7 +186,7 @@ def build_region_headline(
         champion = holders[1]
         rest = _join_names([holders[s] for s in range(2, _PLAYOFF_SEEDS + 1)])
         verb = "won" if remaining_games == 0 else "has won"
-        return f"{champion} {verb} the region, with {rest} joining it in the playoffs."
+        return f"{champion} {verb} the region, with {rest} joining them in the playoffs."
 
     # 2. Region title still open.
     if 1 not in holders:

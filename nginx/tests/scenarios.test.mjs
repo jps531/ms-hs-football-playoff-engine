@@ -88,3 +88,13 @@ test("insights become one-way cards with margins preserved", () => {
   assert.equal(cards[0].groups[0][0].min_margin, 8);
   assert.equal(cards[0].p, null);
 });
+
+test("insights proving the same outcome merge into one card, joined by OR", () => {
+  const elim = (loser) => ({
+    insight_type: "eliminated_if", team: "Richton",
+    conditions: [{ winner: "Lumberton", loser: "Richton", min_margin: 1, max_margin: null }, { winner: "Stringer", loser, min_margin: 1, max_margin: null }],
+  });
+  const cards = insightCards([elim("Lumberton"), elim("Resurrection"), { ...elim("X"), team: "Bay" }]);
+  assert.deepEqual(cards.map((c) => [c.title, c.groups.length]), [["Richton is eliminated", 2], ["Bay is eliminated", 1]]);
+  assert.equal(cards[0].groups[1][1].opponent, "Resurrection");
+});

@@ -178,7 +178,7 @@ export function conditionGroups(groups, teams) {
 export function scenarioCard({ title, p = null, groups, provenanceHtml = "", team = null, teams }) {
   const odds = p == null ? "" : oddsCell(p);
   return `<article class="scenario"${teamColorStyle(team)}>
-    <div class="scenario__head"><h4 class="scenario__title">${esc(title)}</h4>${odds}</div>
+    <div class="scenario__head"><h4 class="scenario__title">${esc(title)}\u00a0<span class="scenario__if">IF</span></h4>${odds}</div>
     ${provenanceHtml}
     <div class="scenario__body">${conditionGroups(groups, teams)}</div>
   </article>`;
