@@ -28,8 +28,13 @@
       </a>
       <form class="team-search" role="search">
         <label for="team-search" class="visually-hidden">Find a team</label>
-        <input id="team-search" type="search" list="team-options" placeholder="Find a team" autocomplete="off" enterkeyhint="go">
-        <datalist id="team-options"></datalist>
+        <input id="team-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="team-results"
+          placeholder="Find a team" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="search">
+        <div class="team-results" id="team-results-popup" hidden>
+          <ul id="team-results" role="listbox" aria-label="Teams"></ul>
+          <p class="team-results__empty" hidden></p>
+        </div>
+        <p class="visually-hidden" id="team-search-status" role="status"></p>
       </form>
       <div class="theme-toggle" role="radiogroup" aria-label="Theme">
         <button type="button" class="theme-toggle__item" role="radio" aria-checked="false" tabindex="-1" data-theme="light" title="Light">

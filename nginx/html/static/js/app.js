@@ -10,6 +10,7 @@ import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard,
 } from "./components.js";
+import { matchTeams } from "./search.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
 } from "./scenarios.js";
@@ -25,7 +26,10 @@ const STORE = { clazz: "mshsf.class", odds: "mshsf.odds" };
 const app = document.getElementById("app");
 const scrubberHost = document.getElementById("scrubber");
 const teamSearch = document.getElementById("team-search");
-const teamOptions = document.getElementById("team-options");
+const resultsPopup = document.getElementById("team-results-popup");
+const resultsList = document.getElementById("team-results");
+const resultsEmpty = resultsPopup?.querySelector(".team-results__empty");
+const searchStatus = document.getElementById("team-search-status");
 
 // --------------------------------------------------------------- data
 
@@ -224,57 +228,111 @@ scrubberHost.addEventListener("keydown", (e) => {
 });
 
 // --------------------------------------------------------- team search
-// One field that's both a dropdown and a search: a text input bound to a
-// datalist of every team in the season. Picking a team opens its region.
+// A combobox: typing lists matching teams under the field (best first, the
+// top one highlighted), arrow keys move the highlight, and Enter or a tap
+// opens that team's region. Nothing navigates until the reader commits.
 
 let teamSearchSeason = null;
 let teamIndex = {};
+let matches = [];
+let active = -1;
 
 async function loadTeamSearch(season) {
   if (!teamSearch || teamSearchSeason === season) return;
   teamSearchSeason = season;
   teamIndex = await teamsBySchool(season);
-  const options = Object.values(teamIndex)
-    .sort((a, b) => a.school.localeCompare(b.school))
-    .map((t) => `<option value="${esc(t.school)}">${t.class_}A · Region ${t.region}</option>`);
-  teamOptions.innerHTML = options.join("");
+  if (document.activeElement === teamSearch && teamSearch.value.trim()) updateResults();
 }
 
-function findTeam(text) {
-  const q = text.trim().toLowerCase();
-  if (!q) return null;
-  const all = Object.values(teamIndex);
-  return all.find((t) => t.school.toLowerCase() === q)
-    ?? (() => {
-      const starts = all.filter((t) => t.school.toLowerCase().startsWith(q));
-      return starts.length === 1 ? starts[0] : null;
-    })();
+function openResults(open) {
+  resultsPopup.hidden = !open;
+  teamSearch.setAttribute("aria-expanded", String(open && matches.length > 0));
+  if (!open) teamSearch.removeAttribute("aria-activedescendant");
+}
+
+function setActive(i) {
+  active = i;
+  resultsList.querySelectorAll("[role=option]").forEach((el, k) => el.setAttribute("aria-selected", String(k === i)));
+  const el = i >= 0 ? document.getElementById(`team-opt-${i}`) : null;
+  if (el) {
+    teamSearch.setAttribute("aria-activedescendant", el.id);
+    el.scrollIntoView({ block: "nearest" });
+  } else {
+    teamSearch.removeAttribute("aria-activedescendant");
+  }
+}
+
+function updateResults() {
+  const query = teamSearch.value.trim();
+  if (!query) {
+    matches = [];
+    searchStatus.textContent = "";
+    openResults(false);
+    return;
+  }
+  const loaded = Object.keys(teamIndex).length > 0;
+  matches = matchTeams(Object.values(teamIndex), query);
+  resultsList.innerHTML = matches.map((t, i) => `<li id="team-opt-${i}" role="option" aria-selected="false" data-index="${i}">
+      ${teamMark(t.school, t)}<span class="team-results__name">${esc(t.school)}</span>
+      <span class="team-results__meta">${t.class_}A · Region ${t.region}</span>
+    </li>`).join("");
+  resultsEmpty.hidden = matches.length > 0;
+  resultsEmpty.textContent = loaded ? `No team matches “${query}”.` : "Loading teams…";
+  searchStatus.textContent = !loaded ? ""
+    : matches.length ? `${matches.length} ${matches.length === 1 ? "team" : "teams"} found. Press Enter to open ${matches[0].school}.`
+      : "No teams found.";
+  openResults(true);
+  setActive(matches.length ? 0 : -1);
 }
 
 function goToTeam(team) {
   teamSearch.value = "";
+  matches = [];
+  openResults(false);
   teamSearch.blur();
   scrollToFocus = true;
   navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school }), { scroll: true });
 }
 
-teamSearch?.addEventListener("input", () => {
-  // Picking from the datalist fills the exact name; jump straight there.
-  const team = teamIndex[teamSearch.value];
+teamSearch?.addEventListener("input", updateResults);
+teamSearch?.addEventListener("focus", () => { if (teamSearch.value.trim()) updateResults(); });
+teamSearch?.addEventListener("blur", () => openResults(false));
+
+teamSearch?.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (resultsPopup.hidden) updateResults();
+    if (!matches.length) return;
+    e.preventDefault();
+    const step = e.key === "ArrowDown" ? 1 : -1;
+    setActive((active + step + matches.length) % matches.length);
+  } else if (e.key === "Escape") {
+    if (!resultsPopup.hidden) {
+      e.preventDefault();
+      openResults(false);
+    }
+  }
+});
+
+// Enter (or the keyboard's Search key) commits the highlighted team.
+teamSearch?.closest("form")?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!teamSearch.value.trim()) return;
+  if (resultsPopup.hidden) updateResults();
+  const team = matches[active] ?? matches[0];
   if (team) goToTeam(team);
 });
 
-teamSearch?.closest("form")?.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const team = findTeam(teamSearch.value);
-  if (team) {
-    goToTeam(team);
-    return;
-  }
-  teamSearch.setCustomValidity("No team by that name this season.");
-  teamSearch.reportValidity();
+// Pressing a result mustn't blur the field first (that would close the list
+// before the tap lands); the click then opens the team.
+resultsList?.addEventListener("pointerdown", (e) => e.preventDefault());
+resultsList?.addEventListener("click", (e) => {
+  const option = e.target.closest("[role=option]");
+  if (option) goToTeam(matches[Number(option.dataset.index)]);
 });
-teamSearch?.addEventListener("keydown", () => teamSearch.setCustomValidity(""));
+resultsList?.addEventListener("pointermove", (e) => {
+  const option = e.target.closest("[role=option]");
+  if (option && Number(option.dataset.index) !== active) setActive(Number(option.dataset.index));
+});
 
 // ---------------------------------------------------- provenance controls
 // The page's provenance line doubles as its controls: which season, through
