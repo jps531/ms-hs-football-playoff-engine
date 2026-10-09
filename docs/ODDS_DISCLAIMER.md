@@ -8,7 +8,7 @@ The win probabilities, seeding odds, and playoff advancement percentages display
 
 ## What These Numbers Are
 
-The odds shown here come from counting every way a region's remaining games can finish and applying the MHSAA tiebreakers to each one. "Toss-up" odds count every outcome equally; "Projected" odds weight each outcome by Elo-based win probabilities that reflect historical performance and schedule strength. Early in the season (more than 15 region games left) both come from a 50,000-run Elo-weighted simulation. Either way:
+The odds shown here come from counting every way a region's remaining games can finish and applying the MHSAA tiebreakers to each one. "Toss-up" odds count every outcome equally; "Projected" odds weight each outcome by Elo-based win probabilities that reflect historical performance and schedule strength. Early in the season (more than 15 region games left) both come from a 50,000-run Elo-weighted simulation, seeded from the region's games so the same inputs always give the same odds. Either way:
 
 - They do not account for injuries, weather, travel, or any game-day factors.
 - High school football schedules are small samples — a single game can drastically shift outcomes.
