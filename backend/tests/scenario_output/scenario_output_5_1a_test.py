@@ -1,7 +1,9 @@
 """Scenario output tests for Region 5-1A (2025 season, pre-final-week).
 
 Region 5-1A is a richly margin-sensitive case with 6 teams, 3 remaining games,
-and 14 distinct scenario outcomes (scenarios 3 and 6 each split into 4 sub-labels).
+and 8 distinct scenario outcomes (scenario 3 splits into 4 sub-labels).  The
+McAdams vs Nanih Waiya game never changes the seeding, so it is omitted from
+every scenario's game_winners.
 
 Teams (alphabetical): Ethel, Leake County, McAdams, Nanih Waiya, Noxapater, Sebastopol
 Remaining games (cutoff 2025-10-24):
@@ -14,9 +16,10 @@ Eliminated: McAdams, Sebastopol
 
 Code paths exercised:
   - build_scenario_atoms       — multi-seed atoms for 4 teams; unconditional for McAdams
-  - enumerate_division_scenarios — 14 scenarios; groups 3 and 6 have 4 margin-sensitive
-                                   sub-labels (a/b/c/d) each; group 2 and 5 have 2 (a/b)
-  - division_scenarios_as_dict  — 14 keys; eliminated list varies across scenarios
+  - enumerate_division_scenarios — 8 scenarios; group 3 has 4 margin-sensitive
+                                   sub-labels (a/b/c/d); group 2 has 2 (a/b); masks
+                                   differing only in McAdams/Nanih Waiya are merged
+  - division_scenarios_as_dict  — 8 keys; eliminated list varies across scenarios
   - team_scenarios_as_dict      — non-trivial odds (fractional); 5 of 6 teams have
                                    more than one possible outcome
   - render_team_scenarios       — margin-qualified condition strings; "Eliminated if:" block
@@ -177,14 +180,14 @@ def test_atoms_nanih_waiya_unconditional():
 
 
 def test_scenario_count():
-    """14 distinct scenario entries from 8 outcome × margin combinations."""
-    assert len(_SCENARIOS) == 14
+    """8 distinct scenario entries (McAdams/Nanih Waiya is irrelevant to seeding)."""
+    assert len(_SCENARIOS) == 8
 
 
 def test_scenario_keys():
-    """Scenario keys are exactly {'1','2a','2b','3a','3b','3c','3d','4','5a','5b','6a','6b','6c','6d'}."""
-    keys = {f"{s['scenario_num']}{s['sub_label']}" for s in _SCENARIOS}
-    assert keys == {"1", "2a", "2b", "3a", "3b", "3c", "3d", "4", "5a", "5b", "6a", "6b", "6c", "6d"}
+    """Scenario keys are exactly 1, 2a, 2b, 3a-3d, 4 in order."""
+    keys = [f"{s['scenario_num']}{s['sub_label']}" for s in _SCENARIOS]
+    assert keys == ["1", "2a", "2b", "3a", "3b", "3c", "3d", "4"]
 
 
 def test_scenario_entry_shape():
@@ -231,7 +234,6 @@ def test_scenario_2a_2b_same_game_winners():
     expected_winners = [
         ("Ethel", "Sebastopol"),
         ("Noxapater", "Leake County"),
-        ("Nanih Waiya", "McAdams"),
     ]
     assert sc2a["game_winners"] == expected_winners
 
@@ -256,7 +258,6 @@ def test_scenario_3_group_same_game_winners():
     expected_winners = [
         ("Sebastopol", "Ethel"),
         ("Leake County", "Noxapater"),
-        ("Nanih Waiya", "McAdams"),
     ]
     assert scs[0]["game_winners"] == expected_winners
 
@@ -279,11 +280,12 @@ def test_scenario_3d_seeding():
     assert sc["seeding"][:4] == ("Nanih Waiya", "Leake County", "Sebastopol", "Noxapater")
 
 
-def test_scenario_6_group_has_four_sub_labels():
-    """Group 6 (same W/L as group 3 but McAdams beats Nanih Waiya) also has 4 sub-scenarios."""
-    scs = [s for s in _SCENARIOS if s["scenario_num"] == 6]
-    assert len(scs) == 4
-    assert {s["sub_label"] for s in scs} == {"a", "b", "c", "d"}
+def test_mcadams_nanih_waiya_never_in_game_winners():
+    """The McAdams/Nanih Waiya result never affects seeding, so masks differing only
+    in it are merged and the game is omitted from every scenario's game_winners."""
+    for sc in _SCENARIOS:
+        for w, l in sc["game_winners"]:
+            assert {w, l} != {"McAdams", "Nanih Waiya"}
 
 
 def test_unconditional_scenario_has_none_conditions():

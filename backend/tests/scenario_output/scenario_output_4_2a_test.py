@@ -7,7 +7,7 @@ has clinched #1 unconditionally; Eupora is always eliminated.
 Teams (alphabetical): East Webster, Eupora, Kemper County, Philadelphia, Velma Jackson
 Remaining games (cutoff 2025-10-24):
   East Webster vs Eupora        — East Webster beat Eupora 26–0 (actual)
-  Kemper County vs Philadelphia — Kemper County beat Philadelphia 40–6 (actual, scenario 3)
+  Kemper County vs Philadelphia — Kemper County beat Philadelphia 40–6 (actual, scenario 2)
 
 Known 2025 seeds: East Webster / Kemper County / Velma Jackson / Philadelphia
 Eliminated: Eupora
@@ -15,9 +15,9 @@ Eliminated: Eupora
 Code paths exercised:
   - build_scenario_atoms       — EW and Eupora unconditional; KC two-alternative atom for #2;
                                   VJ margin-insensitive; Philly three possible seeds
-  - enumerate_division_scenarios — 5 scenarios (1a/1b from Eupora-upsets-EW masks,
-                                    2a/2b from EW-wins masks, 3 from KC-wins mask)
-  - EW/Eupora game appears in game_winners for MS sub-scenarios but not in any atom conditions
+  - enumerate_division_scenarios — 3 scenarios (1a/1b from the Philly-wins masks, merged
+                                    across the irrelevant EW/Eupora result; 2 from KC wins)
+  - EW/Eupora game appears in no scenario's game_winners or atom conditions
   - team_scenarios_as_dict      — exact fractional odds (75/25/50)
   - render_team_scenarios       — margin-qualified condition for KC/Philly threshold at 7
 """
@@ -240,14 +240,14 @@ def test_atoms_no_ew_eupora_condition_in_vj():
 
 
 def test_scenario_count():
-    """5 distinct scenario entries: 1a, 1b, 2a, 2b, 3."""
-    assert len(_SCENARIOS) == 5
+    """3 distinct scenario entries: 1a, 1b, 2."""
+    assert len(_SCENARIOS) == 3
 
 
 def test_scenario_keys():
-    """Scenario keys are exactly {'1a', '1b', '2a', '2b', '3'}."""
-    keys = {f"{s['scenario_num']}{s['sub_label']}" for s in _SCENARIOS}
-    assert keys == {"1a", "1b", "2a", "2b", "3"}
+    """Scenario keys are exactly 1a, 1b, 2 in order."""
+    keys = [f"{s['scenario_num']}{s['sub_label']}" for s in _SCENARIOS]
+    assert keys == ["1a", "1b", "2"]
 
 
 def test_east_webster_always_first():
@@ -262,67 +262,37 @@ def test_eupora_always_eliminated():
         assert "Eupora" not in sc["seeding"][:4]
 
 
-def test_scenario_3_is_actual_result():
-    """Scenario 3 (Kemper County beats Philadelphia) matches 2025 final seeds."""
-    sc3 = next(s for s in _SCENARIOS if s["scenario_num"] == 3 and s["sub_label"] == "")
-    assert sc3["seeding"][:4] == ("East Webster", "Kemper County", "Velma Jackson", "Philadelphia")
+def test_scenario_2_is_actual_result():
+    """Scenario 2 (Kemper County beats Philadelphia) matches 2025 final seeds."""
+    sc2 = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "")
+    assert sc2["seeding"][:4] == ("East Webster", "Kemper County", "Velma Jackson", "Philadelphia")
 
 
-def test_scenario_3_game_winners():
-    """Scenario 3 game_winners only lists the KC/Philly game (EW/Eupora is irrelevant)."""
-    sc3 = next(s for s in _SCENARIOS if s["scenario_num"] == 3 and s["sub_label"] == "")
-    assert sc3["game_winners"] == [("Kemper County", "Philadelphia")]
-    assert sc3["conditions_atom"] is None
+def test_scenario_2_game_winners():
+    """Scenario 2 game_winners only lists the KC/Philly game (EW/Eupora is irrelevant)."""
+    sc2 = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "")
+    assert sc2["game_winners"] == [("Kemper County", "Philadelphia")]
+    assert sc2["conditions_atom"] is None
 
 
 def test_scenario_1a_seeding():
-    """Scenario 1a (Eupora upsets EW, Philly wins by 1–6): KC #2, Philly #3."""
+    """Scenario 1a (Philly wins by 1–6): KC #2, Philly #3."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 1 and s["sub_label"] == "a")
     assert sc["seeding"][:4] == ("East Webster", "Kemper County", "Philadelphia", "Velma Jackson")
 
 
 def test_scenario_1b_seeding():
-    """Scenario 1b (Eupora upsets EW, Philly wins by 7+): Philly #2, KC #3."""
+    """Scenario 1b (Philly wins by 7+): Philly #2, KC #3."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 1 and s["sub_label"] == "b")
     assert sc["seeding"][:4] == ("East Webster", "Philadelphia", "Kemper County", "Velma Jackson")
 
 
-def test_scenario_2a_seeding():
-    """Scenario 2a (EW wins, Philly wins by 1–6): KC #2, Philly #3."""
-    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
-    assert sc["seeding"][:4] == ("East Webster", "Kemper County", "Philadelphia", "Velma Jackson")
-
-
-def test_scenario_2b_seeding():
-    """Scenario 2b (EW wins, Philly wins by 7+): Philly #2, KC #3."""
-    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
-    assert sc["seeding"][:4] == ("East Webster", "Philadelphia", "Kemper County", "Velma Jackson")
-
-
-def test_scenarios_1a_2a_same_seeding():
-    """Scenarios 1a and 2a produce identical seedings (EW/Eupora result irrelevant)."""
-    sc1a = next(s for s in _SCENARIOS if s["scenario_num"] == 1 and s["sub_label"] == "a")
-    sc2a = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
-    assert sc1a["seeding"] == sc2a["seeding"]
-
-
-def test_scenarios_1b_2b_same_seeding():
-    """Scenarios 1b and 2b produce identical seedings."""
-    sc1b = next(s for s in _SCENARIOS if s["scenario_num"] == 1 and s["sub_label"] == "b")
-    sc2b = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
-    assert sc1b["seeding"] == sc2b["seeding"]
-
-
-def test_scenario_1a_game_winners_include_eupora():
-    """Scenario 1a game_winners include the Eupora/EW result (Eupora wins that mask)."""
-    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 1 and s["sub_label"] == "a")
-    assert ("Eupora", "East Webster") in sc["game_winners"]
-
-
-def test_scenario_2a_game_winners_include_ew():
-    """Scenario 2a game_winners include the EW/Eupora result (EW wins that mask)."""
-    sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
-    assert ("East Webster", "Eupora") in sc["game_winners"]
+def test_scenario_1_game_winners_omit_ew_eupora():
+    """Scenario 1 sub-scenarios list only the KC/Philly game: the EW/Eupora result is
+    irrelevant, so its two masks are merged into one numbered scenario."""
+    for sc in _SCENARIOS:
+        if sc["scenario_num"] == 1:
+            assert sc["game_winners"] == [("Philadelphia", "Kemper County")]
 
 
 def test_scenario_1a_conditions_atom():
@@ -364,7 +334,7 @@ def test_velma_jackson_never_margin_sensitive():
 
 
 def test_div_dict_keys():
-    """division_scenarios_as_dict produces keys '1a','1b','2' (2a/2b deduplicated as identical to 1a/1b; old 3→2)."""
+    """division_scenarios_as_dict produces keys '1a','1b','2' (EW/Eupora masks merged upstream)."""
     assert set(_DIV_DICT.keys()) == {"1a", "1b", "2"}
 
 
