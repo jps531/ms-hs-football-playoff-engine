@@ -1086,7 +1086,7 @@ def get_region_finish_scenarios(
         if clazz <= 4 else {}
     )
     quarterfinals_home_overall = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
-    semifinals_home_overall = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+    semifinals_home_overall = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
 
     bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn, rounds_completed)
     second_round_home_overall_w = (
@@ -1094,7 +1094,7 @@ def get_region_finish_scenarios(
         if clazz <= 4 else {}
     )
     quarterfinals_home_overall_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
-    semifinals_home_overall_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+    semifinals_home_overall_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
 
     # Override bracket advancement for eliminated playoff teams with historical facts.
     # For each eliminated team, we know exactly which rounds they reached from round_snapshots:

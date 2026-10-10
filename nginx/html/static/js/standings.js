@@ -222,10 +222,12 @@ export function teamSchedule(team, results, remaining) {
         result: g.tie ? "T" : g.winner === team ? "W" : "L",
       };
     });
+  const byDate = (x, y) => (x.date ?? "9999") < (y.date ?? "9999") ? -1 : (x.date ?? "9999") > (y.date ?? "9999") ? 1 : 0;
   const upcoming = remaining
     .filter((g) => g.away === team || g.home === team)
-    .map((g) => ({ date: g.date, ...sideOf(g) }));
-  return { completed, upcoming };
+    .map((g) => ({ date: g.date, ...sideOf(g) }))
+    .sort(byDate); // the standings list them by team name; undated games last
+  return { completed: completed.sort(byDate), upcoming };
 }
 
 /**

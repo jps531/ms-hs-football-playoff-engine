@@ -2,7 +2,7 @@
 
 Picks the single most interesting fact about a region's playoff race right now
 and states it in plain English, e.g. "Taylorsville clinches the region with a
-win over Mize — no help needed." The sentence is built only from data the
+win over Mize." The sentence is built only from data the
 standings response already carries — per-team seeding odds, the
 pre-computed, margin-verified key insights, and (with five or fewer games
 left, where they're margin-accurate) each team's exact scenario paths — so it
@@ -166,7 +166,7 @@ def _phrase_with_help(clinch: _Clinch, achievement: str) -> str:
 
     The team's own wins read as "with a win over X"; results it needs from
     elsewhere read as "if Y (also) beats Z". A clinch that depends on nobody
-    else's result earns the "no help needed" tag.
+    else's result simply ends there.
     """
     team = clinch.team
     own = [r for r in clinch.results if r.winner == team]
@@ -177,8 +177,6 @@ def _phrase_with_help(clinch: _Clinch, achievement: str) -> str:
         phrase += (" with a win" if len(own) == 1 else " with wins") + f" over {_join_names(wins)}"
         if others:
             phrase += " if " + _join_names([_beats(r, also=(i == 0)) for i, r in enumerate(others)])
-        else:
-            phrase += " \u2014 no help needed"
     else:
         phrase += " if " + _join_names([_beats(r) for r in others])
     return phrase

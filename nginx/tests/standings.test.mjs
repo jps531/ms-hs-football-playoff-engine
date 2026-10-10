@@ -218,3 +218,13 @@ test("no playoff run before the bracket starts or for teams that missed it", () 
   assert.equal(playoffStatus({ ...playoffTeam([0, 0, 0, 0, 0]), odds: { p_playoffs: 0 } }, 3), null);
   assert.equal(playoffStatus({ odds: { p_playoffs: 1 } }, 3), null);
 });
+
+test("a team's remaining games run by date, undated last, whatever order they arrive in", () => {
+  const remaining = [
+    { date: "2025-10-29", away: "Simmons", home: "West Bolivar", joiner: "at" },
+    { date: null, away: "Simmons", home: "Shaw", joiner: "at" },
+    { date: "2025-10-16", away: "Riverside", home: "Simmons", joiner: "at" },
+  ];
+  const { upcoming } = teamSchedule("Simmons", [], remaining);
+  assert.deepEqual(upcoming.map((g) => g.opponent), ["Riverside", "West Bolivar", "Shaw"]);
+});

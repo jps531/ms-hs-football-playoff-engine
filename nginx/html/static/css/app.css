@@ -545,7 +545,7 @@ button { font: inherit; color: inherit; }
   font-size: 12px; line-height: 16px;
   padding-block: 6px;
 }
-.standings .col-pos { width: 2em; text-align: left; color: var(--text-secondary); }
+.standings .col-pos { width: 2.4em; padding-left: 12px; text-align: left; color: var(--text-secondary); }
 .standings .col-team { text-align: left; width: 100%; }
 .standings tbody th { font-weight: 400; }
 .standings .col-odds { width: 4.4em; padding-inline: 3px; }
@@ -556,6 +556,9 @@ button { font: inherit; color: inherit; }
 /* The picked team: a rule in the identity green, not a fill (a fill would
    match the lowest odds-ramp slot and hide those cells). */
 .standings tr.is-focus > :first-child { box-shadow: inset 3px 0 0 var(--accent-identity); }
+/* The picked row and its expanded panels read as one block: no rule between
+   them, so the green edge runs unbroken from the row through the panels. */
+.standings tr.is-focus:not(.detail) > * { border-bottom-color: transparent; }
 .standings tr.is-focus .team-name { font-weight: 600; }
 .focus-note { margin-bottom: 8px; font-size: 14px; color: var(--text-secondary); }
 

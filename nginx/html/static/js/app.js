@@ -231,7 +231,9 @@ function showContext(html) {
   headObserver?.disconnect();
   contextBar.classList.remove("is-shown");
   contextBar.querySelector(".context-bar__inner").innerHTML = html ?? "";
-  const head = html && app.querySelector(".region-head, .entry-head");
+  // The bar takes over as soon as the page title is out of view, not once
+  // the whole heading block (headline and controls) has gone.
+  const head = html && app.querySelector(".region-head .title, .entry-head .title");
   if (!head) return;
   const headerH = document.querySelector(".site-header-bar").getBoundingClientRect().height;
   headObserver = new IntersectionObserver(([entry]) => {

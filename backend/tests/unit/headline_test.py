@@ -125,10 +125,10 @@ class TestTitleOpen:
         ]
 
     def test_self_contained_clinch_needs_no_help(self):
-        """A clinch depending only on the team's own win is tagged "no help needed"."""
+        """A clinch depending only on the team's own win needs no "if" clause."""
         insights = [_insight("clinch_seed", "Taylorsville", [("Taylorsville", "Mize")], seed=1)]
         assert build_region_headline(self._teams(), insights, 3) == (
-            "Taylorsville clinches the region with a win over Mize — no help needed."
+            "Taylorsville clinches the region with a win over Mize."
         )
 
     def test_clinch_with_outside_help_says_also(self):
@@ -150,7 +150,7 @@ class TestTitleOpen:
         """A required winning margin is part of the sentence, never dropped."""
         insights = [_insight("clinch_seed", "Taylorsville", [("Taylorsville", "Mize", 8, None)], seed=1)]
         assert build_region_headline(self._teams(), insights, 3) == (
-            "Taylorsville clinches the region with a win over Mize by 8 or more — no help needed."
+            "Taylorsville clinches the region with a win over Mize by 8 or more."
         )
 
     def test_favorites_simplest_clinch_leads(self):
@@ -160,7 +160,7 @@ class TestTitleOpen:
             _insight("clinch_seed", "Taylorsville", [("Taylorsville", "Mize")], seed=1),
         ]
         assert build_region_headline(self._teams(), insights, 3) == (
-            "Taylorsville clinches the region with a win over Mize — no help needed."
+            "Taylorsville clinches the region with a win over Mize."
         )
 
     def test_long_shot_clinch_does_not_headline(self):
@@ -200,7 +200,7 @@ class TestTitleOpen:
             )
         )
         assert build_region_headline(teams, insights, 4) == (
-            "Stringer clinches the region with wins over Resurrection, Lumberton and Richton — no help needed."
+            "Stringer clinches the region with wins over Resurrection, Lumberton and Richton."
         )
 
     def test_ignores_insights_for_other_seeds(self):
@@ -214,7 +214,7 @@ class TestTitleOpen:
         """Key insights skip teams already in the playoffs; their exact path still counts."""
         path = _single_path(PathOutcomeModel(type="seed", value=1), [("Taylorsville", "Mize")])
         assert build_region_headline(self._teams(a_paths=[path]), [], 3) == (
-            "Taylorsville clinches the region with a win over Mize — no help needed."
+            "Taylorsville clinches the region with a win over Mize."
         )
 
     def test_paths_ignored_when_not_margin_accurate(self):
@@ -254,7 +254,7 @@ class TestTitleDecided:
         insights = [_insight("clinch_playoffs", "Madison Central", [("Madison Central", "Clinton")])]
         assert build_region_headline(self._teams(), insights, 3) == (
             "Oxford has the region won, and Madison Central clinches the last playoff spot "
-            "with a win over Clinton — no help needed."
+            "with a win over Clinton."
         )
 
     def test_names_the_chasers_without_a_clean_clinch(self):
@@ -346,13 +346,13 @@ def test_engine_region_2_7a_last_spot():
     """2-7A: Oxford locked at #1; a Madison Central win over Clinton settles the last spot outright."""
     assert _engine_headline(7, 2) == (
         "Oxford has the region won, and Madison Central clinches the last playoff spot "
-        "with a win over Clinton — no help needed."
+        "with a win over Clinton."
     )
 
 
 def test_engine_region_1_7a_title_from_exact_path():
     """1-7A: the title clinch comes from an exact path, since the contender is already in the playoffs."""
-    assert _engine_headline(7, 1) == "DeSoto Central clinches the region with a win over Tupelo — no help needed."
+    assert _engine_headline(7, 1) == "DeSoto Central clinches the region with a win over Tupelo."
 
 
 def test_engine_region_3_7a_long_shot_not_featured():

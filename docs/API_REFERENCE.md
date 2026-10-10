@@ -64,7 +64,7 @@ specific seed pinned to that exact position — not alphabetical order.
 
 **Top-level response fields**:
 - `scenarios` — when `scenarios_available` is `true`, each entry includes `game_winners` (which team wins each remaining game to produce this seeding), `tiebreaker_groups`, `coinflip_groups`, and `outcomes` (team → seed number)
-- `headline` — one plain-English sentence stating the most interesting fact about the race right now (e.g. "Oxford has the region won, and Madison Central clinches the last playoff spot with a win over Clinton — no help needed."). Built only from locked seeds, margin-verified key insights, and — with five or fewer games left — single-path scenario conditions, so it never states anything the engine hasn't proven. See `backend/helpers/headline.py`.
+- `headline` — one plain-English sentence stating the most interesting fact about the race right now (e.g. "Oxford has the region won, and Madison Central clinches the last playoff spot with a win over Clinton."). Built only from locked seeds, margin-verified key insights, and — with five or fewer games left — single-path scenario conditions, so it never states anything the engine hasn't proven. See `backend/helpers/headline.py`.
 - `key_insights` — each condition carries `winner`/`loser` plus `min_margin`/`max_margin` (same semantics as path conditions above).
 - `computation_state` — `margin_sensitive` (bool), `margin_compute_status` (`not_needed` / `pending` / `running` / `complete` / `skipped`), and timestamps. Use `margin_compute_status` to show a "refining odds…" indicator while background margin computation is running.
 
