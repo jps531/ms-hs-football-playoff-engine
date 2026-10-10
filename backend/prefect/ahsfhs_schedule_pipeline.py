@@ -2,8 +2,11 @@
 
 Fetches each school's season schedule, parses game dates/results/regions,
 and writes records to the ``games`` table via INSERT ... ON CONFLICT UPDATE.
+Afterwards, games a school's page no longer lists (e.g. the old date of a
+rescheduled game) are removed, so the table mirrors AHSFHS.
 """
 
+import json
 import re
 import time
 from collections.abc import Iterable
@@ -319,6 +322,95 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     return len(list(game_records))
 
 
+# Each scraped school's listed dates, passed as one JSON object
+# {school: ["YYYY-MM-DD", ...]}. A row is removed only when it's unplayed and
+# has no manual overrides: a finished game with a score, or a row someone
+# corrected by hand, is kept even if AHSFHS stops listing it, and reported.
+_LISTED_CTE = """
+    WITH listed AS (
+        SELECT key AS school,
+               ARRAY(SELECT jsonb_array_elements_text(value)::date) AS dates
+        FROM jsonb_each(%s::jsonb)
+    )
+"""
+_DELETE_UNLISTED_SQL = (
+    _LISTED_CTE
+    + """
+    DELETE FROM games g
+    USING listed l
+    WHERE g.season = %s
+      AND g.school = l.school
+      AND NOT (g.date = ANY(l.dates))
+      AND g.final IS NOT TRUE
+      AND g.overrides = '{}'::jsonb
+    RETURNING g.school, g.date, g.opponent
+"""
+)
+_KEPT_UNLISTED_SQL = (
+    _LISTED_CTE
+    + """
+    SELECT g.school, g.date, g.opponent, g.final, g.overrides <> '{}'::jsonb AS overridden
+    FROM games g
+    JOIN listed l ON l.school = g.school
+    WHERE g.season = %s
+      AND NOT (g.date = ANY(l.dates))
+    ORDER BY g.school, g.date
+"""
+)
+
+
+@task(task_run_name="Remove Unlisted AHSFHS Game Records for {season}")
+def remove_unlisted_games(game_records: Iterable[Game], season: int) -> int:
+    """Delete each scraped school's games that its AHSFHS page no longer lists.
+
+    ``insert_rows`` only replaces a school's rows within three days of a
+    scraped game, so when a game moves by more than that (rescheduled a week
+    later, say), the row at its old date would otherwise stay and count as a
+    game played that week. This removes, for every school whose page was
+    scraped this run, that season's rows not on the page.
+
+    Only schools with at least one scraped game are touched, so a page that
+    failed to load or parse never wipes a schedule. Finished games and rows
+    with manual overrides are never removed; they're logged as a warning.
+
+    Args:
+        game_records: This run's scraped games (every school's).
+        season:       Season the games belong to.
+
+    Returns:
+        The number of rows deleted.
+    """
+    dates_by_school: dict[str, set[str]] = {}
+    for g in game_records:
+        dates_by_school.setdefault(g.school, set()).add(g.date.isoformat())
+    if not dates_by_school:
+        return 0
+
+    logger = get_run_logger()
+    listed = json.dumps({school: sorted(dates) for school, dates in dates_by_school.items()})
+
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_DELETE_UNLISTED_SQL, (listed, season))
+            deleted = cur.fetchall()
+            cur.execute(_KEPT_UNLISTED_SQL, (listed, season))
+            kept = cur.fetchall()
+        conn.commit()
+
+    for school, game_date, opponent in deleted:
+        logger.info("Removed %s's %s game vs %s: no longer on its AHSFHS schedule", school, game_date, opponent)
+    for school, game_date, opponent, _final, overridden in kept:
+        reason = "it has manual overrides" if overridden else "it's a finished game"
+        logger.warning(
+            "%s's %s game vs %s is no longer on its AHSFHS schedule; kept because %s",
+            school,
+            game_date,
+            opponent,
+            reason,
+        )
+    return len(deleted)
+
+
 @task(task_run_name="Get Existing Schools for AHSFHS Schedule Scrape")
 def get_existing_schools(season: int) -> list[School]:
     """
@@ -354,4 +446,5 @@ def ahsfhs_schedule_data_flow(season: int | None = None) -> int:
     existing_schools = get_existing_schools(season)
     game_records = find_ahsfhs_schedule_for_schools(existing_schools, season)
     updated_count = insert_rows(game_records)
+    remove_unlisted_games(game_records, season)
     return updated_count
