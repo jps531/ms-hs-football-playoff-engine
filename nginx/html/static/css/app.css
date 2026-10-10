@@ -1,0 +1,791 @@
+/* 2026 interim UI — see the design brief for the rules these styles follow.
+   Chrome stays achromatic; color comes only from team identity, the odds
+   ramp, and the state colors (clinched / eliminated / coin flip). */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/fonts/inter-latin-wght-normal.woff2") format("woff2");
+}
+
+/* ------------------------------------------------------------------ tokens */
+
+:root {
+  --brand-50: #F2FBF8;
+  --brand-100: #E1F7EF;
+  --brand-200: #C2EFDF;
+  --brand-300: #9BE6CD;
+  --brand-400: #66DDB5;
+  --brand-500: #26C58F;
+  --brand-600: #198C65;
+  --brand-700: #137252;
+  --brand-800: #0F5B41;
+  --brand-900: #0D4632;
+  --brand-950: #07291D;
+
+  --neutral-50: #F7F7F7;
+  --neutral-100: #EFEFEF;
+  --neutral-200: #DFDEDF;
+  --neutral-300: #C7C7C7;
+  --neutral-400: #A4A3A4;
+  --neutral-500: #7B7A7B;
+  --neutral-600: #5C5B5C;
+  --neutral-700: #4C4C4C;
+  --neutral-800: #393939;
+  --neutral-900: #272727;
+  --neutral-950: #161616;
+
+  --surface-page: #FFFFFF;
+  --surface-card: #FFFFFF;
+  --surface-raised: var(--neutral-50);
+  --surface-inverse: var(--neutral-900);
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-600);
+  --text-on-inverse: var(--neutral-50);
+  --border: var(--neutral-200);
+  --connector: var(--neutral-400);
+  --interactive: var(--brand-700);
+  --interactive-hover: var(--brand-800);
+  --accent-identity: var(--brand-600);
+  --state-clinched: var(--brand-700);
+  --state-eliminated: #B91C1C;
+  --state-coinflip: #FBBF24;
+  --state-live: var(--brand-700);
+
+  --odds-1: var(--neutral-50);
+  --odds-2: var(--brand-100);
+  --odds-3: var(--brand-200);
+  --odds-4: var(--brand-300);
+  --odds-5: var(--brand-400);
+  --odds-text: var(--neutral-900);
+
+  --scrubber-selected-bg: var(--brand-700);
+  --scrubber-selected-text: #FFFFFF;
+  --link: var(--interactive);
+  --link-hover: var(--interactive-hover);
+  --header-h: 68px;
+
+  --font-display: "Nippo", "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  color-scheme: light;
+}
+
+.dark {
+  --surface-page: var(--neutral-950);
+  --surface-card: var(--neutral-900);
+  --surface-raised: var(--neutral-800);
+  --surface-inverse: var(--neutral-50);
+  --text-primary: var(--neutral-50);
+  --text-secondary: var(--neutral-400);
+  --text-on-inverse: var(--neutral-900);
+  --border: var(--neutral-800);
+  --connector: var(--neutral-500);
+  --accent-identity: var(--brand-500);
+  --state-live: var(--brand-500);
+
+  --odds-1: var(--neutral-800);
+  --odds-2: var(--brand-950);
+  --odds-3: var(--brand-900);
+  --odds-4: var(--brand-800);
+  --odds-5: var(--brand-700);
+  --odds-text: var(--brand-50);
+
+  --scrubber-selected-bg: var(--brand-400);
+  --scrubber-selected-text: var(--neutral-900);
+  --link: var(--brand-400);
+  --link-hover: var(--brand-300);
+
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------- base */
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font: 400 16px/24px var(--font-text);
+}
+/* Tabular figures on every numeric style (brief §4) — scoped, because Inter's
+   tnum feature also widens hyphens and would space out prose and titles. */
+.standings, .odds, .provenance, .game-card {
+  font-variant-numeric: tabular-nums;
+}
+h1, h2, h3, h4, p, ol, ul, figure { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+/* Link color comes from a theme token rather than a ".dark a" rule, so
+   components that set color: inherit (team names, titles) win in both themes. */
+a { color: var(--link); text-underline-offset: 3px; }
+a:hover { color: var(--link-hover); }
+button { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--interactive);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.dark :focus-visible { outline-color: var(--brand-400); }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute; left: 16px; top: -48px;
+  background: var(--surface-inverse); color: var(--text-on-inverse);
+  padding: 10px 14px; border-radius: 6px; z-index: 20;
+}
+.skip-link:focus { top: 8px; color: var(--text-on-inverse); }
+
+/* ----------------------------------------------------------------- layout
+   Two measures, not one: a reading column for prose and a wider one for
+   the table and scenario cards. */
+
+.site-header, .page, .site-footer, .scrubber-bar__inner {
+  margin-inline: auto;
+  padding-inline: 16px;
+  max-width: 68rem;
+}
+@media (min-width: 48em) {
+  .site-header, .page, .site-footer, .scrubber-bar__inner { padding-inline: 32px; }
+}
+
+/* The header (name, team search, theme) stays pinned at every width; the
+   class scrubber scrolls away under it, and the context bar takes over
+   once the page title is out of view. */
+.site-header-bar { position: sticky; top: 0; z-index: 11; background: var(--surface-page); }
+.site-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  height: var(--header-h);
+}
+.site-header__home {
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 44px;
+  color: var(--text-primary); text-decoration: none;
+  font-size: 16px; line-height: 20px;
+}
+.site-header__home:hover { color: var(--text-primary); }
+.site-header__home img { width: 34px; height: auto; }
+.team-search { position: relative; flex: 1 1 auto; display: flex; justify-content: flex-end; max-width: 20rem; margin-left: auto; }
+/* 16px, not smaller: iOS Safari zooms the page into any field under 16px
+   when it's focused, and doesn't zoom back out. */
+.team-search input {
+  width: 100%; min-height: 44px; padding: 0 12px;
+  font: inherit; font-size: 16px;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.team-search input::placeholder { color: var(--text-secondary); }
+
+/* Search suggestions: a popup list under the field. */
+.team-results {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  width: max(100%, min(22rem, calc(100vw - 32px)));
+  max-height: min(24rem, 60vh); overflow-y: auto;
+  padding: 4px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+.dark .team-results { box-shadow: 0 8px 24px rgb(0 0 0 / 0.5); }
+.team-results [role="option"] {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  min-height: 44px; padding: 6px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.team-results [aria-selected="true"] { background: var(--surface-raised); }
+.team-results__name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-results__meta { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.team-results__empty { padding: 10px; font-size: 14px; color: var(--text-secondary); }
+/* Phones: the field is narrow and mid-header, so the list spans the header. */
+@media (max-width: 40em) {
+  .site-header { position: relative; }
+  .team-search { position: static; }
+  .team-results { left: 16px; right: 16px; width: auto; top: calc(100% - 2px); }
+}
+@media (max-width: 40em) {
+  .site-header { gap: 10px; }
+  .site-header__home span { display: none; }
+}
+
+/* Light / System / Dark: a segmented control matching the class scrubber.
+   Each choice is a 44px touch target; the selected one is filled. */
+.theme-toggle {
+  flex: none;
+  display: inline-flex; gap: 2px;
+  padding: 3px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.theme-toggle__item {
+  display: grid; place-items: center;
+  width: 44px; height: 38px;
+  padding: 0; border: 0; border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.theme-toggle__item svg { width: 20px; height: 20px; }
+.theme-toggle__item:hover { color: var(--text-primary); }
+.theme-toggle__item[aria-checked="true"] {
+  background: var(--scrubber-selected-bg);
+  color: var(--scrubber-selected-text);
+}
+.theme-toggle__item:focus-visible { outline-offset: -2px; }
+@media (max-width: 30em) {
+  .theme-toggle__item { width: 38px; }
+  .theme-toggle__item svg { width: 18px; height: 18px; }
+}
+
+.site-footer {
+  padding-block: 48px 40px;
+  color: var(--text-secondary);
+  font-size: 12px; line-height: 16px;
+}
+.site-footer p { max-width: 40rem; }
+.site-footer p + p { margin-top: 8px; }
+
+/* ---------------------------------------------------------- class scrubber */
+
+.scrubber-bar {
+  background: var(--surface-page);
+  border-bottom: 1px solid var(--border);
+}
+
+/* What's on screen, pinned under the header once the title scrolls away.
+   Fixed rather than sticky so showing it never shifts the page. */
+.context-bar {
+  position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 10;
+  background: var(--surface-page);
+  border-block: 1px solid var(--border);
+  visibility: hidden; opacity: 0; transform: translateY(-6px);
+  transition: opacity 120ms ease-out, transform 120ms ease-out, visibility 0s linear 120ms;
+}
+.context-bar.is-shown {
+  visibility: visible; opacity: 1; transform: none;
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .context-bar, .context-bar.is-shown { transition: none; transform: none; }
+}
+.context-bar__inner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
+  margin-inline: auto; max-width: 68rem;
+  padding: 8px 16px;
+  font-size: 13px; line-height: 18px;
+}
+@media (min-width: 48em) {
+  .context-bar__inner { padding-inline: 32px; }
+}
+.context-bar__title {
+  font-family: var(--font-display); font-weight: 700;
+  font-variant-numeric: normal; /* tnum would space out the hyphen in "2-7A" */
+  font-size: 15px; letter-spacing: 0;
+  color: var(--text-primary);
+}
+.context-bar .sep { color: var(--text-secondary); }
+.scrubber-bar__inner { padding-block: 8px; }
+.scrubber {
+  display: inline-flex; gap: 2px;
+  max-width: 100%;
+  padding: 3px;
+  background: var(--surface-raised);
+  border-radius: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.scrubber::-webkit-scrollbar { display: none; }
+.scrubber__item {
+  flex: none;
+  min-width: 48px; min-height: 44px;
+  padding: 0 12px;
+  border: 0; border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600; font-size: 15px;
+  cursor: pointer;
+}
+.scrubber__item:hover { color: var(--text-primary); }
+.scrubber__item[aria-checked="true"] {
+  background: var(--scrubber-selected-bg);
+  color: var(--scrubber-selected-text);
+}
+.scrubber__item:focus-visible { outline-offset: -2px; }
+
+/* -------------------------------------------------------------- typography */
+
+/* Nippo carries the page's titles and headers (the site name, page titles
+   including their class/region designation, and section headers); Inter
+   carries everything people read or compare. Nippo's only weight is Bold. */
+.title, .section-title, .sub-title, .region-block__title, .article h2, .site-header__home span {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+.title {
+  font-size: 32px; line-height: 36px;
+  letter-spacing: -0.01em;
+}
+@media (max-width: 30em) {
+  .title { font-size: 28px; line-height: 32px; }
+}
+
+.headline {
+  font-size: 22px; line-height: 32px; font-weight: 600;
+  max-width: 36rem;
+  text-wrap: pretty;
+}
+
+.section-title { font-size: 24px; line-height: 30px; }
+.sub-title { font-size: 20px; line-height: 26px; }
+.prose { max-width: 38rem; }
+.prose p + p { margin-top: 16px; }
+.muted { color: var(--text-secondary); }
+.caption { font-size: 12px; line-height: 16px; color: var(--text-secondary); }
+
+/* ------------------------------------------------------------ provenance */
+
+.mode { display: inline-flex; align-items: center; gap: 4px; }
+
+.info-button {
+  display: inline-grid; place-items: center;
+  width: 32px; height: 44px; margin-left: -4px;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--text-secondary);
+}
+.info-button svg { width: 15px; height: 15px; }
+.info-button:hover, .info-button[aria-expanded="true"] { color: var(--text-primary); }
+.mode-help {
+  max-width: 36rem; margin-top: 4px; padding: 10px 14px;
+  border-left: 2px solid var(--connector);
+  font-size: 14px; line-height: 20px; color: var(--text-secondary);
+}
+.mode-help p + p { margin-top: 6px; }
+.mode-help strong { color: var(--text-primary); font-weight: 600; }
+
+/* The provenance line as controls: each select reads as part of the
+   sentence, with a dotted underline and caret marking it as changeable. */
+.provenance--controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px;
+  font-size: 13px;
+}
+.provenance--controls .sep { color: var(--text-secondary); }
+.provenance--controls .seg { display: inline-flex; align-items: center; gap: 6px; }
+.ctl { display: inline-flex; align-items: center; gap: 4px; }
+.inline-select select {
+  appearance: none;
+  field-sizing: content; /* hug the chosen option instead of the longest one */
+  min-height: 44px;
+  padding: 0 14px 0 2px;
+  border: 0; border-radius: 4px;
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237B7A7B' stroke-width='1.5'/%3E%3C/svg%3E")
+    no-repeat right 2px center / 9px 6px;
+  color: var(--text-primary);
+  font: inherit; font-weight: 600;
+  text-decoration: underline dotted var(--connector);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.ctl--mode.mode--tossup select { font-style: italic; }
+.inline-select option { font-style: normal; color: initial; }
+.mode--tossup { font-style: italic; }
+.mode__glyph { width: 13px; height: 13px; flex: none; }
+
+.provenance {
+  font-size: 12px; line-height: 16px; font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+.provenance__live { color: var(--state-live); display: inline-flex; align-items: center; gap: 6px; }
+.provenance__pulse {
+  position: relative; display: inline-block;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--state-live);
+}
+.provenance__pulse::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1px solid var(--state-live);
+  transform: translate(-50%, -50%);
+  animation: live-ring 1200ms ease-out infinite;
+}
+@keyframes live-ring {
+  from { width: 8px; height: 8px; opacity: 0.6; }
+  to { width: 20px; height: 20px; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .provenance__pulse::after { display: none; }
+}
+
+/* --------------------------------------------------------------- badges */
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 6px;
+  font-size: 12px; line-height: 18px; font-weight: 500;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.badge svg { width: 12px; height: 12px; flex: none; }
+.badge--clinched, .badge--champion { background: var(--state-clinched); color: #FFFFFF; }
+.badge--eliminated { background: var(--state-eliminated); color: #FFFFFF; }
+.badge--coinflip { background: var(--state-coinflip); color: var(--neutral-900); }
+
+/* ------------------------------------------------------------ team marks */
+
+.mark {
+  display: inline-block; flex: none;
+  width: 24px; height: 24px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.mark--generic .helmet__shell { stroke: #FFFFFF; }
+.mark--generic.mark--pale .helmet__shell { stroke: var(--neutral-400); }
+.dark .mark--generic.mark--pale .helmet__shell { stroke: #FFFFFF; }
+/* No team colors on record: initials in a neutral squircle. */
+.mark--initials {
+  display: inline-grid; place-items: center;
+  border-radius: 30%;
+  background: var(--neutral-200);
+  color: var(--neutral-800);
+  font-size: 10px; line-height: 1; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.dark .mark--initials { background: var(--neutral-700); color: var(--neutral-50); }
+/* Logos at 48px and up get a footprint-normalizing container. */
+.mark--lg { width: 48px; height: 48px; }
+.mark--lg.mark--logo {
+  padding: 4px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.mark--lg.mark--initials { font-size: 18px; }
+
+.team { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* ------------------------------------------------------------- odds cell */
+
+.odds {
+  display: inline-block;
+  min-width: 3.6em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--odds-1);
+  color: var(--odds-text);
+  font-size: 14px; line-height: 20px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.odds--1 { background: var(--odds-1); }
+.odds--2 { background: var(--odds-2); }
+.odds--3 { background: var(--odds-3); }
+.odds--4 { background: var(--odds-4); }
+.odds--5 { background: var(--odds-5); }
+
+.entry-head { padding-block: 40px 24px; }
+
+/* ------------------------------------------- class view: region tables */
+
+.region-blocks {
+  display: grid; gap: 36px 56px;
+  grid-template-columns: repeat(auto-fill, minmax(min(26rem, 100%), 1fr));
+  align-items: start;
+}
+.region-block__title { font-size: 20px; line-height: 26px; }
+.region-block__title a { color: inherit; text-decoration: none; display: inline-flex; min-height: 44px; align-items: center; }
+.region-block__title a:hover { text-decoration: underline; }
+.standings--compact { margin-top: 0; }
+.standings--compact th, .standings--compact td { padding: 4px 4px; }
+.standings--compact .col-odds { width: 4.2em; }
+.team-link {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 40px;
+  color: inherit; text-decoration: none;
+}
+.team-link:hover .team-name { text-decoration: underline; }
+.standings .team-link .team-name { font-weight: 500; }
+
+/* ---------------------------------------------------------- region view */
+
+.region-head { padding-block: 28px 0; }
+.region-head__back {
+  display: inline-flex; align-items: center; min-height: 44px;
+  font-size: 14px;
+}
+.region-head .title { margin-top: 4px; }
+.region-head .headline { margin-top: 20px; }
+.region-head .provenance { margin-top: 16px; }
+.region-head .provenance--controls, .entry-head .provenance--controls { margin-top: 8px; }
+
+.standings { margin-top: 14px; width: 100%; border-collapse: collapse; }
+.standings caption { text-align: left; }
+.standings th, .standings td {
+  padding: 8px 6px;
+  font-size: 14px; line-height: 20px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  vertical-align: middle;
+}
+.standings thead th {
+  font-weight: 500; color: var(--text-secondary);
+  font-size: 12px; line-height: 16px;
+  padding-block: 6px;
+}
+.standings .col-pos { width: 2.4em; padding-left: 12px; text-align: left; color: var(--text-secondary); }
+.standings .col-team { text-align: left; width: 100%; }
+.standings tbody th { font-weight: 400; }
+.standings .col-odds { width: 4.4em; padding-inline: 3px; }
+.standings .col-rec { white-space: nowrap; }
+/* Records and odds sit centered under centered headers. */
+.standings .col-rec, .standings .col-odds { text-align: center; }
+.standings tr.is-eliminated .team-name { color: var(--text-secondary); }
+/* The picked team: a rule in the identity green, not a fill (a fill would
+   match the lowest odds-ramp slot and hide those cells). */
+.standings tr.is-focus > :first-child { box-shadow: inset 3px 0 0 var(--accent-identity); }
+/* The picked row and its expanded panels read as one block: no rule between
+   them, so the green edge runs unbroken from the row through the panels. */
+.standings tr.is-focus:not(.detail) > * { border-bottom-color: transparent; }
+.standings tr.is-focus .team-name { font-weight: 600; }
+.focus-note { margin-bottom: 8px; font-size: 14px; color: var(--text-secondary); }
+
+.row-toggle {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; min-height: 44px;
+  padding: 0; border: 0; background: none;
+  text-align: left; cursor: pointer;
+}
+.row-toggle .team-name { font-weight: 500; }
+.row-toggle__label { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.row-toggle__chev {
+  width: 14px; height: 14px; flex: none;
+  color: var(--text-secondary);
+  transition: transform 120ms ease-out;
+}
+.row-toggle[aria-expanded="true"] .row-toggle__chev { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .row-toggle__chev { transition: none; }
+}
+/* Expanded row: Record, Seeding odds, and Playoff path panels side by side,
+   wrapping to a stack on narrow screens. */
+.standings tr.detail td { text-align: left; padding: 12px 6px 24px 2.6em; }
+.detail__panels {
+  display: grid; gap: 24px 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), auto));
+  justify-content: space-between;
+  align-items: start;
+}
+.detail__title { font-family: var(--font-display); font-weight: 700; font-size: 17px; line-height: 22px; }
+.detail__sub { margin-top: 16px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--text-secondary); }
+.detail__records { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 14px; color: var(--text-secondary); }
+.detail__records strong { color: var(--text-primary); font-weight: 600; font-size: 16px; margin-right: 2px; }
+.detail__note { margin-top: 10px; font-size: 14px; line-height: 20px; color: var(--text-secondary); max-width: 34rem; }
+.detail__odds { display: grid; gap: 6px; margin: 8px 0 0; font-size: 14px; }
+.detail__odds div { display: grid; grid-template-columns: 4.6em auto; align-items: center; }
+.detail__odds dt { color: var(--text-secondary); }
+.detail__odds dd { margin: 0; }
+.sched { margin-top: 6px; display: grid; gap: 6px; font-size: 14px; }
+.sched li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sched .mark { width: 20px; height: 20px; }
+.sched__joiner { min-width: 1.4em; color: var(--text-secondary); font-size: 13px; }
+.sched__result { margin-left: 4px; font-weight: 600; white-space: nowrap; }
+.sched__wl { font-weight: 600; }
+.sched__wl--L, .sched__wl--T { color: var(--text-secondary); }
+.sched__date { margin-left: 4px; color: var(--text-secondary); font-size: 13px; }
+
+/* Playoff path inside an expanded row. */
+.path { margin-top: 8px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.path th, .path td { padding: 4px 14px 4px 0; text-align: right; border: 0; }
+.path th[scope="row"], .path thead th:first-child { text-align: left; font-weight: 400; }
+.path thead th { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.standings tr.detail .path td, .standings tr.detail .path th { padding: 4px 14px 4px 0; }
+.standings tr.detail .path thead th { text-align: left; }
+
+/* Narrow (or zoomed) viewports keep two odds columns: 1st and Playoffs. */
+@media (max-width: 40em) {
+  .standings .col-mid, .standings .col-overall { display: none; }
+}
+@media (max-width: 22em) {
+  .standings .col-pos { display: none; }
+}
+/* Keep the expanded panels clear of the picked row's green rule. */
+@media (max-width: 40em) {
+  .standings tr.detail td { padding-left: 16px; padding-right: 10px; }
+}
+
+.section { margin-top: 56px; }
+.section > .section-title + * { margin-top: 16px; }
+
+/* Region games: a card per game, grouped under each game day. */
+.game-day + .game-day { margin-top: 24px; }
+.game-day__title {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 15px; line-height: 20px;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.game-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
+  margin-top: 10px;
+}
+.game-card {
+  display: grid; gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.game-card.is-focus { border-color: var(--accent-identity); box-shadow: inset 3px 0 0 var(--accent-identity); }
+.game-card__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.game-card__team { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.game-card__score { font-weight: 500; }
+.game-card__team.is-winner .team-name, .game-card__team.is-winner .game-card__score { font-weight: 700; }
+.game-card__joiner { color: var(--text-secondary); font-size: 14px; }
+
+/* ------------------------------------------------------------ scenarios */
+
+.scenario-group + .scenario-group { margin-top: 40px; }
+.scenario-group--spaced { margin-top: 20px; }
+.scenario-group > .sub-title { margin-bottom: 14px; }
+details.scenario-group > summary {
+  display: flex; align-items: baseline; gap: 12px;
+  min-height: 44px; padding-block: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+details.scenario-group > summary::-webkit-details-marker { display: none; }
+details.scenario-group > summary .sub-title::before,
+details.scenario-group > summary .section-title::before {
+  content: ""; display: inline-block;
+  width: 0; height: 0; margin-right: 10px; vertical-align: 3px;
+  border-left: 6px solid currentColor; border-block: 5px solid transparent;
+  transition: transform 120ms ease-out;
+}
+details.scenario-group[open] > summary .sub-title::before,
+details.scenario-group[open] > summary .section-title::before { transform: rotate(90deg); }
+details.scenario-group > summary { flex-wrap: wrap; }
+details.scenario-group[open] > summary { margin-bottom: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  details.scenario-group > summary .sub-title::before,
+  details.scenario-group > summary .section-title::before { transition: none; }
+}
+.scenario-grid {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
+  align-items: start;
+}
+.scenario {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--team-ui-light, var(--border));
+  border-radius: 8px;
+  padding: 16px 16px 18px;
+}
+.dark .scenario { border-left-color: var(--team-ui-dark, var(--border)); }
+.scenario__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.scenario__title { font-size: 18px; line-height: 24px; font-weight: 600; }
+.scenario__head .odds { font-size: 16px; font-weight: 600; }
+/* The card title reads as a condition: "Stringer clinches the region IF",
+   then the chips. Styled like the AND/OR connectors it leads into. */
+.scenario__if {
+  margin-left: 2px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+.scenario .provenance { margin-top: 4px; }
+
+/* A complete scenario: the seeds it produces, then the results behind it. */
+.outcome__seeds { display: grid; gap: 6px; margin-top: 12px; font-size: 14px; }
+.outcome__seeds li { display: flex; align-items: center; gap: 10px; }
+.outcome__seeds li.is-focus .team-name { font-weight: 700; }
+.outcome__seed {
+  display: inline-grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--surface-raised);
+  font-size: 12px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.outcome__out { margin-top: 8px; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.outcome__out-label { font-weight: 600; margin-right: 2px; }
+.outcome__out strong { color: var(--text-primary); }
+.outcome__if {
+  margin-top: 14px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+.outcome .scenario__body { margin-top: 8px; }
+.scenario__body { margin-top: 16px; }
+
+/* Condition chips and the explicit AND / OR grammar. */
+.conditions { display: flex; flex-direction: column; align-items: stretch; }
+.cond-group { display: flex; flex-direction: column; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px 6px 6px;
+  background: var(--surface-raised);
+  border-radius: 6px;
+  font-size: 14px; line-height: 20px;
+  text-align: left;
+}
+.chip--text { padding-left: 10px; }
+.chip__subject { font-weight: 500; }
+.chip svg { width: 18px; height: 18px; flex: none; }
+.and {
+  position: relative;
+  display: flex; justify-content: center;
+  height: 26px;
+}
+.and::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 50%;
+  width: 1px; background: var(--connector);
+}
+.and span {
+  position: relative; align-self: center;
+  padding: 0 4px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 10px; line-height: 12px; font-weight: 600;
+}
+.or {
+  position: relative;
+  display: flex; justify-content: center;
+  margin-block: 14px;
+}
+.or::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%;
+  height: 1px; background: var(--connector);
+}
+.or span {
+  position: relative;
+  padding: 1px 10px;
+  border-radius: 6px;
+  background: var(--surface-inverse);
+  color: var(--text-on-inverse);
+  font-size: 11px; line-height: 16px; font-weight: 600;
+}
+
+.notice { padding-block: 40px; color: var(--text-secondary); }
+
+/* ---------------------------------------------------------- methodology */
+
+.article { padding-block: 40px 0; }
+.article .prose { margin-top: 20px; }
+.article h2 { margin-top: 36px; font-size: 20px; line-height: 26px; }
+.article h2 + p { margin-top: 8px; }
+.article ol.steps { list-style: decimal; padding-left: 1.4em; margin-top: 8px; }
+.article ol.steps li + li { margin-top: 6px; }
+.article ol.steps + p { margin-top: 16px; }

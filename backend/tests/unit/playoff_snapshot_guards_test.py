@@ -60,6 +60,7 @@ def flow_env(monkeypatch):
     events: list[tuple] = []
 
     def finish(c, r, season, seeding, matchup_fn, as_of_date=None):
+        """Stand-in for get_region_finish_scenarios: record the region_standings write."""
         events.append(("write", c, r, as_of_date))
 
     elo_snapshots = [(date(2025, 10, 31), {}), (date(2025, 11, 7), {}), (date(2025, 11, 14), {})]
@@ -84,6 +85,7 @@ def flow_env(monkeypatch):
         monkeypatch.setattr(pipeline, name, value)
 
     def set_playoff_starts(starts):
+        """Set what fetch_playoff_start_dates returns ({class: first playoff game date})."""
         monkeypatch.setattr(pipeline, "fetch_playoff_start_dates", MagicMock(return_value=starts))
 
     set_playoff_starts({})

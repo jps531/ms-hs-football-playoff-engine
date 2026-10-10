@@ -1091,6 +1091,7 @@ def compute_semifinal_home_odds(
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
     wins_confirmed: "dict[str, int] | None" = None,
     cross_region_wins: "dict[tuple[int, int], int] | None" = None,
+    round_snapshots: "dict[int, dict[int, dict[str, StandingsOdds]]] | None" = None,
 ) -> dict[str, float]:
     """Compute each team's overall probability of hosting their semifinal game.
 
@@ -1103,7 +1104,11 @@ def compute_semifinal_home_odds(
 
     When *rounds_completed* >= sf_offset and *all_region_odds* is provided,
     returns exactly 0.0 or 1.0 per team by finding the one alive SF opponent
-    and applying ``sf_home_team`` directly.
+    and applying ``sf_home_team`` directly.  Once the semifinal has been
+    played, one of the two teams is out of *all_region_odds*: *round_snapshots*
+    (keyed by rounds_completed, searched newest-first) then supplies the
+    opponent that lost, and the seed of a team that lost the semifinal, so
+    both keep the hosting fact for the rest of the season.
 
     Args:
         region:            Region number for the teams in *region_odds*.
@@ -1117,6 +1122,8 @@ def compute_semifinal_home_odds(
         cross_region_wins: ``(region, seed) → confirmed_wins`` for surviving
                            cross-region teams; adjusts ``_p_team_reach`` via
                            ``skip_wins`` so their advancement weights are correct.
+        round_snapshots:   Accumulated per-round survivor odds, keyed by
+                           rounds_completed value at the time of each snapshot.
 
     Returns:
         Dict mapping team name to overall P(hosting semifinal) in [0.0, 1.0].
@@ -1128,13 +1135,28 @@ def compute_semifinal_home_odds(
     for school, o in region_odds.items():
         tw = wins_confirmed.get(school, 0) if wins_confirmed is not None else rounds_completed
         seed = next((s for s, p in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)) if p > 0.5), None)
+        played_sf = o.p_playoffs > 0
+        # A team that lost the semifinal is out of the current odds; it played
+        # the game if it was alive after the quarterfinals.
+        if (
+            seed is None
+            and o.p_playoffs <= 0
+            and o.clinched
+            and o.eliminated
+            and round_snapshots
+            and _school_reached_rc(school, region, round_snapshots, sf_offset)
+        ):
+            seed = _historical_seed(school, region, round_snapshots)
+            played_sf = seed is not None
 
-        # Deterministic: alive team with enough confirmed wins and unique SF opponent known.
-        if seed is not None and o.p_playoffs > 0 and tw >= sf_offset and all_region_odds is not None:
+        # Deterministic: a team with enough confirmed wins and a unique SF opponent known.
+        if seed is not None and played_sf and tw >= sf_offset and all_region_odds is not None:
             idx = _slot_index_for(region, seed, half_slots)
             if idx is not None:
                 opp_slots_a = [half_slots[i] for i in _opponent_slot_indices(idx, sf_offset)]
                 opp = _alive_in_slots(opp_slots_a, all_region_odds)
+                if opp is None and round_snapshots:
+                    opp = _alive_in_snapshots(opp_slots_a, round_snapshots)
                 if opp is not None:
                     result[school] = 1.0 if sf_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
                     continue

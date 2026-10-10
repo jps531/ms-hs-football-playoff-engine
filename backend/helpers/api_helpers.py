@@ -121,6 +121,22 @@ from backend.helpers.win_probability import (
 # ---------------------------------------------------------------------------
 
 DISPLAY_THRESHOLD = 6
+
+# A region_standings row belongs on public read paths only while its school is
+# active for that season. The pipeline already skips inactive schools when it
+# computes, but a school marked inactive after earlier snapshots were written
+# would otherwise keep surfacing through its last (stale) row. Append to a
+# WHERE clause on an unaliased ``region_standings``; aliased queries join
+# ``ACTIVE_SCHOOL_JOIN_RS`` instead.
+ACTIVE_SCHOOL_FILTER = (
+    " AND EXISTS (SELECT 1 FROM school_seasons active"
+    " WHERE active.school = region_standings.school"
+    " AND active.season = region_standings.season AND active.is_active)"
+)
+ACTIVE_SCHOOL_JOIN_RS = (
+    " JOIN school_seasons active"
+    " ON active.school = rs.school AND active.season = rs.season AND active.is_active"
+)
 """Maximum remaining games for which the human-readable scenario list is shown."""
 
 CLINCHED_THRESHOLD = 0.999
@@ -1659,10 +1675,13 @@ _RANK_COLUMNS = """
     tr.elo, tr.rpi
 """
 
-_RANK_FROM_JOIN = """
+_RANK_FROM_JOIN = (
+    """
     FROM region_standings rs
     LEFT JOIN team_ratings tr ON tr.school = rs.school AND tr.season = rs.season AND tr.as_of_date = rs.as_of_date
 """
+    + ACTIVE_SCHOOL_JOIN_RS
+)
 
 
 async def resolve_snapshot_dates(  # pragma: no cover
@@ -2127,7 +2146,9 @@ async def _load_all_region_odds(
             school, region, odds_1st, odds_2nd, odds_3rd, odds_4th,
             odds_playoffs, clinched, eliminated
         FROM region_standings
-        WHERE season = %s AND class = %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
         ORDER BY school, as_of_date DESC
         """,
         (season, clazz, as_of),
@@ -2183,7 +2204,9 @@ async def _load_and_build_playoff_bracket_state(  # pragma: no cover
                     WHEN rs.odds_3rd > 0.99 THEN 3
                     WHEN rs.odds_4th > 0.99 THEN 4
                END AS seed
-        FROM region_standings rs
+        FROM region_standings rs"""
+        + ACTIVE_SCHOOL_JOIN_RS
+        + """
         WHERE rs.season = %s AND rs.class = %s
           AND rs.clinched = TRUE
           AND (rs.odds_1st > 0.99 OR rs.odds_2nd > 0.99 OR rs.odds_3rd > 0.99 OR rs.odds_4th > 0.99)
@@ -2402,7 +2425,12 @@ async def load_scenarios_snapshot(  # pragma: no cover
             insight_type=ins.insight_type,
             team=ins.team,
             seed=ins.seed,
-            conditions=[KeyInsightConditionModel(winner=c.winner, loser=c.loser) for c in ins.conditions],
+            conditions=[
+                KeyInsightConditionModel(
+                    winner=c.winner, loser=c.loser, min_margin=c.min_margin, max_margin=c.max_margin
+                )
+                for c in ins.conditions
+            ],
             rendered=ins.rendered,
             r_computed=ins.r_computed,
         )
@@ -2443,7 +2471,9 @@ async def load_other_region_seeding(  # pragma: no cover
         """
         SELECT DISTINCT ON (school) school, region, odds_1st, odds_2nd, odds_3rd, odds_4th
         FROM region_standings
-        WHERE season = %s AND class = %s AND region != %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND region != %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
         ORDER BY school, as_of_date DESC
         """,
         (season, clazz, exclude_region, as_of),
@@ -2842,7 +2872,9 @@ async def _load_standings_snapshot(  # pragma: no cover
             odds_first_round_home_weighted, odds_second_round_home_weighted,
             odds_quarterfinals_home_weighted, odds_semifinals_home_weighted
         FROM region_standings
-        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
         ORDER BY school, as_of_date DESC
         """,
         (season, clazz, region, as_of),
@@ -4058,26 +4090,33 @@ def build_season_dates(
 
     *game_rows* is ``(date, round, class_, school, opponent)`` tuples from
     ``games_effective`` joined to ``school_seasons`` (two rows per in-state
-    contest), already filtered to *class_filter* if the caller scoped the
-    query to one class — in which case every date resolves unambiguously.
-    Otherwise, 1A-4A and 5A-7A run offset playoff schedules, so a single date
-    can mean different things per class (see ``SeasonDateEntry``'s
-    docstring) — handled per-date below by falling back to a composed
-    ``description`` when classes disagree. *class_filter* is also used to
-    decide singular vs. plural wording for the championship (see
-    ``_pluralize_round_label``); it does not filter *game_rows* itself.
+    contest), for every class. With *class_filter* set, only that class's
+    dates are returned, and every date resolves unambiguously. Otherwise,
+    1A-4A and 5A-7A run offset playoff schedules, so a single date can mean
+    different things per class (see ``SeasonDateEntry``'s docstring) —
+    handled per-date below by falling back to a composed ``description``
+    when classes disagree. *class_filter* also decides singular vs. plural
+    wording for the championship (see ``_pluralize_round_label``).
+
+    Week numbers always come from the statewide schedule, so the same
+    calendar week has the same number for every class even when one class
+    had no games in an earlier week.
     """
+    # Global Monday-Sunday week pool spans every date with a game in any
+    # class, regular season or playoffs, so week numbers count continuously
+    # through the whole season (season_start is a hardcoded week 0 below,
+    # not part of this pool -- it would otherwise land in week 1's
+    # Monday-Sunday window).
+    week_starts = sorted({row[0] - timedelta(days=row[0].weekday()) for row in game_rows})
+
     by_date: dict[date, dict] = {}
     for d, round_name, class_, school, opponent in game_rows:
+        if class_filter is not None and class_ != class_filter:
+            continue
         entry = by_date.setdefault(d, {"by_class": defaultdict(set), "contests": set()})
         entry["by_class"][class_].add(round_name)
         entry["contests"].add(frozenset({school, opponent}))
 
-    # Global Monday-Sunday week pool spans every date with a game, regular
-    # season or playoffs, so week numbers count continuously through the
-    # whole season (season_start is a hardcoded week 0 below, not part of
-    # this pool -- it would otherwise land in week 1's Monday-Sunday window).
-    week_starts = sorted({d - timedelta(days=d.weekday()) for d in by_date})
     week_by_start = {ws: i + 1 for i, ws in enumerate(week_starts)}
 
     def week_for(d: date) -> int:

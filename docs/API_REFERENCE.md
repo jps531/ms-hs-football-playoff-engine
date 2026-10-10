@@ -11,7 +11,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | GET | `/seasons` | List all seasons that have enrolled teams |
 | GET | `/seasons/{season}/structure` | All classes and regions with team counts for a season |
 | GET | `/seasons/{season}/dates` | Notable game dates for a timeline scrubber (round, week, game count); optional `class` filter. Params: `season`, `class` |
-| GET | `/teams` | List teams; `season` required, optional `class` and `region` filters |
+| GET | `/teams` | List teams; `season` required, optional `class` and `region` filters. Each team includes `helmet_url` — the full image URL of its resolved helmet for that season (same resolution order as `/teams/{team}/helmets/resolved`, right-side view preferred, else left), or `null` |
 | GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
 | GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
 | GET | `/teams/{team}/helmets/resolved` | The single default helmet design to display for a team in a season — see "Primary helmet & display resolution order" below. Params: `season` (required) |
@@ -35,6 +35,8 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 ## Standings — `/standings`
 
+Schools marked inactive for a season (`school_seasons.is_active = false`) are left out of every standings, rankings, hosting, and bracket read, and out of `GET /teams`, even if snapshots were written for them before they were marked inactive.
+
 Team ordering across every endpoint below reflects actual current standing:
 the MHSAA tiebreaker procedure applied to completed games (head-to-head,
 point differential, etc.), with any team that has mathematically clinched a
@@ -57,11 +59,13 @@ specific seed pinned to that exact position — not alphabetical order.
 - `paths` — only present when `include_team_scenarios=true` and scenarios are available. Minimized, machine-readable per-team conditions for condition "chips," a team-page "Paths" module, and "Play this out" (mapping conditions to simulate-mode picks). One entry per achievable outcome:
   - `outcome` — `{"type": "seed", "value": N}`, `{"type": "playoffs"}` (any seed), or `{"type": "eliminated"}`
   - `p` — the outcome's existing unweighted probability (`p1`–`p4` / `p_playoffs` / `1 - p_playoffs`) — not a per-branch probability
-  - `conditions` — OR-of-AND-groups (outer array = alternative paths, inner array = conditions that must all hold), already ordered broadest/most-likely-first by the boolean minimizer. Each condition is tagged by `type`: `"game_result"` (the common case — `school`/`date`/`opponent`/`required_result`/`margin_class`, `school` always from the winner's perspective), `"margin_sum"` (a linear margin constraint spanning multiple games — `games`/`op`/`threshold` instead of a single school/opponent), or `"coin_flip"`/`"pd_rank"` (tiebreaker-only, not tied to any remaining game — `description` text only). `date` is `null` when the underlying game's date can't be resolved. `margin_class` is `null` except at R≤5 (margin-sensitive tier) — see SCENARIO_COMPUTATION.md.
+  - `conditions` — OR-of-AND-groups (outer array = alternative paths, inner array = conditions that must all hold), already ordered broadest/most-likely-first by the boolean minimizer. Each condition is tagged by `type`: `"game_result"` (the common case — `school`/`date`/`opponent`/`required_result`/`margin_class`/`min_margin`/`max_margin`, `school` always from the winner's perspective; `min_margin` is inclusive, `max_margin` exclusive and `null` when unbounded, so `8`/`11` means "by 8–10"), `"margin_sum"` (a linear margin constraint spanning multiple games — `games`/`op`/`threshold` instead of a single school/opponent, plus its plain-English rendering in `description`), or `"coin_flip"`/`"pd_rank"` (tiebreaker-only, not tied to any remaining game — `description` text only). `date` is `null` when the underlying game's date can't be resolved. `margin_class` is `null` except at R≤5 (margin-sensitive tier) — see SCENARIO_COMPUTATION.md.
   - `human_text` — fallback copy only; the structured `conditions` form is the contract, not this string
 
 **Top-level response fields**:
 - `scenarios` — when `scenarios_available` is `true`, each entry includes `game_winners` (which team wins each remaining game to produce this seeding), `tiebreaker_groups`, `coinflip_groups`, and `outcomes` (team → seed number)
+- `headline` — one plain-English sentence stating the most interesting fact about the race right now (e.g. "Oxford has the region won, and Madison Central clinches the last playoff spot with a win over Clinton."). Built only from locked seeds, margin-verified key insights, and — with five or fewer games left — single-path scenario conditions, so it never states anything the engine hasn't proven. See `backend/helpers/headline.py`.
+- `key_insights` — each condition carries `winner`/`loser` plus `min_margin`/`max_margin` (same semantics as path conditions above).
 - `computation_state` — `margin_sensitive` (bool), `margin_compute_status` (`not_needed` / `pending` / `running` / `complete` / `skipped`), and timestamps. Use `margin_compute_status` to show a "refining odds…" indicator while background margin computation is running.
 
 ## Rankings — `/rankings`

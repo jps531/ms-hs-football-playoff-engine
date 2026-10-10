@@ -272,3 +272,28 @@ class TestOrdering:
         ]
         entries = build_season_dates(rows)
         assert [e.date for e in entries] == [date(2025, 8, 27), WEEK1_THU, FIRST_ROUND]
+
+
+class TestClassScopedWeeks:
+    """Scoped to one class, week numbers still follow the statewide schedule."""
+
+    def test_week_numbers_match_statewide_when_a_class_skipped_a_week(self):
+        """A class with no games in week 1 still calls its first game week 2, like every other class."""
+        rows: list[GameRow] = [
+            (WEEK1_FRI, None, 7, "Alpha7A", "Beta7A"),  # only 7A plays in week 1
+            (WEEK2_FRI, None, 7, "Alpha7A", "Gamma7A"),
+            (WEEK2_FRI, None, 1, "Alpha1A", "Beta1A"),
+        ]
+        one_a = [e for e in build_season_dates(rows, class_filter=1) if e.kind == "games"]
+        assert [(e.date, e.week, e.description) for e in one_a] == [(WEEK2_FRI, 2, "Week 2")]
+        seven_a = {e.date: e.week for e in build_season_dates(rows, class_filter=7) if e.kind == "games"}
+        assert seven_a == {WEEK1_FRI: 1, WEEK2_FRI: 2}
+
+    def test_scoped_dates_leave_out_other_classes_games(self):
+        """Only the requested class's dates come back, with its own game count."""
+        rows: list[GameRow] = [
+            (WEEK1_FRI, None, 7, "Alpha7A", "Beta7A"),
+            (WEEK1_SAT, None, 1, "Alpha1A", "Beta1A"),
+        ]
+        entries = [e for e in build_season_dates(rows, class_filter=1) if e.kind == "games"]
+        assert [(e.date, e.num_games) for e in entries] == [(WEEK1_SAT, 1)]

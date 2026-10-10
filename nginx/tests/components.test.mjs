@@ -1,0 +1,144 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
+  gameCard, outcomeScenarioCard,
+} from "../html/static/js/components.js";
+
+const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+test("odds cell carries its ramp slot and honest text", () => {
+  assert.equal(oddsCell(0.794), '<span class="odds odds--4">79%</span>');
+  assert.equal(oddsCell(0.001), '<span class="odds odds--1">&lt;1%</span>');
+});
+
+test("provenance: segments own their separators", () => {
+  const fmt = () => "Oct 24";
+  assert.equal(text(provenance({ label: "Week 9", date: "2026-10-24" }, fmt)), "Through Week 9 · Oct 24");
+  assert.equal(text(provenance({ label: "Week 9" }, fmt)), "Through Week 9");
+  assert.equal(text(provenance({ date: "2026-10-24" }, fmt)), "Updated Oct 24");
+  assert.equal(text(provenance({ live: true, label: "Week 9" }, fmt)), "LIVE · Week 9");
+  assert.equal(provenance({}, fmt), "");
+  assert.ok(!text(provenance({ label: "Week 9" }, fmt)).includes("·"));
+});
+
+test("statuses: every one that applies, the clinch first", () => {
+  const odds = (p1, p2 = 0, p3 = 0, p4 = 0) => ({ p1, p2, p3, p4, p_playoffs: p1 + p2 + p3 + p4 });
+  const done = { regionComplete: true };
+  const labels = (e, opts = done) => teamStatuses(e, opts).map((st) => st.label);
+  assert.deepEqual(labels({ odds: odds(1.0000000000000027), clinched: true }), ["Clinched #1"]);
+  assert.deepEqual(labels({ odds: odds(0, 0.5, 0.5), clinched: true }), ["Clinched"]);
+  assert.deepEqual(labels({ odds: odds(0, 0.5, 0.5), clinched: true, coin_flip_needed: true }), ["Clinched", "Coin flip"]);
+  assert.deepEqual(labels({ odds: odds(0), eliminated: true, coin_flip_needed: true }), ["Eliminated", "Coin flip"]);
+  assert.deepEqual(labels({ odds: odds(0.5, 0.5) }), []);
+  const badges = statusBadges({ odds: odds(0, 1), clinched: true, coin_flip_needed: true }, done);
+  assert.equal((badges.match(/<svg/g) || []).length, 2); // icon + text, never color alone
+  assert.equal(text(badges), "Clinched #2 Coin flip");
+});
+
+test("coin flip shows only once region play is complete", () => {
+  const entry = { odds: { p1: 0.5, p2: 0.5, p3: 0, p4: 0, p_playoffs: 1 }, clinched: true, coin_flip_needed: true };
+  assert.deepEqual(teamStatuses(entry).map((st) => st.label), ["Clinched"]);
+  assert.deepEqual(teamStatuses(entry, { regionComplete: false }).map((st) => st.label), ["Clinched"]);
+  assert.equal(text(statusBadges(entry)), "Clinched");
+});
+
+test("info button discloses a note instead of relying on hover", () => {
+  const html = infoButton("mode-help", "What Projected means");
+  assert.match(html, /<button type="button"[^>]*aria-expanded="false" aria-controls="mode-help"/);
+  assert.equal(text(html), "What Projected means");
+});
+
+test("team mark: helmet image, else a generic helmet in team colors, else a squircle", () => {
+  assert.match(teamMark("Oxford", { helmet_url: "h.png" }), /mark--helmet[^>]*src="h.png"[^>]*alt=""/);
+  const colors = { color_variants: { primary: { raw: "#B22234" }, secondary: [{ raw: "#ffc72c" }] } };
+  const generic = teamMark("Oxford", colors);
+  assert.match(generic, /mark--generic/);
+  assert.match(generic, /fill="#B22234"/); // shell is the raw primary: artwork, never clamped
+  assert.match(generic, /stroke="#FFC72C"/); // crown stripe is the first secondary
+  assert.match(generic, /aria-hidden="true"/);
+  assert.match(teamMark("Oxford", { color_variants: { primary: { raw: "#2A3EAD" } } }), /stroke="#FFFFFF"/);
+  assert.match(teamMark("Oxford", { color_variants: { primary: { raw: "#FFFFFF" } } }), /mark--pale/);
+  assert.doesNotMatch(generic, /mark--pale/);
+  const squircle = teamMark("Wilkinson County", { logo_primary: "l.png" });
+  assert.match(squircle, /mark--initials/); // logos aren't used at mark size
+  assert.equal(text(squircle), "W");
+});
+
+test("provenance carries the odds mode by glyph and type, not color", () => {
+  const projected = provenance({ label: "Week 9", date: "x", mode: "projected" }, () => "Oct 24");
+  assert.equal(text(projected), "Through Week 9 · Oct 24 · Projected");
+  assert.match(projected, /mode--projected"><svg/);
+  const tossup = provenance({ label: "Week 9", mode: "tossup" }, () => "");
+  assert.match(tossup, /mode--tossup"><svg/);
+  assert.equal(text(tossup), "Through Week 9 · Toss-up");
+  assert.doesNotMatch(provenance({ label: "Week 9", mode: "bogus" }, () => ""), /mode/);
+});
+
+test("chip: subject team named, margin range shown", () => {
+  const chip = conditionChip({ type: "game_result", school: "Raleigh", opponent: "Magee", required_result: "win", min_margin: 8, max_margin: 11 }, {});
+  assert.equal(text(chip), "R Raleigh beats Magee by 8–10");
+  assert.match(chip, /chip__subject">Raleigh</);
+  const flip = conditionChip({ type: "coin_flip", description: "Petal wins coin flip vs Stringer" }, {});
+  assert.match(flip, /<svg/);
+});
+
+test("AND / OR grammar is explicit text, not position", () => {
+  const c = (w, l) => ({ type: "game_result", school: w, opponent: l, min_margin: 1, max_margin: null });
+  const html = conditionGroups([[c("A", "B"), c("C", "D")], [c("E", "F")]], {});
+  assert.equal((html.match(/class="and"/g) || []).length, 1);
+  assert.equal((html.match(/class="or"/g) || []).length, 1);
+  assert.match(text(html), /A beats B AND .* C beats D OR .* E beats F/);
+  assert.doesNotMatch(conditionGroups([[c("A", "B")]], {}), /class="(and|or)"/);
+});
+
+test("class scrubber is one tab stop with the selection checked", () => {
+  const html = classScrubber([1, 2, 3], 2);
+  assert.equal((html.match(/tabindex="0"/g) || []).length, 1);
+  assert.match(html, /aria-checked="true" tabindex="0" data-class="2"/);
+  assert.match(classScrubber([1, 2, 3], null), /tabindex="0" data-class="1"/);
+  assert.match(html, /role="radiogroup"/);
+});
+
+test("scenario card titles read as a condition ending in IF", async () => {
+  const { scenarioCard } = await import("../html/static/js/components.js");
+  const html = scenarioCard({ title: "Stringer clinches the region", groups: [[{ type: "game_result", school: "Stringer", opponent: "Lumberton" }]], teams: {} });
+  assert.match(text(html), /^Stringer clinches the region IF/);
+  assert.match(html, /region\u00a0<span class="scenario__if">IF</); // non-breaking: IF never wraps alone
+});
+
+test("game card: visitor on top with the joiner, winner bolded, a readable summary", () => {
+  const html = gameCard({ away: "Taylorsville", home: "Stringer", joiner: "at", awayScore: 0, homeScore: 48, winner: "Stringer" }, {}, { focus: "Stringer" });
+  assert.match(html, /class="game-card is-focus"/);
+  assert.ok(text(html).startsWith("Taylorsville 0, Stringer 48"));
+  assert.ok(html.indexOf("Taylorsville") < html.indexOf(">at<"));
+  assert.match(html, /game-card__team is-winner"><span class="team">.*Stringer/);
+  const upcoming = gameCard({ away: "A", home: "B", joiner: "vs" }, {});
+  assert.ok(text(upcoming).startsWith("A vs B"));
+  assert.doesNotMatch(upcoming, /game-card__score/);
+});
+
+test("scenario box lists the seeds, who's out, then IF and the conditions", () => {
+  const html = outcomeScenarioCard({
+    label: "Scenario 2A",
+    seeds: [{ seed: 1, team: "A" }, { seed: 2, team: "B" }],
+    out: ["C"],
+    groups: [[{ type: "game_result", school: "A", opponent: "B", required_result: "win", min_margin: 1, max_margin: null }]],
+  }, {}, { focus: "C" });
+  // Initials marks repeat each name in the text.
+  assert.match(text(html), /^Scenario 2A 1 A A 2 B B Out C IF A A beats B$/);
+  assert.match(html, /<strong>C<\/strong>/);
+});
+
+test("in the playoffs the run replaces the clinch; teams that missed stay Eliminated", () => {
+  const bracket = (r) => ({ second_round: r[0], quarterfinals: r[1], semifinals: r[2], finals: r[3], champion: r[4] });
+  const lost = { clinched: true, eliminated: true, odds: { p1: 1, p_playoffs: 1 }, bracket_odds: bracket([0, 0, 0, 0, 0]) };
+  assert.deepEqual(teamStatuses(lost, { clazz: 2 }).map((st) => [st.kind, st.label]), [["eliminated", "Lost in First Round"]]);
+  const alive = { clinched: true, odds: { p2: 1, p_playoffs: 1 }, bracket_odds: bracket([1, 1, 1, 0.5, 0.2]) };
+  assert.deepEqual(teamStatuses(alive, { clazz: 2 }).map((st) => st.label), ["Advanced to Semifinals"]);
+  const champ = { clinched: true, odds: { p1: 1, p_playoffs: 1 }, bracket_odds: bracket([1, 1, 1, 1, 1]) };
+  assert.deepEqual(teamStatuses(champ, { clazz: 2 }).map((st) => [st.kind, st.label]), [["champion", "State Champion"]]);
+  const missed = { eliminated: true, odds: { p_playoffs: 0 }, bracket_odds: bracket([0, 0, 0, 0, 0]) };
+  assert.deepEqual(teamStatuses(missed, { clazz: 2 }).map((st) => st.label), ["Eliminated"]);
+  assert.match(statusBadges(champ, { clazz: 2 }), /badge--champion/);
+});
