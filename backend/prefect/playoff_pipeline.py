@@ -194,7 +194,6 @@ def playoff_round_odds(
     return alive, standings
 
 
-
 @task(task_run_name="Build Playoff Seeding Data {season} {region}-{clazz}A")
 def build_playoff_region_data(
     clazz: int,
@@ -247,6 +246,54 @@ def build_playoff_region_data(
 
 
 # ---------------------------------------------------------------------------
+# Task D — clear snapshots that would shadow the playoff ones
+# ---------------------------------------------------------------------------
+
+# Every per-class snapshot table, with how each stores ``class``.
+_SNAPSHOT_TABLES = (
+    ("region_standings", int),
+    ("region_computation_state", int),
+    ("region_scenarios", str),
+)
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Clear stale {season} {clazz}A playoff-season snapshots")
+def clear_stale_playoff_snapshots(
+    season: int, clazz: int, first_playoff_date: date, playoff_dates: list[date]
+) -> dict[str, int]:
+    """Delete a class's snapshots dated in its playoffs but not on one of its playoff dates.
+
+    Readers take the newest snapshot on or before a date, so a regular-season
+    style row dated after the class's last playoff game (say, one written for
+    another class's later championship date by a run that didn't yet skip
+    classes in the playoffs) hides the playoff update's final row. Once a
+    class's playoffs start, only this flow writes its snapshots, on its own
+    playoff dates, so any other date from the first playoff game on is stale.
+
+    Args:
+        season:             Football season year.
+        clazz:              MHSAA classification (1–7).
+        first_playoff_date: Date of the class's first completed playoff game.
+        playoff_dates:      Every date this flow writes for the class.
+
+    Returns:
+        Rows deleted per table.
+    """
+    deleted: dict[str, int] = {}
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            for table, class_type in _SNAPSHOT_TABLES:
+                cur.execute(
+                    f"DELETE FROM {table} WHERE season = %s AND class = %s "  # noqa: S608 -- fixed table names
+                    "AND as_of_date >= %s AND NOT (as_of_date = ANY(%s))",
+                    (season, class_type(clazz), first_playoff_date, list(playoff_dates)),
+                )
+                deleted[table] = cur.rowcount
+        conn.commit()
+    return deleted
+
+
+# ---------------------------------------------------------------------------
 # Flow
 # ---------------------------------------------------------------------------
 
@@ -294,6 +341,10 @@ def playoff_bracket_update(season: int | None = None) -> None:
         num_rounds = fetch_num_rounds(clazz, season)
         playoff_dates = sorted({g.date for g in playoff_games})
         logger.info("%dA season %d: %d playoff dates to process.", clazz, season, len(playoff_dates))
+
+        deleted = clear_stale_playoff_snapshots(season, clazz, first_playoff_date, playoff_dates)
+        if any(deleted.values()):
+            logger.info("%dA season %d: cleared stale playoff-season snapshots %s.", clazz, season, deleted)
 
         round_snapshots: dict[int, dict[int, dict[str, StandingsOdds]]] = {}
         for playoff_date in playoff_dates:

@@ -84,3 +84,38 @@ class TestFetchActualSeedings:
         result, _, params = self._run(monkeypatch, [("Alpha", 1, 1), ("Echo", 1, None)])
         assert result == {"Alpha": (1, 1)}
         assert params == (2025, 1, None, None)
+
+
+class TestClearStalePlayoffSnapshots:
+    """Snapshots dated in a class's playoffs, off its playoff dates, would shadow the final playoff rows."""
+
+    def test_deletes_off_date_rows_in_every_snapshot_table(self, monkeypatch):
+        """Each table is cleared from the first playoff date on, keeping the playoff dates themselves."""
+        cur = MagicMock()
+        cur.rowcount = 2
+        conn = MagicMock()
+        conn.cursor.return_value.__enter__.return_value = cur
+        monkeypatch.setattr(
+            playoff_pipeline,
+            "get_database_connection",
+            MagicMock(return_value=MagicMock(__enter__=lambda s: conn, __exit__=lambda *a: None)),
+        )
+        keep = [date(2025, 11, 7), date(2025, 12, 4)]
+        deleted = playoff_pipeline.clear_stale_playoff_snapshots.fn(2025, 1, date(2025, 11, 7), keep)
+
+        assert deleted == {"region_standings": 2, "region_computation_state": 2, "region_scenarios": 2}
+        calls = [c.args for c in cur.execute.call_args_list]
+        assert [sql.split()[2] for sql, _ in calls] == [
+            "region_standings",
+            "region_computation_state",
+            "region_scenarios",
+        ]
+        for sql, _ in calls:
+            assert "as_of_date >= %s AND NOT (as_of_date = ANY(%s))" in sql
+        # region_scenarios stores class as text; the others as an integer.
+        assert [params for _, params in calls] == [
+            (2025, 1, date(2025, 11, 7), keep),
+            (2025, 1, date(2025, 11, 7), keep),
+            (2025, "1", date(2025, 11, 7), keep),
+        ]
+        conn.commit.assert_called_once()
