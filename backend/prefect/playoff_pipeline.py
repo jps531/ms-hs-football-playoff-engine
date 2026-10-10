@@ -1,15 +1,20 @@
 """Prefect tasks and flow for updating playoff bracket standings after each round.
 
 After each playoff round, this pipeline reads actual game results, rebuilds
-deterministic seeding odds (alive teams get 1.0 for their actual seed;
-eliminated teams get 0.0), and re-runs the existing bracket/home-odds helpers
-to write updated snapshots to ``region_standings``.
+deterministic "alive" odds for the bracket math (alive teams get 1.0 for their
+actual seed; eliminated teams get 0.0), and re-runs the existing
+bracket/home-odds helpers to write updated snapshots to ``region_standings``.
+The seeding odds it stores are each team's final regular-season seeding, not
+the alive markers: a team knocked out in the quarterfinals is still the No. 2
+seed that made the playoffs, and its bracket odds still show the rounds it
+reached.
 
 The flow is self-backfilling: running it on a past season produces one snapshot
 per playoff round date, equivalent to running it live after each round.
 """
 
 import bisect
+from datetime import date
 
 from prefect import flow, get_run_logger, task
 
@@ -36,23 +41,27 @@ from backend.prefect.region_scenarios_pipeline import (
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Actual Seedings for {clazz}A")
-def fetch_actual_seedings(season: int, clazz: int) -> dict[str, tuple[int, int]]:
+def fetch_actual_seedings(season: int, clazz: int, before: date | None = None) -> dict[str, tuple[int, int]]:
     """Return school → (region, actual_seed) for all clinched playoff teams.
 
-    Queries the most recent pre-playoff region_standings snapshot where each
-    team is clinched, and infers their actual seed from the odds column closest
-    to 1.0.
+    For each school, reads its newest ``region_standings`` row (before
+    *before*, the class's first playoff date, when given) in which it is
+    clinched with a locked seed, and takes that seed. Looking per school and
+    before the playoffs keeps every playoff team's seed even when a later
+    snapshot (or one written by an older version of this pipeline) stored a
+    knocked-out team without it.
 
     Args:
         season: Football season year.
         clazz:  MHSAA classification (1–7).
+        before: Only consider snapshots dated strictly before this date.
 
     Returns:
         Dict mapping school name to (region, seed) for all playoff-qualifying
         teams in this class.  Teams that did not qualify are excluded.
     """
     sql = """
-        SELECT rs.school, rs.region,
+        SELECT DISTINCT ON (rs.school) rs.school, rs.region,
             CASE
                 WHEN rs.odds_1st  > 0.99 THEN 1
                 WHEN rs.odds_2nd  > 0.99 THEN 2
@@ -65,18 +74,14 @@ def fetch_actual_seedings(season: int, clazz: int) -> dict[str, tuple[int, int]]
         WHERE rs.season  = %s
           AND rs.class   = %s
           AND rs.clinched = TRUE
-          AND rs.as_of_date = (
-              SELECT MAX(rs2.as_of_date)
-              FROM region_standings rs2
-              WHERE rs2.season  = %s
-                AND rs2.class   = %s
-                AND rs2.clinched = TRUE
-          )
+          AND (rs.odds_1st > 0.99 OR rs.odds_2nd > 0.99 OR rs.odds_3rd > 0.99 OR rs.odds_4th > 0.99)
+          AND (%s::date IS NULL OR rs.as_of_date < %s::date)
+        ORDER BY rs.school, rs.as_of_date DESC
     """
     result: dict[str, tuple[int, int]] = {}
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (season, clazz, season, clazz))
+            cur.execute(sql, (season, clazz, before, before))
             for school, region, seed in cur.fetchall():
                 if seed is not None:
                     result[school] = (region, seed)
@@ -124,6 +129,72 @@ def fetch_completed_playoff_games(season: int, clazz: int) -> list[Game]:
 # ---------------------------------------------------------------------------
 
 
+def playoff_round_odds(
+    teams: list[str],
+    region_seed_map: dict[str, int],
+    alive_seeds: set[int],
+) -> tuple[dict[str, StandingsOdds], dict[str, StandingsOdds]]:
+    """Build one region's odds after a playoff round: (alive, standings).
+
+    *alive* drives the bracket math: a team still in the bracket gets 1.0 for
+    its seed and for the playoffs; a knocked-out or non-playoff team gets 0.0
+    across the board, so it drops out of future rounds.
+
+    *standings* is what ``region_standings`` stores and readers see: every
+    playoff team keeps its final seeding (1.0 for its seed and the playoffs)
+    for the rest of the season, win or lose; teams that missed the playoffs
+    stay at 0.0. ``clinched`` marks a playoff team and ``eliminated`` a team
+    no longer alive, in both.
+
+    Args:
+        teams:           Every school in the region.
+        region_seed_map: Playoff teams in the region, school → seed.
+        alive_seeds:     Seeds from this region still alive in the bracket.
+    """
+    alive: dict[str, StandingsOdds] = {}
+    standings: dict[str, StandingsOdds] = {}
+
+    def seeded(school: str, seed: int, eliminated: bool) -> StandingsOdds:
+        """Odds of a playoff team holding *seed*."""
+        return StandingsOdds(
+            school=school,
+            p1=1.0 if seed == 1 else 0.0,
+            p2=1.0 if seed == 2 else 0.0,
+            p3=1.0 if seed == 3 else 0.0,
+            p4=1.0 if seed == 4 else 0.0,
+            p_playoffs=1.0,
+            final_playoffs=1.0,
+            clinched=True,
+            eliminated=eliminated,
+        )
+
+    def zeroed(school: str, made_playoffs: bool) -> StandingsOdds:
+        """Odds of a team out of the bracket (or never in it)."""
+        return StandingsOdds(
+            school=school,
+            p1=0.0,
+            p2=0.0,
+            p3=0.0,
+            p4=0.0,
+            p_playoffs=0.0,
+            final_playoffs=0.0,
+            clinched=made_playoffs,
+            eliminated=True,
+        )
+
+    for school in teams:
+        seed = region_seed_map.get(school)
+        if seed is None:
+            alive[school] = standings[school] = zeroed(school, made_playoffs=False)
+        elif seed in alive_seeds:
+            alive[school] = standings[school] = seeded(school, seed, eliminated=False)
+        else:
+            alive[school] = zeroed(school, made_playoffs=True)
+            standings[school] = seeded(school, seed, eliminated=True)
+    return alive, standings
+
+
+
 @task(task_run_name="Build Playoff Seeding Data {season} {region}-{clazz}A")
 def build_playoff_region_data(
     clazz: int,
@@ -134,11 +205,10 @@ def build_playoff_region_data(
 ) -> RegionSeedingData:
     """Construct a RegionSeedingData bundle with deterministic seeding odds.
 
-    Identifies still-alive teams via ``survivors_from_games``, then sets
-    each team's seeding probability to exactly 1.0 for their actual seed
-    (alive teams) or 0.0 across the board (eliminated / non-playoff teams).
-    Completed region games are fetched so ``write_region_standings`` can
-    display accurate W/L records.
+    Identifies still-alive teams via ``survivors_from_games``, then builds
+    the alive odds the bracket math runs on and the seeding odds to store
+    (see ``playoff_round_odds``). Completed region games are fetched so
+    ``write_region_standings`` can display accurate W/L records.
 
     Args:
         clazz:          MHSAA classification (1–7).
@@ -162,36 +232,7 @@ def build_playoff_region_data(
     # known_survivors is a set of (region, seed) tuples.
     alive_seeds = {seed for (r, seed) in known_survivors if r == region}
 
-    odds: dict[str, StandingsOdds] = {}
-    for school in teams:
-        actual_seed = region_seed_map.get(school)
-        is_alive = actual_seed is not None and actual_seed in alive_seeds
-
-        if is_alive:
-            odds[school] = StandingsOdds(
-                school=school,
-                p1=1.0 if actual_seed == 1 else 0.0,
-                p2=1.0 if actual_seed == 2 else 0.0,
-                p3=1.0 if actual_seed == 3 else 0.0,
-                p4=1.0 if actual_seed == 4 else 0.0,
-                p_playoffs=1.0,
-                final_playoffs=1.0,
-                clinched=True,
-                eliminated=False,
-            )
-        else:
-            made_playoffs = actual_seed is not None  # eliminated from bracket vs never qualified
-            odds[school] = StandingsOdds(
-                school=school,
-                p1=0.0,
-                p2=0.0,
-                p3=0.0,
-                p4=0.0,
-                p_playoffs=0.0,
-                final_playoffs=0.0,
-                clinched=made_playoffs,
-                eliminated=True,
-            )
+    odds, standings = playoff_round_odds(teams, region_seed_map, alive_seeds)
 
     return RegionSeedingData(
         odds=odds,
@@ -200,6 +241,8 @@ def build_playoff_region_data(
         teams=teams,
         completed=completed_region,
         remaining=[],
+        standings_odds=standings,
+        standings_odds_weighted=standings,
     )
 
 
@@ -235,14 +278,17 @@ def playoff_bracket_update(season: int | None = None) -> None:
     class_regions: dict[int, list[int]] = {c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)}
 
     for clazz, regions in class_regions.items():
-        school_to_seed = fetch_actual_seedings(season, clazz)
-        if not school_to_seed:
-            logger.info("No clinched seedings found for %dA season %d — skipping.", clazz, season)
-            continue
-
         playoff_games = fetch_completed_playoff_games(season, clazz)
         if not playoff_games:
             logger.info("No completed playoff games for %dA season %d — skipping.", clazz, season)
+            continue
+
+        # Seeds come from the regular season's final snapshots, never from a
+        # playoff-date row this flow wrote on an earlier run.
+        first_playoff_date = min(g.date for g in playoff_games)
+        school_to_seed = fetch_actual_seedings(season, clazz, before=first_playoff_date)
+        if not school_to_seed:
+            logger.info("No clinched seedings found for %dA season %d — skipping.", clazz, season)
             continue
 
         num_rounds = fetch_num_rounds(clazz, season)
