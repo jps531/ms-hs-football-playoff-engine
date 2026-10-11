@@ -1,9 +1,11 @@
 // 2026 interim UI: pick a class, pick a region, read that region's race.
-// Two views on one page — the class's region list and a region — addressed
-// by query string so every view has a shareable URL:
-//   ?season=2026&class=7&region=2&team=Oxford&week=9&odds=tossup
-// Every parameter is optional; omitted ones fall back to the current season,
-// the latest week, and Projected odds.
+// The path says what you're looking at and the query how (see routes.js):
+//   /standings/7a           every region in 7A
+//   /standings/7a/2         Region 2-7A
+//   ?season=2025&week=9&odds=tossup&team=oxford
+// Defaults stay out of the URL, so a link to "now" is just the path.
+// Moving between pages pushes history; changing the season, week, odds
+// mode, or picked team replaces it, so Back goes to the previous page.
 
 import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate } from "./format.js";
 import {
@@ -11,6 +13,7 @@ import {
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard,
 } from "./components.js";
 import { matchTeams } from "./search.js";
+import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
 } from "./scenarios.js";
@@ -20,7 +23,6 @@ import {
 } from "./standings.js";
 
 const API = "/api/v1";
-const CLASSES = [1, 2, 3, 4, 5, 6, 7];
 const STORE = { clazz: "mshsf.class", odds: "mshsf.odds" };
 
 const app = document.getElementById("app");
@@ -123,39 +125,54 @@ function weeksUpToLatest(ctx, weeks, date, asOf) {
 // ------------------------------------------------------------- routing
 
 function readRoute() {
-  const q = new URLSearchParams(location.search);
-  const num = (k) => (Number.isInteger(Number(q.get(k))) && Number(q.get(k)) > 0 ? Number(q.get(k)) : null);
-  const clazz = num("class");
-  const odds = q.get("odds");
-  return {
-    season: num("season"),
-    clazz: CLASSES.includes(clazz) ? clazz : null,
-    region: num("region"),
-    team: q.get("team") || null,
-    week: num("week"),
-    odds: odds in ODDS_MODES ? odds : null,
-  };
+  return { ...parseLocation(location.pathname, location.search), teamName: null };
 }
 
 let route = readRoute();
+let currentSeason = null; // newest season, known once /seasons loads
 
-/** URL for the current route with some fields changed (null removes one). */
+/**
+ * URL for the current route with some fields changed (null removes one).
+ * `team` is a school name; the URL carries its slug. The landing page keeps
+ * its "/" for view-state changes and only leaves it to change class or region.
+ */
 function hrefWith(changes) {
   const next = { ...route, ...changes };
-  const q = new URLSearchParams();
-  if (next.season) q.set("season", next.season);
-  if (next.clazz) q.set("class", next.clazz);
-  if (next.region) q.set("region", next.region);
-  if (next.team) q.set("team", next.team);
-  if (next.week) q.set("week", next.week);
-  if (next.odds) q.set("odds", next.odds);
-  return `/?${q}`;
+  const moving = "clazz" in changes || "region" in changes;
+  const page = route.page === "landing" && !moving ? "landing" : next.region ? "region" : "class";
+  const teamName = "team" in changes ? changes.team : route.teamName;
+  return buildPath({ ...next, page, team: teamName ? slugify(teamName) : null }, { currentSeason });
 }
 
-function navigate(url, { scroll = false } = {}) {
-  history.pushState(null, "", url);
+/** Go to another page (push) or change how this one is shown (replace). */
+function navigate(url, { scroll = false, replace = false } = {}) {
+  if (replace) history.replaceState(null, "", url);
+  else history.pushState(null, "", url);
   render();
   if (scroll) window.scrollTo(0, 0);
+}
+
+/** The school a `team` value names: its slug, or the name itself (old links). */
+function resolveTeam(value, index) {
+  if (!value) return null;
+  const schools = Object.keys(index);
+  return schools.find((s) => slugify(s) === value) ?? (value in index ? value : null);
+}
+
+/**
+ * Rewrite the address bar to the canonical URL for what's on screen (old
+ * query-string links, team names instead of slugs, a spelled-out default)
+ * without adding a history entry.
+ */
+function canonicalize(season) {
+  const storedOdds = stored(STORE.odds, (v) => v in ODDS_MODES);
+  const canonical = buildPath({
+    ...route,
+    season,
+    odds: route.odds ?? storedOdds,
+    team: route.teamName ? slugify(route.teamName) : null,
+  }, { currentSeason });
+  if (canonical !== location.pathname + location.search) history.replaceState(null, "", canonical);
 }
 
 function stored(key, valid) {
@@ -179,6 +196,13 @@ let scrollToFocus = false;
 async function render() {
   const token = ++renderToken;
   route = readRoute();
+  if (route.page === "notfound") {
+    renderScrubber(null);
+    showContext(null);
+    app.innerHTML = notice("There’s no page at this address. Pick a class above to find a region.");
+    document.title = `Page not found — ${SITE}`;
+    return;
+  }
   const saved = Number(stored(STORE.clazz, (v) => CLASSES.includes(Number(v))));
   route.clazz ??= CLASSES.includes(saved) ? saved : CLASSES[0];
   store(STORE.clazz, route.clazz);
@@ -186,14 +210,18 @@ async function render() {
   app.setAttribute("aria-busy", "true");
   try {
     const all = await seasons();
+    currentSeason = all[0];
     const season = all.includes(route.season) ? route.season : all[0];
-    const ctx = { ...route, season, seasons: all, currentSeason: all[0] };
+    route.season = season === currentSeason ? null : season;
+    route.teamName = resolveTeam(route.team, await teamsBySchool(season));
+    const ctx = { ...route, team: route.teamName, season, seasons: all, currentSeason };
     loadTeamSearch(season);
     const html = route.region ? await regionView(ctx) : await classView(ctx);
     if (token !== renderToken) return;
     app.innerHTML = html;
     showContext(nextContext);
-    if (scrollToFocus && route.team && route.region) focusTeamRow();
+    canonicalize(route.season);
+    if (scrollToFocus && route.teamName && route.region) focusTeamRow();
     scrollToFocus = false;
   } catch (err) {
     if (token !== renderToken) return;
@@ -243,9 +271,10 @@ function showContext(html) {
   headObserver.observe(head);
 }
 
+const SITE = "Mississippi High School Football";
+
 function pageTitle(clazz, region) {
-  const base = "Mississippi High School Football Playoff Races";
-  return region ? `Region ${region}-${clazz}A · ${base}` : `${clazz}A Regions · ${base}`;
+  return region ? `Region ${region}-${clazz}A playoff race — ${SITE}` : `Class ${clazz}A playoff races — ${SITE}`;
 }
 
 function notice(text) {
@@ -454,13 +483,13 @@ app.addEventListener("change", (e) => {
   if (!control) return;
   const value = control.value;
   if (control.dataset.control === "season") {
-    navigate(hrefWith({ season: Number(value), week: null, team: null }));
+    navigate(hrefWith({ season: Number(value), week: null, team: null }), { replace: true });
   } else if (control.dataset.control === "week") {
     const latest = control.options[0].value; // options run newest first
-    navigate(hrefWith({ week: value === latest ? null : Number(value) }));
+    navigate(hrefWith({ week: value === latest ? null : Number(value) }), { replace: true });
   } else if (control.dataset.control === "odds") {
     store(STORE.odds, value);
-    navigate(hrefWith({ odds: value === "projected" ? null : value }));
+    navigate(hrefWith({ odds: value }), { replace: true });
   }
 });
 
@@ -703,17 +732,22 @@ app.addEventListener("click", (e) => {
   }
   const toggle = e.target.closest(".row-toggle");
   if (!toggle) {
-    const link = e.target.closest("a[href^='/?']");
+    // In-app links render in place: a page link adds history, a link that
+    // only changes how this page is shown (data-replace) doesn't.
+    const link = e.target.closest("a[href^='/standings/'], a[href^='/?'], a[href='/']");
     if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
       e.preventDefault();
-      navigate(link.getAttribute("href"), { scroll: !link.hasAttribute("data-keep-scroll") });
+      navigate(link.getAttribute("href"), {
+        scroll: !link.hasAttribute("data-keep-scroll"),
+        replace: link.hasAttribute("data-replace"),
+      });
     }
     return;
   }
   // Picking a row selects that team (its playoff path opens and the
   // scenarios narrow to it); picking it again clears the selection.
   const selected = toggle.getAttribute("aria-expanded") === "true";
-  navigate(hrefWith({ team: selected ? null : toggle.dataset.team }));
+  navigate(hrefWith({ team: selected ? null : toggle.dataset.team }), { replace: true });
 });
 
 /** Region games as a card grid under a heading for each game day. */
@@ -736,7 +770,7 @@ function scenariosSection(data, teams, prov, mode, focus) {
   const forFocus = (cards) => (focus ? cards.filter((c) => c.team === focus) : cards);
   const remainingCount = data.remaining_games.length;
   const focusNote = focus
-    ? `<p class="focus-note">Showing ${esc(focus)} only. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll>Show every team</a></p>`
+    ? `<p class="focus-note">Showing ${esc(focus)} only. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
     : "";
 
   let body;
