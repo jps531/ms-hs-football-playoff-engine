@@ -1014,6 +1014,8 @@ class TestBuildHostConditions:
                     "opponent": "TeamB",
                     "required_result": "win",
                     "margin_class": None,
+                    "min_margin": 1,
+                    "max_margin": None,
                 }
             ]
         ]
@@ -1101,6 +1103,8 @@ class TestExpandAndRenderConditions:
                     "opponent": "TeamB",
                     "required_result": "win",
                     "margin_class": None,
+                    "min_margin": 1,
+                    "max_margin": None,
                 }
             ]
         ]
@@ -1211,6 +1215,8 @@ class TestAtomConditionDicts:
                 "opponent": "Stringer",
                 "required_result": "win",
                 "margin_class": None,
+                "min_margin": 1,
+                "max_margin": None,
             }
         ]
 
@@ -1226,6 +1232,13 @@ class TestAtomConditionDicts:
         out = atom_condition_dicts(atom, self._DATES)
         assert out[0]["margin_class"] == "two_plus_scores"
 
+    def test_game_result_carries_exact_margin_bounds(self):
+        """The exact bounds survive alongside the coarse margin_class, so a bounded
+        range like 8-10 (max_margin exclusive) can be displayed precisely."""
+        atom = [GameResult(winner="Petal", loser="Stringer", min_margin=8, max_margin=11)]
+        out = atom_condition_dicts(atom, self._DATES)
+        assert (out[0]["min_margin"], out[0]["max_margin"]) == (8, 11)
+
     def test_margin_condition_becomes_margin_sum(self):
         """A multi-game MarginCondition becomes a margin_sum dict with per-game references."""
         atom = [MarginCondition(add=(("Mize", "Raleigh"),), sub=(("Petal", "Stringer"),), op=">=", threshold=10)]
@@ -1239,6 +1252,7 @@ class TestAtomConditionDicts:
                 ],
                 "op": ">=",
                 "threshold": 10,
+                "description": "Mize/Raleigh's margin exceeds Petal/Stringer's by 10 or more",
             }
         ]
 

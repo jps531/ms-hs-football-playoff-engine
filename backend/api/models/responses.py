@@ -162,6 +162,7 @@ class TeamModel(BaseModel):
     secondary_color: str
     secondary_color_hex: str | None = None
     color_variants: dict | None = None
+    helmet_url: str | None = None
     latitude: float | None = None
     longitude: float | None = None
     zip: str | None = None
@@ -355,10 +356,12 @@ class PathConditionModel(BaseModel):
     opponent: str | None = None
     required_result: str | None = None  # "win" | "loss"
     margin_class: str | None = None
+    min_margin: int | None = None  # populated for "game_result": winning margin lower bound (inclusive)
+    max_margin: int | None = None  # populated for "game_result": upper bound (exclusive); None = unbounded
     games: list[PathGameRefModel] | None = None  # populated for "margin_sum"
     op: str | None = None  # populated for "margin_sum"
     threshold: int | None = None  # populated for "margin_sum"
-    description: str | None = None  # human-readable fallback for coin_flip / pd_rank / bracket_advances / seed_required / bracket_win
+    description: str | None = None  # human-readable text for margin_sum / coin_flip / pd_rank / bracket_advances / seed_required / bracket_win
     region: int | None = None  # populated for "bracket_advances" / "seed_required" / "bracket_win"
     seed: int | None = None  # populated for "bracket_advances" / "seed_required" / "bracket_win"
     round_name: str | None = None  # populated for "bracket_advances" / "bracket_win"
@@ -520,10 +523,16 @@ class ScenarioEntry(BaseModel):
 
 
 class KeyInsightConditionModel(BaseModel):
-    """A single game-result condition within a key insight."""
+    """A single game-result condition within a key insight.
+
+    ``min_margin``/``max_margin`` bound the winning margin (``max_margin``
+    exclusive, ``None`` = unbounded); the defaults mean a plain win.
+    """
 
     winner: str
     loser: str
+    min_margin: int = 1
+    max_margin: int | None = None
 
 
 class KeyInsightModel(BaseModel):
@@ -550,6 +559,7 @@ class StandingsResponse(BaseModel):
     scenarios: list[ScenarioEntry] | None = None
     key_insights: list[KeyInsightModel] | None = None
     computation_state: ComputationStateModel | None = None
+    headline: str | None = None
 
 
 class ClassRegionStandings(BaseModel):

@@ -17,18 +17,24 @@ from backend.helpers.data_classes import (
 from backend.helpers.scenario_serializers import serialize_atom, serialize_condition
 
 
+def margin_phrase(min_margin: int, max_margin: int | None) -> str:
+    """Render a winning-margin range as a trailing phrase (e.g. " by 8 or more").
+
+    ``max_margin`` is exclusive; ``None`` means unbounded. A plain win (1 or
+    more, unbounded) renders as the empty string.
+    """
+    if min_margin <= 1 and max_margin is None:
+        return ""
+    if max_margin is not None and max_margin == min_margin + 1:
+        return f" by exactly {min_margin}"
+    if max_margin is None:
+        return f" by {min_margin} or more"
+    return f" by {min_margin}\u2013{max_margin - 1}"
+
+
 def _render_game_result(cond: GameResult) -> str:
     """Render a GameResult as a plain-English phrase."""
-    base = f"{cond.winner} beats {cond.loser}"
-    if cond.min_margin == 1 and cond.max_margin is None:
-        return base
-    if cond.max_margin is not None and cond.max_margin == cond.min_margin + 1:
-        return f"{base} by exactly {cond.min_margin}"
-    if cond.max_margin is None:
-        return f"{base} by {cond.min_margin} or more"
-    if cond.min_margin == 1:
-        return f"{base} by 1\u2013{cond.max_margin - 1}"
-    return f"{base} by {cond.min_margin}\u2013{cond.max_margin - 1}"
+    return f"{cond.winner} beats {cond.loser}{margin_phrase(cond.min_margin, cond.max_margin)}"
 
 
 def _winner_label(pair: tuple[str, str], atom: list) -> str:
@@ -269,9 +275,11 @@ def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | No
     Produces the plain-dict shape backing ``PathConditionModel``: the common
     ``GameResult`` case becomes a single-game ``"game_result"`` dict
     (``school`` is always the winner, ``required_result`` always ``"win"`` —
-    callers needing the loser's perspective invert it); a multi-game
-    ``MarginCondition`` becomes a ``"margin_sum"`` dict since it doesn't
-    reduce to one school/opponent pair; tiebreaker-only
+    callers needing the loser's perspective invert it — plus the exact
+    ``min_margin``/``max_margin`` bounds, ``max_margin`` exclusive and ``None``
+    when unbounded); a multi-game ``MarginCondition`` becomes a
+    ``"margin_sum"`` dict since it doesn't reduce to one school/opponent pair,
+    with its plain-English rendering in ``description``; tiebreaker-only
     ``CoinFlipResult``/``PDRankCondition`` (not tied to any remaining game)
     become ``"coin_flip"``/``"pd_rank"`` dicts carrying only descriptive text.
 
@@ -296,6 +304,8 @@ def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | No
                     "opponent": cond.loser,
                     "required_result": "win",
                     "margin_class": classify_margin(cond.min_margin, cond.max_margin),
+                    "min_margin": cond.min_margin,
+                    "max_margin": cond.max_margin,
                 }
             )
         elif isinstance(cond, MarginCondition):
@@ -303,7 +313,15 @@ def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | No
             for a, b in list(cond.add) + list(cond.sub):
                 pair = cast(tuple[str, str], tuple(sorted((a, b))))
                 games.append({"school": a, "date": game_dates.get(pair), "opponent": b})
-            result.append({"type": "margin_sum", "games": games, "op": cond.op, "threshold": cond.threshold})
+            result.append(
+                {
+                    "type": "margin_sum",
+                    "games": games,
+                    "op": cond.op,
+                    "threshold": cond.threshold,
+                    "description": _render_margin_condition(cond, atom),
+                }
+            )
         elif isinstance(cond, CoinFlipResult):
             result.append({"type": "coin_flip", "description": str(cond)})
         elif isinstance(cond, PDRankCondition):

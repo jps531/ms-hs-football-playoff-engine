@@ -10,6 +10,7 @@ from backend.api.limiter import limiter
 from backend.api.models.requests import BracketGameResultRequest, GameResultRequest, SimulateBracketRequest
 from backend.api.models.responses import ClassHostingResponse, HostingResponse
 from backend.helpers.api_helpers import (
+    ACTIVE_SCHOOL_FILTER,
     _compute_seed_atoms_if_pre_playoff,
     _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
@@ -84,7 +85,9 @@ async def _load_region_odds(
             odds_playoffs_weighted, odds_second_round_weighted,
             odds_quarterfinals_weighted, odds_semifinals_weighted
         FROM region_standings
-        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND region = %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
         ORDER BY school, as_of_date DESC
         """,
         (season, clazz, region, as_of),
@@ -127,7 +130,9 @@ async def _load_all_regions_hosting_odds(
             odds_playoffs_weighted, odds_second_round_weighted,
             odds_quarterfinals_weighted, odds_semifinals_weighted
         FROM region_standings
-        WHERE season = %s AND class = %s AND as_of_date <= %s
+        WHERE season = %s AND class = %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
         ORDER BY school, as_of_date DESC
         """,
         (season, clazz, as_of),
@@ -315,7 +320,9 @@ async def simulate_class_hosting(
                 """
                 SELECT DISTINCT ON (school) school, region, odds_1st, odds_2nd, odds_3rd, odds_4th
                 FROM region_standings
-                WHERE season = %s AND class = %s AND as_of_date <= %s
+                WHERE season = %s AND class = %s AND as_of_date <= %s"""
+                + ACTIVE_SCHOOL_FILTER
+                + """
                 ORDER BY school, as_of_date DESC
                 """,
                 (season, clazz, as_of),

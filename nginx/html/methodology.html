@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How the Odds Work · Mississippi High School Football Playoff Races</title>
+  <meta name="description" content="How the seeding odds and playoff scenarios for Mississippi high school football regions are calculated.">
+  <link rel="icon" type="image/png" href="/static/mark.png">
+  <script>
+    (() => {
+      let theme = null;
+      try { theme = localStorage.getItem("mshsf.theme"); } catch { /* storage unavailable */ }
+      const dark = theme ? theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      if (dark) document.documentElement.classList.add("dark");
+    })();
+  </script>
+  <link rel="preload" href="/static/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=nippo@700&amp;display=swap">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="site-header-bar">
+    <header class="site-header">
+      <a class="site-header__home" href="/" aria-label="Mississippi High School Football, all regions">
+        <img src="/static/mark.png" alt="" width="34" height="29">
+        <span>Mississippi High School Football</span>
+      </a>
+      <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="false" tabindex="-1" data-theme="light" title="Light">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg>
+          <span class="visually-hidden">Light</span>
+        </button>
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="true" tabindex="0" data-theme="system" title="Match this device">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 15H2.8V3.8h15.4V8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.4 15v3.4M5.6 18.6h5.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.00 5.40 L10.79 7.51 L13.04 7.61 L11.28 9.02 L11.88 11.19 L10.00 9.95 L8.12 11.19 L8.72 9.02 L6.96 7.61 L9.21 7.51Z" fill="currentColor"/><rect x="15.2" y="9.6" width="6" height="10.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <span class="visually-hidden">System</span>
+        </button>
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="false" tabindex="-1" data-theme="dark" title="Dark">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.6A8.6 8.6 0 1 1 9.4 3.6a6.8 6.8 0 0 0 11 11Z" fill="currentColor"/></svg>
+          <span class="visually-hidden">Dark</span>
+        </button>
+      </div>
+    </header>
+  </div>
+
+  <main id="content" class="page article">
+    <h1 class="title">How the odds work</h1>
+
+    <div class="prose">
+      <p>
+        Every number on this site comes from playing out the rest of a region’s
+        schedule every possible way, then applying the MHSAA’s own tiebreaker
+        rules to each outcome. Nothing is hand-picked, and nothing is a pundit’s
+        opinion.
+      </p>
+
+      <h2>Every remaining game, every way it could go</h2>
+      <p>
+        A region with six games left has 64 ways those games can finish. We
+        build the final standings for each one, break any ties, and count how
+        often each team lands in each seed. A team that finishes first in 16
+        of the 64 has a 25% toss-up chance at the region title.
+      </p>
+      <p>
+        Early in the season, when a region has more than 15 games left and
+        there are too many outcomes to list, we simulate the rest of the
+        schedule 50,000 times instead, using each team’s Elo rating to decide
+        who wins each game. Until a region gets down to 15 games, both odds
+        modes below show those simulated numbers.
+      </p>
+
+      <h2>Projected and toss-up odds</h2>
+      <p>
+        Every outcome can be counted two ways, and you can switch between them
+        at the top of each region.
+      </p>
+      <p>
+        <strong>Projected</strong> weights each outcome by how likely it is.
+        Every team carries an Elo rating built from its results, with extra
+        credit for margin of victory and a carryover from last season, and
+        those ratings, plus home-field advantage, set each team’s chance of
+        winning each remaining game. A 70% favorite’s win counts for more
+        than its upset loss.
+      </p>
+      <p>
+        <strong>Toss-up</strong> treats every remaining game as a coin flip, so
+        each outcome counts the same. It describes the shape of the race
+        rather than who’s better: how many of the possible endings put a team
+        in, regardless of how likely any one game is.
+      </p>
+      <p>
+        Clinched and eliminated mean the same thing in both. A team that’s in
+        no matter what is 100% either way.
+      </p>
+
+      <h2>Breaking ties the way the MHSAA does</h2>
+      <p>
+        When teams finish with the same region record, they’re separated in
+        this order, following the region tiebreaker procedure in the
+        <a href="https://www.misshsaa.com/wp-content/uploads/2026/06/2026-27-MHSAA-Handbook-Final-V6.pdf">2026–27 MHSAA Handbook</a>:
+      </p>
+      <ol class="steps">
+        <li>Head-to-head results among the tied teams.</li>
+        <li>Results against the highest-finishing teams in the region, working down.</li>
+        <li>Point differential in region games among the tied teams, capped at 12 points per game.</li>
+        <li>Point differential, capped at 12, in region games against the highest-finishing teams.</li>
+        <li>Fewest points allowed in all region games.</li>
+        <li>A coin flip.</li>
+      </ol>
+      <p>
+        Because steps 3 and 4 depend on the score, not just the winner, some
+        races turn on margin of victory. Once five or fewer region games remain,
+        we work through every winning margin as well, which is why a scenario
+        can read “Raleigh beats Magee by 8–10.” While games remain, a tie that
+        would come down to a coin flip counts each way the flip could go
+        equally. Once region play is over, a team whose tie can only be
+        settled by a coin flip is marked with a coin.
+      </p>
+
+      <h2>What the scenarios mean</h2>
+      <p>
+        Once six or fewer region games remain, each team’s possible outcomes are
+        listed with exactly what has to happen. Conditions joined by AND must all
+        happen together. When there’s more than one way to get there, the
+        alternatives are separated by OR, and any one of them is enough.
+      </p>
+      <p>
+        With seven to ten games left, we show only results that settle a spot
+        outright, no matter how every other game turns out. The headline at the
+        top of each region is drawn from these same proven facts.
+      </p>
+
+      <h2>What “clinched” and “eliminated” mean</h2>
+      <p>
+        Clinched means a team makes the playoffs, or locks in a specific seed,
+        in every possible outcome of the remaining games. Eliminated means it
+        misses the playoffs in every one. We show 0% and 100% only for those
+        certainties; anything short of that reads as less than 1% or more than
+        99%.
+      </p>
+
+      <h2>Rules, not AI</h2>
+      <p>
+        No AI model produces any number, scenario, or headline on this site.
+        Every result comes from fixed, written-down rules: counting every way
+        the remaining games can go, applying the MHSAA tiebreakers to each one,
+        and, for Projected odds, Elo ratings computed from game results. Even
+        the sentence at the top of each region is assembled from those proven
+        facts by a template, not written by a language model.
+      </p>
+      <p>
+        Given the same games, the rules give the same answer every time. That
+        includes the early-season simulation: it’s seeded from the games
+        themselves, so the same games always produce the same 50,000 runs and
+        the same odds, and the numbers only change when a result does. AI
+        coding tools helped build the website and its code; they play no part
+        in calculating the results.
+      </p>
+
+      <h2>Where the scores come from</h2>
+      <p>
+        Schedules and scores come from
+        <a href="https://www.ahsfhs.org/">AHSFHS</a>, the source of
+        truth this site relies on for Mississippi high school football results.
+        Region and classification assignments come from the MHSAA. When a
+        score is wrong at the source, it’s wrong here until it’s corrected.
+      </p>
+
+      <h2>When it updates</h2>
+      <p>
+        Every morning, the latest scores are pulled at 9:00 AM Central, and the
+        standings, odds, scenarios, and playoff brackets are recalculated at
+        9:15 AM Central. Results from a Friday night show up Saturday morning.
+        The line under each region’s headline says which week the numbers
+        cover.
+      </p>
+
+      <h2>What this isn’t</h2>
+      <p>
+        Seeds aren’t official until the MHSAA announces them. Forfeits, score
+        corrections, and late schedule changes can move things.
+      </p>
+
+      <h2>Not for gambling</h2>
+      <p>
+        The odds on this site are statistical estimates for information and
+        entertainment only. They’re meant to help fans understand how a
+        playoff race might unfold. Do not use them to place bets or wagers of
+        any kind.
+      </p>
+      <p>
+        They don’t account for injuries, weather, travel, or anything else that
+        happens on game day. High school seasons are short, so a single game
+        can swing a race. The model hasn’t been validated for predictive
+        accuracy against outside benchmarks. A 70% chance of finishing first
+        means the team finishes first in 70% of the ways the season can
+        play out, counted the way the odds mode describes. It is not a
+        guarantee, a line, or an edge.
+      </p>
+      <p>
+        This site, its operators, and its developers accept no responsibility,
+        legal or otherwise, for any losses arising from the use of these
+        numbers for gambling, sports betting, or wagering of any kind, legal
+        or illegal. Use for betting is entirely at your own risk; nothing here
+        is gambling advice, a betting service, or a prediction market. Sports
+        betting is heavily regulated in Mississippi, and wagering on high
+        school athletic events may be illegal under state and federal law.
+      </p>
+
+      <h2>About the author</h2>
+      <!-- AUTHOR BIO: replace the placeholder paragraph below with your bio. -->
+      <p class="muted">Author bio coming soon.</p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p><a href="/">Back to the region races</a></p>
+    <p>© 2025–2026 Paul Sullivan. All rights reserved.</p>
+  </footer>
+
+  <script src="/static/js/theme.js" defer></script>
+</body>
+</html>

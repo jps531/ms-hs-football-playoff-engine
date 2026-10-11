@@ -106,6 +106,12 @@ class RegionSeedingData:
     teams: list[str]
     completed: list[CompletedGame]
     remaining: list[RemainingGame]
+    # Odds to store in region_standings when they differ from the odds the
+    # bracket math runs on. During the playoffs ``odds`` marks who is still
+    # alive (eliminated teams at 0), while the stored seeding odds must keep
+    # each team's final regular-season seeding. None means store ``odds``.
+    standings_odds: dict[str, StandingsOdds] | None = None
+    standings_odds_weighted: dict[str, StandingsOdds] | None = None
 
 
 # -------------------------
@@ -1080,7 +1086,7 @@ def get_region_finish_scenarios(
         if clazz <= 4 else {}
     )
     quarterfinals_home_overall = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
-    semifinals_home_overall = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+    semifinals_home_overall = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
 
     bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn, rounds_completed)
     second_round_home_overall_w = (
@@ -1088,7 +1094,7 @@ def get_region_finish_scenarios(
         if clazz <= 4 else {}
     )
     quarterfinals_home_overall_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
-    semifinals_home_overall_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds)
+    semifinals_home_overall_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
 
     # Override bracket advancement for eliminated playoff teams with historical facts.
     # For each eliminated team, we know exactly which rounds they reached from round_snapshots:
@@ -1108,7 +1114,8 @@ def get_region_finish_scenarios(
                 second_round=1.0 if num_rounds >= 5 and _reached(1) else 0.0,
                 quarterfinals=1.0 if _reached(qf_off) else 0.0,
                 semifinals=1.0 if _reached(sf_off) else 0.0,
-                finals=0.0,
+                # A championship-game loser reached the final.
+                finals=1.0 if _reached(num_rounds - 1) else 0.0,
                 champion=0.0,
             )
             # Reuse unweighted result for weighted (same deterministic odds in playoff pipeline).
@@ -1175,9 +1182,12 @@ def get_region_finish_scenarios(
     logger.info("Writing region standings for season %d, class %d, region %d", season, clazz, region)
     logger.info("Region standings: %s", region_standings)
     logger.info("Odds: %s", odds)
+    # What gets stored (and what insights are judged against): the seeding
+    # odds readers see, which in the playoffs differ from the alive markers.
+    stored_odds = seeding_data.standings_odds or odds
     write_region_standings.fn(
         region_standings,
-        odds,
+        stored_odds,
         clazz,
         region,
         season,
@@ -1197,7 +1207,7 @@ def get_region_finish_scenarios(
             quarterfinals=quarterfinals_home_given_reach_w,
             semifinals=semifinals_home_given_reach_w,
         ),
-        odds_weighted=odds_weighted,
+        odds_weighted=seeding_data.standings_odds_weighted or odds_weighted,
     )
 
     R = len(remaining)
@@ -1209,7 +1219,7 @@ def get_region_finish_scenarios(
         complete_scenarios = enumerate_division_scenarios(
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed
         )
-        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
+        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=stored_odds, r_computed=R)
         write_region_scenarios.fn(
             clazz,
             region,
@@ -1247,7 +1257,7 @@ def get_region_finish_scenarios(
         complete_scenarios = enumerate_division_scenarios(
             teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
         )
-        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=odds, r_computed=R)
+        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=stored_odds, r_computed=R)
         write_region_scenarios.fn(
             clazz,
             region,

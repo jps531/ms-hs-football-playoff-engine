@@ -246,6 +246,13 @@ SELECT
   overrides
 FROM locations;
 
+-- region_game is decided by the region alignment, not by the source site:
+-- a regular-season game (no playoff round) is a region game exactly when both
+-- teams are in the same class and region in school_seasons for that season.
+-- AHSFHS marks region games per team page and can disagree between the two
+-- teams' pages or lag a realignment (e.g. Leake Central's 2026 move to 5A-2),
+-- so its flag in games.region_game is no longer used. An override
+-- ('region_game' in overrides) still wins for a genuine exception.
 CREATE OR REPLACE VIEW games_effective AS
 SELECT
   school, date, season, opponent,
@@ -261,7 +268,16 @@ SELECT
   COALESCE((overrides->>'location_id')::int,      location_id)    AS location_id,
   COALESCE((overrides->>'points_for')::int,       points_for)     AS points_for,
   COALESCE((overrides->>'points_against')::int,   points_against) AS points_against,
-  COALESCE((overrides->>'region_game')::boolean,  region_game)    AS region_game,
+  COALESCE(
+    (overrides->>'region_game')::boolean,
+    COALESCE(overrides->>'round', round) IS NULL AND EXISTS (
+      SELECT 1
+      FROM school_seasons a
+      JOIN school_seasons b
+        ON b.season = a.season AND b.class = a.class AND b.region = a.region
+      WHERE a.school = games.school AND a.season = games.season AND b.school = games.opponent
+    )
+  ) AS region_game,
   COALESCE(overrides->>'round',                   round)          AS round,
   COALESCE((overrides->>'kickoff_time')::timestamptz, kickoff_time) AS kickoff_time,
   overrides,
@@ -821,8 +837,9 @@ COMMENT ON COLUMN games.game_clock IS
 COMMENT ON COLUMN games.source IS
   'Data source that provided this game record (e.g. "maxpreps", "mhsaa").';
 COMMENT ON COLUMN games.region_game IS
-  'TRUE if this game counts toward region standings. Set during ingestion based on '
-  'both schools sharing the same class and region in the same season.';
+  'The source site''s region-game mark (AHSFHS''s asterisk), kept for reference. '
+  'games_effective ignores it: there a regular-season game is a region game when both '
+  'schools share the same class and region in school_seasons for that season.';
 COMMENT ON COLUMN games.season IS
   'Four-digit season year. Needed to join back to schools.';
 COMMENT ON COLUMN games.round IS
