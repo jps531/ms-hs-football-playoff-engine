@@ -103,12 +103,18 @@ class TestClearStalePlayoffSnapshots:
         keep = [date(2025, 11, 7), date(2025, 12, 4)]
         deleted = playoff_pipeline.clear_stale_playoff_snapshots.fn(2025, 1, date(2025, 11, 7), keep)
 
-        assert deleted == {"region_standings": 2, "region_computation_state": 2, "region_scenarios": 2}
+        assert deleted == {
+            "region_standings": 2,
+            "region_computation_state": 2,
+            "region_scenarios": 2,
+            "region_seed_pairs": 2,
+        }
         calls = [c.args for c in cur.execute.call_args_list]
         assert [sql.split()[2] for sql, _ in calls] == [
             "region_standings",
             "region_computation_state",
             "region_scenarios",
+            "region_seed_pairs",
         ]
         for sql, _ in calls:
             assert "as_of_date >= %s AND NOT (as_of_date = ANY(%s))" in sql
@@ -117,5 +123,6 @@ class TestClearStalePlayoffSnapshots:
             (2025, 1, date(2025, 11, 7), keep),
             (2025, 1, date(2025, 11, 7), keep),
             (2025, "1", date(2025, 11, 7), keep),
+            (2025, 1, date(2025, 11, 7), keep),
         ]
         conn.commit.assert_called_once()

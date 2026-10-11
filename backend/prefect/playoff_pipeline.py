@@ -254,6 +254,7 @@ _SNAPSHOT_TABLES = (
     ("region_standings", int),
     ("region_computation_state", int),
     ("region_scenarios", str),
+    ("region_seed_pairs", int),
 )
 
 

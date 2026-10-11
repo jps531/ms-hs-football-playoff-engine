@@ -363,3 +363,40 @@ class TestDetermineScenariosMonteCarlo:
         r2 = determine_scenarios(self.TEAMS, completed=[], remaining=remaining, n_samples=500, seed=2)
         assert self._counts(r1) == self._counts(r1_again)
         assert self._counts(r1) != self._counts(r2)
+
+
+class TestSeedPairs:
+    """determine_scenarios also tallies same-region seed pairs (for bracket matchups)."""
+
+    def _consistent(self, sr, teams):
+        """Each team's pair credits at a seed equal 3x its seed count (three other playoff seeds)."""
+        counts = {1: sr.first_counts, 2: sr.second_counts, 3: sr.third_counts, 4: sr.fourth_counts}
+        for t in teams:
+            for s in range(1, 5):
+                total = sum(
+                    p for (a, sa, b, sb), p in sr.seed_pairs.items() if (a == t and sa == s) or (b == t and sb == s)
+                )
+                assert total == pytest.approx(3 * counts[s][t])
+
+    def test_pairs_agree_with_seed_counts_and_never_pair_a_team_with_itself(self):
+        """Exhaustive enumeration: pairs line up with the per-seed counts."""
+        from backend.helpers.data_classes import RemainingGame
+
+        teams = ["A", "B", "C", "D", "E"]
+        remaining = [RemainingGame(a, b) for i, a in enumerate(teams) for b in teams[i + 1 :]][:6]
+        sr = determine_scenarios(teams, [], remaining, ignore_margins=True)
+        assert sr.seed_pairs
+        assert all(a < b for a, _, b, _ in sr.seed_pairs)
+        self._consistent(sr, teams)
+
+    def test_coin_flip_ties_split_pairs_evenly(self):
+        """A three-way coin flip for seeds 1-3 gives each ordering of the tied teams an equal share."""
+        from backend.helpers.scenarios import _accumulate_pairs
+
+        pairs: dict = {}
+        pairs_w: dict = {}
+        _accumulate_pairs(["A", "B", "C", "D"], [["A", "B", "C"]], 1.0, 1.0, pairs, pairs_w)
+        assert pairs[("A", 1, "B", 2)] == pytest.approx(1 / 6)
+        assert pairs[("A", 1, "D", 4)] == pytest.approx(1 / 3)
+        assert pairs[("C", 3, "D", 4)] == pytest.approx(1 / 3)
+        assert sum(pairs.values()) == pytest.approx(6.0)  # six seed pairs per outcome

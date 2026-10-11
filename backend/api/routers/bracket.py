@@ -9,7 +9,12 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateBracketRequest
-from backend.api.models.responses import BracketResponse, SlotOutlookResponse, TeamBracketEntry
+from backend.api.models.responses import (
+    BracketMatchupsResponse,
+    BracketResponse,
+    SlotOutlookResponse,
+    TeamBracketEntry,
+)
 from backend.helpers.api_helpers import (
     _apply_round_ceilings,
     _candidate_seeds_by_region,
@@ -28,10 +33,15 @@ from backend.helpers.api_helpers import (
     clinched_school,
     load_championship_venue,
     load_home_venues,
+    load_playoff_results,
+    load_region_seed_odds,
+    load_region_seed_pairs,
     load_remaining_game_dates,
     today,
 )
-from backend.helpers.data_classes import FormatSlot, MatchupProbFn
+from backend.helpers.bracket_home_odds import equal_matchup_prob
+from backend.helpers.bracket_matchups import bracket_outlook, merge_modes, pairs_for_regions
+from backend.helpers.data_classes import FormatSlot, MatchupProbFn, StandingsOdds
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
 router = APIRouter(prefix="/api/v1", tags=["bracket"])
@@ -144,6 +154,67 @@ async def get_bracket(
         season=season, class_=class_,
         bracket_layout=bracket_layout,
         teams=entries,
+    )
+
+
+def _as_standings_odds(seed_odds: dict[int, dict[str, dict[int, float]]]) -> dict[int, dict[str, StandingsOdds]]:
+    """region -> team -> StandingsOdds, for building the position-level Elo matchup function."""
+    out: dict[int, dict[str, StandingsOdds]] = {}
+    for region, teams in seed_odds.items():
+        for team, by in teams.items():
+            p = sum(by.values())
+            out.setdefault(region, {})[team] = StandingsOdds(
+                team, by[1], by[2], by[3], by[4], p, p, p >= 0.999, p <= 0.0
+            )
+    return out
+
+
+@router.get("/bracket/matchups", responses=_404)
+async def get_bracket_matchups(
+    season: SeasonQ,
+    class_: ClassQ,
+    date: Annotated[date | None, Query()] = None,
+) -> BracketMatchupsResponse:
+    """Who might play whom, and where, in every game of *class_*'s bracket.
+
+    For each game: the teams that could fill each side with their chance of
+    being there (each side sums to 1), and the likeliest specific matchups
+    with the chance of that exact game and of side A hosting it. Pairings
+    under 0.5% in both modes are combined in ``other``.
+
+    Matchup odds come from the regions' joint seeding (``region_seed_pairs``)
+    and the same position-level bracket model as ``/bracket``'s reach and
+    hosting odds, so they add up to those numbers; they are never two teams'
+    separate odds multiplied. Played games are fixed. ``*_weighted`` fields
+    are Projected (Elo) odds, null when no ratings exist.
+    """
+    as_of = date or today()
+    async with get_conn() as conn:
+        slots = await _load_format_slots(conn, season, class_)
+        if not slots:
+            raise HTTPException(status_code=404, detail=f"No playoff format for {class_}A season {season}")
+        odds_t, odds_w, standings_dates = await load_region_seed_odds(conn, season, class_, as_of)
+        if not odds_t:
+            raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
+        stored_t, stored_w = await load_region_seed_pairs(conn, season, class_, as_of)
+        results = await load_playoff_results(conn, season, class_, as_of)
+        elo_ratings = await _load_elo_ratings(conn, season, as_of)
+
+    tossup = bracket_outlook(
+        slots, season, odds_t, pairs_for_regions(odds_t, standings_dates, stored_t), equal_matchup_prob, results
+    )
+    projected = None
+    has_projected = any(p > 0 for teams in odds_w.values() for by in teams.values() for p in by.values())
+    if elo_ratings and has_projected:
+        matchup_fn = make_matchup_prob_fn(elo_ratings, _as_standings_odds(odds_w), EloConfig())
+        projected = bracket_outlook(
+            slots, season, odds_w, pairs_for_regions(odds_w, standings_dates, stored_w), matchup_fn, results
+        )
+    return BracketMatchupsResponse(
+        season=season,
+        class_=class_,
+        as_of_date=max(standings_dates.values()) if standings_dates else None,
+        games=merge_modes(tossup, projected),
     )
 
 

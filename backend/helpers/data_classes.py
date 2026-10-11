@@ -6,7 +6,7 @@ DB-mapped objects for schools, locations, brackets, and bracket games.
 
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 from typing import Any, TypedDict
@@ -173,6 +173,12 @@ class ScenarioResults:
     third_counts_weighted: defaultdict[str, float]
     fourth_counts_weighted: defaultdict[str, float]
     denom_weighted: float
+    # Same-region seed pairs: (team_a, seed_a, team_b, seed_b) -> credit, with
+    # team_a < team_b, for every pair of playoff seeds (1-4) in each outcome.
+    # Divide by ``denom`` / ``denom_weighted`` for the probability that both
+    # happen together, which the per-seed counts alone can't give.
+    seed_pairs: dict[tuple[str, int, str, int], float] = field(default_factory=dict)
+    seed_pairs_weighted: dict[tuple[str, int, str, int], float] = field(default_factory=dict)
 
 
 # -------------------------

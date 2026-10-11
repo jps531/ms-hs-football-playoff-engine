@@ -337,11 +337,14 @@ def _p_home_in_r2(
     all_region_odds: "dict[int, dict[str, StandingsOdds]] | None" = None,
     cross_region_wins: "dict[tuple[int, int], int] | None" = None,
 ) -> float:
-    """P(team was home in R2) given R2 opponent is the winner of *r2_opp_slot*.
+    """P(team was home in R2) given it won R2 against the winner of *r2_opp_slot*.
 
     R2 rule: higher seed (lower number) hosts.  Equal cross-region seeds use
     the odd/even year region-number tiebreak (same as QF/SF).
-    Each possible R2 opponent is weighted by their R1 win probability.
+    Each possible R2 opponent is weighted by their R1 win probability times the
+    team's chance of beating them: the quarterfinal rule asks about a team that
+    *won* its R2 game, which it more likely did against the weaker opponent.
+    (With 50/50 games the second factor cancels out.)
 
     When *all_region_odds* is provided, candidates that were eliminated before R2
     (i.e., eliminated with zero confirmed wins in *cross_region_wins*) are skipped.
@@ -386,15 +389,16 @@ def _p_home_in_r2(
                 confirmed_wins = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
                 if confirmed_wins == 0:
                     continue
-        total_w += p_opp_r1
+        w = p_opp_r1 * _p_beat_by_seed(team_region, team_seed, opp_region, opp_seed, win_prob_fn)
+        total_w += w
         if team_seed < opp_seed:
-            p += p_opp_r1
+            p += w
         elif team_seed == opp_seed:
             # equal cross-region seed: odd year → lower region# hosts; even → higher
             if odd_year:
-                p += p_opp_r1 if team_region < opp_region else 0.0
+                p += w if team_region < opp_region else 0.0
             else:
-                p += p_opp_r1 if team_region > opp_region else 0.0
+                p += w if team_region > opp_region else 0.0
     return p / total_w if total_w > 0.0 else 0.0
 
 

@@ -2169,6 +2169,76 @@ async def _load_all_region_odds(
     return by_region
 
 
+async def load_region_seed_odds(  # pragma: no cover
+    conn, season: int, clazz: int, as_of: date
+) -> tuple[dict[int, dict[str, dict[int, float]]], dict[int, dict[str, dict[int, float]]], dict[int, date]]:
+    """Seed odds for every region in *clazz* from each school's latest snapshot on or before *as_of*.
+
+    Returns (toss-up, projected, snapshot dates): region -> team -> {seed: p}
+    for both odds modes, and region -> the as_of_date of its newest row.
+    """
+    rows = await conn.execute(
+        """
+        SELECT DISTINCT ON (school)
+            school, region, as_of_date,
+            odds_1st, odds_2nd, odds_3rd, odds_4th,
+            odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted
+        FROM region_standings
+        WHERE season = %s AND class = %s AND as_of_date <= %s"""
+        + ACTIVE_SCHOOL_FILTER
+        + """
+        ORDER BY school, as_of_date DESC
+        """,
+        (season, clazz, as_of),
+    )
+    tossup: dict[int, dict[str, dict[int, float]]] = {}
+    projected: dict[int, dict[str, dict[int, float]]] = {}
+    dates: dict[int, date] = {}
+    async for school, region, as_of_date, *odds in rows:
+        tossup.setdefault(region, {})[school] = {s: float(odds[s - 1] or 0.0) for s in (1, 2, 3, 4)}
+        projected.setdefault(region, {})[school] = {s: float(odds[s + 3] or 0.0) for s in (1, 2, 3, 4)}
+        dates[region] = max(dates.get(region, as_of_date), as_of_date)
+    return tossup, projected, dates
+
+
+async def load_region_seed_pairs(  # pragma: no cover
+    conn, season: int, clazz: int, as_of: date
+) -> tuple[dict[int, tuple[date, list]], dict[int, tuple[date, list]]]:
+    """Each region's newest stored seed pairs on or before *as_of*: (toss-up, projected)."""
+    rows = await conn.execute(
+        """
+        SELECT DISTINCT ON (region) region, as_of_date, pairs, pairs_weighted
+        FROM region_seed_pairs
+        WHERE season = %s AND class = %s AND as_of_date <= %s
+        ORDER BY region, as_of_date DESC
+        """,
+        (season, clazz, as_of),
+    )
+    tossup: dict[int, tuple[date, list]] = {}
+    projected: dict[int, tuple[date, list]] = {}
+    async for region, as_of_date, pairs, pairs_weighted in rows:
+        tossup[region] = (as_of_date, pairs or [])
+        projected[region] = (as_of_date, pairs_weighted or [])
+    return tossup, projected
+
+
+async def load_playoff_results(  # pragma: no cover
+    conn, season: int, clazz: int, as_of: date
+) -> list[tuple[str, str]]:
+    """Confirmed playoff results in *clazz* on or before *as_of*, as (winner, loser)."""
+    rows = await conn.execute(
+        """
+        SELECT g.school, g.opponent
+        FROM games_effective g
+        JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+        WHERE g.season = %s AND ss.class = %s AND g.final AND g.round IS NOT NULL
+          AND g.date <= %s AND g.points_for > g.points_against
+        """,
+        (season, clazz, as_of),
+    )
+    return [(r[0], r[1]) async for r in rows]
+
+
 async def _load_elo_ratings(conn, season: int, as_of: date) -> dict[str, float]:  # pragma: no cover
     """Return the most-recent Elo rating per school as of *as_of*."""
     rows = await conn.execute(
