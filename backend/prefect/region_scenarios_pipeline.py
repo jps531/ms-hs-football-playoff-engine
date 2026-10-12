@@ -6,6 +6,7 @@ and ``determine_odds()`` from ``scenarios.py``, and writes results to the
 """
 
 import bisect
+import json
 from dataclasses import dataclass as _dataclass
 from datetime import date
 from typing import TypeVar
@@ -112,6 +113,11 @@ class RegionSeedingData:
     # each team's final regular-season seeding. None means store ``odds``.
     standings_odds: dict[str, StandingsOdds] | None = None
     standings_odds_weighted: dict[str, StandingsOdds] | None = None
+    # Same-region seed-pair probabilities (team_a, seed_a, team_b, seed_b) -> p,
+    # Toss-up and Projected; stored in region_seed_pairs for bracket matchups.
+    # None when not computed (the playoff update, whose seeds are all locked).
+    seed_pairs: dict[tuple[str, int, str, int], float] | None = None
+    seed_pairs_weighted: dict[tuple[str, int, str, int], float] | None = None
 
 
 # -------------------------
@@ -993,7 +999,46 @@ def get_region_seeding_odds(
         teams=teams,
         completed=completed,
         remaining=remaining,
+        seed_pairs={k: v / r.denom for k, v in r.seed_pairs.items()} if r.denom else {},
+        seed_pairs_weighted=(
+            {k: v / r.denom_weighted for k, v in r.seed_pairs_weighted.items()} if r.denom_weighted else {}
+        ),
     )
+
+
+def _pairs_json(pairs: dict[tuple[str, int, str, int], float]) -> str:
+    """Seed pairs as a JSON array of [team_a, seed_a, team_b, seed_b, p], dropping impossible ones."""
+    return json.dumps([[a, sa, b, sb, p] for (a, sa, b, sb), p in sorted(pairs.items()) if p > 0])
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Write {season} Seed Pairs for {region}-{clazz}A")
+def write_region_seed_pairs(
+    clazz: int,
+    region: int,
+    season: int,
+    as_of_date: date,
+    pairs: dict[tuple[str, int, str, int], float],
+    pairs_weighted: dict[tuple[str, int, str, int], float],
+) -> None:
+    """Upsert one region's same-region seed-pair probabilities for a snapshot date.
+
+    Written alongside the region's ``region_standings`` rows so the bracket
+    matchup odds can pair two teams from the same region exactly.
+    """
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO region_seed_pairs (season, class, region, as_of_date, pairs, pairs_weighted)
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb)
+                ON CONFLICT (season, class, region, as_of_date) DO UPDATE SET
+                    pairs          = EXCLUDED.pairs,
+                    pairs_weighted = EXCLUDED.pairs_weighted,
+                    computed_at    = NOW()
+                """,
+                (season, clazz, region, as_of_date, _pairs_json(pairs), _pairs_json(pairs_weighted)),
+            )
+        conn.commit()
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
@@ -1209,6 +1254,10 @@ def get_region_finish_scenarios(
         ),
         odds_weighted=seeding_data.standings_odds_weighted or odds_weighted,
     )
+    if seeding_data.seed_pairs is not None and seeding_data.seed_pairs_weighted is not None:
+        write_region_seed_pairs.fn(
+            clazz, region, season, run_date, seeding_data.seed_pairs, seeding_data.seed_pairs_weighted
+        )
 
     R = len(remaining)
 

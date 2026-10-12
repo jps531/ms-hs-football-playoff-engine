@@ -54,6 +54,57 @@ def pct_str(x: float) -> str:
 # -------------------------
 
 
+def _orderings(final_order: list[str], flip_groups: list[list[str]]) -> list[list[str]]:
+    """Every ordering a set of coin flips can produce, each equally likely.
+
+    Each tied group is permuted independently in place (cartesian product
+    across groups). With no flips, the resolver's ordering is the only one.
+    """
+    orderings: list[list[str]] = [list(final_order)]
+    for group in flip_groups:
+        expanded: list[list[str]] = []
+        for current in orderings:
+            positions = [current.index(t) for t in group]
+            for perm in permutations(group):
+                new = list(current)
+                for pos, team in zip(positions, perm):
+                    new[pos] = team
+                expanded.append(new)
+        orderings = expanded
+    return orderings
+
+
+def _accumulate_pairs(
+    final_order: list[str],
+    flip_groups: list[list[str]],
+    unweighted: float,
+    weighted: float,
+    pair_counts: dict[tuple[str, int, str, int], float],
+    pair_counts_weighted: dict[tuple[str, int, str, int], float],
+    playoff_seeds: int = 4,
+) -> None:
+    """Credit every pair of playoff seeds in this outcome to its two teams.
+
+    For each ordering (coin flips split evenly, as for the seed counts), each
+    pair of the top ``playoff_seeds`` places adds its share under the key
+    ``(team_a, seed_a, team_b, seed_b)`` with ``team_a < team_b``. Summed over
+    outcomes and divided by the denominator, this is the probability that both
+    teams land on those seeds together — what a bracket needs to say how
+    likely two teams from one region are to meet.
+    """
+    orderings = _orderings(final_order, flip_groups)
+    u_share = unweighted / len(orderings)
+    w_share = weighted / len(orderings)
+    for ordering in orderings:
+        top = ordering[:playoff_seeds]
+        for i in range(len(top)):
+            for j in range(i + 1, len(top)):
+                a, sa, b, sb = top[i], i + 1, top[j], j + 1
+                key = (a, sa, b, sb) if a < b else (b, sb, a, sa)
+                pair_counts[key] = pair_counts.get(key, 0.0) + u_share
+                pair_counts_weighted[key] = pair_counts_weighted.get(key, 0.0) + w_share
+
+
 def _accumulate_slots(
     final_order: list[str],
     flip_groups: list[list[str]],
@@ -67,6 +118,8 @@ def _accumulate_slots(
     second_counts_weighted: defaultdict[str, float],
     third_counts_weighted: defaultdict[str, float],
     fourth_counts_weighted: defaultdict[str, float],
+    pair_counts: dict[tuple[str, int, str, int], float] | None = None,
+    pair_counts_weighted: dict[tuple[str, int, str, int], float] | None = None,
 ) -> None:
     """Accumulate seed counts into counters, distributing evenly over coin-flip permutations.
 
@@ -82,7 +135,11 @@ def _accumulate_slots(
         unweighted: Unweighted credit for this (mask, margin-combo) branch.
         weighted: Win-probability-weighted credit for this branch.
         first_counts … fourth_counts_weighted: Counters to update in-place.
+        pair_counts, pair_counts_weighted: Optional same-region seed-pair
+            counters (see ``_accumulate_pairs``), updated in-place.
     """
+    if pair_counts is not None and pair_counts_weighted is not None:
+        _accumulate_pairs(final_order, flip_groups, unweighted, weighted, pair_counts, pair_counts_weighted)
     if not flip_groups:
         slots = rank_to_slots(final_order)
         for team, (lo, hi) in slots.items():
@@ -101,17 +158,7 @@ def _accumulate_slots(
         return
 
     # Build all orderings by permuting each flip group independently.
-    orderings: list[list[str]] = [list(final_order)]
-    for group in flip_groups:
-        expanded: list[list[str]] = []
-        for current in orderings:
-            positions = [current.index(t) for t in group]
-            for perm in permutations(group):
-                new = list(current)
-                for pos, team in zip(positions, perm):
-                    new[pos] = team
-                expanded.append(new)
-        orderings = expanded
+    orderings = _orderings(final_order, flip_groups)
 
     n = len(orderings)
     u_share = unweighted / n
@@ -230,6 +277,8 @@ def determine_scenarios(
     third_counts_weighted: defaultdict[str, float] = defaultdict(float)
     fourth_counts_weighted: defaultdict[str, float] = defaultdict(float)
     denom_weighted: float = 0.0
+    seed_pairs: dict[tuple[str, int, str, int], float] = {}
+    seed_pairs_weighted: dict[tuple[str, int, str, int], float] = {}
 
     pa_for_winner = 14
     base_margins = {(rem_game.a, rem_game.b): 7 for rem_game in remaining}
@@ -261,6 +310,8 @@ def determine_scenarios(
             second_counts_weighted,
             third_counts_weighted,
             fourth_counts_weighted,
+            seed_pairs,
+            seed_pairs_weighted,
         )
         denom = 1.0
         denom_weighted = 1.0
@@ -306,6 +357,8 @@ def determine_scenarios(
                 second_counts_weighted,
                 third_counts_weighted,
                 fourth_counts_weighted,
+                seed_pairs,
+                seed_pairs_weighted,
             )
             denom_weighted += 1.0
         denom = float(n_samples)
@@ -350,6 +403,8 @@ def determine_scenarios(
                     second_counts_weighted,
                     third_counts_weighted,
                     fourth_counts_weighted,
+                    seed_pairs,
+                    seed_pairs_weighted,
                 )
                 continue
 
@@ -405,6 +460,8 @@ def determine_scenarios(
                     second_counts_weighted,
                     third_counts_weighted,
                     fourth_counts_weighted,
+                    seed_pairs,
+                    seed_pairs_weighted,
                 )
             else:
                 # Enumerate all 12^N margin combinations for intra-bucket games.
@@ -446,6 +503,8 @@ def determine_scenarios(
                         second_counts_weighted,
                         third_counts_weighted,
                         fourth_counts_weighted,
+                        seed_pairs,
+                        seed_pairs_weighted,
                     )
 
         denom = float(1 << num_remaining)
@@ -463,6 +522,8 @@ def determine_scenarios(
         third_counts_weighted=third_counts_weighted,
         fourth_counts_weighted=fourth_counts_weighted,
         denom_weighted=denom_weighted,
+        seed_pairs=seed_pairs,
+        seed_pairs_weighted=seed_pairs_weighted,
     )
 
 

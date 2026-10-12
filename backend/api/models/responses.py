@@ -830,6 +830,88 @@ class BracketResponse(BaseModel):
     teams: list[TeamBracketEntry]
 
 
+class MatchupFeeder(BaseModel):
+    """A first-round (region, seed) position that can arrive on one side of a game."""
+
+    region: int
+    seed: int
+
+
+class MatchupOccupant(BaseModel):
+    """A team that can fill one side of a bracket game.
+
+    ``p_reach`` is the chance this team is the one on this side (the side's
+    values sum to 1). ``is_locked`` means it's certain: seed clinched and every
+    game before this one won. ``*_weighted`` is Projected (Elo) odds; null when
+    no ratings exist.
+    """
+
+    team: str
+    p_reach: float
+    p_reach_weighted: float | None
+    is_locked: bool
+
+
+class MatchupSide(BaseModel):
+    """One side of a bracket game: where it comes from and who might fill it."""
+
+    feeders: list[MatchupFeeder]
+    occupants: list[MatchupOccupant]
+
+
+class Matchup(BaseModel):
+    """One specific pairing for a bracket game.
+
+    ``team_a`` is from side A. ``p_matchup`` is the chance this exact game
+    happens; ``p_host_a`` the chance team_a hosts it if it does (null at a
+    neutral site). Computed from the region's joint seeding, never by
+    multiplying two teams' separate odds.
+    """
+
+    team_a: str
+    team_b: str
+    p_matchup: float
+    p_matchup_weighted: float | None
+    p_host_a: float | None
+    p_host_a_weighted: float | None
+
+
+class MatchupRemainder(BaseModel):
+    """Combined chance of every pairing too unlikely to list (below 0.5% in both modes)."""
+
+    p_matchup: float
+    p_matchup_weighted: float | None
+
+
+class BracketMatchupGame(BaseModel):
+    """Possible occupants and matchups for one bracket game.
+
+    ``id`` is ``{half}-{round_index}-{game_index}`` (matching the position of
+    the game in ``BracketLayout.halves``) or ``final`` for the championship.
+    ``matchups`` is null when a region's joint seeding isn't stored for this
+    snapshot (see ``notes``); the sides are still complete.
+    """
+
+    id: str
+    round: str
+    half: str | None
+    decided: bool
+    side_a: MatchupSide
+    side_b: MatchupSide
+    matchups: list[Matchup] | None
+    other: MatchupRemainder | None
+    notes: list[str]
+
+
+class BracketMatchupsResponse(BaseModel):
+    """Who might play whom, and where, in every game of a class's bracket."""
+
+    season: int
+    class_: int
+    as_of_date: date | None
+    games: list[BracketMatchupGame]
+
+
 # ---------------------------------------------------------------------------
 # Games
 # ---------------------------------------------------------------------------

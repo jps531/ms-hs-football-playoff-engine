@@ -156,6 +156,15 @@ erDiagram
         timestamptz computed_at
         timestamptz margin_computed_at
     }
+    region_seed_pairs {
+        int season PK
+        int class PK
+        int region PK
+        date as_of_date PK
+        jsonb pairs
+        jsonb pairs_weighted
+        timestamptz computed_at
+    }
     playoff_formats {
         int id PK
         int season

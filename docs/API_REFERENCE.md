@@ -123,6 +123,7 @@ For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Advancement odds for every seed slot in a class. Params: `season`, `class`, `date` |
+| GET | `/matchups` | Who might play whom, and where, in every game of a class's bracket. Params: `season`, `class`, `date`. See **Matchups** below. |
 | GET | `/slots/{slot}` | Every team still alive for one bracket slot/round, ranked by chance of reaching it. Params: `season`, `class`, `round` (default `first_round`), `date`, `include_conditions` (default `false`) |
 | POST | `/simulate` | Apply hypothetical bracket results and return updated odds. Rate limited: 10/minute. |
 
@@ -164,6 +165,15 @@ Each `BracketGame` node:
 - `feeds_from_halves: ["N", "S"]`
 - `north_participant`, `south_participant` — the SF winners from each half; `null` until the semifinals are complete.
 - `result` — same `BracketGameResult` shape as regular game nodes.
+
+**Matchups** (`GET /bracket/matchups`) — one entry per game in `games[]`, half by half and round by round, then the championship:
+
+- `id` — `{half}-{round_index}-{game_index}` (the game's position in `bracket_layout.halves`) or `final`; `round` (`"First Round"` … `"Championship Game"`), `half` (`N`/`S`, null for the final), `decided` (the game has been played).
+- `side_a` / `side_b` — `feeders` (the first-round `{region, seed}` positions that can arrive on that side) and `occupants`: `{team, p_reach, p_reach_weighted, is_locked}`, likeliest first. A side's `p_reach` values sum to 1. `is_locked` means certain (seed clinched and every earlier game won).
+- `matchups` — `{team_a, team_b, p_matchup, p_matchup_weighted, p_host_a, p_host_a_weighted}`; `team_a` is from side A. `p_matchup` is the chance of that exact game; `p_host_a` the chance team_a hosts it if it happens (`null` at the neutral-site championship). Pairings under 0.5% in both modes are combined in `other` (`p_matchup`, `p_matchup_weighted`), so `matchups` plus `other` sums to 1. `null` (with a `notes` entry) when a region's joint seeding isn't stored for this snapshot.
+- Probabilities are rounded to 0.01%. `*_weighted` fields are Projected (Elo) odds; `null` when no ratings exist.
+
+How it's computed: the same position-level bracket model as the reach and hosting odds above (so a team's matchups add up to its reach odds and its hosting odds), with two teams from the same region paired through the region's joint seed odds (`region_seed_pairs`, written by the region pipeline) — never by multiplying their separate odds, which would let a team meet itself. Hosting follows the MHSAA rules in `bracket_home_odds`. Played games are fixed.
 
 **Simulate input** (all three simulate endpoints — `POST /bracket/simulate`, `POST /hosting/{clazz}/simulate`, `POST /hosting/{clazz}/{region}/simulate`):
 
