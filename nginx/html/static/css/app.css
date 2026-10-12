@@ -910,11 +910,14 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 /* A game card. */
 .bgame {
   display: grid; gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   padding: 12px 14px;
   background: var(--surface-card);
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+.bgame > *, .bside > *, .bgame__detail > * { min-width: 0; }
 .bgame.is-path { border-color: var(--accent-identity); box-shadow: inset 3px 0 0 var(--accent-identity); }
 .bgame.is-off { background: var(--surface-raised); }
 .bgame.is-off .team-name, .bgame.is-off .bteam__score { color: var(--text-secondary); }

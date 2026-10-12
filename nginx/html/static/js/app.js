@@ -155,11 +155,13 @@ function hrefWith(changes) {
 }
 
 /** Go to another page (push) or change how this one is shown (replace). */
-function navigate(url, { scroll = false, replace = false } = {}) {
+async function navigate(url, { scroll = false, replace = false } = {}) {
   if (replace) history.replaceState(null, "", url);
   else history.pushState(null, "", url);
-  render();
-  if (scroll) window.scrollTo(0, 0);
+  const token = renderToken + 1;
+  await render();
+  // Go to the top once the new page is in (not while the old one is still showing).
+  if (scroll && token === renderToken) window.scrollTo(0, 0);
 }
 
 /** The school a `team` value names: its slug, or the name itself (old links). */
@@ -230,8 +232,13 @@ async function render() {
     const html = route.page === "bracket" ? await bracketView(ctx)
       : route.region ? await regionView(ctx) : await classView(ctx);
     if (token !== renderToken) return;
+    // Re-rendering the same bracket (a team picked, odds changed) keeps each round strip where it was.
+    const strips = route.page === "bracket" ? [...app.querySelectorAll(".bracket-rounds")].map((el) => el.scrollLeft) : [];
     app.innerHTML = html;
-    if (route.page === "bracket") wireRoundStrips();
+    if (route.page === "bracket") {
+      app.querySelectorAll(".bracket-rounds").forEach((el, i) => { el.scrollLeft = strips[i] ?? 0; });
+      wireRoundStrips();
+    }
     showContext(nextContext);
     canonicalize(route.season);
     if (scrollToFocus && route.teamName && route.region) focusTeamRow();
@@ -299,7 +306,12 @@ function notice(text) {
 
 function renderScrubber(clazz) {
   scrubberHost.innerHTML = classScrubber(CLASSES, clazz) + (clazz ? viewTabs() : "");
-  scrubberHost.querySelector('[aria-checked="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  // Keep the selected class in view sideways; never scroll the page itself.
+  const strip = scrubberHost.querySelector(".scrubber");
+  const on = strip?.querySelector('[aria-checked="true"]');
+  if (on && (on.offsetLeft < strip.scrollLeft || on.offsetLeft + on.offsetWidth > strip.scrollLeft + strip.clientWidth)) {
+    strip.scrollLeft = on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2;
+  }
 }
 
 /**
@@ -319,7 +331,7 @@ const classHref = (clazz) => hrefWith({ clazz, region: null, team: null, week: n
 
 scrubberHost.addEventListener("click", (e) => {
   const item = e.target.closest("[data-class]");
-  if (item) navigate(classHref(Number(item.dataset.class)));
+  if (item) navigate(classHref(Number(item.dataset.class)), { scroll: true });
 });
 
 scrubberHost.addEventListener("keydown", (e) => {
@@ -334,7 +346,7 @@ scrubberHost.addEventListener("keydown", (e) => {
   else return;
   e.preventDefault();
   const target = items[next].dataset.class;
-  navigate(classHref(Number(target)));
+  navigate(classHref(Number(target)), { scroll: true });
   scrubberHost.querySelector(`[data-class="${target}"]`)?.focus();
 });
 
@@ -1036,7 +1048,7 @@ function bracketGame(game, path, variant = "") {
   const result = bracketData.results[game.id] ?? null;
   const state = gameState(game, result);
   const open = bracketUi.open === game.id;
-  const host = result ? null : settledHost(game);
+  const host = settledHost(game);
   const onPath = path ? path.has(game.id) : null;
   const cls = ["bgame", `bgame--${state}`, open ? "is-open" : "", onPath === true ? "is-path" : "", onPath === false ? "is-off" : ""]
     .filter(Boolean).join(" ");
@@ -1057,10 +1069,12 @@ function bracketGame(game, path, variant = "") {
 /** Host wording from one team's point of view. */
 function hostText(team, hosts, pTeamHosts) {
   if (hosts === "neutral") return "Neutral site";
-  if (hosts === "team") return `${team} hosts`;
-  if (hosts === "opponent") return "Away";
-  return `${team} hosts ${formatPct(pTeamHosts)}`;
+  if (hosts === "split") return `${team} hosts ${formatPct(pTeamHosts)}`;
+  return "";
 }
+
+/** "vs" when the picked team would host, "at" when the opponent would. */
+const oppJoiner = (hosts) => (hosts === "opponent" ? "at" : "vs");
 
 /** Expanded game: a picked team's opponents here, or both sides and the likeliest matchups. */
 function gameDetail(game) {
@@ -1076,7 +1090,10 @@ function gameDetail(game) {
     const shown = showAll ? opp : opp.slice(0, MATCHUP_CAP);
     const intro = here.locked ? `${focus}’s possible opponents here` : `If ${focus} gets here (${formatPct(here.p)} chance)`;
     return `<h4 class="bgame__heading">${esc(intro)}</h4>
-      <ol class="opp-list">${shown.map((o) => `<li>${teamLabel(o.opponent, teams)}${oddsCell(o.p)}<span class="opp-list__host">${esc(hostText(focus, o.hosts, o.pTeamHosts))}</span></li>`).join("")}</ol>
+      <ol class="opp-list">${shown.map((o) => {
+        const note = hostText(focus, o.hosts, o.pTeamHosts);
+        return `<li><span class="mu__teams"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}</span>${oddsCell(o.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
+      }).join("")}</ol>
       ${opp.length > MATCHUP_CAP ? `<button type="button" class="bside__more" data-show-all="${esc(key)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${opp.length}`}</button>` : ""}`;
   }
   const ms = gameMatchups(game, mode);
@@ -1089,9 +1106,12 @@ function gameDetail(game) {
     return `<div><h4 class="bgame__heading">${esc(sideLabel(side.feeders))}</h4><p class="muted bgame__count">${n} possible ${n === 1 ? "team" : "teams"}</p></div>`;
   }).join('<p class="bgame__sides-vs muted" aria-hidden="true">vs</p>');
   const rows = shown.map((m) => {
+    // Home team last ("Clinton at Booneville"); "vs" when the host isn't settled or the site is neutral.
     const h = hosting(m.hostA);
-    const where = h.host === "neutral" ? "Neutral site" : h.host === "a" ? `${m.a} hosts` : h.host === "b" ? `${m.b} hosts` : `${m.a} hosts ${formatPct(h.p)}`;
-    return `<li><span class="mu__teams">${teamLabel(m.a, teams)}<span class="vs">vs</span>${teamLabel(m.b, teams)}</span>${oddsCell(m.p)}<span class="opp-list__host">${esc(where)}</span></li>`;
+    const [away, home] = h.host === "a" ? [m.b, m.a] : [m.a, m.b];
+    const joiner = h.host === "a" || h.host === "b" ? "at" : "vs";
+    const note = h.host === "neutral" ? "Neutral site" : h.host === "split" ? `${m.a} hosts ${formatPct(h.p)}` : "";
+    return `<li><span class="mu__teams">${teamLabel(away, teams)}<span class="vs">${joiner}</span>${teamLabel(home, teams)}</span>${oddsCell(m.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
   });
   return `<div class="bgame__sides">${sides}</div>
     <h4 class="bgame__heading">Most likely matchups</h4>
