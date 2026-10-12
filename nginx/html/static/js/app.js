@@ -2,6 +2,7 @@
 // The path says what you're looking at and the query how (see routes.js):
 //   /standings/7a           every region in 7A
 //   /standings/7a/2         Region 2-7A
+//   /brackets/7a            the 7A playoff bracket
 //   ?season=2025&week=9&odds=tossup&team=oxford
 // Defaults stay out of the URL, so a link to "now" is just the path.
 // Moving between pages pushes history; changing the season, week, odds
@@ -14,6 +15,10 @@ import {
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
+import {
+  sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
+  teamInGame, opponentsFor, pathGames, bracketStructure, positionName,
+} from "./bracket.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
 } from "./scenarios.js";
@@ -139,7 +144,12 @@ let currentSeason = null; // newest season, known once /seasons loads
 function hrefWith(changes) {
   const next = { ...route, ...changes };
   const moving = "clazz" in changes || "region" in changes;
-  const page = route.page === "landing" && !moving ? "landing" : next.region ? "region" : "class";
+  let page = next.page;
+  if (!("page" in changes)) {
+    if (route.page === "landing" && !moving) page = "landing";
+    else if (route.page === "bracket" && !next.region) page = "bracket";
+    else page = next.region ? "region" : "class";
+  }
   const teamName = "team" in changes ? changes.team : route.teamName;
   return buildPath({ ...next, page, team: teamName ? slugify(teamName) : null }, { currentSeason });
 }
@@ -215,10 +225,13 @@ async function render() {
     route.season = season === currentSeason ? null : season;
     route.teamName = resolveTeam(route.team, await teamsBySchool(season));
     const ctx = { ...route, team: route.teamName, season, seasons: all, currentSeason };
+    renderScrubber(route.clazz); // again, now that the picked team is known (the view links carry it)
     loadTeamSearch(season);
-    const html = route.region ? await regionView(ctx) : await classView(ctx);
+    const html = route.page === "bracket" ? await bracketView(ctx)
+      : route.region ? await regionView(ctx) : await classView(ctx);
     if (token !== renderToken) return;
     app.innerHTML = html;
+    if (route.page === "bracket") wireRoundStrips();
     showContext(nextContext);
     canonicalize(route.season);
     if (scrollToFocus && route.teamName && route.region) focusTeamRow();
@@ -234,7 +247,7 @@ async function render() {
   } finally {
     if (token === renderToken) app.removeAttribute("aria-busy");
   }
-  document.title = pageTitle(route.clazz, route.region);
+  document.title = pageTitle(route.clazz, route.region, route.page);
 }
 
 // ---------------------------------------------------------- context bar
@@ -273,7 +286,8 @@ function showContext(html) {
 
 const SITE = "Mississippi High School Football";
 
-function pageTitle(clazz, region) {
+function pageTitle(clazz, region, page) {
+  if (page === "bracket") return `Class ${clazz}A playoff bracket — ${SITE}`;
   return region ? `Region ${region}-${clazz}A playoff race — ${SITE}` : `Class ${clazz}A playoff races — ${SITE}`;
 }
 
@@ -284,8 +298,21 @@ function notice(text) {
 // ------------------------------------------------------------ scrubber
 
 function renderScrubber(clazz) {
-  scrubberHost.innerHTML = classScrubber(CLASSES, clazz);
+  scrubberHost.innerHTML = classScrubber(CLASSES, clazz) + (clazz ? viewTabs() : "");
   scrubberHost.querySelector('[aria-checked="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+/**
+ * Standings / Bracket: the two views of the current class. Switching keeps
+ * the class, season, week, odds mode, and picked team.
+ */
+function viewTabs() {
+  const onBracket = route.page === "bracket";
+  const tab = (label, href, current) => `<a class="view-tabs__item" href="${esc(href)}"${current ? ' aria-current="page"' : ""}>${label}</a>`;
+  return `<nav class="view-tabs" aria-label="View">
+    ${tab("Standings", hrefWith({ page: route.region ? "region" : "class" }), !onBracket)}
+    ${tab("Bracket", hrefWith({ page: "bracket", region: null }), onBracket)}
+  </nav>`;
 }
 
 const classHref = (clazz) => hrefWith({ clazz, region: null, team: null, week: null });
@@ -598,7 +625,10 @@ async function regionView(ctx) {
   nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode);
   return `<div class="page">
     <header class="region-head">
-      <a class="region-head__back" href="${esc(hrefWith({ region: null, team: null }))}">All ${clazz}A regions</a>
+      <p class="region-head__links">
+        <a href="${esc(hrefWith({ region: null, team: null }))}">All ${clazz}A regions</a>
+        <a href="${esc(hrefWith({ page: "bracket", region: null }))}">${clazz}A bracket</a>
+      </p>
       <h1 class="title">Region ${region}-${clazz}A</h1>
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
       ${controls}
@@ -713,6 +743,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
             <td>${p.hostOverall == null ? "" : esc(formatPct(p.hostOverall))}</td>
           </tr>`).join("")}</tbody>
         </table>
+        <p class="detail__link"><a href="${esc(hrefWith({ page: "bracket", region: null, team: t.school }))}">See ${esc(t.school)}’s path in the bracket</a></p>
       </section>`
     : "";
   return `<div class="detail__panels">${record}${seeding}${pathPanel}</div>`;
@@ -734,7 +765,7 @@ app.addEventListener("click", (e) => {
   if (!toggle) {
     // In-app links render in place: a page link adds history, a link that
     // only changes how this page is shown (data-replace) doesn't.
-    const link = e.target.closest("a[href^='/standings/'], a[href^='/?'], a[href='/']");
+    const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/?'], a[href='/']");
     if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
       e.preventDefault();
       navigate(link.getAttribute("href"), {
@@ -827,6 +858,316 @@ function allScenariosSection(scenarios, teams, focus) {
     </details>
   </section>`;
 }
+
+// ------------------------------------------------------------- bracket
+// One class's playoff bracket, built for the undetermined state: an open
+// side lists who might fill it with reach odds; a locked side is a fact (a
+// lock, the seed, no percentage); a played game is a result. Each game
+// expands in place to say who might play here and who'd host — from a
+// picked team's side when one is picked. Hosting comes from the API.
+
+const LIST_CAP = 5; // occupants shown before "Show all"
+const MATCHUP_CAP = 6; // matchups / opponents shown before "Show all"
+
+/** Bracket UI state that isn't in the URL; reset when the class changes. */
+const bracketUi = { key: null, open: null, showAll: new Set(), half: "both", focus: null };
+let bracketData = null; // what the last bracket render used, for in-place updates
+
+async function bracketView(ctx) {
+  const { season, clazz } = ctx;
+  const weeks = await playedWeeks(season, clazz);
+  const date = dateParam(ctx, weeks);
+  const dq = date ? `&date=${date}` : "";
+  const [layoutRes, matchupRes, standings, teams] = await Promise.all([
+    getJSON(`/bracket?season=${season}&class=${clazz}${dq}`).catch(() => null),
+    getJSON(`/bracket/matchups?season=${season}&class=${clazz}${dq}`),
+    getJSON(`/standings/${clazz}?season=${season}${dq}`).catch(() => null),
+    teamsBySchool(season),
+  ]);
+  const shownWeeks = weeksUpToLatest(ctx, weeks, date, matchupRes.as_of_date);
+  const games = matchupRes.games;
+  const projectedAvailable = games.some((g) => g.side_a.occupants.some((o) => o.p_reach_weighted != null));
+  const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
+
+  // A locked team's seed, for its "Region 3 champion" label.
+  const seeds = {};
+  for (const r of standings?.regions ?? []) {
+    for (const t of r.teams) {
+      const s = [1, 2, 3, 4].find((k) => (t.odds?.[`p${k}`] ?? 0) >= 0.999);
+      if (s) seeds[t.school] = { region: r.region, seed: s };
+    }
+  }
+
+  const key = `${season}:${clazz}`;
+  if (bracketUi.key !== key) {
+    // Phones show one half at a time; wide screens start with both.
+    const half = matchMedia("(max-width: 48em)").matches ? "N" : "both";
+    Object.assign(bracketUi, { key, open: null, showAll: new Set(), half, focus: null });
+  }
+  // One half at a time (phones): show the picked team's half when the pick changes.
+  if (ctx.team !== bracketUi.focus) {
+    bracketUi.focus = ctx.team;
+    const first = ctx.team && bracketUi.half !== "both"
+      ? games.find((g) => g.id !== "final" && teamInGame(g, ctx.team, mode)?.p > 0)
+      : null;
+    if (first) bracketUi.half = first.half;
+  }
+  bracketData = {
+    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz,
+  };
+
+  const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
+  nextContext = contextHtml(`${clazz}A bracket`, controlsSummary, mode);
+  const focusNote = ctx.team
+    ? `<p class="focus-note">Showing ${esc(ctx.team)}’s possible path. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
+    : `<p class="focus-note muted">Pick a team to see its possible path and opponents.</p>`;
+  return `<div class="page">
+    <header class="entry-head bracket-head">
+      <h1 class="title">Class ${clazz}A bracket</h1>
+      ${controls}
+      ${focusNote}
+    </header>
+    <div id="bracket-host">${bracketHtml()}</div>
+  </div>`;
+}
+
+const HALF_NAMES = { N: "North", S: "South" };
+const ROUND_SHORT = { "First Round": "1st Rd", "Second Round": "2nd Rd", Quarterfinals: "Quarters", Semifinals: "Semis", "Championship Game": "Final" };
+const shortRound = (name) => ROUND_SHORT[name] ?? name;
+
+/** Render the bracket from bracketData and bracketUi. */
+function bracketHtml() {
+  const { games, mode, focus } = bracketData;
+  const { halves, final } = bracketStructure(games);
+  const path = focus ? pathGames(games, focus, mode) : null;
+  const halfControl = halves.length > 1
+    ? `<div class="half-control" role="group" aria-label="Bracket half">
+        ${["both", ...halves.map((h) => h.half)].map((h) => `<button type="button" class="half-control__item${h === "both" ? " half-control__item--both" : ""}" data-half="${h}" aria-pressed="${bracketUi.half === h}">${h === "both" ? "Both halves" : HALF_NAMES[h] ?? h}</button>`).join("")}
+      </div>`
+    : "";
+  const finalCol = final
+    ? `<div class="bracket-col bracket-col--final">
+        <h3 class="bracket-col__title">${esc(final.round)}</h3>
+        <div class="bracket-col__games">${bracketGame(final, path, "inline")}</div>
+      </div>`
+    : "";
+  const halfBlocks = halves.map(({ half, rounds }) => {
+    const names = [...rounds.map((r) => r.name), ...(final ? [final.round] : [])];
+    return `<section class="bracket-half" data-half="${half}" aria-label="${HALF_NAMES[half] ?? half} half">
+      ${halves.length > 1 ? `<h2 class="sub-title bracket-half__title">${HALF_NAMES[half] ?? half}</h2>` : ""}
+      <div class="round-tabs" role="group" aria-label="Rounds">
+        ${names.map((n, i) => `<button type="button" class="round-tabs__item" data-round-jump="${i}" aria-current="${i === 0}">${esc(shortRound(n))}</button>`).join("")}
+      </div>
+      <div class="bracket-rounds">
+        ${rounds.map((r) => `<div class="bracket-col">
+            <h3 class="bracket-col__title">${esc(r.name)}</h3>
+            <div class="bracket-col__games">${r.games.map((g) => bracketGame(g, path)).join("")}</div>
+          </div>`).join("")}
+        ${finalCol}
+      </div>
+    </section>`;
+  });
+  const finalBlock = final
+    ? `<section class="bracket-final" aria-labelledby="final-title">
+        <h2 class="sub-title" id="final-title">${esc(final.round)}</h2>
+        ${bracketGame(final, path, "wide")}
+      </section>`
+    : "";
+  return `<div class="bracket" data-half="${bracketUi.half}">${halfControl}${halfBlocks.join("")}${finalBlock}</div>`;
+}
+
+/** A team's seed label once it's locked: "Region 3 champion". */
+function seedLabel(team) {
+  const s = bracketData.seeds[team];
+  return s ? positionName(s) : null;
+}
+
+const LOCK = '<svg class="lock" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="7" width="9" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>';
+
+/** A team name that picks the team when tapped (shared with the standings via ?team=). */
+function pickTeam(team) {
+  const { teams, focus } = bracketData;
+  const mine = team === focus;
+  return `<button type="button" class="bteam__name${mine ? " is-focus" : ""}" data-pick-team="${esc(team)}" aria-pressed="${mine}">${teamMark(team, teams[team])}<span class="team-name">${esc(team)}</span></button>`;
+}
+
+/** Which side hosts this game whoever reaches it, if that's settled: "a", "b", "neutral", or null. */
+function settledHost(game) {
+  if (game.id === "final") return "neutral";
+  const ms = gameMatchups(game, bracketData.mode);
+  if (!ms.length) return null;
+  const hosts = new Set(ms.map((m) => hosting(m.hostA).host));
+  return hosts.size === 1 && !hosts.has("split") ? [...hosts][0] : null;
+}
+
+/** One side of a game card: a result row, a locked team, or the list of who might fill it. */
+function bracketSide(game, sideKey, result, host) {
+  const { mode } = bracketData;
+  const side = sideKey === "a" ? game.side_a : game.side_b;
+  const homeTag = host === sideKey ? '<span class="bteam__home">Home</span>' : "";
+  if (result) {
+    const team = lockedTeam(side) ?? (sideKey === "a" ? result.winner : result.loser);
+    const won = team === result.winner;
+    const score = won ? result.winnerScore : result.loserScore;
+    return `<div class="bteam bteam--result${won ? " is-winner" : ""}">${pickTeam(team)}${score != null ? `<span class="bteam__score">${esc(score)}</span>` : ""}</div>`;
+  }
+  const locked = lockedTeam(side);
+  if (locked) {
+    const label = seedLabel(locked);
+    return `<div class="bteam bteam--locked">${pickTeam(locked)}<span class="bteam__fact">${LOCK}<span class="visually-hidden">Locked in: </span>${label ? esc(label) : "Clinched"}</span>${homeTag}</div>`;
+  }
+  const list = occupants(side, mode);
+  const allKey = `${game.id}:${sideKey}`;
+  const showAll = bracketUi.showAll.has(allKey);
+  const shown = showAll ? list : list.slice(0, LIST_CAP);
+  const firstRound = side.feeders.length === 1;
+  const label = firstRound || homeTag ? `<p class="bside__label">${firstRound ? esc(sideLabel(side.feeders)) : ""}${homeTag}</p>` : "";
+  const more = list.length > LIST_CAP
+    ? `<button type="button" class="bside__more" data-show-all="${esc(allKey)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${list.length}`}</button>`
+    : "";
+  if (!list.length) return `<div class="bside">${label}<p class="bside__empty muted">No team can get here</p></div>`;
+  return `<div class="bside">${label}<ul class="bside__list">${shown.map((o) => `<li class="bteam">${pickTeam(o.team)}${oddsCell(o.p)}</li>`).join("")}</ul>${more}</div>`;
+}
+
+const STATE_LABEL = { played: "Final", determined: "Matchup set", partial: "One spot set", projected: "" };
+
+/** A game card: two sides, and an in-place expansion with who might play here. */
+function bracketGame(game, path, variant = "") {
+  const result = bracketData.results[game.id] ?? null;
+  const state = gameState(game, result);
+  const open = bracketUi.open === game.id;
+  const host = result ? null : settledHost(game);
+  const onPath = path ? path.has(game.id) : null;
+  const cls = ["bgame", `bgame--${state}`, open ? "is-open" : "", onPath === true ? "is-path" : "", onPath === false ? "is-off" : ""]
+    .filter(Boolean).join(" ");
+  const detailId = `bd-${game.id}${variant ? `-${variant}` : ""}`;
+  const stateLabel = STATE_LABEL[state] ? `<p class="bgame__state">${STATE_LABEL[state]}</p>` : "";
+  const joiner = host === "a" || host === "b" ? "at" : "vs";
+  return `<article class="${cls}" data-game="${esc(game.id)}">
+    ${stateLabel}
+    ${host === "a" ? bracketSide(game, "b", result, host) : bracketSide(game, "a", result, host)}
+    <div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
+    ${host === "a" ? bracketSide(game, "a", result, host) : bracketSide(game, "b", result, host)}
+    ${host === "neutral" ? '<p class="bgame__site muted">Neutral site</p>' : ""}
+    ${result ? "" : `<button type="button" class="bgame__toggle" data-game-toggle="${esc(game.id)}" aria-expanded="${open}" aria-controls="${detailId}">${open ? "Hide" : "Who might play here"}${chevronIcon}</button>
+    <div class="bgame__detail" id="${detailId}"${open ? "" : " hidden"}>${open ? gameDetail(game) : ""}</div>`}
+  </article>`;
+}
+
+/** Host wording from one team's point of view. */
+function hostText(team, hosts, pTeamHosts) {
+  if (hosts === "neutral") return "Neutral site";
+  if (hosts === "team") return `${team} hosts`;
+  if (hosts === "opponent") return "Away";
+  return `${team} hosts ${formatPct(pTeamHosts)}`;
+}
+
+/** Expanded game: a picked team's opponents here, or both sides and the likeliest matchups. */
+function gameDetail(game) {
+  const { mode, focus, teams } = bracketData;
+  if (game.matchups == null) {
+    return `<p class="bgame__note muted">${esc(game.notes?.[0] ?? "Matchup odds aren’t available for this game yet.")}</p>`;
+  }
+  const here = focus ? teamInGame(game, focus, mode) : null;
+  if (here && (here.p > 0 || here.locked)) {
+    const opp = opponentsFor(game, focus, mode);
+    const key = `${game.id}:opp`;
+    const showAll = bracketUi.showAll.has(key);
+    const shown = showAll ? opp : opp.slice(0, MATCHUP_CAP);
+    const intro = here.locked ? `${focus}’s possible opponents here` : `If ${focus} gets here (${formatPct(here.p)} chance)`;
+    return `<h4 class="bgame__heading">${esc(intro)}</h4>
+      <ol class="opp-list">${shown.map((o) => `<li>${teamLabel(o.opponent, teams)}${oddsCell(o.p)}<span class="opp-list__host">${esc(hostText(focus, o.hosts, o.pTeamHosts))}</span></li>`).join("")}</ol>
+      ${opp.length > MATCHUP_CAP ? `<button type="button" class="bside__more" data-show-all="${esc(key)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${opp.length}`}</button>` : ""}`;
+  }
+  const ms = gameMatchups(game, mode);
+  const key = `${game.id}:m`;
+  const showAll = bracketUi.showAll.has(key);
+  const shown = showAll ? ms : ms.slice(0, MATCHUP_CAP);
+  const other = game.other ? (mode === "projected" && game.other.p_matchup_weighted != null ? game.other.p_matchup_weighted : game.other.p_matchup) : 0;
+  const sides = [game.side_a, game.side_b].map((side) => {
+    const n = occupants(side, mode).length;
+    return `<div><h4 class="bgame__heading">${esc(sideLabel(side.feeders))}</h4><p class="muted bgame__count">${n} possible ${n === 1 ? "team" : "teams"}</p></div>`;
+  }).join('<p class="bgame__sides-vs muted" aria-hidden="true">vs</p>');
+  const rows = shown.map((m) => {
+    const h = hosting(m.hostA);
+    const where = h.host === "neutral" ? "Neutral site" : h.host === "a" ? `${m.a} hosts` : h.host === "b" ? `${m.b} hosts` : `${m.a} hosts ${formatPct(h.p)}`;
+    return `<li><span class="mu__teams">${teamLabel(m.a, teams)}<span class="vs">vs</span>${teamLabel(m.b, teams)}</span>${oddsCell(m.p)}<span class="opp-list__host">${esc(where)}</span></li>`;
+  });
+  return `<div class="bgame__sides">${sides}</div>
+    <h4 class="bgame__heading">Most likely matchups</h4>
+    <ol class="opp-list opp-list--matchups">${rows.join("")}</ol>
+    ${ms.length > MATCHUP_CAP ? `<button type="button" class="bside__more" data-show-all="${esc(key)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${ms.length}`}</button>` : ""}
+    ${other >= 0.0005 ? `<p class="muted bgame__count">Other pairings, each under 0.5%: ${esc(formatPct(other))} combined</p>` : ""}`;
+}
+
+/** Re-render the bracket in place (expansion, show-all, half), keeping each round strip's scroll. */
+function rerenderBracket() {
+  const host = document.getElementById("bracket-host");
+  if (!host || !bracketData) return;
+  const scrolls = [...host.querySelectorAll(".bracket-rounds")].map((el) => el.scrollLeft);
+  host.innerHTML = bracketHtml();
+  host.querySelectorAll(".bracket-rounds").forEach((el, i) => { el.scrollLeft = scrolls[i] ?? 0; });
+  wireRoundStrips();
+}
+
+/** Keep each half's round tabs in step with its horizontal scroll (phones). */
+function wireRoundStrips() {
+  document.querySelectorAll(".bracket-half").forEach((half) => {
+    const strip = half.querySelector(".bracket-rounds");
+    const tabs = [...half.querySelectorAll("[data-round-jump]")];
+    if (!strip || !tabs.length) return;
+    const sync = () => {
+      const cols = [...strip.querySelectorAll(".bracket-col")].filter((c) => c.offsetParent !== null);
+      const x = strip.scrollLeft;
+      let current = 0;
+      cols.forEach((c, i) => { if (c.offsetLeft - cols[0].offsetLeft <= x + 8) current = i; });
+      // The last round can't scroll to the left edge; at the end of the strip it's the current one.
+      if (x + strip.clientWidth >= strip.scrollWidth - 8) current = cols.length - 1;
+      tabs.forEach((t, i) => t.setAttribute("aria-current", String(i === current)));
+    };
+    strip.addEventListener("scroll", sync, { passive: true });
+    sync();
+  });
+}
+
+app.addEventListener("click", (e) => {
+  const toggle = e.target.closest("[data-game-toggle]");
+  if (toggle) {
+    const id = toggle.dataset.gameToggle;
+    bracketUi.open = bracketUi.open === id ? null : id;
+    rerenderBracket();
+    document.querySelector(`[data-game="${CSS.escape(id)}"] [data-game-toggle]`)?.focus({ preventScroll: true });
+    return;
+  }
+  const more = e.target.closest("[data-show-all]");
+  if (more) {
+    const k = more.dataset.showAll;
+    if (bracketUi.showAll.has(k)) bracketUi.showAll.delete(k);
+    else bracketUi.showAll.add(k);
+    rerenderBracket();
+    return;
+  }
+  const half = e.target.closest(".half-control [data-half]");
+  if (half) {
+    bracketUi.half = half.dataset.half;
+    rerenderBracket();
+    return;
+  }
+  const jump = e.target.closest("[data-round-jump]");
+  if (jump) {
+    const strip = jump.closest(".bracket-half").querySelector(".bracket-rounds");
+    const cols = [...strip.querySelectorAll(".bracket-col")].filter((c) => c.offsetParent !== null);
+    const col = cols[Number(jump.dataset.roundJump)];
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (col) strip.scrollTo({ left: col.offsetLeft - cols[0].offsetLeft, behavior: smooth ? "smooth" : "auto" });
+    return;
+  }
+  const pick = e.target.closest("[data-pick-team]");
+  if (pick) {
+    const team = pick.dataset.pickTeam;
+    navigate(hrefWith({ team: bracketData?.focus === team ? null : team }), { replace: true });
+  }
+});
 
 // --------------------------------------------------------------- boot
 

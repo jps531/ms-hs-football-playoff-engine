@@ -296,7 +296,24 @@ button { font: inherit; color: inherit; }
   color: var(--text-primary);
 }
 .context-bar .sep { color: var(--text-secondary); }
-.scrubber-bar__inner { padding-block: 8px; }
+.scrubber-bar__inner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px;
+  padding-block: 8px;
+}
+.scrubber-bar__inner .scrubber { min-width: 0; }
+
+/* Standings / Bracket: the two views of the current class. */
+.view-tabs { display: flex; gap: 4px; margin-left: auto; }
+.view-tabs__item {
+  display: inline-flex; align-items: center;
+  min-height: 44px; padding: 0 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 600; font-size: 15px;
+  text-decoration: none;
+}
+.view-tabs__item:hover { color: var(--text-primary); }
+.view-tabs__item[aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--accent-identity); }
 .scrubber {
   display: inline-flex; gap: 2px;
   max-width: 100%;
@@ -522,7 +539,8 @@ button { font: inherit; color: inherit; }
 /* ---------------------------------------------------------- region view */
 
 .region-head { padding-block: 28px 0; }
-.region-head__back {
+.region-head__links { display: flex; flex-wrap: wrap; gap: 0 20px; }
+.region-head__links a {
   display: inline-flex; align-items: center; min-height: 44px;
   font-size: 14px;
 }
@@ -789,3 +807,211 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .article ol.steps { list-style: decimal; padding-left: 1.4em; margin-top: 8px; }
 .article ol.steps li + li { margin-top: 6px; }
 .article ol.steps + p { margin-top: 16px; }
+
+.detail__link { margin-top: 14px; font-size: 14px; }
+
+/* ------------------------------------------------------------- bracket */
+
+.bracket-head { padding-bottom: 16px; }
+.bracket-head .focus-note { margin-top: 12px; }
+
+/* North / South / Both: a segmented control like the class scrubber. */
+.half-control {
+  display: inline-flex; gap: 2px;
+  margin-bottom: 20px;
+  padding: 3px;
+  background: var(--surface-raised);
+  border-radius: 10px;
+}
+.half-control__item {
+  min-height: 40px; padding: 0 14px;
+  border: 0; border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600; font-size: 14px;
+  cursor: pointer;
+}
+.half-control__item:hover { color: var(--text-primary); }
+.half-control__item[aria-pressed="true"] {
+  background: var(--scrubber-selected-bg);
+  color: var(--scrubber-selected-text);
+}
+.half-control__item:focus-visible { outline-offset: -2px; }
+.bracket[data-half="N"] .bracket-half[data-half="S"],
+.bracket[data-half="S"] .bracket-half[data-half="N"] { display: none; }
+
+.bracket-half + .bracket-half { margin-top: 40px; }
+.bracket-half__title { margin-bottom: 12px; }
+
+/* Wide screens: rounds as columns, games spaced to line up with their feeders. */
+.bracket-rounds {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(15rem, 1fr);
+  gap: 16px;
+  overflow-x: auto;
+}
+.bracket-col { display: flex; flex-direction: column; min-width: 0; }
+.bracket-col__title {
+  margin-bottom: 10px;
+  font-size: 13px; line-height: 18px; font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.bracket-col__games {
+  flex: 1;
+  display: flex; flex-direction: column; justify-content: space-around;
+  gap: 12px;
+}
+.bracket-col--final, .round-tabs { display: none; }
+.bracket-final { margin-top: 40px; max-width: 24rem; }
+.bracket-final .sub-title { margin-bottom: 12px; }
+
+/* Phones: one round per screen, the next one peeking in; round tabs jump. */
+@media (max-width: 48em) {
+  .half-control__item--both { display: none; }
+  .bracket-half + .bracket-half { margin-top: 0; }
+  .round-tabs {
+    display: flex; gap: 4px;
+    margin-bottom: 12px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .round-tabs::-webkit-scrollbar { display: none; }
+  .round-tabs__item {
+    flex: none;
+    min-height: 40px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-weight: 600; font-size: 14px;
+    cursor: pointer;
+  }
+  .round-tabs__item[aria-current="true"] {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+  }
+  .bracket-rounds {
+    grid-auto-columns: 88%;
+    gap: 12px;
+    margin-inline: -16px;
+    padding-inline: 16px;
+    scroll-padding-inline: 16px;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .bracket-rounds::-webkit-scrollbar { display: none; }
+  .bracket-col { scroll-snap-align: start; }
+  .bracket-col__games { justify-content: flex-start; }
+  .bracket-col--final { display: flex; }
+  .bracket-final { display: none; }
+}
+
+/* A game card. */
+.bgame {
+  display: grid; gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.bgame.is-path { border-color: var(--accent-identity); box-shadow: inset 3px 0 0 var(--accent-identity); }
+.bgame.is-off { background: var(--surface-raised); }
+.bgame.is-off .team-name, .bgame.is-off .bteam__score { color: var(--text-secondary); }
+.bgame.is-off .odds { opacity: 0.75; }
+.bgame__state {
+  font-size: 11px; line-height: 14px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.bgame__site { font-size: 13px; }
+
+.bteam {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 36px; min-width: 0;
+}
+.bteam__name {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-width: 0; min-height: 36px;
+  padding: 0; border: 0; background: none;
+  color: var(--text-primary);
+  font: inherit; text-align: left;
+  cursor: pointer;
+}
+.bteam__name .mark { flex: none; }
+.bteam__name .team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.bteam__name:hover .team-name { text-decoration: underline; }
+.bteam__name.is-focus .team-name { font-weight: 700; }
+.bteam .odds { flex: none; }
+.bteam__fact {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  font-size: 13px; color: var(--text-secondary);
+}
+.lock { width: 13px; height: 13px; flex: none; }
+.bteam__home {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border); border-radius: 4px;
+  font-size: 11px; line-height: 16px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.bside__label .bteam__home { margin-left: 8px; }
+/* A locked team: name and Home tag, then its seed on a line of its own. */
+.bteam--locked { flex-wrap: wrap; row-gap: 0; }
+.bteam--locked .bteam__name { flex: 1 1 0; }
+.bteam--locked .bteam__home { order: 1; }
+.bteam--locked .bteam__fact { order: 2; flex-basis: 100%; padding-left: 30px; margin-top: -6px; }
+.bteam__score { flex: none; font-variant-numeric: tabular-nums; font-weight: 500; }
+.bteam--result.is-winner .team-name, .bteam--result.is-winner .bteam__score { font-weight: 700; }
+.bteam--result:not(.is-winner) .team-name { color: var(--text-secondary); }
+
+.bside__label { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.bside__list { list-style: none; margin: 0; padding: 0; }
+.bside__empty { font-size: 14px; }
+.bside__more {
+  min-height: 36px; padding: 0;
+  border: 0; background: none;
+  color: var(--link); font: inherit; font-size: 14px;
+  cursor: pointer;
+}
+.bside__more:hover { color: var(--link-hover); text-decoration: underline; }
+
+.bgame__vs {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.bgame__vs::before, .bgame__vs::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+
+.bgame__toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; min-height: 44px;
+  margin-top: 4px; padding: 0;
+  border: 0; border-top: 1px solid var(--border);
+  background: none;
+  color: var(--link); font: inherit; font-size: 14px; font-weight: 500;
+  text-align: left; cursor: pointer;
+}
+.bgame__toggle:hover { color: var(--link-hover); }
+.bgame__toggle .row-toggle__chev { color: currentColor; transform: rotate(90deg); }
+.bgame__toggle[aria-expanded="true"] .row-toggle__chev { transform: rotate(-90deg); }
+
+.bgame__detail { display: grid; gap: 8px; padding-bottom: 4px; }
+.bgame__detail[hidden] { display: none; }
+.bgame__heading { font-size: 14px; line-height: 20px; font-weight: 600; }
+.bgame__count, .bgame__note { font-size: 13px; line-height: 18px; }
+.bgame__sides { display: grid; gap: 4px; }
+.bgame__sides-vs { font-size: 12px; }
+
+.opp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.opp-list li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: 2px 10px;
+}
+.opp-list .team { min-width: 0; }
+.opp-list .team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opp-list__host { grid-column: 1 / -1; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.opp-list .team + .odds { justify-self: end; }
+.mu__teams { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.mu__teams .vs { font-size: 12px; color: var(--text-secondary); }
+.bgame .mark { width: 22px; height: 22px; }

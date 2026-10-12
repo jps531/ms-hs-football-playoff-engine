@@ -2,6 +2,7 @@
 //   /                          landing (the remembered class's regions)
 //   /standings/3a              every region in a class
 //   /standings/3a/6            one region (Region 6-3A)
+//   /brackets/3a               a class's playoff bracket
 //   ?season=2025&week=9&odds=tossup&team=st-martin
 // Defaults are left out of the URL (current season, latest week, Projected,
 // no team), so a link to "now" is just the path. No DOM, so it runs under
@@ -28,7 +29,7 @@ const classFromSlug = (v) => {
 /**
  * Read a location into a route:
  * { page, clazz, region, season, week, odds, team, legacy }.
- * page is "landing", "class", "region", or "notfound". team is the raw
+ * page is "landing", "class", "region", "bracket", or "notfound". team is the raw
  * `team` value (a slug, or a school name in an old link). legacy is true for
  * an old query-string link (?class=3&region=6) the app should rewrite.
  */
@@ -63,6 +64,10 @@ export function parseLocation(pathname, search) {
     const region = positiveInt(parts[2]);
     return region ? { ...route, page: "region", clazz, region } : route;
   }
+  if (parts[0] === "brackets" && parts.length === 2) {
+    const clazz = classFromSlug(parts[1]);
+    return clazz ? { ...route, page: "bracket", clazz } : route;
+  }
   return route;
 }
 
@@ -76,6 +81,8 @@ export function buildPath(route, { currentSeason = null } = {}) {
   if (route.page === "class" || route.page === "region") {
     path = `/standings/${route.clazz}a`;
     if (route.page === "region") path += `/${route.region}`;
+  } else if (route.page === "bracket") {
+    path = `/brackets/${route.clazz}a`;
   }
   const q = new URLSearchParams();
   if (route.season && route.season !== currentSeason) q.set("season", route.season);
