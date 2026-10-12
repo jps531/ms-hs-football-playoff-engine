@@ -179,3 +179,74 @@ export function bracketStructure(games) {
     final,
   };
 }
+
+/**
+ * The bracket as one tree of columns, left to right: each round with the
+ * chosen halves' games stacked in order, then the championship. Every game
+ * lists its feeders (indices into the previous column), so a game sits
+ * between the two games that send it a team.
+ *
+ * @param {{halves, final}} structure  from bracketStructure()
+ * @param {string[]} halves  which halves to include, e.g. ["N", "S"] or ["N"]
+ * @returns {{ name: string, games: { game: object, feeders: number[] }[] }[]}
+ */
+export function treeColumns(structure, halves) {
+  const shown = structure.halves.filter((h) => halves.includes(h.half));
+  const depth = Math.max(0, ...shown.map((h) => h.rounds.length));
+  const cols = [];
+  for (let k = 0; k < depth; k++) {
+    const games = [];
+    let offset = 0; // where this half's previous-round games start in the previous column
+    for (const h of shown) {
+      const round = h.rounds[k];
+      const prevCount = k > 0 ? h.rounds[k - 1].games.length : 0;
+      round.games.forEach((game, i) => {
+        games.push({ game, feeders: k === 0 ? [] : [offset + 2 * i, offset + 2 * i + 1].filter((j) => j < offset + prevCount) });
+      });
+      offset += prevCount;
+    }
+    cols.push({ name: shown[0].rounds[k].name, games });
+  }
+  if (structure.final && depth > 0) {
+    cols.push({ name: structure.final.round, games: [{ game: structure.final, feeders: cols[depth - 1].games.map((_, j) => j) }] });
+  }
+  return cols;
+}
+
+/**
+ * Vertical centers of every card for a given focus, in pixels.
+ *
+ * The focus column (and anything left of it) is a plain stacked list; each
+ * column to its right centers every game between its feeders, so lines run
+ * straight across. A fractional focus (mid-swipe) blends the two layouts,
+ * which is what makes the bracket "condense" as you move round to round.
+ *
+ * @param cols   from treeColumns()
+ * @param focus  0 for the first column; 1.5 is halfway to the third
+ * @param pitch  card height plus the gap between cards
+ * @param card   card height
+ * @returns {{ centers: number[][], height: number }} height of the visible area
+ */
+export function treeLayout(cols, focus, pitch, card) {
+  const last = Math.max(0, cols.length - 1);
+  const f = Math.min(Math.max(focus, 0), last);
+  const k = Math.floor(f);
+  const t = f - k;
+  const at = (base) => {
+    const out = [];
+    cols.forEach((col, r) => {
+      out.push(col.games.map((g, i) => {
+        const prev = out[r - 1];
+        if (r <= base || !g.feeders.length || !prev) return i * pitch + card / 2;
+        return g.feeders.reduce((s, j) => s + prev[j], 0) / g.feeders.length;
+      }));
+    });
+    return out;
+  };
+  const a = at(k);
+  const b = t > 0 ? at(Math.min(k + 1, last)) : a;
+  const centers = a.map((col, r) => col.map((y, i) => y + (b[r][i] - y) * t));
+  const bottom = (col) => (col.length ? Math.max(...col) + card / 2 : 0);
+  const height = Math.max(0, ...centers.slice(k).map(bottom));
+  return { centers, height };
+}

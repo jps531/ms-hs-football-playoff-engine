@@ -17,7 +17,7 @@ import { matchTeams } from "./search.js";
 import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
-  teamInGame, opponentsFor, pathGames, bracketStructure, positionName,
+  teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout,
 } from "./bracket.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
@@ -210,6 +210,7 @@ async function render() {
   route = readRoute();
   if (route.page === "notfound") {
     renderScrubber(null);
+    document.body.classList.remove("is-wide");
     showContext(null);
     app.innerHTML = notice("There’s no page at this address. Pick a class above to find a region.");
     document.title = `Page not found — ${SITE}`;
@@ -233,11 +234,15 @@ async function render() {
       : route.region ? await regionView(ctx) : await classView(ctx);
     if (token !== renderToken) return;
     // Re-rendering the same bracket (a team picked, odds changed) keeps each round strip where it was.
-    const strips = route.page === "bracket" ? [...app.querySelectorAll(".bracket-rounds")].map((el) => el.scrollLeft) : [];
+    const strip = route.page === "bracket" ? app.querySelector(".tree")?.scrollLeft ?? 0 : 0;
     app.innerHTML = html;
+    document.body.classList.toggle("is-wide", route.page === "bracket");
     if (route.page === "bracket") {
-      app.querySelectorAll(".bracket-rounds").forEach((el, i) => { el.scrollLeft = strips[i] ?? 0; });
-      wireRoundStrips();
+      const tree = app.querySelector(".tree");
+      if (tree) tree.scrollLeft = strip;
+      wireBracket();
+    } else {
+      sheet?.close();
     }
     showContext(nextContext);
     canonicalize(route.season);
@@ -305,49 +310,52 @@ function notice(text) {
 // ------------------------------------------------------------ scrubber
 
 function renderScrubber(clazz) {
-  scrubberHost.innerHTML = classScrubber(CLASSES, clazz) + (clazz ? viewTabs() : "");
+  scrubberHost.innerHTML = classScrubber(CLASSES, clazz, classHref);
+  syncNav();
   // Keep the selected class in view sideways; never scroll the page itself.
   const strip = scrubberHost.querySelector(".scrubber");
-  const on = strip?.querySelector('[aria-checked="true"]');
+  const on = strip?.querySelector('[aria-current="page"]');
   if (on && (on.offsetLeft < strip.scrollLeft || on.offsetLeft + on.offsetWidth > strip.scrollLeft + strip.clientWidth)) {
     strip.scrollLeft = on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2;
   }
 }
 
 /**
- * Standings / Bracket: the two views of the current class. Switching keeps
- * the class, season, week, odds mode, and picked team.
+ * Main nav (header links and the phone tab bar): Standings and Bracket are
+ * the two views of the current class, and switching keeps the class,
+ * season, week, odds mode, and picked team.
  */
-function viewTabs() {
+function syncNav() {
   const onBracket = route.page === "bracket";
-  const tab = (label, href, current) => `<a class="view-tabs__item" href="${esc(href)}"${current ? ' aria-current="page"' : ""}>${label}</a>`;
-  return `<nav class="view-tabs" aria-label="View">
-    ${tab("Standings", hrefWith({ page: route.region ? "region" : "class" }), !onBracket)}
-    ${tab("Bracket", hrefWith({ page: "bracket", region: null }), onBracket)}
-  </nav>`;
+  const known = route.page !== "notfound";
+  const targets = {
+    standings: known ? hrefWith({ page: route.region ? "region" : "class" }) : "/",
+    bracket: known ? hrefWith({ page: "bracket", region: null }) : "/brackets/1a",
+  };
+  for (const a of document.querySelectorAll("[data-nav]")) {
+    const key = a.dataset.nav;
+    if (key in targets) a.setAttribute("href", targets[key]);
+    const current = known && (key === "bracket" ? onBracket : key === "standings" ? !onBracket : false);
+    if (current) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  }
 }
+
+// Standings and Bracket links render in place, like any in-app link.
+document.addEventListener("click", (e) => {
+  const link = e.target.closest('[data-nav="standings"], [data-nav="bracket"]');
+  if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  navigate(link.getAttribute("href"), { scroll: true });
+});
 
 const classHref = (clazz) => hrefWith({ clazz, region: null, team: null, week: null });
 
 scrubberHost.addEventListener("click", (e) => {
   const item = e.target.closest("[data-class]");
-  if (item) navigate(classHref(Number(item.dataset.class)), { scroll: true });
-});
-
-scrubberHost.addEventListener("keydown", (e) => {
-  const items = [...scrubberHost.querySelectorAll("[data-class]")];
-  const i = items.indexOf(document.activeElement);
-  if (i < 0) return;
-  const moves = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-  let next;
-  if (e.key in moves) next = (i + moves[e.key] + items.length) % items.length;
-  else if (e.key === "Home") next = 0;
-  else if (e.key === "End") next = items.length - 1;
-  else return;
+  if (!item || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
-  const target = items[next].dataset.class;
-  navigate(classHref(Number(target)), { scroll: true });
-  scrubberHost.querySelector(`[data-class="${target}"]`)?.focus();
+  navigate(item.getAttribute("href"), { scroll: true });
 });
 
 // --------------------------------------------------------- team search
@@ -882,7 +890,7 @@ const LIST_CAP = 5; // occupants shown before "Show all"
 const MATCHUP_CAP = 6; // matchups / opponents shown before "Show all"
 
 /** Bracket UI state that isn't in the URL; reset when the class changes. */
-const bracketUi = { key: null, open: null, showAll: new Set(), half: "both", focus: null };
+const bracketUi = { key: null, open: null, showAll: new Set(), half: "both", focus: null }; // open: the game in the sheet
 let bracketData = null; // what the last bracket render used, for in-place updates
 
 async function bracketView(ctx) {
@@ -932,7 +940,7 @@ async function bracketView(ctx) {
   nextContext = contextHtml(`${clazz}A bracket`, controlsSummary, mode);
   const focusNote = ctx.team
     ? `<p class="focus-note">Showing ${esc(ctx.team)}’s possible path. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
-    : `<p class="focus-note muted">Pick a team to see its possible path and opponents.</p>`;
+    : `<p class="focus-note muted">Tap a game to see who might play there, and pick a team to follow its path.</p>`;
   return `<div class="page">
     <header class="entry-head bracket-head">
       <h1 class="title">Class ${clazz}A bracket</h1>
@@ -947,45 +955,40 @@ const HALF_NAMES = { N: "North", S: "South" };
 const ROUND_SHORT = { "First Round": "1st Rd", "Second Round": "2nd Rd", Quarterfinals: "Quarters", Semifinals: "Semis", "Championship Game": "Final" };
 const shortRound = (name) => ROUND_SHORT[name] ?? name;
 
+// The bracket is a tree of columns (rounds, then the final). Cards have a
+// fixed height so each game can sit exactly between the two that feed it,
+// with lines joining them. On phones the columns scroll sideways one round
+// at a time, and the layout condenses as you go: the round in front of you
+// is a plain list, and later rounds space out to line up with it.
+const CARD_H = 98; // px, a game card (two team rows)
+const PITCH = CARD_H + 14; // card plus the gap below it
+const narrow = () => matchMedia("(max-width: 48em)").matches;
+
 /** Render the bracket from bracketData and bracketUi. */
 function bracketHtml() {
   const { games, mode, focus } = bracketData;
-  const { halves, final } = bracketStructure(games);
+  const structure = bracketStructure(games);
+  const halves = structure.halves.map((h) => h.half);
+  const cols = treeColumns(structure, bracketUi.half === "both" ? halves : [bracketUi.half]);
   const path = focus ? pathGames(games, focus, mode) : null;
+  bracketData.cols = cols;
+  bracketData.path = path;
   const halfControl = halves.length > 1
     ? `<div class="half-control" role="group" aria-label="Bracket half">
-        ${["both", ...halves.map((h) => h.half)].map((h) => `<button type="button" class="half-control__item${h === "both" ? " half-control__item--both" : ""}" data-half="${h}" aria-pressed="${bracketUi.half === h}">${h === "both" ? "Both halves" : HALF_NAMES[h] ?? h}</button>`).join("")}
+        ${["both", ...halves].map((h) => `<button type="button" class="half-control__item${h === "both" ? " half-control__item--both" : ""}" data-half="${h}" aria-pressed="${bracketUi.half === h}">${h === "both" ? "Both halves" : HALF_NAMES[h] ?? h}</button>`).join("")}
       </div>`
     : "";
-  const finalCol = final
-    ? `<div class="bracket-col bracket-col--final">
-        <h3 class="bracket-col__title">${esc(final.round)}</h3>
-        <div class="bracket-col__games">${bracketGame(final, path, "inline")}</div>
-      </div>`
-    : "";
-  const halfBlocks = halves.map(({ half, rounds }) => {
-    const names = [...rounds.map((r) => r.name), ...(final ? [final.round] : [])];
-    return `<section class="bracket-half" data-half="${half}" aria-label="${HALF_NAMES[half] ?? half} half">
-      ${halves.length > 1 ? `<h2 class="sub-title bracket-half__title">${HALF_NAMES[half] ?? half}</h2>` : ""}
-      <div class="round-tabs" role="group" aria-label="Rounds">
-        ${names.map((n, i) => `<button type="button" class="round-tabs__item" data-round-jump="${i}" aria-current="${i === 0}">${esc(shortRound(n))}</button>`).join("")}
-      </div>
-      <div class="bracket-rounds">
-        ${rounds.map((r) => `<div class="bracket-col">
-            <h3 class="bracket-col__title">${esc(r.name)}</h3>
-            <div class="bracket-col__games">${r.games.map((g) => bracketGame(g, path)).join("")}</div>
-          </div>`).join("")}
-        ${finalCol}
-      </div>
-    </section>`;
-  });
-  const finalBlock = final
-    ? `<section class="bracket-final" aria-labelledby="final-title">
-        <h2 class="sub-title" id="final-title">${esc(final.round)}</h2>
-        ${bracketGame(final, path, "wide")}
-      </section>`
-    : "";
-  return `<div class="bracket" data-half="${bracketUi.half}">${halfControl}${halfBlocks.join("")}${finalBlock}</div>`;
+  const tabs = `<div class="round-tabs" role="group" aria-label="Jump to a round">
+      ${cols.map((c, i) => `<button type="button" class="round-tabs__item" data-round-jump="${i}" aria-current="${i === 0}">${esc(shortRound(c.name))}</button>`).join("")}
+    </div>`;
+  const columns = cols.map((c) => `<section class="tcol" aria-label="${esc(c.name)}">
+      <h3 class="tcol__title">${esc(c.name)}</h3>
+      <ol class="tcol__body">${c.games.map(({ game }) => `<li class="tslot">${treeCard(game, path)}</li>`).join("")}</ol>
+    </section>`).join("");
+  return `${halfControl}${tabs}
+    <div class="tree" style="--card-h:${CARD_H}px">
+      <div class="tree__cols">${columns}<svg class="tree__lines" aria-hidden="true"></svg></div>
+    </div>`;
 }
 
 /** A team's seed label once it's locked: "Region 3 champion". */
@@ -995,13 +998,7 @@ function seedLabel(team) {
 }
 
 const LOCK = '<svg class="lock" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="7" width="9" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>';
-
-/** A team name that picks the team when tapped (shared with the standings via ?team=). */
-function pickTeam(team) {
-  const { teams, focus } = bracketData;
-  const mine = team === focus;
-  return `<button type="button" class="bteam__name${mine ? " is-focus" : ""}" data-pick-team="${esc(team)}" aria-pressed="${mine}">${teamMark(team, teams[team])}<span class="team-name">${esc(team)}</span></button>`;
-}
+const CLOSE = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
 
 /** Which side hosts this game whoever reaches it, if that's settled: "a", "b", "neutral", or null. */
 function settledHost(game) {
@@ -1010,6 +1007,250 @@ function settledHost(game) {
   if (!ms.length) return null;
   const hosts = new Set(ms.map((m) => hosting(m.hostA).host));
   return hosts.size === 1 && !hosts.has("split") ? [...hosts][0] : null;
+}
+
+/** Sides top to bottom (home team last) and the word between them. */
+function sideOrder(host) {
+  return {
+    order: host === "a" ? ["b", "a"] : ["a", "b"],
+    joiner: host === "a" || host === "b" ? "at" : "vs",
+  };
+}
+
+const STATE_LABEL = { played: "Final", determined: "Matchup set", partial: "One spot set", projected: "" };
+
+/** A compact game card in the tree: one row per side. Tapping it opens the game sheet. */
+function treeCard(game, path) {
+  const result = bracketData.results[game.id] ?? null;
+  const state = gameState(game, result);
+  const { order, joiner } = sideOrder(settledHost(game));
+  const onPath = path ? path.has(game.id) : null;
+  const cls = ["tgame", `tgame--${state}`, onPath === true ? "is-path" : "", onPath === false ? "is-off" : ""].filter(Boolean).join(" ");
+  return `<button type="button" class="${cls}" data-game-open="${esc(game.id)}" aria-haspopup="dialog">
+    ${treeRow(game, order[0], result, "")}
+    ${treeRow(game, order[1], result, joiner)}
+  </button>`;
+}
+
+/** One side of a compact card: the result, the locked team, or the likeliest (or picked) team with its odds. */
+function treeRow(game, sideKey, result, gutter) {
+  const { mode, focus, teams } = bracketData;
+  const side = sideKey === "a" ? game.side_a : game.side_b;
+  const row = (cls, team, name, sub, value) => `<span class="trow${cls}${team && team === focus ? " is-focus" : ""}">
+      <span class="trow__gutter">${gutter}</span>${team ? teamMark(team, teams[team], { size: 22 }) : '<span class="mark"></span>'}
+      <span class="trow__text"><span class="trow__name">${esc(name)}</span>${sub ? `<span class="trow__sub">${sub}</span>` : ""}</span>
+      <span class="trow__value">${value}</span>
+    </span>`;
+  if (result) {
+    const team = lockedTeam(side) ?? (sideKey === "a" ? result.winner : result.loser);
+    const won = team === result.winner;
+    const score = won ? result.winnerScore : result.loserScore;
+    return row(` trow--result${won ? " is-winner" : ""}`, team, team, "", score != null ? esc(score) : "");
+  }
+  const locked = lockedTeam(side);
+  if (locked) {
+    return row(" trow--locked", locked, locked, `${LOCK}<span class="visually-hidden">Locked in: </span>${esc(seedLabel(locked) ?? "Clinched")}`, "");
+  }
+  const list = occupants(side, mode);
+  const firstRound = side.feeders.length === 1;
+  if (!list.length) return row(" trow--empty", null, "No team can get here", "", "");
+  const shown = (focus && list.find((o) => o.team === focus)) || list[0];
+  const sub = [firstRound ? esc(positionName(side.feeders[0])) : "", list.length > 1 ? `+${list.length - 1} more` : ""].filter(Boolean).join(" · ");
+  return row("", shown.team, shown.team, sub, oddsCell(shown.p));
+}
+
+// ---------------------------------------------------- tree layout + lines
+
+let tree = null; // the rendered tree: elements and measurements
+let treeFrame = 0;
+
+/** Hook up the tree after it's in the page (and the open game sheet, if any). */
+function wireBracket() {
+  const host = document.getElementById("bracket-host");
+  if (!host) {
+    tree = null;
+    return;
+  }
+  const strip = host.querySelector(".tree");
+  tree = {
+    strip,
+    colsEl: host.querySelector(".tree__cols"),
+    cols: [...host.querySelectorAll(".tcol")],
+    bodies: [...host.querySelectorAll(".tcol__body")],
+    slots: [...host.querySelectorAll(".tcol")].map((c) => [...c.querySelectorAll(".tslot")]),
+    svg: host.querySelector(".tree__lines"),
+    tabs: [...host.querySelectorAll("[data-round-jump]")],
+  };
+  measureTree();
+  layoutTree();
+  strip.addEventListener("scroll", scheduleTree, { passive: true });
+  refreshSheet();
+}
+
+function scheduleTree() {
+  if (!treeFrame) treeFrame = requestAnimationFrame(() => { treeFrame = 0; layoutTree(); });
+}
+
+window.addEventListener("resize", () => {
+  if (!tree?.strip.isConnected) return;
+  measureTree();
+  layoutTree();
+});
+
+/** Column positions, and on phones room after the final so it can scroll to the front. */
+function measureTree() {
+  const { strip, colsEl, cols } = tree;
+  colsEl.style.paddingRight = "";
+  tree.x = cols.map((c) => ({ left: c.offsetLeft, right: c.offsetLeft + c.offsetWidth }));
+  tree.step = cols.length > 1 ? cols[1].offsetLeft - cols[0].offsetLeft : 1;
+  tree.narrow = narrow();
+  if (tree.narrow && cols.length) {
+    const room = strip.clientWidth - cols[cols.length - 1].offsetWidth - 32;
+    colsEl.style.paddingRight = `${Math.max(0, room)}px`;
+  }
+}
+
+/** Place every card for the current scroll position, and redraw the lines. */
+function layoutTree() {
+  if (!tree?.strip.isConnected) return;
+  const { strip, bodies, slots, svg, tabs, x } = tree;
+  const cols = bracketData.cols;
+  const focus = tree.narrow ? strip.scrollLeft / tree.step : 0;
+  const { centers, height } = treeLayout(cols, focus, PITCH, CARD_H);
+  slots.forEach((col, r) => col.forEach((el, i) => { el.style.transform = `translateY(${centers[r][i] - CARD_H / 2}px)`; }));
+  for (const b of bodies) b.style.height = `${height}px`;
+
+  const path = bracketData.path;
+  const plain = [];
+  const lit = [];
+  const firstShown = Math.floor(focus); // rounds left of this have scrolled away, and so have their lines
+  cols.forEach((col, r) => {
+    if (r - 1 < firstShown) return;
+    col.games.forEach(({ game, feeders }, i) => {
+      for (const j of feeders) {
+        const x1 = x[r - 1].right;
+        const x2 = x[r].left;
+        const xm = (x1 + x2) / 2;
+        const y1 = centers[r - 1][j];
+        const y2 = centers[r][i];
+        const d = `M${x1} ${y1.toFixed(1)}H${xm}V${y2.toFixed(1)}H${x2}`;
+        const onPath = path && path.has(game.id) && path.has(cols[r - 1].games[j].game.id);
+        (onPath ? lit : plain).push(d);
+      }
+    });
+  });
+  svg.style.top = `${bodies[0]?.offsetTop ?? 0}px`;
+  svg.setAttribute("width", tree.colsEl.scrollWidth);
+  svg.setAttribute("height", Math.max(height, 1));
+  svg.innerHTML = `<path d="${plain.join("")}"/>${lit.length ? `<path class="is-path" d="${lit.join("")}"/>` : ""}`;
+
+  const current = Math.round(focus);
+  tabs.forEach((t, i) => t.setAttribute("aria-current", String(i === current)));
+}
+
+/** Re-render the bracket in place (half control). */
+function rerenderBracket() {
+  const host = document.getElementById("bracket-host");
+  if (!host || !bracketData) return;
+  host.innerHTML = bracketHtml();
+  wireBracket();
+}
+
+// ------------------------------------------------------------ game sheet
+// Tapping a game opens a sheet (a bottom sheet on phones, a dialog on wide
+// screens) with every team that could fill each side and the likeliest
+// matchups, or a picked team's possible opponents there.
+
+let sheet = null;
+
+function gameSheet() {
+  if (sheet) return sheet;
+  sheet = document.createElement("dialog");
+  sheet.className = "game-sheet";
+  sheet.setAttribute("aria-labelledby", "game-sheet-title");
+  document.body.append(sheet);
+  sheet.addEventListener("click", onSheetClick);
+  sheet.addEventListener("close", () => {
+    const id = bracketUi.open;
+    bracketUi.open = null;
+    if (id) document.querySelector(`[data-game-open="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+  });
+  return sheet;
+}
+
+function openSheet(id) {
+  bracketUi.open = id;
+  const s = gameSheet();
+  s.innerHTML = sheetHtml(id);
+  if (!s.open) s.showModal();
+  s.querySelector(".game-sheet__body").scrollTop = 0;
+}
+
+/** After a re-render (a team picked in the sheet, odds changed), show the open game's new numbers. */
+function refreshSheet() {
+  if (!sheet?.open || !bracketUi.open) return;
+  const body = sheet.querySelector(".game-sheet__body");
+  const top = body?.scrollTop ?? 0;
+  sheet.innerHTML = sheetHtml(bracketUi.open);
+  sheet.querySelector(".game-sheet__body").scrollTop = top;
+}
+
+function sheetHtml(id) {
+  const game = bracketData.games.find((g) => g.id === id);
+  if (!game) return "";
+  const result = bracketData.results[game.id] ?? null;
+  const state = gameState(game, result);
+  const host = settledHost(game);
+  const { order, joiner } = sideOrder(host);
+  const sideOf = (k) => (k === "a" ? game.side_a : game.side_b);
+  const known = order.map((k) => lockedTeam(sideOf(k)) ?? (result ? (k === "a" ? result.winner : result.loser) : null));
+  const title = known[0] && known[1] ? `${known[0]} ${joiner} ${known[1]}` : "Who might play here";
+  const kicker = [game.round, game.id !== "final" ? HALF_NAMES[game.half] : null, STATE_LABEL[state] || null].filter(Boolean).join(" · ");
+  return `<div class="game-sheet__head">
+      <div>
+        <p class="game-sheet__kicker">${esc(kicker)}</p>
+        <h2 class="game-sheet__title" id="game-sheet-title">${esc(title)}</h2>
+      </div>
+      <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
+    </div>
+    <div class="game-sheet__body">
+      <div class="bgame bgame--sheet">
+        ${bracketSide(game, order[0], result, host)}
+        <div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
+        ${bracketSide(game, order[1], result, host)}
+        ${host === "neutral" ? '<p class="bgame__site muted">Neutral site</p>' : ""}
+      </div>
+      ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
+      <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
+    </div>`;
+}
+
+function onSheetClick(e) {
+  if (e.target === sheet || e.target.closest("[data-sheet-close]")) {
+    sheet.close();
+    return;
+  }
+  const more = e.target.closest("[data-show-all]");
+  if (more) {
+    const k = more.dataset.showAll;
+    if (bracketUi.showAll.has(k)) bracketUi.showAll.delete(k);
+    else bracketUi.showAll.add(k);
+    refreshSheet();
+    sheet.querySelector(`[data-show-all="${CSS.escape(k)}"]`)?.focus({ preventScroll: true });
+    return;
+  }
+  const pick = e.target.closest("[data-pick-team]");
+  if (pick) {
+    const team = pick.dataset.pickTeam;
+    navigate(hrefWith({ team: bracketData?.focus === team ? null : team }), { replace: true });
+  }
+}
+
+/** A team name that picks the team when tapped (shared with the standings via ?team=). */
+function pickTeam(team) {
+  const { teams, focus } = bracketData;
+  const mine = team === focus;
+  return `<button type="button" class="bteam__name${mine ? " is-focus" : ""}" data-pick-team="${esc(team)}" aria-pressed="${mine}">${teamMark(team, teams[team])}<span class="team-name">${esc(team)}</span></button>`;
 }
 
 /** One side of a game card: a result row, a locked team, or the list of who might fill it. */
@@ -1039,31 +1280,6 @@ function bracketSide(game, sideKey, result, host) {
     : "";
   if (!list.length) return `<div class="bside">${label}<p class="bside__empty muted">No team can get here</p></div>`;
   return `<div class="bside">${label}<ul class="bside__list">${shown.map((o) => `<li class="bteam">${pickTeam(o.team)}${oddsCell(o.p)}</li>`).join("")}</ul>${more}</div>`;
-}
-
-const STATE_LABEL = { played: "Final", determined: "Matchup set", partial: "One spot set", projected: "" };
-
-/** A game card: two sides, and an in-place expansion with who might play here. */
-function bracketGame(game, path, variant = "") {
-  const result = bracketData.results[game.id] ?? null;
-  const state = gameState(game, result);
-  const open = bracketUi.open === game.id;
-  const host = settledHost(game);
-  const onPath = path ? path.has(game.id) : null;
-  const cls = ["bgame", `bgame--${state}`, open ? "is-open" : "", onPath === true ? "is-path" : "", onPath === false ? "is-off" : ""]
-    .filter(Boolean).join(" ");
-  const detailId = `bd-${game.id}${variant ? `-${variant}` : ""}`;
-  const stateLabel = STATE_LABEL[state] ? `<p class="bgame__state">${STATE_LABEL[state]}</p>` : "";
-  const joiner = host === "a" || host === "b" ? "at" : "vs";
-  return `<article class="${cls}" data-game="${esc(game.id)}">
-    ${stateLabel}
-    ${host === "a" ? bracketSide(game, "b", result, host) : bracketSide(game, "a", result, host)}
-    <div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
-    ${host === "a" ? bracketSide(game, "a", result, host) : bracketSide(game, "b", result, host)}
-    ${host === "neutral" ? '<p class="bgame__site muted">Neutral site</p>' : ""}
-    ${result ? "" : `<button type="button" class="bgame__toggle" data-game-toggle="${esc(game.id)}" aria-expanded="${open}" aria-controls="${detailId}">${open ? "Hide" : "Who might play here"}${chevronIcon}</button>
-    <div class="bgame__detail" id="${detailId}"${open ? "" : " hidden"}>${open ? gameDetail(game) : ""}</div>`}
-  </article>`;
 }
 
 /** Host wording from one team's point of view. */
@@ -1120,51 +1336,10 @@ function gameDetail(game) {
     ${other >= 0.0005 ? `<p class="muted bgame__count">Other pairings, each under 0.5%: ${esc(formatPct(other))} combined</p>` : ""}`;
 }
 
-/** Re-render the bracket in place (expansion, show-all, half), keeping each round strip's scroll. */
-function rerenderBracket() {
-  const host = document.getElementById("bracket-host");
-  if (!host || !bracketData) return;
-  const scrolls = [...host.querySelectorAll(".bracket-rounds")].map((el) => el.scrollLeft);
-  host.innerHTML = bracketHtml();
-  host.querySelectorAll(".bracket-rounds").forEach((el, i) => { el.scrollLeft = scrolls[i] ?? 0; });
-  wireRoundStrips();
-}
-
-/** Keep each half's round tabs in step with its horizontal scroll (phones). */
-function wireRoundStrips() {
-  document.querySelectorAll(".bracket-half").forEach((half) => {
-    const strip = half.querySelector(".bracket-rounds");
-    const tabs = [...half.querySelectorAll("[data-round-jump]")];
-    if (!strip || !tabs.length) return;
-    const sync = () => {
-      const cols = [...strip.querySelectorAll(".bracket-col")].filter((c) => c.offsetParent !== null);
-      const x = strip.scrollLeft;
-      let current = 0;
-      cols.forEach((c, i) => { if (c.offsetLeft - cols[0].offsetLeft <= x + 8) current = i; });
-      // The last round can't scroll to the left edge; at the end of the strip it's the current one.
-      if (x + strip.clientWidth >= strip.scrollWidth - 8) current = cols.length - 1;
-      tabs.forEach((t, i) => t.setAttribute("aria-current", String(i === current)));
-    };
-    strip.addEventListener("scroll", sync, { passive: true });
-    sync();
-  });
-}
-
 app.addEventListener("click", (e) => {
-  const toggle = e.target.closest("[data-game-toggle]");
-  if (toggle) {
-    const id = toggle.dataset.gameToggle;
-    bracketUi.open = bracketUi.open === id ? null : id;
-    rerenderBracket();
-    document.querySelector(`[data-game="${CSS.escape(id)}"] [data-game-toggle]`)?.focus({ preventScroll: true });
-    return;
-  }
-  const more = e.target.closest("[data-show-all]");
-  if (more) {
-    const k = more.dataset.showAll;
-    if (bracketUi.showAll.has(k)) bracketUi.showAll.delete(k);
-    else bracketUi.showAll.add(k);
-    rerenderBracket();
+  const card = e.target.closest("[data-game-open]");
+  if (card) {
+    openSheet(card.dataset.gameOpen);
     return;
   }
   const half = e.target.closest(".half-control [data-half]");
@@ -1174,18 +1349,9 @@ app.addEventListener("click", (e) => {
     return;
   }
   const jump = e.target.closest("[data-round-jump]");
-  if (jump) {
-    const strip = jump.closest(".bracket-half").querySelector(".bracket-rounds");
-    const cols = [...strip.querySelectorAll(".bracket-col")].filter((c) => c.offsetParent !== null);
-    const col = cols[Number(jump.dataset.roundJump)];
+  if (jump && tree) {
     const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (col) strip.scrollTo({ left: col.offsetLeft - cols[0].offsetLeft, behavior: smooth ? "smooth" : "auto" });
-    return;
-  }
-  const pick = e.target.closest("[data-pick-team]");
-  if (pick) {
-    const team = pick.dataset.pickTeam;
-    navigate(hrefWith({ team: bracketData?.focus === team ? null : team }), { replace: true });
+    tree.strip.scrollTo({ left: Number(jump.dataset.roundJump) * tree.step, behavior: smooth ? "smooth" : "auto" });
   }
 });
 

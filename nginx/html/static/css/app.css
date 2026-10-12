@@ -302,18 +302,6 @@ button { font: inherit; color: inherit; }
 }
 .scrubber-bar__inner .scrubber { min-width: 0; }
 
-/* Standings / Bracket: the two views of the current class. */
-.view-tabs { display: flex; gap: 4px; margin-left: auto; }
-.view-tabs__item {
-  display: inline-flex; align-items: center;
-  min-height: 44px; padding: 0 10px;
-  border-bottom: 2px solid transparent;
-  color: var(--text-secondary);
-  font-weight: 600; font-size: 15px;
-  text-decoration: none;
-}
-.view-tabs__item:hover { color: var(--text-primary); }
-.view-tabs__item[aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--accent-identity); }
 .scrubber {
   display: inline-flex; gap: 2px;
   max-width: 100%;
@@ -326,8 +314,10 @@ button { font: inherit; color: inherit; }
 .scrubber::-webkit-scrollbar { display: none; }
 .scrubber__item {
   flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
   min-width: 48px; min-height: 44px;
   padding: 0 12px;
+  text-decoration: none;
   border: 0; border-radius: 7px;
   background: transparent;
   color: var(--text-secondary);
@@ -335,7 +325,8 @@ button { font: inherit; color: inherit; }
   cursor: pointer;
 }
 .scrubber__item:hover { color: var(--text-primary); }
-.scrubber__item[aria-checked="true"] {
+.scrubber__item:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+.scrubber__item[aria-current="page"], .scrubber__item[aria-current="page"]:hover {
   background: var(--scrubber-selected-bg);
   color: var(--scrubber-selected-text);
 }
@@ -837,40 +828,79 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   color: var(--scrubber-selected-text);
 }
 .half-control__item:focus-visible { outline-offset: -2px; }
-.bracket[data-half="N"] .bracket-half[data-half="S"],
-.bracket[data-half="S"] .bracket-half[data-half="N"] { display: none; }
 
-.bracket-half + .bracket-half { margin-top: 40px; }
-.bracket-half__title { margin-bottom: 12px; }
+/* The bracket page is wider than the rest, with the header to match. */
+body.is-wide .site-header, body.is-wide .scrubber-bar__inner, body.is-wide .context-bar__inner,
+body.is-wide .page, body.is-wide .site-footer { max-width: 92rem; }
 
-/* Wide screens: rounds as columns, games spaced to line up with their feeders. */
-.bracket-rounds {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(15rem, 1fr);
-  gap: 16px;
-  overflow-x: auto;
+/* Round tabs: phones only (wide screens show every round at once). */
+.round-tabs { display: none; }
+
+/* The bracket tree: columns of fixed-height cards, positioned by app.js so
+   each game sits between the two that feed it, joined by lines. */
+.tree {
+  --line: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  position: relative;
+  overflow-x: auto; overflow-y: hidden;
+  padding-bottom: 12px;
 }
-.bracket-col { display: flex; flex-direction: column; min-width: 0; }
-.bracket-col__title {
+.tree__cols { position: relative; display: flex; gap: 32px; width: max-content; min-width: 100%; }
+.tcol { flex: 1 0 14rem; max-width: 18rem; }
+.tcol__title {
   margin-bottom: 10px;
   font-size: 13px; line-height: 18px; font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase; letter-spacing: 0.04em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.bracket-col__games {
-  flex: 1;
-  display: flex; flex-direction: column; justify-content: space-around;
-  gap: 12px;
-}
-.bracket-col--final, .round-tabs { display: none; }
-.bracket-final { margin-top: 40px; max-width: 24rem; }
-.bracket-final .sub-title { margin-bottom: 12px; }
+.tcol__body { position: relative; margin: 0; padding: 0; list-style: none; }
+.tslot { position: absolute; top: 0; left: 0; right: 0; height: var(--card-h); }
+.tree__lines { position: absolute; left: 0; pointer-events: none; overflow: visible; }
+.tree__lines path { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.tree__lines path.is-path { stroke: var(--accent-identity); stroke-width: 2.5; }
 
-/* Phones: one round per screen, the next one peeking in; round tabs jump. */
+/* A compact game card: one row per side, the home team on the bottom. */
+.tgame {
+  display: flex; flex-direction: column; justify-content: center;
+  width: 100%; height: 100%;
+  padding: 2px 10px 2px 2px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary); font: inherit; text-align: left;
+  cursor: pointer;
+}
+.tgame:hover { border-color: var(--line); }
+.tgame:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.tgame.is-path { border-color: var(--accent-identity); box-shadow: inset 3px 0 0 var(--accent-identity); }
+.tgame.is-off { background: var(--surface-raised); }
+.tgame.is-off .trow__name, .tgame.is-off .trow__value { color: var(--text-secondary); }
+.tgame.is-off .odds { opacity: 0.75; }
+.trow {
+  display: grid; grid-template-columns: 22px 22px minmax(0, 1fr) auto; align-items: center; column-gap: 8px;
+  height: 45px; min-width: 0;
+}
+.trow + .trow { border-top: 1px solid var(--border); }
+.trow__gutter { font-size: 11px; line-height: 14px; color: var(--text-secondary); text-align: center; }
+.trow .mark { width: 22px; height: 22px; }
+.trow__text { display: flex; flex-direction: column; min-width: 0; }
+.trow__name { font-size: 14px; line-height: 18px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow__sub {
+  display: block;
+  font-size: 12px; line-height: 15px; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.trow__sub .lock { width: 11px; height: 11px; margin-right: 3px; vertical-align: -1px; }
+.trow__value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.trow .odds { min-width: 3.2em; padding: 1px 5px; font-size: 13px; line-height: 18px; }
+.trow--result:not(.is-winner) .trow__name, .trow--result:not(.is-winner) .trow__value { color: var(--text-secondary); font-weight: 500; }
+.trow--result.is-winner .trow__name, .trow--result.is-winner .trow__value { font-weight: 700; }
+.trow.is-focus .trow__name { font-weight: 700; }
+.trow--empty .trow__name { color: var(--text-secondary); font-weight: 400; }
+
+/* Phones: one round per screen with the next peeking in, round tabs to jump. */
 @media (max-width: 48em) {
   .half-control__item--both { display: none; }
-  .bracket-half + .bracket-half { margin-top: 0; }
   .round-tabs {
     display: flex; gap: 4px;
     margin-bottom: 12px;
@@ -886,13 +916,8 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
     font-weight: 600; font-size: 14px;
     cursor: pointer;
   }
-  .round-tabs__item[aria-current="true"] {
-    border-color: var(--text-primary);
-    color: var(--text-primary);
-  }
-  .bracket-rounds {
-    grid-auto-columns: 88%;
-    gap: 12px;
+  .round-tabs__item[aria-current="true"] { border-color: var(--text-primary); color: var(--text-primary); }
+  .tree {
     margin-inline: -16px;
     padding-inline: 16px;
     scroll-padding-inline: 16px;
@@ -900,11 +925,50 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
     overscroll-behavior-x: contain;
     scrollbar-width: none;
   }
-  .bracket-rounds::-webkit-scrollbar { display: none; }
-  .bracket-col { scroll-snap-align: start; }
-  .bracket-col__games { justify-content: flex-start; }
-  .bracket-col--final { display: flex; }
-  .bracket-final { display: none; }
+  .tree::-webkit-scrollbar { display: none; }
+  .tree__cols { gap: 24px; }
+  .tcol { flex: none; width: calc(88vw - 40px); max-width: none; scroll-snap-align: start; }
+}
+
+/* The game sheet: a bottom sheet on phones, a centered dialog on wide screens. */
+.game-sheet {
+  width: min(32rem, calc(100vw - 32px)); max-height: min(85vh, 48rem);
+  padding: 0;
+  background: var(--surface-page); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 14px;
+  overflow: hidden;
+}
+.game-sheet[open] { display: flex; flex-direction: column; }
+.game-sheet::backdrop { background: rgb(0 0 0 / 0.45); }
+.game-sheet__head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 16px 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.game-sheet__kicker { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.game-sheet__title { margin-top: 2px; font-size: 18px; line-height: 24px; font-weight: 700; }
+.game-sheet__close {
+  flex: none; display: grid; place-items: center;
+  width: 44px; height: 44px; margin: -8px -6px 0 0;
+  border: 0; border-radius: 8px; background: transparent;
+  color: var(--text-secondary); cursor: pointer;
+}
+.game-sheet__close svg { width: 18px; height: 18px; }
+.game-sheet__close:hover { color: var(--text-primary); background: var(--surface-raised); }
+.game-sheet__body { overflow-y: auto; overscroll-behavior: contain; padding: 12px 20px 20px; display: grid; gap: 14px; }
+.game-sheet__hint { font-size: 13px; }
+.bgame.bgame--sheet { padding: 0; border: 0; background: none; }
+@media (max-width: 48em) {
+  .game-sheet {
+    width: 100%; max-width: 100%; max-height: 88vh;
+    margin: auto 0 0;
+    border-radius: 16px 16px 0 0; border-bottom: 0;
+  }
+  .game-sheet__body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .game-sheet[open] { animation: sheet-in 160ms ease-out; }
+  @keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } }
 }
 
 /* A game card. */
@@ -918,10 +982,6 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   border-radius: 10px;
 }
 .bgame > *, .bside > *, .bgame__detail > * { min-width: 0; }
-.bgame.is-path { border-color: var(--accent-identity); box-shadow: inset 3px 0 0 var(--accent-identity); }
-.bgame.is-off { background: var(--surface-raised); }
-.bgame.is-off .team-name, .bgame.is-off .bteam__score { color: var(--text-secondary); }
-.bgame.is-off .odds { opacity: 0.75; }
 .bgame__state {
   font-size: 11px; line-height: 14px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
@@ -986,19 +1046,6 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 }
 .bgame__vs::before, .bgame__vs::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
 
-.bgame__toggle {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  width: 100%; min-height: 44px;
-  margin-top: 4px; padding: 0;
-  border: 0; border-top: 1px solid var(--border);
-  background: none;
-  color: var(--link); font: inherit; font-size: 14px; font-weight: 500;
-  text-align: left; cursor: pointer;
-}
-.bgame__toggle:hover { color: var(--link-hover); }
-.bgame__toggle .row-toggle__chev { color: currentColor; transform: rotate(90deg); }
-.bgame__toggle[aria-expanded="true"] .row-toggle__chev { transform: rotate(-90deg); }
-
 .bgame__detail { display: grid; gap: 8px; padding-bottom: 4px; }
 .bgame__detail[hidden] { display: none; }
 .bgame__heading { font-size: 14px; line-height: 20px; font-weight: 600; }
@@ -1018,3 +1065,56 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .mu__teams { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
 .mu__teams .vs { font-size: 12px; color: var(--text-secondary); }
 .bgame .mark { width: 22px; height: 22px; }
+
+/* ------------------------------------------------------------ main nav */
+/* Standings, Bracket, How it works: header links on wide screens, a tab
+   bar along the bottom on phones and small tablets. Only one is shown. */
+
+.site-nav { display: none; gap: 4px; }
+/* Pages without the team search (How it works): keep the nav beside the name. */
+.site-nav:has(+ .theme-toggle) { margin-right: auto; }
+.site-nav__item {
+  display: inline-flex; align-items: center;
+  min-height: 44px; padding: 0 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 600; font-size: 15px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-nav__item:hover { color: var(--text-primary); }
+.site-nav__item[aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--accent-identity); }
+
+.tab-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 12;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface-page);
+  border-top: 1px solid var(--border);
+}
+.tab-bar__item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 56px;
+  color: var(--text-secondary);
+  font-size: 12px; line-height: 14px; font-weight: 600;
+  text-decoration: none;
+}
+.tab-bar__item svg { width: 24px; height: 24px; }
+.tab-bar__item:hover { color: var(--text-primary); }
+.tab-bar__item[aria-current="page"] { color: var(--accent-identity); }
+.tab-bar__item:focus-visible { outline-offset: -4px; }
+body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
+
+/* Between tablet and wide desktop the name gives way to the nav (the helmet stays). */
+@media (min-width: 60em) and (max-width: 79.99em) {
+  .site-header__home span { display: none; }
+}
+@media (min-width: 60em) {
+  .site-nav { display: flex; }
+  .site-header__home { flex: none; }
+  .tab-bar { display: none; }
+  body { padding-bottom: 0; }
+}
+@media print {
+  .tab-bar { display: none; }
+}

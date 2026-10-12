@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups,
-  teamInGame, opponentsFor, pathGames, bracketStructure,
+  teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout,
 } from "../html/static/js/bracket.js";
 
 const occ = (team, p, pw = p, locked = false) => ({ team, p_reach: p, p_reach_weighted: pw, is_locked: locked });
@@ -99,4 +99,41 @@ test("structure comes from the ids, whatever the round count", () => {
     ["S", [["First Round", 1]]],
   ]);
   assert.equal(s.final.id, "final");
+});
+
+test("tree columns: halves stacked per round, then the final fed by every semifinal", () => {
+  const g = (id) => ({ id });
+  const structure = {
+    halves: [
+      { half: "N", rounds: [{ name: "First Round", games: [g("N-0-0"), g("N-0-1"), g("N-0-2"), g("N-0-3")] }, { name: "Quarterfinals", games: [g("N-1-0"), g("N-1-1")] }, { name: "Semifinals", games: [g("N-2-0")] }] },
+      { half: "S", rounds: [{ name: "First Round", games: [g("S-0-0"), g("S-0-1"), g("S-0-2"), g("S-0-3")] }, { name: "Quarterfinals", games: [g("S-1-0"), g("S-1-1")] }, { name: "Semifinals", games: [g("S-2-0")] }] },
+    ],
+    final: { id: "final", round: "Championship Game" },
+  };
+  const both = treeColumns(structure, ["N", "S"]);
+  assert.deepEqual(both.map((c) => c.name), ["First Round", "Quarterfinals", "Semifinals", "Championship Game"]);
+  assert.deepEqual(both[1].games.map((x) => [x.game.id, x.feeders]), [["N-1-0", [0, 1]], ["N-1-1", [2, 3]], ["S-1-0", [4, 5]], ["S-1-1", [6, 7]]]);
+  assert.deepEqual(both[2].games.map((x) => x.feeders), [[0, 1], [2, 3]]);
+  assert.deepEqual(both[3].games[0].feeders, [0, 1]);
+  const south = treeColumns(structure, ["S"]);
+  assert.deepEqual(south[0].games.map((x) => x.game.id), ["S-0-0", "S-0-1", "S-0-2", "S-0-3"]);
+  assert.deepEqual(south[1].games.map((x) => x.feeders), [[0, 1], [2, 3]]);
+  assert.deepEqual(south[3].games[0].feeders, [0]);
+});
+
+test("tree layout: focus column stacks, later columns center between feeders, and swiping blends", () => {
+  const cols = [
+    { games: [0, 1, 2, 3].map(() => ({ feeders: [] })) },
+    { games: [{ feeders: [0, 1] }, { feeders: [2, 3] }] },
+    { games: [{ feeders: [0, 1] }] },
+  ];
+  const at0 = treeLayout(cols, 0, 100, 80);
+  assert.deepEqual(at0.centers, [[40, 140, 240, 340], [90, 290], [190]]);
+  assert.equal(at0.height, 380);
+  const at1 = treeLayout(cols, 1, 100, 80);
+  assert.deepEqual(at1.centers.slice(1), [[40, 140], [90]]);
+  assert.equal(at1.height, 180); // the first column is off to the left and doesn't count
+  const mid = treeLayout(cols, 0.5, 100, 80);
+  assert.deepEqual(mid.centers[1], [65, 215]); // halfway between [90, 290] and [40, 140]
+  assert.deepEqual(treeLayout(cols, 9, 100, 80).centers[2], [40]); // focus is clamped
 });
