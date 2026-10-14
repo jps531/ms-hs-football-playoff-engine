@@ -234,12 +234,12 @@ def test_team_status_matches_the_page_badges():
 def test_team_description_states_its_numbers():
     racing = _with_bracket(_team("Raleigh", 0.997, 0.39), second_round=0.6, champion=0.04)
     assert team_description(racing, 3, 6, "projected") == (
-        "Raleigh (6–2, 3–1 in Region 6-3A): 39% to win the region, >99% to make the playoffs, 4% to win state."
+        "Raleigh (6–2, 3–1 in Region 6-3A): 39% to win the region, >99% to make the playoffs, 4% to win the state championship."
     )
     locked = _with_bracket(_team("Raleigh", 1.0, 1.0), second_round=0.8, champion=0.06)
     assert (
         team_description(locked, 3, 6, "projected")
-        == "Raleigh (6–2, 3–1 in Region 6-3A): locked in as the #1 seed, 6% to win state."
+        == "Raleigh (6–2, 3–1 in Region 6-3A): locked in as the #1 seed, 6% to win the state championship."
     )
     # Can't win the region: it doesn't lead with "0% to win the region".
     chasing = _team("Magee", 0.28, 0.0)

@@ -227,9 +227,14 @@ def wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, wid
     return [fit(draw, line, font, width) for line in lines]
 
 
+def _tracked_width(draw: ImageDraw.ImageDraw, text: str, font, tracking: float) -> float:
+    """Width of *text* drawn by ``_tracked``."""
+    return sum(draw.textlength(ch, font=font) for ch in text) + tracking * max(0, len(text) - 1)
+
+
 def _tracked(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, font, fill, tracking: float, anchor="ls"):
     """Small caps-style label with letter spacing (Pillow has none built in). Left or right anchored."""
-    total = sum(draw.textlength(ch, font=font) for ch in text) + tracking * max(0, len(text) - 1)
+    total = _tracked_width(draw, text, font, tracking)
     x, y = xy
     if anchor[0] == "r":
         x -= total
@@ -509,11 +514,11 @@ def playoff_path(team: dict, mode: str, clazz: int) -> list[tuple[str, str, floa
         return []
     w = "_weighted" if mode == "projected" else ""
     rounds = [
-        ("second_round", "2ND ROUND"),
-        ("quarterfinals", "QUARTERS"),
-        ("semifinals", "SEMIS"),
-        ("finals", "FINAL"),
-        ("champion", "STATE TITLE"),
+        ("second_round", "SECOND ROUND"),
+        ("quarterfinals", "QUARTERFINALS"),
+        ("semifinals", "SEMIFINALS"),
+        ("finals", "CHAMPIONSHIP GAME"),
+        ("champion", "CHAMPIONS"),
     ]
     return [(k, label, b.get(f"{k}{w}")) for k, label in rounds if not (k == "second_round" and clazz >= 5)]
 
@@ -564,7 +569,7 @@ def team_description(team: dict, clazz: int, region: int, mode: str) -> str:
     """One line of the team's numbers, for the link preview.
 
     "Raleigh (5–1, 1–0 in Region 6-3A): 39% to win the region, >99% to make the
-    playoffs, 4% to win state." Locked and finished outcomes are stated as facts.
+    playoffs, 4% to win the state championship." Locked and finished outcomes are stated as facts.
     """
     overall, in_region = _records(team)
     name = f"{team['school']} ({overall}, {in_region} in Region {region}-{clazz}A)"
@@ -588,7 +593,7 @@ def team_description(team: dict, clazz: int, region: int, mode: str) -> str:
         parts.append("in the playoffs" if _certain(playoffs) else f"{format_pct(playoffs)} to make the playoffs")
     path = playoff_path(team, mode, clazz)
     if path and path[-1][2] is not None:
-        parts.append(f"{format_pct(path[-1][2])} to win state")
+        parts.append(f"{format_pct(path[-1][2])} to win the state championship")
     if len(parts) > 1:
         return f"{name}: {', '.join(parts[:-1])}, {parts[-1]}."
     return f"{name}: {parts[0]}."
@@ -600,9 +605,14 @@ def _pill_row(draw: ImageDraw.ImageDraw, top: float, label: str, cells: list[tup
     _tracked(draw, (PAD, top), label, small, TEXT_2, 1.8)
     gap = 14
     width = (WIDTH - 2 * PAD - gap * (len(cells) - 1)) / len(cells)
+    # Full round names ("CHAMPIONSHIP GAME") over five columns: step the
+    # headers down a size rather than abbreviate them.
+    header_font, tracking = small, 1.6
+    if max(_tracked_width(draw, h, small, 1.6) for h, _ in cells) > width - 16:
+        header_font, tracking = _inter(15, 600), 0.8
     for i, (header, p) in enumerate(cells):
         right = PAD + (i + 1) * width + i * gap
-        _tracked(draw, (right, top + 34), header, small, TEXT_2, 1.6, anchor="rs")
+        _tracked(draw, (right, top + 34), header, header_font, TEXT_2, tracking, anchor="rs")
         if p is None:
             continue
         _odds_pill(draw, right, top + 34 + 40, p, width, 56, 32)

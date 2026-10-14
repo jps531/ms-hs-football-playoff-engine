@@ -33,8 +33,8 @@ const entry = {
 
 test("playoff path: reach, host if there, host overall per round", () => {
   const path = playoffPath(entry, "tossup", 3);
-  assert.deepEqual(path.map((p) => p.round), ["First round", "Second round", "Quarterfinals", "Semifinals", "Championship game", "Wins it all"]);
-  assert.deepEqual(path[0], { round: "First round", reach: 0.9, neutral: false, hostIfReach: 0.5, hostOverall: 0.45 });
+  assert.deepEqual(path.map((p) => p.round), ["First Round", "Second Round", "Quarterfinals", "Semifinals", "Championship Game", "Champions"]);
+  assert.deepEqual(path[0], { round: "First Round", reach: 0.9, neutral: false, hostIfReach: 0.5, hostOverall: 0.45 });
   assert.equal(path[2].hostOverall, 0.2);
   assert.equal(path[4].neutral, true); // championship is at a neutral site
   assert.equal(path[5].neutral, false); // nothing left to host after it
@@ -43,8 +43,8 @@ test("playoff path: reach, host if there, host overall per round", () => {
 
 test("playoff path follows the odds mode and skips 5A-7A's missing round", () => {
   const path = playoffPath(entry, "projected", 6);
-  assert.equal(path.some((p) => p.round === "Second round"), false);
-  assert.deepEqual(path[0], { round: "First round", reach: 0.95, neutral: false, hostIfReach: 0.6, hostOverall: 0.57 });
+  assert.equal(path.some((p) => p.round === "Second Round"), false);
+  assert.deepEqual(path[0], { round: "First Round", reach: 0.95, neutral: false, hostIfReach: 0.6, hostOverall: 0.57 });
   assert.equal(path[1].reach, 0.5);
   assert.deepEqual(playoffPath({ odds: {} }, "tossup", 3), []);
 });
