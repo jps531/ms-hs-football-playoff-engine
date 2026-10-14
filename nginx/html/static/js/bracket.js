@@ -7,18 +7,18 @@
 //   /bracket/matchups   -> games[] (sides, occupants, matchups, hosting)
 // Hosting always comes from the API; nothing here applies MHSAA rules.
 
-const SEED_NAMES = { 1: "champion", 2: "runner-up", 3: "3rd seed", 4: "4th seed" };
+const SEED_NAMES = { 1: "#1 Seed", 2: "#2 Seed", 3: "#3 Seed", 4: "#4 Seed" };
 
-/** "Region 3 champion", "Region 4 runner-up". */
+/** "Region 3 #1 Seed", "Region 4 #2 Seed". */
 export function positionName({ region, seed }) {
-  return `Region ${region} ${SEED_NAMES[seed] ?? `#${seed}`}`;
+  return `Region ${region} ${SEED_NAMES[seed] ?? `#${seed} Seed`}`;
 }
 
 /**
  * Where one side of a game comes from, as short as it can be said:
- *   one or two positions   "Region 3 champion", "Region 1 champion or Region 2 4th seed"
- *   more, by region        "Region 1 (champion, 3rd seed), Region 2 (runner-up, 4th seed)"
- *   whole regions          "Region 1 or 2 (any seed)", "Regions 1–4 (any seed)"
+ *   one or two positions   "Region 3 #1 Seed", "Region 1 #1 Seed or Region 2 #4 Seed"
+ *   more, by region        "Region 1 (#1 Seed, #3 Seed), Region 2 (#2 Seed, #4 Seed)"
+ *   whole regions          "Region 1 or 2 (Any Seed)", "Regions 1–4 (Any Seed)"
  */
 export function sideLabel(feeders) {
   const names = feeders.map(positionName);
@@ -32,15 +32,15 @@ export function sideLabel(feeders) {
   const full = (r) => [1, 2, 3, 4].every((k) => byRegion.get(r).includes(k));
   if (regions.every(full)) {
     const contiguous = regions.every((r, i) => !i || r === regions[i - 1] + 1);
-    if (regions.length === 1) return `Region ${regions[0]} (any seed)`;
-    if (regions.length === 2) return `Region ${regions[0]} or ${regions[1]} (any seed)`;
+    if (regions.length === 1) return `Region ${regions[0]} (Any Seed)`;
+    if (regions.length === 2) return `Region ${regions[0]} or ${regions[1]} (Any Seed)`;
     return contiguous
-      ? `Regions ${regions[0]}–${regions[regions.length - 1]} (any seed)`
-      : `Regions ${regions.slice(0, -1).join(", ")} or ${regions[regions.length - 1]} (any seed)`;
+      ? `Regions ${regions[0]}–${regions[regions.length - 1]} (Any Seed)`
+      : `Regions ${regions.slice(0, -1).join(", ")} or ${regions[regions.length - 1]} (Any Seed)`;
   }
   return regions.map((r) => {
-    if (full(r)) return `Region ${r} (any seed)`;
-    const seeds = byRegion.get(r).sort((a, b) => a - b).map((k) => SEED_NAMES[k] ?? `#${k}`);
+    if (full(r)) return `Region ${r} (Any Seed)`;
+    const seeds = byRegion.get(r).sort((a, b) => a - b).map((k) => SEED_NAMES[k] ?? `#${k} Seed`);
     return `Region ${r} (${seeds.join(", ")})`;
   }).join(", ");
 }

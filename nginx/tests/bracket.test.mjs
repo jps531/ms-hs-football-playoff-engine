@@ -25,16 +25,16 @@ const QF = {
 };
 
 test("positions and sides read the MHSAA way", () => {
-  assert.equal(positionName({ region: 3, seed: 1 }), "Region 3 champion");
-  assert.equal(positionName({ region: 4, seed: 2 }), "Region 4 runner-up");
-  assert.equal(sideLabel([{ region: 3, seed: 1 }]), "Region 3 champion");
-  assert.equal(sideLabel(QF.side_a.feeders), "Region 1 champion or Region 2 4th seed");
+  assert.equal(positionName({ region: 3, seed: 1 }), "Region 3 #1 Seed");
+  assert.equal(positionName({ region: 4, seed: 2 }), "Region 4 #2 Seed");
+  assert.equal(sideLabel([{ region: 3, seed: 1 }]), "Region 3 #1 Seed");
+  assert.equal(sideLabel(QF.side_a.feeders), "Region 1 #1 Seed or Region 2 #4 Seed");
   const pos = (pairs) => pairs.map(([region, seed]) => ({ region, seed }));
-  assert.equal(sideLabel(pos([[1, 1], [2, 4], [1, 3], [2, 2]])), "Region 1 (champion, 3rd seed), Region 2 (runner-up, 4th seed)");
+  assert.equal(sideLabel(pos([[1, 1], [2, 4], [1, 3], [2, 2]])), "Region 1 (#1 Seed, #3 Seed), Region 2 (#2 Seed, #4 Seed)");
   const all = (rs) => pos(rs.flatMap((r) => [1, 2, 3, 4].map((k) => [r, k])));
-  assert.equal(sideLabel(all([1, 2, 3, 4])), "Regions 1–4 (any seed)");
-  assert.equal(sideLabel(all([5, 6])), "Region 5 or 6 (any seed)");
-  assert.equal(sideLabel([...all([1]), ...pos([[2, 1], [2, 2]])]), "Region 1 (any seed), Region 2 (champion, runner-up)");
+  assert.equal(sideLabel(all([1, 2, 3, 4])), "Regions 1–4 (Any Seed)");
+  assert.equal(sideLabel(all([5, 6])), "Region 5 or 6 (Any Seed)");
+  assert.equal(sideLabel([...all([1]), ...pos([[2, 1], [2, 2]])]), "Region 1 (Any Seed), Region 2 (#1 Seed, #2 Seed)");
 });
 
 test("occupants follow the odds mode and sort likeliest first", () => {

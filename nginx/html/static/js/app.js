@@ -299,7 +299,7 @@ function showContext(html) {
 const SITE = "Mississippi High School Football";
 
 function pageTitle(clazz, region, page) {
-  if (page === "bracket") return `Class ${clazz}A playoff bracket — ${SITE}`;
+  if (page === "bracket") return `Class ${clazz}A Playoff Bracket — ${SITE}`;
   return region ? `Region ${region}-${clazz}A playoff race — ${SITE}` : `Class ${clazz}A playoff races — ${SITE}`;
 }
 
@@ -647,7 +647,7 @@ async function regionView(ctx) {
     <header class="region-head">
       <p class="region-head__links">
         <a href="${esc(hrefWith({ region: null, team: null }))}">All ${clazz}A regions</a>
-        <a href="${esc(hrefWith({ page: "bracket", region: null }))}">${clazz}A bracket</a>
+        <a href="${esc(hrefWith({ page: "bracket", region: null }))}">${clazz}A Bracket</a>
       </p>
       <h1 class="title">Region ${region}-${clazz}A</h1>
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
@@ -909,7 +909,7 @@ async function bracketView(ctx) {
   const projectedAvailable = games.some((g) => g.side_a.occupants.some((o) => o.p_reach_weighted != null));
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
 
-  // A locked team's seed, for its "Region 3 champion" label.
+  // A locked team's seed, for its "Region 3 #1 Seed" label.
   const seeds = {};
   for (const r of standings?.regions ?? []) {
     for (const t of r.teams) {
@@ -938,13 +938,13 @@ async function bracketView(ctx) {
 
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
   bracketData.summary = controlsSummary; // for the game sheet's provenance line
-  nextContext = contextHtml(`${clazz}A bracket`, controlsSummary, mode);
+  nextContext = contextHtml(`${clazz}A Bracket`, controlsSummary, mode);
   const focusNote = ctx.team
     ? `<p class="focus-note">Showing ${esc(ctx.team)}’s possible path. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
     : `<p class="focus-note muted">Tap a game to see who might play there, and pick a team to follow its path.</p>`;
   return `<div class="page">
     <header class="entry-head bracket-head">
-      <h1 class="title">Class ${clazz}A bracket</h1>
+      <h1 class="title">Class ${clazz}A Bracket</h1>
       ${controls}
       ${focusNote}
     </header>
@@ -992,7 +992,7 @@ function bracketHtml() {
     </div>`;
 }
 
-/** A team's seed label once it's locked: "Region 3 champion". */
+/** A team's seed label once it's locked: "Region 3 #1 Seed". */
 function seedLabel(team) {
   const s = bracketData.seeds[team];
   return s ? positionName(s) : null;
