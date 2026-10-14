@@ -1322,7 +1322,7 @@ function bracketSide(game, sideKey, result, host) {
 /** Host wording from one team's point of view. */
 function hostText(team, hosts, pTeamHosts) {
   if (hosts === "neutral") return "Neutral site";
-  if (hosts === "split") return `${team} hosts ${formatPct(pTeamHosts)}`;
+  if (hosts === "split") return `${formatPct(pTeamHosts)} chance ${team} hosts`;
   return "";
 }
 
@@ -1363,7 +1363,7 @@ function gameDetail(game) {
     const h = hosting(m.hostA);
     const [away, home] = h.host === "a" ? [m.b, m.a] : [m.a, m.b];
     const joiner = h.host === "a" || h.host === "b" ? "at" : "vs";
-    const note = h.host === "neutral" ? "Neutral site" : h.host === "split" ? `${m.a} hosts ${formatPct(h.p)}` : "";
+    const note = h.host === "neutral" ? "Neutral site" : h.host === "split" ? `${formatPct(h.p)} chance ${m.a} hosts` : "";
     return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}</span></span>${oddsCell(m.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
   });
   if (!ms.length) {
