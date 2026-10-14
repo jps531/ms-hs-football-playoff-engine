@@ -29,6 +29,12 @@ test("positions and sides read the MHSAA way", () => {
   assert.equal(positionName({ region: 4, seed: 2 }), "Region 4 runner-up");
   assert.equal(sideLabel([{ region: 3, seed: 1 }]), "Region 3 champion");
   assert.equal(sideLabel(QF.side_a.feeders), "Region 1 champion or Region 2 4th seed");
+  const pos = (pairs) => pairs.map(([region, seed]) => ({ region, seed }));
+  assert.equal(sideLabel(pos([[1, 1], [2, 4], [1, 3], [2, 2]])), "Region 1 (champion, 3rd seed), Region 2 (runner-up, 4th seed)");
+  const all = (rs) => pos(rs.flatMap((r) => [1, 2, 3, 4].map((k) => [r, k])));
+  assert.equal(sideLabel(all([1, 2, 3, 4])), "Regions 1–4 (any seed)");
+  assert.equal(sideLabel(all([5, 6])), "Region 5 or 6 (any seed)");
+  assert.equal(sideLabel([...all([1]), ...pos([[2, 1], [2, 2]])]), "Region 1 (any seed), Region 2 (champion, runner-up)");
 });
 
 test("occupants follow the odds mode and sort likeliest first", () => {
@@ -71,7 +77,7 @@ test("a picked team's opponents are conditional on it getting there, with who ho
   assert.deepEqual(fromB.map((o) => [o.opponent, o.hosts]), [["Taylorsville", "opponent"], ["Mize", "team"]]);
   assert.equal(fromB.reduce((s, o) => s + o.p, 0), 1);
   assert.deepEqual(opponentsFor(QF, "Nobody", "tossup"), []);
-  assert.deepEqual(teamInGame(QF, "Mize", "projected"), { side: "a", p: 0.3, locked: false });
+  assert.deepEqual(teamInGame(QF, "Mize", "projected"), { sides: ["a"], p: 0.3, locked: false });
 });
 
 test("a team's path is every game it can still play in", () => {
@@ -136,4 +142,32 @@ test("tree layout: focus column stacks, later columns center between feeders, an
   const mid = treeLayout(cols, 0.5, 100, 80);
   assert.deepEqual(mid.centers[1], [65, 215]); // halfway between [90, 290] and [40, 140]
   assert.deepEqual(treeLayout(cols, 9, 100, 80).centers[2], [40]); // focus is clamped
+});
+
+test("a team that can reach either side: chances add, and opponents from both orientations combine", () => {
+  const side = (occ) => ({ feeders: [], occupants: occ.map(([team, p]) => ({ team, p_reach: p, p_reach_weighted: null, is_locked: false })) });
+  const game = {
+    id: "N-1-0",
+    side_a: side([["Indy", 0.2], ["Winona", 0.5], ["Raleigh", 0.3]]),
+    side_b: side([["Indy", 0.1], ["Winona", 0.4], ["Magee", 0.5]]),
+    matchups: [
+      { team_a: "Indy", team_b: "Winona", p_matchup: 0.08, p_matchup_weighted: null, p_host_a: 1, p_host_a_weighted: null },
+      { team_a: "Indy", team_b: "Magee", p_matchup: 0.12, p_matchup_weighted: null, p_host_a: 1, p_host_a_weighted: null },
+      { team_a: "Winona", team_b: "Indy", p_matchup: 0.04, p_matchup_weighted: null, p_host_a: 0, p_host_a_weighted: null },
+      { team_a: "Raleigh", team_b: "Indy", p_matchup: 0.06, p_matchup_weighted: null, p_host_a: 0.5, p_host_a_weighted: null },
+    ],
+  };
+  const here = teamInGame(game, "Indy", "tossup");
+  assert.deepEqual(here.sides, ["a", "b"]);
+  assert.ok(Math.abs(here.p - 0.3) < 1e-9);
+  const opp = opponentsFor(game, "Indy", "tossup");
+  assert.deepEqual(opp.map((o) => o.opponent), ["Magee", "Winona", "Raleigh"]);
+  const w = opp.find((o) => o.opponent === "Winona");
+  assert.ok(Math.abs(w.pMatchup - 0.12) < 1e-9); // 0.08 as side A + 0.04 as side B
+  assert.ok(Math.abs(w.p - 0.4) < 1e-9); // 0.12 / 0.3
+  assert.equal(w.hosts, "team"); // hosts in both orientations
+  const r = opp.find((o) => o.opponent === "Raleigh");
+  assert.equal(r.hosts, "split");
+  assert.ok(Math.abs(r.pTeamHosts - 0.5) < 1e-9);
+  assert.ok(Math.abs(opp.reduce((s, o) => s + o.p, 0) - 1) < 1e-9);
 });

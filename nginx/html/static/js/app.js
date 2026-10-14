@@ -937,6 +937,7 @@ async function bracketView(ctx) {
   };
 
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
+  bracketData.summary = controlsSummary; // for the game sheet's provenance line
   nextContext = contextHtml(`${clazz}A bracket`, controlsSummary, mode);
   const focusNote = ctx.team
     ? `<p class="focus-note">Showing ${esc(ctx.team)}’s possible path. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
@@ -952,7 +953,7 @@ async function bracketView(ctx) {
 }
 
 const HALF_NAMES = { N: "North", S: "South" };
-const ROUND_SHORT = { "First Round": "1st Rd", "Second Round": "2nd Rd", Quarterfinals: "Quarters", Semifinals: "Semis", "Championship Game": "Final" };
+const ROUND_SHORT = { "First Round": "R1", "Second Round": "R2", Quarterfinals: "QF", Semifinals: "SF", "Championship Game": "CG" };
 const shortRound = (name) => ROUND_SHORT[name] ?? name;
 
 // The bracket is a tree of columns (rounds, then the final). Cards have a
@@ -979,7 +980,7 @@ function bracketHtml() {
       </div>`
     : "";
   const tabs = `<div class="round-tabs" role="group" aria-label="Jump to a round">
-      ${cols.map((c, i) => `<button type="button" class="round-tabs__item" data-round-jump="${i}" aria-current="${i === 0}">${esc(shortRound(c.name))}</button>`).join("")}
+      ${cols.map((c, i) => `<button type="button" class="round-tabs__item" data-round-jump="${i}" aria-current="${i === 0}" aria-label="${esc(c.name)}" title="${esc(c.name)}">${esc(shortRound(c.name))}</button>`).join("")}
     </div>`;
   const columns = cols.map((c) => `<section class="tcol" aria-label="${esc(c.name)}">
       <h3 class="tcol__title">${esc(c.name)}</h3>
@@ -1021,26 +1022,52 @@ const STATE_LABEL = { played: "Final", determined: "Matchup set", partial: "One 
 
 /** A compact game card in the tree: one row per side. Tapping it opens the game sheet. */
 function treeCard(game, path) {
-  const result = bracketData.results[game.id] ?? null;
+  const { results, focus, mode } = bracketData;
+  const result = results[game.id] ?? null;
   const state = gameState(game, result);
   const { order, joiner } = sideOrder(settledHost(game));
   const onPath = path ? path.has(game.id) : null;
   const cls = ["tgame", `tgame--${state}`, onPath === true ? "is-path" : "", onPath === false ? "is-off" : ""].filter(Boolean).join(" ");
-  return `<button type="button" class="${cls}" data-game-open="${esc(game.id)}" aria-haspopup="dialog">
-    ${treeRow(game, order[0], result, "")}
-    ${treeRow(game, order[1], result, joiner)}
-  </button>`;
+  const here = focus && !result ? teamInGame(game, focus, mode) : null;
+  const rows = here && here.p > 0 && !here.locked
+    ? focusRows(game, here)
+    : `${treeRow(game, order[0], result, "")}${treeRow(game, order[1], result, joiner)}`;
+  return `<button type="button" class="${cls}" data-game-open="${esc(game.id)}" aria-haspopup="dialog">${rows}</button>`;
+}
+
+/**
+ * A game the picked team might reach, from its point of view: the team with
+ * its chance of playing here (from either side), and its likeliest opponent
+ * with the chance of that exact game. The home team still goes last.
+ */
+function focusRows(game, here) {
+  const { focus, teams } = bracketData;
+  const opp = opponentsFor(game, focus, bracketData.mode);
+  const top = opp[0];
+  const teamRow = (gutter) => treeLine(gutter, focus, focus, teams, "Chance to play here", oddsCell(here.p), " is-focus");
+  // Every pairing here is under the API's 0.5% listing floor: too many long shots to name one.
+  if (!top) return `${teamRow("")}${treeLine("vs", null, "Many possible opponents", teams, "Each under 0.5%", "", " trow--empty")}`;
+  const more = opp.length > 1 ? ` · +${opp.length - 1} more` : "";
+  const oppRow = (gutter) => treeLine(gutter, top.opponent, top.opponent, teams, `Likeliest opponent${more}`, oddsCell(top.pMatchup), "");
+  if (top.hosts === "team") return `${oppRow("")}${teamRow("at")}`;
+  if (top.hosts === "opponent") return `${teamRow("")}${oppRow("at")}`;
+  return `${teamRow("")}${oppRow("vs")}`;
+}
+
+/** One row of a compact card. */
+function treeLine(gutter, team, name, teams, sub, value, cls) {
+  return `<span class="trow${cls}">
+      <span class="trow__gutter">${gutter}</span>${team ? teamMark(team, teams[team], { size: 22 }) : '<span class="mark"></span>'}
+      <span class="trow__text"><span class="trow__name">${esc(name)}</span>${sub ? `<span class="trow__sub">${sub}</span>` : ""}</span>
+      <span class="trow__value">${value}</span>
+    </span>`;
 }
 
 /** One side of a compact card: the result, the locked team, or the likeliest (or picked) team with its odds. */
 function treeRow(game, sideKey, result, gutter) {
   const { mode, focus, teams } = bracketData;
   const side = sideKey === "a" ? game.side_a : game.side_b;
-  const row = (cls, team, name, sub, value) => `<span class="trow${cls}${team && team === focus ? " is-focus" : ""}">
-      <span class="trow__gutter">${gutter}</span>${team ? teamMark(team, teams[team], { size: 22 }) : '<span class="mark"></span>'}
-      <span class="trow__text"><span class="trow__name">${esc(name)}</span>${sub ? `<span class="trow__sub">${sub}</span>` : ""}</span>
-      <span class="trow__value">${value}</span>
-    </span>`;
+  const row = (cls, team, name, sub, value) => treeLine(gutter, team, name, teams, sub, value, `${cls}${team && team === focus ? " is-focus" : ""}`);
   if (result) {
     const team = lockedTeam(side) ?? (sideKey === "a" ? result.winner : result.loser);
     const won = team === result.winner;
@@ -1193,6 +1220,8 @@ function refreshSheet() {
   const top = body?.scrollTop ?? 0;
   sheet.innerHTML = sheetHtml(bracketUi.open);
   sheet.querySelector(".game-sheet__body").scrollTop = top;
+  // The control that was focused was just replaced; keep focus in the sheet.
+  if (!sheet.contains(document.activeElement)) sheet.querySelector(".game-sheet__title")?.focus({ preventScroll: true });
 }
 
 function sheetHtml(id) {
@@ -1209,7 +1238,8 @@ function sheetHtml(id) {
   return `<div class="game-sheet__head">
       <div>
         <p class="game-sheet__kicker">${esc(kicker)}</p>
-        <h2 class="game-sheet__title" id="game-sheet-title">${esc(title)}</h2>
+        <h2 class="game-sheet__title" id="game-sheet-title" tabindex="-1" autofocus>${esc(title)}</h2>
+        <p class="game-sheet__prov provenance">${contextHtml(`Class ${bracketData.clazz}A`, bracketData.summary, bracketData.mode)}</p>
       </div>
       <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
@@ -1308,7 +1338,7 @@ function gameDetail(game) {
     return `<h4 class="bgame__heading">${esc(intro)}</h4>
       <ol class="opp-list">${shown.map((o) => {
         const note = hostText(focus, o.hosts, o.pTeamHosts);
-        return `<li><span class="mu__teams"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}</span>${oddsCell(o.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
+        return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}</span></span>${oddsCell(o.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
       }).join("")}</ol>
       ${opp.length > MATCHUP_CAP ? `<button type="button" class="bside__more" data-show-all="${esc(key)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${opp.length}`}</button>` : ""}`;
   }
@@ -1327,8 +1357,12 @@ function gameDetail(game) {
     const [away, home] = h.host === "a" ? [m.b, m.a] : [m.a, m.b];
     const joiner = h.host === "a" || h.host === "b" ? "at" : "vs";
     const note = h.host === "neutral" ? "Neutral site" : h.host === "split" ? `${m.a} hosts ${formatPct(h.p)}` : "";
-    return `<li><span class="mu__teams">${teamLabel(away, teams)}<span class="vs">${joiner}</span>${teamLabel(home, teams)}</span>${oddsCell(m.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
+    return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}</span></span>${oddsCell(m.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
   });
+  if (!ms.length) {
+    return `<div class="bgame__sides">${sides}</div>
+      <p class="muted bgame__count">So many teams could still meet here that no single matchup has even a 0.5% chance yet.</p>`;
+  }
   return `<div class="bgame__sides">${sides}</div>
     <h4 class="bgame__heading">Most likely matchups</h4>
     <ol class="opp-list opp-list--matchups">${rows.join("")}</ol>

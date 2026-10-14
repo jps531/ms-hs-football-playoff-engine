@@ -15,15 +15,34 @@ export function positionName({ region, seed }) {
 }
 
 /**
- * Where one side of a game comes from: a single position's name in the
- * first round ("Region 3 champion"), and a list of the positions that can
- * win their way there later ("Region 1 champion, Region 2 4th seed, ... or
- * Region 4 3rd seed").
+ * Where one side of a game comes from, as short as it can be said:
+ *   one or two positions   "Region 3 champion", "Region 1 champion or Region 2 4th seed"
+ *   more, by region        "Region 1 (champion, 3rd seed), Region 2 (runner-up, 4th seed)"
+ *   whole regions          "Region 1 or 2 (any seed)", "Regions 1–4 (any seed)"
  */
 export function sideLabel(feeders) {
   const names = feeders.map(positionName);
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+  if (names.length <= 2) return names.join(" or ");
+  const byRegion = new Map();
+  for (const { region, seed } of feeders) {
+    if (!byRegion.has(region)) byRegion.set(region, []);
+    byRegion.get(region).push(seed);
+  }
+  const regions = [...byRegion.keys()].sort((a, b) => a - b);
+  const full = (r) => [1, 2, 3, 4].every((k) => byRegion.get(r).includes(k));
+  if (regions.every(full)) {
+    const contiguous = regions.every((r, i) => !i || r === regions[i - 1] + 1);
+    if (regions.length === 1) return `Region ${regions[0]} (any seed)`;
+    if (regions.length === 2) return `Region ${regions[0]} or ${regions[1]} (any seed)`;
+    return contiguous
+      ? `Regions ${regions[0]}–${regions[regions.length - 1]} (any seed)`
+      : `Regions ${regions.slice(0, -1).join(", ")} or ${regions[regions.length - 1]} (any seed)`;
+  }
+  return regions.map((r) => {
+    if (full(r)) return `Region ${r} (any seed)`;
+    const seeds = byRegion.get(r).sort((a, b) => a - b).map((k) => SEED_NAMES[k] ?? `#${k}`);
+    return `Region ${r} (${seeds.join(", ")})`;
+  }).join(", ");
 }
 
 /** Results from the layout, keyed like the matchups' game ids. */
@@ -107,34 +126,57 @@ export function matchups(game, mode) {
     .sort((x, y) => y.p - x.p || x.a.localeCompare(y.a) || x.b.localeCompare(y.b));
 }
 
-/** P(team plays in this game) in the odds mode, and which side it'd be on. */
+/**
+ * P(team plays in this game) in the odds mode, and which sides it could be
+ * on. A team can reach either side of some games (a region's 2 seed feeds
+ * one side and its 3 seed the other), and never both at once, so the
+ * chances add.
+ */
 export function teamInGame(game, team, mode) {
+  let p = 0;
+  let locked = false;
+  const sides = [];
   for (const [key, side] of [["a", game.side_a], ["b", game.side_b]]) {
     const o = side.occupants.find((x) => x.team === team);
-    if (o) return { side: key, p: pick(o, "p_reach", mode) ?? 0, locked: o.is_locked };
+    if (!o) continue;
+    p += pick(o, "p_reach", mode) ?? 0;
+    locked ||= o.is_locked;
+    sides.push(key);
   }
-  return null;
+  return sides.length ? { sides, p: Math.min(1, p), locked } : null;
 }
 
 /**
  * A picked team's possible opponents in one game, from its own point of view:
- * [{ opponent, p, hosts }] where p is the chance of facing that opponent *if*
- * the team gets here, and hosts is "team" / "opponent" / "split" / "neutral"
+ * [{ opponent, p, pMatchup, hosts }] where p is the chance of facing that
+ * opponent *if* the team gets here, pMatchup the chance this exact game
+ * happens, and hosts is "team" / "opponent" / "split" / "neutral"
  * (with pTeamHosts). Likeliest first. Empty when the team can't play here.
  */
 export function opponentsFor(game, team, mode) {
   const here = teamInGame(game, team, mode);
   if (!here || here.p <= 0) return [];
-  const rows = [];
+  // The same opponent can come from either orientation (team on side A or
+  // on side B); combine them, weighting hosting by each one's chance.
+  const by = new Map();
   for (const m of matchups(game, mode)) {
-    const mine = here.side === "a" ? m.a : m.b;
-    if (mine !== team) continue;
-    const opponent = here.side === "a" ? m.b : m.a;
-    const pTeamHosts = m.hostA == null ? null : here.side === "a" ? m.hostA : 1 - m.hostA;
+    if (m.a !== team && m.b !== team) continue;
+    const opponent = m.a === team ? m.b : m.a;
+    const hosts = m.hostA == null ? null : m.a === team ? m.hostA : 1 - m.hostA;
+    const row = by.get(opponent) ?? { p: 0, hostMass: 0, neutral: false };
+    row.p += m.p;
+    if (hosts == null) row.neutral = true;
+    else row.hostMass += m.p * hosts;
+    by.set(opponent, row);
+  }
+  const rows = [];
+  for (const [opponent, r] of by) {
+    const pTeamHosts = r.neutral ? null : r.hostMass / r.p;
     const h = hosting(pTeamHosts);
     rows.push({
       opponent,
-      p: m.p / here.p,
+      p: r.p / here.p,
+      pMatchup: r.p,
       hosts: h.host === "a" ? "team" : h.host === "b" ? "opponent" : h.host,
       pTeamHosts,
     });
