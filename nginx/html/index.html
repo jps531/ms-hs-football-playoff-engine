@@ -15,10 +15,10 @@
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <!--# endblock -->
-  <!-- Share tags: nginx swaps in this page's own (title, headline as the
-       description, its card image) for region and class pages; anywhere else,
-       or before the pipeline has drawn them, the generic block above. -->
-  <!--# include virtual="/_share/meta/${share_page}.html" stub="share_default" -->
+  <!-- Share tags: nginx swaps in this page's own (title, description, card
+       image) for region, team (?team=) and class pages; anywhere else, or
+       before the pipeline has drawn them, the generic block above. -->
+  <!--# include virtual="/share/meta/${share_page}${share_team}.html" stub="share_default" -->
   <link rel="icon" type="image/png" href="/static/mark.png">
   <script>
     (() => {

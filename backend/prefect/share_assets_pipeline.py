@@ -5,14 +5,17 @@ It reads the site's own public API, the same numbers the page shows, and
 writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
 
     og/{class}-{region}.png   region card, 1200x630
+    og/{class}-{region}/{team}.png
+                              team card (a region link with ?team=<slug>)
     og/{class}.png            class card
     og/site.png               fallback card for every other page
-    meta/{class}-{region}.html, meta/{class}.html
+    meta/{class}-{region}.html, meta/{class}.html, meta/{class}-{region}/{team}.html
                               <title>, description, Open Graph / Twitter tags
 
 nginx splices the matching ``meta/*.html`` into the app's ``index.html``
-<head> for /standings/{class}a/{region} and /standings/{class}a (server-side
-include), falling back to the generic tags in ``index.html``. The app itself
+<head> for /standings/{class}a/{region}[?team=<slug>] and /standings/{class}a
+(server-side include). A team without a file falls back to its region's tags,
+anything else to the generic tags in ``index.html``. The app itself
 is unchanged; the tags are for link previews and search engines.
 """
 
@@ -38,6 +41,10 @@ from backend.helpers.share_cards import (
     render_class_card,
     render_region_card,
     render_site_card,
+    render_team_card,
+    slugify,
+    team_description,
+    team_title,
 )
 
 API_URL = os.environ.get("SHARE_API_URL", "http://api:8000/api/v1")
@@ -91,16 +98,16 @@ def build_share_assets(
 ) -> dict[str, int]:
     """Render every region and class card and its meta tags for *season* (default: the newest).
 
-    Returns counts of what was written: {"regions": n, "classes": n}.
+    Returns counts of what was written: {"regions": n, "classes": n, "teams": n}.
     """
     if season is None:
         seasons = fetch("/seasons") or []
         if not seasons:
-            return {"regions": 0, "classes": 0}
+            return {"regions": 0, "classes": 0, "teams": 0}
         season = seasons[0]["season"]
     site_url = site_url.rstrip("/")
     _write_png(out_dir / "og" / "site.png", render_site_card())
-    written = {"regions": 0, "classes": 0}
+    written = {"regions": 0, "classes": 0, "teams": 0}
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
@@ -146,7 +153,39 @@ def build_share_assets(
                 ),
             )
             written["regions"] += 1
+            written["teams"] += _write_team_assets(out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of)
     return written
+
+
+def _write_team_assets(
+    out_dir: Path, site_url: str, clazz: int, region: int, payload: dict, stamp: str, mode: str, as_of: date
+) -> int:
+    """Each team's card and meta file for one region; removes ones for teams no longer in it."""
+    name = f"{clazz}-{region}"
+    meta_dir = out_dir / "meta" / name
+    og_dir = out_dir / "og" / name
+    current: set[str] = set()
+    for team in payload["teams"]:
+        slug = slugify(team["school"])
+        if not slug:
+            continue
+        current.add(slug)
+        _write_png(og_dir / f"{slug}.png", render_team_card(clazz, region, team, stamp, mode))
+        _write_text(
+            meta_dir / f"{slug}.html",
+            meta_tags(
+                team_title(team, clazz, region),
+                description(team_description(team, clazz, region, mode)),
+                f"{site_url}/static/og/{name}/{slug}.png?v={as_of:%Y%m%d}",
+                f"{site_url}/standings/{clazz}a/{region}?team={slug}",
+            ),
+        )
+    # A team that moved regions (or a renamed one) shouldn't keep a stale card here.
+    for folder, suffix in ((meta_dir, ".html"), (og_dir, ".png")):
+        for path in folder.glob(f"*{suffix}"):
+            if path.stem not in current:
+                path.unlink(missing_ok=True)
+    return len(current)
 
 
 @task(name="Write share assets", retries=1, retry_delay_seconds=30)
@@ -155,7 +194,11 @@ def write_share_assets(season: int | None = None) -> dict[str, int]:
     logger = get_run_logger()
     written = build_share_assets(api_fetch, Path(OUTPUT_DIR), SITE_URL, date.today(), season)
     logger.info(
-        "Share assets written to %s: %d regions, %d classes", OUTPUT_DIR, written["regions"], written["classes"]
+        "Share assets written to %s: %d regions, %d classes, %d teams",
+        OUTPUT_DIR,
+        written["regions"],
+        written["classes"],
+        written["teams"],
     )
     return written
 

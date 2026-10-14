@@ -18,7 +18,11 @@ from backend.helpers.share_cards import (
     render_class_card,
     render_region_card,
     render_site_card,
+    render_team_card,
+    slugify,
     standing_positions,
+    team_description,
+    team_status,
     wrap,
 )
 from backend.prefect.share_assets_pipeline import build_share_assets
@@ -162,7 +166,7 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         "/standings/3/7?season=2026": {"as_of_date": "2026-10-09", "headline": None, "teams": TEAMS},
     }
     written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com/", date(2026, 10, 14))
-    assert written == {"regions": 2, "classes": 1}
+    assert written == {"regions": 2, "classes": 1, "teams": 8}
     for name in ("site.png", "3.png", "3-6.png", "3-7.png"):
         assert Image.open(tmp_path / "og" / name).size == (WIDTH, HEIGHT)
     meta = (tmp_path / "meta" / "3-6.html").read_text()
@@ -191,3 +195,87 @@ def test_card_order_and_tied_positions_match_the_standings_table():
     # A team that hasn't played sits with the .500 teams.
     fresh = [_team("A", 0.5, region_wins=1, region_losses=1), _team("B", 0.5, region_wins=0, region_losses=0)]
     assert standing_positions(display_order(fresh)) == [1, 1]
+
+
+def _with_bracket(team, **reach):
+    """A team entry with round-by-round reach odds (same in both modes)."""
+    rounds = {"second_round": 0.0, "quarterfinals": 0.0, "semifinals": 0.0, "finals": 0.0, "champion": 0.0, **reach}
+    return {**team, "bracket_odds": {**rounds, **{f"{k}_weighted": v for k, v in rounds.items()}}}
+
+
+def test_slugs_match_the_site():
+    """Same cases as routes.test.mjs, so a card's file matches the ?team= the app writes."""
+    assert slugify("St. Martin") == "st-martin"
+    assert slugify("D'Iberville") == "diberville"
+    assert slugify("St. Andrew’s") == "st-andrews"
+    assert slugify("H. W. Byers") == "h-w-byers"
+    assert slugify("Jefferson Davis County") == "jefferson-davis-county"
+
+
+def test_team_status_matches_the_page_badges():
+    locked = _team("Raleigh", 1.0, 1.0)
+    assert team_status(locked, 3) == ("clinched", "Clinched #1")
+    assert team_status({**_team("Magee", 0.4), "eliminated": True}, 3) == ("eliminated", "Eliminated")
+    assert team_status({**_team("Seminary", 1.0, 0.5), "clinched": True}, 3) == ("clinched", "Clinched")
+    assert team_status(_team("Mize", 0.5), 3) is None
+    # Once the bracket is underway, the run takes over.
+    assert team_status(_with_bracket(locked, second_round=1.0, quarterfinals=0.0), 3) == (
+        "eliminated",
+        "Lost in Second Round",
+    )
+    assert team_status(_with_bracket(locked, second_round=1.0, quarterfinals=1.0, semifinals=0.5), 3) == (
+        "clinched",
+        "Advanced to Quarterfinals",
+    )
+    champ = _with_bracket(locked, second_round=1, quarterfinals=1, semifinals=1, finals=1, champion=1)
+    assert team_status(champ, 3) == ("champion", "State Champion")
+
+
+def test_team_description_states_its_numbers():
+    racing = _with_bracket(_team("Raleigh", 0.997, 0.39), second_round=0.6, champion=0.04)
+    assert team_description(racing, 3, 6, "projected") == (
+        "Raleigh (6–2, 3–1 in Region 6-3A): 39% to win the region, >99% to make the playoffs, 4% to win state."
+    )
+    locked = _with_bracket(_team("Raleigh", 1.0, 1.0), second_round=0.8, champion=0.06)
+    assert (
+        team_description(locked, 3, 6, "projected")
+        == "Raleigh (6–2, 3–1 in Region 6-3A): locked in as the #1 seed, 6% to win state."
+    )
+    # Can't win the region: it doesn't lead with "0% to win the region".
+    chasing = _team("Magee", 0.28, 0.0)
+    assert team_description(chasing, 3, 6, "projected") == "Magee (6–2, 3–1 in Region 6-3A): 28% to make the playoffs."
+    out = {**_team("Mize", 0.0), "eliminated": True}
+    assert team_description(out, 3, 6, "projected") == "Mize (6–2, 3–1 in Region 6-3A): out of the playoff race."
+
+
+def test_team_card_renders_with_and_without_a_playoff_path():
+    team = _with_bracket(_team("Jefferson Davis County Attendance Center", 0.6, 0.1), second_round=0.3, champion=0.01)
+    for clazz in (3, 6):  # 5A-7A have no second round
+        assert render_team_card(clazz, 6, team, "Through Week 8 · Oct 9 · Projected", "projected").size == (
+            WIDTH,
+            HEIGHT,
+        )
+    assert render_team_card(3, 6, _team("Mize", 0.5), "x", "tossup").size == (WIDTH, HEIGHT)
+
+
+def test_team_files_for_teams_no_longer_in_a_region_are_removed(tmp_path):
+    api = {
+        "/seasons": [{"season": 2026}],
+        "/standings/3?season=2026": {"as_of_date": "2026-10-09", "regions": [{"region": 6, "teams": TEAMS}]},
+        "/seasons/2026/dates?class=3": {"dates": DATES},
+        "/standings/3/6?season=2026": {"as_of_date": "2026-10-09", "headline": "Raleigh leads.", "teams": TEAMS},
+    }
+    (tmp_path / "meta" / "3-6").mkdir(parents=True)
+    (tmp_path / "meta" / "3-6" / "moved-away.html").write_text("old")
+    assert build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["teams"] == 4
+    assert sorted(p.name for p in (tmp_path / "meta" / "3-6").iterdir()) == [
+        "magee.html",
+        "mize.html",
+        "raleigh.html",
+        "seminary.html",
+    ]
+    meta = (tmp_path / "meta" / "3-6" / "raleigh.html").read_text()
+    assert "<title>Raleigh in the Region 6-3A playoff race — Mississippi High School Football</title>" in meta
+    assert "https://mshsfootball.com/static/og/3-6/raleigh.png?v=20261009" in meta
+    assert 'href="https://mshsfootball.com/standings/3a/6?team=raleigh"' in meta
+    assert Image.open(tmp_path / "og" / "3-6" / "raleigh.png").size == (WIDTH, HEIGHT)
