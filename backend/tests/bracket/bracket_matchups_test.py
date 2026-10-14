@@ -313,3 +313,19 @@ def test_stored_pairs_are_used_only_from_the_same_snapshot_as_the_standings():
     assert stale[1] is None
     derived = pairs_for_regions({2: locked_region}, {2: date(2026, 10, 16)}, {})
     assert derived[2] == {("C", 1, "D", 2): 1.0}
+
+
+def test_regions_without_same_date_pairs_need_a_fallback_unless_their_seeds_are_locked():
+    """A newest snapshot written before pairs existed sends the region to its newest snapshot with both."""
+    from datetime import date
+
+    from backend.helpers.bracket_matchups import regions_needing_fallback
+
+    open_region = {"A": {1: 0.5, 2: 0.5}, "B": {1: 0.5, 2: 0.5}}
+    locked_region = {"C": {1: 1.0}, "D": {2: 1.0}}
+    pairs = [["A", 1, "B", 2, 0.5], ["A", 2, "B", 1, 0.5]]
+    odds = {1: open_region, 2: open_region, 3: open_region, 4: locked_region}
+    dates = {1: date(2026, 10, 9), 2: date(2026, 10, 11), 3: date(2026, 10, 11), 4: date(2026, 10, 11)}
+    stored = {1: (date(2026, 10, 9), pairs), 2: (date(2026, 10, 9), pairs)}
+    # 1: pairs match its snapshot. 2: pairs only from an older date. 3: no pairs at all. 4: locked.
+    assert regions_needing_fallback(odds, dates, stored) == [2, 3]

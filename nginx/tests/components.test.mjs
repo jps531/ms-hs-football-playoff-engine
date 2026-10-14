@@ -92,12 +92,14 @@ test("AND / OR grammar is explicit text, not position", () => {
   assert.doesNotMatch(conditionGroups([[c("A", "B")]], {}), /class="(and|or)"/);
 });
 
-test("class scrubber is one tab stop with the selection checked", () => {
-  const html = classScrubber([1, 2, 3], 2);
-  assert.equal((html.match(/tabindex="0"/g) || []).length, 1);
-  assert.match(html, /aria-checked="true" tabindex="0" data-class="2"/);
-  assert.match(classScrubber([1, 2, 3], null), /tabindex="0" data-class="1"/);
-  assert.match(html, /role="radiogroup"/);
+test("class row is a nav of links with the current class marked", () => {
+  const html = classScrubber([1, 2, 3], 2, (c) => `/brackets/${c}a`);
+  assert.match(html, /^<nav class="scrubber" aria-label="Classification">/);
+  assert.equal((html.match(/<a /g) || []).length, 3);
+  assert.match(html, /href="\/brackets\/2a" data-class="2" aria-current="page">2A</);
+  assert.equal((html.match(/aria-current/g) || []).length, 1);
+  assert.doesNotMatch(classScrubber([1, 2, 3], null), /aria-current/);
+  assert.match(classScrubber([1], 1), /href="\/standings\/1a"/);
 });
 
 test("scenario card titles read as a condition ending in IF", async () => {

@@ -34,13 +34,14 @@ from backend.helpers.api_helpers import (
     load_championship_venue,
     load_home_venues,
     load_playoff_results,
+    load_region_fallback_snapshots,
     load_region_seed_odds,
     load_region_seed_pairs,
     load_remaining_game_dates,
     today,
 )
 from backend.helpers.bracket_home_odds import equal_matchup_prob
-from backend.helpers.bracket_matchups import bracket_outlook, merge_modes, pairs_for_regions
+from backend.helpers.bracket_matchups import bracket_outlook, merge_modes, pairs_for_regions, regions_needing_fallback
 from backend.helpers.data_classes import FormatSlot, MatchupProbFn, StandingsOdds
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
 
@@ -197,6 +198,15 @@ async def get_bracket_matchups(
         if not odds_t:
             raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
         stored_t, stored_w = await load_region_seed_pairs(conn, season, class_, as_of)
+        # A region whose newest snapshot has standings but no pairs (written
+        # before pairs existed) uses its newest snapshot that has both, so its
+        # seed odds and pairs still come from one computation.
+        stale = regions_needing_fallback(odds_t, standings_dates, stored_t)
+        fallback = await load_region_fallback_snapshots(conn, season, class_, as_of, stale)
+        for region, (snap, seeds_t, seeds_w, pairs_t, pairs_w) in fallback.items():
+            odds_t[region], odds_w[region] = seeds_t, seeds_w
+            stored_t[region], stored_w[region] = (snap, pairs_t), (snap, pairs_w)
+            standings_dates[region] = snap
         results = await load_playoff_results(conn, season, class_, as_of)
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
 

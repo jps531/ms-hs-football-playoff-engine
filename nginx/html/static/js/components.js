@@ -244,16 +244,15 @@ export function outcomeScenarioCard({ label, seeds, out, groups }, teams, { focu
 // -------------------------------------------------------- class scrubber
 
 /**
- * Segmented control over the ordered class scale. A radiogroup with a roving
- * tabindex: one tab stop, arrow keys move between (and select) classes.
+ * The class row: one link per class (each its own page), styled as a
+ * segmented control. The current class is marked aria-current.
  */
-export function classScrubber(classes, selected) {
-  const active = classes.includes(selected) ? selected : classes[0];
+export function classScrubber(classes, selected, hrefFor = (c) => `/standings/${c}a`) {
   const items = classes.map((c) => {
-    const on = c === selected;
-    return `<button type="button" class="scrubber__item" role="radio" aria-checked="${on}" tabindex="${c === active ? 0 : -1}" data-class="${c}">${c}A</button>`;
+    const current = c === selected ? ' aria-current="page"' : "";
+    return `<a class="scrubber__item" href="${esc(hrefFor(c))}" data-class="${c}"${current}>${c}A</a>`;
   });
-  return `<div class="scrubber" role="radiogroup" aria-label="Classification">${items.join("")}</div>`;
+  return `<nav class="scrubber" aria-label="Classification">${items.join("")}</nav>`;
 }
 
 export const chevronIcon = ICONS.chevron;

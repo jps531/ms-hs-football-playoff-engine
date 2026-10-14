@@ -296,7 +296,12 @@ button { font: inherit; color: inherit; }
   color: var(--text-primary);
 }
 .context-bar .sep { color: var(--text-secondary); }
-.scrubber-bar__inner { padding-block: 8px; }
+.scrubber-bar__inner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px;
+  padding-block: 8px;
+}
+.scrubber-bar__inner .scrubber { min-width: 0; }
+
 .scrubber {
   display: inline-flex; gap: 2px;
   max-width: 100%;
@@ -309,8 +314,10 @@ button { font: inherit; color: inherit; }
 .scrubber::-webkit-scrollbar { display: none; }
 .scrubber__item {
   flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
   min-width: 48px; min-height: 44px;
   padding: 0 12px;
+  text-decoration: none;
   border: 0; border-radius: 7px;
   background: transparent;
   color: var(--text-secondary);
@@ -318,7 +325,8 @@ button { font: inherit; color: inherit; }
   cursor: pointer;
 }
 .scrubber__item:hover { color: var(--text-primary); }
-.scrubber__item[aria-checked="true"] {
+.scrubber__item:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+.scrubber__item[aria-current="page"], .scrubber__item[aria-current="page"]:hover {
   background: var(--scrubber-selected-bg);
   color: var(--scrubber-selected-text);
 }
@@ -522,7 +530,8 @@ button { font: inherit; color: inherit; }
 /* ---------------------------------------------------------- region view */
 
 .region-head { padding-block: 28px 0; }
-.region-head__back {
+.region-head__links { display: flex; flex-wrap: wrap; gap: 0 20px; }
+.region-head__links a {
   display: inline-flex; align-items: center; min-height: 44px;
   font-size: 14px;
 }
@@ -789,3 +798,334 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .article ol.steps { list-style: decimal; padding-left: 1.4em; margin-top: 8px; }
 .article ol.steps li + li { margin-top: 6px; }
 .article ol.steps + p { margin-top: 16px; }
+
+.detail__link { margin-top: 14px; font-size: 14px; }
+
+/* ------------------------------------------------------------- bracket */
+
+.bracket-head { padding-bottom: 16px; }
+.bracket-head .focus-note { margin-top: 12px; }
+
+/* North / South / Both: a segmented control like the class scrubber. */
+.half-control {
+  display: inline-flex; gap: 2px;
+  margin-bottom: 20px;
+  padding: 3px;
+  background: var(--surface-raised);
+  border-radius: 10px;
+}
+.half-control__item {
+  min-height: 40px; padding: 0 14px;
+  border: 0; border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600; font-size: 14px;
+  cursor: pointer;
+}
+.half-control__item:hover { color: var(--text-primary); }
+.half-control__item[aria-pressed="true"] {
+  background: var(--scrubber-selected-bg);
+  color: var(--scrubber-selected-text);
+}
+.half-control__item:focus-visible { outline-offset: -2px; }
+
+/* The bracket page is wider than the rest, with the header to match. */
+body.is-wide .site-header, body.is-wide .scrubber-bar__inner, body.is-wide .context-bar__inner,
+body.is-wide .page, body.is-wide .site-footer { max-width: 92rem; }
+
+/* Round tabs: phones only (wide screens show every round at once). */
+.round-tabs { display: none; }
+
+/* The bracket tree: columns of fixed-height cards, positioned by app.js so
+   each game sits between the two that feed it, joined by lines. */
+.tree {
+  --line: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  position: relative;
+  overflow-x: auto; overflow-y: hidden;
+  padding-bottom: 12px;
+}
+.tree__cols { position: relative; display: flex; gap: 32px; width: max-content; min-width: 100%; }
+.tcol { flex: 1 0 14rem; max-width: 18rem; }
+.tcol__title {
+  margin-bottom: 10px;
+  font-size: 13px; line-height: 18px; font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tcol__body { position: relative; margin: 0; padding: 0; list-style: none; }
+.tslot { position: absolute; top: 0; left: 0; right: 0; height: var(--card-h); }
+.tree__lines { position: absolute; left: 0; pointer-events: none; overflow: visible; }
+.tree__lines path { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.tree__lines path.is-path { stroke: var(--accent-identity); stroke-width: 2.5; }
+
+/* A compact game card: one row per side, the home team on the bottom. */
+.tgame {
+  display: flex; flex-direction: column; justify-content: center;
+  width: 100%; height: 100%;
+  padding: 2px 10px 2px 2px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary); font: inherit; text-align: left;
+  cursor: pointer;
+}
+.tgame:hover { border-color: var(--line); }
+.tgame:focus-visible { outline: 2px solid var(--link); outline-offset: -3px; } /* inside the card: the tree clips anything outside */
+.tgame.is-path { border-color: var(--accent-identity); box-shadow: inset 3px 0 0 var(--accent-identity); }
+.tgame.is-off { background: var(--surface-raised); }
+.tgame.is-off .trow__name, .tgame.is-off .trow__value { color: var(--text-secondary); }
+.tgame.is-off .odds { opacity: 0.75; }
+.trow {
+  display: grid; grid-template-columns: 22px 22px minmax(0, 1fr) auto; align-items: center; column-gap: 8px;
+  height: 45px; min-width: 0;
+}
+.trow + .trow { border-top: 1px solid var(--border); }
+.trow__gutter { font-size: 11px; line-height: 14px; color: var(--text-secondary); text-align: center; }
+.trow .mark { width: 22px; height: 22px; }
+.trow__text { display: flex; flex-direction: column; min-width: 0; }
+.trow__name { font-size: 14px; line-height: 18px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow__sub {
+  display: block;
+  font-size: 12px; line-height: 15px; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.trow__sub .lock { width: 11px; height: 11px; margin-right: 3px; vertical-align: -1px; }
+.trow__value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.trow .odds { min-width: 3.2em; padding: 1px 5px; font-size: 13px; line-height: 18px; }
+.trow--result:not(.is-winner) .trow__name, .trow--result:not(.is-winner) .trow__value { color: var(--text-secondary); font-weight: 500; }
+.trow--result.is-winner .trow__name, .trow--result.is-winner .trow__value { font-weight: 700; }
+.trow.is-focus .trow__name { font-weight: 700; }
+.trow--empty .trow__name { color: var(--text-secondary); font-weight: 400; }
+
+/* Phones: one round per screen with the next peeking in, round tabs to jump. */
+@media (max-width: 48em) {
+  .half-control__item--both { display: none; }
+  .round-tabs {
+    display: flex; gap: 4px;
+    margin-bottom: 12px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .round-tabs::-webkit-scrollbar { display: none; }
+  .round-tabs__item {
+    flex: none;
+    min-height: 40px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-weight: 600; font-size: 14px;
+    cursor: pointer;
+  }
+  .round-tabs__item[aria-current="true"] { border-color: var(--text-primary); color: var(--text-primary); }
+  .tree {
+    margin-inline: -16px;
+    padding-inline: 16px;
+    scroll-padding-inline: 16px;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .tree::-webkit-scrollbar { display: none; }
+  .tree__cols { gap: 24px; }
+  .tcol { flex: none; width: calc(88vw - 40px); max-width: none; scroll-snap-align: start; }
+}
+
+/* The game sheet: a bottom sheet on phones, a centered dialog on wide screens. */
+.game-sheet {
+  width: min(32rem, calc(100vw - 32px)); max-height: min(85vh, 48rem);
+  padding: 0;
+  background: var(--surface-page); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 14px;
+  overflow: hidden;
+}
+.game-sheet[open] { display: flex; flex-direction: column; }
+.game-sheet::backdrop { background: rgb(0 0 0 / 0.45); }
+.game-sheet__head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 16px 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.game-sheet__kicker { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.game-sheet__title { margin-top: 2px; font-size: 18px; line-height: 24px; font-weight: 700; }
+.game-sheet__title:focus { outline: none; } /* focused on open so the close button doesn't start ringed */
+.game-sheet__prov { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-top: 4px; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.game-sheet__prov .context-bar__title { font-weight: 600; color: var(--text-primary); }
+.game-sheet__prov .sep { color: var(--text-secondary); }
+.game-sheet__close {
+  flex: none; display: grid; place-items: center;
+  width: 44px; height: 44px; margin: -8px -6px 0 0;
+  border: 0; border-radius: 8px; background: transparent;
+  color: var(--text-secondary); cursor: pointer;
+}
+.game-sheet__close svg { width: 18px; height: 18px; }
+.game-sheet__close:hover { color: var(--text-primary); background: var(--surface-raised); }
+.game-sheet__body { overflow-y: auto; overscroll-behavior: contain; padding: 12px 20px 20px; display: grid; gap: 14px; }
+.game-sheet__hint { font-size: 13px; }
+.bgame.bgame--sheet { padding: 0; border: 0; background: none; }
+@media (max-width: 48em) {
+  .game-sheet {
+    width: 100%; max-width: 100%; max-height: 88vh;
+    margin: auto 0 0;
+    border-radius: 16px 16px 0 0; border-bottom: 0;
+  }
+  .game-sheet__body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .game-sheet[open] { animation: sheet-in 160ms ease-out; }
+  @keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } }
+}
+
+/* A game card. */
+.bgame {
+  display: grid; gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.bgame > *, .bside > *, .bgame__detail > * { min-width: 0; }
+.bgame__state {
+  font-size: 11px; line-height: 14px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.bgame__site { font-size: 13px; }
+
+.bteam {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 36px; min-width: 0;
+}
+.bteam__name {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-width: 0; min-height: 36px;
+  padding: 0; border: 0; background: none;
+  color: var(--text-primary);
+  font: inherit; text-align: left;
+  cursor: pointer;
+}
+.bteam__name .mark { flex: none; }
+.bteam__name .team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.bteam__name:hover .team-name { text-decoration: underline; }
+.bteam__name.is-focus .team-name { font-weight: 700; }
+.bteam .odds { flex: none; }
+.bteam__fact {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  font-size: 13px; color: var(--text-secondary);
+}
+.lock { width: 13px; height: 13px; flex: none; }
+.bteam__home {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border); border-radius: 4px;
+  font-size: 11px; line-height: 16px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.bside__label .bteam__home { margin-left: 8px; }
+/* A locked team: name and Home tag, then its seed on a line of its own. */
+.bteam--locked { flex-wrap: wrap; row-gap: 0; }
+.bteam--locked .bteam__name { flex: 1 1 0; }
+.bteam--locked .bteam__home { order: 1; }
+.bteam--locked .bteam__fact { order: 2; flex-basis: 100%; padding-left: 30px; margin-top: -6px; }
+.bteam__score { flex: none; font-variant-numeric: tabular-nums; font-weight: 500; }
+.bteam--result.is-winner .team-name, .bteam--result.is-winner .bteam__score { font-weight: 700; }
+.bteam--result:not(.is-winner) .team-name { color: var(--text-secondary); }
+
+.bside__label { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.bside__list { list-style: none; margin: 0; padding: 0; }
+.bside__empty { font-size: 14px; }
+.bside__more {
+  min-height: 36px; padding: 0;
+  border: 0; background: none;
+  color: var(--link); font: inherit; font-size: 14px;
+  cursor: pointer;
+}
+.bside__more:hover { color: var(--link-hover); text-decoration: underline; }
+
+.bgame__vs {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.bgame__vs::before, .bgame__vs::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+
+.bgame__detail { display: grid; gap: 8px; padding-bottom: 4px; }
+.bgame__detail[hidden] { display: none; }
+.bgame__heading { font-size: 14px; line-height: 20px; font-weight: 600; }
+.bgame__count, .bgame__note { font-size: 13px; line-height: 18px; }
+.bgame__sides { display: grid; gap: 4px; }
+.bgame__sides-vs { font-size: 12px; }
+
+.opp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.opp-list li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: 2px 10px;
+}
+.opp-list .team { min-width: 0; }
+.opp-list--matchups { gap: 0; }
+.opp-list--matchups li { padding-block: 8px; }
+.opp-list--matchups li + li { border-top: 1px solid var(--border); }
+.opp-list .team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opp-list__host { grid-column: 1 / -1; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.opp-list .team + .odds { justify-self: end; }
+.mu__teams { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mu__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mu__line .team { min-width: 0; }
+.mu__line .team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mu__line .vs { flex: none; width: 1.5em; }
+.mu__teams .vs { font-size: 12px; color: var(--text-secondary); }
+.bgame .mark { width: 22px; height: 22px; }
+
+/* ------------------------------------------------------------ main nav */
+/* Standings, Bracket, How it works: header links on wide screens, a tab
+   bar along the bottom on phones and small tablets. Only one is shown. */
+
+.site-nav { display: none; gap: 4px; }
+/* Pages without the team search (How it works): keep the nav beside the name. */
+.site-nav:has(+ .theme-toggle) { margin-right: auto; }
+.site-nav__item {
+  display: inline-flex; align-items: center;
+  min-height: 44px; padding: 0 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 600; font-size: 15px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-nav__item:hover { color: var(--text-primary); }
+.site-nav__item[aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--accent-identity); }
+
+.tab-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 12;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface-page);
+  border-top: 1px solid var(--border);
+}
+.tab-bar__item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 56px;
+  color: var(--text-secondary);
+  font-size: 12px; line-height: 14px; font-weight: 600;
+  text-decoration: none;
+}
+.tab-bar__item svg { width: 24px; height: 24px; }
+.tab-bar__item:hover { color: var(--text-primary); }
+.tab-bar__item[aria-current="page"] { color: var(--accent-identity); }
+.tab-bar__item:focus-visible { outline-offset: -4px; }
+body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
+
+/* Between tablet and wide desktop the name gives way to the nav (the helmet stays). */
+@media (min-width: 60em) and (max-width: 79.99em) {
+  .site-header__home span { display: none; }
+}
+@media (min-width: 60em) {
+  .site-nav { display: flex; }
+  .site-header__home { flex: none; }
+  .tab-bar { display: none; }
+  body { padding-bottom: 0; }
+}
+@media print {
+  .tab-bar { display: none; }
+}
