@@ -58,14 +58,34 @@ def build_location_overrides(payload: dict) -> list[tuple[str, str]]:
     ]
 
 
+def _result(points_for: int, points_against: int) -> str:
+    """The W/L/T result for one side of a final score."""
+    return "W" if points_for > points_against else "L" if points_for < points_against else "T"
+
+
 def build_score_overrides(payload: dict) -> tuple[str, list[tuple[str, str]]]:
-    """Return (game_date, [(field, value), ...]) game-override pairs for an approved 'score' submission."""
+    """Return (game_date, [(field, value), ...]) game-override pairs for an approved 'score' submission.
+
+    The stored result is overridden along with the score, so a correction that
+    changes the winner doesn't leave a stale W or L behind.
+    """
     game_date: str = payload["date"]
+    pf, pa = int(payload["points_for"]), int(payload["points_against"])
     overrides = [
-        ("points_for", str(payload["points_for"])),
-        ("points_against", str(payload["points_against"])),
+        ("points_for", str(pf)),
+        ("points_against", str(pa)),
+        ("result", _result(pf, pa)),
     ]
     return game_date, overrides
+
+
+def build_opponent_score_overrides(payload: dict) -> list[tuple[str, str]]:
+    """The same correction from the opponent's side of the game: scores swapped, result mirrored.
+
+    Each game has a row per school, so both are corrected to keep the two teams' records in agreement.
+    """
+    pf, pa = int(payload["points_for"]), int(payload["points_against"])
+    return [("points_for", str(pa)), ("points_against", str(pf)), ("result", _result(pa, pf))]
 
 
 def build_helmet_assignment_override(payload: dict) -> tuple[str, int]:
@@ -97,6 +117,9 @@ async def apply_submission(conn: Any, row: tuple) -> None:
     school: str | None = row[3]
     payload: dict = row[6]
 
+    if stype == "feedback":
+        return  # Nothing to apply; approving just marks it reviewed. (Feedback has no school.)
+
     if school is None:
         raise HTTPException(status_code=422, detail="Submission is missing a school")
 
@@ -119,9 +142,14 @@ async def apply_submission(conn: Any, row: tuple) -> None:
         game_date, overrides = build_score_overrides(payload)
         for field, value in overrides:
             await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, game_date, field, value))
-
-    elif stype == "feedback":
-        pass  # No DB action on approval.
+        # The opponent's row of the same game, so both teams' records agree. An
+        # out-of-state opponent has no row; the override then matches nothing.
+        opponent = await (
+            await conn.execute("SELECT opponent FROM games WHERE school = %s AND date = %s", (school, game_date))
+        ).fetchone()
+        if opponent is not None:
+            for field, value in build_opponent_score_overrides(payload):
+                await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (opponent[0], game_date, field, value))
 
     elif stype == "helmet_assignment":
         game_date, helmet_design_id = build_helmet_assignment_override(payload)
@@ -156,9 +184,26 @@ def build_location_payload(body: Any) -> dict[str, Any]:
     return {"latitude": body.latitude, "longitude": body.longitude}
 
 
+def _optional_context(body: Any, fields: tuple[str, ...]) -> dict[str, Any]:
+    """The optional fields a public form sent (note, page, email…), trimmed, leaving out empty ones."""
+    out: dict[str, Any] = {}
+    for field in fields:
+        value = getattr(body, field, None)
+        if isinstance(value, str):
+            value = value.strip()
+        if value:
+            out[field] = value
+    return out
+
+
 def build_score_payload(body: Any) -> dict[str, Any]:
     """Build a 'score' submission payload from a ``SubmitScoreRequest`` body."""
-    return {"date": body.date.isoformat(), "points_for": body.points_for, "points_against": body.points_against}
+    return {
+        "date": body.date.isoformat(),
+        "points_for": body.points_for,
+        "points_against": body.points_against,
+        **_optional_context(body, ("note", "page")),
+    }
 
 
 def build_helmet_assignment_payload(body: Any) -> dict[str, Any]:
@@ -167,8 +212,16 @@ def build_helmet_assignment_payload(body: Any) -> dict[str, Any]:
 
 
 def build_feedback_payload(body: Any) -> dict[str, Any]:
-    """Build a 'feedback' submission payload from a ``SubmitFeedbackRequest`` body."""
-    return {"subject": body.subject, "message": body.message}
+    """Build a 'feedback' submission payload from a ``SubmitFeedbackRequest`` body.
+
+    ``category`` is always recorded (it defaults to "other"); page and email only when given.
+    """
+    return {
+        "subject": body.subject.strip(),
+        "message": body.message.strip(),
+        "category": getattr(body, "category", "other"),
+        **_optional_context(body, ("page", "email")),
+    }
 
 
 def build_logo_initial_payload(logo_type: str) -> dict[str, Any]:

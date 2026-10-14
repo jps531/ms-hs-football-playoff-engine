@@ -68,9 +68,9 @@ async def list_submissions(
                 """
                 SELECT id, type, status, school, submitted_at, reviewed_at, helmet_design_id
                 FROM submissions
-                WHERE (type::text = %s OR %s IS NULL)
-                  AND (status::text = %s OR %s IS NULL)
-                  AND (%s IS NULL OR (helmet_design_id IS NULL) = %s)
+                WHERE (type::text = %s OR %s::text IS NULL)
+                  AND (status::text = %s OR %s::text IS NULL)
+                  AND (%s::boolean IS NULL OR (helmet_design_id IS NULL) = %s::boolean)
                 ORDER BY submitted_at DESC
                 LIMIT %s OFFSET %s
                 """,

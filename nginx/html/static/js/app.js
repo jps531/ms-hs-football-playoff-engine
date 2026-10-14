@@ -16,6 +16,9 @@ import {
 import { matchTeams } from "./search.js";
 import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
 import {
+  CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, submissionError,
+} from "./feedback.js";
+import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
   teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout,
 } from "./bracket.js";
@@ -220,6 +223,13 @@ async function render() {
   route.clazz ??= CLASSES.includes(saved) ? saved : CLASSES[0];
   store(STORE.clazz, route.clazz);
   renderScrubber(route.clazz);
+  if (route.page === "feedback") {
+    document.body.classList.remove("is-wide");
+    showContext(null);
+    app.innerHTML = feedbackPage();
+    document.title = `Send feedback — ${SITE}`;
+    return;
+  }
   app.setAttribute("aria-busy", "true");
   try {
     const all = await seasons();
@@ -327,6 +337,7 @@ function renderScrubber(clazz) {
  */
 function syncNav() {
   const onBracket = route.page === "bracket";
+  const onStandings = ["landing", "class", "region"].includes(route.page);
   const known = route.page !== "notfound";
   const targets = {
     standings: known ? hrefWith({ page: route.region ? "region" : "class" }) : "/",
@@ -335,7 +346,7 @@ function syncNav() {
   for (const a of document.querySelectorAll("[data-nav]")) {
     const key = a.dataset.nav;
     if (key in targets) a.setAttribute("href", targets[key]);
-    const current = known && (key === "bracket" ? onBracket : key === "standings" ? !onBracket : false);
+    const current = known && (key === "bracket" ? onBracket : key === "standings" ? onStandings : false);
     if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
@@ -766,7 +777,8 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
         <p class="detail__link"><a href="${esc(hrefWith({ page: "bracket", region: null, team: t.school }))}">See ${esc(t.school)}’s path in the bracket</a></p>
       </section>`
     : "";
-  return `<div class="detail__panels">${record}${seeding}${pathPanel}</div>`;
+  return `<div class="detail__panels">${record}${seeding}${pathPanel}</div>
+    <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Something look wrong for ${esc(t.school)}? Tell us</button></p>`;
 }
 
 function focusTeamRow() {
@@ -803,9 +815,10 @@ app.addEventListener("click", (e) => {
 
 /** Region games as a card grid under a heading for each game day. */
 function gamesSection(id, title, games, teams, focus) {
+  const report = id === "results"; // played games can be reported as a wrong score
   const days = byDay(games).map(({ date, items }) => `<div class="game-day">
       <h3 class="game-day__title">${date ? esc(gameDate(date)) : "Date to be announced"}</h3>
-      <ul class="game-grid">${items.map((g) => gameCard(g, teams, { focus })).join("")}</ul>
+      <ul class="game-grid">${items.map((g) => gameCard(g, teams, { focus, report })).join("")}</ul>
     </div>`);
   return `<section class="section" aria-labelledby="${id}-title">
     <h2 class="section-title" id="${id}-title">${title}</h2>
@@ -854,6 +867,7 @@ function scenariosSection(data, teams, prov, mode, focus) {
     <h2 class="section-title" id="scen-title">What has to happen</h2>
     ${focusNote}
     ${body}
+    <p class="report-line"><button type="button" class="link-button" data-feedback="odds"${focus ? ` data-team="${esc(focus)}"` : ""}>See a scenario that can’t be right? Tell us</button></p>
   </section>`;
 }
 
@@ -1259,6 +1273,7 @@ function sheetHtml(id) {
       </div>
       ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
       <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
+      <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Something look wrong in this game? Tell us</button></p>
     </div>`;
 }
 
@@ -1394,6 +1409,216 @@ app.addEventListener("click", (e) => {
     const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     tree.strip.scrollTo({ left: Number(jump.dataset.roundJump) * tree.step, behavior: smooth ? "smooth" : "auto" });
   }
+});
+
+// ------------------------------------------------------------- feedback
+// One form for every kind of report, in a sheet over the page it's about
+// (or on its own at /feedback). A score correction for a specific game goes
+// to /submissions/scores with the corrected score; everything else to
+// /submissions/feedback with a category and what it's about. Both land in
+// the moderation queue. Flood guards: the API's per-visitor and daily
+// limits, duplicate suppression and circuit breaker, nginx's request rate
+// limit, a honeypot field people never see, and a minimum time to fill in.
+
+let feedbackSheet = null;
+
+/** "Region 6-3A · Raleigh": what a report from this page is about. */
+function feedbackContext({ team = null, about = null } = {}) {
+  const parts = [];
+  if (route.page === "region") parts.push(`Region ${route.region}-${route.clazz}A`);
+  else if (route.page === "class") parts.push(`Class ${route.clazz}A`);
+  else if (route.page === "bracket") parts.push(`${route.clazz}A bracket`);
+  if (about) parts.push(about);
+  if (team) parts.push(team);
+  return parts.join(" · ") || null;
+}
+
+/**
+ * The form. `game` (a completed region game) makes it a score correction;
+ * otherwise it's a general report starting on `category`, about `context`.
+ */
+function feedbackForm({ game = null, category = "other", context = null, page = "/" } = {}) {
+  const honeypot = `<div class="fb-hp" aria-hidden="true"><label>Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>`;
+  const status = '<p class="fb-status" role="status" aria-live="polite"></p>';
+  const opened = Date.now();
+  if (game) {
+    const scoreInput = (name, team, value) => `<label class="fb-score">
+        <span class="fb-score__team">${esc(team)}</span>
+        <input type="text" name="${name}" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${esc(value)}" autocomplete="off" required>
+      </label>`;
+    return `<form class="fb-form" novalidate data-fb-form data-mode="score" data-opened="${opened}" data-page="${esc(page)}" data-game="${esc(JSON.stringify(game))}">
+      <p class="fb-about">${esc(game.away)} ${esc(game.awayScore)}, ${esc(game.home)} ${esc(game.homeScore)} · ${esc(gameDate(game.date))}</p>
+      <fieldset class="fb-scores">
+        <legend>The correct final score</legend>
+        ${scoreInput("away", game.away, game.awayScore)}
+        ${scoreInput("home", game.home, game.homeScore)}
+      </fieldset>
+      <label class="fb-field"><span>Where did you see it? <span class="muted">(optional)</span></span>
+        <textarea name="note" rows="2" maxlength="${NOTE_MAX}" placeholder="A link to a box score, the school’s post…"></textarea>
+      </label>
+      ${honeypot}
+      ${status}
+      <div class="fb-actions"><button type="submit" class="fb-submit">Send correction</button></div>
+      <p class="fb-fine muted">A moderator checks every correction before it changes the standings.</p>
+    </form>`;
+  }
+  const cats = CATEGORIES.map((c) => `<label class="fb-cat"><input type="radio" name="category" value="${c.value}"${c.value === category ? " checked" : ""}><span>${esc(c.label)}</span></label>`).join("");
+  return `<form class="fb-form" novalidate data-fb-form data-mode="feedback" data-opened="${opened}" data-page="${esc(page)}"${context ? ` data-context="${esc(context)}"` : ""}>
+    ${context ? `<p class="fb-about">About: ${esc(context)}</p>` : ""}
+    <fieldset class="fb-cats"><legend>What’s it about?</legend>${cats}</fieldset>
+    <label class="fb-field"><span>What’s wrong, or what would you like to tell us?</span>
+      <textarea name="message" rows="5" maxlength="${MESSAGE_MAX}" required placeholder="${esc(MESSAGE_HINTS[category] ?? MESSAGE_HINTS.other)}"></textarea>
+    </label>
+    <label class="fb-field"><span>Email <span class="muted">(optional, only if you’d like a reply)</span></span>
+      <input type="email" name="email" maxlength="254" autocomplete="email" inputmode="email">
+    </label>
+    ${honeypot}
+    ${status}
+    <div class="fb-actions"><button type="submit" class="fb-submit">Send</button></div>
+  </form>`;
+}
+
+function feedbackPage() {
+  return `<div class="page">
+    <header class="entry-head">
+      <h1 class="title">Send feedback</h1>
+      <p class="prose">Spotted a wrong score, odds or a scenario that can’t be right, or have an idea? Tell us here.
+        To correct a specific game’s score, open its region and use “Wrong score?” on the game.</p>
+    </header>
+    <div class="fb-page">${feedbackForm({ page: "/feedback" })}</div>
+  </div>`;
+}
+
+function openFeedback({ game = null, category = "other", team = null, about = null } = {}) {
+  if (sheet?.open) sheet.close(); // from the bracket's game sheet: one sheet at a time
+  if (!feedbackSheet) {
+    feedbackSheet = document.createElement("dialog");
+    feedbackSheet.className = "game-sheet feedback-sheet";
+    feedbackSheet.setAttribute("aria-labelledby", "feedback-title");
+    document.body.append(feedbackSheet);
+    feedbackSheet.addEventListener("click", (e) => {
+      if (e.target === feedbackSheet || e.target.closest("[data-sheet-close]")) feedbackSheet.close();
+    });
+  }
+  const context = game ? null : feedbackContext({ team, about });
+  const page = location.pathname + location.search;
+  feedbackSheet.innerHTML = `<div class="game-sheet__head">
+      <div>
+        <p class="game-sheet__kicker">Feedback</p>
+        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${game ? "Report a wrong score" : "Tell us what’s wrong"}</h2>
+      </div>
+      <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
+    </div>
+    <div class="game-sheet__body">${feedbackForm({ game, category, context, page })}</div>`;
+  feedbackSheet.showModal();
+}
+
+/** Check, send, and report back. Nothing is sent until the form is valid. */
+async function sendFeedback(form) {
+  const status = form.querySelector(".fb-status");
+  const button = form.querySelector(".fb-submit");
+  const data = new FormData(form);
+  const page = form.dataset.page || "/";
+  const website = String(data.get("website") || "");
+  let path;
+  let body;
+  let problem;
+  if (form.dataset.mode === "score") {
+    const game = JSON.parse(form.dataset.game);
+    const values = { awayScore: data.get("away"), homeScore: data.get("home"), note: String(data.get("note") || "") };
+    problem = scoreProblem(game, values);
+    body = scoreBody(game, { ...values, page, website });
+    path = "/submissions/scores";
+  } else {
+    const values = {
+      category: String(data.get("category") || "other"),
+      context: form.dataset.context || null,
+      message: String(data.get("message") || ""),
+      email: String(data.get("email") || ""),
+    };
+    problem = feedbackProblem(values);
+    body = feedbackBody({ ...values, page, website });
+    path = "/submissions/feedback";
+  }
+  status.classList.toggle("is-error", Boolean(problem));
+  status.textContent = problem ?? "";
+  if (problem) return;
+  // Filled in faster than a person could: treat it as sent without sending.
+  if (Date.now() - Number(form.dataset.opened) < MIN_FILL_MS) {
+    feedbackSent(form);
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "Sending…";
+  try {
+    const res = await fetch(API + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      feedbackSent(form);
+      return;
+    }
+    const detail = (await res.json().catch(() => null))?.detail;
+    status.classList.add("is-error");
+    status.textContent = submissionError(res.status, detail);
+  } catch {
+    status.classList.add("is-error");
+    status.textContent = submissionError(0);
+  }
+  button.disabled = false;
+  button.textContent = form.dataset.mode === "score" ? "Send correction" : "Send";
+}
+
+function feedbackSent(form) {
+  const score = form.dataset.mode === "score";
+  const inSheet = Boolean(form.closest("dialog"));
+  const done = document.createElement("div");
+  done.className = "fb-sent";
+  done.setAttribute("role", "status");
+  done.innerHTML = `<p class="fb-sent__title">Thanks, we’ve got it.</p>
+    <p class="muted">${score
+      ? "A moderator will check the score. Once it’s approved, the standings and odds pick it up at the next morning’s update."
+      : "A moderator will read it. If you left an email, we may follow up."}</p>
+    ${inSheet ? '<button type="button" class="fb-submit" data-sheet-close>Done</button>' : '<a href="/feedback" class="fb-again">Send something else</a>'}`;
+  form.replaceWith(done);
+  done.querySelector("button, a")?.focus({ preventScroll: true });
+}
+
+// The message's hint follows the category: a score report needs the game and the score.
+const MESSAGE_HINTS = {
+  score: "Which game, and what was the final score?",
+  odds: "Which team, and what looks wrong?",
+  other: "The more specific, the faster we can fix it.",
+};
+
+document.addEventListener("change", (e) => {
+  if (e.target.name !== "category" || !e.target.closest("[data-fb-form]")) return;
+  const message = e.target.form.querySelector('textarea[name="message"]');
+  if (message) message.placeholder = MESSAGE_HINTS[e.target.value] ?? MESSAGE_HINTS.other;
+});
+
+document.addEventListener("submit", (e) => {
+  const form = e.target.closest("[data-fb-form]");
+  if (!form) return;
+  e.preventDefault();
+  sendFeedback(form);
+});
+
+document.addEventListener("click", (e) => {
+  const report = e.target.closest("[data-score-report]");
+  if (report) {
+    const d = report.dataset;
+    openFeedback({
+      game: { date: d.date, away: d.away, home: d.home, awayScore: Number(d.awayScore), homeScore: Number(d.homeScore) },
+    });
+    return;
+  }
+  const trigger = e.target.closest("[data-feedback]");
+  if (!trigger || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  openFeedback({ category: trigger.dataset.feedback, team: trigger.dataset.team || null, about: trigger.dataset.about || null });
 });
 
 // --------------------------------------------------------------- boot

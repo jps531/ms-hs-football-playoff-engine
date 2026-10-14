@@ -18,7 +18,7 @@ test("path routes: class, region, landing, and anything else is not found", () =
   assert.equal(parseLocation("/standings/7A", "").clazz, 7); // case-insensitive
   assert.equal(parseLocation("/standings/7a/", "").page, "class"); // trailing slash
   assert.equal(parseLocation("/", "").page, "landing");
-  for (const bad of ["/standings/8a", "/standings/3a/x", "/standings/3a/6/extra", "/brackets/9a", "/brackets/3a/6", "/nope"]) {
+  for (const bad of ["/standings/8a", "/standings/3a/x", "/standings/3a/6/extra", "/brackets/9a", "/brackets/3a/6", "/feedback/x", "/nope"]) {
     assert.equal(parseLocation(bad, "").page, "notfound", bad);
   }
 });
@@ -60,4 +60,11 @@ test("bracket pages: /brackets/{class}, sharing the view-state query", () => {
   const r = parseLocation("/brackets/3a", "?odds=tossup&team=st-martin");
   assert.deepEqual([r.page, r.clazz, r.odds, r.team], ["bracket", 3, "tossup", "st-martin"]);
   assert.equal(buildPath({ ...r, season: null, week: null }, { currentSeason: 2026 }), "/brackets/3a?odds=tossup&team=st-martin");
+});
+
+test("the feedback page: /feedback, with no view state in its URL", () => {
+  assert.equal(parseLocation("/feedback", "").page, "feedback");
+  assert.equal(parseLocation("/feedback/", "?team=raleigh").page, "feedback");
+  assert.equal(parseLocation("/feedback/x", "").page, "notfound");
+  assert.equal(buildPath({ ...parseLocation("/feedback", "?odds=tossup"), season: 2025 }, { currentSeason: 2026 }), "/feedback");
 });

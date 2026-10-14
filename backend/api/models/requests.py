@@ -400,13 +400,25 @@ class SubmitLocationRequest(BaseModel):
     longitude: float = Field(ge=-180.0, le=180.0)
 
 
+# Shared by the public submission forms. ``page`` is the site path the report
+# came from (for context); ``website`` is a honeypot: the form hides it from
+# people, so anything in it means an automated submission.
+_PagePath = Field(default=None, max_length=300, pattern=r"^$|^/[^\s]*$")
+_Honeypot = Field(default=None, max_length=500)
+
+FeedbackCategory = Literal["score", "odds", "other"]
+
+
 class SubmitScoreRequest(BaseModel):
     """Submit a corrected game score."""
 
     school: str
     date: date_type
-    points_for: int = Field(ge=0)
-    points_against: int = Field(ge=0)
+    points_for: int = Field(ge=0, le=200)
+    points_against: int = Field(ge=0, le=200)
+    note: str | None = Field(default=None, max_length=1000)
+    page: str | None = _PagePath
+    website: str | None = _Honeypot
 
 
 class SubmitHelmetAssignmentRequest(BaseModel):
@@ -418,10 +430,15 @@ class SubmitHelmetAssignmentRequest(BaseModel):
 
 
 class SubmitFeedbackRequest(BaseModel):
-    """Submit general feedback visible to moderators."""
+    """Submit feedback visible to moderators: a score report without a specific game, wrong odds or
+    scenarios, or anything else (``category``), with an optional email for a reply."""
 
     subject: str = Field(min_length=1, max_length=200)
     message: str = Field(min_length=1, max_length=5000)
+    category: FeedbackCategory = "other"
+    page: str | None = _PagePath
+    email: str | None = Field(default=None, max_length=254, pattern=r"^$|^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    website: str | None = _Honeypot
 
 
 class ModerationDecisionRequest(BaseModel):

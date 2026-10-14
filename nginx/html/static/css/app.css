@@ -1129,3 +1129,74 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media print {
   .tab-bar { display: none; }
 }
+
+/* ------------------------------------------------------------ feedback */
+/* Report links sit quietly under what they're about; the form opens in a
+   sheet (the bracket's game sheet styles) or on /feedback. */
+
+.link-button {
+  padding: 0; border: 0; background: none;
+  color: var(--link); font: inherit;
+  text-decoration: underline; text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-button:hover { color: var(--link-hover); }
+.report-line { margin-top: 16px; font-size: 14px; line-height: 20px; }
+
+.game-card__report {
+  justify-self: end;
+  min-height: 32px; padding: 0 2px;
+  border: 0; background: none;
+  color: var(--text-secondary); font: inherit; font-size: 13px;
+  text-decoration: underline; text-underline-offset: 3px;
+  cursor: pointer;
+}
+.game-card__report:hover { color: var(--link); }
+
+.fb-page { max-width: 36rem; }
+.fb-form { display: grid; gap: 18px; }
+.fb-about { font-size: 14px; line-height: 20px; font-weight: 600; }
+.fb-form fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.fb-form legend { margin-bottom: 8px; padding: 0; font-size: 14px; font-weight: 600; }
+.fb-cats { display: flex; flex-wrap: wrap; gap: 8px; }
+.fb-cat { position: relative; display: inline-flex; }
+.fb-cat input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.fb-cat span {
+  display: inline-flex; align-items: center;
+  min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text-secondary); font-size: 14px; font-weight: 600;
+}
+.fb-cat input:checked + span { border-color: var(--text-primary); color: var(--text-primary); background: var(--surface-raised); }
+.fb-cat input:focus-visible + span { outline: 2px solid var(--link); outline-offset: 2px; }
+.fb-field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+.fb-field .muted { font-weight: 400; }
+.fb-form textarea, .fb-form input[type="email"], .fb-score input {
+  width: 100%; padding: 10px 12px;
+  font: inherit; font-size: 16px; font-weight: 400; /* 16px: no iOS zoom on focus */
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.fb-form textarea { resize: vertical; min-height: 6rem; }
+.fb-scores { display: grid; gap: 10px; }
+.fb-score { display: grid; grid-template-columns: minmax(0, 1fr) 6rem; align-items: center; gap: 12px; }
+.fb-score__team { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-score input { text-align: right; font-variant-numeric: tabular-nums; }
+/* The honeypot: kept out of sight and out of the tab order; people never fill it in. */
+.fb-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.fb-status { min-height: 20px; font-size: 14px; line-height: 20px; }
+.fb-status.is-error { color: var(--state-eliminated); font-weight: 600; }
+.fb-actions { display: flex; }
+.fb-submit {
+  min-height: 44px; padding: 0 20px;
+  border: 0; border-radius: 8px;
+  background: var(--scrubber-selected-bg); color: var(--scrubber-selected-text);
+  font: inherit; font-weight: 600;
+  cursor: pointer;
+}
+.fb-submit:disabled { opacity: 0.6; cursor: progress; }
+.fb-fine { font-size: 13px; line-height: 18px; }
+.fb-sent { display: grid; gap: 10px; justify-items: start; padding-block: 8px; }
+.fb-sent__title { font-size: 18px; font-weight: 700; }
+.dark .fb-status.is-error { color: #F87171; } /* the badge red is too dark to read as text here */
