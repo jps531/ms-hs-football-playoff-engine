@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import html
 import math
+import re
+import unicodedata
 from collections.abc import Iterable
 from datetime import date
 from functools import cache
@@ -225,9 +227,14 @@ def wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, wid
     return [fit(draw, line, font, width) for line in lines]
 
 
+def _tracked_width(draw: ImageDraw.ImageDraw, text: str, font, tracking: float) -> float:
+    """Width of *text* drawn by ``_tracked``."""
+    return sum(draw.textlength(ch, font=font) for ch in text) + tracking * max(0, len(text) - 1)
+
+
 def _tracked(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, font, fill, tracking: float, anchor="ls"):
     """Small caps-style label with letter spacing (Pillow has none built in). Left or right anchored."""
-    total = sum(draw.textlength(ch, font=font) for ch in text) + tracking * max(0, len(text) - 1)
+    total = _tracked_width(draw, text, font, tracking)
     x, y = xy
     if anchor[0] == "r":
         x -= total
@@ -469,6 +476,193 @@ def _class_table(draw, top: float, rows: list[tuple[str, str, str, float]]) -> N
         )
         draw.text((name_x, middle + 19), f"{record} in region", font=_inter(21, 500), fill=TEXT_2, anchor="lm")
         _odds_pill(draw, right, middle, p)
+
+
+# ------------------------------------------------------------------ teams
+
+CLINCHED = "#66DDB5"  # --brand-400, the clinched badge's color in the dark theme
+
+_ROUND_TITLES = {
+    "second_round": "Second Round",
+    "quarterfinals": "Quarterfinals",
+    "semifinals": "Semifinals",
+    "finals": "Championship Game",
+}
+
+
+def slugify(name: str) -> str:
+    """A team's URL slug, as the site makes it (``slugify`` in routes.js): "D'Iberville" -> "diberville"."""
+    text = unicodedata.normalize("NFD", name or "")
+    text = "".join(ch for ch in text if not unicodedata.combining(ch)).lower()
+    text = re.sub(r"['’.]", "", text)
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
+
+
+def _certain(p: float | None) -> bool:
+    """Whether a probability is a certainty (within float noise of 1)."""
+    return p is not None and p >= 1 - _EPS
+
+
+def playoff_path(team: dict, mode: str, clazz: int) -> list[tuple[str, str, float | None]]:
+    """A team's chance of reaching each playoff round: [(key, label, p)], as the page's playoff path.
+
+    5A-7A have no second round. Empty when the snapshot has no bracket odds.
+    """
+    b = team.get("bracket_odds")
+    if not b:
+        return []
+    w = "_weighted" if mode == "projected" else ""
+    rounds = [
+        ("second_round", "SECOND ROUND"),
+        ("quarterfinals", "QUARTERFINALS"),
+        ("semifinals", "SEMIFINALS"),
+        ("finals", "CHAMPIONSHIP GAME"),
+        ("champion", "CHAMPIONS"),
+    ]
+    return [(k, label, b.get(f"{k}{w}")) for k, label in rounds if not (k == "second_round" and clazz >= 5)]
+
+
+def team_status(team: dict, clazz: int) -> tuple[str, str] | None:
+    """The page's status badge for a team: (kind, label), e.g. ("clinched", "Clinched #1"); None without one.
+
+    Mirrors ``teamStatuses`` / ``playoffStatus`` in the site's JavaScript.
+    """
+    odds = team["odds"]
+    if _certain(odds.get("p_playoffs")):
+        path = playoff_path(team, "tossup", clazz)
+        if path:
+            if _certain(path[-1][2]):
+                return ("champion", "State Champion")
+            reached = [k for k, _, p in path[:-1] if _certain(p)]
+            keys = [k for k, _, _ in path]
+            if reached:
+                last = reached[-1]
+                nxt = path[keys.index(last) + 1][2]
+                if nxt is not None and nxt <= _EPS:
+                    return ("eliminated", f"Lost in {_ROUND_TITLES[last]}")
+                return ("clinched", f"Advanced to {_ROUND_TITLES[last]}")
+            if path[0][2] is not None and path[0][2] <= _EPS:
+                return ("eliminated", "Lost in First Round")
+    if team.get("eliminated"):
+        return ("eliminated", "Eliminated")
+    seed = next((s for s in (1, 2, 3, 4) if _certain(odds.get(f"p{s}"))), None)
+    if seed:
+        return ("clinched", f"Clinched #{seed}")
+    if team.get("clinched"):
+        return ("clinched", "Clinched")
+    return None
+
+
+def _records(team: dict) -> tuple[str, str]:
+    """A team's overall and region records: ("5–1", "1–0")."""
+    r = team["record"]
+    return record_text(r["wins"], r["losses"], r.get("ties") or 0), _region_record(team)
+
+
+def team_title(team: dict, clazz: int, region: int) -> str:
+    """A team link's title: "Raleigh in the Region 6-3A playoff race — Mississippi High School Football"."""
+    return f"{team['school']} in the Region {region}-{clazz}A playoff race — {SITE_NAME}"
+
+
+def team_description(team: dict, clazz: int, region: int, mode: str) -> str:
+    """One line of the team's numbers, for the link preview.
+
+    "Raleigh (5–1, 1–0 in Region 6-3A): 39% to win the region, >99% to make the
+    playoffs, 4% to win the state championship." Locked and finished outcomes are stated as facts.
+    """
+    overall, in_region = _records(team)
+    name = f"{team['school']} ({overall}, {in_region} in Region {region}-{clazz}A)"
+    status = team_status(team, clazz)
+    if status and status[0] == "champion":
+        return f"{name}: {clazz}A state champion."
+    if status and status[1].startswith("Lost in"):
+        return f"{name}: lost in the {status[1].removeprefix('Lost in ').lower()}."
+    if status and status[1] == "Eliminated":
+        return f"{name}: out of the playoff race."
+    odds = team["odds"]
+    parts = []
+    seed = next((s for s in (1, 2, 3, 4) if _certain(odds.get(f"p{s}"))), None)
+    if seed:
+        parts.append(f"locked in as the #{seed} seed")
+    else:
+        p1 = mode_odds(team, "p1", mode)
+        if p1 > _EPS:  # a team that can't win the region doesn't lead with "0% to win the region"
+            parts.append(f"{format_pct(p1)} to win the region")
+        playoffs = mode_odds(team, "p_playoffs", mode)
+        parts.append("in the playoffs" if _certain(playoffs) else f"{format_pct(playoffs)} to make the playoffs")
+    path = playoff_path(team, mode, clazz)
+    if path and path[-1][2] is not None:
+        parts.append(f"{format_pct(path[-1][2])} to win the state championship")
+    if len(parts) > 1:
+        return f"{name}: {', '.join(parts[:-1])}, {parts[-1]}."
+    return f"{name}: {parts[0]}."
+
+
+def _pill_row(draw: ImageDraw.ImageDraw, top: float, label: str, cells: list[tuple[str, float | None]]) -> None:
+    """A section of large odds cells spanning the card: its title in Nippo, column headers, pills.
+
+    *top* is the title's baseline; the row ends about 95px below it.
+    """
+    small = _inter(17, 600)
+    draw.text((PAD, top), label, font=_nippo(30), fill=TEXT, anchor="ls")
+    gap = 14
+    width = (WIDTH - 2 * PAD - gap * (len(cells) - 1)) / len(cells)
+    # Full round names ("CHAMPIONSHIP GAME") over five columns: step the
+    # headers down a size rather than abbreviate them.
+    header_font, tracking = small, 1.6
+    if max(_tracked_width(draw, h, small, 1.6) for h, _ in cells) > width - 16:
+        header_font, tracking = _inter(15, 600), 0.8
+    for i, (header, p) in enumerate(cells):
+        right = PAD + (i + 1) * width + i * gap
+        _tracked(draw, (right, top + 34), header, header_font, TEXT_2, tracking, anchor="rs")
+        if p is None:
+            continue
+        _odds_pill(draw, right, top + 34 + 36, p, width, 50, 30)
+
+
+def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str) -> Image.Image:
+    """A team's card: name, records and status, seeding odds, and its odds of reaching each playoff round.
+
+    *team* is one entry of the API's region standings response.
+    """
+    img = Image.new("RGB", (WIDTH, HEIGHT), BG)
+    draw = ImageDraw.Draw(img)
+    _tracked(draw, (PAD, PAD + 18), f"REGION {region}-{clazz}A", _inter(20, 600), TEXT_2, 2)
+    name_font = _nippo(80)
+    draw.text(
+        (PAD, PAD + 104), fit(draw, team["school"], name_font, WIDTH - 2 * PAD), font=name_font, fill=TEXT, anchor="ls"
+    )
+    overall, in_region = _records(team)
+    line_font = _inter(30, 600)
+    x = PAD
+    y = PAD + 154
+    for text, color in [(f"{overall} overall", TEXT), (" · ", TEXT_2), (f"{in_region} in region", TEXT)]:
+        draw.text((x, y), text, font=line_font, fill=color, anchor="ls")
+        x += draw.textlength(text, font=line_font)
+    status = team_status(team, clazz)
+    if status:
+        draw.text((x, y), " · ", font=line_font, fill=TEXT_2, anchor="ls")
+        x += draw.textlength(" · ", font=line_font)
+        draw.text(
+            (x, y), status[1], font=line_font, fill=CLINCHED if status[0] != "eliminated" else TEXT_2, anchor="ls"
+        )
+    _pill_row(
+        draw,
+        PAD + 220,
+        "Seeding",
+        [
+            (h, mode_odds(team, k, mode))
+            for h, k in zip(
+                ("1ST", "2ND", "3RD", "4TH", "PLAYOFFS"), ("p1", "p2", "p3", "p4", "p_playoffs"), strict=True
+            )
+        ],
+    )
+    path = playoff_path(team, mode, clazz)
+    if path:
+        _pill_row(draw, PAD + 366, "Playoff Path", [(label, p) for _, label, p in path])
+    _footer(draw, stamp)
+    return img
 
 
 def render_site_card() -> Image.Image:

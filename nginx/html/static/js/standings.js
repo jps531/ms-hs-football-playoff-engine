@@ -83,12 +83,12 @@ export function playoffPath(entry, mode, clazz) {
   const o = entry.odds ?? {};
   const pick = (obj, key) => (obj ? obj[`${key}${w}`] ?? null : null);
   const rounds = [
-    { round: "First round", reach: mode === "projected" ? o.p_playoffs_weighted : o.p_playoffs, host: pick(h, "first_round") },
-    { round: "Second round", reach: pick(b, "second_round"), host: pick(h, "second_round"), skip: clazz >= 5 },
+    { round: "First Round", reach: mode === "projected" ? o.p_playoffs_weighted : o.p_playoffs, host: pick(h, "first_round") },
+    { round: "Second Round", reach: pick(b, "second_round"), host: pick(h, "second_round"), skip: clazz >= 5 },
     { round: "Quarterfinals", reach: pick(b, "quarterfinals"), host: pick(h, "quarterfinals") },
     { round: "Semifinals", reach: pick(b, "semifinals"), host: pick(h, "semifinals") },
-    { round: "Championship game", reach: pick(b, "finals"), host: null, neutral: true },
-    { round: "Wins it all", reach: pick(b, "champion"), host: null },
+    { round: "Championship Game", reach: pick(b, "finals"), host: null, neutral: true },
+    { round: "Champions", reach: pick(b, "champion"), host: null },
   ];
   return rounds
     .filter((r) => !r.skip)
@@ -100,14 +100,6 @@ export function playoffPath(entry, mode, clazz) {
       hostOverall: host != null && reach != null ? host * reach : null,
     }));
 }
-
-const ROUND_TITLES = {
-  "First round": "First Round",
-  "Second round": "Second Round",
-  Quarterfinals: "Quarterfinals",
-  Semifinals: "Semifinals",
-  "Championship game": "Championship Game",
-};
 
 /**
  * Where a playoff team stands once the bracket is underway, read from its
@@ -126,10 +118,10 @@ export function playoffStatus(entry, clazz) {
   if (i < 0) return null;
   const next = path[i + 1];
   if (next.reach != null && next.reach <= 1e-9) {
-    return { kind: "lost", label: `Lost in ${ROUND_TITLES[rounds[i].round]}` };
+    return { kind: "lost", label: `Lost in ${rounds[i].round}` };
   }
   if (i === 0) return null; // in the bracket, first round still to play
-  return { kind: "advanced", label: `Advanced to ${ROUND_TITLES[rounds[i].round]}` };
+  return { kind: "advanced", label: `Advanced to ${rounds[i].round}` };
 }
 
 const pairKey = (a, b) => [a, b].sort().join("\u0000");
