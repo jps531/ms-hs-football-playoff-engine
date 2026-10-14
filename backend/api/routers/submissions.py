@@ -7,8 +7,22 @@ without a token are accepted normally with user_id=NULL.
 
 Submissions enter a moderation queue and are not applied to the live database
 until a moderator approves them via ``/api/v1/moderation/submissions/{id}/approve``.
+
+The two endpoints the site's feedback form uses (``/feedback`` and ``/scores``)
+are guarded against floods on top of their per-IP rate limits (nginx also
+limits the request rate to ``/api/v1/submissions/``):
+
+- a honeypot field the form hides from people: a filled one is answered as
+  if accepted and dropped;
+- a repeat of a still-pending submission within a day returns the original
+  instead of queueing a copy;
+- a circuit breaker: past ``_MAX_PENDING_PER_HOUR`` new pending form
+  submissions in an hour, more are refused with 503 until the rate drops,
+  so a distributed flood can't fill the queue.
 """
 
+import json
+from datetime import UTC, datetime
 from functools import partial
 from typing import Annotated, Any
 
@@ -51,6 +65,55 @@ router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
 _MAX_HELMET_IMAGES = 5
 _VALID_IMAGE_LABELS = {"left", "right", "front", "logo", "other"}
+
+# The feedback form's endpoints: a few a minute is plenty for a person
+# correcting scores, and a day's cap stops slow drips.
+_FORM_LIMIT = "5/minute;30/day"
+_MAX_PENDING_PER_HOUR = 300
+
+
+async def _accept_form_submission(
+    conn, stype: str, school: str | None, user_id: int | None, payload: dict
+) -> tuple[int, datetime]:
+    """Queue a feedback-form submission, unless it repeats a pending one or the queue is flooded.
+
+    Returns ``(id, submitted_at)``: the original's for a repeat, a new row's otherwise.
+    Raises 503 when more than ``_MAX_PENDING_PER_HOUR`` form submissions arrived in the last hour.
+    """
+    repeat = await (
+        await conn.execute(
+            """
+            SELECT id, submitted_at FROM submissions
+            WHERE type = %s AND status = 'pending' AND school IS NOT DISTINCT FROM %s
+              AND payload = %s::jsonb AND submitted_at > NOW() - INTERVAL '1 day'
+            ORDER BY submitted_at DESC LIMIT 1
+            """,
+            (stype, school, json.dumps(payload)),
+        )
+    ).fetchone()
+    if repeat is not None:
+        return repeat[0], repeat[1]
+    recent = await (
+        await conn.execute(
+            """
+            SELECT COUNT(*) FROM submissions
+            WHERE type IN ('feedback', 'score') AND status = 'pending'
+              AND submitted_at > NOW() - INTERVAL '1 hour'
+            """
+        )
+    ).fetchone()
+    if recent is not None and recent[0] >= _MAX_PENDING_PER_HOUR:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="We're getting more reports than usual. Please try again in a little while.",
+            headers={"Retry-After": "900"},
+        )
+    return await insert_submission(conn, stype, school, user_id, payload)
+
+
+def _honeypot_response(stype: str, school: str | None) -> SubmissionCreatedResponse:
+    """What an automated submission (honeypot filled) gets back: looks accepted, nothing is stored."""
+    return SubmissionCreatedResponse(id=0, type=stype, school=school, submitted_at=datetime.now(UTC))
 
 
 class _HelmetForm:
@@ -240,23 +303,28 @@ async def submit_location(
 
 
 @router.post(
-    "/scores", status_code=status.HTTP_201_CREATED, responses={404: {"description": "School or game not found"}}
+    "/scores",
+    status_code=status.HTTP_201_CREATED,
+    responses={404: {"description": "School or game not found"}, 503: {"description": "Too many reports right now"}},
 )
-@limiter.limit("10/minute")
+@limiter.limit(_FORM_LIMIT)
 async def submit_score(
     request: Request, body: SubmitScoreRequest, current_user: OptionalUser = None
 ) -> SubmissionCreatedResponse:
     """Submit a corrected game score for moderator review.
 
     Both the school and the game (school + date) must already exist in the database.
+    A repeat of a pending correction returns the original; see the module notes on flood guards.
     """
+    if body.website:
+        return _honeypot_response("score", body.school)
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
         await require_game_exists(conn, body.school, body.date)
 
         user_id = optional_user_id(current_user)
         payload = build_score_payload(body)
-        submission_id, submitted_at = await insert_submission(conn, "score", body.school, user_id, payload)
+        submission_id, submitted_at = await _accept_form_submission(conn, "score", body.school, user_id, payload)
 
     return SubmissionCreatedResponse(id=submission_id, type="score", school=body.school, submitted_at=submitted_at)
 
@@ -312,15 +380,22 @@ async def submit_helmet_assignment(
     )
 
 
-@router.post("/feedback", status_code=status.HTTP_201_CREATED)
-@limiter.limit("10/minute")
+@router.post(
+    "/feedback", status_code=status.HTTP_201_CREATED, responses={503: {"description": "Too many reports right now"}}
+)
+@limiter.limit(_FORM_LIMIT)
 async def submit_feedback(
     request: Request, body: SubmitFeedbackRequest, current_user: OptionalUser = None
 ) -> SubmissionCreatedResponse:
-    """Submit general feedback for moderator review."""
+    """Submit feedback for moderator review: a score report, wrong odds or scenarios, or anything else.
+
+    A repeat of a pending report returns the original; see the module notes on flood guards.
+    """
+    if body.website:
+        return _honeypot_response("feedback", None)
     user_id = optional_user_id(current_user)
     payload = build_feedback_payload(body)
     async with get_conn() as conn:
-        submission_id, submitted_at = await insert_submission(conn, "feedback", None, user_id, payload)
+        submission_id, submitted_at = await _accept_form_submission(conn, "feedback", None, user_id, payload)
 
     return SubmissionCreatedResponse(id=submission_id, type="feedback", school=None, submitted_at=submitted_at)

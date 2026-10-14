@@ -29,7 +29,7 @@ const classFromSlug = (v) => {
 /**
  * Read a location into a route:
  * { page, clazz, region, season, week, odds, team, legacy }.
- * page is "landing", "class", "region", "bracket", or "notfound". team is the raw
+ * page is "landing", "class", "region", "bracket", "feedback", or "notfound". team is the raw
  * `team` value (a slug, or a school name in an old link). legacy is true for
  * an old query-string link (?class=3&region=6) the app should rewrite.
  */
@@ -64,6 +64,7 @@ export function parseLocation(pathname, search) {
     const region = positiveInt(parts[2]);
     return region ? { ...route, page: "region", clazz, region } : route;
   }
+  if (parts[0] === "feedback" && parts.length === 1) return { ...route, page: "feedback" };
   if (parts[0] === "brackets" && parts.length === 2) {
     const clazz = classFromSlug(parts[1]);
     return clazz ? { ...route, page: "bracket", clazz } : route;
@@ -78,6 +79,7 @@ export function parseLocation(pathname, search) {
  */
 export function buildPath(route, { currentSeason = null } = {}) {
   let path = "/";
+  if (route.page === "feedback") return "/feedback";
   if (route.page === "class" || route.page === "region") {
     path = `/standings/${route.clazz}a`;
     if (route.page === "region") path += `/${route.region}`;

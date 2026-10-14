@@ -120,6 +120,15 @@ test("game card: visitor on top with the joiner, winner bolded, a readable summa
   assert.doesNotMatch(upcoming, /game-card__score/);
 });
 
+test("game card: a completed game can be reported as a wrong score, with everything the form needs", () => {
+  const game = { date: "2026-10-09", away: "Seminary", home: "Raleigh", joiner: "at", awayScore: 21, homeScore: 28, winner: "Raleigh" };
+  const html = gameCard(game, {}, { report: true });
+  assert.match(html, /data-score-report data-date="2026-10-09" data-away="Seminary" data-home="Raleigh" data-away-score="21" data-home-score="28"/);
+  assert.match(html, /Wrong score\?<span class="visually-hidden"> Report a correction for Seminary 21, Raleigh 28/);
+  assert.doesNotMatch(gameCard(game, {}), /data-score-report/);
+  assert.doesNotMatch(gameCard({ away: "A", home: "B", joiner: "vs" }, {}, { report: true }), /data-score-report/);
+});
+
 test("scenario box lists the seeds, who's out, then IF and the conditions", () => {
   const html = outcomeScenarioCard({
     label: "Scenario 2A",

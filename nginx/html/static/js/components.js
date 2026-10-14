@@ -199,7 +199,7 @@ export function scenarioCard({ title, p = null, groups, provenanceHtml = "", tea
  * bold the winner. `game` is { away, home, joiner, awayScore?, homeScore?,
  * winner? }; `focus` outlines the card when the picked team plays in it.
  */
-export function gameCard(game, teams, { focus = null } = {}) {
+export function gameCard(game, teams, { focus = null, report = false } = {}) {
   const played = game.awayScore != null && game.homeScore != null;
   const side = (name, score) => {
     const won = played && game.winner === name;
@@ -214,6 +214,7 @@ export function gameCard(game, teams, { focus = null } = {}) {
     <span class="visually-hidden">${esc(label)}</span>
     <div class="game-card__row" aria-hidden="true">${side(game.away, game.awayScore)}<span class="game-card__joiner">${esc(game.joiner)}</span></div>
     <div class="game-card__row" aria-hidden="true">${side(game.home, game.homeScore)}</div>
+    ${report && played ? `<button type="button" class="game-card__report" data-score-report data-date="${esc(game.date)}" data-away="${esc(game.away)}" data-home="${esc(game.home)}" data-away-score="${esc(game.awayScore)}" data-home-score="${esc(game.homeScore)}">Wrong score?<span class="visually-hidden"> Report a correction for ${esc(label)}</span></button>` : ""}
   </li>`;
 }
 

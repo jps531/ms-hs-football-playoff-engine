@@ -29,6 +29,7 @@ from backend.helpers.submission_helpers import (
     build_location_payload,
     build_logo_image_fields,
     build_logo_initial_payload,
+    build_opponent_score_overrides,
     build_score_overrides,
     build_score_payload,
     build_submission_summary,
@@ -60,9 +61,7 @@ class FakeConn:
         return self.fetchone_result
 
 
-def _submission_row(
-    stype: str, school: str | None, payload: dict, submission_id: int = 1
-) -> tuple:
+def _submission_row(stype: str, school: str | None, payload: dict, submission_id: int = 1) -> tuple:
     """Build a (id, type, status, school, submitted_at, reviewed_at, payload, notes, helmet_design_id) row."""
     return (submission_id, stype, "pending", school, datetime(2025, 9, 1), None, payload, None, None)
 
@@ -156,7 +155,20 @@ class TestBuildScoreOverrides:
         """Returns the game_date plus points_for/points_against as string override pairs."""
         game_date, overrides = build_score_overrides({"date": "2025-09-05", "points_for": 21, "points_against": 14})
         assert game_date == "2025-09-05"
-        assert overrides == [("points_for", "21"), ("points_against", "14")]
+        assert overrides == [("points_for", "21"), ("points_against", "14"), ("result", "W")]
+
+    def test_result_follows_the_corrected_score(self):
+        """A loss or a tie is recorded as such, so a changed winner can't leave a stale result."""
+        assert build_score_overrides({"date": "d", "points_for": 7, "points_against": 14})[1][2] == ("result", "L")
+        assert build_score_overrides({"date": "d", "points_for": 14, "points_against": 14})[1][2] == ("result", "T")
+
+    def test_opponent_side_is_mirrored(self):
+        """The opponent's row gets the same score swapped and the opposite result."""
+        assert build_opponent_score_overrides({"date": "d", "points_for": 21, "points_against": 14}) == [
+            ("points_for", "14"),
+            ("points_against", "21"),
+            ("result", "L"),
+        ]
 
 
 class TestBuildHelmetAssignmentOverride:
@@ -198,10 +210,10 @@ class TestApplySubmission:
         assert conn.calls == []
 
     def test_feedback_is_a_no_op(self):
-        """A 'feedback' submission makes no DB writes."""
+        """A 'feedback' submission makes no DB writes, and having no school (it never does) is fine."""
         conn = FakeConn()
-        row = _submission_row("feedback", "Taylorsville", {"subject": "x", "message": "y"})
-        asyncio.run(apply_submission(conn, row))
+        for school in ("Taylorsville", None):
+            asyncio.run(apply_submission(conn, _submission_row("feedback", school, {"subject": "x", "message": "y"})))
         assert conn.calls == []
 
     @patch("backend.helpers.submission_helpers.recompute_color_variants", new_callable=AsyncMock)
@@ -237,21 +249,34 @@ class TestApplySubmission:
         assert conn.calls[0] == ("SELECT set_school_override(%s, %s, %s)", ("Taylorsville", "latitude", "34.5"))
         assert conn.calls[1] == ("SELECT set_school_override(%s, %s, %s)", ("Taylorsville", "longitude", "-89.1"))
 
-    def test_score_sets_game_overrides(self):
-        """A 'score' submission calls set_game_override with the game date for each score field."""
+    def test_score_sets_game_overrides_on_both_teams_rows(self):
+        """A 'score' submission overrides the school's row (score and result), then the opponent's, mirrored."""
         conn = FakeConn()
+        conn.fetchone_result = ("Mize",)
         payload = {"date": "2025-09-05", "points_for": 21, "points_against": 14}
         row = _submission_row("score", "Taylorsville", payload)
         asyncio.run(apply_submission(conn, row))
-        assert len(conn.calls) == 2
-        assert conn.calls[0] == (
-            "SELECT set_game_override(%s, %s, %s, %s)",
+        override = "SELECT set_game_override(%s, %s, %s, %s)"
+        assert [params for sql, params in conn.calls if sql == override] == [
             ("Taylorsville", "2025-09-05", "points_for", "21"),
-        )
-        assert conn.calls[1] == (
-            "SELECT set_game_override(%s, %s, %s, %s)",
             ("Taylorsville", "2025-09-05", "points_against", "14"),
+            ("Taylorsville", "2025-09-05", "result", "W"),
+            ("Mize", "2025-09-05", "points_for", "14"),
+            ("Mize", "2025-09-05", "points_against", "21"),
+            ("Mize", "2025-09-05", "result", "L"),
+        ]
+
+    def test_score_without_an_opponent_row_corrects_just_the_school(self):
+        """No row for the opponent (e.g. a game lookup that finds nothing): only the school's row changes."""
+        conn = FakeConn()
+        conn.fetchone_result = None
+        asyncio.run(
+            apply_submission(
+                conn,
+                _submission_row("score", "Taylorsville", {"date": "2025-09-05", "points_for": 3, "points_against": 0}),
+            )
         )
+        assert {params[0] for sql, params in conn.calls if "set_game_override" in sql} == {"Taylorsville"}
 
     @patch("backend.helpers.submission_helpers.require_helmet_design_exists", new_callable=AsyncMock)
     def test_helmet_assignment_updates_games_after_existence_check(self, mock_require_exists):
@@ -313,9 +338,7 @@ class TestBuildColorsPayload:
 
     def test_secondary_only_omits_primary_key(self):
         """No primary_color means the key is absent, not None."""
-        body = SubmitColorsRequest(
-            school="Taylorsville", secondary_colors=[ColorEntry(name="Blue", hex="#0000FF")]
-        )
+        body = SubmitColorsRequest(school="Taylorsville", secondary_colors=[ColorEntry(name="Blue", hex="#0000FF")])
         result = build_colors_payload(body)
         assert "primary_color" not in result
         assert result == {"secondary_colors": [{"name": "Blue", "hex": "#0000FF"}]}
@@ -356,7 +379,27 @@ class TestBuildFeedbackPayload:
     def test_maps_subject_and_message(self):
         """subject/message pass straight through into the payload dict."""
         body = SubmitFeedbackRequest(subject="Bug report", message="Something's wrong")
-        assert build_feedback_payload(body) == {"subject": "Bug report", "message": "Something's wrong"}
+        assert build_feedback_payload(body) == {
+            "subject": "Bug report",
+            "message": "Something's wrong",
+            "category": "other",
+        }
+
+    def test_records_category_page_and_email_when_given(self):
+        """The form's context rides along; blank optional fields are left out."""
+        body = SubmitFeedbackRequest(
+            subject=" Odds ",
+            message=" Raleigh can't finish 4th ",
+            category="odds",
+            page="/standings/3a/6?team=raleigh",
+            email="",
+        )
+        assert build_feedback_payload(body) == {
+            "subject": "Odds",
+            "message": "Raleigh can't finish 4th",
+            "category": "odds",
+            "page": "/standings/3a/6?team=raleigh",
+        }
 
 
 class TestBuildLogoInitialPayload:
