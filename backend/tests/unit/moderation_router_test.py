@@ -74,9 +74,7 @@ class TestApproveSubmissionStatusTransition:
         updated = _submission_row(stype="logo", status="accepted_pending_asset")
         conn = FakeConn([fetched, updated])
         with patch.object(moderation, "get_conn", _fake_get_conn(conn)):
-            result = asyncio.run(
-                moderation.approve_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None))
-            )
+            result = asyncio.run(moderation.approve_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None)))
         assert result.status == "accepted_pending_asset"
         update_sql, update_params = conn.calls[1]
         assert "UPDATE submissions" in update_sql
@@ -89,9 +87,7 @@ class TestApproveSubmissionStatusTransition:
         updated = _submission_row(stype="helmet", status="approved")
         conn = FakeConn([fetched, updated])
         with patch.object(moderation, "get_conn", _fake_get_conn(conn)):
-            result = asyncio.run(
-                moderation.approve_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None))
-            )
+            result = asyncio.run(moderation.approve_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None)))
         assert result.status == "approved"
         _update_sql, update_params = conn.calls[1]
         assert update_params[0] == "approved"
@@ -103,9 +99,7 @@ class TestApproveSubmissionStatusTransition:
         updated = _submission_row(stype="colors", status="approved")
         conn = FakeConn([fetched, updated])
         with patch.object(moderation, "get_conn", _fake_get_conn(conn)):
-            result = asyncio.run(
-                moderation.approve_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None))
-            )
+            result = asyncio.run(moderation.approve_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None)))
         assert result.status == "approved"
 
 
@@ -118,9 +112,7 @@ class TestRejectSubmissionGeneralizedGuard:
         updated = _submission_row(stype="logo", status="rejected")
         conn = FakeConn([fetched, updated])
         with patch.object(moderation, "get_conn", _fake_get_conn(conn)):
-            result = asyncio.run(
-                moderation.reject_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None))
-            )
+            result = asyncio.run(moderation.reject_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None)))
         assert result.status == "rejected"
 
     def test_accepted_pending_asset_submission_can_be_rejected(self):
@@ -129,9 +121,7 @@ class TestRejectSubmissionGeneralizedGuard:
         updated = _submission_row(stype="logo", status="rejected")
         conn = FakeConn([fetched, updated])
         with patch.object(moderation, "get_conn", _fake_get_conn(conn)):
-            result = asyncio.run(
-                moderation.reject_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None))
-            )
+            result = asyncio.run(moderation.reject_submission({"db_id": 1}, 1, ModerationDecisionRequest(notes=None)))
         assert result.status == "rejected"
 
     def test_already_approved_submission_cannot_be_rejected(self):
@@ -143,3 +133,28 @@ class TestRejectSubmissionGeneralizedGuard:
             with pytest.raises(HTTPException) as exc_info:
                 asyncio.run(coro)
         assert exc_info.value.status_code == 409
+
+
+class TestListSubmissionsQuery:
+    """list_submissions' optional filters must reach Postgres with a type it can determine."""
+
+    def test_null_checked_parameters_are_cast(self):
+        """A bare ``%s IS NULL`` is IndeterminateDatatype in Postgres, so every unfiltered list was a 500."""
+        import re
+
+        class ListConn(FakeConn):
+            """FakeConn with fetchall() for the list query."""
+
+            async def fetchall(self):
+                """Return one summary row."""
+                return [(1, "score", "pending", "Oxford", datetime(2026, 10, 14), None, None)]
+
+        conn = ListConn([])
+        with patch.object(moderation, "get_conn", _fake_get_conn(conn)):
+            result = asyncio.run(moderation.list_submissions({"role": "moderator"}))
+        sql, params = conn.calls[0]
+        assert re.search(r"%s\s+IS\s+NULL", sql) is None
+        assert sql.count("%s::text IS NULL") == 2
+        assert sql.count("%s::boolean") == 2
+        assert params == (None, None, None, None, None, None, 50, 0)
+        assert [r.id for r in result] == [1]
