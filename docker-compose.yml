@@ -34,6 +34,8 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/html:/usr/share/nginx/html:ro
+      # Share cards and meta tags the Prefect worker draws (see share_assets_pipeline.py)
+      - share-assets:/usr/share/nginx/share:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       # Certbot webroot: renewal writes HTTP-01 challenge tokens here on the host
       - /var/www/certbot:/var/www/certbot:ro
@@ -75,6 +77,11 @@ services:
     restart: unless-stopped
     environment:
       <<: *env-common
+      # Share cards: read from the API, written where nginx serves them.
+      SHARE_API_URL: "http://api:8000/api/v1"
+      SHARE_OUTPUT_DIR: "/opt/share"
+    volumes:
+      - share-assets:/opt/share
     networks:
       - mshsfootball
     depends_on:
@@ -131,4 +138,6 @@ volumes:
   dbdata:
     driver: local
   prefect-data:
+    driver: local
+  share-assets:
     driver: local

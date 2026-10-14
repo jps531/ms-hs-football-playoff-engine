@@ -144,3 +144,23 @@ docker compose --env-file .env.local --profile local-db up -d --force-recreate n
 ```
 
 Required env vars: `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`, `CLOUDINARY_*`, `FRONTEND_ORIGIN`.
+
+## Share cards (link previews)
+
+Each morning, after the region update, the Prefect worker draws a link-preview
+card and meta tags for every region and class page
+(`backend/prefect/share_assets_pipeline.py`). It reads the site's own API and
+writes into the `share-assets` volume, which nginx serves at `/static/og/` and
+splices into each page's `<head>` with a server-side include. Until a page has
+its own, it gets the generic tags in `index.html`.
+
+To redraw them by hand (after a deploy, or after rerunning a pipeline), run the
+`share-assets` deployment from the Prefect UI. To check one:
+
+```
+curl -s https://mshsfootball.com/standings/3a/6 | grep -E '<title>|og:image"'
+```
+
+Facebook caches previews; its Sharing Debugger ("Scrape Again") refreshes one.
+Card URLs carry the snapshot date (`?v=20261009`), so a new day's card is a new
+URL and is fetched fresh.

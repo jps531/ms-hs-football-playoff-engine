@@ -11,6 +11,7 @@ from backend.prefect.nces_school_pipeline import nces_school_data_flow
 from backend.prefect.playoff_pipeline import playoff_bracket_update
 from backend.prefect.region_scenarios_pipeline import backfill_historical_snapshots, region_scenarios_data_flow
 from backend.prefect.regions_data_pipeline import regions_data_flow
+from backend.prefect.share_assets_pipeline import share_assets_flow
 
 _SCHEDULE_TIMEZONE = "America/Chicago"
 
@@ -31,6 +32,8 @@ async def main():
         ),
         await backfill_historical_snapshots.to_deployment("backfill-historical-snapshots"),
         await playoff_bracket_update.to_deployment("playoff-bracket-update"),
+        # Also runs at the end of the daily region update; this is for a manual redraw.
+        await share_assets_flow.to_deployment("share-assets"),
     )
 
 

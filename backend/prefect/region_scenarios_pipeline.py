@@ -63,6 +63,7 @@ from backend.helpers.win_probability import (
     make_matchup_prob_fn,
     make_win_prob_fn_from_ratings,
 )
+from backend.prefect.share_assets_pipeline import write_share_assets
 
 _T = TypeVar("_T")
 
@@ -1420,6 +1421,13 @@ def region_scenarios_data_flow(
     # Last, so playoff-aware rows are what's left for every playoff date.
     if skipped:
         run_playoff_bracket_update(season)
+
+    # Link previews: redraw every region and class card from what the site now
+    # serves. A failure here shouldn't fail the data update itself.
+    try:
+        write_share_assets(season)
+    except Exception:
+        logger.exception("Share assets failed; the region update itself completed")
     return scenario_dicts
 
 
