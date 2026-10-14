@@ -77,6 +77,14 @@ export function forgetToken(storage) {
   storage.removeItem(TOKEN_KEY);
 }
 
+/** Auth0's error text, with the fix added for the one setup mistake it doesn't explain. */
+export function explainAuthError(text) {
+  if (/not authorized to access resource server/i.test(text ?? "")) {
+    return `${text} In Auth0, open Applications → APIs → your API → Application Access and authorize this application for user access.`;
+  }
+  return text;
+}
+
 /** Send the browser to Auth0's sign-in page. */
 export async function signIn(cfg, redirectUri, storage = sessionStorage) {
   const verifier = randomString(48);
@@ -93,7 +101,7 @@ export async function completeSignIn(cfg, redirectUri, url, storage = sessionSto
   const params = new URL(url).searchParams;
   const pending = JSON.parse(storage.getItem(PENDING_KEY) ?? "null");
   storage.removeItem(PENDING_KEY);
-  if (params.get("error")) throw new Error(params.get("error_description") || params.get("error"));
+  if (params.get("error")) throw new Error(explainAuthError(params.get("error_description") || params.get("error")));
   if (!pending || params.get("state") !== pending.state) throw new Error("That sign-in link was stale. Please sign in again.");
   const { url: tokenUrl, body } = tokenRequest(cfg, { code: params.get("code"), verifier: pending.verifier, redirectUri });
   const res = await fetcher(tokenUrl, {
@@ -102,7 +110,7 @@ export async function completeSignIn(cfg, redirectUri, url, storage = sessionSto
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.access_token) throw new Error(data.error_description || "Auth0 didn't return a token.");
+  if (!res.ok || !data.access_token) throw new Error(explainAuthError(data.error_description) || "Auth0 didn't return a token.");
   saveToken(storage, data.access_token, data.expires_in ?? 3600);
   return data.access_token;
 }

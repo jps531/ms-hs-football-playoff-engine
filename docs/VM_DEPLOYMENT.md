@@ -188,9 +188,11 @@ so it needs its own Auth0 application:
    - **Allowed Logout URLs:** `https://mshsfootball.com/moderate`
    - **Allowed Web Origins:** `https://mshsfootball.com`
    - Add the `http://localhost` equivalents if you test locally.
-3. If your API's settings (Applications → APIs → your API) restrict which
-   applications may get user tokens for it, allow the new app. By default any
-   application in the tenant can.
+3. Authorize the app for your API: Applications → APIs → your API →
+   **Application Access** (older dashboards: **Machine to Machine Applications**),
+   find the new app and set **User Access** to **Authorized** (older dashboards:
+   turn its toggle on). No scopes are needed. Skipping this gives
+   `Client "…" is not authorized to access resource server "…"` on sign-in.
 4. Put its **Client ID** in `.env.local` as `AUTH0_SPA_CLIENT_ID` and recreate the API.
 
 Only users whose row in `users` has role `moderator` or `owner` see the queue. A

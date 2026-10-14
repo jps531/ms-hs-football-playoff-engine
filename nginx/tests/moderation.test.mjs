@@ -4,7 +4,7 @@ import {
   canApprove, canReject, decisionLabels, payloadValue, feedbackAbout, itemHtml, pageLink, relativeTime, scoreChange, typeLabel, typeOptions,
 } from "../html/static/js/moderation.js";
 import {
-  authorizeUrl, base64url, challengeFor, completeSignIn, logoutUrl, saveToken, storedToken, tokenRequest,
+  authorizeUrl, base64url, challengeFor, completeSignIn, explainAuthError, logoutUrl, saveToken, storedToken, tokenRequest,
 } from "../html/static/js/auth.js";
 
 const SCORE = {
@@ -150,4 +150,11 @@ test("payload values read as text", () => {
   assert.equal(payloadValue({ a: 1 }), '{"a":1}');
   assert.equal(payloadValue(null), "");
   assert.equal(payloadValue(3), "3");
+});
+
+test("an unauthorized-client error says where to fix it", () => {
+  const raw = 'Client "abc" is not authorized to access resource server "mshsfbanalytics".';
+  assert.match(explainAuthError(raw), /Application Access/);
+  assert.equal(explainAuthError("Nope"), "Nope");
+  assert.equal(explainAuthError(undefined), undefined);
 });
