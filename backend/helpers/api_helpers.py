@@ -2222,6 +2222,61 @@ async def load_region_seed_pairs(  # pragma: no cover
     return tossup, projected
 
 
+async def load_region_fallback_snapshots(  # pragma: no cover
+    conn, season: int, clazz: int, as_of: date, regions: list[int]
+) -> dict[int, tuple[date, dict[str, dict[int, float]], dict[str, dict[int, float]], list, list]]:
+    """For each of *regions*, its newest snapshot on or before *as_of* that has both standings and seed pairs.
+
+    Returns region -> (snapshot date, toss-up seed odds, projected seed odds,
+    toss-up pairs, projected pairs), the odds as team -> {seed: p}. Regions
+    with no such snapshot are left out.
+    """
+    if not regions:
+        return {}
+    rows = await conn.execute(
+        """
+        SELECT DISTINCT ON (p.region) p.region, p.as_of_date, p.pairs, p.pairs_weighted
+        FROM region_seed_pairs p
+        WHERE p.season = %s AND p.class = %s AND p.as_of_date <= %s AND p.region = ANY(%s)
+          AND EXISTS (
+            SELECT 1 FROM region_standings s
+            WHERE s.season = p.season AND s.class = p.class
+              AND s.region = p.region AND s.as_of_date = p.as_of_date
+          )
+        ORDER BY p.region, p.as_of_date DESC
+        """,
+        (season, clazz, as_of, regions),
+    )
+    found = {
+        region: (as_of_date, pairs or [], pairs_weighted or [])
+        async for region, as_of_date, pairs, pairs_weighted in rows
+    }
+    if not found:
+        return {}
+    keys = sorted(found)
+    rows = await conn.execute(
+        """
+        SELECT school, region,
+            odds_1st, odds_2nd, odds_3rd, odds_4th,
+            odds_1st_weighted, odds_2nd_weighted, odds_3rd_weighted, odds_4th_weighted
+        FROM region_standings
+        WHERE season = %s AND class = %s
+          AND (region, as_of_date) IN (SELECT * FROM unnest(%s::int[], %s::date[]))"""
+        + ACTIVE_SCHOOL_FILTER,
+        (season, clazz, keys, [found[r][0] for r in keys]),
+    )
+    tossup: dict[int, dict[str, dict[int, float]]] = {}
+    projected: dict[int, dict[str, dict[int, float]]] = {}
+    async for school, region, *odds in rows:
+        tossup.setdefault(region, {})[school] = {s: float(odds[s - 1] or 0.0) for s in (1, 2, 3, 4)}
+        projected.setdefault(region, {})[school] = {s: float(odds[s + 3] or 0.0) for s in (1, 2, 3, 4)}
+    return {
+        r: (found[r][0], tossup[r], projected.get(r, {}), found[r][1], found[r][2])
+        for r in keys
+        if r in tossup
+    }
+
+
 async def load_playoff_results(  # pragma: no cover
     conn, season: int, clazz: int, as_of: date
 ) -> list[tuple[str, str]]:

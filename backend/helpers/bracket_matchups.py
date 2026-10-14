@@ -578,3 +578,26 @@ def pairs_for_regions(
         else:
             out[region] = locked_pairs(teams)
     return out
+
+
+def regions_needing_fallback(
+    seed_odds: dict[int, dict[str, dict[int, float]]],
+    standings_dates: dict[int, object],
+    stored: dict[int, tuple[object, list[list]]],
+) -> list[int]:
+    """Regions whose newest standings snapshot has no seed pairs from the same date.
+
+    Every region update writes both together, but snapshots written before
+    the pairs existed (or by an older pipeline) have standings only. Those
+    regions can use their newest snapshot that has both instead; a region
+    whose seeds are all locked needs no stored pairs and isn't listed.
+    """
+    out = []
+    for region, teams in seed_odds.items():
+        row = stored.get(region)
+        if row is not None and row[0] == standings_dates.get(region):
+            continue
+        if locked_pairs(teams) is not None:
+            continue
+        out.append(region)
+    return sorted(out)
