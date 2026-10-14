@@ -1044,11 +1044,17 @@ function focusRows(game, here) {
   const { focus, teams } = bracketData;
   const opp = opponentsFor(game, focus, bracketData.mode);
   const top = opp[0];
-  const teamRow = (gutter) => treeLine(gutter, focus, focus, teams, "Chance to play here", oddsCell(here.p), " is-focus");
+  // First round: each side is one region/seed, so say which finish puts the
+  // team (and its opponent) here.
+  const firstRound = game.side_a.feeders.length === 1 && game.side_b.feeders.length === 1;
+  const mySide = here.sides[0] === "a" ? game.side_a : game.side_b;
+  const theirSide = here.sides[0] === "a" ? game.side_b : game.side_a;
+  const teamSub = firstRound ? esc(positionName(mySide.feeders[0])) : "Chance to play here";
+  const oppSub = firstRound ? esc(positionName(theirSide.feeders[0])) : "Likeliest opponent";
+  const teamRow = (gutter) => treeLine(gutter, focus, focus, teams, teamSub, oddsCell(here.p), " is-focus");
   // Every pairing here is under the API's 0.5% listing floor: too many long shots to name one.
-  if (!top) return `${teamRow("")}${treeLine("vs", null, "Many possible opponents", teams, "Each under 0.5%", "", " trow--empty")}`;
-  const more = opp.length > 1 ? ` · +${opp.length - 1} more` : "";
-  const oppRow = (gutter) => treeLine(gutter, top.opponent, top.opponent, teams, `Likeliest opponent${more}`, oddsCell(top.pMatchup), "");
+  if (!top) return `${teamRow("")}${treeLine("vs", null, "Many opponents", teams, "Each under 0.5%", "", " trow--empty")}`;
+  const oppRow = (gutter) => treeLine(gutter, top.opponent, top.opponent, teams, oppSub, oddsCell(top.pMatchup), "");
   if (top.hosts === "team") return `${oppRow("")}${teamRow("at")}`;
   if (top.hosts === "opponent") return `${teamRow("")}${oppRow("at")}`;
   return `${teamRow("")}${oppRow("vs")}`;
@@ -1082,7 +1088,8 @@ function treeRow(game, sideKey, result, gutter) {
   const firstRound = side.feeders.length === 1;
   if (!list.length) return row(" trow--empty", null, "No team can get here", "", "");
   const shown = (focus && list.find((o) => o.team === focus)) || list[0];
-  const sub = [firstRound ? esc(positionName(side.feeders[0])) : "", list.length > 1 ? `+${list.length - 1} more` : ""].filter(Boolean).join(" · ");
+  // First round: the region/seed this slot is for. Later: how many others could be here instead.
+  const sub = firstRound ? esc(positionName(side.feeders[0])) : list.length > 1 ? `+${list.length - 1} more` : "";
   return row("", shown.team, shown.team, sub, oddsCell(shown.p));
 }
 
