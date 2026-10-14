@@ -8,8 +8,12 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
     og/{class}-{region}/{team}.png
                               team card (a region link with ?team=<slug>)
     og/{class}.png            class card
+    og/bracket-{class}.png    class bracket card (/brackets/{class}a)
+    og/bracket-{class}/{team}.png
+                              a team's road through the bracket (?team=<slug>)
     og/site.png               fallback card for every other page
-    meta/{class}-{region}.html, meta/{class}.html, meta/{class}-{region}/{team}.html
+    meta/{class}-{region}.html, meta/{class}.html, meta/{class}-{region}/{team}.html,
+    meta/bracket-{class}.html, meta/bracket-{class}/{team}.html
                               <title>, description, Open Graph / Twitter tags
 
 nginx splices the matching ``meta/*.html`` into the app's ``index.html``
@@ -31,6 +35,9 @@ import requests
 from prefect import flow, get_run_logger, task
 
 from backend.helpers.share_cards import (
+    bracket_description,
+    bracket_favorites,
+    bracket_title,
     class_description,
     class_title,
     description,
@@ -38,12 +45,17 @@ from backend.helpers.share_cards import (
     odds_mode,
     provenance,
     region_title,
+    render_bracket_card,
     render_class_card,
     render_region_card,
     render_site_card,
+    render_team_bracket_card,
     render_team_card,
     slugify,
+    team_bracket_description,
+    team_bracket_title,
     team_description,
+    team_road,
     team_title,
 )
 
@@ -98,16 +110,16 @@ def build_share_assets(
 ) -> dict[str, int]:
     """Render every region and class card and its meta tags for *season* (default: the newest).
 
-    Returns counts of what was written: {"regions": n, "classes": n, "teams": n}.
+    Returns counts of what was written: {"regions", "classes", "teams", "brackets", "bracket_teams"}.
     """
     if season is None:
         seasons = fetch("/seasons") or []
         if not seasons:
-            return {"regions": 0, "classes": 0, "teams": 0}
+            return dict.fromkeys(("regions", "classes", "teams", "brackets", "bracket_teams"), 0)
         season = seasons[0]["season"]
     site_url = site_url.rstrip("/")
     _write_png(out_dir / "og" / "site.png", render_site_card())
-    written = {"regions": 0, "classes": 0, "teams": 0}
+    written = dict.fromkeys(("regions", "classes", "teams", "brackets", "bracket_teams"), 0)
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
@@ -130,6 +142,10 @@ def build_share_assets(
             ),
         )
         written["classes"] += 1
+
+        bracket = _write_bracket_assets(out_dir, site_url, clazz, season, standings, stamp, mode, version, fetch)
+        written["brackets"] += bracket["brackets"]
+        written["bracket_teams"] += bracket["bracket_teams"]
 
         for region in sorted(r["region"] for r in standings["regions"]):
             payload = fetch(f"/standings/{clazz}/{region}?season={season}")
@@ -157,6 +173,70 @@ def build_share_assets(
     return written
 
 
+def _write_bracket_assets(
+    out_dir: Path,
+    site_url: str,
+    clazz: int,
+    season: int,
+    standings: dict,
+    stamp: str,
+    mode: str,
+    version: str,
+    fetch: Fetch,
+) -> dict[str, int]:
+    """The class bracket card and each playoff team's road card; removes ones for teams no longer in it."""
+    teams = [t for r in standings["regions"] for t in r["teams"]]
+    regions = {t["school"]: r["region"] for r in standings["regions"] for t in r["teams"]}
+    favorites = bracket_favorites(teams, mode)
+    if not favorites:  # no bracket odds yet (e.g. before any region is computed)
+        return {"brackets": 0, "bracket_teams": 0}
+    name = f"bracket-{clazz}"
+    page = f"{site_url}/brackets/{clazz}a"
+    _write_png(out_dir / "og" / f"{name}.png", render_bracket_card(clazz, favorites, regions, stamp, mode))
+    _write_text(
+        out_dir / "meta" / f"{name}.html",
+        meta_tags(
+            bracket_title(clazz),
+            description(bracket_description(clazz, favorites, mode)),
+            f"{site_url}/static/og/{name}.png?v={version}",
+            page,
+        ),
+    )
+    matchups = fetch(f"/bracket/matchups?season={season}&class={clazz}") or {}
+    games = matchups.get("games") or []
+    current: set[str] = set()
+    for team in favorites:
+        road = team_road(games, team["school"], mode)
+        slug = slugify(team["school"])
+        if not road or not slug:
+            continue
+        current.add(slug)
+        _write_png(
+            out_dir / "og" / name / f"{slug}.png",
+            render_team_bracket_card(clazz, regions.get(team["school"]), team, road, stamp, mode),
+        )
+        champion = (team.get("bracket_odds") or {}).get("champion_weighted" if mode == "projected" else "champion")
+        _write_text(
+            out_dir / "meta" / name / f"{slug}.html",
+            meta_tags(
+                team_bracket_title(team["school"], clazz),
+                description(team_bracket_description(team["school"], road, champion)),
+                f"{site_url}/static/og/{name}/{slug}.png?v={version}",
+                f"{page}?team={slug}",
+            ),
+        )
+    _remove_others(out_dir / "meta" / name, ".html", current)
+    _remove_others(out_dir / "og" / name, ".png", current)
+    return {"brackets": 1, "bracket_teams": len(current)}
+
+
+def _remove_others(folder: Path, suffix: str, keep: set[str]) -> None:
+    """Delete *folder*'s *suffix* files whose names aren't in *keep* (teams that moved or left)."""
+    for path in folder.glob(f"*{suffix}"):
+        if path.stem not in keep:
+            path.unlink(missing_ok=True)
+
+
 def _write_team_assets(
     out_dir: Path, site_url: str, clazz: int, region: int, payload: dict, stamp: str, mode: str, as_of: date
 ) -> int:
@@ -181,10 +261,8 @@ def _write_team_assets(
             ),
         )
     # A team that moved regions (or a renamed one) shouldn't keep a stale card here.
-    for folder, suffix in ((meta_dir, ".html"), (og_dir, ".png")):
-        for path in folder.glob(f"*{suffix}"):
-            if path.stem not in current:
-                path.unlink(missing_ok=True)
+    _remove_others(meta_dir, ".html", current)
+    _remove_others(og_dir, ".png", current)
     return len(current)
 
 
@@ -194,11 +272,13 @@ def write_share_assets(season: int | None = None) -> dict[str, int]:
     logger = get_run_logger()
     written = build_share_assets(api_fetch, Path(OUTPUT_DIR), SITE_URL, date.today(), season)
     logger.info(
-        "Share assets written to %s: %d regions, %d classes, %d teams",
+        "Share assets written to %s: %d regions, %d classes, %d teams, %d brackets, %d bracket teams",
         OUTPUT_DIR,
         written["regions"],
         written["classes"],
         written["teams"],
+        written["brackets"],
+        written["bracket_teams"],
     )
     return written
 

@@ -8,6 +8,8 @@ from backend.helpers.share_cards import (
     HEIGHT,
     WIDTH,
     _inter,
+    bracket_description,
+    bracket_favorites,
     description,
     display_order,
     format_pct,
@@ -15,13 +17,17 @@ from backend.helpers.share_cards import (
     odds_bucket,
     odds_mode,
     provenance,
+    render_bracket_card,
     render_class_card,
     render_region_card,
     render_site_card,
+    render_team_bracket_card,
     render_team_card,
     slugify,
     standing_positions,
+    team_bracket_description,
     team_description,
+    team_road,
     team_status,
     wrap,
 )
@@ -166,7 +172,7 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         "/standings/3/7?season=2026": {"as_of_date": "2026-10-09", "headline": None, "teams": TEAMS},
     }
     written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com/", date(2026, 10, 14))
-    assert written == {"regions": 2, "classes": 1, "teams": 8}
+    assert written == {"regions": 2, "classes": 1, "teams": 8, "brackets": 0, "bracket_teams": 0}
     for name in ("site.png", "3.png", "3-6.png", "3-7.png"):
         assert Image.open(tmp_path / "og" / name).size == (WIDTH, HEIGHT)
     meta = (tmp_path / "meta" / "3-6.html").read_text()
@@ -279,3 +285,130 @@ def test_team_files_for_teams_no_longer_in_a_region_are_removed(tmp_path):
     assert "https://mshsfootball.com/static/og/3-6/raleigh.png?v=20261009" in meta
     assert 'href="https://mshsfootball.com/standings/3a/6?team=raleigh"' in meta
     assert Image.open(tmp_path / "og" / "3-6" / "raleigh.png").size == (WIDTH, HEIGHT)
+
+
+def _occ(team, p, locked=False):
+    return {"team": team, "p_reach": p, "p_reach_weighted": None, "is_locked": locked}
+
+
+def _mu(a, b, p, host_a):
+    return {
+        "team_a": a,
+        "team_b": b,
+        "p_matchup": p,
+        "p_matchup_weighted": None,
+        "p_host_a": host_a,
+        "p_host_a_weighted": None,
+    }
+
+
+GAMES = [
+    # First round: Raleigh is the 1 seed or the 2 seed, in two different games.
+    {
+        "id": "S-0-0",
+        "round": "First Round",
+        "side_a": {"occupants": [_occ("Raleigh", 0.6), _occ("Magee", 0.4)]},
+        "side_b": {"occupants": [_occ("Tylertown", 1.0, True)]},
+        "matchups": [_mu("Raleigh", "Tylertown", 0.6, 1.0), _mu("Magee", "Tylertown", 0.4, 1.0)],
+    },
+    {
+        "id": "S-0-1",
+        "round": "First Round",
+        "side_a": {"occupants": [_occ("Union", 1.0, True)]},
+        "side_b": {"occupants": [_occ("Raleigh", 0.4), _occ("Magee", 0.6)]},
+        "matchups": [_mu("Union", "Raleigh", 0.4, 1.0), _mu("Union", "Magee", 0.6, 1.0)],
+    },
+    {
+        "id": "S-1-0",
+        "round": "Second Round",
+        "side_a": {"occupants": [_occ("Raleigh", 0.5), _occ("Tylertown", 0.5)]},
+        "side_b": {"occupants": [_occ("Union", 0.7), _occ("Magee", 0.3)]},
+        "matchups": [
+            _mu("Raleigh", "Union", 0.35, 0.6),
+            _mu("Raleigh", "Magee", 0.15, 0.6),
+            _mu("Tylertown", "Union", 0.35, 0.5),
+        ],
+    },
+    {
+        "id": "final",
+        "round": "Championship Game",
+        "side_a": {"occupants": [_occ("Raleigh", 0.1)]},
+        "side_b": {"occupants": [_occ("Pisgah", 0.2)]},
+        "matchups": [],
+    },
+]
+
+
+def test_team_road_adds_both_sides_and_finds_the_likeliest_opponent():
+    """Raleigh can be in either first-round game; the road sums them and names the likeliest opponent overall."""
+    road = team_road(GAMES, "Raleigh", "tossup")
+    assert [s["round"] for s in road] == ["First Round", "Second Round", "Championship Game"]
+    first, second, final = road
+    assert first["reach"] == 1.0
+    assert (first["opponent"], first["hosts"]) == ("Tylertown", "team")  # 0.6 vs Tylertown beats 0.4 at Union
+    assert abs(first["p_if_there"] - 0.6) < 1e-9
+    assert (second["opponent"], second["hosts"]) == ("Union", "split")
+    assert abs(second["p_if_there"] - 0.7) < 1e-9 and abs(second["p_team_hosts"] - 0.6) < 1e-9
+    assert final["opponent"] is None  # every pairing under the listing floor
+    union = team_road(GAMES, "Union", "tossup")[0]
+    assert (union["opponent"], union["hosts"]) == ("Magee", "team")
+    assert team_road(GAMES, "Nobody", "tossup") == []
+
+
+def test_team_bracket_description_names_the_road():
+    road = team_road(GAMES, "Raleigh", "tossup")
+    assert team_bracket_description("Raleigh", road, 0.04) == (
+        "Raleigh’s likeliest road: First Round vs Tylertown, Second Round vs Union; 4% to win the state championship."
+    )
+
+
+def _bracket_team(name, semis, final, champ, playoffs=1.0):
+    t = _team(name, playoffs)
+    odds = {"second_round": 0.8, "quarterfinals": 0.5, "semifinals": semis, "finals": final, "champion": champ}
+    return {**t, "bracket_odds": {**odds, **{f"{k}_weighted": v for k, v in odds.items()}}}
+
+
+def test_bracket_favorites_and_description():
+    teams = [
+        _bracket_team("Magee", 0.3, 0.15, 0.05),
+        _bracket_team("Raleigh", 0.4, 0.2, 0.12),
+        _bracket_team("Out", 0.0, 0.0, 0.0, playoffs=0.0),
+        _bracket_team("Seminary", 0.3, 0.16, 0.05),
+    ]
+    favorites = bracket_favorites(teams, "projected")
+    assert [t["school"] for t in favorites] == ["Raleigh", "Seminary", "Magee"]  # ties broken by the final, then semis
+    assert bracket_description(3, favorites, "projected") == (
+        "Raleigh leads the Class 3A bracket at 12% to win the state championship, ahead of Seminary (5%) and Magee (5%)."
+    )
+    champ = [_bracket_team("Raleigh", 1.0, 1.0, 1.0)]
+    assert bracket_description(3, champ, "projected") == "Raleigh won the Class 3A state championship."
+    assert bracket_description(3, [], "projected") == "Who might play whom in the Class 3A playoffs, and where."
+
+
+def test_bracket_cards_render():
+    teams = [_bracket_team(n, 0.3, 0.15, 0.05) for n in ("Raleigh", "Magee", "Seminary Attendance Center Long Name")]
+    regions = {t["school"]: 6 for t in teams}
+    assert render_bracket_card(3, teams, regions, "x", "projected").size == (WIDTH, HEIGHT)
+    road = team_road(GAMES, "Raleigh", "tossup")
+    assert render_team_bracket_card(3, 6, teams[0], road, "x", "tossup").size == (WIDTH, HEIGHT)
+
+
+def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
+    teams = [_bracket_team("Raleigh", 0.4, 0.2, 0.12), _bracket_team("Union", 0.3, 0.1, 0.05)]
+    api = {
+        "/seasons": [{"season": 2026}],
+        "/standings/3?season=2026": {"as_of_date": "2026-10-09", "regions": [{"region": 6, "teams": teams}]},
+        "/seasons/2026/dates?class=3": {"dates": DATES},
+        "/standings/3/6?season=2026": {"as_of_date": "2026-10-09", "headline": "Raleigh leads.", "teams": teams},
+        "/bracket/matchups?season=2026&class=3": {"games": GAMES},
+    }
+    (tmp_path / "og" / "bracket-3").mkdir(parents=True)
+    (tmp_path / "og" / "bracket-3" / "gone.png").write_bytes(b"old")
+    written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
+    assert (written["brackets"], written["bracket_teams"]) == (1, 2)
+    assert sorted(p.name for p in (tmp_path / "og" / "bracket-3").iterdir()) == ["raleigh.png", "union.png"]
+    meta = (tmp_path / "meta" / "bracket-3" / "raleigh.html").read_text()
+    assert "Raleigh’s path in the Class 3A bracket" in meta
+    assert 'href="https://mshsfootball.com/brackets/3a?team=raleigh"' in meta
+    assert "https://mshsfootball.com/static/og/bracket-3/raleigh.png?v=20261009" in meta
+    assert "Raleigh leads the Class 3A bracket" in (tmp_path / "meta" / "bracket-3.html").read_text()
