@@ -292,8 +292,11 @@ def _table(
     record_right = edge + gap - 32
     small = _inter(17, 600)
     _tracked(draw, (record_right, top), record_header, small, TEXT_2, 1.6, anchor="rs")
+    header_font, tracking = small, 1.6
+    if any(_tracked_width(draw, h, small, 1.6) > w + gap - 6 for h, w in zip(odds_headers, widths, strict=True)):
+        header_font, tracking = _inter(15, 600), 0.8
     for col_right, header in zip(rights, odds_headers, strict=True):
-        _tracked(draw, (col_right, top), header, small, TEXT_2, 1.6, anchor="rs")
+        _tracked(draw, (col_right, top), header, header_font, TEXT_2, tracking, anchor="rs")
     pill_h = min(44, row_h - 10)
     pill_size = 27 if min(widths) >= 110 else 23
     name_font = _inter(30 if row_h >= 52 else 28, 600)
@@ -661,6 +664,241 @@ def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str)
     path = playoff_path(team, mode, clazz)
     if path:
         _pill_row(draw, PAD + 366, "Playoff Path", [(label, p) for _, label, p in path])
+    _footer(draw, stamp)
+    return img
+
+
+# ---------------------------------------------------------------- brackets
+
+
+def bracket_title(clazz: int) -> str:
+    """The bracket page's title, as the app sets it."""
+    return f"Class {clazz}A Playoff Bracket — {SITE_NAME}"
+
+
+def _bracket_odds(team: dict, key: str, mode: str) -> float:
+    """One of a team's round-reach odds (``semifinals``, ``finals``, ``champion``) in the odds mode."""
+    b = team.get("bracket_odds") or {}
+    w = b.get(f"{key}_weighted")
+    return (w if mode == "projected" and w is not None else b.get(key)) or 0.0
+
+
+def bracket_favorites(teams: list[dict], mode: str) -> list[dict]:
+    """Playoff teams, likeliest champion first (then likeliest to reach the final, then the semifinals)."""
+    alive = [t for t in teams if t.get("bracket_odds") and mode_odds(t, "p_playoffs", mode) > _EPS]
+    return sorted(
+        alive,
+        key=lambda t: tuple(-_bracket_odds(t, k, mode) for k in ("champion", "finals", "semifinals")),
+    )
+
+
+def bracket_description(clazz: int, favorites: list[dict], mode: str) -> str:
+    """The bracket's link-preview line: the favorites' title odds, or the champion once there is one."""
+    if favorites and _certain(_bracket_odds(favorites[0], "champion", "tossup")):
+        return f"{favorites[0]['school']} won the Class {clazz}A state championship."
+    if not favorites:
+        return f"Who might play whom in the Class {clazz}A playoffs, and where."
+    top = favorites[0]
+    text = (
+        f"{top['school']} leads the Class {clazz}A bracket at "
+        f"{format_pct(_bracket_odds(top, 'champion', mode))} to win the state championship"
+    )
+    chasers = [f"{t['school']} ({format_pct(_bracket_odds(t, 'champion', mode))})" for t in favorites[1:3]]
+    if chasers:
+        text += f", ahead of {' and '.join(chasers)}"
+    return f"{text}."
+
+
+def _pick(obj: dict, key: str, mode: str) -> float | None:
+    """A matchups-payload value in the odds mode, falling back to Toss-up (``pick`` in bracket.js)."""
+    w = obj.get(f"{key}_weighted")
+    return w if mode == "projected" and w is not None else obj.get(key)
+
+
+def team_road(games: list[dict], team: str, mode: str) -> list[dict]:
+    """A team's road through the bracket, one entry per round it can still reach.
+
+    From the bracket matchups payload (``/bracket/matchups``), as the bracket
+    page computes it: for each round, the chance the team plays in it (from
+    either side of any game), its likeliest opponent there with the chance of
+    that exact game and of facing them if the team gets there, and who'd host:
+    ``{round, reach, opponent, p_matchup, p_if_there, hosts, p_team_hosts}``
+    where hosts is "team", "opponent", "split" or "neutral".
+    """
+    by_round: dict[str, dict] = {}
+    order: list[str] = []
+    for g in games:
+        name = g["round"]
+        if name not in by_round:
+            by_round[name] = {"reach": 0.0, "opponents": {}}
+            order.append(name)
+        entry = by_round[name]
+        for side in (g["side_a"], g["side_b"]):
+            o = next((x for x in side["occupants"] if x["team"] == team), None)
+            if o:
+                entry["reach"] += _pick(o, "p_reach", mode) or 0.0
+        for m in g.get("matchups") or []:
+            if team not in (m["team_a"], m["team_b"]):
+                continue
+            p = _pick(m, "p_matchup", mode) or 0.0
+            host_a = _pick(m, "p_host_a", mode)
+            opponent = m["team_b"] if m["team_a"] == team else m["team_a"]
+            row = entry["opponents"].setdefault(opponent, {"p": 0.0, "host": 0.0, "neutral": False})
+            row["p"] += p
+            if host_a is None:
+                row["neutral"] = True
+            else:
+                row["host"] += p * (host_a if m["team_a"] == team else 1 - host_a)
+    road = []
+    for name in order:
+        entry = by_round[name]
+        reach = min(1.0, entry["reach"])
+        if reach <= _EPS:
+            continue
+        step = {
+            "round": name,
+            "reach": reach,
+            "opponent": None,
+            "p_matchup": None,
+            "p_if_there": None,
+            "hosts": None,
+            "p_team_hosts": None,
+        }
+        if entry["opponents"]:
+            opponent, row = max(entry["opponents"].items(), key=lambda kv: (kv[1]["p"], kv[0]))
+            p_hosts = None if row["neutral"] else row["host"] / row["p"] if row["p"] > _EPS else None
+            if p_hosts is None:
+                hosts = "neutral"
+            elif p_hosts >= 0.995:
+                hosts = "team"
+            elif p_hosts <= 0.005:
+                hosts = "opponent"
+            else:
+                hosts = "split"
+            step.update(
+                opponent=opponent, p_matchup=row["p"], p_if_there=row["p"] / reach, hosts=hosts, p_team_hosts=p_hosts
+            )
+        road.append(step)
+    return road
+
+
+def team_bracket_title(team: str, clazz: int) -> str:
+    """A team link on the bracket page: "Raleigh's path in the Class 3A bracket — …"."""
+    return f"{team}’s path in the Class {clazz}A bracket — {SITE_NAME}"
+
+
+def team_bracket_description(team: str, road: list[dict], champion: float | None) -> str:
+    """ "Raleigh's likeliest road: First Round at home vs Tylertown, Second Round vs Hazlehurst, …; 4% to win…"."""
+    stops = []
+    for step in road:
+        if step["round"] == "Championship Game" or not step["opponent"]:
+            continue
+        joiner = "at" if step["hosts"] == "opponent" else "vs"
+        stops.append(f"{step['round']} {joiner} {step['opponent']}")
+    text = f"{team}’s likeliest road: {', '.join(stops[:3])}" if stops else f"{team}’s road through the bracket"
+    if champion is not None:
+        text += f"; {format_pct(champion)} to win the state championship"
+    return f"{text}."
+
+
+def render_bracket_card(
+    clazz: int, favorites: list[dict], regions: dict[str, int], stamp: str, mode: str
+) -> Image.Image:
+    """A class bracket's card: the favorites and their odds of reaching the semifinals, the final, and winning it all.
+
+    *regions* maps each school to its region, for the sub-label.
+    """
+    img = Image.new("RGB", (WIDTH, HEIGHT), BG)
+    draw = ImageDraw.Draw(img)
+    draw.text((PAD, PAD + 58), f"Class {clazz}A Bracket", font=_nippo(76), fill=TEXT, anchor="ls")
+    champion = favorites[0] if favorites and _certain(_bracket_odds(favorites[0], "champion", "tossup")) else None
+    line = f"{champion['school']} won the state championship" if champion else "Who’s likeliest to win it all"
+    draw.text((PAD, PAD + 108), line, font=_inter(32, 600), fill=TEXT_2, anchor="ls")
+    rows = [
+        (
+            str(i + 1),
+            t["school"],
+            f"Region {regions.get(t['school'], '?')}",
+            [_bracket_odds(t, k, mode) for k in ("semifinals", "finals", "champion")],
+        )
+        for i, t in enumerate(favorites[:6])
+    ]
+    top = PAD + 108 + 46
+    row_h = min(52, (_TABLE_BOTTOM - (top + 14)) / max(1, len(rows)))
+    _table(
+        draw, top, rows, "", ["SEMIFINALS", "CHAMPIONSHIP GAME", "CHAMPIONS"], PAD + 44, row_h, [176, 176, 176], gap=16
+    )
+    _footer(draw, stamp)
+    return img
+
+
+def render_team_bracket_card(
+    clazz: int, region: int | None, team: dict, road: list[dict], stamp: str, mode: str
+) -> Image.Image:
+    """A team's road through the bracket: each round's chance, likeliest opponent, and who'd host."""
+    img = Image.new("RGB", (WIDTH, HEIGHT), BG)
+    draw = ImageDraw.Draw(img)
+    kicker = f"CLASS {clazz}A BRACKET" + (f" · REGION {region}-{clazz}A" if region else "")
+    _tracked(draw, (PAD, PAD + 14), kicker, _inter(19, 600), TEXT_2, 2)
+    name_font = _nippo(64)
+    draw.text(
+        (PAD, PAD + 84), fit(draw, team["school"], name_font, WIDTH - 2 * PAD), font=name_font, fill=TEXT, anchor="ls"
+    )
+    status = team_status(team, clazz)
+    champion = _bracket_odds(team, "champion", mode) if team.get("bracket_odds") else None
+    parts = [(status[1], CLINCHED if status[0] != "eliminated" else TEXT_2)] if status else []
+    if champion is not None and not (status and status[0] == "champion"):
+        parts.append((f"{format_pct(champion)} to win the state championship", TEXT))
+    x, y = PAD, PAD + 126
+    line_font = _inter(28, 600)
+    for i, (text, color) in enumerate(parts):
+        if i:
+            draw.text((x, y), " · ", font=line_font, fill=TEXT_2, anchor="ls")
+            x += draw.textlength(" · ", font=line_font)
+        draw.text((x, y), text, font=line_font, fill=color, anchor="ls")
+        x += draw.textlength(text, font=line_font)
+
+    small = _inter(17, 600)
+    top = PAD + 174
+    right = WIDTH - PAD
+    pill_w = 110
+    reach_right = PAD + 272 + pill_w  # room for "Championship Game"
+    opp_x = reach_right + 36
+    _tracked(draw, (reach_right, top), "CHANCE TO PLAY", small, TEXT_2, 1.6, anchor="rs")
+    _tracked(draw, (opp_x, top), "LIKELIEST OPPONENT", small, TEXT_2, 1.6)
+    _tracked(draw, (right, top), "IF THEY GET THERE", small, TEXT_2, 1.6, anchor="rs")
+    steps = road[:5]
+    row_h = min(68, (_TABLE_BOTTOM - (top + 14)) / max(1, len(steps)))
+    pill_h = min(44, row_h - 16)
+    y = top + 14
+    for step in steps:
+        draw.line((PAD, y, right, y), fill=RULE, width=1)
+        middle = y + row_h / 2
+        draw.text((PAD, middle), step["round"], font=_inter(25, 600), fill=TEXT, anchor="lm")
+        _odds_pill(draw, reach_right, middle, step["reach"], pill_w, pill_h, 26)
+        if step["opponent"]:
+            joiner = "at" if step["hosts"] == "opponent" else "vs"
+            where = {
+                "team": "Home",
+                "opponent": "Away",
+                "neutral": "Neutral site",
+                "split": f"{format_pct(step['p_team_hosts'])} chance at home"
+                if step["p_team_hosts"] is not None
+                else "",
+            }[step["hosts"]]
+            joiner_font = _inter(21, 500)
+            draw.text((opp_x, middle - 12), joiner, font=joiner_font, fill=TEXT_2, anchor="lm")
+            name_x = opp_x + draw.textlength(joiner, font=joiner_font) + 10
+            opp_font = _inter(26, 600)
+            opp_name = fit(draw, step["opponent"], opp_font, right - pill_w - 32 - name_x)
+            draw.text((name_x, middle - 12), opp_name, font=opp_font, fill=TEXT, anchor="lm")
+            draw.text((opp_x, middle + 17), where, font=_inter(19, 500), fill=TEXT_2, anchor="lm")
+            _odds_pill(draw, right, middle, step["p_if_there"], pill_w, pill_h, 26)
+        else:
+            # Every pairing here is under the API's 0.5% listing floor.
+            draw.text((opp_x, middle - 12), "Many possible opponents", font=_inter(24, 600), fill=TEXT_2, anchor="lm")
+            draw.text((opp_x, middle + 17), "Each under 0.5%", font=_inter(19, 500), fill=TEXT_2, anchor="lm")
+        y += row_h
     _footer(draw, stamp)
     return img
 
