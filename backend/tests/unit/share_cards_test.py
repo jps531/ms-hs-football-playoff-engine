@@ -9,6 +9,7 @@ from backend.helpers.share_cards import (
     WIDTH,
     _inter,
     description,
+    display_order,
     format_pct,
     meta_tags,
     odds_bucket,
@@ -17,6 +18,7 @@ from backend.helpers.share_cards import (
     render_class_card,
     render_region_card,
     render_site_card,
+    standing_positions,
     wrap,
 )
 from backend.prefect.share_assets_pipeline import build_share_assets
@@ -172,3 +174,20 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
     assert "Region 7-3A standings" in (tmp_path / "meta" / "3-7.html").read_text()
     assert "/standings/3a" in (tmp_path / "meta" / "3.html").read_text()
     assert not list(tmp_path.rglob(".*"))  # no temp files left behind
+
+
+def test_card_order_and_tied_positions_match_the_standings_table():
+    """Region record first, then odds; ties share a position (Region 6-3A on Oct 9, 2026)."""
+    api_order = [
+        _team("Magee", 1.0, 0.33, region_wins=2, region_losses=0),
+        _team("Seminary", 0.997, 0.28, region_wins=1, region_losses=0),
+        _team("Raleigh", 0.998, 0.39, region_wins=1, region_losses=0),
+        _team("McLaurin", 0.39, 0.0, region_wins=0, region_losses=2),
+        _team("Jefferson Davis County", 0.61, 0.0, region_wins=0, region_losses=2),
+    ]
+    ordered = display_order(api_order)
+    assert [t["school"] for t in ordered] == ["Magee", "Raleigh", "Seminary", "Jefferson Davis County", "McLaurin"]
+    assert standing_positions(ordered) == [1, 1, 1, 4, 4]
+    # A team that hasn't played sits with the .500 teams.
+    fresh = [_team("A", 0.5, region_wins=1, region_losses=1), _team("B", 0.5, region_wins=0, region_losses=0)]
+    assert standing_positions(display_order(fresh)) == [1, 1]

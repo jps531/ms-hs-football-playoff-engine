@@ -236,12 +236,19 @@ def _tracked(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, font
         x += draw.textlength(ch, font=font) + tracking
 
 
-def _odds_pill(draw: ImageDraw.ImageDraw, right: float, middle: float, p: float) -> None:
+def _odds_pill(
+    draw: ImageDraw.ImageDraw,
+    right: float,
+    middle: float,
+    p: float,
+    width: float = 118,
+    height: float = 44,
+    size: int = 27,
+) -> None:
     """An odds cell in the ramp, right-aligned at *right*, centered on *middle*."""
-    w, h = 118, 44
-    box = (right - w, middle - h / 2, right, middle + h / 2)
+    box = (right - width, middle - height / 2, right, middle + height / 2)
     draw.rounded_rectangle(box, radius=7, fill=ODDS_BG[odds_bucket(p)])
-    draw.text((right - 14, middle), format_pct(p), font=_inter(27, 600), fill=ODDS_TEXT, anchor="rm")
+    draw.text((right - 12, middle), format_pct(p), font=_inter(size, 600), fill=ODDS_TEXT, anchor="rm")
 
 
 def _footer(draw: ImageDraw.ImageDraw, stamp: str) -> None:
@@ -251,60 +258,155 @@ def _footer(draw: ImageDraw.ImageDraw, stamp: str) -> None:
     draw.text((WIDTH - PAD, base), SITE_HOST, font=_inter(24, 600), fill=TEXT, anchor="rs")
 
 
-def _table(draw, top: float, rows: list[tuple[str, str, str, float]], headers: tuple[str, str], name_x: float) -> None:
-    """Rows of (label, name, record, odds) under small column headers."""
+# Bottom of the area a table may use: the footer sits below it.
+_TABLE_BOTTOM = HEIGHT - PAD - 34
+
+
+def _table(
+    draw,
+    top: float,
+    rows: list[tuple[str, str, str, list[float]]],
+    record_header: str,
+    odds_headers: list[str],
+    name_x: float,
+    row_h: float = 56,
+    pill_widths: list[float] | None = None,
+    gap: float = 10,
+) -> None:
+    """Rows of (label, name, record, [odds...]) under small column headers, odds columns on the right."""
     right = WIDTH - PAD
-    record_right = right - 118 - 40
+    widths = pill_widths or [118] * len(odds_headers)
+    # Right edge of each odds column, last one flush with the margin.
+    rights: list[float] = []
+    edge = right
+    for w in reversed(widths):
+        rights.insert(0, edge)
+        edge -= w + gap
+    record_right = edge + gap - 32
     small = _inter(17, 600)
-    _tracked(draw, (record_right, top), headers[0], small, TEXT_2, 1.6, anchor="rs")
-    _tracked(draw, (right, top), headers[1], small, TEXT_2, 1.6, anchor="rs")
+    _tracked(draw, (record_right, top), record_header, small, TEXT_2, 1.6, anchor="rs")
+    for col_right, header in zip(rights, odds_headers, strict=True):
+        _tracked(draw, (col_right, top), header, small, TEXT_2, 1.6, anchor="rs")
+    pill_h = min(44, row_h - 10)
+    pill_size = 27 if min(widths) >= 110 else 23
+    name_font = _inter(30 if row_h >= 52 else 28, 600)
+    record_font = _inter(27 if row_h >= 52 else 25, 500)
     y = top + 14
-    row_h = 56
-    for label, name, record, p in rows:
+    for label, name, record, odds in rows:
         draw.line((PAD, y, right, y), fill=RULE, width=1)
         middle = y + row_h / 2
         draw.text((PAD, middle), label, font=_inter(26, 500), fill=TEXT_2, anchor="lm")
-        name_font = _inter(30, 600)
-        record_font = _inter(27, 500)
         record_w = draw.textlength(record, font=record_font)
         draw.text(
             (name_x, middle),
-            fit(draw, name, name_font, record_right - record_w - 32 - name_x),
+            fit(draw, name, name_font, record_right - record_w - 28 - name_x),
             font=name_font,
             fill=TEXT,
             anchor="lm",
         )
         draw.text((record_right, middle), record, font=record_font, fill=TEXT, anchor="rm")
-        _odds_pill(draw, right, middle, p)
+        for col_right, w, p in zip(rights, widths, odds, strict=True):
+            _odds_pill(draw, col_right, middle, p, w, pill_h, pill_size)
         y += row_h
 
 
+def _win_pct(r: dict) -> float | None:
+    """Region winning percentage, ties counting half; None with no games played."""
+    games = r["region_wins"] + r["region_losses"] + (r.get("region_ties") or 0)
+    return (r["region_wins"] + 0.5 * (r.get("region_ties") or 0)) / games if games else None
+
+
+def display_order(teams: list[dict]) -> list[dict]:
+    """Teams in the order the standings table shows them (``displayOrder`` in standings.js).
+
+    Region winning percentage (no games counts as .500), then games over .500,
+    then odds of 1st, the playoffs, 2nd, 3rd and 4th (projected when any exist),
+    then the API's order (MHSAA tiebreakers).
+    """
+    weighted = any((t["odds"].get("p_playoffs_weighted") or 0) > 0 for t in teams)
+    keys = [f"{k}_weighted" if weighted else k for k in ("p1", "p_playoffs", "p2", "p3", "p4")]
+
+    def key(t: dict) -> tuple:
+        """Sort key: larger is earlier, so every part is negated."""
+        r = t["record"]
+        return (
+            -_pct_or_half(t),
+            -(r["region_wins"] - r["region_losses"]),
+            *(-(t["odds"].get(k) or 0.0) for k in keys),
+        )
+
+    return sorted(teams, key=key)  # stable: ties keep the API's order
+
+
+def standing_positions(ordered: list[dict]) -> list[int]:
+    """Positions with ties shared, competition style (``standingPositions`` in standings.js): 1, 1, 1, 4.
+
+    "Tied" means the same region winning percentage, so 2-0 and 1-0 share a position.
+    """
+    out: list[int] = []
+    for i, t in enumerate(ordered):
+        tied = i > 0 and _pct_or_half(ordered[i - 1]) == _pct_or_half(t)
+        out.append(out[i - 1] if tied else i + 1)
+    return out
+
+
+def _pct_or_half(t: dict) -> float:
+    """Region winning percentage, with a team that hasn't played counting as .500."""
+    pct = _win_pct(t["record"])
+    return 0.5 if pct is None else pct
+
+
+def _region_record(t: dict) -> str:
+    """A team's region record, "4–0"."""
+    r = t["record"]
+    return record_text(r["region_wins"], r["region_losses"], r.get("region_ties") or 0)
+
+
 def render_region_card(clazz: int, region: int, payload: dict, stamp: str, mode: str) -> Image.Image:
-    """A region's card: name, headline sentence, top of the standings with playoff odds, provenance.
+    """A region's card: name, headline sentence, the standings with seeding and playoff odds, provenance.
+
+    The table is the page's: same order, same tied positions, 1st-4th and
+    playoff odds in the odds ramp. Every team that fits is shown (all of them
+    unless a three-line headline leaves room for fewer).
 
     *payload* is the API's region standings response (``/standings/{class}/{region}``).
     """
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
     draw = ImageDraw.Draw(img)
     draw.text((PAD, PAD + 58), f"Region {region}-{clazz}A", font=_nippo(76), fill=TEXT, anchor="ls")
-    y = PAD + 58 + 24
+    y = PAD + 58
     headline = payload.get("headline")
-    lines = wrap(draw, headline, _inter(34, 600), WIDTH - 2 * PAD, 3) if headline else []
+    lines = wrap(draw, headline, _inter(32, 600), WIDTH - 2 * PAD, 3) if headline else []
     for line in lines:
-        y += 44
-        draw.text((PAD, y), line, font=_inter(34, 600), fill=TEXT, anchor="ls")
-    teams = payload.get("teams") or []
-    count = 4 if len(lines) <= 2 else 3
+        y += 42
+        draw.text((PAD, y), line, font=_inter(32, 600), fill=TEXT, anchor="ls")
+    ordered = display_order(payload.get("teams") or [])
+    positions = standing_positions(ordered)
+    top = y + 40
+    space = _TABLE_BOTTOM - (top + 14)
+    fits = max(1, int(space // 40))
+    shown = ordered[:fits]
+    row_h = min(52, space / max(1, len(shown)))
     rows = [
         (
-            str(i + 1),
+            str(positions[i]),
             t["school"],
-            record_text(t["record"]["region_wins"], t["record"]["region_losses"], t["record"].get("region_ties") or 0),
-            mode_odds(t, "p_playoffs", mode),
+            _region_record(t),
+            [mode_odds(t, k, mode) for k in ("p1", "p2", "p3", "p4", "p_playoffs")],
         )
-        for i, t in enumerate(teams[:count])
+        for i, t in enumerate(shown)
     ]
-    _table(draw, y + 46, rows, ("REGION", "PLAYOFFS"), PAD + 44)
+    _table(
+        draw,
+        top,
+        rows,
+        "REGION",
+        ["1ST", "2ND", "3RD", "4TH", "PLAYOFFS"],
+        PAD + 44,
+        row_h,
+        [88, 88, 88, 88, 116],
+        gap=8,
+    )
     _footer(draw, stamp)
     return img
 
@@ -318,7 +420,7 @@ def render_class_card(clazz: int, payload: dict, stamp: str, mode: str) -> Image
     draw = ImageDraw.Draw(img)
     draw.text((PAD, PAD + 58), f"Class {clazz}A", font=_nippo(76), fill=TEXT, anchor="ls")
     regions = sorted(payload.get("regions") or [], key=lambda r: r["region"])
-    leaders = [(r["region"], r["teams"][0]) for r in regions if r.get("teams")]
+    leaders = [(r["region"], display_order(r["teams"])[0]) for r in regions if r.get("teams")]
     y = PAD + 58
     if len(leaders) <= 4:
         draw.text((PAD, y + 50), "Who leads every region race", font=_inter(34, 600), fill=TEXT_2, anchor="ls")
@@ -327,7 +429,7 @@ def render_class_card(clazz: int, payload: dict, stamp: str, mode: str) -> Image
         (
             f"R{region}",
             t["school"],
-            record_text(t["record"]["region_wins"], t["record"]["region_losses"], t["record"].get("region_ties") or 0),
+            _region_record(t),
             mode_odds(t, "p1", mode),
         )
         for region, t in leaders[:8]
@@ -335,7 +437,7 @@ def render_class_card(clazz: int, payload: dict, stamp: str, mode: str) -> Image
     if len(rows) > 4:
         _class_table(draw, y + 40, rows)  # eight regions: two columns of four
     else:
-        _table(draw, y + 46, rows, ("REGION", "WINS REGION"), PAD + 56)
+        _table(draw, y + 46, [(*r[:3], [r[3]]) for r in rows], "REGION", ["WINS REGION"], PAD + 56)
     _footer(draw, stamp)
     return img
 
