@@ -1200,3 +1200,71 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .fb-sent { display: grid; gap: 10px; justify-items: start; padding-block: 8px; }
 .fb-sent__title { font-size: 18px; font-weight: 700; }
 .dark .fb-status.is-error { color: #F87171; } /* the badge red is too dark to read as text here */
+/* Cloudflare Turnstile: invisible unless Cloudflare asks for a click */
+.fb-turnstile:empty { display: none; }
+
+/* ------------------------------------------------------------ moderation (/moderate) */
+.mod-page { max-width: 46rem; }
+.mod-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding-bottom: 16px; margin-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.mod-statuses { flex: 1 1 100%; margin: 0; padding: 0; border: 0; min-width: 0; }
+.mod-type select {
+  min-height: 40px; padding: 0 10px;
+  font: inherit; font-size: 14px; color: var(--text-primary);
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;
+}
+.mod-account { margin-left: auto; display: inline-flex; gap: 16px; align-items: center; font-size: 14px; }
+.mod-list { display: grid; }
+.mod-list[aria-busy="true"] { opacity: 0.55; }
+.mod-empty { padding-block: 32px; }
+.mod-more { padding-block: 16px 8px; }
+.mod-card { display: grid; gap: 10px; padding-block: 20px; border-bottom: 1px solid var(--border); }
+.mod-card__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.mod-card__title { font-size: 16px; line-height: 22px; font-weight: 700; }
+.mod-card__title:focus { outline: none; }
+.mod-card__when { font-size: 13px; }
+.mod-card__about { font-weight: 600; }
+.mod-card__meta { font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.mod-message {
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  padding: 12px 14px; border-radius: 8px; background: var(--surface-raised);
+}
+.mod-score { justify-self: start; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 15px; }
+.mod-score th, .mod-score td { padding: 6px 12px 6px 0; text-align: left; }
+.mod-score thead th { font-size: 13px; font-weight: 600; color: var(--text-secondary); max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-score tbody th { font-weight: 500; color: var(--text-secondary); padding-right: 20px; }
+.mod-score tbody td { font-weight: 600; min-width: 3ch; }
+.mod-score td.is-changed span { padding: 2px 6px; margin-left: -6px; border-radius: 6px; background: var(--odds-3); color: var(--odds-text); }
+.mod-score__result { color: var(--text-secondary); font-weight: 500 !important; }
+.mod-payload { display: grid; gap: 4px; font-size: 14px; }
+.mod-payload div { display: grid; grid-template-columns: 10rem minmax(0, 1fr); gap: 12px; }
+@media (max-width: 560px) { .mod-payload div { grid-template-columns: minmax(0, 1fr); gap: 0; } .mod-payload div + div { margin-top: 6px; } }
+.mod-payload dt { color: var(--text-secondary); }
+.mod-payload dd { margin: 0; overflow-wrap: anywhere; }
+.mod-card__review { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; }
+.mod-card__notes { flex-basis: 100%; color: var(--text-secondary); white-space: pre-wrap; }
+.mod-status {
+  display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px;
+  border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: var(--surface-raised); border: 1px solid var(--border);
+}
+.mod-status--approved { color: var(--state-clinched); border-color: currentColor; }
+.mod-status--rejected { color: var(--state-eliminated); border-color: currentColor; }
+.dark .mod-status--rejected { color: #F87171; }
+.mod-decide { display: grid; gap: 10px; }
+.mod-decide textarea {
+  width: 100%; padding: 8px 12px; min-height: 2.75rem; resize: vertical;
+  font: inherit; font-size: 16px; color: var(--text-primary);
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;
+}
+.mod-decide__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.mod-reject {
+  min-height: 44px; padding: 0 18px;
+  font: inherit; font-weight: 600; color: var(--text-primary);
+  background: transparent; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.mod-reject:hover { border-color: var(--text-secondary); }
+.mod-decide button:disabled { opacity: 0.6; cursor: progress; }
+.mod-message-card { display: grid; gap: 12px; justify-items: start; padding-block: 24px; }

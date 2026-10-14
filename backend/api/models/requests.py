@@ -405,6 +405,8 @@ class SubmitLocationRequest(BaseModel):
 # people, so anything in it means an automated submission.
 _PagePath = Field(default=None, max_length=300, pattern=r"^$|^/[^\s]*$")
 _Honeypot = Field(default=None, max_length=500)
+# Cloudflare Turnstile's token (see backend/api/turnstile.py); checked, never stored.
+_TurnstileToken = Field(default=None, max_length=2048)
 
 FeedbackCategory = Literal["score", "odds", "other"]
 
@@ -419,6 +421,7 @@ class SubmitScoreRequest(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
     page: str | None = _PagePath
     website: str | None = _Honeypot
+    turnstile_token: str | None = _TurnstileToken
 
 
 class SubmitHelmetAssignmentRequest(BaseModel):
@@ -439,6 +442,7 @@ class SubmitFeedbackRequest(BaseModel):
     page: str | None = _PagePath
     email: str | None = Field(default=None, max_length=254, pattern=r"^$|^[^@\s]+@[^@\s]+\.[^@\s]+$")
     website: str | None = _Honeypot
+    turnstile_token: str | None = _TurnstileToken
 
 
 class ModerationDecisionRequest(BaseModel):

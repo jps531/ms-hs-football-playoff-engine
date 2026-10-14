@@ -1,5 +1,6 @@
-"""Navigation and metadata endpoints: seasons, structure, teams."""
+"""Navigation and metadata endpoints: seasons, structure, teams, and the browser's client config."""
 
+import os
 from typing import Annotated, Any, Literal, LiteralString
 
 from fastapi import APIRouter, HTTPException, Query
@@ -9,6 +10,7 @@ from backend.api.db import get_conn
 from backend.api.models.responses import (
     ChampionshipVenueModel,
     ClassStructure,
+    ClientConfig,
     HelmetDesignModel,
     HelmetDetailModel,
     HelmetListItemModel,
@@ -21,6 +23,7 @@ from backend.api.models.responses import (
     TeamLogoModel,
     TeamModel,
 )
+from backend.api.turnstile import turnstile_site_key
 from backend.helpers.api_helpers import (
     HELMET_DESIGNS_SELECT,
     HELMET_STATS_SELECT,
@@ -506,3 +509,17 @@ async def list_championships(
             )
             async for r in rows
         ]
+
+
+@router.get("/client-config")
+async def get_client_config() -> ClientConfig:
+    """Return the public keys the site's pages need: Turnstile's site key and the moderation page's Auth0 app.
+
+    Nothing here is secret; a value is null when that feature isn't set up on this server.
+    """
+    return ClientConfig(
+        turnstile_site_key=turnstile_site_key(),
+        auth0_domain=os.getenv("AUTH0_DOMAIN") or None,
+        auth0_audience=os.getenv("AUTH0_AUDIENCE") or None,
+        auth0_client_id=os.getenv("AUTH0_SPA_CLIENT_ID") or None,
+    )

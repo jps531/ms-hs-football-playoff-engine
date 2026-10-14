@@ -14,6 +14,8 @@ limits the request rate to ``/api/v1/submissions/``):
 
 - a honeypot field the form hides from people: a filled one is answered as
   if accepted and dropped;
+- Cloudflare Turnstile, when configured (see ``backend.api.turnstile``): a
+  missing or failed token is refused with 403;
 - a repeat of a still-pending submission within a day returns the original
   instead of queueing a copy;
 - a circuit breaker: past ``_MAX_PENDING_PER_HOUR`` new pending form
@@ -30,7 +32,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 
 from backend.api.auth import OptionalUser, optional_user_id
 from backend.api.db import get_conn
-from backend.api.limiter import limiter
+from backend.api.limiter import client_ip, limiter
 from backend.api.models.requests import (
     SubmitColorsRequest,
     SubmitFeedbackRequest,
@@ -39,6 +41,7 @@ from backend.api.models.requests import (
     SubmitScoreRequest,
 )
 from backend.api.models.responses import HelmetAssignmentAlreadyConfirmed, SubmissionCreatedResponse
+from backend.api.turnstile import verify_turnstile
 from backend.helpers.image_helpers import (
     LogoType,
     save_and_upload,
@@ -305,7 +308,11 @@ async def submit_location(
 @router.post(
     "/scores",
     status_code=status.HTTP_201_CREATED,
-    responses={404: {"description": "School or game not found"}, 503: {"description": "Too many reports right now"}},
+    responses={
+        403: {"description": "Spam check failed"},
+        404: {"description": "School or game not found"},
+        503: {"description": "Too many reports right now"},
+    },
 )
 @limiter.limit(_FORM_LIMIT)
 async def submit_score(
@@ -318,6 +325,7 @@ async def submit_score(
     """
     if body.website:
         return _honeypot_response("score", body.school)
+    await verify_turnstile(body.turnstile_token, client_ip(request))
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
         await require_game_exists(conn, body.school, body.date)
@@ -381,7 +389,9 @@ async def submit_helmet_assignment(
 
 
 @router.post(
-    "/feedback", status_code=status.HTTP_201_CREATED, responses={503: {"description": "Too many reports right now"}}
+    "/feedback",
+    status_code=status.HTTP_201_CREATED,
+    responses={403: {"description": "Spam check failed"}, 503: {"description": "Too many reports right now"}},
 )
 @limiter.limit(_FORM_LIMIT)
 async def submit_feedback(
@@ -393,6 +403,7 @@ async def submit_feedback(
     """
     if body.website:
         return _honeypot_response("feedback", None)
+    await verify_turnstile(body.turnstile_token, client_ip(request))
     user_id = optional_user_id(current_user)
     payload = build_feedback_payload(body)
     async with get_conn() as conn:

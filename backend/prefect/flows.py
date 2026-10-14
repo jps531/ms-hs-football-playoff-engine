@@ -12,6 +12,7 @@ from backend.prefect.playoff_pipeline import playoff_bracket_update
 from backend.prefect.region_scenarios_pipeline import backfill_historical_snapshots, region_scenarios_data_flow
 from backend.prefect.regions_data_pipeline import regions_data_flow
 from backend.prefect.share_assets_pipeline import share_assets_flow
+from backend.prefect.submission_digest_pipeline import submission_digest_flow
 
 _SCHEDULE_TIMEZONE = "America/Chicago"
 
@@ -34,6 +35,11 @@ async def main():
         await playoff_bracket_update.to_deployment("playoff-bracket-update"),
         # Also runs at the end of the daily region update; this is for a manual redraw.
         await share_assets_flow.to_deployment("share-assets"),
+        # Emails the moderators what came in over the last day; quiet days send nothing.
+        await submission_digest_flow.to_deployment(
+            "submission-digest",
+            schedule=CronSchedule(cron="0 7 * * *", timezone=_SCHEDULE_TIMEZONE),
+        ),
     )
 
 

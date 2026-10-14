@@ -144,6 +144,7 @@ docker compose --env-file .env.local --profile local-db up -d --force-recreate n
 ```
 
 Required env vars: `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`, `CLOUDINARY_*`, `FRONTEND_ORIGIN`.
+Optional: `AUTH0_SPA_CLIENT_ID`, `TURNSTILE_*`, `SMTP_*`, `DIGEST_TO` (see below).
 
 ## Share cards (link previews)
 
@@ -168,3 +169,75 @@ curl -s 'https://mshsfootball.com/brackets/3a?team=raleigh' | grep -E '<title>|o
 Facebook caches previews; its Sharing Debugger ("Scrape Again") refreshes one.
 Card URLs carry the snapshot date (`?v=20261009`), so a new day's card is a new
 URL and is fetched fresh.
+
+## Feedback, moderation and spam protection
+
+The feedback form (`/feedback`, and the "Wrong score?" and "Tell us" links) files
+submissions into the moderation queue. Moderators review them at `/moderate`, and
+a daily email lists what came in. Each piece below is off until it's configured.
+
+### Moderation page (`/moderate`)
+
+The page signs in with Auth0 directly from the browser (authorization code + PKCE),
+so it needs its own Auth0 application:
+
+1. Auth0 → Applications → **Create Application** → **Single Page Web Applications**
+   (name it e.g. "MSHSF moderation").
+2. In its Settings:
+   - **Allowed Callback URLs:** `https://mshsfootball.com/moderate`
+   - **Allowed Logout URLs:** `https://mshsfootball.com/moderate`
+   - **Allowed Web Origins:** `https://mshsfootball.com`
+   - Add the `http://localhost` equivalents if you test locally.
+3. If your API's settings (Applications → APIs → your API) restrict which
+   applications may get user tokens for it, allow the new app. By default any
+   application in the tenant can.
+4. Put its **Client ID** in `.env.local` as `AUTH0_SPA_CLIENT_ID` and recreate the API.
+
+Only users whose row in `users` has role `moderator` or `owner` see the queue. A
+user row is created on first sign-in; promote it with:
+
+```
+UPDATE users SET role = 'moderator' WHERE email = 'someone@example.com';
+```
+
+Signing in also sets the session cookie the Prefect UI link uses, so the page's
+"Prefect" link opens without a Bearer header.
+
+### Turnstile (spam check on the form)
+
+1. Cloudflare dashboard → **Turnstile** → **Add widget**. Hostname
+   `mshsfootball.com`, widget mode **Managed** (the form keeps it invisible unless
+   Cloudflare wants a click). The site doesn't have to be proxied by Cloudflare.
+2. Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` in `.env.local` and recreate
+   the API. With no secret set, the form doesn't load the widget and the API
+   doesn't check tokens.
+
+If Cloudflare's verify endpoint is unreachable, submissions are let through (and
+logged) rather than refused; the rate limits and queue cap still apply. A visitor
+whose content blocker stops the widget loading is told to allow
+`challenges.cloudflare.com`.
+
+### Daily digest email
+
+The `submission-digest` deployment runs at 7:00 America/Chicago and emails
+`DIGEST_TO` a summary of the last day's submissions with a link to `/moderate`.
+Days with nothing new send nothing. Configure SMTP for the Prefect worker:
+
+| Provider | `SMTP_HOST` | `SMTP_PORT` | `SMTP_USERNAME` / `SMTP_PASSWORD` |
+|---|---|---|---|
+| Gmail (needs 2-step verification) | `smtp.gmail.com` | `587` | your address / an [app password](https://myaccount.google.com/apppasswords) |
+| Resend | `smtp.resend.com` | `465` | `resend` / an API key |
+| Amazon SES | `email-smtp.<region>.amazonaws.com` | `587` | SES SMTP credentials |
+
+Set `SMTP_FROM` when the From address differs from the login (Resend, SES), then
+recreate the worker. To test, run the `submission-digest` deployment from the
+Prefect UI; without SMTP settings it logs the email it would have sent.
+
+### Rate limits
+
+- nginx: every API request is limited to 10 a second per IP, with a burst of 60
+  (a page load makes at most 6). `/api/v1/submissions/` is also limited to 10 a
+  minute, with a burst of 5. Both return JSON 429s.
+- API: the feedback and score forms allow 5 a minute and 30 a day per IP, ignore
+  repeats of a pending report, and refuse new ones (503) past 300 pending in an
+  hour. A filled honeypot field gets a fake success.

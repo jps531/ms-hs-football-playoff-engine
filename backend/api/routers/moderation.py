@@ -6,7 +6,7 @@ belonging to a user with the ``moderator`` or ``owner`` role.
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.auth import ModeratorAuth
 from backend.api.db import get_conn
@@ -14,6 +14,9 @@ from backend.api.models.requests import ModerationDecisionRequest
 from backend.api.models.responses import (
     ColorSubmissionPreview,
     ColorVariantsPreview,
+    CurrentGameScore,
+    ModerationQueue,
+    ModerationQueueItem,
     SubmissionDetail,
     SubmissionSummary,
 )
@@ -78,6 +81,64 @@ async def list_submissions(
             )
         ).fetchall()
     return [build_submission_summary(r) for r in rows]
+
+
+# Each queue row is a submission plus, for a score, the submitting school's live game that day.
+# CASE keeps the date cast to score rows, whose payload date is always ISO.
+_QUEUE_SELECT = """
+    SELECT s.id, s.type, s.status, s.school, s.submitted_at, s.reviewed_at, s.payload, s.moderator_notes,
+           s.helmet_design_id,
+           g.school IS NOT NULL, g.opponent, g.location, g.points_for, g.points_against, g.result
+    FROM submissions s
+    LEFT JOIN games_effective g
+      ON s.type = 'score'
+     AND g.school = s.school
+     AND g.date = CASE WHEN s.type = 'score' THEN (s.payload->>'date')::date END
+    WHERE (%s::text IS NULL OR s.status::text = %s::text)
+      AND (%s::text IS NULL OR s.type::text = %s::text)
+    ORDER BY s.submitted_at DESC
+    LIMIT %s OFFSET %s
+"""
+
+
+def _row_to_queue_item(row: tuple) -> ModerationQueueItem:
+    """Map a _QUEUE_SELECT row to a ModerationQueueItem."""
+    detail = _row_to_detail(row[:9])
+    game = None
+    if row[9]:
+        game = CurrentGameScore(
+            opponent=row[10], location=row[11], points_for=row[12], points_against=row[13], result=row[14]
+        )
+    return ModerationQueueItem(**detail.model_dump(), current_game=game)
+
+
+@router.get("/queue")
+async def get_queue(
+    moderator: ModeratorAuth,
+    status_filter: str | None = "pending",
+    type: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> ModerationQueue:
+    """The moderation page's view: newest first, with payloads, and the pending count per type.
+
+    ``status_filter`` defaults to pending; pass ``all`` for every status. Score rows carry
+    ``current_game``, the game as the site shows it now, so the page can show the change.
+    """
+    status_value = None if status_filter in (None, "", "all") else status_filter
+    async with get_conn() as conn:
+        rows = await (
+            await conn.execute(_QUEUE_SELECT, (status_value, status_value, type, type, limit, offset))
+        ).fetchall()
+        counts = await (
+            await conn.execute(
+                "SELECT type::text, COUNT(*) FROM submissions WHERE status = 'pending' GROUP BY type ORDER BY type"
+            )
+        ).fetchall()
+    return ModerationQueue(
+        pending_counts={t: n for t, n in counts},
+        items=[_row_to_queue_item(r) for r in rows],
+    )
 
 
 @router.get("/submissions/{submission_id}", responses={404: {"description": "Not found"}})

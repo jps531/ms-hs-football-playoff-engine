@@ -80,6 +80,15 @@ services:
       # Share cards: read from the API, written where nginx serves them.
       SHARE_API_URL: "http://api:8000/api/v1"
       SHARE_OUTPUT_DIR: "/opt/share"
+      # Daily moderation digest (submission_digest_pipeline.py); unset = log only.
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USERNAME: "${SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_SECURITY: "${SMTP_SECURITY:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      DIGEST_TO: "${DIGEST_TO:-}"
+      SITE_URL: "${SITE_URL:-https://mshsfootball.com}"
     volumes:
       - share-assets:/opt/share
     networks:
@@ -97,6 +106,11 @@ services:
     restart: unless-stopped
     environment:
       <<: *env-common
+      # Cloudflare Turnstile on the feedback form; unset = off.
+      TURNSTILE_SITE_KEY: "${TURNSTILE_SITE_KEY:-}"
+      TURNSTILE_SECRET_KEY: "${TURNSTILE_SECRET_KEY:-}"
+      # The Auth0 single-page app /moderate signs in with.
+      AUTH0_SPA_CLIENT_ID: "${AUTH0_SPA_CLIENT_ID:-}"
     networks:
       - mshsfootball
     depends_on:

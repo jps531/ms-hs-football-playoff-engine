@@ -44,6 +44,8 @@ test("score body is the visiting team's side of the game", () => {
 
 test("failures are explained in plain words", () => {
   assert.match(submissionError(429), /wait a minute/);
+  assert.equal(submissionError(403, "The spam check didn't pass. Please try again."), "The spam check didn't pass. Please try again.");
+  assert.match(submissionError(403), /spam check/);
   assert.equal(submissionError(503, "Busy, try later."), "Busy, try later.");
   assert.match(submissionError(404), /couldn't find that game/);
   assert.match(submissionError(0), /connection/);

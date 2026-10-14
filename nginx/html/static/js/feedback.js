@@ -77,6 +77,7 @@ export function scoreBody(game, { awayScore, homeScore, note, page, website }) {
 
 /** What to say when a submission fails, from the HTTP status (0 for no response) and the API's detail. */
 export function submissionError(status, detail) {
+  if (status === 403) return typeof detail === "string" ? detail : "The spam check didn't pass. Please try again.";
   if (status === 429) return "You've sent several reports in a short time. Please wait a minute and try again.";
   if (status === 503) return typeof detail === "string" ? detail : "We're getting more reports than usual. Please try again in a little while.";
   if (status === 404) return "We couldn't find that game to correct. Please send it as general feedback instead.";
