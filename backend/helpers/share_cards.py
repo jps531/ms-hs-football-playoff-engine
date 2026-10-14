@@ -600,9 +600,12 @@ def team_description(team: dict, clazz: int, region: int, mode: str) -> str:
 
 
 def _pill_row(draw: ImageDraw.ImageDraw, top: float, label: str, cells: list[tuple[str, float | None]]) -> None:
-    """A labelled row of large odds cells spanning the card: section label, column headers, pills."""
+    """A section of large odds cells spanning the card: its title in Nippo, column headers, pills.
+
+    *top* is the title's baseline; the row ends about 95px below it.
+    """
     small = _inter(17, 600)
-    _tracked(draw, (PAD, top), label, small, TEXT_2, 1.8)
+    draw.text((PAD, top), label, font=_nippo(30), fill=TEXT, anchor="ls")
     gap = 14
     width = (WIDTH - 2 * PAD - gap * (len(cells) - 1)) / len(cells)
     # Full round names ("CHAMPIONSHIP GAME") over five columns: step the
@@ -615,7 +618,7 @@ def _pill_row(draw: ImageDraw.ImageDraw, top: float, label: str, cells: list[tup
         _tracked(draw, (right, top + 34), header, header_font, TEXT_2, tracking, anchor="rs")
         if p is None:
             continue
-        _odds_pill(draw, right, top + 34 + 40, p, width, 56, 32)
+        _odds_pill(draw, right, top + 34 + 36, p, width, 50, 30)
 
 
 def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str) -> Image.Image:
@@ -646,8 +649,8 @@ def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str)
         )
     _pill_row(
         draw,
-        PAD + 214,
-        "SEEDING",
+        PAD + 220,
+        "Seeding",
         [
             (h, mode_odds(team, k, mode))
             for h, k in zip(
@@ -657,7 +660,7 @@ def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str)
     )
     path = playoff_path(team, mode, clazz)
     if path:
-        _pill_row(draw, PAD + 350, "PLAYOFF PATH", [(label, p) for _, label, p in path])
+        _pill_row(draw, PAD + 366, "Playoff Path", [(label, p) for _, label, p in path])
     _footer(draw, stamp)
     return img
 
