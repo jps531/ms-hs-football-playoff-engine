@@ -15,12 +15,17 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
     meta/{class}-{region}.html, meta/{class}.html, meta/{class}-{region}/{team}.html,
     meta/bracket-{class}.html, meta/bracket-{class}/{team}.html
                               <title>, description, Open Graph / Twitter tags
+    body/{class}-{region}.html, body/{class}.html, body/site.html
+                              the page's content as static HTML (backend.helpers.static_pages)
+    sitemap.xml               every region, class and bracket page, for search engines
 
 nginx splices the matching ``meta/*.html`` into the app's ``index.html``
 <head> for /standings/{class}a/{region}[?team=<slug>] and /standings/{class}a
 (server-side include). A team without a file falls back to its region's tags,
-anything else to the generic tags in ``index.html``. The app itself
-is unchanged; the tags are for link previews and search engines.
+anything else to the generic tags in ``index.html``. It also splices the
+matching ``body/*.html`` into ``<main>``, so the page reads without
+JavaScript; the app replaces it on load. Cards, tags and content all come
+from the same API reads in the same run, so they describe the same snapshot.
 """
 
 from __future__ import annotations
@@ -57,6 +62,15 @@ from backend.helpers.share_cards import (
     team_description,
     team_road,
     team_title,
+)
+from backend.helpers.static_pages import (
+    bracket_path,
+    class_body,
+    class_path,
+    region_body,
+    region_path,
+    site_body,
+    sitemap_xml,
 )
 
 API_URL = os.environ.get("SHARE_API_URL", "http://api:8000/api/v1")
@@ -108,18 +122,24 @@ def build_share_assets(
     today: date,
     season: int | None = None,
 ) -> dict[str, int]:
-    """Render every region and class card and its meta tags for *season* (default: the newest).
+    """Render every region and class card, its meta tags and its static page content for *season*
+    (default: the newest), plus the front page's content and the sitemap.
 
     Returns counts of what was written: {"regions", "classes", "teams", "brackets", "bracket_teams"}.
     """
+    keys = ("regions", "classes", "teams", "brackets", "bracket_teams")
     if season is None:
         seasons = fetch("/seasons") or []
         if not seasons:
-            return dict.fromkeys(("regions", "classes", "teams", "brackets", "bracket_teams"), 0)
+            return dict.fromkeys(keys, 0)
         season = seasons[0]["season"]
     site_url = site_url.rstrip("/")
     _write_png(out_dir / "og" / "site.png", render_site_card())
-    written = dict.fromkeys(("regions", "classes", "teams", "brackets", "bracket_teams"), 0)
+    written = dict.fromkeys(keys, 0)
+    teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
+    regions_by_class: dict[int, list[int]] = {}
+    brackets: list[int] = []
+    sitemap: list[tuple[str, date | None]] = [("/", today), ("/methodology", None)]
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
@@ -141,11 +161,17 @@ def build_share_assets(
                 f"{site_url}/standings/{clazz}a",
             ),
         )
+        class_page = class_body(clazz, standings, f"{season} season · {stamp}", mode, teams)
+        _write_text(out_dir / "body" / f"{clazz}.html", class_page)
+        sitemap.append((class_path(clazz), as_of))
         written["classes"] += 1
 
         bracket = _write_bracket_assets(out_dir, site_url, clazz, season, standings, stamp, mode, version, fetch)
         written["brackets"] += bracket["brackets"]
         written["bracket_teams"] += bracket["bracket_teams"]
+        if bracket["brackets"]:
+            brackets.append(clazz)
+            sitemap.append((bracket_path(clazz), as_of))
 
         for region in sorted(r["region"] for r in standings["regions"]):
             payload = fetch(f"/standings/{clazz}/{region}?season={season}")
@@ -168,8 +194,16 @@ def build_share_assets(
                     f"{site_url}/standings/{clazz}a/{region}",
                 ),
             )
+            games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
+            body = region_body(clazz, region, payload, f"{season} season · {r_stamp}", r_mode, teams, games)
+            _write_text(out_dir / "body" / f"{name}.html", body)
+            regions_by_class.setdefault(clazz, []).append(region)
+            sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
             written["teams"] += _write_team_assets(out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of)
+    if regions_by_class:
+        _write_text(out_dir / "body" / "site.html", site_body(regions_by_class, brackets))
+        _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     return written
 
 

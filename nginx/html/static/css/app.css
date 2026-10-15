@@ -1289,3 +1289,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .mod-reject:hover { border-color: var(--text-secondary); }
 .mod-decide button:disabled { opacity: 0.6; cursor: progress; }
 .mod-message-card { display: grid; gap: 12px; justify-items: start; padding-block: 24px; }
+
+/* ------------------------------------------------------------ static page content
+   What nginx includes before the app loads (backend/helpers/static_pages.py). */
+.provenance--static { margin-top: 8px; }
+.static-list { display: grid; gap: 6px; margin-top: 12px; padding-left: 20px; }
+.static-list--inline { display: flex; flex-wrap: wrap; gap: 6px 18px; padding-left: 0; list-style: none; }

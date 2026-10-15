@@ -157,6 +157,15 @@ writes into the `share-assets` volume, which nginx serves at `/static/og/` and
 splices into each page's `<head>` with a server-side include. Until a page has
 its own, it gets the generic tags in `index.html`.
 
+The same run writes each region and class page's content as static HTML
+(`body/*.html`: the headline, standings table, remaining games, what each team
+needs, and the snapshot line), plus a front-page index and `sitemap.xml`.
+nginx includes a page's content inside `<main>`, so search engines and
+browsers without JavaScript get the real race; the app replaces it on load.
+Links to an older week, season or odds mode skip it, since the latest snapshot
+would be the wrong one. `robots.txt` (in `nginx/html`) points crawlers at the
+sitemap.
+
 To redraw them by hand (after a deploy, or after rerunning a pipeline), run the
 `share-assets` deployment from the Prefect UI. To check one:
 
@@ -164,6 +173,9 @@ To redraw them by hand (after a deploy, or after rerunning a pipeline), run the
 curl -s https://mshsfootball.com/standings/3a/6 | grep -E '<title>|og:image"'
 curl -s 'https://mshsfootball.com/standings/3a/6?team=raleigh' | grep -E '<title>|og:image"'
 curl -s 'https://mshsfootball.com/brackets/3a?team=raleigh' | grep -E '<title>|og:image"'
+# Page content, as a crawler (or a browser without JavaScript) gets it:
+curl -s https://mshsfootball.com/standings/3a/6 | sed -n '/<main/,/<\/main>/p' | sed 's/<[^>]*>/ /g' | tr -s ' ' | head -c 600; echo
+curl -s https://mshsfootball.com/sitemap.xml | head -5
 ```
 
 Facebook caches previews; its Sharing Debugger ("Scrape Again") refreshes one.
