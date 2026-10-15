@@ -68,6 +68,7 @@ from backend.helpers.static_pages import (
     class_body,
     class_path,
     landing_body,
+    pick_featured,
     region_body,
     region_path,
     sitemap_xml,
@@ -138,6 +139,7 @@ def build_share_assets(
     written = dict.fromkeys(keys, 0)
     teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
     sitemap: list[tuple[str, date | None]] = [("/", today), ("/methodology", None)]
+    region_payloads: dict[tuple[int, int], dict] = {}
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
@@ -174,6 +176,7 @@ def build_share_assets(
             payload = fetch(f"/standings/{clazz}/{region}?season={season}")
             if not payload or not payload.get("teams"):
                 continue
+            region_payloads[(clazz, region)] = payload
             r_mode = odds_mode(payload["teams"])
             r_as_of = date.fromisoformat(payload["as_of_date"]) if payload.get("as_of_date") else as_of
             r_stamp = provenance(r_as_of, dates, r_mode, today)
@@ -197,9 +200,14 @@ def build_share_assets(
             sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
             written["teams"] += _write_team_assets(out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of)
+    # The front page, with the most open race featured (the same pick the app makes).
     summary = fetch(f"/standings/summary?season={season}")
-    if summary and summary.get("classes"):
-        _write_text(out_dir / "body" / "site.html", landing_body(summary, season))
+    featured = pick_featured(summary) if summary else None
+    if featured:
+        featured["standings"] = region_payloads.get((featured["clazz"], featured["card"]["region"]))
+        if not featured["standings"]:
+            featured = None
+    _write_text(out_dir / "body" / "site.html", landing_body(featured))
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     return written

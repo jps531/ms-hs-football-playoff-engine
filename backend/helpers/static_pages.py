@@ -26,6 +26,7 @@ from backend.helpers.share_cards import (
     format_pct,
     mode_odds,
     odds_bucket,
+    odds_mode,
     record_text,
     short_date,
     slugify,
@@ -285,87 +286,108 @@ def class_body(clazz: int, standings: dict, stamp: str, mode: str, teams: dict[s
     )
 
 
-LANDING_TITLE = "Mississippi high school football playoff races"
+CLASSES = range(1, 8)
 
 
-def join_names(names: list[str]) -> str:
-    """Newspaper-style list, as format.js's ``joinNames``: "A", "A and B", "A, B and C"."""
-    if len(names) <= 1:
-        return "".join(names)
-    return f"{', '.join(names[:-1])} and {names[-1]}"
+def pick_featured(summary: dict) -> dict | None:
+    """The race to feature on the front page, as ``pickFeatured`` in landing.js picks it.
 
-
-def leaders(card: dict) -> tuple[str, str] | None:
-    """(names, region record) of everyone tied with a region's leader; None before any region games.
-
-    Mirrors ``leaders`` in landing.js: more than three tied reads "4 teams".
+    The region with the most teams still undecided, then the more volatile race, then the
+    higher class, then the lower region number. ``{"clazz", "card"}``, or None when no region
+    has an undecided team (the regular season is over).
     """
-    statuses = card.get("statuses") or []
-    if not statuses:
-        return None
-    top = statuses[0]["record"]
-    key = (top["region_wins"], top["region_losses"], top.get("region_ties") or 0)
-    if sum(key) == 0:
-        return None
-    names = [
-        s["school"]
-        for s in statuses
-        if (s["record"]["region_wins"], s["record"]["region_losses"], s["record"].get("region_ties") or 0) == key
-    ]
-    return (f"{len(names)} teams" if len(names) > 3 else join_names(names)), record_text(*key)
-
-
-def _landing_row(clazz: int, card: dict) -> str:
-    """One region's row: its link, who leads, and how many have clinched, are undecided, or are out."""
-    lead = leaders(card)
-    leading = (
-        f'{_e(lead[0])} <span class="muted">{_e(lead[1])}</span>'
-        if lead
-        else ('<span class="muted">No region games yet</span>')
+    cards = [{"clazz": c["class_"], "card": card} for c in summary.get("classes") or [] for card in c["regions"]]
+    open_races = [f for f in cards if f["card"]["teams_alive"] > 0]
+    open_races.sort(
+        key=lambda f: (-f["card"]["teams_alive"], -f["card"]["volatility"], -f["clazz"], f["card"]["region"])
     )
-    region = card["region"]
-    return (
-        f'<tr><th scope="row" class="col-region"><a href="/standings/{clazz}a/{region}">Region {region}</a></th>'
-        f'<td class="col-leading">{leading}</td>'
-        f'<td class="col-num">{card["num_clinched"]}</td><td class="col-num">{card["teams_alive"]}</td>'
-        f'<td class="col-num">{card["num_eliminated"]}</td></tr>'
+    return open_races[0] if open_races else None
+
+
+def _chips(path: str, label: str) -> str:
+    """Links to 1A-7A: *path* and *label* are formats taking the class number."""
+    return "".join(
+        f'<a class="landing-chip" href="{path.format(c)}" aria-label="{label.format(c)}">{c}A</a>' for c in CLASSES
     )
 
 
-def _landing_class(block: dict) -> str:
-    """One class's section on the front page."""
-    c = block["class_"]
-    rows = "".join(_landing_row(c, card) for card in sorted(block["regions"], key=lambda r: r["region"]))
+def _featured(clazz: int, card: dict, standings: dict) -> str:
+    """The featured race's card: headline, a compact table with playoff odds, counts and a link."""
+    page = region_path(clazz, card["region"])
+    mode = odds_mode(standings["teams"])
+    ordered = display_order(standings["teams"])
+    positions = standing_positions(ordered)
+    rows = "".join(
+        f'<tr class="{"is-eliminated" if t.get("eliminated") else ""}"><td class="col-pos">{pos}</td>'
+        f'<th scope="row" class="col-team"><span class="team-name">{_e(t["school"])}</span></th>'
+        f'<td class="col-rec">{_region_record(t)}</td>'
+        f'<td class="col-odds">{_odds(mode_odds(t, "p_playoffs", mode))}</td></tr>'
+        for pos, t in zip(positions, ordered, strict=True)
+    )
+    mode_name = "Projected" if mode == "projected" else "Toss-up"
+    headline = standings.get("headline")
+    headline_html = f'<p class="landing-featured__headline">{_e(headline)}</p>' if headline else ""
+    updated = short_date(date.fromisoformat(standings["as_of_date"]))
+    name = f"Region {card['region']}-{clazz}A"
     return (
-        f'<section class="landing-class" aria-labelledby="class-{c}">'
-        f'<h2 class="landing-class__title" id="class-{c}"><a href="/standings/{c}a">Class {c}A</a>'
-        f'<a class="landing-class__bracket" href="/brackets/{c}a">{c}A Bracket</a></h2>'
+        '<section class="landing-featured" aria-labelledby="featured-title">'
+        '<p class="landing-kicker">Race to watch</p>'
+        f'<h2 class="landing-featured__title" id="featured-title"><a href="{page}">{name}</a></h2>'
+        f"{headline_html}"
         '<table class="standings standings--compact landing-table">'
-        f'<caption class="visually-hidden">Class {c}A regions: who leads, and how many teams have clinched a '
-        "playoff spot, are still undecided, or are out</caption>"
-        '<thead><tr><th scope="col" class="col-region">Region</th><th scope="col" class="col-leading">Leading</th>'
-        '<th scope="col" class="col-num">Clinched</th><th scope="col" class="col-num">Undecided</th>'
-        '<th scope="col" class="col-num">Out</th></tr></thead>'
-        f"<tbody>{rows}</tbody></table></section>"
+        f'<caption class="visually-hidden">{name} standings and {mode_name.lower()} odds of making the playoffs</caption>'
+        '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
+        '<th scope="col" class="col-team">Team</th>'
+        '<th scope="col" class="col-rec">Region</th><th scope="col" class="col-odds">Playoffs</th></tr></thead>'
+        f"<tbody>{rows}</tbody></table>"
+        f'<p class="landing-featured__meta muted">{card["num_clinched"]} clinched · {card["teams_alive"]} undecided · '
+        f"{card['num_eliminated']} out · {mode_name} odds · Updated {_e(updated)}</p>"
+        f'<p><a class="landing-button" href="{page}">See what has to happen</a></p>'
+        "</section>"
     )
 
 
-def landing_body(summary: dict, season: int) -> str:
-    """The front page for a ``/standings/summary`` response: the same markup as ``landingHtml`` in landing.js,
-    so the static copy and the app's page are identical."""
-    as_of = date.fromisoformat(summary["as_of_date"])
-    classes = sorted(summary.get("classes") or [], key=lambda b: b["class_"])
+def landing_body(featured: dict | None) -> str:
+    """The front page: the same markup as ``landingHtml`` in landing.js, so the static copy and the
+    app's page are identical. *featured* is ``{"clazz", "card", "standings"}`` or None."""
+    if featured:
+        example = region_path(featured["clazz"], featured["card"]["region"])
+        example_name = f"Region {featured['card']['region']}-{featured['clazz']}A"
+        featured_html = _featured(featured["clazz"], featured["card"], featured["standings"])
+    else:
+        example, example_name, featured_html = "/standings/1a", "Class 1A", ""
+    see = f'<p><a href="{example}">See {example_name}</a></p>'
     return (
         '<div class="page landing">'
-        '<header class="entry-head">'
-        f'<h1 class="title">{LANDING_TITLE}</h1>'
-        '<p class="prose">Every MHSAA region race: who’s in, who’s out, and exactly what has to happen next. '
-        "Pick a region to see its odds and scenarios.</p>"
-        f'<p class="provenance provenance--static">{season} season · Updated {_e(short_date(as_of))}</p>'
-        '<p class="landing-key muted"><strong>Clinched</strong>: sure of a playoff spot. '
-        "<strong>Undecided</strong>: could still make or miss the playoffs. <strong>Out</strong>: eliminated.</p>"
-        "</header>"
-        f"{''.join(_landing_class(b) for b in classes)}"
+        '<section class="landing-hero">'
+        '<h1 class="title landing-hero__title">Every Mississippi high school football playoff race, '
+        "worked out every possible way</h1>"
+        '<p class="landing-hero__lead">Standings, playoff odds, and exactly what each team needs to happen, '
+        "for every MHSAA region. Updated every morning.</p>"
+        '<div class="landing-hero__actions">'
+        '<a class="landing-button" href="#team-search" data-focus-search>Find your team</a>'
+        '<nav class="landing-classes" aria-label="Standings by class">'
+        '<span class="landing-classes__label">Standings by class</span>'
+        f"{_chips('/standings/{}a', 'Class {}A standings')}</nav>"
+        "</div></section>"
+        f"{featured_html}"
+        '<section class="landing-cards" aria-label="What’s here">'
+        '<article class="landing-card"><h2 class="landing-card__title">Standings and odds</h2>'
+        "<p>Every region’s standings, with each team’s chance of finishing first through fourth and of making "
+        "the playoffs. Projected odds weigh each game by team strength; Toss-up odds treat every game as a "
+        f"coin flip.</p>{see}</article>"
+        '<article class="landing-card"><h2 class="landing-card__title">What has to happen</h2>'
+        "<p>The exact results each team needs, checked against every MHSAA tiebreaker, down to the margin of "
+        f"victory when it matters: “clinches the No. 2 seed with a win, no help needed.”</p>{see}</article>"
+        '<article class="landing-card"><h2 class="landing-card__title">Playoff brackets</h2>'
+        "<p>Each class’s bracket, filled in with who is likely to land in each spot, who each team might play, "
+        "and where.</p>"
+        '<nav class="landing-classes" aria-label="Brackets by class">'
+        f"{_chips('/brackets/{}a', 'Class {}A bracket')}</nav></article>"
+        "</section>"
+        '<p class="landing-sources">Scores from <a href="https://www.ahsfhs.org/">AHSFHS</a>. '
+        "Seeding follows the MHSAA’s tiebreaker rules. Updated daily at 9:15 AM Central. "
+        '<a href="/methodology">How it works</a></p>'
         "</div>\n"
     )
 

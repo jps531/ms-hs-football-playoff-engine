@@ -14,9 +14,8 @@ from backend.helpers.static_pages import (
     class_body,
     initials,
     insight_lines,
-    join_names,
     landing_body,
-    leaders,
+    pick_featured,
     region_body,
     sitemap_xml,
 )
@@ -194,72 +193,56 @@ def test_class_body_lists_every_region_in_order():
     assert 'href="/standings/3a/7?team=raleigh"' in body
 
 
-def _status(school, w, l, t=0):
-    """A summary card's team status with a region record."""
-    return {"school": school, "record": {"region_wins": w, "region_losses": l, "region_ties": t}}
-
-
-def _card(region, statuses, counts=(1, 3, 1)):
+def _card(region, alive, volatility=0.5):
     """A /standings/summary region card."""
-    return {
-        "region": region,
-        "statuses": statuses,
-        "num_clinched": counts[0],
-        "teams_alive": counts[1],
-        "num_eliminated": counts[2],
-    }
+    return {"region": region, "teams_alive": alive, "volatility": volatility, "num_clinched": 1, "num_eliminated": 1}
 
 
 SUMMARY = {
     "as_of_date": "2026-10-14",
     "classes": [
-        {
-            "class_": 7,
-            "regions": [
-                _card(2, [_status("Oxford", 4, 0)]),
-                _card(1, [_status("Tupelo", 2, 1), _status("Starkville", 2, 1)]),
-            ],
-        },
-        {"class_": 1, "regions": [_card(1, [_status("A", 0, 0)], (0, 5, 0))]},
-        {
-            "class_": 3,
-            "regions": [
-                _card(6, [_status(n, 1, 1) for n in ("A", "B", "C", "D")]),
-                _card(7, [_status("D'Iberville <x>", 3, 0)]),
-            ],
-        },
+        {"class_": 3, "regions": [_card(1, 4, 0.9), _card(2, 5, 0.1)]},
+        {"class_": 6, "regions": [_card(1, 5, 0.1), _card(2, 2, 0.99)]},
     ],
+}
+FEATURED = {
+    "clazz": 6,
+    "card": _card(1, 5, 0.1),
+    "standings": _region(headline="D'Iberville and Raleigh chase two spots <Friday>.", as_of_date="2026-10-14"),
 }
 
 
-def test_leaders_and_names_read_like_the_page():
-    """Co-leaders on region record; more than three is a count; nobody before region games start."""
-    assert join_names(["A", "B", "C"]) == "A, B and C"
-    assert leaders(SUMMARY["classes"][0]["regions"][1]) == ("Tupelo and Starkville", "2–1")
-    assert leaders(SUMMARY["classes"][2]["regions"][0]) == ("4 teams", "1–1")
-    assert leaders(SUMMARY["classes"][1]["regions"][0]) is None
+def test_featured_race_is_the_most_open_one():
+    """Most undecided, then most volatile, then the higher class; none once every race is settled."""
+    assert pick_featured(SUMMARY) == {"clazz": 6, "card": _card(1, 5, 0.1)}
+    closer = {"classes": [{"class_": 3, "regions": [_card(2, 5, 0.3)]}, *SUMMARY["classes"][1:]]}
+    assert pick_featured(closer)["clazz"] == 3
+    assert pick_featured({"classes": [{"class_": 1, "regions": [_card(1, 0)]}]}) is None
 
 
-def test_landing_body_lists_every_race():
-    """Classes and regions in order, with counts, links and the snapshot date."""
-    body = landing_body(SUMMARY, 2026)
-    assert body.index("Class 1A") < body.index("Class 3A") < body.index("Class 7A")
-    assert body.index('href="/standings/7a/1"') < body.index('href="/standings/7a/2"')
-    assert "2026 season · Updated Oct 14" in body
-    assert "No region games yet" in body and "D&#39;Iberville &lt;x&gt;" in body
+def test_landing_body_features_the_race_and_links_everything():
+    """Hero, the featured race's card, the three capability cards, and every class's standings and bracket."""
+    body = landing_body(FEATURED)
+    assert "Race to watch" in body and '<a href="/standings/6a/1">Region 1-6A</a>' in body
+    assert "D&#39;Iberville and Raleigh chase two spots &lt;Friday&gt;." in body
+    assert "1 clinched · 5 undecided · 1 out · Projected odds · Updated Oct 14" in body
+    for c in range(1, 8):
+        assert f'href="/standings/{c}a"' in body and f'href="/brackets/{c}a"' in body
+    assert "Race to watch" not in landing_body(None) and "See Class 1A" in landing_body(None)
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="needs node to run landing.js")
-def test_landing_markup_matches_the_app_exactly():
+@pytest.mark.parametrize("featured", [FEATURED, None], ids=["featured", "no-race"])
+def test_landing_markup_matches_the_app_exactly(featured):
     """The static front page and the app's are the same HTML, so nothing changes when the app loads."""
     script = (
         f"import({json.dumps((NGINX_JS / 'landing.js').as_uri())})"
-        ".then((m) => process.stdout.write(m.landingHtml(JSON.parse(process.argv[1]), 2026)))"
+        ".then((m) => process.stdout.write(m.landingHtml(JSON.parse(process.argv[1]))))"
     )
     js = subprocess.run(
-        ["node", "--input-type=module", "-e", script, json.dumps(SUMMARY)], capture_output=True, text=True, check=True
+        ["node", "--input-type=module", "-e", script, json.dumps(featured)], capture_output=True, text=True, check=True
     ).stdout
-    assert js == landing_body(SUMMARY, 2026)
+    assert js == landing_body(featured)
 
 
 def test_sitemap_is_valid_xml_with_lastmod():
@@ -285,7 +268,7 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
         "/standings/3/6?season=2026": _region(),
         "/standings/summary?season=2026": {
             "as_of_date": "2026-10-09",
-            "classes": [{"class_": 3, "regions": [_card(6, [_status("Raleigh", 3, 1)])]}],
+            "classes": [{"class_": 3, "regions": [_card(6, 3)]}],
         },
         "/games?season=2026&class=3&region=6": [
             {
@@ -304,7 +287,8 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
     assert "Fri, Oct 16: Raleigh at Mize" in region  # from the schedule
     assert "raleigh.png" in region
     assert "Class 3A" in (tmp_path / "body" / "3.html").read_text()
-    assert "Class 3A" in (tmp_path / "body" / "site.html").read_text()
+    site = (tmp_path / "body" / "site.html").read_text()
+    assert "Race to watch" in site and "Region 6-3A" in site  # the only open race, from the region's own payload
     sitemap = (tmp_path / "sitemap.xml").read_text()
     for path in ("/</loc>", "/standings/3a</loc>", "/standings/3a/6</loc>", "/methodology</loc>"):
         assert path in sitemap

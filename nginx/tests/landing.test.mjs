@@ -1,40 +1,43 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { landingHtml, leaders } from "../html/static/js/landing.js";
+import { landingHtml, pickFeatured } from "../html/static/js/landing.js";
 
-const status = (school, w, l, t = 0) => ({ school, record: { region_wins: w, region_losses: l, region_ties: t } });
-const card = (region, statuses, counts = [1, 3, 1]) => ({
-  region, statuses, num_clinched: counts[0], teams_alive: counts[1], num_eliminated: counts[2],
+const card = (region, alive, volatility = 0.5) => ({ region, teams_alive: alive, volatility, num_clinched: 1, num_eliminated: 1 });
+const team = (school, w, l, p, eliminated = false) => ({
+  school, eliminated, clinched: false,
+  record: { wins: w, losses: l, ties: 0, region_wins: w, region_losses: l, region_ties: 0 },
+  odds: { p1: 0, p2: 0, p3: 0, p4: 0, p_playoffs: p, p1_weighted: 0, p2_weighted: 0, p3_weighted: 0, p4_weighted: 0, p_playoffs_weighted: p },
 });
 
-test("leaders: everyone tied with the leader on region record", () => {
-  assert.deepEqual(leaders(card(1, [status("Oxford", 1, 0), status("Germantown", 1, 0), status("Clinton", 0, 1)])),
-    { names: "Oxford and Germantown", record: "1–0" });
-  assert.deepEqual(leaders(card(1, [status("A", 3, 0), status("B", 2, 1)])), { names: "A", record: "3–0" });
-  const four = ["A", "B", "C", "D"].map((s) => status(s, 1, 1));
-  assert.equal(leaders(card(1, four)).names, "4 teams");
-  assert.equal(leaders(card(1, [status("A", 0, 0), status("B", 0, 0)])), null);
-  assert.equal(leaders(card(1, [])), null);
+test("featured race: most undecided, then most volatile, then higher class", () => {
+  const summary = { classes: [
+    { class_: 3, regions: [card(1, 4, 0.9), card(2, 5, 0.1)] },
+    { class_: 6, regions: [card(1, 5, 0.1), card(2, 2, 0.99)] },
+  ] };
+  assert.deepEqual([pickFeatured(summary).clazz, pickFeatured(summary).card.region], [6, 1]);
+  summary.classes[0].regions[1].volatility = 0.3;
+  assert.deepEqual([pickFeatured(summary).clazz, pickFeatured(summary).card.region], [3, 2]);
+  assert.equal(pickFeatured({ classes: [{ class_: 1, regions: [card(1, 0)] }] }), null);
 });
 
-test("front page: every class in order, regions in order, counts and links", () => {
-  const html = landingHtml({
-    as_of_date: "2026-10-14",
-    classes: [
-      { class_: 7, regions: [card(2, [status("Oxford", 4, 0)]), card(1, [status("Tupelo", 2, 1)])] },
-      { class_: 1, regions: [card(1, [status("A", 0, 0)], [0, 5, 0])] },
-    ],
-  }, 2026);
-  assert.ok(html.indexOf("Class 1A") < html.indexOf("Class 7A"));
-  assert.ok(html.indexOf('href="/standings/7a/1"') < html.indexOf('href="/standings/7a/2"'));
-  assert.match(html, /2026 season · Updated Oct 14/);
-  assert.match(html, /Oxford <span class="muted">4–0<\/span>/);
-  assert.match(html, /No region games yet/);
-  assert.match(html, /href="\/brackets\/7a">7A Bracket/);
-  assert.match(html, /<th scope="col" class="col-num">Undecided<\/th>/);
+test("front page with a featured race", () => {
+  const featured = {
+    clazz: 5, card: card(3, 3),
+    standings: { as_of_date: "2026-10-14", headline: "Three teams chase two spots <Friday>.", teams: [team("Brookhaven", 2, 1, 0.6), team("Natchez", 3, 0, 1), team("Vicksburg", 0, 3, 0, true)] },
+  };
+  const html = landingHtml(featured);
+  assert.match(html, /Race to watch/);
+  assert.match(html, /<a href="\/standings\/5a\/3">Region 3-5A<\/a>/);
+  assert.match(html, /Three teams chase two spots &lt;Friday&gt;\./);
+  assert.ok(html.indexOf("Natchez") < html.indexOf("Brookhaven"));
+  assert.match(html, /1 clinched · 3 undecided · 1 out · Projected odds · Updated Oct 14/);
+  assert.match(html, /See Region 3-5A/);
+  assert.match(html, /<a class="landing-button" href="#team-search" data-focus-search>Find your team<\/a>/);
+  for (let c = 1; c <= 7; c++) assert.ok(html.includes(`href="/standings/${c}a"`) && html.includes(`href="/brackets/${c}a"`));
 });
 
-test("front page escapes team names", () => {
-  const html = landingHtml({ as_of_date: "2026-10-14", classes: [{ class_: 3, regions: [card(1, [status("<b>X</b>", 1, 0)])] }] }, 2026);
-  assert.ok(!html.includes("<b>X</b>") && html.includes("&lt;b&gt;X&lt;/b&gt;"));
+test("front page without a race on", () => {
+  const html = landingHtml(null);
+  assert.ok(!html.includes("Race to watch"));
+  assert.match(html, /See Class 1A/);
 });

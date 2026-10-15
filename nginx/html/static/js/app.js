@@ -14,7 +14,7 @@ import {
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard,
 } from "./components.js";
 import { matchTeams } from "./search.js";
-import { landingHtml } from "./landing.js";
+import { landingHtml, pickFeatured } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
 import {
@@ -567,13 +567,31 @@ function oddsMode(ctx) {
 }
 
 // ------------------------------------------------------------ front page
-// Every region race in the state (landing.js), the same page the static copy
-// nginx serves shows, so nothing changes when the app takes over.
+
+// "Find your team" on the front page: focus the header's search box (without
+// JavaScript the link just jumps to it).
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("[data-focus-search]")) return;
+  e.preventDefault();
+  teamSearch?.focus({ preventScroll: false });
+});
+// What the site does and a live race to show it (landing.js): the same page
+// the static copy nginx serves, so nothing changes when the app takes over.
 
 async function landingView(ctx) {
-  const summary = await getJSON(`/standings/summary?season=${ctx.season}`);
-  nextContext = contextHtml("All classes", { date: `Updated ${shortDate(summary.as_of_date)}` }, null);
-  return landingHtml(summary, ctx.season);
+  // The featured race is a nicety: if it can't load, the page still renders without it.
+  let featured = null;
+  try {
+    const summary = await getJSON(`/standings/summary?season=${ctx.season}`);
+    featured = pickFeatured(summary);
+    if (featured) {
+      featured.standings = await getJSON(`/standings/${featured.clazz}/${featured.card.region}?season=${ctx.season}`);
+    }
+  } catch {
+    featured = null;
+  }
+  nextContext = null;
+  return landingHtml(featured);
 }
 
 // ------------------------------------------------------ class view (entry)
