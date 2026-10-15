@@ -2,6 +2,7 @@
 (backend.prefect.submission_digest_pipeline)."""
 
 import logging
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -9,6 +10,7 @@ import backend.prefect.submission_digest_pipeline as pipeline
 from backend.helpers.submission_digest import DigestItem, about, build_digest, summary, type_label
 
 SITE = "https://mshsfootball.com/"
+NOW = datetime(2026, 10, 15, 12, 0, tzinfo=UTC)
 
 
 def _score(status: str = "pending", **payload) -> DigestItem:
@@ -55,6 +57,7 @@ class TestSummary:
     def test_feedback_drops_the_category_from_the_subject(self):
         """The label carries the category; the line carries what it's about and the message, flattened."""
         assert type_label(_feedback()) == "Feedback · Odds or scenarios"
+        assert type_label(_feedback(category="other")) == "Feedback"
         assert summary(_feedback()) == "Region 2-7A · Oxford: Oxford can't be 4th"
 
     def test_feedback_with_only_a_category_subject(self):
@@ -74,29 +77,59 @@ class TestSummary:
 
 
 class TestBuildDigest:
-    """The email as a whole."""
+    """The reminder as a whole."""
 
-    def test_subject_and_counts(self):
-        """Subject carries only counts; the header breaks pending down by type."""
-        email = build_digest([_score(), _feedback()], {"score": 3, "feedback": 1, "logo": 0}, SITE)
-        assert email.subject == "Moderation: 2 new submissions, 4 pending"
+    def _old(self, item_id=5, days=3, status="pending"):
+        """A score correction that has been waiting *days*."""
+        return DigestItem(
+            item_id,
+            "score",
+            status,
+            "Tupelo",
+            {"date": "2026-10-03", "points_for": 7, "points_against": 3},
+            is_new=False,
+            submitted_at=NOW - timedelta(days=days, hours=2),
+        )
+
+    def test_subject_and_header_count_everything_waiting(self):
+        """Subject: counts only. Header: the breakdown, and what's new."""
+        email = build_digest([_score(), _feedback(), self._old()], SITE, NOW)
+        assert email.subject == "Moderation: 3 waiting, 2 new"
         assert email.text.startswith(
-            "2 new submissions in the last day. 4 pending in all (1 feedback, 3 score correction)."
+            "3 submissions waiting for a decision (2 score corrections, 1 feedback). 2 new since yesterday."
         )
         assert "https://mshsfootball.com/moderate" in email.text
 
+    def test_new_come_first_then_older_with_their_age(self):
+        """Two sections; older items say how long they've waited, logos say they need an asset."""
+        logo = DigestItem(
+            9, "logo", "accepted_pending_asset", "Tupelo", {}, is_new=False, submitted_at=NOW - timedelta(days=9)
+        )
+        text = build_digest([_feedback(), self._old(), logo], SITE, NOW).text
+        assert text.index("New (1)") < text.index("#8 Feedback") < text.index("Still waiting (2)")
+        assert "#5 Score correction [waiting 3 days]" in text
+        assert "#9 Logo [needs asset, waiting 9 days]" in text
+
+    def test_nothing_new_is_still_a_reminder(self):
+        """Only older items: the reminder says nothing is new."""
+        email = build_digest([self._old()], SITE, NOW, hours=48)
+        assert email.subject == "Moderation: 1 waiting"
+        assert "Nothing new since the last 48 hours." in email.text
+        assert "New (" not in email.text
+
+    def test_long_backlogs_are_cut_short(self):
+        """Past the limit, the rest are counted, not listed."""
+        older = [self._old(item_id=100 + i) for i in range(5)]
+        text = build_digest([_feedback(), *older], SITE, NOW, limit=3).text
+        assert "#101" in text and "#102" not in text
+        assert "…and 3 more on the moderation page." in text
+
     def test_visitor_text_is_escaped_in_html(self):
         """Anything a visitor typed is escaped in the HTML part."""
-        email = build_digest([_feedback(message="<script>alert(1)</script>", email="a@b.co")], {"feedback": 1}, SITE)
+        email = build_digest([_feedback(message="<script>alert(1)</script>", email="a@b.co")], SITE, NOW)
         assert "<script>" not in email.html
         assert "&lt;script&gt;" in email.html
         assert "Reply to: a@b.co" in email.text
-
-    def test_reviewed_items_are_marked(self):
-        """Something already handled says so."""
-        email = build_digest([_score(status="approved")], {}, SITE, hours=48)
-        assert "#7 Score correction [approved]" in email.text
-        assert "1 new submission in the last 48 hours. 0 pending in all." in email.text
 
 
 class FakeSMTP:
@@ -164,72 +197,65 @@ class TestSending:
         """No host: the digest is logged, not sent."""
         monkeypatch.delenv("SMTP_HOST")
         assert pipeline.smtp_settings() is None
-        assert pipeline.send_digest.fn(build_digest([_score()], {}, SITE)) is False
+        assert pipeline.send_digest.fn(build_digest([_score()], SITE, NOW)) is False
 
     def test_sends_over_starttls_with_login(self, smtp_env, monkeypatch):
         """STARTTLS, login, then one message to every recipient."""
         monkeypatch.setattr(pipeline.smtplib, "SMTP", FakeSMTP)
-        assert pipeline.send_digest.fn(build_digest([_score()], {"score": 1}, SITE)) is True
+        assert pipeline.send_digest.fn(build_digest([_score()], SITE, NOW)) is True
         (server,) = FakeSMTP.instances
         assert server.actions == [
             "starttls",
             ("login", "bot@example.com"),
-            ("send", "a@example.com, b@example.com", "Moderation: 1 new submission, 1 pending"),
+            ("send", "a@example.com, b@example.com", "Moderation: 1 waiting, 1 new"),
         ]
 
     def test_ssl_uses_smtp_ssl(self, smtp_env, monkeypatch):
         """Implicit TLS connects with SMTP_SSL and skips STARTTLS."""
         monkeypatch.setenv("SMTP_PORT", "465")
         monkeypatch.setattr(pipeline.smtplib, "SMTP_SSL", FakeSMTP)
-        pipeline.send_digest.fn(build_digest([_score()], {}, SITE))
+        pipeline.send_digest.fn(build_digest([_score()], SITE, NOW))
         assert "starttls" not in FakeSMTP.instances[0].actions
 
     def test_message_has_text_and_html(self):
         """Multipart: the plain text first, then HTML."""
-        message = pipeline.build_message(build_digest([_feedback()], {}, SITE), "bot@example.com", ["a@example.com"])
+        message = pipeline.build_message(build_digest([_feedback()], SITE, NOW), "bot@example.com", ["a@example.com"])
         assert [p.get_content_type() for p in message.iter_parts()] == ["text/plain", "text/html"]
-
-    def test_row_to_item(self):
-        """A query row with no game match has no current_game."""
-        item = pipeline.row_to_item((3, "feedback", "pending", None, None, False, None, None, None))
-        assert (item.payload, item.current_game) == ({}, None)
 
 
 class TestFlow:
-    """The flow sends only when something new still needs a decision."""
+    """The flow sends a reminder whenever anything is waiting."""
 
-    def test_quiet_day_sends_nothing(self, smtp_env, monkeypatch):
-        """No new submissions: no email."""
-        monkeypatch.setattr(pipeline, "load_new_submissions", lambda hours: ([], {"score": 2}))
+    def test_nothing_waiting_sends_nothing(self, smtp_env, monkeypatch):
+        """An empty queue: no email."""
+        monkeypatch.setattr(pipeline, "load_waiting_submissions", lambda hours: ([], NOW))
         monkeypatch.setattr(pipeline, "send_digest", lambda d: pytest.fail("should not send"))
         assert pipeline.submission_digest_flow.fn() == 0
 
-    def test_new_submissions_are_sent(self, smtp_env, monkeypatch):
-        """New submissions: one digest."""
+    def test_anything_waiting_is_sent(self, smtp_env, monkeypatch):
+        """Waiting items, new or not: one reminder listing all of them."""
         sent = []
-        monkeypatch.setattr(pipeline, "load_new_submissions", lambda hours: ([_score(), _feedback()], {"score": 1}))
+        old = DigestItem(
+            5, "feedback", "pending", None, {"message": "old"}, is_new=False, submitted_at=NOW - timedelta(days=4)
+        )
+        monkeypatch.setattr(pipeline, "load_waiting_submissions", lambda hours: ([_score(), old], NOW))
         monkeypatch.setattr(pipeline, "send_digest", sent.append)
         assert pipeline.submission_digest_flow.fn() == 2
-        assert sent[0].subject == "Moderation: 2 new submissions, 1 pending"
+        assert sent[0].subject == "Moderation: 2 waiting, 1 new"
 
-    def test_already_handled_sends_nothing(self, smtp_env, monkeypatch):
-        """New submissions that were all reviewed already: no email."""
-        monkeypatch.setattr(
-            pipeline, "load_new_submissions", lambda hours: ([_score(status="approved"), _score(status="rejected")], {})
-        )
-        monkeypatch.setattr(pipeline, "send_digest", lambda d: pytest.fail("should not send"))
-        assert pipeline.submission_digest_flow.fn() == 0
-
-    def test_only_waiting_items_are_listed(self, smtp_env, monkeypatch):
-        """Handled ones are left out; a logo awaiting its asset still counts as waiting."""
+    def test_only_older_items_still_remind(self, smtp_env, monkeypatch):
+        """Nothing new today but something still open: the reminder still goes out."""
         sent = []
-        logo = DigestItem(9, "logo", "accepted_pending_asset", "Tupelo", {})
-        monkeypatch.setattr(
-            pipeline,
-            "load_new_submissions",
-            lambda hours: ([_score(status="approved"), _feedback(), logo], {"feedback": 1}),
+        old = DigestItem(
+            5, "logo", "accepted_pending_asset", "Tupelo", {}, is_new=False, submitted_at=NOW - timedelta(days=2)
         )
+        monkeypatch.setattr(pipeline, "load_waiting_submissions", lambda hours: ([old], NOW))
         monkeypatch.setattr(pipeline, "send_digest", sent.append)
-        assert pipeline.submission_digest_flow.fn() == 2
-        assert "#7" not in sent[0].text
-        assert "#8 Feedback" in sent[0].text and "#9 Logo [accepted pending asset]" in sent[0].text
+        assert pipeline.submission_digest_flow.fn() == 1
+        assert sent[0].subject == "Moderation: 1 waiting"
+
+    def test_row_to_item_reads_new_and_age(self):
+        """The query's new flag and submitted time carry through."""
+        when = NOW - timedelta(days=1)
+        item = pipeline.row_to_item((3, "feedback", "pending", None, None, False, None, None, None, False, when, NOW))
+        assert (item.payload, item.current_game, item.is_new, item.submitted_at) == ({}, None, False, when)

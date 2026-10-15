@@ -30,6 +30,7 @@ test("score change: current vs reported, from the school's side", () => {
 test("labels follow the type", () => {
   assert.equal(typeLabel(SCORE), "Score correction");
   assert.equal(typeLabel(FEEDBACK), "Feedback · Odds or scenarios");
+  assert.equal(typeLabel({ type: "feedback", payload: { category: "other" } }), "Feedback");
   assert.equal(typeLabel({ type: "helmet_assignment" }), "Helmet worn");
   assert.equal(typeLabel({ type: "new_thing" }), "New thing");
   assert.deepEqual(decisionLabels("score"), { approve: "Apply correction", reject: "Reject" });

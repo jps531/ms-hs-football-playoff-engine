@@ -222,9 +222,10 @@ whose content blocker stops the widget loading is told to allow
 ### Daily digest email
 
 The `submission-digest` deployment runs at 7:00 America/Chicago and emails
-`DIGEST_TO` the last day's submissions that still need a decision, with a link to
-`/moderate`. If nothing new is waiting (a quiet day, or you've already handled
-everything) it sends nothing. Configure SMTP for the Prefect worker:
+`DIGEST_TO` a reminder whenever anything is waiting for a decision (pending, or a
+logo accepted but still needing its asset): what came in since yesterday first,
+then everything older that's still open, with how long it has waited, and a link
+to `/moderate`. Once the queue is clear it stops sending. Configure SMTP for the Prefect worker:
 
 | Provider | `SMTP_HOST` | `SMTP_PORT` | `SMTP_USERNAME` / `SMTP_PASSWORD` |
 |---|---|---|---|

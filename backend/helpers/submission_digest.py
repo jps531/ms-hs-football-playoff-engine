@@ -1,4 +1,4 @@
-"""The daily moderation digest: what was submitted, as a plain-text and HTML email.
+"""The daily moderation reminder: every submission still waiting, as a plain-text and HTML email.
 
 Pure functions only. ``backend.prefect.submission_digest_pipeline`` loads the
 rows and sends the message. Everything a visitor wrote is escaped in the HTML
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import html
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 CATEGORY_LABELS = {"score": "Score report", "odds": "Odds or scenarios", "other": "Feedback"}
@@ -23,11 +23,15 @@ TYPE_LABELS = {
     "location": "Location",
 }
 MESSAGE_PREVIEW = 280
+MAX_LISTED = 50  # a long backlog lists this many; the page has the rest
 
 
 @dataclass(frozen=True)
 class DigestItem:
-    """One new submission, with the live game for a score correction (None when there's no game row)."""
+    """One submission still waiting, with the live game for a score correction (None when there's no game row).
+
+    ``is_new`` marks one submitted since the last digest; ``submitted_at`` gives an older one its age.
+    """
 
     id: int
     type: str
@@ -35,6 +39,8 @@ class DigestItem:
     school: str | None
     payload: dict[str, Any]
     current_game: dict[str, Any] | None = None
+    is_new: bool = True
+    submitted_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +82,8 @@ def _score(points_for: Any, points_against: Any) -> str:
 def type_label(item: DigestItem) -> str:
     """The submission's kind as a moderator reads it, e.g. 'Feedback · Odds or scenarios'."""
     if item.type == "feedback":
-        return f"Feedback · {CATEGORY_LABELS.get(item.payload.get('category', 'other'), 'Feedback')}"
+        category = CATEGORY_LABELS.get(item.payload.get("category", "other"), "Feedback")
+        return "Feedback" if category == "Feedback" else f"Feedback · {category}"
     return TYPE_LABELS.get(item.type, item.type.replace("_", " ").capitalize())
 
 
@@ -122,39 +129,86 @@ def extras(item: DigestItem) -> list[str]:
     return lines
 
 
+def _waiting_for(item: DigestItem, now: datetime) -> str:
+    """How long an older item has been waiting, e.g. 'waiting 3 days'."""
+    if item.submitted_at is None:
+        return "waiting"
+    days = max(1, (now - item.submitted_at).days)
+    return f"waiting {_plural(days, 'day')}"
+
+
+def _breakdown(items: list[DigestItem]) -> str:
+    """'3 score corrections, 1 feedback, 1 logo needing an asset'."""
+    counts: dict[tuple[str, bool], int] = {}
+    for item in items:
+        key = (TYPE_LABELS.get(item.type, item.type).lower(), item.status == "accepted_pending_asset")
+        counts[key] = counts.get(key, 0) + 1
+    parts = []
+    for (label, needs_asset), n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        noun = label if n == 1 or label == "feedback" else f"{label}s"
+        parts.append(f"{n} {noun}{' needing an asset' if needs_asset else ''}")
+    return ", ".join(parts)
+
+
 def build_digest(
-    items: list[DigestItem], pending_counts: dict[str, int], site_url: str, hours: int = 24
+    items: list[DigestItem], site_url: str, now: datetime, hours: int = 24, limit: int = MAX_LISTED
 ) -> DigestEmail:
-    """Render the digest for *items* (newest first) and the queue's current pending counts."""
+    """Render the reminder for every submission still waiting (*items*, newest first).
+
+    Items submitted in the last *hours* are listed first as new; the rest follow as still
+    waiting, with their age. At most *limit* are listed; the page has the rest.
+    """
     site = site_url.rstrip("/")
     moderate = f"{site}/moderate"
-    pending = sum(pending_counts.values())
-    subject = f"Moderation: {_plural(len(items), 'new submission')}, {pending} pending"
-    period = "day" if hours == 24 else f"{hours} hours"
-    pending_parts = ", ".join(f"{n} {TYPE_LABELS.get(t, t).lower()}" for t, n in sorted(pending_counts.items()) if n)
-    head = f"{_plural(len(items), 'new submission')} in the last {period}. {pending} pending in all"
-    head += f" ({pending_parts})." if pending_parts else "."
+    new = [i for i in items if i.is_new]
+    older = [i for i in items if not i.is_new]
+    subject = f"Moderation: {len(items)} waiting" + (f", {len(new)} new" if new else "")
+    period = "yesterday" if hours == 24 else f"the last {hours} hours"
+    head = f"{_plural(len(items), 'submission')} waiting for a decision ({_breakdown(items)})."
+    head += f" {len(new)} new since {period}." if new else f" Nothing new since {period}."
 
     text_lines = [head, f"Review them at {moderate}", ""]
-    html_items = []
-    for item in items:
-        status = "" if item.status == "pending" else f" [{item.status.replace('_', ' ')}]"
-        text_lines.append(f"#{item.id} {type_label(item)}{status}")
-        text_lines.append(f"  {summary(item)}")
-        text_lines.extend(f"  {line}" for line in extras(item))
-        text_lines.append("")
-        extra_html = "".join(f'<br><span style="color:#666">{html.escape(line)}</span>' for line in extras(item))
-        html_items.append(
-            '<li style="margin:0 0 12px">'
-            f"<strong>#{item.id} {html.escape(type_label(item))}{html.escape(status)}</strong><br>"
-            f"{html.escape(summary(item))}{extra_html}</li>"
+    html_sections = []
+    remaining = limit
+    for title, group in (("New", new), ("Still waiting", older)):
+        shown = group[: max(remaining, 0)]
+        remaining -= len(shown)
+        if not group:
+            continue
+        text_lines += [f"{title} ({len(group)})", ""]
+        html_items = []
+        for item in shown:
+            tags = []
+            if item.status == "accepted_pending_asset":
+                tags.append("needs asset")
+            if not item.is_new:
+                tags.append(_waiting_for(item, now))
+            tag = f" [{', '.join(tags)}]" if tags else ""
+            text_lines.append(f"#{item.id} {type_label(item)}{tag}")
+            text_lines.append(f"  {summary(item)}")
+            text_lines.extend(f"  {line}" for line in extras(item))
+            text_lines.append("")
+            extra_html = "".join(f'<br><span style="color:#666">{html.escape(line)}</span>' for line in extras(item))
+            html_items.append(
+                '<li style="margin:0 0 12px">'
+                f"<strong>#{item.id} {html.escape(type_label(item))}</strong>"
+                f'<span style="color:#666">{html.escape(tag)}</span><br>'
+                f"{html.escape(summary(item))}{extra_html}</li>"
+            )
+        if len(shown) < len(group):
+            more = f"…and {len(group) - len(shown)} more on the moderation page."
+            text_lines += [more, ""]
+            html_items.append(f'<li style="list-style:none;color:#666">{html.escape(more)}</li>')
+        html_sections.append(
+            f'<h3 style="font-size:15px;margin:20px 0 8px">{html.escape(title)} ({len(group)})</h3>'
+            f'<ul style="padding-left:20px;margin:0">{"".join(html_items)}</ul>'
         )
 
     body_html = (
         '<div style="font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:640px">'
         f"<p>{html.escape(head)}</p>"
         f'<p><a href="{html.escape(moderate)}" style="color:#2E6B4F;font-weight:600">Open the moderation page</a></p>'
-        f'<ul style="padding-left:20px">{"".join(html_items)}</ul>'
+        f"{''.join(html_sections)}"
         "</div>"
     )
     return DigestEmail(subject=subject, text="\n".join(text_lines).rstrip() + "\n", html=body_html)

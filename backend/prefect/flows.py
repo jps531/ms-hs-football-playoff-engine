@@ -35,7 +35,7 @@ async def main():
         await playoff_bracket_update.to_deployment("playoff-bracket-update"),
         # Also runs at the end of the daily region update; this is for a manual redraw.
         await share_assets_flow.to_deployment("share-assets"),
-        # Emails the moderators what came in over the last day; quiet days send nothing.
+        # Emails the moderators each morning while anything is waiting; an empty queue sends nothing.
         await submission_digest_flow.to_deployment(
             "submission-digest",
             schedule=CronSchedule(cron="0 7 * * *", timezone=_SCHEDULE_TIMEZONE),

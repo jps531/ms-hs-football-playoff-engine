@@ -1,9 +1,10 @@
-"""Daily moderation digest: email what was submitted in the last day.
+"""Daily moderation reminder: email what is still waiting for a decision.
 
-Runs each morning (see ``flows.py``). It reads the submissions table directly
-and emails ``DIGEST_TO`` the digest built by ``backend.helpers.submission_digest``
-for what came in over the last day and still needs a decision. When nothing
-new is waiting (a quiet day, or everything already handled) it sends nothing.
+Runs each morning (see ``flows.py``). While anything is waiting for a decision
+(pending, or a logo accepted but still needing its asset) it emails
+``DIGEST_TO`` a reminder built by ``backend.helpers.submission_digest``: what
+came in over the last day first, then everything older that's still open.
+When nothing is waiting it sends nothing.
 
 Mail goes out over SMTP, configured by environment variables:
 
@@ -23,6 +24,7 @@ from __future__ import annotations
 import os
 import smtplib
 import ssl
+from datetime import datetime
 from email.message import EmailMessage
 
 from prefect import flow, get_run_logger, task
@@ -32,37 +34,50 @@ from backend.helpers.submission_digest import DigestEmail, DigestItem, build_dig
 
 SITE_URL = os.environ.get("SITE_URL", "https://mshsfootball.com")
 
-# New submissions, with the live game a score correction would change (see the moderation queue).
-_NEW_SUBMISSIONS_SQL = """
+# Statuses that still need a moderator: undecided, or a logo accepted but awaiting its asset.
+UNRESOLVED = ("pending", "accepted_pending_asset")
+
+# Every submission still waiting, newest first, flagged new if it came in during the last
+# %s hours, with the live game a score correction would change (see the moderation queue).
+_WAITING_SQL = """
     SELECT s.id, s.type::text, s.status::text, s.school, s.payload,
-           g.school IS NOT NULL, g.opponent, g.points_for, g.points_against
+           g.school IS NOT NULL, g.opponent, g.points_for, g.points_against,
+           s.submitted_at >= NOW() - make_interval(hours => %s), s.submitted_at, NOW()
     FROM submissions s
     LEFT JOIN games_effective g
       ON s.type = 'score'
      AND g.school = s.school
      AND g.date = CASE WHEN s.type = 'score' THEN (s.payload->>'date')::date END
-    WHERE s.submitted_at >= NOW() - make_interval(hours => %s)
+    WHERE s.status::text IN %s
     ORDER BY s.submitted_at DESC
 """
 
-_PENDING_COUNTS_SQL = "SELECT type::text, COUNT(*) FROM submissions WHERE status = 'pending' GROUP BY type"
-
 
 def row_to_item(row: tuple) -> DigestItem:
-    """Map a _NEW_SUBMISSIONS_SQL row to a DigestItem."""
+    """Map a _WAITING_SQL row (without its trailing NOW()) to a DigestItem."""
     game = {"opponent": row[6], "points_for": row[7], "points_against": row[8]} if row[5] else None
-    return DigestItem(id=row[0], type=row[1], status=row[2], school=row[3], payload=row[4] or {}, current_game=game)
+    return DigestItem(
+        id=row[0],
+        type=row[1],
+        status=row[2],
+        school=row[3],
+        payload=row[4] or {},
+        current_game=game,
+        is_new=bool(row[9]),
+        submitted_at=row[10],
+    )
 
 
-@task(task_run_name="Load new submissions")
-def load_new_submissions(hours: int) -> tuple[list[DigestItem], dict[str, int]]:
-    """Return the submissions from the last *hours* (newest first) and the pending count per type."""
+@task(task_run_name="Load waiting submissions")
+def load_waiting_submissions(hours: int) -> tuple[list[DigestItem], datetime]:
+    """Return every submission still waiting (newest first), and the database's current time."""
     with get_database_connection() as conn, conn.cursor() as cur:
-        cur.execute(_NEW_SUBMISSIONS_SQL, (hours,))
-        items = [row_to_item(r) for r in cur.fetchall()]
-        cur.execute(_PENDING_COUNTS_SQL)
-        counts = {t: n for t, n in cur.fetchall()}
-    return items, counts
+        cur.execute(_WAITING_SQL, (hours, UNRESOLVED))
+        rows = cur.fetchall()
+        if not rows:
+            cur.execute("SELECT NOW()")
+            return [], cur.fetchone()[0]
+    return [row_to_item(r) for r in rows], rows[0][11]
 
 
 def smtp_settings() -> dict | None:
@@ -124,23 +139,16 @@ def send_digest(digest: DigestEmail) -> bool:
     return True
 
 
-# Statuses that still need a moderator: undecided, or a logo accepted but awaiting its asset.
-UNRESOLVED = ("pending", "accepted_pending_asset")
-
-
 @flow(name="Submission Digest Flow")
 def submission_digest_flow(hours: int = 24) -> int:
-    """Email the last *hours* of submissions that still need a decision.
+    """Email a reminder of every submission still waiting, marking what came in over the last *hours*.
 
-    Returns how many were in the email; 0 means nothing was sent.
+    Returns how many were waiting; 0 means nothing was sent.
     """
     logger = get_run_logger()
-    items, counts = load_new_submissions(hours)
-    waiting = [i for i in items if i.status in UNRESOLVED]
-    if not waiting:
-        logger.info(
-            "%d new submission(s) in the last %d hours, none still waiting; nothing to send.", len(items), hours
-        )
+    items, now = load_waiting_submissions(hours)
+    if not items:
+        logger.info("Nothing is waiting for a decision; nothing to send.")
         return 0
-    send_digest(build_digest(waiting, counts, SITE_URL, hours))
-    return len(waiting)
+    send_digest(build_digest(items, SITE_URL, now, hours))
+    return len(items)

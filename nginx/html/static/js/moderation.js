@@ -27,7 +27,10 @@ export function typeName(type) {
 }
 
 export function typeLabel(item) {
-  if (item.type === "feedback") return `Feedback · ${CATEGORY_LABELS[item.payload?.category] ?? "Feedback"}`;
+  if (item.type === "feedback") {
+    const category = CATEGORY_LABELS[item.payload?.category] ?? "Feedback";
+    return category === "Feedback" ? "Feedback" : `Feedback · ${category}`;
+  }
   return typeName(item.type);
 }
 
