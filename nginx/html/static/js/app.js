@@ -780,7 +780,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
       </section>`
     : "";
   return `<div class="detail__panels">${record}${seeding}${pathPanel}</div>
-    <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Something look wrong for ${esc(t.school)}? Tell us</button></p>`;
+    <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Something look wrong for ${esc(t.school)}? Let us know.</button></p>`;
 }
 
 function focusTeamRow() {
@@ -1275,7 +1275,7 @@ function sheetHtml(id) {
       </div>
       ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
       <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
-      <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Something look wrong in this game? Tell us</button></p>
+      <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Something look wrong in this game? Let us know.</button></p>
     </div>`;
 }
 
