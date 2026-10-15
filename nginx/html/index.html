@@ -81,7 +81,12 @@
   </div>
 
   <main id="app" tabindex="-1">
-    <noscript><div class="page"><p class="notice">This page needs JavaScript to load the standings.</p></div></noscript>
+    <!--# block name="body_default" --><noscript><div class="page"><p class="notice">This page needs JavaScript to load the standings.</p></div></noscript><!--# endblock -->
+    <!-- Page content: nginx includes this page's static copy (standings,
+         remaining games, conditions, as of the latest snapshot) so it reads
+         without JavaScript; the app replaces it once it loads. Pages without
+         one show the notice above. -->
+    <!--# include virtual="/share/body/${share_body}.html" stub="body_default" -->
   </main>
 
   <footer class="site-footer">

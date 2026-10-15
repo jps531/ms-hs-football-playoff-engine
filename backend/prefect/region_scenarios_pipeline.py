@@ -67,6 +67,12 @@ from backend.prefect.share_assets_pipeline import write_share_assets
 
 _T = TypeVar("_T")
 
+# Stamped on every region_standings row (and so on its archive copy), so a
+# calibration report can tell which model produced a published number. Bump
+# it whenever a change alters the odds themselves: Elo parameters, home-field
+# advantage, tiebreaker handling, simulation counts, bracket or hosting rules.
+MODEL_VERSION = "2026.1"
+
 
 def quote(value: _T) -> _T:
     """Wrap value with Prefect's quote to skip task-parameter introspection."""
@@ -663,7 +669,10 @@ def write_region_standings(
     """Upsert standings and odds into the ``region_standings`` table.
 
     Constructs one row per school and performs an INSERT ... ON CONFLICT UPDATE
-    so that re-running the flow is idempotent.
+    so that re-running the flow is idempotent. Each row is stamped with
+    ``computed_at`` and ``MODEL_VERSION``; a database trigger appends every
+    write to ``region_standings_archive``, which nothing rewrites, so the odds
+    as published survive later reruns and backfills.
 
     Home-odds parameters are **p_host_given_reach** probabilities: P(hosts round |
     reaches round).  The overall P(hosts round) can be recovered at query
@@ -751,6 +760,7 @@ def write_region_standings(
                 how.quarterfinals.get(team.school, 0.0),  # odds_quarterfinals_home_weighted
                 how.semifinals.get(team.school, 0.0),  # odds_semifinals_home_weighted
                 team.school in coinflip_teams,  # coin_flip_needed
+                MODEL_VERSION,  # model_version (computed_at is NOW(), in the template)
             )
         )
 
@@ -767,7 +777,7 @@ def write_region_standings(
             odds_first_round_home, odds_second_round_home, odds_quarterfinals_home, odds_semifinals_home,
             odds_first_round_home_weighted, odds_second_round_home_weighted,
             odds_quarterfinals_home_weighted, odds_semifinals_home_weighted,
-            coin_flip_needed
+            coin_flip_needed, model_version, computed_at
         )
         VALUES %s
         ON CONFLICT (school, season, as_of_date) DO UPDATE SET
@@ -809,11 +819,13 @@ def write_region_standings(
             odds_second_round_home_weighted = EXCLUDED.odds_second_round_home_weighted,
             odds_quarterfinals_home_weighted = EXCLUDED.odds_quarterfinals_home_weighted,
             odds_semifinals_home_weighted = EXCLUDED.odds_semifinals_home_weighted,
-            coin_flip_needed = EXCLUDED.coin_flip_needed
+            coin_flip_needed = EXCLUDED.coin_flip_needed,
+            model_version = EXCLUDED.model_version,
+            computed_at = EXCLUDED.computed_at
         ;
     """
 
-    template = "(" + ", ".join(["%s"] * 42) + ")"
+    template = "(" + ", ".join(["%s"] * 43) + ", NOW())"
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             execute_values(cur, sql, data_by_school, template=template, page_size=500)

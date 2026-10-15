@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /moderate
+Disallow: /prefect/
+Disallow: /feedback
+Disallow: /docs
+Disallow: /redoc
+
+Sitemap: https://mshsfootball.com/sitemap.xml
