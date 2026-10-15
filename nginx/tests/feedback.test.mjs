@@ -14,7 +14,8 @@ test("subjects name the category and what it's about, within the API's limit", (
 });
 
 test("general reports need a real message and, if given, a plausible email", () => {
-  assert.match(feedbackProblem({ message: "bad" }), /a little more/);
+  assert.match(feedbackProblem({ message: "  " }), /tell us what's wrong/);
+  assert.equal(feedbackProblem({ message: "28-21" }), null); // short is fine
   assert.match(feedbackProblem({ message: "x".repeat(MESSAGE_MAX + 1) }), /under/);
   assert.match(feedbackProblem({ message: "Raleigh can't finish 4th", email: "nope" }), /email/);
   assert.equal(feedbackProblem({ message: "Raleigh can't finish 4th", email: "" }), null);

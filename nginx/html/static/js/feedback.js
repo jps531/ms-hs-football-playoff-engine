@@ -10,7 +10,6 @@ export const CATEGORIES = [
   { value: "other", label: "Something else", subject: "Feedback" },
 ];
 
-export const MESSAGE_MIN = 10;
 export const MESSAGE_MAX = 2000;
 export const NOTE_MAX = 1000;
 // A form sent sooner than this after opening is almost certainly a script;
@@ -28,7 +27,7 @@ export function feedbackSubject(category, context) {
 /** A problem with a general report's fields, as a sentence for the form, or null. */
 export function feedbackProblem({ message, email }) {
   const text = (message ?? "").trim();
-  if (text.length < MESSAGE_MIN) return "Please tell us a little more about what's wrong.";
+  if (!text) return "Please tell us what's wrong.";
   if (text.length > MESSAGE_MAX) return `Please keep it under ${MESSAGE_MAX} characters.`;
   if (email && !EMAIL.test(email.trim())) return "That email address doesn't look right. It's optional, so you can leave it blank.";
   return null;

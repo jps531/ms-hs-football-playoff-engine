@@ -196,7 +196,7 @@ class TestSending:
 
 
 class TestFlow:
-    """The flow sends only when something came in."""
+    """The flow sends only when something new still needs a decision."""
 
     def test_quiet_day_sends_nothing(self, smtp_env, monkeypatch):
         """No new submissions: no email."""
@@ -211,3 +211,25 @@ class TestFlow:
         monkeypatch.setattr(pipeline, "send_digest", sent.append)
         assert pipeline.submission_digest_flow.fn() == 2
         assert sent[0].subject == "Moderation: 2 new submissions, 1 pending"
+
+    def test_already_handled_sends_nothing(self, smtp_env, monkeypatch):
+        """New submissions that were all reviewed already: no email."""
+        monkeypatch.setattr(
+            pipeline, "load_new_submissions", lambda hours: ([_score(status="approved"), _score(status="rejected")], {})
+        )
+        monkeypatch.setattr(pipeline, "send_digest", lambda d: pytest.fail("should not send"))
+        assert pipeline.submission_digest_flow.fn() == 0
+
+    def test_only_waiting_items_are_listed(self, smtp_env, monkeypatch):
+        """Handled ones are left out; a logo awaiting its asset still counts as waiting."""
+        sent = []
+        logo = DigestItem(9, "logo", "accepted_pending_asset", "Tupelo", {})
+        monkeypatch.setattr(
+            pipeline,
+            "load_new_submissions",
+            lambda hours: ([_score(status="approved"), _feedback(), logo], {"feedback": 1}),
+        )
+        monkeypatch.setattr(pipeline, "send_digest", sent.append)
+        assert pipeline.submission_digest_flow.fn() == 2
+        assert "#7" not in sent[0].text
+        assert "#8 Feedback" in sent[0].text and "#9 Logo [accepted pending asset]" in sent[0].text

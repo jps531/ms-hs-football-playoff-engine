@@ -1,9 +1,9 @@
 """Daily moderation digest: email what was submitted in the last day.
 
 Runs each morning (see ``flows.py``). It reads the submissions table directly
-and, when anything new came in, emails the digest built by
-``backend.helpers.submission_digest`` to ``DIGEST_TO``. A quiet day sends
-nothing.
+and emails ``DIGEST_TO`` the digest built by ``backend.helpers.submission_digest``
+for what came in over the last day and still needs a decision. When nothing
+new is waiting (a quiet day, or everything already handled) it sends nothing.
 
 Mail goes out over SMTP, configured by environment variables:
 
@@ -124,13 +124,23 @@ def send_digest(digest: DigestEmail) -> bool:
     return True
 
 
+# Statuses that still need a moderator: undecided, or a logo accepted but awaiting its asset.
+UNRESOLVED = ("pending", "accepted_pending_asset")
+
+
 @flow(name="Submission Digest Flow")
 def submission_digest_flow(hours: int = 24) -> int:
-    """Email a digest of the last *hours* of submissions; returns how many were in it (0 sends nothing)."""
+    """Email the last *hours* of submissions that still need a decision.
+
+    Returns how many were in the email; 0 means nothing was sent.
+    """
     logger = get_run_logger()
     items, counts = load_new_submissions(hours)
-    if not items:
-        logger.info("No new submissions in the last %d hours; nothing to send.", hours)
+    waiting = [i for i in items if i.status in UNRESOLVED]
+    if not waiting:
+        logger.info(
+            "%d new submission(s) in the last %d hours, none still waiting; nothing to send.", len(items), hours
+        )
         return 0
-    send_digest(build_digest(items, counts, SITE_URL, hours))
-    return len(items)
+    send_digest(build_digest(waiting, counts, SITE_URL, hours))
+    return len(waiting)
