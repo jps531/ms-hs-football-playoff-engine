@@ -1180,6 +1180,43 @@ class SubmissionDetail(SubmissionSummary):
     moderator_notes: str | None
 
 
+class CurrentGameScore(BaseModel):
+    """The live game row (games_effective) a score submission would correct, from the submitting school's side."""
+
+    opponent: str | None
+    location: str | None
+    points_for: int | None
+    points_against: int | None
+    result: str | None
+
+
+class ModerationQueueItem(SubmissionDetail):
+    """A submission as the moderation page shows it: the full payload, plus the game a score would change."""
+
+    current_game: CurrentGameScore | None = None
+
+
+class ModerationQueue(BaseModel):
+    """One page of the moderation queue and the pending count for each submission type."""
+
+    pending_counts: dict[str, int]
+    items: list[ModerationQueueItem]
+
+
+class ClientConfig(BaseModel):
+    """Public settings the site's browser code needs: the Turnstile site key, the moderator sign-in,
+    and where the API docs are (Swagger UI is only served in some environments).
+
+    Each value is None when that feature isn't configured on this server.
+    """
+
+    turnstile_site_key: str | None
+    auth0_domain: str | None
+    auth0_audience: str | None
+    auth0_client_id: str | None
+    api_docs_url: str | None = None
+
+
 class ColorVariantsPreview(BaseModel):
     """Primary + secondary color_variants blobs for a preview (no computed_at/algorithm_version — ephemeral)."""
 

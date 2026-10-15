@@ -12,6 +12,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
+from backend.api import turnstile
 from backend.api.limiter import client_ip
 from backend.api.models.requests import SubmitFeedbackRequest, SubmitScoreRequest
 from backend.api.routers import submissions
@@ -152,3 +153,35 @@ def test_form_fields_are_validated():
     with pytest.raises(ValueError):
         _feedback(category="spam")
     assert _feedback(email="", page="").email == ""
+
+
+def test_a_failed_turnstile_check_stores_nothing(monkeypatch):
+    """With Turnstile on, a missing token is refused before the queue is touched."""
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret")
+    conn = FakeConn([])
+    with _patch_conn(conn), pytest.raises(HTTPException) as err:
+        _call(submissions.submit_feedback(_request(), _feedback()))
+    assert err.value.status_code == 403
+    assert conn.calls == []
+
+
+def test_a_passed_turnstile_check_is_queued(monkeypatch):
+    """A token Cloudflare accepts goes on to the usual guard, checked against the visitor's address."""
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret")
+    seen = []
+    monkeypatch.setattr(turnstile, "_siteverify", lambda s, t, ip: seen.append((t, ip)) or {"success": True})
+    conn = FakeConn([None, (0,), (42, SUBMITTED)])
+    with _patch_conn(conn):
+        res = _call(
+            submissions.submit_feedback(_request({"X-Real-IP": "203.0.113.9"}), _feedback(turnstile_token="tok"))
+        )
+    assert res.id == 42
+    assert seen == [("tok", "203.0.113.9")]
+    assert "turnstile" not in conn.calls[-1][1][-1]  # the stored payload (JSON text)
+
+
+def test_the_honeypot_answers_before_turnstile(monkeypatch):
+    """A bot that fills the honeypot gets the fake success, not a 403 that tells it what to fix."""
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret")
+    res = _call(submissions.submit_feedback(_request(), _feedback(website="spam")))
+    assert res.id == 0

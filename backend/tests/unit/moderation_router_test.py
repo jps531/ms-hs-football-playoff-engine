@@ -158,3 +158,66 @@ class TestListSubmissionsQuery:
         assert sql.count("%s::boolean") == 2
         assert params == (None, None, None, None, None, None, 50, 0)
         assert [r.id for r in result] == [1]
+
+
+class TestQueue:
+    """GET /moderation/queue: payloads, the game a score would change, and pending counts."""
+
+    class QueueConn(FakeConn):
+        """Answers the queue query, then the counts query, from fetchall()."""
+
+        def __init__(self, rows, counts):
+            """Queue the two fetchall() results."""
+            super().__init__([])
+            self._all = [rows, counts]
+
+        async def fetchall(self):
+            """Pop the next fetchall() result."""
+            return self._all.pop(0)
+
+    def _run(self, conn, **kw):
+        """Call get_queue against *conn*."""
+        with patch.object(moderation, "get_conn", _fake_get_conn(conn)):
+            return asyncio.run(moderation.get_queue({"role": "moderator"}, **{"limit": 50, "offset": 0, **kw}))
+
+    def test_score_rows_carry_the_current_game(self):
+        """A score row with a game match gets current_game; feedback rows don't."""
+        score = (
+            *_submission_row(5, "score", school="Oxford", payload={"date": "2026-10-10", "points_for": 21}),
+            True,
+            "Tupelo",
+            "away",
+            14,
+            16,
+            "L",
+        )
+        feedback = (
+            *_submission_row(6, "feedback", school=None, payload={"message": "hi"}),
+            False,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        conn = self.QueueConn([score, feedback], [("feedback", 1), ("score", 2)])
+        queue = self._run(conn)
+        assert queue.pending_counts == {"feedback": 1, "score": 2}
+        assert queue.items[0].current_game.model_dump() == {
+            "opponent": "Tupelo",
+            "location": "away",
+            "points_for": 14,
+            "points_against": 16,
+            "result": "L",
+        }
+        assert queue.items[0].payload["points_for"] == 21
+        assert queue.items[1].current_game is None
+        assert conn.calls[0][1] == ("pending", "pending", None, None, 50, 0)
+
+    def test_all_means_every_status(self):
+        """status_filter=all drops the status condition; type passes through."""
+        conn = self.QueueConn([], [])
+        self._run(conn, status_filter="all", type="score")
+        sql, params = conn.calls[0]
+        assert params == (None, None, "score", "score", 50, 0)
+        assert "%s IS NULL" not in sql

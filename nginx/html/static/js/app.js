@@ -14,6 +14,7 @@ import {
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard,
 } from "./components.js";
 import { matchTeams } from "./search.js";
+import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, submissionError,
@@ -228,6 +229,7 @@ async function render() {
     showContext(null);
     app.innerHTML = feedbackPage();
     document.title = `Send feedback — ${SITE}`;
+    mountTurnstile(app.querySelector("[data-fb-form]"), API);
     return;
   }
   app.setAttribute("aria-busy", "true");
@@ -778,7 +780,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
       </section>`
     : "";
   return `<div class="detail__panels">${record}${seeding}${pathPanel}</div>
-    <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Something look wrong for ${esc(t.school)}? Tell us</button></p>`;
+    <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Something look wrong for ${esc(t.school)}? Let us know.</button></p>`;
 }
 
 function focusTeamRow() {
@@ -867,7 +869,7 @@ function scenariosSection(data, teams, prov, mode, focus) {
     <h2 class="section-title" id="scen-title">What has to happen</h2>
     ${focusNote}
     ${body}
-    <p class="report-line"><button type="button" class="link-button" data-feedback="odds"${focus ? ` data-team="${esc(focus)}"` : ""}>See a scenario that can’t be right? Tell us</button></p>
+    <p class="report-line"><button type="button" class="link-button" data-feedback="odds"${focus ? ` data-team="${esc(focus)}"` : ""}>See a scenario that can’t be right? Let us know.</button></p>
   </section>`;
 }
 
@@ -1273,7 +1275,7 @@ function sheetHtml(id) {
       </div>
       ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
       <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
-      <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Something look wrong in this game? Tell us</button></p>
+      <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Something look wrong in this game? Let us know.</button></p>
     </div>`;
 }
 
@@ -1457,6 +1459,7 @@ function feedbackForm({ game = null, category = "other", context = null, page = 
         <textarea name="note" rows="2" maxlength="${NOTE_MAX}" placeholder="A link to a box score, the school’s post…"></textarea>
       </label>
       ${honeypot}
+      <div class="fb-turnstile"></div>
       ${status}
       <div class="fb-actions"><button type="submit" class="fb-submit">Send correction</button></div>
       <p class="fb-fine muted">A moderator checks every correction before it changes the standings.</p>
@@ -1473,6 +1476,7 @@ function feedbackForm({ game = null, category = "other", context = null, page = 
       <input type="email" name="email" maxlength="254" autocomplete="email" inputmode="email">
     </label>
     ${honeypot}
+    <div class="fb-turnstile"></div>
     ${status}
     <div class="fb-actions"><button type="submit" class="fb-submit">Send</button></div>
   </form>`;
@@ -1482,8 +1486,8 @@ function feedbackPage() {
   return `<div class="page">
     <header class="entry-head">
       <h1 class="title">Send feedback</h1>
-      <p class="prose">Spotted a wrong score, odds or a scenario that can’t be right, or have an idea? Tell us here.
-        To correct a specific game’s score, open its region and use “Wrong score?” on the game.</p>
+      <p class="prose">Spotted a wrong score, see odds or a scenario that can’t be right, or have an idea? Let us know.
+        To correct a specific game’s score, open its region and select “Wrong score?” on the game.</p>
     </header>
     <div class="fb-page">${feedbackForm({ page: "/feedback" })}</div>
   </div>`;
@@ -1502,6 +1506,7 @@ function openFeedback({ game = null, category = "other", team = null, about = nu
   }
   const context = game ? null : feedbackContext({ team, about });
   const page = location.pathname + location.search;
+  removeTurnstile(feedbackSheet.querySelector("[data-fb-form]"));
   feedbackSheet.innerHTML = `<div class="game-sheet__head">
       <div>
         <p class="game-sheet__kicker">Feedback</p>
@@ -1511,6 +1516,7 @@ function openFeedback({ game = null, category = "other", team = null, about = nu
     </div>
     <div class="game-sheet__body">${feedbackForm({ game, category, context, page })}</div>`;
   feedbackSheet.showModal();
+  mountTurnstile(feedbackSheet.querySelector("[data-fb-form]"), API);
 }
 
 /** Check, send, and report back. Nothing is sent until the form is valid. */
@@ -1548,8 +1554,18 @@ async function sendFeedback(form) {
     feedbackSent(form);
     return;
   }
+  const label = button.textContent;
   button.disabled = true;
   button.textContent = "Sending…";
+  const check = await turnstileToken(form);
+  if (check.problem) {
+    status.classList.add("is-error");
+    status.textContent = check.problem;
+    button.disabled = false;
+    button.textContent = label;
+    return;
+  }
+  if (check.token) body.turnstile_token = check.token;
   try {
     const res = await fetch(API + path, {
       method: "POST",
@@ -1567,8 +1583,9 @@ async function sendFeedback(form) {
     status.classList.add("is-error");
     status.textContent = submissionError(0);
   }
+  resetTurnstile(form); // the token was used up
   button.disabled = false;
-  button.textContent = form.dataset.mode === "score" ? "Send correction" : "Send";
+  button.textContent = label;
 }
 
 function feedbackSent(form) {
@@ -1582,6 +1599,7 @@ function feedbackSent(form) {
       ? "A moderator will check the score. Once it’s approved, the standings and odds pick it up at the next morning’s update."
       : "A moderator will read it. If you left an email, we may follow up."}</p>
     ${inSheet ? '<button type="button" class="fb-submit" data-sheet-close>Done</button>' : '<a href="/feedback" class="fb-again">Send something else</a>'}`;
+  removeTurnstile(form);
   form.replaceWith(done);
   done.querySelector("button, a")?.focus({ preventScroll: true });
 }
