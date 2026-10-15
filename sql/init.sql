@@ -344,6 +344,8 @@ CREATE TABLE IF NOT EXISTS region_standings (
   odds_second_round_home_weighted REAL NOT NULL DEFAULT 0.0,
   odds_quarterfinals_home_weighted REAL NOT NULL DEFAULT 0.0,
   odds_semifinals_home_weighted REAL NOT NULL DEFAULT 0.0,
+  computed_at     TIMESTAMPTZ,  -- when the pipeline computed this row (archive below)
+  model_version   TEXT,         -- MODEL_VERSION in region_scenarios_pipeline.py
   UNIQUE (school, season, as_of_date),
   FOREIGN KEY (school, season) REFERENCES school_seasons(school, season)
 );
@@ -1287,3 +1289,60 @@ COMMENT ON COLUMN user_attended_games.date IS
   'Part of the FK to games(school, date). Game date.';
 COMMENT ON COLUMN user_attended_games.attended_at IS
   'Timestamp when the user marked this game as attended.';
+
+
+-- ---------------------------------------------------------------------------
+-- Odds snapshot archive (groundwork for publishing calibration)
+-- ---------------------------------------------------------------------------
+-- Every write to region_standings is appended here, whole, by a trigger, with
+-- when it was computed and by which model version. region_standings is
+-- rewritten (reruns, backfills, playoff cleanup); this never is. The first
+-- archived version of a team's (season, as_of_date) is what was published that
+-- day. See sql/migrations/2026_10_region_standings_archive.sql.
+
+CREATE TABLE IF NOT EXISTS region_standings_archive (
+  id             BIGSERIAL   PRIMARY KEY,
+  school         TEXT        NOT NULL,
+  season         INTEGER     NOT NULL,
+  as_of_date     DATE        NOT NULL,
+  class          INTEGER,
+  region         INTEGER,
+  computed_at    TIMESTAMPTZ,
+  model_version  TEXT,
+  archived_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  snapshot       JSONB       NOT NULL
+);
+
+COMMENT ON TABLE region_standings_archive IS
+  'Append-only copy of every write to region_standings (see sql/migrations/2026_10_region_standings_archive.sql). '
+  'The first row per (school, season, as_of_date) is what was published that day.';
+COMMENT ON COLUMN region_standings_archive.snapshot IS
+  'The full region_standings row as written (to_jsonb), so later schema changes never lose a field.';
+
+CREATE INDEX IF NOT EXISTS idx_region_standings_archive_lookup
+  ON region_standings_archive (season, school, as_of_date, archived_at);
+
+CREATE OR REPLACE FUNCTION archive_region_standings() RETURNS trigger AS $$
+BEGIN
+  INSERT INTO region_standings_archive (school, season, as_of_date, class, region, computed_at, model_version, snapshot)
+  VALUES (NEW.school, NEW.season, NEW.as_of_date, NEW.class, NEW.region, NEW.computed_at, NEW.model_version, to_jsonb(NEW));
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS region_standings_archive_write ON region_standings;
+CREATE TRIGGER region_standings_archive_write
+  AFTER INSERT OR UPDATE ON region_standings
+  FOR EACH ROW EXECUTE FUNCTION archive_region_standings();
+
+-- The archive is append-only. To prune it on purpose, drop this trigger first.
+CREATE OR REPLACE FUNCTION region_standings_archive_append_only() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'region_standings_archive is append-only (drop trigger region_standings_archive_guard to prune it)';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS region_standings_archive_guard ON region_standings_archive;
+CREATE TRIGGER region_standings_archive_guard
+  BEFORE UPDATE OR DELETE ON region_standings_archive
+  FOR EACH ROW EXECUTE FUNCTION region_standings_archive_append_only();
