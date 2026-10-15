@@ -1,13 +1,29 @@
 """Static page content (backend.helpers.static_pages) and the pipeline that writes it."""
 
+import json
 import re
+import shutil
+import subprocess
 import xml.etree.ElementTree as ET
 from datetime import date
+from pathlib import Path
 
-from backend.helpers.static_pages import class_body, initials, insight_lines, region_body, site_body, sitemap_xml
+import pytest
+
+from backend.helpers.static_pages import (
+    class_body,
+    initials,
+    insight_lines,
+    join_names,
+    landing_body,
+    leaders,
+    region_body,
+    sitemap_xml,
+)
 from backend.prefect.share_assets_pipeline import build_share_assets
 from backend.tests.unit.share_cards_test import DATES, TEAMS, _team
 
+NGINX_JS = Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js"
 STAMP = "Through Week 8 · Oct 9 · Projected"
 HELMETS = {"Raleigh": {"helmet_url": "https://res.cloudinary.com/x/raleigh.png"}}
 
@@ -178,12 +194,72 @@ def test_class_body_lists_every_region_in_order():
     assert 'href="/standings/3a/7?team=raleigh"' in body
 
 
-def test_site_body_links_every_class_region_and_bracket():
-    """The front page lists each class's regions, and its bracket only when there is one."""
-    body = site_body({3: [7, 6], 1: [1]}, [3])
-    assert body.index("Class 1A") < body.index("Class 3A")
-    assert '<a href="/standings/3a/6">Region 6-3A</a>' in body
-    assert '<a href="/brackets/3a">3A Bracket</a>' in body and "/brackets/1a" not in body
+def _status(school, w, l, t=0):
+    """A summary card's team status with a region record."""
+    return {"school": school, "record": {"region_wins": w, "region_losses": l, "region_ties": t}}
+
+
+def _card(region, statuses, counts=(1, 3, 1)):
+    """A /standings/summary region card."""
+    return {
+        "region": region,
+        "statuses": statuses,
+        "num_clinched": counts[0],
+        "teams_alive": counts[1],
+        "num_eliminated": counts[2],
+    }
+
+
+SUMMARY = {
+    "as_of_date": "2026-10-14",
+    "classes": [
+        {
+            "class_": 7,
+            "regions": [
+                _card(2, [_status("Oxford", 4, 0)]),
+                _card(1, [_status("Tupelo", 2, 1), _status("Starkville", 2, 1)]),
+            ],
+        },
+        {"class_": 1, "regions": [_card(1, [_status("A", 0, 0)], (0, 5, 0))]},
+        {
+            "class_": 3,
+            "regions": [
+                _card(6, [_status(n, 1, 1) for n in ("A", "B", "C", "D")]),
+                _card(7, [_status("D'Iberville <x>", 3, 0)]),
+            ],
+        },
+    ],
+}
+
+
+def test_leaders_and_names_read_like_the_page():
+    """Co-leaders on region record; more than three is a count; nobody before region games start."""
+    assert join_names(["A", "B", "C"]) == "A, B and C"
+    assert leaders(SUMMARY["classes"][0]["regions"][1]) == ("Tupelo and Starkville", "2–1")
+    assert leaders(SUMMARY["classes"][2]["regions"][0]) == ("4 teams", "1–1")
+    assert leaders(SUMMARY["classes"][1]["regions"][0]) is None
+
+
+def test_landing_body_lists_every_race():
+    """Classes and regions in order, with counts, links and the snapshot date."""
+    body = landing_body(SUMMARY, 2026)
+    assert body.index("Class 1A") < body.index("Class 3A") < body.index("Class 7A")
+    assert body.index('href="/standings/7a/1"') < body.index('href="/standings/7a/2"')
+    assert "2026 season · Updated Oct 14" in body
+    assert "No region games yet" in body and "D&#39;Iberville &lt;x&gt;" in body
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node to run landing.js")
+def test_landing_markup_matches_the_app_exactly():
+    """The static front page and the app's are the same HTML, so nothing changes when the app loads."""
+    script = (
+        f"import({json.dumps((NGINX_JS / 'landing.js').as_uri())})"
+        ".then((m) => process.stdout.write(m.landingHtml(JSON.parse(process.argv[1]), 2026)))"
+    )
+    js = subprocess.run(
+        ["node", "--input-type=module", "-e", script, json.dumps(SUMMARY)], capture_output=True, text=True, check=True
+    ).stdout
+    assert js == landing_body(SUMMARY, 2026)
 
 
 def test_sitemap_is_valid_xml_with_lastmod():
@@ -207,6 +283,10 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
         "/standings/3?season=2026": {"as_of_date": "2026-10-09", "regions": [{"region": 6, "teams": TEAMS}]},
         "/seasons/2026/dates?class=3": {"dates": DATES},
         "/standings/3/6?season=2026": _region(),
+        "/standings/summary?season=2026": {
+            "as_of_date": "2026-10-09",
+            "classes": [{"class_": 3, "regions": [_card(6, [_status("Raleigh", 3, 1)])]}],
+        },
         "/games?season=2026&class=3&region=6": [
             {
                 "team_a": "Raleigh",
@@ -224,7 +304,7 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
     assert "Fri, Oct 16: Raleigh at Mize" in region  # from the schedule
     assert "raleigh.png" in region
     assert "Class 3A" in (tmp_path / "body" / "3.html").read_text()
-    assert "/standings/3a/6" in (tmp_path / "body" / "site.html").read_text()
+    assert "Class 3A" in (tmp_path / "body" / "site.html").read_text()
     sitemap = (tmp_path / "sitemap.xml").read_text()
     for path in ("/</loc>", "/standings/3a</loc>", "/standings/3a/6</loc>", "/methodology</loc>"):
         assert path in sitemap

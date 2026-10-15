@@ -27,6 +27,7 @@ from backend.helpers.share_cards import (
     mode_odds,
     odds_bucket,
     record_text,
+    short_date,
     slugify,
     standing_positions,
     team_status,
@@ -39,8 +40,9 @@ DROPPED_WORDS = {"county", "high", "school", "academy"}  # as format.js's initia
 
 
 def _e(text: object) -> str:
-    """HTML-escape any value."""
-    return html.escape(str(text), quote=True)
+    """HTML-escape any value exactly as format.js's ``escapeHtml`` does (apostrophe as ``&#39;``),
+    so markup shared with the app is byte-for-byte the same."""
+    return html.escape(str(text), quote=True).replace("&#x27;", "&#39;")
 
 
 def region_path(clazz: int, region: int) -> str:
@@ -283,25 +285,88 @@ def class_body(clazz: int, standings: dict, stamp: str, mode: str, teams: dict[s
     )
 
 
-def site_body(regions_by_class: dict[int, list[int]], brackets: Iterable[int]) -> str:
-    """The front page's content: every class, its regions and bracket, as links."""
-    with_bracket = set(brackets)
-    sections = []
-    for clazz in sorted(regions_by_class):
-        links = "".join(
-            f'<li><a href="{region_path(clazz, r)}">Region {r}-{clazz}A</a></li>'
-            for r in sorted(regions_by_class[clazz])
-        )
-        bracket = f' · <a href="{bracket_path(clazz)}">{clazz}A Bracket</a>' if clazz in with_bracket else ""
-        sections.append(
-            f'<section class="section"><h2 class="section-title"><a href="{class_path(clazz)}">Class {clazz}A</a>'
-            f'{bracket}</h2><ul class="static-list static-list--inline">{links}</ul></section>'
-        )
+LANDING_TITLE = "Mississippi high school football playoff races"
+
+
+def join_names(names: list[str]) -> str:
+    """Newspaper-style list, as format.js's ``joinNames``: "A", "A and B", "A, B and C"."""
+    if len(names) <= 1:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def leaders(card: dict) -> tuple[str, str] | None:
+    """(names, region record) of everyone tied with a region's leader; None before any region games.
+
+    Mirrors ``leaders`` in landing.js: more than three tied reads "4 teams".
+    """
+    statuses = card.get("statuses") or []
+    if not statuses:
+        return None
+    top = statuses[0]["record"]
+    key = (top["region_wins"], top["region_losses"], top.get("region_ties") or 0)
+    if sum(key) == 0:
+        return None
+    names = [
+        s["school"]
+        for s in statuses
+        if (s["record"]["region_wins"], s["record"]["region_losses"], s["record"].get("region_ties") or 0) == key
+    ]
+    return (f"{len(names)} teams" if len(names) > 3 else join_names(names)), record_text(*key)
+
+
+def _landing_row(clazz: int, card: dict) -> str:
+    """One region's row: its link, who leads, and how many have clinched, are undecided, or are out."""
+    lead = leaders(card)
+    leading = (
+        f'{_e(lead[0])} <span class="muted">{_e(lead[1])}</span>'
+        if lead
+        else ('<span class="muted">No region games yet</span>')
+    )
+    region = card["region"]
     return (
-        '<div class="page static-page">'
-        '<h1 class="title">Mississippi high school football playoff races</h1>'
-        '<p class="prose">Every MHSAA region race: who’s in, who’s out, and exactly what has to happen next.</p>'
-        f"{''.join(sections)}</div>\n"
+        f'<tr><th scope="row" class="col-region"><a href="/standings/{clazz}a/{region}">Region {region}</a></th>'
+        f'<td class="col-leading">{leading}</td>'
+        f'<td class="col-num">{card["num_clinched"]}</td><td class="col-num">{card["teams_alive"]}</td>'
+        f'<td class="col-num">{card["num_eliminated"]}</td></tr>'
+    )
+
+
+def _landing_class(block: dict) -> str:
+    """One class's section on the front page."""
+    c = block["class_"]
+    rows = "".join(_landing_row(c, card) for card in sorted(block["regions"], key=lambda r: r["region"]))
+    return (
+        f'<section class="landing-class" aria-labelledby="class-{c}">'
+        f'<h2 class="landing-class__title" id="class-{c}"><a href="/standings/{c}a">Class {c}A</a>'
+        f'<a class="landing-class__bracket" href="/brackets/{c}a">{c}A Bracket</a></h2>'
+        '<table class="standings standings--compact landing-table">'
+        f'<caption class="visually-hidden">Class {c}A regions: who leads, and how many teams have clinched a '
+        "playoff spot, are still undecided, or are out</caption>"
+        '<thead><tr><th scope="col" class="col-region">Region</th><th scope="col" class="col-leading">Leading</th>'
+        '<th scope="col" class="col-num">Clinched</th><th scope="col" class="col-num">Undecided</th>'
+        '<th scope="col" class="col-num">Out</th></tr></thead>'
+        f"<tbody>{rows}</tbody></table></section>"
+    )
+
+
+def landing_body(summary: dict, season: int) -> str:
+    """The front page for a ``/standings/summary`` response: the same markup as ``landingHtml`` in landing.js,
+    so the static copy and the app's page are identical."""
+    as_of = date.fromisoformat(summary["as_of_date"])
+    classes = sorted(summary.get("classes") or [], key=lambda b: b["class_"])
+    return (
+        '<div class="page landing">'
+        '<header class="entry-head">'
+        f'<h1 class="title">{LANDING_TITLE}</h1>'
+        '<p class="prose">Every MHSAA region race: who’s in, who’s out, and exactly what has to happen next. '
+        "Pick a region to see its odds and scenarios.</p>"
+        f'<p class="provenance provenance--static">{season} season · Updated {_e(short_date(as_of))}</p>'
+        '<p class="landing-key muted"><strong>Clinched</strong>: sure of a playoff spot. '
+        "<strong>Undecided</strong>: could still make or miss the playoffs. <strong>Out</strong>: eliminated.</p>"
+        "</header>"
+        f"{''.join(_landing_class(b) for b in classes)}"
+        "</div>\n"
     )
 
 

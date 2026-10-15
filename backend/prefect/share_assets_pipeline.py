@@ -67,9 +67,9 @@ from backend.helpers.static_pages import (
     bracket_path,
     class_body,
     class_path,
+    landing_body,
     region_body,
     region_path,
-    site_body,
     sitemap_xml,
 )
 
@@ -137,8 +137,6 @@ def build_share_assets(
     _write_png(out_dir / "og" / "site.png", render_site_card())
     written = dict.fromkeys(keys, 0)
     teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
-    regions_by_class: dict[int, list[int]] = {}
-    brackets: list[int] = []
     sitemap: list[tuple[str, date | None]] = [("/", today), ("/methodology", None)]
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
@@ -170,7 +168,6 @@ def build_share_assets(
         written["brackets"] += bracket["brackets"]
         written["bracket_teams"] += bracket["bracket_teams"]
         if bracket["brackets"]:
-            brackets.append(clazz)
             sitemap.append((bracket_path(clazz), as_of))
 
         for region in sorted(r["region"] for r in standings["regions"]):
@@ -197,12 +194,13 @@ def build_share_assets(
             games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
             body = region_body(clazz, region, payload, f"{season} season · {r_stamp}", r_mode, teams, games)
             _write_text(out_dir / "body" / f"{name}.html", body)
-            regions_by_class.setdefault(clazz, []).append(region)
             sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
             written["teams"] += _write_team_assets(out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of)
-    if regions_by_class:
-        _write_text(out_dir / "body" / "site.html", site_body(regions_by_class, brackets))
+    summary = fetch(f"/standings/summary?season={season}")
+    if summary and summary.get("classes"):
+        _write_text(out_dir / "body" / "site.html", landing_body(summary, season))
+    if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     return written
 

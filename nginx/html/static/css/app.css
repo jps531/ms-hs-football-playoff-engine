@@ -1295,3 +1295,26 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .provenance--static { margin-top: 8px; }
 .static-list { display: grid; gap: 6px; margin-top: 12px; padding-left: 20px; }
 .static-list--inline { display: flex; flex-wrap: wrap; gap: 6px 18px; padding-left: 0; list-style: none; }
+
+/* ------------------------------------------------------------ front page ("/")
+   Every region race, one class per block (landing.js; the static copy is the same markup). */
+.landing {
+  display: grid; gap: 32px 56px;
+  grid-template-columns: repeat(auto-fill, minmax(min(26rem, 100%), 1fr));
+  align-items: start; padding-bottom: 24px;
+}
+.landing > .entry-head { grid-column: 1 / -1; padding-bottom: 0; }
+.landing-key { margin-top: 8px; font-size: 13px; line-height: 18px; }
+.landing-class__title {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 20px; line-height: 26px;
+}
+.landing-class__title a { display: inline-flex; align-items: center; min-height: 44px; }
+.landing-class__title a:first-child { color: inherit; text-decoration: none; }
+.landing-class__title a:first-child:hover { text-decoration: underline; }
+.landing-class__bracket { font-family: inherit; font-size: 14px; font-weight: 500; }
+.landing-table .col-region { text-align: left; white-space: nowrap; width: 6.5em; padding-left: 4px; }
+.landing-table .col-region a { display: inline-flex; align-items: center; min-height: 32px; }
+.landing-table .col-leading { text-align: left; width: 100%; }
+.landing-table .col-num { text-align: center; width: 5.2em; font-variant-numeric: tabular-nums; }
+.landing-class__title a:first-child { font-family: var(--font-display); font-weight: 700; }
