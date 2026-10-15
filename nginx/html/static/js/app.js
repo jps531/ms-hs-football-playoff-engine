@@ -869,7 +869,7 @@ function scenariosSection(data, teams, prov, mode, focus) {
     <h2 class="section-title" id="scen-title">What has to happen</h2>
     ${focusNote}
     ${body}
-    <p class="report-line"><button type="button" class="link-button" data-feedback="odds"${focus ? ` data-team="${esc(focus)}"` : ""}>See a scenario that can’t be right? Tell us</button></p>
+    <p class="report-line"><button type="button" class="link-button" data-feedback="odds"${focus ? ` data-team="${esc(focus)}"` : ""}>See a scenario that can’t be right? Let us know.</button></p>
   </section>`;
 }
 
@@ -1486,8 +1486,8 @@ function feedbackPage() {
   return `<div class="page">
     <header class="entry-head">
       <h1 class="title">Send feedback</h1>
-      <p class="prose">Spotted a wrong score, odds or a scenario that can’t be right, or have an idea? Tell us here.
-        To correct a specific game’s score, open its region and use “Wrong score?” on the game.</p>
+      <p class="prose">Spotted a wrong score, see odds or a scenario that can’t be right, or have an idea? Let us know.
+        To correct a specific game’s score, open its region and select “Wrong score?” on the game.</p>
     </header>
     <div class="fb-page">${feedbackForm({ page: "/feedback" })}</div>
   </div>`;

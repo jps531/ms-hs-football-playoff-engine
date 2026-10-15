@@ -1204,7 +1204,8 @@ class ModerationQueue(BaseModel):
 
 
 class ClientConfig(BaseModel):
-    """Public settings the site's browser code needs: the Turnstile site key and the moderator sign-in.
+    """Public settings the site's browser code needs: the Turnstile site key, the moderator sign-in,
+    and where the API docs are (Swagger UI is only served in some environments).
 
     Each value is None when that feature isn't configured on this server.
     """
@@ -1213,6 +1214,7 @@ class ClientConfig(BaseModel):
     auth0_domain: str | None
     auth0_audience: str | None
     auth0_client_id: str | None
+    api_docs_url: str | None = None
 
 
 class ColorVariantsPreview(BaseModel):

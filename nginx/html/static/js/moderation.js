@@ -208,13 +208,17 @@ export function itemHtml(item, now = Date.now()) {
   </article>`;
 }
 
-/** The type filter's options: every type with something pending, plus any already chosen. */
-export function typeOptions(counts, chosen) {
-  const types = new Set([...Object.keys(counts ?? {}), "score", "feedback"]);
+/**
+ * The type filter's chips: all types, then every type with something pending
+ * (scores and feedback always), plus whichever is chosen. Counts are pending ones.
+ */
+export function typeFilters(counts, chosen) {
+  const types = new Set([...Object.keys(counts ?? {}).filter((t) => counts[t] > 0), "score", "feedback"]);
   if (chosen) types.add(chosen);
   const total = Object.values(counts ?? {}).reduce((a, b) => a + b, 0);
   return [
-    { value: "", label: `All types${total ? ` (${total} pending)` : ""}` },
-    ...[...types].sort().map((t) => ({ value: t, label: `${typeName(t)}${counts?.[t] ? ` (${counts[t]} pending)` : ""}` })),
+    { value: "", label: "All types", count: total },
+    ...[...types].sort((a, b) => typeName(a).localeCompare(typeName(b)))
+      .map((t) => ({ value: t, label: typeName(t), count: counts?.[t] ?? 0 })),
   ];
 }

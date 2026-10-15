@@ -1205,17 +1205,38 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 
 /* ------------------------------------------------------------ moderation (/moderate) */
 .mod-page { max-width: 46rem; }
-.mod-toolbar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+.mod-account { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.mod-button {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--text-primary); text-decoration: none;
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.mod-button:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+.mod-filters {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 16px; align-items: start;
   padding-bottom: 16px; margin-bottom: 8px; border-bottom: 1px solid var(--border);
 }
-.mod-statuses { flex: 1 1 100%; margin: 0; padding: 0; border: 0; min-width: 0; }
-.mod-type select {
-  min-height: 40px; padding: 0 10px;
-  font: inherit; font-size: 14px; color: var(--text-primary);
-  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;
+.mod-filter { grid-column: 1; margin: 0; padding: 0; border: 0; min-width: 0; }
+.mod-filter legend { margin-bottom: 6px; padding: 0; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.mod-refresh {
+  grid-column: 2; grid-row: 1; align-self: end;
+  display: inline-grid; place-items: center; width: 44px; height: 44px;
+  color: var(--text-primary); background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
 }
-.mod-account { margin-left: auto; display: inline-flex; gap: 16px; align-items: center; font-size: 14px; }
+.mod-refresh:hover { border-color: var(--text-secondary); }
+.mod-refresh svg { width: 20px; height: 20px; }
+.mod-refresh.is-loading svg { animation: mod-spin 0.8s linear infinite; }
+@keyframes mod-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mod-refresh.is-loading svg { animation: none; opacity: 0.5; } }
+/* More specific than ".fb-cat span", which styles the chip itself. */
+.fb-cat span.mod-count {
+  display: inline-grid; place-items: center; min-width: 20px; min-height: 0; height: 20px;
+  margin: 0 -6px 0 8px; padding: 0 6px; border: 0;
+  border-radius: 999px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: var(--odds-3); color: var(--odds-text);
+}
+.fb-cat span.mod-count .visually-hidden { padding: 0; border: 0; min-height: 0; }
 .mod-list { display: grid; }
 .mod-list[aria-busy="true"] { opacity: 0.55; }
 .mod-empty { padding-block: 32px; }

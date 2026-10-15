@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  canApprove, canReject, decisionLabels, payloadValue, feedbackAbout, itemHtml, pageLink, relativeTime, scoreChange, typeLabel, typeOptions,
+  canApprove, canReject, decisionLabels, payloadValue, feedbackAbout, itemHtml, pageLink, relativeTime, scoreChange, typeFilters, typeLabel,
 } from "../html/static/js/moderation.js";
 import {
   authorizeUrl, base64url, challengeFor, completeSignIn, explainAuthError, logoutUrl, saveToken, storedToken, tokenRequest,
@@ -80,11 +80,15 @@ test("score cards show both rows and what changed; reviewed cards have no button
   assert.match(done, /Checked MaxPreps/);
 });
 
-test("type filter lists pending counts", () => {
-  const options = typeOptions({ score: 2, logo: 1 }, "");
-  assert.equal(options[0].label, "All types (3 pending)");
-  assert.deepEqual(options.map((o) => o.value), ["", "feedback", "logo", "score"]);
-  assert.equal(options.find((o) => o.value === "score").label, "Score correction (2 pending)");
+test("type filter chips: all types first, then pending types by name, with counts", () => {
+  const chips = typeFilters({ score: 2, logo: 1, colors: 0 }, "");
+  assert.deepEqual(chips.map((c) => [c.value, c.label, c.count]), [
+    ["", "All types", 3],
+    ["feedback", "Feedback", 0],
+    ["logo", "Logo", 1],
+    ["score", "Score correction", 2],
+  ]);
+  assert.ok(typeFilters({}, "helmet").some((c) => c.value === "helmet"));
 });
 
 // ------------------------------------------------------------ sign-in

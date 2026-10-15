@@ -4,7 +4,7 @@
 import { clientConfig } from "./config.js";
 import { completeSignIn, forgetToken, logoutUrl, signIn, storedToken } from "./auth.js";
 import { escapeHtml as esc } from "./format.js";
-import { STATUSES, itemHtml, typeOptions } from "./moderation.js";
+import { STATUSES, itemHtml, typeFilters } from "./moderation.js";
 
 const API = "/api/v1";
 const PAGE_SIZE = 50;
@@ -72,31 +72,53 @@ function showSignedOut(note = "") {
     '<button type="button" class="fb-submit" data-signin>Sign in</button>');
 }
 
+const REFRESH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
+
+function chip(name, value, label, count, checked) {
+  const badge = count ? ` <span class="mod-count">${count}<span class="visually-hidden"> pending</span></span>` : "";
+  return `<label class="fb-cat"><input type="radio" name="${name}" value="${esc(value)}"${checked ? " checked" : ""}><span>${esc(label)}${badge}</span></label>`;
+}
+
 function shell() {
-  const statuses = STATUSES.map((s) => `<label class="fb-cat"><input type="radio" name="status" value="${s.value}"${s.value === state.status ? " checked" : ""}><span data-status-label="${s.value}">${esc(s.label)}</span></label>`).join("");
-  root.innerHTML = `<div class="mod-toolbar">
-      <fieldset class="fb-cats mod-statuses"><legend class="visually-hidden">Status</legend>${statuses}</fieldset>
-      <label class="mod-type"><span class="visually-hidden">Type</span><select name="type"></select></label>
-      <button type="button" class="link-button" data-refresh>Refresh</button>
-      <span class="mod-account">
-        <a href="/prefect/" target="_blank" rel="noopener">Prefect</a>
-        <button type="button" class="link-button" data-signout>Sign out</button>
-      </span>
+  const docs = state.cfg.api_docs_url
+    ? `<a class="mod-button" href="${esc(state.cfg.api_docs_url)}" target="_blank" rel="noopener">API Docs</a>`
+    : "";
+  root.innerHTML = `<div class="mod-account">
+      <a class="mod-button" href="/prefect/" target="_blank" rel="noopener">Prefect</a>
+      ${docs}
+      <button type="button" class="mod-button" data-signout>Sign out</button>
+    </div>
+    <div class="mod-filters">
+      <fieldset class="mod-filter">
+        <legend>Status</legend>
+        <div class="fb-cats" data-filter="status"></div>
+      </fieldset>
+      <button type="button" class="mod-refresh" data-refresh aria-label="Refresh the queue" title="Refresh">${REFRESH_ICON}</button>
+      <fieldset class="mod-filter">
+        <legend>Type</legend>
+        <div class="fb-cats" data-filter="type"></div>
+      </fieldset>
     </div>
     <div class="mod-list" aria-live="polite"></div>
     <div class="mod-more"></div>`;
 }
 
+/** Redraw both chip rows (keeping focus on the chosen chip) and the tab title's count. */
 function renderCounts() {
   const pending = Object.values(state.counts).reduce((a, b) => a + b, 0);
-  const label = root.querySelector('[data-status-label="pending"]');
-  if (label) label.textContent = pending ? `Pending (${pending})` : "Pending";
-  const select = root.querySelector('select[name="type"]');
-  if (select) {
-    select.innerHTML = typeOptions(state.counts, state.type)
-      .map((o) => `<option value="${esc(o.value)}"${o.value === state.type ? " selected" : ""}>${esc(o.label)}</option>`)
+  const focused = document.activeElement?.name;
+  const statusRow = root.querySelector('[data-filter="status"]');
+  const typeRow = root.querySelector('[data-filter="type"]');
+  if (statusRow) {
+    statusRow.innerHTML = STATUSES.map((s) => chip("status", s.value, s.label, s.value === "pending" ? pending : 0, s.value === state.status)).join("");
+  }
+  if (typeRow) {
+    // Counts are pending ones, so they only show while looking at pending.
+    typeRow.innerHTML = typeFilters(state.counts, state.type)
+      .map((t) => chip("type", t.value, t.label, state.status === "pending" ? t.count : 0, t.value === state.type))
       .join("");
   }
+  if (focused === "status" || focused === "type") root.querySelector(`input[name="${focused}"]:checked`)?.focus();
   document.title = pending ? `(${pending}) ${TITLE}` : TITLE;
 }
 
@@ -115,7 +137,9 @@ function renderList() {
 
 async function load({ append = false } = {}) {
   const list = root.querySelector(".mod-list");
+  const refresh = root.querySelector("[data-refresh]");
   list.setAttribute("aria-busy", "true");
+  refresh?.classList.add("is-loading");
   const q = new URLSearchParams({
     status_filter: state.status,
     limit: String(PAGE_SIZE),
@@ -141,6 +165,7 @@ async function load({ append = false } = {}) {
     list.innerHTML = `<p class="fb-status is-error">${esc(err.message || "The queue didn’t load.")}</p>`;
   } finally {
     list.removeAttribute("aria-busy");
+    refresh?.classList.remove("is-loading");
   }
 }
 

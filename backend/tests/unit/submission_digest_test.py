@@ -94,7 +94,7 @@ class TestBuildDigest:
     def test_subject_and_header_count_everything_waiting(self):
         """Subject: counts only. Header: the breakdown, and what's new."""
         email = build_digest([_score(), _feedback(), self._old()], SITE, NOW)
-        assert email.subject == "Moderation: 3 waiting, 2 new"
+        assert email.subject == "MSHSFB Moderation: 3 waiting, 2 new"
         assert email.text.startswith(
             "3 submissions waiting for a decision (2 score corrections, 1 feedback). 2 new since yesterday."
         )
@@ -113,7 +113,7 @@ class TestBuildDigest:
     def test_nothing_new_is_still_a_reminder(self):
         """Only older items: the reminder says nothing is new."""
         email = build_digest([self._old()], SITE, NOW, hours=48)
-        assert email.subject == "Moderation: 1 waiting"
+        assert email.subject == "MSHSFB Moderation: 1 waiting"
         assert "Nothing new since the last 48 hours." in email.text
         assert "New (" not in email.text
 
@@ -207,7 +207,7 @@ class TestSending:
         assert server.actions == [
             "starttls",
             ("login", "bot@example.com"),
-            ("send", "a@example.com, b@example.com", "Moderation: 1 waiting, 1 new"),
+            ("send", "a@example.com, b@example.com", "MSHSFB Moderation: 1 waiting, 1 new"),
         ]
 
     def test_ssl_uses_smtp_ssl(self, smtp_env, monkeypatch):
@@ -241,7 +241,7 @@ class TestFlow:
         monkeypatch.setattr(pipeline, "load_waiting_submissions", lambda hours: ([_score(), old], NOW))
         monkeypatch.setattr(pipeline, "send_digest", sent.append)
         assert pipeline.submission_digest_flow.fn() == 2
-        assert sent[0].subject == "Moderation: 2 waiting, 1 new"
+        assert sent[0].subject == "MSHSFB Moderation: 2 waiting, 1 new"
 
     def test_only_older_items_still_remind(self, smtp_env, monkeypatch):
         """Nothing new today but something still open: the reminder still goes out."""
@@ -252,7 +252,7 @@ class TestFlow:
         monkeypatch.setattr(pipeline, "load_waiting_submissions", lambda hours: ([old], NOW))
         monkeypatch.setattr(pipeline, "send_digest", sent.append)
         assert pipeline.submission_digest_flow.fn() == 1
-        assert sent[0].subject == "Moderation: 1 waiting"
+        assert sent[0].subject == "MSHSFB Moderation: 1 waiting"
 
     def test_row_to_item_reads_new_and_age(self):
         """The query's new flag and submitted time carry through."""

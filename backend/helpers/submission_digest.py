@@ -162,7 +162,7 @@ def build_digest(
     moderate = f"{site}/moderate"
     new = [i for i in items if i.is_new]
     older = [i for i in items if not i.is_new]
-    subject = f"Moderation: {len(items)} waiting" + (f", {len(new)} new" if new else "")
+    subject = f"MSHSFB Moderation: {len(items)} waiting" + (f", {len(new)} new" if new else "")
     period = "yesterday" if hours == 24 else f"the last {hours} hours"
     head = f"{_plural(len(items), 'submission')} waiting for a decision ({_breakdown(items)})."
     head += f" {len(new)} new since {period}." if new else f" Nothing new since {period}."
