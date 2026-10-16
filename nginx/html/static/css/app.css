@@ -1339,5 +1339,23 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   display: block; padding: 10px 16px; border-top: 1px solid var(--border);
   font-size: 14px; font-weight: 600; color: var(--link);
 }
-.landing-preview--image img { display: block; width: 100%; height: auto; }
+/* The bracket page in miniature: drawn at a fixed 1200px and scaled to fit, smaller on phones. */
+.landing-preview--bracket { --bp-s: 0.45; }
+@media (max-width: 640px) { .landing-preview--bracket { --bp-s: 0.25; } }
+.landing-preview--bracket .landing-preview__frame { height: calc(735px * var(--bp-s) + 14px); }
+.landing-preview--bracket .landing-preview__page { width: 1200px; transform: scale(var(--bp-s)); }
+.bracket-preview {
+  --line: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  display: flex; align-items: flex-start; gap: 28px; margin-top: 18px;
+}
+.bracket-preview__tree { position: relative; flex: none; }
+.bracket-preview__titles { position: relative; height: 28px; }
+.bracket-preview__titles .tcol__title { position: absolute; top: 0; margin: 0; }
+.bracket-preview__cols { position: relative; }
+.bracket-preview__cols .tree__lines { top: 0; }
+.bracket-preview__slot { position: absolute; display: block; }
+.bracket-preview__sheet {
+  display: flex; flex-direction: column; flex: none; width: 380px; max-height: none;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+}
 .landing--fallback .landing-links a { margin-right: 10px; }

@@ -5,12 +5,16 @@ import xml.etree.ElementTree as ET
 from datetime import date
 
 from backend.helpers.static_pages import (
+    bracket_preview_html,
     class_body,
     initials,
     insight_lines,
     landing_body,
+    layout_results,
+    locked_seeds,
     pick_featured,
     region_body,
+    side_label,
     sitemap_xml,
 )
 from backend.prefect.share_assets_pipeline import build_share_assets
@@ -203,8 +207,159 @@ FEATURED = {
     "standings": _region(headline="D'Iberville and Raleigh chase two spots <Friday>."),
     "stamp": "2026 season · " + STAMP,
     "mode": "projected",
-    "bracket_image": "/static/og/bracket-3.png?v=20261009",
+    "bracket_html": "",
 }
+
+
+def _side(feeders, occupants):
+    """A matchups side: its feeder positions and who might fill it (team, p, locked)."""
+    return {
+        "feeders": [{"region": r, "seed": k} for r, k in feeders],
+        "occupants": [{"team": t, "p_reach": p, "p_reach_weighted": p, "is_locked": lock} for t, p, lock in occupants],
+    }
+
+
+def _game(gid, rnd, a, b, matchups=()):
+    """A /bracket/matchups game."""
+    return {
+        "id": gid,
+        "round": rnd,
+        "half": gid.split("-")[0],
+        "side_a": a,
+        "side_b": b,
+        "matchups": [
+            {"team_a": x, "team_b": y, "p_matchup": p, "p_matchup_weighted": p, "p_host_a": h, "p_host_a_weighted": h}
+            for x, y, p, h in matchups
+        ],
+    }
+
+
+BRACKET = [
+    _game(
+        "N-0-0",
+        "First Round",
+        _side([(1, 1)], [("Raleigh", 1.0, True)]),
+        _side([(2, 4)], [("Mize", 0.6, False), ("Magee", 0.4, False)]),
+        [("Raleigh", "Mize", 0.6, 1.0), ("Raleigh", "Magee", 0.4, 1.0)],
+    ),
+    _game(
+        "N-0-1",
+        "First Round",
+        _side([(2, 2)], [("Seminary", 0.7, False)]),
+        _side([(1, 3)], [("Taylorsville", 0.5, False)]),
+    ),
+    _game(
+        "N-0-2",
+        "First Round",
+        _side([(3, 1)], [("Bay Springs", 0.8, False)]),
+        _side([(4, 4)], [("Stringer", 0.3, False)]),
+    ),
+    _game(
+        "N-0-3", "First Round", _side([(4, 2)], [("Lumberton", 0.6, False)]), _side([(3, 3)], [("Collins", 0.4, False)])
+    ),
+    _game(
+        "N-1-0",
+        "Second Round",
+        _side(
+            [(1, 1), (2, 4)],
+            [("Raleigh", 0.7, False), ("Mize", 0.2, False), ("Magee", 0.1, False), ("Seminary", 0.05, False)],
+        ),
+        _side([(2, 2), (1, 3)], [("Seminary", 0.5, False), ("Taylorsville", 0.5, False)]),
+        [("Raleigh", "Seminary", 0.35, 0.5), ("Raleigh", "Taylorsville", 0.35, 1.0), ("Mize", "Seminary", 0.1, 0.0)],
+    ),
+    _game(
+        "N-1-1",
+        "Second Round",
+        _side([(3, 1), (4, 4)], [("Bay Springs", 0.6, False)]),
+        _side([(4, 2), (3, 3)], [("Lumberton", 0.5, False)]),
+    ),
+    _game(
+        "N-2-0",
+        "Quarterfinals",
+        _side([(1, 1), (2, 4), (2, 2), (1, 3)], [("Raleigh", 0.4, False)]),
+        _side([(3, 1), (4, 4), (4, 2), (3, 3)], [("Bay Springs", 0.3, False)]),
+    ),
+    _game("final", "Championship Game", _side([], []), _side([], [])),
+]
+BRACKET_CTX = {"mode": "projected", "results": {}, "seeds": {"Raleigh": (1, 1)}, "teams": {}}
+
+
+class TestBracketPreview:
+    """The bracket page in miniature: the same cards and sheet the page draws."""
+
+    def test_side_labels_match_bracket_js(self):
+        """One or two positions by name; more by region; whole regions as 'Any Seed'."""
+        assert side_label([{"region": 3, "seed": 1}]) == "Region 3 #1 Seed"
+        assert (
+            side_label([{"region": 1, "seed": 1}, {"region": 2, "seed": 4}]) == "Region 1 #1 Seed or Region 2 #4 Seed"
+        )
+        whole = [{"region": r, "seed": k} for r in (1, 2, 3) for k in (1, 2, 3, 4)]
+        assert side_label(whole) == "Regions 1–3 (Any Seed)"
+        mixed = [{"region": 1, "seed": 1}, {"region": 1, "seed": 3}, {"region": 2, "seed": 2}]
+        assert side_label(mixed) == "Region 1 (#1 Seed, #3 Seed), Region 2 (#2 Seed)"
+
+    def test_three_rounds_with_lines_and_one_open_game(self):
+        """Seven cards in three columns, connector lines, the second-round game selected with its sheet open."""
+        html = bracket_preview_html(3, BRACKET, BRACKET_CTX)
+        assert html.count('class="bracket-preview__slot"') == 7
+        assert [t for t in re.findall(r'class="tcol__title"[^>]*>([^<]+)<', html)] == [
+            "First Round",
+            "Second Round",
+            "Quarterfinals",
+        ]
+        assert html.count("M") >= 6 and '<svg class="tree__lines"' in html
+        assert html.count(" is-path") == 1 and "Second Round · North" in html
+
+    def test_cards_read_like_the_tree(self):
+        """Locked teams carry their seed and a lock; first-round slots their position; later ones '+N more'; the home side goes last."""
+        html = bracket_preview_html(3, BRACKET, BRACKET_CTX)
+        first = html.split('class="bracket-preview__slot"')[1]
+        assert "Region 1 #1 Seed" in html and 'class="lock"' in html
+        assert "Region 2 #4 Seed" in html and "+3 more" in html
+        # Raleigh hosts its first-round game whoever comes, so it's the bottom row, with "at".
+        assert first.index("Mize") < first.index("Raleigh")
+
+    def test_sheet_lists_sides_and_matchups(self):
+        """Top occupants per side with a 'Show all', then the likeliest matchups with who hosts."""
+        html = bracket_preview_html(3, BRACKET, BRACKET_CTX)
+        sheet = html[html.index('<div class="game-sheet bracket-preview__sheet">') :]
+        assert "Show all 4" in sheet and "Most likely matchups" in sheet
+        assert "50% chance Raleigh hosts" in sheet
+        assert sheet.count('<li><span class="mu__teams">') == 2
+
+    def test_results_show_scores(self):
+        """A played game shows the score, winner first in weight, not odds."""
+        layout = {
+            "halves": {
+                "N": [
+                    [
+                        {
+                            "result": {
+                                "winner": {"school": "Raleigh"},
+                                "loser": {"school": "Mize"},
+                                "winner_score": 35,
+                                "loser_score": 7,
+                            }
+                        }
+                    ]
+                ]
+            }
+        }
+        results = layout_results(layout)
+        assert results == {"N-0-0": {"winner": "Raleigh", "loser": "Mize", "winner_score": 35, "loser_score": 7}}
+        html = bracket_preview_html(3, BRACKET, {**BRACKET_CTX, "results": results})
+        assert "tgame--played" in html and ">35<" in html and "trow--result is-winner" in html
+
+    def test_too_small_a_bracket_draws_nothing(self):
+        """Fewer than two rounds in a half: no preview (the landing just links)."""
+        assert bracket_preview_html(3, BRACKET[:4], BRACKET_CTX) == ""
+
+    def test_locked_seeds_from_class_standings(self):
+        """A team certain of a seed gets that seed's label."""
+        standings = {"regions": [{"region": 6, "teams": [_team("Raleigh", 1.0, 1.0), _team("Mize", 0.4, 0.2)]}]}
+        assert locked_seeds(standings) == {"Raleigh": (6, 1)}
+
+
 COLORS = {"Seminary": {"color_variants": {"primary": {"raw": "#123456"}, "secondary": [{"raw": "#ffcc00"}]}}}
 
 
@@ -260,11 +415,14 @@ class TestLandingBody:
         assert "D&#39;Iberville and Raleigh chase two spots &lt;Friday&gt;." in preview
         assert ">1st</th>" in preview and ">Overall</th>" in preview
 
-    def test_bracket_preview_uses_the_bracket_card(self):
-        """The morning's bracket card, linking to the bracket; just a link when there's no card yet."""
-        body = landing_body(FEATURED, {})
-        assert 'href="/brackets/3a"><img src="/static/og/bracket-3.png?v=20261009"' in body
-        assert "See the 3A bracket" in landing_body({**FEATURED, "bracket_image": None}, {})
+    def test_bracket_preview_is_the_bracket_page_in_miniature(self):
+        """One link to the bracket, with the tree and an open sheet inside; just a link without data."""
+        body = landing_body({**FEATURED, "bracket_html": bracket_preview_html(3, BRACKET, BRACKET_CTX)}, {})
+        preview = body[body.index('<a class="landing-preview landing-preview--bracket"') :]
+        preview = preview[: preview.index("</a>") + 4]
+        assert 'href="/brackets/3a" aria-label="Open the Class 3A bracket"' in preview
+        assert preview.count("<a ") == 1 and "Who might play here" in preview
+        assert "See the 3A bracket" in landing_body({**FEATURED, "bracket_html": ""}, {})
 
     def test_no_data_still_renders(self):
         """Before any standings exist: the intro and tour, without examples."""

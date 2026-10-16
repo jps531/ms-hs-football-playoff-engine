@@ -109,15 +109,17 @@ def generic_helmet(shell: str, stripe: str, size: int = 24) -> str:
     )
 
 
-def _mark(school: str, team: dict | None) -> str:
+def _mark(school: str, team: dict | None, size: int = 24) -> str:
     """The team's mark as the app's ``teamMark`` draws it: its helmet image, else a helmet in its colors,
     else its initials."""
     helmet = (team or {}).get("helmet_url")
     if helmet:
-        return f'<img class="mark mark--helmet" src="{_e(helmet)}" alt="" width="24" height="24" loading="lazy">'
+        return (
+            f'<img class="mark mark--helmet" src="{_e(helmet)}" alt="" width="{size}" height="{size}" loading="lazy">'
+        )
     colors = team_colors(team)
     if colors:
-        return generic_helmet(*colors)
+        return generic_helmet(*colors, size=size)
     return f'<span class="mark mark--initials" aria-hidden="true">{_e(initials(school))}</span>'
 
 
@@ -415,15 +417,352 @@ def _region_preview(featured: dict, teams: dict[str, dict]) -> str:
     )
 
 
+# ------------------------------------------------------------------ bracket preview
+# A picture of the bracket page: the top quarter of one half of the featured class's
+# tree (three rounds of the same game cards the page draws), with one game's sheet
+# open beside it, the way it looks after tapping that game. Mirrors bracket.js and
+# the bracket view in app.js (treeRow, bracketSide, gameDetail); laid out here with
+# fixed positions, since there's no page to measure.
+
+SEED_NAMES = {1: "#1 Seed", 2: "#2 Seed", 3: "#3 Seed", 4: "#4 Seed"}
+HALF_NAMES = {"N": "North", "S": "South"}
+CARD_H, PITCH, COL_W, COL_GAP = 98, 112, 240, 36
+LOCK = (
+    '<svg class="lock" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">'
+    '<rect x="3.5" y="7" width="9" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>'
+)
+SHEET_LIST = 3  # occupants per side the preview's sheet lists
+SHEET_MATCHUPS = 2  # and matchups
+
+
+def position_name(region: int, seed: int) -> str:
+    """ "Region 3 #1 Seed", as bracket.js's ``positionName``."""
+    return f"Region {region} {SEED_NAMES.get(seed, f'#{seed} Seed')}"
+
+
+def side_label(feeders: list[dict]) -> str:
+    """Where a side comes from, as bracket.js's ``sideLabel`` says it."""
+    names = [position_name(f["region"], f["seed"]) for f in feeders]
+    if len(names) <= 2:
+        return " or ".join(names)
+    by_region: dict[int, list[int]] = {}
+    for f in feeders:
+        by_region.setdefault(f["region"], []).append(f["seed"])
+    regions = sorted(by_region)
+    full = {r: all(k in by_region[r] for k in (1, 2, 3, 4)) for r in regions}
+    if all(full.values()):
+        if len(regions) == 1:
+            return f"Region {regions[0]} (Any Seed)"
+        if len(regions) == 2:
+            return f"Region {regions[0]} or {regions[1]} (Any Seed)"
+        if all(not i or r == regions[i - 1] + 1 for i, r in enumerate(regions)):
+            return f"Regions {regions[0]}–{regions[-1]} (Any Seed)"
+        return f"Regions {', '.join(map(str, regions[:-1]))} or {regions[-1]} (Any Seed)"
+    parts = []
+    for r in regions:
+        if full[r]:
+            parts.append(f"Region {r} (Any Seed)")
+        else:
+            seeds = ", ".join(SEED_NAMES.get(k, f"#{k} Seed") for k in sorted(by_region[r]))
+            parts.append(f"Region {r} ({seeds})")
+    return ", ".join(parts)
+
+
+def _pick(obj: dict, key: str, mode: str) -> float | None:
+    """A value in the odds mode: the weighted one for Projected when there is one."""
+    weighted = obj.get(f"{key}_weighted")
+    return weighted if mode == "projected" and weighted is not None else obj.get(key)
+
+
+def occupants(side: dict, mode: str) -> list[dict]:
+    """Who might fill a side, likeliest first (bracket.js's ``occupants``)."""
+    out = [
+        {"team": o["team"], "p": _pick(o, "p_reach", mode) or 0.0, "locked": o.get("is_locked")}
+        for o in side.get("occupants") or []
+    ]
+    out = [o for o in out if o["p"] > 0 or o["locked"]]
+    return sorted(out, key=lambda o: (-o["p"], o["team"]))
+
+
+def locked_team(side: dict) -> str | None:
+    """The team certain to fill a side, or None."""
+    return next((o["team"] for o in side.get("occupants") or [] if o.get("is_locked")), None)
+
+
+def _hosting(p_host_a: float | None) -> str:
+    """Who hosts a pairing: "a", "b", "split" or "neutral" (bracket.js's ``hosting``)."""
+    if p_host_a is None:
+        return "neutral"
+    if p_host_a >= 0.995:
+        return "a"
+    if p_host_a <= 0.005:
+        return "b"
+    return "split"
+
+
+def game_matchups(game: dict, mode: str) -> list[dict]:
+    """The game's pairings in the odds mode, likeliest first (bracket.js's ``matchups``)."""
+    ms = [
+        {
+            "a": m["team_a"],
+            "b": m["team_b"],
+            "p": _pick(m, "p_matchup", mode) or 0.0,
+            "host_a": _pick(m, "p_host_a", mode),
+        }
+        for m in game.get("matchups") or []
+    ]
+    return sorted((m for m in ms if m["p"] > 0), key=lambda m: (-m["p"], m["a"], m["b"]))
+
+
+def settled_host(game: dict, mode: str) -> str | None:
+    """Which side hosts whoever gets there, when that's settled (app.js's ``settledHost``)."""
+    if game["id"] == "final":
+        return "neutral"
+    hosts = {_hosting(m["host_a"]) for m in game_matchups(game, mode)}
+    return next(iter(hosts)) if len(hosts) == 1 and "split" not in hosts else None
+
+
+def layout_results(layout: dict | None) -> dict[str, dict]:
+    """Played games' results keyed by matchup game id (bracket.js's ``layoutResults``)."""
+    out: dict[str, dict] = {}
+
+    def result(r: dict | None) -> dict | None:
+        """One result as the cards use it."""
+        if not r or not (r.get("winner") or {}).get("school"):
+            return None
+        return {
+            "winner": r["winner"]["school"],
+            "loser": (r.get("loser") or {}).get("school"),
+            "winner_score": r.get("winner_score"),
+            "loser_score": r.get("loser_score"),
+        }
+
+    for half, rounds in ((layout or {}).get("halves") or {}).items():
+        for k, games in enumerate(rounds):
+            for i, g in enumerate(games):
+                if res := result(g.get("result")):
+                    out[f"{half}-{k}-{i}"] = res
+    if final := result(((layout or {}).get("championship") or {}).get("result")):
+        out["final"] = final
+    return out
+
+
+def locked_seeds(class_standings: dict | None) -> dict[str, tuple[int, int]]:
+    """Teams sure of a seed: school -> (region, seed), for their "Region 3 #1 Seed" label."""
+    seeds = {}
+    for block in (class_standings or {}).get("regions") or []:
+        for t in block["teams"]:
+            seed = next((k for k in (1, 2, 3, 4) if (t["odds"].get(f"p{k}") or 0) >= 0.999), None)
+            if seed:
+                seeds[t["school"]] = (block["region"], seed)
+    return seeds
+
+
+def _tree_line(gutter: str, team: str | None, name: str, teams: dict, sub: str, value: str, cls: str) -> str:
+    """One row of a compact card (app.js's ``treeLine``)."""
+    mark = _mark(team, teams.get(team), size=22) if team else '<span class="mark"></span>'
+    sub_html = f'<span class="trow__sub">{sub}</span>' if sub else ""
+    return (
+        f'<span class="trow{cls}"><span class="trow__gutter">{gutter}</span>{mark}'
+        f'<span class="trow__text"><span class="trow__name">{_e(name)}</span>{sub_html}</span>'
+        f'<span class="trow__value">{value}</span></span>'
+    )
+
+
+def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: dict) -> str:
+    """One side of a compact card: the result, the locked team, or the likeliest team with its odds."""
+    side = game[f"side_{side_key}"]
+    teams = ctx["teams"]
+    if result:
+        team = locked_team(side) or (result["winner"] if side_key == "a" else result["loser"])
+        won = team == result["winner"]
+        score = result["winner_score"] if won else result["loser_score"]
+        cls = " trow--result is-winner" if won else " trow--result"
+        return _tree_line(gutter, team, team or "", teams, "", _e(score) if score is not None else "", cls)
+    locked = locked_team(side)
+    if locked:
+        seed = ctx["seeds"].get(locked)
+        label = position_name(*seed) if seed else "Clinched"
+        sub = f'{LOCK}<span class="visually-hidden">Locked in: </span>{_e(label)}'
+        return _tree_line(gutter, locked, locked, teams, sub, "", " trow--locked")
+    listed = occupants(side, ctx["mode"])
+    if not listed:
+        return _tree_line(gutter, None, "No team can get here", teams, "", "", " trow--empty")
+    first_round = len(side["feeders"]) == 1
+    f0 = side["feeders"][0]
+    sub = (
+        _e(position_name(f0["region"], f0["seed"]))
+        if first_round
+        else (f"+{len(listed) - 1} more" if len(listed) > 1 else "")
+    )
+    return _tree_line(gutter, listed[0]["team"], listed[0]["team"], teams, sub, _odds(listed[0]["p"]), "")
+
+
+def _side_order(host: str | None) -> tuple[list[str], str]:
+    """Sides top to bottom (home team last) and the word between them."""
+    return (["b", "a"] if host == "a" else ["a", "b"]), ("at" if host in ("a", "b") else "vs")
+
+
+def _tree_card(game: dict, ctx: dict, selected: bool) -> str:
+    """A compact game card, as the tree draws it; the selected one is the game whose sheet is open."""
+    result = ctx["results"].get(game["id"])
+    state = (
+        "played"
+        if result
+        else (
+            "determined"
+            if locked_team(game["side_a"]) and locked_team(game["side_b"])
+            else "partial"
+            if locked_team(game["side_a"]) or locked_team(game["side_b"])
+            else "projected"
+        )
+    )
+    order, joiner = _side_order(settled_host(game, ctx["mode"]))
+    rows = _tree_row(game, order[0], result, "", ctx) + _tree_row(game, order[1], result, joiner, ctx)
+    return f'<span class="tgame tgame--{state}{" is-path" if selected else ""}">{rows}</span>'
+
+
+def _sheet_side(game: dict, side_key: str, host: str | None, ctx: dict) -> str:
+    """One side in the open sheet: its locked team, or who might fill it (app.js's ``bracketSide``)."""
+    side = game[f"side_{side_key}"]
+    teams = ctx["teams"]
+    home = '<span class="bteam__home">Home</span>' if host == side_key else ""
+
+    def name(team: str) -> str:
+        """A team as the sheet lists it."""
+        return (
+            f'<span class="bteam__name">{_mark(team, teams.get(team))}<span class="team-name">{_e(team)}</span></span>'
+        )
+
+    locked = locked_team(side)
+    if locked:
+        seed = ctx["seeds"].get(locked)
+        label = position_name(*seed) if seed else "Clinched"
+        return (
+            f'<div class="bteam bteam--locked">{name(locked)}<span class="bteam__fact">{LOCK}'
+            f'<span class="visually-hidden">Locked in: </span>{_e(label)}</span>{home}</div>'
+        )
+    listed = occupants(side, ctx["mode"])
+    first_round = len(side["feeders"]) == 1
+    label = (
+        f'<p class="bside__label">{_e(side_label(side["feeders"])) if first_round else ""}{home}</p>'
+        if first_round or home
+        else ""
+    )
+    if not listed:
+        return f'<div class="bside">{label}<p class="bside__empty muted">No team can get here</p></div>'
+    items = "".join(f'<li class="bteam">{name(o["team"])}{_odds(o["p"])}</li>' for o in listed[:SHEET_LIST])
+    more = f'<p class="bside__more">Show all {len(listed)}</p>' if len(listed) > SHEET_LIST else ""
+    return f'<div class="bside">{label}<ul class="bside__list">{items}</ul>{more}</div>'
+
+
+def _team_label(name: str, teams: dict) -> str:
+    """A team with its mark (components.js's ``teamLabel``)."""
+    return f'<span class="team">{_mark(name, teams.get(name))}<span class="team-name">{_e(name)}</span></span>'
+
+
+def _sheet(game: dict, ctx: dict) -> str:
+    """The game sheet as it opens over the bracket: both sides, then the likeliest matchups."""
+    host = settled_host(game, ctx["mode"])
+    order, joiner = _side_order(host)
+    kicker = " · ".join(x for x in (game["round"], HALF_NAMES.get(game.get("half"))) if x)
+    rows = []
+    for m in game_matchups(game, ctx["mode"])[:SHEET_MATCHUPS]:
+        h = _hosting(m["host_a"])
+        away, home = (m["b"], m["a"]) if h == "a" else (m["a"], m["b"])
+        word = "at" if h in ("a", "b") else "vs"
+        note = (
+            "Neutral site"
+            if h == "neutral"
+            else (f"{format_pct(m['host_a'])} chance {m['a']} hosts" if h == "split" else "")
+        )
+        note_html = f'<span class="opp-list__host">{_e(note)}</span>' if note else ""
+        rows.append(
+            '<li><span class="mu__teams">'
+            f'<span class="mu__line"><span class="vs"></span>{_team_label(away, ctx["teams"])}</span>'
+            f'<span class="mu__line"><span class="vs">{word}</span>{_team_label(home, ctx["teams"])}</span>'
+            f"</span>{_odds(m['p'])}{note_html}</li>"
+        )
+    matchups = (
+        f'<h4 class="bgame__heading">Most likely matchups</h4><ol class="opp-list opp-list--matchups">{"".join(rows)}</ol>'
+        if rows
+        else ""
+    )
+    return (
+        '<div class="game-sheet bracket-preview__sheet">'
+        f'<div class="game-sheet__head"><div><p class="game-sheet__kicker">{_e(kicker)}</p>'
+        '<p class="game-sheet__title">Who might play here</p></div></div>'
+        '<div class="game-sheet__body"><div class="bgame bgame--sheet">'
+        f"{_sheet_side(game, order[0], host, ctx)}"
+        f'<div class="bgame__vs" aria-hidden="true"><span>{joiner}</span></div>'
+        f"{_sheet_side(game, order[1], host, ctx)}"
+        f'</div><div class="bgame__detail">{matchups}</div></div></div>'
+    )
+
+
+def bracket_preview_html(clazz: int, games: list[dict], ctx: dict) -> str:
+    """The bracket page in miniature: three rounds of one half's top quarter, with a game's sheet open.
+
+    *ctx* holds ``mode``, ``results``, ``seeds`` and ``teams``. Returns "" without enough games.
+    """
+    by_id = {g["id"]: g for g in games}
+    half = next((g.get("half") for g in games if g["id"] != "final"), None)
+    cols = []
+    for k in range(3):
+        col = [by_id.get(f"{half}-{k}-{i}") for i in range(4 >> k)]
+        if not all(col):
+            break
+        cols.append(col)
+    if len(cols) < 2:
+        return ""
+    centers = [[CARD_H / 2 + PITCH * i for i in range(len(cols[0]))]]
+    for k in range(1, len(cols)):
+        prev = centers[-1]
+        centers.append([(prev[2 * i] + prev[2 * i + 1]) / 2 for i in range(len(cols[k]))])
+    height = PITCH * len(cols[0]) - (PITCH - CARD_H)
+    selected = cols[1][0]["id"]
+    left = [k * (COL_W + COL_GAP) for k in range(len(cols))]
+    lines = []
+    for k in range(1, len(cols)):
+        for i in range(len(cols[k])):
+            for j in (2 * i, 2 * i + 1):
+                x1, x2 = left[k - 1] + COL_W, left[k]
+                xm = (x1 + x2) / 2
+                lines.append(f"M{x1} {centers[k - 1][j]:.1f}H{xm:g}V{centers[k][i]:.1f}H{x2}")
+    titles = "".join(
+        f'<p class="tcol__title" style="left:{left[k]}px;width:{COL_W}px">{_e(col[0]["round"])}</p>'
+        for k, col in enumerate(cols)
+    )
+    cards = "".join(
+        f'<span class="bracket-preview__slot" style="left:{left[k]}px;top:{centers[k][i] - CARD_H / 2:g}px;'
+        f'width:{COL_W}px;height:{CARD_H}px">{_tree_card(g, ctx, g["id"] == selected)}</span>'
+        for k, col in enumerate(cols)
+        for i, g in enumerate(col)
+    )
+    width = left[-1] + COL_W
+    return (
+        '<div class="bracket-preview">'
+        f'<div class="bracket-preview__tree" style="width:{width}px">'
+        f'<div class="bracket-preview__titles">{titles}</div>'
+        f'<div class="bracket-preview__cols" style="height:{height}px">'
+        f'<svg class="tree__lines" width="{width}" height="{height}" aria-hidden="true"><path d="{"".join(lines)}"/></svg>'
+        f"{cards}</div></div>"
+        f"{_sheet(by_id[selected], ctx)}"
+        "</div>"
+    )
+
+
 def _bracket_preview(featured: dict) -> str:
-    """The featured class's bracket card (drawn each morning with the share cards), linking to its bracket."""
-    clazz, image = featured["clazz"], featured.get("bracket_image")
-    if not image:
+    """The featured class's bracket page in miniature, as one link to it; just the link without data."""
+    clazz, preview = featured["clazz"], featured.get("bracket_html")
+    if not preview:
         return f'<p><a href="{bracket_path(clazz)}">See the {clazz}A bracket</a></p>'
     return (
-        f'<a class="landing-preview landing-preview--image" href="{bracket_path(clazz)}">'
-        f'<img src="{_e(image)}" width="1200" height="630" loading="lazy" '
-        f'alt="Class {clazz}A playoff bracket preview: the likeliest team in each spot">'
+        f'<a class="landing-preview landing-preview--bracket" href="{bracket_path(clazz)}" '
+        f'aria-label="Open the Class {clazz}A bracket">'
+        '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
+        f'<p class="title">Class {clazz}A Bracket</p>{_provenance(featured["stamp"])}{preview}'
+        "</div></div>"
         f'<span class="landing-preview__label">Open the {clazz}A bracket</span></a>'
     )
 
@@ -445,7 +784,7 @@ def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
     """The front page: who we are and how it works on the left, a tour of the site on the right, with the
     most open race (``featured``) as the live example throughout.
 
-    *featured* is ``{"clazz", "card", "standings", "stamp", "mode", "bracket_image"}`` or None.
+    *featured* is ``{"clazz", "card", "standings", "stamp", "mode", "bracket_html"}`` or None.
     The app shows this same file at "/", so there is one renderer and nothing changes when it loads.
     """
     intro = (
