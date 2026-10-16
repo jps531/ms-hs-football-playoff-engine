@@ -167,8 +167,8 @@ button { font: inherit; color: inherit; }
   height: var(--header-h);
 }
 .site-header__home {
-  display: inline-flex; align-items: center; gap: 10px;
-  min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-width: 44px; min-height: 44px;
   color: var(--text-primary); text-decoration: none;
   font-size: 16px; line-height: 20px;
 }
@@ -218,6 +218,14 @@ button { font: inherit; color: inherit; }
   .site-header { gap: 10px; }
   .site-header__home span { display: none; }
 }
+/* Very narrow (a phone zoomed to 200%): the search gets a row of its own, and
+   the header scrolls away rather than holding a third of the screen. */
+@media (max-width: 20em) {
+  .site-header-bar { position: static; }
+  .site-header { flex-wrap: wrap; height: auto; padding-block: 8px; row-gap: 8px; }
+  .team-search { order: 3; flex-basis: 100%; max-width: none; }
+  .context-bar { top: 0; }
+}
 
 /* Light / System / Dark: a segmented control matching the class scrubber.
    Each choice is a 44px touch target; the selected one is filled. */
@@ -231,7 +239,7 @@ button { font: inherit; color: inherit; }
 }
 .theme-toggle__item {
   display: grid; place-items: center;
-  width: 44px; height: 38px;
+  width: 44px; height: 44px;
   padding: 0; border: 0; border-radius: 9px;
   background: transparent;
   color: var(--text-secondary);
@@ -245,7 +253,6 @@ button { font: inherit; color: inherit; }
 }
 .theme-toggle__item:focus-visible { outline-offset: -2px; }
 @media (max-width: 30em) {
-  .theme-toggle__item { width: 38px; }
   .theme-toggle__item svg { width: 18px; height: 18px; }
 }
 
@@ -368,7 +375,7 @@ button { font: inherit; color: inherit; }
 
 .info-button {
   display: inline-grid; place-items: center;
-  width: 32px; height: 44px; margin-left: -4px;
+  width: 44px; height: 44px; margin-inline: -10px -6px;
   padding: 0; border: 0; background: none; cursor: pointer;
   color: var(--text-secondary);
 }
@@ -557,7 +564,7 @@ button { font: inherit; color: inherit; }
 .standings .col-pos { width: 2.4em; padding-left: 12px; text-align: left; color: var(--text-secondary); }
 .standings .col-team { text-align: left; width: 100%; }
 .standings tbody th { font-weight: 400; }
-.standings .col-odds { width: 4.4em; padding-inline: 3px; }
+.standings .col-odds { width: 4.4em; padding-inline: 2px; } /* 3px pushed the table 1px past a 375px phone */
 .standings .col-rec { white-space: nowrap; }
 /* Records and odds sit centered under centered headers. */
 .standings .col-rec, .standings .col-odds { text-align: center; }
@@ -819,7 +826,7 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   border-radius: 10px;
 }
 .half-control__item {
-  min-height: 40px; padding: 0 14px;
+  min-height: 44px; padding: 0 14px;
   border: 0; border-radius: 7px;
   background: transparent;
   color: var(--text-secondary);
@@ -913,7 +920,7 @@ body.is-wide .page, body.is-wide .site-footer { max-width: 92rem; }
   .round-tabs::-webkit-scrollbar { display: none; }
   .round-tabs__item {
     flex: none;
-    min-height: 40px; padding: 0 12px;
+    min-width: 44px; min-height: 44px; padding: 0 12px;
     border: 1px solid var(--border); border-radius: 999px;
     background: transparent;
     color: var(--text-secondary);
@@ -932,6 +939,15 @@ body.is-wide .page, body.is-wide .site-footer { max-width: 92rem; }
   .tree::-webkit-scrollbar { display: none; }
   .tree__cols { gap: 24px; }
   .tcol { flex: none; width: calc(88vw - 40px); max-width: none; scroll-snap-align: start; }
+}
+/* Very narrow (a phone zoomed to 200%): a full-width round, and each row
+   gives the name the width, odds underneath; the helmet (decoration) goes. */
+@media (max-width: 20em) {
+  .tcol { width: calc(100vw - 40px); }
+  .trow { grid-template-columns: 18px minmax(0, 1fr); column-gap: 6px; }
+  .trow .mark { display: none; }
+  .trow__sub { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } /* still read out */
+  .trow__value { grid-column: 2; justify-self: start; line-height: 1; }
 }
 
 /* The game sheet: a bottom sheet on phones, a centered dialog on wide screens. */
@@ -974,6 +990,25 @@ body.is-wide .page, body.is-wide .site-footer { max-width: 92rem; }
   }
   .game-sheet__body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
 }
+/* Small or zoomed-in screens: the whole sheet scrolls, so its heading doesn't
+   leave the body a sliver. */
+@media (max-width: 20em), (max-height: 32em) {
+  .game-sheet { overflow-y: auto; overscroll-behavior: contain; }
+  .game-sheet[open] { display: block; }
+  .game-sheet__body { overflow: visible; }
+}
+/* Very narrow: matchups and opponents put their odds under the names. */
+@media (max-width: 20em) {
+  ol.opp-list li { grid-template-columns: minmax(0, 1fr); }
+  ol.opp-list li > .odds { justify-self: end; }
+}
+/* Names wrap in the sheet rather than cut off: it's where the full name is.
+   When even one word won't fit beside the odds (zoomed in), the odds drop
+   below the name. */
+dialog.game-sheet .team-name { white-space: normal; overflow-wrap: break-word; }
+dialog.game-sheet .bteam { flex-wrap: wrap; }
+dialog.game-sheet .bteam__name { flex: 1 1 0; min-width: min-content; }
+dialog.game-sheet .bteam .odds { margin-left: auto; }
 @media (prefers-reduced-motion: no-preference) {
   .game-sheet[open] { animation: sheet-in 160ms ease-out; }
   @keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } }
@@ -999,11 +1034,11 @@ body.is-wide .page, body.is-wide .site-footer { max-width: 92rem; }
 
 .bteam {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  min-height: 36px; min-width: 0;
+  min-height: 44px; min-width: 0;
 }
 .bteam__name {
   display: inline-flex; align-items: center; gap: 8px;
-  min-width: 0; min-height: 36px;
+  min-width: 0; min-height: 44px;
   padding: 0; border: 0; background: none;
   color: var(--text-primary);
   font: inherit; text-align: left;
@@ -1041,7 +1076,7 @@ body.is-wide .page, body.is-wide .site-footer { max-width: 92rem; }
 .bside__list { list-style: none; margin: 0; padding: 0; }
 .bside__empty { font-size: 14px; }
 .bside__more {
-  min-height: 36px; padding: 0;
+  min-height: 44px; padding: 0;
   border: 0; background: none;
   color: var(--link); font: inherit; font-size: 14px;
   cursor: pointer;
@@ -1146,6 +1181,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 }
 .link-button:hover { color: var(--link-hover); }
 .report-line { margin-top: 16px; font-size: 14px; line-height: 20px; }
+.report-line .link-button { min-height: 44px; text-align: left; } /* a line of its own, so a full-size target */
 
 .game-card__report {
   justify-self: end;
