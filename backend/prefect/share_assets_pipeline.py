@@ -140,6 +140,7 @@ def build_share_assets(
     teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
     sitemap: list[tuple[str, date | None]] = [("/", today), ("/methodology", None)]
     region_payloads: dict[tuple[int, int], dict] = {}
+    bracket_versions: dict[int, str] = {}
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
@@ -170,13 +171,13 @@ def build_share_assets(
         written["brackets"] += bracket["brackets"]
         written["bracket_teams"] += bracket["bracket_teams"]
         if bracket["brackets"]:
+            bracket_versions[clazz] = version
             sitemap.append((bracket_path(clazz), as_of))
 
         for region in sorted(r["region"] for r in standings["regions"]):
             payload = fetch(f"/standings/{clazz}/{region}?season={season}")
             if not payload or not payload.get("teams"):
                 continue
-            region_payloads[(clazz, region)] = payload
             r_mode = odds_mode(payload["teams"])
             r_as_of = date.fromisoformat(payload["as_of_date"]) if payload.get("as_of_date") else as_of
             r_stamp = provenance(r_as_of, dates, r_mode, today)
@@ -196,18 +197,26 @@ def build_share_assets(
             )
             games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
             body = region_body(clazz, region, payload, f"{season} season · {r_stamp}", r_mode, teams, games)
+            region_payloads[(clazz, region)] = {
+                "standings": payload,
+                "stamp": f"{season} season · {r_stamp}",
+                "mode": r_mode,
+            }
             _write_text(out_dir / "body" / f"{name}.html", body)
             sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
             written["teams"] += _write_team_assets(out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of)
-    # The front page, with the most open race featured (the same pick the app makes).
+    # The front page, with the most open race as its live example. The app shows this same file at "/".
     summary = fetch(f"/standings/summary?season={season}")
     featured = pick_featured(summary) if summary else None
-    if featured:
-        featured["standings"] = region_payloads.get((featured["clazz"], featured["card"]["region"]))
-        if not featured["standings"]:
-            featured = None
-    _write_text(out_dir / "body" / "site.html", landing_body(featured))
+    region_data = region_payloads.get((featured["clazz"], featured["card"]["region"])) if featured else None
+    if featured and region_data:
+        featured.update(region_data)
+        bracket = bracket_versions.get(featured["clazz"])
+        featured["bracket_image"] = f"/static/og/bracket-{featured['clazz']}.png?v={bracket}" if bracket else None
+    else:
+        featured = None
+    _write_text(out_dir / "body" / "site.html", landing_body(featured, teams))
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     return written

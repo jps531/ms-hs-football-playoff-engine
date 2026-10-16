@@ -4,5 +4,6 @@ Disallow: /prefect/
 Disallow: /feedback
 Disallow: /docs
 Disallow: /redoc
+Disallow: /share/
 
 Sitemap: https://mshsfootball.com/sitemap.xml

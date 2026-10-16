@@ -14,7 +14,7 @@ import {
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard,
 } from "./components.js";
 import { matchTeams } from "./search.js";
-import { landingHtml, pickFeatured } from "./landing.js";
+import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
 import {
@@ -244,13 +244,13 @@ async function render() {
     const ctx = { ...route, team: route.teamName, season, seasons: all, currentSeason };
     renderScrubber(route.page === "landing" ? null : route.clazz); // again, now that the picked team is known (the view links carry it)
     loadTeamSearch(season);
-    const html = route.page === "landing" ? await landingView(ctx)
+    const html = route.page === "landing" ? await landingView()
       : route.page === "bracket" ? await bracketView(ctx)
       : route.region ? await regionView(ctx) : await classView(ctx);
     if (token !== renderToken) return;
     // Re-rendering the same bracket (a team picked, odds changed) keeps each round strip where it was.
     const strip = route.page === "bracket" ? app.querySelector(".tree")?.scrollLeft ?? 0 : 0;
-    app.innerHTML = html;
+    if (html !== null) app.innerHTML = html;
     document.body.classList.toggle("is-wide", route.page === "bracket");
     if (route.page === "bracket") {
       const tree = app.querySelector(".tree");
@@ -567,31 +567,24 @@ function oddsMode(ctx) {
 }
 
 // ------------------------------------------------------------ front page
+// The pipeline draws it (landing.js says how it reaches the page); the app
+// only shows it.
 
-// "Find your team" on the front page: focus the header's search box (without
-// JavaScript the link just jumps to it).
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("[data-focus-search]")) return;
-  e.preventDefault();
-  teamSearch?.focus({ preventScroll: false });
-});
-// What the site does and a live race to show it (landing.js): the same page
-// the static copy nginx serves, so nothing changes when the app takes over.
-
-async function landingView(ctx) {
-  // The featured race is a nicety: if it can't load, the page still renders without it.
-  let featured = null;
-  try {
-    const summary = await getJSON(`/standings/summary?season=${ctx.season}`);
-    featured = pickFeatured(summary);
-    if (featured) {
-      featured.standings = await getJSON(`/standings/${featured.clazz}/${featured.card.region}?season=${ctx.season}`);
-    }
-  } catch {
-    featured = null;
-  }
+/**
+ * The front page's HTML, or null when it's already on screen (a first visit:
+ * nginx put the pipeline's copy there), so it's left exactly as it is.
+ */
+async function landingView() {
   nextContext = null;
-  return landingHtml(featured);
+  if (app.querySelector(":scope > .landing")) return null;
+  try {
+    const res = await fetch(FRONT_PAGE_URL, { headers: { Accept: "text/html" } });
+    const html = res.ok ? await res.text() : null;
+    if (isFrontPage(html)) return html;
+  } catch {
+    /* fall through to the fallback */
+  }
+  return LANDING_FALLBACK;
 }
 
 // ------------------------------------------------------ class view (entry)

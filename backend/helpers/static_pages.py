@@ -21,14 +21,13 @@ from collections.abc import Iterable
 from datetime import date
 from xml.sax.saxutils import escape as xml_escape
 
+from backend.helpers.color_contrast import contrast_ratio
 from backend.helpers.share_cards import (
     display_order,
     format_pct,
     mode_odds,
     odds_bucket,
-    odds_mode,
     record_text,
-    short_date,
     slugify,
     standing_positions,
     team_status,
@@ -68,21 +67,80 @@ def initials(name: str) -> str:
     return "".join(w[0].upper() for w in (significant or words)[:2])
 
 
+_HEX = re.compile(r"^#?[0-9a-fA-F]{6}$")
+
+# The badge icons (ICONS in components.js).
+BADGE_ICONS = {
+    "clinched": '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+    "eliminated": '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+    "coinflip": '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">'
+    '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.2"/></svg>',
+}
+BADGE_ICONS["champion"] = BADGE_ICONS["clinched"]
+
+
+def team_colors(team: dict | None) -> tuple[str, str] | None:
+    """(shell, stripe) for a team's generic helmet, as format.js's ``teamRawColors``; None without a primary."""
+    variants = (team or {}).get("color_variants") or {}
+    shell = (variants.get("primary") or {}).get("raw")
+    if not shell or not _HEX.match(shell):
+        return None
+    secondary = ((variants.get("secondary") or [{}])[0] or {}).get("raw") or str(
+        (team or {}).get("secondary_color_hex") or ""
+    ).split(",")[0].strip()
+    return shell.upper(), (secondary.upper() if _HEX.match(secondary or "") else "#FFFFFF")
+
+
+def generic_helmet(shell: str, stripe: str, size: int = 24) -> str:
+    """A helmet drawn in the team's colors, as components.js's ``genericHelmet``."""
+    pale = " mark--pale" if contrast_ratio(shell if shell.startswith("#") else f"#{shell}", "#FFFFFF") < 1.6 else ""
+    return (
+        f'<svg class="mark mark--generic{pale}" viewBox="0 0 32 28" width="{size}" height="{size}" aria-hidden="true">'
+        '<g fill="none" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M20 13H30.2V22.4H21.6M19.6 17.8H30.2M25 13V22.4" stroke="#8C8C8C" stroke-width="1.7"/>'
+        '<path class="helmet__shell" d="M2.5 16.2C2.5 8.2 8.8 2.6 16.4 2.6C22.4 2.6 26.6 6.2 27.8 11.3L20.2 12.2'
+        'L19.2 19.4L21.4 22.9C18.8 25.2 14.6 26 10.6 25.2C5.6 24.2 2.5 20.9 2.5 16.2Z" '
+        f'fill="{_e(shell)}" stroke-width="1.5" paint-order="stroke"/>'
+        f'<path d="M5.2 11.8C7.2 7.4 11 5 15.6 4.6" stroke="{_e(stripe)}" stroke-width="1.8"/>'
+        '<circle cx="12.4" cy="16.4" r="1.6" fill="#8C8C8C"/>'
+        "</g></svg>"
+    )
+
+
 def _mark(school: str, team: dict | None) -> str:
-    """The team's helmet image when it has one, else its initials, as the app's ``teamMark`` falls back to."""
+    """The team's mark as the app's ``teamMark`` draws it: its helmet image, else a helmet in its colors,
+    else its initials."""
     helmet = (team or {}).get("helmet_url")
     if helmet:
         return f'<img class="mark mark--helmet" src="{_e(helmet)}" alt="" width="24" height="24" loading="lazy">'
+    colors = team_colors(team)
+    if colors:
+        return generic_helmet(*colors)
     return f'<span class="mark mark--initials" aria-hidden="true">{_e(initials(school))}</span>'
 
 
-def _badge(team: dict, clazz: int) -> str:
-    """The team's status badge (Clinched #1, Eliminated, …), text only."""
+def region_complete(teams: list[dict]) -> bool:
+    """Every team has played every region game (standings.js's ``regionComplete``)."""
+    n = len(teams)
+    return n > 1 and all(
+        t["record"]["region_wins"] + t["record"]["region_losses"] + (t["record"].get("region_ties") or 0) >= n - 1
+        for t in teams
+    )
+
+
+def _badge(team: dict, clazz: int, complete: bool = False) -> str:
+    """The team's status badges as components.js's ``statusBadges`` draws them (Clinched #1, Eliminated, …)."""
+    badges = []
     status = team_status(team, clazz)
-    if not status:
-        return ""
-    kind, label = status
-    return f'<span class="badge badge--{_e(kind)}">{_e(label)}</span>'
+    if status:
+        badges.append(status)
+    if complete and team.get("coin_flip_needed"):
+        badges.append(("coinflip", "Coin flip"))
+    return "".join(
+        f'<span class="badge badge--{_e(kind)}">{BADGE_ICONS.get(kind, "")}{_e(label)}</span>' for kind, label in badges
+    )
 
 
 def _odds(p: float | None) -> str:
@@ -173,15 +231,20 @@ def _row_start(team: dict, pos: int) -> str:
     return f'<tr class="{cls}"><td class="col-pos">{pos}</td>'
 
 
-def _team_cell(team: dict, page: str, clazz: int, teams: dict[str, dict]) -> str:
-    """The team's row header: mark, name and status badge, linking to its view of the region page."""
+def _team_cell(team: dict, page: str, clazz: int, teams: dict[str, dict], complete: bool, link: bool = True) -> str:
+    """The team's row header: mark, name and status badges, linking to its view of the region page.
+
+    ``link=False`` drops the link, for a preview that is itself one link.
+    """
     name = team["school"]
-    href = _e(f"{page}?team={slugify(name)}")
-    label = f'<span class="team-name">{_e(name)}</span>{_badge(team, clazz)}'
-    return (
-        f'<th scope="row" class="col-team"><a class="team-link" href="{href}">'
-        f'{_mark(name, teams.get(name))}<span class="row-toggle__label">{label}</span></a></th>'
+    inner = (
+        f'{_mark(name, teams.get(name))}<span class="row-toggle__label">'
+        f'<span class="team-name">{_e(name)}</span>{_badge(team, clazz, complete)}</span>'
     )
+    if not link:
+        return f'<th scope="row" class="col-team"><span class="team-link">{inner}</span></th>'
+    href = _e(f"{page}?team={slugify(name)}")
+    return f'<th scope="row" class="col-team"><a class="team-link" href="{href}">{inner}</a></th>'
 
 
 def _region_record(team: dict) -> str:
@@ -204,6 +267,32 @@ def _list_section(title: str, items: list[str]) -> str:
     return f'<section class="section"><h2 class="section-title">{_e(title)}</h2><ul class="static-list">{lis}</ul></section>'
 
 
+def region_table(clazz: int, region: int, payload: dict, mode: str, teams: dict[str, dict], link: bool = True) -> str:
+    """The region page's standings table: position, team, records, odds of each seed and the playoffs."""
+    ordered = display_order(payload["teams"])
+    positions = standing_positions(ordered)
+    page = region_path(clazz, region)
+    complete = not payload.get("remaining_games")
+    rows = []
+    for pos, team in zip(positions, ordered, strict=True):
+        odds = "".join(f'<td class="col-odds">{_odds(mode_odds(team, key, mode))}</td>' for key, _ in ODDS_COLUMNS)
+        rows.append(
+            f"{_row_start(team, pos)}{_team_cell(team, page, clazz, teams, complete, link)}"
+            f'<td class="col-rec">{_region_record(team)}</td>'
+            f'<td class="col-rec col-overall">{_overall_record(team)}</td>{odds}</tr>'
+        )
+    heads = "".join(f'<th scope="col" class="col-odds">{label}</th>' for _, label in ODDS_COLUMNS)
+    return (
+        '<table class="standings">'
+        f'<caption class="visually-hidden">Region {region}-{clazz}A standings and {MODE_NAMES[mode]} odds of '
+        "finishing in each playoff position.</caption>"
+        '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
+        '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
+        f'<th scope="col" class="col-rec col-overall">Overall</th>{heads}</tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
 def region_body(
     clazz: int,
     region: int,
@@ -217,27 +306,6 @@ def region_body(
 
     *games* are the region's ``/games`` rows, for the remaining games' dates and sites.
     """
-    ordered = display_order(payload["teams"])
-    positions = standing_positions(ordered)
-    page = region_path(clazz, region)
-    rows = []
-    for pos, team in zip(positions, ordered, strict=True):
-        odds = "".join(f'<td class="col-odds">{_odds(mode_odds(team, key, mode))}</td>' for key, _ in ODDS_COLUMNS)
-        rows.append(
-            f"{_row_start(team, pos)}{_team_cell(team, page, clazz, teams)}"
-            f'<td class="col-rec">{_region_record(team)}</td>'
-            f'<td class="col-rec col-overall">{_overall_record(team)}</td>{odds}</tr>'
-        )
-    heads = "".join(f'<th scope="col" class="col-odds">{label}</th>' for _, label in ODDS_COLUMNS)
-    table = (
-        '<table class="standings">'
-        f'<caption class="visually-hidden">Region {region}-{clazz}A standings and {MODE_NAMES[mode]} odds of '
-        "finishing in each playoff position.</caption>"
-        '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
-        '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
-        f'<th scope="col" class="col-rec col-overall">Overall</th>{heads}</tr></thead>'
-        f"<tbody>{''.join(rows)}</tbody></table>"
-    )
     schedule = _list_section("Remaining games", remaining_matchups(payload.get("remaining_games") or [], games))
     needs = _list_section("What has to happen", insight_lines(payload.get("key_insights")))
     headline = payload.get("headline")
@@ -249,147 +317,216 @@ def region_body(
         f'<a href="{bracket_path(clazz)}">{clazz}A Bracket</a></p>'
         f'<h1 class="title">Region {region}-{clazz}A</h1>{headline_html}{_provenance(stamp)}'
         "</header>"
-        f"{table}{schedule}{needs}"
+        f"{region_table(clazz, region, payload, mode, teams)}{schedule}{needs}"
         "</div>\n"
+    )
+
+
+def class_region_block(clazz: int, block: dict, mode: str, teams: dict[str, dict], heading: str = "h2") -> str:
+    """One region as the class page shows it: its title and a condensed table (position, team, region
+    record, odds of 1st and of the playoffs)."""
+    region = block["region"]
+    ordered = display_order(block["teams"])
+    positions = standing_positions(ordered)
+    page = region_path(clazz, region)
+    complete = region_complete(ordered)
+    rows = "".join(
+        f"{_row_start(t, pos)}{_team_cell(t, page, clazz, teams, complete)}"
+        f'<td class="col-rec">{_region_record(t)}</td>'
+        f'<td class="col-odds">{_odds(mode_odds(t, "p1", mode))}</td>'
+        f'<td class="col-odds">{_odds(mode_odds(t, "p_playoffs", mode))}</td></tr>'
+        for pos, t in zip(positions, ordered, strict=True)
+    )
+    return (
+        f'<section class="region-block" aria-labelledby="region-{region}">'
+        f'<{heading} class="region-block__title" id="region-{region}"><a href="{page}">Region {region}</a></{heading}>'
+        '<table class="standings standings--compact">'
+        f'<caption class="visually-hidden">Region {region}-{clazz}A standings</caption>'
+        '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
+        '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
+        '<th scope="col" class="col-odds">1st</th><th scope="col" class="col-odds">Playoffs</th></tr></thead>'
+        f"<tbody>{rows}</tbody></table></section>"
     )
 
 
 def class_body(clazz: int, standings: dict, stamp: str, mode: str, teams: dict[str, dict]) -> str:
     """A class page's content: every region's condensed table, each linking to its region page."""
-    blocks = []
-    for block in sorted(standings["regions"], key=lambda b: b["region"]):
-        region = block["region"]
-        ordered = display_order(block["teams"])
-        positions = standing_positions(ordered)
-        page = region_path(clazz, region)
-        rows = "".join(
-            f"{_row_start(t, pos)}{_team_cell(t, page, clazz, teams)}"
-            f'<td class="col-rec">{_region_record(t)}</td>'
-            f'<td class="col-odds">{_odds(mode_odds(t, "p1", mode))}</td>'
-            f'<td class="col-odds">{_odds(mode_odds(t, "p_playoffs", mode))}</td></tr>'
-            for pos, t in zip(positions, ordered, strict=True)
-        )
-        blocks.append(
-            f'<section class="region-block" aria-labelledby="region-{region}">'
-            f'<h2 class="region-block__title" id="region-{region}"><a href="{page}">Region {region}</a></h2>'
-            '<table class="standings standings--compact">'
-            f'<caption class="visually-hidden">Region {region}-{clazz}A standings</caption>'
-            '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
-            '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
-            '<th scope="col" class="col-odds">1st</th><th scope="col" class="col-odds">Playoffs</th></tr></thead>'
-            f"<tbody>{rows}</tbody></table></section>"
-        )
+    blocks = "".join(
+        class_region_block(clazz, b, mode, teams) for b in sorted(standings["regions"], key=lambda b: b["region"])
+    )
     return (
         '<div class="page entry-head static-page">'
         f'<h1 class="title">Class {clazz}A</h1>{_provenance(stamp)}</div>'
-        f'<div class="page region-blocks static-page">{"".join(blocks)}</div>\n'
+        f'<div class="page region-blocks static-page">{blocks}</div>\n'
     )
-
-
-CLASSES = range(1, 8)
 
 
 def pick_featured(summary: dict) -> dict | None:
-    """The race to feature on the front page, as ``pickFeatured`` in landing.js picks it.
+    """The region the front page uses for its examples: the most open race.
 
-    The region with the most teams still undecided, then the more volatile race, then the
-    higher class, then the lower region number. ``{"clazz", "card"}``, or None when no region
-    has an undecided team (the regular season is over).
+    Most teams still undecided, then the more volatile race, then the higher class, then the
+    lower region number. ``{"clazz", "card"}``; None only when there are no regions at all.
     """
     cards = [{"clazz": c["class_"], "card": card} for c in summary.get("classes") or [] for card in c["regions"]]
-    open_races = [f for f in cards if f["card"]["teams_alive"] > 0]
-    open_races.sort(
-        key=lambda f: (-f["card"]["teams_alive"], -f["card"]["volatility"], -f["clazz"], f["card"]["region"])
-    )
-    return open_races[0] if open_races else None
+    cards.sort(key=lambda f: (-f["card"]["teams_alive"], -f["card"]["volatility"], -f["clazz"], f["card"]["region"]))
+    return cards[0] if cards else None
 
 
-def _chips(path: str, label: str) -> str:
-    """Links to 1A-7A: *path* and *label* are formats taking the class number."""
-    return "".join(
-        f'<a class="landing-chip" href="{path.format(c)}" aria-label="{label.format(c)}">{c}A</a>' for c in CLASSES
-    )
+def _bullets(items: Iterable[str]) -> str:
+    """A plain bulleted list."""
+    return f'<ul class="landing-list">{"".join(f"<li>{_e(i)}</li>" for i in items)}</ul>'
 
 
-def _featured(clazz: int, card: dict, standings: dict) -> str:
-    """The featured race's card: headline, a compact table with playoff odds, counts and a link."""
-    page = region_path(clazz, card["region"])
-    mode = odds_mode(standings["teams"])
-    ordered = display_order(standings["teams"])
-    positions = standing_positions(ordered)
-    rows = "".join(
-        f'<tr class="{"is-eliminated" if t.get("eliminated") else ""}"><td class="col-pos">{pos}</td>'
-        f'<th scope="row" class="col-team"><span class="team-name">{_e(t["school"])}</span></th>'
-        f'<td class="col-rec">{_region_record(t)}</td>'
-        f'<td class="col-odds">{_odds(mode_odds(t, "p_playoffs", mode))}</td></tr>'
-        for pos, t in zip(positions, ordered, strict=True)
-    )
-    mode_name = "Projected" if mode == "projected" else "Toss-up"
-    headline = standings.get("headline")
-    headline_html = f'<p class="landing-featured__headline">{_e(headline)}</p>' if headline else ""
-    updated = short_date(date.fromisoformat(standings["as_of_date"]))
-    name = f"Region {card['region']}-{clazz}A"
+def _section(key: str, title: str, body: str, level: str = "h2") -> str:
+    """A front-page section with an uppercase heading."""
+    cls = "landing-heading" if level == "h2" else "landing-subheading"
     return (
-        '<section class="landing-featured" aria-labelledby="featured-title">'
-        '<p class="landing-kicker">Race to watch</p>'
-        f'<h2 class="landing-featured__title" id="featured-title"><a href="{page}">{name}</a></h2>'
-        f"{headline_html}"
-        '<table class="standings standings--compact landing-table">'
-        f'<caption class="visually-hidden">{name} standings and {mode_name.lower()} odds of making the playoffs</caption>'
-        '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
-        '<th scope="col" class="col-team">Team</th>'
-        '<th scope="col" class="col-rec">Region</th><th scope="col" class="col-odds">Playoffs</th></tr></thead>'
-        f"<tbody>{rows}</tbody></table>"
-        f'<p class="landing-featured__meta muted">{card["num_clinched"]} clinched · {card["teams_alive"]} undecided · '
-        f"{card['num_eliminated']} out · {mode_name} odds · Updated {_e(updated)}</p>"
-        f'<p><a class="landing-button" href="{page}">See what has to happen</a></p>'
-        "</section>"
+        f'<section class="landing-section" aria-labelledby="landing-{key}">'
+        f'<{level} class="{cls}" id="landing-{key}">{_e(title)}</{level}>{body}</section>'
     )
 
 
-def landing_body(featured: dict | None) -> str:
-    """The front page: the same markup as ``landingHtml`` in landing.js, so the static copy and the
-    app's page are identical. *featured* is ``{"clazz", "card", "standings"}`` or None."""
-    if featured:
-        example = region_path(featured["clazz"], featured["card"]["region"])
-        example_name = f"Region {featured['card']['region']}-{featured['clazz']}A"
-        featured_html = _featured(featured["clazz"], featured["card"], featured["standings"])
-    else:
-        example, example_name, featured_html = "/standings/1a", "Class 1A", ""
-    see = f'<p><a href="{example}">See {example_name}</a></p>'
+def _class_example(featured: dict, teams: dict[str, dict]) -> str:
+    """The featured region as the class page shows it."""
+    clazz, payload = featured["clazz"], featured["standings"]
+    block = {"region": featured["card"]["region"], "teams": payload["teams"]}
     return (
-        '<div class="page landing">'
-        '<section class="landing-hero">'
-        '<h1 class="title landing-hero__title">Every Mississippi high school football playoff race, '
-        "worked out every possible way</h1>"
-        '<p class="landing-hero__lead">Standings, playoff odds, and exactly what each team needs to happen, '
-        "for every MHSAA region. Updated every morning.</p>"
-        '<div class="landing-hero__actions">'
-        '<a class="landing-button" href="#team-search" data-focus-search>Find your team</a>'
-        '<nav class="landing-classes" aria-label="Standings by class">'
-        '<span class="landing-classes__label">Standings by class</span>'
-        f"{_chips('/standings/{}a', 'Class {}A standings')}</nav>"
-        "</div></section>"
-        f"{featured_html}"
-        '<section class="landing-cards" aria-label="What’s here">'
-        '<article class="landing-card"><h2 class="landing-card__title">Standings and odds</h2>'
-        "<p>Every region’s standings, with each team’s chance of finishing first through fourth and of making "
-        "the playoffs. Projected odds weigh each game by team strength; Toss-up odds treat every game as a "
-        f"coin flip.</p>{see}</article>"
-        '<article class="landing-card"><h2 class="landing-card__title">What has to happen</h2>'
-        "<p>The exact results each team needs, checked against every MHSAA tiebreaker, down to the margin of "
-        f"victory when it matters: “clinches the No. 2 seed with a win, no help needed.”</p>{see}</article>"
-        '<article class="landing-card"><h2 class="landing-card__title">Playoff brackets</h2>'
-        "<p>Each class’s bracket, filled in with who is likely to land in each spot, who each team might play, "
-        "and where.</p>"
-        '<nav class="landing-classes" aria-label="Brackets by class">'
-        f"{_chips('/brackets/{}a', 'Class {}A bracket')}</nav></article>"
-        "</section>"
-        '<p class="landing-sources">Scores from <a href="https://www.ahsfhs.org/">AHSFHS</a>. '
-        "Seeding follows the MHSAA’s tiebreaker rules. Updated daily at 9:15 AM Central. "
-        '<a href="/methodology">How it works</a></p>'
-        "</div>\n"
+        '<figure class="landing-example">'
+        f"{class_region_block(clazz, block, featured['mode'], teams, heading='h3')}"
+        f'<figcaption class="landing-example__caption muted">Class {clazz}A, {_e(featured["stamp"])}. '
+        f'<a href="{class_path(clazz)}">See every {clazz}A region</a></figcaption>'
+        "</figure>"
     )
+
+
+def _region_preview(featured: dict, teams: dict[str, dict]) -> str:
+    """A small picture of the featured region's page, as one link to it (so nothing inside is a link)."""
+    clazz, region, payload = featured["clazz"], featured["card"]["region"], featured["standings"]
+    name = f"Region {region}-{clazz}A"
+    headline = payload.get("headline")
+    headline_html = f'<p class="headline">{_e(headline)}</p>' if headline else ""
+    return (
+        f'<a class="landing-preview" href="{region_path(clazz, region)}" aria-label="Open the {name} page">'
+        '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
+        f'<p class="title">{name}</p>{headline_html}{_provenance(featured["stamp"])}'
+        f"{region_table(clazz, region, payload, featured['mode'], teams, link=False)}"
+        "</div></div>"
+        f'<span class="landing-preview__label">Open {name}</span></a>'
+    )
+
+
+def _bracket_preview(featured: dict) -> str:
+    """The featured class's bracket card (drawn each morning with the share cards), linking to its bracket."""
+    clazz, image = featured["clazz"], featured.get("bracket_image")
+    if not image:
+        return f'<p><a href="{bracket_path(clazz)}">See the {clazz}A bracket</a></p>'
+    return (
+        f'<a class="landing-preview landing-preview--image" href="{bracket_path(clazz)}">'
+        f'<img src="{_e(image)}" width="1200" height="630" loading="lazy" '
+        f'alt="Class {clazz}A playoff bracket preview: the likeliest team in each spot">'
+        f'<span class="landing-preview__label">Open the {clazz}A bracket</span></a>'
+    )
+
+
+WHAT_WE_DO = (
+    "We work out every way each Mississippi high school football region race can still finish, then rank "
+    "each finish with the MHSAA’s own tiebreaker rules. That gives every team’s odds of making the playoffs "
+    "and of landing each seed, and the exact results it needs to get there. Every region, every class, "
+    "updated every morning."
+)
+HOW_IT_WORKS = (
+    "With a handful of region games left, we play out every possible combination of results; earlier in the "
+    "season we simulate the rest of the schedule 50,000 times. Projected odds weigh each game by the two "
+    "teams’ Elo ratings and home field; Toss-up odds treat every game as a coin flip. Scores come from AHSFHS."
+)
+
+
+def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
+    """The front page: who we are and how it works on the left, a tour of the site on the right, with the
+    most open race (``featured``) as the live example throughout.
+
+    *featured* is ``{"clazz", "card", "standings", "stamp", "mode", "bracket_image"}`` or None.
+    The app shows this same file at "/", so there is one renderer and nothing changes when it loads.
+    """
+    intro = (
+        '<div class="landing-intro">'
+        '<p class="landing-kicker">Welcome to</p>'
+        '<h1 class="landing-title">Mississippi High School Football</h1>'
+        '<img class="landing-helmet" src="/static/helmet.webp" width="1000" height="851" alt="">'
+        f"{_section('what', 'What we do', f'<p>{_e(WHAT_WE_DO)}</p>')}"
+        + _section(
+            "how",
+            "How it works",
+            f'<p>{_e(HOW_IT_WORKS)}</p><p><a href="/methodology">More on how the odds work</a></p>',
+        )
+        + "</div>"
+    )
+    class_extra = _class_example(featured, teams) if featured else ""
+    region_extra = _region_preview(featured, teams) if featured else ""
+    bracket_extra = _bracket_preview(featured) if featured else ""
+    region_scenarios = "".join(
+        _section(key, title, f"<p>{_e(text)}</p>", level="h3")
+        for key, title, text in (
+            (
+                "title-scenarios",
+                "Region title scenarios",
+                "Scenarios for how each eligible team can still win the region.",
+            ),
+            (
+                "seeding-scenarios",
+                "Team seeding scenarios",
+                "Scenarios for how each eligible team can finish as a given seed.",
+            ),
+            ("unique-scenarios", "Unique region scenarios", "Each unique seeding finish possible in a given region."),
+        )
+    )
+    tour = (
+        '<div class="landing-tour">'
+        + _section(
+            "class",
+            "Class standings",
+            "<p>Standings for each region in each class.</p>"
+            + _bullets(
+                (
+                    "Each team’s region record",
+                    "Which teams have clinched playoff spots or specific seeds",
+                    "Each team’s chance of making the playoffs",
+                    "Each team’s chance of winning the region",
+                )
+            )
+            + class_extra,
+        )
+        + _section(
+            "region",
+            "Region breakdown",
+            _section(
+                "region-standings",
+                "Standings",
+                "<p>Detailed standings for a given region.</p>"
+                + _bullets(
+                    (
+                        "A headline summing up the race",
+                        "Each team’s region and overall records",
+                        "Which teams have clinched playoff spots or specific seeds",
+                        "Each team’s chance of making the playoffs",
+                        "Each team’s chance of finishing at each seed",
+                        "An expanded view of each team: its completed and remaining games and its playoff path odds",
+                    )
+                )
+                + region_extra,
+                level="h3",
+            )
+            + region_scenarios,
+        )
+        + _section(
+            "bracket",
+            "Bracket page",
+            "<p>Each class’s playoff bracket, filled in with who is likely to land in each spot. Pick a game to "
+            "see every team that could play there, how likely each matchup is, and who would host.</p>" + bracket_extra,
+        )
+        + "</div>"
+    )
+    return f'<div class="page landing">{intro}{tour}</div>\n'
 
 
 def sitemap_xml(site_url: str, pages: Iterable[tuple[str, date | None]]) -> str:

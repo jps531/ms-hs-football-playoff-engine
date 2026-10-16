@@ -1,14 +1,8 @@
 """Static page content (backend.helpers.static_pages) and the pipeline that writes it."""
 
-import json
 import re
-import shutil
-import subprocess
 import xml.etree.ElementTree as ET
 from datetime import date
-from pathlib import Path
-
-import pytest
 
 from backend.helpers.static_pages import (
     class_body,
@@ -22,7 +16,6 @@ from backend.helpers.static_pages import (
 from backend.prefect.share_assets_pipeline import build_share_assets
 from backend.tests.unit.share_cards_test import DATES, TEAMS, _team
 
-NGINX_JS = Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js"
 STAMP = "Through Week 8 · Oct 9 · Projected"
 HELMETS = {"Raleigh": {"helmet_url": "https://res.cloudinary.com/x/raleigh.png"}}
 
@@ -169,9 +162,8 @@ class TestRegionBody:
         clinched = {**TEAMS[0], "clinched": True}
         body = region_body(3, 6, _region(teams=[clinched, out]), STAMP, "projected", {})
         assert '<span class="badge badge--clinched">' in body
-        assert (
-            '<tr class="is-eliminated">' in body and '<span class="badge badge--eliminated">Eliminated</span>' in body
-        )
+        assert '<tr class="is-eliminated">' in body
+        assert '<span class="badge badge--eliminated"><svg' in body and "</svg>Eliminated</span>" in body
 
 
 def test_initials_match_the_app():
@@ -206,43 +198,78 @@ SUMMARY = {
     ],
 }
 FEATURED = {
-    "clazz": 6,
-    "card": _card(1, 5, 0.1),
-    "standings": _region(headline="D'Iberville and Raleigh chase two spots <Friday>.", as_of_date="2026-10-14"),
+    "clazz": 3,
+    "card": _card(6, 3),
+    "standings": _region(headline="D'Iberville and Raleigh chase two spots <Friday>."),
+    "stamp": "2026 season · " + STAMP,
+    "mode": "projected",
+    "bracket_image": "/static/og/bracket-3.png?v=20261009",
 }
+COLORS = {"Seminary": {"color_variants": {"primary": {"raw": "#123456"}, "secondary": [{"raw": "#ffcc00"}]}}}
 
 
 def test_featured_race_is_the_most_open_one():
-    """Most undecided, then most volatile, then the higher class; none once every race is settled."""
+    """Most undecided, then most volatile, then the higher class; a settled season still gets an example."""
     assert pick_featured(SUMMARY) == {"clazz": 6, "card": _card(1, 5, 0.1)}
     closer = {"classes": [{"class_": 3, "regions": [_card(2, 5, 0.3)]}, *SUMMARY["classes"][1:]]}
     assert pick_featured(closer)["clazz"] == 3
-    assert pick_featured({"classes": [{"class_": 1, "regions": [_card(1, 0)]}]}) is None
+    assert pick_featured({"classes": [{"class_": 1, "regions": [_card(1, 0)]}]})["clazz"] == 1
+    assert pick_featured({"classes": []}) is None
 
 
-def test_landing_body_features_the_race_and_links_everything():
-    """Hero, the featured race's card, the three capability cards, and every class's standings and bracket."""
-    body = landing_body(FEATURED)
-    assert "Race to watch" in body and '<a href="/standings/6a/1">Region 1-6A</a>' in body
-    assert "D&#39;Iberville and Raleigh chase two spots &lt;Friday&gt;." in body
-    assert "1 clinched · 5 undecided · 1 out · Projected odds · Updated Oct 14" in body
-    for c in range(1, 8):
-        assert f'href="/standings/{c}a"' in body and f'href="/brackets/{c}a"' in body
-    assert "Race to watch" not in landing_body(None) and "See Class 1A" in landing_body(None)
+class TestLandingBody:
+    """The front page: who we are on the left, a tour of the site on the right."""
 
+    def test_intro_and_every_tour_section(self):
+        """Welcome, helmet, what we do and how it works; then class, region (with its three scenario kinds) and bracket."""
+        body = landing_body(FEATURED, HELMETS)
+        assert '<h1 class="landing-title">Mississippi High School Football</h1>' in body
+        assert 'src="/static/helmet.webp"' in body
+        for heading in (
+            "What we do",
+            "How it works",
+            "Class standings",
+            "Region breakdown",
+            "Standings",
+            "Region title scenarios",
+            "Team seeding scenarios",
+            "Unique region scenarios",
+            "Bracket page",
+        ):
+            assert f">{heading}</h" in body, heading
+        assert body.index("Class standings") < body.index("Region breakdown") < body.index("Bracket page")
+        assert 'href="/methodology"' in body
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="needs node to run landing.js")
-@pytest.mark.parametrize("featured", [FEATURED, None], ids=["featured", "no-race"])
-def test_landing_markup_matches_the_app_exactly(featured):
-    """The static front page and the app's are the same HTML, so nothing changes when the app loads."""
-    script = (
-        f"import({json.dumps((NGINX_JS / 'landing.js').as_uri())})"
-        ".then((m) => process.stdout.write(m.landingHtml(JSON.parse(process.argv[1]))))"
-    )
-    js = subprocess.run(
-        ["node", "--input-type=module", "-e", script, json.dumps(featured)], capture_output=True, text=True, check=True
-    ).stdout
-    assert js == landing_body(featured)
+    def test_class_example_is_the_class_page_block(self):
+        """The featured region as the class page shows it: helmets, badges, team links, and a caption."""
+        body = landing_body(FEATURED, {**HELMETS, **COLORS})
+        example = body[body.index('<figure class="landing-example">') : body.index("</figure>")]
+        assert '<h3 class="region-block__title" id="region-6"><a href="/standings/3a/6">Region 6</a></h3>' in example
+        assert 'href="/standings/3a/6?team=raleigh"' in example and "raleigh.png" in example
+        assert '<svg class="mark mark--generic" viewBox="0 0 32 28"' in example and 'fill="#123456"' in example
+        assert "Class 3A, 2026 season · Through Week 8 · Oct 9 · Projected." in example
+
+    def test_region_preview_is_one_link_with_no_links_inside(self):
+        """The region page in miniature: a single link to it, hidden from screen readers inside."""
+        body = landing_body(FEATURED, HELMETS)
+        preview = body[
+            body.index('<a class="landing-preview"') : body.index("</a>", body.index("landing-preview__label"))
+        ]
+        assert 'href="/standings/3a/6" aria-label="Open the Region 6-3A page"' in preview
+        assert preview.count("<a ") == 1 and 'aria-hidden="true"' in preview
+        assert "D&#39;Iberville and Raleigh chase two spots &lt;Friday&gt;." in preview
+        assert ">1st</th>" in preview and ">Overall</th>" in preview
+
+    def test_bracket_preview_uses_the_bracket_card(self):
+        """The morning's bracket card, linking to the bracket; just a link when there's no card yet."""
+        body = landing_body(FEATURED, {})
+        assert 'href="/brackets/3a"><img src="/static/og/bracket-3.png?v=20261009"' in body
+        assert "See the 3A bracket" in landing_body({**FEATURED, "bracket_image": None}, {})
+
+    def test_no_data_still_renders(self):
+        """Before any standings exist: the intro and tour, without examples."""
+        body = landing_body(None, {})
+        assert "Class standings" in body and "landing-example" not in body and "landing-preview" not in body
 
 
 def test_sitemap_is_valid_xml_with_lastmod():
@@ -288,7 +315,7 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
     assert "raleigh.png" in region
     assert "Class 3A" in (tmp_path / "body" / "3.html").read_text()
     site = (tmp_path / "body" / "site.html").read_text()
-    assert "Race to watch" in site and "Region 6-3A" in site  # the only open race, from the region's own payload
+    assert "Open the Region 6-3A page" in site and "2026 season · Through Week 8" in site  # the region's own payload
     sitemap = (tmp_path / "sitemap.xml").read_text()
     for path in ("/</loc>", "/standings/3a</loc>", "/standings/3a/6</loc>", "/methodology</loc>"):
         assert path in sitemap
