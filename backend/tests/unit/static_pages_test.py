@@ -3,8 +3,10 @@
 import re
 import xml.etree.ElementTree as ET
 from datetime import date
+from pathlib import Path
 
 from backend.helpers.static_pages import (
+    ODDS_COLUMNS,
     bracket_preview_html,
     class_body,
     initials,
@@ -428,7 +430,7 @@ class TestLandingBody:
         assert 'href="/standings/3a/6" aria-label="Open the Region 6-3A page"' in preview
         assert preview.count("<a ") == 1 and 'aria-hidden="true"' in preview
         assert "D&#39;Iberville and Raleigh chase two spots &lt;Friday&gt;." in preview
-        assert ">1st</th>" in preview and ">Overall</th>" in preview
+        assert ">1st</span>" in preview and ">Overall</th>" in preview
 
     def test_bracket_preview_is_the_bracket_page_in_miniature(self):
         """One link to the bracket, with the tree and an open sheet inside; just a link without data."""
@@ -494,3 +496,11 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
         assert path in sitemap
     assert "<lastmod>2026-10-09</lastmod>" in sitemap
     assert "/brackets/3a" not in sitemap  # no bracket odds yet, so no bracket page to list
+
+
+def test_odds_headers_match_the_app():
+    """The pre-rendered pages' odds headers and their full names are the app's, so the page doesn't change on load."""
+    app_js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "app.js").read_text()
+    for key, label, full in ODDS_COLUMNS:
+        assert f'{{ key: "{key}", label: "{label}",' in app_js
+        assert f'full: "{full}"' in app_js

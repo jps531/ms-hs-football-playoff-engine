@@ -33,7 +33,26 @@ from backend.helpers.share_cards import (
     team_status,
 )
 
-ODDS_COLUMNS = (("p1", "1st"), ("p2", "2nd"), ("p3", "3rd"), ("p4", "4th"), ("p_playoffs", "Playoffs"))
+# (key, header, what it measures): headers and their full names match ODDS_COLUMNS in app.js.
+ODDS_COLUMNS = (
+    ("p1", "1st", "Chance of finishing 1st (the #1 seed)"),
+    ("p2", "2nd", "Chance of finishing 2nd (the #2 seed)"),
+    ("p3", "3rd", "Chance of finishing 3rd (the #3 seed)"),
+    ("p4", "4th", "Chance of finishing 4th (the #4 seed)"),
+    ("p_playoffs", "Makes playoffs", "Chance of making the playoffs as any seed"),
+)
+ODDS_BY_KEY = {key: (label, full) for key, label, full in ODDS_COLUMNS}
+
+
+def _odds_head(key: str) -> str:
+    """An odds column header: the short label on screen, what it measures for screen readers and on hover."""
+    label, full = ODDS_BY_KEY[key]
+    return (
+        f'<th scope="col" class="col-odds" title="{full}"><span aria-hidden="true">{label}</span>'
+        f'<span class="visually-hidden">{full}</span></th>'
+    )
+
+
 INSIGHT_ORDER = {"clinch_seed": 0, "clinch_playoffs": 1, "eliminated_if": 2}
 MODE_NAMES = {"projected": "projected", "tossup": "toss-up"}
 DROPPED_WORDS = {"county", "high", "school", "academy"}  # as format.js's initials()
@@ -277,13 +296,13 @@ def region_table(clazz: int, region: int, payload: dict, mode: str, teams: dict[
     complete = not payload.get("remaining_games")
     rows = []
     for pos, team in zip(positions, ordered, strict=True):
-        odds = "".join(f'<td class="col-odds">{_odds(mode_odds(team, key, mode))}</td>' for key, _ in ODDS_COLUMNS)
+        odds = "".join(f'<td class="col-odds">{_odds(mode_odds(team, key, mode))}</td>' for key, _, _ in ODDS_COLUMNS)
         rows.append(
             f"{_row_start(team, pos)}{_team_cell(team, page, clazz, teams, complete, link)}"
             f'<td class="col-rec">{_region_record(team)}</td>'
             f'<td class="col-rec col-overall">{_overall_record(team)}</td>{odds}</tr>'
         )
-    heads = "".join(f'<th scope="col" class="col-odds">{label}</th>' for _, label in ODDS_COLUMNS)
+    heads = "".join(_odds_head(key) for key, _, _ in ODDS_COLUMNS)
     return (
         '<table class="standings">'
         f'<caption class="visually-hidden">Region {region}-{clazz}A standings and {MODE_NAMES[mode]} odds of '
@@ -351,7 +370,7 @@ def class_region_block(
         f'<caption class="visually-hidden">Region {region}-{clazz}A standings</caption>'
         '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
         '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
-        '<th scope="col" class="col-odds">1st</th><th scope="col" class="col-odds">Playoffs</th></tr></thead>'
+        f"{_odds_head('p1')}{_odds_head('p_playoffs')}</tr></thead>"
         f"<tbody>{rows}</tbody></table></section>"
     )
 

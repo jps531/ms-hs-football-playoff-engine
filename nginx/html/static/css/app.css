@@ -603,7 +603,7 @@ button { font: inherit; color: inherit; }
 .detail__records strong { color: var(--text-primary); font-weight: 600; font-size: 16px; margin-right: 2px; }
 .detail__note { margin-top: 10px; font-size: 14px; line-height: 20px; color: var(--text-secondary); max-width: 34rem; }
 .detail__odds { display: grid; gap: 6px; margin: 8px 0 0; font-size: 14px; }
-.detail__odds div { display: grid; grid-template-columns: 4.6em auto; align-items: center; }
+.detail__odds div { display: grid; grid-template-columns: 7.4em auto; align-items: center; }
 .detail__odds dt { color: var(--text-secondary); }
 .detail__odds dd { margin: 0; }
 .sched { margin-top: 6px; display: grid; gap: 6px; font-size: 14px; }
@@ -798,6 +798,10 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .article ol.steps { list-style: decimal; padding-left: 1.4em; margin-top: 8px; }
 .article ol.steps li + li { margin-top: 6px; }
 .article ol.steps + p { margin-top: 16px; }
+.article ul.bullets { list-style: disc; padding-left: 1.4em; margin-top: 8px; }
+.article ul.bullets li + li { margin-top: 6px; }
+.article ul.bullets + p { margin-top: 16px; }
+.article h2[id] { scroll-margin-top: 80px; }
 
 .detail__link { margin-top: 14px; font-size: 14px; }
 
@@ -1360,3 +1364,8 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
 }
 .landing--fallback .landing-links a { margin-right: 10px; }
+
+/* The team's Elo rating under its seeding odds (the expanded row). */
+.detail__elo { margin-top: 12px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.detail__elo-label { color: var(--text-secondary); }
+.detail__elo + .detail__note { margin-top: 4px; font-size: 13px; line-height: 18px; }

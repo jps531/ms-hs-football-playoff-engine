@@ -25,6 +25,7 @@ from backend.helpers.api_helpers import (
     _load_elo_ratings,
     _load_format_slots,
     _odds_from_rows,
+    attach_elo,
     build_region_summary_card,
     build_standings_bracket_home_odds,
     build_team_entries,
@@ -38,6 +39,7 @@ from backend.helpers.api_helpers import (
     load_completed_region_games,
     load_remaining_game_dates,
     load_scenarios_snapshot,
+    load_team_elo,
     recompute_scenarios_from_games,
     records_from_completed,
     remaining_to_models,
@@ -231,10 +233,12 @@ async def get_standings(
         game_dates = (
             await load_remaining_game_dates(conn, season, snapshot.remaining) if snapshot.scenario_atoms else {}
         )
+        elo = await load_team_elo(conn, season, [e.school for e in snapshot.team_entries], snapshot.snapshot_date)
 
     team_entries = _reorder_team_entries(
         snapshot.team_entries, current_standings_order(snapshot.teams, snapshot.completed, snapshot.odds_for_order)
     )
+    attach_elo(team_entries, elo)
 
     scenarios_available = within_display_threshold(snapshot.remaining)
 
