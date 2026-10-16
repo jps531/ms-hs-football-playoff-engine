@@ -22,11 +22,27 @@ _CONN = object()  # never touched directly; all DB-facing helpers are mocked
 def _standings_row(school: str, as_of_date: date = date(2025, 10, 1)) -> tuple:
     """A 39-column region_standings row (see resolve_standings_snapshot's row-position docstring)."""
     return (
-        school, 5, 2, 0, 3, 1, 0,  # 0-6: school, wins, losses, ties, region_wins/losses/ties
-        0.4, 0.3, 0.2, 0.1, 0.7,  # 7-11: odds_1st-odds_playoffs
-        False, False, False,  # 12-14: clinched, eliminated, coin_flip_needed
+        school,
+        5,
+        2,
+        0,
+        3,
+        1,
+        0,  # 0-6: school, wins, losses, ties, region_wins/losses/ties
+        0.4,
+        0.3,
+        0.2,
+        0.1,
+        0.7,  # 7-11: odds_1st-odds_playoffs
+        False,
+        False,
+        False,  # 12-14: clinched, eliminated, coin_flip_needed
         as_of_date,  # 15
-        0.4, 0.3, 0.2, 0.1, 0.7,  # 16-20: weighted seeding odds
+        0.4,
+        0.3,
+        0.2,
+        0.1,
+        0.7,  # 16-20: weighted seeding odds
         *([0.0] * 10),  # 21-30: bracket advancement (unweighted + weighted)
         *([0.0] * 8),  # 31-38: home-game odds (unweighted + weighted)
     )
@@ -44,11 +60,18 @@ class TestResolveStandingsSnapshotStoredWithScenarios:
     @patch("backend.helpers.api_helpers.load_completed_region_games", new_callable=AsyncMock)
     @patch("backend.helpers.api_helpers.load_scenarios_snapshot", new_callable=AsyncMock)
     @patch("backend.helpers.api_helpers._load_standings_snapshot", new_callable=AsyncMock)
-    def test_uses_stored_snapshot_and_scenarios(self, mock_load_standings, mock_load_scenarios, mock_completed, mock_atoms):
+    def test_uses_stored_snapshot_and_scenarios(
+        self, mock_load_standings, mock_load_scenarios, mock_completed, mock_atoms
+    ):
         """A stored snapshot plus a stored scenarios row is used as-is, with no on-demand recompute."""
         rows = [_standings_row("Alpha"), _standings_row("Beta")]
         mock_load_standings.return_value = rows
-        mock_load_scenarios.return_value = ([RemainingGame(a="Alpha", b="Beta")], [{"scenario_num": 1}], [], date(2025, 10, 1))
+        mock_load_scenarios.return_value = (
+            [RemainingGame(a="Alpha", b="Beta")],
+            [{"scenario_num": 1}],
+            [],
+            date(2025, 10, 1),
+        )
         mock_completed.return_value = _completed()
 
         result = asyncio.run(
@@ -69,7 +92,9 @@ class TestResolveStandingsSnapshotStoredWithScenarios:
     @patch("backend.helpers.api_helpers.load_completed_region_games", new_callable=AsyncMock)
     @patch("backend.helpers.api_helpers.load_scenarios_snapshot", new_callable=AsyncMock)
     @patch("backend.helpers.api_helpers._load_standings_snapshot", new_callable=AsyncMock)
-    def test_include_team_scenarios_fetches_atoms(self, mock_load_standings, mock_load_scenarios, mock_completed, mock_atoms):
+    def test_include_team_scenarios_fetches_atoms(
+        self, mock_load_standings, mock_load_scenarios, mock_completed, mock_atoms
+    ):
         """include_team_scenarios=True triggers a scenario_atoms fetch, populating result.scenario_atoms."""
         mock_load_standings.return_value = [_standings_row("Alpha")]
         mock_load_scenarios.return_value = ([], [], [], date(2025, 10, 1))
@@ -91,7 +116,9 @@ class TestResolveStandingsSnapshotStoredWithoutScenarios:
     @patch("backend.helpers.api_helpers.load_completed_region_games", new_callable=AsyncMock)
     @patch("backend.helpers.api_helpers.load_scenarios_snapshot", new_callable=AsyncMock)
     @patch("backend.helpers.api_helpers._load_standings_snapshot", new_callable=AsyncMock)
-    def test_recomputes_only_remaining_games(self, mock_load_standings, mock_load_scenarios, mock_completed, mock_recompute):
+    def test_recomputes_only_remaining_games(
+        self, mock_load_standings, mock_load_scenarios, mock_completed, mock_recompute
+    ):
         """No stored scenarios row falls back to recomputing just the remaining-games list."""
         rows = [_standings_row("Alpha", as_of_date=date(2025, 9, 28))]
         mock_load_standings.return_value = rows
@@ -158,3 +185,14 @@ class TestResolveStandingsSnapshotFullRecompute:
         assert result.teams == ["Alpha"]
         assert len(result.team_entries) == 1
         assert result.team_entries[0].school == "Alpha"
+
+
+def test_attach_elo_sets_ratings_and_leaves_unrated_teams_empty():
+    """Each entry gets its school's rating; a team with none stays None."""
+    from types import SimpleNamespace
+
+    from backend.helpers.api_helpers import attach_elo
+
+    entries = [SimpleNamespace(school="Oxford", elo=None), SimpleNamespace(school="Tupelo", elo=None)]
+    attach_elo(entries, {"Oxford": 1642.4})
+    assert [e.elo for e in entries] == [1642.4, None]

@@ -402,6 +402,7 @@ class TeamStandingsEntry(BaseModel):
     eliminated: bool
     coin_flip_needed: bool
     paths: list[ScenarioPathModel] | None = None
+    elo: float | None = None  # the team's Elo rating as of the snapshot (what Projected odds use); None if unrated
 
 
 class TeamStatusModel(BaseModel):

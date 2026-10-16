@@ -653,17 +653,17 @@ def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str)
     _pill_row(
         draw,
         PAD + 220,
-        "Seeding",
+        "Seeding odds",
         [
             (h, mode_odds(team, k, mode))
             for h, k in zip(
-                ("1ST", "2ND", "3RD", "4TH", "PLAYOFFS"), ("p1", "p2", "p3", "p4", "p_playoffs"), strict=True
+                ("1ST", "2ND", "3RD", "4TH", "MAKES PLAYOFFS"), ("p1", "p2", "p3", "p4", "p_playoffs"), strict=True
             )
         ],
     )
     path = playoff_path(team, mode, clazz)
     if path:
-        _pill_row(draw, PAD + 366, "Playoff Path", [(label, p) for _, label, p in path])
+        _pill_row(draw, PAD + 366, "Chance of reaching each round", [(label, p) for _, label, p in path])
     _footer(draw, stamp)
     return img
 

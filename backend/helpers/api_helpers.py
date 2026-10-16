@@ -2294,6 +2294,26 @@ async def load_playoff_results(  # pragma: no cover
     return [(r[0], r[1]) async for r in rows]
 
 
+async def load_team_elo(conn, season: int, schools: list[str], as_of: date) -> dict[str, float]:  # pragma: no cover
+    """Each of *schools*' most recent Elo rating on or before *as_of* (schools without one are left out)."""
+    rows = await conn.execute(
+        """
+        SELECT DISTINCT ON (school) school, elo
+        FROM team_ratings
+        WHERE season = %s AND school = ANY(%s) AND as_of_date <= %s
+        ORDER BY school, as_of_date DESC
+        """,
+        (season, schools, as_of),
+    )
+    return {r[0]: r[1] async for r in rows}
+
+
+def attach_elo(entries: list, elo: dict[str, float]) -> None:
+    """Set each team entry's ``elo`` from *elo* (by school), leaving unrated teams at None."""
+    for entry in entries:
+        entry.elo = elo.get(entry.school)
+
+
 async def _load_elo_ratings(conn, season: int, as_of: date) -> dict[str, float]:  # pragma: no cover
     """Return the most-recent Elo rating per school as of *as_of*."""
     rows = await conn.execute(

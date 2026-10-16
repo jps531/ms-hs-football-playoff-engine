@@ -634,8 +634,8 @@ async function classView(ctx) {
           <th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>
           <th scope="col" class="col-team">Team</th>
           <th scope="col" class="col-rec">Region</th>
-          <th scope="col" class="col-odds">1st</th>
-          <th scope="col" class="col-odds">Playoffs</th>
+          ${oddsHead(ODDS_BY_KEY.p1)}
+          ${oddsHead(ODDS_BY_KEY.p_playoffs)}
         </tr></thead>
         <tbody>${rows.join("")}</tbody>
       </table>
@@ -699,13 +699,21 @@ async function regionView(ctx) {
   </div>`;
 }
 
+// label: the column header; seed: the same odds in the expanded row; full:
+// what the number measures, for screen readers and as the header's tooltip.
 const ODDS_COLUMNS = [
-  { key: "p1", label: "1st", mid: false },
-  { key: "p2", label: "2nd", mid: true },
-  { key: "p3", label: "3rd", mid: true },
-  { key: "p4", label: "4th", mid: true },
-  { key: "p_playoffs", label: "Playoffs", mid: false },
+  { key: "p1", label: "1st", seed: "1st seed", full: "Chance of finishing 1st (the #1 seed)", mid: false },
+  { key: "p2", label: "2nd", seed: "2nd seed", full: "Chance of finishing 2nd (the #2 seed)", mid: true },
+  { key: "p3", label: "3rd", seed: "3rd seed", full: "Chance of finishing 3rd (the #3 seed)", mid: true },
+  { key: "p4", label: "4th", seed: "4th seed", full: "Chance of finishing 4th (the #4 seed)", mid: true },
+  { key: "p_playoffs", label: "Makes playoffs", seed: "Makes playoffs", full: "Chance of making the playoffs as any seed", mid: false },
 ];
+const ODDS_BY_KEY = Object.fromEntries(ODDS_COLUMNS.map((c) => [c.key, c]));
+
+/** An odds column header: the short label on screen, what it measures for screen readers and on hover. */
+function oddsHead(c, extra = "") {
+  return `<th scope="col" class="col-odds${extra}" title="${c.full}"><span aria-hidden="true">${c.label}</span><span class="visually-hidden">${c.full}</span></th>`;
+}
 
 function standingsTable(data, teams, mode, focus, clazz, games) {
   const ordered = displayOrder(data.teams);
@@ -734,9 +742,7 @@ function standingsTable(data, teams, mode, focus, clazz, games) {
       <tr class="detail${focused ? " is-focus" : ""}" id="${detailId}"${focused ? "" : " hidden"}><td colspan="9">${focused ? rowDetail(t, mode, clazz, complete, teams, games) : ""}</td></tr>`;
   });
 
-  const oddsHeads = ODDS_COLUMNS.map(
-    (c) => `<th scope="col" class="col-odds${c.mid ? " col-mid" : ""}">${c.label}</th>`,
-  );
+  const oddsHeads = ODDS_COLUMNS.map((c) => oddsHead(c, c.mid ? " col-mid" : ""));
   return `<table class="standings">
     <caption class="visually-hidden">Standings and ${mode === "projected" ? "projected" : "toss-up"} odds of finishing in each playoff position. Select a team to see its playoff path and scenarios.</caption>
     <thead><tr>
@@ -755,6 +761,19 @@ function standingsTable(data, teams, mode, focus, clazz, games) {
  * record and region schedule, its seeding odds, and its road through the
  * bracket.
  */
+/**
+ * The team's Elo rating, the number Projected odds are built on (brief: make
+ * the model legible). Ratings are numbers, not positions, so it's never called
+ * a ranking. Nothing for a team without one.
+ */
+function eloLine(elo) {
+  if (elo == null) return "";
+  return `<p class="detail__elo"><span class="detail__elo-label">Elo rating</span> <strong>${Math.round(elo)}</strong></p>
+    <p class="detail__note muted">The rating behind Projected odds, built from game results. Classes start from a baseline
+      of 1000 in 1A up to 1300 in 7A, and a 100-point edge is about a 64% chance to win on a neutral field.
+      <a href="/methodology#elo">How the ratings work</a></p>`;
+}
+
 function rowDetail(t, mode, clazz, complete, teams, games) {
   const r = t.record;
   const o = oddsFor(t, mode);
@@ -783,7 +802,8 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
 
   const seeding = `<section class="detail__panel" aria-label="Seeding odds">
       <h3 class="detail__title">Seeding odds</h3>
-      <dl class="detail__odds">${ODDS_COLUMNS.map((c) => `<div><dt>${c.label}</dt><dd>${oddsCell(o[c.key])}</dd></div>`).join("")}</dl>
+      <dl class="detail__odds">${ODDS_COLUMNS.map((c) => `<div><dt>${c.seed}</dt><dd>${oddsCell(o[c.key])}</dd></div>`).join("")}</dl>
+      ${eloLine(t.elo)}
     </section>`;
 
   // Teams that made the playoffs keep their path after elimination: it
@@ -793,7 +813,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
     ? `<section class="detail__panel detail__panel--path" aria-label="Playoff path">
         <h3 class="detail__title">Playoff path</h3>
         <table class="path">
-          <thead><tr><th scope="col">Round</th><th scope="col">Reaches</th><th scope="col">Hosts if there</th><th scope="col">Hosts overall</th></tr></thead>
+          <thead><tr><th scope="col">Round</th><th scope="col">Reaches round</th><th scope="col">Hosts, if it gets there</th><th scope="col">Hosts, overall</th></tr></thead>
           <tbody>${path.map((p) => `<tr>
             <th scope="row">${esc(p.round)}</th>
             <td>${oddsCell(p.reach)}</td>
@@ -801,6 +821,9 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
             <td>${p.hostOverall == null ? "" : esc(formatPct(p.hostOverall))}</td>
           </tr>`).join("")}</tbody>
         </table>
+        <p class="detail__note muted">Reaches round is the chance of playing in that round at all, so it includes
+          going further. Hosts, if it gets there assumes the team reaches that round; Hosts, overall is the chance
+          of reaching it and hosting.</p>
         <p class="detail__link"><a href="${esc(hrefWith({ page: "bracket", region: null, team: t.school }))}">See ${esc(t.school)}’s path in the bracket</a></p>
       </section>`
     : "";
@@ -1384,7 +1407,10 @@ function gameDetail(game) {
     const showAll = bracketUi.showAll.has(key);
     const shown = showAll ? opp : opp.slice(0, MATCHUP_CAP);
     const intro = here.locked ? `${focus}’s possible opponents here` : `If ${focus} gets here (${formatPct(here.p)} chance)`;
+    // These are conditional odds; say so, so they aren't read as the chance the game happens.
+    const measure = here.locked ? "Chance of facing each one" : `Chance of facing each one, if ${focus} gets here`;
     return `<h4 class="bgame__heading">${esc(intro)}</h4>
+      <p class="muted bgame__count">${esc(measure)}</p>
       <ol class="opp-list">${shown.map((o) => {
         const note = hostText(focus, o.hosts, o.pTeamHosts);
         return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}</span></span>${oddsCell(o.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
