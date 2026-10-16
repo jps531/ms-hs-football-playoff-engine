@@ -15,7 +15,7 @@ from backend.api.auth import (
     SESSION_COOKIE_MAX_AGE,
     SESSION_COOKIE_NAME,
     CurrentUser,
-    ModeratorCookieOrBearerAuth,
+    OwnerCookieOrBearerAuth,
     mint_session_token,
 )
 
@@ -23,12 +23,12 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.get("/verify-moderator", include_in_schema=False)
-async def verify_moderator_for_nginx(_: ModeratorCookieOrBearerAuth) -> None:
+async def verify_moderator_for_nginx(_: OwnerCookieOrBearerAuth) -> None:
     """Internal endpoint called by nginx auth_request to gate the Prefect UI.
 
-    Returns 200 when either the session cookie or the Bearer token is valid and the role is
-    moderator or owner. FastAPI's ModeratorCookieOrBearerAuth dependency raises 401/403
-    automatically on failure.
+    Returns 200 when either the session cookie or the Bearer token is valid and the account is
+    the owner (the path keeps its old name so nginx.conf needn't change). FastAPI's
+    OwnerCookieOrBearerAuth dependency raises 401/403 automatically on failure.
     """
 
 

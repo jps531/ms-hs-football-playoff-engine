@@ -543,3 +543,24 @@ class TestUpdateSubmissionPayload:
         sql, params = conn.calls[0]
         assert "UPDATE submissions SET payload" in sql
         assert params == ('{"image_paths": ["a.jpg"]}', 7)
+
+
+def test_submission_image_paths_for_cleanup():
+    """Logo and helmet submissions list what they uploaded; other types have nothing to delete."""
+    from backend.helpers.submission_helpers import submission_image_paths
+
+    assert submission_image_paths("logo", {"cloudinary_path": "logos/submissions/primary/Oxford_4"}) == [
+        "logos/submissions/primary/Oxford_4"
+    ]
+    assert submission_image_paths("logo", {}) == []
+    helmet = {
+        "image_paths": ["helmets/submissions/Oxford_5_0", "helmets/submissions/Oxford_5_1"],
+        "logo_image_path": "helmets/submissions/Oxford_5_2",
+    }
+    assert submission_image_paths("helmet", helmet) == [
+        "helmets/submissions/Oxford_5_0",
+        "helmets/submissions/Oxford_5_1",
+        "helmets/submissions/Oxford_5_2",
+    ]
+    assert submission_image_paths("helmet", None) == []
+    assert submission_image_paths("feedback", {"message": "x"}) == []

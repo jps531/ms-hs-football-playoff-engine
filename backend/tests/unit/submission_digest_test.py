@@ -176,6 +176,7 @@ def smtp_env(monkeypatch):
     for key in ("SMTP_PORT", "SMTP_SECURITY", "SMTP_FROM"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(pipeline, "get_run_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(pipeline, "forget_old_contact_emails", lambda: 0)
     FakeSMTP.instances = []
 
 
@@ -192,6 +193,18 @@ class TestSending:
         """Port 465 implies implicit TLS."""
         monkeypatch.setenv("SMTP_PORT", "465")
         assert pipeline.smtp_settings()["security"] == "ssl"
+
+    def test_unencrypted_mail_only_in_local(self, smtp_env, monkeypatch):
+        """SMTP_SECURITY=none is a local-testing setting: elsewhere it's refused, as is a typo."""
+        monkeypatch.setenv("SMTP_SECURITY", "none")
+        monkeypatch.setenv("ENVIRONMENT", "local")
+        assert pipeline.smtp_settings()["security"] == "none"
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        with pytest.raises(ValueError, match="unencrypted"):
+            pipeline.smtp_settings()
+        monkeypatch.setenv("SMTP_SECURITY", "tls")
+        with pytest.raises(ValueError, match="starttls, ssl, or none"):
+            pipeline.smtp_settings()
 
     def test_unconfigured_sends_nothing(self, smtp_env, monkeypatch):
         """No host: the digest is logged, not sent."""
@@ -259,3 +272,39 @@ class TestFlow:
         when = NOW - timedelta(days=1)
         item = pipeline.row_to_item((3, "feedback", "pending", None, None, False, None, None, None, False, when, NOW))
         assert (item.payload, item.current_game, item.is_new, item.submitted_at) == ({}, None, False, when)
+
+
+def test_old_contact_emails_are_forgotten(monkeypatch):
+    """Decided submissions past the retention window lose payload.email; pending ones keep it."""
+    from contextlib import contextmanager
+
+    seen = {}
+
+    class Cur:
+        """Records the UPDATE."""
+
+        rowcount = 3
+
+        def execute(self, sql, params):
+            """Record it."""
+            seen.update(sql=sql, params=params)
+
+    class Conn:
+        """A connection whose cursor is Cur."""
+
+        @contextmanager
+        def cursor(self):
+            """Yield the recording cursor."""
+            yield Cur()
+
+    @contextmanager
+    def connect():
+        """Yield the fake connection."""
+        yield Conn()
+
+    monkeypatch.setattr(pipeline, "get_database_connection", connect)
+    monkeypatch.setattr(pipeline, "get_run_logger", lambda: logging.getLogger("test"))
+    assert pipeline.forget_old_contact_emails.fn() == 3
+    assert "payload - 'email'" in seen["sql"]
+    assert "status IN ('approved', 'rejected')" in seen["sql"]
+    assert seen["params"] == (pipeline.EMAIL_RETENTION_DAYS,)

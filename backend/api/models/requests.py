@@ -373,14 +373,14 @@ class PatchTeamLogoRequest(BaseModel):
 class ColorEntry(BaseModel):
     """A single named color with its hex code."""
 
-    name: str
+    name: str = Field(min_length=1, max_length=60)
     hex: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
 class SubmitColorsRequest(BaseModel):
     """Submit a school color correction. At least one of primary_color or secondary_colors is required."""
 
-    school: str
+    school: str = Field(max_length=100)
     primary_color: ColorEntry | None = None
     secondary_colors: list[ColorEntry] = Field(default_factory=list, max_length=5)
 
@@ -395,7 +395,7 @@ class SubmitColorsRequest(BaseModel):
 class SubmitLocationRequest(BaseModel):
     """Submit corrected GPS coordinates for a school."""
 
-    school: str
+    school: str = Field(max_length=100)
     latitude: float = Field(ge=-90.0, le=90.0)
     longitude: float = Field(ge=-180.0, le=180.0)
 
@@ -427,7 +427,7 @@ class SubmitScoreRequest(BaseModel):
 class SubmitHelmetAssignmentRequest(BaseModel):
     """Submit or confirm which helmet design a school wore in a specific game."""
 
-    school: str
+    school: str = Field(max_length=100)
     date: date_type
     helmet_design_id: int
 

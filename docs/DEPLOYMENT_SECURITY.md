@@ -15,15 +15,17 @@ Items already fixed in code are **not** listed here — see git history for thos
 
 ### Environment Variables
 
-- [ ] Set `FRONTEND_ORIGIN=https://yourdomain.com` — the API refuses to start with a wildcard in non-local mode.
-- [ ] Rotate `POSTGRES_PASSWORD` from the `.env.example` placeholder to a 32+ character random password (e.g. `openssl rand -base64 32`).
+- [ ] Set `ENVIRONMENT=production` (public API docs off, `Secure` session cookie, wildcard CORS refused).
+- [ ] Set `FRONTEND_ORIGIN=https://yourdomain.com` — the API refuses to start with a wildcard in non-local mode, and Turnstile checks tokens against its hostname.
+- [ ] Rotate `POSTGRES_PASSWORD` from the `.env.example` placeholder to a 32+ character random password (e.g. `openssl rand -hex 32`). Compose has no fallback and refuses to start without one.
 - [ ] Ensure `.env.local` and `.env.non-docker.local` are never committed — `.gitignore` covers them but double-check with `git ls-files | grep env`.
 - [ ] Consider a secrets manager (AWS Secrets Manager, GCP Secret Manager, or Docker Secrets) instead of flat `.env` files for production credentials.
 
 ### Database
 
-- [ ] The database port (`5432`) must **not** be exposed to the public internet. In `docker-compose.yml`, verify that `ports:` is absent from the `db` service (or bound to `127.0.0.1` only).
-- [ ] Create a read-only DB user for any future read-replica or analytics access — the API user should have only the minimum permissions required.
+- [x] The database port is published on `127.0.0.1` only (`docker-compose.yml`), so it isn't reachable from the internet even if the cloud firewall changes.
+- [ ] Create the API and pipeline roles (`sql/app_roles.sql`, steps in [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#database-roles)) and set `API_DB_*` / `PIPELINE_DB_*`. Until then both connect as the owner.
+- [ ] Create a read-only DB user for any future read-replica or analytics access.
 
 ---
 
@@ -31,7 +33,7 @@ Items already fixed in code are **not** listed here — see git history for thos
 
 ### Prefect UI
 
-The Prefect UI (`/prefect/`) is protected by moderator JWT auth, but is still reachable over the public internet. This means a compromised moderator account exposes pipeline controls and execution logs.
+The Prefect UI (`/prefect/`) is the owner's only (the role is re-checked against the database on every request), but is still reachable over the public internet. A compromised owner account exposes pipeline controls and execution logs.
 
 - [ ] **IP allowlist**: Restrict `/prefect/` and `/api/v1/admin/*` to a known IP range (office/VPN) via nginx `allow`/`deny`:
   ```nginx
@@ -46,10 +48,7 @@ The Prefect UI (`/prefect/`) is protected by moderator JWT auth, but is still re
 
 ### Content Security Policy
 
-Once the frontend stack is finalized, add a `Content-Security-Policy` header tailored to the actual origins and script sources in use. A starter policy for an API-only backend:
-```nginx
-add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'none';" always;
-```
+- [x] `nginx/nginx.conf` sends a Content-Security-Policy (scripts from this site, Turnstile, and the inline theme script by hash; `backend/tests/unit/deploy_config_test.py` keeps the hash in step). If you add a third-party script, font host or API the browser calls, add it there. To diagnose a blocked resource, the browser console names the directive.
 
 ---
 
@@ -62,14 +61,10 @@ add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'none';"
 
 ---
 
-## Anonymous Submission Spam Protection
+## Submission Spam Protection
 
-The `/api/v1/submissions/*` endpoints accept unauthenticated requests by design, but have no CAPTCHA. A motivated attacker can flood the moderation queue.
-
-- [ ] Add Cloudflare Turnstile (or hCaptcha) to the frontend submission forms. The backend should validate the Turnstile token server-side before inserting into the submissions table.
-  - Endpoint: `POST https://challenges.cloudflare.com/turnstile/v0/siteverify`
-  - Add `turnstile_token: str` field to `SubmitColorsRequest`, `SubmitLocationRequest`, `SubmitScoreRequest`, `SubmitFeedbackRequest`, and the logo/helmet form bodies.
-- [ ] Alternatively, consider requiring authentication for all submission types (sacrifice anonymous contributions for queue integrity).
+- [x] The feedback form (`/submissions/feedback`, `/submissions/scores`) checks Cloudflare Turnstile server-side (failing closed if Cloudflare is down), plus a honeypot, per-visitor and daily limits, duplicate suppression and a queue circuit breaker.
+- [x] The asset and data submissions (logos, helmets, colors, locations, helmet assignments) require a signed-in account, with a per-account daily cap; uploads are checked to be real images, and rejected ones are deleted from Cloudinary.
 
 ---
 
@@ -85,7 +80,9 @@ The `/api/v1/submissions/*` endpoints accept unauthenticated requests by design,
 
 ## Ongoing
 
-- [ ] **Dependency scanning**: Enable Dependabot (GitHub) or `uv audit` in CI to catch newly-disclosed CVEs in pinned dependencies.
+- [x] **Pinned builds**: images by digest, Python packages from `uv.lock` with hashes checked.
+- [ ] **Dependency scanning**: `.github/dependabot.yml` is in the repo; turn on Dependabot alerts and security updates in GitHub (Settings → Code security), along with secret scanning + push protection, CodeQL default setup, and private vulnerability reporting (see `SECURITY.md`).
 - [ ] **Log aggregation**: Ship structured logs (the `_log.info(...)` calls added in admin/moderation routers) to a centralized service (Datadog, Loki, CloudWatch) so admin action history is queryable and alertable.
-- [ ] **DB backup**: Set up automated PostgreSQL backups before going live. At minimum, `pg_dump` on a cron schedule to an offsite location.
+- [ ] **DB backup**: schedule `scripts/backup_db.sh` with cron and turn on Lightsail automatic snapshots ([VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#backups)). Test a restore once.
+- [x] **Contact-email retention**: the daily digest flow removes the email from feedback decided more than 90 days ago.
 - [ ] **Incident response**: Document what to do if Cloudinary credentials are leaked (regenerate API key in Cloudinary console, rotate `CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET` in all deployment configs, restart API containers).

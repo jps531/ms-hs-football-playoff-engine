@@ -61,12 +61,45 @@ def test_failing_token_is_refused(enabled, monkeypatch):
 
 
 @pytest.mark.parametrize("exc", [urllib.error.URLError("down"), TimeoutError(), ValueError("bad json")])
-def test_cloudflare_outage_fails_open(enabled, monkeypatch, exc):
-    """If siteverify can't answer, the other guards carry on alone."""
+def test_cloudflare_outage_fails_closed(enabled, monkeypatch, exc):
+    """If siteverify can't answer, the submission is refused with 503 and a retry hint, not waved through."""
 
     def boom(*a):
         """Simulate the outage."""
         raise exc
 
     monkeypatch.setattr(turnstile, "_siteverify", boom)
-    assert _verify("tok") is None
+    with pytest.raises(HTTPException) as err:
+        _verify("tok")
+    assert err.value.status_code == 503
+    assert err.value.headers == {"Retry-After": "120"}
+
+
+@pytest.mark.parametrize(
+    ("origin", "reported", "ok"),
+    [
+        ("https://mshsfootball.com", "mshsfootball.com", True),
+        ("https://mshsfootball.com", "www.mshsfootball.com", True),
+        ("https://mshsfootball.com", "evil.example", False),
+        ("*", "evil.example", True),  # local: no origin to check against
+        ("https://mshsfootball.com", None, True),  # older responses without a hostname
+    ],
+)
+def test_token_must_be_solved_on_this_site(enabled, monkeypatch, origin, reported, ok):
+    """A token from another site's widget is refused once FRONTEND_ORIGIN names ours."""
+    monkeypatch.setenv("FRONTEND_ORIGIN", origin)
+    monkeypatch.setattr(turnstile, "_siteverify", lambda *a: {"success": True, "hostname": reported})
+    if ok:
+        assert _verify("tok") is None
+    else:
+        with pytest.raises(HTTPException) as err:
+            _verify("tok")
+        assert err.value.status_code == 403
+
+
+def test_missing_secret_outside_local_is_logged(monkeypatch, caplog):
+    """Production without a secret still works, but says so loudly."""
+    monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    assert _verify(None) is None
+    assert "TURNSTILE_SECRET_KEY" in caplog.text

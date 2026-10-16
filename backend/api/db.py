@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 from psycopg_pool import AsyncConnectionPool
 
 _DB_HOST = os.getenv("POSTGRES_HOST", "db")
@@ -18,7 +19,8 @@ _DB_NAME = os.getenv("POSTGRES_DB", "mshsfootball")
 _DB_USER = os.getenv("POSTGRES_USER", "postgres")
 _DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
 
-_conninfo = f"host={_DB_HOST} port={_DB_PORT} dbname={_DB_NAME} user={_DB_USER} password={_DB_PASSWORD}"
+# make_conninfo quotes each value, so a password with a space or quote still works.
+_conninfo = make_conninfo(host=_DB_HOST, port=_DB_PORT, dbname=_DB_NAME, user=_DB_USER, password=_DB_PASSWORD)
 
 pool: AsyncConnectionPool | None = None
 

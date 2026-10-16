@@ -185,3 +185,42 @@ def test_the_honeypot_answers_before_turnstile(monkeypatch):
     monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret")
     res = _call(submissions.submit_feedback(_request(), _feedback(website="spam")))
     assert res.id == 0
+
+
+# --------------------------------------------- signed-in asset and data endpoints
+
+
+@pytest.mark.parametrize("path", ["/logos", "/helmets", "/colors", "/locations", "/helmet-assignments"])
+def test_asset_and_data_endpoints_need_a_signed_in_account(path):
+    """Each depends on CurrentUser (a valid Auth0 token), not the optional user the forms take."""
+    from backend.api.auth import require_user
+
+    route = next(r for r in submissions.router.routes if r.path == f"/api/v1/submissions{path}")
+    deps = {d.call for d in route.dependant.dependencies}
+    assert require_user in deps
+
+
+@pytest.mark.parametrize("path", ["/feedback", "/scores"])
+def test_the_feedback_form_stays_open_to_anonymous_visitors(path):
+    """The site's own form posts without signing in."""
+    from backend.api.auth import require_user
+
+    route = next(r for r in submissions.router.routes if r.path == f"/api/v1/submissions{path}")
+    assert require_user not in {d.call for d in route.dependant.dependencies}
+
+
+def test_an_account_under_the_daily_cap_may_submit():
+    """Below the cap nothing is raised, and the count is scoped to that account and those types."""
+    conn = FakeConn([(submissions._MAX_PER_ACCOUNT_PER_DAY - 1,)])
+    asyncio.run(submissions._require_under_account_cap(conn, 7))
+    sql, params = conn.calls[0]
+    assert "user_id = %s" in sql and params[0] == 7
+    assert set(params[1]) == {"logo", "helmet", "colors", "location", "helmet_assignment"}
+
+
+def test_an_account_at_the_daily_cap_is_refused():
+    """At the cap: 429."""
+    conn = FakeConn([(submissions._MAX_PER_ACCOUNT_PER_DAY,)])
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(submissions._require_under_account_cap(conn, 7))
+    assert exc_info.value.status_code == 429

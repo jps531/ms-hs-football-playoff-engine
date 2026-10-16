@@ -7,13 +7,10 @@ x-env-common: &env-common
   POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
   POSTGRES_DB: "${POSTGRES_DB:-mshsfootball}"
   POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+  # No default: a compose file that falls back to "postgres" is a password anyone can read.
+  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your env file}"
   PREFECT_PORT: "${PREFECT_PORT:-4200}"
   API_PORT: "${API_PORT:-8000}"
-  PREFECT_VERSION: "${PREFECT_VERSION:-2.17.1}"
-  PYTHON_VERSION: "${PYTHON_VERSION:-3.11}"
-  POSTGRES_VERSION: "${POSTGRES_VERSION:-17}"
-  NGINX_VERSION: "${NGINX_VERSION:-1.27-alpine}"
   NGINX_PORT: "${NGINX_PORT:-80}"
   PYTHONPATH: "${PYTHONPATH:-/opt/prefect/flows/pipelines}"
   CLOUDINARY_CLOUD_NAME: "${CLOUDINARY_CLOUD_NAME}"
@@ -24,9 +21,18 @@ x-env-common: &env-common
   AUTH0_AUDIENCE: "${AUTH0_AUDIENCE}"
   SESSION_SECRET_KEY: "${SESSION_SECRET_KEY}"
 
+# Images are pinned by digest (here and in the Dockerfiles) so every deploy
+# runs what was tested; Dependabot (.github/dependabot.yml) proposes updates.
+# Every container gets no-new-privileges: nothing in it can gain privileges
+# through setuid binaries.
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+
 services:
   nginx:
-    image: nginx:${NGINX_VERSION:-1.27-alpine}
+    <<: *hardening
+    image: nginx:1.30.6-alpine@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
     container_name: nginx_${ENVIRONMENT}
     ports:
       - "${NGINX_PORT:-80}:80"
@@ -47,7 +53,9 @@ services:
     restart: unless-stopped
 
   prefect-server:
-    image: prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
+    <<: *hardening
+    # Same Prefect tag as Dockerfile.prefect's base image.
+    image: prefecthq/prefect:2.17.1-python3.11@sha256:16f31cae6b600a5b6872503858ae512899b765be019620739eb0cdba316081f4
     container_name: prefect-server_${ENVIRONMENT}
     restart: unless-stopped
     command: prefect server start --host 0.0.0.0 --port ${PREFECT_PORT}
@@ -56,8 +64,10 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # Only Prefect's own settings: the server never touches the app database,
+    # Cloudinary or Auth0, so it doesn't hold their secrets.
     environment:
-      <<: *env-common
+      PREFECT_LOGGING_LEVEL: "${PREFECT_LOGGING_LEVEL:-INFO}"
       PREFECT_UI_SERVE_BASE: "/prefect"
       PREFECT_UI_API_URL: "/prefect/api"
     networks:
@@ -66,13 +76,10 @@ services:
       - prefect-data:/root/.prefect
 
   prefect-worker:
+    <<: *hardening
     build:
       context: .
       dockerfile: Dockerfile.prefect
-      args:
-        - ENVIRONMENT=${ENVIRONMENT}
-        - PREFECT_VERSION=${PREFECT_VERSION}
-        - PYTHON_VERSION=${PYTHON_VERSION}
     container_name: prefect-worker_${ENVIRONMENT}
     restart: unless-stopped
     environment:
@@ -89,6 +96,9 @@ services:
       SMTP_FROM: "${SMTP_FROM:-}"
       DIGEST_TO: "${DIGEST_TO:-}"
       SITE_URL: "${SITE_URL:-https://mshsfootball.com}"
+      # Least-privilege role from sql/app_roles.sql; falls back to the owner until it exists.
+      POSTGRES_USER: "${PIPELINE_DB_USER:-${POSTGRES_USER:-postgres}}"
+      POSTGRES_PASSWORD: "${PIPELINE_DB_PASSWORD:-${POSTGRES_PASSWORD}}"
     volumes:
       - share-assets:/opt/share
     networks:
@@ -97,11 +107,13 @@ services:
       - prefect-server
 
   api:
+    <<: *hardening
     build:
       context: .
       dockerfile: Dockerfile.api
-      args:
-        - PYTHON_VERSION=${PYTHON_VERSION}
+    # Runs as an unprivileged user (Dockerfile.api) and needs no capabilities.
+    cap_drop:
+      - ALL
     container_name: api_${ENVIRONMENT}
     restart: unless-stopped
     environment:
@@ -111,6 +123,11 @@ services:
       TURNSTILE_SECRET_KEY: "${TURNSTILE_SECRET_KEY:-}"
       # The Auth0 single-page app /moderate signs in with.
       AUTH0_SPA_CLIENT_ID: "${AUTH0_SPA_CLIENT_ID:-}"
+      # CORS origin; required (not *) once ENVIRONMENT isn't local.
+      FRONTEND_ORIGIN: "${FRONTEND_ORIGIN:-*}"
+      # Least-privilege role from sql/app_roles.sql; falls back to the owner until it exists.
+      POSTGRES_USER: "${API_DB_USER:-${POSTGRES_USER:-postgres}}"
+      POSTGRES_PASSWORD: "${API_DB_PASSWORD:-${POSTGRES_PASSWORD}}"
     networks:
       - mshsfootball
     depends_on:
@@ -120,12 +137,20 @@ services:
 
   # Local PostgreSQL for testing (disabled on VM by using profiles)
   db:
-    image: postgres:${POSTGRES_VERSION:-17}
+    <<: *hardening
+    # Stay on major 17: a new major needs a dump and restore, not just a pull.
+    image: postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
     profiles: ["local-db"]
     environment:
       <<: *env-common
+      # For sql/init_app_roles.sh on a fresh database.
+      API_DB_PASSWORD: "${API_DB_PASSWORD:-}"
+      PIPELINE_DB_PASSWORD: "${PIPELINE_DB_PASSWORD:-}"
+    # Loopback only, for local tools: Docker's port rules bypass ufw, so a bare
+    # "5432:5432" would leave the database open to the internet behind nothing
+    # but the cloud firewall. Containers reach it over the compose network.
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - dbdata:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
@@ -135,6 +160,8 @@ services:
       - ./sql/seeds/playoff_formats_2025.sql:/docker-entrypoint-initdb.d/05_playoff_formats_2025.sql:ro
       - ./sql/seeds/playoff_formats_2026.sql:/docker-entrypoint-initdb.d/06_playoff_formats_2026.sql:ro
       - ./sql/seeds/championship_venues_history.sql:/docker-entrypoint-initdb.d/07_championship_venues_history.sql:ro
+      - ./sql/init_app_roles.sh:/docker-entrypoint-initdb.d/08_app_roles.sh:ro
+      - ./sql/app_roles.sql:/docker-entrypoint-initdb.d/app_roles.sql.inc:ro
     networks:
       - mshsfootball
     healthcheck:

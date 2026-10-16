@@ -1246,8 +1246,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 /* ------------------------------------------------------------ moderation (/moderate) */
 .mod-page { max-width: 46rem; }
 .mod-account { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.mod-button[hidden] { display: none; }
 .mod-button {
-  display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px;
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px;
   font: inherit; font-size: 14px; font-weight: 600; color: var(--text-primary); text-decoration: none;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
 }
