@@ -11,7 +11,7 @@
 import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate } from "./format.js";
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
-  ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard,
+  ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard, breadcrumbs,
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -206,6 +206,26 @@ function store(key, value) {
 
 // ------------------------------------------------------------- render
 
+/**
+ * Tell search engines not to index what's on screen (a page that doesn't
+ * exist, or has nothing published): nginx can only 404 addresses that are
+ * malformed, so one for a region a class doesn't have is caught here.
+ */
+function setNoindex(on) {
+  let tag = document.head.querySelector('meta[name="robots"][data-app]');
+  if (!on) {
+    tag?.remove();
+    return;
+  }
+  if (!tag) {
+    tag = document.createElement("meta");
+    tag.name = "robots";
+    tag.dataset.app = "";
+    document.head.append(tag);
+  }
+  tag.content = "noindex";
+}
+
 let renderToken = 0;
 // Set when the team search jumps to a team, so the page scrolls to its row;
 // picking a row in place leaves the scroll position alone.
@@ -213,6 +233,7 @@ let scrollToFocus = false;
 async function render() {
   const token = ++renderToken;
   route = readRoute();
+  setNoindex(route.page === "notfound");
   if (route.page === "notfound") {
     renderScrubber(null);
     document.body.classList.remove("is-wide");
@@ -266,6 +287,7 @@ async function render() {
   } catch (err) {
     if (token !== renderToken) return;
     showContext(null);
+    setNoindex(true);
     app.innerHTML = notice(
       err?.status === 404
         ? "There’s nothing published for this yet. Try another week or season, or check back once region play is underway."
@@ -605,6 +627,7 @@ async function classView(ctx) {
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
 
   const head = `<div class="page entry-head">
+    ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, null]])}
     <h1 class="title">Class ${clazz}A</h1>
     ${controlsLine(ctx, shownWeeks, { asOf: data.as_of_date, mode, projectedAvailable })}
   </div>`;
@@ -683,10 +706,10 @@ async function regionView(ctx) {
   nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode);
   return `<div class="page">
     <header class="region-head">
-      <p class="region-head__links">
-        <a href="${esc(hrefWith({ region: null, team: null }))}">All ${clazz}A regions</a>
+      <div class="region-head__links">
+        ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ region: null, team: null })], [`Region ${region}-${clazz}A`, null]])}
         <a href="${esc(hrefWith({ page: "bracket", region: null }))}">${clazz}A Bracket</a>
-      </p>
+      </div>
       <h1 class="title">Region ${region}-${clazz}A</h1>
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
       ${controls}
@@ -1008,6 +1031,7 @@ async function bracketView(ctx) {
     : `<p class="focus-note muted">Tap a game to see who might play there, and pick a team to follow its path.</p>`;
   return `<div class="page">
     <header class="entry-head bracket-head">
+      ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: null })], [`${clazz}A Bracket`, null]])}
       <h1 class="title">Class ${clazz}A Bracket</h1>
       ${controls}
       ${focusNote}

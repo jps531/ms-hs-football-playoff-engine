@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Page not found · Mississippi High School Football</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/png" href="/static/mark.png">
+  <script>
+    (() => {
+      let theme = null;
+      try { theme = localStorage.getItem("mshsf.theme"); } catch { /* storage unavailable */ }
+      const dark = theme ? theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      if (dark) document.documentElement.classList.add("dark");
+    })();
+  </script>
+  <link rel="preload" href="/static/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/nippo-bold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="site-header-bar">
+    <header class="site-header">
+      <a class="site-header__home" href="/" aria-label="Mississippi High School Football, all regions">
+        <img src="/static/mark.png" alt="" width="34" height="29">
+        <span>Mississippi High School Football</span>
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <a class="site-nav__item" href="/" data-nav="standings">Standings</a>
+        <a class="site-nav__item" href="/brackets/1a" data-nav="bracket">Bracket</a>
+        <a class="site-nav__item" href="/methodology" data-nav="method">How it works</a>
+      </nav>
+      <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="false" tabindex="-1" data-theme="light" title="Light">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg>
+          <span class="visually-hidden">Light</span>
+        </button>
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="true" tabindex="0" data-theme="system" title="Match this device">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 15H2.8V3.8h15.4V8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.4 15v3.4M5.6 18.6h5.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.00 5.40 L10.79 7.51 L13.04 7.61 L11.28 9.02 L11.88 11.19 L10.00 9.95 L8.12 11.19 L8.72 9.02 L6.96 7.61 L9.21 7.51Z" fill="currentColor"/><rect x="15.2" y="9.6" width="6" height="10.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <span class="visually-hidden">System</span>
+        </button>
+        <button type="button" class="theme-toggle__item" role="radio" aria-checked="false" tabindex="-1" data-theme="dark" title="Dark">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.6A8.6 8.6 0 1 1 9.4 3.6a6.8 6.8 0 0 0 11 11Z" fill="currentColor"/></svg>
+          <span class="visually-hidden">Dark</span>
+        </button>
+      </div>
+    </header>
+  </div>
+
+  <main id="content" class="page article">
+    <h1 class="title">Page not found</h1>
+    <div class="prose">
+      <p>There’s no page at this address. It may have moved, or the link may be mistyped.</p>
+      <p class="landing-links">Standings: <a href="/standings/1a">1A</a> <a href="/standings/2a">2A</a> <a href="/standings/3a">3A</a> <a href="/standings/4a">4A</a> <a href="/standings/5a">5A</a> <a href="/standings/6a">6A</a> <a href="/standings/7a">7A</a></p>
+      <p class="landing-links">Brackets: <a href="/brackets/1a">1A</a> <a href="/brackets/2a">2A</a> <a href="/brackets/3a">3A</a> <a href="/brackets/4a">4A</a> <a href="/brackets/5a">5A</a> <a href="/brackets/6a">6A</a> <a href="/brackets/7a">7A</a></p>
+      <p><a href="/">Go to the front page</a></p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p><a href="/feedback">Send feedback or report a problem</a></p>
+    <p>© 2025–2026 Paul Sullivan. All rights reserved.</p>
+  </footer>
+
+  <!-- Phones: the same three destinations as a tab bar along the bottom. -->
+  <nav class="tab-bar" aria-label="Main">
+    <a class="tab-bar__item" href="/" data-nav="standings"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg><span>Standings</span></a>
+    <a class="tab-bar__item" href="/brackets/1a" data-nav="bracket"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h5v6H3M3 13h5v6H3M8 8h5v8H8M13 12h8"/></svg><span>Bracket</span></a>
+    <a class="tab-bar__item" href="/methodology" data-nav="method"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor" stroke="none"/></svg><span>How it works</span></a>
+  </nav>
+
+  <script src="/static/js/theme.js" defer></script>
+  <script src="/static/js/nav.js" defer></script>
+</body>
+</html>

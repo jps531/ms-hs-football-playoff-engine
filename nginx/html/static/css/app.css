@@ -9,6 +9,16 @@
   font-display: swap;
   src: url("/static/fonts/inter-latin-wght-normal.woff2") format("woff2");
 }
+/* Nippo Bold (Indian Type Foundry, ITF Free Font License), served from this
+   site: a Latin subset of backend/assets/fonts/Nippo-Bold.otf, the file the
+   share cards draw with, so there's no third-party stylesheet to wait on. */
+@font-face {
+  font-family: "Nippo";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/nippo-bold.woff2") format("woff2");
+}
 
 /* ------------------------------------------------------------------ tokens */
 
@@ -537,7 +547,15 @@ button { font: inherit; color: inherit; }
 /* ---------------------------------------------------------- region view */
 
 .region-head { padding-block: 28px 0; }
-.region-head__links { display: flex; flex-wrap: wrap; gap: 0 20px; }
+.region-head__links { display: flex; flex-wrap: wrap; align-items: center; gap: 0 20px; }
+
+/* Breadcrumbs: Home › Class 7A › Region 2-7A. Each link is a full-height target. */
+.crumbs ol { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.crumbs li { display: inline-flex; align-items: center; min-height: 44px; color: var(--text-secondary); }
+.crumbs li + li::before { content: "›"; margin: 0 8px; color: var(--text-secondary); }
+.crumbs a { display: inline-flex; align-items: center; min-height: 44px; }
+.entry-head .crumbs + .title, .article .crumbs + .title { margin-top: 4px; }
+.entry-head:has(> .crumbs) { padding-top: 28px; } /* the crumbs take the space the padding gave */
 .region-head__links a {
   display: inline-flex; align-items: center; min-height: 44px;
   font-size: 14px;
@@ -545,7 +563,8 @@ button { font: inherit; color: inherit; }
 .region-head .title { margin-top: 4px; }
 .region-head .headline { margin-top: 20px; }
 .region-head .provenance { margin-top: 16px; }
-.region-head .provenance--controls, .entry-head .provenance--controls { margin-top: 8px; }
+.region-head .provenance--controls, .entry-head .provenance--controls,
+.static-page .region-head .provenance--static { margin-top: 8px; }
 
 .standings { margin-top: 14px; width: 100%; border-collapse: collapse; }
 .standings caption { text-align: left; }
@@ -842,7 +861,8 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 
 /* The bracket page is wider than the rest, with the header to match. */
 body.is-wide .site-header, body.is-wide .scrubber-bar__inner, body.is-wide .context-bar__inner,
-body.is-wide .page, body.is-wide .site-footer { max-width: 92rem; }
+body.is-wide .page, body.is-wide .site-footer,
+body:has(.bracket-head) :is(.site-header, .scrubber-bar__inner, .context-bar__inner, .page, .site-footer) { max-width: 92rem; }
 
 /* Round tabs: phones only (wide screens show every round at once). */
 .round-tabs { display: none; }
@@ -1333,7 +1353,12 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 
 /* ------------------------------------------------------------ static page content
    What nginx includes before the app loads (backend/helpers/static_pages.py). */
+/* The pre-rendered snapshot line takes the room the app's dropdowns will
+   (one 44px row, two on phones), so nothing below it moves when they arrive.
+   The landing preview's copy is a picture, so it keeps its own height. */
 .provenance--static { margin-top: 8px; }
+.static-page .provenance--static { display: flex; align-items: center; min-height: 44px; }
+@media (max-width: 30em) { .static-page .provenance--static { min-height: 88px; align-items: flex-start; padding-top: 14px; } }
 .static-list { display: grid; gap: 6px; margin-top: 12px; padding-left: 20px; }
 .static-list--inline { display: flex; flex-wrap: wrap; gap: 6px 18px; padding-left: 0; list-style: none; }
 
@@ -1400,7 +1425,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   display: flex; flex-direction: column; flex: none; width: 380px; max-height: none;
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
 }
-.landing--fallback .landing-links a { margin-right: 10px; }
+.landing-links a { margin-right: 10px; }
 
 /* The team's Elo rating under its seeding odds (the expanded row). */
 .detail__elo { margin-top: 12px; font-size: 15px; font-variant-numeric: tabular-nums; }

@@ -106,3 +106,31 @@ def test_every_image_runs_the_python_the_project_targets():
     assert api == worker.group(1) == target
     dependabot = (ROOT / ".github" / "dependabot.yml").read_text()
     assert 'dependency-name: "python"' in dependabot
+
+
+def test_only_real_pages_get_the_app_and_everything_else_404s():
+    """Page routes are validated in nginx; other addresses get the 404 page, not the API's JSON or a 200 shell."""
+    route = re.search(r"location ~ (\S+) \{\n\s+root /usr/share/nginx/html;\n\s+ssi on;", NGINX).group(1)
+    pattern = re.compile(route.strip("^$").join("^$"))
+    for path in ("/standings/3a", "/standings/3a/", "/standings/3a/6", "/brackets/7a"):
+        assert pattern.match(path), path
+    for path in ("/standings/9a", "/standings/3a/12", "/standings/3a/6/x", "/brackets/8a", "/brackets/7a/1"):
+        assert not pattern.match(path), path
+    assert "error_page 404 /404.html;" in NGINX
+    assert "location ^~ /standings/" not in NGINX  # ^~ would stop the route regex from ever matching
+    assert re.search(r"location / \{\n\s+return 404;", NGINX)
+    page = (ROOT / "nginx" / "html" / "404.html").read_text()
+    assert '<meta name="robots" content="noindex">' in page
+
+
+def test_api_responses_are_noindexed_but_still_crawlable():
+    """Google renders the app, which needs /api/, so robots.txt mustn't block it; a header keeps it out of results."""
+    robots = (ROOT / "nginx" / "html" / "robots.txt").read_text()
+    assert "Disallow: /api" not in robots
+    assert '"noindex"' in NGINX and "add_header X-Robots-Tag $x_robots_tag" in NGINX
+
+
+def test_www_redirects_to_the_bare_domain():
+    """One address per page for search engines."""
+    assert "return 301 https://mshsfootball.com$request_uri;" in NGINX
+    assert "if ($host = www.mshsfootball.com)" in NGINX

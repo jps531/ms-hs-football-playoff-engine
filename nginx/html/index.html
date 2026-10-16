@@ -29,7 +29,7 @@
     })();
   </script>
   <link rel="preload" href="/static/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=nippo@700&amp;display=swap">
+  <link rel="preload" href="/static/fonts/nippo-bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
@@ -73,7 +73,8 @@
   </div>
 
   <div class="scrubber-bar">
-    <div class="scrubber-bar__inner" id="scrubber"></div>
+    <!-- The class picker as the app draws it (app.js renderScrubber), filled in by nginx's include. -->
+    <div class="scrubber-bar__inner" id="scrubber"><nav class="scrubber" aria-label="Classification"><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/1a" data-class="1"<!--# if expr="$page_class = 1" --> aria-current="page"<!--# endif -->>1A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/2a" data-class="2"<!--# if expr="$page_class = 2" --> aria-current="page"<!--# endif -->>2A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/3a" data-class="3"<!--# if expr="$page_class = 3" --> aria-current="page"<!--# endif -->>3A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/4a" data-class="4"<!--# if expr="$page_class = 4" --> aria-current="page"<!--# endif -->>4A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/5a" data-class="5"<!--# if expr="$page_class = 5" --> aria-current="page"<!--# endif -->>5A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/6a" data-class="6"<!--# if expr="$page_class = 6" --> aria-current="page"<!--# endif -->>6A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/7a" data-class="7"<!--# if expr="$page_class = 7" --> aria-current="page"<!--# endif -->>7A</a></nav></div>
   </div>
 
   <div class="context-bar" id="context-bar" aria-hidden="true">
