@@ -55,7 +55,7 @@ services:
   prefect-server:
     <<: *hardening
     # Same Prefect tag as Dockerfile.prefect's base image.
-    image: prefecthq/prefect:2.17.1-python3.11@sha256:16f31cae6b600a5b6872503858ae512899b765be019620739eb0cdba316081f4
+    image: prefecthq/prefect:2.20.26-python3.11@sha256:967e666f27b0732370fc95bd3170f927e1a76b8fe059adc129cc56958a938b48
     container_name: prefect-server_${ENVIRONMENT}
     restart: unless-stopped
     command: prefect server start --host 0.0.0.0 --port ${PREFECT_PORT}
