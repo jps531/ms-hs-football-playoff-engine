@@ -23,6 +23,10 @@ updates:
       # Prefect 3 is a different product; Postgres majors need a dump and restore.
       - dependency-name: "prefecthq/prefect"
         update-types: ["version-update:semver-major"]
+      # Python stays on 3.11 (patch releases only): a new minor needs the
+      # locked packages to have wheels for it, and the worker to move too.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # Images in docker-compose.yml (nginx, postgres, prefect-server)
   - package-ecosystem: "docker-compose"
