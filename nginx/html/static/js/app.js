@@ -14,6 +14,7 @@ import {
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard,
 } from "./components.js";
 import { matchTeams } from "./search.js";
+import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
 import {
@@ -223,7 +224,8 @@ async function render() {
   const saved = Number(stored(STORE.clazz, (v) => CLASSES.includes(Number(v))));
   route.clazz ??= CLASSES.includes(saved) ? saved : CLASSES[0];
   store(STORE.clazz, route.clazz);
-  renderScrubber(route.clazz);
+  // The front page shows every class, so no class tab is current there.
+  renderScrubber(route.page === "landing" ? null : route.clazz);
   if (route.page === "feedback") {
     document.body.classList.remove("is-wide");
     showContext(null);
@@ -240,14 +242,15 @@ async function render() {
     route.season = season === currentSeason ? null : season;
     route.teamName = resolveTeam(route.team, await teamsBySchool(season));
     const ctx = { ...route, team: route.teamName, season, seasons: all, currentSeason };
-    renderScrubber(route.clazz); // again, now that the picked team is known (the view links carry it)
+    renderScrubber(route.page === "landing" ? null : route.clazz); // again, now that the picked team is known (the view links carry it)
     loadTeamSearch(season);
-    const html = route.page === "bracket" ? await bracketView(ctx)
+    const html = route.page === "landing" ? await landingView()
+      : route.page === "bracket" ? await bracketView(ctx)
       : route.region ? await regionView(ctx) : await classView(ctx);
     if (token !== renderToken) return;
     // Re-rendering the same bracket (a team picked, odds changed) keeps each round strip where it was.
     const strip = route.page === "bracket" ? app.querySelector(".tree")?.scrollLeft ?? 0 : 0;
-    app.innerHTML = html;
+    if (html !== null) app.innerHTML = html;
     document.body.classList.toggle("is-wide", route.page === "bracket");
     if (route.page === "bracket") {
       const tree = app.querySelector(".tree");
@@ -311,6 +314,7 @@ function showContext(html) {
 const SITE = "Mississippi High School Football";
 
 function pageTitle(clazz, region, page) {
+  if (page === "landing") return "Mississippi High School Football Playoff Races"; // as index.html's own <title>
   if (page === "bracket") return `Class ${clazz}A Playoff Bracket — ${SITE}`;
   return region ? `Region ${region}-${clazz}A playoff race — ${SITE}` : `Class ${clazz}A playoff races — ${SITE}`;
 }
@@ -560,6 +564,27 @@ function dateParam(ctx, weeks) {
 
 function oddsMode(ctx) {
   return ctx.odds ?? stored(STORE.odds, (v) => v in ODDS_MODES) ?? "projected";
+}
+
+// ------------------------------------------------------------ front page
+// The pipeline draws it (landing.js says how it reaches the page); the app
+// only shows it.
+
+/**
+ * The front page's HTML, or null when it's already on screen (a first visit:
+ * nginx put the pipeline's copy there), so it's left exactly as it is.
+ */
+async function landingView() {
+  nextContext = null;
+  if (app.querySelector(":scope > .landing")) return null;
+  try {
+    const res = await fetch(FRONT_PAGE_URL, { headers: { Accept: "text/html" } });
+    const html = res.ok ? await res.text() : null;
+    if (isFrontPage(html)) return html;
+  } catch {
+    /* fall through to the fallback */
+  }
+  return LANDING_FALLBACK;
 }
 
 // ------------------------------------------------------ class view (entry)

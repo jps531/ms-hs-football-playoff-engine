@@ -1,5 +1,5 @@
 // URL shape: the path says what you're looking at, the query says how.
-//   /                          landing (the remembered class's regions)
+//   /                          landing (what the site does, and a featured race)
 //   /standings/3a              every region in a class
 //   /standings/3a/6            one region (Region 6-3A)
 //   /brackets/3a               a class's playoff bracket

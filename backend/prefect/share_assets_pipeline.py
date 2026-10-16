@@ -65,11 +65,15 @@ from backend.helpers.share_cards import (
 )
 from backend.helpers.static_pages import (
     bracket_path,
+    bracket_preview_html,
     class_body,
     class_path,
+    landing_body,
+    layout_results,
+    locked_seeds,
+    pick_featured,
     region_body,
     region_path,
-    site_body,
     sitemap_xml,
 )
 
@@ -137,13 +141,14 @@ def build_share_assets(
     _write_png(out_dir / "og" / "site.png", render_site_card())
     written = dict.fromkeys(keys, 0)
     teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
-    regions_by_class: dict[int, list[int]] = {}
-    brackets: list[int] = []
     sitemap: list[tuple[str, date | None]] = [("/", today), ("/methodology", None)]
+    region_payloads: dict[tuple[int, int], dict] = {}
+    class_standings: dict[int, dict] = {}
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
             continue
+        class_standings[clazz] = standings
         dates = (fetch(f"/seasons/{season}/dates?class={clazz}") or {}).get("dates", [])
         all_teams = [t for r in standings["regions"] for t in r["teams"]]
         mode = odds_mode(all_teams)
@@ -170,7 +175,6 @@ def build_share_assets(
         written["brackets"] += bracket["brackets"]
         written["bracket_teams"] += bracket["bracket_teams"]
         if bracket["brackets"]:
-            brackets.append(clazz)
             sitemap.append((bracket_path(clazz), as_of))
 
         for region in sorted(r["region"] for r in standings["regions"]):
@@ -196,15 +200,46 @@ def build_share_assets(
             )
             games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
             body = region_body(clazz, region, payload, f"{season} season · {r_stamp}", r_mode, teams, games)
+            region_payloads[(clazz, region)] = {
+                "standings": payload,
+                "stamp": f"{season} season · {r_stamp}",
+                "mode": r_mode,
+            }
             _write_text(out_dir / "body" / f"{name}.html", body)
-            regions_by_class.setdefault(clazz, []).append(region)
             sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
             written["teams"] += _write_team_assets(out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of)
-    if regions_by_class:
-        _write_text(out_dir / "body" / "site.html", site_body(regions_by_class, brackets))
+    # The front page, with the most open race as its live example. The app shows this same file at "/".
+    summary = fetch(f"/standings/summary?season={season}")
+    featured = pick_featured(summary) if summary else None
+    region_data = region_payloads.get((featured["clazz"], featured["card"]["region"])) if featured else None
+    if featured and region_data:
+        featured.update(region_data)
+        featured["class_standings"] = class_standings.get(featured["clazz"])
+        featured["bracket_html"] = _bracket_preview_html(fetch, season, featured, class_standings, teams)
+    else:
+        featured = None
+    _write_text(out_dir / "body" / "site.html", landing_body(featured, teams))
+    if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     return written
+
+
+def _bracket_preview_html(fetch: Fetch, season: int, featured: dict, class_standings: dict, teams: dict) -> str:
+    """The front page's picture of the featured class's bracket page, from the bracket's own data."""
+    clazz = featured["clazz"]
+    games = (fetch(f"/bracket/matchups?season={season}&class={clazz}") or {}).get("games") or []
+    if not games:
+        return ""
+    layout = (fetch(f"/bracket?season={season}&class={clazz}") or {}).get("bracket_layout")
+    projected = any(o.get("p_reach_weighted") is not None for g in games for o in g["side_a"]["occupants"])
+    ctx = {
+        "mode": "projected" if projected else "tossup",
+        "results": layout_results(layout),
+        "seeds": locked_seeds(class_standings.get(clazz)),
+        "teams": teams,
+    }
+    return bracket_preview_html(clazz, games, ctx)
 
 
 def _write_bracket_assets(

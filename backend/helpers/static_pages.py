@@ -21,6 +21,7 @@ from collections.abc import Iterable
 from datetime import date
 from xml.sax.saxutils import escape as xml_escape
 
+from backend.helpers.color_contrast import contrast_ratio
 from backend.helpers.share_cards import (
     display_order,
     format_pct,
@@ -39,8 +40,9 @@ DROPPED_WORDS = {"county", "high", "school", "academy"}  # as format.js's initia
 
 
 def _e(text: object) -> str:
-    """HTML-escape any value."""
-    return html.escape(str(text), quote=True)
+    """HTML-escape any value exactly as format.js's ``escapeHtml`` does (apostrophe as ``&#39;``),
+    so markup shared with the app is byte-for-byte the same."""
+    return html.escape(str(text), quote=True).replace("&#x27;", "&#39;")
 
 
 def region_path(clazz: int, region: int) -> str:
@@ -65,21 +67,82 @@ def initials(name: str) -> str:
     return "".join(w[0].upper() for w in (significant or words)[:2])
 
 
-def _mark(school: str, team: dict | None) -> str:
-    """The team's helmet image when it has one, else its initials, as the app's ``teamMark`` falls back to."""
+_HEX = re.compile(r"^#?[0-9a-fA-F]{6}$")
+
+# The badge icons (ICONS in components.js).
+BADGE_ICONS = {
+    "clinched": '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+    "eliminated": '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+    "coinflip": '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">'
+    '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.2"/></svg>',
+}
+BADGE_ICONS["champion"] = BADGE_ICONS["clinched"]
+
+
+def team_colors(team: dict | None) -> tuple[str, str] | None:
+    """(shell, stripe) for a team's generic helmet, as format.js's ``teamRawColors``; None without a primary."""
+    variants = (team or {}).get("color_variants") or {}
+    shell = (variants.get("primary") or {}).get("raw")
+    if not shell or not _HEX.match(shell):
+        return None
+    secondary = ((variants.get("secondary") or [{}])[0] or {}).get("raw") or str(
+        (team or {}).get("secondary_color_hex") or ""
+    ).split(",")[0].strip()
+    return shell.upper(), (secondary.upper() if _HEX.match(secondary or "") else "#FFFFFF")
+
+
+def generic_helmet(shell: str, stripe: str, size: int = 24) -> str:
+    """A helmet drawn in the team's colors, as components.js's ``genericHelmet``."""
+    pale = " mark--pale" if contrast_ratio(shell if shell.startswith("#") else f"#{shell}", "#FFFFFF") < 1.6 else ""
+    return (
+        f'<svg class="mark mark--generic{pale}" viewBox="0 0 32 28" width="{size}" height="{size}" aria-hidden="true">'
+        '<g fill="none" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M20 13H30.2V22.4H21.6M19.6 17.8H30.2M25 13V22.4" stroke="#8C8C8C" stroke-width="1.7"/>'
+        '<path class="helmet__shell" d="M2.5 16.2C2.5 8.2 8.8 2.6 16.4 2.6C22.4 2.6 26.6 6.2 27.8 11.3L20.2 12.2'
+        'L19.2 19.4L21.4 22.9C18.8 25.2 14.6 26 10.6 25.2C5.6 24.2 2.5 20.9 2.5 16.2Z" '
+        f'fill="{_e(shell)}" stroke-width="1.5" paint-order="stroke"/>'
+        f'<path d="M5.2 11.8C7.2 7.4 11 5 15.6 4.6" stroke="{_e(stripe)}" stroke-width="1.8"/>'
+        '<circle cx="12.4" cy="16.4" r="1.6" fill="#8C8C8C"/>'
+        "</g></svg>"
+    )
+
+
+def _mark(school: str, team: dict | None, size: int = 24) -> str:
+    """The team's mark as the app's ``teamMark`` draws it: its helmet image, else a helmet in its colors,
+    else its initials."""
     helmet = (team or {}).get("helmet_url")
     if helmet:
-        return f'<img class="mark mark--helmet" src="{_e(helmet)}" alt="" width="24" height="24" loading="lazy">'
+        return (
+            f'<img class="mark mark--helmet" src="{_e(helmet)}" alt="" width="{size}" height="{size}" loading="lazy">'
+        )
+    colors = team_colors(team)
+    if colors:
+        return generic_helmet(*colors, size=size)
     return f'<span class="mark mark--initials" aria-hidden="true">{_e(initials(school))}</span>'
 
 
-def _badge(team: dict, clazz: int) -> str:
-    """The team's status badge (Clinched #1, Eliminated, …), text only."""
+def region_complete(teams: list[dict]) -> bool:
+    """Every team has played every region game (standings.js's ``regionComplete``)."""
+    n = len(teams)
+    return n > 1 and all(
+        t["record"]["region_wins"] + t["record"]["region_losses"] + (t["record"].get("region_ties") or 0) >= n - 1
+        for t in teams
+    )
+
+
+def _badge(team: dict, clazz: int, complete: bool = False) -> str:
+    """The team's status badges as components.js's ``statusBadges`` draws them (Clinched #1, Eliminated, …)."""
+    badges = []
     status = team_status(team, clazz)
-    if not status:
-        return ""
-    kind, label = status
-    return f'<span class="badge badge--{_e(kind)}">{_e(label)}</span>'
+    if status:
+        badges.append(status)
+    if complete and team.get("coin_flip_needed"):
+        badges.append(("coinflip", "Coin flip"))
+    return "".join(
+        f'<span class="badge badge--{_e(kind)}">{BADGE_ICONS.get(kind, "")}{_e(label)}</span>' for kind, label in badges
+    )
 
 
 def _odds(p: float | None) -> str:
@@ -170,15 +233,20 @@ def _row_start(team: dict, pos: int) -> str:
     return f'<tr class="{cls}"><td class="col-pos">{pos}</td>'
 
 
-def _team_cell(team: dict, page: str, clazz: int, teams: dict[str, dict]) -> str:
-    """The team's row header: mark, name and status badge, linking to its view of the region page."""
+def _team_cell(team: dict, page: str, clazz: int, teams: dict[str, dict], complete: bool, link: bool = True) -> str:
+    """The team's row header: mark, name and status badges, linking to its view of the region page.
+
+    ``link=False`` drops the link, for a preview that is itself one link.
+    """
     name = team["school"]
-    href = _e(f"{page}?team={slugify(name)}")
-    label = f'<span class="team-name">{_e(name)}</span>{_badge(team, clazz)}'
-    return (
-        f'<th scope="row" class="col-team"><a class="team-link" href="{href}">'
-        f'{_mark(name, teams.get(name))}<span class="row-toggle__label">{label}</span></a></th>'
+    inner = (
+        f'{_mark(name, teams.get(name))}<span class="row-toggle__label">'
+        f'<span class="team-name">{_e(name)}</span>{_badge(team, clazz, complete)}</span>'
     )
+    if not link:
+        return f'<th scope="row" class="col-team"><span class="team-link">{inner}</span></th>'
+    href = _e(f"{page}?team={slugify(name)}")
+    return f'<th scope="row" class="col-team"><a class="team-link" href="{href}">{inner}</a></th>'
 
 
 def _region_record(team: dict) -> str:
@@ -201,6 +269,32 @@ def _list_section(title: str, items: list[str]) -> str:
     return f'<section class="section"><h2 class="section-title">{_e(title)}</h2><ul class="static-list">{lis}</ul></section>'
 
 
+def region_table(clazz: int, region: int, payload: dict, mode: str, teams: dict[str, dict], link: bool = True) -> str:
+    """The region page's standings table: position, team, records, odds of each seed and the playoffs."""
+    ordered = display_order(payload["teams"])
+    positions = standing_positions(ordered)
+    page = region_path(clazz, region)
+    complete = not payload.get("remaining_games")
+    rows = []
+    for pos, team in zip(positions, ordered, strict=True):
+        odds = "".join(f'<td class="col-odds">{_odds(mode_odds(team, key, mode))}</td>' for key, _ in ODDS_COLUMNS)
+        rows.append(
+            f"{_row_start(team, pos)}{_team_cell(team, page, clazz, teams, complete, link)}"
+            f'<td class="col-rec">{_region_record(team)}</td>'
+            f'<td class="col-rec col-overall">{_overall_record(team)}</td>{odds}</tr>'
+        )
+    heads = "".join(f'<th scope="col" class="col-odds">{label}</th>' for _, label in ODDS_COLUMNS)
+    return (
+        '<table class="standings">'
+        f'<caption class="visually-hidden">Region {region}-{clazz}A standings and {MODE_NAMES[mode]} odds of '
+        "finishing in each playoff position.</caption>"
+        '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
+        '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
+        f'<th scope="col" class="col-rec col-overall">Overall</th>{heads}</tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
 def region_body(
     clazz: int,
     region: int,
@@ -214,27 +308,6 @@ def region_body(
 
     *games* are the region's ``/games`` rows, for the remaining games' dates and sites.
     """
-    ordered = display_order(payload["teams"])
-    positions = standing_positions(ordered)
-    page = region_path(clazz, region)
-    rows = []
-    for pos, team in zip(positions, ordered, strict=True):
-        odds = "".join(f'<td class="col-odds">{_odds(mode_odds(team, key, mode))}</td>' for key, _ in ODDS_COLUMNS)
-        rows.append(
-            f"{_row_start(team, pos)}{_team_cell(team, page, clazz, teams)}"
-            f'<td class="col-rec">{_region_record(team)}</td>'
-            f'<td class="col-rec col-overall">{_overall_record(team)}</td>{odds}</tr>'
-        )
-    heads = "".join(f'<th scope="col" class="col-odds">{label}</th>' for _, label in ODDS_COLUMNS)
-    table = (
-        '<table class="standings">'
-        f'<caption class="visually-hidden">Region {region}-{clazz}A standings and {MODE_NAMES[mode]} odds of '
-        "finishing in each playoff position.</caption>"
-        '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
-        '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
-        f'<th scope="col" class="col-rec col-overall">Overall</th>{heads}</tr></thead>'
-        f"<tbody>{''.join(rows)}</tbody></table>"
-    )
     schedule = _list_section("Remaining games", remaining_matchups(payload.get("remaining_games") or [], games))
     needs = _list_section("What has to happen", insight_lines(payload.get("key_insights")))
     headline = payload.get("headline")
@@ -246,63 +319,577 @@ def region_body(
         f'<a href="{bracket_path(clazz)}">{clazz}A Bracket</a></p>'
         f'<h1 class="title">Region {region}-{clazz}A</h1>{headline_html}{_provenance(stamp)}'
         "</header>"
-        f"{table}{schedule}{needs}"
+        f"{region_table(clazz, region, payload, mode, teams)}{schedule}{needs}"
         "</div>\n"
+    )
+
+
+def class_region_block(
+    clazz: int, block: dict, mode: str, teams: dict[str, dict], heading: str = "h2", link: bool = True
+) -> str:
+    """One region as the class page shows it: its title and a condensed table (position, team, region
+    record, odds of 1st and of the playoffs). ``link=False`` for a preview that is itself one link."""
+    region = block["region"]
+    ordered = display_order(block["teams"])
+    positions = standing_positions(ordered)
+    page = region_path(clazz, region)
+    complete = region_complete(ordered)
+    title = f'<a href="{page}">Region {region}</a>' if link else f"Region {region}"
+    labelled = f' aria-labelledby="region-{region}"' if link else ""
+    heading_id = f' id="region-{region}"' if link else ""
+    rows = "".join(
+        f"{_row_start(t, pos)}{_team_cell(t, page, clazz, teams, complete, link)}"
+        f'<td class="col-rec">{_region_record(t)}</td>'
+        f'<td class="col-odds">{_odds(mode_odds(t, "p1", mode))}</td>'
+        f'<td class="col-odds">{_odds(mode_odds(t, "p_playoffs", mode))}</td></tr>'
+        for pos, t in zip(positions, ordered, strict=True)
+    )
+    return (
+        f'<section class="region-block"{labelled}>'
+        f'<{heading} class="region-block__title"{heading_id}>{title}</{heading}>'
+        '<table class="standings standings--compact">'
+        f'<caption class="visually-hidden">Region {region}-{clazz}A standings</caption>'
+        '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
+        '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
+        '<th scope="col" class="col-odds">1st</th><th scope="col" class="col-odds">Playoffs</th></tr></thead>'
+        f"<tbody>{rows}</tbody></table></section>"
     )
 
 
 def class_body(clazz: int, standings: dict, stamp: str, mode: str, teams: dict[str, dict]) -> str:
     """A class page's content: every region's condensed table, each linking to its region page."""
-    blocks = []
-    for block in sorted(standings["regions"], key=lambda b: b["region"]):
-        region = block["region"]
-        ordered = display_order(block["teams"])
-        positions = standing_positions(ordered)
-        page = region_path(clazz, region)
-        rows = "".join(
-            f"{_row_start(t, pos)}{_team_cell(t, page, clazz, teams)}"
-            f'<td class="col-rec">{_region_record(t)}</td>'
-            f'<td class="col-odds">{_odds(mode_odds(t, "p1", mode))}</td>'
-            f'<td class="col-odds">{_odds(mode_odds(t, "p_playoffs", mode))}</td></tr>'
-            for pos, t in zip(positions, ordered, strict=True)
-        )
-        blocks.append(
-            f'<section class="region-block" aria-labelledby="region-{region}">'
-            f'<h2 class="region-block__title" id="region-{region}"><a href="{page}">Region {region}</a></h2>'
-            '<table class="standings standings--compact">'
-            f'<caption class="visually-hidden">Region {region}-{clazz}A standings</caption>'
-            '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
-            '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
-            '<th scope="col" class="col-odds">1st</th><th scope="col" class="col-odds">Playoffs</th></tr></thead>'
-            f"<tbody>{rows}</tbody></table></section>"
-        )
+    blocks = "".join(
+        class_region_block(clazz, b, mode, teams) for b in sorted(standings["regions"], key=lambda b: b["region"])
+    )
     return (
         '<div class="page entry-head static-page">'
         f'<h1 class="title">Class {clazz}A</h1>{_provenance(stamp)}</div>'
-        f'<div class="page region-blocks static-page">{"".join(blocks)}</div>\n'
+        f'<div class="page region-blocks static-page">{blocks}</div>\n'
     )
 
 
-def site_body(regions_by_class: dict[int, list[int]], brackets: Iterable[int]) -> str:
-    """The front page's content: every class, its regions and bracket, as links."""
-    with_bracket = set(brackets)
-    sections = []
-    for clazz in sorted(regions_by_class):
-        links = "".join(
-            f'<li><a href="{region_path(clazz, r)}">Region {r}-{clazz}A</a></li>'
-            for r in sorted(regions_by_class[clazz])
-        )
-        bracket = f' · <a href="{bracket_path(clazz)}">{clazz}A Bracket</a>' if clazz in with_bracket else ""
-        sections.append(
-            f'<section class="section"><h2 class="section-title"><a href="{class_path(clazz)}">Class {clazz}A</a>'
-            f'{bracket}</h2><ul class="static-list static-list--inline">{links}</ul></section>'
-        )
+def pick_featured(summary: dict) -> dict | None:
+    """The region the front page uses for its examples: the most open race.
+
+    Most teams still undecided, then the more volatile race, then the higher class, then the
+    lower region number. ``{"clazz", "card"}``; None only when there are no regions at all.
+    """
+    cards = [{"clazz": c["class_"], "card": card} for c in summary.get("classes") or [] for card in c["regions"]]
+    cards.sort(key=lambda f: (-f["card"]["teams_alive"], -f["card"]["volatility"], -f["clazz"], f["card"]["region"]))
+    return cards[0] if cards else None
+
+
+def _bullets(items: Iterable[str]) -> str:
+    """A plain bulleted list."""
+    return f'<ul class="landing-list">{"".join(f"<li>{_e(i)}</li>" for i in items)}</ul>'
+
+
+def _section(key: str, title: str, body: str, level: str = "h2") -> str:
+    """A front-page section with an uppercase heading."""
+    cls = "landing-heading" if level == "h2" else "landing-subheading"
     return (
-        '<div class="page static-page">'
-        '<h1 class="title">Mississippi high school football playoff races</h1>'
-        '<p class="prose">Every MHSAA region race: who’s in, who’s out, and exactly what has to happen next.</p>'
-        f"{''.join(sections)}</div>\n"
+        f'<section class="landing-section" aria-labelledby="landing-{key}">'
+        f'<{level} class="{cls}" id="landing-{key}">{_e(title)}</{level}>{body}</section>'
     )
+
+
+def _class_preview(featured: dict, teams: dict[str, dict]) -> str:
+    """A small picture of the featured class's page (the featured region and the next one), as one link to it."""
+    clazz, region = featured["clazz"], featured["card"]["region"]
+    blocks = sorted((featured.get("class_standings") or {}).get("regions") or [], key=lambda b: b["region"])
+    if not any(b["region"] == region for b in blocks):
+        blocks = [{"region": region, "teams": featured["standings"]["teams"]}]
+    at = next(i for i, b in enumerate(blocks) if b["region"] == region)
+    shown = blocks[at : at + 2] if at + 1 < len(blocks) else blocks[max(0, at - 1) : at + 1]
+    tables = "".join(class_region_block(clazz, b, featured["mode"], teams, heading="p", link=False) for b in shown)
+    return (
+        f'<a class="landing-preview landing-preview--class" href="{class_path(clazz)}" '
+        f'aria-label="Open the Class {clazz}A page">'
+        '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
+        f'<p class="title">Class {clazz}A</p>{_provenance(featured["stamp"])}'
+        f'<div class="region-blocks">{tables}</div>'
+        "</div></div>"
+        f'<span class="landing-preview__label">Open Class {clazz}A</span></a>'
+    )
+
+
+def _lead(text: str) -> str:
+    """The sentence introducing an example card."""
+    return f'<p class="landing-lead">{_e(text)}</p>'
+
+
+def _region_preview(featured: dict, teams: dict[str, dict]) -> str:
+    """A small picture of the featured region's page, as one link to it (so nothing inside is a link)."""
+    clazz, region, payload = featured["clazz"], featured["card"]["region"], featured["standings"]
+    name = f"Region {region}-{clazz}A"
+    headline = payload.get("headline")
+    headline_html = f'<p class="headline">{_e(headline)}</p>' if headline else ""
+    return (
+        f'<a class="landing-preview" href="{region_path(clazz, region)}" aria-label="Open the {name} page">'
+        '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
+        f'<p class="title">{name}</p>{headline_html}{_provenance(featured["stamp"])}'
+        f"{region_table(clazz, region, payload, featured['mode'], teams, link=False)}"
+        "</div></div>"
+        f'<span class="landing-preview__label">Open {name}</span></a>'
+    )
+
+
+# ------------------------------------------------------------------ bracket preview
+# A picture of the bracket page: the top quarter of one half of the featured class's
+# tree (three rounds of the same game cards the page draws), with one game's sheet
+# open beside it, the way it looks after tapping that game. Mirrors bracket.js and
+# the bracket view in app.js (treeRow, bracketSide, gameDetail); laid out here with
+# fixed positions, since there's no page to measure.
+
+SEED_NAMES = {1: "#1 Seed", 2: "#2 Seed", 3: "#3 Seed", 4: "#4 Seed"}
+HALF_NAMES = {"N": "North", "S": "South"}
+CARD_H, PITCH, COL_W, COL_GAP = 98, 112, 240, 36
+LOCK = (
+    '<svg class="lock" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">'
+    '<rect x="3.5" y="7" width="9" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>'
+)
+SHEET_LIST = 3  # occupants per side the preview's sheet lists
+SHEET_MATCHUPS = 2  # and matchups
+
+
+def position_name(region: int, seed: int) -> str:
+    """ "Region 3 #1 Seed", as bracket.js's ``positionName``."""
+    return f"Region {region} {SEED_NAMES.get(seed, f'#{seed} Seed')}"
+
+
+def side_label(feeders: list[dict]) -> str:
+    """Where a side comes from, as bracket.js's ``sideLabel`` says it."""
+    names = [position_name(f["region"], f["seed"]) for f in feeders]
+    if len(names) <= 2:
+        return " or ".join(names)
+    by_region: dict[int, list[int]] = {}
+    for f in feeders:
+        by_region.setdefault(f["region"], []).append(f["seed"])
+    regions = sorted(by_region)
+    full = {r: all(k in by_region[r] for k in (1, 2, 3, 4)) for r in regions}
+    if all(full.values()):
+        if len(regions) == 1:
+            return f"Region {regions[0]} (Any Seed)"
+        if len(regions) == 2:
+            return f"Region {regions[0]} or {regions[1]} (Any Seed)"
+        if all(not i or r == regions[i - 1] + 1 for i, r in enumerate(regions)):
+            return f"Regions {regions[0]}–{regions[-1]} (Any Seed)"
+        return f"Regions {', '.join(map(str, regions[:-1]))} or {regions[-1]} (Any Seed)"
+    parts = []
+    for r in regions:
+        if full[r]:
+            parts.append(f"Region {r} (Any Seed)")
+        else:
+            seeds = ", ".join(SEED_NAMES.get(k, f"#{k} Seed") for k in sorted(by_region[r]))
+            parts.append(f"Region {r} ({seeds})")
+    return ", ".join(parts)
+
+
+def _pick(obj: dict, key: str, mode: str) -> float | None:
+    """A value in the odds mode: the weighted one for Projected when there is one."""
+    weighted = obj.get(f"{key}_weighted")
+    return weighted if mode == "projected" and weighted is not None else obj.get(key)
+
+
+def occupants(side: dict, mode: str) -> list[dict]:
+    """Who might fill a side, likeliest first (bracket.js's ``occupants``)."""
+    out = [
+        {"team": o["team"], "p": _pick(o, "p_reach", mode) or 0.0, "locked": o.get("is_locked")}
+        for o in side.get("occupants") or []
+    ]
+    out = [o for o in out if o["p"] > 0 or o["locked"]]
+    return sorted(out, key=lambda o: (-o["p"], o["team"]))
+
+
+def locked_team(side: dict) -> str | None:
+    """The team certain to fill a side, or None."""
+    return next((o["team"] for o in side.get("occupants") or [] if o.get("is_locked")), None)
+
+
+def _hosting(p_host_a: float | None) -> str:
+    """Who hosts a pairing: "a", "b", "split" or "neutral" (bracket.js's ``hosting``)."""
+    if p_host_a is None:
+        return "neutral"
+    if p_host_a >= 0.995:
+        return "a"
+    if p_host_a <= 0.005:
+        return "b"
+    return "split"
+
+
+def game_matchups(game: dict, mode: str) -> list[dict]:
+    """The game's pairings in the odds mode, likeliest first (bracket.js's ``matchups``)."""
+    ms = [
+        {
+            "a": m["team_a"],
+            "b": m["team_b"],
+            "p": _pick(m, "p_matchup", mode) or 0.0,
+            "host_a": _pick(m, "p_host_a", mode),
+        }
+        for m in game.get("matchups") or []
+    ]
+    return sorted((m for m in ms if m["p"] > 0), key=lambda m: (-m["p"], m["a"], m["b"]))
+
+
+def settled_host(game: dict, mode: str) -> str | None:
+    """Which side hosts whoever gets there, when that's settled (app.js's ``settledHost``)."""
+    if game["id"] == "final":
+        return "neutral"
+    hosts = {_hosting(m["host_a"]) for m in game_matchups(game, mode)}
+    return next(iter(hosts)) if len(hosts) == 1 and "split" not in hosts else None
+
+
+def layout_results(layout: dict | None) -> dict[str, dict]:
+    """Played games' results keyed by matchup game id (bracket.js's ``layoutResults``)."""
+    out: dict[str, dict] = {}
+
+    def result(r: dict | None) -> dict | None:
+        """One result as the cards use it."""
+        if not r or not (r.get("winner") or {}).get("school"):
+            return None
+        return {
+            "winner": r["winner"]["school"],
+            "loser": (r.get("loser") or {}).get("school"),
+            "winner_score": r.get("winner_score"),
+            "loser_score": r.get("loser_score"),
+        }
+
+    for half, rounds in ((layout or {}).get("halves") or {}).items():
+        for k, games in enumerate(rounds):
+            for i, g in enumerate(games):
+                if res := result(g.get("result")):
+                    out[f"{half}-{k}-{i}"] = res
+    if final := result(((layout or {}).get("championship") or {}).get("result")):
+        out["final"] = final
+    return out
+
+
+def locked_seeds(class_standings: dict | None) -> dict[str, tuple[int, int]]:
+    """Teams sure of a seed: school -> (region, seed), for their "Region 3 #1 Seed" label."""
+    seeds = {}
+    for block in (class_standings or {}).get("regions") or []:
+        for t in block["teams"]:
+            seed = next((k for k in (1, 2, 3, 4) if (t["odds"].get(f"p{k}") or 0) >= 0.999), None)
+            if seed:
+                seeds[t["school"]] = (block["region"], seed)
+    return seeds
+
+
+def _tree_line(gutter: str, team: str | None, name: str, teams: dict, sub: str, value: str, cls: str) -> str:
+    """One row of a compact card (app.js's ``treeLine``)."""
+    mark = _mark(team, teams.get(team), size=22) if team else '<span class="mark"></span>'
+    sub_html = f'<span class="trow__sub">{sub}</span>' if sub else ""
+    return (
+        f'<span class="trow{cls}"><span class="trow__gutter">{gutter}</span>{mark}'
+        f'<span class="trow__text"><span class="trow__name">{_e(name)}</span>{sub_html}</span>'
+        f'<span class="trow__value">{value}</span></span>'
+    )
+
+
+def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: dict) -> str:
+    """One side of a compact card: the result, the locked team, or the likeliest team with its odds."""
+    side = game[f"side_{side_key}"]
+    teams = ctx["teams"]
+    if result:
+        team = locked_team(side) or (result["winner"] if side_key == "a" else result["loser"])
+        won = team == result["winner"]
+        score = result["winner_score"] if won else result["loser_score"]
+        cls = " trow--result is-winner" if won else " trow--result"
+        return _tree_line(gutter, team, team or "", teams, "", _e(score) if score is not None else "", cls)
+    locked = locked_team(side)
+    if locked:
+        seed = ctx["seeds"].get(locked)
+        label = position_name(*seed) if seed else "Clinched"
+        sub = f'{LOCK}<span class="visually-hidden">Locked in: </span>{_e(label)}'
+        return _tree_line(gutter, locked, locked, teams, sub, "", " trow--locked")
+    listed = occupants(side, ctx["mode"])
+    if not listed:
+        return _tree_line(gutter, None, "No team can get here", teams, "", "", " trow--empty")
+    first_round = len(side["feeders"]) == 1
+    f0 = side["feeders"][0]
+    sub = (
+        _e(position_name(f0["region"], f0["seed"]))
+        if first_round
+        else (f"+{len(listed) - 1} more" if len(listed) > 1 else "")
+    )
+    return _tree_line(gutter, listed[0]["team"], listed[0]["team"], teams, sub, _odds(listed[0]["p"]), "")
+
+
+def _side_order(host: str | None) -> tuple[list[str], str]:
+    """Sides top to bottom (home team last) and the word between them."""
+    return (["b", "a"] if host == "a" else ["a", "b"]), ("at" if host in ("a", "b") else "vs")
+
+
+def _tree_card(game: dict, ctx: dict, selected: bool) -> str:
+    """A compact game card, as the tree draws it; the selected one is the game whose sheet is open."""
+    result = ctx["results"].get(game["id"])
+    state = (
+        "played"
+        if result
+        else (
+            "determined"
+            if locked_team(game["side_a"]) and locked_team(game["side_b"])
+            else "partial"
+            if locked_team(game["side_a"]) or locked_team(game["side_b"])
+            else "projected"
+        )
+    )
+    order, joiner = _side_order(settled_host(game, ctx["mode"]))
+    rows = _tree_row(game, order[0], result, "", ctx) + _tree_row(game, order[1], result, joiner, ctx)
+    return f'<span class="tgame tgame--{state}{" is-path" if selected else ""}">{rows}</span>'
+
+
+def _sheet_side(game: dict, side_key: str, host: str | None, ctx: dict) -> str:
+    """One side in the open sheet: its locked team, or who might fill it (app.js's ``bracketSide``)."""
+    side = game[f"side_{side_key}"]
+    teams = ctx["teams"]
+    home = '<span class="bteam__home">Home</span>' if host == side_key else ""
+
+    def name(team: str) -> str:
+        """A team as the sheet lists it."""
+        return (
+            f'<span class="bteam__name">{_mark(team, teams.get(team))}<span class="team-name">{_e(team)}</span></span>'
+        )
+
+    locked = locked_team(side)
+    if locked:
+        seed = ctx["seeds"].get(locked)
+        label = position_name(*seed) if seed else "Clinched"
+        return (
+            f'<div class="bteam bteam--locked">{name(locked)}<span class="bteam__fact">{LOCK}'
+            f'<span class="visually-hidden">Locked in: </span>{_e(label)}</span>{home}</div>'
+        )
+    listed = occupants(side, ctx["mode"])
+    first_round = len(side["feeders"]) == 1
+    label = (
+        f'<p class="bside__label">{_e(side_label(side["feeders"])) if first_round else ""}{home}</p>'
+        if first_round or home
+        else ""
+    )
+    if not listed:
+        return f'<div class="bside">{label}<p class="bside__empty muted">No team can get here</p></div>'
+    items = "".join(f'<li class="bteam">{name(o["team"])}{_odds(o["p"])}</li>' for o in listed[:SHEET_LIST])
+    more = f'<p class="bside__more">Show all {len(listed)}</p>' if len(listed) > SHEET_LIST else ""
+    return f'<div class="bside">{label}<ul class="bside__list">{items}</ul>{more}</div>'
+
+
+def _team_label(name: str, teams: dict) -> str:
+    """A team with its mark (components.js's ``teamLabel``)."""
+    return f'<span class="team">{_mark(name, teams.get(name))}<span class="team-name">{_e(name)}</span></span>'
+
+
+def _sheet(game: dict, ctx: dict) -> str:
+    """The game sheet as it opens over the bracket: both sides, then the likeliest matchups."""
+    host = settled_host(game, ctx["mode"])
+    order, joiner = _side_order(host)
+    kicker = " · ".join(x for x in (game["round"], HALF_NAMES.get(game.get("half"))) if x)
+    rows = []
+    for m in game_matchups(game, ctx["mode"])[:SHEET_MATCHUPS]:
+        h = _hosting(m["host_a"])
+        away, home = (m["b"], m["a"]) if h == "a" else (m["a"], m["b"])
+        word = "at" if h in ("a", "b") else "vs"
+        note = (
+            "Neutral site"
+            if h == "neutral"
+            else (f"{format_pct(m['host_a'])} chance {m['a']} hosts" if h == "split" else "")
+        )
+        note_html = f'<span class="opp-list__host">{_e(note)}</span>' if note else ""
+        rows.append(
+            '<li><span class="mu__teams">'
+            f'<span class="mu__line"><span class="vs"></span>{_team_label(away, ctx["teams"])}</span>'
+            f'<span class="mu__line"><span class="vs">{word}</span>{_team_label(home, ctx["teams"])}</span>'
+            f"</span>{_odds(m['p'])}{note_html}</li>"
+        )
+    matchups = (
+        f'<h4 class="bgame__heading">Most likely matchups</h4><ol class="opp-list opp-list--matchups">{"".join(rows)}</ol>'
+        if rows
+        else ""
+    )
+    return (
+        '<div class="game-sheet bracket-preview__sheet">'
+        f'<div class="game-sheet__head"><div><p class="game-sheet__kicker">{_e(kicker)}</p>'
+        '<p class="game-sheet__title">Who might play here</p></div></div>'
+        '<div class="game-sheet__body"><div class="bgame bgame--sheet">'
+        f"{_sheet_side(game, order[0], host, ctx)}"
+        f'<div class="bgame__vs" aria-hidden="true"><span>{joiner}</span></div>'
+        f"{_sheet_side(game, order[1], host, ctx)}"
+        f'</div><div class="bgame__detail">{matchups}</div></div></div>'
+    )
+
+
+def bracket_preview_html(clazz: int, games: list[dict], ctx: dict) -> str:
+    """The bracket page in miniature: three rounds of one half's top quarter, with a game's sheet open.
+
+    *ctx* holds ``mode``, ``results``, ``seeds`` and ``teams``. Returns "" without enough games.
+    """
+    by_id = {g["id"]: g for g in games}
+    half = next((g.get("half") for g in games if g["id"] != "final"), None)
+    cols = []
+    for k in range(3):
+        col = [by_id.get(f"{half}-{k}-{i}") for i in range(4 >> k)]
+        if not all(col):
+            break
+        cols.append(col)
+    if len(cols) < 2:
+        return ""
+    centers = [[CARD_H / 2 + PITCH * i for i in range(len(cols[0]))]]
+    for k in range(1, len(cols)):
+        prev = centers[-1]
+        centers.append([(prev[2 * i] + prev[2 * i + 1]) / 2 for i in range(len(cols[k]))])
+    height = PITCH * len(cols[0]) - (PITCH - CARD_H)
+    selected = cols[1][0]["id"]
+    left = [k * (COL_W + COL_GAP) for k in range(len(cols))]
+    lines = []
+    for k in range(1, len(cols)):
+        for i in range(len(cols[k])):
+            for j in (2 * i, 2 * i + 1):
+                x1, x2 = left[k - 1] + COL_W, left[k]
+                xm = (x1 + x2) / 2
+                lines.append(f"M{x1} {centers[k - 1][j]:.1f}H{xm:g}V{centers[k][i]:.1f}H{x2}")
+    titles = "".join(
+        f'<p class="tcol__title" style="left:{left[k]}px;width:{COL_W}px">{_e(col[0]["round"])}</p>'
+        for k, col in enumerate(cols)
+    )
+    cards = "".join(
+        f'<span class="bracket-preview__slot" style="left:{left[k]}px;top:{centers[k][i] - CARD_H / 2:g}px;'
+        f'width:{COL_W}px;height:{CARD_H}px">{_tree_card(g, ctx, g["id"] == selected)}</span>'
+        for k, col in enumerate(cols)
+        for i, g in enumerate(col)
+    )
+    width = left[-1] + COL_W
+    return (
+        '<div class="bracket-preview">'
+        f'<div class="bracket-preview__tree" style="width:{width}px">'
+        f'<div class="bracket-preview__titles">{titles}</div>'
+        f'<div class="bracket-preview__cols" style="height:{height}px">'
+        f'<svg class="tree__lines" width="{width}" height="{height}" aria-hidden="true"><path d="{"".join(lines)}"/></svg>'
+        f"{cards}</div></div>"
+        f"{_sheet(by_id[selected], ctx)}"
+        "</div>"
+    )
+
+
+def _bracket_preview(featured: dict) -> str:
+    """The featured class's bracket page in miniature, as one link to it; just the link without data."""
+    clazz, preview = featured["clazz"], featured.get("bracket_html")
+    if not preview:
+        return f'<p><a href="{bracket_path(clazz)}">See the {clazz}A bracket</a></p>'
+    return (
+        f'<a class="landing-preview landing-preview--bracket" href="{bracket_path(clazz)}" '
+        f'aria-label="Open the Class {clazz}A bracket">'
+        '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
+        f'<p class="title">Class {clazz}A Bracket</p>{_provenance(featured["stamp"])}{preview}'
+        "</div></div>"
+        f'<span class="landing-preview__label">Open the {clazz}A bracket</span></a>'
+    )
+
+
+WHAT_WE_DO = (
+    "We work out every way each Mississippi high school football region race can still finish, then rank "
+    "each finish with the MHSAA’s own tiebreaker rules. That gives every team’s odds of making the playoffs "
+    "and of landing each seed, and the exact results it needs to get there. Every region, every class, "
+    "updated every morning."
+)
+HOW_IT_WORKS = (
+    "With a handful of region games left, we play out every possible combination of results; earlier in the "
+    "season we simulate the rest of the schedule 50,000 times. Projected odds weigh each game by the two "
+    "teams’ Elo ratings and home field; Toss-up odds treat every game as a coin flip. Scores come from AHSFHS."
+)
+
+
+def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
+    """The front page: who we are and how it works on the left, a tour of the site on the right, with the
+    most open race (``featured``) as the live example throughout.
+
+    *featured* is ``{"clazz", "card", "standings", "stamp", "mode", "bracket_html"}`` or None.
+    The app shows this same file at "/", so there is one renderer and nothing changes when it loads.
+    """
+    intro = (
+        '<div class="landing-intro">'
+        '<p class="landing-kicker">Welcome to</p>'
+        '<h1 class="landing-title">Mississippi High School Football</h1>'
+        '<img class="landing-helmet" src="/static/helmet.webp" width="1000" height="851" alt="">'
+        f"{_section('what', 'What we do', f'<p>{_e(WHAT_WE_DO)}</p>')}"
+        + _section(
+            "how",
+            "How it works",
+            f'<p>{_e(HOW_IT_WORKS)}</p><p><a href="/methodology">More on how the odds work</a></p>',
+        )
+        + "</div>"
+    )
+    class_extra = region_extra = bracket_extra = ""
+    if featured:
+        c, r = featured["clazz"], featured["card"]["region"]
+        unsettled = ", the most unsettled race in the state right now" if featured["card"]["teams_alive"] > 0 else ""
+        class_extra = _lead(f"Here’s Class {c}A as it stands right now, starting with Region {r}:") + _class_preview(
+            featured, teams
+        )
+        region_extra = _lead(f"Here’s Region {r}-{c}A{unsettled}:") + _region_preview(featured, teams)
+        lead = f"And here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"
+        bracket_extra = (_lead(lead) if featured.get("bracket_html") else "") + _bracket_preview(featured)
+    region_scenarios = "".join(
+        _section(key, title, f"<p>{_e(text)}</p>", level="h3")
+        for key, title, text in (
+            (
+                "title-scenarios",
+                "Region title scenarios",
+                "Scenarios for how each eligible team can still win the region.",
+            ),
+            (
+                "seeding-scenarios",
+                "Team seeding scenarios",
+                "Scenarios for how each eligible team can finish as a given seed.",
+            ),
+            ("unique-scenarios", "Unique region scenarios", "Each unique seeding finish possible in a given region."),
+        )
+    )
+    tour = (
+        '<div class="landing-tour">'
+        + _section(
+            "class",
+            "Class standings",
+            "<p>Standings for each region in each class.</p>"
+            + _bullets(
+                (
+                    "Each team’s region record",
+                    "Which teams have clinched playoff spots or specific seeds",
+                    "Each team’s chance of making the playoffs",
+                    "Each team’s chance of winning the region",
+                )
+            )
+            + class_extra,
+        )
+        + _section(
+            "region",
+            "Region breakdown",
+            _section(
+                "region-standings",
+                "Standings",
+                "<p>Detailed standings for a given region.</p>"
+                + _bullets(
+                    (
+                        "A headline summing up the race",
+                        "Each team’s region and overall records",
+                        "Which teams have clinched playoff spots or specific seeds",
+                        "Each team’s chance of making the playoffs",
+                        "Each team’s chance of finishing at each seed",
+                        "An expanded view of each team: its completed and remaining games and its playoff path odds",
+                    )
+                )
+                + region_extra,
+                level="h3",
+            )
+            + region_scenarios,
+        )
+        + _section(
+            "bracket",
+            "Bracket page",
+            "<p>Each class’s playoff bracket, filled in with who is likely to land in each spot. Pick a game to "
+            "see every team that could play there, how likely each matchup is, and who would host.</p>" + bracket_extra,
+        )
+        + "</div>"
+    )
+    return f'<div class="page landing">{intro}{tour}</div>\n'
 
 
 def sitemap_xml(site_url: str, pages: Iterable[tuple[str, date | None]]) -> str:
