@@ -1,12 +1,14 @@
 """Tests for image URL assembly and Cloudinary upload helpers in image_helpers.py."""
 
 import asyncio
+import io
 import os
 from typing import cast
 from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException, UploadFile
+from PIL import Image
 
 from backend.helpers.image_helpers import (
     MAX_UPLOAD_FILE_BYTES,
@@ -14,6 +16,7 @@ from backend.helpers.image_helpers import (
     logo_url,
     save_and_upload,
     save_temp,
+    sniff_image,
     upload_helmet,
     upload_logo,
     upload_submission_helmet_image,
@@ -21,6 +24,16 @@ from backend.helpers.image_helpers import (
     upload_team_logo,
     validate_upload,
 )
+
+
+def _image_bytes(fmt: str = "PNG", size: tuple[int, int] = (4, 4)) -> bytes:
+    """A real, tiny image in *fmt*."""
+    buf = io.BytesIO()
+    Image.new("RGB", size, (200, 30, 30)).save(buf, format=fmt)
+    return buf.getvalue()
+
+
+PNG = _image_bytes()
 
 
 class _FakeUploadFile:
@@ -290,13 +303,13 @@ class TestSaveAndUpload:
 
     def test_returns_upload_fn_result(self):
         """The return value is whatever upload_fn(tmp_path) returns."""
-        file = _fake_upload_file("logo.png", "image/png", b"fake-image-bytes")
+        file = _fake_upload_file("logo.png", "image/png", PNG)
         result = asyncio.run(save_and_upload(file, lambda path: "logos/primary/Taylorsville"))
         assert result == "logos/primary/Taylorsville"
 
     def test_upload_fn_receives_path_to_saved_contents(self):
         """upload_fn is called with a path whose contents match the uploaded file."""
-        file = _fake_upload_file("logo.png", "image/png", b"fake-image-bytes")
+        file = _fake_upload_file("logo.png", "image/png", PNG)
         seen_contents = {}
 
         def upload_fn(path: str) -> str:
@@ -306,11 +319,11 @@ class TestSaveAndUpload:
             return "ok"
 
         asyncio.run(save_and_upload(file, upload_fn))
-        assert seen_contents["data"] == b"fake-image-bytes"
+        assert seen_contents["data"] == PNG
 
     def test_temp_file_removed_after_successful_upload(self):
         """The temp file no longer exists once save_and_upload returns."""
-        file = _fake_upload_file("logo.png", "image/png", b"data")
+        file = _fake_upload_file("logo.png", "image/png", PNG)
         captured_path = {}
 
         def upload_fn(path: str) -> str:
@@ -323,7 +336,7 @@ class TestSaveAndUpload:
 
     def test_temp_file_removed_even_when_upload_fn_raises(self):
         """The finally block cleans up the temp file even if upload_fn raises."""
-        file = _fake_upload_file("logo.png", "image/png", b"data")
+        file = _fake_upload_file("logo.png", "image/png", PNG)
         captured_path = {}
 
         def upload_fn(path: str) -> str:
@@ -385,3 +398,51 @@ class TestLogoUrl:
         """Missing CLOUDINARY_BASE_URL produces a leading-slash URL rather than raising."""
         monkeypatch.delenv("CLOUDINARY_BASE_URL", raising=False)
         assert logo_url("logos/primary/Taylorsville") == "/logos/primary/Taylorsville"
+
+
+class TestSniffImage:
+    """sniff_image trusts the bytes, not the declared type."""
+
+    @pytest.mark.parametrize(
+        ("fmt", "mime", "ext"),
+        [
+            ("PNG", "image/png", ".png"),
+            ("JPEG", "image/jpeg", ".jpg"),
+            ("GIF", "image/gif", ".gif"),
+            ("WEBP", "image/webp", ".webp"),
+        ],
+    )
+    def test_allowed_formats_are_recognized(self, fmt, mime, ext):
+        """Each allowed format comes back as its real type and extension."""
+        assert sniff_image(_image_bytes(fmt)) == (mime, ext)
+
+    @pytest.mark.parametrize("contents", [b"<html><script>alert(1)</script></html>", b"", b"%PDF-1.7 not an image"])
+    def test_non_images_are_refused(self, contents):
+        """A script or document declared as an image is refused with 422."""
+        with pytest.raises(HTTPException) as exc_info:
+            sniff_image(contents)
+        assert exc_info.value.status_code == 422
+
+    def test_other_image_formats_are_refused(self):
+        """A real image in a format we don't take (BMP) is refused."""
+        with pytest.raises(HTTPException):
+            sniff_image(_image_bytes("BMP"))
+
+    def test_huge_dimensions_are_refused(self):
+        """An image too large in pixels to be a real photo is refused."""
+        with patch("backend.helpers.image_helpers.MAX_UPLOAD_PIXELS", 10):
+            with pytest.raises(HTTPException):
+                sniff_image(_image_bytes(size=(4, 4)))
+
+    def test_a_disguised_file_gets_its_real_extension(self):
+        """A PNG uploaded as photo.exe is saved with .png, not .exe."""
+        file = _fake_upload_file("photo.exe", "image/png", PNG)
+        seen = {}
+
+        def upload_fn(path: str) -> str:
+            """Record the temp path."""
+            seen["path"] = path
+            return "ok"
+
+        asyncio.run(save_and_upload(file, upload_fn))
+        assert seen["path"].endswith(".png")

@@ -1,0 +1,18 @@
+# Keep secrets, history and local junk out of the build context: the
+# Dockerfiles only need pyproject.toml, uv.lock, backend/ and sql/seeds/.
+.env
+.env.*
+!.env.example
+*.pem
+.git
+.github
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+nginx
+docs
+node_modules

@@ -51,8 +51,10 @@ nano .env.local
 ```
 
 Key values to set:
+- `ENVIRONMENT=production` — turns off the public API docs, marks the session cookie `Secure`, and requires `FRONTEND_ORIGIN`
 - `POSTGRES_HOST=db` — uses Docker's internal service name (PostgreSQL runs in the same stack)
-- `POSTGRES_PASSWORD` — generate with `openssl rand -base64 32`
+- `POSTGRES_PASSWORD` — generate with `openssl rand -hex 32`; compose refuses to start without it
+- `API_DB_PASSWORD` and `PIPELINE_DB_PASSWORD` (with `API_DB_USER=mshsfootball_api`, `PIPELINE_DB_USER=mshsfootball_pipeline`) — see [Database roles](#database-roles); on a new instance they're created with the database
 - `CLOUDINARY_*` — from your Cloudinary dashboard
 - `CLOUDINARY_BASE_URL` — hardcode the full URL: `https://res.cloudinary.com/YOUR_CLOUD_NAME/image/upload`
 - `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` — from your Auth0 dashboard (same tenant as local dev)
@@ -62,6 +64,57 @@ Then bring up the stack (PostgreSQL runs in Docker alongside the other services)
 ```
 docker compose --env-file .env.local --profile local-db up --build -d
 ```
+
+### Database roles
+
+The database is owned by `POSTGRES_USER`, which only schema setup and migrations
+use. The API and the pipelines connect as their own roles (`sql/app_roles.sql`),
+which can read and write rows and nothing else: they can't create or alter
+tables, disable triggers (so the standings archive stays append-only), or run
+`COPY … PROGRAM` and read server files the way a superuser can.
+
+A new instance creates both roles with the database when `API_DB_PASSWORD` and
+`PIPELINE_DB_PASSWORD` are set. On an existing database, create them once
+(re-running is safe, and is how you change a password):
+
+```
+# 1. Add to .env.local (new random passwords):
+#      API_DB_USER=mshsfootball_api
+#      API_DB_PASSWORD=<openssl rand -hex 24>
+#      PIPELINE_DB_USER=mshsfootball_pipeline
+#      PIPELINE_DB_PASSWORD=<openssl rand -hex 24>
+# 2. Create the roles, passing the passwords from the env file:
+API_PW=$(grep '^API_DB_PASSWORD=' .env.local | cut -d= -f2-)
+PIPE_PW=$(grep '^PIPELINE_DB_PASSWORD=' .env.local | cut -d= -f2-)
+docker compose --env-file .env.local --profile local-db exec -T db \
+  sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v api_password="$1" -v pipeline_password="$2" -f -' \
+  sh "$API_PW" "$PIPE_PW" < sql/app_roles.sql
+# 3. Recreate the API and the worker so they connect as the new roles:
+docker compose --env-file .env.local --profile local-db up -d --force-recreate api prefect-worker
+```
+
+Until step 3, both keep using `POSTGRES_USER`. To check, `docker compose … exec api printenv POSTGRES_USER`
+should print `mshsfootball_api`.
+
+The database port is published on `127.0.0.1` only (for `psql` over an SSH
+tunnel); containers reach it over the compose network. Docker's port rules
+bypass `ufw`, so a port published on all interfaces would be open to the
+internet behind nothing but the Lightsail firewall.
+
+### Backups
+
+`scripts/backup_db.sh` writes a compressed, verified `pg_dump` to `~/backups`
+and keeps 14 days. Run it nightly from cron (`crontab -e`):
+
+```
+17 3 * * * cd /home/ubuntu/ms-hs-football-playoff-engine && scripts/backup_db.sh >> /home/ubuntu/backups/backup.log 2>&1
+```
+
+A copy on the same disk doesn't survive losing the instance, so also turn on
+Lightsail's **automatic snapshots** (instance → Snapshots → Automatic
+snapshots), or set `OFFSITE_CMD` to something that copies the file elsewhere.
+The script's header has the restore command; try a restore into a scratch
+database once, so you know it works before you need it.
 
 ## SSL with Let's Encrypt
 
@@ -143,8 +196,14 @@ If the pull changed `nginx/nginx.conf`, also recreate nginx. The config is bind-
 docker compose --env-file .env.local --profile local-db up -d --force-recreate nginx
 ```
 
-Required env vars: `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`, `CLOUDINARY_*`, `FRONTEND_ORIGIN`.
+Required env vars: `ENVIRONMENT=production`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`,
+`API_DB_*`, `PIPELINE_DB_*`, `CLOUDINARY_*`, `FRONTEND_ORIGIN`, `SESSION_SECRET_KEY`.
 Optional: `AUTH0_SPA_CLIENT_ID`, `TURNSTILE_*`, `SMTP_*`, `DIGEST_TO` (see below).
+
+Base images are pinned by digest in `docker-compose.yml` and the Dockerfiles, and
+Python packages come from `uv.lock` with their hashes checked, so a rebuild
+installs exactly what was tested. Dependabot opens a PR when something has a
+newer version; nothing changes on the server until that PR is merged and pulled.
 
 ## Share cards (link previews)
 
@@ -208,14 +267,17 @@ so it needs its own Auth0 application:
 4. Put its **Client ID** in `.env.local` as `AUTH0_SPA_CLIENT_ID` and recreate the API.
 
 Only users whose row in `users` has role `moderator` or `owner` see the queue. A
-user row is created on first sign-in; promote it with:
+user row is created on first sign-in. Promote it by its Auth0 user ID (Auth0 →
+User Management → Users → the person → **user_id**, e.g. `auth0|65f…` or
+`google-oauth2|10…`), not by email: the stored email is only kept once Auth0 has
+verified it, and anyone can type someone else's address when signing up.
 
 ```
-UPDATE users SET role = 'moderator' WHERE email = 'someone@example.com';
+UPDATE users SET role = 'moderator' WHERE auth0_id = 'auth0|65f0c0ffee…';
 ```
 
-Signing in also sets the session cookie the Prefect UI link uses, so the page's
-"Prefect" link opens without a Bearer header.
+The Prefect UI is the owner's only: the page shows its "Prefect" link, and sets
+the session cookie that lets it open without a Bearer header, only for the owner.
 
 ### Turnstile (spam check on the form)
 
@@ -226,8 +288,9 @@ Signing in also sets the session cookie the Prefect UI link uses, so the page's
    the API. With no secret set, the form doesn't load the widget and the API
    doesn't check tokens.
 
-If Cloudflare's verify endpoint is unreachable, submissions are let through (and
-logged) rather than refused; the rate limits and queue cap still apply. A visitor
+If Cloudflare's verify endpoint is unreachable, submissions are refused with "try
+again in a few minutes" (and an error is logged) rather than let through unchecked.
+With `FRONTEND_ORIGIN` set, a token solved on any other hostname is refused. A visitor
 whose content blocker stops the widget loading is told to allow
 `challenges.cloudflare.com`.
 

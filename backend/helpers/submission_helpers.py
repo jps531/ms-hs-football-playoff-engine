@@ -274,6 +274,19 @@ def build_helmet_initial_payload(
     return payload
 
 
+def submission_image_paths(stype: str, payload: dict | None) -> list[str]:
+    """The Cloudinary public ids a logo or helmet submission uploaded (none for other types)."""
+    payload = payload or {}
+    if stype == "logo":
+        return [payload["cloudinary_path"]] if payload.get("cloudinary_path") else []
+    if stype == "helmet":
+        paths = list(payload.get("image_paths") or [])
+        if payload.get("logo_image_path"):
+            paths.append(payload["logo_image_path"])
+        return paths
+    return []
+
+
 def build_helmet_image_fields(
     image_paths: list[str], image_labels: list[str], logo_image_path: str | None
 ) -> dict[str, Any]:

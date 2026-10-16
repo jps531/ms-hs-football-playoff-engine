@@ -4,6 +4,7 @@ All endpoints require a valid Auth0-issued ``Authorization: Bearer`` token
 belonging to a user with the ``moderator`` or ``owner`` role.
 """
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, Query
@@ -22,7 +23,13 @@ from backend.api.models.responses import (
 )
 from backend.helpers.color_contrast import compute_color_variants
 from backend.helpers.color_variants import split_secondary_hexes
-from backend.helpers.submission_helpers import apply_submission, build_submission_summary, resolve_approval_status
+from backend.helpers.image_helpers import delete_images
+from backend.helpers.submission_helpers import (
+    apply_submission,
+    build_submission_summary,
+    resolve_approval_status,
+    submission_image_paths,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -299,4 +306,6 @@ async def reject_submission(
         ).fetchone()
     assert updated is not None
     _log.info("moderation: user %s rejected submission %s type=%s", moderator["db_id"], submission_id, row[1])
+    # A rejected reference has no further use; don't keep it on Cloudinary.
+    await asyncio.to_thread(delete_images, submission_image_paths(row[1], updated[6]))
     return _row_to_detail(updated)

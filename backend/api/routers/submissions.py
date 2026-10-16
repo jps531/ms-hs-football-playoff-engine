@@ -1,9 +1,12 @@
 """Public endpoints for user-submitted corrections and new assets.
 
-All endpoints are open to anonymous callers.  If the request includes a valid
-Auth0 Bearer token the submission is linked to that user's row (user_id), which
-enables future features like auto-approval for trusted contributors.  Submissions
-without a token are accepted normally with user_id=NULL.
+The site's feedback form endpoints (``/feedback`` and ``/scores``) are open to
+anonymous callers; with a valid Auth0 Bearer token the submission is linked to
+that user's row (user_id). The asset and data endpoints (``/logos``,
+``/helmets``, ``/colors``, ``/locations``, ``/helmet-assignments``) need a
+signed-in account: they store images on Cloudinary or propose data changes,
+nothing on the site calls them anonymously, and an account makes a flood both
+attributable and capped (``_MAX_PER_ACCOUNT_PER_DAY`` across them).
 
 Submissions enter a moderation queue and are not applied to the live database
 until a moderator approves them via ``/api/v1/moderation/submissions/{id}/approve``.
@@ -30,7 +33,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 
-from backend.api.auth import OptionalUser, optional_user_id
+from backend.api.auth import CurrentUser, OptionalUser, optional_user_id
 from backend.api.db import get_conn
 from backend.api.limiter import client_ip, limiter
 from backend.api.models.requests import (
@@ -65,7 +68,12 @@ from backend.helpers.submission_helpers import (
 
 router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 
-_404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}
+# The signed-in asset and data endpoints.
+_ACCOUNT_RESPONSES: dict[int | str, dict[str, Any]] = {
+    401: {"description": "Sign in required"},
+    404: {"description": "Not found"},
+    429: {"description": "Daily limit reached"},
+}
 _MAX_HELMET_IMAGES = 5
 _VALID_IMAGE_LABELS = {"left", "right", "front", "logo", "other"}
 
@@ -73,6 +81,29 @@ _VALID_IMAGE_LABELS = {"left", "right", "front", "logo", "other"}
 # correcting scores, and a day's cap stops slow drips.
 _FORM_LIMIT = "5/minute;30/day"
 _MAX_PENDING_PER_HOUR = 300
+
+# Signed-in submissions of assets and data: plenty for someone filling in a
+# school's helmets and colors, not enough to fill the Cloudinary account.
+_ACCOUNT_TYPES = ("logo", "helmet", "colors", "location", "helmet_assignment")
+_MAX_PER_ACCOUNT_PER_DAY = 25
+
+
+async def _require_under_account_cap(conn, user_id: int) -> None:
+    """Raise 429 once *user_id* has made ``_MAX_PER_ACCOUNT_PER_DAY`` asset/data submissions in a day."""
+    row = await (
+        await conn.execute(
+            """
+            SELECT COUNT(*) FROM submissions
+            WHERE user_id = %s AND type = ANY(%s) AND submitted_at > NOW() - INTERVAL '1 day'
+            """,
+            (user_id, list(_ACCOUNT_TYPES)),
+        )
+    ).fetchone()
+    if row is not None and row[0] >= _MAX_PER_ACCOUNT_PER_DAY:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"That's the limit of {_MAX_PER_ACCOUNT_PER_DAY} submissions a day. Please try again tomorrow.",
+        )
 
 
 async def _accept_form_submission(
@@ -124,18 +155,18 @@ class _HelmetForm:
 
     def __init__(
         self,
-        school: Annotated[str, Form()],
+        school: Annotated[str, Form(max_length=100)],
         year_first_worn: Annotated[int, Form()],
-        description: Annotated[str, Form()],
+        description: Annotated[str, Form(max_length=2000)],
         year_last_worn: Annotated[int | None, Form()] = None,
         currently_worn: Annotated[bool, Form()] = False,
-        color: Annotated[str | None, Form()] = None,
-        finish: Annotated[str | None, Form()] = None,
-        facemask_color: Annotated[str | None, Form()] = None,
-        logo_description: Annotated[str | None, Form()] = None,
-        stripe: Annotated[str | None, Form()] = None,
-        additional_notes: Annotated[str | None, Form()] = None,
-        other_note: Annotated[str | None, Form()] = None,
+        color: Annotated[str | None, Form(max_length=100)] = None,
+        finish: Annotated[str | None, Form(max_length=100)] = None,
+        facemask_color: Annotated[str | None, Form(max_length=100)] = None,
+        logo_description: Annotated[str | None, Form(max_length=500)] = None,
+        stripe: Annotated[str | None, Form(max_length=200)] = None,
+        additional_notes: Annotated[str | None, Form(max_length=2000)] = None,
+        other_note: Annotated[str | None, Form(max_length=2000)] = None,
     ) -> None:
         """Bind form fields to instance attributes for FastAPI dependency injection."""
         self.school = school
@@ -152,14 +183,14 @@ class _HelmetForm:
         self.other_note = other_note
 
 
-@router.post("/logos", status_code=status.HTTP_201_CREATED, responses=_404)
+@router.post("/logos", status_code=status.HTTP_201_CREATED, responses=_ACCOUNT_RESPONSES)
 @limiter.limit("3/minute")
 async def submit_logo(
     request: Request,
-    school: Annotated[str, Form()],
+    current_user: CurrentUser,
+    school: Annotated[str, Form(max_length=100)],
     logo_type: Annotated[LogoType, Form()],
     file: Annotated[UploadFile, File()],
-    current_user: OptionalUser = None,
 ) -> SubmissionCreatedResponse:
     """Submit a school logo for moderator review.
 
@@ -169,10 +200,11 @@ async def submit_logo(
     evidence; a moderator recreates it to a standard format as a new
     ``team_logos`` asset after accepting the submission.
     """
+    user_id = current_user["db_id"]
     async with get_conn() as conn:
         await require_school_exists(conn, school)
+        await _require_under_account_cap(conn, user_id)
 
-    user_id = optional_user_id(current_user)
     payload = build_logo_initial_payload(logo_type)
     # Insert first so we get the submission_id for Cloudinary path construction.
     async with get_conn() as conn:
@@ -190,15 +222,15 @@ async def submit_logo(
     return SubmissionCreatedResponse(id=submission_id, type="logo", school=school, submitted_at=submitted_at)
 
 
-@router.post("/helmets", status_code=status.HTTP_201_CREATED, responses=_404)
+@router.post("/helmets", status_code=status.HTTP_201_CREATED, responses=_ACCOUNT_RESPONSES)
 @limiter.limit("3/minute")
 async def submit_helmet(
     request: Request,
+    current_user: CurrentUser,
     form: Annotated[_HelmetForm, Depends()],
     images: Annotated[list[UploadFile], File()] = [],
     image_labels: Annotated[list[str], Form()] = [],
     logo_image: Annotated[UploadFile | None, File()] = None,
-    current_user: OptionalUser = None,
 ) -> SubmissionCreatedResponse:
     """Submit a helmet design for moderator review.
 
@@ -227,8 +259,10 @@ async def submit_helmet(
                 detail=f"Invalid image label '{label}'. Valid: {sorted(_VALID_IMAGE_LABELS)}",
             )
 
+    user_id = current_user["db_id"]
     async with get_conn() as conn:
         await require_school_exists(conn, form.school)
+        await _require_under_account_cap(conn, user_id)
 
     payload = build_helmet_initial_payload(
         year_first_worn=form.year_first_worn,
@@ -244,7 +278,6 @@ async def submit_helmet(
         other_note=form.other_note,
     )
 
-    user_id = optional_user_id(current_user)
     # Insert first so we get the submission_id for Cloudinary path construction.
     async with get_conn() as conn:
         submission_id, submitted_at = await insert_submission(conn, "helmet", form.school, user_id, payload)
@@ -275,30 +308,32 @@ async def submit_helmet(
     return SubmissionCreatedResponse(id=submission_id, type="helmet", school=form.school, submitted_at=submitted_at)
 
 
-@router.post("/colors", status_code=status.HTTP_201_CREATED, responses=_404)
+@router.post("/colors", status_code=status.HTTP_201_CREATED, responses=_ACCOUNT_RESPONSES)
 @limiter.limit("10/minute")
 async def submit_colors(
-    request: Request, body: SubmitColorsRequest, current_user: OptionalUser = None
+    request: Request, body: SubmitColorsRequest, current_user: CurrentUser
 ) -> SubmissionCreatedResponse:
     """Submit a school color correction for moderator review."""
-    user_id = optional_user_id(current_user)
+    user_id = current_user["db_id"]
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
+        await _require_under_account_cap(conn, user_id)
         payload = build_colors_payload(body)
         submission_id, submitted_at = await insert_submission(conn, "colors", body.school, user_id, payload)
 
     return SubmissionCreatedResponse(id=submission_id, type="colors", school=body.school, submitted_at=submitted_at)
 
 
-@router.post("/locations", status_code=status.HTTP_201_CREATED, responses=_404)
+@router.post("/locations", status_code=status.HTTP_201_CREATED, responses=_ACCOUNT_RESPONSES)
 @limiter.limit("10/minute")
 async def submit_location(
-    request: Request, body: SubmitLocationRequest, current_user: OptionalUser = None
+    request: Request, body: SubmitLocationRequest, current_user: CurrentUser
 ) -> SubmissionCreatedResponse:
     """Submit corrected GPS coordinates for a school."""
-    user_id = optional_user_id(current_user)
+    user_id = current_user["db_id"]
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
+        await _require_under_account_cap(conn, user_id)
         payload = build_location_payload(body)
         submission_id, submitted_at = await insert_submission(conn, "location", body.school, user_id, payload)
 
@@ -337,13 +372,13 @@ async def submit_score(
     return SubmissionCreatedResponse(id=submission_id, type="score", school=body.school, submitted_at=submitted_at)
 
 
-@router.post("/helmet-assignments", status_code=status.HTTP_201_CREATED, responses=_404)
+@router.post("/helmet-assignments", status_code=status.HTTP_201_CREATED, responses=_ACCOUNT_RESPONSES)
 @limiter.limit("10/minute")
 async def submit_helmet_assignment(
     request: Request,
     response: Response,
     body: SubmitHelmetAssignmentRequest,
-    current_user: OptionalUser = None,
+    current_user: CurrentUser,
 ) -> SubmissionCreatedResponse | HelmetAssignmentAlreadyConfirmed:
     """Submit or confirm which helmet design a school wore in a specific game.
 
@@ -379,7 +414,8 @@ async def submit_helmet_assignment(
                 school=body.school, date=body.date, helmet_design_id=body.helmet_design_id
             )
 
-        user_id = optional_user_id(current_user)
+        user_id = current_user["db_id"]
+        await _require_under_account_cap(conn, user_id)
         payload = build_helmet_assignment_payload(body)
         submission_id, submitted_at = await insert_submission(conn, "helmet_assignment", body.school, user_id, payload)
 

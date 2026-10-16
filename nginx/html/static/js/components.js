@@ -143,7 +143,8 @@ export function teamMark(name, team, { size = 24 } = {}) {
 /** Inline style carrying a team's clamped UI color for both themes. */
 export function teamColorStyle(team) {
   const colors = teamUiColors(team);
-  return colors ? ` style="--team-ui-light:${colors.light};--team-ui-dark:${colors.dark}"` : "";
+  // Escaped even though the colors are computed server-side: an attribute is no place to trust data.
+  return colors ? ` style="--team-ui-light:${esc(colors.light)};--team-ui-dark:${esc(colors.dark)}"` : "";
 }
 
 /** Helmet + name: the only way a team is ever identified. */

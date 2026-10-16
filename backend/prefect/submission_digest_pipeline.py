@@ -11,12 +11,17 @@ Mail goes out over SMTP, configured by environment variables:
     SMTP_HOST, SMTP_PORT (default 587)   the server
     SMTP_USERNAME, SMTP_PASSWORD         login, when the server needs one
     SMTP_SECURITY                        starttls (default), ssl, or none;
-                                         port 465 implies ssl
+                                         port 465 implies ssl; none (the
+                                         password and digest in the clear) is
+                                         refused unless ENVIRONMENT=local
     SMTP_FROM                            the From address (default SMTP_USERNAME)
     DIGEST_TO                            recipients, comma-separated
     SITE_URL                             for the link to /moderate
 
 Without SMTP_HOST or DIGEST_TO the flow logs the digest and sends nothing.
+
+Each run also forgets the contact email on feedback that was decided more
+than ``EMAIL_RETENTION_DAYS`` ago: it was only ever there for a reply.
 """
 
 from __future__ import annotations
@@ -89,6 +94,10 @@ def smtp_settings() -> dict | None:
     port = int(os.environ.get("SMTP_PORT", "587"))
     username = os.environ.get("SMTP_USERNAME", "").strip()
     security = os.environ.get("SMTP_SECURITY", "").strip().lower() or ("ssl" if port == 465 else "starttls")
+    if security not in ("starttls", "ssl", "none"):
+        raise ValueError(f"SMTP_SECURITY must be starttls, ssl, or none, not {security!r}")
+    if security == "none" and os.environ.get("ENVIRONMENT", "local") != "local":
+        raise ValueError("SMTP_SECURITY=none sends the SMTP password and the digest unencrypted; use starttls or ssl")
     return {
         "host": host,
         "port": port,
@@ -126,6 +135,26 @@ def send_message(message: EmailMessage, settings: dict) -> None:
         server.send_message(message)
 
 
+EMAIL_RETENTION_DAYS = 90
+
+
+@task(task_run_name="Forget old contact emails")
+def forget_old_contact_emails(days: int = EMAIL_RETENTION_DAYS) -> int:
+    """Remove ``payload.email`` from submissions approved or rejected more than *days* ago; returns how many."""
+    with get_database_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE submissions SET payload = payload - 'email', updated_at = NOW()
+            WHERE payload ? 'email' AND status IN ('approved', 'rejected')
+              AND COALESCE(reviewed_at, submitted_at) < NOW() - make_interval(days => %s)
+            """,
+            (days,),
+        )
+        forgotten = cur.rowcount
+    get_run_logger().info("Forgot the contact email on %d submission(s) decided over %d days ago", forgotten, days)
+    return forgotten
+
+
 @task(task_run_name="Send the digest")
 def send_digest(digest: DigestEmail) -> bool:
     """Email *digest*; returns False (and logs it) when SMTP isn't configured."""
@@ -146,6 +175,7 @@ def submission_digest_flow(hours: int = 24) -> int:
     Returns how many were waiting; 0 means nothing was sent.
     """
     logger = get_run_logger()
+    forget_old_contact_emails()
     items, now = load_waiting_submissions(hours)
     if not items:
         logger.info("Nothing is waiting for a decision; nothing to send.")

@@ -84,7 +84,7 @@ function shell() {
     ? `<a class="mod-button" href="${esc(state.cfg.api_docs_url)}" target="_blank" rel="noopener">API Docs</a>`
     : "";
   root.innerHTML = `<div class="mod-account">
-      <a class="mod-button" href="/prefect/" target="_blank" rel="noopener">Prefect</a>
+      <a class="mod-button" href="/prefect/" target="_blank" rel="noopener" data-prefect hidden>Prefect</a>
       ${docs}
       <button type="button" class="mod-button" data-signout>Sign out</button>
     </div>
@@ -260,8 +260,17 @@ async function boot() {
   }
   shell();
   await load();
-  // A first-party cookie, so the Prefect link opens without a Bearer header.
-  api("/auth/session", { method: "POST" }).catch(() => {});
+  // Prefect is the owner's alone (the API refuses anyone else), so only the
+  // owner sees its link, and only the owner needs the first-party cookie that
+  // lets the link open without a Bearer header.
+  api("/users/me")
+    .then((res) => (res.ok ? res.json() : null))
+    .then((me) => {
+      if (me?.role !== "owner") return;
+      root.querySelector("[data-prefect]")?.removeAttribute("hidden");
+      return api("/auth/session", { method: "POST" });
+    })
+    .catch(() => {});
 }
 
 boot();

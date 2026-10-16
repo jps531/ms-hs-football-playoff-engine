@@ -6,9 +6,12 @@ siteverify endpoint before a submission is queued. Each token is single-use.
 
 Turnstile is on when ``TURNSTILE_SECRET_KEY`` is set (the browser gets the
 matching ``TURNSTILE_SITE_KEY`` from ``/api/v1/meta/client-config``), so local
-runs and tests need no keys. If Cloudflare itself can't be reached the check
-fails open: the per-IP limits and the queue's circuit breaker still apply,
-and an outage there shouldn't take the form down with it.
+runs and tests need no keys; outside ``ENVIRONMENT=local`` a missing secret is
+logged as an error. If Cloudflare itself can't be reached the check fails
+closed (503, try again shortly): a spam check that waves everything through
+whenever it's unavailable isn't one. A token solved on another site is
+refused: Cloudflare reports the hostname, which must be ``FRONTEND_ORIGIN``'s
+(or its ``www.``) when that's set.
 """
 
 import asyncio
@@ -27,6 +30,23 @@ _VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 _TIMEOUT_SECONDS = 5
 
 CHECK_FAILED = "The spam check didn't pass. Please try again."
+CHECK_UNAVAILABLE = "The spam check isn't responding right now. Please try again in a few minutes."
+
+
+def _expected_hostname() -> str | None:
+    """The site's hostname, from FRONTEND_ORIGIN; None (no hostname check) when unset or ``*``."""
+    origin = os.getenv("FRONTEND_ORIGIN", "").strip()
+    if not origin or origin == "*":
+        return None
+    return urllib.parse.urlparse(origin).hostname
+
+
+def _hostname_ok(reported: str | None) -> bool:
+    """Was the token solved on this site? Cloudflare's test keys report example.com, so local runs skip this."""
+    expected = _expected_hostname()
+    if expected is None or not reported:
+        return True
+    return reported.lower() in (expected, f"www.{expected}")
 
 
 def turnstile_secret() -> str:
@@ -54,18 +74,25 @@ def _siteverify(secret: str, token: str, remote_ip: str | None) -> dict:
 async def verify_turnstile(token: str | None, remote_ip: str | None) -> None:
     """Raise HTTP 403 unless *token* passes Turnstile; a no-op while Turnstile is off.
 
-    Fails open, with a warning logged, when Cloudflare can't be reached or answers garbage.
+    Raises 503 when Cloudflare can't be reached or answers garbage (fails closed).
     """
     secret = turnstile_secret()
     if not secret:
+        if os.getenv("ENVIRONMENT", "local") != "local":
+            _log.error("turnstile: TURNSTILE_SECRET_KEY isn't set; the feedback form has no spam check")
         return
     if not token:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=CHECK_FAILED)
     try:
         result = await asyncio.to_thread(_siteverify, secret, token, remote_ip)
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        _log.warning("turnstile: siteverify unavailable, letting the submission through: %s", exc)
-        return
+        _log.error("turnstile: siteverify unavailable, refusing the submission: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=CHECK_UNAVAILABLE, headers={"Retry-After": "120"}
+        ) from exc
     if not result.get("success"):
         _log.info("turnstile: rejected token, errors=%s", result.get("error-codes"))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=CHECK_FAILED)
+    if not _hostname_ok(result.get("hostname")):
+        _log.info("turnstile: token solved on %s, not this site", result.get("hostname"))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=CHECK_FAILED)

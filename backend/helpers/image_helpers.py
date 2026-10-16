@@ -1,5 +1,8 @@
 """Cloudinary image upload helpers."""
 
+import asyncio
+import io
+import logging
 import os
 import tempfile
 from collections.abc import Callable
@@ -8,12 +11,23 @@ from typing import Literal
 import cloudinary
 import cloudinary.uploader
 from fastapi import HTTPException, UploadFile, status
+from PIL import Image, UnidentifiedImageError
+
+_log = logging.getLogger(__name__)
 
 LogoType = Literal["primary", "secondary", "tertiary"]
 HelmetImageType = Literal["left", "right", "photo"]
 
 ALLOWED_UPLOAD_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
+# What a file really is (read from its bytes, not the type the client declared) and its extension.
+_SNIFFED_TYPES = {
+    "JPEG": ("image/jpeg", ".jpg"),
+    "PNG": ("image/png", ".png"),
+    "WEBP": ("image/webp", ".webp"),
+    "GIF": ("image/gif", ".gif"),
+}
+MAX_UPLOAD_PIXELS = 40_000_000  # far past any photo; refuses decompression bombs
 
 
 def validate_upload(content_type: str | None, size: int) -> None:
@@ -30,9 +44,36 @@ def validate_upload(content_type: str | None, size: int) -> None:
         )
 
 
-def save_temp(filename: str | None, contents: bytes) -> str:
-    """Write upload contents to a named temp file (mode 0600) and return its path."""
-    suffix = os.path.splitext(filename or "")[1] or ".png"
+def sniff_image(contents: bytes) -> tuple[str, str]:
+    """Return ``(mime_type, extension)`` for what *contents* actually is; HTTP 422 unless it's an allowed image.
+
+    The client's declared content type is only a claim: this opens the bytes, so a script or an
+    HTML page renamed ``.png`` is refused, as is an image too large in pixels to be a real photo.
+    """
+    try:
+        with Image.open(io.BytesIO(contents)) as img:
+            fmt = img.format
+            width, height = img.size
+            img.verify()
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError, Image.DecompressionBombError):
+        fmt = None
+        width = height = 0
+    if fmt not in _SNIFFED_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"The file isn't a supported image. Allowed: {sorted(ALLOWED_UPLOAD_MIME_TYPES)}",
+        )
+    if width * height > MAX_UPLOAD_PIXELS:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Image dimensions are too large")
+    return _SNIFFED_TYPES[fmt]
+
+
+def save_temp(filename: str | None, contents: bytes, suffix: str | None = None) -> str:
+    """Write upload contents to a named temp file (mode 0600) and return its path.
+
+    *suffix* defaults to *filename*'s extension (or ``.png``).
+    """
+    suffix = suffix or os.path.splitext(filename or "")[1] or ".png"
     tmp = tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=suffix)
     tmp.write(contents)
     tmp.close()
@@ -44,15 +85,30 @@ async def save_and_upload(file: UploadFile, upload_fn: Callable[[str], str]) -> 
 
     *upload_fn* should be a closure/partial with all upload-specific arguments
     (school, logo_type, submission_id, etc.) already bound except the local file path.
-    The temp file is removed whether or not the upload succeeds.
+    The file must really be an allowed image (see :func:`sniff_image`), whatever it claims to be;
+    the temp file gets the extension of what it is. The upload runs in a worker thread so it
+    doesn't stall other requests. The temp file is removed whether or not the upload succeeds.
     """
     contents = await file.read()
     validate_upload(file.content_type, len(contents))
-    tmp_path = save_temp(file.filename, contents)
+    _, extension = sniff_image(contents)
+    tmp_path = save_temp(file.filename, contents, suffix=extension)
     try:
-        return upload_fn(tmp_path)
+        return await asyncio.to_thread(upload_fn, tmp_path)
     finally:
         os.unlink(tmp_path)
+
+
+def delete_images(public_ids: list[str]) -> None:  # pragma: no cover - Cloudinary call
+    """Delete uploaded images from Cloudinary (best effort: a failure is logged, not raised)."""
+    if not public_ids:
+        return
+    _configure()
+    for public_id in public_ids:
+        try:
+            cloudinary.uploader.destroy(public_id, invalidate=True)
+        except Exception as exc:  # noqa: BLE001 - one failed delete shouldn't stop the rest
+            _log.warning("cloudinary: couldn't delete %s: %s", public_id, exc)
 
 
 def _configure() -> None:

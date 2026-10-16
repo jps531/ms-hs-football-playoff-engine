@@ -6,7 +6,9 @@ decoded JWT payload with db_id and role via a single DB lookup, lazy-provisionin
 a new user row (role='user') on the first authenticated request from a given Auth0 sub.
 """
 
+import asyncio
 import json
+import logging
 import os
 import time
 import urllib.request
@@ -26,15 +28,24 @@ _SESSION_ALGORITHM = "HS256"
 SESSION_COOKIE_NAME = "session"
 SESSION_COOKIE_MAX_AGE = 60 * 60 * 24  # 24h, matches the Auth0 access token lifetime noted in README.md
 
+_log = logging.getLogger(__name__)
+
 _jwks_cache: dict | None = None
 _jwks_fetched_at: float = 0.0
 _JWKS_TTL = 86400  # refresh cached keys every 24 hours
+# A token signed with a key we haven't seen (Auth0 rotated its keys) refetches
+# the set early, but at most this often, so junk tokens can't make us hammer Auth0.
+_JWKS_MIN_REFRESH = 300
 
 
-def _get_jwks() -> dict:
-    """Fetch and cache Auth0's JSON Web Key Set. Refreshes every 24 hours."""
+def _get_jwks(force: bool = False) -> dict:
+    """Fetch and cache Auth0's JSON Web Key Set. Refreshes every 24 hours, or sooner when *force*d.
+
+    A forced refresh is skipped if the set was fetched in the last ``_JWKS_MIN_REFRESH`` seconds.
+    """
     global _jwks_cache, _jwks_fetched_at
-    if _jwks_cache is None or time.monotonic() - _jwks_fetched_at > _JWKS_TTL:
+    age = time.monotonic() - _jwks_fetched_at
+    if _jwks_cache is None or age > _JWKS_TTL or (force and age > _JWKS_MIN_REFRESH):
         url = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json"
         with urllib.request.urlopen(url, timeout=5) as response:  # noqa: S310
             _jwks_cache = json.load(response)
@@ -53,6 +64,15 @@ def _get_userinfo(token: str) -> dict:
         return json.load(response)
 
 
+def _verified_email(userinfo: dict) -> str:
+    """The profile's email only if Auth0 says it's verified, else "".
+
+    An unverified address is just text anyone could type at sign-up, so it never lands in
+    users.email, where someone looking for a moderator's row might match on it.
+    """
+    return userinfo.get("email", "") if userinfo.get("email_verified") is True else ""
+
+
 def _find_rsa_key(jwks: dict, kid: str) -> dict:
     """Return the RSA key matching kid, or empty dict if not found."""
     for key in jwks.get("keys", []):
@@ -68,13 +88,20 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
 _optional_bearer = HTTPBearer(auto_error=False)
 
 
-def _decode_auth0_token(token: str) -> dict:
-    """Validate an Auth0 RS256 JWT against the JWKS; raise HTTP 401 on any failure."""
+async def _decode_auth0_token(token: str) -> dict:
+    """Validate an Auth0 RS256 JWT against the JWKS; raise HTTP 401 on any failure.
+
+    Fetching the key set is blocking I/O, so it runs in a worker thread, off the event loop.
+    """
     try:
         header = jwt.get_unverified_header(
             token  # NOSONAR - kid extracted here solely to select the JWKS key; full signature+claims verification is done by jwt.decode() below
         )
-        rsa_key = _find_rsa_key(_get_jwks(), header.get("kid", ""))
+        kid = header.get("kid", "")
+        rsa_key = _find_rsa_key(await asyncio.to_thread(_get_jwks), kid)
+        if not rsa_key:
+            # Possibly a newly rotated key: refetch (rate-limited) before giving up.
+            rsa_key = _find_rsa_key(await asyncio.to_thread(_get_jwks, True), kid)
         if not rsa_key:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -103,7 +130,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
     """
     from backend.api.db import get_conn  # local import avoids circular dependency
 
-    payload = _decode_auth0_token(token)
+    payload = await _decode_auth0_token(token)
     sub = payload["sub"]
 
     async with get_conn() as conn:
@@ -115,7 +142,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
         ).fetchone()
 
         if row is None:
-            userinfo = _get_userinfo(token)
+            userinfo = await asyncio.to_thread(_get_userinfo, token)
             row = await (
                 await conn.execute(
                     """
@@ -123,7 +150,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
                     VALUES (%s, %s, %s)
                     RETURNING id, role, is_active
                     """,
-                    (sub, userinfo.get("email", ""), userinfo.get("name", sub)),
+                    (sub, _verified_email(userinfo), userinfo.get("name", sub)),
                 )
             ).fetchone()
 
@@ -221,28 +248,45 @@ def _decode_session_token(token: str) -> dict | None:
         return None
 
 
-async def get_moderator_via_cookie_or_bearer(
+async def _current_role(db_id: int) -> str | None:
+    """The account's role now, or None if it's gone or deactivated."""
+    from backend.api.db import get_conn  # local import avoids circular dependency
+
+    async with get_conn() as conn:
+        row = await (await conn.execute("SELECT role, is_active FROM users WHERE id = %s", (db_id,))).fetchone()
+    if row is None or not row[1]:
+        return None
+    return row[0]
+
+
+async def get_owner_via_cookie_or_bearer(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_optional_bearer)],
 ) -> dict:
-    """Authorize via session cookie OR Bearer token — used by the nginx auth_request verify
-    endpoint so both a first-party session cookie and the Bearer/ModHeader workaround work."""
+    """Authorize the owner via session cookie OR Bearer token — used by the nginx auth_request
+    verify endpoint that gates the Prefect UI, so both a first-party session cookie and the
+    Bearer/ModHeader workaround work.
+
+    Owner only: Prefect runs deployments and shows logs and settings, an admin console in all
+    but name. The cookie's role is re-checked against the users table, so demoting or
+    deactivating someone takes effect at once rather than when their cookie expires.
+    """
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
     if session_token:
         claims = _decode_session_token(session_token)
-        if claims is not None and claims.get("role") in ("moderator", "owner"):
+        if claims is not None and await _current_role(claims.get("db_id")) == "owner":
             return claims
 
     if credentials is not None:
         payload = await get_current_user(credentials.credentials)
-        if payload.get("role") in ("moderator", "owner"):
+        if payload.get("role") == "owner":
             return payload
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Moderator access required")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required")
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Moderator authentication required (session cookie or Bearer token)",
+        detail="Owner authentication required (session cookie or Bearer token)",
     )
 
 
-ModeratorCookieOrBearerAuth = Annotated[dict, Depends(get_moderator_via_cookie_or_bearer)]
+OwnerCookieOrBearerAuth = Annotated[dict, Depends(get_owner_via_cookie_or_bearer)]
