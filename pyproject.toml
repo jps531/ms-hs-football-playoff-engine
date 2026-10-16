@@ -10,10 +10,11 @@ name = "ms-hs-football-playoff-engine"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "prefect>=2.16,<3",
-    "griffe<1.0",
-    "anyio>=3.0,<4",
-    "pydantic>=2.0,<2.10",
+    # Caps below are deliberate; Dependabot is lockfile-only and won't lift them.
+    "prefect>=2.16,<3",  # the flows are Prefect 2; Prefect 3 is a rewrite
+    "griffe<1.0",  # Prefect 2's docstring parsing breaks on griffe 1
+    "anyio>=3.0,<4",  # Prefect 2.16 needs anyio 3
+    "pydantic>=2.0,<2.10",  # Prefect 2.16 fails to import with pydantic 2.10+ ('type' object is not iterable)
     "requests>=2.31",
     "pandas>=2.2",
     "lxml>=5.2",

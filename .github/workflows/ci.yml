@@ -1,0 +1,71 @@
+# Checks every pull request (Dependabot's included) and every push to main:
+# the tests, lint, and that the Docker images still build and nginx still
+# accepts its config. A Dependabot upgrade that breaks any of them shows up
+# as a red check on its PR instead of on the server.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Read-only: nothing here needs to write to the repo, and PRs from forks or
+# Dependabot get no secrets.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # Actions are pinned to commits (tags can be moved); Dependabot updates them.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Install (exactly as locked)
+        run: uv sync --frozen --python 3.11
+      - name: Lint
+        run: uv run --frozen ruff check backend
+      - name: Python tests
+        run: uv run --frozen pytest backend/tests -q -p no:cacheprovider -o addopts=""
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: JavaScript tests
+        run: node --test nginx/tests/*.test.mjs
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Compose file resolves
+        env:
+          POSTGRES_PASSWORD: ci-only
+        run: docker compose --profile local-db config --quiet
+      - name: Build the API image
+        run: docker build --file Dockerfile.api --tag ci/api .
+      - name: Build the worker image
+        run: docker build --file Dockerfile.prefect --tag ci/worker .
+      - name: The API image imports and runs as a non-root user
+        run: |
+          docker run --rm -e AUTH0_DOMAIN=ci.example -e AUTH0_AUDIENCE=ci -e SESSION_SECRET_KEY=ci-only-0123456789abcdef0123456789 \
+            ci/api python -c "import os, backend.api.main; assert os.getuid() != 0; print('api ok')"
+      - name: nginx accepts its config
+        run: |
+          mkdir -p ci-cert && openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=ci \
+            -keyout ci-cert/privkey.pem -out ci-cert/fullchain.pem 2>/dev/null
+          image=$(sed -n 's/^ *image: \(nginx:[^ ]*\)$/\1/p' docker-compose.yml)
+          docker run --rm --add-host api:127.0.0.1 --add-host prefect-server:127.0.0.1 \
+            -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$PWD/ci-cert:/etc/letsencrypt/live/mshsfootball.com:ro" \
+            "$image" nginx -t
