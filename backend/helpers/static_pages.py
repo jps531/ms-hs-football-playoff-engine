@@ -324,24 +324,29 @@ def region_body(
     )
 
 
-def class_region_block(clazz: int, block: dict, mode: str, teams: dict[str, dict], heading: str = "h2") -> str:
+def class_region_block(
+    clazz: int, block: dict, mode: str, teams: dict[str, dict], heading: str = "h2", link: bool = True
+) -> str:
     """One region as the class page shows it: its title and a condensed table (position, team, region
-    record, odds of 1st and of the playoffs)."""
+    record, odds of 1st and of the playoffs). ``link=False`` for a preview that is itself one link."""
     region = block["region"]
     ordered = display_order(block["teams"])
     positions = standing_positions(ordered)
     page = region_path(clazz, region)
     complete = region_complete(ordered)
+    title = f'<a href="{page}">Region {region}</a>' if link else f"Region {region}"
+    labelled = f' aria-labelledby="region-{region}"' if link else ""
+    heading_id = f' id="region-{region}"' if link else ""
     rows = "".join(
-        f"{_row_start(t, pos)}{_team_cell(t, page, clazz, teams, complete)}"
+        f"{_row_start(t, pos)}{_team_cell(t, page, clazz, teams, complete, link)}"
         f'<td class="col-rec">{_region_record(t)}</td>'
         f'<td class="col-odds">{_odds(mode_odds(t, "p1", mode))}</td>'
         f'<td class="col-odds">{_odds(mode_odds(t, "p_playoffs", mode))}</td></tr>'
         for pos, t in zip(positions, ordered, strict=True)
     )
     return (
-        f'<section class="region-block" aria-labelledby="region-{region}">'
-        f'<{heading} class="region-block__title" id="region-{region}"><a href="{page}">Region {region}</a></{heading}>'
+        f'<section class="region-block"{labelled}>'
+        f'<{heading} class="region-block__title"{heading_id}>{title}</{heading}>'
         '<table class="standings standings--compact">'
         f'<caption class="visually-hidden">Region {region}-{clazz}A standings</caption>'
         '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
@@ -388,17 +393,29 @@ def _section(key: str, title: str, body: str, level: str = "h2") -> str:
     )
 
 
-def _class_example(featured: dict, teams: dict[str, dict]) -> str:
-    """The featured region as the class page shows it."""
-    clazz, payload = featured["clazz"], featured["standings"]
-    block = {"region": featured["card"]["region"], "teams": payload["teams"]}
+def _class_preview(featured: dict, teams: dict[str, dict]) -> str:
+    """A small picture of the featured class's page (the featured region and the next one), as one link to it."""
+    clazz, region = featured["clazz"], featured["card"]["region"]
+    blocks = sorted((featured.get("class_standings") or {}).get("regions") or [], key=lambda b: b["region"])
+    if not any(b["region"] == region for b in blocks):
+        blocks = [{"region": region, "teams": featured["standings"]["teams"]}]
+    at = next(i for i, b in enumerate(blocks) if b["region"] == region)
+    shown = blocks[at : at + 2] if at + 1 < len(blocks) else blocks[max(0, at - 1) : at + 1]
+    tables = "".join(class_region_block(clazz, b, featured["mode"], teams, heading="p", link=False) for b in shown)
     return (
-        '<figure class="landing-example">'
-        f"{class_region_block(clazz, block, featured['mode'], teams, heading='h3')}"
-        f'<figcaption class="landing-example__caption muted">Class {clazz}A, {_e(featured["stamp"])}. '
-        f'<a href="{class_path(clazz)}">See every {clazz}A region</a></figcaption>'
-        "</figure>"
+        f'<a class="landing-preview landing-preview--class" href="{class_path(clazz)}" '
+        f'aria-label="Open the Class {clazz}A page">'
+        '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
+        f'<p class="title">Class {clazz}A</p>{_provenance(featured["stamp"])}'
+        f'<div class="region-blocks">{tables}</div>'
+        "</div></div>"
+        f'<span class="landing-preview__label">Open Class {clazz}A</span></a>'
     )
+
+
+def _lead(text: str) -> str:
+    """The sentence introducing an example card."""
+    return f'<p class="landing-lead">{_e(text)}</p>'
 
 
 def _region_preview(featured: dict, teams: dict[str, dict]) -> str:
@@ -800,9 +817,16 @@ def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
         )
         + "</div>"
     )
-    class_extra = _class_example(featured, teams) if featured else ""
-    region_extra = _region_preview(featured, teams) if featured else ""
-    bracket_extra = _bracket_preview(featured) if featured else ""
+    class_extra = region_extra = bracket_extra = ""
+    if featured:
+        c, r = featured["clazz"], featured["card"]["region"]
+        unsettled = ", the most unsettled race in the state right now" if featured["card"]["teams_alive"] > 0 else ""
+        class_extra = _lead(f"Here’s Class {c}A as it stands right now, starting with Region {r}:") + _class_preview(
+            featured, teams
+        )
+        region_extra = _lead(f"Here’s Region {r}-{c}A{unsettled}:") + _region_preview(featured, teams)
+        lead = f"And here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"
+        bracket_extra = (_lead(lead) if featured.get("bracket_html") else "") + _bracket_preview(featured)
     region_scenarios = "".join(
         _section(key, title, f"<p>{_e(text)}</p>", level="h3")
         for key, title, text in (

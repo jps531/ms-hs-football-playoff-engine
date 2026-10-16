@@ -215,6 +215,7 @@ def build_share_assets(
     region_data = region_payloads.get((featured["clazz"], featured["card"]["region"])) if featured else None
     if featured and region_data:
         featured.update(region_data)
+        featured["class_standings"] = class_standings.get(featured["clazz"])
         featured["bracket_html"] = _bracket_preview_html(fetch, season, featured, class_standings, teams)
     else:
         featured = None

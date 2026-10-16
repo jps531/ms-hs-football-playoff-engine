@@ -208,6 +208,7 @@ FEATURED = {
     "stamp": "2026 season · " + STAMP,
     "mode": "projected",
     "bracket_html": "",
+    "class_standings": {"regions": [{"region": 7, "teams": TEAMS}, {"region": 6, "teams": TEAMS}]},
 }
 
 
@@ -395,21 +396,35 @@ class TestLandingBody:
         assert body.index("Class standings") < body.index("Region breakdown") < body.index("Bracket page")
         assert 'href="/methodology"' in body
 
-    def test_class_example_is_the_class_page_block(self):
-        """The featured region as the class page shows it: helmets, badges, team links, and a caption."""
+    def test_class_preview_is_the_class_page_in_miniature(self):
+        """One link to the class page, with the featured region and the next one inside, as the class page draws them."""
         body = landing_body(FEATURED, {**HELMETS, **COLORS})
-        example = body[body.index('<figure class="landing-example">') : body.index("</figure>")]
-        assert '<h3 class="region-block__title" id="region-6"><a href="/standings/3a/6">Region 6</a></h3>' in example
-        assert 'href="/standings/3a/6?team=raleigh"' in example and "raleigh.png" in example
-        assert '<svg class="mark mark--generic" viewBox="0 0 32 28"' in example and 'fill="#123456"' in example
-        assert "Class 3A, 2026 season · Through Week 8 · Oct 9 · Projected." in example
+        card = body[body.index('<a class="landing-preview landing-preview--class"') :]
+        card = card[: card.index("</a>") + 4]
+        assert 'href="/standings/3a" aria-label="Open the Class 3A page"' in card
+        assert card.count("<a ") == 1 and 'aria-hidden="true"' in card
+        assert (
+            '<p class="region-block__title">Region 6</p>' in card
+            and '<p class="region-block__title">Region 7</p>' in card
+        )
+        assert "raleigh.png" in card and 'fill="#123456"' in card
+        assert '<p class="title">Class 3A</p>' in card
+
+    def test_each_card_is_introduced(self):
+        """A sentence before each example says what it is; 'most unsettled' only while the race is open."""
+        body = landing_body({**FEATURED, "bracket_html": "<div>tree</div>"}, {})
+        assert "Here’s Class 3A as it stands right now, starting with Region 6:" in body
+        assert "Here’s Region 6-3A, the most unsettled race in the state right now:" in body
+        assert "And here’s the Class 3A bracket, with one game opened up the way it looks after you tap it:" in body
+        settled = landing_body({**FEATURED, "card": _card(6, 0)}, {})
+        assert "Here’s Region 6-3A:" in settled and "most unsettled" not in settled
+        assert "Class 3A bracket, with one game" not in settled  # no bracket preview, so no sentence for it
 
     def test_region_preview_is_one_link_with_no_links_inside(self):
         """The region page in miniature: a single link to it, hidden from screen readers inside."""
         body = landing_body(FEATURED, HELMETS)
-        preview = body[
-            body.index('<a class="landing-preview"') : body.index("</a>", body.index("landing-preview__label"))
-        ]
+        start = body.index('<a class="landing-preview" ')
+        preview = body[start : body.index("</a>", body.index("landing-preview__label", start))]
         assert 'href="/standings/3a/6" aria-label="Open the Region 6-3A page"' in preview
         assert preview.count("<a ") == 1 and 'aria-hidden="true"' in preview
         assert "D&#39;Iberville and Raleigh chase two spots &lt;Friday&gt;." in preview

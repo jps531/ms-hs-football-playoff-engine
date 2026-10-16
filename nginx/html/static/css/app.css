@@ -1320,9 +1320,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .landing-section > .landing-section { margin-top: 14px; }
 .landing-section p, .landing-list { font-size: 16px; line-height: 24px; }
 .landing-list { padding-left: 20px; list-style: disc; display: grid; gap: 2px; }
-.landing-example { margin: 8px 0 0; max-width: 34rem; }
-.landing-example .region-block__title { font-size: 18px; line-height: 24px; }
-.landing-example__caption { margin-top: 6px; font-size: 13px; line-height: 18px; }
+/* "Here's Class 5A as it stands right now:" before each example card. */
+.landing-section .landing-lead { margin-top: 6px; font-size: 15px; line-height: 22px; color: var(--text-secondary); }
+.landing-lead + .landing-preview { margin-top: 0; }
+.landing-preview--class .region-blocks { margin-top: 18px; gap: 24px 48px; }
 .landing-preview {
   display: block; margin-top: 8px; max-width: 40rem;
   border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
