@@ -1096,7 +1096,9 @@ function treeCard(game, path) {
   const rows = here && here.p > 0 && !here.locked
     ? focusRows(game, here)
     : `${treeRow(game, order[0], result, "")}${treeRow(game, order[1], result, joiner)}`;
-  return `<button type="button" class="${cls}" data-game-open="${esc(game.id)}" aria-haspopup="dialog">${rows}</button>`;
+  // The column heading isn't part of the button's name, so screen readers tabbing through hear the round here.
+  const where = `<span class="visually-hidden">${esc([game.round, STATE_LABEL[state]].filter(Boolean).join(", "))}: </span>`;
+  return `<button type="button" class="${cls}" data-game-open="${esc(game.id)}" aria-haspopup="dialog">${where}${rows}</button>`;
 }
 
 /**
@@ -1115,10 +1117,10 @@ function focusRows(game, here) {
   const theirSide = here.sides[0] === "a" ? game.side_b : game.side_a;
   const teamSub = firstRound ? esc(positionName(mySide.feeders[0])) : "Chance to play here";
   const oppSub = firstRound ? esc(positionName(theirSide.feeders[0])) : "Likeliest opponent";
-  const teamRow = (gutter) => treeLine(gutter, focus, focus, teams, teamSub, oddsCell(here.p), " is-focus");
+  const teamRow = (gutter) => treeLine(gutter, focus, focus, teams, teamSub, oddsCell(here.p) + spoken(" chance to play here"), " is-focus");
   // Every pairing here is under the API's 0.5% listing floor: too many long shots to name one.
   if (!top) return `${teamRow("")}${treeLine("vs", null, "Many opponents", teams, "Each under 0.5%", "", " trow--empty")}`;
-  const oppRow = (gutter) => treeLine(gutter, top.opponent, top.opponent, teams, oppSub, oddsCell(top.pMatchup), "");
+  const oppRow = (gutter) => treeLine(gutter, top.opponent, top.opponent, teams, oppSub, oddsCell(top.pMatchup) + spoken(" chance of this matchup"), "");
   if (top.hosts === "team") return `${oppRow("")}${teamRow("at")}`;
   if (top.hosts === "opponent") return `${teamRow("")}${oppRow("at")}`;
   return `${teamRow("")}${oppRow("vs")}`;
@@ -1154,8 +1156,11 @@ function treeRow(game, sideKey, result, gutter) {
   const shown = (focus && list.find((o) => o.team === focus)) || list[0];
   // First round: the region/seed this slot is for. Later: how many others could be here instead.
   const sub = firstRound ? esc(positionName(side.feeders[0])) : list.length > 1 ? `+${list.length - 1} more` : "";
-  return row("", shown.team, shown.team, sub, oddsCell(shown.p));
+  return row("", shown.team, shown.team, sub, oddsCell(shown.p) + spoken(" chance to play here"));
 }
+
+/** Words for screen readers only. */
+const spoken = (text) => `<span class="visually-hidden">${esc(text)}</span>`;
 
 // ---------------------------------------------------- tree layout + lines
 
@@ -1260,6 +1265,7 @@ function rerenderBracket() {
 // matchups, or a picked team's possible opponents there.
 
 let sheet = null;
+let sheetFocus = null; // a selector to focus once the sheet re-renders (the team just picked)
 
 function gameSheet() {
   if (sheet) return sheet;
@@ -1281,6 +1287,7 @@ function openSheet(id) {
   const s = gameSheet();
   s.innerHTML = sheetHtml(id);
   if (!s.open) s.showModal();
+  s.scrollTop = 0; // the whole sheet scrolls when the screen is small (or zoomed in), else just its body
   s.querySelector(".game-sheet__body").scrollTop = 0;
 }
 
@@ -1289,10 +1296,15 @@ function refreshSheet() {
   if (!sheet?.open || !bracketUi.open) return;
   const body = sheet.querySelector(".game-sheet__body");
   const top = body?.scrollTop ?? 0;
+  const outer = sheet.scrollTop;
   sheet.innerHTML = sheetHtml(bracketUi.open);
   sheet.querySelector(".game-sheet__body").scrollTop = top;
-  // The control that was focused was just replaced; keep focus in the sheet.
-  if (!sheet.contains(document.activeElement)) sheet.querySelector(".game-sheet__title")?.focus({ preventScroll: true });
+  sheet.scrollTop = outer;
+  // The control that was focused was just replaced; keep focus in the sheet,
+  // on the same team if one was just picked.
+  const want = sheetFocus && sheet.querySelector(sheetFocus);
+  sheetFocus = null;
+  if (!sheet.contains(document.activeElement)) (want ?? sheet.querySelector(".game-sheet__title"))?.focus({ preventScroll: true });
 }
 
 function sheetHtml(id) {
@@ -1344,6 +1356,7 @@ function onSheetClick(e) {
   const pick = e.target.closest("[data-pick-team]");
   if (pick) {
     const team = pick.dataset.pickTeam;
+    sheetFocus = `[data-pick-team="${CSS.escape(team)}"]`;
     navigate(hrefWith({ team: bracketData?.focus === team ? null : team }), { replace: true });
   }
 }
@@ -1359,7 +1372,7 @@ function pickTeam(team) {
 function bracketSide(game, sideKey, result, host) {
   const { mode } = bracketData;
   const side = sideKey === "a" ? game.side_a : game.side_b;
-  const homeTag = host === sideKey ? '<span class="bteam__home">Home</span>' : "";
+  const homeTag = host === sideKey ? '<span class="bteam__home"><span class="visually-hidden">, </span>Home</span>' : "";
   if (result) {
     const team = lockedTeam(side) ?? (sideKey === "a" ? result.winner : result.loser);
     const won = team === result.winner;
