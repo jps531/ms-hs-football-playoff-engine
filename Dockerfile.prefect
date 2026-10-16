@@ -2,7 +2,7 @@
 # by digest so a rebuild gets exactly what was tested; Dependabot
 # (.github/dependabot.yml) proposes updates. Keep the Prefect tag in step with
 # prefect-server's image in docker-compose.yml.
-FROM ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c AS uv
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
 
 FROM prefecthq/prefect:2.20.26-python3.11@sha256:967e666f27b0732370fc95bd3170f927e1a76b8fe059adc129cc56958a938b48
 
