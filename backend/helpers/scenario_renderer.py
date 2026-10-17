@@ -159,7 +159,11 @@ def render_scenario_title(sc: dict) -> str:
     otherwise falls back to joining the ``game_winners`` list.
     """
     if sc.get("alternatives"):
-        title = " OR ".join(f"({_render_atom(atom)})" for atom in sc["alternatives"])
+        # What every alternative needs once, then the ways they differ.
+        alts = sc["alternatives"]
+        shared = [c for c in alts[0] if all(c in alt for alt in alts[1:])]
+        ways = " OR ".join(f"({_render_atom([c for c in alt if c not in shared])})" for alt in alts)
+        title = " AND ".join([t for t in (_render_atom(shared),) if t] + [ways])
     elif sc.get("conditions_atom") is not None:
         title = _render_atom(sc["conditions_atom"])
     else:
