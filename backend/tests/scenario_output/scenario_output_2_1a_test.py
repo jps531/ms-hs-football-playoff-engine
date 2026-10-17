@@ -264,6 +264,7 @@ def test_scenario_shape():
         "seeding",
         "game_winners",
         "conditions_atom",
+        "alternatives",
         "open_groups",
         "tiebreaker_groups",
         "coinflip_groups",

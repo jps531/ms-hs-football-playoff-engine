@@ -73,7 +73,9 @@ _ATOMS = build_scenario_atoms(_TEAMS, _COMPLETED, _REMAINING)
 _SCENARIOS = enumerate_division_scenarios(_TEAMS, _COMPLETED, _REMAINING)
 
 _SR = determine_scenarios(_TEAMS, _COMPLETED, _REMAINING)
-_ODDS = determine_odds(_TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom)
+_ODDS = determine_odds(
+    _TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom
+)
 
 _DIV_DICT = division_scenarios_as_dict(_SCENARIOS)
 _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
@@ -195,7 +197,9 @@ def test_lc_ob_game_absent_from_all_atoms():
             for atom in atoms:
                 for cond in atom:
                     if isinstance(cond, GameResult):
-                        assert {cond.winner, cond.loser} != lc_ob, f"{team} seed {seed} atom references LC/OB game"
+                        assert {cond.winner, cond.loser} != lc_ob, (
+                            f"{team} seed {seed} atom references LC/OB game"
+                        )
 
 
 # ---------------------------------------------------------------------------
@@ -420,12 +424,8 @@ def test_atoms_saltillo_eliminated_atom1():
 
 
 def test_div_dict_scenario_keys():
-    """Five keys: Saltillo's win over Grenada splits three ways (1a-1c), then 2 and 3.
-
-    1a and 1b give the same seeding by different margins (either one is enough); the
-    Olive Branch-Lake Cormorant result doesn't matter, so it isn't a condition anywhere.
-    """
-    assert set(_DIV_DICT.keys()) == {"1a", "1b", "1c", "2", "3"}
+    """Division scenarios dict has exactly 4 keys: 1a, 1b, 2, 3 (3a/3b/old-4 renumbered after dedup)."""
+    assert set(_DIV_DICT.keys()) == {"1a", "1b", "2", "3"}
 
 
 def test_div_dict_scenario2_title():
@@ -461,14 +461,15 @@ def test_div_dict_scenario1a_seeds():
     assert s["four_seed"] == "Center Hill"
 
 
-def test_div_dict_scenario1c_seeds():
-    """Scenario 1c: SP #1, LC #2, CH #3, GRE #4 — Saltillo wins by 12+ and South Panola by 1-6."""
-    s = _DIV_DICT["1c"]
-    assert s["title"] == "Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 1\u20136"
+def test_div_dict_scenario1b_seeds():
+    """Scenario 1b: SP #1, LC #2, CH #3, GRE #4 (large SAL/SP margin)."""
+    s = _DIV_DICT["1b"]
     assert s["one_seed"] == "South Panola"
     assert s["two_seed"] == "Lake Cormorant"
     assert s["three_seed"] == "Center Hill"
     assert s["four_seed"] == "Grenada"
+
+
 
 
 def test_div_dict_sp_always_one():
