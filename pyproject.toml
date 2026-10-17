@@ -17,7 +17,7 @@ dependencies = [
     # stays inside them; lift one deliberately, with CI green.
     "prefect>=2.16,<3",
     "griffe<1.0",
-    "anyio>=3.0,<4",
+    "anyio>=4.15.1,<5",
     "pydantic>=2.0,<2.10",
     "requests>=2.31",
     "pandas>=2.2",

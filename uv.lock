@@ -59,15 +59,15 @@ wheels = [
 
 [[package]]
 name = "anyio"
-version = "3.7.1"
+version = "4.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "idna" },
-    { name = "sniffio" },
+    { name = "typing-extensions", marker = "python_full_version < '3.15'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/28/99/2dfd53fd55ce9838e6ff2d4dac20ce58263798bd1a0dbe18b3a9af3fcfce/anyio-3.7.1.tar.gz", hash = "sha256:44a3c9aba0f5defa43261a8b3efb97891f2bd7d804e0e1f56419befa1adfc780", size = 142927, upload-time = "2023-07-05T16:45:02.294Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/d2/f4d173e22df740bc37b1db102b386ba719b66e95b0f0d751f556b387e6d2/anyio-4.15.1.tar.gz", hash = "sha256:9f28306018cbd6d329e64a36d58256edff76dd996fe423bc957326e578b82a94", size = 276966, upload-time = "2026-09-05T10:42:39.44Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/24/44299477fe7dcc9cb58d0a57d5a7588d6af2ff403fdd2d47a246c91a3246/anyio-3.7.1-py3-none-any.whl", hash = "sha256:91dee416e570e92c64041bd18b900d1d6fa78dff7048769ce5ac5ddad004fbb5", size = 80896, upload-time = "2023-07-05T16:44:59.805Z" },
+    { url = "https://files.pythonhosted.org/packages/12/b8/4bd346e22b28902df4d651910f5242c28d84e4a5c2435ca5c3f797ed7e2e/anyio-4.15.1-py3-none-any.whl", hash = "sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101", size = 132079, upload-time = "2026-09-05T10:42:37.923Z" },
 ]
 
 [[package]]
@@ -749,6 +749,18 @@ wheels = [
 ]
 
 [[package]]
+name = "exceptiongroup"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/0e/97c33bf5009bdbac74fd2beace167cab3f978feb69cc36f1ef79360d6c4e/exceptiongroup-1.3.1-py3-none-any.whl", hash = "sha256:a7a39a3bd276781e98394987d3a5701d0c4edffb633bb7a5144577f82c773598", size = 16740, upload-time = "2025-11-21T23:01:53.443Z" },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.136.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1198,6 +1210,15 @@ http2 = [
 ]
 
 [[package]]
+name = "humanize"
+version = "4.16.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/ea/13a1ef3c12d12662905801495283530251918b70d62d368f1d2e0272c70d/humanize-4.16.0.tar.gz", hash = "sha256:7dc2244a2f84a4bfb1d36c37bac80cd78e35cdc5c119206d87b018e1445f3a3f", size = 89515, upload-time = "2026-06-30T16:17:29.859Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/aa/0b7365d30fed43e7a3449aba1fe20a0a7174d9cf13e282af4e69ac825441/humanize-4.16.0-py3-none-any.whl", hash = "sha256:353eb2f34c09d098b2880eee8bef21832eae6d174f48c5762fff7e5fcb74d01d", size = 137209, upload-time = "2026-06-30T16:17:28.36Z" },
+]
+
+[[package]]
 name = "hyperframe"
 version = "6.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1252,6 +1273,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899, upload-time = "2025-03-05T20:05:00.369Z" },
+]
+
+[[package]]
+name = "jinja2-humanize-extension"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "humanize" },
+    { name = "jinja2" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/74/77/0bba383819dd4e67566487c11c49479ced87e77c3285d8e7f7a3401cf882/jinja2_humanize_extension-0.4.0.tar.gz", hash = "sha256:e7d69b1c20f32815bbec722330ee8af14b1287bb1c2b0afa590dbf031cadeaa0", size = 4746, upload-time = "2023-09-01T12:52:42.781Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/26/b4/08c9d297edd5e1182506edecccbb88a92e1122a057953068cadac420ca5d/jinja2_humanize_extension-0.4.0-py3-none-any.whl", hash = "sha256:b6326e2da0f7d425338bebf58848e830421defbce785f12ae812e65128518156", size = 4769, upload-time = "2023-09-01T12:52:41.098Z" },
 ]
 
 [[package]]
@@ -1760,7 +1794,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anyio", specifier = ">=3.0,<4" },
+    { name = "anyio", specifier = ">=4.15.1,<5" },
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "cloudinary", specifier = ">=1.40" },
     { name = "coloraide", specifier = ">=3.3" },
@@ -2223,7 +2257,7 @@ wheels = [
 
 [[package]]
 name = "prefect"
-version = "2.16.6"
+version = "2.20.25"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2240,14 +2274,17 @@ dependencies = [
     { name = "cryptography" },
     { name = "dateparser" },
     { name = "docker" },
+    { name = "exceptiongroup" },
     { name = "fsspec" },
     { name = "graphviz" },
     { name = "griffe" },
     { name = "httpcore" },
     { name = "httpx", extra = ["http2"] },
+    { name = "humanize" },
     { name = "importlib-resources" },
     { name = "itsdangerous" },
     { name = "jinja2" },
+    { name = "jinja2-humanize-extension" },
     { name = "jsonpatch" },
     { name = "jsonschema" },
     { name = "kubernetes" },
@@ -2257,6 +2294,7 @@ dependencies = [
     { name = "pendulum", version = "2.1.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "pendulum", version = "3.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pydantic", extra = ["email"] },
+    { name = "pydantic-core" },
     { name = "python-dateutil" },
     { name = "python-multipart" },
     { name = "python-slugify" },
@@ -2275,9 +2313,9 @@ dependencies = [
     { name = "uvicorn" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/ad/2eb55f454ff42a33a9f052d035ba44a93c3ab9863456b53791da853ae55c/prefect-2.16.6.tar.gz", hash = "sha256:a85fc62a78bace64f51af64d58f0bed482319d1c1e616d1a059f7199df8d3da5", size = 2774886, upload-time = "2024-03-23T21:11:45.948Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/23/b1d98e466ecfb049513f13c2deb5209ea81448862539e9bd6ca8c2b025df/prefect-2.20.25.tar.gz", hash = "sha256:8d7620bf963006432d67cc8079e582806b25f2db8be0e9ffe3c151d12d13f0bc", size = 5724104, upload-time = "2025-12-08T21:31:21.034Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/ca/0cea73da1cab85571d5ecf874c746d6820c169cd995736ea8e5f7e0ee616/prefect-2.16.6-py3-none-any.whl", hash = "sha256:345d9bcff112a7b710601e1f7344b5a6c4e2b5d301a72e88b8b35cb0c5ec8b16", size = 2970312, upload-time = "2024-03-23T21:11:41.795Z" },
+    { url = "https://files.pythonhosted.org/packages/44/27/ee25ee72775fed076c4d8643dfaf198422426b01a6cc0e52513683042aee/prefect-2.20.25-py3-none-any.whl", hash = "sha256:dd48a52b7e0676bc90c1849130116cbadc330102270f8f201bd21547c3c506de", size = 6029263, upload-time = "2025-12-08T21:31:15.818Z" },
 ]
 
 [[package]]
@@ -3404,11 +3442,11 @@ wheels = [
 
 [[package]]
 name = "typing-extensions"
-version = "4.15.0"
+version = "4.16.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/72/94/1a15dd82efb362ac84269196e94cf00f187f7ed21c242792a923cdb1c61f/typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466", size = 109391, upload-time = "2025-08-25T13:49:26.313Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/cc/6253133b5bb138fc3306cebfbda2c520f545d36b5be2c7255cc528bb45d6/typing_extensions-4.16.0.tar.gz", hash = "sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5", size = 113555, upload-time = "2026-07-02T08:40:05.92Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548", size = 44614, upload-time = "2025-08-25T13:49:24.86Z" },
+    { url = "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl", hash = "sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8", size = 45571, upload-time = "2026-07-02T08:40:04.659Z" },
 ]
 
 [[package]]
