@@ -605,9 +605,14 @@ def outcome_scenario_card(card: dict, teams: dict) -> str:
         if card["out"]
         else ""
     )
+    # Shared conditions once, then "AND ONE OF" the alternatives.
+    common = card.get("common") or []
+    shared = (
+        f'{condition_groups([common], teams)}<div class="and-oneof"><span>AND ONE OF</span></div>' if common else ""
+    )
     body = (
-        f'<p class="outcome__if">IF</p><div class="scenario__body">{condition_groups(card["groups"], teams)}</div>'
-        if card["groups"]
+        f'<p class="outcome__if">IF</p><div class="scenario__body">{shared}{condition_groups(card["groups"], teams)}</div>'
+        if card["groups"] or common
         else ""
     )
     return (
@@ -744,10 +749,14 @@ def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = 4
         out = [o["team"] for o in order if o["seed"] > playoff_seeds and o["team"] not in tied]
         if any(o["seed"] > playoff_seeds and o["team"] in tied for o in order):
             out.append("the rest of the tie")
-        cards.append({"num": sc["scenario_num"], "seeds": seeds, "out": out, "groups": groups})
+        # Conditions every alternative shares are said once; the alternatives keep only what differs.
+        common = [c for c in groups[0] if all(c in g for g in groups)] if len(groups) > 1 else []
+        if common:
+            groups = [[c for c in g if c not in common] for g in groups]
+        cards.append({"num": sc["scenario_num"], "seeds": seeds, "out": out, "common": common, "groups": groups})
     seen, unique = set(), []
     for c in cards:
-        key = repr((c["seeds"], c["out"], c["groups"]))
+        key = repr((c["seeds"], c["out"], c["common"], c["groups"]))
         if key not in seen:
             seen.add(key)
             unique.append(c)

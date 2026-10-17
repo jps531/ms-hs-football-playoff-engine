@@ -238,7 +238,7 @@ export function gameCard(game, teams, { focus = null, report = false } = {}) {
  * out), then the results that produce it. `focus` highlights the picked
  * team's line.
  */
-export function outcomeScenarioCard({ label, seeds, out, groups }, teams, { focus = null } = {}) {
+export function outcomeScenarioCard({ label, seeds, out, groups, common = [] }, teams, { focus = null } = {}) {
   // A tie left to the tiebreaker is one row over its places: its teams, unordered, and what decides it.
   const seedRows = seeds.map(({ seed, team, teams: tied, note }) => (tied
     ? `<li class="outcome__tie${tied.includes(focus) ? " is-focus" : ""}"><span class="outcome__seed">${esc(seed)}</span>`
@@ -248,8 +248,12 @@ export function outcomeScenarioCard({ label, seeds, out, groups }, teams, { focu
   const outLine = out.length
     ? `<p class="outcome__out"><span class="outcome__out-label">Out</span> ${out.map((t) => (t === focus ? `<strong>${esc(t)}</strong>` : esc(t))).join(", ")}</p>`
     : "";
-  const body = groups.length
-    ? `<p class="outcome__if">IF</p><div class="scenario__body">${conditionGroups(groups, teams)}</div>`
+  // Shared conditions once, then "AND ONE OF" the alternatives.
+  const shared = common.length
+    ? `${conditionGroups([common], teams)}<div class="and-oneof"><span>AND ONE OF</span></div>`
+    : "";
+  const body = groups.length || common.length
+    ? `<p class="outcome__if">IF</p><div class="scenario__body">${shared}${conditionGroups(groups, teams)}</div>`
     : "";
   return `<article class="scenario outcome">
     <h4 class="scenario__title">${esc(label)}</h4>

@@ -191,3 +191,15 @@ test("a tie straddling the cutoff says how many get in and that the rest of it i
   assert.match(card.seeds[3].note, /^1 of these 2 make the playoffs\. Order decided by the tiebreaker/);
   assert.deepEqual(card.out, ["the rest of the tie"]);
 });
+
+test("what every alternative shares is said once; the alternatives keep only what differs", () => {
+  const win = (w, l, lo = 1, hi = null) => ({ type: "game_result", winner: w, loser: l, min_margin: lo, max_margin: hi });
+  const [card] = completeScenarioCards([{
+    scenario_num: 1, sub_label: "a", title: "",
+    game_winners: [],
+    condition_groups: [[win("A", "B"), win("C", "D", 1, 8)], [win("A", "B"), win("C", "D", 10)]],
+    outcomes: { A: "1", B: "2", C: "3", D: "4" },
+  }]);
+  assert.deepEqual(card.common.map((c) => c.school), ["A"]);
+  assert.deepEqual(card.groups.map((g) => g.map((c) => [c.school, c.min_margin])), [[["C", 1]], [["C", 10]]]);
+});

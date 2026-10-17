@@ -817,6 +817,13 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   color: var(--text-on-inverse);
   font-size: 11px; line-height: 16px; font-weight: 600;
 }
+/* Between a scenario's shared conditions and its alternatives: "AND ONE OF". */
+.and-oneof { display: flex; justify-content: center; margin-block: 12px 4px; }
+.and-oneof span {
+  padding: 1px 10px; border: 1px solid var(--connector); border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 11px; line-height: 16px; font-weight: 600;
+}
 
 .notice { padding-block: 40px; color: var(--text-secondary); }
 

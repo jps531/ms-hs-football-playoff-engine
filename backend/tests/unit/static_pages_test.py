@@ -1005,3 +1005,20 @@ def test_complete_scenario_cards_or_groups_and_ties_match_scenarios_js():
     }])  # fmt: skip
     assert straddle["seeds"][3]["note"].startswith("1 of these 2 make the playoffs. Order decided by the tiebreaker")
     assert straddle["out"] == ["the rest of the tie"]
+
+
+def test_complete_scenario_cards_say_shared_conditions_once():
+    """Mirrors scenarios.test.mjs: what every alternative shares is pulled out, said once before AND ONE OF."""
+    from backend.helpers.static_pages import complete_scenario_cards, outcome_scenario_card
+
+    def win(w, l, lo=1, hi=None):
+        return {"type": "game_result", "winner": w, "loser": l, "min_margin": lo, "max_margin": hi}
+
+    [card] = complete_scenario_cards([{
+        "scenario_num": 1, "sub_label": "a", "title": "", "game_winners": [],
+        "condition_groups": [[win("A", "B"), win("C", "D", 1, 8)], [win("A", "B"), win("C", "D", 10)]],
+        "outcomes": {"A": "1", "B": "2", "C": "3", "D": "4"},
+    }])  # fmt: skip
+    assert [c["school"] for c in card["common"]] == ["A"]
+    assert [[(c["school"], c["min_margin"]) for c in g] for g in card["groups"]] == [[("C", 1)], [("C", 10)]]
+    assert '<div class="and-oneof"><span>AND ONE OF</span></div>' in outcome_scenario_card(card, {})

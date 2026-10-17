@@ -125,8 +125,9 @@ export const OPEN_TIE_NOTES = {
  * row over its places: its order isn't stated, so it isn't shown. `out` is the
  * rest (with "the rest of the tie" when one straddles the cutoff). `groups`
  * is the scenario's conditions in the chip format: one AND-group, or several
- * joined by OR when different results lead to the same outcome. Game results
- * become team chips; other conditions keep the API's wording.
+ * joined by OR when different results lead to the same outcome, with what they
+ * all share pulled out into `common`. Game results become team chips; other
+ * conditions keep the API's wording.
  */
 export function completeScenarioCards(scenarios, playoffSeeds = 4) {
   const cards = (scenarios ?? []).map((sc) => {
@@ -174,11 +175,16 @@ export function completeScenarioCards(scenarios, playoffSeeds = 4) {
     }
     const straddle = ties.some((t) => order.some((x) => t.members.has(x.team) && x.seed > playoffSeeds));
     const out = order.filter((o) => o.seed > playoffSeeds && !ties.some((t) => t.members.has(o.team))).map((o) => o.team);
+    // Conditions every alternative shares are said once; the alternatives keep only what differs.
+    const key = (c) => JSON.stringify(c);
+    const common = groups.length > 1 ? groups[0].filter((c) => groups.every((g) => g.some((x) => key(x) === key(c)))) : [];
+    const shared = new Set(common.map(key));
     return {
       label: `Scenario ${sc.scenario_num}${(sc.sub_label ?? "").toUpperCase()}`,
       seeds,
       out: straddle ? [...out, "the rest of the tie"] : out,
-      groups,
+      common,
+      groups: common.length ? groups.map((g) => g.filter((c) => !shared.has(key(c)))) : groups,
       num: sc.scenario_num,
     };
   });
@@ -193,7 +199,7 @@ export function completeScenarioCards(scenarios, playoffSeeds = 4) {
 function dedupe(cards) {
   const seen = new Set();
   return cards.filter((c) => {
-    const key = JSON.stringify([c.seeds, c.out, c.groups]);
+    const key = JSON.stringify([c.seeds, c.out, c.common, c.groups]);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
