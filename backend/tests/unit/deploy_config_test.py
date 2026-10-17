@@ -94,3 +94,15 @@ def test_builds_install_the_lockfile_with_hashes_and_bake_in_no_secrets():
         assert not re.search(r"^COPY .*\.env", text, re.M)
     ignore = (ROOT / ".dockerignore").read_text().split()
     assert ".env.*" in ignore and ".git" in ignore
+
+
+def test_every_image_runs_the_python_the_project_targets():
+    """The API image, the worker's Prefect image and ruff all say 3.11; a jump (say, to 3.14) needs every
+    locked wheel to exist for it, so it's a deliberate change, not a Dependabot merge."""
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    target = re.search(r'target-version = "py3(\d+)"', pyproject).group(1)
+    api = re.search(r"^FROM python:3\.(\d+)\.", (ROOT / "Dockerfile.api").read_text(), re.M).group(1)
+    worker = re.search(r"^FROM prefecthq/prefect:\S+-python3\.(\d+)@", (ROOT / "Dockerfile.prefect").read_text(), re.M)
+    assert api == worker.group(1) == target
+    dependabot = (ROOT / ".github" / "dependabot.yml").read_text()
+    assert 'dependency-name: "python"' in dependabot

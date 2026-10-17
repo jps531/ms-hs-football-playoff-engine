@@ -1,36 +1,70 @@
-# Dependabot: weekly PRs for new versions, plus security updates as soon as an
-# advisory is published (turn on "Dependabot security updates" in the repo's
-# Settings -> Code security). Docker images are pinned by digest, so these
-# PRs are the only way they change.
+# Dependabot: what it may propose, how often, and how it's bundled.
+#
+# - Monthly, not weekly, and bundled: one PR for Python packages, one for the
+#   Docker images (Dockerfiles and docker-compose.yml together, so the Prefect
+#   server and worker always move as a pair), one for GitHub Actions.
+#   Security fixes still arrive as soon as an advisory is published (turn on
+#   "Dependabot security updates" in Settings -> Code security), also bundled.
+# - Python updates are lockfile-only: Dependabot stays inside the ranges in
+#   pyproject.toml and never rewrites them, so a deliberate cap (prefect<3,
+#   pydantic<2.10, anyio<4 — see the comments there) can't be lifted by a bot.
+#   Raising a cap is a change a person makes, with the tests to back it.
+# - Every PR runs CI (.github/workflows/ci.yml): the tests, and building the
+#   images. Merge only when it's green.
 version: 2
+
+multi-ecosystem-groups:
+  docker-images:
+    schedule:
+      interval: "monthly"
+
 updates:
-  # Python packages: pyproject.toml + uv.lock
+  # Python packages: uv.lock, within pyproject.toml's ranges
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    versioning-strategy: "lockfile-only"
+    open-pull-requests-limit: 3
     groups:
-      python-minor-and-patch:
-        update-types: ["minor", "patch"]
-    open-pull-requests-limit: 5
+      python-packages:
+        applies-to: version-updates
+        patterns: ["*"]
+      python-security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   # Base images in Dockerfile.api and Dockerfile.prefect
   - package-ecosystem: "docker"
     directory: "/"
-    schedule:
-      interval: "weekly"
+    multi-ecosystem-group: "docker-images"
+    patterns: ["*"]
     ignore:
-      # Prefect 3 is a different product; Postgres majors need a dump and restore.
+      # Prefect 3 is a different product.
       - dependency-name: "prefecthq/prefect"
         update-types: ["version-update:semver-major"]
+      # Python stays on 3.11 (patch releases only): a new minor needs every
+      # locked package to have wheels for it, and the worker to move too.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # Images in docker-compose.yml (nginx, postgres, prefect-server)
   - package-ecosystem: "docker-compose"
     directory: "/"
-    schedule:
-      interval: "weekly"
+    multi-ecosystem-group: "docker-images"
+    patterns: ["*"]
     ignore:
+      # A Postgres major needs a dump and restore, not just a pull.
       - dependency-name: "postgres"
         update-types: ["version-update:semver-major"]
       - dependency-name: "prefecthq/prefect"
         update-types: ["version-update:semver-major"]
+
+  # The actions CI uses (pinned to commits)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]

@@ -10,6 +10,11 @@ name = "ms-hs-football-playoff-engine"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    # The caps on prefect, griffe, anyio and pydantic are deliberate, for
+    # Prefect 2 (the flows are Prefect 2; Prefect 3 is a rewrite): with
+    # Prefect 2.16, anyio 4 breaks it and pydantic 2.10+ stops it importing
+    # ("'type' object is not iterable"). Dependabot is lockfile-only, so it
+    # stays inside them; lift one deliberately, with CI green.
     "prefect>=2.16,<3",
     "griffe<1.0",
     "anyio>=3.0,<4",
