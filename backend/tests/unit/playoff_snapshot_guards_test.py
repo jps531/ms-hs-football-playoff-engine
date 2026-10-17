@@ -79,6 +79,9 @@ def flow_env(monkeypatch):
         "make_matchup_prob_fn": MagicMock(return_value=None),
         "get_region_finish_scenarios": finish,
         "run_playoff_bracket_update": lambda season: events.append(("playoff_update", season)),
+        # The flow redraws the share cards last; unstubbed it calls the API, fails, and waits out a
+        # 30-second retry delay before the flow carries on.
+        "write_share_assets": MagicMock(),
         "date": _FakeDate,
     }
     for name, value in stubs.items():

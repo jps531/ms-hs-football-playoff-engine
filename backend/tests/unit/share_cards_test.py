@@ -411,4 +411,7 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     assert "Raleigh’s path in the Class 3A bracket" in meta
     assert 'href="https://mshsfootball.com/brackets/3a?team=raleigh"' in meta
     assert "https://mshsfootball.com/static/og/bracket-3/raleigh.png?v=20261009" in meta
+    page = (tmp_path / "body" / "bracket-3.html").read_text()  # the bracket page itself, readable without JavaScript
+    assert '<h1 class="title">Class 3A Bracket</h1>' in page and 'class="tslot"' in page
+    assert '"@type":"BreadcrumbList"' in (tmp_path / "meta" / "bracket-3.html").read_text()
     assert "Raleigh leads the Class 3A bracket" in (tmp_path / "meta" / "bracket-3.html").read_text()

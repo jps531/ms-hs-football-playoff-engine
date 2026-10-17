@@ -1,4 +1,6 @@
 User-agent: *
+# /api/ stays crawlable on purpose: Google runs the app when it renders a page,
+# and the app needs the API. API responses carry X-Robots-Tag: noindex instead.
 Disallow: /moderate
 Disallow: /prefect/
 Disallow: /feedback

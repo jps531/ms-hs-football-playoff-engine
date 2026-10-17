@@ -6,18 +6,28 @@ from datetime import date
 from pathlib import Path
 
 from backend.helpers.static_pages import (
+    CARD_H,
     ODDS_COLUMNS,
+    PITCH,
+    bracket_body,
     bracket_preview_html,
+    bracket_trail,
+    breadcrumb_ld,
+    breadcrumb_nav,
     class_body,
     initials,
     insight_lines,
+    json_ld,
     landing_body,
     layout_results,
     locked_seeds,
     pick_featured,
     region_body,
+    region_trail,
     side_label,
     sitemap_xml,
+    tree_centers,
+    tree_columns,
 )
 from backend.prefect.share_assets_pipeline import build_share_assets
 from backend.tests.unit.share_cards_test import DATES, TEAMS, _team
@@ -75,7 +85,7 @@ class TestRegionBody:
         assert '<h1 class="title">Region 6-3A</h1>' in body
         assert "Seminary &lt;Friday&gt;." in body
         assert f'<p class="provenance provenance--static">{STAMP}</p>' in body
-        assert 'href="/standings/3a"' in body and 'href="/brackets/3a"' in body
+        assert 'href="/standings/3a"' in body  # the class crumb; the bracket is a click away in the header nav
 
     def test_standings_table_in_display_order_with_projected_odds(self):
         """Rows follow the app's order; odds are the mode's, as text; each team links to its view."""
@@ -496,6 +506,11 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
         assert path in sitemap
     assert "<lastmod>2026-10-09</lastmod>" in sitemap
     assert "/brackets/3a" not in sitemap  # no bracket odds yet, so no bracket page to list
+    assert not (tmp_path / "body" / "bracket-3.html").exists()
+    head = (tmp_path / "meta" / "site.html").read_text()
+    assert '<link rel="canonical" href="https://mshsfootball.com/">' in head and '"@type":"WebSite"' in head
+    class_head = (tmp_path / "meta" / "3.html").read_text()
+    assert '"@type":"BreadcrumbList"' in class_head and "https://mshsfootball.com/standings/3a" in class_head
 
 
 def test_odds_headers_match_the_app():
@@ -504,3 +519,107 @@ def test_odds_headers_match_the_app():
     for key, label, full in ODDS_COLUMNS:
         assert f'{{ key: "{key}", label: "{label}",' in app_js
         assert f'full: "{full}"' in app_js
+
+
+# ------------------------------------------------------------ breadcrumbs and structured data
+
+
+def test_breadcrumbs_link_every_level_but_this_one():
+    """Home › Class 3A › Region 6-3A, the last unlinked and marked current; the same markup as components.js."""
+    nav = breadcrumb_nav(region_trail(3, 6))
+    assert nav == (
+        '<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li>'
+        '<li><a href="/standings/3a">Class 3A</a></li><li aria-current="page">Region 6-3A</li></ol></nav>'
+    )
+    components = (
+        Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "components.js"
+    ).read_text()
+    for fragment in ('<li aria-current="page">', '<nav class="crumbs" aria-label="Breadcrumb"><ol>'):
+        assert fragment in components
+
+
+def test_breadcrumb_structured_data_uses_full_addresses():
+    """BreadcrumbList items count from 1 and name absolute URLs."""
+    data = breadcrumb_ld("https://mshsfootball.com", bracket_trail(3))
+    assert [(i["position"], i["name"], i["item"]) for i in data["itemListElement"]] == [
+        (1, "Home", "https://mshsfootball.com/"),
+        (2, "Class 3A", "https://mshsfootball.com/standings/3a"),
+        (3, "3A Bracket", "https://mshsfootball.com/brackets/3a"),
+    ]
+
+
+def test_structured_data_cannot_close_its_script_element():
+    """A value containing </script> can't end the block early."""
+    block = json_ld({"name": "</script><script>alert(1)</script>"})
+    assert block.count("</script>") == 1 and "\\u003c/script>" in block
+
+
+def test_region_and_class_pages_carry_breadcrumbs():
+    """The static pages start with the same breadcrumbs as the app's."""
+    assert breadcrumb_nav(region_trail(3, 6)) in region_body(3, 6, _region(), "stamp", "projected", {})
+
+
+# ------------------------------------------------------------ the bracket page
+
+
+def _games(ids: list[str]) -> list[dict]:
+    """Bare games with the given ids (round named from the id's round number)."""
+    names = {"0": "First Round", "1": "Quarterfinals", "2": "Semifinals"}
+    return [{"id": i, "round": "Championship Game" if i == "final" else names[i.split("-")[1]]} for i in ids]
+
+
+def test_tree_columns_match_bracket_js():
+    """Both halves stacked per round, then the final fed by every semifinal (bracket.test.mjs's case)."""
+    ids = [f"{h}-0-{i}" for h in "NS" for i in range(4)] + [f"{h}-1-{i}" for h in "NS" for i in range(2)]
+    cols = tree_columns(_games([*ids, "N-2-0", "S-2-0", "final"]))
+    assert [c["name"] for c in cols] == ["First Round", "Quarterfinals", "Semifinals", "Championship Game"]
+    assert [(g["game"]["id"], g["feeders"]) for g in cols[1]["games"]] == [
+        ("N-1-0", [0, 1]),
+        ("N-1-1", [2, 3]),
+        ("S-1-0", [4, 5]),
+        ("S-1-1", [6, 7]),
+    ]
+    assert [g["feeders"] for g in cols[2]["games"]] == [[0, 1], [2, 3]]
+    assert cols[3]["games"][0]["feeders"] == [0, 1]
+
+
+def test_tree_centers_match_bracket_js_at_focus_zero():
+    """The first column stacks; each later game sits between its feeders (bracket.js treeLayout(cols, 0))."""
+    cols = tree_columns(_games(["N-0-0", "N-0-1", "N-0-2", "N-0-3", "N-1-0", "N-1-1", "N-2-0"]))
+    centers, height = tree_centers(cols)
+    first = [CARD_H / 2 + PITCH * i for i in range(4)]
+    assert centers[0] == first
+    assert centers[1] == [(first[0] + first[1]) / 2, (first[2] + first[3]) / 2]
+    assert centers[2] == [(centers[1][0] + centers[1][1]) / 2]
+    assert height == first[-1] + CARD_H / 2
+
+
+def test_bracket_page_has_every_game_positioned_with_breadcrumbs():
+    """Title, breadcrumbs, the snapshot line, and every game in its slot, readable without JavaScript."""
+    html = bracket_body(3, BRACKET, BRACKET_CTX, "2026 season · Through Week 8")
+    assert breadcrumb_nav(bracket_trail(3)) in html and '<h1 class="title">Class 3A Bracket</h1>' in html
+    assert html.count('class="tslot"') == len(BRACKET)
+    assert "translateY(0px)" in html and f"translateY({PITCH:g}px)" in html
+    assert "Raleigh" in html and "Bay Springs" in html and "Championship Game" in html
+    assert '<span class="visually-hidden">First Round, One spot set: </span>' in html
+    assert bracket_body(3, [], BRACKET_CTX, "x") == ""
+
+
+def test_front_page_has_every_classs_standings_and_bracket_under_the_helmet():
+    """Two rows of seven buttons, each saying what it opens; the same markup as landing.js's classGrid."""
+    from backend.helpers.static_pages import class_grid
+
+    grid = class_grid()
+    assert grid.count('class="landing-classes__item"') == 14
+    assert (
+        '<a class="landing-classes__item" href="/standings/3a">3A<span class="visually-hidden"> standings</span></a>'
+        in grid
+    )
+    assert (
+        '<a class="landing-classes__item" href="/brackets/7a">7A<span class="visually-hidden"> brackets</span></a>'
+        in grid
+    )
+    body = landing_body(None, {})
+    assert body.index("landing-helmet") < body.index("landing-classes") < body.index("What we do")
+    js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "landing.js").read_text()
+    assert 'class="landing-classes__item" href="${path(c)}">${c}A<span class="visually-hidden">' in js

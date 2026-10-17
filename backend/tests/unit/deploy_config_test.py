@@ -106,3 +106,50 @@ def test_every_image_runs_the_python_the_project_targets():
     assert api == worker.group(1) == target
     dependabot = (ROOT / ".github" / "dependabot.yml").read_text()
     assert 'dependency-name: "python"' in dependabot
+
+
+def test_only_real_pages_get_the_app_and_everything_else_404s():
+    """Page routes are validated in nginx; other addresses get the 404 page, not the API's JSON or a 200 shell."""
+    route = re.search(r"location ~ (\S+) \{\n\s+root /usr/share/nginx/html;\n\s+ssi on;", NGINX).group(1)
+    pattern = re.compile(route.strip("^$").join("^$"))
+    for path in ("/standings/3a", "/standings/3a/", "/standings/3a/6", "/brackets/7a"):
+        assert pattern.match(path), path
+    for path in ("/standings/9a", "/standings/3a/12", "/standings/3a/6/x", "/brackets/8a", "/brackets/7a/1"):
+        assert not pattern.match(path), path
+    assert "error_page 404 /404.html;" in NGINX
+    assert "location ^~ /standings/" not in NGINX  # ^~ would stop the route regex from ever matching
+    assert re.search(r"location / \{\n\s+return 404;", NGINX)
+    page = (ROOT / "nginx" / "html" / "404.html").read_text()
+    assert '<meta name="robots" content="noindex">' in page
+
+
+def test_api_responses_are_noindexed_but_still_crawlable():
+    """Google renders the app, which needs /api/, so robots.txt mustn't block it; a header keeps it out of results."""
+    robots = (ROOT / "nginx" / "html" / "robots.txt").read_text()
+    assert "Disallow: /api" not in robots
+    assert '"noindex"' in NGINX and "add_header X-Robots-Tag $x_robots_tag" in NGINX
+
+
+def test_www_redirects_to_the_bare_domain():
+    """One address per page for search engines."""
+    assert "return 301 https://mshsfootball.com$request_uri;" in NGINX
+    assert "if ($host = www.mshsfootball.com)" in NGINX
+
+
+def test_the_main_nav_is_in_the_page_from_the_start():
+    """Standings and Bracket point at the page's class, and the current section is marked, before the app loads."""
+    shell = (ROOT / "nginx" / "html" / "index.html").read_text()
+    for cls in ("site-nav__item", "tab-bar__item"):
+        assert f'<a class="{cls}" href="/brackets/<!--# if expr="$page_class" -->' in shell
+        assert '<!--# if expr="$nav_section = bracket" --> aria-current="page"' in shell
+    assert "map $request_uri $nav_section" in NGINX
+
+
+def test_the_front_page_marks_no_nav_section_and_has_no_class_picker():
+    """ "/" is neither Standings nor Bracket, and has its own class grid instead of the picker."""
+    section = re.search(r"map \$request_uri \$nav_section \{(.*?)\}", NGINX, re.S).group(1)
+    assert "standings" in section and "(?:\\\\?|$)" not in section
+    picker = re.search(r"map \$request_uri \$show_class_picker \{(.*?)\}", NGINX, re.S).group(1)
+    assert '"no"' in picker
+    shell = (ROOT / "nginx" / "html" / "index.html").read_text()
+    assert '<div class="scrubber-bar"<!--# if expr="$show_class_picker = no" --> hidden<!--# endif -->>' in shell

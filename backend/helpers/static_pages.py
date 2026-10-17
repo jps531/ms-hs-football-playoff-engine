@@ -16,6 +16,7 @@ site's JavaScript), so the static page and the live one agree.
 from __future__ import annotations
 
 import html
+import json
 import re
 from collections.abc import Iterable
 from datetime import date
@@ -77,6 +78,63 @@ def class_path(clazz: int) -> str:
 def bracket_path(clazz: int) -> str:
     """ "/brackets/7a"."""
     return f"/brackets/{clazz}a"
+
+
+# ---------------------------------------------------------- breadcrumbs, structured data
+
+Trail = list[tuple[str, str]]  # [(label, path), …], home first, this page last
+
+
+def class_trail(clazz: int) -> Trail:
+    """Home › Class 3A."""
+    return [("Home", "/"), (f"Class {clazz}A", class_path(clazz))]
+
+
+def region_trail(clazz: int, region: int) -> Trail:
+    """Home › Class 3A › Region 6-3A."""
+    return [*class_trail(clazz), (f"Region {region}-{clazz}A", region_path(clazz, region))]
+
+
+def bracket_trail(clazz: int) -> Trail:
+    """Home › Class 3A › 3A Bracket."""
+    return [*class_trail(clazz), (f"{clazz}A Bracket", bracket_path(clazz))]
+
+
+def breadcrumb_nav(trail: Trail) -> str:
+    """The visible breadcrumbs (components.js's ``breadcrumbs``): the last entry is this page, not linked."""
+    items = "".join(
+        f'<li aria-current="page">{_e(label)}</li>'
+        if i == len(trail) - 1
+        else f'<li><a href="{path}">{_e(label)}</a></li>'
+        for i, (label, path) in enumerate(trail)
+    )
+    return f'<nav class="crumbs" aria-label="Breadcrumb"><ol>{items}</ol></nav>'
+
+
+def json_ld(data: dict) -> str:
+    """A ``<script type="application/ld+json">`` block (data, not code: the CSP doesn't apply to it).
+
+    ``<`` is escaped so no value can close the element early.
+    """
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+    return f'<script type="application/ld+json">{payload}</script>'
+
+
+def breadcrumb_ld(site_url: str, trail: Trail) -> dict:
+    """schema.org BreadcrumbList for *trail*, the trail search results show under a page's title."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": i, "name": label, "item": f"{site_url}{path}"}
+            for i, (label, path) in enumerate(trail, start=1)
+        ],
+    }
+
+
+def website_ld(site_url: str, name: str) -> dict:
+    """schema.org WebSite: the site's name as search results should show it."""
+    return {"@context": "https://schema.org", "@type": "WebSite", "name": name, "url": f"{site_url}/"}
 
 
 def initials(name: str) -> str:
@@ -334,8 +392,7 @@ def region_body(
     return (
         '<div class="page static-page">'
         '<header class="region-head">'
-        f'<p class="region-head__links"><a href="{class_path(clazz)}">All {clazz}A regions</a> '
-        f'<a href="{bracket_path(clazz)}">{clazz}A Bracket</a></p>'
+        f"{breadcrumb_nav(region_trail(clazz, region))}"
         f'<h1 class="title">Region {region}-{clazz}A</h1>{headline_html}{_provenance(stamp)}'
         "</header>"
         f"{region_table(clazz, region, payload, mode, teams)}{schedule}{needs}"
@@ -382,7 +439,7 @@ def class_body(clazz: int, standings: dict, stamp: str, mode: str, teams: dict[s
     )
     return (
         '<div class="page entry-head static-page">'
-        f'<h1 class="title">Class {clazz}A</h1>{_provenance(stamp)}</div>'
+        f'{breadcrumb_nav(class_trail(clazz))}<h1 class="title">Class {clazz}A</h1>{_provenance(stamp)}</div>'
         f'<div class="page region-blocks static-page">{blocks}</div>\n'
     )
 
@@ -624,14 +681,13 @@ def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: 
     listed = occupants(side, ctx["mode"])
     if not listed:
         return _tree_line(gutter, None, "No team can get here", teams, "", "", " trow--empty")
-    first_round = len(side["feeders"]) == 1
-    f0 = side["feeders"][0]
-    sub = (
-        _e(position_name(f0["region"], f0["seed"]))
-        if first_round
-        else (f"+{len(listed) - 1} more" if len(listed) > 1 else "")
-    )
-    return _tree_line(gutter, listed[0]["team"], listed[0]["team"], teams, sub, _odds(listed[0]["p"]), "")
+    feeders = side.get("feeders") or []
+    if len(feeders) == 1:  # first round: the region/seed this slot is for
+        sub = _e(position_name(feeders[0]["region"], feeders[0]["seed"]))
+    else:
+        sub = f"+{len(listed) - 1} more" if len(listed) > 1 else ""
+    value = _odds(listed[0]["p"]) + '<span class="visually-hidden"> chance to play here</span>'
+    return _tree_line(gutter, listed[0]["team"], listed[0]["team"], teams, sub, value, "")
 
 
 def _side_order(host: str | None) -> tuple[list[str], str]:
@@ -655,7 +711,120 @@ def _tree_card(game: dict, ctx: dict, selected: bool) -> str:
     )
     order, joiner = _side_order(settled_host(game, ctx["mode"]))
     rows = _tree_row(game, order[0], result, "", ctx) + _tree_row(game, order[1], result, joiner, ctx)
-    return f'<span class="tgame tgame--{state}{" is-path" if selected else ""}">{rows}</span>'
+    where = ", ".join(x for x in (game["round"], STATE_LABEL[state]) if x)
+    return (
+        f'<span class="tgame tgame--{state}{" is-path" if selected else ""}">'
+        f'<span class="visually-hidden">{_e(where)}: </span>{rows}</span>'
+    )
+
+
+STATE_LABEL = {"played": "Final", "determined": "Matchup set", "partial": "One spot set", "projected": ""}
+HALF_NAMES = {"N": "North", "S": "South"}
+ROUND_SHORT = {
+    "First Round": "R1",
+    "Second Round": "R2",
+    "Quarterfinals": "QF",
+    "Semifinals": "SF",
+    "Championship Game": "CG",
+}
+
+
+def tree_columns(games: list[dict]) -> list[dict]:
+    """The bracket as columns, both halves stacked in each round, then the final (bracket.js's ``treeColumns``).
+
+    Each column is ``{"name", "games": [{"game", "feeders"}]}``; feeders index the previous column.
+    """
+    halves: dict[str, dict[str, dict]] = {}
+    final = None
+    for g in games:
+        if g["id"] == "final":
+            final = g
+            continue
+        half, k = g["id"].split("-")[:2]
+        halves.setdefault(half, {}).setdefault(k, {"name": g["round"], "games": []})["games"].append(g)
+    shown = [[r for _, r in sorted(rounds.items(), key=lambda kv: int(kv[0]))] for rounds in halves.values()]
+    depth = max((len(h) for h in shown), default=0)
+    cols: list[dict] = []
+    for k in range(depth):
+        col, offset = [], 0
+        for rounds in shown:
+            prev = len(rounds[k - 1]["games"]) if k > 0 else 0
+            for i, game in enumerate(rounds[k]["games"]):
+                feeders = [] if k == 0 else [j for j in (offset + 2 * i, offset + 2 * i + 1) if j < offset + prev]
+                col.append({"game": game, "feeders": feeders})
+            offset += prev
+        cols.append({"name": shown[0][k]["name"], "games": col})
+    if final and depth:
+        cols.append(
+            {"name": final["round"], "games": [{"game": final, "feeders": list(range(len(cols[-1]["games"])))}]}
+        )
+    return cols
+
+
+def tree_centers(cols: list[dict]) -> tuple[list[list[float]], float]:
+    """Each card's vertical center and the tree's height, unscrolled (bracket.js's ``treeLayout`` at focus 0)."""
+    centers: list[list[float]] = []
+    for r, col in enumerate(cols):
+        centers.append(
+            [
+                sum(centers[r - 1][j] for j in g["feeders"]) / len(g["feeders"])
+                if r > 0 and g["feeders"]
+                else i * PITCH + CARD_H / 2
+                for i, g in enumerate(col["games"])
+            ]
+        )
+    height = max((max(c) + CARD_H / 2 for c in centers if c), default=0)
+    return centers, height
+
+
+def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
+    """A bracket page's content, as the app first draws it on a wide screen: both halves, every round,
+    each game between the two that feed it (app.js's ``bracketView``/``bracketHtml``). The lines
+    joining games, and tapping a game, come with the app.
+
+    *ctx* holds ``mode``, ``results``, ``seeds`` and ``teams``. Returns "" without games.
+    """
+    cols = tree_columns(games)
+    if not cols:
+        return ""
+    centers, height = tree_centers(cols)
+    halves = list(dict.fromkeys(g["id"].split("-")[0] for g in games if g["id"] != "final"))
+    half_control = ""
+    if len(halves) > 1:
+        buttons = "".join(
+            f'<button type="button" class="half-control__item{" half-control__item--both" if h == "both" else ""}" '
+            f'data-half="{h}" aria-pressed="{"true" if h == "both" else "false"}">'
+            f"{'Both halves' if h == 'both' else _e(HALF_NAMES.get(h, h))}</button>"
+            for h in ["both", *halves]
+        )
+        half_control = f'<div class="half-control" role="group" aria-label="Bracket half">{buttons}</div>'
+    tabs = "".join(
+        f'<button type="button" class="round-tabs__item" data-round-jump="{i}" aria-current="{"true" if i == 0 else "false"}" '
+        f'aria-label="{_e(c["name"])}" title="{_e(c["name"])}">{_e(ROUND_SHORT.get(c["name"], c["name"]))}</button>'
+        for i, c in enumerate(cols)
+    )
+    columns = "".join(
+        f'<section class="tcol" aria-label="{_e(c["name"])}"><h3 class="tcol__title">{_e(c["name"])}</h3>'
+        f'<ol class="tcol__body" style="height:{height:g}px">'
+        + "".join(
+            f'<li class="tslot" style="transform:translateY({centers[r][i] - CARD_H / 2:g}px)">'
+            f"{_tree_card(g['game'], ctx, False)}</li>"
+            for i, g in enumerate(c["games"])
+        )
+        + "</ol></section>"
+        for r, c in enumerate(cols)
+    )
+    return (
+        '<div class="page static-page">'
+        '<header class="entry-head bracket-head">'
+        f'{breadcrumb_nav(bracket_trail(clazz))}<h1 class="title">Class {clazz}A Bracket</h1>{_provenance(stamp)}'
+        '<p class="focus-note muted">Tap a game to see who might play there, and pick a team to follow its path.</p>'
+        "</header>"
+        f'<div id="bracket-host">{half_control}'
+        f'<div class="round-tabs" role="group" aria-label="Jump to a round">{tabs}</div>'
+        f'<div class="tree" style="--card-h:{CARD_H}px"><div class="tree__cols">{columns}</div></div>'
+        "</div></div>\n"
+    )
 
 
 def _sheet_side(game: dict, side_key: str, host: str | None, ctx: dict) -> str:
@@ -816,6 +985,30 @@ HOW_IT_WORKS = (
 )
 
 
+CLASSES = range(1, 8)
+
+
+def class_grid() -> str:
+    """The front page's way in: every class's standings and bracket, a button each (landing.js's
+    ``classGrid`` writes the same). Hidden words make each link say what it opens."""
+
+    def row(key: str, label: str, path) -> str:
+        items = "".join(
+            f'<li><a class="landing-classes__item" href="{path(c)}">{c}A'
+            f'<span class="visually-hidden"> {label.lower()}</span></a></li>'
+            for c in CLASSES
+        )
+        return (
+            f'<div class="landing-classes__row"><p class="landing-classes__label" id="classes-{key}">{label}</p>'
+            f'<ul class="landing-classes__list" aria-labelledby="classes-{key}">{items}</ul></div>'
+        )
+
+    return (
+        '<nav class="landing-classes" aria-label="Classes">'
+        f"{row('standings', 'Standings', class_path)}{row('brackets', 'Brackets', bracket_path)}</nav>"
+    )
+
+
 def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
     """The front page: who we are and how it works on the left, a tour of the site on the right, with the
     most open race (``featured``) as the live example throughout.
@@ -828,6 +1021,7 @@ def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
         '<p class="landing-kicker">Welcome to</p>'
         '<h1 class="landing-title">Mississippi High School Football</h1>'
         '<img class="landing-helmet" src="/static/helmet.webp" width="1000" height="851" alt="">'
+        f"{class_grid()}"
         f"{_section('what', 'What we do', f'<p>{_e(WHAT_WE_DO)}</p>')}"
         + _section(
             "how",

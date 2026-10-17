@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
-  gameCard, outcomeScenarioCard,
+  gameCard, outcomeScenarioCard, breadcrumbs,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -152,4 +152,13 @@ test("in the playoffs the run replaces the clinch; teams that missed stay Elimin
   const missed = { eliminated: true, odds: { p_playoffs: 0 }, bracket_odds: bracket([0, 0, 0, 0, 0]) };
   assert.deepEqual(teamStatuses(missed, { clazz: 2 }).map((st) => st.label), ["Eliminated"]);
   assert.match(statusBadges(champ, { clazz: 2 }), /badge--champion/);
+});
+
+test("breadcrumbs link every level but the page itself (static_pages.breadcrumb_nav writes the same)", () => {
+  assert.equal(
+    breadcrumbs([["Home", "/"], ["Class 3A", "/standings/3a"], ["Region 6-3A", null]]),
+    '<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li>'
+      + '<li><a href="/standings/3a">Class 3A</a></li><li aria-current="page">Region 6-3A</li></ol></nav>',
+  );
+  assert.match(breadcrumbs([["Home", "/"], ["A & B", null]]), /A &amp; B/);
 });

@@ -40,6 +40,9 @@ import requests
 from prefect import flow, get_run_logger, task
 
 from backend.helpers.share_cards import (
+    SITE_DESCRIPTION,
+    SITE_NAME,
+    SITE_TITLE,
     bracket_description,
     bracket_favorites,
     bracket_title,
@@ -64,17 +67,24 @@ from backend.helpers.share_cards import (
     team_title,
 )
 from backend.helpers.static_pages import (
+    bracket_body,
     bracket_path,
     bracket_preview_html,
+    bracket_trail,
+    breadcrumb_ld,
     class_body,
     class_path,
+    class_trail,
+    json_ld,
     landing_body,
     layout_results,
     locked_seeds,
     pick_featured,
     region_body,
     region_path,
+    region_trail,
     sitemap_xml,
+    website_ld,
 )
 
 API_URL = os.environ.get("SHARE_API_URL", "http://api:8000/api/v1")
@@ -139,6 +149,17 @@ def build_share_assets(
         season = seasons[0]["season"]
     site_url = site_url.rstrip("/")
     _write_png(out_dir / "og" / "site.png", render_site_card())
+    # The front page's head: its canonical address and the site's name for search results.
+    _write_text(
+        out_dir / "meta" / "site.html",
+        meta_tags(
+            SITE_TITLE,
+            SITE_DESCRIPTION,
+            f"{site_url}/static/og/site.png?v={today:%Y%m%d}",
+            f"{site_url}/",
+            json_ld(website_ld(site_url, SITE_NAME)),
+        ),
+    )
     written = dict.fromkeys(keys, 0)
     teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
     sitemap: list[tuple[str, date | None]] = [("/", today), ("/methodology", None)]
@@ -164,6 +185,7 @@ def build_share_assets(
                 class_description(clazz),
                 f"{site_url}/static/og/{clazz}.png?v={version}",
                 f"{site_url}/standings/{clazz}a",
+                json_ld(breadcrumb_ld(site_url, class_trail(clazz))),
             ),
         )
         class_page = class_body(clazz, standings, f"{season} season · {stamp}", mode, teams)
@@ -171,7 +193,7 @@ def build_share_assets(
         sitemap.append((class_path(clazz), as_of))
         written["classes"] += 1
 
-        bracket = _write_bracket_assets(out_dir, site_url, clazz, season, standings, stamp, mode, version, fetch)
+        bracket = _write_bracket_assets(out_dir, site_url, clazz, season, standings, stamp, mode, version, fetch, teams)
         written["brackets"] += bracket["brackets"]
         written["bracket_teams"] += bracket["bracket_teams"]
         if bracket["brackets"]:
@@ -196,6 +218,7 @@ def build_share_assets(
                     description(headline),
                     f"{site_url}/static/og/{name}.png?v={r_as_of:%Y%m%d}",
                     f"{site_url}/standings/{clazz}a/{region}",
+                    json_ld(breadcrumb_ld(site_url, region_trail(clazz, region))),
                 ),
             )
             games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
@@ -252,8 +275,10 @@ def _write_bracket_assets(
     mode: str,
     version: str,
     fetch: Fetch,
+    teams_by_school: dict | None = None,
 ) -> dict[str, int]:
-    """The class bracket card and each playoff team's road card; removes ones for teams no longer in it."""
+    """The class bracket card, its page content, and each playoff team's road card; removes ones for teams
+    no longer in it."""
     teams = [t for r in standings["regions"] for t in r["teams"]]
     regions = {t["school"]: r["region"] for r in standings["regions"] for t in r["teams"]}
     favorites = bracket_favorites(teams, mode)
@@ -269,10 +294,23 @@ def _write_bracket_assets(
             description(bracket_description(clazz, favorites, mode)),
             f"{site_url}/static/og/{name}.png?v={version}",
             page,
+            json_ld(breadcrumb_ld(site_url, bracket_trail(clazz))),
         ),
     )
     matchups = fetch(f"/bracket/matchups?season={season}&class={clazz}") or {}
     games = matchups.get("games") or []
+    if games:
+        layout = (fetch(f"/bracket?season={season}&class={clazz}") or {}).get("bracket_layout")
+        projected = any(o.get("p_reach_weighted") is not None for g in games for o in g["side_a"]["occupants"])
+        ctx = {
+            "mode": "projected" if projected else "tossup",
+            "results": layout_results(layout),
+            "seeds": locked_seeds(standings),
+            "teams": teams_by_school or {},
+        }
+        page_body = bracket_body(clazz, games, ctx, f"{season} season · {stamp}")
+        if page_body:
+            _write_text(out_dir / "body" / f"{name}.html", page_body)
     current: set[str] = set()
     for team in favorites:
         road = team_road(games, team["school"], mode)

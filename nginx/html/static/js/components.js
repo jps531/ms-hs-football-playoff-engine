@@ -147,6 +147,18 @@ export function teamColorStyle(team) {
   return colors ? ` style="--team-ui-light:${esc(colors.light)};--team-ui-dark:${esc(colors.dark)}"` : "";
 }
 
+/**
+ * Breadcrumbs: where this page sits (Home › Class 7A › Region 2-7A). *trail*
+ * is [[label, href], …]; the last entry is this page, shown but not linked.
+ * static_pages.py's breadcrumb_nav() writes the same markup.
+ */
+export function breadcrumbs(trail) {
+  const items = trail.map(([label, href], i) => (i === trail.length - 1
+    ? `<li aria-current="page">${esc(label)}</li>`
+    : `<li><a href="${esc(href)}">${esc(label)}</a></li>`));
+  return `<nav class="crumbs" aria-label="Breadcrumb"><ol>${items.join("")}</ol></nav>`;
+}
+
 /** Helmet + name: the only way a team is ever identified. */
 export function teamLabel(name, teams) {
   return `<span class="team">${teamMark(name, teams?.[name])}<span class="team-name">${esc(name)}</span></span>`;

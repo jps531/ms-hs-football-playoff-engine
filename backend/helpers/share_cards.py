@@ -28,6 +28,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 SITE_NAME = "Mississippi High School Football"
+SITE_TITLE = "Mississippi High School Football Playoff Races"
+SITE_DESCRIPTION = (
+    "Every Mississippi high school football region race: who’s in, who’s out, and exactly what has to happen next."
+)
 SITE_HOST = "mshsfootball.com"
 
 FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
@@ -162,8 +166,11 @@ def description(text: str, limit: int = DESCRIPTION_LIMIT) -> str:
     return f"{cut}…"
 
 
-def meta_tags(title: str, desc: str, image_url: str, page_url: str) -> str:
-    """The page's <title>, description, Open Graph and Twitter tags, ready to splice into <head>."""
+def meta_tags(title: str, desc: str, image_url: str, page_url: str, extra: str = "") -> str:
+    """The page's <title>, description, Open Graph and Twitter tags, ready to splice into <head>.
+
+    *extra* is appended as is: the page's structured data (``static_pages.json_ld`` blocks).
+    """
     t, d, img, url = (html.escape(v, quote=True) for v in (title, desc, image_url, page_url))
     return "\n".join(
         [
@@ -179,6 +186,7 @@ def meta_tags(title: str, desc: str, image_url: str, page_url: str) -> str:
             f'<meta property="og:image:height" content="{HEIGHT}">',
             '<meta name="twitter:card" content="summary_large_image">',
             f'<link rel="canonical" href="{url}">',
+            *([extra] if extra else []),
             "",
         ]
     )
