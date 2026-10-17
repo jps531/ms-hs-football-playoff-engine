@@ -1867,7 +1867,10 @@ def enumerate_division_scenarios(
     - ``scenario_num`` (int) and ``sub_label`` (``''``, or ``'a'``, ``'b'``, … within one set of winners).
     - ``game_winners`` (list[tuple[str, str]]): (winner, loser) for each game that matters.
     - ``conditions_atom`` (list | None): for a sub-scenario, its winners as ``GameResult`` conditions
-      plus the ``TiebreakDecision`` conditions that pick it out; None otherwise.
+      (with margin ranges where it needs them) plus the ``TiebreakDecision`` conditions that pick it
+      out; None otherwise.
+    - ``alternatives`` (list[list] | None): when more than one set of conditions leads to the same
+      outcome, all of them (``conditions_atom`` is the first); any one is enough.
     - ``open_groups`` (list[tuple[int, tuple[str, ...]]] | None): groups whose order is left to the
       tiebreaker from the given step on.
     - ``tiebreaker_groups``, ``coinflip_groups``: always None (kept for stored-snapshot compatibility).
@@ -2013,12 +2016,13 @@ def enumerate_division_scenarios(
             entries.append((min(group), "multi", None, _common_game_winners(group, remaining), outcomes[min(group)]))
     entries.sort(key=lambda e: e[0])
 
-    def scenario(num, sub, winners, atom, open_groups, seeding):
+    def scenario(num, sub, winners, atom, open_groups, seeding, alternatives=None):
         return {
             "scenario_num": num,
             "sub_label": sub,
             "game_winners": winners,
             "conditions_atom": atom,
+            "alternatives": alternatives,
             "open_groups": [(step, tuple(g)) for step, g in open_groups] or None,
             "tiebreaker_groups": None,
             "coinflip_groups": None,
@@ -2031,13 +2035,23 @@ def enumerate_division_scenarios(
             scenarios.append(scenario(num, "", data, None, open_groups, seeding))
             continue
         winners = open_groups  # for "multi" entries this slot carries the merged group's winners
-        for k, (stated, groups, seeding, _, free) in enumerate(sorted(data, key=lambda o: (o[3], len(o[0])))):
+        # One sub-scenario per outcome; the different ways to it (margin blocks, or tiebreaker routes)
+        # are its alternatives, any one of which is enough.
+        by_result: dict[tuple, list] = {}
+        for stated, groups, seeding, key, free in sorted(data, key=lambda o: (o[3], len(o[0]))):
             # Every deciding game, with its margin range where the outcome needs one, then any decisions.
             mine = [(w, l) for w, l in winners if not any(set(pairs[i]) == {w, l} for i in free)]
             ranged = {(c.winner, c.loser): c for c in stated if isinstance(c, GameResult)}
             atom = [ranged.get((w, l), GameResult(w, l, 1, None)) for w, l in mine]
             atom += [c for c in stated if not isinstance(c, GameResult)]
-            scenarios.append(scenario(num, _sub_label(k), mine, atom, groups, seeding))
+            by_result.setdefault((seeding, groups), []).append((mine, atom))
+        for k, ((seeding, groups), ways) in enumerate(by_result.items()):
+            # The winners every alternative needs; each alternative's atom names the rest.
+            shared = [w for w in ways[0][0] if all(w in mine for mine, _ in ways)]
+            alts = [atom for _, atom in ways]
+            scenarios.append(
+                scenario(num, _sub_label(k), shared, alts[0], groups, seeding, alts if len(alts) > 1 else None)
+            )
     return scenarios
 
 

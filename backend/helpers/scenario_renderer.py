@@ -105,9 +105,10 @@ def render_tiebreak_decision(cond: TiebreakDecision) -> str:
     if cond.step == 3:
         lead = f"Point differential in games among {_join(cond.group)} (capped at 12 a game)"
     else:
+        # Step 4 only comes into it when step 3 left them level, so say so: read alone, it could match.
         lead = (
-            f"{_join(cond.group)} on point differential against the rest of the region "
-            "(capped at 12 a game, highest-placed opponent first)"
+            f"{_join(cond.group)} level on point differential in games among them, so on point differential "
+            "against the rest of the region (capped at 12 a game, highest-placed opponent first)"
         )
     if len(cond.parts) == 1:
         return f"{lead}: {'both' if len(cond.group) == 2 else 'all'} level"
@@ -157,7 +158,9 @@ def render_scenario_title(sc: dict) -> str:
     If *sc* has a ``conditions_atom``, renders it through ``_render_atom``;
     otherwise falls back to joining the ``game_winners`` list.
     """
-    if sc.get("conditions_atom") is not None:
+    if sc.get("alternatives"):
+        title = " OR ".join(f"({_render_atom(atom)})" for atom in sc["alternatives"])
+    elif sc.get("conditions_atom") is not None:
         title = _render_atom(sc["conditions_atom"])
     else:
         title = " AND ".join(f"{w} beats {l}" for w, l in sc.get("game_winners", []))

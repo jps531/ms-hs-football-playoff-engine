@@ -71,9 +71,12 @@ def _matches(scenario: dict, mask: int, margins: dict, remaining, decisions: set
         a_wins = bool(mask >> index[pair] & 1)
         if (pair[0] if a_wins else pair[1]) != winner:
             return False
-    return all(
-        c in decisions if isinstance(c, TiebreakDecision) else c.satisfied_by(mask, margins, remaining)
-        for c in scenario.get("conditions_atom") or []
+    return any(
+        all(
+            c in decisions if isinstance(c, TiebreakDecision) else c.satisfied_by(mask, margins, remaining)
+            for c in atom
+        )
+        for atom in scenario.get("alternatives") or [scenario.get("conditions_atom") or []]
     )
 
 
