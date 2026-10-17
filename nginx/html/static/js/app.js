@@ -245,7 +245,7 @@ async function render() {
   const saved = Number(stored(STORE.clazz, (v) => CLASSES.includes(Number(v))));
   route.clazz ??= CLASSES.includes(saved) ? saved : CLASSES[0];
   store(STORE.clazz, route.clazz);
-  // The front page shows every class, so no class tab is current there.
+  // The front page has no class (and no class picker); every other page marks its class.
   renderScrubber(route.page === "landing" ? null : route.clazz);
   if (route.page === "feedback") {
     document.body.classList.remove("is-wide");
@@ -348,6 +348,8 @@ function notice(text) {
 // ------------------------------------------------------------ scrubber
 
 function renderScrubber(clazz) {
+  // The front page has no class of its own, and its own grid of links instead.
+  scrubberHost.parentElement.hidden = route.page === "landing";
   scrubberHost.innerHTML = classScrubber(CLASSES, clazz, classHref);
   syncNav();
   // Keep the selected class in view sideways; never scroll the page itself.
@@ -365,7 +367,7 @@ function renderScrubber(clazz) {
  */
 function syncNav() {
   const onBracket = route.page === "bracket";
-  const onStandings = ["landing", "class", "region"].includes(route.page);
+  const onStandings = ["class", "region"].includes(route.page); // not the front page: it's neither
   const known = route.page !== "notfound";
   const targets = {
     standings: known ? hrefWith({ page: route.region ? "region" : "class" }) : "/",

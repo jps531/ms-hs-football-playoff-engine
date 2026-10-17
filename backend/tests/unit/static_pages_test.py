@@ -603,3 +603,23 @@ def test_bracket_page_has_every_game_positioned_with_breadcrumbs():
     assert "Raleigh" in html and "Bay Springs" in html and "Championship Game" in html
     assert '<span class="visually-hidden">First Round, One spot set: </span>' in html
     assert bracket_body(3, [], BRACKET_CTX, "x") == ""
+
+
+def test_front_page_has_every_classs_standings_and_bracket_under_the_helmet():
+    """Two rows of seven buttons, each saying what it opens; the same markup as landing.js's classGrid."""
+    from backend.helpers.static_pages import class_grid
+
+    grid = class_grid()
+    assert grid.count('class="landing-classes__item"') == 14
+    assert (
+        '<a class="landing-classes__item" href="/standings/3a">3A<span class="visually-hidden"> standings</span></a>'
+        in grid
+    )
+    assert (
+        '<a class="landing-classes__item" href="/brackets/7a">7A<span class="visually-hidden"> brackets</span></a>'
+        in grid
+    )
+    body = landing_body(None, {})
+    assert body.index("landing-helmet") < body.index("landing-classes") < body.index("What we do")
+    js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "landing.js").read_text()
+    assert 'class="landing-classes__item" href="${path(c)}">${c}A<span class="visually-hidden">' in js

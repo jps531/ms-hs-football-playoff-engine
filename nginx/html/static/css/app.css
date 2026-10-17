@@ -319,6 +319,8 @@ button { font: inherit; color: inherit; }
 }
 .scrubber-bar__inner .scrubber { min-width: 0; }
 
+/* The front page has no class of its own, so no class picker (it has its own way in). */
+.scrubber-bar[hidden] { display: none; }
 .scrubber {
   display: inline-flex; gap: 2px;
   max-width: 100%;
@@ -549,7 +551,10 @@ button { font: inherit; color: inherit; }
 .region-head { padding-block: 28px 0; }
 
 /* Breadcrumbs: Home › Class 7A › Region 2-7A. Each link is a full-height target. */
-.crumbs ol { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.crumbs ol {
+  display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none;
+  font-family: var(--font-display); font-size: 14px; letter-spacing: 0.02em;
+}
 .crumbs li { display: inline-flex; align-items: center; min-height: 44px; color: var(--text-secondary); }
 .crumbs li + li::before { content: "›"; margin: 0 8px; color: var(--text-secondary); }
 .crumbs a { display: inline-flex; align-items: center; min-height: 44px; }
@@ -1374,6 +1379,26 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .landing-title { margin-top: 4px; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.1; letter-spacing: 0.01em; }
 .landing-intro > .landing-kicker + .landing-title { margin-top: -28px; } /* kicker and title read as one block */
 .landing-helmet { display: block; width: 100%; max-width: 520px; height: auto; }
+/* Under the helmet: every class's standings and bracket, a button each. */
+.landing-classes { display: grid; gap: 12px; max-width: 520px; }
+.landing-classes__label {
+  font-family: var(--font-display); font-size: 15px; line-height: 18px; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.landing-classes__list {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px;
+  margin: 8px 0 0; padding: 0; list-style: none;
+}
+.landing-classes__item {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 44px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-primary); text-decoration: none;
+  font-weight: 600; font-size: 15px;
+}
+.landing-classes__item:hover { background: var(--scrubber-selected-bg); color: var(--scrubber-selected-text); }
+.landing-classes__item:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 @media (max-width: 959px) { .landing-helmet { max-width: 280px; } }
 .landing-heading { font-size: 22px; line-height: 26px; letter-spacing: 0.02em; }
 .landing-subheading { font-size: 17px; line-height: 22px; letter-spacing: 0.02em; }

@@ -985,6 +985,30 @@ HOW_IT_WORKS = (
 )
 
 
+CLASSES = range(1, 8)
+
+
+def class_grid() -> str:
+    """The front page's way in: every class's standings and bracket, a button each (landing.js's
+    ``classGrid`` writes the same). Hidden words make each link say what it opens."""
+
+    def row(key: str, label: str, path) -> str:
+        items = "".join(
+            f'<li><a class="landing-classes__item" href="{path(c)}">{c}A'
+            f'<span class="visually-hidden"> {label.lower()}</span></a></li>'
+            for c in CLASSES
+        )
+        return (
+            f'<div class="landing-classes__row"><p class="landing-classes__label" id="classes-{key}">{label}</p>'
+            f'<ul class="landing-classes__list" aria-labelledby="classes-{key}">{items}</ul></div>'
+        )
+
+    return (
+        '<nav class="landing-classes" aria-label="Classes">'
+        f"{row('standings', 'Standings', class_path)}{row('brackets', 'Brackets', bracket_path)}</nav>"
+    )
+
+
 def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
     """The front page: who we are and how it works on the left, a tour of the site on the right, with the
     most open race (``featured``) as the live example throughout.
@@ -997,6 +1021,7 @@ def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
         '<p class="landing-kicker">Welcome to</p>'
         '<h1 class="landing-title">Mississippi High School Football</h1>'
         '<img class="landing-helmet" src="/static/helmet.webp" width="1000" height="851" alt="">'
+        f"{class_grid()}"
         f"{_section('what', 'What we do', f'<p>{_e(WHAT_WE_DO)}</p>')}"
         + _section(
             "how",

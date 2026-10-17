@@ -143,3 +143,13 @@ def test_the_main_nav_is_in_the_page_from_the_start():
         assert f'<a class="{cls}" href="/brackets/<!--# if expr="$page_class" -->' in shell
         assert '<!--# if expr="$nav_section = bracket" --> aria-current="page"' in shell
     assert "map $request_uri $nav_section" in NGINX
+
+
+def test_the_front_page_marks_no_nav_section_and_has_no_class_picker():
+    """ "/" is neither Standings nor Bracket, and has its own class grid instead of the picker."""
+    section = re.search(r"map \$request_uri \$nav_section \{(.*?)\}", NGINX, re.S).group(1)
+    assert "standings" in section and "(?:\\\\?|$)" not in section
+    picker = re.search(r"map \$request_uri \$show_class_picker \{(.*?)\}", NGINX, re.S).group(1)
+    assert '"no"' in picker
+    shell = (ROOT / "nginx" / "html" / "index.html").read_text()
+    assert '<div class="scrubber-bar"<!--# if expr="$show_class_picker = no" --> hidden<!--# endif -->>' in shell
