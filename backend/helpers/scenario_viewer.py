@@ -1738,9 +1738,37 @@ _MARGIN_RANGE = range(1, 13)
 # The most games left for which every margin combination (12 per game) is checked; with more, a group
 # whose order turns on margins is shown as a group left to the tiebreaker (see enumerate_division_scenarios).
 _MAX_EXACT_MARGIN_GAMES = 5
+# The most margin blocks an outcome is described with as plain margin ranges ("A beats B by 1-7");
+# an outcome whose margins need more is described by the tiebreaker decisions behind it instead.
+_MAX_MARGIN_BLOCKS = 2
 # The most outcomes one set of winners lists as their own sub-scenarios; past it, the tie that decides
 # them is shown as left to the tiebreaker (and the check-a-score tool), not as dozens of cards.
 _MAX_LISTED_OUTCOMES = 8
+
+
+def _margin_blocks(region: set[tuple[int, ...]], limit: int) -> list[list[tuple[int, int]]] | None:
+    """*region* (margin combinations, 1-12 per game) as at most *limit* boxes of margin ranges, each
+    box inside it and together covering it; None when it takes more."""
+    boxes: list[list[tuple[int, int]]] = []
+    left = set(region)
+    while left:
+        if len(boxes) == limit:
+            return None
+        box = [(m, m) for m in min(left)]
+        for i in range(len(box)):
+            for step in (-1, 1):
+                while True:
+                    lo, hi = box[i]
+                    nxt = (lo - 1, hi) if step < 0 else (lo, hi + 1)
+                    if nxt[0] < _MARGIN_RANGE[0] or nxt[1] > _MARGIN_RANGE[-1]:
+                        break
+                    trial = box[:i] + [nxt] + box[i + 1 :]
+                    if not all(p in region for p in product(*(range(a, b + 1) for a, b in trial))):
+                        break
+                    box = trial
+        boxes.append(box)
+        left -= set(product(*(range(a, b + 1) for a, b in box)))
+    return boxes
 
 
 def _sub_label(k: int) -> str:
@@ -1868,10 +1896,12 @@ def enumerate_division_scenarios(
             continue
         signatures: dict = {}
         first: dict = {}
+        regions: dict = defaultdict(set)
         for combo in product(_MARGIN_RANGE, repeat=R):
             stated, outcome = run(mask, dict(zip(pairs, combo, strict=True)))
             signatures[frozenset(stated)] = outcome
             first.setdefault(outcome, combo)
+            regions[outcome].add(combo)
         if len(first) == 1:  # the decisions vary, but never the outcome
             (seeding, open_groups) = next(iter(first))
             outcomes[mask] = [((), open_groups, seeding, None)]
@@ -1887,11 +1917,25 @@ def enumerate_division_scenarios(
             seeding, open_groups = _settle_open(order, open_groups, playoff_seeds)
             outcomes[mask] = [((), open_groups, seeding, None)]
             continue
-        outcomes[mask] = [
-            (tuple(sorted(term, key=lambda d: (d.step, d.group))), open_groups, seeding, first[(seeding, open_groups)])
-            for (seeding, open_groups), terms in _simplest_terms(signatures).items()
-            for term in terms
-        ]
+        # Each outcome in plain margin ranges when a couple of blocks say it; else by its decisions.
+        winners = _game_winners_for_mask(mask, remaining)
+        terms = _simplest_terms(signatures)
+        listed = []
+        for outcome, region in regions.items():
+            seeding, open_groups = outcome
+            blocks = _margin_blocks(region, _MAX_MARGIN_BLOCKS)
+            if blocks is not None:
+                for box in blocks:
+                    ranges = [
+                        GameResult(w, l, lo, None if hi == _MARGIN_RANGE[-1] else hi + 1)
+                        for (w, l), (lo, hi) in zip(winners, box, strict=True)
+                    ]
+                    listed.append((tuple(ranges), open_groups, seeding, tuple(lo for lo, _ in box)))
+            else:
+                for term in terms[outcome]:
+                    stated = tuple(sorted(term, key=lambda d: (d.step, d.group)))
+                    listed.append((stated, open_groups, seeding, first[outcome]))
+        outcomes[mask] = listed
 
     # Winner sets with one outcome merge by seeding; the rest list their outcomes as sub-scenarios.
     by_outcome: dict[tuple, list[int]] = defaultdict(list)
@@ -1928,7 +1972,9 @@ def enumerate_division_scenarios(
         winners = _game_winners_for_mask(mask, remaining)
         base = [GameResult(w, l, 1, None) for w, l in winners]
         for k, (stated, open_groups, seeding, _) in enumerate(sorted(data, key=lambda o: (o[3], len(o[0])))):
-            scenarios.append(scenario(num, _sub_label(k), winners, base + list(stated), open_groups, seeding))
+            # Margin ranges stand in for the plain winners; decisions add to them.
+            atom = list(stated) if stated and isinstance(stated[0], GameResult) else base + list(stated)
+            scenarios.append(scenario(num, _sub_label(k), winners, atom, open_groups, seeding))
     return scenarios
 
 
