@@ -294,6 +294,7 @@ def resolve_bucket(
     base_margin_default=7,
     coin_flip_collector: list[list[str]] | None = None,
     step_trace_collector: dict | None = None,
+    decision_collector: list | None = None,
 ):
     """Apply tiebreaker Steps 1-6 to order a single tied group of teams.
 
@@ -321,6 +322,11 @@ def resolve_bucket(
             ``{tuple(sorted(bucket)): (step2, step4)}`` for this bucket and
             any sub-buckets resolved by recursive calls.  Pass the same dict
             to ``resolve_standings_with_trace`` to avoid recomputing step data.
+        decision_collector: Optional list that receives, in the order they
+            are made, the decisions at the steps that can depend on margins
+            and points allowed (3, 4 and 5): ``(step, group, parts)``, where
+            *group* is the tied group (sorted) and *parts* its teams split by
+            that step, best first, each part sorted (one part: still level).
 
     Returns:
         An ordered list of team names (highest seed first) for this bucket.
@@ -365,19 +371,24 @@ def resolve_bucket(
     # Steps 1–5: apply each key in sequence.  When a step splits a group, each
     # resulting sub-group restarts from Step 1 via a recursive call; the
     # resolved sub-sequence is broken into singletons so it is not re-processed.
-    for key_builder in [
-        lambda t: -step1[t],
-        lambda t: _key_step2(step2[t]),
-        lambda t: -step3[t],
-        lambda t: _key_step4(step4[t]),
-        lambda t: wl_totals[t]["pa"],
-    ]:
+    for step, key_builder in enumerate(
+        [
+            lambda t: -step1[t],
+            lambda t: _key_step2(step2[t]),
+            lambda t: -step3[t],
+            lambda t: _key_step4(step4[t]),
+            lambda t: wl_totals[t]["pa"],
+        ],
+        start=1,
+    ):
         next_pending: list[list[str]] = []
         for g in pending:
             if len(g) <= 1:
                 next_pending.append(g)
                 continue
             parts = _partition_by(g, key_func=key_builder)
+            if decision_collector is not None and step >= 3:
+                decision_collector.append((step, tuple(g), tuple(tuple(p) for p in parts)))
             if len(parts) == 1:
                 # No progress from this step — keep for the next one
                 next_pending.append(g)
@@ -401,6 +412,7 @@ def resolve_bucket(
                             base_margin_default,
                             coin_flip_collector,
                             step_trace_collector=step_trace_collector,
+                            decision_collector=decision_collector,
                         )
                         next_pending.extend([[t] for t in resolved])
         pending = next_pending
@@ -485,6 +497,7 @@ def resolve_standings_for_mask(
     pa_win=14,
     coin_flip_collector: list[list[str]] | None = None,
     step_trace_collector: dict | None = None,
+    decision_collector: list | None = None,
 ):
     """Resolve the full region seeding order for a single outcome mask.
 
@@ -506,6 +519,8 @@ def resolve_standings_for_mask(
         step_trace_collector: If provided, populated with per-bucket step data
             via ``resolve_bucket``.  Prefer ``resolve_standings_with_trace``
             over passing this directly.
+        decision_collector: If provided, receives every step 3-5 decision made
+            (see ``resolve_bucket``), bucket by bucket in seeding order.
 
     Returns:
         An ordered list of all team names (seed 1 first through seed N last).
@@ -528,6 +543,7 @@ def resolve_standings_for_mask(
                 base_margin_default,
                 coin_flip_collector=coinflip_events,
                 step_trace_collector=step_trace_collector,
+                decision_collector=decision_collector,
             )
         )
     return final
