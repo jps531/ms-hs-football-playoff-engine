@@ -689,12 +689,14 @@ async function regionView(ctx) {
   const focus = data.teams.some((t) => t.school === ctx.team) ? ctx.team : null;
 
   // Cards carry the same provenance as plain text, so a cropped screenshot
-  // of one still says what it shows.
+  // of one still says what it shows. The odds mode only where the card has
+  // odds: a "settles a spot" card has none, so it would say nothing there.
   const shownWeek = [...shownWeeks].reverse().find((w) => w.firstDate <= data.as_of_date);
-  const cardProv = provenance(
-    { label: shownWeek?.label, date: shownWeek?.lastDate ?? data.as_of_date, mode },
+  const provFor = (withMode) => provenance(
+    { label: shownWeek?.label, date: shownWeek?.lastDate ?? data.as_of_date, mode: withMode ? mode : null },
     shortDate,
   );
+  const cardProv = { odds: provFor(true), plain: provFor(false) };
 
   // Home and away come from the schedule when it lists the game; the
   // standings' remaining-games list often doesn't know the site.
@@ -901,7 +903,9 @@ function gamesSection(id, title, games, teams, focus) {
 // ------------------------------------------------------------ scenarios
 
 function scenariosSection(data, teams, prov, mode, focus) {
-  const cardHtml = (c) => scenarioCard({ ...c, team: teams[c.team], teams, provenanceHtml: prov });
+  const cardHtml = (c) => scenarioCard({
+    ...c, team: teams[c.team], teams, provenanceHtml: c.p == null ? prov.plain : prov.odds,
+  });
   const grid = (cards) => `<div class="scenario-grid">${cards.map(cardHtml).join("")}</div>`;
   const forFocus = (cards) => (focus ? cards.filter((c) => c.team === focus) : cards);
   const remainingCount = data.remaining_games.length;

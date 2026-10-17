@@ -105,7 +105,7 @@ def mode_odds(team: dict, key: str, mode: str) -> float:
     return (odds.get(f"{key}_weighted") or 0.0) if mode == "projected" else odds[key]
 
 
-def provenance(as_of: date | None, dates: list[dict], mode: str, today: date) -> str:
+def provenance(as_of: date | None, dates: list[dict], mode: str | None, today: date) -> str:
     """What a card reflects, as the page's controls say it: "Through Week 8 · Oct 24 · Projected".
 
     Mirrors the site: weeks come from the season's game dates before today;
@@ -138,7 +138,8 @@ def provenance(as_of: date | None, dates: list[dict], mode: str, today: date) ->
             parts.append(short_date(shown["last"]))
     elif as_of is not None:
         parts.append(f"Updated {short_date(as_of)}")
-    parts.append("Projected" if mode == "projected" else "Toss-up")
+    if mode:  # None where nothing shown has odds, so the mode would say nothing
+        parts.append("Projected" if mode == "projected" else "Toss-up")
     return " · ".join(parts)
 
 
