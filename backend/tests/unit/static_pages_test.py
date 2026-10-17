@@ -477,7 +477,8 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
         "/teams?season=2026": [{"school": "Raleigh", "helmet_url": "https://res.cloudinary.com/x/raleigh.png"}],
         "/standings/3?season=2026": {"as_of_date": "2026-10-09", "regions": [{"region": 6, "teams": TEAMS}]},
         "/seasons/2026/dates?class=3": {"dates": DATES},
-        "/standings/3/6?season=2026": _region(),
+        "/standings/3/6?season=2026": _region(scenarios_available=True),
+        "/standings/3/6?season=2026&include_team_scenarios=true": _example()["scenario_payload"],
         "/standings/summary?season=2026": {
             "as_of_date": "2026-10-09",
             "classes": [{"class_": 3, "regions": [_card(6, 3)]}],
@@ -501,6 +502,7 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
     assert "Class 3A" in (tmp_path / "body" / "3.html").read_text()
     site = (tmp_path / "body" / "site.html").read_text()
     assert "Open the Region 6-3A page" in site and "2026 season · Through Week 8" in site  # the region's own payload
+    assert "#scen-title" in site and "#all-scen-title" in site  # the scenario examples, from the scenarios read
     sitemap = (tmp_path / "sitemap.xml").read_text()
     for path in ("/</loc>", "/standings/3a</loc>", "/standings/3a/6</loc>", "/methodology</loc>"):
         assert path in sitemap
@@ -623,3 +625,216 @@ def test_front_page_has_every_classs_standings_and_bracket_under_the_helmet():
     assert body.index("landing-helmet") < body.index("landing-classes") < body.index("What we do")
     js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "landing.js").read_text()
     assert 'class="landing-classes__item" href="${path(c)}">${c}A<span class="visually-hidden">' in js
+
+
+# ---------------------------------------------------------------- scenario previews
+# Mirrors nginx/tests/scenarios.test.mjs, so the front page's examples pick the same cards the region page shows.
+
+
+def _cond(w, l):
+    """One alternative: *w* beats *l*."""
+    return [[{"type": "game_result", "school": w, "opponent": l}]]
+
+
+def _seed(value, groups):
+    return {"outcome": {"type": "seed", "value": value}, "conditions": groups}
+
+
+def _playoffs(groups):
+    return {"outcome": {"type": "playoffs"}, "conditions": groups}
+
+
+UNCONDITIONAL = [[]]
+
+
+def _odds(p1, p2, p3, p4, w=None):
+    """Odds where the toss-up and projected columns differ."""
+    ww = w or [p1, p2, p3, p4]
+    return {
+        "p1": p1, "p2": p2, "p3": p3, "p4": p4, "p_playoffs": p1 + p2 + p3 + p4,
+        "p1_weighted": ww[0], "p2_weighted": ww[1], "p3_weighted": ww[2], "p4_weighted": ww[3],
+        "p_playoffs_weighted": sum(ww),
+    }  # fmt: skip
+
+
+def test_outcome_cards_match_scenarios_js_for_the_2_7a_shape():
+    from backend.helpers.static_pages import outcome_cards
+
+    teams = [
+        {"school": "Oxford", "clinched": True, "odds": _odds(1, 0, 0, 0),
+         "paths": [_seed(1, UNCONDITIONAL), _playoffs(UNCONDITIONAL)]},
+        {"school": "Starkville", "clinched": True, "odds": _odds(0, 0, 0.5, 0.5),
+         "paths": [_seed(3, _cond("Clinton", "MC")), _seed(4, _cond("MC", "Clinton")), _playoffs(UNCONDITIONAL)]},
+        {"school": "MC", "odds": _odds(0, 0, 0.5, 0.146),
+         "paths": [_seed(3, _cond("MC", "Clinton")), _seed(4, _cond("Clinton", "MC")), _playoffs(_cond("MC", "Clinton"))]},
+        {"school": "Clinton", "odds": _odds(0, 0, 0, 0.354),
+         "paths": [_seed(4, _cond("Clinton", "MC")), _playoffs(_cond("Clinton", "MC"))]},
+        {"school": "Murrah", "eliminated": True, "odds": _odds(0, 0, 0, 0),
+         "paths": [{"outcome": {"type": "eliminated"}, "conditions": UNCONDITIONAL}]},
+    ]  # fmt: skip
+    g = outcome_cards(teams, "tossup")
+    assert g["title"] == []  # an unconditional #1 is a badge, not a card
+    assert [c["title"] for c in g["playoffs"]] == [
+        "MC makes the playoffs",
+        "Clinton makes the playoffs as the No. 4 seed",
+    ]
+    assert [c["title"] for c in g["seeding"]] == [
+        "Starkville finishes third",
+        "Starkville finishes fourth",
+        "MC finishes third",
+        "MC finishes fourth",
+    ]
+
+
+def test_outcome_cards_title_elimination_and_order_match_scenarios_js():
+    from backend.helpers.static_pages import outcome_cards
+
+    mize = [{"school": "Mize", "odds": _odds(0.25, 0, 0, 0),
+             "paths": [_seed(1, _cond("Mize", "Bay")), _playoffs(_cond("Mize", "Bay"))]}]  # fmt: skip
+    g = outcome_cards(mize, "tossup")
+    assert [c["title"] for c in g["title"]] == ["Mize wins the region"] and g["playoffs"] == []
+
+    many = _cond("A", "B") + _cond("C", "D") + _cond("E", "F")
+    nwr = [{"school": "NWR", "odds": _odds(0, 0.4, 0, 0.35), "paths": [
+        _seed(2, _cond("NWR", "Pearl")), _seed(4, _cond("Pearl", "NWR")), _playoffs(many),
+        {"outcome": {"type": "eliminated"}, "conditions": _cond("Brandon", "NWR")},
+    ]}]  # fmt: skip
+    assert [(c["title"], round(c["p"], 6)) for c in outcome_cards(nwr, "tossup")["playoffs"]] == [
+        ("NWR is eliminated", 0.25)
+    ]
+
+    pair = [
+        {"school": "A", "clinched": True, "odds": _odds(0.25, 0.75, 0, 0, [0.6, 0.4, 0, 0]),
+         "paths": [_seed(1, _cond("A", "B")), _seed(2, _cond("B", "A")), _playoffs(UNCONDITIONAL)]},
+        {"school": "B", "clinched": True, "odds": _odds(0.75, 0.25, 0, 0, [0.4, 0.6, 0, 0]),
+         "paths": [_seed(1, _cond("B", "A")), _seed(2, _cond("A", "B")), _playoffs(UNCONDITIONAL)]},
+    ]  # fmt: skip
+    assert [c["team"] for c in outcome_cards(pair, "tossup")["title"]] == ["B", "A"]
+    assert [(c["team"], c["p"]) for c in outcome_cards(pair, "projected")["title"]] == [("A", 0.6), ("B", 0.4)]
+
+
+STRINGER = {
+    "scenario_num": 2,
+    "sub_label": "a",
+    "title": "Stringer beats Richton by 8 or more AND Stringer's margin and Lumberton's margin combined total 10 or more"
+    " AND Lumberton beats Magee",
+    "game_winners": [{"winner": "Stringer", "loser": "Richton"}, {"winner": "Lumberton", "loser": "Magee"}],
+    "conditions": [
+        {"type": "game_result", "winner": "Stringer", "loser": "Richton", "min_margin": 8, "max_margin": None},
+        {"type": "margin_condition", "add": [], "sub": [], "op": ">=", "threshold": 10},
+        {"type": "game_result", "winner": "Lumberton", "loser": "Magee", "min_margin": 1, "max_margin": None},
+    ],
+    "coinflip_groups": [["Magee", "Richton"]],
+    "outcomes": {"Lumberton": "2", "Stringer": "1", "Magee": "4", "Richton": "3", "Taylorsville": "5"},
+}
+
+
+def test_complete_scenario_cards_match_scenarios_js():
+    from backend.helpers.static_pages import complete_scenario_cards
+
+    [card] = complete_scenario_cards([STRINGER])
+    assert card["label"] == "Scenario 1"  # numbered by position on the page
+    assert [(s["seed"], s["team"]) for s in card["seeds"]] == [
+        (1, "Stringer"),
+        (2, "Lumberton"),
+        (3, "Richton"),
+        (4, "Magee"),
+    ]
+    assert card["out"] == ["Taylorsville"]
+    [group] = card["groups"]
+    assert [c["type"] for c in group] == ["game_result", "text", "game_result", "coin_flip"]
+    assert group[0]["min_margin"] == 8
+    assert group[1]["description"] == "Stringer's margin and Lumberton's margin combined total 10 or more"
+    assert group[3]["description"] == "A coin flip settles the tie between Magee and Richton"
+
+    [fallback] = complete_scenario_cards([{
+        "scenario_num": 1, "sub_label": "", "title": "A beats B",
+        "game_winners": [{"winner": "A", "loser": "B"}], "conditions": None, "outcomes": {"A": "1", "B": "2"},
+    }])  # fmt: skip
+    assert fallback["groups"] == [[{"type": "game_result", "school": "A", "opponent": "B", "required_result": "win",
+                                    "min_margin": 1, "max_margin": None}]]  # fmt: skip
+
+    def sc(num, title, outcomes):
+        w, l = title.split(" beats ")
+        return {"scenario_num": num, "title": title, "outcomes": outcomes,
+                "conditions": [{"type": "game_result", "winner": w, "loser": l, "min_margin": 1, "max_margin": None}]}  # fmt: skip
+
+    x, y = {"A": "1", "B": "2"}, {"B": "1", "A": "2"}
+    cards = complete_scenario_cards(
+        [sc(1, "A beats B", x), sc(2, "B beats A", y), sc(2, "B beats C", y), sc(3, "B beats A", y),
+         sc(3, "B beats C", y), sc(4, "C beats A", y)]
+    )  # fmt: skip
+    assert [c["label"] for c in cards] == ["Scenario 1", "Scenario 2A", "Scenario 2B", "Scenario 3"]
+
+
+def test_margin_text_matches_format_js():
+    from backend.helpers.static_pages import margin_text
+
+    assert margin_text(1, None) == margin_text(None, None) == ""
+    assert margin_text(8, None) == " by 8+"
+    assert margin_text(3, 4) == " by exactly 3"
+    assert margin_text(3, 7) == " by 3–6"
+
+
+def _entry(open_teams, scenarios=True):
+    """A region for pick_scenario_region with *open_teams* teams still able to win it."""
+    teams = [{"odds": _odds(0.5, 0, 0, 0)} for _ in range(open_teams)] + [{"odds": _odds(0, 0, 0, 0)}]
+    return {"standings": {"scenarios_available": scenarios, "teams": teams}, "mode": "tossup"}
+
+
+def test_scenario_region_is_the_featured_one_when_its_title_is_open():
+    from backend.helpers.static_pages import pick_scenario_region
+
+    regions = {(3, 5): _entry(1), (3, 6): _entry(2), (3, 7): _entry(3), (5, 1): _entry(4), (4, 2): _entry(5, False)}
+    assert pick_scenario_region(regions, (3, 6)) == (3, 6)
+    assert pick_scenario_region(regions, (3, 5)) == (3, 7)  # title decided: the most open race in its class
+    assert pick_scenario_region(regions, (2, 1)) == (5, 1)  # nothing in its class: the most open anywhere
+    assert pick_scenario_region(regions, None) == (5, 1)
+    assert pick_scenario_region({(3, 5): _entry(1), (4, 2): _entry(5, False)}, (3, 5)) is None
+
+
+def _example():
+    teams = [
+        {"school": "A", "odds": _odds(0.6, 0.4, 0, 0),
+         "paths": [_seed(1, _cond("A", "B")), _seed(2, _cond("B", "A")), _playoffs(UNCONDITIONAL)], "clinched": True},
+        {"school": "B", "odds": _odds(0.4, 0.6, 0, 0),
+         "paths": [_seed(1, _cond("B", "A")), _seed(2, _cond("A", "B")), _playoffs(UNCONDITIONAL)], "clinched": True},
+    ]  # fmt: skip
+    scenarios = [
+        {"scenario_num": 1, "title": "A beats B", "outcomes": {"A": "1", "B": "2"},
+         "conditions": [{"type": "game_result", "winner": "A", "loser": "B", "min_margin": 1, "max_margin": None}]},
+        {"scenario_num": 2, "title": "B beats A", "outcomes": {"B": "1", "A": "2"},
+         "conditions": [{"type": "game_result", "winner": "B", "loser": "A", "min_margin": 1, "max_margin": None}]},
+        {"scenario_num": 3, "title": "B beats A by 9+", "outcomes": {"B": "1", "A": "2"},
+         "conditions": [{"type": "game_result", "winner": "B", "loser": "A", "min_margin": 9, "max_margin": None}]},
+    ]  # fmt: skip
+    return {"clazz": 3, "region": 6, "stamp": STAMP, "mode": "tossup",
+            "scenario_payload": {"scenarios_available": True, "teams": teams, "scenarios": scenarios}}  # fmt: skip
+
+
+def test_front_page_shows_each_scenario_kind_linking_to_its_section():
+    from backend.helpers.static_pages import scenario_previews
+
+    out = scenario_previews(_example(), {})
+    assert "two likeliest champions of Region 6-3A" in out["title"]
+    assert 'href="/standings/3a/6#scen-title"' in out["title"] and "A wins the region" in out["title"]
+    assert out["title"].index("A wins the region") < out["title"].index("B wins the region")
+    assert (
+        "B finishes second" in out["seeding"] and 'aria-label="Open Region 6-3A’s seeding scenarios"' in out["seeding"]
+    )
+    assert "Region 6-3A can still finish 3 ways. Here are the first two:" in out["unique"]
+    assert 'href="/standings/3a/6#all-scen-title"' in out["unique"]
+    assert "Scenario 2" in out["unique"] and "Scenario 3" not in out["unique"]
+    assert STAMP in out["unique"]
+
+    body = landing_body(None, {}, _example())
+    assert body.index("Region title scenarios") < body.index("two likeliest champions")
+    assert body.index("Unique region scenarios") < body.index("can still finish 3 ways")
+    assert scenario_previews(None, {}) == {"title": "", "seeding": "", "unique": ""}
+    unavailable = {**_example(), "scenario_payload": {"scenarios_available": False}}
+    assert scenario_previews(unavailable, {}) == {"title": "", "seeding": "", "unique": ""}
+
+
+def test_region_scenarios_run_after_the_scores_are_pulled():
+    flows = (Path(__file__).resolve().parents[2] / "prefect" / "flows.py").read_text()
+    assert 'CronSchedule(cron="30 9 * * *"' in flows

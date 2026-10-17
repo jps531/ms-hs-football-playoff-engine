@@ -80,6 +80,7 @@ from backend.helpers.static_pages import (
     layout_results,
     locked_seeds,
     pick_featured,
+    pick_scenario_region,
     region_body,
     region_path,
     region_trail,
@@ -242,7 +243,19 @@ def build_share_assets(
         featured["bracket_html"] = _bracket_preview_html(fetch, season, featured, class_standings, teams)
     else:
         featured = None
-    _write_text(out_dir / "body" / "site.html", landing_body(featured, teams))
+    # The scenario examples: a region with an open title race (the featured one if it has one),
+    # fetched again with each team's paths.
+    scenario_example = None
+    pick = pick_scenario_region(region_payloads, (featured["clazz"], featured["card"]["region"]) if featured else None)
+    if pick:
+        c, r = pick
+        scenario_example = {
+            **region_payloads[pick],
+            "clazz": c,
+            "region": r,
+            "scenario_payload": fetch(f"/standings/{c}/{r}?season={season}&include_team_scenarios=true"),
+        }
+    _write_text(out_dir / "body" / "site.html", landing_body(featured, teams, scenario_example))
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     return written
