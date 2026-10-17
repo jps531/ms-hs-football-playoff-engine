@@ -119,7 +119,9 @@ def render_tiebreak_decision(cond: TiebreakDecision) -> str:
 def render_open_group(step: int, group) -> str:
     """A group a scenario leaves to the tiebreaker from *step* on, in words."""
     teams = _join(group)
-    if step >= 5:
+    if step >= 6:
+        return f"{teams} are level on every tiebreaker: a coin flip decides their order"
+    if step == 5:
         return f"{teams} are still level: fewest points allowed in region games decides their order (then a coin flip)"
     return (
         f"{teams} tie: their order is decided by point differential in games among them, then against "

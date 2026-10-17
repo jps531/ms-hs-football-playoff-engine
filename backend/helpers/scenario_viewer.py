@@ -1776,19 +1776,26 @@ def _sub_label(k: int) -> str:
     return chr(ord("a") + k) if k < 26 else _sub_label(k // 26 - 1) + chr(ord("a") + k % 26)
 
 
-def _decision_signature(decisions: list, open_from: int) -> tuple[tuple, tuple]:
+def _decision_signature(decisions: list, open_from: int, in_play: set[str]) -> tuple[tuple, tuple]:
     """Split a seeding's tiebreaker *decisions* into what a scenario states and what it leaves open.
 
     Returns ``(stated, open_groups)``: ``stated`` the step 3-4 decisions (``TiebreakDecision``), and
     ``open_groups`` the ``(step, group)`` pairs for groups whose order the scenario leaves to the
     tiebreaker from *step* on: every group that reaches step 5 (fewest points allowed, which turns on
-    actual scores rather than margins), and with ``open_from=3`` every group that reaches step 3.
-    Decisions within an open group are dropped: they follow from how it's settled.
+    actual scores rather than margins) with a team still to play (*in_play*), and with
+    ``open_from=3`` every group that reaches step 3. A group whose teams have all finished their
+    region games already has its points allowed, so step 5 decides it for certain; if they're level
+    there too, it's a coin flip, ``(6, group)``. Decisions within an open group are dropped: they
+    follow from how it's settled.
     """
     stated: list = []
     open_groups: list = []
     for step, group, parts in decisions:
         if any(set(group) <= set(g) for _, g in open_groups):
+            continue
+        if step == 5 and not set(group) & in_play:
+            if len(parts) == 1:
+                open_groups.append((6, group))
             continue
         if step >= open_from:
             open_groups.append((step, group))
@@ -1875,6 +1882,7 @@ def enumerate_division_scenarios(
     pairs = [(rg.a, rg.b) for rg in remaining]
     exact = R <= _MAX_EXACT_MARGIN_GAMES and not (precomputed is not None and precomputed.ignore_margins)
     open_from = 5 if exact else 3
+    in_play = {t for rg in remaining for t in (rg.a, rg.b)}
     ref = {pair: base_margin_default for pair in pairs}
 
     def run(mask: int, margins: dict) -> tuple[tuple, tuple]:
@@ -1883,7 +1891,7 @@ def enumerate_division_scenarios(
         order = resolve_standings_for_mask(
             teams, completed, remaining, mask, margins, base_margin_default, pa_win, decision_collector=decisions
         )
-        stated, open_groups = _decision_signature(decisions, open_from)
+        stated, open_groups = _decision_signature(decisions, open_from, in_play)
         seeding, shown = _settle_open(order, open_groups, playoff_seeds)
         return stated, (seeding, shown)
 
@@ -1913,7 +1921,7 @@ def enumerate_division_scenarios(
             order = resolve_standings_for_mask(
                 teams, completed, remaining, mask, ref, base_margin_default, pa_win, decision_collector=decisions
             )
-            _, open_groups = _decision_signature(decisions, 3)
+            _, open_groups = _decision_signature(decisions, 3, in_play)
             seeding, open_groups = _settle_open(order, open_groups, playoff_seeds)
             outcomes[mask] = [((), open_groups, seeding, None)]
             continue
@@ -1997,17 +2005,24 @@ def _format_team_list(teams: list[str]) -> str:
     return ", ".join(teams[:-1]) + f", and {teams[-1]}"
 
 
+_COUNT_WORDS = {2: "Two", 3: "Three", 4: "Four"}
+_OPEN_REASON = {
+    3: "order decided by the tiebreaker (point differential, then fewest points allowed)",
+    4: "order decided by the tiebreaker (point differential, then fewest points allowed)",
+    5: "order decided by fewest points allowed in region games (then a coin flip)",
+    6: "order decided by a coin flip",
+}
+
+
 def render_scenarios(scenarios: list[dict], playoff_seeds: int = 4) -> str:
     """Render a pre-computed scenario list (from enumerate_division_scenarios or DB) as text.
 
     This is the decoupled rendering path — it does not re-run enumeration, so it
     can be called cheaply at request time using scenarios loaded from the database.
 
-    When a scenario has ``tiebreaker_groups`` set (produced under
-    ``ignore_margins=True`` for masks that would be margin-sensitive in full
-    enumeration), the seeding lines for those positions are collapsed into a
-    single "Tie between X and Y — depends on point differential" line instead
-    of showing a definitive ordering that would only be valid at one margin.
+    A group whose order a scenario leaves to the tiebreaker (``open_groups``,
+    or older snapshots' ``tiebreaker_groups``/``coinflip_groups``) is shown as
+    one line over its places, saying what decides it, never as an order.
 
     Example output::
 
@@ -2035,45 +2050,39 @@ def render_scenarios(scenarios: list[dict], playoff_seeds: int = 4) -> str:
 
         lines.append(f"{label}: {condition_str}")
 
-        seeding = sc["seeding"]
-        tiebreaker_groups = sc.get("tiebreaker_groups")
-        coinflip_groups = sc.get("coinflip_groups")
-
-        if tiebreaker_groups or coinflip_groups:
-            # Build a mapping from seed-index (0-based) to the collapsed group
-            # that covers that position.  Only groups entirely within playoff_seeds
-            # are collapsed; cross-boundary groups fall through to normal rendering.
-            seeding_list = list(seeding)
-            tb_pos: dict[int, tuple[int, list[str], str]] = {}  # pos -> (group_start, teams, reason_suffix)
-            for group, reason in [
-                *[(g, "depends on point differential") for g in (tiebreaker_groups or [])],
-                *[(g, "depends on point differential") for g in (coinflip_groups or [])],
-            ]:
-                positions = sorted(seeding_list.index(t) for t in group if t in seeding_list)
-                if positions and all(p < playoff_seeds for p in positions):
-                    ordered = [seeding_list[p] for p in positions]
-                    for p in positions:
-                        tb_pos[p] = (positions[0], ordered, reason)
-
-            i = 0
-            while i < playoff_seeds:
-                if i in tb_pos:
-                    group_start, ordered, reason = tb_pos[i]
-                    if i == group_start:
-                        end = i + len(ordered)
-                        team_str = _format_team_list(ordered)
-                        lines.append(f"{i + 1}-{end}. Tie between {team_str} — {reason}")
-                        i = end
-                    else:
-                        i += 1  # interior of a group already rendered
+        seeding = list(sc["seeding"])
+        # Groups whose order isn't stated: shown as one line over their places, never in an order.
+        groups = [(step, list(g)) for step, g in sc.get("open_groups") or []]
+        groups += [(3, list(g)) for g in sc.get("tiebreaker_groups") or []]  # older stored scenarios
+        groups += [(6, list(g)) for g in sc.get("coinflip_groups") or []]
+        at: dict[int, tuple[int, list[str]]] = {}
+        for step, group in groups:
+            spots = sorted(seeding.index(t) for t in group if t in seeding)
+            if spots and spots[0] < playoff_seeds:
+                at[spots[0]] = (step, [seeding[p] for p in spots])
+        out_of_group: set[str] = set()
+        i = 0
+        while i < playoff_seeds:
+            if i in at:
+                step, members = at[i]
+                last = min(i + len(members), playoff_seeds)
+                places = f"{i + 1}-{last}" if last > i + 1 else f"{i + 1}"
+                if last - i == len(members):
+                    who = _format_team_list(members)
+                elif last - i == 1:
+                    who = ", ".join(members[:-1]) + f" or {members[-1]}"
                 else:
-                    lines.append(f"{i + 1}. {seeding[i]}")
-                    i += 1
-        else:
-            for i in range(playoff_seeds):
+                    who = f"{_COUNT_WORDS.get(last - i, last - i)} of {_format_team_list(members)}"
+                lines.append(f"{places}. {who}: {_OPEN_REASON[min(step, 6)]}")
+                out_of_group.update(members)
+                i = last
+            else:
                 lines.append(f"{i + 1}. {seeding[i]}")
+                i += 1
 
-        eliminated = list(seeding[playoff_seeds:])
+        eliminated = [t for t in seeding[playoff_seeds:] if t not in out_of_group]
+        if len(eliminated) < len(seeding[playoff_seeds:]):
+            eliminated.append("the rest of that tie")
         if eliminated:
             lines.append(f"Eliminated: {', '.join(eliminated)}")
 

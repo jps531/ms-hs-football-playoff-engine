@@ -114,6 +114,7 @@ def coverage_problems(
             )
             decisions = {TiebreakDecision(step, group, parts) for step, group, parts in raw}
             reached = {(step, group) for step, group, _ in raw}
+            reached |= {(6, group) for step, group, parts in raw if step == 5 and len(parts) == 1}
             report.checked += 1
             hits = [s for s in scenarios if _matches(s, mask, margins, remaining, decisions)]
             if not hits:

@@ -43,6 +43,7 @@ from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_scenarios,
     teams_3_7a,
 )
+from backend.tests.scenario_coverage import coverage_problems
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -78,29 +79,33 @@ def _atom_satisfied(atom, mask, margins):
 
 
 def test_3_7a_scenario_count():
-    """3-7A produces exactly 17 distinct complete seeding scenarios."""
+    """3-7A lists 6 scenarios: one per set of winners that decides the seeding.
+
+    With Brandon, Pearl and Northwest Rankin all winning, five teams tie and their order has 12
+    possible top-4 finishes, more than are listed one by one, so that's a single scenario leaving
+    the tie to the tiebreaker.
+    """
     scenarios = enumerate_division_scenarios(
         teams_3_7a,
         expected_3_7a_completed_games,
         _REMAINING,
         scenario_atoms=expected_3_7a_scenarios,
     )
-    assert len(scenarios) == 17
+    assert len(scenarios) == 6
 
 
-def test_3_7a_margin_sensitive_group_labeled():
-    """The margin-sensitive mask produces sub-scenarios labeled 4a through 4l."""
+def test_3_7a_five_way_tie_left_to_the_tiebreaker():
+    """The five-way tie is one scenario naming the tie, with no order or margins made up for it."""
     scenarios = enumerate_division_scenarios(
         teams_3_7a,
         expected_3_7a_completed_games,
         _REMAINING,
         scenario_atoms=expected_3_7a_scenarios,
     )
-    sub_scenarios = [sc for sc in scenarios if sc["sub_label"]]
-    assert len(sub_scenarios) == 12
-    assert all(sc["scenario_num"] == 4 for sc in sub_scenarios)
-    labels = sorted(sc["sub_label"] for sc in sub_scenarios)
-    assert labels == list("abcdefghijkl")
+    assert not [sc for sc in scenarios if sc["sub_label"]]
+    sc4 = next(sc for sc in scenarios if sc["scenario_num"] == 4)
+    assert sc4["open_groups"] == [(3, ("Brandon", "Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
+    assert sc4["conditions_atom"] is None
 
 
 def test_3_7a_grouped_scenarios_omit_irrelevant_game():
@@ -155,31 +160,15 @@ def test_3_7a_deterministic_scenarios_correct_seedings():
 
 
 def test_3_7a_every_outcome_covered_by_exactly_one_scenario():
-    """Every (mask, margin) combination is covered by the seeding of exactly one scenario."""
+    """Every (mask, margin) combination matches a scenario, and every scenario it matches agrees."""
     scenarios = enumerate_division_scenarios(
         teams_3_7a,
         expected_3_7a_completed_games,
         _REMAINING,
         scenario_atoms=expected_3_7a_scenarios,
     )
-    seeding_map = {sc["seeding"]: sc for sc in scenarios}
-
-    failures = []
-    for mask, margins in _all_outcome_branches():
-        order = resolve_standings_for_mask(
-            teams_3_7a,
-            expected_3_7a_completed_games,
-            _REMAINING,
-            mask,
-            margins,
-            _BASE_MARGIN_DEFAULT,
-            _PA_WIN,
-        )
-        seeding = tuple(order)
-        if seeding not in seeding_map:
-            failures.append(f"mask={mask} margins={margins}: seeding {seeding} not in scenarios")
-
-    assert not failures, f"{len(failures)} uncovered outcomes:\n" + "\n".join(failures[:5])
+    report = coverage_problems(teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenarios)
+    assert report.ok, report.summary(_REMAINING)
 
 
 def test_3_7a_conditions_match_seedings():
@@ -262,7 +251,7 @@ def test_full_season_render_contains_no_remaining():
 
 
 def test_render_contains_all_scenario_labels():
-    """Rendered output contains all 17 scenario labels."""
+    """Rendered output contains all 6 scenario labels, and no sub-scenarios."""
     output = render_division_scenarios(
         teams_3_7a,
         expected_3_7a_completed_games,
@@ -270,9 +259,8 @@ def test_render_contains_all_scenario_labels():
         scenario_atoms=expected_3_7a_scenarios,
     )
     for n in range(1, 7):
-        assert f"Scenario {n}" in output
-    for letter in "abcdefghijkl":
-        assert f"Scenario 4{letter}:" in output
+        assert f"Scenario {n}:" in output
+    assert "Scenario 4a" not in output
 
 
 def test_render_eliminated_teams_shown():
@@ -291,18 +279,15 @@ def test_render_eliminated_teams_shown():
 
 
 def test_render_without_explicit_atoms_auto_computes():
-    """Without explicit scenario_atoms, enumerate_division_scenarios auto-builds atoms for
-    margin-sensitive scenarios so conditions_atom is populated and margin text appears."""
+    """Without explicit scenario_atoms the scenarios are the same: they don't depend on atoms."""
     output = render_division_scenarios(
         teams_3_7a,
         expected_3_7a_completed_games,
         _REMAINING,
         scenario_atoms=None,
     )
-    # Should still have 17 scenarios (Scenario 1–6 with 4a–4l for the margin-sensitive mask)
-    assert output.count("Scenario 4") == 12  # exactly 4a through 4l
-    # Margin condition text IS present — atoms are auto-computed even without explicit atoms arg
-    assert "or more" in output
+    assert output.count("Scenario 4") == 1
+    assert "order decided by the tiebreaker" in output
 
 
 # ---------------------------------------------------------------------------
@@ -356,80 +341,6 @@ def test_margin_condition_satisfied_by_eq_op():
 # ---------------------------------------------------------------------------
 
 
-def test_4c_has_exact_sum_condition():
-    """Scenario 4c's atom includes a 'combined total exactly 10' condition.
-
-    After ascending-margin sort, the p∈[1,5], n∈[5,9], p+n=10 scenario is 4c
-    (sort key (1,5) — third-smallest minimum margin pair).
-    """
-    scenarios = enumerate_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games,
-        _REMAINING,
-        scenario_atoms=expected_3_7a_scenarios,
-    )
-    sc_4c = next(sc for sc in scenarios if sc["scenario_num"] == 4 and sc["sub_label"] == "c")
-    assert sc_4c is not None
-    atom = sc_4c["conditions_atom"]
-    eq_conds = [c for c in atom if isinstance(c, MarginCondition) and c.op == "=="]
-    assert len(eq_conds) >= 1
-    assert any(c.threshold == 10 for c in eq_conds)
-
-
-def test_4e_has_exact_diff_condition():
-    """Scenario 4e's atom includes a 'diff exactly 2' condition (Pearl exceeds NWR by exactly 2).
-
-    After ascending-margin sort, the p∈[3,5], n∈[1,3], p–n=2 scenario is 4e
-    (sort key (3,1) — fifth-smallest minimum margin pair).
-    """
-    scenarios = enumerate_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games,
-        _REMAINING,
-        scenario_atoms=expected_3_7a_scenarios,
-    )
-    sc_4e = next(sc for sc in scenarios if sc["scenario_num"] == 4 and sc["sub_label"] == "e")
-    assert sc_4e is not None
-    atom = sc_4e["conditions_atom"]
-    eq_conds = [c for c in atom if isinstance(c, MarginCondition) and c.op == "=="]
-    assert len(eq_conds) >= 1
-    # diff == -2 means NWR_margin - Pearl_margin == -2, i.e. Pearl exceeds NWR by exactly 2
-    assert any(c.threshold == -2 and len(c.add) == 1 and len(c.sub) == 1 for c in eq_conds)
-
-
-def test_4h_has_exact_diff_condition():
-    """Scenario 4h's atom includes a 'diff exactly 2' condition (Pearl exceeds NWR by exactly 2).
-
-    After ascending-margin sort, the p≥6, n∈[4,10], p–n=2 scenario is 4h
-    (sort key (6,4) — eighth-smallest minimum margin pair).
-    Uses build_scenario_atoms (algorithmic) because the hand-crafted fixture encodes the
-    n=4, p=6 boundary as exact GameResult bounds with no MarginCondition.
-    """
-    scenarios = _SCENARIOS_3_7A
-    sc_4h = next(sc for sc in scenarios if sc["scenario_num"] == 4 and sc["sub_label"] == "h")
-    atom = sc_4h["conditions_atom"]
-    eq_conds = [c for c in atom if isinstance(c, MarginCondition) and c.op == "=="]
-    assert len(eq_conds) >= 1
-    # Either add=Pearl/sub=NWR with threshold=2 or add=NWR/sub=Pearl with threshold=-2 —
-    # both encode "Pearl's margin exceeds NWR's by exactly 2"
-    assert any(abs(c.threshold) == 2 and len(c.add) == 1 and len(c.sub) == 1 for c in eq_conds)
-
-
-def test_4j_has_exact_sum_condition():
-    """Scenario 4j's atom includes a 'combined total exactly 10' condition.
-
-    After ascending-margin sort, the p∈[7,9], n∈[1,3], p+n=10 scenario is 4j
-    (sort key (7,1) — tenth-smallest minimum margin pair).
-    Uses build_scenario_atoms (algorithmic) for the same reason as test_4h above.
-    """
-    scenarios = _SCENARIOS_3_7A
-    sc_4j = next(sc for sc in scenarios if sc["scenario_num"] == 4 and sc["sub_label"] == "j")
-    atom = sc_4j["conditions_atom"]
-    eq_conds = [c for c in atom if isinstance(c, MarginCondition) and c.op == "=="]
-    assert len(eq_conds) >= 1
-    assert any(c.threshold == 10 for c in eq_conds)
-
-
 # ---------------------------------------------------------------------------
 # Full render snapshot — 3-7A division scenarios (algorithmic atoms)
 # ---------------------------------------------------------------------------
@@ -440,14 +351,14 @@ Scenario 1: Pearl beats Oak Grove AND Petal beats Northwest Rankin
 2. Pearl
 3. Oak Grove
 4. Brandon
-Eliminated: Northwest Rankin, Meridian
+Eliminated: Meridian, Northwest Rankin
 
 Scenario 2: Oak Grove beats Pearl AND Petal beats Northwest Rankin
 1. Petal
 2. Oak Grove
 3. Brandon
 4. Northwest Rankin
-Eliminated: Pearl, Meridian
+Eliminated: Meridian, Pearl
 
 Scenario 3: Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 1. Northwest Rankin
@@ -456,103 +367,23 @@ Scenario 3: Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Ranki
 4. Oak Grove
 Eliminated: Brandon, Meridian
 
-Scenario 4a: Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-1. Oak Grove
-2. Petal
-3. Northwest Rankin
-4. Pearl
-Eliminated: Brandon, Meridian
-
-Scenario 4b: Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-1. Oak Grove
-2. Northwest Rankin
-3. Petal
-4. Pearl
-Eliminated: Brandon, Meridian
-
-Scenario 4c: Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-1. Oak Grove
-2. Northwest Rankin
-3. Pearl
-4. Petal
-Eliminated: Brandon, Meridian
-
-Scenario 4d: Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-1. Northwest Rankin
-2. Oak Grove
-3. Pearl
-4. Petal
-Eliminated: Brandon, Meridian
-
-Scenario 4e: Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-1. Petal
-2. Oak Grove
-3. Northwest Rankin
-4. Pearl
-Eliminated: Brandon, Meridian
-
-Scenario 4f: Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-1. Petal
-2. Oak Grove
-3. Pearl
-4. Northwest Rankin
-Eliminated: Brandon, Meridian
-
-Scenario 4g: Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-1. Petal
-2. Pearl
-3. Oak Grove
-4. Northwest Rankin
-Eliminated: Brandon, Meridian
-
-Scenario 4h: Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-1. Northwest Rankin
-2. Pearl
-3. Petal
-4. Oak Grove
-Eliminated: Brandon, Meridian
-
-Scenario 4i: Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-1. Northwest Rankin
-2. Pearl
-3. Oak Grove
-4. Petal
-Eliminated: Brandon, Meridian
-
-Scenario 4j: Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-1. Pearl
-2. Petal
-3. Oak Grove
-4. Northwest Rankin
-Eliminated: Brandon, Meridian
-
-Scenario 4k: Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-1. Pearl
-2. Northwest Rankin
-3. Petal
-4. Oak Grove
-Eliminated: Brandon, Meridian
-
-Scenario 4l: Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-1. Pearl
-2. Petal
-3. Northwest Rankin
-4. Oak Grove
-Eliminated: Brandon, Meridian
+Scenario 4: Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
+1-4. Four of Brandon, Northwest Rankin, Oak Grove, Pearl, and Petal: order decided by the tiebreaker (point differential, then fewest points allowed)
+Eliminated: Meridian, the rest of that tie
 
 Scenario 5: Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 1. Oak Grove
 2. Northwest Rankin
 3. Petal
 4. Brandon
-Eliminated: Pearl, Meridian
+Eliminated: Meridian, Pearl
 
 Scenario 6: Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 1. Oak Grove
 2. Petal
 3. Brandon
 4. Northwest Rankin
-Eliminated: Pearl, Meridian"""
+Eliminated: Meridian, Pearl"""
 
 
 def test_render_division_scenarios_full_output():
@@ -589,15 +420,16 @@ class TestBuildScenarioAtoms37A:
         """Return enumerate_division_scenarios output built from algorithmic atoms."""
         return _SCENARIOS_3_7A
 
-    def test_produces_17_scenarios(self):
-        """build_scenario_atoms atoms yield exactly 17 distinct scenarios."""
-        assert len(self._scenarios()) == 17
+    def test_produces_6_scenarios(self):
+        """build_scenario_atoms atoms yield the same 6 scenarios (scenarios don't depend on atoms)."""
+        assert len(self._scenarios()) == 6
 
-    def test_sub_scenarios_labeled_4a_through_4l(self):
-        """Margin-sensitive group produces sub-scenarios 4a–4l."""
-        subs = [sc for sc in self._scenarios() if sc["sub_label"]]
-        assert len(subs) == 12
-        assert sorted(sc["sub_label"] for sc in subs) == list("abcdefghijkl")
+    def test_five_way_tie_is_one_scenario(self):
+        """The five-way tie is left to the tiebreaker rather than split into sub-scenarios."""
+        assert not [sc for sc in self._scenarios() if sc["sub_label"]]
+        assert [sc["open_groups"] for sc in self._scenarios() if sc["scenario_num"] == 4] == [
+            [(3, ("Brandon", "Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
+        ]
 
     def test_render_uses_range_descriptions_not_exact_values(self):
         """Rendered output uses range-based wording, not per-game point samples.
@@ -622,10 +454,10 @@ class TestBuildScenarioAtoms37A:
                     )
 
     def test_render_contains_joint_constraints(self):
-        """Rendered output for mask=5 sub-scenarios includes joint margin constraint phrases."""
+        """The five-way tie renders as left to the tiebreaker, not as margin arithmetic."""
         output = render_scenarios(self._scenarios())
-        # The 3-7A mask=5 sub-scenarios all involve sum or diff constraints
-        assert "combined total" in output or "margin exceeds" in output or "margin equals" in output
+        assert "order decided by the tiebreaker (point differential, then fewest points allowed)" in output
+        assert "combined total" not in output and "margin exceeds" not in output
 
     def test_render_scenario_1_correct(self):
         """Scenario 1 is deterministic: Pearl wins, Petal wins, Brandon game irrelevant."""
@@ -650,23 +482,9 @@ class TestBuildScenarioAtoms37A:
         assert "1. Oak Grove" in lines[sc6_idx + 1]
 
     def test_backward_coverage_with_built_atoms(self):
-        """Every (mask, margin) combo is covered by some scenario when using built atoms."""
-        scenarios = self._scenarios()
-        seeding_map = {sc["seeding"]: sc for sc in scenarios}
-        failures = []
-        for mask, margins in _all_outcome_branches():
-            order = resolve_standings_for_mask(
-                teams_3_7a,
-                expected_3_7a_completed_games,
-                _REMAINING,
-                mask,
-                margins,
-                _BASE_MARGIN_DEFAULT,
-                _PA_WIN,
-            )
-            if tuple(order) not in seeding_map:
-                failures.append(f"mask={mask} margins={margins}: {tuple(order)} not found")
-        assert not failures, f"{len(failures)} uncovered outcomes:\n" + "\n".join(failures[:3])
+        """Every (mask, margin) combo is covered, and correctly, when using built atoms."""
+        report = coverage_problems(teams_3_7a, expected_3_7a_completed_games, _REMAINING, self._scenarios())
+        assert report.ok, report.summary(_REMAINING)
 
     def test_nwr_petal_game_range_not_all_exact(self):
         """The NWR/Petal game in mask=5 sub-scenarios uses ranges, not point samples."""
@@ -1589,24 +1407,12 @@ class TestEnumerateDivisionScenariosNoAtoms:
     """Line 1640→1649: passing scenario_atoms={} leaves conditions_atom as None."""
 
     def test_empty_scenario_atoms_dict_leaves_conditions_atom_none(self):
-        """When scenario_atoms is an empty dict (falsy), the margin-sensitive
-        sub-scenario path at line 1640 takes the False branch, leaving
-        conditions_atom=None for all sub-scenarios."""
-        # Use the 3-7A fixture which has margin-sensitive scenarios.
-        scenarios = enumerate_division_scenarios(
-            teams_3_7a,
-            expected_3_7a_completed_games,
-            _REMAINING,
-            scenario_atoms={},  # explicitly empty — falsy, bypasses auto-build
+        """scenario_atoms doesn't change the scenarios: an empty dict gives the same list as built atoms."""
+        with_atoms = enumerate_division_scenarios(
+            teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms=expected_3_7a_scenarios
         )
-
-        ms_scenarios = [sc for sc in scenarios if sc["sub_label"] != ""]
-        assert len(ms_scenarios) > 0, "Need at least one margin-sensitive sub-scenario"
-
-        for sc in ms_scenarios:
-            assert sc["conditions_atom"] is None, (
-                f"Scenario {sc['scenario_num']}{sc['sub_label']}: expected None but got {sc['conditions_atom']}"
-            )
+        empty = enumerate_division_scenarios(teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms={})
+        assert empty == with_atoms
 
 
 # ---------------------------------------------------------------------------
@@ -1732,18 +1538,15 @@ _SCENARIOS_PC = enumerate_division_scenarios(teams_3_7a, _COMPLETED_PC, _REMAINI
 
 
 def test_partial_a_scenario_count():
-    """Partial A (Brandon/Meridian known) produces 15 distinct scenarios."""
-    assert len(_SCENARIOS_PA) == 15
+    """Partial A (Brandon/Meridian known) produces 4 scenarios, one per set of winners."""
+    assert len(_SCENARIOS_PA) == 4
 
 
 def test_partial_a_scenario_labels():
-    """Partial A has 12 sub-labeled scenarios (3a–3l) and 3 unlabeled (1, 2, 4)."""
-    labeled = [sc for sc in _SCENARIOS_PA if sc["sub_label"]]
-    unlabeled = [sc for sc in _SCENARIOS_PA if not sc["sub_label"]]
-    assert len(labeled) == 12
-    assert all(sc["scenario_num"] == 3 for sc in labeled)
-    assert sorted(sc["sub_label"] for sc in labeled) == list("abcdefghijkl")
-    assert {sc["scenario_num"] for sc in unlabeled} == {1, 2, 4}
+    """Partial A's five-way tie (Pearl and NWR win) has too many finishes to list: scenario 3 leaves it open."""
+    assert not [sc for sc in _SCENARIOS_PA if sc["sub_label"]]
+    sc3 = next(sc for sc in _SCENARIOS_PA if sc["scenario_num"] == 3)
+    assert sc3["open_groups"] == [(3, ("Brandon", "Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
 
 
 def test_partial_a_deterministic_seedings():
@@ -1755,24 +1558,9 @@ def test_partial_a_deterministic_seedings():
 
 
 def test_partial_a_backward_coverage():
-    """Every (mask, margins) over 2 remaining games is covered by some Partial A scenario seeding."""
-    seeding_map = {sc["seeding"] for sc in _SCENARIOS_PA}
-    failures = []
-    for mask in range(1 << 2):
-        for m0, m1 in product(range(1, 13), repeat=2):
-            margins = {_PAIRS_PA[0]: m0, _PAIRS_PA[1]: m1}
-            order = resolve_standings_for_mask(
-                teams_3_7a,
-                _COMPLETED_PA,
-                _REMAINING_PA,
-                mask,
-                margins,
-                _BASE_MARGIN_DEFAULT,
-                _PA_WIN,
-            )
-            if tuple(order) not in seeding_map:
-                failures.append(f"mask={mask} margins={margins}: {tuple(order)} not in scenarios")
-    assert not failures, f"{len(failures)} uncovered:\n" + "\n".join(failures[:3])
+    """Every (mask, margins) is covered by a scenario, and every scenario covering it agrees."""
+    report = coverage_problems(teams_3_7a, _COMPLETED_PA, _REMAINING_PA, _SCENARIOS_PA)
+    assert report.ok, report.summary(_REMAINING_PA)
 
 
 def test_partial_a_soundness():
@@ -1847,24 +1635,9 @@ def test_partial_b_no_margin_conditions():
 
 
 def test_partial_b_backward_coverage():
-    """Every (mask, margin) with 1 remaining NWR/Petal game maps to a Partial B scenario seeding."""
-    seeding_map = {sc["seeding"] for sc in _SCENARIOS_PB}
-    failures = []
-    for mask in range(1 << 1):
-        for m in range(1, 13):
-            margins = {_PAIRS_PB[0]: m}
-            order = resolve_standings_for_mask(
-                teams_3_7a,
-                _COMPLETED_PB,
-                _REMAINING_PB,
-                mask,
-                margins,
-                _BASE_MARGIN_DEFAULT,
-                _PA_WIN,
-            )
-            if tuple(order) not in seeding_map:
-                failures.append(f"mask={mask} margin={m}: {tuple(order)} not in scenarios")
-    assert not failures, f"{len(failures)} uncovered:\n" + "\n".join(failures)
+    """Every (mask, margins) is covered by a scenario, and every scenario covering it agrees."""
+    report = coverage_problems(teams_3_7a, _COMPLETED_PB, _REMAINING_PB, _SCENARIOS_PB)
+    assert report.ok, report.summary(_REMAINING_PB)
 
 
 # ---------------------------------------------------------------------------
@@ -1896,24 +1669,9 @@ def test_partial_c_deterministic_seeding():
 
 
 def test_partial_c_backward_coverage():
-    """Every (mask, margin) with 1 remaining OG/Pearl game maps to a Partial C scenario seeding."""
-    seeding_map = {sc["seeding"] for sc in _SCENARIOS_PC}
-    failures = []
-    for mask in range(1 << 1):
-        for m in range(1, 13):
-            margins = {_PAIRS_PC[0]: m}
-            order = resolve_standings_for_mask(
-                teams_3_7a,
-                _COMPLETED_PC,
-                _REMAINING_PC,
-                mask,
-                margins,
-                _BASE_MARGIN_DEFAULT,
-                _PA_WIN,
-            )
-            if tuple(order) not in seeding_map:
-                failures.append(f"mask={mask} margin={m}: {tuple(order)} not in scenarios")
-    assert not failures, f"{len(failures)} uncovered:\n" + "\n".join(failures)
+    """Every (mask, margins) is covered by a scenario, and every scenario covering it agrees."""
+    report = coverage_problems(teams_3_7a, _COMPLETED_PC, _REMAINING_PC, _SCENARIOS_PC)
+    assert report.ok, report.summary(_REMAINING_PC)
 
 
 def test_partial_c_soundness():
@@ -1966,105 +1724,25 @@ Scenario 1: Pearl beats Oak Grove AND Petal beats Northwest Rankin
 2. Pearl
 3. Oak Grove
 4. Brandon
-Eliminated: Northwest Rankin, Meridian
+Eliminated: Meridian, Northwest Rankin
 
 Scenario 2: Oak Grove beats Pearl AND Petal beats Northwest Rankin
 1. Petal
 2. Oak Grove
 3. Brandon
 4. Northwest Rankin
-Eliminated: Pearl, Meridian
+Eliminated: Meridian, Pearl
 
-Scenario 3a: Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-1. Oak Grove
-2. Petal
-3. Northwest Rankin
-4. Pearl
-Eliminated: Brandon, Meridian
-
-Scenario 3b: Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-1. Oak Grove
-2. Northwest Rankin
-3. Petal
-4. Pearl
-Eliminated: Brandon, Meridian
-
-Scenario 3c: Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-1. Oak Grove
-2. Northwest Rankin
-3. Pearl
-4. Petal
-Eliminated: Brandon, Meridian
-
-Scenario 3d: Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-1. Northwest Rankin
-2. Oak Grove
-3. Pearl
-4. Petal
-Eliminated: Brandon, Meridian
-
-Scenario 3e: Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-1. Petal
-2. Oak Grove
-3. Northwest Rankin
-4. Pearl
-Eliminated: Brandon, Meridian
-
-Scenario 3f: Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-1. Petal
-2. Oak Grove
-3. Pearl
-4. Northwest Rankin
-Eliminated: Brandon, Meridian
-
-Scenario 3g: Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-1. Petal
-2. Pearl
-3. Oak Grove
-4. Northwest Rankin
-Eliminated: Brandon, Meridian
-
-Scenario 3h: Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-1. Northwest Rankin
-2. Pearl
-3. Petal
-4. Oak Grove
-Eliminated: Brandon, Meridian
-
-Scenario 3i: Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-1. Northwest Rankin
-2. Pearl
-3. Oak Grove
-4. Petal
-Eliminated: Brandon, Meridian
-
-Scenario 3j: Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-1. Pearl
-2. Petal
-3. Oak Grove
-4. Northwest Rankin
-Eliminated: Brandon, Meridian
-
-Scenario 3k: Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-1. Pearl
-2. Northwest Rankin
-3. Petal
-4. Oak Grove
-Eliminated: Brandon, Meridian
-
-Scenario 3l: Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-1. Pearl
-2. Petal
-3. Northwest Rankin
-4. Oak Grove
-Eliminated: Brandon, Meridian
+Scenario 3: Pearl beats Oak Grove AND Northwest Rankin beats Petal
+1-4. Four of Brandon, Northwest Rankin, Oak Grove, Pearl, and Petal: order decided by the tiebreaker (point differential, then fewest points allowed)
+Eliminated: Meridian, the rest of that tie
 
 Scenario 4: Oak Grove beats Pearl AND Northwest Rankin beats Petal
 1. Oak Grove
 2. Petal
 3. Brandon
 4. Northwest Rankin
-Eliminated: Pearl, Meridian"""
+Eliminated: Meridian, Pearl"""
 
 
 def test_partial_a_render_full_output():
@@ -2084,14 +1762,14 @@ Scenario 1: Petal beats Northwest Rankin
 2. Oak Grove
 3. Brandon
 4. Northwest Rankin
-Eliminated: Pearl, Meridian
+Eliminated: Meridian, Pearl
 
 Scenario 2: Northwest Rankin beats Petal
 1. Oak Grove
 2. Petal
 3. Brandon
 4. Northwest Rankin
-Eliminated: Pearl, Meridian"""
+Eliminated: Meridian, Pearl"""
 
 
 def test_partial_b_render_full_output():
@@ -2106,7 +1784,7 @@ def test_partial_b_render_full_output():
 
 
 _EXPECTED_PARTIAL_C_RENDER = """\
-Scenario 1a: Pearl beats Oak Grove by 1\u20133
+Scenario 1a: Pearl beats Oak Grove by 1–3
 1. Oak Grove
 2. Northwest Rankin
 3. Petal
@@ -2127,7 +1805,7 @@ Scenario 1c: Pearl beats Oak Grove by exactly 5
 4. Petal
 Eliminated: Brandon, Meridian
 
-Scenario 1d: Pearl beats Oak Grove by 6\u20137
+Scenario 1d: Pearl beats Oak Grove by 6–7
 1. Northwest Rankin
 2. Pearl
 3. Oak Grove
@@ -2153,7 +1831,7 @@ Scenario 2: Oak Grove beats Pearl
 2. Petal
 3. Brandon
 4. Northwest Rankin
-Eliminated: Pearl, Meridian"""
+Eliminated: Meridian, Pearl"""
 
 
 def test_partial_c_render_full_output():
@@ -2165,83 +1843,6 @@ def test_partial_c_render_full_output():
     assert result == _EXPECTED_PARTIAL_C_RENDER, (
         f"\n--- EXPECTED ---\n{_EXPECTED_PARTIAL_C_RENDER}\n--- ACTUAL ---\n{result}"
     )
-
-
-def test_partial_c_consistent_with_partial_a():
-    """With NWR/Petal fixed at n=6, each Partial C scenario maps to the expected Partial A scenario.
-
-    Correspondence (NWR wins by 6), using new ascending-margin sub-labels:
-      PC 1a (p=1)  → PA 3b  (p∈[1,5], n∈[4,8], p+n≤9  → 1+6=7 ✓)
-      PC 1b (p=4)  → PA 3c  (p∈[1,5], n∈[5,9], p+n=10 → 4+6=10 ✓)
-      PC 1c (p=5)  → PA 3d  (p∈[1,5], n≥6, p+n≥11     → 5+6=11 ✓)
-      PC 1d (p=6)  → PA 3i  (p≥6, n≥5, p–n≤1)
-      PC 1e (p=8)  → PA 3h  (p≥6, n∈[4,10], p–n=2     → 8–6=2 ✓)
-      PC 1f (p=9)  → PA 3k  (p≥7, n∈[4,9], p–n≥3      → 9–6=3 ✓)
-      PC 2         → PA 4   (OG wins, NWR wins)
-    """
-    pa_seeding_to_label = {sc["seeding"]: f"{sc['scenario_num']}{sc['sub_label']}" for sc in _SCENARIOS_PA}
-
-    # (pc_key, sample_p for Pearl-wins cases or None for OG-wins, expected_pa_label)
-    cases = [
-        ("1a", 1, "3b"),
-        ("1b", 4, "3c"),
-        ("1c", 5, "3d"),
-        ("1d", 6, "3i"),
-        ("1e", 8, "3h"),
-        ("1f", 9, "3k"),
-        ("2", None, "4"),
-    ]
-
-    # _REMAINING_PA: index 0 = OG/Pearl (bit 0=1 → OG wins), index 1 = NWR/Petal (bit 1=1 → NWR wins)
-    _og_pearl = _PAIRS_PA[0]
-    _nwr_petal = _PAIRS_PA[1]
-    _n = 6  # NWR beats Petal by 6
-
-    failures = []
-    for pc_key, p, expected_pa in cases:
-        if p is None:  # OG wins the Pearl game
-            mask_pc = 1  # bit 0=1 → OG wins
-            mask_pa = 0b11  # bit 0=OG wins, bit 1=NWR wins
-            margins_pc = {_PAIRS_PC[0]: 7}
-            margins_pa = {_og_pearl: 7, _nwr_petal: _n}
-        else:  # Pearl wins the OG game
-            mask_pc = 0  # bit 0=0 → Pearl wins
-            mask_pa = 0b10  # bit 0=Pearl wins, bit 1=NWR wins
-            margins_pc = {_PAIRS_PC[0]: p}
-            margins_pa = {_og_pearl: p, _nwr_petal: _n}
-
-        seeding_pc = tuple(
-            resolve_standings_for_mask(
-                teams_3_7a,
-                _COMPLETED_PC,
-                _REMAINING_PC,
-                mask_pc,
-                margins_pc,
-                _BASE_MARGIN_DEFAULT,
-                _PA_WIN,
-            )
-        )
-        seeding_pa = tuple(
-            resolve_standings_for_mask(
-                teams_3_7a,
-                _COMPLETED_PA,
-                _REMAINING_PA,
-                mask_pa,
-                margins_pa,
-                _BASE_MARGIN_DEFAULT,
-                _PA_WIN,
-            )
-        )
-
-        if seeding_pc != seeding_pa:
-            failures.append(f"PC {pc_key} (p={p}, n={_n}): seedings differ — PC={seeding_pc}, PA={seeding_pa}")
-            continue
-
-        actual_pa = pa_seeding_to_label.get(seeding_pa, "?")
-        if actual_pa != expected_pa:
-            failures.append(f"PC {pc_key} (p={p}, n={_n}): PA scenario is {actual_pa}, expected {expected_pa}")
-
-    assert not failures, "\n".join(failures)
 
 
 # ---------------------------------------------------------------------------
@@ -2672,43 +2273,29 @@ class TestRenderScenariosEdgeCases:
         }
 
     def test_tie_group_spanning_playoff_boundary_falls_through(self):
-        """A tiebreaker group crossing the playoff boundary is not collapsed.
+        """A tie straddling the playoff cutoff is shown as one place shared, not as an order.
 
-        Group [D, E] sits at positions 3 and 4 (0-indexed). With playoff_seeds=4,
-        position 4 is outside the playoff cutoff, so all(p < 4) is False and the
-        group is not added to tb_pos — normal individual rendering applies to
-        positions 0-3.
+        Group [D, E] sits at positions 3 and 4 (0-indexed); with playoff_seeds=4 one of them is 4th
+        and the other is out, and which one isn't stated.
         """
         sc = self._sc(
             seeding=["A", "B", "C", "D", "E"],
             tiebreaker_groups=[["D", "E"]],
         )
         rendered = render_scenarios([sc], playoff_seeds=4)
-        assert "Tie between" not in rendered
-        assert "4. D" in rendered
+        assert "4. D or E: order decided by the tiebreaker" in rendered
+        assert "Eliminated: the rest of that tie" in rendered
 
     def test_overlapping_groups_hit_interior_continue(self):
-        """Overlapping tiebreaker+coinflip groups overwrite tb_pos so that an
-        interior position is encountered, triggering the i += 1 path.
-
-        tiebreaker_groups=[["A","B"]] → tb_pos = {0:(0,[A,B],...), 1:(0,[A,B],...)}
-        coinflip_groups=[["B","C"]]  → overwrites tb_pos[1] with (1,[B,C],...),
-                                       adds tb_pos[2] = (1,[B,C],...)
-
-        Loop: i=0 renders "1-2. Tie A and B" → jumps to i=2.
-              i=2: tb_pos[2] but group_start=1 ≠ i=2 → interior continue → i=3.
-              i=3: normal "4. D".
-        """
+        """Overlapping stored groups: the first claims its places and the rest render normally."""
         sc = self._sc(
             seeding=["A", "B", "C", "D"],
             tiebreaker_groups=[["A", "B"]],
             coinflip_groups=[["B", "C"]],
         )
         rendered = render_scenarios([sc], playoff_seeds=4)
-        assert "1-2. Tie between A and B" in rendered
+        assert "1-2. A and B: order decided by the tiebreaker" in rendered
         assert "4. D" in rendered
-        # position 3 (C) is skipped by the interior continue — no "3. C" line
-        assert "3. C" not in rendered
 
 
 # ---------------------------------------------------------------------------
