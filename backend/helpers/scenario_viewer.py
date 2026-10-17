@@ -1934,11 +1934,13 @@ def enumerate_division_scenarios(
             blocks = _margin_blocks(region, _MAX_MARGIN_BLOCKS)
             if blocks is not None:
                 for box in blocks:
-                    ranges = [
+                    # Only the games the outcome needs a margin for; the rest are plain wins.
+                    ranges = tuple(
                         GameResult(w, l, lo, None if hi == _MARGIN_RANGE[-1] else hi + 1)
                         for (w, l), (lo, hi) in zip(winners, box, strict=True)
-                    ]
-                    listed.append((tuple(ranges), open_groups, seeding, tuple(lo for lo, _ in box)))
+                        if (lo, hi) != (_MARGIN_RANGE[0], _MARGIN_RANGE[-1])
+                    )
+                    listed.append((ranges, open_groups, seeding, tuple(lo for lo, _ in box)))
             else:
                 for term in terms[outcome]:
                     stated = tuple(sorted(term, key=lambda d: (d.step, d.group)))
@@ -1955,9 +1957,15 @@ def enumerate_division_scenarios(
     for (seeding, open_groups), masks in by_outcome.items():
         for group in _valid_merge_groups(masks):
             entries.append((min(group), "single", seeding, open_groups, _common_game_winners(group, remaining)))
+    # Winner sets listing the very same outcomes under the very same conditions merge too: a game
+    # that differs between them has no condition on it (one would name its winner), so it doesn't matter.
+    by_listing: dict[tuple, list[int]] = defaultdict(list)
     for mask, outs in outcomes.items():
         if len(outs) > 1:
-            entries.append((mask, "multi", None, None, outs))
+            by_listing[frozenset((st, o, sd) for st, o, sd, _ in outs)].append(mask)
+    for masks in by_listing.values():
+        for group in _valid_merge_groups(masks):
+            entries.append((min(group), "multi", None, _common_game_winners(group, remaining), outcomes[min(group)]))
     entries.sort(key=lambda e: e[0])
 
     def scenario(num, sub, winners, atom, open_groups, seeding):
@@ -1977,12 +1985,13 @@ def enumerate_division_scenarios(
         if kind == "single":
             scenarios.append(scenario(num, "", data, None, open_groups, seeding))
             continue
-        winners = _game_winners_for_mask(mask, remaining)
-        base = [GameResult(w, l, 1, None) for w, l in winners]
-        for k, (stated, open_groups, seeding, _) in enumerate(sorted(data, key=lambda o: (o[3], len(o[0])))):
-            # Margin ranges stand in for the plain winners; decisions add to them.
-            atom = list(stated) if stated and isinstance(stated[0], GameResult) else base + list(stated)
-            scenarios.append(scenario(num, _sub_label(k), winners, atom, open_groups, seeding))
+        winners = open_groups  # for "multi" entries this slot carries the merged group's winners
+        for k, (stated, groups, seeding, _) in enumerate(sorted(data, key=lambda o: (o[3], len(o[0])))):
+            # Every deciding game, with its margin range where the outcome needs one, then any decisions.
+            ranged = {(c.winner, c.loser): c for c in stated if isinstance(c, GameResult)}
+            atom = [ranged.get((w, l), GameResult(w, l, 1, None)) for w, l in winners]
+            atom += [c for c in stated if not isinstance(c, GameResult)]
+            scenarios.append(scenario(num, _sub_label(k), winners, atom, groups, seeding))
     return scenarios
 
 
