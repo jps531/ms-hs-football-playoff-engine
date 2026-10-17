@@ -478,7 +478,9 @@ def build_host_conditions(
     contract) — see ``expand_and_render_conditions`` for the shared expansion
     logic. Returns ``[]`` when the team never hosts this round.
     """
-    return expand_and_render_conditions(team, [list(sc.conditions) for sc in round_scenarios.will_host], seed_atoms, game_dates)
+    return expand_and_render_conditions(
+        team, [list(sc.conditions) for sc in round_scenarios.will_host], seed_atoms, game_dates
+    )
 
 
 def build_reach_conditions(
@@ -529,6 +531,8 @@ def division_scenarios_as_dict(
                 "three_seed": str,     # team finishing 3rd
                 "four_seed": str,      # team finishing 4th
                 "eliminated": list[str],   # teams outside the top seeds
+                "open_groups": list[list[str]],  # ties left to the tiebreaker: their
+                                                 # members' places above are alphabetical
             }
     """
     seed_fields = _SEED_FIELD_NAMES[:playoff_seeds]
@@ -536,7 +540,7 @@ def division_scenarios_as_dict(
     # Pass 1: build entries (deduplicating identical title+seeding), preserving
     # the original scenario_num grouping so sub-labels stay together.
     seen_display: set[tuple] = set()
-    deduped: list[tuple[int, str, str, tuple]] = []  # (orig_num, sub_label, title, seeding)
+    deduped: list[tuple[int, str, str, tuple, list]] = []  # (orig_num, sub_label, title, seeding, open groups)
     for sc in scenarios:
         title = render_scenario_title(sc)
         seeding = sc["seeding"]
@@ -544,14 +548,15 @@ def division_scenarios_as_dict(
         if display_key in seen_display:
             continue
         seen_display.add(display_key)
-        deduped.append((sc["scenario_num"], sc["sub_label"], title, seeding))
+        groups = [list(g) for _, g in sc.get("open_groups") or []]
+        deduped.append((sc["scenario_num"], sc["sub_label"], title, seeding, groups))
 
     # Pass 2: re-number sequentially so gaps left by dedup don't appear in keys.
     # Groups of sub-scenarios (same orig_num) get the same new number.
     result: dict[str, dict] = {}
     new_num = 0
     prev_orig_num: int | None = None
-    for orig_num, sub_label, title, seeding in deduped:
+    for orig_num, sub_label, title, seeding, groups in deduped:
         if orig_num != prev_orig_num:
             new_num += 1
             prev_orig_num = orig_num
@@ -560,6 +565,7 @@ def division_scenarios_as_dict(
         for i, field in enumerate(seed_fields):
             entry[field] = seeding[i] if i < len(seeding) else None
         entry["eliminated"] = list(seeding[playoff_seeds:])
+        entry["open_groups"] = groups  # teams whose order among their places isn't stated
         result[key] = entry
     return result
 

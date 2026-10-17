@@ -284,7 +284,7 @@ def test_div_dict_four_keys():
 
 def test_div_dict_entry_shape():
     """Each entry has exactly the required keys."""
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in _DIV_DICT.items():
         assert set(entry.keys()) == required, f"key {key!r} has unexpected shape"
 

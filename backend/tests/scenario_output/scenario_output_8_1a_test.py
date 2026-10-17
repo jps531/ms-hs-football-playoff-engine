@@ -294,7 +294,7 @@ def test_div_dict_keys():
 
 def test_div_dict_entry_shape():
     """Every entry has the required keys."""
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in _DIV_DICT.items():
         assert set(entry.keys()) == required, f"scenario {key!r} missing keys"
 
