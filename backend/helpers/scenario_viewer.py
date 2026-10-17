@@ -1897,10 +1897,13 @@ def enumerate_division_scenarios(
 
     # mask -> list of (stated, open_groups, seeding, first margin combination), one per outcome and term.
     outcomes: dict[int, list] = {}
+    # mask -> its outcome, or {margin combination: outcome} where margins matter (for dropping games below).
+    table: dict[int, object] = {}
     for mask in range(1 << R):
         stated, (seeding, open_groups) = run(mask, ref)
         if not stated or not exact:
             outcomes[mask] = [((), open_groups, seeding, None)]
+            table[mask] = (seeding, open_groups)
             continue
         signatures: dict = {}
         first: dict = {}
@@ -1913,6 +1916,7 @@ def enumerate_division_scenarios(
         if len(first) == 1:  # the decisions vary, but never the outcome
             (seeding, open_groups) = next(iter(first))
             outcomes[mask] = [((), open_groups, seeding, None)]
+            table[mask] = (seeding, open_groups)
             continue
         if len(first) > _MAX_LISTED_OUTCOMES:
             # Too many to list: leave each tie that reaches step 3 open. Which ties reach it doesn't
@@ -1924,7 +1928,9 @@ def enumerate_division_scenarios(
             _, open_groups = _decision_signature(decisions, 3, in_play)
             seeding, open_groups = _settle_open(order, open_groups, playoff_seeds)
             outcomes[mask] = [((), open_groups, seeding, None)]
+            table[mask] = (seeding, open_groups)
             continue
+        table[mask] = {combo: outcome for outcome, region in regions.items() for combo in region}
         # Each outcome in plain margin ranges when a couple of blocks say it; else by its decisions.
         winners = _game_winners_for_mask(mask, remaining)
         terms = _simplest_terms(signatures)
@@ -1947,11 +1953,50 @@ def enumerate_division_scenarios(
                     listed.append((stated, open_groups, seeding, first[outcome]))
         outcomes[mask] = listed
 
+    def holds_without(mask: int, ranges: tuple, outcome, games: frozenset) -> bool:
+        """True when the outcome holds at every margin *ranges* allow, whoever wins *games*."""
+        index = {frozenset(p): i for i, p in enumerate(pairs)}
+        box = [list(_MARGIN_RANGE) for _ in pairs]
+        for c in ranges:
+            hi = c.max_margin - 1 if c.max_margin is not None else _MARGIN_RANGE[-1]
+            box[index[frozenset((c.winner, c.loser))]] = list(range(c.min_margin, hi + 1))
+        flips = [i for i in range(R) if i in games]
+        for k in range(1, 1 << len(flips)):
+            other = mask
+            for j, i in enumerate(flips):
+                if k >> j & 1:
+                    other ^= 1 << i
+            known = table[other]
+            if isinstance(known, dict):
+                if any(known[combo] != outcome for combo in product(*box)):
+                    return False
+            elif known != outcome:
+                return False
+        return True
+
+    # A sub-scenario stated in margin ranges drops any other game whose result can't change its
+    # outcome within those ranges ("A beats B by 5 or more", whoever wins C-D).
+    for mask, outs in outcomes.items():
+        if len(outs) < 2:
+            continue
+        dropped = []
+        for stated, open_groups, seeding, key in outs:
+            free: frozenset = frozenset()
+            if all(isinstance(c, GameResult) for c in stated):
+                ranged = {frozenset((c.winner, c.loser)) for c in stated}
+                for i, pair in enumerate(pairs):
+                    if frozenset(pair) not in ranged and holds_without(
+                        mask, stated, (seeding, open_groups), free | {i}
+                    ):
+                        free = free | {i}
+            dropped.append((stated, open_groups, seeding, key, free))
+        outcomes[mask] = dropped
+
     # Winner sets with one outcome merge by seeding; the rest list their outcomes as sub-scenarios.
     by_outcome: dict[tuple, list[int]] = defaultdict(list)
     for mask, outs in outcomes.items():
         if len(outs) == 1:
-            _, open_groups, seeding, _ = outs[0]
+            _, open_groups, seeding, _ = outs[0][:4]
             by_outcome[(seeding, open_groups)].append(mask)
     entries = []
     for (seeding, open_groups), masks in by_outcome.items():
@@ -1962,7 +2007,7 @@ def enumerate_division_scenarios(
     by_listing: dict[tuple, list[int]] = defaultdict(list)
     for mask, outs in outcomes.items():
         if len(outs) > 1:
-            by_listing[frozenset((st, o, sd) for st, o, sd, _ in outs)].append(mask)
+            by_listing[frozenset((st, o, sd, free) for st, o, sd, _, free in outs)].append(mask)
     for masks in by_listing.values():
         for group in _valid_merge_groups(masks):
             entries.append((min(group), "multi", None, _common_game_winners(group, remaining), outcomes[min(group)]))
@@ -1986,12 +2031,13 @@ def enumerate_division_scenarios(
             scenarios.append(scenario(num, "", data, None, open_groups, seeding))
             continue
         winners = open_groups  # for "multi" entries this slot carries the merged group's winners
-        for k, (stated, groups, seeding, _) in enumerate(sorted(data, key=lambda o: (o[3], len(o[0])))):
+        for k, (stated, groups, seeding, _, free) in enumerate(sorted(data, key=lambda o: (o[3], len(o[0])))):
             # Every deciding game, with its margin range where the outcome needs one, then any decisions.
+            mine = [(w, l) for w, l in winners if not any(set(pairs[i]) == {w, l} for i in free)]
             ranged = {(c.winner, c.loser): c for c in stated if isinstance(c, GameResult)}
-            atom = [ranged.get((w, l), GameResult(w, l, 1, None)) for w, l in winners]
+            atom = [ranged.get((w, l), GameResult(w, l, 1, None)) for w, l in mine]
             atom += [c for c in stated if not isinstance(c, GameResult)]
-            scenarios.append(scenario(num, _sub_label(k), winners, atom, groups, seeding))
+            scenarios.append(scenario(num, _sub_label(k), mine, atom, groups, seeding))
     return scenarios
 
 
