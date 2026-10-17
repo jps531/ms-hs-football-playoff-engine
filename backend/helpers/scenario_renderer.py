@@ -14,6 +14,7 @@ from backend.helpers.data_classes import (
     RoundHomeScenarios,
     RoundMatchups,
     TiebreakDecision,
+    TiebreakPlace,
 )
 from backend.helpers.scenario_serializers import serialize_atom, serialize_condition
 
@@ -130,6 +131,33 @@ def render_open_group(step: int, group) -> str:
     )
 
 
+_PLACE_WORDS = {2: "2nd", 3: "3rd", 4: "4th", 5: "5th", 6: "6th"}
+_COUNT_WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
+_TIE_DECIDED_BY = {
+    6: "which a coin flip decides",
+    5: "which goes to fewest points allowed in region games (then a coin flip)",
+}
+
+
+def render_tiebreak_place(cond: TiebreakPlace) -> str:
+    """A team's place in a tie left to the tiebreaker, in words, e.g. "Raleigh finishes ahead of both
+    Magee and Seminary in their tie, which goes to fewest points allowed in region games (then a coin flip)"."""
+    others = [t for t in cond.group if t != cond.team]
+    both = "both " if len(others) == 2 else ""
+    if cond.place == 1:
+        where = f"ahead of {both}{_join(others)} in their tie"
+    elif cond.place == len(cond.group):
+        where = f"behind {both}{_join(others)} in their tie"
+    else:
+        place = _PLACE_WORDS.get(cond.place, f"{cond.place}th")
+        count = _COUNT_WORDS.get(len(cond.group), str(len(cond.group)))
+        where = f"{place} of the {count} in the tie with {_join(others)}"
+    how = _TIE_DECIDED_BY.get(
+        cond.step, "which goes to the tiebreaker (point differential, then fewest points allowed)"
+    )
+    return f"{cond.team} finishes {where}, {how}"
+
+
 def _render_condition(cond, atom: list) -> str:
     """Dispatch to the appropriate renderer based on the condition type."""
     if isinstance(cond, GameResult):
@@ -140,6 +168,8 @@ def _render_condition(cond, atom: list) -> str:
         return f"{cond.winner} wins coin flip vs {cond.loser}"
     if isinstance(cond, TiebreakDecision):
         return render_tiebreak_decision(cond)
+    if isinstance(cond, TiebreakPlace):
+        return render_tiebreak_place(cond)
     if isinstance(cond, PDRankCondition):
         ordinals = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
         ord_str = ordinals.get(cond.rank, f"{cond.rank}th")
@@ -172,17 +202,24 @@ def render_scenario_title(sc: dict) -> str:
     return " AND ".join([t for t in (title,) if t] + groups)
 
 
-def atoms_from_complete_scenarios(complete_scenarios: list[dict]) -> dict[str, dict[int, list[list]]]:
+def atoms_from_complete_scenarios(
+    complete_scenarios: list[dict], playoff_seeds: int = 4
+) -> dict[str, dict[int, list[list]]]:
     """Reconstruct a per-team per-seed atom dict from stored complete-scenario dicts.
 
     This is O(S × N) where S is the number of scenarios and N the team count.
-    The result is equivalent to ``build_scenario_atoms`` output and can be passed
-    directly to ``team_scenarios_as_dict``.
+    The result has ``build_scenario_atoms``' shape (every place past the
+    playoff seeds is ``playoff_seeds + 1``, eliminated) and can be passed directly to
+    ``team_scenarios_as_dict``. Complete scenarios say only what the
+    tiebreaker decides, so the paths built from them do too.
 
-    A scenario with alternatives contributes each one; a team in one of its open groups (a tie
-    whose order the scenario doesn't state) gets no seed from it, since its place there is only a
-    placeholder: its paths say nothing that scenario doesn't.
+    A scenario with alternatives contributes each one. A team in one of its
+    open groups (a tie whose order the scenario leaves to the tiebreaker)
+    reaches each of the group's places it can (``open_places``, else all of
+    them) only by finishing there in that tie, so each of its atoms for those
+    places carries a ``TiebreakPlace``.
     """
+    out = playoff_seeds + 1
     atoms: dict[str, dict[int, list]] = {}
     for sc in complete_scenarios:
         alternatives = sc.get("alternatives") or [sc.get("conditions_atom")]
@@ -190,14 +227,20 @@ def atoms_from_complete_scenarios(complete_scenarios: list[dict]) -> dict[str, d
             a if a is not None else [GameResult(winner=w, loser=l) for w, l in sc.get("game_winners", [])]
             for a in alternatives
         ]
-        unstated = {t for _, g in sc.get("open_groups") or [] for t in g}
-        seeding = sc.get("seeding", ())
+        seeding = list(sc.get("seeding", ()))
+        open_of = {t: (step, tuple(g)) for step, g in sc.get("open_groups") or [] for t in g}
         for seed_idx, team in enumerate(seeding):
-            if team in unstated:
-                continue
-            seed_num = seed_idx + 1
             team_map = atoms.setdefault(team, {})
-            team_map.setdefault(seed_num, []).extend(alternatives)
+            if team not in open_of:
+                team_map.setdefault(min(seed_idx + 1, out), []).extend(list(a) for a in alternatives)
+                continue
+            step, group = open_of[team]
+            places = sorted(seeding.index(t) for t in group)
+            reach = set((sc.get("open_places") or {}).get(team) or (min(i + 1, out) for i in places))
+            for place, idx in enumerate(places, start=1):
+                if min(idx + 1, out) in reach:
+                    tie = TiebreakPlace(team, place, group, step)
+                    team_map.setdefault(min(idx + 1, out), []).extend([*a, tie] for a in alternatives)
     return atoms
 
 
@@ -386,6 +429,8 @@ def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | No
             result.append({"type": "pd_rank", "description": str(cond)})
         elif isinstance(cond, TiebreakDecision):
             result.append({"type": "tiebreak", "description": render_tiebreak_decision(cond)})
+        elif isinstance(cond, TiebreakPlace):
+            result.append({"type": "tiebreak", "description": render_tiebreak_place(cond)})
         else:  # never drop a condition silently: a card without it would claim more than is true
             raise TypeError(f"no path rendering for {type(cond).__name__}")
     return result

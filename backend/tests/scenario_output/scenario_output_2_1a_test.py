@@ -90,54 +90,78 @@ Falkner
 
 #1 seed if: (73.1%)
 1. Falkner beats Potts Camp
-2. Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland
-3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more
+2. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
 #2 seed if: (26.9%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
-2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311"""
+2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes 2nd of the three in the tie with H. W. Byers and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
+
+#3 seed if: (0.0%)
+1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes behind both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
 
 HWB_EXPECTED = """\
 H. W. Byers
 
+#1 seed if: (0.0%)
+1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes ahead of both Falkner and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
+
 #2 seed if: (70.8%)
 1. Falkner beats Potts Camp AND H. W. Byers beats Ashland
-2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311
-3. Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland
+2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes ahead of both Ashland and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
+4. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
+5. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes 2nd of the three in the tie with Falkner and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
 
 #3 seed if: (2.1%)
-1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland
+1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes 2nd of the three in the tie with Ashland and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
+2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes behind both Falkner and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
 #4 seed if: (27.1%)
-1. Ashland beats H. W. Byers by 12 or more
-2. Potts Camp beats Falkner AND Ashland beats H. W. Byers"""
+1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
+2. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes behind both Ashland and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
 
 POTTS_CAMP_EXPECTED = """\
 Potts Camp
 
 #1 seed if: (26.9%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
-2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311
+2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes ahead of both Falkner and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
 #2 seed if: (2.3%)
-1. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 12 or more
-2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more
+1. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
+2. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes ahead of both Ashland and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes 2nd of the three in the tie with Falkner and H. W. Byers, which goes to fewest points allowed in region games (then a coin flip)
 
 #3 seed if: (70.8%)
 1. Falkner beats Potts Camp AND H. W. Byers beats Ashland
-2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311
-3. Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland"""
+2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes 2nd of the three in the tie with Ashland and H. W. Byers, which goes to fewest points allowed in region games (then a coin flip)
+4. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
+5. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes behind both Falkner and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
+
+#4 seed if: (0.0%)
+1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes behind both Ashland and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
 
 ASHLAND_EXPECTED = """\
 Ashland
 
+#2 seed if: (0.0%)
+1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
+
 #3 seed if: (27.1%)
-1. Ashland beats H. W. Byers by 12 or more
-2. Potts Camp beats Falkner AND Ashland beats H. W. Byers
+1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
+2. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes 2nd of the three in the tie with H. W. Byers and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
 
 #4 seed if: (72.9%)
 1. H. W. Byers beats Ashland
-2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311"""
+2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes behind both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms
@@ -150,23 +174,23 @@ def test_atoms_all_teams_present():
 
 
 def test_atoms_falkner_has_two_seeds():
-    """Falkner can only finish #1 or #2 — they are always a top-2 team."""
-    assert set(_ATOMS["Falkner"].keys()) == {1, 2}
+    """Falkner can finish #1, #2, #3."""
+    assert set(_ATOMS["Falkner"].keys()) == {1, 2, 3}
 
 
 def test_atoms_hwb_has_three_seeds():
-    """H. W. Byers can finish #2, #3, or #4."""
-    assert set(_ATOMS["H. W. Byers"].keys()) == {2, 3, 4}
+    """H. W. Byers can finish #1, #2, #3, #4."""
+    assert set(_ATOMS["H. W. Byers"].keys()) == {1, 2, 3, 4}
 
 
 def test_atoms_potts_camp_has_three_seeds():
-    """Potts Camp can finish #1, #2, or #3."""
-    assert set(_ATOMS["Potts Camp"].keys()) == {1, 2, 3}
+    """Potts Camp can finish #1, #2, #3, #4."""
+    assert set(_ATOMS["Potts Camp"].keys()) == {1, 2, 3, 4}
 
 
 def test_atoms_ashland_has_two_seeds():
-    """Ashland can finish #3 or #4 — they are always a bottom-2 team."""
-    assert set(_ATOMS["Ashland"].keys()) == {3, 4}
+    """Ashland can finish #2, #3, #4."""
+    assert set(_ATOMS["Ashland"].keys()) == {2, 3, 4}
 
 
 def test_atoms_falkner_seed1_three_atoms():
@@ -197,29 +221,22 @@ def test_atoms_falkner_seed1_second_atom_margin_restricted():
 
 
 def test_atoms_falkner_seed1_third_atom_double_large_margin():
-    """Falkner's #1 via double large-margin wins: PC wins by 12+ AND HWB wins by 12+."""
-    atom = _ATOMS["Falkner"][1][2]
-    assert len(atom) == 2
-    for gr in atom:
-        assert gr.min_margin == 12
-        assert gr.max_margin is None
+    """Falkner #1 path 3: Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)."""
+    assert [str(c) for c in _ATOMS["Falkner"][1][2]] == [
+        "Potts Camp>Falkner by 12+",
+        "H. W. Byers>Ashland by 12+",
+        "Falkner 1 of [Falkner, H. W. Byers, Potts Camp] from step 5",
+    ]
 
 
 def test_atoms_hwb_seed3_is_single_atom():
-    """H. W. Byers reaches #3 only via one narrow path: PC beats Falkner by 12+ AND HWB beats Ashland."""
-    atoms = _ATOMS["H. W. Byers"][3]
-    assert len(atoms) == 1
-    atom = atoms[0]
-    assert len(atom) == 2
-    pc_gr = next(g for g in atom if g.winner == "Potts Camp")
-    assert pc_gr.min_margin == 12
-    assert pc_gr.max_margin is None
+    """H. W. Byers"s #3 has 3 paths."""
+    assert len(_ATOMS["H. W. Byers"][3]) == 3
 
 
 def test_atoms_ashland_seed4_has_two_atoms():
-    """Ashland ends up #4 either when HWB beats them outright, or when Falkner beats PC
-    and Ashland wins by only 1–11."""
-    assert len(_ATOMS["Ashland"][4]) == 2
+    """Ashland"s #4 has 3 paths."""
+    assert len(_ATOMS["Ashland"][4]) == 3
 
 
 def test_atoms_ashland_seed4_first_atom_hwb_wins():
@@ -266,6 +283,7 @@ def test_scenario_shape():
         "conditions_atom",
         "alternatives",
         "open_groups",
+        "open_places",
         "tiebreaker_groups",
         "coinflip_groups",
     }
@@ -581,18 +599,18 @@ def test_team_dict_falkner_seed1_scenarios():
 
 
 def test_team_dict_hwb_seed2_scenarios():
-    """H. W. Byers #2 has 3 scenario strings."""
-    assert len(_TEAM_DICT["H. W. Byers"][2]["scenarios"]) == 3
+    """H. W. Byers #2 has 5 scenario strings."""
+    assert len(_TEAM_DICT["H. W. Byers"][2]["scenarios"]) == 5
 
 
 def test_team_dict_hwb_seed3_one_scenario():
-    """H. W. Byers #3 has exactly 1 scenario string (narrow path)."""
-    assert len(_TEAM_DICT["H. W. Byers"][3]["scenarios"]) == 1
+    """H. W. Byers #3 has 3 scenario strings."""
+    assert len(_TEAM_DICT["H. W. Byers"][3]["scenarios"]) == 3
 
 
 def test_team_dict_potts_camp_seed2_two_scenarios():
-    """Potts Camp #2 has 2 scenario strings."""
-    assert len(_TEAM_DICT["Potts Camp"][2]["scenarios"]) == 2
+    """Potts Camp #2 has 3 scenario strings."""
+    assert len(_TEAM_DICT["Potts Camp"][2]["scenarios"]) == 3
 
 
 # ---------------------------------------------------------------------------

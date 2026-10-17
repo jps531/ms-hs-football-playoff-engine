@@ -5,7 +5,6 @@ from itertools import product
 import pytest
 
 from backend.helpers.data_classes import (
-    CoinFlipResult,
     CompletedGame,
     FormatSlot,
     GameResult,
@@ -16,14 +15,10 @@ from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_renderer import _render_margin_condition
 from backend.helpers.scenario_viewer import (
     EnumeratedOutcomes,
-    _derive_atom,
-    _eval_mc,
-    _find_combined_atom,
     _find_tiebreaker_groups,
     _format_team_list,
     _minimize_game_winner_atom,
     _simplify_atom_list,
-    _split_non_rectangular_atom,
     build_pre_playoff_home_scenarios,
     build_scenario_atoms,
     compute_odds_from_precomputed,
@@ -43,7 +38,7 @@ from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_scenarios,
     teams_3_7a,
 )
-from backend.tests.scenario_coverage import coverage_problems
+from backend.tests.scenario_coverage import coverage_problems, team_path_problems
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -95,7 +90,8 @@ def test_3_7a_scenario_count():
 
 
 def test_3_7a_five_way_tie_left_to_the_tiebreaker():
-    """The five-way tie is one scenario naming the tie, with no order or margins made up for it."""
+    """The five-way tie is one scenario naming the tie (the four whose places vary; Brandon is always
+    fifth), with no order or margins made up for it."""
     scenarios = enumerate_division_scenarios(
         teams_3_7a,
         expected_3_7a_completed_games,
@@ -104,7 +100,7 @@ def test_3_7a_five_way_tie_left_to_the_tiebreaker():
     )
     assert not [sc for sc in scenarios if sc["sub_label"]]
     sc4 = next(sc for sc in scenarios if sc["scenario_num"] == 4)
-    assert sc4["open_groups"] == [(3, ("Brandon", "Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
+    assert sc4["open_groups"] == [(3, ("Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
     assert sc4["conditions_atom"] is None
 
 
@@ -368,8 +364,8 @@ Scenario 3: Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Ranki
 Eliminated: Brandon, Meridian
 
 Scenario 4: Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-1-4. Four of Brandon, Northwest Rankin, Oak Grove, Pearl, and Petal: order decided by the tiebreaker (point differential, then fewest points allowed)
-Eliminated: Meridian, the rest of that tie
+1-4. Northwest Rankin, Oak Grove, Pearl, and Petal: order decided by the tiebreaker (point differential, then fewest points allowed)
+Eliminated: Brandon, Meridian
 
 Scenario 5: Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 1. Oak Grove
@@ -428,7 +424,7 @@ class TestBuildScenarioAtoms37A:
         """The five-way tie is left to the tiebreaker rather than split into sub-scenarios."""
         assert not [sc for sc in self._scenarios() if sc["sub_label"]]
         assert [sc["open_groups"] for sc in self._scenarios() if sc["scenario_num"] == 4] == [
-            [(3, ("Brandon", "Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
+            [(3, ("Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
         ]
 
     def test_render_uses_range_descriptions_not_exact_values(self):
@@ -502,218 +498,6 @@ class TestBuildScenarioAtoms37A:
 
 
 # ---------------------------------------------------------------------------
-# Synthetic unit tests — _find_combined_atom, _split_non_rectangular_atom,
-# _derive_atom (coverage-gap fill)
-# ---------------------------------------------------------------------------
-
-_SYNTH_REMAINING = [RemainingGame("A", "B"), RemainingGame("C", "D")]
-_SYNTH_PAIRS = [("A", "B"), ("C", "D")]
-_AB = ("A", "B")
-_CD = ("C", "D")
-_SYNTH_MASK = 0b11  # A wins game 0 (AB), C wins game 1 (CD)
-
-
-class TestFindCombinedAtom:
-    """Synthetic tests for _find_combined_atom — MarginCondition paths and None returns."""
-
-    def _call(self, scenario_atoms, sample_margins, seeding, playoff_seeds=2):
-        """Invoke _find_combined_atom with synthetic remaining games and mask."""
-        return _find_combined_atom(
-            seeding=seeding,
-            playoff_seeds=playoff_seeds,
-            mask=_SYNTH_MASK,
-            sample_margins=sample_margins,
-            scenario_atoms=scenario_atoms,
-            remaining=_SYNTH_REMAINING,
-        )
-
-    def test_ge_intersection_keeps_tightest(self):
-        """Two '>=' atoms on same key — merged result keeps the higher (tighter) threshold."""
-        atoms = {
-            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=5)]]},
-            "C": {2: [[GameResult("C", "D", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=3)]]},
-        }
-        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "C", "B", "D"))
-        assert result is not None
-        mc = [c for c in result if isinstance(c, MarginCondition)]
-        assert len(mc) == 1
-        assert mc[0].op == ">=" and mc[0].threshold == 5
-
-    def test_lt_op_converted_to_le(self):
-        """op='<' threshold N is normalised to '<=' threshold N-1 (line 144-145)."""
-        atoms = {
-            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op="<", threshold=10)]]},
-        }
-        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "B", "C", "D"))
-        assert result is not None
-        mc = [c for c in result if isinstance(c, MarginCondition)]
-        assert len(mc) == 1
-        assert mc[0].op == "<=" and mc[0].threshold == 9
-
-    def test_gt_op_converted_to_ge(self):
-        """op='>' threshold N is normalised to '>=' threshold N+1 (line 146-147)."""
-        atoms = {
-            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op=">", threshold=5)]]},
-        }
-        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "B", "C", "D"))
-        assert result is not None
-        mc = [c for c in result if isinstance(c, MarginCondition)]
-        assert len(mc) == 1
-        assert mc[0].op == ">=" and mc[0].threshold == 6
-
-    def test_eq_op_collapses_to_eq(self):
-        """op='==' contributes both ge and le directions; reconstructed as op='==' (lines 151-152)."""
-        atoms = {
-            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op="==", threshold=7)]]},
-        }
-        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "B", "C", "D"))
-        assert result is not None
-        mc = [c for c in result if isinstance(c, MarginCondition)]
-        assert len(mc) == 1
-        assert mc[0].op == "==" and mc[0].threshold == 7
-
-    def test_returns_none_when_all_atoms_unsatisfied(self):
-        """Returns None when every playoff-seeded team has no matching atom (line 171)."""
-        # Both atoms require margin >= 10, but sample margin is only 7
-        atoms = {
-            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=10)]]},
-            "C": {2: [[GameResult("C", "D", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=10)]]},
-        }
-        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "C", "B", "D"))
-        assert result is None
-
-    def test_skips_team_with_no_matching_atom_uses_others(self):
-        """Skips (line 120 continue) a team whose atom is unsatisfied; uses remaining teams' atoms."""
-        # A's atom: requires >= 10 (not satisfied with margin=7) → skipped
-        # C's atom: requires >= 3 (satisfied) → used
-        atoms = {
-            "A": {1: [[GameResult("A", "B", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=10)]]},
-            "C": {2: [[GameResult("C", "D", 1, None), MarginCondition(add=(_AB,), sub=(), op=">=", threshold=3)]]},
-        }
-        result = self._call(atoms, {_AB: 7, _CD: 4}, ("A", "C", "B", "D"))
-        assert result is not None
-        mc = [c for c in result if isinstance(c, MarginCondition)]
-        assert len(mc) == 1 and mc[0].threshold == 3
-
-
-class TestSplitNonRectangularAtom:
-    """Synthetic tests for _split_non_rectangular_atom — reverse direction paths."""
-
-    _base = [GameResult("A", "B", 1, None), GameResult("C", "D", 1, None)]
-
-    def _call(self, valid_margins_list, lows, highs):
-        """Invoke _split_non_rectangular_atom with synthetic remaining games and base atom."""
-        return _split_non_rectangular_atom(
-            _SYNTH_MASK,
-            valid_margins_list,
-            _SYNTH_REMAINING,
-            _SYNTH_PAIRS,
-            lows,
-            highs,
-            self._base,
-        )
-
-    def test_reverse_direction_succeeds(self):
-        """Forward fails (game0 non-contiguous for same game1 set); reverse succeeds (line 334).
-
-        valid_2d = {(1,2),(2,1),(2,2),(3,2)}
-        Forward: frozenset({2}) → game0=[1,3] non-contiguous → fails at line 267-268.
-        Reverse: frozenset({2}) → game1=[1]; frozenset({1,2,3}) → game1=[2] — both contiguous.
-        """
-        valid = [
-            {_AB: 1, _CD: 2},
-            {_AB: 2, _CD: 1},
-            {_AB: 2, _CD: 2},
-            {_AB: 3, _CD: 2},
-        ]
-        result = self._call(valid, lows=[1, 1], highs=[3, 2])
-        assert result is not None
-        assert len(result) == 2
-
-    def test_forward_and_reverse_game0_noncont_returns_none(self):
-        """Forward fails (game0 non-contiguous); reverse fails (game0 frozenset non-contiguous).
-
-        valid_2d = {(1,1),(1,2),(3,1),(3,2)}
-        Forward: frozenset({1,2}) → game0=[1,3] non-contiguous → fails at line 267-268.
-        Reverse: frozenset({1,3}) → game1=[1,2] (contiguous), but s_sorted=[1,3]
-                 non-contiguous → fails at line 312-313.
-        Returns None (line 337).
-        """
-        valid = [
-            {_AB: 1, _CD: 1},
-            {_AB: 1, _CD: 2},
-            {_AB: 3, _CD: 1},
-            {_AB: 3, _CD: 2},
-        ]
-        result = self._call(valid, lows=[1, 1], highs=[3, 2])
-        assert result is None
-
-    def test_forward_and_reverse_game1_noncont_returns_none(self):
-        """Forward fails (game1 frozenset non-contiguous); reverse fails (game1 list non-contiguous).
-
-        valid_2d = {(1,1),(1,3),(2,1),(2,3)}
-        Forward: frozenset({1,3}) → game0=[1,2] (contiguous), but p_sorted=[1,3]
-                 non-contiguous → fails at line 270-271.
-        Reverse: frozenset({1,2}) → game1=[1,3] non-contiguous → fails at line 309-310.
-        Returns None (line 337).
-        """
-        valid = [
-            {_AB: 1, _CD: 1},
-            {_AB: 1, _CD: 3},
-            {_AB: 2, _CD: 1},
-            {_AB: 2, _CD: 3},
-        ]
-        result = self._call(valid, lows=[1, 1], highs=[2, 3])
-        assert result is None
-
-
-class TestDeriveAtom:
-    """Synthetic tests for _derive_atom — all-margins-valid and unconstrained fallback paths."""
-
-    def test_all_margins_valid_returns_unconstrained_atom(self):
-        """all_margins_valid=True skips margin iteration and returns one unconstrained atom (lines 404-410)."""
-        result = _derive_atom(
-            mask=_SYNTH_MASK,
-            valid_margins_list=[],  # not consulted when all_margins_valid=True
-            remaining=_SYNTH_REMAINING,
-            pairs=_SYNTH_PAIRS,
-            all_margins_valid=True,
-        )
-        assert len(result) == 1
-        atom = result[0]
-        grs = [c for c in atom if isinstance(c, GameResult)]
-        assert len(grs) == 2
-        assert all(gr.min_margin == 1 and gr.max_margin is None for gr in grs)
-        assert not any(isinstance(c, MarginCondition) for c in atom)
-
-    def test_unconstrained_per_game_fallback(self):
-        """Joint constraints alone reproduce valid_2d → per-game bounds dropped (lines 504-510).
-
-        valid_2d = {(1,1),(1,2),(2,1)} = all (v0,v1) in [1,12]² with v0+v1 <= 3.
-        predicted_full([1,12]×[1,12], sum<=3) equals valid_2d, so the unconstrained
-        GameResult path fires and the atom has max_margin=None for both games.
-        """
-        valid = [
-            {_AB: 1, _CD: 1},
-            {_AB: 1, _CD: 2},
-            {_AB: 2, _CD: 1},
-        ]
-        result = _derive_atom(
-            mask=_SYNTH_MASK,
-            valid_margins_list=valid,
-            remaining=_SYNTH_REMAINING,
-            pairs=_SYNTH_PAIRS,
-        )
-        assert len(result) == 1
-        atom = result[0]
-        grs = [c for c in atom if isinstance(c, GameResult)]
-        assert all(gr.max_margin is None for gr in grs), "GameResults should be unconstrained"
-        mcs = [c for c in atom if isinstance(c, MarginCondition)]
-        assert len(mcs) == 1
-        assert mcs[0].op == "<=" and mcs[0].threshold == 3
-
-
-# ---------------------------------------------------------------------------
 # Soundness: atoms point to the right seeding for EVERY satisfying outcome
 # ---------------------------------------------------------------------------
 
@@ -771,42 +555,14 @@ def test_division_scenario_atom_soundness():
 
 
 def test_per_team_atoms_consistent_with_division_scenarios():
-    """For every (mask, margins), each top-4 team's per-team atom covers the outcome.
+    """For every (mask, margins), each team's per-team atoms are right and cover the outcome.
 
-    For each outcome this test:
-    1. Resolves actual standings via resolve_standings_for_mask
-    2. For each team at seeds 1–4, verifies at least one per-team atom is satisfied
-
-    This cross-validates the per-team format (render_team_scenarios) against
-    the division-scenario format (render_division_scenarios): if a team appears
-    at seed k in a division scenario but has no per-team atom covering that
-    outcome, the two formats are inconsistent.
+    Every path whose conditions can hold gives a place the team can take there, and every place
+    it can take has a path (see ``team_path_problems``), so the per-team format agrees with the
+    division-scenario format it's read off.
     """
-    atoms = _ATOMS_3_7A
-
-    failures = []
-    for mask, margins in _all_outcome_branches():
-        order = resolve_standings_for_mask(
-            teams_3_7a,
-            expected_3_7a_completed_games,
-            _REMAINING,
-            mask,
-            margins,
-            _BASE_MARGIN_DEFAULT,
-            _PA_WIN,
-        )
-        for seed_idx in range(4):
-            team = order[seed_idx]
-            seed = seed_idx + 1
-            team_seed_atoms = atoms.get(team, {}).get(seed, [])
-            if not any(_atom_satisfied(atom, mask, margins) for atom in team_seed_atoms):
-                failures.append(
-                    f"{team} seed {seed}: mask={mask} margins={margins} "
-                    f"not covered by any per-team atom "
-                    f"(full order: {tuple(order)})"
-                )
-
-    assert not failures, f"{len(failures)} per-team / division inconsistencies:\n" + "\n".join(failures[:5])
+    report = team_path_problems(teams_3_7a, expected_3_7a_completed_games, _REMAINING, _ATOMS_3_7A)
+    assert report.ok, report.summary()
 
 
 # ---------------------------------------------------------------------------
@@ -1033,147 +789,6 @@ def test_render_scenarios_no_eliminated_line_when_all_advance():
 # ---------------------------------------------------------------------------
 # Synthetic gap-closure tests — scenario_viewer.py internal helpers
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# _find_combined_atom — line 142→123: CoinFlipResult in atom is silently skipped
-# ---------------------------------------------------------------------------
-
-
-class TestFindCombinedAtomCoinFlipResult:
-    """_find_combined_atom skips CoinFlipResult conditions (line 142→123 branch)."""
-
-    def test_coin_flip_result_in_atom_is_skipped(self):
-        """CoinFlipResult in an atom passes the satisfied_by check but is not
-        processed as GameResult or MarginCondition, exercising the 142→123 branch."""
-        remaining = [RemainingGame("A", "B")]
-        # Atom contains a real GameResult plus a CoinFlipResult.
-        # CoinFlipResult.satisfied_by always returns True, so the atom is found.
-        atom = [
-            GameResult("A", "B", min_margin=1, max_margin=None),
-            CoinFlipResult(winner="A", loser="C"),
-        ]
-        scenario_atoms = {"A": {1: [atom]}}
-        seeding = ("A", "C")
-        mask = 1  # bit 0 = 1 → A wins
-        sample_margins = {("A", "B"): 7}
-
-        result = _find_combined_atom(seeding, 2, mask, sample_margins, scenario_atoms, remaining)
-
-        # The CoinFlipResult is skipped; the GameResult is captured normally.
-        assert result is not None
-        game_results = [c for c in result if isinstance(c, GameResult)]
-        assert len(game_results) == 1
-        assert game_results[0].winner == "A"
-
-    def test_atom_with_only_coin_flip_result_returns_empty_list(self):
-        """When the atom contains only a CoinFlipResult, the combined atom has no
-        game or margin conditions (result is an empty list, not None)."""
-        remaining = [RemainingGame("A", "B")]
-        atom = [CoinFlipResult(winner="A", loser="B")]
-        scenario_atoms = {"A": {1: [atom]}}
-        seeding = ("A",)
-        mask = 1
-        sample_margins = {("A", "B"): 7}
-
-        result = _find_combined_atom(seeding, 1, mask, sample_margins, scenario_atoms, remaining)
-
-        # found_any=True, but no GameResult/MarginCondition collected → empty list returned
-        assert result == []
-
-
-# ---------------------------------------------------------------------------
-# _eval_mc — line 217: unknown operator falls through to return True
-# ---------------------------------------------------------------------------
-
-
-class TestEvalMcUnknownOperator:
-    """_eval_mc returns True for an unrecognised operator (line 217 fallback)."""
-
-    def test_gt_operator_returns_true(self):
-        """op='>' is not one of '<=', '>=', '==' — line 217 fires and returns True."""
-        mc = MarginCondition(add=(("A", "B"),), sub=(), op=">", threshold=5)
-        margins = {("A", "B"): 3}  # value 3 is NOT > 5, but fallback returns True anyway
-        assert _eval_mc(mc, margins) is True
-
-    def test_lt_operator_returns_true(self):
-        """op='<' also exercises the unknown-operator fallback."""
-        mc = MarginCondition(add=(("A", "B"),), sub=(), op="<", threshold=1)
-        margins = {("A", "B"): 5}  # value 5 is NOT < 1, but fallback returns True
-        assert _eval_mc(mc, margins) is True
-
-
-# ---------------------------------------------------------------------------
-# _derive_atom — line 445→447: 1 sensitive game, non-rectangular, split returns None
-# ---------------------------------------------------------------------------
-
-
-class TestDeriveAtomSingleSensitiveSplitFails:
-    """_derive_atom falls back to [atom] when split returns None (line 445→447)."""
-
-    def test_one_sensitive_game_noncontiguous_margins(self):
-        """With R=1 and a non-contiguous valid set (e.g. {3, 5}), _split_non_rectangular_atom
-        returns None (its inner loop never runs for R=1), so line 447 fires."""
-        remaining = [RemainingGame("A", "B")]
-        pairs = [("A", "B")]
-        # Valid margins: only 3 and 5 — skips 4. Range [3,5] has 3 values but only 2 are valid.
-        valid_margins_list = [{("A", "B"): 3}, {("A", "B"): 5}]
-        mask = 1  # A wins bit 0
-
-        result = _derive_atom(mask, valid_margins_list, remaining, pairs, all_margins_valid=False)
-
-        # Should return a single broad atom covering [3, 6) (max_margin=hi+1=5+1=6)
-        assert len(result) == 1
-        atom = result[0]
-        assert len(atom) == 1
-        gr = atom[0]
-        assert isinstance(gr, GameResult)
-        assert gr.winner == "A"
-        assert gr.min_margin == 3
-        assert gr.max_margin == 6  # exclusive: 5+1=6
-
-
-# ---------------------------------------------------------------------------
-# _derive_atom — line 526: 2 sensitive games, predicted set doesn't match, split fails
-# ---------------------------------------------------------------------------
-
-
-class TestDeriveAtomTwoSensitiveSplitFails:
-    """_derive_atom fallback [atom] when predicted set ≠ valid set and split fails (line 526)."""
-
-    def test_diamond_valid_set_forces_fallback(self):
-        """valid_2d = {(1,2),(2,1),(3,2),(2,3)} — a diamond pattern.
-
-        The sum constraint IS binding (sum in [3,5]), so margin_conds is non-empty
-        and the early-return at line 496 is not taken.  The sum constraint doesn't
-        fully reproduce the valid set (predicted has 7 points vs actual 4), so
-        line 514 isn't taken either.  Both forward and reverse groupings in
-        _split_non_rectangular_atom have non-contiguous outer indices ([1,3] missing
-        2), so it returns None.  Line 526 fires.
-        """
-        remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
-        pairs = [("A", "B"), ("C", "D")]
-        # Diamond: four corners of a rotated square in margin space
-        valid_margins_list = [
-            {("A", "B"): 1, ("C", "D"): 2},
-            {("A", "B"): 2, ("C", "D"): 1},
-            {("A", "B"): 3, ("C", "D"): 2},
-            {("A", "B"): 2, ("C", "D"): 3},
-        ]
-        mask = 3  # both A and C win
-
-        result = _derive_atom(mask, valid_margins_list, remaining, pairs, all_margins_valid=False)
-
-        # Fallback: single broad atom [GameResult(A,B,1,4), GameResult(C,D,1,4)]
-        # (lows=[1,1], highs=[3,3] → max_margin=4 for both)
-        assert len(result) == 1
-        atom = result[0]
-        gr_ab = next(c for c in atom if isinstance(c, GameResult) and c.winner == "A")
-        assert gr_ab.min_margin == 1
-        assert gr_ab.max_margin == 4
-        gr_cd = next(c for c in atom if isinstance(c, GameResult) and c.winner == "C")
-        assert gr_cd.min_margin == 1
-        assert gr_cd.max_margin == 4
-
 
 # ---------------------------------------------------------------------------
 # _simplify_atom_list — Rule 1 with MarginCondition (line 651)
@@ -1543,10 +1158,11 @@ def test_partial_a_scenario_count():
 
 
 def test_partial_a_scenario_labels():
-    """Partial A's five-way tie (Pearl and NWR win) has too many finishes to list: scenario 3 leaves it open."""
+    """Partial A's five-way tie (Pearl and NWR win) has too many finishes to list: scenario 3 leaves it open.
+    Brandon finishes fifth at every margin, so the tie it leaves open is the other four."""
     assert not [sc for sc in _SCENARIOS_PA if sc["sub_label"]]
     sc3 = next(sc for sc in _SCENARIOS_PA if sc["scenario_num"] == 3)
-    assert sc3["open_groups"] == [(3, ("Brandon", "Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
+    assert sc3["open_groups"] == [(3, ("Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
 
 
 def test_partial_a_deterministic_seedings():
@@ -1734,8 +1350,8 @@ Scenario 2: Oak Grove beats Pearl AND Petal beats Northwest Rankin
 Eliminated: Meridian, Pearl
 
 Scenario 3: Pearl beats Oak Grove AND Northwest Rankin beats Petal
-1-4. Four of Brandon, Northwest Rankin, Oak Grove, Pearl, and Petal: order decided by the tiebreaker (point differential, then fewest points allowed)
-Eliminated: Meridian, the rest of that tie
+1-4. Northwest Rankin, Oak Grove, Pearl, and Petal: order decided by the tiebreaker (point differential, then fewest points allowed)
+Eliminated: Brandon, Meridian
 
 Scenario 4: Oak Grove beats Pearl AND Northwest Rankin beats Petal
 1. Oak Grove
@@ -1980,116 +1596,6 @@ class TestBuildScenarioAtomsLargeRGate:
 # ---------------------------------------------------------------------------
 # Step 3c: PDRankCondition atoms in ignore_margins mode
 # ---------------------------------------------------------------------------
-
-
-class TestStep3cPDRankAtoms:
-    """build_scenario_atoms emits PDRankCondition atoms for coinflip masks in
-    ignore_margins mode (Step 3c)."""
-
-    # Use the 1-2A 0-games-played checkpoint which has 16 coinflip scenarios.
-    _fixture = REGION_RESULTS_2025[(2, 1)]
-    _all_games = _fixture["games"]
-    _teams = teams_from_games(_all_games)
-    _cutoff = "2025-10-15"
-
-    @classmethod
-    def _setup(cls):
-        """Build scenario atoms fixture for this checkpoint."""
-        completed = get_completed_games(expand_results([g for g in cls._all_games if g["date"] <= cls._cutoff]))
-        remaining = [
-            RemainingGame(*sorted([g["winner"], g["loser"]])) for g in cls._all_games if g["date"] > cls._cutoff
-        ]
-        eo = enumerate_outcomes(cls._teams, completed, remaining, ignore_margins=True)
-        atoms = build_scenario_atoms(cls._teams, completed, remaining, precomputed=eo)
-        return atoms
-
-    def test_coinflip_teams_have_multiple_seed_entries(self):
-        """Coinflip-affected teams (Hamilton, Hatley, Walnut) appear at more than
-        one seed in the atoms dict due to Step 3c PDRankCondition atoms."""
-        from backend.helpers.data_classes import PDRankCondition
-
-        atoms = self._setup()
-        for team in ("Hamilton", "Hatley", "Walnut"):
-            assert team in atoms, f"{team} missing from atoms"
-            seeds_with_pd_rank = [
-                seed
-                for seed, atom_list in atoms[team].items()
-                if any(isinstance(c, PDRankCondition) for atom in atom_list for c in atom)
-            ]
-            assert len(seeds_with_pd_rank) >= 2, (
-                f"{team} should have PDRankCondition atoms at ≥2 seeds, got {seeds_with_pd_rank}"
-            )
-
-    def test_pd_rank_condition_team_matches_atom_key(self):
-        """Every PDRankCondition in a team's atom list names that same team."""
-        from backend.helpers.data_classes import PDRankCondition
-
-        atoms = self._setup()
-        for team, seed_map in atoms.items():
-            for seed, atom_list in seed_map.items():
-                for atom in atom_list:
-                    for cond in atom:
-                        if isinstance(cond, PDRankCondition):
-                            assert cond.team == team, f"PDRankCondition.team={cond.team!r} in atom for {team!r}"
-
-    def test_pd_rank_condition_group_contains_team(self):
-        """Every PDRankCondition's group includes the team the condition is for."""
-        from backend.helpers.data_classes import PDRankCondition
-
-        atoms = self._setup()
-        for team, seed_map in atoms.items():
-            for seed, atom_list in seed_map.items():
-                for atom in atom_list:
-                    for cond in atom:
-                        if isinstance(cond, PDRankCondition):
-                            assert cond.team in cond.group, f"team {cond.team!r} not in group {cond.group}"
-
-    def test_pd_rank_condition_rank_in_bounds(self):
-        """Every PDRankCondition has rank in [1, len(group)] and is at a valid playoff seed."""
-        from backend.helpers.data_classes import PDRankCondition
-
-        atoms = self._setup()
-        for team, seed_map in atoms.items():
-            for seed, atom_list in seed_map.items():
-                for atom in atom_list:
-                    for cond in atom:
-                        if isinstance(cond, PDRankCondition):
-                            assert 1 <= cond.rank <= len(cond.group), (
-                                f"{team} seed {seed}: rank {cond.rank} out of bounds "
-                                f"for group of size {len(cond.group)}"
-                            )
-                            assert 1 <= seed <= 4, f"PDRankCondition at non-playoff seed {seed}"
-
-    def test_pd_rank_condition_higher_rank_at_higher_seed(self):
-        """For a given team and game-winner set, higher PD rank → higher seed number.
-
-        Within the same mask (identified by identical game-winner conditions), atoms
-        at a lower seed number must have a strictly lower PDRankCondition rank.
-        """
-        from backend.helpers.data_classes import PDRankCondition
-
-        atoms = self._setup()
-        for team, seed_map in atoms.items():
-            # Build: game_winner_key -> list of (seed, rank) from PDRankCondition atoms
-            gw_to_seed_rank: dict[tuple, list] = {}
-            for seed, atom_list in seed_map.items():
-                for atom in atom_list:
-                    pd_conds = [c for c in atom if isinstance(c, PDRankCondition)]
-                    if not pd_conds:
-                        continue
-                    gr_key = tuple((c.winner, c.loser) for c in atom if isinstance(c, GameResult))
-                    for pd in pd_conds:
-                        gw_to_seed_rank.setdefault(gr_key, []).append((seed, pd.rank))
-
-            for gw_key, pairs in gw_to_seed_rank.items():
-                pairs_sorted = sorted(pairs)  # by seed ascending
-                for i in range(len(pairs_sorted) - 1):
-                    s1, r1 = pairs_sorted[i]
-                    s2, r2 = pairs_sorted[i + 1]
-                    assert r1 < r2, (
-                        f"{team}: same game winners {gw_key} — seed {s1} has rank {r1}, "
-                        f"but seed {s2} has rank {r2} (expected r1 < r2)"
-                    )
 
 
 # ---------------------------------------------------------------------------
@@ -2389,3 +1895,23 @@ class TestFindTiebreakerGroups:
         runs off the end of the list without converging and no group is formed."""
         groups = _find_tiebreaker_groups(["A", "B", "C"], ["A", "B", "D"])
         assert groups == []
+
+
+class TestSimplifyAtomListTiePlaces:
+    """Rule 5: a team's every place in one tie, otherwise alike, is the rest alone."""
+
+    def test_every_place_in_the_tie_drops_the_tie(self):
+        from backend.helpers.data_classes import TiebreakPlace
+
+        g = GameResult("A", "B")
+        tie = ("A", "C")
+        atoms = [[g, TiebreakPlace("A", 1, tie, 5)], [g, TiebreakPlace("A", 2, tie, 5)]]
+        assert _simplify_atom_list(atoms) == [[g]]
+
+    def test_some_places_in_the_tie_stay(self):
+        from backend.helpers.data_classes import TiebreakPlace
+
+        g = GameResult("A", "B")
+        tie = ("A", "C", "D")
+        atoms = [[g, TiebreakPlace("A", 1, tie, 5)], [g, TiebreakPlace("A", 2, tie, 5)]]
+        assert _simplify_atom_list(atoms) == atoms

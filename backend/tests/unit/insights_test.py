@@ -345,23 +345,15 @@ def test_conditions_frozenset_same_regardless_of_order():
 # ---------------------------------------------------------------------------
 
 
-def test_verify_margins_skipped_at_r4_or_less():
-    """r_computed ≤ 4 skips margin verification and returns True immediately."""
-    # With r_computed=4, should return True without calling tiebreaker
-    result = _verify_insight_margins(
-        (GameResult("Beta", "Gamma"),),
-        "Beta",
-        _TEAMS_3,
-        _COMPLETED_3,
-        _REMAINING_1,
-        r_computed=4,
-        expected_seed=2,
-    )
-    assert result is True
+def test_verify_margins_runs_at_r4_or_less():
+    """Few games left is no shortcut: a claim is checked against the tiebreaker at any r_computed."""
+    args = ((GameResult("Beta", "Gamma"),), "Beta", _TEAMS_3, _COMPLETED_3, _REMAINING_1)
+    assert _verify_insight_margins(*args, r_computed=4, expected_seed=2) is True
+    assert _verify_insight_margins(*args, r_computed=4, expected_seed=1) is False
 
 
 def test_verify_margins_r0_skipped():
-    """r_computed = 0 (all games complete) skips verification and returns True."""
+    """With no conditions, the claim is checked against every result (Alpha is always in)."""
     result = _verify_insight_margins(
         (),
         "Alpha",
@@ -912,8 +904,9 @@ def test_extract_insights_none_odds_default():
     assert isinstance(insights, list)
 
 
-def test_extract_insights_region_cap():
+def test_extract_insights_region_cap(monkeypatch):
     """Total insights capped at _MAX_TOTAL_REGION."""
+    monkeypatch.setattr("backend.helpers.insights._verify_insight_margins", lambda *a, **kw: True)
     teams = [f"Team{i}" for i in range(_MAX_TOTAL_REGION + 5)]
     atoms = {t: {1: [[GameResult(t, "Opponent")]]} for t in teams}
     remaining = [RemainingGame(t, "Opponent") for t in teams[:3]]

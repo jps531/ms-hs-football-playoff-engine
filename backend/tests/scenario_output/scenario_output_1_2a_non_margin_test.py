@@ -85,6 +85,7 @@ class TestCheckpointA:
             "conditions_atom",
             "alternatives",
             "open_groups",
+            "open_places",
             "tiebreaker_groups",
             "coinflip_groups",
         }
@@ -189,6 +190,7 @@ class TestCheckpointB:
             "conditions_atom",
             "alternatives",
             "open_groups",
+            "open_places",
             "tiebreaker_groups",
             "coinflip_groups",
         }

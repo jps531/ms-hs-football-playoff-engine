@@ -110,7 +110,7 @@ from backend.helpers.scenario_serializers import (
     deserialize_scenario_atoms,
     serialize_condition,
 )
-from backend.helpers.scenario_viewer import _simplify_atom_list, build_scenario_atoms
+from backend.helpers.scenario_viewer import _simplify_atom_list, build_scenario_atoms, team_atoms_from_scenarios
 from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
 from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.helpers.win_probability import (
@@ -1307,13 +1307,17 @@ async def _compute_seed_atoms_if_pre_playoff(
     snapshot fetch.
     """
     scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
+    complete: list[dict] = []
     if scenarios_data is not None:
-        remaining, _, _, _ = scenarios_data
+        remaining, complete, _, _ = scenarios_data
     else:
         _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
 
     if not has_displayable_scenarios(remaining):
         return None, remaining
+    if complete:
+        # The stored complete scenarios already say what each place needs; no need to rebuild them.
+        return team_atoms_from_scenarios(complete, remaining), remaining
 
     if teams is None:
         teams = await load_active_region_teams(conn, season, clazz, region)

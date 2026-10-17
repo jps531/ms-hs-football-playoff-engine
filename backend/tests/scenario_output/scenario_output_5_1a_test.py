@@ -197,6 +197,7 @@ def test_scenario_entry_shape():
         "conditions_atom",
         "alternatives",
         "open_groups",
+        "open_places",
         "tiebreaker_groups",
         "coinflip_groups",
     }

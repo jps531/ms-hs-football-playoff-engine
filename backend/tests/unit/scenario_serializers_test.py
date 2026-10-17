@@ -455,9 +455,17 @@ def test_tiebreak_decision_roundtrip():
     assert deserialize_condition(serialize_condition(cond)) == cond
 
 
+def test_tiebreak_place_roundtrip():
+    """A team's place in a tie left to the tiebreaker survives the snapshot unchanged."""
+    from backend.helpers.data_classes import TiebreakPlace
+
+    cond = TiebreakPlace("Raleigh", 2, ("Magee", "Raleigh", "Seminary"), 5)
+    assert deserialize_condition(serialize_condition(cond)) == cond
+
+
 def test_complete_scenarios_keep_open_groups():
     """A group left to the tiebreaker stays open after the snapshot, so its places never read as an order;
-    a scenario's alternative conditions all survive too."""
+    the places its teams can reach, and a scenario's alternative conditions, all survive too."""
     from backend.helpers.scenario_serializers import deserialize_complete_scenarios, serialize_complete_scenarios
 
     sc = {
@@ -467,6 +475,7 @@ def test_complete_scenarios_keep_open_groups():
         "conditions_atom": [GameResult("A", "B", 1, 8)],
         "alternatives": [[GameResult("A", "B", 1, 8)], [GameResult("A", "B", 10, None)]],
         "open_groups": [(5, ("A", "C"))],
+        "open_places": {"C": [2]},
         "tiebreaker_groups": None,
         "coinflip_groups": None,
         "seeding": ("A", "C", "B"),
@@ -474,6 +483,7 @@ def test_complete_scenarios_keep_open_groups():
     assert deserialize_complete_scenarios(serialize_complete_scenarios([sc])) == [sc]
     # Older snapshots, from before open groups, still load.
     old = serialize_complete_scenarios([sc])[0]
-    del old["open_groups"], old["alternatives"]
+    del old["open_groups"], old["alternatives"], old["open_places"]
     assert deserialize_complete_scenarios([old])[0]["open_groups"] is None
     assert deserialize_complete_scenarios([old])[0]["alternatives"] is None
+    assert deserialize_complete_scenarios([old])[0]["open_places"] is None

@@ -922,6 +922,36 @@ class TiebreakDecision:
         return f"step {self.step} [{', '.join(self.group)}]: {order}"
 
 
+# --- Data class for a team's place in a tie a scenario leaves to the tiebreaker ---
+@dataclass(frozen=True)
+class TiebreakPlace:
+    """A team's place within a tied group whose order is left to the tiebreaker.
+
+    A complete scenario can leave a tie's order open (``open_groups``): from
+    ``step`` on, the tiebreaker decides it — fewest points allowed in region
+    games (step 5), which turns on actual scores, or a coin flip (step 6), or,
+    with margins ignored, everything from point differential on (step 3). A
+    team's path to a seed through such a scenario needs this condition too:
+    ``team`` comes out ``place`` (1-based) of ``group`` on that tiebreaker.
+
+    Like ``TiebreakDecision`` it isn't a condition on margins, so
+    ``satisfied_by`` can't answer it.
+    """
+
+    team: str
+    place: int
+    group: tuple[str, ...]
+    step: int
+
+    def satisfied_by(self, _outcome_mask: int, _margins: dict, _remaining: list) -> bool:
+        """Not decidable from margins alone; see the class docstring."""
+        raise NotImplementedError("a TiebreakPlace is decided by the tiebreaker, not by margins")
+
+    def __str__(self) -> str:
+        """Return a compact representation: "Raleigh 1st of [Magee, Raleigh, Seminary] from step 5"."""
+        return f"{self.team} {self.place} of [{', '.join(self.group)}] from step {self.step}"
+
+
 # --- Data class for point-differential rank in a coin-flip group ---
 @dataclass(frozen=True)
 class PDRankCondition:

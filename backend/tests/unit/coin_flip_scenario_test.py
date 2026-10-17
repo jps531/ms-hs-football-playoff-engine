@@ -9,23 +9,17 @@ affect Alpha or Beta at all.  Therefore:
     cutoff).
 
 This fixture exercises:
-  _relevant_flip_groups          (scenario_viewer.py)
-  _expand_coin_flip_seedings     (scenario_viewer.py)
-  _build_coin_flip_conds         (scenario_viewer.py)
-  Step 3b in build_scenario_atoms (scenario_viewer.py)
+  build_scenario_atoms giving each team its place in the flip (scenario_viewer.py)
   enumerate_division_scenarios leaving a certain coin flip to the flip (scenario_viewer.py)
-  CoinFlipResult dispatch in _render_condition (scenario_renderer.py)
+  TiebreakPlace dispatch in _render_condition (scenario_renderer.py)
   _accumulate_slots with flip_groups (scenarios.py lines 105–134)
 """
 
 import pytest
 
-from backend.helpers.data_classes import CoinFlipResult, CompletedGame, RemainingGame
+from backend.helpers.data_classes import CoinFlipResult, CompletedGame, RemainingGame, TiebreakPlace
 from backend.helpers.scenario_renderer import render_team_scenarios
 from backend.helpers.scenario_viewer import (
-    _build_coin_flip_conds,
-    _expand_coin_flip_seedings,
-    _relevant_flip_groups,
     build_scenario_atoms,
     enumerate_division_scenarios,
     enumerate_outcomes,
@@ -70,131 +64,12 @@ _ODDS = determine_odds(
 
 
 # ---------------------------------------------------------------------------
-# Unit tests: _relevant_flip_groups
-# ---------------------------------------------------------------------------
-
-
-class TestRelevantFlipGroups:
-    """_relevant_flip_groups keeps only groups with a member inside playoff range."""
-
-    _SEEDING = ["Alpha", "Beta", "Delta", "Gamma"]
-
-    def test_keeps_group_spanning_playoff_boundary(self):
-        """Flip group whose members are all within playoff range → included."""
-        groups = [["Alpha", "Beta"]]
-        result = _relevant_flip_groups(groups, self._SEEDING, playoff_seeds=2)
-        assert result == [["Alpha", "Beta"]]
-
-    def test_drops_group_entirely_outside_playoff_range(self):
-        """Flip group where no member is in top-N → excluded."""
-        groups = [["Delta", "Gamma"]]  # positions 2 and 3, outside top-2
-        result = _relevant_flip_groups(groups, self._SEEDING, playoff_seeds=2)
-        assert result == []
-
-    def test_keeps_group_straddling_boundary(self):
-        """Group with one member at the last playoff seed → included."""
-        groups = [["Beta", "Delta"]]  # Beta at index 1 (< 2)
-        result = _relevant_flip_groups(groups, self._SEEDING, playoff_seeds=2)
-        assert result == [["Beta", "Delta"]]
-
-    def test_multiple_groups_filtered_correctly(self):
-        """Only groups with a playoff-range member are returned."""
-        groups = [["Alpha", "Beta"], ["Delta", "Gamma"]]
-        result = _relevant_flip_groups(groups, self._SEEDING, playoff_seeds=2)
-        assert result == [["Alpha", "Beta"]]
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: _expand_coin_flip_seedings
-# ---------------------------------------------------------------------------
-
-
-class TestExpandCoinFlipSeedings:
-    """_expand_coin_flip_seedings generates all permutations of each flip group."""
-
-    def test_two_team_flip_produces_two_seedings(self):
-        """A 2-team flip group yields 2 expanded seedings."""
-        canonical = ["Alpha", "Beta", "Delta", "Gamma"]
-        result = _expand_coin_flip_seedings(canonical, [["Alpha", "Beta"]])
-        assert len(result) == 2
-
-    def test_both_orderings_present(self):
-        """Both (Alpha, Beta, ...) and (Beta, Alpha, ...) appear."""
-        canonical = ["Alpha", "Beta", "Delta", "Gamma"]
-        result = _expand_coin_flip_seedings(canonical, [["Alpha", "Beta"]])
-        seedings = {s[:2] for s in result}
-        assert ("Alpha", "Beta") in seedings
-        assert ("Beta", "Alpha") in seedings
-
-    def test_non_flip_positions_unchanged(self):
-        """Teams not in any flip group stay in their original positions."""
-        canonical = ["Alpha", "Beta", "Delta", "Gamma"]
-        result = _expand_coin_flip_seedings(canonical, [["Alpha", "Beta"]])
-        for seeding in result:
-            assert seeding[2] == "Delta"
-            assert seeding[3] == "Gamma"
-
-    def test_empty_flip_groups_returns_original(self):
-        """With no flip groups, returns the canonical seeding unchanged."""
-        canonical = ["Alpha", "Beta", "Delta", "Gamma"]
-        result = _expand_coin_flip_seedings(canonical, [])
-        assert result == [tuple(canonical)]
-
-    def test_three_team_flip_produces_six_seedings(self):
-        """A 3-team flip group yields 3! = 6 expanded seedings."""
-        canonical = ["Alpha", "Beta", "Delta", "Gamma"]
-        result = _expand_coin_flip_seedings(canonical, [["Alpha", "Beta", "Delta"]])
-        assert len(result) == 6
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: _build_coin_flip_conds
-# ---------------------------------------------------------------------------
-
-
-class TestBuildCoinFlipConds:
-    """_build_coin_flip_conds emits pairwise CoinFlipResult conditions."""
-
-    def test_two_team_group_produces_one_condition(self):
-        """A 2-team group emits one CoinFlipResult covering the pair."""
-        seeding = ["Alpha", "Beta", "Delta", "Gamma"]
-        conds = _build_coin_flip_conds(seeding, [["Alpha", "Beta"]])
-        assert len(conds) == 1
-
-    def test_condition_reflects_seeding_order(self):
-        """Winner is the team ranked higher in the seeding."""
-        seeding = ["Alpha", "Beta", "Delta", "Gamma"]
-        conds = _build_coin_flip_conds(seeding, [["Alpha", "Beta"]])
-        assert conds[0] == CoinFlipResult(winner="Alpha", loser="Beta")
-
-    def test_reverse_seeding_flips_winner(self):
-        """When Beta is ranked higher, Beta is the winner."""
-        seeding = ["Beta", "Alpha", "Delta", "Gamma"]
-        conds = _build_coin_flip_conds(seeding, [["Alpha", "Beta"]])
-        assert conds[0] == CoinFlipResult(winner="Beta", loser="Alpha")
-
-    def test_three_team_group_produces_two_conditions(self):
-        """A 3-team group emits 2 consecutive-pair CoinFlipResults."""
-        seeding = ["Alpha", "Beta", "Delta", "Gamma"]
-        conds = _build_coin_flip_conds(seeding, [["Alpha", "Beta", "Delta"]])
-        assert len(conds) == 2
-        assert conds[0] == CoinFlipResult(winner="Alpha", loser="Beta")
-        assert conds[1] == CoinFlipResult(winner="Beta", loser="Delta")
-
-    def test_empty_groups_produces_no_conditions(self):
-        """With no flip groups, no CoinFlipResult conditions are emitted."""
-        seeding = ["Alpha", "Beta", "Delta", "Gamma"]
-        conds = _build_coin_flip_conds(seeding, [])
-        assert conds == []
-
-
-# ---------------------------------------------------------------------------
 # Integration tests: build_scenario_atoms (Step 3b)
 # ---------------------------------------------------------------------------
 
 
 class TestBuildScenarioAtomsCoinFlip:
-    """build_scenario_atoms emits coin-flip atoms for both playoff teams."""
+    """build_scenario_atoms gives both playoff teams each place, by their place in the coin flip."""
 
     def test_alpha_has_atoms_at_both_seeds(self):
         """Alpha can win either seed → atoms exist at seeds 1 and 2."""
@@ -206,22 +81,23 @@ class TestBuildScenarioAtomsCoinFlip:
         assert 1 in _ATOMS.get("Beta", {})
         assert 2 in _ATOMS.get("Beta", {})
 
-    def test_alpha_seed1_atom_contains_coin_flip_result(self):
-        """Alpha's seed-1 atoms each contain a CoinFlipResult condition."""
-        for atom in _ATOMS["Alpha"][1]:
-            assert any(isinstance(c, CoinFlipResult) for c in atom), f"No CoinFlipResult in atom: {atom}"
+    def test_alpha_seed1_atom_is_first_place_in_the_flip(self):
+        """Alpha's seed-1 atom is its first place in the Alpha/Beta coin flip (step 6), nothing else."""
+        assert _ATOMS["Alpha"][1] == [[TiebreakPlace("Alpha", 1, ("Alpha", "Beta"), 6)]]
 
-    def test_alpha_seed1_coin_flip_names_alpha_as_winner(self):
-        """When Alpha wins seed 1, the CoinFlipResult has Alpha as winner."""
-        for atom in _ATOMS["Alpha"][1]:
-            flip_conds = [c for c in atom if isinstance(c, CoinFlipResult)]
-            assert all(c.winner == "Alpha" for c in flip_conds)
+    def test_alpha_seed2_atom_is_second_place_in_the_flip(self):
+        """Alpha's seed-2 atom is its second place in the coin flip."""
+        assert _ATOMS["Alpha"][2] == [[TiebreakPlace("Alpha", 2, ("Alpha", "Beta"), 6)]]
 
-    def test_beta_seed1_coin_flip_names_beta_as_winner(self):
-        """When Beta wins seed 1, the CoinFlipResult has Beta as winner."""
-        for atom in _ATOMS["Beta"][1]:
-            flip_conds = [c for c in atom if isinstance(c, CoinFlipResult)]
-            assert all(c.winner == "Beta" for c in flip_conds)
+    def test_beta_seed1_atom_names_beta(self):
+        """When Beta takes seed 1, the condition is Beta's first place in the flip."""
+        assert _ATOMS["Beta"][1] == [[TiebreakPlace("Beta", 1, ("Alpha", "Beta"), 6)]]
+
+    def test_no_coin_flip_results(self):
+        """The old per-result CoinFlipResult atoms are gone: the flip is a place in the tie."""
+        assert not any(
+            isinstance(c, CoinFlipResult) for seeds in _ATOMS.values() for al in seeds.values() for a in al for c in a
+        )
 
     def test_eliminated_teams_not_in_atoms(self):
         """Delta and Gamma have no seed-1 or seed-2 atoms."""
@@ -318,27 +194,22 @@ class TestDetermineScenariosCoinFlip:
 
 
 class TestRenderCoinFlipScenario:
-    """render_team_scenarios surfaces 'wins coin flip vs' for flip-determined seeds."""
+    """render_team_scenarios says a flip-determined seed turns on the team's place in the coin flip."""
 
-    def test_alpha_render_contains_coin_flip_phrasing(self):
-        """Alpha's rendered output includes 'wins coin flip vs'."""
+    def test_alpha_seed1_shows_alpha_ahead_on_the_flip(self):
+        """Alpha's seed-1 section says Alpha finishes ahead of Beta on the coin flip."""
         output = render_team_scenarios("Alpha", _ATOMS)
-        assert "wins coin flip vs" in output
+        assert "Alpha finishes ahead of Beta in their tie, which a coin flip decides" in output
 
-    def test_beta_render_contains_coin_flip_phrasing(self):
-        """Beta's rendered output includes 'wins coin flip vs'."""
+    def test_alpha_seed2_shows_alpha_behind_on_the_flip(self):
+        """Alpha's seed-2 section says Alpha finishes behind Beta on the coin flip."""
+        output = render_team_scenarios("Alpha", _ATOMS)
+        assert "Alpha finishes behind Beta in their tie, which a coin flip decides" in output
+
+    def test_beta_render_names_beta(self):
+        """Beta's rendered output is about Beta's place in the flip."""
         output = render_team_scenarios("Beta", _ATOMS)
-        assert "wins coin flip vs" in output
-
-    def test_alpha_seed1_shows_alpha_winning_flip(self):
-        """Alpha's seed-1 section lists 'Alpha wins coin flip vs Beta'."""
-        output = render_team_scenarios("Alpha", _ATOMS)
-        assert "Alpha wins coin flip vs Beta" in output
-
-    def test_alpha_seed2_shows_beta_winning_flip(self):
-        """Alpha's seed-2 section lists 'Beta wins coin flip vs Alpha'."""
-        output = render_team_scenarios("Alpha", _ATOMS)
-        assert "Beta wins coin flip vs Alpha" in output
+        assert "Beta finishes ahead of Alpha in their tie, which a coin flip decides" in output
 
     def test_render_with_odds_shows_fifty_percent(self):
         """With 50/50 odds, both seed sections show 50.0%."""
@@ -350,9 +221,7 @@ class TestRenderCoinFlipScenario:
 # Precomputed path: enumerate_outcomes → build_scenario_atoms /
 #                   enumerate_division_scenarios with coin-flip region
 #
-# Covers the `if precomputed is not None:` blocks in both consumers, including
-# the coin-flip branch at lines ~1261-1262 (build_scenario_atoms) and the
-# coin-flip metadata loop at lines ~1537-1542 (enumerate_division_scenarios).
+# Passing a precomputed EnumeratedOutcomes gives the same atoms and scenarios.
 # ---------------------------------------------------------------------------
 
 _PRECOMPUTED = enumerate_outcomes(_TEAMS, _COMPLETED, _REMAINING)
@@ -378,10 +247,9 @@ class TestPrecomputedPathCoinFlip:
         assert len(_ATOMS_PRE["Alpha"][1]) == len(_ATOMS["Alpha"][1])
         assert len(_ATOMS_PRE["Beta"][2]) == len(_ATOMS["Beta"][2])
 
-    def test_precomputed_atoms_contain_coin_flip_result(self):
-        """Alpha's seed-1 atoms (precomputed path) each have a CoinFlipResult."""
-        for atom in _ATOMS_PRE["Alpha"][1]:
-            assert any(isinstance(c, CoinFlipResult) for c in atom), f"No CoinFlipResult in precomputed atom: {atom}"
+    def test_precomputed_atoms_match_direct_exactly(self):
+        """The precomputed path gives the same atoms, the place in the flip included."""
+        assert _ATOMS_PRE == _ATOMS
 
     def test_precomputed_scenario_count_matches(self):
         """Precomputed path produces the same number of scenarios as direct path."""

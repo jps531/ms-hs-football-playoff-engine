@@ -100,8 +100,8 @@ NORTHEAST_JONES_EXPECTED = """\
 Northeast Jones
 
 #4 seed if: (37.5%)
-1. Purvis beats Vancleave AND Stone beats East Central
-2. Northeast Jones beats Wayne County AND Purvis beats Vancleave AND East Central beats Stone
+1. Northeast Jones beats Wayne County AND Purvis beats Vancleave
+2. Purvis beats Vancleave AND Stone beats East Central
 
 Eliminated if: (62.5%)
 1. Vancleave beats Purvis
@@ -114,8 +114,8 @@ Purvis
 1. Purvis beats Vancleave
 
 #4 seed if: (37.5%)
-1. Vancleave beats Purvis AND Stone beats East Central
-2. Northeast Jones beats Wayne County AND Vancleave beats Purvis AND East Central beats Stone
+1. Northeast Jones beats Wayne County AND Vancleave beats Purvis
+2. Vancleave beats Purvis AND Stone beats East Central
 
 Eliminated if: (12.5%)
 1. Wayne County beats Northeast Jones AND Vancleave beats Purvis AND East Central beats Stone"""
@@ -124,8 +124,8 @@ VANCLEAVE_EXPECTED = """\
 Vancleave
 
 #3 seed if: (37.5%)
-1. Vancleave beats Purvis AND Stone beats East Central
-2. Northeast Jones beats Wayne County AND Vancleave beats Purvis AND East Central beats Stone
+1. Northeast Jones beats Wayne County AND Vancleave beats Purvis
+2. Vancleave beats Purvis AND Stone beats East Central
 
 #4 seed if: (12.5%)
 1. Wayne County beats Northeast Jones AND Vancleave beats Purvis AND East Central beats Stone
@@ -281,29 +281,13 @@ def test_atoms_purvis_seed4_count():
 
 
 def test_atoms_purvis_seed4_atom0():
-    """Purvis seed-4 first atom: VAN beats Purvis AND Stone beats EC (NJ/WC game irrelevant)."""
-    atom = _ATOMS["Purvis"][4][0]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Vancleave"
-    assert gr0.loser == "Purvis"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Stone"
-    assert gr1.loser == "East Central"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
+    """Purvis #4 path 1: Northeast Jones beats Wayne County AND Vancleave beats Purvis."""
+    assert [str(c) for c in _ATOMS["Purvis"][4][0]] == ["Northeast Jones>Wayne County", "Vancleave>Purvis"]
 
 
 def test_atoms_purvis_seed4_atom1():
-    """Purvis seed-4 second atom: NJ beats WC AND VAN beats Purvis AND EC beats Stone."""
-    atom = _ATOMS["Purvis"][4][1]
-    assert len(atom) == 3
-    winners = {gr.winner for gr in atom}
-    assert "Northeast Jones" in winners
-    assert "Vancleave" in winners
-    assert "East Central" in winners
+    """Purvis #4 path 2: Vancleave beats Purvis AND Stone beats East Central."""
+    assert [str(c) for c in _ATOMS["Purvis"][4][1]] == ["Vancleave>Purvis", "Stone>East Central"]
 
 
 def test_atoms_purvis_seed5_count():
@@ -332,29 +316,13 @@ def test_atoms_vancleave_seed3_count():
 
 
 def test_atoms_vancleave_seed3_atom0():
-    """Vancleave seed-3 first atom: VAN beats Purvis AND Stone beats EC (NJ/WC irrelevant)."""
-    atom = _ATOMS["Vancleave"][3][0]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Vancleave"
-    assert gr0.loser == "Purvis"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Stone"
-    assert gr1.loser == "East Central"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
+    """Vancleave #3 path 1: Northeast Jones beats Wayne County AND Vancleave beats Purvis."""
+    assert [str(c) for c in _ATOMS["Vancleave"][3][0]] == ["Northeast Jones>Wayne County", "Vancleave>Purvis"]
 
 
 def test_atoms_vancleave_seed3_atom1():
-    """Vancleave seed-3 second atom: NJ beats WC AND VAN beats Purvis AND EC beats Stone."""
-    atom = _ATOMS["Vancleave"][3][1]
-    assert len(atom) == 3
-    winners = {gr.winner for gr in atom}
-    assert "Northeast Jones" in winners
-    assert "Vancleave" in winners
-    assert "East Central" in winners
+    """Vancleave #3 path 2: Vancleave beats Purvis AND Stone beats East Central."""
+    assert [str(c) for c in _ATOMS["Vancleave"][3][1]] == ["Vancleave>Purvis", "Stone>East Central"]
 
 
 def test_atoms_vancleave_seed4_count():
@@ -399,37 +367,13 @@ def test_atoms_northeast_jones_seed4_count():
 
 
 def test_atoms_northeast_jones_seed4_atom0():
-    """NJ seed-4 first atom: Purvis beats VAN AND Stone beats EC (NJ/WC game absent)."""
-    atom = _ATOMS["Northeast Jones"][4][0]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Purvis"
-    assert gr0.loser == "Vancleave"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Stone"
-    assert gr1.loser == "East Central"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
-
-
-def test_atoms_northeast_jones_seed4_atom0_nj_wc_absent():
-    """NJ seed-4 first atom omits the NJ/WC game — that result is irrelevant to NJ's #4 finish here."""
-    atom = _ATOMS["Northeast Jones"][4][0]
-    nj_wc_teams = {"Northeast Jones", "Wayne County"}
-    for gr in atom:
-        assert {gr.winner, gr.loser} != nj_wc_teams
+    """Northeast Jones #4 path 1: Northeast Jones beats Wayne County AND Purvis beats Vancleave."""
+    assert [str(c) for c in _ATOMS["Northeast Jones"][4][0]] == ["Northeast Jones>Wayne County", "Purvis>Vancleave"]
 
 
 def test_atoms_northeast_jones_seed4_atom1():
-    """NJ seed-4 second atom: NJ beats WC AND Purvis beats VAN AND EC beats Stone."""
-    atom = _ATOMS["Northeast Jones"][4][1]
-    assert len(atom) == 3
-    winners = {gr.winner for gr in atom}
-    assert "Northeast Jones" in winners
-    assert "Purvis" in winners
-    assert "East Central" in winners
+    """Northeast Jones #4 path 2: Purvis beats Vancleave AND Stone beats East Central."""
+    assert [str(c) for c in _ATOMS["Northeast Jones"][4][1]] == ["Purvis>Vancleave", "Stone>East Central"]
 
 
 # ---------------------------------------------------------------------------
@@ -470,22 +414,6 @@ def test_atoms_east_central_seed4_atom():
 # ---------------------------------------------------------------------------
 # Cross-game independence: NJ/WC game absent from Purvis/VAN/NJ seed-4 atom-0
 # ---------------------------------------------------------------------------
-
-
-def test_nj_wc_absent_from_purvis_seed4_atom0():
-    """Purvis seed-4 first atom omits NJ/WC — irrelevant when VAN wins AND Stone wins."""
-    atom = _ATOMS["Purvis"][4][0]
-    nj_wc_teams = {"Northeast Jones", "Wayne County"}
-    for gr in atom:
-        assert {gr.winner, gr.loser} != nj_wc_teams
-
-
-def test_nj_wc_absent_from_vancleave_seed3_atom0():
-    """Vancleave seed-3 first atom omits NJ/WC — irrelevant when VAN wins AND Stone wins."""
-    atom = _ATOMS["Vancleave"][3][0]
-    nj_wc_teams = {"Northeast Jones", "Wayne County"}
-    for gr in atom:
-        assert {gr.winner, gr.loser} != nj_wc_teams
 
 
 # ---------------------------------------------------------------------------

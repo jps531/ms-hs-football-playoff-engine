@@ -5376,10 +5376,25 @@ class TestScenarioAlternativesAndOpenGroups:
         body = [_GameResult("Taylorsville", "Lumberton", winner_score=27, loser_score=7)]
         assert filter_scenarios_by_simulation([self._scenario()], body) == []
 
-    def test_team_atoms_skip_teams_whose_place_isnt_stated(self):
-        """Magee and Seminary's places are only placeholders in the open group, so they get no seed from it."""
+    def test_team_atoms_give_tied_teams_their_place_in_the_tie(self):
+        """Magee and Seminary's places come from the open group: each needs its place in the tie."""
+        from backend.helpers.data_classes import TiebreakPlace
         from backend.helpers.scenario_renderer import atoms_from_complete_scenarios
 
         atoms = atoms_from_complete_scenarios([self._scenario()])
-        assert "Magee" not in atoms and "Seminary" not in atoms
+        group = ("Magee", "Seminary")
+        assert atoms["Magee"][2] == [
+            [*way, TiebreakPlace("Magee", 1, group, 5)] for way in self._scenario()["alternatives"]
+        ]
+        assert atoms["Magee"][3] == [
+            [*way, TiebreakPlace("Magee", 2, group, 5)] for way in self._scenario()["alternatives"]
+        ]
+        assert set(atoms["Seminary"]) == {2, 3}
         assert len(atoms["Lumberton"][1]) == 2  # both ways to the outcome
+
+    def test_team_atoms_keep_only_the_places_a_tied_team_reaches(self):
+        """With ``open_places``, a tied team gets paths only to the seeds it can reach."""
+        from backend.helpers.scenario_renderer import atoms_from_complete_scenarios
+
+        atoms = atoms_from_complete_scenarios([{**self._scenario(), "open_places": {"Seminary": [3]}}])
+        assert set(atoms["Seminary"]) == {3} and set(atoms["Magee"]) == {2, 3}

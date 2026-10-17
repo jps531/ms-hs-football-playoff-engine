@@ -220,6 +220,7 @@ def test_scenario_shape():
         "conditions_atom",
         "alternatives",
         "open_groups",
+        "open_places",
         "tiebreaker_groups",
         "coinflip_groups",
     }

@@ -222,37 +222,21 @@ def test_no_coin_flip_teams():
 
 
 def test_coahoma_county_seed1_first_atom_conditions():
-    """CC seed-1 first atom: CC beats Ind (any margin) AND NP beats HS (any margin).
-
-    This is the simplest path to CC at seed 1: CC beats their strongest remaining
-    opponent (Ind) and their H2H rival's opponent (NP beats HS) — forcing a 3-0
-    or 2-1 CC record where CC beats NP by H2H (from the Oct 10 completed game).
-    """
-    atom = _ATOMS["Coahoma County"][1][0]
-    cc_beats_ind = next(
-        (c for c in atom if isinstance(c, GameResult) and c.winner == "Coahoma County" and c.loser == "Independence"),
-        None,
-    )
-    np_beats_hs = next(
-        (c for c in atom if isinstance(c, GameResult) and c.winner == "North Panola" and c.loser == "Holly Springs"),
-        None,
-    )
-    assert cc_beats_ind is not None, "CC beats Ind condition missing"
-    assert cc_beats_ind.min_margin == 1
-    assert cc_beats_ind.max_margin is None  # any winning margin qualifies
-    assert np_beats_hs is not None, "NP beats HS condition missing"
-    assert np_beats_hs.min_margin == 1
-    assert np_beats_hs.max_margin is None
+    """Coahoma County #1 path 1: Coahoma County beats Holly Springs AND Coahoma County beats Independence."""
+    assert [str(c) for c in _ATOMS["Coahoma County"][1][0]] == [
+        "Coahoma County>Holly Springs",
+        "Coahoma County>Independence",
+    ]
 
 
 def test_coahoma_county_seed1_atom_count():
-    """CC seed-1 has 14 atoms (margin-sensitive tiebreaker paths when 3-way ties occur)."""
-    assert len(_ATOMS["Coahoma County"][1]) == 14
+    """Coahoma County"s #1 has 13 paths."""
+    assert len(_ATOMS["Coahoma County"][1]) == 13
 
 
 def test_coahoma_county_seed4_atom_count():
-    """CC seed-4 has only 2 atoms (rare outcome — CC loses both remaining games)."""
-    assert len(_ATOMS["Coahoma County"][4]) == 2
+    """Coahoma County"s #4 has 3 paths."""
+    assert len(_ATOMS["Coahoma County"][4]) == 3
 
 
 def test_coahoma_county_seed4_first_atom():
@@ -443,9 +427,9 @@ def test_render_coahoma_county_seed4_first_atom():
 
 
 def test_render_coahoma_county_has_margin_conditions():
-    """CC's render contains margin-sensitive conditions (from 3-way tie resolution)."""
+    """CC's margin-sensitive paths (from 3-way ties) state the tiebreaker decisions behind them."""
     rendered = render_team_scenarios("Coahoma County", _ATOMS, odds=_ODDS)
-    assert "by exactly" in rendered
+    assert "Point differential in games among Coahoma County, Holly Springs and Independence" in rendered
 
 
 # Independence
