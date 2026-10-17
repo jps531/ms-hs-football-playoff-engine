@@ -730,14 +730,14 @@ def _scenario_preview(
     names it for the link's accessible name ("title scenarios")."""
     clazz, region = example["clazz"], example["region"]
     name = f"Region {region}-{clazz}A"
-    sub_html = f'<h3 class="sub-title">{_e(sub)}</h3>' if sub else ""
+    grid = f'<div class="scenario-grid">{"".join(cards_html)}</div>'
+    group = f'<div class="scenario-group"><h3 class="sub-title">{_e(sub)}</h3>{grid}</div>' if sub else grid
     return (
         f'<a class="landing-preview landing-preview--scenarios" href="{region_path(clazz, region)}#{anchor}" '
         f'aria-label="Open {name}’s {what}">'
         '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
         f'<p class="title">{name}</p>{_provenance(example["stamp"])}'
-        f'<section class="section"><p class="section-title">{_e(heading)}</p>{sub_html}'
-        f'<div class="scenario-grid">{"".join(cards_html)}</div></section>'
+        f'<section class="section"><p class="section-title">{_e(heading)}</p>{group}</section>'
         "</div></div>"
         f'<span class="landing-preview__label">Open {name}</span></a>'
     )
@@ -749,54 +749,77 @@ def _open_title_teams(entry: dict) -> int:
     return sum(1 for t in teams if 0 < mode_odds(t, "p1", entry["mode"]) < 1)
 
 
+def _bubble_teams(entry: dict) -> int:
+    """How many teams can still make or miss the playoffs in *entry*'s odds mode."""
+    teams = entry["standings"].get("teams") or []
+    return sum(1 for t in teams if 0 < mode_odds(t, "p_playoffs", entry["mode"]) < 1)
+
+
 def pick_scenario_region(
     regions: dict[tuple[int, int], dict], prefer: tuple[int, int] | None
 ) -> tuple[int, int] | None:
     """The region the front page's scenario examples come from: one with full scenarios and an open title
-    race, so all three examples have something to show. The featured region when it qualifies, else the
-    most open race in its class, else in any class. *regions* maps (class, region) to
-    ``{"standings", "stamp", "mode"}``."""
+    race, so every example has something to show; better still, one with a playoff spot still open too.
+    Among those, the featured region, else the most open race in its class, else in any class. *regions*
+    maps (class, region) to ``{"standings", "stamp", "mode"}``."""
     candidates = [
         k for k, v in regions.items() if v["standings"].get("scenarios_available") and _open_title_teams(v) >= 2
     ]
     if not candidates:
         return None
-    if prefer in candidates:
-        return prefer
     same_class = prefer[0] if prefer else None
-    return max(candidates, key=lambda k: (k[0] == same_class, _open_title_teams(regions[k]), -k[0], -k[1]))
+    return max(
+        candidates,
+        key=lambda k: (
+            _bubble_teams(regions[k]) > 0,
+            k == prefer,
+            k[0] == same_class,
+            _open_title_teams(regions[k]),
+            -k[0],
+            -k[1],
+        ),
+    )
 
 
 def scenario_previews(example: dict | None, teams: dict) -> dict[str, str]:
-    """The front page's three scenario examples, each a lead-in and a preview: ``{"title", "seeding",
-    "unique"}``, "" for any with nothing to show. *example* is the region picked by ``pick_scenario_region``
-    with its stamp and mode: ``{"clazz", "region", "stamp", "mode", "scenario_payload"}``, the payload
-    including each team's paths."""
-    empty = {"title": "", "seeding": "", "unique": ""}
+    """The front page's four scenario examples, each a lead-in and a preview: ``{"title", "playoffs",
+    "seeding", "unique"}``, "" for any with nothing to show. *example* is the region picked by
+    ``pick_scenario_region`` with its stamp and mode: ``{"clazz", "region", "stamp", "mode",
+    "scenario_payload"}``, the payload including each team's paths; ``"final": True`` when the regular
+    season is over and it's the region as it stood going into its final week."""
+    empty = {"title": "", "playoffs": "", "seeding": "", "unique": ""}
     payload = (example or {}).get("scenario_payload")
     if not payload or not payload.get("scenarios_available"):
         return empty
     name = f"Region {example['region']}-{example['clazz']}A"
+    final = example.get("final")
+    then = " going into its final week" if final else ""
+    leads = {
+        "title": f"Here’s what {'had' if final else 'has'} to happen for the two likeliest champions of {name}{then}:",
+        "playoffs": f"Here’s what {'decided' if final else 'decides'} the last playoff spots in {name}{then}:",
+        "seeding": f"And what {'would put' if final else 'puts'} teams in {name} at a particular seed:",
+    }
     groups = outcome_cards(payload.get("teams") or [], example["mode"])
     out = dict(empty)
-    if groups["title"]:
-        cards = [scenario_card(c, teams) for c in groups["title"][:SCENARIO_PREVIEW_CARDS]]
-        out["title"] = _lead(f"Here’s what has to happen for the two likeliest champions of {name}:") + (
-            _scenario_preview(
-                example, teams, "What has to happen", "The region title", cards, "scen-title", "title scenarios"
+    for key, sub, what in (
+        ("title", "The region title", "title scenarios"),
+        ("playoffs", "Playoff spots", "playoff spot scenarios"),
+        ("seeding", "Seeding", "seeding scenarios"),
+    ):
+        if groups[key]:
+            cards = [scenario_card(c, teams) for c in groups[key][:SCENARIO_PREVIEW_CARDS]]
+            out[key] = _lead(leads[key]) + _scenario_preview(
+                example, teams, "What has to happen", sub, cards, "scen-title", what
             )
-        )
-    if groups["seeding"]:
-        cards = [scenario_card(c, teams) for c in groups["seeding"][:SCENARIO_PREVIEW_CARDS]]
-        out["seeding"] = _lead(f"And what puts teams in {name} at a particular seed:") + _scenario_preview(
-            example, teams, "What has to happen", "Seeding", cards, "scen-title", "seeding scenarios"
-        )
     complete = complete_scenario_cards(payload.get("scenarios"))
     if complete:
         cards = [outcome_scenario_card(c, teams) for c in complete[:SCENARIO_PREVIEW_CARDS]]
         ways = f"{len(complete)} way{'s' if len(complete) != 1 else ''}"
         first = "Here’s the first:" if len(complete) == 1 else "Here are the first two:"
-        out["unique"] = _lead(f"{name} can still finish {ways}. {first}") + _scenario_preview(
+        lead = (
+            f"Going into its final week, {name} could finish {ways}." if final else f"{name} can still finish {ways}."
+        )
+        out["unique"] = _lead(f"{lead} {first}") + _scenario_preview(
             example, teams, "Scenarios", "", cards, "all-scen-title", "complete scenarios"
         )
     return out
@@ -1341,6 +1364,12 @@ def landing_body(featured: dict | None, teams: dict[str, dict], scenario_example
                 "Region title scenarios",
                 "Scenarios for how each eligible team can still win the region.",
                 "title",
+            ),
+            (
+                "playoff-scenarios",
+                "Playoff spot scenarios",
+                "Scenarios for how each team on the bubble can still make or miss the playoffs.",
+                "playoffs",
             ),
             (
                 "seeding-scenarios",

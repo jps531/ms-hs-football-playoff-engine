@@ -1429,6 +1429,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .landing-preview__page .title { font-size: 32px; line-height: 38px; }
 /* The scenario previews' own text sizes, over the landing section's 16px paragraphs. */
 .landing-preview--scenarios .section-title { font-size: 24px; line-height: 30px; }
+/* The section starts just under the provenance line here (no standings table in between), and the
+   sub-heading sits where the page's open fold puts it. */
+.landing-preview--scenarios .section { margin-top: 28px; }
+.landing-preview--scenarios .scenario-group > .sub-title { margin-bottom: 14px; }
 .landing-preview--scenarios :is(.outcome__out, .outcome__if) { font-size: 13px; line-height: 18px; }
 .landing-preview__label {
   display: block; padding: 10px 16px; border-top: 1px solid var(--border);

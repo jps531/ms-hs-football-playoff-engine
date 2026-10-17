@@ -33,7 +33,7 @@ from __future__ import annotations
 import os
 import tempfile
 from collections.abc import Callable
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import requests
@@ -166,12 +166,15 @@ def build_share_assets(
     sitemap: list[tuple[str, date | None]] = [("/", today), ("/methodology", None)]
     region_payloads: dict[tuple[int, int], dict] = {}
     class_standings: dict[int, dict] = {}
+    class_dates: dict[int, list[dict]] = {}
+    last_region_game: dict[tuple[int, int], date] = {}
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
             continue
         class_standings[clazz] = standings
         dates = (fetch(f"/seasons/{season}/dates?class={clazz}") or {}).get("dates", [])
+        class_dates[clazz] = dates
         all_teams = [t for r in standings["regions"] for t in r["teams"]]
         mode = odds_mode(all_teams)
         as_of = date.fromisoformat(standings["as_of_date"])
@@ -223,6 +226,9 @@ def build_share_assets(
                 ),
             )
             games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
+            region_days = [date.fromisoformat(g["date"]) for g in games if g.get("is_region_game") and g.get("date")]
+            if region_days:
+                last_region_game[(clazz, region)] = max(region_days)
             body = region_body(clazz, region, payload, f"{season} season · {r_stamp}", r_mode, teams, games)
             region_payloads[(clazz, region)] = {
                 "standings": payload,
@@ -244,21 +250,58 @@ def build_share_assets(
     else:
         featured = None
     # The scenario examples: a region with an open title race (the featured one if it has one),
-    # fetched again with each team's paths.
+    # fetched again with each team's paths. Once the regular season is over nothing is open, so they
+    # show the regions as they stood going into their final week instead.
+    prefer = (featured["clazz"], featured["card"]["region"]) if featured else None
+    examples, final = region_payloads, False
+    pick = pick_scenario_region(region_payloads, prefer)
+    if (
+        not pick
+        and region_payloads
+        and not any(v["standings"].get("remaining_games") for v in region_payloads.values())
+    ):
+        examples = _final_week_payloads(fetch, season, last_region_game, class_dates, today)
+        pick, final = pick_scenario_region(examples, prefer), True
     scenario_example = None
-    pick = pick_scenario_region(region_payloads, (featured["clazz"], featured["card"]["region"]) if featured else None)
     if pick:
         c, r = pick
+        on = f"&date={examples[pick]['date']}" if final else ""
         scenario_example = {
-            **region_payloads[pick],
+            **examples[pick],
             "clazz": c,
             "region": r,
-            "scenario_payload": fetch(f"/standings/{c}/{r}?season={season}&include_team_scenarios=true"),
+            "final": final,
+            "scenario_payload": fetch(f"/standings/{c}/{r}?season={season}{on}&include_team_scenarios=true"),
         }
     _write_text(out_dir / "body" / "site.html", landing_body(featured, teams, scenario_example))
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     return written
+
+
+def final_week_eve(last_game: date, dates: list[dict]) -> date:
+    """The day before the week of a region's last region game: the last snapshot with that week still to play."""
+    games = [(date.fromisoformat(str(d["date"])[:10]), d["week"]) for d in dates if d.get("kind") == "games"]
+    week = next((w for day, w in games if day == last_game), None)
+    days = [day for day, w in games if w == week]
+    return min(days or [last_game]) - timedelta(days=1)
+
+
+def _final_week_payloads(
+    fetch: Fetch, season: int, last_region_game: dict[tuple[int, int], date], class_dates: dict, today: date
+) -> dict[tuple[int, int], dict]:
+    """Each region as it stood going into its final week, shaped like the run's own region payloads."""
+    out: dict[tuple[int, int], dict] = {}
+    for (clazz, region), last in sorted(last_region_game.items()):
+        day = final_week_eve(last, class_dates.get(clazz, []))
+        payload = fetch(f"/standings/{clazz}/{region}?season={season}&date={day}")
+        if not payload or not payload.get("teams"):
+            continue
+        mode = odds_mode(payload["teams"])
+        as_of = date.fromisoformat(payload["as_of_date"]) if payload.get("as_of_date") else day
+        stamp = provenance(as_of, class_dates.get(clazz, []), mode, today)
+        out[(clazz, region)] = {"standings": payload, "stamp": f"{season} season · {stamp}", "mode": mode, "date": day}
+    return out
 
 
 def _bracket_preview_html(fetch: Fetch, season: int, featured: dict, class_standings: dict, teams: dict) -> str:
