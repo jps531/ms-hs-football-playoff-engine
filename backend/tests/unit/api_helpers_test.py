@@ -1501,9 +1501,7 @@ class TestBuildGameModelsProbabilities:
     def test_persisted_pregame_prob_used_directly(self):
         """A row with a persisted pregame_prob uses it as-is (no elo needed)."""
         computed_at = datetime(2025, 10, 10, 12, 0, 0)
-        row = _game_row(
-            "Alpha", "Beta", pregame_prob=0.65, pregame_prob_computed_at=computed_at, status="final"
-        )
+        row = _game_row("Alpha", "Beta", pregame_prob=0.65, pregame_prob_computed_at=computed_at, status="final")
         result = build_game_models([row], team_filter=None)
         assert result[0].pregame_prob == 0.65
         assert result[0].prob_as_of == computed_at
@@ -1511,9 +1509,7 @@ class TestBuildGameModelsProbabilities:
 
     def test_pregame_prob_computed_from_elo_when_not_persisted(self):
         """A not-yet-final row with elo ratings computes pregame_prob on the fly."""
-        row = _game_row(
-            "Alpha", "Beta", location="home", status="not_started", elo_school=1200.0, elo_opponent=1000.0
-        )
+        row = _game_row("Alpha", "Beta", location="home", status="not_started", elo_school=1200.0, elo_opponent=1000.0)
         result = build_game_models([row], team_filter=None)
         assert result[0].pregame_prob is not None
         assert result[0].pregame_prob > 0.5  # Alpha (elo_school) is favored and at home
@@ -4675,9 +4671,7 @@ class TestComputeSeedAtomsIfPrePlayoff:
         mock_load_completed.return_value = []
         conn = object()
 
-        atoms, result_remaining = asyncio.run(
-            _compute_seed_atoms_if_pre_playoff(conn, 2025, 5, 2, date(2025, 10, 3))
-        )
+        atoms, result_remaining = asyncio.run(_compute_seed_atoms_if_pre_playoff(conn, 2025, 5, 2, date(2025, 10, 3)))
 
         assert result_remaining == remaining
         assert atoms is not None
@@ -4831,9 +4825,7 @@ class TestLoadTravelInsights:
     def test_unresolvable_venue_is_skipped(self, mock_venues):
         """A trip whose venue can't be resolved (unknown school on either side) is skipped, not errored."""
         mock_venues.return_value = self._VENUES
-        conn = _SequencedFakeConn(
-            [[("Unknown", "AlsoUnknown", date(2025, 10, 2), None, None, None, None)], []]
-        )
+        conn = _SequencedFakeConn([[("Unknown", "AlsoUnknown", date(2025, 10, 2), None, None, None, None)], []])
         trips, _ = asyncio.run(load_travel_insights(conn, 2025, date(2025, 9, 29), date(2025, 10, 5), limit=10))
         assert trips == []
 
@@ -5253,11 +5245,31 @@ class TestUnpackHostingOddsRow:
     def test_unpacks_all_parts(self):
         """Each of the six parts is sliced from the expected column range."""
         row = (
-            "Alpha", 0.4, 0.3, 0.2, 0.1, 0.7, 0.7, False, False,  # 0-8: school..clinched/eliminated
-            1.0, 0.5, 0.3, 0.2,  # 9-12: home
-            0.9, 0.4, 0.25, 0.15,  # 13-16: home_weighted
-            0.7, 0.5, 0.3, 0.2,  # 17-20: adv
-            0.6, 0.4, 0.25, 0.15,  # 21-24: adv_weighted
+            "Alpha",
+            0.4,
+            0.3,
+            0.2,
+            0.1,
+            0.7,
+            0.7,
+            False,
+            False,  # 0-8: school..clinched/eliminated
+            1.0,
+            0.5,
+            0.3,
+            0.2,  # 9-12: home
+            0.9,
+            0.4,
+            0.25,
+            0.15,  # 13-16: home_weighted
+            0.7,
+            0.5,
+            0.3,
+            0.2,  # 17-20: adv
+            0.6,
+            0.4,
+            0.25,
+            0.15,  # 21-24: adv_weighted
         )
         school, odds, home, home_w, adv, adv_w = _unpack_hosting_odds_row(row)
         assert school == "Alpha"
@@ -5315,3 +5327,59 @@ class TestDefaultClassesForSeason:
         """2023 onward use seven classes."""
         assert default_classes_for_season(2023) == [1, 2, 3, 4, 5, 6, 7]
         assert default_classes_for_season(2026) == [1, 2, 3, 4, 5, 6, 7]
+
+
+class TestScenarioAlternativesAndOpenGroups:
+    """Scenarios with several ways to one outcome, or a tie left to the tiebreaker, keep both through the API."""
+
+    @staticmethod
+    def _decision():
+        from backend.helpers.data_classes import TiebreakDecision
+
+        return TiebreakDecision(3, ("Magee", "Raleigh", "Seminary"), (("Magee",), ("Raleigh", "Seminary")))
+
+    def _scenario(self):
+        low = [GameResult("Lumberton", "Taylorsville", 1, 12), GameResult("Stringer", "Resurrection")]
+        high = [GameResult("Lumberton", "Taylorsville", 12, None), self._decision()]
+        return {
+            "scenario_num": 1,
+            "sub_label": "a",
+            "game_winners": [("Lumberton", "Taylorsville")],
+            "conditions_atom": low,
+            "alternatives": [low, high],
+            "open_groups": [(5, ("Magee", "Seminary"))],
+            "tiebreaker_groups": None,
+            "coinflip_groups": None,
+            "seeding": ("Lumberton", "Magee", "Seminary", "Stringer"),
+        }
+
+    def test_entries_carry_every_alternative_and_open_group(self):
+        from backend.helpers.api_helpers import scenarios_to_entries
+
+        [entry] = scenarios_to_entries([self._scenario()])
+        assert len(entry.condition_groups) == 2
+        tiebreak = entry.condition_groups[1][1]
+        assert tiebreak["type"] == "tiebreak_decision" and tiebreak["description"].startswith("Point differential")
+        [group] = entry.open_groups
+        assert (group.step, group.teams) == (5, ["Magee", "Seminary"])
+        assert "fewest points allowed" in group.description
+
+    def test_simulation_keeps_only_the_alternatives_the_result_allows(self):
+        """A 20-point Lumberton win rules out the 1-11 way; the scenario survives on the 12+ way alone."""
+        body = [_GameResult("Lumberton", "Taylorsville", winner_score=27, loser_score=7)]
+        [sc] = filter_scenarios_by_simulation([self._scenario()], body)
+        assert sc["alternatives"] is None
+        assert sc["conditions_atom"] == [self._decision()]  # the decided game is stripped
+        assert sc["game_winners"] == []
+
+    def test_simulation_drops_a_scenario_no_alternative_allows(self):
+        body = [_GameResult("Taylorsville", "Lumberton", winner_score=27, loser_score=7)]
+        assert filter_scenarios_by_simulation([self._scenario()], body) == []
+
+    def test_team_atoms_skip_teams_whose_place_isnt_stated(self):
+        """Magee and Seminary's places are only placeholders in the open group, so they get no seed from it."""
+        from backend.helpers.scenario_renderer import atoms_from_complete_scenarios
+
+        atoms = atoms_from_complete_scenarios([self._scenario()])
+        assert "Magee" not in atoms and "Seminary" not in atoms
+        assert len(atoms["Lumberton"][1]) == 2  # both ways to the outcome

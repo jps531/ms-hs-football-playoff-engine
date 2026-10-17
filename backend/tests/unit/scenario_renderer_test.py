@@ -1255,15 +1255,24 @@ class TestAtomConditionDicts:
         out = atom_condition_dicts(atom, self._DATES)
         assert [d["school"] for d in out] == ["Petal", "Mize"]
 
-    def test_unrecognized_condition_type_produces_no_dict_but_loop_continues(self):
-        """A condition object of an unrecognized type matches none of the isinstance
-        branches and is silently skipped, while later conditions in the same atom
-        still get processed (the loop continues rather than stopping)."""
+    def test_unrecognized_condition_type_is_an_error(self):
+        """A condition of an unrecognized type is an error, never skipped: a path shown
+        without one of its conditions would claim more than is true."""
         atom = [object(), GameResult(winner="Mize", loser="Raleigh")]
-        out = atom_condition_dicts(atom, self._DATES)
-        assert len(out) == 1
-        assert out[0]["type"] == "game_result"
-        assert out[0]["school"] == "Mize"
+        with pytest.raises(TypeError, match="no path rendering"):
+            atom_condition_dicts(atom, self._DATES)
+
+    def test_tiebreak_decision_becomes_a_described_condition(self):
+        """A tiebreaker decision becomes a "tiebreak" condition carrying its sentence."""
+        from backend.helpers.data_classes import TiebreakDecision
+
+        cond = TiebreakDecision(3, ("Magee", "Raleigh", "Seminary"), (("Magee",), ("Raleigh", "Seminary")))
+        [out] = atom_condition_dicts([cond], self._DATES)
+        assert out == {
+            "type": "tiebreak",
+            "description": "Point differential in games among Magee, Raleigh and Seminary (capped at 12 a game): "
+            "Magee best, then Raleigh and Seminary, level",
+        }
 
 
 class TestRenderTeamMatchups:

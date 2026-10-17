@@ -178,17 +178,26 @@ def atoms_from_complete_scenarios(complete_scenarios: list[dict]) -> dict[str, d
     This is O(S × N) where S is the number of scenarios and N the team count.
     The result is equivalent to ``build_scenario_atoms`` output and can be passed
     directly to ``team_scenarios_as_dict``.
+
+    A scenario with alternatives contributes each one; a team in one of its open groups (a tie
+    whose order the scenario doesn't state) gets no seed from it, since its place there is only a
+    placeholder: its paths say nothing that scenario doesn't.
     """
     atoms: dict[str, dict[int, list]] = {}
     for sc in complete_scenarios:
-        atom = sc.get("conditions_atom")
-        if atom is None:
-            atom = [GameResult(winner=w, loser=l) for w, l in sc.get("game_winners", [])]
+        alternatives = sc.get("alternatives") or [sc.get("conditions_atom")]
+        alternatives = [
+            a if a is not None else [GameResult(winner=w, loser=l) for w, l in sc.get("game_winners", [])]
+            for a in alternatives
+        ]
+        unstated = {t for _, g in sc.get("open_groups") or [] for t in g}
         seeding = sc.get("seeding", ())
         for seed_idx, team in enumerate(seeding):
+            if team in unstated:
+                continue
             seed_num = seed_idx + 1
             team_map = atoms.setdefault(team, {})
-            team_map.setdefault(seed_num, []).append(atom)
+            team_map.setdefault(seed_num, []).extend(alternatives)
     return atoms
 
 
@@ -375,6 +384,10 @@ def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | No
             result.append({"type": "coin_flip", "description": str(cond)})
         elif isinstance(cond, PDRankCondition):
             result.append({"type": "pd_rank", "description": str(cond)})
+        elif isinstance(cond, TiebreakDecision):
+            result.append({"type": "tiebreak", "description": render_tiebreak_decision(cond)})
+        else:  # never drop a condition silently: a card without it would claim more than is true
+            raise TypeError(f"no path rendering for {type(cond).__name__}")
     return result
 
 
