@@ -18,6 +18,7 @@ from backend.helpers.data_classes import (
     HomeGameScenario,
     MarginCondition,
     PDRankCondition,
+    TiebreakDecision,
 )
 
 # ---------------------------------------------------------------------------
@@ -43,6 +44,13 @@ def serialize_condition(cond) -> dict:
             "op": cond.op,
             "threshold": cond.threshold,
         }
+    if isinstance(cond, TiebreakDecision):
+        return {
+            "type": "tiebreak_decision",
+            "step": cond.step,
+            "group": list(cond.group),
+            "parts": [list(p) for p in cond.parts],
+        }
     if isinstance(cond, PDRankCondition):
         return {
             "type": "pd_rank_condition",
@@ -62,7 +70,9 @@ def serialize_condition(cond) -> dict:
     raise TypeError(f"Cannot serialize condition of type {type(cond).__name__!r}")
 
 
-def deserialize_condition(d: dict) -> GameResult | MarginCondition | PDRankCondition | HomeGameCondition:
+def deserialize_condition(
+    d: dict,
+) -> GameResult | MarginCondition | PDRankCondition | TiebreakDecision | HomeGameCondition:
     """Deserialize a dict produced by serialize_condition back to a dataclass."""
     t = d["type"]
     if t == "game_result":
@@ -78,6 +88,12 @@ def deserialize_condition(d: dict) -> GameResult | MarginCondition | PDRankCondi
             sub=tuple(tuple(p) for p in d["sub"]),
             op=d["op"],
             threshold=d["threshold"],
+        )
+    if t == "tiebreak_decision":
+        return TiebreakDecision(
+            step=d["step"],
+            group=tuple(d["group"]),
+            parts=tuple(tuple(p) for p in d["parts"]),
         )
     if t == "pd_rank_condition":
         return PDRankCondition(

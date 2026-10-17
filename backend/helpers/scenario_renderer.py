@@ -13,6 +13,7 @@ from backend.helpers.data_classes import (
     PDRankCondition,
     RoundHomeScenarios,
     RoundMatchups,
+    TiebreakDecision,
 )
 from backend.helpers.scenario_serializers import serialize_atom, serialize_condition
 
@@ -92,6 +93,40 @@ def _render_margin_condition(cond: MarginCondition, atom: list) -> str:
     return " + ".join(parts) + f" {cond.op} {cond.threshold}"
 
 
+def _join(names) -> str:
+    """ "A", "A and B", "A, B and C"."""
+    names = list(names)
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def render_tiebreak_decision(cond: TiebreakDecision) -> str:
+    """One tiebreaker decision in words, e.g. "Point differential in games among A, B and C (capped at
+    12 a game): A best, then B and C, level"."""
+    if cond.step == 3:
+        lead = f"Point differential in games among {_join(cond.group)} (capped at 12 a game)"
+    else:
+        lead = (
+            f"{_join(cond.group)} on point differential against the rest of the region "
+            "(capped at 12 a game, highest-placed opponent first)"
+        )
+    if len(cond.parts) == 1:
+        return f"{lead}: {'both' if len(cond.group) == 2 else 'all'} level"
+    top, *rest = cond.parts
+    first = f"{_join(top)} best" if len(top) == 1 else f"{_join(top)} level at the top"
+    return f"{lead}: {first}, " + ", ".join(f"then {_join(p)}" + (", level" if len(p) > 1 else "") for p in rest)
+
+
+def render_open_group(step: int, group) -> str:
+    """A group a scenario leaves to the tiebreaker from *step* on, in words."""
+    teams = _join(group)
+    if step >= 5:
+        return f"{teams} are still level: fewest points allowed in region games decides their order (then a coin flip)"
+    return (
+        f"{teams} tie: their order is decided by point differential in games among them, then against "
+        "the rest of the region (capped at 12 a game), then fewest points allowed"
+    )
+
+
 def _render_condition(cond, atom: list) -> str:
     """Dispatch to the appropriate renderer based on the condition type."""
     if isinstance(cond, GameResult):
@@ -100,6 +135,8 @@ def _render_condition(cond, atom: list) -> str:
         return _render_margin_condition(cond, atom)
     if isinstance(cond, CoinFlipResult):
         return f"{cond.winner} wins coin flip vs {cond.loser}"
+    if isinstance(cond, TiebreakDecision):
+        return render_tiebreak_decision(cond)
     if isinstance(cond, PDRankCondition):
         ordinals = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
         ord_str = ordinals.get(cond.rank, f"{cond.rank}th")
@@ -119,8 +156,11 @@ def render_scenario_title(sc: dict) -> str:
     otherwise falls back to joining the ``game_winners`` list.
     """
     if sc.get("conditions_atom") is not None:
-        return _render_atom(sc["conditions_atom"])
-    return " AND ".join(f"{w} beats {l}" for w, l in sc.get("game_winners", []))
+        title = _render_atom(sc["conditions_atom"])
+    else:
+        title = " AND ".join(f"{w} beats {l}" for w, l in sc.get("game_winners", []))
+    groups = [render_open_group(step, g) for step, g in sc.get("open_groups") or []]
+    return " AND ".join([t for t in (title,) if t] + groups)
 
 
 def atoms_from_complete_scenarios(complete_scenarios: list[dict]) -> dict[str, dict[int, list[list]]]:
@@ -496,10 +536,7 @@ def division_scenarios_as_dict(
     seen_display: set[tuple] = set()
     deduped: list[tuple[int, str, str, tuple]] = []  # (orig_num, sub_label, title, seeding)
     for sc in scenarios:
-        if sc["conditions_atom"] is not None:
-            title = _render_atom(sc["conditions_atom"])
-        else:
-            title = " AND ".join(f"{w} beats {l}" for w, l in sc["game_winners"])
+        title = render_scenario_title(sc)
         seeding = sc["seeding"]
         display_key = (title, seeding)
         if display_key in seen_display:

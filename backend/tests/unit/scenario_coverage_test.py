@@ -7,12 +7,9 @@ coverage" tests only ask whether the seeding appears somewhere in the list,
 which a scenario with the wrong conditions still passes.
 
 Regions come from the 2025 season, cut to their last 1-3 region games
-(exhaustively checked), plus 3A Region 6 in 2026 with four left (sampled).
-The ones in KNOWN_GAPS fail today: the scenario builder describes each
-seeding of a margin-sensitive outcome with the conditions around a single
-sample margin, so a seeding whose margins form more than one block is only
-partly covered. They're marked xfail(strict=True) so the fix has to clear
-them from the list.
+(exhaustively checked), plus 3A Region 6 in 2026 with four left (sampled),
+the region where "Raleigh beats JDC by 12+, Seminary beats Magee, Raleigh
+beats Seminary" had no scenario.
 """
 
 import pytest
@@ -22,15 +19,6 @@ from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_viewer import build_scenario_atoms, enumerate_division_scenarios, enumerate_outcomes
 from backend.tests.data.results_2025_ground_truth import REGION_RESULTS_2025, expand_results, teams_from_games
 from backend.tests.scenario_coverage import coverage_problems
-
-# (class, region, games left) that fail today.
-KNOWN_GAPS = {
-    (1, 1, 3), (1, 2, 3), (1, 3, 3), (1, 4, 3), (1, 7, 3),
-    (2, 1, 3), (2, 3, 3), (2, 5, 3),
-    (3, 5, 3), (3, 6, 3), (3, 7, 3), (3, 8, 3),
-    (4, 3, 2), (4, 3, 3), (4, 5, 3), (4, 6, 3), (4, 8, 3),
-    (6, 1, 3),
-}  # fmt: skip
 
 
 def _cut(games: list[dict], left: int):
@@ -52,12 +40,7 @@ def _cases():
     for (clazz, region), fixture in sorted(REGION_RESULTS_2025.items()):
         for left in (1, 2, 3):
             if len(fixture["games"]) > left:
-                marks = (
-                    [pytest.mark.xfail(strict=True, reason="known scenario gap")]
-                    if (clazz, region, left) in KNOWN_GAPS
-                    else []
-                )
-                yield pytest.param(clazz, region, left, id=f"{clazz}A-{region}-{left}left", marks=marks)
+                yield pytest.param(clazz, region, left, id=f"{clazz}A-{region}-{left}left")
 
 
 @pytest.mark.parametrize(("clazz", "region", "left"), list(_cases()))
@@ -85,7 +68,6 @@ _R36_LEFT = [
 ]
 
 
-@pytest.mark.xfail(strict=True, reason="known scenario gap")
 def test_scenarios_cover_every_outcome_3a_region_6_2026():
     games = [dict(winner=w, loser=l, winner_score=a, loser_score=b, date=d) for w, l, a, b, d in _R36_PLAYED]
     teams = teams_from_games(games)

@@ -18,6 +18,7 @@ from backend.helpers.data_classes import (
     PDRankCondition,
     RemainingGame,
     StandingsOdds,
+    TiebreakDecision,
 )
 from backend.helpers.scenario_renderer import _render_atom
 from backend.helpers.tiebreakers import resolve_standings_for_mask
@@ -1734,6 +1735,74 @@ def build_scenario_atoms(
 _MARGIN_RANGE = range(1, 13)
 
 
+# The most games left for which every margin combination (12 per game) is checked; with more, a group
+# whose order turns on margins is shown as a group left to the tiebreaker (see enumerate_division_scenarios).
+_MAX_EXACT_MARGIN_GAMES = 5
+# The most outcomes one set of winners lists as their own sub-scenarios; past it, the tie that decides
+# them is shown as left to the tiebreaker (and the check-a-score tool), not as dozens of cards.
+_MAX_LISTED_OUTCOMES = 8
+
+
+def _sub_label(k: int) -> str:
+    """Sub-scenario labels a..z, then aa, ab, … for a set of winners with more outcomes than letters."""
+    return chr(ord("a") + k) if k < 26 else _sub_label(k // 26 - 1) + chr(ord("a") + k % 26)
+
+
+def _decision_signature(decisions: list, open_from: int) -> tuple[tuple, tuple]:
+    """Split a seeding's tiebreaker *decisions* into what a scenario states and what it leaves open.
+
+    Returns ``(stated, open_groups)``: ``stated`` the step 3-4 decisions (``TiebreakDecision``), and
+    ``open_groups`` the ``(step, group)`` pairs for groups whose order the scenario leaves to the
+    tiebreaker from *step* on: every group that reaches step 5 (fewest points allowed, which turns on
+    actual scores rather than margins), and with ``open_from=3`` every group that reaches step 3.
+    Decisions within an open group are dropped: they follow from how it's settled.
+    """
+    stated: list = []
+    open_groups: list = []
+    for step, group, parts in decisions:
+        if any(set(group) <= set(g) for _, g in open_groups):
+            continue
+        if step >= open_from:
+            open_groups.append((step, group))
+        else:
+            stated.append(TiebreakDecision(step, group, parts))
+    return tuple(stated), tuple(open_groups)
+
+
+def _settle_open(order: list[str], open_groups: tuple, playoff_seeds: int) -> tuple[tuple[str, ...], tuple]:
+    """What a scenario shows of a seeding: the playoff seeds in order, then the rest alphabetically
+    (they're listed as out, not ranked); each open group's places alphabetical too, since its order
+    isn't stated. Returns ``(seeding, open groups that reach a playoff seed)``."""
+    out = list(order)
+    for _, group in open_groups:
+        spots = sorted(i for i, t in enumerate(out) if t in group)
+        for i, team in zip(spots, sorted(group), strict=True):
+            out[i] = team
+    out = out[:playoff_seeds] + sorted(out[playoff_seeds:])
+    shown = tuple((step, g) for step, g in open_groups if set(g) & set(out[:playoff_seeds]))
+    return tuple(out), shown
+
+
+def _simplest_terms(signatures: dict) -> dict:
+    """For each outcome, the fewest stated decisions that still pick it out exactly.
+
+    *signatures* maps each distinct set of decisions seen (a frozenset) to its outcome. A decision
+    is dropped from an outcome's conditions when every set of decisions containing what's left has
+    that same outcome, so the shorter conditions are still exact (every result they match has the
+    outcome) and still cover all of it (each set keeps a term inside it). Returns outcome -> terms.
+    """
+    terms: dict = defaultdict(list)
+    for sig, outcome in sorted(signatures.items(), key=lambda kv: (len(kv[0]), sorted(map(str, kv[0])))):
+        term = set(sig)
+        for lit in sorted(sig, key=str):
+            trial = term - {lit}
+            if all(o == outcome for other, o in signatures.items() if trial <= other):
+                term = trial
+        if not any(set(t) <= term for t in terms[outcome]):
+            terms[outcome] = [t for t in terms[outcome] if not term <= set(t)] + [frozenset(term)]
+    return terms
+
+
 def enumerate_division_scenarios(
     teams: list[str],
     completed: list[CompletedGame],
@@ -1744,250 +1813,122 @@ def enumerate_division_scenarios(
     base_margin_default: int = 7,
     precomputed: EnumeratedOutcomes | None = None,
 ) -> list[dict]:
-    """Enumerate all distinct complete seeding outcomes with their conditions.
+    """Enumerate every distinct way the region can finish, each with exactly what makes it happen.
+
+    For each set of winners, the tiebreaker is run and its margin-dependent decisions recorded. When
+    no tied group gets past step 2 (head-to-head, then record against the rest), the winners alone
+    decide the seeding: one scenario, merged with other winner sets giving the same seeding where
+    they share their deciding games. Otherwise, with up to ``_MAX_EXACT_MARGIN_GAMES`` games left,
+    every margin combination (1-12 per game, 12 meaning 12 or more) is checked, and each distinct
+    set of step 3-4 decisions becomes a sub-scenario stating them (``TiebreakDecision`` conditions),
+    so a scenario says only what the tiebreaker decided, keeping just the decisions its outcome
+    depends on. With more games left, a group that reaches step 3 is left open instead.
+
+    A group still level after step 4 is always left open: step 5 (fewest points allowed in region
+    games) depends on the actual scores, which margins don't fix, so the scenario names the group
+    and leaves its order to that step and then a coin flip, rather than guessing.
 
     Each returned dict has:
-    - ``scenario_num`` (int): primary scenario number.
-    - ``sub_label`` (str): ``''`` for single scenarios; ``'a'``, ``'b'``, … for
-      sub-scenarios within a margin-sensitive mask.
-    - ``game_winners`` (list[tuple[str, str]]): (winner, loser) pairs for each
-      relevant game.  Games that don't affect the seeding are omitted.
-    - ``conditions_atom`` (list | None): the raw condition atom (GameResult /
-      MarginCondition objects) for margin-sensitive sub-scenarios, or None.
-    - ``seeding`` (tuple[str, ...]): all teams ordered seed 1 first.
+    - ``scenario_num`` (int) and ``sub_label`` (``''``, or ``'a'``, ``'b'``, … within one set of winners).
+    - ``game_winners`` (list[tuple[str, str]]): (winner, loser) for each game that matters.
+    - ``conditions_atom`` (list | None): for a sub-scenario, its winners as ``GameResult`` conditions
+      plus the ``TiebreakDecision`` conditions that pick it out; None otherwise.
+    - ``open_groups`` (list[tuple[int, tuple[str, ...]]] | None): groups whose order is left to the
+      tiebreaker from the given step on.
+    - ``tiebreaker_groups``, ``coinflip_groups``: always None (kept for stored-snapshot compatibility).
+    - ``seeding`` (tuple[str, ...]): the playoff seeds in order, then the teams out alphabetically
+      (outcomes differing only below the playoff seeds are one outcome); an open group's places
+      alphabetical. An open group wholly out of the playoffs isn't listed.
+
+    ``scenario_atoms`` and ``precomputed`` are accepted for compatibility; ``precomputed`` only says
+    whether margins are being ignored (``ignore_margins``), which leaves every margin-dependent group open.
     """
     R = len(remaining)
     pairs = [(rg.a, rg.b) for rg in remaining]
+    exact = R <= _MAX_EXACT_MARGIN_GAMES and not (precomputed is not None and precomputed.ignore_margins)
+    open_from = 5 if exact else 3
+    ref = {pair: base_margin_default for pair in pairs}
 
-    if R == 0:
-        order = resolve_standings_for_mask(teams, completed, remaining, 0, {}, base_margin_default, pa_win)
-        return [
-            {
-                "scenario_num": 1,
-                "sub_label": "",
-                "game_winners": [],
-                "conditions_atom": None,
-                "tiebreaker_groups": None,
-                "coinflip_groups": None,
-                "seeding": tuple(order),
-            }
+    def run(mask: int, margins: dict) -> tuple[tuple, tuple]:
+        """(stated decisions, (seeding, open groups)) for one result."""
+        decisions: list = []
+        order = resolve_standings_for_mask(
+            teams, completed, remaining, mask, margins, base_margin_default, pa_win, decision_collector=decisions
+        )
+        stated, open_groups = _decision_signature(decisions, open_from)
+        seeding, shown = _settle_open(order, open_groups, playoff_seeds)
+        return stated, (seeding, shown)
+
+    # mask -> list of (stated, open_groups, seeding, first margin combination), one per outcome and term.
+    outcomes: dict[int, list] = {}
+    for mask in range(1 << R):
+        stated, (seeding, open_groups) = run(mask, ref)
+        if not stated or not exact:
+            outcomes[mask] = [((), open_groups, seeding, None)]
+            continue
+        signatures: dict = {}
+        first: dict = {}
+        for combo in product(_MARGIN_RANGE, repeat=R):
+            stated, outcome = run(mask, dict(zip(pairs, combo, strict=True)))
+            signatures[frozenset(stated)] = outcome
+            first.setdefault(outcome, combo)
+        if len(first) == 1:  # the decisions vary, but never the outcome
+            (seeding, open_groups) = next(iter(first))
+            outcomes[mask] = [((), open_groups, seeding, None)]
+            continue
+        if len(first) > _MAX_LISTED_OUTCOMES:
+            # Too many to list: leave each tie that reaches step 3 open. Which ties reach it doesn't
+            # depend on margins (steps 1-2 don't), so this is one outcome for every margin.
+            decisions: list = []
+            order = resolve_standings_for_mask(
+                teams, completed, remaining, mask, ref, base_margin_default, pa_win, decision_collector=decisions
+            )
+            _, open_groups = _decision_signature(decisions, 3)
+            seeding, open_groups = _settle_open(order, open_groups, playoff_seeds)
+            outcomes[mask] = [((), open_groups, seeding, None)]
+            continue
+        outcomes[mask] = [
+            (tuple(sorted(term, key=lambda d: (d.step, d.group))), open_groups, seeding, first[(seeding, open_groups)])
+            for (seeding, open_groups), terms in _simplest_terms(signatures).items()
+            for term in terms
         ]
 
-    # (mask, seeding_tuple) → list of margin dicts for that combination.
-    # Use precomputed EnumeratedOutcomes when available; otherwise enumerate here.
-    if precomputed is not None:
-        mask_seeding_margins = defaultdict(list, {k: list(v) for k, v in precomputed.groups.items()})
-        non_sensitive_masks = precomputed.non_sensitive_masks
-        coin_flips = precomputed.coin_flips
-    else:
-        mask_seeding_margins = defaultdict(list)
-        non_sensitive_masks = set()
-        coin_flips = {}
-
-        for mask in range(1 << R):
-            if not _is_margin_sensitive_mask(teams, completed, remaining, mask, pairs, pa_win, base_margin_default):
-                ref_margins = {pairs[i]: 1 for i in range(R)}
-                flip_collector: list = []
-                order = resolve_standings_for_mask(
-                    teams,
-                    completed,
-                    remaining,
-                    mask,
-                    ref_margins,
-                    base_margin_default,
-                    pa_win,
-                    coin_flip_collector=flip_collector,
-                )
-                mask_seeding_margins[(mask, tuple(order))]  # touch key so it exists
-                non_sensitive_masks.add(mask)
-                if flip_collector:
-                    coin_flips[mask] = flip_collector
-            else:
-                for margin_combo in product(_MARGIN_RANGE, repeat=R):
-                    margins = {pairs[i]: margin_combo[i] for i in range(R)}
-                    flip_collector = []
-                    order = resolve_standings_for_mask(
-                        teams,
-                        completed,
-                        remaining,
-                        mask,
-                        margins,
-                        base_margin_default,
-                        pa_win,
-                        coin_flip_collector=flip_collector,
-                    )
-                    mask_seeding_margins[(mask, tuple(order))].append(margins)
-                    if flip_collector and mask not in coin_flips:
-                        coin_flips[mask] = flip_collector
-
-    # Compute flip-sensitive metadata for coin-flip scenario expansion.
-    # Keyed by mask; only includes masks with flips that affect playoff seeds.
-    flip_mask_full_seedings_ds: dict[int, tuple] = {}
-    flip_mask_relevant_groups_ds: dict[int, list[list[str]]] = {}
-    for mask, seeding in mask_seeding_margins.keys():
-        if mask not in non_sensitive_masks or mask not in coin_flips:
-            continue
-        if mask in flip_mask_full_seedings_ds:
-            continue  # already processed this mask
-        relevant = _relevant_flip_groups(coin_flips[mask], list(seeding), playoff_seeds)
-        if relevant:
-            flip_mask_full_seedings_ds[mask] = seeding
-            flip_mask_relevant_groups_ds[mask] = relevant
-
-    # Which masks produce more than one distinct seeding? (margin-sensitive)
-    mask_seeding_count: dict[int, int] = defaultdict(int)
-    for mask, _ in mask_seeding_margins.keys():
-        mask_seeding_count[mask] += 1
-    margin_sensitive = {m for m, cnt in mask_seeding_count.items() if cnt > 1 and m not in non_sensitive_masks}
-
-    # Auto-build atoms when margin-sensitive sub-scenarios need conditions_atom populated.
-    if margin_sensitive and scenario_atoms is None:
-        scenario_atoms = build_scenario_atoms(
-            teams,
-            completed,
-            remaining,
-            pa_win=pa_win,
-            base_margin_default=base_margin_default,
-            playoff_seeds=playoff_seeds,
-            precomputed=precomputed,
-        )
-
-    # Separate into non-margin-sensitive (group by seeding) and margin-sensitive
-    non_ms: dict[tuple, list[int]] = defaultdict(list)  # seeding -> [masks]
-    ms: dict[int, list[tuple]] = defaultdict(list)  # mask -> [(seeding, margins_list)]
-
-    for (mask, seeding), margins_list in mask_seeding_margins.items():
-        if mask in margin_sensitive:
-            ms[mask].append((seeding, margins_list))
-        else:
-            non_ms[seeding].append(mask)
-
-    # In ignore_margins mode, coin-flip masks are collapsed into single scenarios
-    # (like margin-sensitive ties) rather than expanded into per-permutation sub-scenarios.
-    ignore_margins_mode = precomputed is not None and precomputed.ignore_margins
-
-    # Build ordered list of scenario entries: (sort_key, entry_type, data)
-    # Three entry types:
-    #   "single"   — plain non-sensitive mask (no coin flip affecting playoff seeds,
-    #                or ignore_margins mode where coin flips are collapsed)
-    #   "coinflip" — non-sensitive mask with a coin flip that affects playoff seeds
-    #                (only in normal/full enumeration mode)
-    #   "multi"    — margin-sensitive mask (different seedings at different margins)
+    # Winner sets with one outcome merge by seeding; the rest list their outcomes as sub-scenarios.
+    by_outcome: dict[tuple, list[int]] = defaultdict(list)
+    for mask, outs in outcomes.items():
+        if len(outs) == 1:
+            _, open_groups, seeding, _ = outs[0]
+            by_outcome[(seeding, open_groups)].append(mask)
     entries = []
-
-    # For ignore_margins mode, pool plain + flip masks together so coin-flip outcomes
-    # are not expanded into individual sub-scenarios.  A merged group that contains
-    # at least one flip mask records the flip groups for collapsed rendering.
-    coinflip_groups_by_min_mask: dict[int, list] = {}
-
-    for seeding, masks in non_ms.items():
-        plain_masks = [m for m in masks if m not in flip_mask_relevant_groups_ds]
-        flip_masks = [m for m in masks if m in flip_mask_relevant_groups_ds]
-
-        if ignore_margins_mode:
-            # Pool all masks — don't expand coin-flip sub-scenarios
-            for group in _valid_merge_groups(plain_masks + flip_masks):
-                min_mask = min(group)
-                game_winners = _common_game_winners(group, remaining)
-                entries.append((min_mask, "single", seeding, group, game_winners))
-                for m in group:
-                    if m in flip_mask_relevant_groups_ds:
-                        coinflip_groups_by_min_mask[min_mask] = flip_mask_relevant_groups_ds[m]
-                        break
-        else:
-            for group in _valid_merge_groups(plain_masks):
-                min_mask = min(group)
-                game_winners = _common_game_winners(group, remaining)
-                entries.append((min_mask, "single", seeding, group, game_winners))
-
-            for mask in flip_masks:
-                entries.append((mask, "coinflip", seeding, mask, flip_mask_relevant_groups_ds[mask]))
-
-    for mask, sub_list in ms.items():
-        entries.append((mask, "multi", None, mask, sub_list))
-
+    for (seeding, open_groups), masks in by_outcome.items():
+        for group in _valid_merge_groups(masks):
+            entries.append((min(group), "single", seeding, open_groups, _common_game_winners(group, remaining)))
+    for mask, outs in outcomes.items():
+        if len(outs) > 1:
+            entries.append((mask, "multi", None, None, outs))
     entries.sort(key=lambda e: e[0])
 
+    def scenario(num, sub, winners, atom, open_groups, seeding):
+        return {
+            "scenario_num": num,
+            "sub_label": sub,
+            "game_winners": winners,
+            "conditions_atom": atom,
+            "open_groups": [(step, tuple(g)) for step, g in open_groups] or None,
+            "tiebreaker_groups": None,
+            "coinflip_groups": None,
+            "seeding": seeding,
+        }
+
     scenarios = []
-    scenario_num = 0
-
-    tb_masks = precomputed.margin_tiebreaker_masks if precomputed is not None else {}
-
-    for entry in entries:
-        if entry[1] == "single":
-            min_mask_key, _, seeding, masks, game_winners = entry
-            scenario_num += 1
-            # Check if any mask in this merge group would be margin-sensitive under
-            # full enumeration (only populated when ignore_margins=True via precomputed).
-            tiebreaker_groups = None
-            for m in masks:
-                if m in tb_masks:
-                    tiebreaker_groups = tb_masks[m]
-                    break
-            coinflip_groups = coinflip_groups_by_min_mask.get(min_mask_key)
-            scenarios.append(
-                {
-                    "scenario_num": scenario_num,
-                    "sub_label": "",
-                    "game_winners": game_winners,
-                    "conditions_atom": None,
-                    "tiebreaker_groups": tiebreaker_groups,
-                    "coinflip_groups": coinflip_groups,
-                    "seeding": seeding,
-                }
-            )
-        elif entry[1] == "coinflip":
-            _, _, _, mask, relevant_groups = entry
-            scenario_num += 1
-            full_seeding = flip_mask_full_seedings_ds[mask]
-            mask_game_winners = _game_winners_for_mask(mask, remaining)
-            base_conds = [GameResult(w, l, 1, None) for w, l in mask_game_winners]
-            for k, expanded_seeding in enumerate(_expand_coin_flip_seedings(list(full_seeding), relevant_groups)):
-                sub_label = chr(ord("a") + k)
-                flip_conds = _build_coin_flip_conds(list(expanded_seeding), relevant_groups)
-                scenarios.append(
-                    {
-                        "scenario_num": scenario_num,
-                        "sub_label": sub_label,
-                        "game_winners": mask_game_winners,
-                        "conditions_atom": base_conds + flip_conds,
-                        "tiebreaker_groups": None,
-                        "coinflip_groups": None,
-                        "seeding": tuple(expanded_seeding),
-                    }
-                )
-        else:
-            _, _, _, mask, sub_list = entry
-            scenario_num += 1
-            sub_list_sorted = sorted(
-                sub_list,
-                key=lambda x: tuple(min(m[pair] for m in x[1]) for pair in pairs),
-            )
-            mask_game_winners = _game_winners_for_mask(mask, remaining)
-            for k, (seeding, margins_list) in enumerate(sub_list_sorted):
-                sub_label = chr(ord("a") + k)
-                conditions_atom = None
-                if scenario_atoms:
-                    conditions_atom = _find_combined_atom(
-                        seeding,
-                        playoff_seeds,
-                        mask,
-                        margins_list[0],
-                        scenario_atoms,
-                        remaining,
-                    )
-                scenarios.append(
-                    {
-                        "scenario_num": scenario_num,
-                        "sub_label": sub_label,
-                        "game_winners": mask_game_winners,
-                        "conditions_atom": conditions_atom,
-                        "tiebreaker_groups": None,
-                        "coinflip_groups": None,
-                        "seeding": seeding,
-                    }
-                )
-
+    for num, (mask, kind, seeding, open_groups, data) in enumerate(entries, start=1):
+        if kind == "single":
+            scenarios.append(scenario(num, "", data, None, open_groups, seeding))
+            continue
+        winners = _game_winners_for_mask(mask, remaining)
+        base = [GameResult(w, l, 1, None) for w, l in winners]
+        for k, (stated, open_groups, seeding, _) in enumerate(sorted(data, key=lambda o: (o[3], len(o[0])))):
+            scenarios.append(scenario(num, _sub_label(k), winners, base + list(stated), open_groups, seeding))
     return scenarios
 
 
