@@ -724,10 +724,11 @@ def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = 4
 
 
 def _scenario_preview(
-    example: dict, teams: dict, heading: str, sub: str, cards_html: list[str], anchor: str, what: str
+    example: dict, teams: dict, heading: str, sub: str, cards_html: list[str], anchor: str, what: str, odds: bool = True
 ) -> str:
     """A picture of one of the region page's scenario sections, as one link to that section; *what*
-    names it for the link's accessible name ("title scenarios")."""
+    names it for the link's accessible name ("title scenarios"). Without *odds* on its cards, its
+    provenance line leaves out the odds mode."""
     clazz, region = example["clazz"], example["region"]
     name = f"Region {region}-{clazz}A"
     grid = f'<div class="scenario-grid">{"".join(cards_html)}</div>'
@@ -736,11 +737,16 @@ def _scenario_preview(
         f'<a class="landing-preview landing-preview--scenarios" href="{region_path(clazz, region)}#{anchor}" '
         f'aria-label="Open {name}’s {what}">'
         '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
-        f'<p class="title">{name}</p>{_provenance(example["stamp"])}'
+        f'<p class="title">{name}</p>{_provenance(example["stamp"] if odds else _plain_stamp(example))}'
         f'<section class="section"><p class="section-title">{_e(heading)}</p>{group}</section>'
         "</div></div>"
         f'<span class="landing-preview__label">Open {name}</span></a>'
     )
+
+
+def _plain_stamp(example: dict) -> str:
+    """The example's provenance without the odds mode, for a picture with no odds in it."""
+    return example.get("plain_stamp") or example["stamp"]
 
 
 def _open_title_teams(entry: dict) -> int:
@@ -863,7 +869,7 @@ def insight_preview(example: dict | None, teams: dict) -> str:
         f'<a class="landing-preview landing-preview--scenarios" href="{region_path(clazz, region)}#scen-title" '
         f'aria-label="Open {name}’s results that settle a spot">'
         '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
-        f'<p class="title">{name}</p>{_provenance(example["stamp"])}'
+        f'<p class="title">{name}</p>{_provenance(_plain_stamp(example))}'
         f'<section class="section"><p class="section-title">What has to happen</p>'
         f'<p class="prose muted">{_e(intro)}</p>'
         f'<div class="scenario-group scenario-group--spaced"><div class="scenario-grid">{grid}</div></div>'
@@ -911,7 +917,7 @@ def scenario_previews(example: dict | None, teams: dict) -> dict[str, str]:
             f"Going into its final week, {name} could finish {ways}." if final else f"{name} can still finish {ways}."
         )
         out["unique"] = _lead(f"{lead} {first}") + _scenario_preview(
-            example, teams, "Scenarios", "", cards, "all-scen-title", "complete scenarios"
+            example, teams, "Scenarios", "", cards, "all-scen-title", "complete scenarios", odds=False
         )
     return out
 

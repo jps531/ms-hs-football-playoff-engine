@@ -956,6 +956,19 @@ def test_insight_week_eve_is_the_last_with_seven_to_ten_games_left():
     assert insight_week_eve(games[:6], dates, date(2026, 10, 30)) is None  # never had more than 6 left
 
 
+def test_pictures_without_odds_leave_the_odds_mode_out_of_their_provenance():
+    from backend.helpers.share_cards import provenance
+    from backend.helpers.static_pages import insight_preview, scenario_previews
+
+    assert provenance(date(2026, 10, 9), DATES, None, date(2026, 10, 14)) == "Through Week 8 · Oct 9"
+    plain = "2026 season · Through Week 8 · Oct 9"
+    out = scenario_previews({**_example(), "plain_stamp": plain}, {})
+    assert STAMP in out["title"] and STAMP in out["playoffs"] and STAMP in out["seeding"]  # these show odds
+    assert plain in out["unique"] and "Projected" not in out["unique"]  # complete scenarios have none
+    settled = insight_preview({**_far_out(), "plain_stamp": plain, "clazz": 3, "region": 6}, {})
+    assert plain in settled and "Projected" not in settled
+
+
 def test_region_scenarios_run_after_the_scores_are_pulled():
     flows = (Path(__file__).resolve().parents[2] / "prefect" / "flows.py").read_text()
     assert 'CronSchedule(cron="30 9 * * *"' in flows

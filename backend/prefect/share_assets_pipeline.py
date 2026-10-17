@@ -238,6 +238,7 @@ def build_share_assets(
             region_payloads[(clazz, region)] = {
                 "standings": payload,
                 "stamp": f"{season} season · {r_stamp}",
+                "plain_stamp": f"{season} season · {provenance(r_as_of, dates, None, today)}",
                 "mode": r_mode,
             }
             _write_text(out_dir / "body" / f"{name}.html", body)
@@ -338,8 +339,14 @@ def _payloads_on(
             continue
         mode = odds_mode(payload["teams"])
         as_of = date.fromisoformat(payload["as_of_date"]) if payload.get("as_of_date") else day
-        stamp = provenance(as_of, class_dates.get(clazz, []), mode, today)
-        out[(clazz, region)] = {"standings": payload, "stamp": f"{season} season · {stamp}", "mode": mode, "date": day}
+        stamp, plain = (provenance(as_of, class_dates.get(clazz, []), m, today) for m in (mode, None))
+        out[(clazz, region)] = {
+            "standings": payload,
+            "stamp": f"{season} season · {stamp}",
+            "plain_stamp": f"{season} season · {plain}",
+            "mode": mode,
+            "date": day,
+        }
     return out
 
 
