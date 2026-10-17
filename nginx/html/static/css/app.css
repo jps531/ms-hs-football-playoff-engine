@@ -547,7 +547,6 @@ button { font: inherit; color: inherit; }
 /* ---------------------------------------------------------- region view */
 
 .region-head { padding-block: 28px 0; }
-.region-head__links { display: flex; flex-wrap: wrap; align-items: center; gap: 0 20px; }
 
 /* Breadcrumbs: Home › Class 7A › Region 2-7A. Each link is a full-height target. */
 .crumbs ol { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; font-size: 14px; }
@@ -556,10 +555,6 @@ button { font: inherit; color: inherit; }
 .crumbs a { display: inline-flex; align-items: center; min-height: 44px; }
 .entry-head .crumbs + .title, .article .crumbs + .title { margin-top: 4px; }
 .entry-head:has(> .crumbs) { padding-top: 28px; } /* the crumbs take the space the padding gave */
-.region-head__links a {
-  display: inline-flex; align-items: center; min-height: 44px;
-  font-size: 14px;
-}
 .region-head .title { margin-top: 4px; }
 .region-head .headline { margin-top: 20px; }
 .region-head .provenance { margin-top: 16px; }

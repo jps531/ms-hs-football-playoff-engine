@@ -706,10 +706,7 @@ async function regionView(ctx) {
   nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode);
   return `<div class="page">
     <header class="region-head">
-      <div class="region-head__links">
-        ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ region: null, team: null })], [`Region ${region}-${clazz}A`, null]])}
-        <a href="${esc(hrefWith({ page: "bracket", region: null }))}">${clazz}A Bracket</a>
-      </div>
+      ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ region: null, team: null })], [`Region ${region}-${clazz}A`, null]])}
       <h1 class="title">Region ${region}-${clazz}A</h1>
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
       ${controls}

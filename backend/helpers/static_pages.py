@@ -392,8 +392,7 @@ def region_body(
     return (
         '<div class="page static-page">'
         '<header class="region-head">'
-        f'<div class="region-head__links">{breadcrumb_nav(region_trail(clazz, region))}'
-        f'<a href="{bracket_path(clazz)}">{clazz}A Bracket</a></div>'
+        f"{breadcrumb_nav(region_trail(clazz, region))}"
         f'<h1 class="title">Region {region}-{clazz}A</h1>{headline_html}{_provenance(stamp)}'
         "</header>"
         f"{region_table(clazz, region, payload, mode, teams)}{schedule}{needs}"

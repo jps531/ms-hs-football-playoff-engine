@@ -41,8 +41,8 @@
         <span>Mississippi High School Football</span>
       </a>
       <nav class="site-nav" aria-label="Main">
-        <a class="site-nav__item" href="/" data-nav="standings">Standings</a>
-        <a class="site-nav__item" href="/brackets/1a" data-nav="bracket">Bracket</a>
+        <a class="site-nav__item" href="<!--# if expr="$page_class" -->/standings/<!--# echo var="page_class" -->a<!--# else -->/<!--# endif -->" data-nav="standings"<!--# if expr="$nav_section = standings" --> aria-current="page"<!--# endif -->>Standings</a>
+        <a class="site-nav__item" href="/brackets/<!--# if expr="$page_class" --><!--# echo var="page_class" --><!--# else -->1<!--# endif -->a" data-nav="bracket"<!--# if expr="$nav_section = bracket" --> aria-current="page"<!--# endif -->>Bracket</a>
         <a class="site-nav__item" href="/methodology" data-nav="method">How it works</a>
       </nav>
       <form class="team-search" role="search">
@@ -99,8 +99,8 @@
 
   <!-- Phones: the same three destinations as a tab bar along the bottom. -->
   <nav class="tab-bar" aria-label="Main">
-    <a class="tab-bar__item" href="/" data-nav="standings"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg><span>Standings</span></a>
-    <a class="tab-bar__item" href="/brackets/1a" data-nav="bracket"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h5v6H3M3 13h5v6H3M8 8h5v8H8M13 12h8"/></svg><span>Bracket</span></a>
+    <a class="tab-bar__item" href="<!--# if expr="$page_class" -->/standings/<!--# echo var="page_class" -->a<!--# else -->/<!--# endif -->" data-nav="standings"<!--# if expr="$nav_section = standings" --> aria-current="page"<!--# endif -->><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg><span>Standings</span></a>
+    <a class="tab-bar__item" href="/brackets/<!--# if expr="$page_class" --><!--# echo var="page_class" --><!--# else -->1<!--# endif -->a" data-nav="bracket"<!--# if expr="$nav_section = bracket" --> aria-current="page"<!--# endif -->><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h5v6H3M3 13h5v6H3M8 8h5v8H8M13 12h8"/></svg><span>Bracket</span></a>
     <a class="tab-bar__item" href="/methodology" data-nav="method"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor" stroke="none"/></svg><span>How it works</span></a>
   </nav>
 

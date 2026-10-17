@@ -85,7 +85,7 @@ class TestRegionBody:
         assert '<h1 class="title">Region 6-3A</h1>' in body
         assert "Seminary &lt;Friday&gt;." in body
         assert f'<p class="provenance provenance--static">{STAMP}</p>' in body
-        assert 'href="/standings/3a"' in body and 'href="/brackets/3a"' in body
+        assert 'href="/standings/3a"' in body  # the class crumb; the bracket is a click away in the header nav
 
     def test_standings_table_in_display_order_with_projected_odds(self):
         """Rows follow the app's order; odds are the mode's, as text; each team links to its view."""

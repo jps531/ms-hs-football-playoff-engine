@@ -134,3 +134,12 @@ def test_www_redirects_to_the_bare_domain():
     """One address per page for search engines."""
     assert "return 301 https://mshsfootball.com$request_uri;" in NGINX
     assert "if ($host = www.mshsfootball.com)" in NGINX
+
+
+def test_the_main_nav_is_in_the_page_from_the_start():
+    """Standings and Bracket point at the page's class, and the current section is marked, before the app loads."""
+    shell = (ROOT / "nginx" / "html" / "index.html").read_text()
+    for cls in ("site-nav__item", "tab-bar__item"):
+        assert f'<a class="{cls}" href="/brackets/<!--# if expr="$page_class" -->' in shell
+        assert '<!--# if expr="$nav_section = bracket" --> aria-current="page"' in shell
+    assert "map $request_uri $nav_section" in NGINX
