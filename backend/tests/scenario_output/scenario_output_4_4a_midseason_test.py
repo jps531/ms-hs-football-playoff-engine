@@ -243,8 +243,8 @@ def test_atoms_kosciusko_seed4_atom():
 
 
 def test_div_dict_scenario_count():
-    """There are 21 distinct division scenarios at two weeks out (scenario 3 split into two)."""
-    assert len(_DIV_DICT) == 21
+    """There are 22 distinct division scenarios at two weeks out."""
+    assert len(_DIV_DICT) == 22
 
 
 def test_div_dict_louisville_wins_always_seed1():
@@ -683,7 +683,7 @@ def test_render_yazoo_city_full():
 # Expected: (title, one_seed, two_seed, three_seed, four_seed, eliminated)
 _EXPECTED_SCENARIOS = {
     "1a": (
-        "Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u20136 AND Yazoo City beats Gentry AND Louisville beats Greenwood",
+        "Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1–6 AND Yazoo City beats Gentry AND Louisville beats Greenwood",
         "Louisville",
         "Kosciusko",
         "Greenwood",
@@ -691,7 +691,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "1b": (
-        "Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood",
+        "Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7–10 AND Yazoo City beats Gentry AND Louisville beats Greenwood",
         "Louisville",
         "Kosciusko",
         "Yazoo City",
@@ -723,7 +723,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "4a": (
-        "Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20134 AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry, then Yazoo City",
         "Louisville",
         "Kosciusko",
         "Greenwood",
@@ -731,7 +731,7 @@ _EXPECTED_SCENARIOS = {
         ["Yazoo City"],
     ),
     "4b": (
-        "Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 5 or more AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood and Yazoo City level at the top, then Gentry) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry and Yazoo City, level) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Yazoo City, then Gentry) OR (Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Gentry and Yazoo City, level) OR (Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Yazoo City, then Gentry)",
         "Louisville",
         "Kosciusko",
         "Greenwood",
@@ -739,7 +739,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "4c": (
-        "Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Greenwood level at the top, then Yazoo City) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood and Yazoo City, level) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood, then Yazoo City)",
         "Louisville",
         "Kosciusko",
         "Gentry",
@@ -747,7 +747,7 @@ _EXPECTED_SCENARIOS = {
         ["Yazoo City"],
     ),
     "4d": (
-        "Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Greenwood, then Gentry",
         "Louisville",
         "Kosciusko",
         "Yazoo City",
@@ -755,7 +755,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "4e": (
-        "Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Yazoo City level at the top, then Greenwood) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry and Greenwood, level) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry, then Greenwood) OR (Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Yazoo City best, then Gentry and Greenwood, level)",
         "Louisville",
         "Kosciusko",
         "Yazoo City",
@@ -763,7 +763,15 @@ _EXPECTED_SCENARIOS = {
         ["Greenwood"],
     ),
     "4f": (
-        "Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood",
+        "Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Gentry, Greenwood and Yazoo City are still level: fewest points allowed in region games decides their order (then a coin flip)",
+        "Louisville",
+        "Kosciusko",
+        "Gentry",
+        "Greenwood",
+        ["Yazoo City"],
+    ),
+    "4g": (
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Yazoo City, then Greenwood",
         "Louisville",
         "Kosciusko",
         "Gentry",
@@ -803,7 +811,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "9a": (
-        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville by 1\u20138",
+        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville by 1–8",
         "Kosciusko",
         "Louisville",
         "Greenwood",
@@ -835,7 +843,7 @@ _EXPECTED_SCENARIOS = {
         ["Yazoo City"],
     ),
     "12a": (
-        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 1\u20138",
+        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 1–8",
         "Kosciusko",
         "Louisville",
         "Greenwood",
