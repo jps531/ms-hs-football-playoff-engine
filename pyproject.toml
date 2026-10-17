@@ -31,7 +31,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3,<4",
     "slowapi>=0.1.9",
     "coloraide>=3.3",
-    "pillow>=11",
+    "pillow>=12.3.0",
 ]
 
 [dependency-groups]
