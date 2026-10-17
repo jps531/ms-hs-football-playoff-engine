@@ -17,7 +17,7 @@ dependencies = [
     # stays inside them; lift one deliberately, with CI green.
     "prefect>=2.16,<3",
     "griffe<1.0",
-    "anyio>=4.15.1,<5",
+    "anyio>=4,<4.14",  # 4.14 made TaskGroup.create_task abstract; Prefect 2.20 crashes on it (prefect_compat_test.py)
     "pydantic>=2.0,<2.10",
     "requests>=2.31",
     "pandas>=2.2",

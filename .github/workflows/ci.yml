@@ -62,6 +62,8 @@ jobs:
         run: |
           docker run --rm -e AUTH0_DOMAIN=ci.example -e AUTH0_AUDIENCE=ci -e SESSION_SECRET_KEY=ci-only-0123456789abcdef0123456789 \
             ci/api python -c "import os, backend.api.main; assert os.getuid() != 0; print('api ok')"
+      - name: A real Prefect flow runs in the worker image
+        run: docker run --rm -v "$PWD/scripts:/smoke:ro" ci/worker python /smoke/prefect_smoke.py
       - name: nginx accepts its config
         run: |
           mkdir -p ci-cert && openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=ci \
