@@ -537,14 +537,15 @@ def test_atoms_senatobia_seed4_atom():
 
 
 def test_div_dict_scenario_keys():
-    """Division scenarios dict has exactly keys 1a, 1b, 1c, 2, 3, 4a, 4b.
+    """Division scenarios dict has exactly keys 1a, 1b, 1c, 2, 3, 4a, 4b, 4c.
 
     Scenarios 1a/1b/1c are margin-sensitive sub-scenarios from mask 0 (RF beats CLA).
     Scenario 2 is non-MS (actual result: CLA beats RF, SEN beats RIP).
     Scenario 3 is non-MS (RF beats CLA, RIP beats SEN).
-    Scenarios 4a/4b are margin-sensitive sub-scenarios from mask 3 (CLA beats RF, RIP beats SEN).
+    Scenarios 4a/4b/4c are margin-sensitive sub-scenarios from mask 3 (CLA beats RF, RIP beats SEN);
+    4a and 4c give the same seeding by different margins (either is enough).
     """
-    assert set(_DIV_DICT.keys()) == {"1a", "1b", "1c", "2", "3", "4a", "4b"}
+    assert set(_DIV_DICT.keys()) == {"1a", "1b", "1c", "2", "3", "4a", "4b", "4c"}
 
 
 def test_div_dict_scenario1a_title():
@@ -573,8 +574,11 @@ def test_div_dict_scenario3_title():
 
 
 def test_div_dict_scenario4a_title():
-    """Scenario 4a: CLA by 1-8 AND RIP by 1-11 (SEN wins H2H PD tiebreaker over RF)."""
-    assert _DIV_DICT["4a"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311"
+    """Scenario 4a: RIP by 1-11, any CLA margin (SEN wins the H2H PD tiebreaker over RF); 4b: CLA
+    by 1-8 and RIP by 12+; 4c: CLA by 9+, any RIP margin."""
+    assert _DIV_DICT["4a"]["title"] == "Clarksdale beats Rosa Fort AND Ripley beats Senatobia by 1\u201311"
+    assert _DIV_DICT["4b"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more"
+    assert _DIV_DICT["4c"]["title"] == "Clarksdale beats Rosa Fort by 9 or more AND Ripley beats Senatobia"
 
 
 def test_div_dict_scenario4b_title():

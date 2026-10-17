@@ -385,8 +385,8 @@ def test_div_dict_scenario3a_title():
 
 
 def test_div_dict_scenario3b_title():
-    """Scenario 3b: Clinton beats MC by 8+ (covers all OXF/STV outcomes)."""
-    assert _DIV_DICT["3b"]["title"] == "Clinton beats Madison Central by 8 or more"
+    """Scenario 3b: Clinton beats MC by 8+ with Oxford beating Starkville (Starkville winning is scenario 2)."""
+    assert _DIV_DICT["3b"]["title"] == "Clinton beats Madison Central by 8 or more AND Oxford beats Starkville"
 
 
 def test_div_dict_scenario1_seeds():

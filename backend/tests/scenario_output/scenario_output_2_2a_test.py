@@ -281,10 +281,7 @@ def test_atoms_east_union_seed4_bruce_low_margin_atom():
     """One EU seed-4 atom: Bruce wins by 1–2 AND WV wins."""
     atoms = _ATOMS["East Union"][4]
     low_atom = next(
-        (
-            a for a in atoms
-            if any(isinstance(c, GameResult) and c.winner == "Bruce" and c.max_margin == 3 for c in a)
-        ),
+        (a for a in atoms if any(isinstance(c, GameResult) and c.winner == "Bruce" and c.max_margin == 3 for c in a)),
         None,
     )
     assert low_atom is not None
@@ -297,10 +294,7 @@ def test_atoms_east_union_seed4_bruce_high_margin_atom():
     """One EU seed-4 atom: Bruce wins by 9+ AND WV wins."""
     atoms = _ATOMS["East Union"][4]
     high_atom = next(
-        (
-            a for a in atoms
-            if any(isinstance(c, GameResult) and c.winner == "Bruce" and c.min_margin == 9 for c in a)
-        ),
+        (a for a in atoms if any(isinstance(c, GameResult) and c.winner == "Bruce" and c.min_margin == 9 for c in a)),
         None,
     )
     assert high_atom is not None
@@ -466,13 +460,15 @@ def test_scenario_2a_conditions_atom():
 
 
 def test_scenario_2c_conditions_atom():
-    """Scenario 2c conditions_atom: standalone Bruce wins by 5–8 (no EU/WV condition)."""
+    """Scenario 2c conditions_atom: Bruce wins by 5-8, with Water Valley beating East Union
+    (East Union winning instead is scenario 3, the same seeding at any Bruce margin)."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "c")
     ca = sc["conditions_atom"]
-    assert len(ca) == 1
+    assert len(ca) == 2
     gr_bruce = next(c for c in ca if isinstance(c, GameResult) and c.winner == "Bruce")
     assert gr_bruce.min_margin == 5
     assert gr_bruce.max_margin == 9  # exclusive: margins 5–8
+    assert GameResult("Water Valley", "East Union", 1, None) in ca
 
 
 def test_scenario_2d_conditions_atom():
