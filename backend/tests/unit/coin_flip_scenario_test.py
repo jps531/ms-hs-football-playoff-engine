@@ -13,7 +13,7 @@ This fixture exercises:
   _expand_coin_flip_seedings     (scenario_viewer.py)
   _build_coin_flip_conds         (scenario_viewer.py)
   Step 3b in build_scenario_atoms (scenario_viewer.py)
-  "coinflip" branch of enumerate_division_scenarios (scenario_viewer.py)
+  enumerate_division_scenarios leaving a certain coin flip to the flip (scenario_viewer.py)
   CoinFlipResult dispatch in _render_condition (scenario_renderer.py)
   _accumulate_slots with flip_groups (scenarios.py lines 105–134)
 """
@@ -236,41 +236,28 @@ class TestBuildScenarioAtomsCoinFlip:
 
 
 class TestEnumerateDivisionScenariosCoinFlip:
-    """enumerate_division_scenarios produces coinflip sub-scenarios."""
+    """enumerate_division_scenarios leaves a genuine coin flip to the flip, without guessing it.
 
-    def test_produces_four_scenarios(self):
-        """2 masks × 2 flip outcomes = 4 scenarios total."""
-        assert len(_SCENARIOS) == 4
+    Alpha and Beta have finished their region games, so their points allowed are final and
+    equal: nothing left to play can separate them, and it's a coin flip for certain.
+    """
 
-    def test_all_scenarios_have_sub_labels(self):
-        """All scenarios are sub-labeled (a/b) since they involve coin flips."""
-        assert all(sc["sub_label"] != "" for sc in _SCENARIOS)
+    def test_one_scenario_whatever_the_delta_gamma_result(self):
+        """Delta-Gamma decides nothing that's shown (both are out), so the two masks are one scenario."""
+        assert len(_SCENARIOS) == 1
+        assert _SCENARIOS[0]["game_winners"] == [] and _SCENARIOS[0]["sub_label"] == ""
 
-    def test_sub_labels_are_a_and_b_per_group(self):
-        """Each scenario number has sub-labels 'a' and 'b'."""
-        from collections import defaultdict
+    def test_the_tie_is_left_to_a_coin_flip(self):
+        """Step 6 (the coin flip) for Alpha and Beta, not an order made up for them."""
+        assert _SCENARIOS[0]["open_groups"] == [(6, ("Alpha", "Beta"))]
+        assert set(_SCENARIOS[0]["seeding"][:2]) == {"Alpha", "Beta"}
 
-        by_num = defaultdict(list)
-        for sc in _SCENARIOS:
-            by_num[sc["scenario_num"]].append(sc["sub_label"])
-        for num, labels in by_num.items():
-            assert sorted(labels) == ["a", "b"], f"Scenario {num} has unexpected labels: {labels}"
+    def test_title_says_a_coin_flip_decides(self):
+        from backend.helpers.scenario_renderer import render_scenario_title
 
-    def test_conditions_atoms_contain_coin_flip_result(self):
-        """Every scenario's conditions_atom includes a CoinFlipResult."""
-        for sc in _SCENARIOS:
-            atom = sc.get("conditions_atom")
-            assert atom is not None, f"Scenario {sc['scenario_num']}{sc['sub_label']} has no atom"
-            assert any(isinstance(c, CoinFlipResult) for c in atom), (
-                f"No CoinFlipResult in scenario {sc['scenario_num']}{sc['sub_label']}: {atom}"
-            )
-
-    def test_alpha_and_beta_each_win_seed1_in_two_scenarios(self):
-        """Alpha wins seed 1 in exactly 2 scenarios; Beta in exactly 2."""
-        alpha_seed1 = sum(1 for sc in _SCENARIOS if sc["seeding"][0] == "Alpha")
-        beta_seed1 = sum(1 for sc in _SCENARIOS if sc["seeding"][0] == "Beta")
-        assert alpha_seed1 == 2
-        assert beta_seed1 == 2
+        assert render_scenario_title(_SCENARIOS[0]) == (
+            "Alpha and Beta are level on every tiebreaker: a coin flip decides their order"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -400,14 +387,9 @@ class TestPrecomputedPathCoinFlip:
         """Precomputed path produces the same number of scenarios as direct path."""
         assert len(_SCENARIOS_PRE) == len(_SCENARIOS)
 
-    def test_precomputed_scenarios_have_coin_flip_conditions(self):
-        """Every scenario from the precomputed path includes a CoinFlipResult."""
-        for sc in _SCENARIOS_PRE:
-            atom = sc.get("conditions_atom")
-            assert atom is not None, f"Precomputed scenario {sc['scenario_num']}{sc['sub_label']} has no atom"
-            assert any(isinstance(c, CoinFlipResult) for c in atom), (
-                f"No CoinFlipResult in precomputed scenario conditions: {atom}"
-            )
+    def test_precomputed_scenarios_leave_the_coin_flip_open(self):
+        """The precomputed path gives the same coin-flip scenario."""
+        assert [sc["open_groups"] for sc in _SCENARIOS_PRE] == [[(6, ("Alpha", "Beta"))]]
 
     def test_precomputed_seedings_match_direct(self):
         """The set of seedings produced matches between precomputed and direct paths."""

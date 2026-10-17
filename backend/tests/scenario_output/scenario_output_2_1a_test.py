@@ -252,13 +252,23 @@ def test_atoms_no_margin_conditions():
 
 
 def test_scenario_count():
-    """There are exactly 7 sub-scenarios (4 raw outcomes split by margin tiebreakers)."""
-    assert len(_SCENARIOS) == 7
+    """There are exactly 8 scenarios (4 sets of winners, two of them split three ways by margins)."""
+    assert len(_SCENARIOS) == 8
 
 
 def test_scenario_shape():
     """Every scenario has the required keys."""
-    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "tiebreaker_groups", "coinflip_groups"}
+    required = {
+        "scenario_num",
+        "sub_label",
+        "seeding",
+        "game_winners",
+        "conditions_atom",
+        "alternatives",
+        "open_groups",
+        "tiebreaker_groups",
+        "coinflip_groups",
+    }
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required
 
@@ -275,10 +285,10 @@ def test_scenario_1_has_three_sub_labels():
     assert sorted(sub_labels) == ["a", "b", "c"]
 
 
-def test_scenario_4_has_two_sub_labels():
-    """Scenario 4 (Falkner beats PC, Ashland beats HWB) has 2 margin-sensitive sub-labels."""
+def test_scenario_4_has_three_sub_labels():
+    """Scenario 4 (Falkner beats PC, Ashland beats HWB) has 3 margin-sensitive sub-labels."""
     sub_labels = [sc["sub_label"] for sc in _SCENARIOS if sc["scenario_num"] == 4]
-    assert sorted(sub_labels) == ["a", "b"]
+    assert sorted(sub_labels) == ["a", "b", "c"]
 
 
 def test_scenarios_2_and_3_have_no_sub_labels():
@@ -330,9 +340,7 @@ def test_non_sub_scenarios_conditions_atom_none():
     """Non-sub-labeled scenarios (2 and 3) have conditions_atom=None."""
     for sc in _SCENARIOS:
         if sc["sub_label"] == "":
-            assert sc["conditions_atom"] is None, (
-                f"scenario {sc['scenario_num']} should have conditions_atom=None"
-            )
+            assert sc["conditions_atom"] is None, f"scenario {sc['scenario_num']} should have conditions_atom=None"
 
 
 def test_sub_scenarios_have_conditions_atom():
@@ -406,14 +414,14 @@ def test_scenario_4b_conditions_atom():
 # ---------------------------------------------------------------------------
 
 
-def test_div_dict_seven_keys():
-    """Dict has exactly 7 keys: 1a, 1b, 1c, 2, 3, 4a, 4b."""
-    assert set(_DIV_DICT.keys()) == {"1a", "1b", "1c", "2", "3", "4a", "4b"}
+def test_div_dict_eight_keys():
+    """Dict has exactly 8 keys: 1a, 1b, 1c, 2, 3, 4a, 4b, 4c."""
+    assert set(_DIV_DICT.keys()) == {"1a", "1b", "1c", "2", "3", "4a", "4b", "4c"}
 
 
 def test_div_dict_entry_shape():
     """Each entry has exactly the required keys."""
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in _DIV_DICT.items():
         assert set(entry.keys()) == required, f"key {key!r} has unexpected shape"
 
@@ -425,16 +433,30 @@ def test_div_dict_no_eliminated_teams():
 
 
 def test_div_dict_scenario1_sub_labels_distinct_titles():
-    """Scenarios 1a, 1b, 1c each have a distinct margin-qualified title."""
+    """Scenarios 1a, 1b, 1c each have a distinct margin-qualified title; 1c leaves a three-way tie
+    to points allowed, since it's still level after point differential."""
     assert _DIV_DICT["1a"]["title"] == "Potts Camp beats Falkner by 1\u201311 AND H. W. Byers beats Ashland"
-    assert _DIV_DICT["1b"]["title"] == "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311"
-    assert _DIV_DICT["1c"]["title"] == "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more"
+    assert (
+        _DIV_DICT["1b"]["title"] == "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1\u201311"
+    )
+    assert _DIV_DICT["1c"]["title"] == (
+        "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND "
+        "Falkner, H. W. Byers and Potts Camp are still level: fewest points allowed in region games "
+        "decides their order (then a coin flip)"
+    )
 
 
 def test_div_dict_scenario4_sub_labels_distinct_titles():
-    """Scenarios 4a and 4b have distinct margin-qualified titles."""
+    """Scenarios 4a-4c: Ashland's margin, and when it's 12+ Falkner's too, decide the order."""
     assert _DIV_DICT["4a"]["title"] == "Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311"
-    assert _DIV_DICT["4b"]["title"] == "Falkner beats Potts Camp AND Ashland beats H. W. Byers by 12 or more"
+    assert (
+        _DIV_DICT["4b"]["title"] == "Falkner beats Potts Camp by 1\u201311 AND Ashland beats H. W. Byers by 12 or more"
+    )
+    assert _DIV_DICT["4c"]["title"] == (
+        "Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND "
+        "Ashland, H. W. Byers and Potts Camp are still level: fewest points allowed in region games "
+        "decides their order (then a coin flip)"
+    )
 
 
 def test_div_dict_scenario2_title():
@@ -466,17 +488,20 @@ def test_div_dict_scenario3_seeds():
 
 
 def test_div_dict_scenario1c_seeds():
-    """Scenario 1c: PC 12+ AND HWB 12+ → Falkner #1, Potts Camp #2 (Falkner PD advantage)."""
+    """Scenario 1c: PC 12+ AND HWB 12+ leaves Falkner, HWB and PC level through point differential,
+    so their places (1-3) aren't given an order; Ashland is 4th."""
     entry = _DIV_DICT["1c"]
-    assert entry["one_seed"] == "Falkner"
-    assert entry["two_seed"] == "Potts Camp"
+    assert entry["open_groups"] == [["Falkner", "H. W. Byers", "Potts Camp"]]
+    assert entry["four_seed"] == "Ashland"
 
 
 def test_div_dict_ashland_always_bottom_two():
-    """Ashland is always seed 3 or 4 — never in the top two."""
+    """Ashland is never in the top two by a stated order; only in 4c, where points allowed decides
+    its three-way tie for 2nd-4th, could it get there."""
     for key, entry in _DIV_DICT.items():
-        assert entry["one_seed"] != "Ashland", f"key {key!r}: Ashland should not be #1"
-        assert entry["two_seed"] != "Ashland", f"key {key!r}: Ashland should not be #2"
+        top_two = {entry["one_seed"], entry["two_seed"]}
+        if "Ashland" in top_two:
+            assert key == "4c" and any("Ashland" in g for g in entry["open_groups"]), key
 
 
 def test_div_dict_hwb_never_seed1():
@@ -505,7 +530,9 @@ def test_team_dict_entry_shape():
     """Every entry has odds, weighted_odds, and scenarios keys."""
     for team, team_entry in _TEAM_DICT.items():
         for key, val in team_entry.items():
-            assert set(val.keys()) == {"odds", "weighted_odds", "scenarios", "conditions"}, f"{team!r} key {key!r} has wrong shape"
+            assert set(val.keys()) == {"odds", "weighted_odds", "scenarios", "conditions"}, (
+                f"{team!r} key {key!r} has wrong shape"
+            )
 
 
 def test_team_dict_weighted_odds_none():

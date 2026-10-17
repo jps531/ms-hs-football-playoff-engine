@@ -246,7 +246,7 @@ def test_scenario_count():
 
 def test_scenario_shape():
     """Every scenario has the required keys."""
-    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "tiebreaker_groups", "coinflip_groups"}
+    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "alternatives", "open_groups", "tiebreaker_groups", "coinflip_groups"}
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required
 
@@ -379,7 +379,7 @@ def test_div_dict_four_keys():
 
 def test_div_dict_entry_shape():
     """Each entry has exactly the required keys."""
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in _DIV_DICT.items():
         assert set(entry.keys()) == required, f"key {key!r} has unexpected shape"
 

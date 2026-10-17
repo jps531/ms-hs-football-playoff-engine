@@ -111,8 +111,8 @@ def test_scenario_denominator():
 
 
 def test_scenario_count():
-    """28 distinct division scenarios (margin sensitivity creates sub-labels)."""
-    assert len(_SCENARIOS) == 28
+    """32 distinct division scenarios (margin sensitivity creates sub-labels, one per outcome)."""
+    assert len(_SCENARIOS) == 32
 
 
 # ---------------------------------------------------------------------------
@@ -277,9 +277,7 @@ def test_coahoma_county_seed4_first_atom():
 def test_scenario5_seeding_matches_actual_2025():
     """Scenario 5 produces the actual 2025 seeding: CC #1, NP #2, Ind #3, HS #4."""
     sc5 = next(sc for sc in _SCENARIOS if sc["scenario_num"] == 5 and sc["sub_label"] == "")
-    assert list(sc5["seeding"]) == [
-        "Coahoma County", "North Panola", "Independence", "Holly Springs"
-    ]
+    assert list(sc5["seeding"]) == ["Coahoma County", "North Panola", "Independence", "Holly Springs"]
 
 
 def test_scenario5_is_non_sensitive():
@@ -314,24 +312,25 @@ def test_scenario5_game_winners():
 # ---------------------------------------------------------------------------
 
 
-def test_scenario3_has_five_sub_labels():
-    """Scenario 3 has five sub-labels (a-e) due to 3-way 2-1 tie requiring tiebreakers.
+def test_scenario3_has_six_sub_labels():
+    """Scenario 3 has six sub-labels (a-f), one per outcome of the 3-way 2-1 tie.
 
     Mask: NP beats Ind (bit 0), CC beats HS (bit 1), Ind beats CC (bit 2),
     NP beats HS (bit 3) → CC=2-1, NP=2-1, Ind=2-1 (3-way tie), HS=0-3.
-    Steps 1-4 tiebreakers produce five margin-distinct orderings.
+    Steps 3-4 give five orderings; with every margin 12+ all three stay level, and fewest
+    points allowed decides (3f).
     """
     sc3_labels = sorted(sc["sub_label"] for sc in _SCENARIOS if sc["scenario_num"] == 3)
-    assert sc3_labels == ["a", "b", "c", "d", "e"]
+    assert sc3_labels == ["a", "b", "c", "d", "e", "f"]
+    sc3f = next(sc for sc in _SCENARIOS if sc["scenario_num"] == 3 and sc["sub_label"] == "f")
+    assert sc3f["open_groups"] == [(5, ("Coahoma County", "Independence", "North Panola"))]
 
 
 def test_scenario3_all_have_conditions_atom():
     """All scenario 3 sub-scenarios are margin-sensitive and have a conditions_atom."""
     for sc in _SCENARIOS:
         if sc["scenario_num"] == 3:
-            assert sc["conditions_atom"] is not None, (
-                f"scenario 3{sc['sub_label']} missing conditions_atom"
-            )
+            assert sc["conditions_atom"] is not None, f"scenario 3{sc['sub_label']} missing conditions_atom"
 
 
 def test_scenario3_game_winners_consistent():
@@ -340,11 +339,7 @@ def test_scenario3_game_winners_consistent():
     The sub-labels differ only in margin qualifiers — the underlying outcome
     (which team won each game) is the same for all five variants.
     """
-    sc3_winners = [
-        tuple(sorted(sc["game_winners"]))
-        for sc in _SCENARIOS
-        if sc["scenario_num"] == 3
-    ]
+    sc3_winners = [tuple(sorted(sc["game_winners"])) for sc in _SCENARIOS if sc["scenario_num"] == 3]
     assert len(set(sc3_winners)) == 1, "All sub-scenarios should share the same game winners"
 
 
@@ -376,8 +371,8 @@ def test_render_all_teams_present_in_team_dict():
 
 
 def test_div_dict_key_count():
-    """division_scenarios_as_dict has 28 entries (one per scenario sub-label)."""
-    assert len(_DIV_DICT) == 28
+    """division_scenarios_as_dict has 32 entries (one per scenario sub-label)."""
+    assert len(_DIV_DICT) == 32
 
 
 def test_div_dict_contains_scenario5():

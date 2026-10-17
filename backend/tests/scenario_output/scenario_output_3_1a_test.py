@@ -130,12 +130,8 @@ def test_atoms_each_has_single_condition():
     for team, seed_map in _ATOMS.items():
         for seed, atoms in seed_map.items():
             assert len(atoms) == 1, f"{team!r} seed {seed}: expected 1 atom, got {len(atoms)}"
-            assert len(atoms[0]) == 1, (
-                f"{team!r} seed {seed}: expected 1 condition, got {len(atoms[0])}"
-            )
-            assert isinstance(atoms[0][0], GameResult), (
-                f"{team!r} seed {seed}: condition should be GameResult"
-            )
+            assert len(atoms[0]) == 1, f"{team!r} seed {seed}: expected 1 condition, got {len(atoms[0])}"
+            assert isinstance(atoms[0][0], GameResult), f"{team!r} seed {seed}: condition should be GameResult"
 
 
 def test_atoms_no_margin_restrictions():
@@ -143,12 +139,8 @@ def test_atoms_no_margin_restrictions():
     for team, seed_map in _ATOMS.items():
         for seed, atoms in seed_map.items():
             gr = atoms[0][0]
-            assert gr.min_margin == 1, (
-                f"{team!r} seed {seed}: expected min_margin=1, got {gr.min_margin}"
-            )
-            assert gr.max_margin is None, (
-                f"{team!r} seed {seed}: expected max_margin=None, got {gr.max_margin}"
-            )
+            assert gr.min_margin == 1, f"{team!r} seed {seed}: expected min_margin=1, got {gr.min_margin}"
+            assert gr.max_margin is None, f"{team!r} seed {seed}: expected max_margin=None, got {gr.max_margin}"
 
 
 def test_atoms_calhoun_city_seed1():
@@ -205,9 +197,7 @@ def test_atoms_games_independent():
     for seed in (3, 4):
         for team in ("Okolona", "Vardaman"):
             gr = _ATOMS[team][seed][0][0]
-            assert {gr.winner, gr.loser} == {"Okolona", "Vardaman"}, (
-                f"{team!r} seed {seed} references wrong game: {gr}"
-            )
+            assert {gr.winner, gr.loser} == {"Okolona", "Vardaman"}, f"{team!r} seed {seed} references wrong game: {gr}"
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +212,17 @@ def test_scenario_count():
 
 def test_scenario_shape():
     """Every scenario has the required keys."""
-    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "tiebreaker_groups", "coinflip_groups"}
+    required = {
+        "scenario_num",
+        "sub_label",
+        "seeding",
+        "game_winners",
+        "conditions_atom",
+        "alternatives",
+        "open_groups",
+        "tiebreaker_groups",
+        "coinflip_groups",
+    }
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required
 
@@ -243,10 +243,10 @@ def test_scenario_seedings_cover_all_combos():
     """The four scenarios cover all four possible seeding combinations."""
     seedings = {sc["seeding"] for sc in _SCENARIOS}
     expected = {
-        ("Calhoun City", "West Lowndes", "Okolona",   "Vardaman"),
-        ("Calhoun City", "West Lowndes", "Vardaman",  "Okolona"),
-        ("West Lowndes", "Calhoun City", "Okolona",   "Vardaman"),
-        ("West Lowndes", "Calhoun City", "Vardaman",  "Okolona"),
+        ("Calhoun City", "West Lowndes", "Okolona", "Vardaman"),
+        ("Calhoun City", "West Lowndes", "Vardaman", "Okolona"),
+        ("West Lowndes", "Calhoun City", "Okolona", "Vardaman"),
+        ("West Lowndes", "Calhoun City", "Vardaman", "Okolona"),
     }
     assert seedings == expected
 
@@ -284,7 +284,7 @@ def test_div_dict_four_keys():
 
 def test_div_dict_entry_shape():
     """Each entry has exactly the required keys."""
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in _DIV_DICT.items():
         assert set(entry.keys()) == required, f"key {key!r} has unexpected shape"
 
@@ -319,18 +319,14 @@ def test_div_dict_top_seeds_are_cc_and_wl():
     """Seeds 1 & 2 are always Calhoun City and West Lowndes (in some order)."""
     for key, entry in _DIV_DICT.items():
         top_two = {entry["one_seed"], entry["two_seed"]}
-        assert top_two == {"Calhoun City", "West Lowndes"}, (
-            f"key {key!r} top two seeds are wrong: {top_two}"
-        )
+        assert top_two == {"Calhoun City", "West Lowndes"}, f"key {key!r} top two seeds are wrong: {top_two}"
 
 
 def test_div_dict_bottom_seeds_are_ok_and_var():
     """Seeds 3 & 4 are always Okolona and Vardaman (in some order)."""
     for key, entry in _DIV_DICT.items():
         bottom_two = {entry["three_seed"], entry["four_seed"]}
-        assert bottom_two == {"Okolona", "Vardaman"}, (
-            f"key {key!r} bottom two seeds are wrong: {bottom_two}"
-        )
+        assert bottom_two == {"Okolona", "Vardaman"}, f"key {key!r} bottom two seeds are wrong: {bottom_two}"
 
 
 # ---------------------------------------------------------------------------
@@ -363,18 +359,14 @@ def test_team_dict_all_odds_50_percent():
     """Every team has odds=0.5 for each of their two possible seeds."""
     for team, team_entry in _TEAM_DICT.items():
         for seed, val in team_entry.items():
-            assert val["odds"] == pytest.approx(0.5), (
-                f"{team!r} seed {seed}: expected odds=0.5, got {val['odds']}"
-            )
+            assert val["odds"] == pytest.approx(0.5), f"{team!r} seed {seed}: expected odds=0.5, got {val['odds']}"
 
 
 def test_team_dict_weighted_odds_none():
     """weighted_odds is None for all entries (no win-probability function supplied)."""
     for team, team_entry in _TEAM_DICT.items():
         for key, val in team_entry.items():
-            assert val["weighted_odds"] is None, (
-                f"{team!r} key {key!r}: expected weighted_odds=None"
-            )
+            assert val["weighted_odds"] is None, f"{team!r} key {key!r}: expected weighted_odds=None"
 
 
 def test_team_dict_each_has_one_scenario_string():
@@ -390,9 +382,7 @@ def test_team_dict_scenario_strings_non_empty():
     """All scenario strings are non-empty (conditions are required)."""
     for team, team_entry in _TEAM_DICT.items():
         for seed, val in team_entry.items():
-            assert val["scenarios"][0] != "", (
-                f"{team!r} seed {seed}: scenario string should not be empty"
-            )
+            assert val["scenarios"][0] != "", f"{team!r} seed {seed}: scenario string should not be empty"
 
 
 # ---------------------------------------------------------------------------
@@ -405,8 +395,8 @@ def test_team_dict_scenario_strings_non_empty():
     [
         ("Calhoun City", CALHOUN_CITY_EXPECTED),
         ("West Lowndes", WEST_LOWNDES_EXPECTED),
-        ("Okolona",      OKOLONA_EXPECTED),
-        ("Vardaman",     VARDAMAN_EXPECTED),
+        ("Okolona", OKOLONA_EXPECTED),
+        ("Vardaman", VARDAMAN_EXPECTED),
     ],
 )
 def test_render_team_scenarios_with_odds(team, expected):
@@ -420,15 +410,13 @@ def test_render_team_scenarios_with_odds(team, expected):
     [
         ("Calhoun City", [1, 2]),
         ("West Lowndes", [1, 2]),
-        ("Okolona",      [3, 4]),
-        ("Vardaman",     [3, 4]),
+        ("Okolona", [3, 4]),
+        ("Vardaman", [3, 4]),
     ],
 )
 def test_render_team_scenarios_without_odds(team, seeds):
     """render_team_scenarios without odds produces '#N seed if:' blocks with no percentages."""
     result = render_team_scenarios(team, _ATOMS)
     for seed in seeds:
-        assert f"#{seed} seed if:" in result, (
-            f"{team!r}: expected '#{seed} seed if:' in output without odds"
-        )
+        assert f"#{seed} seed if:" in result, f"{team!r}: expected '#{seed} seed if:' in output without odds"
     assert "%" not in result, f"{team!r}: percentage should not appear when odds not supplied"

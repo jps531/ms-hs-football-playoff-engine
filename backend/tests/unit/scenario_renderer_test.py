@@ -386,34 +386,14 @@ def _div_dict():
 
 
 def test_division_scenarios_dict_keys():
-    """All 17 scenario keys are present (1–3, 4a–4l, 5–6)."""
-    d = _div_dict()
-    expected_keys = {
-        "1",
-        "2",
-        "3",
-        "4a",
-        "4b",
-        "4c",
-        "4d",
-        "4e",
-        "4f",
-        "4g",
-        "4h",
-        "4i",
-        "4j",
-        "4k",
-        "4l",
-        "5",
-        "6",
-    }
-    assert set(d.keys()) == expected_keys
+    """All 6 scenario keys are present; the five-way tie is scenario 4, with no sub-scenarios."""
+    assert set(_div_dict().keys()) == {"1", "2", "3", "4", "5", "6"}
 
 
 def test_division_scenarios_dict_entry_shape():
     """Every entry has exactly the required keys."""
     d = _div_dict()
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in d.items():
         assert set(entry.keys()) == required, f"scenario {key!r} missing keys"
 
@@ -438,22 +418,17 @@ def test_division_scenarios_dict_scenario_3():
     assert set(entry["eliminated"]) == {"Brandon", "Meridian"}
 
 
-def test_division_scenarios_dict_scenario_4a_title():
-    """Scenario 4a title includes margin conditions.
-
-    After ascending-margin sort, 4a is the smallest-margin sub-scenario:
-    p∈[1,4], n∈[1,3], Pearl's margin doesn't exceed NWR's by more than 1.
-    """
-    entry = _div_dict()["4a"]
+def test_division_scenarios_dict_scenario_4_leaves_the_tie_open():
+    """Scenario 4's title names the five-way tie as left to the tiebreaker, and the entry says so."""
+    entry = _div_dict()["4"]
     assert entry["title"] == (
-        "Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND "
-        "Northwest Rankin beats Petal by 1\u20133 AND "
-        "Pearl's margin doesn't exceed Northwest Rankin's by more than 1"
+        "Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND "
+        "Brandon, Northwest Rankin, Oak Grove, Pearl and Petal tie: their order is decided by point "
+        "differential in games among them, then against the rest of the region (capped at 12 a game), "
+        "then fewest points allowed"
     )
-    assert entry["one_seed"] == "Oak Grove"
-    assert entry["two_seed"] == "Petal"
-    assert entry["four_seed"] == "Pearl"
-    assert set(entry["eliminated"]) == {"Brandon", "Meridian"}
+    assert entry["open_groups"] == [["Brandon", "Northwest Rankin", "Oak Grove", "Pearl", "Petal"]]
+    assert entry["eliminated"][0] == "Meridian"
 
 
 def test_division_scenarios_dict_scenario_6():
@@ -1026,7 +1001,9 @@ class TestBuildHostConditions:
         sc = HomeGameScenario(conditions=(seed_required,), explanation=None)
         rnd = _rhs(will_host=(sc,))
         result = build_host_conditions("TeamZ", rnd, self._seed_atoms(), self._DATES)
-        assert result == [[{"type": "seed_required", "school": "TeamZ", "seed": 1, "description": "TeamZ finishes as the #1 seed"}]]
+        assert result == [
+            [{"type": "seed_required", "school": "TeamZ", "seed": 1, "description": "TeamZ finishes as the #1 seed"}]
+        ]
 
     def test_remaining_conditions_appended_to_each_expanded_atom(self):
         """A condition following seed_required is AND-appended to every expanded atom's group."""
@@ -1079,7 +1056,9 @@ class TestExpandAndRenderConditions:
     def test_multiple_groups_all_rendered(self):
         """Each AND-group in the input produces one corresponding output group."""
         cond_a = HomeGameCondition(kind="wins_round", round_name="First Round", region=6, seed=3, team_name="Shaw")
-        cond_b = HomeGameCondition(kind="wins_round", round_name="First Round", region=7, seed=1, team_name="Bogue Chitto")
+        cond_b = HomeGameCondition(
+            kind="wins_round", round_name="First Round", region=7, seed=1, team_name="Bogue Chitto"
+        )
         result = expand_and_render_conditions("TeamA", [[cond_a], [cond_b]], None, {})
         assert len(result) == 2
         assert result[0][0]["school"] == "Shaw"
@@ -1117,7 +1096,9 @@ class TestBuildReachConditions:
     def test_delegates_to_expand_and_render_conditions(self):
         """build_reach_conditions produces the same output as calling
         expand_and_render_conditions directly (thin wrapper, no extra logic)."""
-        cond = HomeGameCondition(kind="wins_round", round_name="Quarterfinals", region=8, seed=1, team_name="Taylorsville")
+        cond = HomeGameCondition(
+            kind="wins_round", round_name="Quarterfinals", region=8, seed=1, team_name="Taylorsville"
+        )
         and_groups = [[cond]]
         assert build_reach_conditions("TeamA", and_groups, None, {}) == expand_and_render_conditions(
             "TeamA", and_groups, None, {}
@@ -1274,15 +1255,24 @@ class TestAtomConditionDicts:
         out = atom_condition_dicts(atom, self._DATES)
         assert [d["school"] for d in out] == ["Petal", "Mize"]
 
-    def test_unrecognized_condition_type_produces_no_dict_but_loop_continues(self):
-        """A condition object of an unrecognized type matches none of the isinstance
-        branches and is silently skipped, while later conditions in the same atom
-        still get processed (the loop continues rather than stopping)."""
+    def test_unrecognized_condition_type_is_an_error(self):
+        """A condition of an unrecognized type is an error, never skipped: a path shown
+        without one of its conditions would claim more than is true."""
         atom = [object(), GameResult(winner="Mize", loser="Raleigh")]
-        out = atom_condition_dicts(atom, self._DATES)
-        assert len(out) == 1
-        assert out[0]["type"] == "game_result"
-        assert out[0]["school"] == "Mize"
+        with pytest.raises(TypeError, match="no path rendering"):
+            atom_condition_dicts(atom, self._DATES)
+
+    def test_tiebreak_decision_becomes_a_described_condition(self):
+        """A tiebreaker decision becomes a "tiebreak" condition carrying its sentence."""
+        from backend.helpers.data_classes import TiebreakDecision
+
+        cond = TiebreakDecision(3, ("Magee", "Raleigh", "Seminary"), (("Magee",), ("Raleigh", "Seminary")))
+        [out] = atom_condition_dicts([cond], self._DATES)
+        assert out == {
+            "type": "tiebreak",
+            "description": "Point differential in games among Magee, Raleigh and Seminary (capped at 12 a game): "
+            "Magee best, then Raleigh and Seminary, level",
+        }
 
 
 class TestRenderTeamMatchups:

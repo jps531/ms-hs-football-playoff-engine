@@ -177,19 +177,29 @@ def test_atoms_nanih_waiya_unconditional():
 
 
 def test_scenario_count():
-    """14 distinct scenario entries from 8 outcome × margin combinations."""
-    assert len(_SCENARIOS) == 14
+    """8 distinct scenario entries: the McAdams/Nanih Waiya result never changes the seeds shown."""
+    assert len(_SCENARIOS) == 8
 
 
 def test_scenario_keys():
-    """Scenario keys are exactly {'1','2a','2b','3a','3b','3c','3d','4','5a','5b','6a','6b','6c','6d'}."""
+    """Scenario keys are exactly {'1','2a','2b','3a','3b','3c','3d','4'}."""
     keys = {f"{s['scenario_num']}{s['sub_label']}" for s in _SCENARIOS}
-    assert keys == {"1", "2a", "2b", "3a", "3b", "3c", "3d", "4", "5a", "5b", "6a", "6b", "6c", "6d"}
+    assert keys == {"1", "2a", "2b", "3a", "3b", "3c", "3d", "4"}
 
 
 def test_scenario_entry_shape():
     """Every scenario dict has the required keys."""
-    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "tiebreaker_groups", "coinflip_groups"}
+    required = {
+        "scenario_num",
+        "sub_label",
+        "seeding",
+        "game_winners",
+        "conditions_atom",
+        "alternatives",
+        "open_groups",
+        "tiebreaker_groups",
+        "coinflip_groups",
+    }
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required
 
@@ -228,12 +238,7 @@ def test_scenario_2a_2b_same_game_winners():
     sc2a = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
     sc2b = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
     assert sc2a["game_winners"] == sc2b["game_winners"]
-    expected_winners = [
-        ("Ethel", "Sebastopol"),
-        ("Noxapater", "Leake County"),
-        ("Nanih Waiya", "McAdams"),
-    ]
-    assert sc2a["game_winners"] == expected_winners
+    assert sc2a["game_winners"] == [("Ethel", "Sebastopol"), ("Noxapater", "Leake County")]
 
 
 def test_scenario_2a_seeding():
@@ -249,16 +254,11 @@ def test_scenario_2b_seeding():
 
 
 def test_scenario_3_group_same_game_winners():
-    """All four 3-group sub-scenarios share the same game_winners."""
+    """All four 3-group sub-scenarios share the same game_winners (Nanih Waiya/McAdams doesn't matter)."""
     scs = [s for s in _SCENARIOS if s["scenario_num"] == 3]
     assert len(scs) == 4
     assert all(s["game_winners"] == scs[0]["game_winners"] for s in scs)
-    expected_winners = [
-        ("Sebastopol", "Ethel"),
-        ("Leake County", "Noxapater"),
-        ("Nanih Waiya", "McAdams"),
-    ]
-    assert scs[0]["game_winners"] == expected_winners
+    assert scs[0]["game_winners"] == [("Sebastopol", "Ethel"), ("Leake County", "Noxapater")]
 
 
 def test_scenario_3_sub_labels():
@@ -277,13 +277,6 @@ def test_scenario_3d_seeding():
     """Scenario 3d: Sebastopol earns #3 (largest margin variant)."""
     sc = next(s for s in _SCENARIOS if s["scenario_num"] == 3 and s["sub_label"] == "d")
     assert sc["seeding"][:4] == ("Nanih Waiya", "Leake County", "Sebastopol", "Noxapater")
-
-
-def test_scenario_6_group_has_four_sub_labels():
-    """Group 6 (same W/L as group 3 but McAdams beats Nanih Waiya) also has 4 sub-scenarios."""
-    scs = [s for s in _SCENARIOS if s["scenario_num"] == 6]
-    assert len(scs) == 4
-    assert {s["sub_label"] for s in scs} == {"a", "b", "c", "d"}
 
 
 def test_unconditional_scenario_has_none_conditions():
@@ -339,7 +332,7 @@ def test_div_dict_keys():
 
 def test_div_dict_entry_shape():
     """Every entry has the required keys."""
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in _DIV_DICT.items():
         assert set(entry.keys()) == required, f"scenario {key!r} has wrong shape"
 
@@ -413,7 +406,9 @@ def test_team_dict_entry_shape():
     """Every entry has odds, weighted_odds, and scenarios keys."""
     for team, team_entry in _TEAM_DICT.items():
         for key, val in team_entry.items():
-            assert set(val.keys()) == {"odds", "weighted_odds", "scenarios", "conditions"}, f"{team!r} key {key!r} has wrong shape"
+            assert set(val.keys()) == {"odds", "weighted_odds", "scenarios", "conditions"}, (
+                f"{team!r} key {key!r} has wrong shape"
+            )
 
 
 def test_team_dict_nanih_waiya_clinched():

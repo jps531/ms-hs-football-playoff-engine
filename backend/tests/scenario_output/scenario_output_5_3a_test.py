@@ -107,7 +107,7 @@ def test_scenario_count():
 def test_scenario_single_entry_shape():
     """The single scenario has all required keys."""
     sc = _SCENARIOS[0]
-    assert set(sc.keys()) == {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "tiebreaker_groups", "coinflip_groups"}
+    assert set(sc.keys()) == {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "alternatives", "open_groups", "tiebreaker_groups", "coinflip_groups"}
 
 
 def test_scenario_num_and_label():
@@ -145,7 +145,7 @@ def test_div_dict_single_key():
 def test_div_dict_entry_shape():
     """Entry has exactly the required keys."""
     entry = _DIV_DICT["1"]
-    assert set(entry.keys()) == {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    assert set(entry.keys()) == {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
 
 
 def test_div_dict_title_empty():

@@ -887,6 +887,41 @@ class CoinFlipResult:
         return f"{self.winner} wins coin flip vs {self.loser}"
 
 
+# --- Data class for one tiebreaker decision that depends on margins ---
+@dataclass(frozen=True)
+class TiebreakDecision:
+    """How one tiebreaker step split (or didn't split) a group of tied teams.
+
+    Steps 3 (head-to-head point differential among the tied teams, each game
+    capped at 12) and 4 (point differential against the teams outside the tie,
+    capped, compared team by team from the top of the standings) are the
+    steps whose result depends on winning margins. A scenario whose seeding
+    turns on margins states the decisions those steps made, so it says only
+    what the rule itself decides.
+
+    ``group`` is the tied group, sorted; ``parts`` its teams in the order the
+    step put them, best first, teams the step left level together (sorted).
+    A single part means the step left the whole group level.
+
+    It isn't a condition on margins alone (it depends on the region's other
+    results too), so ``satisfied_by`` can't answer it; scenario checks
+    re-run the tiebreaker instead.
+    """
+
+    step: int
+    group: tuple[str, ...]
+    parts: tuple[tuple[str, ...], ...]
+
+    def satisfied_by(self, _outcome_mask: int, _margins: dict, _remaining: list) -> bool:
+        """Not decidable from margins alone; see the class docstring."""
+        raise NotImplementedError("check a TiebreakDecision by re-running the tiebreaker")
+
+    def __str__(self) -> str:
+        """Return a compact representation: "step 3 [A, B, C]: A > B = C"."""
+        order = " > ".join(" = ".join(p) for p in self.parts)
+        return f"step {self.step} [{', '.join(self.group)}]: {order}"
+
+
 # --- Data class for point-differential rank in a coin-flip group ---
 @dataclass(frozen=True)
 class PDRankCondition:

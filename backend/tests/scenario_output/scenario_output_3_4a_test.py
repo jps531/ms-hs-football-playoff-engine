@@ -573,8 +573,10 @@ def test_div_dict_scenario3_title():
 
 
 def test_div_dict_scenario4a_title():
-    """Scenario 4a: CLA by 1-8 AND RIP by 1-11 (SEN wins H2H PD tiebreaker over RF)."""
-    assert _DIV_DICT["4a"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311"
+    """Scenario 4a: SEN wins the H2H PD tiebreaker over RF either way: RIP by 1-11, or CLA by 9+."""
+    assert _DIV_DICT["4a"]["title"] == (
+        "(Clarksdale beats Rosa Fort AND Ripley beats Senatobia by 1\u201311) OR (Clarksdale beats Rosa Fort by 9 or more)"
+    )
 
 
 def test_div_dict_scenario4b_title():
