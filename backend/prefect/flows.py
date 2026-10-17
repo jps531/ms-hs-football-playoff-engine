@@ -29,7 +29,8 @@ async def main():
         ),
         await region_scenarios_data_flow.to_deployment(
             "region-scenarios-data-pipeline",
-            schedule=CronSchedule(cron="15 9 * * *", timezone=_SCHEDULE_TIMEZONE),
+            # 9:30, half an hour after the scores are pulled, so a slow schedule pull finishes first.
+            schedule=CronSchedule(cron="30 9 * * *", timezone=_SCHEDULE_TIMEZONE),
         ),
         await backfill_historical_snapshots.to_deployment("backfill-historical-snapshots"),
         await playoff_bracket_update.to_deployment("playoff-bracket-update"),

@@ -245,7 +245,7 @@ For clarity, since the bracket introduces a second view:
 ### 4.1 Approach
 
 Generate static assets in the daily pipeline rather than rendering at request
-time. The pipeline already runs at 9:15 AM Central with all the data in hand,
+time. The pipeline already runs at 9:30 AM Central with all the data in hand,
 and the card is then exactly as fresh as the odds it depicts — which is also
 the honest thing to do.
 

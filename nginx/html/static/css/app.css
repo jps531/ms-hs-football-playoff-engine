@@ -1399,7 +1399,12 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 }
 .landing-classes__item:hover { background: var(--scrubber-selected-bg); color: var(--scrubber-selected-text); }
 .landing-classes__item:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-@media (max-width: 959px) { .landing-helmet { max-width: 280px; } }
+/* One column (phones, small tablets): the welcome and the helmet sit centered;
+   two columns keep them flush left with the text below. */
+@media (max-width: 959px) {
+  .landing-helmet { max-width: 280px; margin-inline: auto; }
+  .landing-intro > .landing-kicker, .landing-intro > .landing-title { text-align: center; }
+}
 .landing-heading { font-size: 22px; line-height: 26px; letter-spacing: 0.02em; }
 .landing-subheading { font-size: 17px; line-height: 22px; letter-spacing: 0.02em; }
 .landing-section { display: grid; gap: 10px; min-width: 0; }
@@ -1422,6 +1427,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
    and the frame's fixed height crops it. */
 .landing-preview__page { display: block; width: calc(100% / 0.55); transform: scale(0.55); transform-origin: top left; }
 .landing-preview__page .title { font-size: 32px; line-height: 38px; }
+/* The scenario previews' own text sizes, over the landing section's 16px paragraphs. */
+.landing-preview--scenarios .section-title { font-size: 24px; line-height: 30px; }
+.landing-preview--scenarios :is(.outcome__out, .outcome__if) { font-size: 13px; line-height: 18px; }
 .landing-preview__label {
   display: block; padding: 10px 16px; border-top: 1px solid var(--border);
   font-size: 14px; font-weight: 600; color: var(--link);

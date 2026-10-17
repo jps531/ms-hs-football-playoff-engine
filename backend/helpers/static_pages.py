@@ -510,6 +510,298 @@ def _region_preview(featured: dict, teams: dict[str, dict]) -> str:
     )
 
 
+# ------------------------------------------------------------------ scenario previews
+# Pictures of the region page's scenario sections for the front page: the same cards
+# components.js draws (scenarioCard, outcomeScenarioCard, conditionGroups), from the
+# same grouping scenarios.js does (outcomeCards, completeScenarioCards).
+
+COIN = (
+    '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">'
+    '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.2"/></svg>'
+)
+ORDINAL_WORDS = {1: "first", 2: "second", 3: "third", 4: "fourth"}
+SCENARIO_PREVIEW_CARDS = 2  # cards per scenario preview
+
+
+def margin_text(lo: int | None, hi: int | None) -> str:
+    """A chip's winning-margin suffix (format.js's ``marginText``): hi is exclusive, None unbounded."""
+    lo = lo or 1
+    if lo <= 1 and hi is None:
+        return ""
+    if hi is None:
+        return f" by {lo}+"
+    if hi == lo + 1:
+        return f" by exactly {lo}"
+    return f" by {lo}–{hi - 1}"
+
+
+def join_names(names: list[str]) -> str:
+    """ "A", "A and B", "A, B and C" (format.js's ``joinNames``)."""
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}" if names else ""
+
+
+def _team_style(team: dict | None) -> str:
+    """The team's UI color for a card's accent (components.js's ``teamColorStyle``), when the API has it."""
+    primary = ((team or {}).get("color_variants") or {}).get("primary") or {}
+    light, dark = (primary.get("light") or {}).get("ui"), (primary.get("dark") or {}).get("ui")
+    if not (light and dark and _HEX.match(light) and _HEX.match(dark)):
+        return ""
+    return f' style="--team-ui-light:{light};--team-ui-dark:{dark}"'
+
+
+def condition_chip(cond: dict, teams: dict) -> str:
+    """One condition as a chip (components.js's ``conditionChip``)."""
+    if cond["type"] == "game_result":
+        subject = cond["school"]
+        verb = "loses to" if cond.get("required_result") == "loss" else "beats"
+        margin = margin_text(cond.get("min_margin"), cond.get("max_margin"))
+        return (
+            f'<span class="chip">{_mark(subject, teams.get(subject))}<span><span class="chip__subject">'
+            f"{_e(subject)}</span> {verb} {_e(cond['opponent'])}{_e(margin)}</span></span>"
+        )
+    icon = COIN if cond["type"] == "coin_flip" else ""
+    return f'<span class="chip chip--text">{icon}<span>{_e(cond.get("description") or "")}</span></span>'
+
+
+def condition_groups(groups: list[list[dict]], teams: dict) -> str:
+    """OR-of-AND condition groups (components.js's ``conditionGroups``)."""
+    rendered = [
+        '<div class="cond-group">'
+        + '<div class="and"><span>AND</span></div>'.join(condition_chip(c, teams) for c in group)
+        + "</div>"
+        for group in groups
+        if group
+    ]
+    joined = '<div class="or"><span>OR</span></div>'.join(rendered)
+    return f'<div class="conditions">{joined}</div>'
+
+
+def scenario_card(card: dict, teams: dict) -> str:
+    """An outcome card: what happens, its odds, and the results that make it happen (``scenarioCard``)."""
+    odds = "" if card.get("p") is None else _odds(card["p"])
+    return (
+        f'<article class="scenario"{_team_style(teams.get(card["team"]))}>'
+        f'<div class="scenario__head"><h4 class="scenario__title">{_e(card["title"])}\u00a0'
+        f'<span class="scenario__if">IF</span></h4>{odds}</div>'
+        f'<div class="scenario__body">{condition_groups(card["groups"], teams)}</div></article>'
+    )
+
+
+def outcome_scenario_card(card: dict, teams: dict) -> str:
+    """One complete scenario: every seed it produces, who's out, and the results (``outcomeScenarioCard``)."""
+    seeds = "".join(
+        f'<li><span class="outcome__seed">{s["seed"]}</span>{_team_label(s["team"], teams)}</li>' for s in card["seeds"]
+    )
+    out = (
+        f'<p class="outcome__out"><span class="outcome__out-label">Out</span> {_e(", ".join(card["out"]))}</p>'
+        if card["out"]
+        else ""
+    )
+    body = (
+        f'<p class="outcome__if">IF</p><div class="scenario__body">{condition_groups(card["groups"], teams)}</div>'
+        if card["groups"]
+        else ""
+    )
+    return (
+        f'<article class="scenario outcome"><h4 class="scenario__title">{_e(card["label"])}</h4>'
+        f'<ol class="outcome__seeds" aria-label="Seeds">{seeds}</ol>{out}{body}</article>'
+    )
+
+
+def _unconditional(path: dict) -> bool:
+    """A path that needs nothing to happen (already clinched or eliminated)."""
+    return len(path["conditions"]) == 1 and not path["conditions"][0]
+
+
+def _outcome_p(team: dict, outcome: dict, mode: str) -> float:
+    """A path outcome's probability in the odds mode (scenarios.js's ``outcomeProbability``)."""
+    if outcome["type"] == "seed":
+        return mode_odds(team, f"p{outcome['value']}", mode)
+    playoffs = mode_odds(team, "p_playoffs", mode)
+    return playoffs if outcome["type"] == "playoffs" else 1 - playoffs
+
+
+def outcome_cards(teams_payload: list[dict], mode: str) -> dict[str, list[dict]]:
+    """Each team's paths as the region page's cards: the title race, playoff spots and seeding
+    (scenarios.js's ``outcomeCards``), each likeliest first."""
+    groups: dict[str, list[dict]] = {"title": [], "playoffs": [], "seeding": []}
+    for t in teams_payload:
+        paths = t.get("paths") or []
+        seed_paths = [p for p in paths if p["outcome"]["type"] == "seed"]
+        playoffs = next((p for p in paths if p["outcome"]["type"] == "playoffs"), None)
+        eliminated = next((p for p in paths if p["outcome"]["type"] == "eliminated"), None)
+        conditional = [p for p in seed_paths if not _unconditional(p)]
+
+        def card(title: str, path: dict, team: dict = t) -> dict:
+            """One card for *path*."""
+            return {
+                "team": team["school"],
+                "title": title,
+                "p": _outcome_p(team, path["outcome"], mode),
+                "groups": path["conditions"],
+            }
+
+        school = t["school"]
+        groups["title"] += [card(f"{school} wins the region", p) for p in conditional if p["outcome"]["value"] == 1]
+        bubble = not t.get("clinched") and not t.get("eliminated") and playoffs and not _unconditional(playoffs)
+        only_seed = seed_paths[0]["outcome"]["value"] if len(seed_paths) == 1 else None
+        if bubble:
+            if eliminated and len(eliminated["conditions"]) < len(playoffs["conditions"]):
+                groups["playoffs"].append(card(f"{school} is eliminated", eliminated))
+            elif only_seed is None:
+                groups["playoffs"].append(card(f"{school} makes the playoffs", playoffs))
+            elif only_seed != 1:
+                groups["playoffs"].append(card(f"{school} makes the playoffs as the No. {only_seed} seed", playoffs))
+        if only_seed is not None:
+            continue
+        groups["seeding"] += [
+            card(f"{school} finishes {ORDINAL_WORDS.get(p['outcome']['value'], str(p['outcome']['value']) + 'th')}", p)
+            for p in conditional
+            if p["outcome"]["value"] != 1
+        ]
+    for cards in groups.values():
+        cards.sort(key=lambda c: -c["p"])
+    return groups
+
+
+def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = 4) -> list[dict]:
+    """Every distinct way the region can finish, as cards (scenarios.js's ``completeScenarioCards``):
+    deduplicated and renumbered 1, 2, 3… with variants lettered A, B…"""
+    cards = []
+    for sc in scenarios or []:
+        phrases = (sc.get("title") or "").split(" AND ")
+        source = sc.get("conditions") or [
+            {"type": "game_result", "winner": g["winner"], "loser": g["loser"], "min_margin": 1, "max_margin": None}
+            for g in sc.get("game_winners") or []
+        ]
+        conditions = [
+            {
+                "type": "game_result",
+                "school": c["winner"],
+                "opponent": c["loser"],
+                "required_result": "win",
+                "min_margin": c.get("min_margin") or 1,
+                "max_margin": c.get("max_margin"),
+            }
+            if c["type"] == "game_result"
+            else {"type": "text", "description": phrases[i] if i < len(phrases) else ""}
+            for i, c in enumerate(source)
+        ]
+        for group in sc.get("coinflip_groups") or []:
+            if len(group) > 1:
+                word = "between" if len(group) == 2 else "among"
+                conditions.append(
+                    {"type": "coin_flip", "description": f"A coin flip settles the tie {word} {join_names(group)}"}
+                )
+        order = sorted(
+            ({"team": t, "seed": int(n)} for t, n in (sc.get("outcomes") or {}).items()), key=lambda o: o["seed"]
+        )
+        cards.append(
+            {
+                "num": sc["scenario_num"],
+                "seeds": [o for o in order if o["seed"] <= playoff_seeds],
+                "out": [o["team"] for o in order if o["seed"] > playoff_seeds],
+                "groups": [conditions] if conditions else [],
+            }
+        )
+    seen, unique = set(), []
+    for c in cards:
+        key = repr((c["seeds"], c["out"], c["groups"]))
+        if key not in seen:
+            seen.add(key)
+            unique.append(c)
+    runs: list[list[dict]] = []
+    for c in unique:
+        if runs and runs[-1][0]["num"] == c["num"]:
+            runs[-1].append(c)
+        else:
+            runs.append([c])
+    return [
+        {**{k: v for k, v in c.items() if k != "num"}, "label": f"Scenario {i}{chr(65 + k) if len(run) > 1 else ''}"}
+        for i, run in enumerate(runs, start=1)
+        for k, c in enumerate(run)
+    ]
+
+
+def _scenario_preview(
+    example: dict, teams: dict, heading: str, sub: str, cards_html: list[str], anchor: str, what: str
+) -> str:
+    """A picture of one of the region page's scenario sections, as one link to that section; *what*
+    names it for the link's accessible name ("title scenarios")."""
+    clazz, region = example["clazz"], example["region"]
+    name = f"Region {region}-{clazz}A"
+    sub_html = f'<h3 class="sub-title">{_e(sub)}</h3>' if sub else ""
+    return (
+        f'<a class="landing-preview landing-preview--scenarios" href="{region_path(clazz, region)}#{anchor}" '
+        f'aria-label="Open {name}’s {what}">'
+        '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
+        f'<p class="title">{name}</p>{_provenance(example["stamp"])}'
+        f'<section class="section"><p class="section-title">{_e(heading)}</p>{sub_html}'
+        f'<div class="scenario-grid">{"".join(cards_html)}</div></section>'
+        "</div></div>"
+        f'<span class="landing-preview__label">Open {name}</span></a>'
+    )
+
+
+def _open_title_teams(entry: dict) -> int:
+    """How many teams can still win the region (neither certain nor out) in *entry*'s odds mode."""
+    teams = entry["standings"].get("teams") or []
+    return sum(1 for t in teams if 0 < mode_odds(t, "p1", entry["mode"]) < 1)
+
+
+def pick_scenario_region(
+    regions: dict[tuple[int, int], dict], prefer: tuple[int, int] | None
+) -> tuple[int, int] | None:
+    """The region the front page's scenario examples come from: one with full scenarios and an open title
+    race, so all three examples have something to show. The featured region when it qualifies, else the
+    most open race in its class, else in any class. *regions* maps (class, region) to
+    ``{"standings", "stamp", "mode"}``."""
+    candidates = [
+        k for k, v in regions.items() if v["standings"].get("scenarios_available") and _open_title_teams(v) >= 2
+    ]
+    if not candidates:
+        return None
+    if prefer in candidates:
+        return prefer
+    same_class = prefer[0] if prefer else None
+    return max(candidates, key=lambda k: (k[0] == same_class, _open_title_teams(regions[k]), -k[0], -k[1]))
+
+
+def scenario_previews(example: dict | None, teams: dict) -> dict[str, str]:
+    """The front page's three scenario examples, each a lead-in and a preview: ``{"title", "seeding",
+    "unique"}``, "" for any with nothing to show. *example* is the region picked by ``pick_scenario_region``
+    with its stamp and mode: ``{"clazz", "region", "stamp", "mode", "scenario_payload"}``, the payload
+    including each team's paths."""
+    empty = {"title": "", "seeding": "", "unique": ""}
+    payload = (example or {}).get("scenario_payload")
+    if not payload or not payload.get("scenarios_available"):
+        return empty
+    name = f"Region {example['region']}-{example['clazz']}A"
+    groups = outcome_cards(payload.get("teams") or [], example["mode"])
+    out = dict(empty)
+    if groups["title"]:
+        cards = [scenario_card(c, teams) for c in groups["title"][:SCENARIO_PREVIEW_CARDS]]
+        out["title"] = _lead(f"Here’s what has to happen for the two likeliest champions of {name}:") + (
+            _scenario_preview(
+                example, teams, "What has to happen", "The region title", cards, "scen-title", "title scenarios"
+            )
+        )
+    if groups["seeding"]:
+        cards = [scenario_card(c, teams) for c in groups["seeding"][:SCENARIO_PREVIEW_CARDS]]
+        out["seeding"] = _lead(f"And what puts teams in {name} at a particular seed:") + _scenario_preview(
+            example, teams, "What has to happen", "Seeding", cards, "scen-title", "seeding scenarios"
+        )
+    complete = complete_scenario_cards(payload.get("scenarios"))
+    if complete:
+        cards = [outcome_scenario_card(c, teams) for c in complete[:SCENARIO_PREVIEW_CARDS]]
+        ways = f"{len(complete)} way{'s' if len(complete) != 1 else ''}"
+        first = "Here’s the first:" if len(complete) == 1 else "Here are the first two:"
+        out["unique"] = _lead(f"{name} can still finish {ways}. {first}") + _scenario_preview(
+            example, teams, "Scenarios", "", cards, "all-scen-title", "complete scenarios"
+        )
+    return out
+
+
 # ------------------------------------------------------------------ bracket preview
 # A picture of the bracket page: the top quarter of one half of the featured class's
 # tree (three rounds of the same game cards the page draws), with one game's sheet
@@ -1009,7 +1301,7 @@ def class_grid() -> str:
     )
 
 
-def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
+def landing_body(featured: dict | None, teams: dict[str, dict], scenario_example: dict | None = None) -> str:
     """The front page: who we are and how it works on the left, a tour of the site on the right, with the
     most open race (``featured``) as the live example throughout.
 
@@ -1040,20 +1332,28 @@ def landing_body(featured: dict | None, teams: dict[str, dict]) -> str:
         region_extra = _lead(f"Here’s Region {r}-{c}A{unsettled}:") + _region_preview(featured, teams)
         lead = f"And here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"
         bracket_extra = (_lead(lead) if featured.get("bracket_html") else "") + _bracket_preview(featured)
+    examples = scenario_previews(scenario_example, teams)
     region_scenarios = "".join(
-        _section(key, title, f"<p>{_e(text)}</p>", level="h3")
-        for key, title, text in (
+        _section(key, title, f"<p>{_e(text)}</p>{examples[example]}", level="h3")
+        for key, title, text, example in (
             (
                 "title-scenarios",
                 "Region title scenarios",
                 "Scenarios for how each eligible team can still win the region.",
+                "title",
             ),
             (
                 "seeding-scenarios",
                 "Team seeding scenarios",
                 "Scenarios for how each eligible team can finish as a given seed.",
+                "seeding",
             ),
-            ("unique-scenarios", "Unique region scenarios", "Each unique seeding finish possible in a given region."),
+            (
+                "unique-scenarios",
+                "Unique region scenarios",
+                "Each unique seeding finish possible in a given region.",
+                "unique",
+            ),
         )
     )
     tour = (
