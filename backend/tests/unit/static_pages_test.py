@@ -871,7 +871,7 @@ def test_final_week_eve_is_the_day_before_the_last_weeks_first_game():
         {"date": "2026-10-30", "kind": "games", "week": 11},
     ]
     assert final_week_eve(date(2026, 10, 30), dates) == date(2026, 10, 28)
-    assert final_week_eve(date(2026, 11, 2), dates) == date(2026, 11, 1)  # a date the class's list lacks
+    assert final_week_eve(date(2026, 11, 2), dates) == date(2026, 10, 28)  # a makeup game counts in its week
 
 
 def test_after_the_season_the_pipeline_reads_the_regions_before_their_final_week(tmp_path):
@@ -886,12 +886,74 @@ def test_after_the_season_the_pipeline_reads_the_regions_before_their_final_week
         "/standings/3/6?season=2026": done,
         "/standings/3/6?season=2026&date=2026-10-15": eve,
         "/standings/3/6?season=2026&date=2026-10-15&include_team_scenarios=true": _example()["scenario_payload"],
-        "/games?season=2026&class=3&region=6": [{"team_a": "Raleigh", "team_b": "Mize", "date": "2026-10-16",
-                                                  "is_region_game": True, "final": True}],
+        "/standings/3/6?season=2026&date=2026-09-30": {**_region(), "key_insights": INSIGHTS, "remaining_games": [{}] * 9},
+        "/games?season=2026&class=3&region=6": [
+            {"team_a": f"T{day}{n}", "team_b": f"U{day}{n}", "date": f"2026-10-{day:02d}", "is_region_game": True}
+            for day in (3, 9, 16) for n in range(3)
+        ],
     }  # fmt: skip
     build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 17))
     site = (tmp_path / "body" / "site.html").read_text()
     assert "going into its final week" in site and "#all-scen-title" in site
+    # And the "settles a spot" example from the last week eve with 7-10 left: Sept 30, with 9.
+    assert "Earlier in the season, with 9 region games left in Region 6-3A" in site
+
+
+INSIGHTS = [
+    {"insight_type": "eliminated_if", "team": "Murrah", "seed": None, "rendered": "",
+     "conditions": [{"winner": "Starkville", "loser": "Terry", "min_margin": 1, "max_margin": None}]},
+    {"insight_type": "already_clinched", "team": "Oxford", "conditions": [], "rendered": ""},
+    {"insight_type": "clinch_seed", "team": "Taylorsville", "seed": 1, "rendered": "",
+     "conditions": [{"winner": "Taylorsville", "loser": "Stringer", "min_margin": 8, "max_margin": None}]},
+    {"insight_type": "eliminated_if", "team": "Murrah", "seed": None, "rendered": "",
+     "conditions": [{"winner": "Terry", "loser": "Murrah", "min_margin": 1, "max_margin": None}]},
+]  # fmt: skip
+
+
+def test_insight_cards_match_scenarios_js():
+    from backend.helpers.static_pages import insight_cards
+
+    cards = insight_cards(INSIGHTS)
+    assert [c["title"] for c in cards] == ["Taylorsville clinches the region", "Murrah is eliminated"]
+    assert cards[0]["groups"][0][0]["min_margin"] == 8 and cards[0]["p"] is None
+    assert len(cards[1]["groups"]) == 2  # two ways to the same outcome, joined by OR
+    assert cards[1]["groups"][1][0] == {"type": "game_result", "school": "Terry", "opponent": "Murrah",
+                                        "required_result": "win", "min_margin": 1, "max_margin": None}  # fmt: skip
+
+
+def _far_out(cards=True, scenarios=False):
+    """A region still too far out for full scenarios, with or without results that settle a spot."""
+    standings = {"scenarios_available": scenarios, "key_insights": INSIGHTS if cards else [],
+                 "remaining_games": [{}] * 8}  # fmt: skip
+    return {"standings": standings, "stamp": STAMP, "mode": "tossup"}
+
+
+def test_settled_spot_example_is_a_region_still_far_out():
+    from backend.helpers.static_pages import insight_preview, pick_insight_region
+
+    regions = {(3, 6): _far_out(), (3, 7): _far_out(scenarios=True), (4, 1): _far_out(cards=False)}
+    assert pick_insight_region(regions, (3, 7)) == (3, 6)  # full scenarios replace these cards on its page
+    assert pick_insight_region({(4, 1): _far_out(cards=False)}, None) is None
+    html = insight_preview({**_far_out(), "clazz": 3, "region": 6}, {})
+    assert "Region 6-3A still has 8 region games left, too many for full scenarios" in html
+    assert 'href="/standings/3a/6#scen-title"' in html and "Taylorsville clinches the region" in html
+    assert "Full scenarios appear once six or fewer region games remain; 8 are left." in html
+    earlier = insight_preview({**_far_out(), "clazz": 3, "region": 6, "earlier": True}, {})
+    assert "Earlier in the season, with 8 region games left in Region 6-3A, these results would settle" in earlier
+    assert insight_preview(None, {}) == ""
+    body = landing_body(None, {}, _example(), {**_far_out(), "clazz": 3, "region": 6})
+    assert body.index("Results that settle a spot") < body.index("too many for full") < body.index("Region title")
+
+
+def test_insight_week_eve_is_the_last_with_seven_to_ten_games_left():
+    from backend.prefect.share_assets_pipeline import insight_week_eve
+
+    dates = [{"date": f"2026-10-{d:02d}", "kind": "games", "week": w} for w, d in ((8, 2), (9, 9), (10, 16), (11, 23))]
+    games = [date(2026, 10, d) for d in (2, 2, 2, 9, 9, 9, 16, 16, 16, 23, 23, 23)]
+    # Before week 9: 9 left; before week 10: 6 left. So the eve of week 9.
+    assert insight_week_eve(games, dates, date(2026, 10, 30)) == date(2026, 10, 8)
+    assert insight_week_eve(games, dates, date(2026, 10, 8)) is None  # only past eves; 12 left on Oct 1
+    assert insight_week_eve(games[:6], dates, date(2026, 10, 30)) is None  # never had more than 6 left
 
 
 def test_region_scenarios_run_after_the_scores_are_pulled():

@@ -781,6 +781,97 @@ def pick_scenario_region(
     )
 
 
+def insight_cards(insights: list[dict] | None) -> list[dict]:
+    """Key insights (one guaranteed path each) as cards (scenarios.js's ``insightCards``): insights proving
+    the same outcome become one card, their ways joined by OR; clinches first, then eliminations."""
+    rank = {"clinch_seed": 0, "clinch_playoffs": 1, "eliminated_if": 2}
+    cards: dict[str, dict] = {}
+    usable = [i for i in insights or [] if i.get("conditions") and _insight_title(i)]
+    for i in sorted(usable, key=lambda i: (rank[i["insight_type"]], i.get("seed") or 9)):
+        key = f"{i['insight_type']}|{i['team']}|{i.get('seed') or ''}"
+        card = cards.setdefault(key, {"team": i["team"], "title": _insight_title(i), "p": None, "groups": []})
+        card["groups"].append(
+            [
+                {
+                    "type": "game_result",
+                    "school": c["winner"],
+                    "opponent": c["loser"],
+                    "required_result": "win",
+                    "min_margin": c.get("min_margin"),
+                    "max_margin": c.get("max_margin"),
+                }
+                for c in i["conditions"]
+            ]
+        )
+    return list(cards.values())
+
+
+def _insight_count(entry: dict) -> int:
+    """How many "settles a spot" cards *entry*'s region page shows (none once full scenarios replace them)."""
+    standings = entry["standings"]
+    return 0 if standings.get("scenarios_available") else len(insight_cards(standings.get("key_insights")))
+
+
+def pick_insight_region(regions: dict[tuple[int, int], dict], prefer: tuple[int, int] | None) -> tuple[int, int] | None:
+    """The region the front page's "settles a spot" example comes from: one still too far out for full
+    scenarios, with results that settle a spot anyway; two or more cards' worth if possible, then the
+    featured region, its class, and the most cards. *regions* is shaped as for ``pick_scenario_region``."""
+    candidates = [k for k, v in regions.items() if _insight_count(v)]
+    if not candidates:
+        return None
+    same_class = prefer[0] if prefer else None
+    return max(
+        candidates,
+        key=lambda k: (
+            _insight_count(regions[k]) >= SCENARIO_PREVIEW_CARDS,
+            k == prefer,
+            k[0] == same_class,
+            _insight_count(regions[k]),
+            -k[0],
+            -k[1],
+        ),
+    )
+
+
+def insight_preview(example: dict | None, teams: dict) -> str:
+    """The front page's "settles a spot" example: a lead-in and a picture of the region page's cards for
+    results that settle a spot no matter what else happens. *example* is the region picked by
+    ``pick_insight_region`` with its stamp and mode: ``{"clazz", "region", "stamp", "mode", "standings"}``;
+    ``"earlier": True`` when it's from earlier in the season (every region now has full scenarios)."""
+    if not example:
+        return ""
+    cards = insight_cards(example["standings"].get("key_insights"))[:SCENARIO_PREVIEW_CARDS]
+    if not cards:
+        return ""
+    clazz, region = example["clazz"], example["region"]
+    name = f"Region {region}-{clazz}A"
+    left = len(example["standings"].get("remaining_games") or [])
+    games = f"{left} region game{'s' if left != 1 else ''}"
+    lead = (
+        f"Earlier in the season, with {games} left in {name}, these results would settle a spot no matter what "
+        "else happened:"
+        if example.get("earlier")
+        else f"{name} still has {games} left, too many for full scenarios, but these results settle a spot no "
+        "matter what else happens:"
+    )
+    intro = (
+        f"Full scenarios appear once six or fewer region games remain; {left} are left. Until then, these are "
+        "results that settle a spot no matter what else happens."
+    )
+    grid = "".join(scenario_card(c, teams) for c in cards)
+    return _lead(lead) + (
+        f'<a class="landing-preview landing-preview--scenarios" href="{region_path(clazz, region)}#scen-title" '
+        f'aria-label="Open {name}’s results that settle a spot">'
+        '<div class="landing-preview__frame" aria-hidden="true"><div class="landing-preview__page">'
+        f'<p class="title">{name}</p>{_provenance(example["stamp"])}'
+        f'<section class="section"><p class="section-title">What has to happen</p>'
+        f'<p class="prose muted">{_e(intro)}</p>'
+        f'<div class="scenario-group scenario-group--spaced"><div class="scenario-grid">{grid}</div></div>'
+        "</section></div></div>"
+        f'<span class="landing-preview__label">Open {name}</span></a>'
+    )
+
+
 def scenario_previews(example: dict | None, teams: dict) -> dict[str, str]:
     """The front page's four scenario examples, each a lead-in and a preview: ``{"title", "playoffs",
     "seeding", "unique"}``, "" for any with nothing to show. *example* is the region picked by
@@ -1324,7 +1415,12 @@ def class_grid() -> str:
     )
 
 
-def landing_body(featured: dict | None, teams: dict[str, dict], scenario_example: dict | None = None) -> str:
+def landing_body(
+    featured: dict | None,
+    teams: dict[str, dict],
+    scenario_example: dict | None = None,
+    insight_example: dict | None = None,
+) -> str:
     """The front page: who we are and how it works on the left, a tour of the site on the right, with the
     most open race (``featured``) as the live example throughout.
 
@@ -1355,10 +1451,17 @@ def landing_body(featured: dict | None, teams: dict[str, dict], scenario_example
         region_extra = _lead(f"Here’s Region {r}-{c}A{unsettled}:") + _region_preview(featured, teams)
         lead = f"And here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"
         bracket_extra = (_lead(lead) if featured.get("bracket_html") else "") + _bracket_preview(featured)
-    examples = scenario_previews(scenario_example, teams)
+    examples = {**scenario_previews(scenario_example, teams), "settled": insight_preview(insight_example, teams)}
     region_scenarios = "".join(
         _section(key, title, f"<p>{_e(text)}</p>{examples[example]}", level="h3")
         for key, title, text, example in (
+            (
+                "settling-results",
+                "Results that settle a spot",
+                "Before full scenarios are ready, the results that clinch a seed or a playoff spot, or knock a "
+                "team out, no matter what else happens.",
+                "settled",
+            ),
             (
                 "title-scenarios",
                 "Region title scenarios",

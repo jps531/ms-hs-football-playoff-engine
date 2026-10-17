@@ -80,6 +80,7 @@ from backend.helpers.static_pages import (
     layout_results,
     locked_seeds,
     pick_featured,
+    pick_insight_region,
     pick_scenario_region,
     region_body,
     region_path,
@@ -167,7 +168,7 @@ def build_share_assets(
     region_payloads: dict[tuple[int, int], dict] = {}
     class_standings: dict[int, dict] = {}
     class_dates: dict[int, list[dict]] = {}
-    last_region_game: dict[tuple[int, int], date] = {}
+    region_game_days: dict[tuple[int, int], list[date]] = {}
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
@@ -226,9 +227,13 @@ def build_share_assets(
                 ),
             )
             games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
-            region_days = [date.fromisoformat(g["date"]) for g in games if g.get("is_region_game") and g.get("date")]
-            if region_days:
-                last_region_game[(clazz, region)] = max(region_days)
+            played = {
+                (g["date"], frozenset((g["team_a"], g["team_b"])))
+                for g in games
+                if g.get("is_region_game") and g.get("date")
+            }
+            if played:
+                region_game_days[(clazz, region)] = sorted(date.fromisoformat(str(d)[:10]) for d, _ in played)
             body = region_body(clazz, region, payload, f"{season} season · {r_stamp}", r_mode, teams, games)
             region_payloads[(clazz, region)] = {
                 "standings": payload,
@@ -260,7 +265,8 @@ def build_share_assets(
         and region_payloads
         and not any(v["standings"].get("remaining_games") for v in region_payloads.values())
     ):
-        examples = _final_week_payloads(fetch, season, last_region_game, class_dates, today)
+        eves = {k: final_week_eve(days[-1], class_dates.get(k[0], [])) for k, days in region_game_days.items()}
+        examples = _payloads_on(fetch, season, eves, class_dates, today)
         pick, final = pick_scenario_region(examples, prefer), True
     scenario_example = None
     if pick:
@@ -273,27 +279,60 @@ def build_share_assets(
             "final": final,
             "scenario_payload": fetch(f"/standings/{c}/{r}?season={season}{on}&include_team_scenarios=true"),
         }
-    _write_text(out_dir / "body" / "site.html", landing_body(featured, teams, scenario_example))
+    # The "settles a spot" example: a region still too far out for full scenarios. Late in the season
+    # every region has them, so it's a region as it last stood with 7-10 region games left.
+    insight_regions, earlier = region_payloads, False
+    insight_pick = pick_insight_region(region_payloads, prefer)
+    if not insight_pick:
+        eves = {
+            k: eve
+            for k, days in region_game_days.items()
+            if len(region_payloads.get(k, {}).get("standings", {}).get("remaining_games") or []) <= 6
+            and (eve := insight_week_eve(days, class_dates.get(k[0], []), today))
+        }
+        insight_regions = _payloads_on(fetch, season, eves, class_dates, today)
+        insight_pick, earlier = pick_insight_region(insight_regions, prefer), True
+    insight_example = (
+        {**insight_regions[insight_pick], "clazz": insight_pick[0], "region": insight_pick[1], "earlier": earlier}
+        if insight_pick
+        else None
+    )
+    _write_text(out_dir / "body" / "site.html", landing_body(featured, teams, scenario_example, insight_example))
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     return written
 
 
+def _week_starts(dates: list[dict]) -> list[tuple[date, int]]:
+    """Each game week's first day and week number, in order."""
+    starts: dict[int, date] = {}
+    for d in dates:
+        if d.get("kind") == "games":
+            day = date.fromisoformat(str(d["date"])[:10])
+            starts[d["week"]] = min(starts.get(d["week"], day), day)
+    return sorted((day, week) for week, day in starts.items())
+
+
 def final_week_eve(last_game: date, dates: list[dict]) -> date:
     """The day before the week of a region's last region game: the last snapshot with that week still to play."""
-    games = [(date.fromisoformat(str(d["date"])[:10]), d["week"]) for d in dates if d.get("kind") == "games"]
-    week = next((w for day, w in games if day == last_game), None)
-    days = [day for day, w in games if w == week]
-    return min(days or [last_game]) - timedelta(days=1)
+    start = max((day for day, _ in _week_starts(dates) if day <= last_game), default=last_game)
+    return start - timedelta(days=1)
 
 
-def _final_week_payloads(
-    fetch: Fetch, season: int, last_region_game: dict[tuple[int, int], date], class_dates: dict, today: date
+def insight_week_eve(game_days: list[date], dates: list[dict], today: date) -> date | None:
+    """The last day before a game week when a region still had 7-10 region games left, the stretch when its
+    page shows results that settle a spot instead of full scenarios; None if it never did."""
+    eves = [day - timedelta(days=1) for day, _ in _week_starts(dates)]
+    fits = [eve for eve in eves if eve < today and 7 <= sum(1 for g in game_days if g > eve) <= 10]
+    return max(fits, default=None)
+
+
+def _payloads_on(
+    fetch: Fetch, season: int, days: dict[tuple[int, int], date], class_dates: dict, today: date
 ) -> dict[tuple[int, int], dict]:
-    """Each region as it stood going into its final week, shaped like the run's own region payloads."""
+    """Each region in *days* as it stood on its day, shaped like the run's own region payloads."""
     out: dict[tuple[int, int], dict] = {}
-    for (clazz, region), last in sorted(last_region_game.items()):
-        day = final_week_eve(last, class_dates.get(clazz, []))
+    for (clazz, region), day in sorted(days.items()):
         payload = fetch(f"/standings/{clazz}/{region}?season={season}&date={day}")
         if not payload or not payload.get("teams"):
             continue
