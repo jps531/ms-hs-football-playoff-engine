@@ -109,38 +109,76 @@ export function insightCards(insights) {
   return [...cards.values()];
 }
 
+/** What decides a tie a scenario leaves open, by the step it's left from. */
+export const OPEN_TIE_NOTES = {
+  3: "Order decided by the tiebreaker: point differential, then fewest points allowed",
+  5: "Order decided by fewest points allowed in region games, then a coin flip",
+  6: "Order decided by a coin flip",
+};
+
 /**
  * The region's complete scenarios — every distinct way the standings can
- * finish — as cards: { label, seeds: [{ seed, team }], out, groups },
- * numbered in order with duplicates removed.
- * `seeds` are the playoff seeds (1-4), `out` the rest in finishing order,
- * and `groups` is one AND-group of conditions in the chip format. Game
- * results become team chips; margin and point-differential conditions keep
- * the API's wording (its title joins the same conditions with " AND ").
+ * finish — as cards: { label, seeds, out, groups }, numbered in order with
+ * duplicates removed.
+ * `seeds` are the playoff seeds (1-4) as { seed, team }, except a tie the
+ * scenario leaves to the tiebreaker, which is one { seed: "2–4", teams, note }
+ * row over its places: its order isn't stated, so it isn't shown. `out` is the
+ * rest (with "the rest of the tie" when one straddles the cutoff). `groups`
+ * is the scenario's conditions in the chip format: one AND-group, or several
+ * joined by OR when different results lead to the same outcome. Game results
+ * become team chips; other conditions keep the API's wording.
  */
 export function completeScenarioCards(scenarios, playoffSeeds = 4) {
   const cards = (scenarios ?? []).map((sc) => {
     const phrases = (sc.title ?? "").split(" AND ");
-    const source = sc.conditions?.length
-      ? sc.conditions
-      : (sc.game_winners ?? []).map((g) => ({ type: "game_result", winner: g.winner, loser: g.loser, min_margin: 1, max_margin: null }));
-    const conditions = source.map((c, i) => (c.type === "game_result"
+    const winners = (sc.game_winners ?? []).map((g) => ({ type: "game_result", winner: g.winner, loser: g.loser, min_margin: 1, max_margin: null }));
+    const sources = sc.condition_groups?.length ? sc.condition_groups : [sc.conditions?.length ? sc.conditions : winners];
+    const chip = (c, i) => (c.type === "game_result"
       ? {
         type: "game_result", school: c.winner, opponent: c.loser, required_result: "win",
         min_margin: c.min_margin ?? 1, max_margin: c.max_margin ?? null,
       }
-      : { type: "text", description: phrases[i] ?? "" }));
+      // Older snapshots carry no description; their title then lines up with a single group.
+      : { type: "text", description: c.description ?? phrases[i] ?? "" });
+    const groups = sources.map((source) => source.map(chip)).filter((g) => g.length);
     for (const group of sc.coinflip_groups ?? []) {
-      if (group.length > 1) conditions.push({ type: "coin_flip", description: `A coin flip settles the tie ${group.length === 2 ? "between" : "among"} ${joinNames(group)}` });
+      if (group.length > 1) {
+        const flip = { type: "coin_flip", description: `A coin flip settles the tie ${group.length === 2 ? "between" : "among"} ${joinNames(group)}` };
+        if (groups.length) groups.forEach((g) => g.push(flip));
+        else groups.push([flip]);
+      }
     }
     const order = Object.entries(sc.outcomes ?? {})
       .map(([team, seed]) => ({ team, seed: Number(seed) }))
       .sort((a, b) => a.seed - b.seed);
+    const ties = (sc.open_groups ?? []).map((g) => ({ ...g, members: new Set(g.teams) }));
+    const seeds = [];
+    const inTie = new Set();
+    for (const o of order.filter((x) => x.seed <= playoffSeeds)) {
+      const tie = ties.find((t) => t.members.has(o.team));
+      if (!tie) {
+        seeds.push(o);
+        continue;
+      }
+      if (inTie.has(tie)) continue;
+      inTie.add(tie);
+      const places = order.filter((x) => tie.members.has(x.team) && x.seed <= playoffSeeds).map((x) => x.seed);
+      const first = places[0];
+      const last = places[places.length - 1];
+      const shared = places.length < tie.teams.length;
+      seeds.push({
+        seed: first === last ? String(first) : `${first}–${last}`,
+        teams: tie.teams,
+        note: (shared ? `${places.length} of these ${tie.teams.length} make the playoffs. ` : "") + (OPEN_TIE_NOTES[tie.step] ?? OPEN_TIE_NOTES[3]),
+      });
+    }
+    const straddle = ties.some((t) => order.some((x) => t.members.has(x.team) && x.seed > playoffSeeds));
+    const out = order.filter((o) => o.seed > playoffSeeds && !ties.some((t) => t.members.has(o.team))).map((o) => o.team);
     return {
       label: `Scenario ${sc.scenario_num}${(sc.sub_label ?? "").toUpperCase()}`,
-      seeds: order.filter((o) => o.seed <= playoffSeeds),
-      out: order.filter((o) => o.seed > playoffSeeds).map((o) => o.team),
-      groups: conditions.length ? [conditions] : [],
+      seeds,
+      out: straddle ? [...out, "the rest of the tie"] : out,
+      groups,
       num: sc.scenario_num,
     };
   });

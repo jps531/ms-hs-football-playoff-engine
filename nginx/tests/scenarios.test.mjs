@@ -148,3 +148,46 @@ test("scenarios that read the same are merged, and the rest renumbered", () => {
   ]);
   assert.deepEqual(cards.map((c) => c.label), ["Scenario 1", "Scenario 2A", "Scenario 2B", "Scenario 3"]);
 });
+
+test("several ways to one outcome become OR groups, worded as the API words them", () => {
+  const tiebreak = { type: "tiebreak_decision", description: "Point differential in games among A, B and C (capped at 12 a game): A best, then B and C, level" };
+  const [card] = completeScenarioCards([{
+    scenario_num: 1, sub_label: "a", title: "ignored when groups carry descriptions",
+    game_winners: [{ winner: "A", loser: "B" }],
+    conditions: [{ type: "game_result", winner: "A", loser: "B", min_margin: 1, max_margin: 8 }],
+    condition_groups: [
+      [{ type: "game_result", winner: "A", loser: "B", min_margin: 1, max_margin: 8 }],
+      [{ type: "game_result", winner: "A", loser: "B", min_margin: 1, max_margin: null }, tiebreak],
+    ],
+    outcomes: { A: "1", B: "2", C: "3" },
+  }]);
+  assert.equal(card.groups.length, 2);
+  assert.equal(card.groups[0][0].max_margin, 8);
+  assert.deepEqual(card.groups[1][1], { type: "text", description: tiebreak.description });
+});
+
+test("a tie left to the tiebreaker is one unordered row over its places", () => {
+  const [card] = completeScenarioCards([{
+    scenario_num: 1, sub_label: "", title: "A beats B",
+    game_winners: [{ winner: "A", loser: "B" }],
+    outcomes: { A: "1", B: "2", C: "3", D: "4", E: "5" },
+    open_groups: [{ step: 5, teams: ["B", "C", "D"], description: "..." }],
+  }]);
+  assert.deepEqual(card.seeds, [
+    { team: "A", seed: 1 },
+    { seed: "2–4", teams: ["B", "C", "D"], note: "Order decided by fewest points allowed in region games, then a coin flip" },
+  ]);
+  assert.deepEqual(card.out, ["E"]);
+});
+
+test("a tie straddling the cutoff says how many get in and that the rest of it is out", () => {
+  const [card] = completeScenarioCards([{
+    scenario_num: 1, sub_label: "", title: "A beats B",
+    game_winners: [{ winner: "A", loser: "B" }],
+    outcomes: { A: "1", B: "2", C: "3", D: "4", E: "5" },
+    open_groups: [{ step: 3, teams: ["D", "E"], description: "..." }],
+  }]);
+  assert.equal(card.seeds[3].seed, "4");
+  assert.match(card.seeds[3].note, /^1 of these 2 make the playoffs\. Order decided by the tiebreaker/);
+  assert.deepEqual(card.out, ["the rest of the tie"]);
+});

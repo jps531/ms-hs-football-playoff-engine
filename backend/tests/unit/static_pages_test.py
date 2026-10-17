@@ -972,3 +972,36 @@ def test_pictures_without_odds_leave_the_odds_mode_out_of_their_provenance():
 def test_region_scenarios_run_after_the_scores_are_pulled():
     flows = (Path(__file__).resolve().parents[2] / "prefect" / "flows.py").read_text()
     assert 'CronSchedule(cron="30 9 * * *"' in flows
+
+
+def test_complete_scenario_cards_or_groups_and_ties_match_scenarios_js():
+    """Mirrors scenarios.test.mjs: alternatives become OR groups; a tie left open is one unordered row."""
+    from backend.helpers.static_pages import complete_scenario_cards, outcome_scenario_card
+
+    tiebreak = {"type": "tiebreak_decision", "description": "Point differential in games among A, B and C: A best"}
+    [card] = complete_scenario_cards([{
+        "scenario_num": 1, "sub_label": "a", "title": "ignored", "game_winners": [{"winner": "A", "loser": "B"}],
+        "condition_groups": [
+            [{"type": "game_result", "winner": "A", "loser": "B", "min_margin": 1, "max_margin": 8}],
+            [{"type": "game_result", "winner": "A", "loser": "B", "min_margin": 1, "max_margin": None}, tiebreak],
+        ],
+        "outcomes": {"A": "1", "B": "2", "C": "3", "D": "4", "E": "5"},
+        "open_groups": [{"step": 5, "teams": ["B", "C", "D"], "description": "..."}],
+    }])  # fmt: skip
+    assert len(card["groups"]) == 2 and card["groups"][1][1] == {"type": "text", "description": tiebreak["description"]}
+    assert card["seeds"] == [
+        {"team": "A", "seed": 1},
+        {"seed": "2–4", "teams": ["B", "C", "D"], "note": "Order decided by fewest points allowed in region games, then a coin flip"},
+    ]  # fmt: skip
+    assert card["out"] == ["E"]
+    html = outcome_scenario_card(card, {})
+    assert '<li class="outcome__tie"><span class="outcome__seed">2–4</span>' in html
+    assert "then a coin flip</span>" in html
+
+    [straddle] = complete_scenario_cards([{
+        "scenario_num": 1, "sub_label": "", "title": "A beats B", "game_winners": [{"winner": "A", "loser": "B"}],
+        "outcomes": {"A": "1", "B": "2", "C": "3", "D": "4", "E": "5"},
+        "open_groups": [{"step": 3, "teams": ["D", "E"], "description": "..."}],
+    }])  # fmt: skip
+    assert straddle["seeds"][3]["note"].startswith("1 of these 2 make the playoffs. Order decided by the tiebreaker")
+    assert straddle["out"] == ["the rest of the tie"]

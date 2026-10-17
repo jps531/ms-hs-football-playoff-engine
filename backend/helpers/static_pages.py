@@ -590,7 +590,15 @@ def scenario_card(card: dict, teams: dict) -> str:
 def outcome_scenario_card(card: dict, teams: dict) -> str:
     """One complete scenario: every seed it produces, who's out, and the results (``outcomeScenarioCard``)."""
     seeds = "".join(
-        f'<li><span class="outcome__seed">{s["seed"]}</span>{_team_label(s["team"], teams)}</li>' for s in card["seeds"]
+        (
+            f'<li class="outcome__tie"><span class="outcome__seed">{_e(s["seed"])}</span>'
+            f'<span class="outcome__tie-body"><span class="outcome__tie-teams">'
+            f"{''.join(_team_label(t, teams) for t in s['teams'])}</span>"
+            f'<span class="outcome__tie-note">{_e(s["note"])}</span></span></li>'
+        )
+        if "teams" in s
+        else f'<li><span class="outcome__seed">{s["seed"]}</span>{_team_label(s["team"], teams)}</li>'
+        for s in card["seeds"]
     )
     out = (
         f'<p class="outcome__out"><span class="outcome__out-label">Out</span> {_e(", ".join(card["out"]))}</p>'
@@ -664,46 +672,79 @@ def outcome_cards(teams_payload: list[dict], mode: str) -> dict[str, list[dict]]
     return groups
 
 
+# What decides a tie a scenario leaves open, by the step it's left from (scenarios.js's OPEN_TIE_NOTES).
+OPEN_TIE_NOTES = {
+    3: "Order decided by the tiebreaker: point differential, then fewest points allowed",
+    5: "Order decided by fewest points allowed in region games, then a coin flip",
+    6: "Order decided by a coin flip",
+}
+
+
 def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = 4) -> list[dict]:
     """Every distinct way the region can finish, as cards (scenarios.js's ``completeScenarioCards``):
     deduplicated and renumbered 1, 2, 3… with variants lettered A, B…"""
     cards = []
     for sc in scenarios or []:
         phrases = (sc.get("title") or "").split(" AND ")
-        source = sc.get("conditions") or [
+        winners = [
             {"type": "game_result", "winner": g["winner"], "loser": g["loser"], "min_margin": 1, "max_margin": None}
             for g in sc.get("game_winners") or []
         ]
-        conditions = [
-            {
-                "type": "game_result",
-                "school": c["winner"],
-                "opponent": c["loser"],
-                "required_result": "win",
-                "min_margin": c.get("min_margin") or 1,
-                "max_margin": c.get("max_margin"),
-            }
-            if c["type"] == "game_result"
-            else {"type": "text", "description": phrases[i] if i < len(phrases) else ""}
-            for i, c in enumerate(source)
-        ]
+        sources = sc.get("condition_groups") or [sc.get("conditions") or winners]
+
+        def chip(c: dict, i: int) -> dict:
+            if c["type"] == "game_result":
+                return {
+                    "type": "game_result",
+                    "school": c["winner"],
+                    "opponent": c["loser"],
+                    "required_result": "win",
+                    "min_margin": c.get("min_margin") or 1,
+                    "max_margin": c.get("max_margin"),
+                }
+            # Older snapshots carry no description; their title then lines up with a single group.
+            return {"type": "text", "description": c.get("description") or (phrases[i] if i < len(phrases) else "")}
+
+        groups = [g for g in ([chip(c, i) for i, c in enumerate(source)] for source in sources) if g]
         for group in sc.get("coinflip_groups") or []:
             if len(group) > 1:
                 word = "between" if len(group) == 2 else "among"
-                conditions.append(
-                    {"type": "coin_flip", "description": f"A coin flip settles the tie {word} {join_names(group)}"}
-                )
+                flip = {"type": "coin_flip", "description": f"A coin flip settles the tie {word} {join_names(group)}"}
+                groups = [[*g, flip] for g in groups] or [[flip]]
         order = sorted(
             ({"team": t, "seed": int(n)} for t, n in (sc.get("outcomes") or {}).items()), key=lambda o: o["seed"]
         )
-        cards.append(
-            {
-                "num": sc["scenario_num"],
-                "seeds": [o for o in order if o["seed"] <= playoff_seeds],
-                "out": [o["team"] for o in order if o["seed"] > playoff_seeds],
-                "groups": [conditions] if conditions else [],
-            }
-        )
+        ties = [(set(g["teams"]), g) for g in sc.get("open_groups") or []]
+        seeds, placed = [], []
+        for o in order:
+            if o["seed"] > playoff_seeds:
+                break
+            tie = next((g for members, g in ties if o["team"] in members), None)
+            if tie is None:
+                seeds.append(o)
+                continue
+            if tie in placed:
+                continue
+            placed.append(tie)
+            places = [x["seed"] for x in order if x["team"] in tie["teams"] and x["seed"] <= playoff_seeds]
+            span = str(places[0]) if places[0] == places[-1] else f"{places[0]}\u2013{places[-1]}"
+            shared = (
+                f"{len(places)} of these {len(tie['teams'])} make the playoffs. "
+                if len(places) < len(tie["teams"])
+                else ""
+            )
+            seeds.append(
+                {
+                    "seed": span,
+                    "teams": tie["teams"],
+                    "note": shared + OPEN_TIE_NOTES.get(tie["step"], OPEN_TIE_NOTES[3]),
+                }
+            )
+        tied = {t for members, _ in ties for t in members}
+        out = [o["team"] for o in order if o["seed"] > playoff_seeds and o["team"] not in tied]
+        if any(o["seed"] > playoff_seeds and o["team"] in tied for o in order):
+            out.append("the rest of the tie")
+        cards.append({"num": sc["scenario_num"], "seeds": seeds, "out": out, "groups": groups})
     seen, unique = set(), []
     for c in cards:
         key = repr((c["seeds"], c["out"], c["groups"]))

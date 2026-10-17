@@ -239,8 +239,12 @@ export function gameCard(game, teams, { focus = null, report = false } = {}) {
  * team's line.
  */
 export function outcomeScenarioCard({ label, seeds, out, groups }, teams, { focus = null } = {}) {
-  const seedRows = seeds.map(({ seed, team }) => `<li${team === focus ? ' class="is-focus"' : ""}>`
-    + `<span class="outcome__seed">${seed}</span>${teamLabel(team, teams)}</li>`);
+  // A tie left to the tiebreaker is one row over its places: its teams, unordered, and what decides it.
+  const seedRows = seeds.map(({ seed, team, teams: tied, note }) => (tied
+    ? `<li class="outcome__tie${tied.includes(focus) ? " is-focus" : ""}"><span class="outcome__seed">${esc(seed)}</span>`
+      + `<span class="outcome__tie-body"><span class="outcome__tie-teams">${tied.map((t) => teamLabel(t, teams)).join("")}</span>`
+      + `<span class="outcome__tie-note">${esc(note)}</span></span></li>`
+    : `<li${team === focus ? ' class="is-focus"' : ""}><span class="outcome__seed">${seed}</span>${teamLabel(team, teams)}</li>`));
   const outLine = out.length
     ? `<p class="outcome__out"><span class="outcome__out-label">Out</span> ${out.map((t) => (t === focus ? `<strong>${esc(t)}</strong>` : esc(t))).join(", ")}</p>`
     : "";

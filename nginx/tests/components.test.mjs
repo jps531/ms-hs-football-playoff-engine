@@ -141,6 +141,17 @@ test("scenario box lists the seeds, who's out, then IF and the conditions", () =
   assert.match(html, /<strong>C<\/strong>/);
 });
 
+test("a tie row lists its teams over its places with what decides it, never an order", () => {
+  const html = outcomeScenarioCard({
+    label: "Scenario 1",
+    seeds: [{ seed: 1, team: "A" }, { seed: "2–4", teams: ["B", "C", "D"], note: "Order decided by a coin flip" }],
+    out: [],
+    groups: [],
+  }, {}, { focus: "C" });
+  assert.match(text(html), /^Scenario 1 1 A A 2–4 B B C C D D Order decided by a coin flip$/);
+  assert.match(html, /class="outcome__tie is-focus"/);
+});
+
 test("in the playoffs the run replaces the clinch; teams that missed stay Eliminated", () => {
   const bracket = (r) => ({ second_round: r[0], quarterfinals: r[1], semifinals: r[2], finals: r[3], champion: r[4] });
   const lost = { clinched: true, eliminated: true, odds: { p1: 1, p_playoffs: 1 }, bracket_odds: bracket([0, 0, 0, 0, 0]) };

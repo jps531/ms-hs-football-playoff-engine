@@ -747,12 +747,17 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .outcome__seeds li { display: flex; align-items: center; gap: 10px; }
 .outcome__seeds li.is-focus .team-name { font-weight: 700; }
 .outcome__seed {
-  display: inline-grid; place-items: center;
-  width: 22px; height: 22px; border-radius: 6px;
+  display: inline-grid; place-items: center; flex: none;
+  min-width: 22px; height: 22px; padding: 0 5px; border-radius: 6px;
   background: var(--surface-raised);
   font-size: 12px; font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* A tie the scenario leaves to the tiebreaker: one row over its places, teams unordered. */
+.outcome__seeds li.outcome__tie { align-items: flex-start; }
+.outcome__tie-body { display: grid; gap: 4px; min-width: 0; }
+.outcome__tie-teams { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.outcome__tie-note { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
 .outcome__out { margin-top: 8px; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
 .outcome__out-label { font-weight: 600; margin-right: 2px; }
 .outcome__out strong { color: var(--text-primary); }
