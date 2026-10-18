@@ -169,46 +169,39 @@ def test_no_team_eliminated():
 
 
 def test_coahoma_county_and_independence_have_equal_odds():
-    """Coahoma County and Independence have near-identical odds (symmetric 1-0 records).
+    """Coahoma County and Independence have close odds (symmetric 1-0 records).
 
-    Floating-point accumulation order causes differences of ~6e-6; abs=1e-4 tolerance
-    is tight enough to catch real bugs while tolerating this numerical noise.
+    Not identical: when their tie goes to fewest points allowed, the points each has already
+    allowed differ, so the odds differ by under a point.
     """
     cc = _ODDS["Coahoma County"]
     ind = _ODDS["Independence"]
-    assert cc.p1 == pytest.approx(ind.p1, abs=1e-4)
-    assert cc.p2 == pytest.approx(ind.p2, abs=1e-4)
-    assert cc.p3 == pytest.approx(ind.p3, abs=1e-4)
-    assert cc.p4 == pytest.approx(ind.p4, abs=1e-4)
+    for seed in ("p1", "p2", "p3", "p4"):
+        assert getattr(cc, seed) == pytest.approx(getattr(ind, seed), abs=0.01)
 
 
 def test_holly_springs_and_north_panola_have_equal_odds():
-    """Holly Springs and North Panola have near-identical odds (symmetric 0-1 records)."""
+    """Holly Springs and North Panola have close odds (symmetric 0-1 records); the points each has
+    already allowed differ, which counts when their tie goes to fewest points allowed."""
     hs = _ODDS["Holly Springs"]
     np_ = _ODDS["North Panola"]
-    assert hs.p1 == pytest.approx(np_.p1, abs=1e-4)
-    assert hs.p2 == pytest.approx(np_.p2, abs=1e-4)
-    assert hs.p3 == pytest.approx(np_.p3, abs=1e-4)
-    assert hs.p4 == pytest.approx(np_.p4, abs=1e-4)
+    for seed in ("p1", "p2", "p3", "p4"):
+        assert getattr(hs, seed) == pytest.approx(getattr(np_, seed), abs=0.02)
 
 
 def test_coahoma_county_seed1_odds():
-    """Coahoma County seed-1 probability is approximately 43.75%.
-
-    Margin-sensitive masks distribute probability fractionally, so the value
-    is not exactly 7/16; abs=0.001 (0.1%) tolerance accommodates this.
-    """
-    assert _ODDS["Coahoma County"].p1 == pytest.approx(7 / 16, abs=0.001)
+    """Coahoma County: #1 42.3%."""
+    assert _ODDS["Coahoma County"].p1 == pytest.approx(0.423167419, abs=0.001)
 
 
 def test_coahoma_county_seed4_odds():
-    """Coahoma County seed-4 probability is approximately 6.25%."""
-    assert _ODDS["Coahoma County"].p4 == pytest.approx(1 / 16, abs=0.001)
+    """Coahoma County: #4 7.6%."""
+    assert _ODDS["Coahoma County"].p4 == pytest.approx(0.076383704, abs=0.001)
 
 
 def test_holly_springs_seed4_odds():
-    """Holly Springs seed-4 probability is approximately 43.75% (mirror of CC seed-1)."""
-    assert _ODDS["Holly Springs"].p4 == pytest.approx(7 / 16, abs=0.001)
+    """Holly Springs: #4 43.1%."""
+    assert _ODDS["Holly Springs"].p4 == pytest.approx(0.430798337, abs=0.001)
 
 
 def test_no_coin_flip_teams():
@@ -388,27 +381,27 @@ def test_render_coahoma_county_seed_sections_present():
 
 
 def test_render_coahoma_county_seed1_pct():
-    """Coahoma County's #1-seed section shows 43.7%."""
+    """Coahoma County's #1-seed section shows 42.3%."""
     rendered = render_team_scenarios("Coahoma County", _ATOMS, odds=_ODDS)
-    assert "#1 seed if: (43.7%)" in rendered
+    assert "#1 seed if: (42.3%)" in rendered
 
 
 def test_render_coahoma_county_seed2_pct():
-    """Coahoma County's #2-seed section shows 33.9%."""
+    """Coahoma County's #2-seed section shows 32.2%."""
     rendered = render_team_scenarios("Coahoma County", _ATOMS, odds=_ODDS)
-    assert "#2 seed if: (33.9%)" in rendered
+    assert "#2 seed if: (32.2%)" in rendered
 
 
 def test_render_coahoma_county_seed3_pct():
-    """Coahoma County's #3-seed section shows 16.1%."""
+    """Coahoma County's #3-seed section shows 17.9%."""
     rendered = render_team_scenarios("Coahoma County", _ATOMS, odds=_ODDS)
-    assert "#3 seed if: (16.1%)" in rendered
+    assert "#3 seed if: (17.9%)" in rendered
 
 
 def test_render_coahoma_county_seed4_pct():
-    """Coahoma County's #4-seed section shows 6.3%."""
+    """Coahoma County's #4-seed section shows 7.6%."""
     rendered = render_team_scenarios("Coahoma County", _ATOMS, odds=_ODDS)
-    assert "#4 seed if: (6.3%)" in rendered
+    assert "#4 seed if: (7.6%)" in rendered
 
 
 def test_render_coahoma_county_seed1_simplest_atom():
@@ -446,15 +439,15 @@ def test_render_independence_seed_sections_present():
 
 
 def test_render_independence_seed1_pct():
-    """Independence's #1-seed section shows 43.7%."""
+    """Independence's #1-seed section shows 43.0%."""
     rendered = render_team_scenarios("Independence", _ATOMS, odds=_ODDS)
-    assert "#1 seed if: (43.7%)" in rendered
+    assert "#1 seed if: (43.0%)" in rendered
 
 
 def test_render_independence_seed4_pct():
-    """Independence's #4-seed section shows 6.3%."""
+    """Independence's #4-seed section shows 7.3%."""
     rendered = render_team_scenarios("Independence", _ATOMS, odds=_ODDS)
-    assert "#4 seed if: (6.3%)" in rendered
+    assert "#4 seed if: (7.3%)" in rendered
 
 
 def test_render_independence_seed1_simplest_atom():
@@ -486,21 +479,21 @@ def test_render_holly_springs_seed_sections_present():
 
 
 def test_render_holly_springs_seed1_pct():
-    """Holly Springs's #1-seed section shows 6.3%."""
+    """Holly Springs's #1-seed section shows 7.2%."""
     rendered = render_team_scenarios("Holly Springs", _ATOMS, odds=_ODDS)
-    assert "#1 seed if: (6.3%)" in rendered
+    assert "#1 seed if: (7.2%)" in rendered
 
 
 def test_render_holly_springs_seed3_pct():
-    """Holly Springs's #3-seed section shows 33.9% (mirror of CC's #2)."""
+    """Holly Springs's #3-seed section shows 32.6% (mirror of CC's #2)."""
     rendered = render_team_scenarios("Holly Springs", _ATOMS, odds=_ODDS)
-    assert "#3 seed if: (33.9%)" in rendered
+    assert "#3 seed if: (32.6%)" in rendered
 
 
 def test_render_holly_springs_seed4_pct():
-    """Holly Springs's #4-seed section shows 43.7% (mirror of CC's #1)."""
+    """Holly Springs's #4-seed section shows 43.1% (mirror of CC's #1)."""
     rendered = render_team_scenarios("Holly Springs", _ATOMS, odds=_ODDS)
-    assert "#4 seed if: (43.7%)" in rendered
+    assert "#4 seed if: (43.1%)" in rendered
 
 
 def test_render_holly_springs_seed1_first_atom():
@@ -532,21 +525,21 @@ def test_render_north_panola_seed_sections_present():
 
 
 def test_render_north_panola_seed1_pct():
-    """North Panola's #1-seed section shows 6.3%."""
+    """North Panola's #1-seed section shows 7.4%."""
     rendered = render_team_scenarios("North Panola", _ATOMS, odds=_ODDS)
-    assert "#1 seed if: (6.3%)" in rendered
+    assert "#1 seed if: (7.4%)" in rendered
 
 
 def test_render_north_panola_seed3_pct():
-    """North Panola's #3-seed section shows 33.9% (mirror of Ind's #2)."""
+    """North Panola's #3-seed section shows 32.2% (mirror of Ind's #2)."""
     rendered = render_team_scenarios("North Panola", _ATOMS, odds=_ODDS)
-    assert "#3 seed if: (33.9%)" in rendered
+    assert "#3 seed if: (32.2%)" in rendered
 
 
 def test_render_north_panola_seed4_pct():
-    """North Panola's #4-seed section shows 43.7% (mirror of Ind's #1)."""
+    """North Panola's #4-seed section shows 42.0% (mirror of Ind's #1)."""
     rendered = render_team_scenarios("North Panola", _ATOMS, odds=_ODDS)
-    assert "#4 seed if: (43.7%)" in rendered
+    assert "#4 seed if: (42.0%)" in rendered
 
 
 def test_render_north_panola_seed1_first_atom():

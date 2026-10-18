@@ -103,12 +103,12 @@ Kosciusko
 GREENWOOD_EXPECTED = """\
 Greenwood
 
-#2 seed if: (16.7%)
+#2 seed if: (37.8%)
 1. Greenwood beats Louisville by 9 or more
 
-#3 seed if: (83.3%)
+#3 seed if: (62.2%)
 1. Louisville beats Greenwood
-2. Greenwood beats Louisville by 1\u20138"""
+2. Greenwood beats Louisville by 1–8"""
 
 LOUISVILLE_EXPECTED = """\
 Louisville
@@ -116,10 +116,10 @@ Louisville
 #1 seed if: (50.0%)
 1. Louisville beats Greenwood
 
-#2 seed if: (33.3%)
-1. Greenwood beats Louisville by 1\u20138
+#2 seed if: (12.2%)
+1. Greenwood beats Louisville by 1–8
 
-#3 seed if: (16.7%)
+#3 seed if: (37.8%)
 1. Greenwood beats Louisville by 9 or more"""
 
 # ---------------------------------------------------------------------------
@@ -519,13 +519,13 @@ def test_team_dict_gentry_keys():
 
 
 def test_odds_louisville_splits():
-    """Louisville: p1=1/2, p2=1/3, p3=1/6; clinched (always makes playoffs)."""
+    """Louisville: clinched; #1 50.0%, #2 12.2%, #3 37.8%, #4 0.0%, playoffs 100.0%."""
     o = _ODDS["Louisville"]
     assert o.clinched is True
     assert o.eliminated is False
     assert o.p1 == pytest.approx(0.5)
-    assert o.p2 == pytest.approx(1 / 3)
-    assert o.p3 == pytest.approx(1 / 6)
+    assert o.p2 == pytest.approx(0.122153209)
+    assert o.p3 == pytest.approx(0.377846791)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 
@@ -542,12 +542,12 @@ def test_odds_kosciusko_even_split():
 
 
 def test_odds_greenwood_clinched():
-    """Greenwood: clinched (always makes playoffs); p2=1/6, p3=5/6."""
+    """Greenwood: clinched; #1 0.0%, #2 37.8%, #3 62.2%, #4 0.0%, playoffs 100.0%."""
     o = _ODDS["Greenwood"]
     assert o.clinched is True
     assert o.p1 == pytest.approx(0.0)
-    assert o.p2 == pytest.approx(1 / 6)
-    assert o.p3 == pytest.approx(5 / 6)
+    assert o.p2 == pytest.approx(0.377846791)
+    assert o.p3 == pytest.approx(0.622153209)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 

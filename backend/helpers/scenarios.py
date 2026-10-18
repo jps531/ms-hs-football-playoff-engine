@@ -7,6 +7,7 @@ per-seed counts. No Prefect or database dependencies.
 
 import hashlib
 import logging
+import math
 import random
 from collections import defaultdict
 from itertools import permutations, product
@@ -180,6 +181,12 @@ def _accumulate_slots(
                 fourth_counts_weighted[team] += w_share
 
 
+# How often each winning margin happens, 1-11 then 12 or more (the cap the point-differential
+# steps use), from the 483 region games of 2025: most are won by 12 or more, and 6 and 7 (a
+# touchdown) are the commonest close margins. A margin-sensitive result's margin combinations are
+# weighted by these rather than evenly.
+_MARGIN_COUNTS = (12, 10, 14, 14, 5, 25, 25, 13, 8, 9, 6, 342)
+_MARGIN_SHARE = tuple(c / sum(_MARGIN_COUNTS) for c in _MARGIN_COUNTS)
 # How many ways the scores of the remaining games are drawn for a result whose order turns on
 # fewest points allowed (step 5) with a tied team still to play.
 _PA_DRAWS = 64
@@ -533,15 +540,15 @@ def determine_scenarios(
                 # This correctly captures multi-game threshold interactions that the
                 # old one-game-at-a-time isolation approach could miss (e.g. a
                 # tiebreaker that only flips when Game A wins by 12+ AND Game B wins
-                # by 1–6 simultaneously).
+                # by 1–6 simultaneously). Each combination counts as often as those
+                # margins happen (``_MARGIN_SHARE``), not evenly.
                 intra_pairs = [(rg.a, rg.b) for rg in intra_bucket_games]
                 n_intra = len(intra_pairs)
-                total_combos = 12**n_intra
                 for margin_combo in product(range(1, 13), repeat=n_intra):
                     branch_margins = dict(base_margins)
                     for (a, b), m in zip(intra_pairs, margin_combo):
                         branch_margins[(a, b)] = m
-                    branch_weight = 1.0 / total_combos
+                    branch_weight = math.prod(_MARGIN_SHARE[m - 1] for m in margin_combo)
                     effective_weight = mask_weight * branch_weight
                     for final_order, local_flips, share in _resolve_with_scores(
                         teams, completed, remaining, outcome_mask, branch_margins, frozenset(intra_pairs)
@@ -667,6 +674,11 @@ def compute_first_round_home_odds(
     return result
 
 
+# Odds are rounded here: past the float noise of summing thousands of shares (~1e-14), so it never
+# orders two level teams or reads as a chance; a real chance below one in a trillion counts as none.
+_ODDS_DIGITS = 12
+
+
 def determine_odds(teams, first_counts, second_counts, third_counts, fourth_counts, denom):
     """Convert accumulated seed counts into probability odds for each team.
 
@@ -687,13 +699,12 @@ def determine_odds(teams, first_counts, second_counts, third_counts, fourth_coun
     """
     odds: dict[str, StandingsOdds] = {}
     for school in teams:
-        p1 = first_counts.get(school, 0.0) / denom
-        p2 = second_counts.get(school, 0.0) / denom
-        p3 = third_counts.get(school, 0.0) / denom
-        p4 = fourth_counts.get(school, 0.0) / denom
-        p_playoffs = p1 + p2 + p3 + p4
-        clinched = p_playoffs >= 0.999
-        eliminated = p_playoffs <= 0.001
+        raw = [c.get(school, 0.0) / denom for c in (first_counts, second_counts, third_counts, fourth_counts)]
+        p1, p2, p3, p4 = (round(p, _ODDS_DIGITS) for p in raw)
+        p_playoffs = round(sum(raw), _ODDS_DIGITS)
+        # Only a certainty (see _ODDS_DIGITS): a team with a 0.05% chance of missing out hasn't clinched.
+        clinched = p_playoffs >= 1.0
+        eliminated = p_playoffs <= 0.0
         if clinched:
             final_playoffs = 1.0
         elif eliminated:

@@ -83,15 +83,15 @@ BYHALIA_EXPECTED = "Byhalia\n\nEliminated. (100.0%)"
 CLARKSDALE_EXPECTED = """\
 Clarksdale
 
-#1 seed if: (62.5%)
+#1 seed if: (54.1%)
 1. Clarksdale beats Rosa Fort
-2. Rosa Fort beats Clarksdale by 1\u20136 AND Senatobia beats Ripley
+2. Rosa Fort beats Clarksdale by 1–6 AND Senatobia beats Ripley
 
-#2 seed if: (33.3%)
-1. Rosa Fort beats Clarksdale by 7\u201310
+#2 seed if: (27.8%)
+1. Rosa Fort beats Clarksdale by 7–10
 2. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
 
-#3 seed if: (4.2%)
+#3 seed if: (18.0%)
 1. Rosa Fort beats Clarksdale by 11 or more AND Senatobia beats Ripley"""
 
 RIPLEY_EXPECTED = """\
@@ -110,11 +110,11 @@ Rosa Fort
 #1 seed if: (25.0%)
 1. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
 
-#2 seed if: (5.6%)
+#2 seed if: (22.3%)
 1. Clarksdale beats Rosa Fort by 1–8 AND Ripley beats Senatobia by 12 or more
 2. Rosa Fort beats Clarksdale by 11 or more AND Senatobia beats Ripley
 
-#3 seed if: (69.4%)
+#3 seed if: (52.7%)
 1. Clarksdale beats Rosa Fort by 9 or more
 2. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
 3. Clarksdale beats Rosa Fort AND Ripley beats Senatobia by 1–11
@@ -123,16 +123,16 @@ Rosa Fort
 SENATOBIA_EXPECTED = """\
 Senatobia
 
-#1 seed if: (12.5%)
+#1 seed if: (20.9%)
 1. Rosa Fort beats Clarksdale by 7 or more AND Senatobia beats Ripley
 
-#2 seed if: (61.1%)
+#2 seed if: (49.8%)
 1. Clarksdale beats Rosa Fort by 9 or more
 2. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
 3. Clarksdale beats Rosa Fort AND Ripley beats Senatobia by 1–11
 4. Rosa Fort beats Clarksdale by 1–6 AND Senatobia beats Ripley
 
-#3 seed if: (1.4%)
+#3 seed if: (4.3%)
 1. Clarksdale beats Rosa Fort by 1–8 AND Ripley beats Senatobia by 12 or more
 
 #4 seed if: (25.0%)
@@ -700,12 +700,12 @@ def test_odds_byhalia_eliminated():
 
 
 def test_odds_clarksdale():
-    """Clarksdale: clinched; p1=5/8, p2=1/3, p3=1/24."""  # NOSONAR
+    """Clarksdale: clinched; #1 54.1%, #2 27.8%, #3 18.0%, #4 0.0%, playoffs 100.0%."""
     o = _ODDS["Clarksdale"]
     assert o.clinched is True
-    assert o.p1 == pytest.approx(0.625)
-    assert o.p2 == pytest.approx(1 / 3)
-    assert o.p3 == pytest.approx(1 / 24)
+    assert o.p1 == pytest.approx(0.541407867)
+    assert o.p2 == pytest.approx(0.278467909)
+    assert o.p3 == pytest.approx(0.180124224)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 
@@ -722,23 +722,23 @@ def test_odds_ripley():
 
 
 def test_odds_rosa_fort():
-    """Rosa Fort: clinched; p1=1/4, p2=1/18, p3=25/36 — never #4."""
+    """Rosa Fort: clinched; #1 25.0%, #2 22.3%, #3 52.7%, #4 0.0%, playoffs 100.0%."""
     o = _ODDS["Rosa Fort"]
     assert o.clinched is True
     assert o.p1 == pytest.approx(0.25)
-    assert o.p2 == pytest.approx(1 / 18)
-    assert o.p3 == pytest.approx(25 / 36)
+    assert o.p2 == pytest.approx(0.223371012)
+    assert o.p3 == pytest.approx(0.526628988)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_senatobia():
-    """Senatobia: clinched; p1=1/8, p2=11/18, p3=1/72, p4=1/4."""  # NOSONAR
+    """Senatobia: clinched; #1 20.9%, #2 49.8%, #3 4.3%, #4 25.0%, playoffs 100.0%."""
     o = _ODDS["Senatobia"]
     assert o.clinched is True
-    assert o.p1 == pytest.approx(0.125)
-    assert o.p2 == pytest.approx(11 / 18)
-    assert o.p3 == pytest.approx(1 / 72)
+    assert o.p1 == pytest.approx(0.208592133)
+    assert o.p2 == pytest.approx(0.498161079)
+    assert o.p3 == pytest.approx(0.043246788)
     assert o.p4 == pytest.approx(0.25)
     assert o.p_playoffs == pytest.approx(1.0)
 

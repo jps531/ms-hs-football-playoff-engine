@@ -529,89 +529,47 @@ expected_3_7a_remaining_games: list[RemainingGame] = [
 # Scenario counts — fractional due to margin-sensitive tiebreaker branches
 # denom = 8.0 (2^3 remaining games)
 expected_3_7a_first_counts: dict[str, float] = {
-    "Petal": 4.083333333333392,
-    "Northwest Rankin": 1.4652777777777737,
-    "Oak Grove": 2.2013888888888884,
-    "Pearl": 0.25000000000000006,
+    "Petal": 4.009696127978602,
+    "Northwest Rankin": 1.7693547488308492,
+    "Oak Grove": 2.02100827728697,
+    "Pearl": 0.19994084590357883,
 }
 expected_3_7a_second_counts: dict[str, float] = {
-    "Pearl": 3.3333333333333703,
-    "Oak Grove": 2.2152777777777777,
-    "Petal": 1.1666666666666667,
-    "Northwest Rankin": 1.284722222222222,
+    "Pearl": 3.686187518485653,
+    "Oak Grove": 2.092863358323798,
+    "Petal": 1.0648380335120815,
+    "Northwest Rankin": 1.1561110896784674,
 }
 expected_3_7a_third_counts: dict[str, float] = {
-    "Oak Grove": 2.3055555555555634,
-    "Brandon": 2.9999999999999956,
-    "Petal": 2.2986111111111076,
-    "Northwest Rankin": 0.1666666666666667,
-    "Pearl": 0.22916666666666674,
+    "Oak Grove": 2.6704688176467797,
+    "Brandon": 3.000000000000001,
+    "Petal": 2.170222342245027,
+    "Northwest Rankin": 0.06398930082429947,
+    "Pearl": 0.09531953928389252,
 }
 expected_3_7a_fourth_counts: dict[str, float] = {
-    "Brandon": 3.000000000000001,
-    "Northwest Rankin": 3.0833333333333313,
-    "Oak Grove": 1.2777777777777743,
-    "Pearl": 0.18750000000000006,
-    "Petal": 0.45138888888888823,
+    "Brandon": 2.999999999999999,
+    "Northwest Rankin": 3.0105448606663847,
+    "Oak Grove": 1.2156595467424522,
+    "Pearl": 0.018552096326873536,
+    "Petal": 0.7552434962642903,
 }
 
 # Odds for each team heading into final week
 expected_3_7a_odds: dict[str, StandingsOdds] = {
     "Meridian": StandingsOdds("Meridian", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False, True),
     "Oak Grove": StandingsOdds(
-        "Oak Grove",
-        0.27517361111111105,
-        0.2769097222222222,
-        0.2881944444444454,
-        0.1597222222222218,
-        1.0000000000000004,
-        1.0,
-        True,
-        False,
+        "Oak Grove", 0.252626034661, 0.26160791979, 0.333808602206, 0.151957443343, 1.0, 1.0, True, False
     ),
     "Pearl": StandingsOdds(
-        "Pearl",
-        0.03125000000000001,
-        0.4166666666666713,
-        0.028645833333333343,
-        0.023437500000000007,
-        0.5000000000000047,
-        0.5000000000000047,
-        False,
-        False,
+        "Pearl", 0.024992605738, 0.460773439811, 0.01191494241, 0.002319012041, 0.5, 0.5, False, False
     ),
     "Petal": StandingsOdds(
-        "Petal",
-        0.510416666666674,
-        0.14583333333333334,
-        0.28732638888888845,
-        0.05642361111111103,
-        1.0000000000000067,
-        1.0,
-        True,
-        False,
+        "Petal", 0.501212015997, 0.133104754189, 0.271277792781, 0.094405437033, 1.0, 1.0, True, False
     ),
-    "Brandon": StandingsOdds(
-        "Brandon",
-        0.0,
-        0.0,
-        0.37499999999999944,
-        0.3750000000000001,
-        0.7499999999999996,
-        0.7499999999999996,
-        False,
-        False,
-    ),
+    "Brandon": StandingsOdds("Brandon", 0.0, 0.0, 0.375, 0.375, 0.75, 0.75, False, False),
     "Northwest Rankin": StandingsOdds(
-        "Northwest Rankin",
-        0.1831597222222217,
-        0.16059027777777776,
-        0.02083333333333334,
-        0.3854166666666664,
-        0.7499999999999991,
-        0.7499999999999991,
-        False,
-        False,
+        "Northwest Rankin", 0.221169343604, 0.14451388621, 0.007998662603, 0.376318107583, 0.75, 0.75, False, False
     ),
 }
 

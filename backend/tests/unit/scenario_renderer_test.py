@@ -176,36 +176,36 @@ Eliminated."""
 PETAL_WITH_ODDS_EXPECTED = """\
 Petal
 
-#1 seed if: (51.0%)
+#1 seed if: (50.1%)
 1. Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes ahead of Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#2 seed if: (14.6%)
+#2 seed if: (13.3%)
 1. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#3 seed if: (28.7%)
+#3 seed if: (27.1%)
 1. Meridian beats Brandon AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#4 seed if: (5.6%)
+#4 seed if: (9.4%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes behind Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)"""
 
 PEARL_WITH_ODDS_EXPECTED = """\
 Pearl
 
-#1 seed if: (3.1%)
+#1 seed if: (2.5%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes ahead of Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#2 seed if: (41.7%)
+#2 seed if: (46.1%)
 1. Meridian beats Brandon AND Pearl beats Oak Grove
 2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#3 seed if: (2.9%)
+#3 seed if: (1.2%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#4 seed if: (2.3%)
+#4 seed if: (0.2%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes behind Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 Eliminated if: (50.0%)
@@ -214,37 +214,37 @@ Eliminated if: (50.0%)
 OAK_GROVE_WITH_ODDS_EXPECTED = """\
 Oak Grove
 
-#1 seed if: (27.5%)
+#1 seed if: (25.3%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes ahead of Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#2 seed if: (27.7%)
+#2 seed if: (26.2%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 2nd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#3 seed if: (28.8%)
+#3 seed if: (33.4%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 3rd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#4 seed if: (16.0%)
+#4 seed if: (15.2%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes behind Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal"""
 
 NORTHWEST_RANKIN_WITH_ODDS_EXPECTED = """\
 Northwest Rankin
 
-#1 seed if: (18.3%)
+#1 seed if: (22.1%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes ahead of Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 
-#2 seed if: (16.1%)
+#2 seed if: (14.5%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 2nd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 2. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 
-#3 seed if: (2.1%)
+#3 seed if: (0.8%)
 1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 3rd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#4 seed if: (38.5%)
+#4 seed if: (37.6%)
 1. Brandon beats Meridian AND Oak Grove beats Pearl
 2. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes behind Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
@@ -443,11 +443,11 @@ def test_team_scenarios_dict_with_odds_no_weighted():
     """With odds= provided, per-seed odds are floats and weighted_odds is None."""
     d = _team_dict(with_odds=True)
     petal = d["Petal"]
-    assert petal[1]["odds"] == pytest.approx(0.510416666666674)
+    assert petal[1]["odds"] == pytest.approx(0.501212016)
     assert petal[1]["weighted_odds"] is None
-    assert petal[2]["odds"] == pytest.approx(0.14583333333333334)
-    assert petal[3]["odds"] == pytest.approx(0.28732638888888845)
-    assert petal[4]["odds"] == pytest.approx(0.05642361111111103)
+    assert petal[2]["odds"] == pytest.approx(0.133104754)
+    assert petal[3]["odds"] == pytest.approx(0.271277793)
+    assert petal[4]["odds"] == pytest.approx(0.094405437)
 
 
 def test_team_scenarios_dict_with_odds_eliminated_section():
@@ -1362,16 +1362,16 @@ Eliminated. (100.0%)"""
 _PARTIAL_A_NWR = """\
 Northwest Rankin
 
-#1 seed if: (11.6%)
+#1 seed if: (19.2%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes ahead of Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#2 seed if: (7.1%)
+#2 seed if: (3.9%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 2nd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#3 seed if: (4.2%)
+#3 seed if: (1.6%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 3rd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#4 seed if: (52.1%)
+#4 seed if: (50.3%)
 1. Oak Grove beats Pearl
 2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes behind Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
@@ -1381,35 +1381,35 @@ Eliminated if: (25.0%)
 _PARTIAL_A_OAK_GROVE = """\
 Oak Grove
 
-#1 seed if: (30.0%)
+#1 seed if: (25.5%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes ahead of Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#2 seed if: (30.4%)
+#2 seed if: (27.3%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 2nd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#3 seed if: (32.6%)
+#3 seed if: (41.8%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 3rd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 
-#4 seed if: (6.9%)
+#4 seed if: (5.4%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes behind Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)"""
 
 _PARTIAL_A_PEARL = """\
 Pearl
 
-#1 seed if: (6.3%)
+#1 seed if: (5.0%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes ahead of Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#2 seed if: (33.3%)
+#2 seed if: (42.2%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 
-#3 seed if: (5.7%)
+#3 seed if: (2.4%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#4 seed if: (4.7%)
+#4 seed if: (0.5%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes behind Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 Eliminated if: (50.0%)
@@ -1418,18 +1418,18 @@ Eliminated if: (50.0%)
 _PARTIAL_A_PETAL = """\
 Petal
 
-#1 seed if: (52.1%)
+#1 seed if: (50.2%)
 1. Petal beats Northwest Rankin
 2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes ahead of Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#2 seed if: (29.2%)
+#2 seed if: (26.6%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
 2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#3 seed if: (7.5%)
+#3 seed if: (4.3%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
-#4 seed if: (11.3%)
+#4 seed if: (18.9%)
 1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes behind Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)"""
 
 
@@ -1583,11 +1583,11 @@ Eliminated. (100.0%)"""
 _PARTIAL_C_NWR = """\
 Northwest Rankin
 
-#1 seed if: (16.7%)
-1. Pearl beats Oak Grove by 5\u20138
+#1 seed if: (7.0%)
+1. Pearl beats Oak Grove by 5–8
 
-#2 seed if: (33.3%)
-1. Pearl beats Oak Grove by 1\u20134
+#2 seed if: (43.0%)
+1. Pearl beats Oak Grove by 1–4
 2. Pearl beats Oak Grove by 9 or more
 
 #4 seed if: (50.0%)
@@ -1596,33 +1596,33 @@ Northwest Rankin
 _PARTIAL_C_OAK_GROVE = """\
 Oak Grove
 
-#1 seed if: (66.7%)
+#1 seed if: (55.2%)
 1. Oak Grove beats Pearl
-2. Pearl beats Oak Grove by 1\u20134
+2. Pearl beats Oak Grove by 1–4
 
-#2 seed if: (4.2%)
+#2 seed if: (0.5%)
 1. Pearl beats Oak Grove by exactly 5
 
-#3 seed if: (8.3%)
-1. Pearl beats Oak Grove by 6\u20137
+#3 seed if: (5.2%)
+1. Pearl beats Oak Grove by 6–7
 
-#4 seed if: (20.8%)
+#4 seed if: (39.1%)
 1. Pearl beats Oak Grove by 8 or more"""
 
 _PARTIAL_C_PEARL = """\
 Pearl
 
-#1 seed if: (16.7%)
+#1 seed if: (37.8%)
 1. Pearl beats Oak Grove by 9 or more
 
-#2 seed if: (12.5%)
-1. Pearl beats Oak Grove by 6\u20138
+#2 seed if: (6.5%)
+1. Pearl beats Oak Grove by 6–8
 
-#3 seed if: (8.3%)
-1. Pearl beats Oak Grove by 4\u20135
+#3 seed if: (2.0%)
+1. Pearl beats Oak Grove by 4–5
 
-#4 seed if: (12.5%)
-1. Pearl beats Oak Grove by 1\u20133
+#4 seed if: (3.7%)
+1. Pearl beats Oak Grove by 1–3
 
 Eliminated if: (50.0%)
 1. Oak Grove beats Pearl"""
@@ -1633,12 +1633,12 @@ Petal
 #2 seed if: (50.0%)
 1. Oak Grove beats Pearl
 
-#3 seed if: (33.3%)
-1. Pearl beats Oak Grove by 1\u20133
+#3 seed if: (42.9%)
+1. Pearl beats Oak Grove by 1–3
 2. Pearl beats Oak Grove by 8 or more
 
-#4 seed if: (16.7%)
-1. Pearl beats Oak Grove by 4\u20137"""
+#4 seed if: (7.1%)
+1. Pearl beats Oak Grove by 4–7"""
 
 
 @pytest.mark.parametrize(

@@ -78,11 +78,11 @@ LAWRENCE_COUNTY_EXPECTED = "Lawrence County\n\nEliminated. (100.0%)"
 COLUMBIA_EXPECTED = """\
 Columbia
 
-#1 seed if: (62.5%)
+#1 seed if: (54.1%)
 1. Columbia beats Poplarville
-2. Poplarville beats Columbia by 1\u20136 AND McComb beats South Pike
+2. Poplarville beats Columbia by 1–6 AND McComb beats South Pike
 
-#2 seed if: (37.5%)
+#2 seed if: (45.9%)
 1. Poplarville beats Columbia by 7 or more
 2. Poplarville beats Columbia AND South Pike beats McComb"""
 
@@ -92,24 +92,24 @@ McComb
 #2 seed if: (25.0%)
 1. Columbia beats Poplarville AND McComb beats South Pike
 
-#3 seed if: (37.5%)
+#3 seed if: (29.1%)
 1. Poplarville beats Columbia AND McComb beats South Pike
-2. Columbia beats Poplarville AND South Pike beats McComb by 1\u20136
+2. Columbia beats Poplarville AND South Pike beats McComb by 1–6
 
-#4 seed if: (37.5%)
+#4 seed if: (45.9%)
 1. South Pike beats McComb by 7 or more
 2. Poplarville beats Columbia AND South Pike beats McComb"""
 
 POPLARVILLE_EXPECTED = """\
 Poplarville
 
-#1 seed if: (37.5%)
+#1 seed if: (45.9%)
 1. Poplarville beats Columbia by 7 or more
 2. Poplarville beats Columbia AND South Pike beats McComb
 
-#2 seed if: (37.5%)
+#2 seed if: (29.1%)
 1. Columbia beats Poplarville AND South Pike beats McComb
-2. Poplarville beats Columbia by 1\u20136 AND McComb beats South Pike
+2. Poplarville beats Columbia by 1–6 AND McComb beats South Pike
 
 #3 seed if: (25.0%)
 1. Columbia beats Poplarville AND McComb beats South Pike"""
@@ -117,13 +117,13 @@ Poplarville
 SOUTH_PIKE_EXPECTED = """\
 South Pike
 
-#3 seed if: (37.5%)
+#3 seed if: (45.9%)
 1. South Pike beats McComb by 7 or more
 2. Poplarville beats Columbia AND South Pike beats McComb
 
-#4 seed if: (62.5%)
+#4 seed if: (54.1%)
 1. McComb beats South Pike
-2. Columbia beats Poplarville AND South Pike beats McComb by 1\u20136"""
+2. Columbia beats Poplarville AND South Pike beats McComb by 1–6"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — seed key structure
@@ -589,13 +589,13 @@ def test_odds_columbia_clinched():
 
 
 def test_odds_columbia_p1():
-    """Columbia has 62.5% chance at #1 seed."""
-    assert _ODDS["Columbia"].p1 == pytest.approx(0.625)
+    """Columbia: #1 54.1%."""
+    assert _ODDS["Columbia"].p1 == pytest.approx(0.541407867)
 
 
 def test_odds_columbia_p2():
-    """Columbia has 37.5% chance at #2 seed."""
-    assert _ODDS["Columbia"].p2 == pytest.approx(0.375)
+    """Columbia: #2 45.9%."""
+    assert _ODDS["Columbia"].p2 == pytest.approx(0.458592133)
 
 
 def test_odds_mccomb_clinched():
@@ -607,11 +607,11 @@ def test_odds_mccomb_clinched():
 
 
 def test_odds_mccomb():
-    """McComb odds: p2=25%, p3=37.5%, p4=37.5%."""
+    """McComb: #2 25.0%, #3 29.1%, #4 45.9%."""
     o = _ODDS["McComb"]
     assert o.p2 == pytest.approx(0.25)
-    assert o.p3 == pytest.approx(0.375)
-    assert o.p4 == pytest.approx(0.375)
+    assert o.p3 == pytest.approx(0.291407867)
+    assert o.p4 == pytest.approx(0.458592133)
 
 
 def test_odds_poplarville_clinched():
@@ -623,10 +623,10 @@ def test_odds_poplarville_clinched():
 
 
 def test_odds_poplarville():
-    """Poplarville odds: p1=37.5%, p2=37.5%, p3=25%."""
+    """Poplarville: #1 45.9%, #2 29.1%, #3 25.0%."""
     o = _ODDS["Poplarville"]
-    assert o.p1 == pytest.approx(0.375)
-    assert o.p2 == pytest.approx(0.375)
+    assert o.p1 == pytest.approx(0.458592133)
+    assert o.p2 == pytest.approx(0.291407867)
     assert o.p3 == pytest.approx(0.25)
 
 
@@ -640,10 +640,10 @@ def test_odds_south_pike_clinched():
 
 
 def test_odds_south_pike():
-    """South Pike odds: p3=37.5%, p4=62.5%."""
+    """South Pike: #3 45.9%, #4 54.1%."""
     o = _ODDS["South Pike"]
-    assert o.p3 == pytest.approx(0.375)
-    assert o.p4 == pytest.approx(0.625)
+    assert o.p3 == pytest.approx(0.458592133)
+    assert o.p4 == pytest.approx(0.541407867)
 
 
 # ---------------------------------------------------------------------------

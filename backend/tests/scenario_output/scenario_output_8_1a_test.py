@@ -65,13 +65,13 @@ _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
 LUMBERTON_EXPECTED = """\
 Lumberton
 
-#1 seed if: (27.1%)
+#1 seed if: (42.7%)
 1. Lumberton beats Taylorsville by 12 or more
 2. Resurrection beats Stringer AND Lumberton beats Taylorsville
 
-#3 seed if: (72.9%)
+#3 seed if: (57.3%)
 1. Taylorsville beats Lumberton
-2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1\u201311"""
+2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1–11"""
 
 RESURRECTION_EXPECTED = "Resurrection\n\nEliminated. (100.0%)"
 
@@ -80,22 +80,22 @@ RICHTON_EXPECTED = "Richton\n\nClinched #4 seed. (100.0%)"
 STRINGER_EXPECTED = """\
 Stringer
 
-#2 seed if: (72.9%)
+#2 seed if: (57.3%)
 1. Taylorsville beats Lumberton
-2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1\u201311
+2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1–11
 
-#3 seed if: (27.1%)
+#3 seed if: (42.7%)
 1. Lumberton beats Taylorsville by 12 or more
 2. Resurrection beats Stringer AND Lumberton beats Taylorsville"""
 
 TAYLORSVILLE_EXPECTED = """\
 Taylorsville
 
-#1 seed if: (72.9%)
+#1 seed if: (57.3%)
 1. Taylorsville beats Lumberton
-2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1\u201311
+2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1–11
 
-#2 seed if: (27.1%)
+#2 seed if: (42.7%)
 1. Lumberton beats Taylorsville by 12 or more
 2. Resurrection beats Stringer AND Lumberton beats Taylorsville"""
 
@@ -399,23 +399,23 @@ def test_team_dict_resurrection_eliminated():
 
 
 def test_team_dict_taylorsville_seed1_odds():
-    """Taylorsville seed-1 odds ≈ 72.9% (3 full outcomes + fractional margin-sensitive split)."""
-    assert _TEAM_DICT["Taylorsville"][1]["odds"] == pytest.approx(0.7291666666666666)
+    """Taylorsville: #1 57.3%."""
+    assert _TEAM_DICT["Taylorsville"][1]["odds"] == pytest.approx(0.572981366)
 
 
 def test_team_dict_taylorsville_seed2_odds():
-    """Taylorsville seed-2 odds ≈ 27.1%."""
-    assert _TEAM_DICT["Taylorsville"][2]["odds"] == pytest.approx(0.2708333333333333)
+    """Taylorsville: #2 42.7%."""
+    assert _TEAM_DICT["Taylorsville"][2]["odds"] == pytest.approx(0.427018634)
 
 
 def test_team_dict_lumberton_seed1_odds():
-    """Lumberton seed-1 odds ≈ 27.1%."""
-    assert _TEAM_DICT["Lumberton"][1]["odds"] == pytest.approx(0.2708333333333333)
+    """Lumberton: #1 42.7%."""
+    assert _TEAM_DICT["Lumberton"][1]["odds"] == pytest.approx(0.427018634)
 
 
 def test_team_dict_lumberton_seed3_odds():
-    """Lumberton seed-3 odds ≈ 72.9%."""
-    assert _TEAM_DICT["Lumberton"][3]["odds"] == pytest.approx(0.7291666666666666)
+    """Lumberton: #3 57.3%."""
+    assert _TEAM_DICT["Lumberton"][3]["odds"] == pytest.approx(0.572981366)
 
 
 def test_team_dict_taylorsville_seed1_scenario_strings():

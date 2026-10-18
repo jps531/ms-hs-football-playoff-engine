@@ -697,7 +697,7 @@ class TeamBracketEntry(BaseModel):
     """Per-slot bracket advancement odds and hosting odds.
 
     ``school`` is populated only when the team has clinched that seed position
-    (``p{seed} >= 0.999``).  Before seedings are locked, ``school`` is None
+    (``p{seed}`` is 1, give or take storage rounding).  Before seedings are locked, ``school`` is None
     and the slot is identified by ``region`` + ``seed``.
 
     ``*_weighted`` fields use Elo-based win probabilities; ``null`` when no

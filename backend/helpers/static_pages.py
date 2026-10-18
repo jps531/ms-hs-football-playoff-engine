@@ -145,6 +145,8 @@ def initials(name: str) -> str:
 
 
 _HEX = re.compile(r"^#?[0-9a-fA-F]{6}$")
+# A seed is locked when it's certain, give or take the odds' 32-bit storage (mirrors app.js).
+_LOCKED = 1 - 1e-6
 
 # The badge icons (ICONS in components.js).
 BADGE_ICONS = {
@@ -1107,7 +1109,7 @@ def locked_seeds(class_standings: dict | None) -> dict[str, tuple[int, int]]:
     seeds = {}
     for block in (class_standings or {}).get("regions") or []:
         for t in block["teams"]:
-            seed = next((k for k in (1, 2, 3, 4) if (t["odds"].get(f"p{k}") or 0) >= 0.999), None)
+            seed = next((k for k in (1, 2, 3, 4) if (t["odds"].get(f"p{k}") or 0) >= _LOCKED), None)
             if seed:
                 seeds[t["school"]] = (block["region"], seed)
     return seeds

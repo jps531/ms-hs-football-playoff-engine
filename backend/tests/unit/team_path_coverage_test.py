@@ -81,13 +81,14 @@ def test_odds_and_paths_agree_2025(clazz, region, left):
 
 
 def test_raleigh_first_in_3a_region_6_is_unlikely_not_impossible():
-    """Raleigh is 1st only when it, Magee and Seminary tie and points allowed favour Raleigh: under 1%, not 0%."""
+    """Raleigh is 1st only when it, Magee and Seminary tie (every game won by 12 or more) and points
+    allowed favour Raleigh: a few percent, not 0%."""
     games = [dict(winner=w, loser=l, winner_score=a, loser_score=b, date=d) for w, l, a, b, d in _R36_PLAYED]
     teams = teams_from_games(games)
     completed = get_completed_games(expand_results(games))
     remaining = [RemainingGame(a, b) for a, b in _R36_LEFT]
     r = determine_scenarios(teams, completed, remaining)
-    assert 0 < r.first_counts["Raleigh"] / r.denom < 0.01
+    assert 0.005 < r.first_counts["Raleigh"] / r.denom < 0.05
 
 
 # ------------------------------------------------------------- the checker itself

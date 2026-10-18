@@ -299,11 +299,11 @@ def test_odds_louisville_clinched():
 
 
 def test_odds_louisville_splits():
-    """Louisville: p1=3/4, p2=5/24, p3=1/24."""
+    """Louisville: #1 75.0%, #2 15.6%, #3 9.4%, #4 0.0%, playoffs 100.0%."""
     o = _ODDS["Louisville"]
     assert o.p1 == pytest.approx(3 / 4)
-    assert o.p2 == pytest.approx(5 / 24)
-    assert o.p3 == pytest.approx(1 / 24)
+    assert o.p2 == pytest.approx(0.155538302)
+    assert o.p3 == pytest.approx(0.094461698)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 
@@ -370,15 +370,15 @@ def test_render_louisville_seed1_pct():
 
 
 def test_render_louisville_seed2_section():
-    """Louisville's #2-seed section shows 20.8%."""
+    """Louisville's #2-seed section shows 15.6%."""
     rendered = render_team_scenarios("Louisville", _ATOMS, odds=_ODDS)
-    assert "#2 seed if: (20.8%)" in rendered
+    assert "#2 seed if: (15.6%)" in rendered
 
 
 def test_render_louisville_seed3_section():
-    """Louisville's #3-seed section: Greenwood beats Louisville by 9 or more (4.2%)."""
+    """Louisville's #3-seed section: Greenwood beats Louisville by 9 or more (9.4%)."""
     rendered = render_team_scenarios("Louisville", _ATOMS, odds=_ODDS)
-    assert "#3 seed if: (4.2%)" in rendered
+    assert "#3 seed if: (9.4%)" in rendered
     assert "Greenwood beats Louisville by 9 or more" in rendered
 
 
@@ -433,9 +433,9 @@ def test_render_greenwood_seed1_pct():
 
 
 def test_render_greenwood_eliminated_pct():
-    """Greenwood's elimination probability is 6.9%."""
+    """Greenwood's elimination probability is 10.0%."""
     rendered = render_team_scenarios("Greenwood", _ATOMS, odds=_ODDS)
-    assert "Eliminated if: (6.9%)" in rendered
+    assert "Eliminated if: (10.0%)" in rendered
 
 
 # Yazoo City
@@ -458,9 +458,9 @@ def test_render_yazoo_city_simple_elimination_atom():
 
 
 def test_render_yazoo_city_eliminated_pct():
-    """Yazoo City's elimination probability is 53.3%."""
+    """Yazoo City's elimination probability is 51.1%."""
     rendered = render_team_scenarios("Yazoo City", _ATOMS, odds=_ODDS)
-    assert "Eliminated if: (53.3%)" in rendered
+    assert "Eliminated if: (51.1%)" in rendered
 
 
 # Gentry
@@ -483,9 +483,9 @@ def test_render_gentry_seed3_simplest_atom():
 
 
 def test_render_gentry_eliminated_pct():
-    """Gentry's elimination probability is 39.8%."""
+    """Gentry's elimination probability is 38.9%."""
     rendered = render_team_scenarios("Gentry", _ATOMS, odds=_ODDS)
-    assert "Eliminated if: (39.8%)" in rendered
+    assert "Eliminated if: (38.9%)" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -497,7 +497,7 @@ _EXPECTED_RENDER = {
     "Gentry": (
         "Gentry\n"
         "\n"
-        "#3 seed if: (27.3%)\n"
+        "#3 seed if: (26.4%)\n"
         "1. Gentry beats Greenwood AND Gentry beats Yazoo City\n"
         "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Greenwood level at the top, then Yazoo City\n"
         "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood and Yazoo City, level\n"
@@ -505,7 +505,7 @@ _EXPECTED_RENDER = {
         "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Yazoo City, then Greenwood\n"
         "6. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Gentry finishes ahead of both Greenwood and Yazoo City in their tie, which goes to fewest points allowed in region games (then a coin flip)\n"
         "\n"
-        "#4 seed if: (32.9%)\n"
+        "#4 seed if: (34.7%)\n"
         "1. Greenwood beats Gentry AND Gentry beats Yazoo City\n"
         "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry, then Yazoo City\n"
         "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Yazoo City level at the top, then Greenwood\n"
@@ -515,7 +515,7 @@ _EXPECTED_RENDER = {
         "7. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "8. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Gentry finishes 2nd of the three in the tie with Greenwood and Yazoo City, which goes to fewest points allowed in region games (then a coin flip)\n"
         "\n"
-        "Eliminated if: (39.8%)\n"
+        "Eliminated if: (38.9%)\n"
         "1. Greenwood beats Gentry AND Yazoo City beats Gentry\n"
         "2. Yazoo City beats Gentry AND Greenwood beats Louisville\n"
         "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood and Yazoo City level at the top, then Gentry\n"
@@ -532,11 +532,11 @@ _EXPECTED_RENDER = {
         "#1 seed if: (12.5%)\n"
         "1. Greenwood beats Gentry AND Yazoo City beats Kosciusko AND Greenwood beats Louisville\n"
         "\n"
-        "#2 seed if: (10.4%)\n"
+        "#2 seed if: (15.7%)\n"
         "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Greenwood beats Louisville by 9 or more\n"
         "2. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Greenwood beats Louisville\n"
         "\n"
-        "#3 seed if: (39.8%)\n"
+        "#3 seed if: (30.2%)\n"
         "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Louisville beats Greenwood\n"
         "2. Greenwood beats Gentry AND Gentry beats Yazoo City AND Louisville beats Greenwood\n"
         "3. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Greenwood beats Louisville by 1\u20138\n"
@@ -550,7 +550,7 @@ _EXPECTED_RENDER = {
         "11. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Greenwood finishes ahead of both Gentry and Yazoo City in their tie, which goes to fewest points allowed in region games (then a coin flip)\n"
         "12. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u20136 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
-        "#4 seed if: (30.4%)\n"
+        "#4 seed if: (31.6%)\n"
         "1. Gentry beats Greenwood AND Gentry beats Yazoo City\n"
         "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Greenwood level at the top, then Yazoo City\n"
         "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood and Yazoo City, level\n"
@@ -559,7 +559,7 @@ _EXPECTED_RENDER = {
         "6. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Greenwood finishes 2nd of the three in the tie with Gentry and Yazoo City, which goes to fewest points allowed in region games (then a coin flip)\n"
         "7. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7 or more AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
-        "Eliminated if: (6.9%)\n"
+        "Eliminated if: (10.0%)\n"
         "1. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Yazoo City level at the top, then Greenwood\n"
         "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry and Greenwood, level\n"
         "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry, then Greenwood\n"
@@ -574,14 +574,14 @@ _EXPECTED_RENDER = {
         "#1 seed if: (12.5%)\n"
         "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Greenwood beats Louisville\n"
         "\n"
-        "#2 seed if: (61.5%)\n"
+        "#2 seed if: (58.0%)\n"
         "1. Gentry beats Greenwood AND Kosciusko beats Yazoo City\n"
         "2. Gentry beats Greenwood AND Gentry beats Yazoo City\n"
         "3. Kosciusko beats Yazoo City AND Louisville beats Greenwood\n"
         "4. Gentry beats Yazoo City AND Louisville beats Greenwood\n"
         "5. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
-        "#3 seed if: (13.5%)\n"
+        "#3 seed if: (17.0%)\n"
         "1. Yazoo City beats Kosciusko by 11 or more AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "2. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "3. Greenwood beats Gentry AND Yazoo City beats Kosciusko AND Gentry beats Yazoo City AND Greenwood beats Louisville\n"
@@ -596,21 +596,21 @@ _EXPECTED_RENDER = {
         "1. Gentry beats Greenwood\n"
         "2. Louisville beats Greenwood\n"
         "\n"
-        "#2 seed if: (20.8%)\n"
+        "#2 seed if: (15.6%)\n"
         "1. Greenwood beats Louisville by 1\u20138 AND Greenwood beats Gentry\n"
         "2. Yazoo City beats Kosciusko AND Greenwood beats Louisville by 9 or more AND Greenwood beats Gentry\n"
         "\n"
-        "#3 seed if: (4.2%)\n"
+        "#3 seed if: (9.4%)\n"
         "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Greenwood beats Louisville by 9 or more"
     ),
     "Yazoo City": (
         "Yazoo City\n"
         "\n"
-        "#2 seed if: (7.3%)\n"
+        "#2 seed if: (10.8%)\n"
         "1. Yazoo City beats Kosciusko by 11 or more AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "2. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
-        "#3 seed if: (15.2%)\n"
+        "#3 seed if: (17.0%)\n"
         "1. Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Greenwood beats Louisville\n"
         "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Greenwood, then Gentry\n"
         "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Yazoo City level at the top, then Greenwood\n"
@@ -620,7 +620,7 @@ _EXPECTED_RENDER = {
         "7. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Yazoo City finishes ahead of both Gentry and Greenwood in their tie, which goes to fewest points allowed in region games (then a coin flip)\n"
         "8. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
-        "#4 seed if: (24.2%)\n"
+        "#4 seed if: (21.2%)\n"
         "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry\n"
         "2. Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville\n"
         "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood and Yazoo City level at the top, then Gentry\n"
@@ -632,7 +632,7 @@ _EXPECTED_RENDER = {
         "9. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Yazoo City finishes 2nd of the three in the tie with Gentry and Greenwood, which goes to fewest points allowed in region games (then a coin flip)\n"
         "10. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u20136 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
-        "Eliminated if: (53.3%)\n"
+        "Eliminated if: (51.1%)\n"
         "1. Gentry beats Yazoo City\n"
         "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry, then Yazoo City\n"
         "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Greenwood level at the top, then Yazoo City\n"

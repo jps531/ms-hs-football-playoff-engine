@@ -68,58 +68,58 @@ MCADAMS_EXPECTED = "McAdams\n\nEliminated. (100.0%)"
 LEAKE_COUNTY_EXPECTED = """\
 Leake County
 
-#2 seed if: (64.6%)
+#2 seed if: (55.4%)
 1. Leake County beats Noxapater
-2. Ethel beats Sebastopol AND Noxapater beats Leake County by 1\u20137
+2. Ethel beats Sebastopol AND Noxapater beats Leake County by 1–7
 
-#3 seed if: (35.4%)
+#3 seed if: (44.6%)
 1. Noxapater beats Leake County by 8 or more
 2. Sebastopol beats Ethel AND Noxapater beats Leake County"""
 
 NOXAPATER_EXPECTED = """\
 Noxapater
 
-#2 seed if: (35.4%)
+#2 seed if: (44.6%)
 1. Noxapater beats Leake County by 8 or more
 2. Sebastopol beats Ethel AND Noxapater beats Leake County
 
-#3 seed if: (27.1%)
-1. Ethel beats Sebastopol AND Noxapater beats Leake County by 1\u20137
-2. Sebastopol beats Ethel by 3\u20138 AND Leake County beats Noxapater
+#3 seed if: (10.4%)
+1. Ethel beats Sebastopol AND Noxapater beats Leake County by 1–7
+2. Sebastopol beats Ethel by 3–8 AND Leake County beats Noxapater
 
-#4 seed if: (37.5%)
+#4 seed if: (45.0%)
 1. Ethel beats Sebastopol AND Leake County beats Noxapater
-2. Sebastopol beats Ethel by 1\u20132 AND Leake County beats Noxapater
+2. Sebastopol beats Ethel by 1–2 AND Leake County beats Noxapater
 3. Sebastopol beats Ethel by 9 or more AND Leake County beats Noxapater"""
 
 ETHEL_EXPECTED = """\
 Ethel
 
-#3 seed if: (29.2%)
+#3 seed if: (26.1%)
 1. Ethel beats Sebastopol AND Leake County beats Noxapater
-2. Sebastopol beats Ethel by 1\u20132 AND Leake County beats Noxapater
+2. Sebastopol beats Ethel by 1–2 AND Leake County beats Noxapater
 
-#4 seed if: (29.2%)
+#4 seed if: (26.4%)
 1. Ethel beats Sebastopol AND Noxapater beats Leake County
-2. Sebastopol beats Ethel by 3\u20134 AND Leake County beats Noxapater
+2. Sebastopol beats Ethel by 3–4 AND Leake County beats Noxapater
 
-Eliminated if: (41.7%)
+Eliminated if: (47.4%)
 1. Sebastopol beats Ethel by 5 or more
 2. Sebastopol beats Ethel AND Noxapater beats Leake County"""
 
 SEBASTOPOL_EXPECTED = """\
 Sebastopol
 
-#3 seed if: (8.3%)
+#3 seed if: (18.9%)
 1. Sebastopol beats Ethel by 9 or more AND Leake County beats Noxapater
 
-#4 seed if: (33.3%)
-1. Sebastopol beats Ethel by 5\u20138
+#4 seed if: (28.5%)
+1. Sebastopol beats Ethel by 5–8
 2. Sebastopol beats Ethel AND Noxapater beats Leake County
 
-Eliminated if: (58.3%)
+Eliminated if: (52.6%)
 1. Ethel beats Sebastopol
-2. Sebastopol beats Ethel by 1\u20134 AND Leake County beats Noxapater"""
+2. Sebastopol beats Ethel by 1–4 AND Leake County beats Noxapater"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — seed key structure
@@ -452,18 +452,18 @@ def test_team_dict_sebastopol_seed_keys():
 
 
 def test_team_dict_leake_county_odds():
-    """Leake County: p2≈64.6%, p3≈35.4%."""
+    """Leake County: #2 55.4%, #3 44.6%."""
     lc = _TEAM_DICT["Leake County"]
-    assert lc[2]["odds"] == pytest.approx(0.6458333333333334, abs=1e-9)
-    assert lc[3]["odds"] == pytest.approx(0.3541666666666667, abs=1e-9)
+    assert lc[2]["odds"] == pytest.approx(0.554347826, abs=1e-9)
+    assert lc[3]["odds"] == pytest.approx(0.445652174, abs=1e-9)
 
 
 def test_team_dict_noxapater_odds():
-    """Noxapater: p2≈35.4%, p3≈27.1%, p4≈37.5%."""
+    """Noxapater: #2 44.6%, #3 10.4%, #4 45.0%."""
     nx = _TEAM_DICT["Noxapater"]
-    assert nx[2]["odds"] == pytest.approx(0.3541666666666667, abs=1e-9)
-    assert nx[3]["odds"] == pytest.approx(0.2708333333333333, abs=1e-9)
-    assert nx[4]["odds"] == pytest.approx(0.375, abs=1e-9)
+    assert nx[2]["odds"] == pytest.approx(0.445652174, abs=1e-9)
+    assert nx[3]["odds"] == pytest.approx(0.104037267, abs=1e-9)
+    assert nx[4]["odds"] == pytest.approx(0.450310559, abs=1e-9)
 
 
 def test_team_dict_noxapater_odds_sum_to_one():
@@ -474,19 +474,19 @@ def test_team_dict_noxapater_odds_sum_to_one():
 
 
 def test_team_dict_ethel_odds():
-    """Ethel: p3≈29.2%, p4≈29.2%, eliminated≈41.7%."""
+    """Ethel: #3 26.1%, #4 26.4%, eliminated 47.4%."""
     e = _TEAM_DICT["Ethel"]
-    assert e[3]["odds"] == pytest.approx(0.2916666666666667, abs=1e-9)
-    assert e[4]["odds"] == pytest.approx(0.2916666666666667, abs=1e-9)
-    assert e["eliminated"]["odds"] == pytest.approx(0.4166666666666667, abs=1e-9)
+    assert e[3]["odds"] == pytest.approx(0.261387164, abs=1e-9)
+    assert e[4]["odds"] == pytest.approx(0.264492754, abs=1e-9)
+    assert e["eliminated"]["odds"] == pytest.approx(0.474120083, abs=1e-9)
 
 
 def test_team_dict_sebastopol_odds():
-    """Sebastopol: p3≈8.3%, p4≈33.3%, eliminated≈58.3%."""
+    """Sebastopol: #3 18.9%, #4 28.5%, eliminated 52.6%."""
     s = _TEAM_DICT["Sebastopol"]
-    assert s[3]["odds"] == pytest.approx(0.08333333333333333, abs=1e-9)
-    assert s[4]["odds"] == pytest.approx(0.3333333333333333, abs=1e-9)
-    assert s["eliminated"]["odds"] == pytest.approx(0.5833333333333334, abs=1e-9)
+    assert s[3]["odds"] == pytest.approx(0.188923395, abs=1e-9)
+    assert s[4]["odds"] == pytest.approx(0.285196687, abs=1e-9)
+    assert s["eliminated"]["odds"] == pytest.approx(0.525879917, abs=1e-9)
 
 
 def test_team_dict_all_weighted_odds_none():

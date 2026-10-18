@@ -72,40 +72,40 @@ MYRTLE_EXPECTED = "Myrtle\n\nClinched #2 seed. (100.0%)"
 BRUCE_EXPECTED = """\
 Bruce
 
-#3 seed if: (8.3%)
+#3 seed if: (18.9%)
 1. Bruce beats Strayhorn by 9 or more AND Water Valley beats East Union
 
-#4 seed if: (33.3%)
-1. Bruce beats Strayhorn by 5\u20138
+#4 seed if: (28.5%)
+1. Bruce beats Strayhorn by 5–8
 2. Bruce beats Strayhorn AND East Union beats Water Valley
 
-Eliminated if: (58.3%)
+Eliminated if: (52.6%)
 1. Strayhorn beats Bruce
-2. Bruce beats Strayhorn by 1\u20134 AND Water Valley beats East Union"""
+2. Bruce beats Strayhorn by 1–4 AND Water Valley beats East Union"""
 
 EAST_UNION_EXPECTED = """\
 East Union
 
-#3 seed if: (37.5%)
-1. Bruce beats Strayhorn by 3\u20138
+#3 seed if: (30.0%)
+1. Bruce beats Strayhorn by 3–8
 2. Bruce beats Strayhorn AND East Union beats Water Valley
 
-#4 seed if: (62.5%)
+#4 seed if: (70.0%)
 1. Strayhorn beats Bruce
-2. Bruce beats Strayhorn by 1\u20132 AND Water Valley beats East Union
+2. Bruce beats Strayhorn by 1–2 AND Water Valley beats East Union
 3. Bruce beats Strayhorn by 9 or more AND Water Valley beats East Union"""
 
 STRAYHORN_EXPECTED = """\
 Strayhorn
 
-#3 seed if: (54.2%)
+#3 seed if: (51.1%)
 1. Strayhorn beats Bruce
-2. Bruce beats Strayhorn by 1\u20132 AND Water Valley beats East Union
+2. Bruce beats Strayhorn by 1–2 AND Water Valley beats East Union
 
-#4 seed if: (4.2%)
-1. Bruce beats Strayhorn by 3\u20134 AND Water Valley beats East Union
+#4 seed if: (1.4%)
+1. Bruce beats Strayhorn by 3–4 AND Water Valley beats East Union
 
-Eliminated if: (41.7%)
+Eliminated if: (47.4%)
 1. Bruce beats Strayhorn by 5 or more
 2. Bruce beats Strayhorn AND East Union beats Water Valley"""
 
@@ -565,11 +565,11 @@ def test_team_dict_myrtle():
 
 
 def test_team_dict_bruce_odds():
-    """Bruce: p3≈8.3%, p4≈33.3%, eliminated≈58.3%."""
+    """Bruce: #3 18.9%, #4 28.5%, eliminated 52.6%."""
     b = _TEAM_DICT["Bruce"]
-    assert b[3]["odds"] == pytest.approx(1 / 12, abs=1e-9)
-    assert b[4]["odds"] == pytest.approx(4 / 12, abs=1e-9)
-    assert b["eliminated"]["odds"] == pytest.approx(7 / 12, abs=1e-9)
+    assert b[3]["odds"] == pytest.approx(0.188923395, abs=1e-9)
+    assert b[4]["odds"] == pytest.approx(0.285196687, abs=1e-9)
+    assert b["eliminated"]["odds"] == pytest.approx(0.525879917, abs=1e-9)
 
 
 def test_team_dict_bruce_odds_sum_to_one():
@@ -578,19 +578,19 @@ def test_team_dict_bruce_odds_sum_to_one():
 
 
 def test_team_dict_east_union_odds():
-    """East Union: p3≈37.5%, p4≈62.5% — never eliminated."""
+    """East Union: #3 30.0%, #4 70.0%."""
     eu = _TEAM_DICT["East Union"]
-    assert eu[3]["odds"] == pytest.approx(0.375, abs=1e-9)
-    assert eu[4]["odds"] == pytest.approx(0.625, abs=1e-9)
+    assert eu[3]["odds"] == pytest.approx(0.299689441, abs=1e-9)
+    assert eu[4]["odds"] == pytest.approx(0.700310559, abs=1e-9)
     assert "eliminated" not in eu
 
 
 def test_team_dict_strayhorn_odds():
-    """Strayhorn: p3≈54.2%, p4≈4.2%, eliminated≈41.7%."""
+    """Strayhorn: #3 51.1%, #4 1.4%, eliminated 47.4%."""
     s = _TEAM_DICT["Strayhorn"]
-    assert s[3]["odds"] == pytest.approx(13 / 24, abs=1e-9)
-    assert s[4]["odds"] == pytest.approx(1 / 24, abs=1e-9)
-    assert s["eliminated"]["odds"] == pytest.approx(10 / 24, abs=1e-9)
+    assert s[3]["odds"] == pytest.approx(0.511387164, abs=1e-9)
+    assert s[4]["odds"] == pytest.approx(0.014492754, abs=1e-9)
+    assert s["eliminated"]["odds"] == pytest.approx(0.474120083, abs=1e-9)
 
 
 def test_team_dict_strayhorn_odds_sum_to_one():

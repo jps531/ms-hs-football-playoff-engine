@@ -88,38 +88,38 @@ _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
 FALKNER_EXPECTED = """\
 Falkner
 
-#1 seed if: (72.9%)
+#1 seed if: (59.1%)
 1. Falkner beats Potts Camp
 2. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
 3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
-#2 seed if: (27.0%)
+#2 seed if: (38.9%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
 3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes 2nd of the three in the tie with H. W. Byers and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
 
-#3 seed if: (<0.1%)
+#3 seed if: (2.0%)
 1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes behind both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
 
 HWB_EXPECTED = """\
 H. W. Byers
 
-#1 seed if: (<0.1%)
+#1 seed if: (0.7%)
 1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes ahead of both Falkner and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
-#2 seed if: (70.9%)
+#2 seed if: (41.0%)
 1. Falkner beats Potts Camp AND H. W. Byers beats Ashland
 2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
 3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes ahead of both Ashland and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
 4. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
 5. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes 2nd of the three in the tie with Falkner and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
 
-#3 seed if: (2.1%)
+#3 seed if: (16.4%)
 1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes 2nd of the three in the tie with Ashland and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
 3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes behind both Falkner and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
-#4 seed if: (27.1%)
+#4 seed if: (41.8%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
 3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes behind both Ashland and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
@@ -127,38 +127,38 @@ H. W. Byers
 POTTS_CAMP_EXPECTED = """\
 Potts Camp
 
-#1 seed if: (27.0%)
+#1 seed if: (40.2%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
 3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes ahead of both Falkner and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
-#2 seed if: (2.0%)
+#2 seed if: (11.6%)
 1. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
 2. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes ahead of both Ashland and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
 3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes 2nd of the three in the tie with Falkner and H. W. Byers, which goes to fewest points allowed in region games (then a coin flip)
 
-#3 seed if: (70.9%)
+#3 seed if: (47.3%)
 1. Falkner beats Potts Camp AND H. W. Byers beats Ashland
 2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
 3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes 2nd of the three in the tie with Ashland and H. W. Byers, which goes to fewest points allowed in region games (then a coin flip)
 4. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
 5. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes behind both Falkner and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
-#4 seed if: (<0.1%)
+#4 seed if: (0.9%)
 1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes behind both Ashland and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
 
 ASHLAND_EXPECTED = """\
 Ashland
 
-#2 seed if: (0.1%)
+#2 seed if: (8.4%)
 1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
 
-#3 seed if: (27.0%)
+#3 seed if: (34.3%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
 3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes 2nd of the three in the tie with H. W. Byers and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
 
-#4 seed if: (72.9%)
+#4 seed if: (57.3%)
 1. H. W. Byers beats Ashland
 2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
 3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes behind both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
@@ -561,33 +561,33 @@ def test_team_dict_weighted_odds_none():
 
 
 def test_team_dict_falkner_odds():
-    """Falkner: #1 72.94%, #2 27.03%, #3 0.03%; the small shares are ties left to fewest points allowed."""
-    assert _TEAM_DICT["Falkner"][1]["odds"] == pytest.approx(0.729415, abs=1e-6)
-    assert _TEAM_DICT["Falkner"][2]["odds"] == pytest.approx(0.270312, abs=1e-6)
-    assert _TEAM_DICT["Falkner"][3]["odds"] == pytest.approx(0.000273, abs=1e-6)
+    """Falkner: #1 59.1%, #2 38.9%, #3 2.0%."""
+    assert _TEAM_DICT["Falkner"][1]["odds"] == pytest.approx(0.590887422, abs=1e-6)
+    assert _TEAM_DICT["Falkner"][2]["odds"] == pytest.approx(0.389415918, abs=1e-6)
+    assert _TEAM_DICT["Falkner"][3]["odds"] == pytest.approx(0.019696661, abs=1e-6)
 
 
 def test_team_dict_hwb_odds():
-    """H. W. Byers: #1 0.01%, #2 70.85%, #3 2.07%, #4 27.07%; the small shares are ties left to fewest points allowed."""
-    assert _TEAM_DICT["H. W. Byers"][1]["odds"] == pytest.approx(0.000099, abs=1e-6)
-    assert _TEAM_DICT["H. W. Byers"][2]["odds"] == pytest.approx(0.708532, abs=1e-6)
-    assert _TEAM_DICT["H. W. Byers"][3]["odds"] == pytest.approx(0.020660, abs=1e-6)
-    assert _TEAM_DICT["H. W. Byers"][4]["odds"] == pytest.approx(0.270709, abs=1e-6)
+    """H. W. Byers: #1 0.7%, #2 41.0%, #3 16.4%, #4 41.8%."""
+    assert _TEAM_DICT["H. W. Byers"][1]["odds"] == pytest.approx(0.007162422, abs=1e-6)
+    assert _TEAM_DICT["H. W. Byers"][2]["odds"] == pytest.approx(0.410287577, abs=1e-6)
+    assert _TEAM_DICT["H. W. Byers"][3]["odds"] == pytest.approx(0.164484395, abs=1e-6)
+    assert _TEAM_DICT["H. W. Byers"][4]["odds"] == pytest.approx(0.418065606, abs=1e-6)
 
 
 def test_team_dict_potts_camp_odds():
-    """Potts Camp: #1 27.05%, #2 2.00%, #3 70.94%, #4 0.01%; the small shares are ties left to fewest points allowed."""
-    assert _TEAM_DICT["Potts Camp"][1]["odds"] == pytest.approx(0.270486, abs=1e-6)
-    assert _TEAM_DICT["Potts Camp"][2]["odds"] == pytest.approx(0.019990, abs=1e-6)
-    assert _TEAM_DICT["Potts Camp"][3]["odds"] == pytest.approx(0.709400, abs=1e-6)
-    assert _TEAM_DICT["Potts Camp"][4]["odds"] == pytest.approx(0.000124, abs=1e-6)
+    """Potts Camp: #1 40.2%, #2 11.6%, #3 47.3%, #4 0.9%."""
+    assert _TEAM_DICT["Potts Camp"][1]["odds"] == pytest.approx(0.401950156, abs=1e-6)
+    assert _TEAM_DICT["Potts Camp"][2]["odds"] == pytest.approx(0.116138046, abs=1e-6)
+    assert _TEAM_DICT["Potts Camp"][3]["odds"] == pytest.approx(0.47295877, abs=1e-6)
+    assert _TEAM_DICT["Potts Camp"][4]["odds"] == pytest.approx(0.008953028, abs=1e-6)
 
 
 def test_team_dict_ashland_odds():
-    """Ashland: #2 0.12%, #3 26.97%, #4 72.92%; the small shares are ties left to fewest points allowed."""
-    assert _TEAM_DICT["Ashland"][2]["odds"] == pytest.approx(0.001166, abs=1e-6)
-    assert _TEAM_DICT["Ashland"][3]["odds"] == pytest.approx(0.269668, abs=1e-6)
-    assert _TEAM_DICT["Ashland"][4]["odds"] == pytest.approx(0.729167, abs=1e-6)
+    """Ashland: #2 8.4%, #3 34.3%, #4 57.3%."""
+    assert _TEAM_DICT["Ashland"][2]["odds"] == pytest.approx(0.084158459, abs=1e-6)
+    assert _TEAM_DICT["Ashland"][3]["odds"] == pytest.approx(0.342860174, abs=1e-6)
+    assert _TEAM_DICT["Ashland"][4]["odds"] == pytest.approx(0.572981366, abs=1e-6)
 
 
 def test_team_dict_odds_sum_to_one():

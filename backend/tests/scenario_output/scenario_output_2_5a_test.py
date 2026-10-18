@@ -120,23 +120,23 @@ Lanier
 #1 seed if: (25.0%)
 1. Provine beats Cleveland Central AND Lanier beats Vicksburg
 
-#2 seed if: (41.7%)
+#2 seed if: (31.1%)
 1. Cleveland Central beats Provine AND Lanier beats Vicksburg
-2. Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20138
+2. Holmes County Central beats Florence AND Vicksburg beats Lanier by 1–8
 
-#3 seed if: (33.3%)
+#3 seed if: (43.9%)
 1. Vicksburg beats Lanier by 9 or more
 2. Florence beats Holmes County Central AND Vicksburg beats Lanier"""
 
 VICKSBURG_EXPECTED = """\
 Vicksburg
 
-#2 seed if: (33.3%)
+#2 seed if: (43.9%)
 1. Vicksburg beats Lanier by 9 or more
 2. Florence beats Holmes County Central AND Vicksburg beats Lanier
 
-#3 seed if: (16.7%)
-1. Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20138
+#3 seed if: (6.1%)
+1. Holmes County Central beats Florence AND Vicksburg beats Lanier by 1–8
 
 #4 seed if: (25.0%)
 1. Holmes County Central beats Florence AND Lanier beats Vicksburg
@@ -657,17 +657,12 @@ def test_odds_cleveland_central():
 
 
 def test_odds_lanier():
-    """Lanier has clinched with p1=1/4, p2=5/12, p3=1/3.
-
-    The margin boundary shifted from VB-by-9 giving Lanier #2 (old, buggy) to
-    VB-by-9 giving Vicksburg #2 (new, correct — VB beat LAN, so H2H restart
-    at Step 1 resolves the sub-group in VB's favour).
-    """
+    """Lanier: clinched; #1 25.0%, #2 31.1%, #3 43.9%, #4 0.0%, playoffs 100.0%."""
     o = _ODDS["Lanier"]
     assert o.clinched is True
     assert o.p1 == pytest.approx(1 / 4)
-    assert o.p2 == pytest.approx(5 / 12)
-    assert o.p3 == pytest.approx(1 / 3)
+    assert o.p2 == pytest.approx(0.311076605)
+    assert o.p3 == pytest.approx(0.438923395)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 
@@ -692,11 +687,11 @@ def test_odds_hcc():
 
 
 def test_odds_vicksburg():
-    """Vicksburg: p2=1/3, p3=1/6, p4=1/4, p_playoffs=3/4."""
+    """Vicksburg: #2 43.9%, #3 6.1%, #4 25.0%, playoffs 75.0%."""
     o = _ODDS["Vicksburg"]
     assert o.clinched is False
-    assert o.p2 == pytest.approx(1 / 3)
-    assert o.p3 == pytest.approx(1 / 6)
+    assert o.p2 == pytest.approx(0.438923395)
+    assert o.p3 == pytest.approx(0.061076605)
     assert o.p4 == pytest.approx(1 / 4)
     assert o.p_playoffs == pytest.approx(3 / 4)
 

@@ -15,10 +15,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Biggersville / Tupelo Christian / Smithville / Thrasher
     (1, 1): {
         "denom": 4,
-        "first_counts": Counter({"Biggersville": 4}),
-        "second_counts": Counter({"Tupelo Christian": 2, "Smithville": 2}),
-        "third_counts": Counter({"Smithville": 2, "Tupelo Christian": 2}),
-        "fourth_counts": Counter({"Thrasher": 4}),
+        "first_counts": Counter({"Biggersville": 4.0}),
+        "second_counts": Counter({"Smithville": 2.0, "Tupelo Christian": 2.0}),
+        "third_counts": Counter({"Smithville": 2.0, "Tupelo Christian": 2.0}),
+        "fourth_counts": Counter({"Thrasher": 4.0}),
         "odds": {
             "Biggersville": StandingsOdds(
                 school="Biggersville",
@@ -74,68 +74,68 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     (1, 2): {
         "denom": 4,
         "first_counts": Counter(
-            {"Falkner": 2.9176587301587458, "Potts Camp": 1.0819444444444417, "H. W. Byers": 0.00039682539682539677}
+            {"Falkner": 2.363549686685375, "Potts Camp": 1.6078006249758883, "H. W. Byers": 0.028649688338743547}
         ),
         "second_counts": Counter(
             {
-                "H. W. Byers": 2.834126984127005,
-                "Falkner": 1.0812499999999972,
-                "Potts Camp": 0.07996031746031747,
-                "Ashland": 0.004662698412698413,
+                "H. W. Byers": 1.641150308354506,
+                "Falkner": 1.5576636703830873,
+                "Potts Camp": 0.4645521832821702,
+                "Ashland": 0.33663383798023666,
             }
         ),
         "third_counts": Counter(
             {
-                "Potts Camp": 2.837599206349223,
-                "Ashland": 1.0786706349206348,
-                "H. W. Byers": 0.08263888888888889,
-                "Falkner": 0.0010912698412698413,
+                "Potts Camp": 1.891835081318516,
+                "Ashland": 1.3714406961812564,
+                "H. W. Byers": 0.6579375795686887,
+                "Falkner": 0.07878664293154475,
             }
         ),
         "fourth_counts": Counter(
-            {"Ashland": 2.91666666666669, "H. W. Byers": 1.082837301587306, "Potts Camp": 0.000496031746031746}
+            {"Ashland": 2.2919254658385086, "H. W. Byers": 1.6722624237380677, "Potts Camp": 0.03581211042342943}
         ),
         "odds": {
             "Ashland": StandingsOdds(
                 school="Ashland",
                 p1=0.0,
-                p2=0.0011656746031746032,
-                p3=0.2696676587301587,
-                p4=0.7291666666666725,
-                p_playoffs=1.0000000000000058,
+                p2=0.084158459495,
+                p3=0.342860174045,
+                p4=0.57298136646,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
             ),
             "Falkner": StandingsOdds(
                 school="Falkner",
-                p1=0.7294146825396864,
-                p2=0.2703124999999993,
-                p3=0.0002728174603174603,
+                p1=0.590887421671,
+                p2=0.389415917596,
+                p3=0.019696660733,
                 p4=0.0,
-                p_playoffs=1.000000000000003,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
             ),
             "H. W. Byers": StandingsOdds(
                 school="H. W. Byers",
-                p1=9.920634920634919e-05,
-                p2=0.7085317460317513,
-                p3=0.02065972222222222,
-                p4=0.2707093253968265,
-                p_playoffs=1.0000000000000064,
+                p1=0.007162422085,
+                p2=0.410287577089,
+                p3=0.164484394892,
+                p4=0.418065605935,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
             ),
             "Potts Camp": StandingsOdds(
                 school="Potts Camp",
-                p1=0.2704861111111104,
-                p2=0.019990079365079367,
-                p3=0.7093998015873058,
-                p4=0.0001240079365079365,
-                p_playoffs=1.0000000000000036,
+                p1=0.401950156244,
+                p2=0.116138045821,
+                p3=0.47295877033,
+                p4=0.008953027606,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -148,10 +148,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Calhoun City / West Lowndes / Okolona / Vardaman
     (1, 3): {
         "denom": 4,
-        "first_counts": Counter({"West Lowndes": 2, "Calhoun City": 2}),
-        "second_counts": Counter({"Calhoun City": 2, "West Lowndes": 2}),
-        "third_counts": Counter({"Vardaman": 2, "Okolona": 2}),
-        "fourth_counts": Counter({"Okolona": 2, "Vardaman": 2}),
+        "first_counts": Counter({"Calhoun City": 2.0, "West Lowndes": 2.0}),
+        "second_counts": Counter({"Calhoun City": 2.0, "West Lowndes": 2.0}),
+        "third_counts": Counter({"Okolona": 2.0, "Vardaman": 2.0}),
+        "fourth_counts": Counter({"Okolona": 2.0, "Vardaman": 2.0}),
         "odds": {
             "Calhoun City": StandingsOdds(
                 school="Calhoun City",
@@ -205,10 +205,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Leflore County / West Tallahatchie / Coffeeville / French Camp
     (1, 4): {
         "denom": 4,
-        "first_counts": Counter({"West Tallahatchie": 2, "Leflore County": 2}),
-        "second_counts": Counter({"Leflore County": 2, "West Tallahatchie": 2}),
-        "third_counts": Counter({"French Camp": 2, "Coffeeville": 2}),
-        "fourth_counts": Counter({"Coffeeville": 2, "French Camp": 2}),
+        "first_counts": Counter({"Leflore County": 2.0, "West Tallahatchie": 2.0}),
+        "second_counts": Counter({"Leflore County": 2.0, "West Tallahatchie": 2.0}),
+        "third_counts": Counter({"Coffeeville": 2.0, "French Camp": 2.0}),
+        "fourth_counts": Counter({"Coffeeville": 2.0, "French Camp": 2.0}),
         "odds": {
             "Coffeeville": StandingsOdds(
                 school="Coffeeville",
@@ -262,34 +262,36 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Nanih Waiya / Leake County / Ethel / Noxapater
     (1, 5): {
         "denom": 8,
-        "first_counts": Counter({"Nanih Waiya": 8.0}),
-        "second_counts": Counter({"Leake County": 5.166666666666666, "Noxapater": 2.8333333333333335}),
+        "first_counts": Counter({"Nanih Waiya": 7.999999999999985}),
+        "second_counts": Counter({"Leake County": 4.434782608695652, "Noxapater": 3.5652173913043486}),
         "third_counts": Counter(
             {
-                "Leake County": 2.8333333333333335,
-                "Ethel": 2.3333333333333335,
-                "Noxapater": 2.1666666666666665,
-                "Sebastopol": 0.6666666666666666,
+                "Leake County": 3.5652173913043486,
+                "Ethel": 2.091097308488613,
+                "Sebastopol": 1.5113871635610767,
+                "Noxapater": 0.8322981366459632,
             }
         ),
-        "fourth_counts": Counter({"Noxapater": 3.0, "Sebastopol": 2.6666666666666665, "Ethel": 2.333333333333333}),
+        "fourth_counts": Counter(
+            {"Noxapater": 3.6024844720496887, "Sebastopol": 2.2815734989648035, "Ethel": 2.1159420289855078}
+        ),
         "odds": {
             "Ethel": StandingsOdds(
                 school="Ethel",
                 p1=0.0,
                 p2=0.0,
-                p3=0.2916666666666667,
-                p4=0.29166666666666663,
-                p_playoffs=0.5833333333333333,
-                final_playoffs=0.5833333333333333,
+                p3=0.261387163561,
+                p4=0.264492753623,
+                p_playoffs=0.525879917184,
+                final_playoffs=0.525879917184,
                 clinched=False,
                 eliminated=False,
             ),
             "Leake County": StandingsOdds(
                 school="Leake County",
                 p1=0.0,
-                p2=0.6458333333333333,
-                p3=0.3541666666666667,
+                p2=0.554347826087,
+                p3=0.445652173913,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -321,9 +323,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Noxapater": StandingsOdds(
                 school="Noxapater",
                 p1=0.0,
-                p2=0.3541666666666667,
-                p3=0.2708333333333333,
-                p4=0.375,
+                p2=0.445652173913,
+                p3=0.104037267081,
+                p4=0.450310559006,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -333,10 +335,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Sebastopol",
                 p1=0.0,
                 p2=0.0,
-                p3=0.08333333333333333,
-                p4=0.3333333333333333,
-                p_playoffs=0.41666666666666663,
-                final_playoffs=0.41666666666666663,
+                p3=0.188923395445,
+                p4=0.285196687371,
+                p_playoffs=0.474120082816,
+                final_playoffs=0.474120082816,
                 clinched=False,
                 eliminated=False,
             ),
@@ -350,17 +352,17 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
         "denom": 4,
         "first_counts": Counter({"Simmons": 4.0}),
         "second_counts": Counter({"South Delta": 4.0}),
-        "third_counts": Counter({"Shaw": 2, "West Bolivar": 1.9999999999999998}),
-        "fourth_counts": Counter({"West Bolivar": 2, "Riverside": 1.3333333333333333, "Shaw": 0.6666666666666666}),
+        "third_counts": Counter({"Shaw": 2.0, "West Bolivar": 1.9999999999999998}),
+        "fourth_counts": Counter({"West Bolivar": 2.0, "Riverside": 1.7556935817805384, "Shaw": 0.2443064182194617}),
         "odds": {
             "Riverside": StandingsOdds(
                 school="Riverside",
                 p1=0.0,
                 p2=0.0,
                 p3=0.0,
-                p4=0.3333333333333333,
-                p_playoffs=0.3333333333333333,
-                final_playoffs=0.3333333333333333,
+                p4=0.438923395445,
+                p_playoffs=0.438923395445,
+                final_playoffs=0.438923395445,
                 clinched=False,
                 eliminated=False,
             ),
@@ -369,9 +371,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 p1=0.0,
                 p2=0.0,
                 p3=0.5,
-                p4=0.16666666666666666,
-                p_playoffs=0.6666666666666666,
-                final_playoffs=0.6666666666666666,
+                p4=0.061076604555,
+                p_playoffs=0.561076604555,
+                final_playoffs=0.561076604555,
                 clinched=False,
                 eliminated=False,
             ),
@@ -401,7 +403,7 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="West Bolivar",
                 p1=0.0,
                 p2=0.0,
-                p3=0.49999999999999994,
+                p3=0.5,
                 p4=0.5,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -416,10 +418,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Bogue Chitto / Salem / Mount Olive / West Lincoln
     (1, 7): {
         "denom": 4,
-        "first_counts": Counter({"Salem": 2, "Bogue Chitto": 2}),
-        "second_counts": Counter({"Bogue Chitto": 2, "Salem": 2}),
-        "third_counts": Counter({"West Lincoln": 2, "Mount Olive": 2}),
-        "fourth_counts": Counter({"Mount Olive": 2, "West Lincoln": 2}),
+        "first_counts": Counter({"Bogue Chitto": 2.0, "Salem": 2.0}),
+        "second_counts": Counter({"Bogue Chitto": 2.0, "Salem": 2.0}),
+        "third_counts": Counter({"Mount Olive": 2.0, "West Lincoln": 2.0}),
+        "fourth_counts": Counter({"Mount Olive": 2.0, "West Lincoln": 2.0}),
         "odds": {
             "Bogue Chitto": StandingsOdds(
                 school="Bogue Chitto",
@@ -473,16 +475,16 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Taylorsville / Stringer / Lumberton / Richton
     (1, 8): {
         "denom": 4,
-        "first_counts": Counter({"Taylorsville": 2.9166666666666665, "Lumberton": 1.0833333333333333}),
-        "second_counts": Counter({"Stringer": 2.9166666666666665, "Taylorsville": 1.0833333333333333}),
-        "third_counts": Counter({"Lumberton": 2.9166666666666665, "Stringer": 1.0833333333333333}),
-        "fourth_counts": Counter({"Richton": 4.0}),
+        "first_counts": Counter({"Taylorsville": 2.2919254658385086, "Lumberton": 1.7080745341614907}),
+        "second_counts": Counter({"Stringer": 2.2919254658385086, "Taylorsville": 1.7080745341614907}),
+        "third_counts": Counter({"Lumberton": 2.2919254658385086, "Stringer": 1.7080745341614907}),
+        "fourth_counts": Counter({"Richton": 3.999999999999999}),
         "odds": {
             "Lumberton": StandingsOdds(
                 school="Lumberton",
-                p1=0.2708333333333333,
+                p1=0.42701863354,
                 p2=0.0,
-                p3=0.7291666666666666,
+                p3=0.57298136646,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -514,8 +516,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Stringer": StandingsOdds(
                 school="Stringer",
                 p1=0.0,
-                p2=0.7291666666666666,
-                p3=0.2708333333333333,
+                p2=0.57298136646,
+                p3=0.42701863354,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -524,8 +526,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Taylorsville": StandingsOdds(
                 school="Taylorsville",
-                p1=0.7291666666666666,
-                p2=0.2708333333333333,
+                p1=0.57298136646,
+                p2=0.42701863354,
                 p3=0.0,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -541,10 +543,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Baldwyn / Hamilton / Hatley / Walnut
     (2, 1): {
         "denom": 4,
-        "first_counts": Counter({"Baldwyn": 4}),
-        "second_counts": Counter({"Hatley": 2, "Hamilton": 2}),
-        "third_counts": Counter({"Hamilton": 2, "Hatley": 2}),
-        "fourth_counts": Counter({"Walnut": 4}),
+        "first_counts": Counter({"Baldwyn": 4.0}),
+        "second_counts": Counter({"Hamilton": 2.0, "Hatley": 2.0}),
+        "third_counts": Counter({"Hamilton": 2.0, "Hatley": 2.0}),
+        "fourth_counts": Counter({"Walnut": 4.0}),
         "odds": {
             "Baldwyn": StandingsOdds(
                 school="Baldwyn",
@@ -598,19 +600,23 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Water Valley / Myrtle / Strayhorn / East Union
     (2, 2): {
         "denom": 4,
-        "first_counts": Counter({"Water Valley": 4.0}),
-        "second_counts": Counter({"Myrtle": 4.0}),
-        "third_counts": Counter({"Strayhorn": 2.166666666666667, "East Union": 1.5, "Bruce": 0.3333333333333333}),
-        "fourth_counts": Counter({"East Union": 2.5, "Bruce": 1.3333333333333333, "Strayhorn": 0.16666666666666666}),
+        "first_counts": Counter({"Water Valley": 3.999999999999999}),
+        "second_counts": Counter({"Myrtle": 3.999999999999999}),
+        "third_counts": Counter(
+            {"Strayhorn": 2.045548654244306, "East Union": 1.1987577639751552, "Bruce": 0.7556935817805384}
+        ),
+        "fourth_counts": Counter(
+            {"East Union": 2.8012422360248443, "Bruce": 1.1407867494824018, "Strayhorn": 0.057971014492753624}
+        ),
         "odds": {
             "Bruce": StandingsOdds(
                 school="Bruce",
                 p1=0.0,
                 p2=0.0,
-                p3=0.08333333333333333,
-                p4=0.3333333333333333,
-                p_playoffs=0.41666666666666663,
-                final_playoffs=0.41666666666666663,
+                p3=0.188923395445,
+                p4=0.285196687371,
+                p_playoffs=0.474120082816,
+                final_playoffs=0.474120082816,
                 clinched=False,
                 eliminated=False,
             ),
@@ -618,8 +624,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="East Union",
                 p1=0.0,
                 p2=0.0,
-                p3=0.375,
-                p4=0.625,
+                p3=0.299689440994,
+                p4=0.700310559006,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -640,10 +646,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Strayhorn",
                 p1=0.0,
                 p2=0.0,
-                p3=0.5416666666666667,
-                p4=0.041666666666666664,
-                p_playoffs=0.5833333333333334,
-                final_playoffs=0.5833333333333334,
+                p3=0.511387163561,
+                p4=0.014492753623,
+                p_playoffs=0.525879917184,
+                final_playoffs=0.525879917184,
                 clinched=False,
                 eliminated=False,
             ),
@@ -666,10 +672,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Charleston / Northside / J Z George / Leland
     (2, 3): {
         "denom": 4,
-        "first_counts": Counter({"Charleston": 4}),
-        "second_counts": Counter({"Northside": 4}),
-        "third_counts": Counter({"Leland": 2, "J Z George": 2}),
-        "fourth_counts": Counter({"J Z George": 2, "Leland": 2}),
+        "first_counts": Counter({"Charleston": 4.0}),
+        "second_counts": Counter({"Northside": 4.0}),
+        "third_counts": Counter({"J Z George": 2.0, "Leland": 2.0}),
+        "fourth_counts": Counter({"J Z George": 2.0, "Leland": 2.0}),
         "odds": {
             "Charleston": StandingsOdds(
                 school="Charleston",
@@ -734,10 +740,12 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: East Webster / Kemper County / Velma Jackson / Philadelphia
     (2, 4): {
         "denom": 4,
-        "first_counts": Counter({"East Webster": 4.0}),
-        "second_counts": Counter({"Kemper County": 3.0, "Philadelphia": 1.0}),
-        "third_counts": Counter({"Velma Jackson": 2, "Philadelphia": 1.0, "Kemper County": 1.0}),
-        "fourth_counts": Counter({"Velma Jackson": 2.0, "Philadelphia": 2}),
+        "first_counts": Counter({"East Webster": 3.9999999999999996}),
+        "second_counts": Counter({"Kemper County": 2.3312629399585925, "Philadelphia": 1.668737060041408}),
+        "third_counts": Counter(
+            {"Velma Jackson": 2.0, "Kemper County": 1.668737060041408, "Philadelphia": 0.33126293995859213}
+        ),
+        "fourth_counts": Counter({"Philadelphia": 2.0, "Velma Jackson": 1.9999999999999998}),
         "odds": {
             "East Webster": StandingsOdds(
                 school="East Webster",
@@ -764,8 +772,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Kemper County": StandingsOdds(
                 school="Kemper County",
                 p1=0.0,
-                p2=0.75,
-                p3=0.25,
+                p2=0.58281573499,
+                p3=0.41718426501,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -775,8 +783,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Philadelphia": StandingsOdds(
                 school="Philadelphia",
                 p1=0.0,
-                p2=0.25,
-                p3=0.25,
+                p2=0.41718426501,
+                p3=0.08281573499,
                 p4=0.5,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -802,18 +810,18 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Scott Central / Lake / Pelahatchie / Newton
     (2, 5): {
         "denom": 4,
-        "first_counts": Counter({"Lake": 2.333333333333333, "Scott Central": 1.6666666666666665}),
-        "second_counts": Counter({"Pelahatchie": 2, "Lake": 1.6666666666666665, "Scott Central": 0.3333333333333333}),
-        "third_counts": Counter({"Pelahatchie": 2.0, "Scott Central": 2}),
-        "fourth_counts": Counter({"Newton": 4.0}),
+        "first_counts": Counter({"Lake": 2.10351966873706, "Scott Central": 1.89648033126294}),
+        "second_counts": Counter({"Pelahatchie": 2.0, "Lake": 1.89648033126294, "Scott Central": 0.10351966873706005}),
+        "third_counts": Counter({"Scott Central": 2.0, "Pelahatchie": 1.9999999999999998}),
+        "fourth_counts": Counter({"Newton": 3.999999999999999}),
         "odds": {
             "Lake": StandingsOdds(
                 school="Lake",
-                p1=0.5833333333333333,
-                p2=0.41666666666666663,
+                p1=0.525879917184,
+                p2=0.474120082816,
                 p3=0.0,
                 p4=0.0,
-                p_playoffs=0.9999999999999999,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -853,8 +861,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Scott Central": StandingsOdds(
                 school="Scott Central",
-                p1=0.41666666666666663,
-                p2=0.08333333333333333,
+                p1=0.474120082816,
+                p2=0.025879917184,
                 p3=0.5,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -870,10 +878,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Heidelberg / Bay Springs / Mize / Clarkdale
     (2, 6): {
         "denom": 4,
-        "first_counts": Counter({"Heidelberg": 2, "Clarkdale": 2}),
-        "second_counts": Counter({"Heidelberg": 2, "Bay Springs": 1, "Clarkdale": 1}),
-        "third_counts": Counter({"Bay Springs": 3, "Mize": 1}),
-        "fourth_counts": Counter({"Enterprise Clarke": 2, "Clarkdale": 1, "Mize": 1}),
+        "first_counts": Counter({"Clarkdale": 2.000000000000001, "Heidelberg": 1.9999999999999998}),
+        "second_counts": Counter({"Heidelberg": 2.000000000000001, "Bay Springs": 1.0, "Clarkdale": 1.0}),
+        "third_counts": Counter({"Bay Springs": 2.9999999999999996, "Mize": 1.0}),
+        "fourth_counts": Counter({"Enterprise Clarke": 2.000000000000001, "Clarkdale": 1.0, "Mize": 1.0}),
         "odds": {
             "Bay Springs": StandingsOdds(
                 school="Bay Springs",
@@ -938,10 +946,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Wesson / Amite County / Loyd Star / Wilkinson County
     (2, 7): {
         "denom": 4,
-        "first_counts": Counter({"Wesson": 4}),
-        "second_counts": Counter({"Loyd Star": 2, "Amite County": 2}),
-        "third_counts": Counter({"Amite County": 2, "Loyd Star": 2}),
-        "fourth_counts": Counter({"Wilkinson County": 2, "Enterprise Lincoln": 2}),
+        "first_counts": Counter({"Wesson": 4.0}),
+        "second_counts": Counter({"Amite County": 2.0, "Loyd Star": 2.0}),
+        "third_counts": Counter({"Amite County": 2.0, "Loyd Star": 2.0}),
+        "fourth_counts": Counter({"Enterprise Lincoln": 2.0, "Wilkinson County": 2.0}),
         "odds": {
             "Amite County": StandingsOdds(
                 school="Amite County",
@@ -1006,10 +1014,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: East Marion / North Forrest / Collins / Perry Central
     (2, 8): {
         "denom": 4,
-        "first_counts": Counter({"East Marion": 2, "North Forrest": 2}),
-        "second_counts": Counter({"North Forrest": 2, "Collins": 2}),
-        "third_counts": Counter({"Collins": 2, "East Marion": 1, "Perry Central": 1}),
-        "fourth_counts": Counter({"Sacred Heart": 2, "Perry Central": 1, "East Marion": 1}),
+        "first_counts": Counter({"East Marion": 1.9999999999999998, "North Forrest": 1.9999999999999998}),
+        "second_counts": Counter({"Collins": 1.9999999999999998, "North Forrest": 1.9999999999999998}),
+        "third_counts": Counter({"Collins": 1.9999999999999998, "East Marion": 1.0, "Perry Central": 1.0}),
+        "fourth_counts": Counter({"Sacred Heart": 1.9999999999999998, "East Marion": 1.0, "Perry Central": 1.0}),
         "odds": {
             "Collins": StandingsOdds(
                 school="Collins",
@@ -1076,8 +1084,12 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
         "denom": 4,
         "first_counts": Counter({"Kossuth": 4.0}),
         "second_counts": Counter({"Booneville": 4.0}),
-        "third_counts": Counter({"Belmont": 2.6666666666666665, "Alcorn Central": 1, "Mantachie": 0.3333333333333333}),
-        "fourth_counts": Counter({"Alcorn Central": 2, "Mantachie": 1.6666666666666665, "Belmont": 0.3333333333333333}),
+        "third_counts": Counter(
+            {"Belmont": 2.2443064182194616, "Alcorn Central": 1.0, "Mantachie": 0.7556935817805384}
+        ),
+        "fourth_counts": Counter(
+            {"Alcorn Central": 1.9999999999999998, "Mantachie": 1.2443064182194619, "Belmont": 0.7556935817805384}
+        ),
         "odds": {
             "Alcorn Central": StandingsOdds(
                 school="Alcorn Central",
@@ -1094,8 +1106,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Belmont",
                 p1=0.0,
                 p2=0.0,
-                p3=0.6666666666666666,
-                p4=0.08333333333333333,
+                p3=0.561076604555,
+                p4=0.188923395445,
                 p_playoffs=0.75,
                 final_playoffs=0.75,
                 clinched=False,
@@ -1127,10 +1139,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Mantachie",
                 p1=0.0,
                 p2=0.0,
-                p3=0.08333333333333333,
-                p4=0.41666666666666663,
-                p_playoffs=0.49999999999999994,
-                final_playoffs=0.49999999999999994,
+                p3=0.188923395445,
+                p4=0.311076604555,
+                p_playoffs=0.5,
+                final_playoffs=0.5,
                 clinched=False,
                 eliminated=False,
             ),
@@ -1142,19 +1154,19 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Coahoma County / North Panola / Independence / Holly Springs
     (3, 2): {
         "denom": 4,
-        "first_counts": Counter({"Coahoma County": 2.6666666666666665, "Independence": 1.3333333333333333}),
+        "first_counts": Counter({"Coahoma County": 2.2443064182194616, "Independence": 1.7556935817805388}),
         "second_counts": Counter(
-            {"Independence": 1.6666666666666665, "Coahoma County": 1.3333333333333333, "North Panola": 1}
+            {"Coahoma County": 1.7556935817805388, "Independence": 1.2443064182194619, "North Panola": 1.0}
         ),
         "third_counts": Counter(
-            {"North Panola": 1.6666666666666665, "Holly Springs": 1.3333333333333333, "Independence": 1}
+            {"Holly Springs": 1.7556935817805384, "North Panola": 1.2443064182194614, "Independence": 1.0}
         ),
-        "fourth_counts": Counter({"Holly Springs": 2.6666666666666665, "North Panola": 1.3333333333333333}),
+        "fourth_counts": Counter({"Holly Springs": 2.2443064182194616, "North Panola": 1.7556935817805384}),
         "odds": {
             "Coahoma County": StandingsOdds(
                 school="Coahoma County",
-                p1=0.6666666666666666,
-                p2=0.3333333333333333,
+                p1=0.561076604555,
+                p2=0.438923395445,
                 p3=0.0,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -1166,8 +1178,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Holly Springs",
                 p1=0.0,
                 p2=0.0,
-                p3=0.3333333333333333,
-                p4=0.6666666666666666,
+                p3=0.438923395445,
+                p4=0.561076604555,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -1175,8 +1187,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Independence": StandingsOdds(
                 school="Independence",
-                p1=0.3333333333333333,
-                p2=0.41666666666666663,
+                p1=0.438923395445,
+                p2=0.311076604555,
                 p3=0.25,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -1188,8 +1200,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="North Panola",
                 p1=0.0,
                 p2=0.25,
-                p3=0.41666666666666663,
-                p4=0.3333333333333333,
+                p3=0.311076604555,
+                p4=0.438923395445,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -1203,10 +1215,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Humphreys County / Thomas E. Edwards / Yazoo County / O'Bannon
     (3, 3): {
         "denom": 4,
-        "first_counts": Counter({"Humphreys County": 4}),
-        "second_counts": Counter({"Yazoo County": 2, "Thomas E. Edwards": 2}),
-        "third_counts": Counter({"Thomas E. Edwards": 2, "Yazoo County": 2}),
-        "fourth_counts": Counter({"O'Bannon": 4}),
+        "first_counts": Counter({"Humphreys County": 4.0}),
+        "second_counts": Counter({"Thomas E. Edwards": 2.0, "Yazoo County": 2.0}),
+        "third_counts": Counter({"Thomas E. Edwards": 2.0, "Yazoo County": 2.0}),
+        "fourth_counts": Counter({"O'Bannon": 4.0}),
         "odds": {
             "Amanda Elzy": StandingsOdds(
                 school="Amanda Elzy",
@@ -1271,10 +1283,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Winona / Noxubee County / Choctaw County / Aberdeen
     (3, 4): {
         "denom": 4,
-        "first_counts": Counter({"Aberdeen": 2, "Winona": 1, "Noxubee County": 1}),
-        "second_counts": Counter({"Winona": 3, "Noxubee County": 1}),
-        "third_counts": Counter({"Choctaw County": 2, "Noxubee County": 2}),
-        "fourth_counts": Counter({"Aberdeen": 2, "Choctaw County": 2}),
+        "first_counts": Counter({"Aberdeen": 2.0, "Noxubee County": 1.0, "Winona": 1.0}),
+        "second_counts": Counter({"Winona": 3.0, "Noxubee County": 1.0}),
+        "third_counts": Counter({"Choctaw County": 2.0, "Noxubee County": 2.0}),
+        "fourth_counts": Counter({"Aberdeen": 2.0, "Choctaw County": 2.0}),
         "odds": {
             "Aberdeen": StandingsOdds(
                 school="Aberdeen",
@@ -1339,10 +1351,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Union / Quitman / Southeast Lauderdale / Pisgah
     (3, 5): {
         "denom": 4,
-        "first_counts": Counter({"Union": 4}),
-        "second_counts": Counter({"Quitman": 4}),
-        "third_counts": Counter({"Southeast Lauderdale": 4}),
-        "fourth_counts": Counter({"Pisgah": 4}),
+        "first_counts": Counter({"Union": 4.0}),
+        "second_counts": Counter({"Quitman": 4.0}),
+        "third_counts": Counter({"Southeast Lauderdale": 4.0}),
+        "fourth_counts": Counter({"Pisgah": 4.0}),
         "odds": {
             "Pisgah": StandingsOdds(
                 school="Pisgah",
@@ -1407,10 +1419,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Raleigh / Seminary / Magee / Jefferson Davis County
     (3, 6): {
         "denom": 4,
-        "first_counts": Counter({"Raleigh": 4}),
-        "second_counts": Counter({"Seminary": 2, "Magee": 2}),
-        "third_counts": Counter({"Magee": 2, "Seminary": 2}),
-        "fourth_counts": Counter({"Jefferson Davis County": 4}),
+        "first_counts": Counter({"Raleigh": 4.000000000000001}),
+        "second_counts": Counter({"Magee": 2.000000000000001, "Seminary": 2.000000000000001}),
+        "third_counts": Counter({"Magee": 2.000000000000001, "Seminary": 2.000000000000001}),
+        "fourth_counts": Counter({"Jefferson Davis County": 4.000000000000001}),
         "odds": {
             "Jefferson Davis County": StandingsOdds(
                 school="Jefferson Davis County",
@@ -1475,12 +1487,16 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Franklin County / Hazlehurst / Jefferson County / Port Gibson
     (3, 7): {
         "denom": 4,
-        "first_counts": Counter({"Franklin County": 2, "Hazlehurst": 1.0, "Jefferson County": 1}),
+        "first_counts": Counter({"Franklin County": 1.9999999999999998, "Hazlehurst": 1.0, "Jefferson County": 1.0}),
         "second_counts": Counter(
-            {"Hazlehurst": 2, "Franklin County": 1.5833333333333335, "Jefferson County": 0.4166666666666667}
+            {
+                "Hazlehurst": 1.9999999999999998,
+                "Franklin County": 1.2173913043478262,
+                "Jefferson County": 0.782608695652174,
+            }
         ),
         "third_counts": Counter(
-            {"Jefferson County": 2.5833333333333335, "Hazlehurst": 1, "Franklin County": 0.4166666666666667}
+            {"Jefferson County": 2.217391304347826, "Hazlehurst": 1.0, "Franklin County": 0.782608695652174}
         ),
         "fourth_counts": Counter({"Port Gibson": 4.0}),
         "odds": {
@@ -1498,8 +1514,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Franklin County": StandingsOdds(
                 school="Franklin County",
                 p1=0.5,
-                p2=0.39583333333333337,
-                p3=0.10416666666666667,
+                p2=0.304347826087,
+                p3=0.195652173913,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -1520,8 +1536,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Jefferson County": StandingsOdds(
                 school="Jefferson County",
                 p1=0.25,
-                p2=0.10416666666666667,
-                p3=0.6458333333333334,
+                p2=0.195652173913,
+                p3=0.554347826087,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -1547,10 +1563,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: West Marion / Presbyterian Christian / Tylertown / St. Patrick
     (3, 8): {
         "denom": 4,
-        "first_counts": Counter({"West Marion": 4}),
-        "second_counts": Counter({"Tylertown": 2, "Presbyterian Christian": 2}),
-        "third_counts": Counter({"Presbyterian Christian": 2, "Tylertown": 2}),
-        "fourth_counts": Counter({"St. Patrick": 4}),
+        "first_counts": Counter({"West Marion": 4.0}),
+        "second_counts": Counter({"Presbyterian Christian": 1.9999999999999998, "Tylertown": 1.9999999999999998}),
+        "third_counts": Counter({"Presbyterian Christian": 1.9999999999999998, "Tylertown": 1.9999999999999998}),
+        "fourth_counts": Counter({"St. Patrick": 4.0}),
         "odds": {
             "Presbyterian Christian": StandingsOdds(
                 school="Presbyterian Christian",
@@ -1615,19 +1631,19 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Corinth / North Pontotoc / New Albany / Tishomingo County
     (4, 1): {
         "denom": 4,
-        "first_counts": Counter({"Corinth": 2.5833333333333335, "New Albany": 1.4166666666666667}),
+        "first_counts": Counter({"Corinth": 2.2173913043478257, "New Albany": 1.782608695652174}),
         "second_counts": Counter(
-            {"New Albany": 1.5833333333333335, "Corinth": 1.4166666666666667, "North Pontotoc": 1}
+            {"Corinth": 1.782608695652174, "New Albany": 1.2173913043478257, "North Pontotoc": 1.0}
         ),
         "third_counts": Counter(
-            {"North Pontotoc": 1.5833333333333335, "Tishomingo County": 1.4166666666666667, "New Albany": 1}
+            {"Tishomingo County": 1.782608695652174, "North Pontotoc": 1.2173913043478262, "New Albany": 1.0}
         ),
-        "fourth_counts": Counter({"Tishomingo County": 2.5833333333333335, "North Pontotoc": 1.4166666666666667}),
+        "fourth_counts": Counter({"Tishomingo County": 2.217391304347826, "North Pontotoc": 1.782608695652174}),
         "odds": {
             "Corinth": StandingsOdds(
                 school="Corinth",
-                p1=0.6458333333333334,
-                p2=0.3541666666666667,
+                p1=0.554347826087,
+                p2=0.445652173913,
                 p3=0.0,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -1637,8 +1653,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "New Albany": StandingsOdds(
                 school="New Albany",
-                p1=0.3541666666666667,
-                p2=0.39583333333333337,
+                p1=0.445652173913,
+                p2=0.304347826087,
                 p3=0.25,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -1650,8 +1666,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="North Pontotoc",
                 p1=0.0,
                 p2=0.25,
-                p3=0.39583333333333337,
-                p4=0.3541666666666667,
+                p3=0.304347826087,
+                p4=0.445652173913,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -1672,8 +1688,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Tishomingo County",
                 p1=0.0,
                 p2=0.0,
-                p3=0.3541666666666667,
-                p4=0.6458333333333334,
+                p3=0.445652173913,
+                p4=0.554347826087,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -1687,10 +1703,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Itawamba Agricultural / Shannon / Houston / Amory
     (4, 2): {
         "denom": 4,
-        "first_counts": Counter({"Itawamba Agricultural": 4}),
-        "second_counts": Counter({"Shannon": 4}),
-        "third_counts": Counter({"Houston": 4}),
-        "fourth_counts": Counter({"Amory": 4}),
+        "first_counts": Counter({"Itawamba Agricultural": 3.999999999999999}),
+        "second_counts": Counter({"Shannon": 3.999999999999999}),
+        "third_counts": Counter({"Houston": 3.999999999999999}),
+        "fourth_counts": Counter({"Amory": 3.999999999999999}),
         "odds": {
             "Amory": StandingsOdds(
                 school="Amory",
@@ -1755,21 +1771,19 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Clarksdale / Senatobia / Rosa Fort / Ripley
     (4, 3): {
         "denom": 4,
-        "first_counts": Counter(
-            {"Clarksdale": 2.5000000000000115, "Rosa Fort": 0.9999999999999974, "Senatobia": 0.49999999999999917}
-        ),
+        "first_counts": Counter({"Clarksdale": 2.1656314699792967, "Rosa Fort": 1.0, "Senatobia": 0.834368530020704}),
         "second_counts": Counter(
-            {"Senatobia": 2.4444444444444544, "Clarksdale": 1.3333333333333297, "Rosa Fort": 0.2222222222222223}
+            {"Senatobia": 1.992644316705889, "Clarksdale": 1.1138716356107659, "Rosa Fort": 0.8934840476833458}
         ),
         "third_counts": Counter(
             {
-                "Rosa Fort": 2.777777777777797,
-                "Ripley": 0.9999999999999974,
-                "Clarksdale": 0.1666666666666667,
-                "Senatobia": 0.055555555555555566,
+                "Rosa Fort": 2.106515952316655,
+                "Ripley": 1.0,
+                "Clarksdale": 0.7204968944099379,
+                "Senatobia": 0.17298715327340766,
             }
         ),
-        "fourth_counts": Counter({"Ripley": 3.0000000000000258, "Senatobia": 0.9999999999999974}),
+        "fourth_counts": Counter({"Ripley": 3.0, "Senatobia": 1.0}),
         "odds": {
             "Byhalia": StandingsOdds(
                 school="Byhalia",
@@ -1784,9 +1798,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Clarksdale": StandingsOdds(
                 school="Clarksdale",
-                p1=0.625000000000003,
-                p2=0.3333333333333324,
-                p3=0.041666666666666664,
+                p1=0.541407867495,
+                p2=0.278467908903,
+                p3=0.180124223602,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -1797,8 +1811,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Ripley",
                 p1=0.0,
                 p2=0.0,
-                p3=0.249999999999999,
-                p4=0.750000000000006,
+                p3=0.25,
+                p4=0.75,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -1806,9 +1820,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Rosa Fort": StandingsOdds(
                 school="Rosa Fort",
-                p1=0.249999999999999,
-                p2=0.055555555555556,
-                p3=0.694444444444449,
+                p1=0.25,
+                p2=0.223371011921,
+                p3=0.526628988079,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -1817,10 +1831,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Senatobia": StandingsOdds(
                 school="Senatobia",
-                p1=0.125,
-                p2=0.6111111111111114,
-                p3=0.013888888888889,
-                p4=0.249999999999999,
+                p1=0.208592132505,
+                p2=0.498161079176,
+                p3=0.043246788318,
+                p4=0.25,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -1834,36 +1848,38 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Louisville / Kosciusko / Greenwood / Yazoo City
     (4, 4): {
         "denom": 4,
-        "first_counts": Counter({"Louisville": 2, "Kosciusko": 1.9999999999999998}),
-        "second_counts": Counter({"Kosciusko": 2, "Louisville": 1.3333333333333333, "Greenwood": 0.6666666666666666}),
-        "third_counts": Counter({"Greenwood": 3.333333333333333, "Louisville": 0.6666666666666666}),
-        "fourth_counts": Counter({"Yazoo City": 1.9999999999999998, "Gentry": 1.9999999999999998}),
+        "first_counts": Counter({"Louisville": 2.0, "Kosciusko": 1.9999999999999998}),
+        "second_counts": Counter(
+            {"Kosciusko": 2.0, "Greenwood": 1.5113871635610767, "Louisville": 0.48861283643892345}
+        ),
+        "third_counts": Counter({"Greenwood": 2.4886128364389233, "Louisville": 1.5113871635610767}),
+        "fourth_counts": Counter({"Gentry": 1.9999999999999998, "Yazoo City": 1.9999999999999998}),
         "odds": {
             "Gentry": StandingsOdds(
                 school="Gentry",
                 p1=0.0,
                 p2=0.0,
                 p3=0.0,
-                p4=0.49999999999999994,
-                p_playoffs=0.49999999999999994,
-                final_playoffs=0.49999999999999994,
+                p4=0.5,
+                p_playoffs=0.5,
+                final_playoffs=0.5,
                 clinched=False,
                 eliminated=False,
             ),
             "Greenwood": StandingsOdds(
                 school="Greenwood",
                 p1=0.0,
-                p2=0.16666666666666666,
-                p3=0.8333333333333333,
+                p2=0.37784679089,
+                p3=0.62215320911,
                 p4=0.0,
-                p_playoffs=0.9999999999999999,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
             ),
             "Kosciusko": StandingsOdds(
                 school="Kosciusko",
-                p1=0.49999999999999994,
+                p1=0.5,
                 p2=0.5,
                 p3=0.0,
                 p4=0.0,
@@ -1875,10 +1891,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Louisville": StandingsOdds(
                 school="Louisville",
                 p1=0.5,
-                p2=0.3333333333333333,
-                p3=0.16666666666666666,
+                p2=0.12215320911,
+                p3=0.37784679089,
                 p4=0.0,
-                p_playoffs=0.9999999999999999,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -1888,9 +1904,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 p1=0.0,
                 p2=0.0,
                 p3=0.0,
-                p4=0.49999999999999994,
-                p_playoffs=0.49999999999999994,
-                final_playoffs=0.49999999999999994,
+                p4=0.5,
+                p_playoffs=0.5,
+                final_playoffs=0.5,
                 clinched=False,
                 eliminated=False,
             ),
@@ -1902,10 +1918,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Leake Central / Newton County / West Lauderdale / Choctaw Central
     (4, 5): {
         "denom": 4,
-        "first_counts": Counter({"Leake Central": 4}),
-        "second_counts": Counter({"Newton County": 4}),
-        "third_counts": Counter({"West Lauderdale": 2, "Choctaw Central": 2}),
-        "fourth_counts": Counter({"Choctaw Central": 2, "West Lauderdale": 2}),
+        "first_counts": Counter({"Leake Central": 4.0}),
+        "second_counts": Counter({"Newton County": 4.0}),
+        "third_counts": Counter({"Choctaw Central": 2.0, "West Lauderdale": 2.0}),
+        "fourth_counts": Counter({"Choctaw Central": 2.0, "West Lauderdale": 2.0}),
         "odds": {
             "Choctaw Central": StandingsOdds(
                 school="Choctaw Central",
@@ -1970,10 +1986,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Forest / Morton / Mendenhall / Richland
     (4, 6): {
         "denom": 4,
-        "first_counts": Counter({"Morton": 2, "Forest": 2}),
-        "second_counts": Counter({"Forest": 2, "Morton": 2}),
-        "third_counts": Counter({"Mendenhall": 4}),
-        "fourth_counts": Counter({"Richland": 4}),
+        "first_counts": Counter({"Forest": 2.0, "Morton": 2.0}),
+        "second_counts": Counter({"Forest": 2.0, "Morton": 2.0}),
+        "third_counts": Counter({"Mendenhall": 4.0}),
+        "fourth_counts": Counter({"Richland": 4.0}),
         "odds": {
             "Forest": StandingsOdds(
                 school="Forest",
@@ -2038,15 +2054,15 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Columbia / McComb / Poplarville / South Pike
     (4, 7): {
         "denom": 4,
-        "first_counts": Counter({"Columbia": 2.5, "Poplarville": 1.5}),
-        "second_counts": Counter({"Columbia": 1.5, "Poplarville": 1.5, "McComb": 1}),
-        "third_counts": Counter({"South Pike": 1.5, "McComb": 1.5, "Poplarville": 1}),
-        "fourth_counts": Counter({"South Pike": 2.5, "McComb": 1.5}),
+        "first_counts": Counter({"Columbia": 2.165631469979296, "Poplarville": 1.834368530020704}),
+        "second_counts": Counter({"Columbia": 1.834368530020704, "Poplarville": 1.1656314699792958, "McComb": 1.0}),
+        "third_counts": Counter({"South Pike": 1.834368530020704, "McComb": 1.165631469979296, "Poplarville": 1.0}),
+        "fourth_counts": Counter({"South Pike": 2.165631469979296, "McComb": 1.834368530020704}),
         "odds": {
             "Columbia": StandingsOdds(
                 school="Columbia",
-                p1=0.625,
-                p2=0.375,
+                p1=0.541407867495,
+                p2=0.458592132505,
                 p3=0.0,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -2069,8 +2085,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="McComb",
                 p1=0.0,
                 p2=0.25,
-                p3=0.375,
-                p4=0.375,
+                p3=0.291407867495,
+                p4=0.458592132505,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -2078,8 +2094,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Poplarville": StandingsOdds(
                 school="Poplarville",
-                p1=0.375,
-                p2=0.375,
+                p1=0.458592132505,
+                p2=0.291407867495,
                 p3=0.25,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -2091,8 +2107,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="South Pike",
                 p1=0.0,
                 p2=0.0,
-                p3=0.375,
-                p4=0.625,
+                p3=0.458592132505,
+                p4=0.541407867495,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -2106,10 +2122,14 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Pass Christian / Forrest County Agricultural / Greene County / Moss Point
     (4, 8): {
         "denom": 4,
-        "first_counts": Counter({"Pass Christian": 4}),
-        "second_counts": Counter({"Greene County": 2, "Forrest County Agricultural": 2}),
-        "third_counts": Counter({"Forrest County Agricultural": 2, "Greene County": 2}),
-        "fourth_counts": Counter({"Moss Point": 4}),
+        "first_counts": Counter({"Pass Christian": 4.0}),
+        "second_counts": Counter(
+            {"Forrest County Agricultural": 1.9999999999999998, "Greene County": 1.9999999999999998}
+        ),
+        "third_counts": Counter(
+            {"Forrest County Agricultural": 1.9999999999999998, "Greene County": 1.9999999999999998}
+        ),
+        "fourth_counts": Counter({"Moss Point": 4.0}),
         "odds": {
             "Bay": StandingsOdds(
                 school="Bay",
@@ -2174,10 +2194,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: West Point / New Hope / Pontotoc / Lafayette
     (5, 1): {
         "denom": 8,
-        "first_counts": Counter({"West Point": 8}),
-        "second_counts": Counter({"New Hope": 8}),
-        "third_counts": Counter({"Pontotoc": 4, "Lafayette": 4}),
-        "fourth_counts": Counter({"Lafayette": 4, "Pontotoc": 4}),
+        "first_counts": Counter({"West Point": 7.9999999999999805}),
+        "second_counts": Counter({"New Hope": 7.9999999999999805}),
+        "third_counts": Counter({"Lafayette": 4.000000000000001, "Pontotoc": 4.000000000000001}),
+        "fourth_counts": Counter({"Lafayette": 4.000000000000001, "Pontotoc": 4.000000000000001}),
         "odds": {
             "Caledonia": StandingsOdds(
                 school="Caledonia",
@@ -2252,24 +2272,27 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Cutoff: 2025-10-31
     # Actual seeds: Cleveland Central / Lanier / Holmes County Central / Vicksburg
     (5, 2): {
-        # second/third counts for Lanier and Vicksburg reflect the corrected tiebreaker
-        # that restarts at H2H after any sub-group split (MHSAA rule).  The Lanier/Vicksburg
-        # margin boundary that affects seed 2 vs 3 is now correctly at 9+ (not 9 vs 10+),
-        # because at margin=9 the H2H sub-group restart gives the win to Vicksburg (who beat
-        # Lanier in the remaining game), not Lanier via Step 4 PD vs outside.
         "denom": 8,
-        "first_counts": Counter({"Cleveland Central": 6.0, "Lanier": 2}),
-        "second_counts": Counter({"Lanier": 10 / 3, "Vicksburg": 8 / 3, "Cleveland Central": 1, "Florence": 1}),
+        "first_counts": Counter({"Cleveland Central": 6.000000000000001, "Lanier": 1.9999999999999998}),
+        "second_counts": Counter(
+            {"Vicksburg": 3.5113871635610767, "Lanier": 2.4886128364389233, "Cleveland Central": 1.0, "Florence": 1.0}
+        ),
         "third_counts": Counter(
             {
-                "Lanier": 8 / 3,
-                "Holmes County Central": 2,
-                "Vicksburg": 4 / 3,
-                "Cleveland Central": 1,
-                "Florence": 1,
+                "Lanier": 3.5113871635610767,
+                "Holmes County Central": 1.9999999999999998,
+                "Cleveland Central": 1.0,
+                "Florence": 1.0,
+                "Vicksburg": 0.48861283643892345,
             }
         ),
-        "fourth_counts": Counter({"Holmes County Central": 4.0, "Florence": 2, "Vicksburg": 2}),
+        "fourth_counts": Counter(
+            {
+                "Holmes County Central": 3.999999999999999,
+                "Florence": 1.9999999999999998,
+                "Vicksburg": 1.9999999999999998,
+            }
+        ),
         "odds": {
             "Cleveland Central": StandingsOdds(
                 school="Cleveland Central",
@@ -2307,8 +2330,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Lanier": StandingsOdds(
                 school="Lanier",
                 p1=0.25,
-                p2=5 / 12,
-                p3=1 / 3,
+                p2=0.311076604555,
+                p3=0.438923395445,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -2329,8 +2352,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Vicksburg": StandingsOdds(
                 school="Vicksburg",
                 p1=0.0,
-                p2=1 / 3,
-                p3=1 / 6,
+                p2=0.438923395445,
+                p3=0.061076604555,
                 p4=0.25,
                 p_playoffs=0.75,
                 final_playoffs=0.75,
@@ -2345,10 +2368,14 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Brookhaven / Laurel / South Jones / Sumrall
     (5, 3): {
         "denom": 8,
-        "first_counts": Counter({"Brookhaven": 8}),
-        "second_counts": Counter({"South Jones": 4, "Laurel": 4}),
-        "third_counts": Counter({"Laurel": 4, "South Jones": 2, "Natchez": 1, "North Pike": 1}),
-        "fourth_counts": Counter({"Sumrall": 4, "North Pike": 2, "Natchez": 1, "South Jones": 1}),
+        "first_counts": Counter({"Brookhaven": 7.999999999999997}),
+        "second_counts": Counter({"Laurel": 3.999999999999999, "South Jones": 3.999999999999999}),
+        "third_counts": Counter(
+            {"Laurel": 3.999999999999999, "South Jones": 1.9999999999999998, "Natchez": 1.0, "North Pike": 1.0}
+        ),
+        "fourth_counts": Counter(
+            {"Sumrall": 3.999999999999999, "North Pike": 2.000000000000001, "Natchez": 1.0, "South Jones": 1.0}
+        ),
         "odds": {
             "Brookhaven": StandingsOdds(
                 school="Brookhaven",
@@ -2424,10 +2451,12 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Stone / Wayne County / Purvis / Northeast Jones
     (5, 4): {
         "denom": 8,
-        "first_counts": Counter({"Stone": 8}),
-        "second_counts": Counter({"Wayne County": 8}),
-        "third_counts": Counter({"Purvis": 4, "Vancleave": 3, "East Central": 1}),
-        "fourth_counts": Counter({"Purvis": 3, "Northeast Jones": 3, "Vancleave": 1, "East Central": 1}),
+        "first_counts": Counter({"Stone": 7.999999999999997}),
+        "second_counts": Counter({"Wayne County": 7.999999999999997}),
+        "third_counts": Counter({"Purvis": 3.999999999999999, "Vancleave": 2.999999999999999, "East Central": 1.0}),
+        "fourth_counts": Counter(
+            {"Northeast Jones": 2.999999999999999, "Purvis": 2.999999999999999, "East Central": 1.0, "Vancleave": 1.0}
+        ),
         "odds": {
             "East Central": StandingsOdds(
                 school="East Central",
@@ -2503,19 +2532,19 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: South Panola / Lake Cormorant / Grenada / Center Hill
     (6, 1): {
         "denom": 8,
-        "first_counts": Counter({"South Panola": 7.999999999997066}),
-        "second_counts": Counter({"Lake Cormorant": 7.999999999997066}),
-        "third_counts": Counter({"Grenada": 5.9166666666652725, "Center Hill": 2.0833333333333828}),
+        "first_counts": Counter({"South Panola": 7.999999999999998}),
+        "second_counts": Counter({"Lake Cormorant": 7.999999999999998}),
+        "third_counts": Counter({"Grenada": 5.765441148103853, "Center Hill": 2.234558851896146}),
         "fourth_counts": Counter(
-            {"Center Hill": 5.9166666666652725, "Grenada": 0.08333333333333336, "Saltillo": 2.0000000000000475}
+            {"Center Hill": 5.765441148103853, "Saltillo": 1.9999999999999998, "Grenada": 0.23455885189614598}
         ),
         "odds": {
             "Center Hill": StandingsOdds(
                 school="Center Hill",
                 p1=0.0,
                 p2=0.0,
-                p3=0.260416666666673,
-                p4=0.739583333333159,
+                p3=0.279319856487,
+                p4=0.720680143513,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -2525,8 +2554,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 school="Grenada",
                 p1=0.0,
                 p2=0.0,
-                p3=0.739583333333159,
-                p4=0.010416666666667,
+                p3=0.720680143513,
+                p4=0.029319856487,
                 p_playoffs=0.75,
                 final_playoffs=0.75,
                 clinched=False,
@@ -2535,10 +2564,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "Lake Cormorant": StandingsOdds(
                 school="Lake Cormorant",
                 p1=0.0,
-                p2=0.999999999999633,
+                p2=1.0,
                 p3=0.0,
                 p4=0.0,
-                p_playoffs=0.999999999999633,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -2559,19 +2588,19 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 p1=0.0,
                 p2=0.0,
                 p3=0.0,
-                p4=0.250000000000006,
-                p_playoffs=0.250000000000006,
-                final_playoffs=0.250000000000006,
+                p4=0.25,
+                p_playoffs=0.25,
+                final_playoffs=0.25,
                 clinched=False,
                 eliminated=False,
             ),
             "South Panola": StandingsOdds(
                 school="South Panola",
-                p1=0.999999999999633,
+                p1=1.0,
                 p2=0.0,
                 p3=0.0,
                 p4=0.0,
-                p_playoffs=0.999999999999633,
+                p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
@@ -2584,10 +2613,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Warren Central / Ridgeland / Callaway / Neshoba Central
     (6, 2): {
         "denom": 8,
-        "first_counts": Counter({"Warren Central": 8}),
-        "second_counts": Counter({"Ridgeland": 8}),
-        "third_counts": Counter({"Neshoba Central": 4, "Callaway": 4}),
-        "fourth_counts": Counter({"Callaway": 4, "Neshoba Central": 4}),
+        "first_counts": Counter({"Warren Central": 8.000000000000002}),
+        "second_counts": Counter({"Ridgeland": 8.000000000000002}),
+        "third_counts": Counter({"Callaway": 3.999999999999999, "Neshoba Central": 3.999999999999999}),
+        "fourth_counts": Counter({"Callaway": 3.999999999999999, "Neshoba Central": 3.999999999999999}),
         "odds": {
             "Callaway": StandingsOdds(
                 school="Callaway",
@@ -2663,11 +2692,13 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Hattiesburg / West Jones / Terry / George County
     (6, 3): {
         "denom": 8,
-        "first_counts": Counter({"Hattiesburg": 5.666666666666667, "Terry": 2.3333333333333335}),
-        "second_counts": Counter({"West Jones": 5.0, "Hattiesburg": 2.3333333333333335, "Terry": 0.6666666666666667}),
-        "third_counts": Counter({"Terry": 5.0, "West Jones": 3.0}),
+        "first_counts": Counter({"Hattiesburg": 4.559006211180123, "Terry": 3.440993788819875}),
+        "second_counts": Counter(
+            {"West Jones": 4.331262939958591, "Hattiesburg": 3.440993788819875, "Terry": 0.22774327122153176}
+        ),
+        "third_counts": Counter({"Terry": 4.331262939958591, "West Jones": 3.668737060041405}),
         "fourth_counts": Counter(
-            {"George County": 5.333333333333333, "Jim Hill": 2, "Forest Hill": 0.6666666666666667}
+            {"George County": 4.488612836438915, "Jim Hill": 1.9999999999999998, "Forest Hill": 1.5113871635610767}
         ),
         "odds": {
             "Forest Hill": StandingsOdds(
@@ -2675,9 +2706,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 p1=0.0,
                 p2=0.0,
                 p3=0.0,
-                p4=0.08333333333333334,
-                p_playoffs=0.08333333333333334,
-                final_playoffs=0.08333333333333334,
+                p4=0.188923395445,
+                p_playoffs=0.188923395445,
+                final_playoffs=0.188923395445,
                 clinched=False,
                 eliminated=False,
             ),
@@ -2686,16 +2717,16 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 p1=0.0,
                 p2=0.0,
                 p3=0.0,
-                p4=0.6666666666666666,
-                p_playoffs=0.6666666666666666,
-                final_playoffs=0.6666666666666666,
+                p4=0.561076604555,
+                p_playoffs=0.561076604555,
+                final_playoffs=0.561076604555,
                 clinched=False,
                 eliminated=False,
             ),
             "Hattiesburg": StandingsOdds(
                 school="Hattiesburg",
-                p1=0.7083333333333334,
-                p2=0.2916666666666667,
+                p1=0.569875776398,
+                p2=0.430124223602,
                 p3=0.0,
                 p4=0.0,
                 p_playoffs=1.0,
@@ -2716,9 +2747,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Terry": StandingsOdds(
                 school="Terry",
-                p1=0.2916666666666667,
-                p2=0.08333333333333334,
-                p3=0.625,
+                p1=0.430124223602,
+                p2=0.028467908903,
+                p3=0.541407867495,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -2728,8 +2759,8 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             "West Jones": StandingsOdds(
                 school="West Jones",
                 p1=0.0,
-                p2=0.625,
-                p3=0.375,
+                p2=0.541407867495,
+                p3=0.458592132505,
                 p4=0.0,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
@@ -2744,10 +2775,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Picayune / Pascagoula / Hancock / Pearl River Central
     (6, 4): {
         "denom": 8,
-        "first_counts": Counter({"Picayune": 8}),
-        "second_counts": Counter({"Pascagoula": 8}),
-        "third_counts": Counter({"Hancock": 6, "Pearl River Central": 2}),
-        "fourth_counts": Counter({"Pearl River Central": 6, "Hancock": 2}),
+        "first_counts": Counter({"Picayune": 8.000000000000004}),
+        "second_counts": Counter({"Pascagoula": 8.000000000000004}),
+        "third_counts": Counter({"Hancock": 6.000000000000001, "Pearl River Central": 1.9999999999999998}),
+        "fourth_counts": Counter({"Pearl River Central": 6.000000000000001, "Hancock": 1.9999999999999998}),
         "odds": {
             "Gautier": StandingsOdds(
                 school="Gautier",
@@ -2823,10 +2854,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Tupelo / Horn Lake / DeSoto Central / Hernando
     (7, 1): {
         "denom": 8,
-        "first_counts": Counter({"Tupelo": 4, "DeSoto Central": 4}),
-        "second_counts": Counter({"Tupelo": 4, "DeSoto Central": 2, "Horn Lake": 2}),
-        "third_counts": Counter({"Horn Lake": 3, "Hernando": 3, "DeSoto Central": 2}),
-        "fourth_counts": Counter({"Southaven": 4, "Horn Lake": 3, "Hernando": 1}),
+        "first_counts": Counter({"DeSoto Central": 3.999999999999999, "Tupelo": 3.999999999999999}),
+        "second_counts": Counter({"Tupelo": 3.999999999999999, "Horn Lake": 2.0, "DeSoto Central": 1.9999999999999998}),
+        "third_counts": Counter({"Horn Lake": 3.000000000000001, "Hernando": 2.999999999999999, "DeSoto Central": 2.0}),
+        "fourth_counts": Counter({"Southaven": 3.9999999999999996, "Horn Lake": 2.999999999999999, "Hernando": 1.0}),
         "odds": {
             "DeSoto Central": StandingsOdds(
                 school="DeSoto Central",
@@ -2902,11 +2933,11 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Oxford / Germantown / Madison Central / Starkville
     (7, 2): {
         "denom": 8,
-        "first_counts": Counter({"Oxford": 8.0}),
-        "second_counts": Counter({"Germantown": 8.0}),
-        "third_counts": Counter({"Madison Central": 4, "Starkville": 4.0}),
+        "first_counts": Counter({"Oxford": 7.9999999999999964}),
+        "second_counts": Counter({"Germantown": 7.9999999999999964}),
+        "third_counts": Counter({"Madison Central": 3.9999999999999996, "Starkville": 3.999999999999999}),
         "fourth_counts": Counter(
-            {"Starkville": 4, "Clinton": 2.833333333333333, "Madison Central": 1.1666666666666667}
+            {"Starkville": 3.9999999999999996, "Clinton": 3.5652173913043477, "Madison Central": 0.4347826086956522}
         ),
         "odds": {
             "Clinton": StandingsOdds(
@@ -2914,9 +2945,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 p1=0.0,
                 p2=0.0,
                 p3=0.0,
-                p4=0.35416666666666663,
-                p_playoffs=0.35416666666666663,
-                final_playoffs=0.35416666666666663,
+                p4=0.445652173913,
+                p_playoffs=0.445652173913,
+                final_playoffs=0.445652173913,
                 clinched=False,
                 eliminated=False,
             ),
@@ -2936,9 +2967,9 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
                 p1=0.0,
                 p2=0.0,
                 p3=0.5,
-                p4=0.14583333333333334,
-                p_playoffs=0.6458333333333334,
-                final_playoffs=0.6458333333333334,
+                p4=0.054347826087,
+                p_playoffs=0.554347826087,
+                final_playoffs=0.554347826087,
                 clinched=False,
                 eliminated=False,
             ),
@@ -2985,36 +3016,36 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
         "denom": 8,
         "first_counts": Counter(
             {
-                "Petal": 4.083333333333362,
-                "Oak Grove": 2.201388888888888,
-                "Northwest Rankin": 1.4652777777777737,
-                "Pearl": 0.25000000000000006,
+                "Petal": 4.009696127978604,
+                "Oak Grove": 2.0210082772869704,
+                "Northwest Rankin": 1.7693547488308492,
+                "Pearl": 0.19994084590357883,
             }
         ),
         "second_counts": Counter(
             {
-                "Pearl": 3.333333333333341,
-                "Oak Grove": 2.2152777777777777,
-                "Northwest Rankin": 1.2847222222222212,
-                "Petal": 1.1666666666666667,
+                "Pearl": 3.6861875184856543,
+                "Oak Grove": 2.092863358323798,
+                "Northwest Rankin": 1.156111089678468,
+                "Petal": 1.0648380335120815,
             }
         ),
         "third_counts": Counter(
             {
-                "Brandon": 2.9999999999999956,
-                "Petal": 2.298611111111116,
-                "Oak Grove": 2.3055555555555634,
-                "Northwest Rankin": 0.1666666666666667,
-                "Pearl": 0.22916666666666674,
+                "Brandon": 3.000000000000001,
+                "Oak Grove": 2.6704688176467797,
+                "Petal": 2.1702223422450264,
+                "Pearl": 0.09531953928389252,
+                "Northwest Rankin": 0.06398930082429947,
             }
         ),
         "fourth_counts": Counter(
             {
-                "Northwest Rankin": 3.0833333333333313,
-                "Brandon": 3.000000000000001,
-                "Oak Grove": 1.2777777777777743,
-                "Petal": 0.45138888888888823,
-                "Pearl": 0.18750000000000006,
+                "Northwest Rankin": 3.0105448606663847,
+                "Brandon": 2.999999999999999,
+                "Oak Grove": 1.2156595467424522,
+                "Petal": 0.7552434962642903,
+                "Pearl": 0.018552096326873536,
             }
         ),
         "odds": {
@@ -3042,10 +3073,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Northwest Rankin": StandingsOdds(
                 school="Northwest Rankin",
-                p1=0.18315972222222171,
-                p2=0.16059027777777765,
-                p3=0.020833333333333332,
-                p4=0.38541666666666663,
+                p1=0.221169343604,
+                p2=0.14451388621,
+                p3=0.007998662603,
+                p4=0.376318107583,
                 p_playoffs=0.75,
                 final_playoffs=0.75,
                 clinched=False,
@@ -3053,10 +3084,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Oak Grove": StandingsOdds(
                 school="Oak Grove",
-                p1=0.27517361111111103,
-                p2=0.27690972222222217,
-                p3=0.28819444444444545,
-                p4=0.15972222222222178,
+                p1=0.252626034661,
+                p2=0.26160791979,
+                p3=0.333808602206,
+                p4=0.151957443343,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -3064,10 +3095,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Pearl": StandingsOdds(
                 school="Pearl",
-                p1=0.03125,
-                p2=0.41666666666666674,
-                p3=0.028645833333333343,
-                p4=0.023437500000000007,
+                p1=0.024992605738,
+                p2=0.460773439811,
+                p3=0.01191494241,
+                p4=0.002319012041,
                 p_playoffs=0.5,
                 final_playoffs=0.5,
                 clinched=False,
@@ -3075,10 +3106,10 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
             ),
             "Petal": StandingsOdds(
                 school="Petal",
-                p1=0.5104166666666702,
-                p2=0.14583333333333334,
-                p3=0.28732638888888952,
-                p4=0.05642361111111103,
+                p1=0.501212015997,
+                p2=0.133104754189,
+                p3=0.271277792781,
+                p4=0.094405437033,
                 p_playoffs=1.0,
                 final_playoffs=1.0,
                 clinched=True,
@@ -3092,10 +3123,14 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Actual seeds: Gulfport / Ocean Springs / D'Iberville / Biloxi
     (7, 4): {
         "denom": 8,
-        "first_counts": Counter({"Gulfport": 8}),
-        "second_counts": Counter({"Ocean Springs": 8}),
-        "third_counts": Counter({"D'Iberville": 4, "St. Martin": 2, "Biloxi": 2}),
-        "fourth_counts": Counter({"Biloxi": 4, "St. Martin": 2, "D'Iberville": 2}),
+        "first_counts": Counter({"Gulfport": 7.999999999999996}),
+        "second_counts": Counter({"Ocean Springs": 7.999999999999996}),
+        "third_counts": Counter(
+            {"D'Iberville": 3.999999999999999, "Biloxi": 1.9999999999999998, "St. Martin": 1.9999999999999998}
+        ),
+        "fourth_counts": Counter(
+            {"Biloxi": 3.999999999999999, "D'Iberville": 1.9999999999999998, "St. Martin": 1.9999999999999998}
+        ),
         "odds": {
             "Biloxi": StandingsOdds(
                 school="Biloxi",

@@ -68,21 +68,21 @@ EUPORA_EXPECTED = "Eupora\n\nEliminated. (100.0%)"
 KEMPER_COUNTY_EXPECTED = """\
 Kemper County
 
-#2 seed if: (75.0%)
+#2 seed if: (58.3%)
 1. Kemper County beats Philadelphia
-2. Philadelphia beats Kemper County by 1\u20136
+2. Philadelphia beats Kemper County by 1–6
 
-#3 seed if: (25.0%)
+#3 seed if: (41.7%)
 1. Philadelphia beats Kemper County by 7 or more"""
 
 PHILADELPHIA_EXPECTED = """\
 Philadelphia
 
-#2 seed if: (25.0%)
+#2 seed if: (41.7%)
 1. Philadelphia beats Kemper County by 7 or more
 
-#3 seed if: (25.0%)
-1. Philadelphia beats Kemper County by 1\u20136
+#3 seed if: (8.3%)
+1. Philadelphia beats Kemper County by 1–6
 
 #4 seed if: (50.0%)
 1. Kemper County beats Philadelphia"""
@@ -388,10 +388,10 @@ def test_team_dict_eupora_eliminated():
 
 
 def test_team_dict_kemper_county_odds():
-    """KC: p2=75%, p3=25%."""
+    """KC: #2 58.3%, #3 41.7%."""
     kc = _TEAM_DICT["Kemper County"]
-    assert kc[2]["odds"] == pytest.approx(0.75, abs=1e-9)
-    assert kc[3]["odds"] == pytest.approx(0.25, abs=1e-9)
+    assert kc[2]["odds"] == pytest.approx(0.582815735, abs=1e-9)
+    assert kc[3]["odds"] == pytest.approx(0.417184265, abs=1e-9)
 
 
 def test_team_dict_kemper_county_odds_sum_to_one():
@@ -401,10 +401,10 @@ def test_team_dict_kemper_county_odds_sum_to_one():
 
 
 def test_team_dict_philadelphia_odds():
-    """Philadelphia: p2=25%, p3=25%, p4=50%."""
+    """Philadelphia: #2 41.7%, #3 8.3%, #4 50.0%."""
     ph = _TEAM_DICT["Philadelphia"]
-    assert ph[2]["odds"] == pytest.approx(0.25, abs=1e-9)
-    assert ph[3]["odds"] == pytest.approx(0.25, abs=1e-9)
+    assert ph[2]["odds"] == pytest.approx(0.417184265, abs=1e-9)
+    assert ph[3]["odds"] == pytest.approx(0.082815735, abs=1e-9)
     assert ph[4]["odds"] == pytest.approx(0.50, abs=1e-9)
 
 
