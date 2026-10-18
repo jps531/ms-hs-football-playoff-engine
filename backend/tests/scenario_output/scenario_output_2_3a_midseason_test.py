@@ -111,8 +111,8 @@ def test_scenario_denominator():
 
 
 def test_scenario_count():
-    """28 distinct division scenarios (margin sensitivity creates sub-labels)."""
-    assert len(_SCENARIOS) == 28
+    """32 distinct division scenarios (margin sensitivity creates sub-labels, one per outcome)."""
+    assert len(_SCENARIOS) == 32
 
 
 # ---------------------------------------------------------------------------
@@ -222,37 +222,21 @@ def test_no_coin_flip_teams():
 
 
 def test_coahoma_county_seed1_first_atom_conditions():
-    """CC seed-1 first atom: CC beats Ind (any margin) AND NP beats HS (any margin).
-
-    This is the simplest path to CC at seed 1: CC beats their strongest remaining
-    opponent (Ind) and their H2H rival's opponent (NP beats HS) — forcing a 3-0
-    or 2-1 CC record where CC beats NP by H2H (from the Oct 10 completed game).
-    """
-    atom = _ATOMS["Coahoma County"][1][0]
-    cc_beats_ind = next(
-        (c for c in atom if isinstance(c, GameResult) and c.winner == "Coahoma County" and c.loser == "Independence"),
-        None,
-    )
-    np_beats_hs = next(
-        (c for c in atom if isinstance(c, GameResult) and c.winner == "North Panola" and c.loser == "Holly Springs"),
-        None,
-    )
-    assert cc_beats_ind is not None, "CC beats Ind condition missing"
-    assert cc_beats_ind.min_margin == 1
-    assert cc_beats_ind.max_margin is None  # any winning margin qualifies
-    assert np_beats_hs is not None, "NP beats HS condition missing"
-    assert np_beats_hs.min_margin == 1
-    assert np_beats_hs.max_margin is None
+    """Coahoma County #1 path 1: Coahoma County beats Holly Springs AND Coahoma County beats Independence."""
+    assert [str(c) for c in _ATOMS["Coahoma County"][1][0]] == [
+        "Coahoma County>Holly Springs",
+        "Coahoma County>Independence",
+    ]
 
 
 def test_coahoma_county_seed1_atom_count():
-    """CC seed-1 has 14 atoms (margin-sensitive tiebreaker paths when 3-way ties occur)."""
-    assert len(_ATOMS["Coahoma County"][1]) == 14
+    """Coahoma County"s #1 has 13 paths."""
+    assert len(_ATOMS["Coahoma County"][1]) == 13
 
 
 def test_coahoma_county_seed4_atom_count():
-    """CC seed-4 has only 2 atoms (rare outcome — CC loses both remaining games)."""
-    assert len(_ATOMS["Coahoma County"][4]) == 2
+    """Coahoma County"s #4 has 3 paths."""
+    assert len(_ATOMS["Coahoma County"][4]) == 3
 
 
 def test_coahoma_county_seed4_first_atom():
@@ -277,9 +261,7 @@ def test_coahoma_county_seed4_first_atom():
 def test_scenario5_seeding_matches_actual_2025():
     """Scenario 5 produces the actual 2025 seeding: CC #1, NP #2, Ind #3, HS #4."""
     sc5 = next(sc for sc in _SCENARIOS if sc["scenario_num"] == 5 and sc["sub_label"] == "")
-    assert list(sc5["seeding"]) == [
-        "Coahoma County", "North Panola", "Independence", "Holly Springs"
-    ]
+    assert list(sc5["seeding"]) == ["Coahoma County", "North Panola", "Independence", "Holly Springs"]
 
 
 def test_scenario5_is_non_sensitive():
@@ -314,24 +296,25 @@ def test_scenario5_game_winners():
 # ---------------------------------------------------------------------------
 
 
-def test_scenario3_has_five_sub_labels():
-    """Scenario 3 has five sub-labels (a-e) due to 3-way 2-1 tie requiring tiebreakers.
+def test_scenario3_has_six_sub_labels():
+    """Scenario 3 has six sub-labels (a-f), one per outcome of the 3-way 2-1 tie.
 
     Mask: NP beats Ind (bit 0), CC beats HS (bit 1), Ind beats CC (bit 2),
     NP beats HS (bit 3) → CC=2-1, NP=2-1, Ind=2-1 (3-way tie), HS=0-3.
-    Steps 1-4 tiebreakers produce five margin-distinct orderings.
+    Steps 3-4 give five orderings; with every margin 12+ all three stay level, and fewest
+    points allowed decides (3f).
     """
     sc3_labels = sorted(sc["sub_label"] for sc in _SCENARIOS if sc["scenario_num"] == 3)
-    assert sc3_labels == ["a", "b", "c", "d", "e"]
+    assert sc3_labels == ["a", "b", "c", "d", "e", "f"]
+    sc3f = next(sc for sc in _SCENARIOS if sc["scenario_num"] == 3 and sc["sub_label"] == "f")
+    assert sc3f["open_groups"] == [(5, ("Coahoma County", "Independence", "North Panola"))]
 
 
 def test_scenario3_all_have_conditions_atom():
     """All scenario 3 sub-scenarios are margin-sensitive and have a conditions_atom."""
     for sc in _SCENARIOS:
         if sc["scenario_num"] == 3:
-            assert sc["conditions_atom"] is not None, (
-                f"scenario 3{sc['sub_label']} missing conditions_atom"
-            )
+            assert sc["conditions_atom"] is not None, f"scenario 3{sc['sub_label']} missing conditions_atom"
 
 
 def test_scenario3_game_winners_consistent():
@@ -340,11 +323,7 @@ def test_scenario3_game_winners_consistent():
     The sub-labels differ only in margin qualifiers — the underlying outcome
     (which team won each game) is the same for all five variants.
     """
-    sc3_winners = [
-        tuple(sorted(sc["game_winners"]))
-        for sc in _SCENARIOS
-        if sc["scenario_num"] == 3
-    ]
+    sc3_winners = [tuple(sorted(sc["game_winners"])) for sc in _SCENARIOS if sc["scenario_num"] == 3]
     assert len(set(sc3_winners)) == 1, "All sub-scenarios should share the same game winners"
 
 
@@ -376,8 +355,8 @@ def test_render_all_teams_present_in_team_dict():
 
 
 def test_div_dict_key_count():
-    """division_scenarios_as_dict has 28 entries (one per scenario sub-label)."""
-    assert len(_DIV_DICT) == 28
+    """division_scenarios_as_dict has 32 entries (one per scenario sub-label)."""
+    assert len(_DIV_DICT) == 32
 
 
 def test_div_dict_contains_scenario5():
@@ -448,9 +427,9 @@ def test_render_coahoma_county_seed4_first_atom():
 
 
 def test_render_coahoma_county_has_margin_conditions():
-    """CC's render contains margin-sensitive conditions (from 3-way tie resolution)."""
+    """CC's margin-sensitive paths (from 3-way ties) state the tiebreaker decisions behind them."""
     rendered = render_team_scenarios("Coahoma County", _ATOMS, odds=_ODDS)
-    assert "by exactly" in rendered
+    assert "Point differential in games among Coahoma County, Holly Springs and Independence" in rendered
 
 
 # Independence

@@ -3,23 +3,22 @@
 Two checkpoints test different enumeration modes:
 
 Checkpoint A — 0 games played (cutoff 2025-10-15, R=6, ignore_margins=True):
-  All 6 region games are unplayed.  41 scenarios result.  16 of them have
-  ``coinflip_groups`` — ties that require a coin flip.  No tiebreaker_groups
-  appear since no completed-game PD differentiates any teams.
+  All 6 region games are unplayed.  40 scenarios result.  16 of them leave a
+  tie to the tiebreaker (``open_groups`` from step 3): with margins ignored, the
+  scenarios don't say how a margin-dependent tie breaks.
 
 Checkpoint B — 1 week played (cutoff 2025-10-17, R=4, ignore_margins=False):
   Two games have completed:
     Hamilton beat Walnut 49-22
     Baldwyn beat Hatley 53-18
   4 games remain.  Full margin enumeration runs (12^4 = 20736 combos per mask).
-  28 scenarios result: 8 plain (no margin constraint) and 20 margin-sensitive
-  (sub-labelled a/b/c/…).  No coinflip_groups (ignore_margins=False uses the
-  expanded coinflip sub-scenario format instead).
+  32 scenarios result: 8 plain (no margin constraint) and 24 margin-sensitive
+  (sub-labelled a/b/c/…), stated as margin ranges or tiebreaker decisions.
 
 Teams (4): Baldwyn, Hamilton, Hatley, Walnut
 """
 
-from backend.helpers.data_classes import GameResult, RemainingGame
+from backend.helpers.data_classes import RemainingGame
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_viewer import enumerate_division_scenarios, enumerate_outcomes, render_scenarios
 from backend.tests.data.results_2025_ground_truth import REGION_RESULTS_2025, expand_results, teams_from_games
@@ -84,6 +83,9 @@ class TestCheckpointA:
             "seeding",
             "game_winners",
             "conditions_atom",
+            "alternatives",
+            "open_groups",
+            "open_places",
             "tiebreaker_groups",
             "coinflip_groups",
         }
@@ -99,9 +101,15 @@ class TestCheckpointA:
         assert all(sc["tiebreaker_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenario_count(self):
-        """16 scenarios have coinflip_groups."""
-        cf_count = sum(1 for sc in _SCENARIOS_A if sc["coinflip_groups"] is not None)
-        assert cf_count == 16
+        """16 scenarios leave a tie to the tiebreaker; none claims a coin flip.
+
+        With margins ignored, every margin-dependent tie is left open from step 3: the old
+        "coin flips" here only came from putting every margin at the same default, which makes
+        point differentials artificially equal.
+        """
+        assert sum(1 for sc in _SCENARIOS_A if sc["open_groups"]) == 16
+        assert all(step == 3 for sc in _SCENARIOS_A for step, _ in sc["open_groups"] or [])
+        assert all(sc["coinflip_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenarios_have_no_sub_label(self):
         """Collapsed coin-flip scenarios use sub_label=''."""
@@ -124,37 +132,28 @@ class TestCheckpointA:
         assert sc["coinflip_groups"] is None
 
     def test_scenario_2_coinflip_three_way(self):
-        """Scenario 2 has a 3-way tie among Hamilton, Hatley, Walnut — coin flip."""
+        """Scenario 2 leaves the 3-way tie among Hamilton, Hatley, Walnut to the tiebreaker."""
         sc = _SCENARIOS_A[1]
         assert sc["scenario_num"] == 2
         assert sc["sub_label"] == ""
-        cf = sc["coinflip_groups"]
-        assert cf is not None
-        assert len(cf) == 1
-        assert set(cf[0]) == {"Hamilton", "Hatley", "Walnut"}
+        assert sc["open_groups"] == [(3, ("Hamilton", "Hatley", "Walnut"))]
 
     def test_scenario_2_renders_coinflip_tie(self):
-        """Scenario 2 renders '1-3. Tie between … — depends on point differential'."""
-        sc = _SCENARIOS_A[1]
-        rendered = render_scenarios([sc])
-        assert "1-3. Tie between" in rendered
-        assert "depends on point differential" in rendered
+        """Scenario 2 renders the tie over places 1-3 without an order."""
+        rendered = render_scenarios([_SCENARIOS_A[1]])
+        assert "1-3. Hamilton, Hatley, and Walnut: order decided by the tiebreaker" in rendered
 
     def test_scenario_3_coinflip_three_way(self):
-        """Scenario 3 has a 3-way coin-flip tie among Baldwyn, Hamilton, Hatley."""
+        """Scenario 3 leaves the 3-way tie among Baldwyn, Hamilton, Hatley to the tiebreaker."""
         sc = _SCENARIOS_A[2]
         assert sc["scenario_num"] == 3
-        cf = sc["coinflip_groups"]
-        assert cf is not None
-        assert set(cf[0]) == {"Baldwyn", "Hamilton", "Hatley"}
+        assert sc["open_groups"] == [(3, ("Baldwyn", "Hamilton", "Hatley"))]
 
     def test_scenario_3_renders_below_top4(self):
-        """Scenario 3 has Walnut at seed 1 and '2-4. Tie…' for the remaining three."""
-        sc = _SCENARIOS_A[2]
-        rendered = render_scenarios([sc])
+        """Scenario 3 has Walnut at seed 1 and the other three tied over places 2-4."""
+        rendered = render_scenarios([_SCENARIOS_A[2]])
         assert "1. Walnut" in rendered
-        assert "2-4. Tie between" in rendered
-        assert "depends on point differential" in rendered
+        assert "2-4. Baldwyn, Hamilton, and Hatley: order decided by the tiebreaker" in rendered
 
     def test_enumerated_outcomes_ignore_margins_flag(self):
         """EnumeratedOutcomes built with ignore_margins=True sets the flag."""
@@ -178,8 +177,8 @@ class TestCheckpointB:
         assert len(_REMAINING_B) == 4
 
     def test_scenario_count(self):
-        """R=4, full enumeration produces 28 scenarios (8 plain + 20 margin-sensitive)."""
-        assert len(_SCENARIOS_B) == 28
+        """R=4, full enumeration produces 32 scenarios (8 plain + 24 margin-sensitive)."""
+        assert len(_SCENARIOS_B) == 32
 
     def test_scenario_keys(self):
         """Every scenario dict has the required keys."""
@@ -189,6 +188,9 @@ class TestCheckpointB:
             "seeding",
             "game_winners",
             "conditions_atom",
+            "alternatives",
+            "open_groups",
+            "open_places",
             "tiebreaker_groups",
             "coinflip_groups",
         }
@@ -209,9 +211,9 @@ class TestCheckpointB:
         assert plain == 8
 
     def test_margin_sensitive_scenario_count(self):
-        """20 scenarios are margin-sensitive (conditions_atom is not None)."""
+        """24 scenarios are margin-sensitive (conditions_atom is not None)."""
         ms = sum(1 for sc in _SCENARIOS_B if sc["conditions_atom"] is not None)
-        assert ms == 20
+        assert ms == 24
 
     def test_margin_sensitive_have_sub_label(self):
         """All margin-sensitive scenarios have a non-empty sub_label (a/b/c/…)."""
@@ -241,13 +243,14 @@ class TestCheckpointB:
         assert "b" in sub_labels
 
     def test_scenario_6a_seeding_and_condition(self):
-        """Scenario 6a: Baldwyn / Hamilton / Hatley / Walnut with margin condition."""
+        """Scenario 6a: Baldwyn / Hamilton / Hatley / Walnut, from how point differential ranks the 3-way tie."""
+        from backend.helpers.data_classes import TiebreakDecision
+
         sc = next(s for s in _SCENARIOS_B if s["scenario_num"] == 6 and s["sub_label"] == "a")
         assert sc["seeding"] == ("Baldwyn", "Hamilton", "Hatley", "Walnut")
-        assert sc["conditions_atom"] is not None
-        # conditions_atom must include a GameResult with margin constraint
-        assert any(
-            isinstance(c, GameResult) and (c.min_margin > 1 or c.max_margin is not None) for c in sc["conditions_atom"]
+        assert (
+            TiebreakDecision(3, ("Hamilton", "Hatley", "Walnut"), (("Hamilton",), ("Hatley",), ("Walnut",)))
+            in sc["conditions_atom"]
         )
 
     def test_completed_games_two_played(self):

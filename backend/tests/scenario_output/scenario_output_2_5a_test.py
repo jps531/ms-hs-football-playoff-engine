@@ -77,8 +77,8 @@ CLEVELAND_CENTRAL_EXPECTED = """\
 Cleveland Central
 
 #1 seed if: (75.0%)
-1. Vicksburg beats Lanier
-2. Cleveland Central beats Provine AND Lanier beats Vicksburg
+1. Cleveland Central beats Provine
+2. Vicksburg beats Lanier
 
 #2 seed if: (12.5%)
 1. Provine beats Cleveland Central AND Holmes County Central beats Florence AND Lanier beats Vicksburg
@@ -200,32 +200,13 @@ def test_atoms_cc_seed1_count():
 
 
 def test_atoms_cc_seed1_atom0():
-    """CC seed-1 atom 0: Vicksburg beats Lanier (any margin). CC/PRO game absent."""
-    atom = _ATOMS["Cleveland Central"][1][0]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert isinstance(gr, GameResult)
-    assert gr.winner == "Vicksburg"
-    assert gr.loser == "Lanier"
-    assert gr.min_margin == 1
-    assert gr.max_margin is None
-
-
-def test_atoms_cc_seed1_atom0_cc_pro_absent():
-    """CC/PRO game is absent from CC seed-1 atom 0 — VB winning is sufficient."""
-    atom = _ATOMS["Cleveland Central"][1][0]
-    pairs = {(gr.winner, gr.loser) for gr in atom if isinstance(gr, GameResult)}
-    assert ("Cleveland Central", "Provine") not in pairs
-    assert ("Provine", "Cleveland Central") not in pairs
+    """Cleveland Central #1 path 1: Cleveland Central beats Provine."""
+    assert [str(c) for c in _ATOMS["Cleveland Central"][1][0]] == ["Cleveland Central>Provine"]
 
 
 def test_atoms_cc_seed1_atom1():
-    """CC seed-1 atom 1: CC beats Provine AND Lanier beats Vicksburg."""
-    atom = _ATOMS["Cleveland Central"][1][1]
-    assert len(atom) == 2
-    winners = {gr.winner for gr in atom}
-    assert "Cleveland Central" in winners
-    assert "Lanier" in winners
+    """Cleveland Central #1 path 2: Vicksburg beats Lanier."""
+    assert [str(c) for c in _ATOMS["Cleveland Central"][1][1]] == ["Vicksburg>Lanier"]
 
 
 def test_atoms_cc_seed2_count():

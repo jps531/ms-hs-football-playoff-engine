@@ -100,8 +100,8 @@ NORTHEAST_JONES_EXPECTED = """\
 Northeast Jones
 
 #4 seed if: (37.5%)
-1. Purvis beats Vancleave AND Stone beats East Central
-2. Northeast Jones beats Wayne County AND Purvis beats Vancleave AND East Central beats Stone
+1. Northeast Jones beats Wayne County AND Purvis beats Vancleave
+2. Purvis beats Vancleave AND Stone beats East Central
 
 Eliminated if: (62.5%)
 1. Vancleave beats Purvis
@@ -114,8 +114,8 @@ Purvis
 1. Purvis beats Vancleave
 
 #4 seed if: (37.5%)
-1. Vancleave beats Purvis AND Stone beats East Central
-2. Northeast Jones beats Wayne County AND Vancleave beats Purvis AND East Central beats Stone
+1. Northeast Jones beats Wayne County AND Vancleave beats Purvis
+2. Vancleave beats Purvis AND Stone beats East Central
 
 Eliminated if: (12.5%)
 1. Wayne County beats Northeast Jones AND Vancleave beats Purvis AND East Central beats Stone"""
@@ -124,8 +124,8 @@ VANCLEAVE_EXPECTED = """\
 Vancleave
 
 #3 seed if: (37.5%)
-1. Vancleave beats Purvis AND Stone beats East Central
-2. Northeast Jones beats Wayne County AND Vancleave beats Purvis AND East Central beats Stone
+1. Northeast Jones beats Wayne County AND Vancleave beats Purvis
+2. Vancleave beats Purvis AND Stone beats East Central
 
 #4 seed if: (12.5%)
 1. Wayne County beats Northeast Jones AND Vancleave beats Purvis AND East Central beats Stone
@@ -281,29 +281,13 @@ def test_atoms_purvis_seed4_count():
 
 
 def test_atoms_purvis_seed4_atom0():
-    """Purvis seed-4 first atom: VAN beats Purvis AND Stone beats EC (NJ/WC game irrelevant)."""
-    atom = _ATOMS["Purvis"][4][0]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Vancleave"
-    assert gr0.loser == "Purvis"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Stone"
-    assert gr1.loser == "East Central"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
+    """Purvis #4 path 1: Northeast Jones beats Wayne County AND Vancleave beats Purvis."""
+    assert [str(c) for c in _ATOMS["Purvis"][4][0]] == ["Northeast Jones>Wayne County", "Vancleave>Purvis"]
 
 
 def test_atoms_purvis_seed4_atom1():
-    """Purvis seed-4 second atom: NJ beats WC AND VAN beats Purvis AND EC beats Stone."""
-    atom = _ATOMS["Purvis"][4][1]
-    assert len(atom) == 3
-    winners = {gr.winner for gr in atom}
-    assert "Northeast Jones" in winners
-    assert "Vancleave" in winners
-    assert "East Central" in winners
+    """Purvis #4 path 2: Vancleave beats Purvis AND Stone beats East Central."""
+    assert [str(c) for c in _ATOMS["Purvis"][4][1]] == ["Vancleave>Purvis", "Stone>East Central"]
 
 
 def test_atoms_purvis_seed5_count():
@@ -332,29 +316,13 @@ def test_atoms_vancleave_seed3_count():
 
 
 def test_atoms_vancleave_seed3_atom0():
-    """Vancleave seed-3 first atom: VAN beats Purvis AND Stone beats EC (NJ/WC irrelevant)."""
-    atom = _ATOMS["Vancleave"][3][0]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Vancleave"
-    assert gr0.loser == "Purvis"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Stone"
-    assert gr1.loser == "East Central"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
+    """Vancleave #3 path 1: Northeast Jones beats Wayne County AND Vancleave beats Purvis."""
+    assert [str(c) for c in _ATOMS["Vancleave"][3][0]] == ["Northeast Jones>Wayne County", "Vancleave>Purvis"]
 
 
 def test_atoms_vancleave_seed3_atom1():
-    """Vancleave seed-3 second atom: NJ beats WC AND VAN beats Purvis AND EC beats Stone."""
-    atom = _ATOMS["Vancleave"][3][1]
-    assert len(atom) == 3
-    winners = {gr.winner for gr in atom}
-    assert "Northeast Jones" in winners
-    assert "Vancleave" in winners
-    assert "East Central" in winners
+    """Vancleave #3 path 2: Vancleave beats Purvis AND Stone beats East Central."""
+    assert [str(c) for c in _ATOMS["Vancleave"][3][1]] == ["Vancleave>Purvis", "Stone>East Central"]
 
 
 def test_atoms_vancleave_seed4_count():
@@ -399,37 +367,13 @@ def test_atoms_northeast_jones_seed4_count():
 
 
 def test_atoms_northeast_jones_seed4_atom0():
-    """NJ seed-4 first atom: Purvis beats VAN AND Stone beats EC (NJ/WC game absent)."""
-    atom = _ATOMS["Northeast Jones"][4][0]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Purvis"
-    assert gr0.loser == "Vancleave"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Stone"
-    assert gr1.loser == "East Central"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
-
-
-def test_atoms_northeast_jones_seed4_atom0_nj_wc_absent():
-    """NJ seed-4 first atom omits the NJ/WC game — that result is irrelevant to NJ's #4 finish here."""
-    atom = _ATOMS["Northeast Jones"][4][0]
-    nj_wc_teams = {"Northeast Jones", "Wayne County"}
-    for gr in atom:
-        assert {gr.winner, gr.loser} != nj_wc_teams
+    """Northeast Jones #4 path 1: Northeast Jones beats Wayne County AND Purvis beats Vancleave."""
+    assert [str(c) for c in _ATOMS["Northeast Jones"][4][0]] == ["Northeast Jones>Wayne County", "Purvis>Vancleave"]
 
 
 def test_atoms_northeast_jones_seed4_atom1():
-    """NJ seed-4 second atom: NJ beats WC AND Purvis beats VAN AND EC beats Stone."""
-    atom = _ATOMS["Northeast Jones"][4][1]
-    assert len(atom) == 3
-    winners = {gr.winner for gr in atom}
-    assert "Northeast Jones" in winners
-    assert "Purvis" in winners
-    assert "East Central" in winners
+    """Northeast Jones #4 path 2: Purvis beats Vancleave AND Stone beats East Central."""
+    assert [str(c) for c in _ATOMS["Northeast Jones"][4][1]] == ["Purvis>Vancleave", "Stone>East Central"]
 
 
 # ---------------------------------------------------------------------------
@@ -472,22 +416,6 @@ def test_atoms_east_central_seed4_atom():
 # ---------------------------------------------------------------------------
 
 
-def test_nj_wc_absent_from_purvis_seed4_atom0():
-    """Purvis seed-4 first atom omits NJ/WC — irrelevant when VAN wins AND Stone wins."""
-    atom = _ATOMS["Purvis"][4][0]
-    nj_wc_teams = {"Northeast Jones", "Wayne County"}
-    for gr in atom:
-        assert {gr.winner, gr.loser} != nj_wc_teams
-
-
-def test_nj_wc_absent_from_vancleave_seed3_atom0():
-    """Vancleave seed-3 first atom omits NJ/WC — irrelevant when VAN wins AND Stone wins."""
-    atom = _ATOMS["Vancleave"][3][0]
-    nj_wc_teams = {"Northeast Jones", "Wayne County"}
-    for gr in atom:
-        assert {gr.winner, gr.loser} != nj_wc_teams
-
-
 # ---------------------------------------------------------------------------
 # Division scenarios dict
 # ---------------------------------------------------------------------------
@@ -504,39 +432,39 @@ def test_div_dict_scenario1_title():
 
 
 def test_div_dict_scenario2_title():
-    """Scenario 2: WC beats NJ AND Purvis beats VAN AND Stone beats EC."""
-    assert (
-        _DIV_DICT["2"]["title"]
-        == "Wayne County beats Northeast Jones AND Purvis beats Vancleave AND Stone beats East Central"
-    )
+    """Scenario 2: Purvis beats Vancleave AND Stone beats East Central."""
+    assert _DIV_DICT["2"]["title"] == "Purvis beats Vancleave AND Stone beats East Central"
 
 
 def test_div_dict_scenario3_title():
-    """Scenario 3 (actual): NJ beats WC AND Purvis beats VAN (Stone/EC irrelevant)."""
-    assert _DIV_DICT["3"]["title"] == "Northeast Jones beats Wayne County AND Purvis beats Vancleave"
-
-
-def test_div_dict_scenario4_title():
-    """Scenario 4: WC beats NJ AND VAN beats Purvis AND EC beats Stone."""
+    """Scenario 3: Wayne County beats Northeast Jones AND Vancleave beats Purvis AND East Central beats Stone."""
     assert (
-        _DIV_DICT["4"]["title"]
+        _DIV_DICT["3"]["title"]
         == "Wayne County beats Northeast Jones AND Vancleave beats Purvis AND East Central beats Stone"
     )
 
 
-def test_div_dict_scenario5_title():
-    """Scenario 5: NJ beats WC AND Vancleave beats Purvis AND EC beats Stone → Stone/WC/VAN/Purvis."""
+def test_div_dict_scenario4_title():
+    """Scenario 4: Northeast Jones beats Wayne County AND Vancleave beats Purvis AND East Central beats Stone."""
     assert (
-        _DIV_DICT["5"]["title"]
+        _DIV_DICT["4"]["title"]
         == "Northeast Jones beats Wayne County AND Vancleave beats Purvis AND East Central beats Stone"
     )
 
 
+def test_div_dict_scenario5_title():
+    """Scenario 5: Wayne County beats Northeast Jones AND Purvis beats Vancleave AND East Central beats Stone."""
+    assert (
+        _DIV_DICT["5"]["title"]
+        == "Wayne County beats Northeast Jones AND Purvis beats Vancleave AND East Central beats Stone"
+    )
+
+
 def test_div_dict_scenario6_title():
-    """Scenario 6: WC beats NJ AND Purvis beats VAN AND EC beats Stone → Stone/WC/Purvis/EC."""
+    """Scenario 6: Northeast Jones beats Wayne County AND Purvis beats Vancleave AND East Central beats Stone."""
     assert (
         _DIV_DICT["6"]["title"]
-        == "Wayne County beats Northeast Jones AND Purvis beats Vancleave AND East Central beats Stone"
+        == "Northeast Jones beats Wayne County AND Purvis beats Vancleave AND East Central beats Stone"
     )
 
 
@@ -563,47 +491,51 @@ def test_div_dict_scenario2_seeds():
 
 
 def test_div_dict_scenario3_seeds():
-    """Scenario 3 (actual): Stone #1, WC #2, Purvis #3, NJ #4."""
+    """Scenario 3: Stone #1, Wayne County #2, East Central #3, Vancleave #4."""
     s = _DIV_DICT["3"]
-    assert s["one_seed"] == "Stone"
-    assert s["two_seed"] == "Wayne County"
-    assert s["three_seed"] == "Purvis"
-    assert s["four_seed"] == "Northeast Jones"
-    assert "East Central" in s["eliminated"]
-    assert "Vancleave" in s["eliminated"]
+    assert (s["one_seed"], s["two_seed"], s["three_seed"], s["four_seed"]) == (
+        "Stone",
+        "Wayne County",
+        "East Central",
+        "Vancleave",
+    )
+    assert set(s["eliminated"]) == {"Northeast Jones", "Purvis"}
 
 
 def test_div_dict_scenario4_seeds():
-    """Scenario 4: Stone #1, WC #2, EC #3, Vancleave #4."""
+    """Scenario 4: Stone #1, Wayne County #2, Vancleave #3, Purvis #4."""
     s = _DIV_DICT["4"]
-    assert s["one_seed"] == "Stone"
-    assert s["two_seed"] == "Wayne County"
-    assert s["three_seed"] == "East Central"
-    assert s["four_seed"] == "Vancleave"
-    assert "Purvis" in s["eliminated"]
-    assert "Northeast Jones" in s["eliminated"]
+    assert (s["one_seed"], s["two_seed"], s["three_seed"], s["four_seed"]) == (
+        "Stone",
+        "Wayne County",
+        "Vancleave",
+        "Purvis",
+    )
+    assert set(s["eliminated"]) == {"East Central", "Northeast Jones"}
 
 
 def test_div_dict_scenario5_seeds():
-    """Scenario 5: Stone #1, WC #2, Vancleave #3, Purvis #4 (NJ and EC eliminated)."""
+    """Scenario 5: Stone #1, Wayne County #2, Purvis #3, East Central #4."""
     s = _DIV_DICT["5"]
-    assert s["one_seed"] == "Stone"
-    assert s["two_seed"] == "Wayne County"
-    assert s["three_seed"] == "Vancleave"
-    assert s["four_seed"] == "Purvis"
-    assert "Northeast Jones" in s["eliminated"]
-    assert "East Central" in s["eliminated"]
+    assert (s["one_seed"], s["two_seed"], s["three_seed"], s["four_seed"]) == (
+        "Stone",
+        "Wayne County",
+        "Purvis",
+        "East Central",
+    )
+    assert set(s["eliminated"]) == {"Northeast Jones", "Vancleave"}
 
 
 def test_div_dict_scenario6_seeds():
-    """Scenario 6: Stone #1, WC #2, Purvis #3, EC #4."""
+    """Scenario 6: Stone #1, Wayne County #2, Purvis #3, Northeast Jones #4."""
     s = _DIV_DICT["6"]
-    assert s["one_seed"] == "Stone"
-    assert s["two_seed"] == "Wayne County"
-    assert s["three_seed"] == "Purvis"
-    assert s["four_seed"] == "East Central"
-    assert "Vancleave" in s["eliminated"]
-    assert "Northeast Jones" in s["eliminated"]
+    assert (s["one_seed"], s["two_seed"], s["three_seed"], s["four_seed"]) == (
+        "Stone",
+        "Wayne County",
+        "Purvis",
+        "Northeast Jones",
+    )
+    assert set(s["eliminated"]) == {"East Central", "Vancleave"}
 
 
 def test_div_dict_stone_always_one():
@@ -626,14 +558,17 @@ def test_div_dict_northeast_jones_never_one_two_three():
         assert scenario.get("three_seed") != "Northeast Jones"
 
 
-def test_div_dict_scenarios_2_and_3_identical_seedings():
-    """Scenarios 2 and 3 produce identical seedings from different game outcomes."""
+def test_div_dict_scenarios_2_and_6_identical_seedings():
+    """Scenarios 2 and 6 produce identical seedings from different game outcomes: with Purvis
+    winning, Stone/EC decides nothing that's shown when Northeast Jones beats Wayne County."""
     s2 = _DIV_DICT["2"]
-    s3 = _DIV_DICT["3"]
-    assert s2["one_seed"] == s3["one_seed"]
-    assert s2["two_seed"] == s3["two_seed"]
-    assert s2["three_seed"] == s3["three_seed"]
-    assert s2["four_seed"] == s3["four_seed"]
+    s6 = _DIV_DICT["6"]
+    assert (s2["one_seed"], s2["two_seed"], s2["three_seed"], s2["four_seed"]) == (
+        s6["one_seed"],
+        s6["two_seed"],
+        s6["three_seed"],
+        s6["four_seed"],
+    )
 
 
 # ---------------------------------------------------------------------------

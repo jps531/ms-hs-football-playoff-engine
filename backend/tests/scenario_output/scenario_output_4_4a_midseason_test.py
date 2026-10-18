@@ -243,8 +243,8 @@ def test_atoms_kosciusko_seed4_atom():
 
 
 def test_div_dict_scenario_count():
-    """There are 21 distinct division scenarios at two weeks out (scenario 3 split into two)."""
-    assert len(_DIV_DICT) == 21
+    """There are 22 distinct division scenarios at two weeks out."""
+    assert len(_DIV_DICT) == 22
 
 
 def test_div_dict_louisville_wins_always_seed1():
@@ -499,38 +499,32 @@ _EXPECTED_RENDER = {
         "\n"
         "#3 seed if: (27.3%)\n"
         "1. Gentry beats Greenwood AND Gentry beats Yazoo City\n"
-        "2. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by 6 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20133 AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by 7 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4\u20135 AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by 8 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 6 AND Louisville beats Greenwood\n"
-        "6. Gentry beats Greenwood by 8\u201311 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 7 AND Louisville beats Greenwood\n"
-        "7. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood\n"
-        "8. Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood\n"
-        "9. Gentry beats Greenwood by exactly 11 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u20139 AND Louisville beats Greenwood\n"
-        "10. Gentry beats Greenwood by 12 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7\u201310 AND Louisville beats Greenwood\n"
+        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Greenwood level at the top, then Yazoo City\n"
+        "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood and Yazoo City, level\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood, then Yazoo City\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Yazoo City, then Greenwood\n"
+        "6. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Gentry finishes ahead of both Greenwood and Yazoo City in their tie, which goes to fewest points allowed in region games (then a coin flip)\n"
         "\n"
         "#4 seed if: (32.9%)\n"
         "1. Greenwood beats Gentry AND Gentry beats Yazoo City\n"
-        "2. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20134 AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by 2\u20133 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20135 AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by exactly 4 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20136 AND Louisville beats Greenwood\n"
-        "6. Gentry beats Greenwood by exactly 5 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20136 AND Louisville beats Greenwood\n"
-        "7. Gentry beats Greenwood by exactly 6 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4\u20137 AND Louisville beats Greenwood\n"
-        "8. Gentry beats Greenwood by exactly 7 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 6\u20137 AND Louisville beats Greenwood\n"
-        "9. Gentry beats Greenwood by exactly 8 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood\n"
-        "10. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "11. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
+        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry, then Yazoo City\n"
+        "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Yazoo City level at the top, then Greenwood\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry and Greenwood, level\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry, then Greenwood\n"
+        "6. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Yazoo City best, then Gentry and Greenwood, level\n"
+        "7. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
+        "8. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Gentry finishes 2nd of the three in the tie with Greenwood and Yazoo City, which goes to fewest points allowed in region games (then a coin flip)\n"
         "\n"
         "Eliminated if: (39.8%)\n"
         "1. Greenwood beats Gentry AND Yazoo City beats Gentry\n"
         "2. Yazoo City beats Gentry AND Greenwood beats Louisville\n"
-        "3. Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 5 or more AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by 2\u20133 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 6 or more AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by 4\u20135 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood\n"
-        "6. Gentry beats Greenwood by 6\u20137 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8 or more AND Louisville beats Greenwood\n"
-        "7. Gentry beats Greenwood by 8\u20139 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "8. Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood"
+        "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood and Yazoo City level at the top, then Gentry\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry and Yazoo City, level\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Yazoo City, then Gentry\n"
+        "6. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Gentry and Yazoo City, level\n"
+        "7. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Yazoo City, then Gentry\n"
+        "8. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Greenwood, then Gentry\n"
+        "9. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Gentry finishes behind both Greenwood and Yazoo City in their tie, which goes to fewest points allowed in region games (then a coin flip)"
     ),
     "Greenwood": (
         "Greenwood\n"
@@ -544,36 +538,35 @@ _EXPECTED_RENDER = {
         "\n"
         "#3 seed if: (39.8%)\n"
         "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Louisville beats Greenwood\n"
-        "2. Gentry beats Greenwood by 1\u20133 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry\n"
+        "2. Greenwood beats Gentry AND Gentry beats Yazoo City AND Louisville beats Greenwood\n"
         "3. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Greenwood beats Louisville by 1\u20138\n"
-        "4. Yazoo City beats Kosciusko by 1\u20136 AND Greenwood beats Gentry AND Louisville beats Greenwood\n"
-        "5. Greenwood beats Louisville AND Gentry beats Greenwood by 4 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry\n"
-        "6. Gentry beats Greenwood by exactly 4 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20136 AND Louisville beats Greenwood\n"
-        "7. Gentry beats Greenwood by 4\u20135 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood\n"
-        "8. Gentry beats Greenwood by exactly 5 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20136 AND Louisville beats Greenwood\n"
-        "9. Gentry beats Greenwood by exactly 6 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4 or more AND Louisville beats Greenwood\n"
-        "10. Gentry beats Greenwood by exactly 7 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 6\u201311 AND Louisville beats Greenwood\n"
-        "11. Gentry beats Greenwood by exactly 8 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u201310 AND Louisville beats Greenwood\n"
-        "12. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood\n"
-        "13. Gentry beats Yazoo City AND Yazoo City beats Kosciusko by 7 or more AND Greenwood beats Gentry AND Louisville beats Greenwood\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry, then Yazoo City\n"
+        "6. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood and Yazoo City level at the top, then Gentry\n"
+        "7. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry and Yazoo City, level\n"
+        "8. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Yazoo City, then Gentry\n"
+        "9. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Gentry and Yazoo City, level\n"
+        "10. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Yazoo City, then Gentry\n"
+        "11. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Greenwood finishes ahead of both Gentry and Yazoo City in their tie, which goes to fewest points allowed in region games (then a coin flip)\n"
+        "12. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u20136 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
         "#4 seed if: (30.4%)\n"
         "1. Gentry beats Greenwood AND Gentry beats Yazoo City\n"
-        "2. Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by 6 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 2\u20133 AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by 7 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 4\u20135 AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood\n"
-        "6. Gentry beats Greenwood by 8 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 6 AND Louisville beats Greenwood\n"
-        "7. Gentry beats Greenwood by 8\u201311 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 7 AND Louisville beats Greenwood\n"
-        "8. Gentry beats Greenwood by 8\u20139 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 11 AND Louisville beats Greenwood\n"
-        "9. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood\n"
-        "10. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 10 AND Louisville beats Greenwood\n"
-        "11. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7 or more AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
+        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Greenwood level at the top, then Yazoo City\n"
+        "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood and Yazoo City, level\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood, then Yazoo City\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Greenwood, then Gentry\n"
+        "6. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Greenwood finishes 2nd of the three in the tie with Gentry and Yazoo City, which goes to fewest points allowed in region games (then a coin flip)\n"
+        "7. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7 or more AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
         "Eliminated if: (6.9%)\n"
-        "1. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
-        "2. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood"
+        "1. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Yazoo City level at the top, then Greenwood\n"
+        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry and Greenwood, level\n"
+        "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry, then Greenwood\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Yazoo City best, then Gentry and Greenwood, level\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Yazoo City, then Greenwood\n"
+        "6. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
+        "7. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Greenwood finishes behind both Gentry and Yazoo City in their tie, which goes to fewest points allowed in region games (then a coin flip)"
     ),
     "Kosciusko": (
         "Kosciusko\n"
@@ -582,10 +575,10 @@ _EXPECTED_RENDER = {
         "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Greenwood beats Louisville\n"
         "\n"
         "#2 seed if: (61.5%)\n"
-        "1. Kosciusko beats Yazoo City AND Louisville beats Greenwood\n"
-        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Greenwood beats Louisville\n"
-        "3. Yazoo City beats Kosciusko AND Gentry beats Yazoo City AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood AND Yazoo City beats Kosciusko AND Gentry beats Yazoo City AND Greenwood beats Louisville\n"
+        "1. Gentry beats Greenwood AND Kosciusko beats Yazoo City\n"
+        "2. Gentry beats Greenwood AND Gentry beats Yazoo City\n"
+        "3. Kosciusko beats Yazoo City AND Louisville beats Greenwood\n"
+        "4. Gentry beats Yazoo City AND Louisville beats Greenwood\n"
         "5. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
         "#3 seed if: (13.5%)\n"
@@ -600,8 +593,8 @@ _EXPECTED_RENDER = {
         "Louisville\n"
         "\n"
         "#1 seed if: (75.0%)\n"
-        "1. Louisville beats Greenwood\n"
-        "2. Gentry beats Greenwood AND Greenwood beats Louisville\n"
+        "1. Gentry beats Greenwood\n"
+        "2. Louisville beats Greenwood\n"
         "\n"
         "#2 seed if: (20.8%)\n"
         "1. Greenwood beats Louisville by 1\u20138 AND Greenwood beats Gentry\n"
@@ -619,34 +612,33 @@ _EXPECTED_RENDER = {
         "\n"
         "#3 seed if: (15.2%)\n"
         "1. Yazoo City beats Kosciusko AND Yazoo City beats Gentry AND Greenwood beats Louisville\n"
-        "2. Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by 8\u20139 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 11 AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 10 AND Louisville beats Greenwood\n"
-        "6. Gentry beats Greenwood by 10 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood\n"
-        "7. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
+        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Greenwood, then Gentry\n"
+        "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Yazoo City level at the top, then Greenwood\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry and Greenwood, level\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry, then Greenwood\n"
+        "6. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Yazoo City best, then Gentry and Greenwood, level\n"
+        "7. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Yazoo City finishes ahead of both Gentry and Greenwood in their tie, which goes to fewest points allowed in region games (then a coin flip)\n"
+        "8. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
         "#4 seed if: (24.2%)\n"
-        "1. Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville\n"
-        "2. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 5 or more AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by 2\u20133 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 6 or more AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by 4\u20135 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7 or more AND Louisville beats Greenwood\n"
-        "6. Gentry beats Greenwood by exactly 6 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8 or more AND Louisville beats Greenwood\n"
-        "7. Gentry beats Greenwood by exactly 7 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u201311 AND Louisville beats Greenwood\n"
-        "8. Gentry beats Greenwood by exactly 8 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 9\u201310 AND Louisville beats Greenwood\n"
-        "9. Gentry beats Greenwood by 9\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood\n"
-        "10. Gentry beats Greenwood by exactly 11 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 8\u20139 AND Louisville beats Greenwood\n"
-        "11. Gentry beats Greenwood by 12 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 7\u201310 AND Louisville beats Greenwood\n"
-        "12. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u20136 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
+        "1. Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry\n"
+        "2. Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville\n"
+        "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood and Yazoo City level at the top, then Gentry\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry and Yazoo City, level\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Yazoo City, then Gentry\n"
+        "6. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Gentry and Yazoo City, level\n"
+        "7. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Yazoo City, then Gentry\n"
+        "8. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Yazoo City, then Greenwood\n"
+        "9. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Yazoo City finishes 2nd of the three in the tie with Gentry and Greenwood, which goes to fewest points allowed in region games (then a coin flip)\n"
+        "10. Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u20136 AND Yazoo City beats Gentry AND Louisville beats Greenwood\n"
         "\n"
         "Eliminated if: (53.3%)\n"
         "1. Gentry beats Yazoo City\n"
-        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20134 AND Louisville beats Greenwood\n"
-        "3. Gentry beats Greenwood by 2 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 5 AND Louisville beats Greenwood\n"
-        "4. Gentry beats Greenwood by 4 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 6 AND Louisville beats Greenwood\n"
-        "5. Gentry beats Greenwood by 6\u201311 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 7 AND Louisville beats Greenwood\n"
-        "6. Gentry beats Greenwood by 8\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 8 AND Louisville beats Greenwood"
+        "2. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry, then Yazoo City\n"
+        "3. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Greenwood level at the top, then Yazoo City\n"
+        "4. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood and Yazoo City, level\n"
+        "5. Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood, then Yazoo City\n"
+        "6. Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Yazoo City finishes behind both Gentry and Greenwood in their tie, which goes to fewest points allowed in region games (then a coin flip)"
     ),
 }
 
@@ -683,7 +675,7 @@ def test_render_yazoo_city_full():
 # Expected: (title, one_seed, two_seed, three_seed, four_seed, eliminated)
 _EXPECTED_SCENARIOS = {
     "1a": (
-        "Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1\u20136 AND Yazoo City beats Gentry AND Louisville beats Greenwood",
+        "Greenwood beats Gentry AND Yazoo City beats Kosciusko by 1–6 AND Yazoo City beats Gentry AND Louisville beats Greenwood",
         "Louisville",
         "Kosciusko",
         "Greenwood",
@@ -691,7 +683,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "1b": (
-        "Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7\u201310 AND Yazoo City beats Gentry AND Louisville beats Greenwood",
+        "Greenwood beats Gentry AND Yazoo City beats Kosciusko by 7–10 AND Yazoo City beats Gentry AND Louisville beats Greenwood",
         "Louisville",
         "Kosciusko",
         "Yazoo City",
@@ -723,7 +715,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "4a": (
-        "Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 1\u20134 AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry, then Yazoo City",
         "Louisville",
         "Kosciusko",
         "Greenwood",
@@ -731,7 +723,7 @@ _EXPECTED_SCENARIOS = {
         ["Yazoo City"],
     ),
     "4b": (
-        "Gentry beats Greenwood by exactly 1 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 5 or more AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood and Yazoo City level at the top, then Gentry) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Gentry and Yazoo City, level) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Greenwood best, then Yazoo City, then Gentry) OR (Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Gentry and Yazoo City, level) OR (Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Greenwood best, then Yazoo City, then Gentry)",
         "Louisville",
         "Kosciusko",
         "Greenwood",
@@ -739,7 +731,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "4c": (
-        "Gentry beats Greenwood by 5 or more AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 1 AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Greenwood level at the top, then Yazoo City) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood and Yazoo City, level) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Greenwood, then Yazoo City)",
         "Louisville",
         "Kosciusko",
         "Gentry",
@@ -747,7 +739,7 @@ _EXPECTED_SCENARIOS = {
         ["Yazoo City"],
     ),
     "4d": (
-        "Gentry beats Greenwood by 7\u201310 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by 12 or more AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Greenwood, then Gentry",
         "Louisville",
         "Kosciusko",
         "Yazoo City",
@@ -755,7 +747,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "4e": (
-        "Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 1\u201311 AND Yazoo City beats Gentry by 9 or more AND Louisville beats Greenwood",
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry and Yazoo City level at the top, then Greenwood) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry and Greenwood, level) OR (Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Yazoo City best, then Gentry, then Greenwood) OR (Gentry, Greenwood and Yazoo City level on point differential in games among them, so on point differential against the rest of the region (capped at 12 a game, highest-placed opponent first): Yazoo City best, then Gentry and Greenwood, level)",
         "Louisville",
         "Kosciusko",
         "Yazoo City",
@@ -763,7 +755,15 @@ _EXPECTED_SCENARIOS = {
         ["Greenwood"],
     ),
     "4f": (
-        "Gentry beats Greenwood by exactly 10 AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood",
+        "Gentry beats Greenwood by exactly 9 AND Kosciusko beats Yazoo City by 12 or more AND Yazoo City beats Gentry by exactly 9 AND Louisville beats Greenwood by 12 or more AND Gentry, Greenwood and Yazoo City are still level: fewest points allowed in region games decides their order (then a coin flip)",
+        "Louisville",
+        "Kosciusko",
+        "Gentry",
+        "Greenwood",
+        ["Yazoo City"],
+    ),
+    "4g": (
+        "Gentry beats Greenwood AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Louisville beats Greenwood AND Point differential in games among Gentry, Greenwood and Yazoo City (capped at 12 a game): Gentry best, then Yazoo City, then Greenwood",
         "Louisville",
         "Kosciusko",
         "Gentry",
@@ -803,7 +803,7 @@ _EXPECTED_SCENARIOS = {
         ["Gentry"],
     ),
     "9a": (
-        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville by 1\u20138",
+        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Yazoo City beats Gentry AND Greenwood beats Louisville by 1–8",
         "Kosciusko",
         "Louisville",
         "Greenwood",
@@ -835,7 +835,7 @@ _EXPECTED_SCENARIOS = {
         ["Yazoo City"],
     ),
     "12a": (
-        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 1\u20138",
+        "Greenwood beats Gentry AND Kosciusko beats Yazoo City AND Gentry beats Yazoo City AND Greenwood beats Louisville by 1–8",
         "Kosciusko",
         "Louisville",
         "Greenwood",

@@ -44,9 +44,9 @@ from backend.helpers.scenario_serializers import (
     serialize_scenario_atoms,
 )
 from backend.helpers.scenario_viewer import (
-    build_scenario_atoms,
     enumerate_division_scenarios,
     enumerate_outcomes,
+    team_atoms_from_scenarios,
 )
 from backend.helpers.scenarios import (
     compute_bracket_odds,
@@ -937,6 +937,7 @@ def write_region_scenarios(
 # R thresholds for margin computation mode
 _R_ALWAYS_MARGIN = 5  # R ≤ this: always full margin, synchronous
 _R_MAX_COMPUTE = 15  # R > this: Monte Carlo odds, skip scenario enumeration entirely
+_R_MAX_ATOMS = 10  # R > this: no per-team atoms (the insights read off them aren't shown past 10 left)
 # R > _R_ALWAYS_MARGIN and R ≤ _R_MAX_COMPUTE: win/loss enumeration, no margin
 
 
@@ -1275,13 +1276,19 @@ def get_region_finish_scenarios(
     R = len(remaining)
 
     if R <= _R_ALWAYS_MARGIN:
-        # Full margin-sensitive computation synchronously.
-        precomputed = enumerate_outcomes(teams, completed, remaining)
-        scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed)
-        complete_scenarios = enumerate_division_scenarios(
-            teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed
+        # Full margin-sensitive computation synchronously. Team paths and insights are read off the
+        # complete scenarios, which state only what the tiebreaker decides.
+        complete_scenarios = enumerate_division_scenarios(teams, completed, remaining)
+        scenario_atoms = team_atoms_from_scenarios(complete_scenarios, remaining)
+        insights = extract_insights(
+            scenario_atoms,
+            teams,
+            completed,
+            remaining,
+            odds=stored_odds,
+            r_computed=R,
+            complete_scenarios=complete_scenarios,
         )
-        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=stored_odds, r_computed=R)
         write_region_scenarios.fn(
             clazz,
             region,
@@ -1315,11 +1322,17 @@ def get_region_finish_scenarios(
     else:
         # R > _R_ALWAYS_MARGIN and R ≤ _R_MAX_COMPUTE: win/loss-only, no margin.
         precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
-        scenario_atoms = build_scenario_atoms(teams, completed, remaining, precomputed=precomputed_wl)
-        complete_scenarios = enumerate_division_scenarios(
-            teams, completed, remaining, scenario_atoms=scenario_atoms, precomputed=precomputed_wl
+        complete_scenarios = enumerate_division_scenarios(teams, completed, remaining, precomputed=precomputed_wl)
+        scenario_atoms = team_atoms_from_scenarios(complete_scenarios, remaining) if R <= _R_MAX_ATOMS else {}
+        insights = extract_insights(
+            scenario_atoms,
+            teams,
+            completed,
+            remaining,
+            odds=stored_odds,
+            r_computed=R,
+            complete_scenarios=complete_scenarios,
         )
-        insights = extract_insights(scenario_atoms, teams, completed, remaining, odds=stored_odds, r_computed=R)
         write_region_scenarios.fn(
             clazz,
             region,

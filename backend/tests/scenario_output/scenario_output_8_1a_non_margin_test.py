@@ -3,15 +3,14 @@
 Two checkpoints test ``ignore_margins=True`` at different R values:
 
 Checkpoint A — 0 games played (cutoff 2025-10-02, R=10):
-  All 10 region games are unplayed.  604 scenarios result from the ignore_margins
-  path.  152 of them have coin-flip groups — ties that can only be broken by a
-  coin flip regardless of the remaining game outcomes.  No tiebreaker groups
-  appear since no completed-game PD yet differentiates any teams.
+  All 10 region games are unplayed.  624 scenarios result from the ignore_margins
+  path.  144 of them leave a tie to the tiebreaker (``open_groups`` from step 3):
+  with margins ignored, a tie whose order turns on point differential isn't given
+  an order, rather than one made up at a default margin.
 
 Checkpoint B — 1 week played (cutoff 2025-10-03, R=8):
-  The first week's 2 games have completed.  164 scenarios remain.  Real game
-  point differentials completely resolve all ties — no tiebreaker groups and
-  no coin-flip groups appear.
+  The first week's 2 games have completed.  170 scenarios remain, 38 of them with
+  a tie left to the tiebreaker.
 
 Teams (5): Lumberton, Resurrection, Richton, Stringer, Taylorsville
 """
@@ -70,8 +69,8 @@ class TestCheckpointA:
         assert len(_REMAINING_A) == 10
 
     def test_scenario_count(self):
-        """R=10, ignore_margins=True produces 604 scenarios."""
-        assert len(_SCENARIOS_A) == 604
+        """R=10, ignore_margins=True produces 624 scenarios."""
+        assert len(_SCENARIOS_A) == 624
 
     def test_scenario_keys(self):
         """Every scenario dict has the required keys."""
@@ -81,6 +80,9 @@ class TestCheckpointA:
             "seeding",
             "game_winners",
             "conditions_atom",
+            "alternatives",
+            "open_groups",
+            "open_places",
             "tiebreaker_groups",
             "coinflip_groups",
         }
@@ -96,9 +98,9 @@ class TestCheckpointA:
         assert all(sc["tiebreaker_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenario_count(self):
-        """152 scenarios have coinflip_groups."""
-        cf_count = sum(1 for sc in _SCENARIOS_A if sc["coinflip_groups"] is not None)
-        assert cf_count == 152
+        """144 scenarios leave a tie to the tiebreaker (margins are ignored, so none is a known coin flip)."""
+        assert sum(1 for sc in _SCENARIOS_A if sc["open_groups"]) == 144
+        assert all(sc["coinflip_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenarios_have_no_sub_label(self):
         """Collapsed coin-flip scenarios use sub_label='' — no expansion."""
@@ -126,12 +128,12 @@ class TestCheckpointA:
         assert sc["coinflip_groups"] is None
 
     def test_coinflip_group_format(self):
-        """coinflip_groups is a list of lists of team name strings."""
-        cf_scens = [s for s in _SCENARIOS_A if s["coinflip_groups"] is not None]
-        assert len(cf_scens) > 0
-        for sc in cf_scens[:5]:
-            for group in sc["coinflip_groups"]:
-                assert isinstance(group, list)
+        """open_groups is a list of (step, teams) pairs, each a tie of region teams left from step 3."""
+        open_scens = [s for s in _SCENARIOS_A if s["open_groups"]]
+        assert len(open_scens) > 0
+        for sc in open_scens[:5]:
+            for step, group in sc["open_groups"]:
+                assert step == 3
                 assert len(group) >= 2
                 assert all(t in _TEAMS for t in group)
 
@@ -172,8 +174,8 @@ class TestCheckpointB:
         assert len(_REMAINING_B) == 8
 
     def test_scenario_count(self):
-        """R=8, ignore_margins=True produces 164 scenarios."""
-        assert len(_SCENARIOS_B) == 164
+        """R=8, ignore_margins=True produces 170 scenarios."""
+        assert len(_SCENARIOS_B) == 170
 
     def test_scenario_keys(self):
         """Every scenario dict has the required keys."""
@@ -183,6 +185,9 @@ class TestCheckpointB:
             "seeding",
             "game_winners",
             "conditions_atom",
+            "alternatives",
+            "open_groups",
+            "open_places",
             "tiebreaker_groups",
             "coinflip_groups",
         }
@@ -213,9 +218,9 @@ class TestCheckpointB:
         assert top4_teams == set(_TEAMS)
 
     def test_unique_seedings(self):
-        """74 distinct seedings appear at this checkpoint."""
+        """91 distinct seedings appear at this checkpoint (teams out listed alphabetically)."""
         unique = {sc["seeding"] for sc in _SCENARIOS_B}
-        assert len(unique) == 74
+        assert len(unique) == 91
 
     def test_enumerated_outcomes_ignore_margins_flag(self):
         """EnumeratedOutcomes built with ignore_margins=True sets the flag."""

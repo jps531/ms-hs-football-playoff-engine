@@ -508,6 +508,17 @@ class ScenarioGameOutcome(BaseModel):
     loser: str
 
 
+class OpenGroupModel(BaseModel):
+    """A tie a scenario leaves to the tiebreaker: its teams' places in ``outcomes`` are only listed
+    alphabetically, since the scenario doesn't say their order. ``step`` is where it's decided from:
+    3 (point differential, then points allowed), 5 (fewest points allowed, then a coin flip) or
+    6 (a coin flip)."""
+
+    step: int
+    teams: list[str]
+    description: str
+
+
 class ScenarioEntry(BaseModel):
     """One complete-scenario entry: the game results that produce a specific seeding."""
 
@@ -519,8 +530,12 @@ class ScenarioEntry(BaseModel):
     coinflip_groups: list[list[str]] | None = None
     outcomes: dict[str, str]  # team → seed number ("1"–"4")
     conditions: list[dict] | None = (
-        None  # structured form of `title` (GameResult/MarginCondition/PDRankCondition dicts)
+        None  # structured form of `title` (GameResult/MarginCondition/PDRankCondition/TiebreakDecision dicts)
     )
+    # Every alternative set of conditions when more than one leads to this outcome (any one is enough);
+    # `conditions` is the first.
+    condition_groups: list[list[dict]] | None = None
+    open_groups: list[OpenGroupModel] | None = None
 
 
 class KeyInsightConditionModel(BaseModel):

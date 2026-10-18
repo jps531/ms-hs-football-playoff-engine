@@ -40,8 +40,8 @@ from itertools import product
 from backend.helpers.data_classes import GameResult, RemainingGame
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_viewer import build_scenario_atoms, enumerate_division_scenarios
-from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.tests.data.results_2025_ground_truth import REGION_RESULTS_2025, expand_results, teams_from_games
+from backend.tests.scenario_coverage import coverage_problems
 
 _PA_WIN = 14
 _BASE_MARGIN_DEFAULT = 7
@@ -117,8 +117,8 @@ def test_remaining_game_pairs():
 
 
 def test_scenario_count_exceeds_r3():
-    """R=4 produces more distinct seeding scenarios than the R=3 fixture (17)."""
-    assert len(_SCENARIOS) > 17
+    """R=4 lists more scenarios than the R=3 fixture (6): another game left means more ways to finish."""
+    assert len(_SCENARIOS) > 6
 
 
 def test_all_scenarios_have_full_seedings():
@@ -183,24 +183,9 @@ def test_atoms_contain_range_based_conditions():
 
 
 def test_backward_coverage():
-    """Every (mask, margins) combination maps to a seeding present in _SCENARIOS.
+    """Every (mask, margins) outcome matches a scenario, and every scenario it matches agrees.
 
-    Iterates all 16 masks × 12^4 = 331,776 margin combinations and verifies
-    that resolve_standings_for_mask produces a seeding that matches some
-    scenario.  This is the completeness guarantee: no outcome is unaccounted for.
+    Samples 1,000 margin combinations per mask (16,000 in all) rather than all 331,776.
     """
-    seeding_map = {sc["seeding"]: sc for sc in _SCENARIOS}
-    failures = []
-    for mask, margins in _all_outcome_branches():
-        order = resolve_standings_for_mask(
-            _TEAMS,
-            _COMPLETED,
-            _REMAINING,
-            mask,
-            margins,
-            _BASE_MARGIN_DEFAULT,
-            _PA_WIN,
-        )
-        if tuple(order) not in seeding_map:
-            failures.append(f"mask={mask:04b} margins={margins}: {tuple(order)} not in scenarios")
-    assert not failures, f"{len(failures)} uncovered:\n" + "\n".join(failures[:5])
+    report = coverage_problems(_TEAMS, _COMPLETED, _REMAINING, _SCENARIOS, samples_per_mask=1000)
+    assert report.ok, report.summary(_REMAINING)

@@ -18,6 +18,8 @@ from backend.helpers.data_classes import (
     HomeGameScenario,
     MarginCondition,
     PDRankCondition,
+    TiebreakDecision,
+    TiebreakPlace,
 )
 
 # ---------------------------------------------------------------------------
@@ -43,6 +45,21 @@ def serialize_condition(cond) -> dict:
             "op": cond.op,
             "threshold": cond.threshold,
         }
+    if isinstance(cond, TiebreakDecision):
+        return {
+            "type": "tiebreak_decision",
+            "step": cond.step,
+            "group": list(cond.group),
+            "parts": [list(p) for p in cond.parts],
+        }
+    if isinstance(cond, TiebreakPlace):
+        return {
+            "type": "tiebreak_place",
+            "team": cond.team,
+            "place": cond.place,
+            "group": list(cond.group),
+            "step": cond.step,
+        }
     if isinstance(cond, PDRankCondition):
         return {
             "type": "pd_rank_condition",
@@ -62,7 +79,9 @@ def serialize_condition(cond) -> dict:
     raise TypeError(f"Cannot serialize condition of type {type(cond).__name__!r}")
 
 
-def deserialize_condition(d: dict) -> GameResult | MarginCondition | PDRankCondition | HomeGameCondition:
+def deserialize_condition(
+    d: dict,
+) -> GameResult | MarginCondition | PDRankCondition | TiebreakDecision | TiebreakPlace | HomeGameCondition:
     """Deserialize a dict produced by serialize_condition back to a dataclass."""
     t = d["type"]
     if t == "game_result":
@@ -79,6 +98,14 @@ def deserialize_condition(d: dict) -> GameResult | MarginCondition | PDRankCondi
             op=d["op"],
             threshold=d["threshold"],
         )
+    if t == "tiebreak_decision":
+        return TiebreakDecision(
+            step=d["step"],
+            group=tuple(d["group"]),
+            parts=tuple(tuple(p) for p in d["parts"]),
+        )
+    if t == "tiebreak_place":
+        return TiebreakPlace(team=d["team"], place=d["place"], group=tuple(d["group"]), step=d["step"])
     if t == "pd_rank_condition":
         return PDRankCondition(
             team=d["team"],
@@ -177,6 +204,9 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
         "sub_label": str,
         "game_winners": [[winner, loser], ...],
         "conditions_atom": [condition_dict, ...] | null,
+        "alternatives": [[condition_dict, ...], ...] | null,
+        "open_groups": [[step, [team, ...]], ...] | null,
+        "open_places": {team: [seed, ...]} | null,
         "tiebreaker_groups": [[team, ...], ...] | null,
         "coinflip_groups": [[team, ...], ...] | null,
         "seeding": [team, ...]
@@ -191,6 +221,11 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
                 "sub_label": sc["sub_label"],
                 "game_winners": [list(gw) for gw in sc["game_winners"]],
                 "conditions_atom": serialize_atom(atom) if atom is not None else None,
+                "alternatives": [serialize_atom(a) for a in sc["alternatives"]] if sc.get("alternatives") else None,
+                "open_groups": [[step, list(g)] for step, g in sc["open_groups"]] if sc.get("open_groups") else None,
+                "open_places": {t: list(seeds) for t, seeds in sc["open_places"].items()}
+                if sc.get("open_places")
+                else None,
                 "tiebreaker_groups": sc.get("tiebreaker_groups"),
                 "coinflip_groups": sc.get("coinflip_groups"),
                 "seeding": list(sc["seeding"]),
@@ -210,6 +245,11 @@ def deserialize_complete_scenarios(data: list[dict]) -> list[dict]:
                 "sub_label": sc["sub_label"],
                 "game_winners": [tuple(gw) for gw in sc["game_winners"]],
                 "conditions_atom": deserialize_atom(atom_data) if atom_data is not None else None,
+                "alternatives": [deserialize_atom(a) for a in sc["alternatives"]] if sc.get("alternatives") else None,
+                "open_groups": [(step, tuple(g)) for step, g in sc["open_groups"]] if sc.get("open_groups") else None,
+                "open_places": {t: list(seeds) for t, seeds in sc["open_places"].items()}
+                if sc.get("open_places")
+                else None,
                 "tiebreaker_groups": sc.get("tiebreaker_groups"),
                 "coinflip_groups": sc.get("coinflip_groups"),
                 "seeding": tuple(sc["seeding"]),

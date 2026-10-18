@@ -75,51 +75,35 @@ Petal
 
 #1 seed if:
 1. Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes ahead of Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if:
 1. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if:
 1. Meridian beats Brandon AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1"""
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes behind Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)"""
 
 PEARL_EXPECTED = """\
 Pearl
 
 #1 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes ahead of Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if:
-1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-5. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+1. Meridian beats Brandon AND Pearl beats Oak Grove
+2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes behind Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 Eliminated if:
 1. Oak Grove beats Pearl"""
@@ -129,54 +113,38 @@ Oak Grove
 
 #1 seed if:
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes ahead of Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if:
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 2nd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if:
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 3rd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if:
-1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more"""
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes behind Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal"""
 
 NORTHWEST_RANKIN_EXPECTED = """\
 Northwest Rankin
 
 #1 seed if:
-1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes ahead of Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 
 #2 seed if:
-1. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 2nd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 
 #3 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 3rd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if:
-1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-5. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+1. Brandon beats Meridian AND Oak Grove beats Pearl
+2. Oak Grove beats Pearl AND Petal beats Northwest Rankin
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes behind Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 Eliminated if:
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin"""
@@ -185,8 +153,8 @@ BRANDON_EXPECTED = """\
 Brandon
 
 #3 seed if:
-1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
+1. Brandon beats Meridian AND Oak Grove beats Pearl
+2. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 
 #4 seed if:
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
@@ -210,51 +178,35 @@ Petal
 
 #1 seed if: (51.0%)
 1. Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes ahead of Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if: (14.6%)
 1. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if: (28.7%)
 1. Meridian beats Brandon AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if: (5.6%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1"""
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes behind Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)"""
 
 PEARL_WITH_ODDS_EXPECTED = """\
 Pearl
 
 #1 seed if: (3.1%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes ahead of Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if: (41.7%)
-1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-5. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+1. Meridian beats Brandon AND Pearl beats Oak Grove
+2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if: (2.9%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if: (2.3%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes behind Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 Eliminated if: (50.0%)
 1. Oak Grove beats Pearl"""
@@ -264,54 +216,38 @@ Oak Grove
 
 #1 seed if: (27.5%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes ahead of Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if: (27.7%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 2nd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if: (28.8%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 3rd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if: (16.0%)
-1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more"""
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes behind Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal"""
 
 NORTHWEST_RANKIN_WITH_ODDS_EXPECTED = """\
 Northwest Rankin
 
 #1 seed if: (18.3%)
-1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes ahead of Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 
 #2 seed if: (16.1%)
-1. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 2nd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
 
 #3 seed if: (2.1%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-2. Brandon beats Meridian AND Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 3rd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if: (38.5%)
-1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
-3. Brandon beats Meridian AND Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-4. Brandon beats Meridian AND Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-5. Brandon beats Meridian AND Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+1. Brandon beats Meridian AND Oak Grove beats Pearl
+2. Oak Grove beats Pearl AND Petal beats Northwest Rankin
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes behind Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 Eliminated if: (25.0%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin"""
@@ -320,8 +256,8 @@ BRANDON_WITH_ODDS_EXPECTED = """\
 Brandon
 
 #3 seed if: (37.5%)
-1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
+1. Brandon beats Meridian AND Oak Grove beats Pearl
+2. Oak Grove beats Pearl AND Petal beats Northwest Rankin
 
 #4 seed if: (37.5%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
@@ -386,34 +322,14 @@ def _div_dict():
 
 
 def test_division_scenarios_dict_keys():
-    """All 17 scenario keys are present (1–3, 4a–4l, 5–6)."""
-    d = _div_dict()
-    expected_keys = {
-        "1",
-        "2",
-        "3",
-        "4a",
-        "4b",
-        "4c",
-        "4d",
-        "4e",
-        "4f",
-        "4g",
-        "4h",
-        "4i",
-        "4j",
-        "4k",
-        "4l",
-        "5",
-        "6",
-    }
-    assert set(d.keys()) == expected_keys
+    """All 6 scenario keys are present; the five-way tie is scenario 4, with no sub-scenarios."""
+    assert set(_div_dict().keys()) == {"1", "2", "3", "4", "5", "6"}
 
 
 def test_division_scenarios_dict_entry_shape():
     """Every entry has exactly the required keys."""
     d = _div_dict()
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in d.items():
         assert set(entry.keys()) == required, f"scenario {key!r} missing keys"
 
@@ -438,21 +354,17 @@ def test_division_scenarios_dict_scenario_3():
     assert set(entry["eliminated"]) == {"Brandon", "Meridian"}
 
 
-def test_division_scenarios_dict_scenario_4a_title():
-    """Scenario 4a title includes margin conditions.
-
-    After ascending-margin sort, 4a is the smallest-margin sub-scenario:
-    p∈[1,4], n∈[1,3], Pearl's margin doesn't exceed NWR's by more than 1.
-    """
-    entry = _div_dict()["4a"]
+def test_division_scenarios_dict_scenario_4_leaves_the_tie_open():
+    """Scenario 4's title names the tie as left to the tiebreaker, and the entry says so. Of the five
+    tied teams, Brandon finishes fifth at every margin, so it's out and the tie is the other four."""
+    entry = _div_dict()["4"]
     assert entry["title"] == (
-        "Brandon beats Meridian AND Pearl beats Oak Grove by 1\u20134 AND "
-        "Northwest Rankin beats Petal by 1\u20133 AND "
-        "Pearl's margin doesn't exceed Northwest Rankin's by more than 1"
+        "Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND "
+        "Northwest Rankin, Oak Grove, Pearl and Petal tie: their order is decided by point "
+        "differential in games among them, then against the rest of the region (capped at 12 a game), "
+        "then fewest points allowed"
     )
-    assert entry["one_seed"] == "Oak Grove"
-    assert entry["two_seed"] == "Petal"
-    assert entry["four_seed"] == "Pearl"
+    assert entry["open_groups"] == [["Northwest Rankin", "Oak Grove", "Pearl", "Petal"]]
     assert set(entry["eliminated"]) == {"Brandon", "Meridian"}
 
 
@@ -517,7 +429,7 @@ def test_team_scenarios_dict_petal_no_elimination():
     """Petal has seeds 1–4 but no 'eliminated' key."""
     entry = _team_dict()["Petal"]
     assert set(entry.keys()) == {1, 2, 3, 4}
-    assert len(entry[1]["scenarios"]) == 4
+    assert len(entry[1]["scenarios"]) == 2  # beating NWR, or coming out on top of the four-way tie
     assert entry[1]["scenarios"][0] == "Petal beats Northwest Rankin"
 
 
@@ -1026,7 +938,9 @@ class TestBuildHostConditions:
         sc = HomeGameScenario(conditions=(seed_required,), explanation=None)
         rnd = _rhs(will_host=(sc,))
         result = build_host_conditions("TeamZ", rnd, self._seed_atoms(), self._DATES)
-        assert result == [[{"type": "seed_required", "school": "TeamZ", "seed": 1, "description": "TeamZ finishes as the #1 seed"}]]
+        assert result == [
+            [{"type": "seed_required", "school": "TeamZ", "seed": 1, "description": "TeamZ finishes as the #1 seed"}]
+        ]
 
     def test_remaining_conditions_appended_to_each_expanded_atom(self):
         """A condition following seed_required is AND-appended to every expanded atom's group."""
@@ -1079,7 +993,9 @@ class TestExpandAndRenderConditions:
     def test_multiple_groups_all_rendered(self):
         """Each AND-group in the input produces one corresponding output group."""
         cond_a = HomeGameCondition(kind="wins_round", round_name="First Round", region=6, seed=3, team_name="Shaw")
-        cond_b = HomeGameCondition(kind="wins_round", round_name="First Round", region=7, seed=1, team_name="Bogue Chitto")
+        cond_b = HomeGameCondition(
+            kind="wins_round", round_name="First Round", region=7, seed=1, team_name="Bogue Chitto"
+        )
         result = expand_and_render_conditions("TeamA", [[cond_a], [cond_b]], None, {})
         assert len(result) == 2
         assert result[0][0]["school"] == "Shaw"
@@ -1117,7 +1033,9 @@ class TestBuildReachConditions:
     def test_delegates_to_expand_and_render_conditions(self):
         """build_reach_conditions produces the same output as calling
         expand_and_render_conditions directly (thin wrapper, no extra logic)."""
-        cond = HomeGameCondition(kind="wins_round", round_name="Quarterfinals", region=8, seed=1, team_name="Taylorsville")
+        cond = HomeGameCondition(
+            kind="wins_round", round_name="Quarterfinals", region=8, seed=1, team_name="Taylorsville"
+        )
         and_groups = [[cond]]
         assert build_reach_conditions("TeamA", and_groups, None, {}) == expand_and_render_conditions(
             "TeamA", and_groups, None, {}
@@ -1274,15 +1192,70 @@ class TestAtomConditionDicts:
         out = atom_condition_dicts(atom, self._DATES)
         assert [d["school"] for d in out] == ["Petal", "Mize"]
 
-    def test_unrecognized_condition_type_produces_no_dict_but_loop_continues(self):
-        """A condition object of an unrecognized type matches none of the isinstance
-        branches and is silently skipped, while later conditions in the same atom
-        still get processed (the loop continues rather than stopping)."""
+    def test_unrecognized_condition_type_is_an_error(self):
+        """A condition of an unrecognized type is an error, never skipped: a path shown
+        without one of its conditions would claim more than is true."""
         atom = [object(), GameResult(winner="Mize", loser="Raleigh")]
-        out = atom_condition_dicts(atom, self._DATES)
-        assert len(out) == 1
-        assert out[0]["type"] == "game_result"
-        assert out[0]["school"] == "Mize"
+        with pytest.raises(TypeError, match="no path rendering"):
+            atom_condition_dicts(atom, self._DATES)
+
+    def test_tiebreak_decision_becomes_a_described_condition(self):
+        """A tiebreaker decision becomes a "tiebreak" condition carrying its sentence."""
+        from backend.helpers.data_classes import TiebreakDecision
+
+        cond = TiebreakDecision(3, ("Magee", "Raleigh", "Seminary"), (("Magee",), ("Raleigh", "Seminary")))
+        [out] = atom_condition_dicts([cond], self._DATES)
+        assert out == {
+            "type": "tiebreak",
+            "description": "Point differential in games among Magee, Raleigh and Seminary (capped at 12 a game): "
+            "Magee best, then Raleigh and Seminary, level",
+        }
+
+    def test_tiebreak_place_becomes_a_described_condition(self):
+        """A team's place in an open tie becomes a "tiebreak" condition saying what decides the tie."""
+        from backend.helpers.data_classes import TiebreakPlace
+
+        [out] = atom_condition_dicts([TiebreakPlace("Raleigh", 1, ("Magee", "Raleigh", "Seminary"), 5)], self._DATES)
+        assert out == {
+            "type": "tiebreak",
+            "description": "Raleigh finishes ahead of both Magee and Seminary in their tie, which goes to "
+            "fewest points allowed in region games (then a coin flip)",
+        }
+
+
+@pytest.mark.parametrize(
+    ("place", "group", "step", "expected"),
+    [
+        (
+            2,
+            ("Magee", "Raleigh", "Seminary"),
+            5,
+            "Raleigh finishes 2nd of the three in the tie with Magee and "
+            "Seminary, which goes to fewest points allowed in region games (then a coin flip)",
+        ),
+        (
+            3,
+            ("Magee", "Raleigh", "Seminary"),
+            5,
+            "Raleigh finishes behind both Magee and Seminary in their tie, "
+            "which goes to fewest points allowed in region games (then a coin flip)",
+        ),
+        (1, ("Magee", "Raleigh"), 6, "Raleigh finishes ahead of Magee in their tie, which a coin flip decides"),
+        (
+            4,
+            ("A", "B", "C", "Raleigh"),
+            3,
+            "Raleigh finishes behind A, B and C in their tie, which goes to the "
+            "tiebreaker (point differential, then fewest points allowed)",
+        ),
+    ],
+)
+def test_render_tiebreak_place(place, group, step, expected):
+    """Each place in a tie reads as where the team finishes in it, and what decides the tie."""
+    from backend.helpers.data_classes import TiebreakPlace
+    from backend.helpers.scenario_renderer import render_tiebreak_place
+
+    assert render_tiebreak_place(TiebreakPlace("Raleigh", place, group, step)) == expected
 
 
 class TestRenderTeamMatchups:
@@ -1390,25 +1363,17 @@ _PARTIAL_A_NWR = """\
 Northwest Rankin
 
 #1 seed if: (11.6%)
-1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-2. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes ahead of Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if: (7.1%)
-1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-3. Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 2nd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if: (4.2%)
-1. Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-2. Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 3rd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if: (52.1%)
 1. Oak Grove beats Pearl
-2. Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-3. Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-4. Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes behind Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 Eliminated if: (25.0%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin"""
@@ -1418,50 +1383,34 @@ Oak Grove
 
 #1 seed if: (30.0%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-3. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-4. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes ahead of Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if: (30.4%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-4. Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 2nd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if: (32.6%)
-1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-2. Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-4. Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 3rd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 
 #4 seed if: (6.9%)
-1. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-2. Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-3. Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more"""
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes behind Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)"""
 
 _PARTIAL_A_PEARL = """\
 Pearl
 
 #1 seed if: (6.3%)
-1. Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-3. Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes ahead of Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if: (33.3%)
-1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-2. Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-4. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
 
 #3 seed if: (5.7%)
-1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if: (4.7%)
-1. Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-3. Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl finishes behind Northwest Rankin, Oak Grove and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 Eliminated if: (50.0%)
 1. Oak Grove beats Pearl"""
@@ -1471,25 +1420,17 @@ Petal
 
 #1 seed if: (52.1%)
 1. Petal beats Northwest Rankin
-2. Pearl beats Oak Grove by 3\u20135 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Pearl beats Oak Grove by 4\u20135 AND Northwest Rankin beats Petal by 1\u20132 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
-4. Pearl beats Oak Grove by 6\u20138 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes ahead of Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #2 seed if: (29.2%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Pearl beats Oak Grove by 1\u20134 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1
-3. Pearl beats Oak Grove by 7\u20139 AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-4. Pearl beats Oak Grove by 8 or more AND Northwest Rankin beats Petal by 1\u20133 AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 2nd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #3 seed if: (7.5%)
-1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 4\u20138 AND Pearl's margin and Northwest Rankin's margin combined total 9 or less
-2. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 4\u201310 AND Pearl's margin exceeds Northwest Rankin's by exactly 2
-3. Pearl beats Oak Grove by 7 or more AND Northwest Rankin beats Petal by 4\u20139 AND Pearl's margin exceeds Northwest Rankin's by 3 or more
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes 3rd of the four in the tie with Northwest Rankin, Oak Grove and Pearl, which goes to the tiebreaker (point differential, then fewest points allowed)
 
 #4 seed if: (11.3%)
-1. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 5\u20139 AND Pearl's margin and Northwest Rankin's margin combined total exactly 10
-2. Pearl beats Oak Grove by 1\u20135 AND Northwest Rankin beats Petal by 6 or more AND Pearl's margin and Northwest Rankin's margin combined total 11 or more
-3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 5 or more AND Pearl's margin doesn't exceed Northwest Rankin's by more than 1"""
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Petal finishes behind Northwest Rankin, Oak Grove and Pearl in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)"""
 
 
 @pytest.mark.parametrize(

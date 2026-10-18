@@ -4,15 +4,13 @@ Two checkpoints test the ``ignore_margins=True`` path at different R values:
 
 Checkpoint A — 0 games played (cutoff 2025-10-02, R=15):
   All 15 region games are still unplayed.  With ignore_margins=True, no margin
-  enumeration runs.  22910 scenarios result, 1934 of which contain coin-flip
-  ties (``coinflip_groups``).  No tiebreaker groups appear because completed
-  game point differentials haven't yet separated any teams' PD.
+  enumeration runs.  18773 scenarios result, 1088 of which leave a tie to the
+  tiebreaker (``open_groups`` from step 3) instead of ordering it at a default margin.
 
 Checkpoint B — 1 week played (cutoff 2025-10-10, R=12):
-  Three games have completed results baked into the standings.  2869 scenarios
-  remain.  216 of them contain ``tiebreaker_groups`` — masks where the seeding
-  would differ between margin=1 and margin=7 for the remaining 12 games.
-  No coin-flip scenarios at this checkpoint (real PD resolves ties).
+  Three games have completed results baked into the standings.  2334 scenarios
+  remain, 160 of them with a tie left to the tiebreaker: its order would turn on
+  the remaining games' margins.
 
 Teams: Brandon, Meridian, Northwest Rankin, Oak Grove, Pearl, Petal
 """
@@ -73,13 +71,23 @@ class TestCheckpointA:
         assert len(_REMAINING_A) == 15
 
     def test_scenario_count(self):
-        """R=15, ignore_margins=True produces 18607 scenarios."""
-        assert len(_SCENARIOS_A) == 18607
+        """R=15, ignore_margins=True produces 18773 scenarios."""
+        assert len(_SCENARIOS_A) == 18773
 
     def test_scenario_keys(self):
         """Every scenario dict has the required keys."""
-        required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom",
-                    "tiebreaker_groups", "coinflip_groups"}
+        required = {
+            "scenario_num",
+            "sub_label",
+            "seeding",
+            "game_winners",
+            "conditions_atom",
+            "alternatives",
+            "open_groups",
+            "open_places",
+            "tiebreaker_groups",
+            "coinflip_groups",
+        }
         for sc in _SCENARIOS_A:
             assert set(sc.keys()) == required
 
@@ -92,9 +100,9 @@ class TestCheckpointA:
         assert all(sc["tiebreaker_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenario_count(self):
-        """1508 scenarios have coinflip_groups (ties unresolvable by win-loss alone)."""
-        cf_count = sum(1 for sc in _SCENARIOS_A if sc["coinflip_groups"] is not None)
-        assert cf_count == 1508
+        """1088 scenarios leave a tie to the tiebreaker (unresolvable by win-loss alone)."""
+        assert sum(1 for sc in _SCENARIOS_A if sc["open_groups"]) == 1088
+        assert all(sc["coinflip_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenarios_have_no_sub_label(self):
         """Collapsed coin-flip scenarios use sub_label='' — no sub-scenario expansion."""
@@ -103,9 +111,9 @@ class TestCheckpointA:
                 assert sc["sub_label"] == ""
 
     def test_unique_seedings(self):
-        """The 22910 scenarios cover all 720 possible orderings of 6 teams."""
+        """360 distinct seedings: every order of the playoff seeds, with the two teams out unranked."""
         unique = {sc["seeding"] for sc in _SCENARIOS_A}
-        assert len(unique) == 720
+        assert len(unique) == 360
 
     def test_all_teams_reach_top_4(self):
         """Every team appears at least once in a top-4 seeding."""
@@ -113,13 +121,12 @@ class TestCheckpointA:
         assert top4_teams == set(_TEAMS)
 
     def test_first_scenario_seeding(self):
-        """First scenario: Petal / Pearl / Oak Grove / Northwest Rankin (no tie, no cf)."""
+        """First scenario: Petal / Pearl / Oak Grove / Northwest Rankin (no tie left open)."""
         sc = _SCENARIOS_A[0]
         assert sc["scenario_num"] == 1
         assert sc["sub_label"] == ""
         assert sc["seeding"][:4] == ("Petal", "Pearl", "Oak Grove", "Northwest Rankin")
-        assert sc["tiebreaker_groups"] is None
-        assert sc["coinflip_groups"] is None
+        assert sc["open_groups"] is None
 
     def test_coinflip_groups_format(self):
         """coinflip_groups is a list of lists of team name strings."""
@@ -168,13 +175,23 @@ class TestCheckpointB:
         assert len(_REMAINING_B) == 12
 
     def test_scenario_count(self):
-        """R=12, ignore_margins=True produces 2478 scenarios."""
-        assert len(_SCENARIOS_B) == 2478
+        """R=12, ignore_margins=True produces 2334 scenarios."""
+        assert len(_SCENARIOS_B) == 2334
 
     def test_scenario_keys(self):
         """Every scenario dict has the required keys."""
-        required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom",
-                    "tiebreaker_groups", "coinflip_groups"}
+        required = {
+            "scenario_num",
+            "sub_label",
+            "seeding",
+            "game_winners",
+            "conditions_atom",
+            "alternatives",
+            "open_groups",
+            "open_places",
+            "tiebreaker_groups",
+            "coinflip_groups",
+        }
         for sc in _SCENARIOS_B:
             assert set(sc.keys()) == required
 
@@ -187,9 +204,8 @@ class TestCheckpointB:
         assert all(sc["coinflip_groups"] is None for sc in _SCENARIOS_B)
 
     def test_tiebreaker_scenario_count(self):
-        """179 scenarios have tiebreaker_groups (margin-sensitive under full enumeration)."""
-        tb_count = sum(1 for sc in _SCENARIOS_B if sc["tiebreaker_groups"] is not None)
-        assert tb_count == 179
+        """160 scenarios leave a tie to the tiebreaker: its order would turn on margins."""
+        assert sum(1 for sc in _SCENARIOS_B if sc["open_groups"]) == 160
 
     def test_tiebreaker_scenarios_have_no_sub_label(self):
         """Collapsed tiebreaker scenarios use sub_label='' — no margin sub-scenarios."""
@@ -198,50 +214,41 @@ class TestCheckpointB:
                 assert sc["sub_label"] == ""
 
     def test_first_scenario_seeding(self):
-        """Scenario 1: Petal / Pearl / Oak Grove / Northwest Rankin."""
+        """Scenario 1: Petal / Pearl / Oak Grove, with 4th left to a tie."""
         sc = _SCENARIOS_B[0]
         assert sc["scenario_num"] == 1
-        assert sc["seeding"][:4] == ("Petal", "Pearl", "Oak Grove", "Northwest Rankin")
-        assert sc["coinflip_groups"] is None
+        assert sc["seeding"][:3] == ("Petal", "Pearl", "Oak Grove")
 
     def test_first_scenario_tiebreaker_groups(self):
-        """Scenario 1 has tiebreaker_groups covering the 3-way PD tie for seeds 4-eliminated."""
+        """Scenario 1 leaves the 3-way tie for 4th (and two places out) to the tiebreaker."""
         sc = _SCENARIOS_B[0]
-        tb = sc["tiebreaker_groups"]
-        assert tb is not None
-        assert len(tb) == 1
-        assert set(tb[0]) == {"Northwest Rankin", "Meridian", "Brandon"}
+        assert sc["open_groups"] == [(3, ("Brandon", "Meridian", "Northwest Rankin"))]
+        assert "4. Brandon, Meridian or Northwest Rankin: order decided by the tiebreaker" in render_scenarios([sc])
 
     def test_tiebreaker_rendered_in_bounds(self):
-        """A tiebreaker group fully within top-4 renders '… depends on point differential'."""
+        """A tie wholly within the top 4 renders as one line over its places, never as an order or a coin flip."""
         for sc in _SCENARIOS_B:
-            tb = sc.get("tiebreaker_groups")
-            if not tb:
-                continue
-            seeding_list = list(sc["seeding"])
-            for group in tb:
-                positions = sorted(seeding_list.index(t) for t in group if t in seeding_list)
-                if all(p < 4 for p in positions):
+            for _, group in sc.get("open_groups") or []:
+                if all(list(sc["seeding"]).index(t) < 4 for t in group):
                     rendered = render_scenarios([sc])
-                    assert "depends on point differential" in rendered
-                    # Should not say 'depends on coin flip'
+                    assert (
+                        "order decided by the tiebreaker (point differential, then fewest points allowed)" in rendered
+                    )
                     assert "coin flip" not in rendered
                     return
-        pytest.fail("No fully-in-bounds tiebreaker_groups found in checkpoint B")
+        pytest.fail("No tie within the top 4 found in checkpoint B")
 
-    def test_scenario_29_seeding_and_tb(self):
-        """Scenario 29 has a 3-way PD tie between Pearl, Petal, and Brandon (seeds 1-3)."""
-        sc = next(s for s in _SCENARIOS_B if s["scenario_num"] == 29 and s["sub_label"] == "")
-        assert sc["seeding"][:4] == ("Pearl", "Petal", "Brandon", "Oak Grove")
-        tb = sc["tiebreaker_groups"]
-        assert tb is not None
-        assert set(tb[0]) == {"Pearl", "Petal", "Brandon"}
+    def test_scenario_1279_seeding_and_tie(self):
+        """Scenario 1279 leaves a 3-way tie between Pearl, Petal, and Brandon (seeds 1-3) open; Oak Grove is 4th."""
+        sc = next(s for s in _SCENARIOS_B if s["scenario_num"] == 1279 and s["sub_label"] == "")
+        assert sc["seeding"][3] == "Oak Grove"
+        assert sc["open_groups"] == [(3, ("Brandon", "Pearl", "Petal"))]
 
-    def test_scenario_29_renders_tb(self):
-        """Scenario 29 renders a '1-3. Tie between Pearl, Petal, and Brandon' line."""
-        sc = next(s for s in _SCENARIOS_B if s["scenario_num"] == 29 and s["sub_label"] == "")
+    def test_scenario_1279_renders_tie(self):
+        """Scenario 1279 renders one '1-3.' line for Brandon, Pearl and Petal, in no order."""
+        sc = next(s for s in _SCENARIOS_B if s["scenario_num"] == 1279 and s["sub_label"] == "")
         rendered = render_scenarios([sc])
-        assert "1-3. Tie between Pearl, Petal, and Brandon — depends on point differential" in rendered
+        assert "1-3. Brandon, Pearl, and Petal: order decided by the tiebreaker" in rendered
 
     def test_enumerated_outcomes_ignore_margins_flag(self):
         """EnumeratedOutcomes.ignore_margins is True for checkpoint B."""

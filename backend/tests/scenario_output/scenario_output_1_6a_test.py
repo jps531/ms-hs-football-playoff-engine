@@ -93,23 +93,23 @@ Center Hill
 
 #3 seed if: (26.0%)
 1. Saltillo beats Grenada AND Center Hill beats South Panola
-2. Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 1\u20136
+2. Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 1–6
 
 #4 seed if: (74.0%)
 1. Grenada beats Saltillo
-2. Saltillo beats Grenada by 1\u201311 AND South Panola beats Center Hill
-3. Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 7 or more"""
+2. South Panola beats Center Hill by 7 or more
+3. Saltillo beats Grenada by 1–11 AND South Panola beats Center Hill"""
 
 GRENADA_EXPECTED = """\
 Grenada
 
 #3 seed if: (74.0%)
 1. Grenada beats Saltillo
-2. Saltillo beats Grenada by 1\u201311 AND South Panola beats Center Hill
-3. Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 7 or more
+2. South Panola beats Center Hill by 7 or more
+3. Saltillo beats Grenada by 1–11 AND South Panola beats Center Hill
 
 #4 seed if: (1.0%)
-1. Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 1\u20136
+1. Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 1–6
 
 Eliminated if: (25.0%)
 1. Saltillo beats Grenada AND Center Hill beats South Panola"""
@@ -262,30 +262,13 @@ def test_atoms_ch_seed4_atom0_ch_sp_absent():
 
 
 def test_atoms_ch_seed4_atom1():
-    """CH seed-4 atom 1: Saltillo beats Grenada by 1–11 AND South Panola beats CH (any)."""
-    atom = _ATOMS["Center Hill"][4][1]
-    assert len(atom) == 2
-    gr_sal = next(g for g in atom if g.winner == "Saltillo")
-    assert gr_sal.loser == "Grenada"
-    assert gr_sal.min_margin == 1
-    assert gr_sal.max_margin == 12  # exclusive upper bound → covers 1–11
-    gr_sp = next(g for g in atom if g.winner == "South Panola")
-    assert gr_sp.loser == "Center Hill"
-    assert gr_sp.max_margin is None  # any margin
+    """Center Hill #4 path 2: South Panola beats Center Hill by 7 or more."""
+    assert [str(c) for c in _ATOMS["Center Hill"][4][1]] == ["South Panola>Center Hill by 7+"]
 
 
 def test_atoms_ch_seed4_atom2():
-    """CH seed-4 atom 2: Saltillo beats Grenada by 12+ AND South Panola beats CH by 7+."""
-    atom = _ATOMS["Center Hill"][4][2]
-    assert len(atom) == 2
-    gr_sal = next(g for g in atom if g.winner == "Saltillo")
-    assert gr_sal.loser == "Grenada"
-    assert gr_sal.min_margin == 12
-    assert gr_sal.max_margin is None  # 12 or more
-    gr_sp = next(g for g in atom if g.winner == "South Panola")
-    assert gr_sp.loser == "Center Hill"
-    assert gr_sp.min_margin == 7
-    assert gr_sp.max_margin is None  # 7 or more
+    """Center Hill #4 path 3: Saltillo beats Grenada by 1–11 AND South Panola beats Center Hill."""
+    assert [str(c) for c in _ATOMS["Center Hill"][4][2]] == ["Saltillo>Grenada by 1–11", "South Panola>Center Hill"]
 
 
 # ---------------------------------------------------------------------------
@@ -309,30 +292,13 @@ def test_atoms_grenada_seed3_atom0():
 
 
 def test_atoms_grenada_seed3_atom1():
-    """GRE seed-3 atom 1: Saltillo beats Grenada by 1–11 AND SP beats CH (any margin)."""
-    atom = _ATOMS["Grenada"][3][1]
-    assert len(atom) == 2
-    gr_sal = next(g for g in atom if g.winner == "Saltillo")
-    assert gr_sal.loser == "Grenada"
-    assert gr_sal.min_margin == 1
-    assert gr_sal.max_margin == 12  # exclusive upper bound → covers 1–11
-    gr_sp = next(g for g in atom if g.winner == "South Panola")
-    assert gr_sp.loser == "Center Hill"
-    assert gr_sp.max_margin is None  # any margin
+    """Grenada #3 path 2: South Panola beats Center Hill by 7 or more."""
+    assert [str(c) for c in _ATOMS["Grenada"][3][1]] == ["South Panola>Center Hill by 7+"]
 
 
 def test_atoms_grenada_seed3_atom2():
-    """GRE seed-3 atom 2: Saltillo beats Grenada by 12+ AND SP beats CH by 7+."""
-    atom = _ATOMS["Grenada"][3][2]
-    assert len(atom) == 2
-    gr_sal = next(g for g in atom if g.winner == "Saltillo")
-    assert gr_sal.loser == "Grenada"
-    assert gr_sal.min_margin == 12
-    assert gr_sal.max_margin is None  # 12 or more
-    gr_sp = next(g for g in atom if g.winner == "South Panola")
-    assert gr_sp.loser == "Center Hill"
-    assert gr_sp.min_margin == 7
-    assert gr_sp.max_margin is None  # 7 or more
+    """Grenada #3 path 3: Saltillo beats Grenada by 1–11 AND South Panola beats Center Hill."""
+    assert [str(c) for c in _ATOMS["Grenada"][3][2]] == ["Saltillo>Grenada by 1–11", "South Panola>Center Hill"]
 
 
 def test_atoms_grenada_seed4_count():

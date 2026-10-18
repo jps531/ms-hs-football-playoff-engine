@@ -866,7 +866,7 @@ class CoinFlipResult:
 
     Used in scenario atoms when two (or more) teams are completely tied through
     all deterministic tiebreaker steps (H2H, vs-outside record, H2H PD, PD vs
-    outside, fewest PA) and a literal coin flip is required.
+    outside, fewest PA in all region games) and a literal coin flip is required.
 
     Unlike GameResult, this condition is not associated with any remaining game;
     it represents an off-field resolution.  It has no margin component and
@@ -885,6 +885,71 @@ class CoinFlipResult:
     def __str__(self) -> str:
         """Return a compact human-readable representation."""
         return f"{self.winner} wins coin flip vs {self.loser}"
+
+
+# --- Data class for one tiebreaker decision that depends on margins ---
+@dataclass(frozen=True)
+class TiebreakDecision:
+    """How one tiebreaker step split (or didn't split) a group of tied teams.
+
+    Steps 3 (head-to-head point differential among the tied teams, each game
+    capped at 12) and 4 (point differential against the teams outside the tie,
+    capped, compared team by team from the top of the standings) are the
+    steps whose result depends on winning margins. A scenario whose seeding
+    turns on margins states the decisions those steps made, so it says only
+    what the rule itself decides.
+
+    ``group`` is the tied group, sorted; ``parts`` its teams in the order the
+    step put them, best first, teams the step left level together (sorted).
+    A single part means the step left the whole group level.
+
+    It isn't a condition on margins alone (it depends on the region's other
+    results too), so ``satisfied_by`` can't answer it; scenario checks
+    re-run the tiebreaker instead.
+    """
+
+    step: int
+    group: tuple[str, ...]
+    parts: tuple[tuple[str, ...], ...]
+
+    def satisfied_by(self, _outcome_mask: int, _margins: dict, _remaining: list) -> bool:
+        """Not decidable from margins alone; see the class docstring."""
+        raise NotImplementedError("check a TiebreakDecision by re-running the tiebreaker")
+
+    def __str__(self) -> str:
+        """Return a compact representation: "step 3 [A, B, C]: A > B = C"."""
+        order = " > ".join(" = ".join(p) for p in self.parts)
+        return f"step {self.step} [{', '.join(self.group)}]: {order}"
+
+
+# --- Data class for a team's place in a tie a scenario leaves to the tiebreaker ---
+@dataclass(frozen=True)
+class TiebreakPlace:
+    """A team's place within a tied group whose order is left to the tiebreaker.
+
+    A complete scenario can leave a tie's order open (``open_groups``): from
+    ``step`` on, the tiebreaker decides it — fewest points allowed in region
+    games (step 5), which turns on actual scores, or a coin flip (step 6), or,
+    with margins ignored, everything from point differential on (step 3). A
+    team's path to a seed through such a scenario needs this condition too:
+    ``team`` comes out ``place`` (1-based) of ``group`` on that tiebreaker.
+
+    Like ``TiebreakDecision`` it isn't a condition on margins, so
+    ``satisfied_by`` can't answer it.
+    """
+
+    team: str
+    place: int
+    group: tuple[str, ...]
+    step: int
+
+    def satisfied_by(self, _outcome_mask: int, _margins: dict, _remaining: list) -> bool:
+        """Not decidable from margins alone; see the class docstring."""
+        raise NotImplementedError("a TiebreakPlace is decided by the tiebreaker, not by margins")
+
+    def __str__(self) -> str:
+        """Return a compact representation: "Raleigh 1st of [Magee, Raleigh, Seminary] from step 5"."""
+        return f"{self.team} {self.place} of [{', '.join(self.group)}] from step {self.step}"
 
 
 # --- Data class for point-differential rank in a coin-flip group ---

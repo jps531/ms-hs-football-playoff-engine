@@ -38,6 +38,7 @@ from backend.api.models.responses import (
     KeyInsightModel,
     MoverModel,
     MoversResponse,
+    OpenGroupModel,
     PathConditionModel,
     PathOutcomeModel,
     RecordModel,
@@ -87,6 +88,7 @@ from backend.helpers.data_classes import (
     RemainingGame,
     StandingsOdds,
     StoredHostingOdds,
+    TiebreakDecision,
 )
 from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios, enumerate_reach_scenarios_for_team
 from backend.helpers.insights import _conditions_frozenset, deserialize_insights
@@ -97,16 +99,18 @@ from backend.helpers.scenario_renderer import (
     atom_condition_dicts,
     build_host_conditions,
     build_reach_conditions,
+    render_open_group,
     render_scenario_title,
+    render_tiebreak_decision,
     team_home_scenarios_as_dict,
 )
 from backend.helpers.scenario_serializers import (
     deserialize_complete_scenarios,
     deserialize_remaining_games,
     deserialize_scenario_atoms,
-    serialize_atom,
+    serialize_condition,
 )
-from backend.helpers.scenario_viewer import _simplify_atom_list, build_scenario_atoms
+from backend.helpers.scenario_viewer import _simplify_atom_list, build_scenario_atoms, team_atoms_from_scenarios
 from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
 from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.helpers.win_probability import (
@@ -576,14 +580,29 @@ def filter_scenarios_by_simulation(
                 return False
         return True
 
+    def _consistent(atom: list) -> bool:
+        """The atom names every simulated pair's winner (as a winner list would) and accepts its margin."""
+        named = {(c.winner, c.loser) for c in atom if isinstance(c, GameResult)}
+        return all(pair in named for pair in simulated_pairs) and _margin_ok({"conditions_atom": atom})
+
     result = []
     for sc in complete_scenarios:
         game_winners = sc.get("game_winners", [])
-        if not all(pair in game_winners for pair in simulated_pairs) or not _margin_ok(sc):
-            continue
         # Every simulated pair is guaranteed to be in game_winners by the check above,
         # so a None atom (implicitly "every game_winners pair, default margin") always
         # has something to strip here — materialize it explicitly before stripping.
+        if sc.get("alternatives"):
+            # Keep the alternatives the simulated results allow; any one of them is enough.
+            kept = [a for a in sc["alternatives"] if _consistent(a)]
+            if not kept:
+                continue
+            kept = [_strip_known_conditions(a, simulated_pairs) for a in kept]
+            winners = [p for p in game_winners if p not in simulated_pairs]
+            alternatives = kept if len(kept) > 1 else None
+            result.append({**sc, "game_winners": winners, "conditions_atom": kept[0], "alternatives": alternatives})
+            continue
+        if not all(pair in game_winners for pair in simulated_pairs) or not _margin_ok(sc):
+            continue
         atom = sc.get("conditions_atom")
         if atom is None:
             atom = [GameResult(winner=w, loser=l) for w, l in game_winners]
@@ -822,10 +841,21 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
     """Convert complete scenario dicts to ``ScenarioEntry`` response objects, or ``None`` if empty."""
     if not complete_scenarios:
         return None
+    def described(atom: list) -> list[dict]:
+        """The atom's conditions as dicts, each tiebreaker decision with its sentence."""
+        out = []
+        for cond in atom:
+            d = serialize_condition(cond)
+            if isinstance(cond, TiebreakDecision):
+                d["description"] = render_tiebreak_decision(cond)
+            out.append(d)
+        return out
+
     result = []
     for sc in complete_scenarios:
         seeding = sc.get("seeding", ())
         conditions_atom = sc.get("conditions_atom")
+        alternatives = sc.get("alternatives")
         result.append(
             ScenarioEntry(
                 scenario_num=sc["scenario_num"],
@@ -835,7 +865,13 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
                 tiebreaker_groups=sc.get("tiebreaker_groups"),
                 coinflip_groups=sc.get("coinflip_groups"),
                 outcomes={team: str(idx + 1) for idx, team in enumerate(seeding)},
-                conditions=serialize_atom(conditions_atom) if conditions_atom is not None else None,
+                conditions=described(conditions_atom) if conditions_atom is not None else None,
+                condition_groups=[described(a) for a in alternatives] if alternatives else None,
+                open_groups=[
+                    OpenGroupModel(step=step, teams=list(g), description=render_open_group(step, g))
+                    for step, g in sc.get("open_groups") or []
+                ]
+                or None,
             )
         )
     return result
@@ -1271,13 +1307,17 @@ async def _compute_seed_atoms_if_pre_playoff(
     snapshot fetch.
     """
     scenarios_data = await load_scenarios_snapshot(conn, season, clazz, region, as_of)
+    complete: list[dict] = []
     if scenarios_data is not None:
-        remaining, _, _, _ = scenarios_data
+        remaining, complete, _, _ = scenarios_data
     else:
         _, _, remaining, _, _ = await recompute_scenarios_from_games(conn, season, clazz, region, as_of)
 
     if not has_displayable_scenarios(remaining):
         return None, remaining
+    if complete:
+        # The stored complete scenarios already say what each place needs; no need to rebuild them.
+        return team_atoms_from_scenarios(complete, remaining), remaining
 
     if teams is None:
         teams = await load_active_region_teams(conn, season, clazz, region)

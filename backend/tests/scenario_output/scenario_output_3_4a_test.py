@@ -101,8 +101,8 @@ Ripley
 1. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
 
 #4 seed if: (75.0%)
-1. Senatobia beats Ripley
-2. Clarksdale beats Rosa Fort AND Ripley beats Senatobia"""
+1. Clarksdale beats Rosa Fort
+2. Senatobia beats Ripley"""
 
 ROSA_FORT_EXPECTED = """\
 Rosa Fort
@@ -111,14 +111,14 @@ Rosa Fort
 1. Rosa Fort beats Clarksdale AND Ripley beats Senatobia
 
 #2 seed if: (5.6%)
-1. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more
+1. Clarksdale beats Rosa Fort by 1–8 AND Ripley beats Senatobia by 12 or more
 2. Rosa Fort beats Clarksdale by 11 or more AND Senatobia beats Ripley
 
 #3 seed if: (69.4%)
 1. Clarksdale beats Rosa Fort by 9 or more
 2. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
-3. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311
-4. Rosa Fort beats Clarksdale by 1\u201310 AND Senatobia beats Ripley"""
+3. Clarksdale beats Rosa Fort AND Ripley beats Senatobia by 1–11
+4. Rosa Fort beats Clarksdale by 1–10 AND Senatobia beats Ripley"""
 
 SENATOBIA_EXPECTED = """\
 Senatobia
@@ -129,11 +129,11 @@ Senatobia
 #2 seed if: (61.1%)
 1. Clarksdale beats Rosa Fort by 9 or more
 2. Clarksdale beats Rosa Fort AND Senatobia beats Ripley
-3. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311
-4. Rosa Fort beats Clarksdale by 1\u20136 AND Senatobia beats Ripley
+3. Clarksdale beats Rosa Fort AND Ripley beats Senatobia by 1–11
+4. Rosa Fort beats Clarksdale by 1–6 AND Senatobia beats Ripley
 
 #3 seed if: (1.4%)
-1. Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 12 or more
+1. Clarksdale beats Rosa Fort by 1–8 AND Ripley beats Senatobia by 12 or more
 
 #4 seed if: (25.0%)
 1. Rosa Fort beats Clarksdale AND Ripley beats Senatobia"""
@@ -310,30 +310,13 @@ def test_atoms_ripley_seed4_count():
 
 
 def test_atoms_ripley_seed4_atom0():
-    """Ripley seed-4 first atom: SEN beats RIP (any margin — covers both CLA-wins and RF-wins cases)."""
-    atom = _ATOMS["Ripley"][4][0]
-    assert len(atom) == 1
-    gr = atom[0]
-    assert gr.winner == "Senatobia"
-    assert gr.loser == "Ripley"
-    assert gr.min_margin == 1
-    assert gr.max_margin is None
+    """Ripley #4 path 1: Clarksdale beats Rosa Fort."""
+    assert [str(c) for c in _ATOMS["Ripley"][4][0]] == ["Clarksdale>Rosa Fort"]
 
 
 def test_atoms_ripley_seed4_atom1():
-    """Ripley seed-4 second atom: CLA beats RF AND RIP beats SEN (mask 3; RIP finishes 2-2 but in bottom half)."""
-    atom = _ATOMS["Ripley"][4][1]
-    assert len(atom) == 2
-    gr0 = atom[0]
-    assert gr0.winner == "Clarksdale"
-    assert gr0.loser == "Rosa Fort"
-    assert gr0.min_margin == 1
-    assert gr0.max_margin is None
-    gr1 = atom[1]
-    assert gr1.winner == "Ripley"
-    assert gr1.loser == "Senatobia"
-    assert gr1.min_margin == 1
-    assert gr1.max_margin is None
+    """Ripley #4 path 2: Senatobia beats Ripley."""
+    assert [str(c) for c in _ATOMS["Ripley"][4][1]] == ["Senatobia>Ripley"]
 
 
 # ---------------------------------------------------------------------------
@@ -573,8 +556,10 @@ def test_div_dict_scenario3_title():
 
 
 def test_div_dict_scenario4a_title():
-    """Scenario 4a: CLA by 1-8 AND RIP by 1-11 (SEN wins H2H PD tiebreaker over RF)."""
-    assert _DIV_DICT["4a"]["title"] == "Clarksdale beats Rosa Fort by 1\u20138 AND Ripley beats Senatobia by 1\u201311"
+    """Scenario 4a: SEN wins the H2H PD tiebreaker over RF either way: RIP by 1-11, or CLA by 9+."""
+    assert _DIV_DICT["4a"]["title"] == (
+        "(Clarksdale beats Rosa Fort AND Ripley beats Senatobia by 1\u201311) OR (Clarksdale beats Rosa Fort by 9 or more)"
+    )
 
 
 def test_div_dict_scenario4b_title():

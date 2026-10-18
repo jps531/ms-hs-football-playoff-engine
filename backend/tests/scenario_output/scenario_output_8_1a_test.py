@@ -226,11 +226,11 @@ def test_scenario_2b_seeding():
 
 
 def test_scenario_2a_2b_same_game_winners():
-    """Scenarios 2a and 2b share the same game_winners (same W/L outcomes, different margins)."""
+    """Scenario 2a needs both results; 2b needs only Lumberton's 12+ win (Stringer-Resurrection can't change it)."""
     sc2a = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "a")
     sc2b = next(s for s in _SCENARIOS if s["scenario_num"] == 2 and s["sub_label"] == "b")
-    assert sc2a["game_winners"] == sc2b["game_winners"]
     assert sc2a["game_winners"] == [("Stringer", "Resurrection"), ("Lumberton", "Taylorsville")]
+    assert sc2b["game_winners"] == [("Lumberton", "Taylorsville")]
 
 
 def test_scenario_3_seeding():
@@ -255,9 +255,7 @@ def test_non_sub_scenarios_conditions_atom_none():
     """Non-sub-labeled scenarios (1 and 3) have conditions_atom=None."""
     for sc in _SCENARIOS:
         if sc["sub_label"] == "":
-            assert sc["conditions_atom"] is None, (
-                f"scenario {sc['scenario_num']} should have conditions_atom=None"
-            )
+            assert sc["conditions_atom"] is None, f"scenario {sc['scenario_num']} should have conditions_atom=None"
 
 
 def test_scenario_2a_conditions_atom():
@@ -294,7 +292,7 @@ def test_div_dict_keys():
 
 def test_div_dict_entry_shape():
     """Every entry has the required keys."""
-    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated"}
+    required = {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
     for key, entry in _DIV_DICT.items():
         assert set(entry.keys()) == required, f"scenario {key!r} missing keys"
 
@@ -361,7 +359,9 @@ def test_team_dict_entry_shape():
     """Every seed/eliminated entry has odds, weighted_odds, and scenarios keys."""
     for team, team_entry in _TEAM_DICT.items():
         for key, val in team_entry.items():
-            assert set(val.keys()) == {"odds", "weighted_odds", "scenarios", "conditions"}, f"{team!r} key {key!r} has wrong shape"
+            assert set(val.keys()) == {"odds", "weighted_odds", "scenarios", "conditions"}, (
+                f"{team!r} key {key!r} has wrong shape"
+            )
 
 
 def test_team_dict_taylorsville_seeds():

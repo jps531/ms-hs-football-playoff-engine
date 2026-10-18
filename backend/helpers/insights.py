@@ -7,14 +7,14 @@ beats Stringer" or "Murrah is eliminated if Starkville beats Terry".
 Intended for display when R=7-10 (where full scenario lists are not shown) and
 as a "headlines" banner at R<=6 alongside the full scenario list.
 
-All conditional insights are margin-verified before emission: for R>4, the
-claim is re-checked across all satisfying win/loss masks and all 12^k margin
-combinations for the k condition games, ensuring the insight is unconditionally
-true even for margin-sensitive tiebreakers.
+Every conditional insight is checked before emission against every result
+meeting its conditions (every winner, margin and score): against the region's
+complete scenarios when they're built, otherwise against the tiebreaker for
+every set of winners. A place that turns on fewest points allowed or a coin
+flip is never treated as certain (see ``_verify_insight_margins``).
 """
 
 from dataclasses import dataclass
-from itertools import product as iter_product
 
 from backend.helpers.data_classes import (
     CompletedGame,
@@ -27,7 +27,6 @@ from backend.helpers.scenario_serializers import deserialize_condition, serializ
 
 _PLAYOFF_SEEDS = 4
 _MAX_CONDITIONS = 3
-_MARGIN_RANGE = range(1, 13)
 _MAX_CLINCH_PER_TEAM = 3
 _MAX_ELIM_PER_TEAM = 3
 _MAX_TOTAL_REGION = 16
@@ -116,6 +115,68 @@ def _cond_game_indices(
     return result
 
 
+def _overlaps(a: GameResult, b: GameResult) -> bool:
+    """True when some result of their game satisfies both (same winner, margin ranges overlapping)."""
+    if a.winner != b.winner:
+        return False
+    a_hi = a.max_margin if a.max_margin is not None else 1 << 30
+    b_hi = b.max_margin if b.max_margin is not None else 1 << 30
+    return max(a.min_margin, b.min_margin) < min(a_hi, b_hi)
+
+
+def _places_from_scenarios(conditions: tuple, team: str, complete_scenarios: list[dict], playoff_seeds: int):
+    """Yield the places *team* can take in each complete scenario that some result meeting *conditions* falls in.
+
+    Complete scenarios cover every result, so every result meeting the conditions is in one of
+    those yielded. A scenario way counts unless one of its game results rules the conditions out
+    (other conditions, such as tiebreaker decisions, are assumed compatible, which can only make
+    the check stricter). In a tie the scenario leaves open, the team can take any of the tie's places
+    it reaches (``open_places``, else all of them).
+    """
+    for sc in complete_scenarios:
+        ways = sc.get("alternatives") or [sc.get("conditions_atom")]
+        winners = [GameResult(w, l) for w, l in sc.get("game_winners") or []]
+        seeding = list(sc.get("seeding", ()))
+        if team not in seeding:
+            continue
+        group = next((g for _, g in sc.get("open_groups") or [] if team in g), None)
+        # Places past the playoff seeds are all "out", one past them.
+        places = {min(seeding.index(t) + 1, playoff_seeds + 1) for t in (group or (team,))}
+        if group and (sc.get("open_places") or {}).get(team):
+            places &= set(sc["open_places"][team])  # the seeds it can actually reach in the tie
+        for way in ways:
+            atom = [*winners, *(way or [])]
+            if all(
+                _overlaps(c, a)
+                for c in conditions
+                for a in atom
+                if isinstance(a, GameResult) and {a.winner, a.loser} == {c.winner, c.loser}
+            ):
+                yield places
+                break
+
+
+def _places_from_tiebreaker(conditions, team, teams, completed, remaining, pa_win, base_margin_default):
+    """Yield the places *team* can take for each set of winners meeting *conditions*, any margins and scores.
+
+    Margins and points allowed only matter inside a group tied after steps 1-2 (which use wins and
+    losses alone), and every way they can go keeps that group in the same places. So a team in such
+    a group can take any of the group's places; any other team's place is fixed by the winners.
+    """
+    from backend.helpers.tiebreakers import resolve_standings_for_mask
+
+    pairs = [(rg.a, rg.b) for rg in remaining]
+    margins = {pair: base_margin_default for pair in pairs}
+    for mask in _masks_satisfying_conditions(conditions, remaining):
+        decisions: list = []
+        order = resolve_standings_for_mask(
+            teams, completed, remaining, mask, margins, base_margin_default, pa_win, decision_collector=decisions
+        )
+        groups = [g for step, g, _ in decisions if step >= 3 and team in g]
+        group = max(groups, key=len) if groups else (team,)
+        yield {order.index(t) + 1 for t in group}
+
+
 def _verify_insight_margins(
     conditions: tuple,
     team: str,
@@ -128,10 +189,14 @@ def _verify_insight_margins(
     playoff_seeds: int = _PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
+    complete_scenarios: list[dict] | None = None,
 ) -> bool:
-    """Return True if the insight holds for all satisfying masks and margin combos.
+    """Return True if the insight holds for every result meeting its conditions: every winner, margin and score.
 
-    For R<=4 atoms are already fully margin-accurate — returns True immediately.
+    With the region's *complete_scenarios*, checks the scenarios those results fall in (exact, and
+    able to confirm claims that rest on margins). Without them, checks every set of winners, with a
+    team tied after steps 1-2 able to take any of its tie's places. A place a tie leaves to fewest
+    points allowed or a coin flip is never treated as certain.
 
     Args:
         conditions: The GameResult conditions from the candidate atom.
@@ -139,35 +204,19 @@ def _verify_insight_margins(
         expected_seed: If set, team must be at exactly this 1-indexed seed.
         expected_in_playoffs: If True, team must be in top playoff_seeds.
             If False, team must NOT be in top playoff_seeds.
+        complete_scenarios: The region's complete scenarios, when built.
     """
-    if r_computed <= 4:
-        return True
-
-    from backend.helpers.tiebreakers import resolve_standings_for_mask
-
-    R = len(remaining)
-    pairs = [(rg.a, rg.b) for rg in remaining]
-    satisfying_masks = _masks_satisfying_conditions(conditions, remaining)
-    cond_indices = _cond_game_indices(conditions, remaining)
-
-    for mask in satisfying_masks:
-        base_margins = {pairs[i]: base_margin_default for i in range(R)}
-        for margin_combo in iter_product(_MARGIN_RANGE, repeat=len(cond_indices)):
-            margins = dict(base_margins)
-            for k, game_idx in enumerate(cond_indices):
-                margins[pairs[game_idx]] = margin_combo[k]
-            seeding = resolve_standings_for_mask(
-                teams, completed, remaining, mask, margins, base_margin_default, pa_win
-            )
-            team_pos = seeding.index(team) if team in seeding else len(seeding)
-            if expected_seed is not None:
-                if team_pos != expected_seed - 1:
-                    return False
-            elif expected_in_playoffs is True and team_pos >= playoff_seeds:
-                return False
-            elif expected_in_playoffs is False and team_pos < playoff_seeds:
-                return False
-
+    if complete_scenarios is not None:
+        outcomes = _places_from_scenarios(conditions, team, complete_scenarios, playoff_seeds)
+    else:
+        outcomes = _places_from_tiebreaker(conditions, team, teams, completed, remaining, pa_win, base_margin_default)
+    for places in outcomes:
+        if expected_seed is not None and places != {expected_seed}:
+            return False
+        if expected_in_playoffs is True and max(places) > playoff_seeds:
+            return False
+        if expected_in_playoffs is False and min(places) <= playoff_seeds:
+            return False
     return True
 
 
@@ -186,6 +235,7 @@ def _extract_clinch_seed_insights(
     playoff_seeds: int = _PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
+    complete_scenarios: list[dict] | None = None,
 ) -> list[KeyInsight]:
     """Extract clinch-seed insights: atoms that guarantee a specific seed position."""
     results = []
@@ -209,6 +259,7 @@ def _extract_clinch_seed_insights(
                     playoff_seeds=playoff_seeds,
                     pa_win=pa_win,
                     base_margin_default=base_margin_default,
+                    complete_scenarios=complete_scenarios,
                 ):
                     continue
                 results.append(
@@ -236,6 +287,7 @@ def _extract_clinch_playoffs_insights(
     playoff_seeds: int = _PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
+    complete_scenarios: list[dict] | None = None,
 ) -> list[KeyInsight]:
     """Extract clinch-playoffs insights not already covered by a clinch-seed insight."""
     covered_by_team: dict[str, set[frozenset]] = {}
@@ -271,6 +323,7 @@ def _extract_clinch_playoffs_insights(
                     playoff_seeds=playoff_seeds,
                     pa_win=pa_win,
                     base_margin_default=base_margin_default,
+                    complete_scenarios=complete_scenarios,
                 ):
                     continue
                 results.append(
@@ -297,6 +350,7 @@ def _extract_elimination_insights(
     playoff_seeds: int = _PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
+    complete_scenarios: list[dict] | None = None,
 ) -> list[KeyInsight]:
     """Extract elimination insights from atoms[team][playoff_seeds+1]."""
     elim_seed = playoff_seeds + 1
@@ -319,6 +373,7 @@ def _extract_elimination_insights(
                 playoff_seeds=playoff_seeds,
                 pa_win=pa_win,
                 base_margin_default=base_margin_default,
+                complete_scenarios=complete_scenarios,
             ):
                 continue
             results.append(
@@ -375,6 +430,7 @@ def extract_insights(
     playoff_seeds: int = _PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
+    complete_scenarios: list[dict] | None = None,
 ) -> list[KeyInsight]:
     """Extract key insights from scenario atoms.
 
@@ -388,6 +444,8 @@ def extract_insights(
         playoff_seeds: Number of playoff seeds (default 4).
         pa_win: Points-allowed for simulated game winners.
         base_margin_default: Default margin for non-condition games in verification.
+        complete_scenarios: The region's complete scenarios, when built: insights are then checked
+            against them exactly (see ``_verify_insight_margins``).
 
     Returns:
         Sorted, deduplicated list of KeyInsight objects, capped per team and region.
@@ -435,6 +493,7 @@ def extract_insights(
         playoff_seeds,
         pa_win,
         base_margin_default,
+        complete_scenarios,
     )
     clinch_playoffs = _extract_clinch_playoffs_insights(
         atoms,
@@ -447,6 +506,7 @@ def extract_insights(
         playoff_seeds,
         pa_win,
         base_margin_default,
+        complete_scenarios,
     )
     elimination = _extract_elimination_insights(
         atoms,
@@ -458,6 +518,7 @@ def extract_insights(
         playoff_seeds,
         pa_win,
         base_margin_default,
+        complete_scenarios,
     )
 
     results.extend(clinch_seed)
