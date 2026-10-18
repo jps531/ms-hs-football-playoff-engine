@@ -1016,8 +1016,8 @@ class StandingsOdds:
     p4: float  # probability of finishing 4th in the region
     p_playoffs: float  # raw sum p1+p2+p3+p4 (may equal p_playoffs if no rounding)
     final_playoffs: float  # 1.0 if clinched, 0.0 if eliminated, else p_playoffs
-    clinched: bool  # True when p_playoffs >= 0.999
-    eliminated: bool  # True when p_playoffs <= 0.001
+    clinched: bool  # True when the team makes the playoffs in every outcome
+    eliminated: bool  # True when it makes them in none
 
 
 @dataclass

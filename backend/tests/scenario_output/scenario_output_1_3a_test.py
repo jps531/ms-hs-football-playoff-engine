@@ -87,11 +87,11 @@ Eliminated if: (25.0%)
 BELMONT_EXPECTED = """\
 Belmont
 
-#3 seed if: (66.7%)
+#3 seed if: (56.1%)
 1. Belmont beats Mantachie
-2. Mantachie beats Belmont by 1\u20138 AND Kossuth beats Alcorn Central
+2. Mantachie beats Belmont by 1–8 AND Kossuth beats Alcorn Central
 
-#4 seed if: (8.3%)
+#4 seed if: (18.9%)
 1. Mantachie beats Belmont by 9 or more AND Kossuth beats Alcorn Central
 
 Eliminated if: (25.0%)
@@ -100,11 +100,11 @@ Eliminated if: (25.0%)
 MANTACHIE_EXPECTED = """\
 Mantachie
 
-#3 seed if: (8.3%)
+#3 seed if: (18.9%)
 1. Mantachie beats Belmont by 9 or more AND Kossuth beats Alcorn Central
 
-#4 seed if: (41.7%)
-1. Mantachie beats Belmont by 1\u20138
+#4 seed if: (31.1%)
+1. Mantachie beats Belmont by 1–8
 2. Alcorn Central beats Kossuth AND Mantachie beats Belmont by 9 or more
 
 Eliminated if: (50.0%)
@@ -495,22 +495,22 @@ def test_odds_alcorn_central():
 
 
 def test_odds_belmont():
-    """BEL odds: p3≈66.7%, p4≈8.3%, eliminated=25%."""
+    """BEL: #3 56.1%, #4 18.9%, playoffs 75.0%."""
     o = _ODDS["Belmont"]
     assert o.clinched is False
     assert o.eliminated is False
-    assert o.p3 == pytest.approx(2 / 3)
-    assert o.p4 == pytest.approx(1 / 12)
+    assert o.p3 == pytest.approx(0.561076605)
+    assert o.p4 == pytest.approx(0.188923395)
     assert o.p_playoffs == pytest.approx(3 / 4)
 
 
 def test_odds_mantachie():
-    """MAN odds: p3≈8.3%, p4≈41.7%, eliminated=50%."""
+    """MAN: #3 18.9%, #4 31.1%, playoffs 50.0%."""
     o = _ODDS["Mantachie"]
     assert o.clinched is False
     assert o.eliminated is False
-    assert o.p3 == pytest.approx(1 / 12)
-    assert o.p4 == pytest.approx(5 / 12)
+    assert o.p3 == pytest.approx(0.188923395)
+    assert o.p4 == pytest.approx(0.311076605)
     assert o.p_playoffs == pytest.approx(0.5)
 
 

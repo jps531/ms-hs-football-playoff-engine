@@ -7,6 +7,7 @@ per-seed counts. No Prefect or database dependencies.
 
 import hashlib
 import logging
+import math
 import random
 from collections import defaultdict
 from itertools import permutations, product
@@ -180,6 +181,111 @@ def _accumulate_slots(
                 fourth_counts_weighted[team] += w_share
 
 
+# How often each winning margin happens, 1-11 then 12 or more (the cap the point-differential
+# steps use), from the 483 region games of 2025: most are won by 12 or more, and 6 and 7 (a
+# touchdown) are the commonest close margins. A margin-sensitive result's margin combinations are
+# weighted by these rather than evenly.
+_MARGIN_COUNTS = (12, 10, 14, 14, 5, 25, 25, 13, 8, 9, 6, 342)
+_MARGIN_SHARE = tuple(c / sum(_MARGIN_COUNTS) for c in _MARGIN_COUNTS)
+# How many ways the scores of the remaining games are drawn for a result whose order turns on
+# fewest points allowed (step 5) with a tied team still to play.
+_PA_DRAWS = 64
+# Score shapes for those draws, as 20 quantiles of the 2025 region games: the points the winner
+# allows, the winning margin, and the winning margin when it's 12 or more (the enumeration's "12").
+_WINNER_ALLOWS = (0, 0, 0, 0, 6, 6, 7, 7, 8, 12, 13, 14, 15, 17, 20, 21, 22, 26, 28, 35)
+_MARGIN = (2, 4, 6, 7, 8, 10, 13, 17, 20, 22, 24, 27, 29, 33, 34, 36, 38, 42, 45, 50)
+_MOST_POINTS = 60  # a high score, for the best and worst cases
+_MARGIN_12_PLUS = (13, 15, 17, 20, 21, 22, 24, 26, 28, 29, 32, 33, 35, 35, 37, 39, 42, 44, 48, 53)
+
+
+def _resolve_with_scores(
+    teams: list[str],
+    completed: list[CompletedGame],
+    remaining: list[RemainingGame],
+    outcome_mask: int,
+    margins: dict,
+    known_margins: frozenset = frozenset(),
+) -> list[tuple[list[str], list[list[str]], float]]:
+    """The seedings one result can give, each with its share: ``[(order, coin-flip groups, share)]``.
+
+    Usually that's the resolver's one order. But when a tie reaches fewest points allowed (step 5)
+    with a tied team still to play, the order turns on the actual scores, which a winner and margin
+    don't fix: rather than settle it with one assumed score, the remaining games' scores are drawn
+    ``_PA_DRAWS`` times from 2025's region games (the points the winner allows, and the margin: as
+    given for games in ``known_margins``, a draw of 12 or more for those at 12, drawn for the rest)
+    and each order gets its share. So an order only points allowed can give gets the small share it
+    deserves, not none. The draws are seeded from the result, so the same inputs give the same odds.
+    """
+    decisions: list = []
+    flips: list[list[str]] = []
+    order = resolve_standings_for_mask(
+        teams,
+        completed,
+        remaining,
+        outcome_mask,
+        margins=margins,
+        base_margin_default=7,
+        pa_win=14,
+        coin_flip_collector=flips,
+        decision_collector=decisions,
+    )
+    in_play = {t for g in remaining for t in (g.a, g.b)}
+    if not any(step == 5 and set(group) & in_play for step, group, _ in decisions):
+        return [(order, flips, 1.0)]
+    pairs = [(g.a, g.b) for g in remaining]
+    tied = sorted({t for step, group, _ in decisions if step == 5 and set(group) & in_play for t in group})
+    seed = outcome_mask * 1_000_003 + sum(margins.get(p, 7) * 13**i for i, p in enumerate(pairs))
+    rng = random.Random(seed)  # NOSONAR
+
+    def margin_range(pair) -> tuple[int, int]:
+        """The fewest and most a game can be won by: its margin, or 12 and up for 12, or any if not given."""
+        if pair not in known_margins:
+            return 1, _MOST_POINTS
+        m = margins.get(pair, 7)
+        return (m, m) if m < 12 else (12, _MOST_POINTS)
+
+    draws = []
+    for _ in range(_PA_DRAWS):
+        scores = {}
+        for pair in pairs:
+            allowed = rng.choice(_WINNER_ALLOWS)  # NOSONAR
+            m = margins.get(pair, 7) if pair in known_margins else rng.choice(_MARGIN)  # NOSONAR
+            if m >= 12 and pair in known_margins:
+                m = rng.choice(_MARGIN_12_PLUS)  # NOSONAR
+            scores[pair] = (allowed, allowed + m)
+        draws.append(scores)
+    # Plus, for each tied team, its best and worst case: it allows as few (or as many) points as it
+    # can and everyone else as many (or as few), so a place it can only reach that way still counts.
+    for team in tied:
+        best, worst = {}, {}
+        for i, pair in enumerate(pairs):
+            lo, hi = margin_range(pair)
+            winner = pair[0] if outcome_mask >> i & 1 else pair[1]
+            if team == winner:
+                best[pair], worst[pair] = (0, hi), (_MOST_POINTS, _MOST_POINTS + lo)
+            elif team in pair:
+                best[pair], worst[pair] = (0, lo), (_MOST_POINTS, _MOST_POINTS + hi)
+            else:
+                best[pair], worst[pair] = (_MOST_POINTS, _MOST_POINTS + hi), (0, lo)
+        draws += [best, worst]
+    out = []
+    for scores in draws:
+        draw_flips: list[list[str]] = []
+        draw = resolve_standings_for_mask(
+            teams,
+            completed,
+            remaining,
+            outcome_mask,
+            margins=margins,
+            base_margin_default=7,
+            pa_win=14,
+            coin_flip_collector=draw_flips,
+            points_allowed=scores,
+        )
+        out.append((draw, draw_flips, 1.0 / len(draws)))
+    return out
+
+
 def _monte_carlo_seed(teams: list[str], completed: list[CompletedGame], remaining: list[RemainingGame]) -> int:
     """Derive a stable RNG seed from a region's inputs.
 
@@ -285,34 +391,24 @@ def determine_scenarios(
     all_coinflip_events: list[list[str]] = []
 
     if num_remaining == 0:
-        local_flips: list[list[str]] = []
-        final_order = resolve_standings_for_mask(
-            teams,
-            completed,
-            remaining,
-            0,
-            margins={},
-            base_margin_default=7,
-            pa_win=pa_for_winner,
-            coin_flip_collector=local_flips,
-        )
-        all_coinflip_events.extend(local_flips)
-        _accumulate_slots(
-            final_order,
-            local_flips,
-            1.0,
-            1.0,
-            first_counts,
-            second_counts,
-            third_counts,
-            fourth_counts,
-            first_counts_weighted,
-            second_counts_weighted,
-            third_counts_weighted,
-            fourth_counts_weighted,
-            seed_pairs,
-            seed_pairs_weighted,
-        )
+        for final_order, local_flips, share in _resolve_with_scores(teams, completed, remaining, 0, {}, frozenset()):
+            all_coinflip_events.extend(local_flips)
+            _accumulate_slots(
+                final_order,
+                local_flips,
+                share,
+                share,
+                first_counts,
+                second_counts,
+                third_counts,
+                fourth_counts,
+                first_counts_weighted,
+                second_counts_weighted,
+                third_counts_weighted,
+                fourth_counts_weighted,
+                seed_pairs,
+                seed_pairs_weighted,
+            )
         denom = 1.0
         denom_weighted = 1.0
 
@@ -332,34 +428,26 @@ def determine_scenarios(
                 # Statistical Monte Carlo sampling only — not security-sensitive.
                 if rng.random() < p:  # NOSONAR
                     outcome_mask |= 1 << bit_index
-            local_flips: list[list[str]] = []
-            final_order = resolve_standings_for_mask(
-                teams,
-                completed,
-                mc_remaining,
-                outcome_mask,
-                margins=base_margins,
-                base_margin_default=7,
-                pa_win=pa_for_winner,
-                coin_flip_collector=local_flips,
-            )
-            all_coinflip_events.extend(local_flips)
-            _accumulate_slots(
-                final_order,
-                local_flips,
-                1.0,
-                1.0,
-                first_counts,
-                second_counts,
-                third_counts,
-                fourth_counts,
-                first_counts_weighted,
-                second_counts_weighted,
-                third_counts_weighted,
-                fourth_counts_weighted,
-                seed_pairs,
-                seed_pairs_weighted,
-            )
+            for final_order, local_flips, share in _resolve_with_scores(
+                teams, completed, mc_remaining, outcome_mask, base_margins, frozenset()
+            ):
+                all_coinflip_events.extend(local_flips)
+                _accumulate_slots(
+                    final_order,
+                    local_flips,
+                    share,
+                    share,
+                    first_counts,
+                    second_counts,
+                    third_counts,
+                    fourth_counts,
+                    first_counts_weighted,
+                    second_counts_weighted,
+                    third_counts_weighted,
+                    fourth_counts_weighted,
+                    seed_pairs,
+                    seed_pairs_weighted,
+                )
             denom_weighted += 1.0
         denom = float(n_samples)
 
@@ -378,34 +466,26 @@ def determine_scenarios(
                 # Fast path: resolve once at the default margin, skip 12^N enumeration.
                 # Odds are approximate (margin tiebreakers not tracked), consistent with
                 # ignore_margins rendering mode.
-                local_flips: list[list[str]] = []
-                final_order = resolve_standings_for_mask(
-                    teams,
-                    completed,
-                    remaining,
-                    outcome_mask,
-                    margins=base_margins,
-                    base_margin_default=7,
-                    pa_win=pa_for_winner,
-                    coin_flip_collector=local_flips,
-                )
-                all_coinflip_events.extend(local_flips)
-                _accumulate_slots(
-                    final_order,
-                    local_flips,
-                    1.0,
-                    mask_weight,
-                    first_counts,
-                    second_counts,
-                    third_counts,
-                    fourth_counts,
-                    first_counts_weighted,
-                    second_counts_weighted,
-                    third_counts_weighted,
-                    fourth_counts_weighted,
-                    seed_pairs,
-                    seed_pairs_weighted,
-                )
+                for final_order, local_flips, share in _resolve_with_scores(
+                    teams, completed, remaining, outcome_mask, base_margins, frozenset()
+                ):
+                    all_coinflip_events.extend(local_flips)
+                    _accumulate_slots(
+                        final_order,
+                        local_flips,
+                        share,
+                        mask_weight * share,
+                        first_counts,
+                        second_counts,
+                        third_counts,
+                        fourth_counts,
+                        first_counts_weighted,
+                        second_counts_weighted,
+                        third_counts_weighted,
+                        fourth_counts_weighted,
+                        seed_pairs,
+                        seed_pairs_weighted,
+                    )
                 continue
 
             wl_totals = standings_from_mask(
@@ -435,66 +515,15 @@ def determine_scenarios(
                 if boundary:
                     intra_bucket_games = intra_bucket_games + boundary
             if not intra_bucket_games:
-                local_flips = []
-                final_order = resolve_standings_for_mask(
-                    teams,
-                    completed,
-                    remaining,
-                    outcome_mask,
-                    margins=base_margins,
-                    base_margin_default=7,
-                    pa_win=pa_for_winner,
-                    coin_flip_collector=local_flips,
-                )
-                all_coinflip_events.extend(local_flips)
-                _accumulate_slots(
-                    final_order,
-                    local_flips,
-                    1.0,
-                    mask_weight,
-                    first_counts,
-                    second_counts,
-                    third_counts,
-                    fourth_counts,
-                    first_counts_weighted,
-                    second_counts_weighted,
-                    third_counts_weighted,
-                    fourth_counts_weighted,
-                    seed_pairs,
-                    seed_pairs_weighted,
-                )
-            else:
-                # Enumerate all 12^N margin combinations for intra-bucket games.
-                # This correctly captures multi-game threshold interactions that the
-                # old one-game-at-a-time isolation approach could miss (e.g. a
-                # tiebreaker that only flips when Game A wins by 12+ AND Game B wins
-                # by 1–6 simultaneously).
-                intra_pairs = [(rg.a, rg.b) for rg in intra_bucket_games]
-                n_intra = len(intra_pairs)
-                total_combos = 12**n_intra
-                for margin_combo in product(range(1, 13), repeat=n_intra):
-                    branch_margins = dict(base_margins)
-                    for (a, b), m in zip(intra_pairs, margin_combo):
-                        branch_margins[(a, b)] = m
-                    branch_weight = 1.0 / total_combos
-                    effective_weight = mask_weight * branch_weight
-                    local_flips = []
-                    final_order = resolve_standings_for_mask(
-                        teams,
-                        completed,
-                        remaining,
-                        outcome_mask,
-                        margins=branch_margins,
-                        base_margin_default=7,
-                        pa_win=pa_for_winner,
-                        coin_flip_collector=local_flips,
-                    )
+                for final_order, local_flips, share in _resolve_with_scores(
+                    teams, completed, remaining, outcome_mask, base_margins, frozenset()
+                ):
                     all_coinflip_events.extend(local_flips)
                     _accumulate_slots(
                         final_order,
                         local_flips,
-                        branch_weight,
-                        effective_weight,
+                        share,
+                        mask_weight * share,
                         first_counts,
                         second_counts,
                         third_counts,
@@ -506,6 +535,41 @@ def determine_scenarios(
                         seed_pairs,
                         seed_pairs_weighted,
                     )
+            else:
+                # Enumerate all 12^N margin combinations for intra-bucket games.
+                # This correctly captures multi-game threshold interactions that the
+                # old one-game-at-a-time isolation approach could miss (e.g. a
+                # tiebreaker that only flips when Game A wins by 12+ AND Game B wins
+                # by 1–6 simultaneously). Each combination counts as often as those
+                # margins happen (``_MARGIN_SHARE``), not evenly.
+                intra_pairs = [(rg.a, rg.b) for rg in intra_bucket_games]
+                n_intra = len(intra_pairs)
+                for margin_combo in product(range(1, 13), repeat=n_intra):
+                    branch_margins = dict(base_margins)
+                    for (a, b), m in zip(intra_pairs, margin_combo):
+                        branch_margins[(a, b)] = m
+                    branch_weight = math.prod(_MARGIN_SHARE[m - 1] for m in margin_combo)
+                    effective_weight = mask_weight * branch_weight
+                    for final_order, local_flips, share in _resolve_with_scores(
+                        teams, completed, remaining, outcome_mask, branch_margins, frozenset(intra_pairs)
+                    ):
+                        all_coinflip_events.extend(local_flips)
+                        _accumulate_slots(
+                            final_order,
+                            local_flips,
+                            branch_weight * share,
+                            effective_weight * share,
+                            first_counts,
+                            second_counts,
+                            third_counts,
+                            fourth_counts,
+                            first_counts_weighted,
+                            second_counts_weighted,
+                            third_counts_weighted,
+                            fourth_counts_weighted,
+                            seed_pairs,
+                            seed_pairs_weighted,
+                        )
 
         denom = float(1 << num_remaining)
 
@@ -610,6 +674,11 @@ def compute_first_round_home_odds(
     return result
 
 
+# Odds are rounded here: past the float noise of summing thousands of shares (~1e-14), so it never
+# orders two level teams or reads as a chance; a real chance below one in a trillion counts as none.
+_ODDS_DIGITS = 12
+
+
 def determine_odds(teams, first_counts, second_counts, third_counts, fourth_counts, denom):
     """Convert accumulated seed counts into probability odds for each team.
 
@@ -630,13 +699,12 @@ def determine_odds(teams, first_counts, second_counts, third_counts, fourth_coun
     """
     odds: dict[str, StandingsOdds] = {}
     for school in teams:
-        p1 = first_counts.get(school, 0.0) / denom
-        p2 = second_counts.get(school, 0.0) / denom
-        p3 = third_counts.get(school, 0.0) / denom
-        p4 = fourth_counts.get(school, 0.0) / denom
-        p_playoffs = p1 + p2 + p3 + p4
-        clinched = p_playoffs >= 0.999
-        eliminated = p_playoffs <= 0.001
+        raw = [c.get(school, 0.0) / denom for c in (first_counts, second_counts, third_counts, fourth_counts)]
+        p1, p2, p3, p4 = (round(p, _ODDS_DIGITS) for p in raw)
+        p_playoffs = round(sum(raw), _ODDS_DIGITS)
+        # Only a certainty (see _ODDS_DIGITS): a team with a 0.05% chance of missing out hasn't clinched.
+        clinched = p_playoffs >= 1.0
+        eliminated = p_playoffs <= 0.0
         if clinched:
             final_playoffs = 1.0
         elif eliminated:

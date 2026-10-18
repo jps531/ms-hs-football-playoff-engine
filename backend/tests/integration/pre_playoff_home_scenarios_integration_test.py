@@ -117,8 +117,7 @@ class TestReturnTypes:
 
 
 # ---------------------------------------------------------------------------
-# Correct odds (Q3 regression: ensure determine_scenarios is used, not the
-# inaccurate compute_odds_from_precomputed path)
+# Correct odds (Q3 regression: the seeding odds come from determine_scenarios)
 # ---------------------------------------------------------------------------
 
 
@@ -130,20 +129,20 @@ class TestRealOdds:
         assert "Will Host First Round (100.0%)" in rendered
 
     def test_r2_host_matches_fixture_odds(self, rendered):
-        """R2 host probability ≈ 43.2% — verifies margin-accurate seeding odds."""
-        assert "Will Host Second Round (43.2%)" in rendered
+        """R2 host probability ≈ 39.3% — verifies margin-accurate seeding odds."""
+        assert "Will Host Second Round (39.3%)" in rendered
 
     def test_r2_away_is_complement(self, rendered):
-        """R2 away probability is the complement of the host probability (56.8%)."""
-        assert "Will Not Host Second Round (56.8%)" in rendered
+        """R2 away probability is the complement of the host probability (60.7%)."""
+        assert "Will Not Host Second Round (60.7%)" in rendered
 
     def test_qf_host_matches_fixture_odds(self, rendered):
-        """Quarterfinal host probability matches the fixture value (9.8%)."""
-        assert "Will Host Quarterfinals (9.8%)" in rendered
+        """Quarterfinal host probability matches the fixture value (10.0%)."""
+        assert "Will Host Quarterfinals (10.0%)" in rendered
 
     def test_sf_host_matches_fixture_odds(self, rendered):
-        """Semifinal host probability matches the fixture value (8.5%)."""
-        assert "Will Host Semifinals (8.5%)" in rendered
+        """Semifinal host probability matches the fixture value (8.0%)."""
+        assert "Will Host Semifinals (8.0%)" in rendered
 
 
 # ---------------------------------------------------------------------------

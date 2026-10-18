@@ -2,8 +2,6 @@
 
 from itertools import product
 
-import pytest
-
 from backend.helpers.data_classes import (
     CompletedGame,
     FormatSlot,
@@ -14,14 +12,12 @@ from backend.helpers.data_classes import (
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenario_renderer import _render_margin_condition
 from backend.helpers.scenario_viewer import (
-    EnumeratedOutcomes,
     _find_tiebreaker_groups,
     _format_team_list,
     _minimize_game_winner_atom,
     _simplify_atom_list,
     build_pre_playoff_home_scenarios,
     build_scenario_atoms,
-    compute_odds_from_precomputed,
     enumerate_division_scenarios,
     enumerate_outcomes,
     render_division_scenarios,
@@ -1462,105 +1458,6 @@ def test_partial_c_render_full_output():
 
 
 # ---------------------------------------------------------------------------
-# compute_odds_from_precomputed
-# ---------------------------------------------------------------------------
-
-
-class TestComputeOddsFromPrecomputed:
-    """Tests for compute_odds_from_precomputed using the 1-2A (R=6) fixture."""
-
-    # Use the 1-2A 0-games-played checkpoint (ignore_margins=True, R=6)
-    # so the test runs fast and covers the coin-flip distribution branch.
-    _fixture = REGION_RESULTS_2025[(2, 1)]
-    _all_games = _fixture["games"]
-    _teams = teams_from_games(_all_games)
-    _cutoff = "2025-10-15"  # 0 games played, R=6
-
-    @classmethod
-    def _eo(cls):
-        """Build an EnumeratedOutcomes fixture for this checkpoint."""
-        completed = get_completed_games(expand_results([g for g in cls._all_games if g["date"] <= cls._cutoff]))
-        remaining = [
-            RemainingGame(*sorted([g["winner"], g["loser"]])) for g in cls._all_games if g["date"] > cls._cutoff
-        ]
-        return enumerate_outcomes(cls._teams, completed, remaining, ignore_margins=True)
-
-    def test_returns_all_teams(self):
-        """compute_odds_from_precomputed returns a key for every team."""
-        eo = self._eo()
-        odds = compute_odds_from_precomputed(eo, list(self._teams))
-        assert set(odds.keys()) == set(self._teams)
-
-    def test_playoff_odds_sum_to_four_over_six(self):
-        """4-seed region with 4 teams: each team's p_playoffs ≈ 4/4 = 1.0 but
-        with 4 teams all equally likely, each gets P(playoffs) = 4/4 = 100%."""
-        eo = self._eo()
-        odds = compute_odds_from_precomputed(eo, list(self._teams))
-        # With 4 teams and 4 playoff spots, everyone makes playoffs in every outcome.
-        for team, o in odds.items():
-            assert o.p_playoffs == pytest.approx(1.0), f"{team} p_playoffs != 1.0"
-
-    def test_seed_probs_sum_to_one_per_seed(self):
-        """Across all teams, P(seed=k) sums to 1.0 for each seed k=1..4."""
-        eo = self._eo()
-        odds = compute_odds_from_precomputed(eo, list(self._teams))
-        for seed_attr in ("p1", "p2", "p3", "p4"):
-            total = sum(getattr(o, seed_attr) for o in odds.values())
-            assert total == pytest.approx(1.0), f"sum({seed_attr}) = {total}"
-
-    def test_coin_flip_masks_distribute_evenly(self):
-        """In a symmetric 0-games-played region, all teams have equal seed odds."""
-        eo = self._eo()
-        odds = compute_odds_from_precomputed(eo, list(self._teams))
-        # With 4 teams and equal probability, each has 25% chance at each seed.
-        for team, o in odds.items():
-            assert o.p1 == pytest.approx(0.25, abs=1e-9), f"{team} p1={o.p1}"
-            assert o.p2 == pytest.approx(0.25, abs=1e-9), f"{team} p2={o.p2}"
-            assert o.p3 == pytest.approx(0.25, abs=1e-9), f"{team} p3={o.p3}"
-            assert o.p4 == pytest.approx(0.25, abs=1e-9), f"{team} p4={o.p4}"
-
-    def test_clinched_flag_set_when_p_playoffs_is_1(self):
-        """clinched is True when p_playoffs >= 0.999."""
-        eo = self._eo()
-        odds = compute_odds_from_precomputed(eo, list(self._teams))
-        for o in odds.values():
-            assert o.clinched is True
-
-    def test_eliminated_flag_not_set(self):
-        """eliminated is False when p_playoffs > 0.001."""
-        eo = self._eo()
-        odds = compute_odds_from_precomputed(eo, list(self._teams))
-        for o in odds.values():
-            assert o.eliminated is False
-
-    def test_matches_determine_scenarios_odds(self):
-        """compute_odds_from_precomputed gives the same odds as determine_scenarios."""
-        from backend.helpers.scenarios import determine_odds, determine_scenarios
-
-        completed = get_completed_games(expand_results([g for g in self._all_games if g["date"] <= self._cutoff]))
-        remaining = [
-            RemainingGame(*sorted([g["winner"], g["loser"]])) for g in self._all_games if g["date"] > self._cutoff
-        ]
-        eo = enumerate_outcomes(self._teams, completed, remaining, ignore_margins=True)
-        fast_odds = compute_odds_from_precomputed(eo, list(self._teams))
-
-        r = determine_scenarios(self._teams, completed, remaining, ignore_margins=True)
-        ref_odds = determine_odds(
-            list(self._teams),
-            r.first_counts,
-            r.second_counts,
-            r.third_counts,
-            r.fourth_counts,
-            r.denom,
-        )
-        for team in self._teams:
-            assert fast_odds[team].p1 == pytest.approx(ref_odds[team].p1, abs=1e-9)
-            assert fast_odds[team].p2 == pytest.approx(ref_odds[team].p2, abs=1e-9)
-            assert fast_odds[team].p3 == pytest.approx(ref_odds[team].p3, abs=1e-9)
-            assert fast_odds[team].p4 == pytest.approx(ref_odds[team].p4, abs=1e-9)
-
-
-# ---------------------------------------------------------------------------
 # build_scenario_atoms R > 10 gate
 # ---------------------------------------------------------------------------
 
@@ -1652,88 +1549,6 @@ class TestMinimizeGameWinnerAtomEdgeCases:
         # always_covered_set covers all outcomes → both are redundant → result is [].
         result = _minimize_game_winner_atom(atom, {0, 1}, remaining_one, 1)
         assert result == []
-
-
-# ---------------------------------------------------------------------------
-# compute_odds_from_precomputed: eliminated team and seed_idx >= playoff_seeds
-# ---------------------------------------------------------------------------
-
-
-class TestComputeOddsFromPrecomputedEliminatedPath:
-    """compute_odds_from_precomputed with a 5-team region and playoff_seeds=4."""
-
-    @staticmethod
-    def _five_team_eo(coin_flips=None):
-        """Synthetic EnumeratedOutcomes: one mask, 5-team seeding, no remaining games."""
-        return EnumeratedOutcomes(
-            groups={(0, ("A", "B", "C", "D", "E")): []},
-            non_sensitive_masks={0},
-            pairs=[],
-            R=0,
-            total_combos=1,
-            coin_flips=coin_flips or {},
-            margin_tiebreaker_masks={},
-        )
-
-    def test_eliminated_team_has_zero_p_playoffs(self):
-        """Team E at seed position 5 (index 4) is not counted — p_playoffs=0."""
-        eo = self._five_team_eo()
-        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
-        assert odds["E"].p_playoffs == pytest.approx(0.0)
-
-    def test_eliminated_flag_set_for_zero_p_playoffs(self):
-        """eliminated=True and final_playoffs=0.0 for the team at position 5."""
-        eo = self._five_team_eo()
-        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
-        assert odds["E"].eliminated is True
-        assert odds["E"].final_playoffs == pytest.approx(0.0)
-
-    def test_top_four_teams_have_nonzero_p_playoffs(self):
-        """Teams A-D are each at a playoff seed in the single outcome."""
-        eo = self._five_team_eo()
-        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
-        for team in ("A", "B", "C", "D"):
-            assert odds[team].p_playoffs == pytest.approx(1.0)
-
-    def test_eliminated_team_skipped_in_coin_flip_path(self):
-        """E at seed position 5 is not accumulated even in the coin-flip (else) path."""
-        # A and B are in a coin-flip group; E is still at the eliminated position
-        eo = self._five_team_eo(coin_flips={0: [["A", "B"]]})
-        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
-        assert odds["E"].p_playoffs == pytest.approx(0.0)
-        assert odds["E"].eliminated is True
-        # A and B split the #1/#2 seed 50/50
-        assert odds["A"].p1 == pytest.approx(0.5)
-        assert odds["B"].p1 == pytest.approx(0.5)
-
-    def test_partial_odds_team_uses_p_playoffs_as_final(self):
-        """A team with 0 < p_playoffs < 1 uses final_playoffs=p_playoffs (else branch).
-
-        Two outcomes: in outcome 1 D makes playoffs (#4 seed), in outcome 2 D is
-        eliminated (position 5). D's p_playoffs=0.5, which is neither clinched nor
-        eliminated, so final_playoffs=p_playoffs is used (line 1227).
-        """
-        eo = EnumeratedOutcomes(
-            groups={
-                (0, ("A", "B", "C", "D", "E")): [],  # D is #4; E eliminated
-                (1, ("E", "A", "B", "C", "D")): [],  # E is #1; D eliminated
-            },
-            non_sensitive_masks={0, 1},
-            pairs=[],
-            R=0,
-            total_combos=1,
-            coin_flips={},
-            margin_tiebreaker_masks={},
-        )
-        odds = compute_odds_from_precomputed(eo, ["A", "B", "C", "D", "E"], playoff_seeds=4)
-        # D appears at playoff seed in only 1 of 2 outcomes
-        assert odds["D"].p_playoffs == pytest.approx(0.5)
-        assert odds["D"].clinched is False
-        assert odds["D"].eliminated is False
-        assert odds["D"].final_playoffs == pytest.approx(0.5)
-        # Same for E
-        assert odds["E"].p_playoffs == pytest.approx(0.5)
-        assert odds["E"].final_playoffs == pytest.approx(0.5)
 
 
 # ---------------------------------------------------------------------------

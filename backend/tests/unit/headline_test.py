@@ -351,8 +351,9 @@ def test_engine_region_2_7a_last_spot():
 
 
 def test_engine_region_1_7a_title_from_exact_path():
-    """1-7A: the title clinch comes from an exact path, since the contender is already in the playoffs."""
-    assert _engine_headline(7, 1) == "DeSoto Central clinches the region with a win over Tupelo."
+    """1-7A: the title clinch comes from an exact path, since the contender is already in the playoffs.
+    Tupelo and DeSoto Central are level at 50% (their game decides it); the current leader is named."""
+    assert _engine_headline(7, 1) == "Tupelo clinches the region with a win over DeSoto Central."
 
 
 def test_engine_region_3_7a_long_shot_not_featured():

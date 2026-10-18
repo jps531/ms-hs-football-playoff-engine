@@ -78,11 +78,11 @@ Franklin County
 #1 seed if: (50.0%)
 1. Franklin County beats Jefferson County
 
-#2 seed if: (39.6%)
-1. Jefferson County beats Franklin County by 1\u20137
+#2 seed if: (30.4%)
+1. Jefferson County beats Franklin County by 1–7
 2. Crystal Springs beats Hazlehurst AND Jefferson County beats Franklin County by 8 or more
 
-#3 seed if: (10.4%)
+#3 seed if: (19.6%)
 1. Jefferson County beats Franklin County by 8 or more AND Hazlehurst beats Crystal Springs"""
 
 HAZLEHURST_EXPECTED = """\
@@ -103,12 +103,12 @@ Jefferson County
 #1 seed if: (25.0%)
 1. Jefferson County beats Franklin County AND Crystal Springs beats Hazlehurst
 
-#2 seed if: (10.4%)
+#2 seed if: (19.6%)
 1. Jefferson County beats Franklin County by 8 or more AND Hazlehurst beats Crystal Springs
 
-#3 seed if: (64.6%)
+#3 seed if: (55.4%)
 1. Franklin County beats Jefferson County
-2. Jefferson County beats Franklin County by 1\u20137 AND Hazlehurst beats Crystal Springs"""
+2. Jefferson County beats Franklin County by 1–7 AND Hazlehurst beats Crystal Springs"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — seed key structure
@@ -489,13 +489,13 @@ def test_odds_franklin_county_p1():
 
 
 def test_odds_franklin_county_p2():
-    """Franklin County has ~39.6% chance at #2 seed."""
-    assert _ODDS["Franklin County"].p2 == pytest.approx(0.39583333333333337)
+    """Franklin County: #2 30.4%."""
+    assert _ODDS["Franklin County"].p2 == pytest.approx(0.304347826)
 
 
 def test_odds_franklin_county_p3():
-    """Franklin County has ~10.4% chance at #3 seed."""
-    assert _ODDS["Franklin County"].p3 == pytest.approx(0.10416666666666667)
+    """Franklin County: #3 19.6%."""
+    assert _ODDS["Franklin County"].p3 == pytest.approx(0.195652174)
 
 
 def test_odds_hazlehurst_clinched():
@@ -524,13 +524,13 @@ def test_odds_jefferson_county_p1():
 
 
 def test_odds_jefferson_county_p2():
-    """Jefferson County has ~10.4% chance at #2 seed."""
-    assert _ODDS["Jefferson County"].p2 == pytest.approx(0.10416666666666667)
+    """Jefferson County: #2 19.6%."""
+    assert _ODDS["Jefferson County"].p2 == pytest.approx(0.195652174)
 
 
 def test_odds_jefferson_county_p3():
-    """Jefferson County has ~64.6% chance at #3 seed."""
-    assert _ODDS["Jefferson County"].p3 == pytest.approx(0.6458333333333334)
+    """Jefferson County: #3 55.4%."""
+    assert _ODDS["Jefferson County"].p3 == pytest.approx(0.554347826)
 
 
 # ---------------------------------------------------------------------------

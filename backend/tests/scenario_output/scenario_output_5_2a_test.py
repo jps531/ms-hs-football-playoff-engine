@@ -76,11 +76,11 @@ _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
 LAKE_EXPECTED = """\
 Lake
 
-#1 seed if: (58.3%)
+#1 seed if: (52.6%)
 1. Lake beats Scott Central
-2. Pelahatchie beats Puckett AND Scott Central beats Lake by 1\u20134
+2. Pelahatchie beats Puckett AND Scott Central beats Lake by 1–4
 
-#2 seed if: (41.7%)
+#2 seed if: (47.4%)
 1. Scott Central beats Lake by 5 or more
 2. Puckett beats Pelahatchie AND Scott Central beats Lake"""
 
@@ -100,12 +100,12 @@ PUCKETT_EXPECTED = "Puckett\n\nEliminated. (100.0%)"
 SCOTT_CENTRAL_EXPECTED = """\
 Scott Central
 
-#1 seed if: (41.7%)
+#1 seed if: (47.4%)
 1. Scott Central beats Lake by 5 or more
 2. Puckett beats Pelahatchie AND Scott Central beats Lake
 
-#2 seed if: (8.3%)
-1. Pelahatchie beats Puckett AND Scott Central beats Lake by 1\u20134
+#2 seed if: (2.6%)
+1. Pelahatchie beats Puckett AND Scott Central beats Lake by 1–4
 
 #3 seed if: (50.0%)
 1. Lake beats Scott Central"""
@@ -497,23 +497,23 @@ def test_team_dict_pelahatchie_two_seeds():
 
 
 def test_team_dict_lake_seed1_odds():
-    """Lake #1 odds are 7/12 ≈ 58.3% (2 masks Lake wins + 4/12 of SC-wins mask)."""
-    assert _TEAM_DICT["Lake"][1]["odds"] == pytest.approx(7 / 12)
+    """Lake #1: #1 52.6%."""
+    assert _TEAM_DICT["Lake"][1]["odds"] == pytest.approx(0.525879917)
 
 
 def test_team_dict_lake_seed2_odds():
-    """Lake #2 odds are 5/12 ≈ 41.7%."""
-    assert _TEAM_DICT["Lake"][2]["odds"] == pytest.approx(5 / 12)
+    """Lake #2: #2 47.4%."""
+    assert _TEAM_DICT["Lake"][2]["odds"] == pytest.approx(0.474120083)
 
 
 def test_team_dict_sc_seed1_odds():
-    """Scott Central #1 odds are 5/12 ≈ 41.7% (1 mask where Puckett wins + 8/12 where Pelahatchie wins)."""
-    assert _TEAM_DICT["Scott Central"][1]["odds"] == pytest.approx(5 / 12)
+    """Scott Central #1: #1 47.4%."""
+    assert _TEAM_DICT["Scott Central"][1]["odds"] == pytest.approx(0.474120083)
 
 
 def test_team_dict_sc_seed2_odds():
-    """Scott Central #2 odds are 1/12 ≈ 8.3% (4/12 of one mask)."""
-    assert _TEAM_DICT["Scott Central"][2]["odds"] == pytest.approx(1 / 12)
+    """Scott Central #2: #2 2.6%."""
+    assert _TEAM_DICT["Scott Central"][2]["odds"] == pytest.approx(0.025879917)
 
 
 def test_team_dict_sc_seed3_odds():

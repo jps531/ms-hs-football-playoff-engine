@@ -91,11 +91,11 @@ OLIVE_BRANCH_EXPECTED = "Olive Branch\n\nEliminated. (100.0%)"
 CENTER_HILL_EXPECTED = """\
 Center Hill
 
-#3 seed if: (26.0%)
+#3 seed if: (27.9%)
 1. Saltillo beats Grenada AND Center Hill beats South Panola
 2. Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 1–6
 
-#4 seed if: (74.0%)
+#4 seed if: (72.1%)
 1. Grenada beats Saltillo
 2. South Panola beats Center Hill by 7 or more
 3. Saltillo beats Grenada by 1–11 AND South Panola beats Center Hill"""
@@ -103,12 +103,12 @@ Center Hill
 GRENADA_EXPECTED = """\
 Grenada
 
-#3 seed if: (74.0%)
+#3 seed if: (72.1%)
 1. Grenada beats Saltillo
 2. South Panola beats Center Hill by 7 or more
 3. Saltillo beats Grenada by 1–11 AND South Panola beats Center Hill
 
-#4 seed if: (1.0%)
+#4 seed if: (2.9%)
 1. Saltillo beats Grenada by 12 or more AND South Panola beats Center Hill by 1–6
 
 Eliminated if: (25.0%)
@@ -526,20 +526,20 @@ def test_odds_olive_branch():
 
 
 def test_odds_center_hill():
-    """Center Hill clinched playoffs: p3=25/96, p4=71/96."""
+    """Center Hill clinched playoffs: clinched; #3 27.9%, #4 72.1%, playoffs 100.0%."""
     o = _ODDS["Center Hill"]
     assert o.clinched is True
-    assert o.p3 == pytest.approx(25 / 96)
-    assert o.p4 == pytest.approx(71 / 96)
+    assert o.p3 == pytest.approx(0.279319856)
+    assert o.p4 == pytest.approx(0.720680144)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_grenada():
-    """Grenada: p3=71/96, p4=1/96 (2D margin threshold), p_playoffs=3/4."""
+    """Grenada: #3 72.1%, #4 2.9%, playoffs 75.0%."""
     o = _ODDS["Grenada"]
     assert o.clinched is False
-    assert o.p3 == pytest.approx(71 / 96)
-    assert o.p4 == pytest.approx(1 / 96)
+    assert o.p3 == pytest.approx(0.720680144)
+    assert o.p4 == pytest.approx(0.029319856)
     assert o.p_playoffs == pytest.approx(3 / 4)
 
 

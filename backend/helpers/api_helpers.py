@@ -143,8 +143,9 @@ ACTIVE_SCHOOL_JOIN_RS = (
 )
 """Maximum remaining games for which the human-readable scenario list is shown."""
 
-CLINCHED_THRESHOLD = 0.999
-"""Minimum seeding probability required to consider a seed position clinched."""
+CLINCHED_THRESHOLD = 1 - 1e-6
+"""Minimum seeding probability required to consider a seed position clinched: certain, give or take
+the odds columns' REAL (32-bit) storage, never merely likely (a 0.05% chance is still a chance)."""
 
 
 def within_display_threshold(remaining: list) -> bool:

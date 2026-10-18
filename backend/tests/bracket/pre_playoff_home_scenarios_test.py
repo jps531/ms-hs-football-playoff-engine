@@ -373,7 +373,7 @@ Will Host First Round (100.0%):
 
 # Expected snapshot for "Will Host Second Round" section (Q1).
 _EXPECTED_R2_HOST = """\
-Will Host Second Round (43.2%):
+Will Host Second Round (39.3%):
 1. Taylorsville beats Lumberton AND Taylorsville advances to Second Round
    [Higher seed (#1) hosts]
 2. Stringer beats Resurrection AND Lumberton beats Taylorsville by 1\u201311 AND Taylorsville advances to Second Round
@@ -385,7 +385,7 @@ Will Host Second Round (43.2%):
 
 # Expected snapshot for "Will Not Host Second Round" section (Q1).
 _EXPECTED_R2_AWAY = """\
-Will Not Host Second Round (56.8%):
+Will Not Host Second Round (60.7%):
 1. Lumberton beats Taylorsville by 12 or more AND Taylorsville advances to Second Round AND Region 6 #1 Seed advances to Second Round
    [Higher seed (#1) hosts]
 2. Resurrection beats Stringer AND Lumberton beats Taylorsville AND Taylorsville advances to Second Round AND Region 6 #1 Seed advances to Second Round
@@ -500,22 +500,22 @@ class TestCombinedPrePlayoffRenderer:
         assert "Will Host First Round (100.0%)" in rendered
 
     def test_r2_host_shows_real_odds(self, rendered):
-        """Second Round host header shows 43.2% (computed from real seeding odds)."""
-        assert "Will Host Second Round (43.2%)" in rendered
+        """Second Round host header shows 39.3% (computed from real seeding odds)."""
+        assert "Will Host Second Round (39.3%)" in rendered
 
     def test_r2_away_shows_real_odds(self, rendered):
-        """Second Round away header shows 56.8% (complement of 43.2%)."""
-        assert "Will Not Host Second Round (56.8%)" in rendered
+        """Second Round away header shows 60.7% (complement of 39.3%)."""
+        assert "Will Not Host Second Round (60.7%)" in rendered
 
     def test_qf_odds_present(self, rendered):
         """Quarterfinal headers include non-trivial hosting odds."""
-        assert "Will Host Quarterfinals (9.8%)" in rendered
-        assert "Will Not Host Quarterfinals (90.2%)" in rendered
+        assert "Will Host Quarterfinals (10.0%)" in rendered
+        assert "Will Not Host Quarterfinals (90.0%)" in rendered
 
     def test_sf_odds_present(self, rendered):
         """Semifinal headers include non-trivial hosting odds."""
-        assert "Will Host Semifinals (8.5%)" in rendered
-        assert "Will Not Host Semifinals (91.5%)" in rendered
+        assert "Will Host Semifinals (8.0%)" in rendered
+        assert "Will Not Host Semifinals (92.0%)" in rendered
 
     # Q1: snapshot tests for R1 and R2 sections
 

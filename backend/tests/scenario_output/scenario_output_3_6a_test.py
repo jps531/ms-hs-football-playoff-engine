@@ -85,11 +85,11 @@ _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
 HATTIESBURG_EXPECTED = """\
 Hattiesburg
 
-#1 seed if: (70.8%)
+#1 seed if: (57.0%)
 1. Hattiesburg beats Terry
 2. Terry beats Hattiesburg by 1–10 AND West Jones beats Jim Hill
 
-#2 seed if: (29.2%)
+#2 seed if: (43.0%)
 1. Terry beats Hattiesburg AND Jim Hill beats West Jones
 2. George County beats Forest Hill AND Terry beats Hattiesburg by 11 or more
 3. Forest Hill beats George County AND Terry beats Hattiesburg by 11 or more AND West Jones beats Jim Hill"""
@@ -97,26 +97,26 @@ Hattiesburg
 TERRY_EXPECTED = """\
 Terry
 
-#1 seed if: (29.2%)
+#1 seed if: (43.0%)
 1. Terry beats Hattiesburg AND Jim Hill beats West Jones
 2. George County beats Forest Hill AND Terry beats Hattiesburg by 11 or more
 3. Forest Hill beats George County AND Terry beats Hattiesburg by 11 or more AND West Jones beats Jim Hill
 
-#2 seed if: (8.3%)
+#2 seed if: (2.8%)
 1. Terry beats Hattiesburg by 7–10 AND West Jones beats Jim Hill
 
-#3 seed if: (62.5%)
+#3 seed if: (54.1%)
 1. Hattiesburg beats Terry
 2. Terry beats Hattiesburg by 1–6 AND West Jones beats Jim Hill"""
 
 WEST_JONES_EXPECTED = """\
 West Jones
 
-#2 seed if: (62.5%)
+#2 seed if: (54.1%)
 1. Hattiesburg beats Terry
 2. Terry beats Hattiesburg by 1–6 AND West Jones beats Jim Hill
 
-#3 seed if: (37.5%)
+#3 seed if: (45.9%)
 1. Terry beats Hattiesburg by 7–10
 2. Terry beats Hattiesburg AND Jim Hill beats West Jones
 3. George County beats Forest Hill AND Terry beats Hattiesburg by 11 or more
@@ -125,22 +125,22 @@ West Jones
 FOREST_HILL_EXPECTED = """\
 Forest Hill
 
-#4 seed if: (8.3%)
+#4 seed if: (18.9%)
 1. Forest Hill beats George County by 9 or more AND West Jones beats Jim Hill
 
-Eliminated if: (91.7%)
+Eliminated if: (81.1%)
 1. George County beats Forest Hill
 2. Jim Hill beats West Jones
-3. Forest Hill beats George County by 1\u20138 AND West Jones beats Jim Hill"""
+3. Forest Hill beats George County by 1–8 AND West Jones beats Jim Hill"""
 
 GEORGE_COUNTY_EXPECTED = """\
 George County
 
-#4 seed if: (66.7%)
+#4 seed if: (56.1%)
 1. George County beats Forest Hill
-2. Forest Hill beats George County by 1\u20138 AND West Jones beats Jim Hill
+2. Forest Hill beats George County by 1–8 AND West Jones beats Jim Hill
 
-Eliminated if: (33.3%)
+Eliminated if: (43.9%)
 1. Forest Hill beats George County by 9 or more
 2. Forest Hill beats George County AND Jim Hill beats West Jones"""
 
@@ -686,47 +686,47 @@ def test_team_dict_jim_hill_keys():
 
 
 def test_odds_hattiesburg():
-    """Hattiesburg: clinched, p1=17/24, p2=7/24."""
+    """Hattiesburg: clinched; #1 57.0%, #2 43.0%, playoffs 100.0%."""
     o = _ODDS["Hattiesburg"]
     assert o.clinched is True
-    assert o.p1 == pytest.approx(17 / 24)
-    assert o.p2 == pytest.approx(7 / 24)
+    assert o.p1 == pytest.approx(0.569875776)
+    assert o.p2 == pytest.approx(0.430124224)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_terry():
-    """Terry: clinched, p1=7/24, p2=1/12, p3=5/8."""
+    """Terry: clinched; #1 43.0%, #2 2.8%, #3 54.1%, playoffs 100.0%."""
     o = _ODDS["Terry"]
     assert o.clinched is True
-    assert o.p1 == pytest.approx(7 / 24)
-    assert o.p2 == pytest.approx(1 / 12)
-    assert o.p3 == pytest.approx(5 / 8)
+    assert o.p1 == pytest.approx(0.430124224)
+    assert o.p2 == pytest.approx(0.028467909)
+    assert o.p3 == pytest.approx(0.541407867)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_west_jones():
-    """West Jones: clinched, p2=5/8, p3=3/8."""
+    """West Jones: clinched; #2 54.1%, #3 45.9%, playoffs 100.0%."""
     o = _ODDS["West Jones"]
     assert o.clinched is True
-    assert o.p2 == pytest.approx(5 / 8)
-    assert o.p3 == pytest.approx(3 / 8)
+    assert o.p2 == pytest.approx(0.541407867)
+    assert o.p3 == pytest.approx(0.458592133)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_forest_hill():
-    """Forest Hill: p4=1/12, p_playoffs=1/12."""
+    """Forest Hill: #4 18.9%, playoffs 18.9%."""
     o = _ODDS["Forest Hill"]
     assert o.clinched is False
-    assert o.p4 == pytest.approx(1 / 12)
-    assert o.p_playoffs == pytest.approx(1 / 12)
+    assert o.p4 == pytest.approx(0.188923395)
+    assert o.p_playoffs == pytest.approx(0.188923395)
 
 
 def test_odds_george_county():
-    """George County: p4=2/3, p_playoffs=2/3."""
+    """George County: #4 56.1%, playoffs 56.1%."""
     o = _ODDS["George County"]
     assert o.clinched is False
-    assert o.p4 == pytest.approx(2 / 3)
-    assert o.p_playoffs == pytest.approx(2 / 3)
+    assert o.p4 == pytest.approx(0.561076605)
+    assert o.p_playoffs == pytest.approx(0.561076605)
 
 
 def test_odds_jim_hill():

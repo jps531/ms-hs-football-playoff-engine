@@ -172,8 +172,9 @@ class TestConstants:
         assert DISPLAY_THRESHOLD == 6
 
     def test_clinched_threshold(self):
-        """CLINCHED_THRESHOLD should be 0.999."""
-        assert CLINCHED_THRESHOLD == pytest.approx(0.999)
+        """CLINCHED_THRESHOLD is a certainty, allowing only for the odds' 32-bit storage: 99.9% isn't clinched."""
+        assert 0.999 < CLINCHED_THRESHOLD < 1.0
+        assert CLINCHED_THRESHOLD == pytest.approx(1 - 1e-6, abs=1e-12)
 
 
 class TestToday:
@@ -2028,10 +2029,17 @@ class TestResolveSeedAndAchievable:
 
     def test_clinched_seed_returned_no_achievable_seeds(self):
         """A seed at/above CLINCHED_THRESHOLD is returned as `seed`; achievable_seeds is None."""
-        odds = _odds("Able", p2=0.999, p_playoffs=1.0)
+        odds = _odds("Able", p2=1.0, p_playoffs=1.0)
         seed, achievable = resolve_seed_and_achievable(odds)
         assert seed == 2
         assert achievable is None
+
+    def test_a_near_certain_seed_is_not_clinched(self):
+        """99.9% at one seed still leaves a chance at another, so no seed is returned as clinched."""
+        odds = _odds("Able", p2=0.999, p3=0.001, p_playoffs=1.0)
+        seed, achievable = resolve_seed_and_achievable(odds)
+        assert seed is None
+        assert achievable == [2, 3]
 
     def test_unclinched_returns_achievable_seeds(self):
         """Below the clinch threshold, every seed with nonzero probability is achievable."""
@@ -2067,7 +2075,7 @@ class TestResolveHostingScenarioInputs:
 
     def test_clinched_seed_returned_no_achievable_seeds(self):
         """A seed at/above CLINCHED_THRESHOLD is returned as `seed`; achievable_seeds is None."""
-        odds = _odds("Able", p2=0.999, p_playoffs=1.0)
+        odds = _odds("Able", p2=1.0, p_playoffs=1.0)
         seed, achievable, *_ = resolve_hosting_scenario_inputs(odds, _hosting_entry())
         assert seed == 2
         assert achievable is None

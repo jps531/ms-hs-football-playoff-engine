@@ -16,6 +16,7 @@ from backend.api.models.responses import (
     TeamBracketEntry,
 )
 from backend.helpers.api_helpers import (
+    CLINCHED_THRESHOLD,
     _apply_round_ceilings,
     _candidate_seeds_by_region,
     _compute_seed_atoms_if_pre_playoff,
@@ -165,7 +166,7 @@ def _as_standings_odds(seed_odds: dict[int, dict[str, dict[int, float]]]) -> dic
         for team, by in teams.items():
             p = sum(by.values())
             out.setdefault(region, {})[team] = StandingsOdds(
-                team, by[1], by[2], by[3], by[4], p, p, p >= 0.999, p <= 0.0
+                team, by[1], by[2], by[3], by[4], p, p, p >= CLINCHED_THRESHOLD, p <= 0.0
             )
     return out
 

@@ -74,35 +74,35 @@ _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
 COAHOMA_COUNTY_EXPECTED = """\
 Coahoma County
 
-#1 seed if: (66.7%)
+#1 seed if: (56.1%)
 1. Coahoma County beats Independence
-2. Independence beats Coahoma County by 1\u20138 AND North Panola beats Holly Springs
+2. Independence beats Coahoma County by 1–8 AND North Panola beats Holly Springs
 
-#2 seed if: (33.3%)
+#2 seed if: (43.9%)
 1. Independence beats Coahoma County by 9 or more
 2. Independence beats Coahoma County AND Holly Springs beats North Panola"""
 
 HOLLY_SPRINGS_EXPECTED = """\
 Holly Springs
 
-#3 seed if: (33.3%)
+#3 seed if: (43.9%)
 1. Holly Springs beats North Panola by 9 or more
 2. Independence beats Coahoma County AND Holly Springs beats North Panola
 
-#4 seed if: (66.7%)
+#4 seed if: (56.1%)
 1. North Panola beats Holly Springs
-2. Coahoma County beats Independence AND Holly Springs beats North Panola by 1\u20138"""
+2. Coahoma County beats Independence AND Holly Springs beats North Panola by 1–8"""
 
 INDEPENDENCE_EXPECTED = """\
 Independence
 
-#1 seed if: (33.3%)
+#1 seed if: (43.9%)
 1. Independence beats Coahoma County by 9 or more
 2. Independence beats Coahoma County AND Holly Springs beats North Panola
 
-#2 seed if: (41.7%)
+#2 seed if: (31.1%)
 1. Coahoma County beats Independence AND Holly Springs beats North Panola
-2. Independence beats Coahoma County by 1\u20138 AND North Panola beats Holly Springs
+2. Independence beats Coahoma County by 1–8 AND North Panola beats Holly Springs
 
 #3 seed if: (25.0%)
 1. Coahoma County beats Independence AND North Panola beats Holly Springs"""
@@ -113,11 +113,11 @@ North Panola
 #2 seed if: (25.0%)
 1. Coahoma County beats Independence AND North Panola beats Holly Springs
 
-#3 seed if: (41.7%)
+#3 seed if: (31.1%)
 1. Independence beats Coahoma County AND North Panola beats Holly Springs
-2. Coahoma County beats Independence AND Holly Springs beats North Panola by 1\u20138
+2. Coahoma County beats Independence AND Holly Springs beats North Panola by 1–8
 
-#4 seed if: (33.3%)
+#4 seed if: (43.9%)
 1. Holly Springs beats North Panola by 9 or more
 2. Independence beats Coahoma County AND Holly Springs beats North Panola"""
 
@@ -586,39 +586,39 @@ def test_odds_no_eliminated():
 
 
 def test_odds_coahoma_county():
-    """CC odds: p1≈66.7%, p2≈33.3%, p3=p4=0."""
+    """CC: #1 56.1%, #2 43.9%, #3 0.0%, #4 0.0%."""
     o = _ODDS["Coahoma County"]
-    assert o.p1 == pytest.approx(2 / 3)
-    assert o.p2 == pytest.approx(1 / 3)
+    assert o.p1 == pytest.approx(0.561076605)
+    assert o.p2 == pytest.approx(0.438923395)
     assert o.p3 == pytest.approx(0.0)
     assert o.p4 == pytest.approx(0.0)
 
 
 def test_odds_holly_springs():
-    """HS odds: p1=p2=0, p3≈33.3%, p4≈66.7%."""
+    """HS: #1 0.0%, #2 0.0%, #3 43.9%, #4 56.1%."""
     o = _ODDS["Holly Springs"]
     assert o.p1 == pytest.approx(0.0)
     assert o.p2 == pytest.approx(0.0)
-    assert o.p3 == pytest.approx(1 / 3)
-    assert o.p4 == pytest.approx(2 / 3)
+    assert o.p3 == pytest.approx(0.438923395)
+    assert o.p4 == pytest.approx(0.561076605)
 
 
 def test_odds_independence():
-    """IND odds: p1≈33.3%, p2≈41.7%, p3=25%, p4=0."""
+    """IND: #1 43.9%, #2 31.1%, #3 25.0%, #4 0.0%."""
     o = _ODDS["Independence"]
-    assert o.p1 == pytest.approx(1 / 3)
-    assert o.p2 == pytest.approx(5 / 12)
+    assert o.p1 == pytest.approx(0.438923395)
+    assert o.p2 == pytest.approx(0.311076605)
     assert o.p3 == pytest.approx(0.25)
     assert o.p4 == pytest.approx(0.0)
 
 
 def test_odds_north_panola():
-    """NP odds: p1=0, p2=25%, p3≈41.7%, p4≈33.3%."""
+    """NP: #1 0.0%, #2 25.0%, #3 31.1%, #4 43.9%."""
     o = _ODDS["North Panola"]
     assert o.p1 == pytest.approx(0.0)
     assert o.p2 == pytest.approx(0.25)
-    assert o.p3 == pytest.approx(5 / 12)
-    assert o.p4 == pytest.approx(1 / 3)
+    assert o.p3 == pytest.approx(0.311076605)
+    assert o.p4 == pytest.approx(0.438923395)
 
 
 # ---------------------------------------------------------------------------

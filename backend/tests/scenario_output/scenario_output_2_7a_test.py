@@ -100,23 +100,23 @@ Madison Central
 #3 seed if: (50.0%)
 1. Madison Central beats Clinton
 
-#4 seed if: (14.6%)
-1. Clinton beats Madison Central by 1\u20137 AND Oxford beats Starkville
+#4 seed if: (5.4%)
+1. Clinton beats Madison Central by 1–7 AND Oxford beats Starkville
 
-Eliminated if: (35.4%)
+Eliminated if: (44.6%)
 1. Clinton beats Madison Central by 8 or more
 2. Clinton beats Madison Central AND Starkville beats Oxford"""
 
 CLINTON_EXPECTED = """\
 Clinton
 
-#4 seed if: (35.4%)
+#4 seed if: (44.6%)
 1. Clinton beats Madison Central by 8 or more
 2. Clinton beats Madison Central AND Starkville beats Oxford
 
-Eliminated if: (64.6%)
+Eliminated if: (55.4%)
 1. Madison Central beats Clinton
-2. Clinton beats Madison Central by 1\u20137 AND Oxford beats Starkville"""
+2. Clinton beats Madison Central by 1–7 AND Oxford beats Starkville"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — seed key structure
@@ -530,27 +530,27 @@ def test_odds_starkville():
 
 
 def test_odds_madison_central():
-    """Madison Central: p3=1/2, p4=7/48, p_playoffs=31/48."""
+    """Madison Central: #1 0.0%, #2 0.0%, #3 50.0%, #4 5.4%, playoffs 55.4%."""
     o = _ODDS["Madison Central"]
     assert o.clinched is False
     assert o.eliminated is False
     assert o.p1 == pytest.approx(0.0)
     assert o.p2 == pytest.approx(0.0)
     assert o.p3 == pytest.approx(0.5)
-    assert o.p4 == pytest.approx(7 / 48)
-    assert o.p_playoffs == pytest.approx(31 / 48)
+    assert o.p4 == pytest.approx(0.054347826)
+    assert o.p_playoffs == pytest.approx(0.554347826)
 
 
 def test_odds_clinton():
-    """Clinton: p4=17/48, p_playoffs=17/48 — only path to playoffs is #4 seed."""
+    """Clinton: #1 0.0%, #2 0.0%, #3 0.0%, #4 44.6%, playoffs 44.6%."""
     o = _ODDS["Clinton"]
     assert o.clinched is False
     assert o.eliminated is False
     assert o.p1 == pytest.approx(0.0)
     assert o.p2 == pytest.approx(0.0)
     assert o.p3 == pytest.approx(0.0)
-    assert o.p4 == pytest.approx(17 / 48)
-    assert o.p_playoffs == pytest.approx(17 / 48)
+    assert o.p4 == pytest.approx(0.445652174)
+    assert o.p_playoffs == pytest.approx(0.445652174)
 
 
 # ---------------------------------------------------------------------------

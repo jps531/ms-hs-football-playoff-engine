@@ -85,24 +85,24 @@ SOUTH_PONTOTOC_EXPECTED = "South Pontotoc\n\nEliminated. (100.0%)"
 CORINTH_EXPECTED = """\
 Corinth
 
-#1 seed if: (64.6%)
+#1 seed if: (55.4%)
 1. Corinth beats New Albany
-2. New Albany beats Corinth by 1\u20137 AND North Pontotoc beats Tishomingo County
+2. New Albany beats Corinth by 1–7 AND North Pontotoc beats Tishomingo County
 
-#2 seed if: (35.4%)
+#2 seed if: (44.6%)
 1. New Albany beats Corinth by 8 or more
 2. New Albany beats Corinth AND Tishomingo County beats North Pontotoc"""
 
 NEW_ALBANY_EXPECTED = """\
 New Albany
 
-#1 seed if: (35.4%)
+#1 seed if: (44.6%)
 1. New Albany beats Corinth by 8 or more
 2. New Albany beats Corinth AND Tishomingo County beats North Pontotoc
 
-#2 seed if: (39.6%)
+#2 seed if: (30.4%)
 1. Corinth beats New Albany AND Tishomingo County beats North Pontotoc
-2. New Albany beats Corinth by 1\u20137 AND North Pontotoc beats Tishomingo County
+2. New Albany beats Corinth by 1–7 AND North Pontotoc beats Tishomingo County
 
 #3 seed if: (25.0%)
 1. Corinth beats New Albany AND North Pontotoc beats Tishomingo County"""
@@ -113,24 +113,24 @@ North Pontotoc
 #2 seed if: (25.0%)
 1. Corinth beats New Albany AND North Pontotoc beats Tishomingo County
 
-#3 seed if: (39.6%)
+#3 seed if: (30.4%)
 1. New Albany beats Corinth AND North Pontotoc beats Tishomingo County
-2. Corinth beats New Albany AND Tishomingo County beats North Pontotoc by 1\u20137
+2. Corinth beats New Albany AND Tishomingo County beats North Pontotoc by 1–7
 
-#4 seed if: (35.4%)
+#4 seed if: (44.6%)
 1. Tishomingo County beats North Pontotoc by 8 or more
 2. New Albany beats Corinth AND Tishomingo County beats North Pontotoc"""
 
 TISHOMINGO_COUNTY_EXPECTED = """\
 Tishomingo County
 
-#3 seed if: (35.4%)
+#3 seed if: (44.6%)
 1. Tishomingo County beats North Pontotoc by 8 or more
 2. New Albany beats Corinth AND Tishomingo County beats North Pontotoc
 
-#4 seed if: (64.6%)
+#4 seed if: (55.4%)
 1. North Pontotoc beats Tishomingo County
-2. Corinth beats New Albany AND Tishomingo County beats North Pontotoc by 1\u20137"""
+2. Corinth beats New Albany AND Tishomingo County beats North Pontotoc by 1–7"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms — seed key structure
@@ -694,46 +694,46 @@ def test_odds_south_pontotoc_eliminated():
 
 
 def test_odds_corinth():
-    """Corinth: clinched; p1=31/48, p2=17/48 — never lower than #2."""
+    """Corinth: clinched; #1 55.4%, #2 44.6%, #3 0.0%, #4 0.0%, playoffs 100.0%."""
     o = _ODDS["Corinth"]
     assert o.clinched is True
-    assert o.p1 == pytest.approx(31 / 48)
-    assert o.p2 == pytest.approx(17 / 48)
+    assert o.p1 == pytest.approx(0.554347826)
+    assert o.p2 == pytest.approx(0.445652174)
     assert o.p3 == pytest.approx(0.0)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_new_albany():
-    """New Albany: clinched; p1=17/48, p2=19/48, p3=1/4 — never #4."""
+    """New Albany: clinched; #1 44.6%, #2 30.4%, #3 25.0%, #4 0.0%, playoffs 100.0%."""
     o = _ODDS["New Albany"]
     assert o.clinched is True
-    assert o.p1 == pytest.approx(17 / 48)
-    assert o.p2 == pytest.approx(19 / 48)
+    assert o.p1 == pytest.approx(0.445652174)
+    assert o.p2 == pytest.approx(0.304347826)
     assert o.p3 == pytest.approx(0.25)
     assert o.p4 == pytest.approx(0.0)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_north_pontotoc():
-    """North Pontotoc: clinched; p2=1/4, p3=19/48, p4=17/48 — never #1."""
+    """North Pontotoc: clinched; #1 0.0%, #2 25.0%, #3 30.4%, #4 44.6%, playoffs 100.0%."""
     o = _ODDS["North Pontotoc"]
     assert o.clinched is True
     assert o.p1 == pytest.approx(0.0)
     assert o.p2 == pytest.approx(0.25)
-    assert o.p3 == pytest.approx(19 / 48)
-    assert o.p4 == pytest.approx(17 / 48)
+    assert o.p3 == pytest.approx(0.304347826)
+    assert o.p4 == pytest.approx(0.445652174)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
 def test_odds_tishomingo_county():
-    """Tishomingo County: clinched; p3=17/48, p4=31/48 — never #1 or #2."""
+    """Tishomingo County: clinched; #1 0.0%, #2 0.0%, #3 44.6%, #4 55.4%, playoffs 100.0%."""
     o = _ODDS["Tishomingo County"]
     assert o.clinched is True
     assert o.p1 == pytest.approx(0.0)
     assert o.p2 == pytest.approx(0.0)
-    assert o.p3 == pytest.approx(17 / 48)
-    assert o.p4 == pytest.approx(31 / 48)
+    assert o.p3 == pytest.approx(0.445652174)
+    assert o.p4 == pytest.approx(0.554347826)
     assert o.p_playoffs == pytest.approx(1.0)
 
 
