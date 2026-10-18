@@ -1,8 +1,8 @@
 """Pure tiebreaker logic for MHSAA region standings.
 
-Implements the 7-step tiebreaker sequence (H2H record -> vs-outside record ->
-H2H capped PD -> capped PD vs outside -> fewest PA vs outside -> fewest PA all
-games -> coin flip). No Prefect or database dependencies.
+Implements the 6-step tiebreaker sequence (H2H record -> vs-outside record ->
+H2H capped PD -> capped PD vs outside -> fewest PA in all region games -> coin
+flip), per the MHSAA handbook. No Prefect or database dependencies.
 """
 
 from collections import defaultdict

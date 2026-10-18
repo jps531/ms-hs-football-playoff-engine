@@ -866,7 +866,7 @@ class CoinFlipResult:
 
     Used in scenario atoms when two (or more) teams are completely tied through
     all deterministic tiebreaker steps (H2H, vs-outside record, H2H PD, PD vs
-    outside, fewest PA) and a literal coin flip is required.
+    outside, fewest PA in all region games) and a literal coin flip is required.
 
     Unlike GameResult, this condition is not associated with any remaining game;
     it represents an off-field resolution.  It has no margin component and
