@@ -9,13 +9,12 @@ the seeding) are presented as lettered sub-scenarios (6a, 6b, …).
 
 from collections import defaultdict
 from dataclasses import dataclass
-from itertools import permutations, product
+from itertools import product
 
 from backend.helpers.data_classes import (
     CompletedGame,
     GameResult,
     RemainingGame,
-    StandingsOdds,
     TiebreakDecision,
 )
 from backend.helpers.scenario_renderer import _render_atom, atoms_from_complete_scenarios
@@ -755,75 +754,6 @@ def _sort_atom_list(atoms: list[list], remaining: list[RemainingGame]) -> list[l
 # ---------------------------------------------------------------------------
 # Odds computation from pre-enumerated outcomes
 # ---------------------------------------------------------------------------
-
-
-def compute_odds_from_precomputed(
-    eo: EnumeratedOutcomes,
-    teams: list[str],
-    playoff_seeds: int = 4,
-):
-    """Compute per-team seeding odds directly from pre-enumerated outcomes.
-
-    Much faster than ``determine_scenarios()`` because all seedings are already
-    in ``eo.groups`` — no additional calls to ``resolve_standings_for_mask``
-    are needed.  Coin-flip masks are distributed evenly across all permutations
-    of each tied group, identical to ``_accumulate_slots`` in scenarios.py.
-
-    Args:
-        eo: Pre-computed enumeration from ``enumerate_outcomes()``.
-        teams: All team names in the region.
-        playoff_seeds: Number of playoff seeds (default 4).
-
-    Returns:
-        Dict mapping team name → ``StandingsOdds``.
-    """
-
-    seed_counts: dict[str, defaultdict[int, float]] = {t: defaultdict(float) for t in teams}
-    total: float = 0.0
-
-    for mask, full_seeding in eo.groups.keys():
-        flip_groups = eo.coin_flips.get(mask, [])
-        if not flip_groups:
-            for seed_idx, team in enumerate(full_seeding):
-                if seed_idx < playoff_seeds and team in seed_counts:
-                    seed_counts[team][seed_idx + 1] += 1.0
-            total += 1.0
-        else:
-            orderings: list[list[str]] = [list(full_seeding)]
-            for group in flip_groups:
-                expanded: list[list[str]] = []
-                for current in orderings:
-                    positions = [current.index(t) for t in group]
-                    for perm in permutations(group):
-                        new = list(current)
-                        for pos, t in zip(positions, perm):
-                            new[pos] = t
-                        expanded.append(new)
-                orderings = expanded
-            share = 1.0 / len(orderings)
-            for ordering in orderings:
-                for seed_idx, team in enumerate(ordering):
-                    if seed_idx < playoff_seeds and team in seed_counts:
-                        seed_counts[team][seed_idx + 1] += share
-            total += 1.0
-
-    odds: dict[str, StandingsOdds] = {}
-    for team in teams:
-        p1 = seed_counts[team][1] / total if total else 0.0
-        p2 = seed_counts[team][2] / total if total else 0.0
-        p3 = seed_counts[team][3] / total if total else 0.0
-        p4 = seed_counts[team][4] / total if total else 0.0
-        p_playoffs = p1 + p2 + p3 + p4
-        clinched = p_playoffs >= 0.999
-        eliminated = p_playoffs <= 0.001
-        if clinched:
-            final_playoffs = 1.0
-        elif eliminated:
-            final_playoffs = 0.0
-        else:
-            final_playoffs = p_playoffs
-        odds[team] = StandingsOdds(team, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated)
-    return odds
 
 
 # ---------------------------------------------------------------------------
@@ -1601,7 +1531,7 @@ def build_pre_playoff_home_scenarios(
     """Build pre-playoff home scenarios and scenario atoms for a team in one call.
 
     Combines ``enumerate_outcomes``, ``build_scenario_atoms``,
-    ``compute_odds_from_precomputed``, and the ``bracket_home_odds`` helpers so
+    and the ``bracket_home_odds`` helpers so
     the caller does not have to wire them together manually.
 
     The returned ``(home_scenarios, atoms)`` pair is ready to pass directly to
@@ -1648,12 +1578,7 @@ def build_pre_playoff_home_scenarios(
     from backend.helpers.scenarios import determine_odds, determine_scenarios
 
     # 1. Build atoms and compute seeding odds.
-    #    enumerate_outcomes is shared with build_scenario_atoms to avoid a
-    #    second 12^R margin enumeration.  determine_scenarios runs its own
-    #    enumeration for margin-accurate seeding probabilities (compute_odds_from_precomputed
-    #    does not weight margin-sensitive seedings correctly).
-    eo = enumerate_outcomes(teams, completed, remaining)
-    atoms = build_scenario_atoms(teams, completed, remaining, playoff_seeds=playoff_seeds, precomputed=eo)
+    atoms = build_scenario_atoms(teams, completed, remaining, playoff_seeds=playoff_seeds)
     sr = determine_scenarios(teams, completed, remaining)
     region_odds = determine_odds(teams, sr.first_counts, sr.second_counts, sr.third_counts, sr.fourth_counts, sr.denom)
 

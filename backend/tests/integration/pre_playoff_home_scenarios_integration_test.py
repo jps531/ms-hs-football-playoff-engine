@@ -117,8 +117,7 @@ class TestReturnTypes:
 
 
 # ---------------------------------------------------------------------------
-# Correct odds (Q3 regression: ensure determine_scenarios is used, not the
-# inaccurate compute_odds_from_precomputed path)
+# Correct odds (Q3 regression: the seeding odds come from determine_scenarios)
 # ---------------------------------------------------------------------------
 
 

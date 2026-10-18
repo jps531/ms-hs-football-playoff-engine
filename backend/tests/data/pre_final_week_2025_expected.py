@@ -70,57 +70,72 @@ PRE_FINAL_WEEK_EXPECTED: dict[tuple[int, int], dict] = {
     # Teams (alphabetical): Ashland, Falkner, H. W. Byers, Potts Camp
     # Cutoff: 2025-10-24
     # Actual seeds: Falkner / H. W. Byers / Potts Camp / Ashland
+    # The small shares come from ties left to fewest points allowed (both games won by 12+).
     (1, 2): {
         "denom": 4,
-        "first_counts": Counter({"Falkner": 2.9236111111111347, "Potts Camp": 1.0763888888888862}),
+        "first_counts": Counter(
+            {"Falkner": 2.9176587301587458, "Potts Camp": 1.0819444444444417, "H. W. Byers": 0.00039682539682539677}
+        ),
         "second_counts": Counter(
-            {"H. W. Byers": 2.8333333333333544, "Falkner": 1.0763888888888862, "Potts Camp": 0.0902777777777778}
+            {
+                "H. W. Byers": 2.834126984127005,
+                "Falkner": 1.0812499999999972,
+                "Potts Camp": 0.07996031746031747,
+                "Ashland": 0.004662698412698413,
+            }
         ),
         "third_counts": Counter(
-            {"Potts Camp": 2.8333333333333544, "Ashland": 1.0833333333333306, "H. W. Byers": 0.08333333333333336}
+            {
+                "Potts Camp": 2.837599206349223,
+                "Ashland": 1.0786706349206348,
+                "H. W. Byers": 0.08263888888888889,
+                "Falkner": 0.0010912698412698413,
+            }
         ),
-        "fourth_counts": Counter({"Ashland": 2.91666666666669, "H. W. Byers": 1.0833333333333306}),
+        "fourth_counts": Counter(
+            {"Ashland": 2.91666666666669, "H. W. Byers": 1.082837301587306, "Potts Camp": 0.000496031746031746}
+        ),
         "odds": {
             "Ashland": StandingsOdds(
                 school="Ashland",
                 p1=0.0,
-                p2=0.0,
-                p3=0.2708333333333333,
-                p4=0.7291666666666673,
-                p_playoffs=1.0,
+                p2=0.0011656746031746032,
+                p3=0.2696676587301587,
+                p4=0.7291666666666725,
+                p_playoffs=1.0000000000000058,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
             ),
             "Falkner": StandingsOdds(
                 school="Falkner",
-                p1=0.730902777777784,
-                p2=0.269097222222222,
-                p3=0.0,
+                p1=0.7294146825396864,
+                p2=0.2703124999999993,
+                p3=0.0002728174603174603,
                 p4=0.0,
-                p_playoffs=1.0,
+                p_playoffs=1.000000000000003,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
             ),
             "H. W. Byers": StandingsOdds(
                 school="H. W. Byers",
-                p1=0.0,
-                p2=0.7083333333333339,
-                p3=0.020833333333333332,
-                p4=0.2708333333333333,
-                p_playoffs=1.0,
+                p1=9.920634920634919e-05,
+                p2=0.7085317460317513,
+                p3=0.02065972222222222,
+                p4=0.2707093253968265,
+                p_playoffs=1.0000000000000064,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,
             ),
             "Potts Camp": StandingsOdds(
                 school="Potts Camp",
-                p1=0.269097222222222,
-                p2=0.022569444444444,
-                p3=0.7083333333333339,
-                p4=0.0,
-                p_playoffs=1.0,
+                p1=0.2704861111111104,
+                p2=0.019990079365079367,
+                p3=0.7093998015873058,
+                p4=0.0001240079365079365,
+                p_playoffs=1.0000000000000036,
                 final_playoffs=1.0,
                 clinched=True,
                 eliminated=False,

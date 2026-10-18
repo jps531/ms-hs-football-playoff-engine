@@ -14,7 +14,9 @@ from backend.helpers.data_helpers import normalize_pair
 # -------------------------
 
 
-def standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default=7):
+def standings_from_mask(
+    teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default=7, points_allowed=None
+):
     """Compute W/L/T and PA for all teams for a given outcome mask.
 
     Implements Step 5 (PA accumulation) by tallying completed game results and
@@ -31,6 +33,9 @@ def standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margi
             (always positive); used for Step 3/4 PD calculations.
         base_margin_default: Assumed winning margin when a game's margin is not
             in `margins`.
+        points_allowed: Optional dict keyed like `margins` giving a remaining
+            game's (winner's, loser's) points allowed, in place of `pa_win` and
+            `pa_win` plus the margin. Only Step 5 reads it.
 
     Returns:
         A dict mapping each team name to a sub-dict with keys
@@ -60,8 +65,9 @@ def standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margi
         m = margins.get((rem_game.a, rem_game.b), base_margin_default)
         wl_totals[winner]["w"] += 1
         wl_totals[loser]["l"] += 1
-        wl_totals[winner]["pa"] += pa_win
-        wl_totals[loser]["pa"] += pa_win + m
+        pa_w, pa_l = (points_allowed or {}).get((rem_game.a, rem_game.b), (pa_win, pa_win + m))
+        wl_totals[winner]["pa"] += pa_w
+        wl_totals[loser]["pa"] += pa_l
     return wl_totals
 
 
@@ -498,6 +504,7 @@ def resolve_standings_for_mask(
     coin_flip_collector: list[list[str]] | None = None,
     step_trace_collector: dict | None = None,
     decision_collector: list | None = None,
+    points_allowed: dict | None = None,
 ):
     """Resolve the full region seeding order for a single outcome mask.
 
@@ -521,11 +528,15 @@ def resolve_standings_for_mask(
             over passing this directly.
         decision_collector: If provided, receives every step 3-5 decision made
             (see ``resolve_bucket``), bucket by bucket in seeding order.
+        points_allowed: Optional per-game (winner's, loser's) points allowed for
+            Step 5 (see ``standings_from_mask``).
 
     Returns:
         An ordered list of all team names (seed 1 first through seed N last).
     """
-    wl_totals = standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default)
+    wl_totals = standings_from_mask(
+        teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default, points_allowed
+    )
     base_order = base_bucket_order(teams, wl_totals)
     final = []
     coinflip_events: list[list[str]] = [] if coin_flip_collector is None else coin_flip_collector
@@ -653,8 +664,9 @@ def sensitive_boundary_games(buckets, remaining, intra_games, teams, completed, 
 
     The sensitivity check is: hold all intra-bucket game margins at 12 (the
     cap where Step-3 H2H PD differences are maximised), then vary the boundary
-    game margin from 1 to 12.  If the full seeding order changes, the boundary
-    game is sensitive and must be included in the 12^N enumeration.
+    game margin from 1 to 12.  If the full seeding order or the tiebreaker's
+    step 3-5 decisions change, the boundary game is sensitive and must be
+    included in the 12^N enumeration.
 
     Args:
         buckets: Tie bucket groups for this mask (from ``tie_bucket_groups``).
@@ -703,6 +715,7 @@ def sensitive_boundary_games(buckets, remaining, intra_games, teams, completed, 
             base_margin_default=7,
             pa_win=pa_win,
             coin_flip_collector=[],
+            decision_collector=(decisions_lo := []),
         )
         order_hi = resolve_standings_for_mask(
             teams,
@@ -713,8 +726,11 @@ def sensitive_boundary_games(buckets, remaining, intra_games, teams, completed, 
             base_margin_default=7,
             pa_win=pa_win,
             coin_flip_collector=[],
+            decision_collector=(decisions_hi := []),
         )
-        if order_lo != order_hi:
+        # Decisions too: a margin can decide whether a tie reaches fewest points allowed without
+        # changing the order at the assumed scores.
+        if order_lo != order_hi or decisions_lo != decisions_hi:
             result.append(rg)
     return result
 

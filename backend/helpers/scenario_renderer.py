@@ -244,6 +244,16 @@ def atoms_from_complete_scenarios(
     return atoms
 
 
+def _pct(p: float) -> str:
+    """A probability as a percentage to one decimal, never rounding a possible outcome to 0 or a
+    possible miss to 100: "<0.1%" and ">99.9%" instead (float noise aside)."""
+    if 1e-9 < p < 0.0005:
+        return "<0.1%"
+    if 0.9995 < p < 1 - 1e-9:
+        return ">99.9%"
+    return f"{p * 100:.1f}%"
+
+
 def render_team_scenarios(
     team: str,
     scenarios: dict[str, dict[int, list[list]]],
@@ -282,10 +292,10 @@ def render_team_scenarios(
         if p_unweighted is None and p_weighted is None:
             return ""
         if p_unweighted is not None and p_weighted is not None:
-            return f" ({p_unweighted * 100:.1f}% \u2013 {p_weighted * 100:.1f}% Weighted)"
+            return f" ({_pct(p_unweighted)} \u2013 {_pct(p_weighted)} Weighted)"
         if p_weighted is not None:
-            return f" ({p_weighted * 100:.1f}% Weighted)"
-        return f" ({p_unweighted * 100:.1f}%)"  # type: ignore[operator]
+            return f" ({_pct(p_weighted)} Weighted)"
+        return f" ({_pct(p_unweighted)})"  # type: ignore[operator]
 
     def _seed_suffix(seed: int) -> str:
         """Return the formatted odds suffix for the given seed position."""
@@ -813,10 +823,10 @@ def _odds_pct(p: float | None, p_w: float | None) -> str:
     if p is None and p_w is None:
         return ""
     if p is not None and p_w is not None:
-        return f" ({p * 100:.1f}% \u2013 {p_w * 100:.1f}% Weighted)"
+        return f" ({_pct(p)} \u2013 {_pct(p_w)} Weighted)"
     if p_w is not None:
-        return f" ({p_w * 100:.1f}% Weighted)"
-    return f" ({p * 100:.1f}%)"  # type: ignore[operator]
+        return f" ({_pct(p_w)} Weighted)"
+    return f" ({_pct(p)})"  # type: ignore[operator]
 
 
 def _render_pre_playoff_block(

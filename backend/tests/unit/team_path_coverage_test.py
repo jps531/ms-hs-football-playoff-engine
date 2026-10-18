@@ -6,6 +6,8 @@ way the remaining games can go (winners, and each margin 1-12): a path whose
 conditions hold must give its place, every place a team can take must have a
 path, and an insight must hold for every result meeting its conditions. A
 place that fewest points allowed or a coin flip decides is never certain.
+The odds agree with the paths: a place has odds above zero exactly when it
+has a path.
 
 Regions come from the 2025 season, cut to their last 1-2 region games
 (exhaustive) and 3 (sampled), plus 3A Region 6 in 2026 with four left.
@@ -17,6 +19,7 @@ from backend.helpers.data_classes import GameResult, RemainingGame, TiebreakPlac
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.insights import KeyInsight, extract_insights
 from backend.helpers.scenario_viewer import enumerate_division_scenarios, team_atoms_from_scenarios
+from backend.helpers.scenarios import determine_odds, determine_scenarios
 from backend.tests.data.results_2025_ground_truth import REGION_RESULTS_2025, expand_results, teams_from_games
 from backend.tests.scenario_coverage import insight_problems, team_path_problems
 from backend.tests.unit.scenario_coverage_test import _R36_LEFT, _R36_PLAYED, _cut
@@ -52,6 +55,39 @@ def test_team_paths_and_insights_hold_3a_region_6_2026():
     completed = get_completed_games(expand_results(games))
     remaining = [RemainingGame(a, b) for a, b in _R36_LEFT]
     _check(teams, completed, remaining, 200)
+
+
+def _odds_and_paths_agree(teams, completed, remaining):
+    """Every place with odds above zero has a path, and every place with a path has odds above zero."""
+    atoms = team_atoms_from_scenarios(enumerate_division_scenarios(teams, completed, remaining), remaining)
+    r = determine_scenarios(teams, completed, remaining)
+    odds = determine_odds(teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
+    wrong = {}
+    for team in teams:
+        o = odds[team]
+        p = {1: o.p1, 2: o.p2, 3: o.p3, 4: o.p4, 5: 1 - o.p_playoffs}
+        with_odds = {seed for seed, x in p.items() if x > 1e-12}
+        if with_odds != set(atoms.get(team, {})):
+            wrong[team] = (sorted(with_odds), sorted(atoms.get(team, {})))
+    return wrong
+
+
+@pytest.mark.parametrize(("clazz", "region", "left"), [c for c in _cases() if c.values[2] < 3])
+def test_odds_and_paths_agree_2025(clazz, region, left):
+    """A place only fewest points allowed can give still has odds above zero (e.g. 2A-1's
+    Ashland at #2), and no place with odds lacks a path. Mismatches: {team: (odds, paths)}."""
+    teams, completed, remaining = _cut(REGION_RESULTS_2025[(clazz, region)]["games"], left)
+    assert _odds_and_paths_agree(teams, completed, remaining) == {}
+
+
+def test_raleigh_first_in_3a_region_6_is_unlikely_not_impossible():
+    """Raleigh is 1st only when it, Magee and Seminary tie and points allowed favour Raleigh: under 1%, not 0%."""
+    games = [dict(winner=w, loser=l, winner_score=a, loser_score=b, date=d) for w, l, a, b, d in _R36_PLAYED]
+    teams = teams_from_games(games)
+    completed = get_completed_games(expand_results(games))
+    remaining = [RemainingGame(a, b) for a, b in _R36_LEFT]
+    r = determine_scenarios(teams, completed, remaining)
+    assert 0 < r.first_counts["Raleigh"] / r.denom < 0.01
 
 
 # ------------------------------------------------------------- the checker itself
@@ -92,3 +128,28 @@ def test_insight_checker_flags_a_false_insight():
     true = KeyInsight("clinch_seed", "A", 1, (GameResult("A", "B"),), True, "A clinches too", 1)
     lie = KeyInsight("clinch_seed", "B", 1, (GameResult("A", "B"),), True, "B clinches", 1)
     assert [x[0] for x in insight_problems(_PAIR, [], _ONE_LEFT, [false, true, lie])] == ["B clinches"]
+
+
+def test_points_allowed_override_replaces_the_assumed_score():
+    """A remaining game's given points allowed replace the assumed 14 and 14 plus the margin."""
+    from backend.helpers.tiebreakers import standings_from_mask
+
+    left = [RemainingGame("A", "B")]
+    assumed = standings_from_mask(["A", "B"], [], left, 1, 14, {("A", "B"): 3})
+    given = standings_from_mask(["A", "B"], [], left, 1, 14, {("A", "B"): 3}, points_allowed={("A", "B"): (0, 40)})
+    assert (assumed["A"]["pa"], assumed["B"]["pa"]) == (14, 17)
+    assert (given["A"]["pa"], given["B"]["pa"]) == (0, 40)
+
+
+def test_a_result_without_a_points_allowed_tie_has_one_order():
+    """Scores are only drawn when a tie reaches fewest points allowed with a tied team still to play."""
+    from backend.helpers.scenarios import _resolve_with_scores
+
+    [(order, flips, share)] = _resolve_with_scores(_PAIR, [], _ONE_LEFT, 1, {("A", "B"): 5})
+    assert (order, flips, share) == (["A", "B"], [], 1.0)
+
+
+def test_text_odds_never_round_a_possible_place_to_zero():
+    from backend.helpers.scenario_renderer import _pct
+
+    assert [_pct(x) for x in (0.0, 0.0001, 0.25, 0.9999, 1.0)] == ["0.0%", "<0.1%", "25.0%", ">99.9%", "100.0%"]
