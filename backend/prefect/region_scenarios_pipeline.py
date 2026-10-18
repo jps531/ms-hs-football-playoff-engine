@@ -71,7 +71,7 @@ _T = TypeVar("_T")
 # calibration report can tell which model produced a published number. Bump
 # it whenever a change alters the odds themselves: Elo parameters, home-field
 # advantage, tiebreaker handling, simulation counts, bracket or hosting rules.
-MODEL_VERSION = "2026.1"
+MODEL_VERSION = "2026.2"  # 2026.2: points allowed modelled, margins weighted by 2025 frequency, clinched = certain
 
 
 def quote(value: _T) -> _T:
