@@ -22,7 +22,7 @@ import {
 } from "./feedback.js";
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
-  teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout,
+  teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks,
 } from "./bracket.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
@@ -1066,6 +1066,8 @@ function bracketHtml() {
   const path = focus ? pathGames(games, focus, mode) : null;
   bracketData.cols = cols;
   bracketData.path = path;
+  // Each open slot's team, so no team shows in two slots of one round.
+  bracketData.picks = new Map(cols.flatMap((c) => [...roundPicks(c, mode, bracketData.results)]));
   const halfControl = halves.length > 1
     ? `<div class="half-control" role="group" aria-label="Bracket half">
         ${["both", ...halves].map((h) => `<button type="button" class="half-control__item${h === "both" ? " half-control__item--both" : ""}" data-half="${h}" aria-pressed="${bracketUi.half === h}">${h === "both" ? "Both halves" : HALF_NAMES[h] ?? h}</button>`).join("")}
@@ -1181,7 +1183,8 @@ function treeRow(game, sideKey, result, gutter) {
   const list = occupants(side, mode);
   const firstRound = side.feeders.length === 1;
   if (!list.length) return row(" trow--empty", null, "No team can get here", "", "");
-  const shown = (focus && list.find((o) => o.team === focus)) || list[0];
+  const pick = bracketData.picks?.get(`${game.id}:${sideKey}`);
+  const shown = (focus && list.find((o) => o.team === focus)) || list.find((o) => o.team === pick) || list[0];
   // First round: the region/seed this slot is for. Later: how many others could be here instead.
   const sub = firstRound ? esc(positionName(side.feeders[0])) : list.length > 1 ? `+${list.length - 1} more` : "";
   return row("", shown.team, shown.team, sub, oddsCell(shown.p) + spoken(" chance to play here"));

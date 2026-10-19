@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups,
-  teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout,
+  teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout, roundPicks,
 } from "../html/static/js/bracket.js";
 
 const occ = (team, p, pw = p, locked = false) => ({ team, p_reach: p, p_reach_weighted: pw, is_locked: locked });
@@ -170,4 +170,43 @@ test("a team that can reach either side: chances add, and opponents from both or
   assert.equal(r.hosts, "split");
   assert.ok(Math.abs(r.pTeamHosts - 0.5) < 1e-9);
   assert.ok(Math.abs(opp.reduce((s, o) => s + o.p, 0) - 1) < 1e-9);
+});
+
+// First-round sides for one region's four seeds (6-3A, Oct 16, Projected): Magee is about as likely
+// #1 as #2, so it would otherwise show in both.
+const seedSide = (seed, occs) => ({ feeders: [{ region: 6, seed }], occupants: occs });
+const r1 = (id, a, b) => ({ game: { id, side_a: a, side_b: b } });
+const REGION_6 = {
+  games: [
+    r1("N-0-0", seedSide(1, [occ("Magee", 0.48), occ("Seminary", 0.47), occ("Raleigh", 0.05)]), seedSide(4, [occ("McLaurin", 0.47), occ("Jefferson Davis County", 0.469)])),
+    r1("N-0-1", seedSide(2, [occ("Magee", 0.479), occ("Raleigh", 0.27), occ("Seminary", 0.25)]), seedSide(3, [occ("Raleigh", 0.62), occ("Seminary", 0.28), occ("Magee", 0.04)])),
+  ],
+};
+
+test("a round shows each team in one slot: its likeliest, the next likeliest elsewhere", () => {
+  const picks = roundPicks(REGION_6, "projected");
+  assert.equal(picks.get("N-0-0:a"), "Magee"); // #1: Magee's likeliest slot
+  assert.equal(picks.get("N-0-1:b"), "Raleigh"); // #3: 62%, not #2's 27%
+  assert.equal(picks.get("N-0-1:a"), "Seminary"); // #2: Magee and Raleigh are shown elsewhere
+  assert.equal(picks.get("N-0-0:b"), "McLaurin");
+  assert.equal(new Set(picks.values()).size, picks.size);
+});
+
+test("a tie goes to the better seed, and locked or played teams count as placed", () => {
+  const tied = { games: [r1("N-0-0", seedSide(2, [occ("A", 0.5), occ("B", 0.5)]), seedSide(1, [occ("A", 0.5), occ("C", 0.5)]))] };
+  const picks = roundPicks(tied, "tossup");
+  assert.equal(picks.get("N-0-0:b"), "A"); // #1 beats #2 on a tie
+  assert.equal(picks.get("N-0-0:a"), "B");
+  const locked = { games: [
+    r1("N-0-0", { feeders: [], occupants: [occ("A", 1, 1, true)] }, seedSide(3, [occ("C", 0.2)])),
+    r1("N-0-1", seedSide(2, [occ("A", 0.9), occ("B", 0.1)]), seedSide(4, [occ("D", 0.3)])),
+  ] };
+  assert.equal(roundPicks(locked, "tossup").get("N-0-1:a"), "B");
+});
+
+test("a side whose every team is likelier elsewhere still shows its likeliest", () => {
+  const only = { games: [r1("N-0-0", seedSide(1, [occ("A", 0.9)]), seedSide(2, [occ("A", 0.1)]))] };
+  const picks = roundPicks(only, "tossup");
+  assert.equal(picks.get("N-0-0:a"), "A");
+  assert.equal(picks.has("N-0-0:b"), false); // the tree falls back to the side's likeliest, A
 });
