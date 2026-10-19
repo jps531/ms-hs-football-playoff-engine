@@ -95,6 +95,20 @@ export function gameDate(iso) {
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+/**
+ * "Sat, Oct 25 at 9:47 AM CDT" for a timestamp, in Mississippi's time zone
+ * whatever the reader's, since the update schedule is Central.
+ */
+export function calculatedAt(iso) {
+  if (!iso) return "";
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "";
+  const zone = { timeZone: "America/Chicago" };
+  const day = t.toLocaleDateString("en-US", { ...zone, weekday: "short", month: "short", day: "numeric" });
+  const time = t.toLocaleTimeString("en-US", { ...zone, hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  return `${day} at ${time}`;
+}
+
 // ------------------------------------------------------------ color contrast
 
 function hexToRgb(hex) {

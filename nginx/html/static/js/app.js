@@ -8,7 +8,7 @@
 // Moving between pages pushes history; changing the season, week, odds
 // mode, or picked team replaces it, so Back goes to the previous page.
 
-import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate } from "./format.js";
+import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate, calculatedAt } from "./format.js";
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard, breadcrumbs,
@@ -232,6 +232,8 @@ let renderToken = 0;
 let scrollToFocus = false;
 async function render() {
   const token = ++renderToken;
+  nextComputedAt = null;
+  showComputedAt(null);
   route = readRoute();
   setNoindex(route.page === "notfound");
   if (route.page === "notfound") {
@@ -281,6 +283,7 @@ async function render() {
       sheet?.close();
     }
     showContext(nextContext);
+    showComputedAt(nextComputedAt);
     canonicalize(route.season);
     if (scrollToFocus && route.teamName && route.region) focusTeamRow();
     scrollToFocus = false;
@@ -306,6 +309,7 @@ async function render() {
 // visible title and controls, so it's hidden from screen readers.
 
 let nextContext = null; // set by the view being rendered
+let nextComputedAt = null; // when the shown numbers were calculated; region pages set it
 let headObserver = null;
 
 function contextHtml(title, summary, mode) {
@@ -315,6 +319,15 @@ function contextHtml(title, summary, mode) {
   if (summary?.date) parts.push(`<span>${esc(summary.date)}</span>`);
   if (mode) parts.push(modeLabel(mode));
   return parts.join(sep);
+}
+
+// The footer says when the numbers on screen were calculated: the real time
+// the pipeline wrote them, not the time it's scheduled to start.
+function showComputedAt(iso) {
+  const slot = document.querySelector("[data-computed-at]");
+  if (!slot) return;
+  const when = calculatedAt(iso);
+  slot.textContent = when ? ` These numbers were calculated ${when}.` : "";
 }
 
 function showContext(html) {
@@ -687,6 +700,7 @@ async function regionView(ctx) {
   const projectedAvailable = hasProjectedOdds(data.teams);
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
   const focus = data.teams.some((t) => t.school === ctx.team) ? ctx.team : null;
+  nextComputedAt = data.computation_state?.computed_at ?? null;
 
   // Cards carry the same provenance as plain text, so a cropped screenshot
   // of one still says what it shows. The odds mode only where the card has
