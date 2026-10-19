@@ -6,12 +6,18 @@ and playoff probability calculators directly.
 
 import pytest
 
-from backend.helpers.data_classes import BracketOdds, StandingsOdds
+import backend.helpers.scenarios as scenarios
+from backend.helpers.data_classes import BracketOdds, RemainingGame, StandingsOdds
+from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenarios import (
+    _BLOWOUTS_BY_WIN_PROB,
+    _MARGIN_COUNTS,
+    _MARGIN_SHARE,
     compute_bracket_odds,
     compute_first_round_home_odds,
     determine_scenarios,
     pct_str,
+    projected_margin_share,
 )
 from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_completed_games_full,
@@ -400,3 +406,112 @@ class TestSeedPairs:
         assert pairs[("A", 1, "D", 4)] == pytest.approx(1 / 3)
         assert pairs[("C", 3, "D", 4)] == pytest.approx(1 / 3)
         assert sum(pairs.values()) == pytest.approx(6.0)  # six seed pairs per outcome
+
+
+# ---------------------------------------------------------------------------
+# Projected margins: how often a winner wins by 12+ depends on its chance
+# ---------------------------------------------------------------------------
+
+
+class TestProjectedMarginShare:
+    """The margin shares projected odds give a game, by the winner's pregame chance."""
+
+    def test_fit_covers_the_same_2025_games_as_the_league_wide_counts(self):
+        """483 region games, 342 of them won by 12 or more, in both tables."""
+        assert sum(games for _, games, _ in _BLOWOUTS_BY_WIN_PROB) == sum(_MARGIN_COUNTS) == 483
+        assert sum(big for _, _, big in _BLOWOUTS_BY_WIN_PROB) == _MARGIN_COUNTS[-1] == 342
+
+    @pytest.mark.parametrize("p", [0.0, 0.1, 0.3, 0.5, 0.55, 0.75, 0.9, 1.0])
+    def test_shares_are_a_distribution(self, p):
+        """Twelve shares, 1 through 11 and 12 or more, adding to 1."""
+        shares = projected_margin_share(p)
+        assert len(shares) == 12 and all(x >= 0 for x in shares)
+        assert sum(shares) == pytest.approx(1.0)
+
+    def test_a_band_gets_its_own_rate_and_between_bands_is_interpolated(self):
+        """At a band's chance, its 2025 rate; halfway between two bands, halfway between their rates."""
+        assert projected_margin_share(0.498)[-1] == pytest.approx(31 / 60)
+        assert projected_margin_share(0.907)[-1] == pytest.approx(101 / 107)
+        assert projected_margin_share((0.701 + 0.800) / 2)[-1] == pytest.approx((64 / 90 + 72 / 85) / 2)
+
+    def test_outside_the_bands_the_end_rates_hold(self):
+        """No extrapolation: a 99% favourite is treated like the top band, a 5% underdog like the bottom."""
+        assert projected_margin_share(0.99)[-1] == pytest.approx(101 / 107)
+        assert projected_margin_share(0.05)[-1] == pytest.approx(22 / 49)
+
+    def test_close_margins_keep_the_league_wide_shape(self):
+        """A 7-point win is as common, relative to a 1-point win, in every band."""
+        for p in (0.3, 0.5, 0.9):
+            shares = projected_margin_share(p)
+            assert shares[6] / shares[0] == pytest.approx(_MARGIN_COUNTS[6] / _MARGIN_COUNTS[0])
+
+    def test_a_favourite_wins_big_more_often_than_a_coin_flip(self):
+        """The reason for the model: 2025's coin-flip games were won by 12+ about half the time, favourites' far more."""
+        assert projected_margin_share(0.5)[-1] < _MARGIN_SHARE[-1] < projected_margin_share(0.9)[-1]
+
+
+def _point_differential_region():
+    """A, B and C beat D; A beat B by 3 and B beat C by 5. If C beats A, the three tie 2-1 and
+    head-to-head point differential decides it: A +3 - m, B +2, C -5 + m for C's margin m."""
+    raw = []
+    for winner, loser, w, lose in (
+        ("A", "B", 10, 7),
+        ("B", "C", 10, 5),
+        ("A", "D", 30, 0),
+        ("B", "D", 30, 0),
+        ("C", "D", 30, 0),
+    ):
+        raw.append(
+            {
+                "school": winner,
+                "opponent": loser,
+                "date": "2026-10-01",
+                "result": "W",
+                "points_for": w,
+                "points_against": lose,
+            }
+        )
+        raw.append(
+            {
+                "school": loser,
+                "opponent": winner,
+                "date": "2026-10-01",
+                "result": "L",
+                "points_for": lose,
+                "points_against": w,
+            }
+        )
+    return ["A", "B", "C", "D"], get_completed_games(raw), [RemainingGame(a="A", b="C", location_a=None)]
+
+
+class TestProjectedMarginsInTheOdds:
+    """Projected odds weight a margin-sensitive game's margins by the winner's chance; toss-up odds don't."""
+
+    def _run(self, monkeypatch, *, league_wide: bool, win_prob_fn=lambda a, b, d, loc: 0.1):
+        """determine_scenarios on the point-differential region, C a 90% favourite over A by default."""
+        if league_wide:
+            monkeypatch.setattr(scenarios, "projected_margin_share", lambda p: _MARGIN_SHARE)
+        teams, completed, remaining = _point_differential_region()
+        return determine_scenarios(teams, completed, remaining, win_prob_fn=win_prob_fn)
+
+    def test_a_big_favourite_winning_wins_big_more_often(self, monkeypatch):
+        """C, a 90% favourite, wins by 12+ (and so takes first on point differential) more often than league-wide."""
+        projected = self._run(monkeypatch, league_wide=False)
+        league = self._run(monkeypatch, league_wide=True)
+        assert projected.first_counts_weighted["C"] > league.first_counts_weighted["C"]
+        assert projected.denom_weighted == pytest.approx(league.denom_weighted)
+
+    def test_toss_up_odds_keep_the_league_wide_margins(self, monkeypatch):
+        """The unweighted (toss-up) counts don't change."""
+        projected = self._run(monkeypatch, league_wide=False)
+        league = self._run(monkeypatch, league_wide=True)
+        for team in "ABCD":
+            assert projected.first_counts[team] == pytest.approx(league.first_counts[team])
+            assert projected.second_counts[team] == pytest.approx(league.second_counts[team])
+
+    def test_without_win_probabilities_weighted_still_equals_toss_up(self, monkeypatch):
+        """No Elo: weighted == unweighted / 2^R, as determine_scenarios documents."""
+        teams, completed, remaining = _point_differential_region()
+        r = determine_scenarios(teams, completed, remaining)
+        for team in "ABCD":
+            assert r.first_counts_weighted[team] == pytest.approx(r.first_counts[team] / 2)
