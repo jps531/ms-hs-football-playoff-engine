@@ -80,6 +80,46 @@ export function occupants(side, mode) {
     .sort((a, b) => b.p - a.p || a.team.localeCompare(b.team));
 }
 
+/**
+ * Which team each open side of a tree column shows, so no team shows in two
+ * slots of one round: Map of `${gameId}:${a|b}` to team. Taking every
+ * (team, side) chance in the column, likeliest first, a team goes to the
+ * side where it's likeliest and that side is filled; a side whose teams are
+ * all likelier elsewhere falls back to its likeliest. Ties go to the better
+ * seed (first round) or the earlier slot. A team already locked into or
+ * playing in the column counts as placed. The game sheet still lists everyone.
+ *
+ * @param {{ games: { game: object }[] }} col  a column from treeColumns()
+ * @param {string} mode  "projected" or "tossup"
+ * @param {Record<string, object>} results  played games, by id
+ */
+export function roundPicks(col, mode, results = {}) {
+  const placed = new Set();
+  const open = [];
+  col.games.forEach(({ game }, i) => {
+    const result = results[game.id];
+    ["a", "b"].forEach((key, j) => {
+      const side = key === "a" ? game.side_a : game.side_b;
+      const locked = lockedTeam(side) ?? (result ? (key === "a" ? result.winner : result.loser) : null);
+      if (locked || result) {
+        if (locked) placed.add(locked);
+        return;
+      }
+      const rank = side.feeders.length === 1 ? side.feeders[0].seed : 2 * i + j;
+      occupants(side, mode).forEach((o) => open.push({ side: `${game.id}:${key}`, team: o.team, p: o.p, rank }));
+    });
+  });
+  open.sort((x, y) => y.p - x.p || x.rank - y.rank || x.team.localeCompare(y.team));
+  const picks = new Map();
+  for (const o of open) {
+    if (!picks.has(o.side) && !placed.has(o.team)) {
+      picks.set(o.side, o.team);
+      placed.add(o.team);
+    }
+  }
+  return picks;
+}
+
 /** The team certain to fill a side, or null. */
 export function lockedTeam(side) {
   const locked = side.occupants.find((o) => o.is_locked);

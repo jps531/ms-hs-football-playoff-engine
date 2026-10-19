@@ -1046,6 +1046,38 @@ def locked_team(side: dict) -> str | None:
     return next((o["team"] for o in side.get("occupants") or [] if o.get("is_locked")), None)
 
 
+def round_picks(col: dict, mode: str, results: dict) -> dict[str, str]:
+    """Which team each open side of a tree column shows, so no team shows in two slots of one round
+    (bracket.js's ``roundPicks``): ``"{game id}:{a|b}" -> team``.
+
+    Taking every (team, side) chance in the column, likeliest first, a team goes to the side where
+    it's likeliest and that side is filled; a side whose teams are all likelier elsewhere falls back
+    to its likeliest. Ties go to the better seed (first round) or the earlier slot. A team locked
+    into or playing in the column counts as placed.
+    """
+    placed: set[str] = set()
+    open_sides = []
+    for i, entry in enumerate(col["games"]):
+        game = entry["game"]
+        result = results.get(game["id"])
+        for j, key in enumerate(("a", "b")):
+            side = game[f"side_{key}"]
+            locked = locked_team(side) or (result and (result["winner"] if key == "a" else result["loser"]))
+            if locked or result:
+                if locked:
+                    placed.add(locked)
+                continue
+            feeders = side.get("feeders") or []
+            rank = feeders[0]["seed"] if len(feeders) == 1 else 2 * i + j
+            open_sides += [(f"{game['id']}:{key}", o["team"], o["p"], rank) for o in occupants(side, mode)]
+    picks: dict[str, str] = {}
+    for side_id, team, _, _ in sorted(open_sides, key=lambda o: (-o[2], o[3], o[1])):
+        if side_id not in picks and team not in placed:
+            picks[side_id] = team
+            placed.add(team)
+    return picks
+
+
 def _hosting(p_host_a: float | None) -> str:
     """Who hosts a pairing: "a", "b", "split" or "neutral" (bracket.js's ``hosting``)."""
     if p_host_a is None:
@@ -1127,7 +1159,8 @@ def _tree_line(gutter: str, team: str | None, name: str, teams: dict, sub: str, 
 
 
 def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: dict) -> str:
-    """One side of a compact card: the result, the locked team, or the likeliest team with its odds."""
+    """One side of a compact card: the result, the locked team, or the round's pick for it (see
+    ``round_picks``; else its likeliest team) with its odds."""
     side = game[f"side_{side_key}"]
     teams = ctx["teams"]
     if result:
@@ -1150,8 +1183,10 @@ def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: 
         sub = _e(position_name(feeders[0]["region"], feeders[0]["seed"]))
     else:
         sub = f"+{len(listed) - 1} more" if len(listed) > 1 else ""
-    value = _odds(listed[0]["p"]) + '<span class="visually-hidden"> chance to play here</span>'
-    return _tree_line(gutter, listed[0]["team"], listed[0]["team"], teams, sub, value, "")
+    pick = (ctx.get("picks") or {}).get(f"{game['id']}:{side_key}")
+    shown = next((o for o in listed if o["team"] == pick), listed[0])
+    value = _odds(shown["p"]) + '<span class="visually-hidden"> chance to play here</span>'
+    return _tree_line(gutter, shown["team"], shown["team"], teams, sub, value, "")
 
 
 def _side_order(host: str | None) -> tuple[list[str], str]:
@@ -1251,6 +1286,8 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
     cols = tree_columns(games)
     if not cols:
         return ""
+    picks = {k: v for c in cols for k, v in round_picks(c, ctx["mode"], ctx["results"]).items()}
+    ctx = {**ctx, "picks": picks}
     centers, height = tree_centers(cols)
     halves = list(dict.fromkeys(g["id"].split("-")[0] for g in games if g["id"] != "final"))
     half_control = ""

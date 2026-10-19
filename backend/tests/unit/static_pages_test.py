@@ -24,6 +24,7 @@ from backend.helpers.static_pages import (
     pick_featured,
     region_body,
     region_trail,
+    round_picks,
     side_label,
     sitemap_xml,
     tree_centers,
@@ -594,6 +595,36 @@ def test_tree_centers_match_bracket_js_at_focus_zero():
     assert centers[1] == [(first[0] + first[1]) / 2, (first[2] + first[3]) / 2]
     assert centers[2] == [(centers[1][0] + centers[1][1]) / 2]
     assert height == first[-1] + CARD_H / 2
+
+
+# 6-3A's first-round sides on Oct 16 (Projected): Magee is about as likely #1 as #2 (bracket.test.mjs's case).
+_REGION_6 = [
+    _game(
+        "N-0-0",
+        "First Round",
+        _side([(6, 1)], [("Magee", 0.48, False), ("Seminary", 0.47, False), ("Raleigh", 0.05, False)]),
+        _side([(6, 4)], [("McLaurin", 0.47, False), ("Jefferson Davis County", 0.469, False)]),
+    ),
+    _game(
+        "N-0-1",
+        "First Round",
+        _side([(6, 2)], [("Magee", 0.479, False), ("Raleigh", 0.27, False), ("Seminary", 0.25, False)]),
+        _side([(6, 3)], [("Raleigh", 0.62, False), ("Seminary", 0.28, False), ("Magee", 0.04, False)]),
+    ),
+]
+
+
+def test_round_picks_match_bracket_js():
+    """Each team shows in one slot of a round, its likeliest; the others show their next likeliest."""
+    picks = round_picks(tree_columns(_REGION_6)[0], "projected", {})
+    assert picks == {"N-0-0:a": "Magee", "N-0-1:b": "Raleigh", "N-0-1:a": "Seminary", "N-0-0:b": "McLaurin"}
+
+
+def test_bracket_page_shows_a_team_once_per_round():
+    """The pre-rendered tree shows Magee only at #1, and Seminary (not Magee) at #2."""
+    html = bracket_body(3, _REGION_6, {**BRACKET_CTX, "seeds": {}}, "x")
+    assert html.count('<span class="trow__name">Magee</span>') == 1
+    assert html.count('<span class="trow__name">Seminary</span>') == 1
 
 
 def test_bracket_page_has_every_game_positioned_with_breadcrumbs():
