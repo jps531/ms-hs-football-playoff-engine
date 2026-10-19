@@ -187,6 +187,38 @@ def _accumulate_slots(
 # weighted by these rather than evenly.
 _MARGIN_COUNTS = (12, 10, 14, 14, 5, 25, 25, 13, 8, 9, 6, 342)
 _MARGIN_SHARE = tuple(c / sum(_MARGIN_COUNTS) for c in _MARGIN_COUNTS)
+# Projected odds go further: how often the winner wins by 12 or more depends on how big a favourite
+# it was. The same 483 games, by the winner's pregame Elo chance, in bands of 38 to 107 games:
+# (the band's chance, games, won by 12 or more), where a band's chance is the midpoint of each of
+# its 5-point bins, weighted by the bin's games. A coin-flip game is won by 12 or more about
+# half the time; a heavy favourite's win almost always is. Between bands the share is interpolated.
+# Each band has too few close games to give 1 through 11 their own shape, so close margins keep the
+# league-wide one (``_MARGIN_COUNTS`` without its last entry).
+_BLOWOUTS_BY_WIN_PROB = (
+    (0.247, 49, 22),
+    (0.404, 38, 16),
+    (0.498, 60, 31),
+    (0.595, 54, 36),
+    (0.701, 90, 64),
+    (0.800, 85, 72),
+    (0.907, 107, 101),
+)
+_CLOSE_SHARE = tuple(c / sum(_MARGIN_COUNTS[:-1]) for c in _MARGIN_COUNTS[:-1])
+
+
+def projected_margin_share(p_winner: float) -> tuple[float, ...]:
+    """How often a game is won by 1, 2, ..., 11, and 12 or more, when the winner had chance *p_winner*."""
+    points = [(p, big / games) for p, games, big in _BLOWOUTS_BY_WIN_PROB]
+    if p_winner <= points[0][0]:
+        blowout = points[0][1]
+    elif p_winner >= points[-1][0]:
+        blowout = points[-1][1]
+    else:
+        (p0, b0), (p1, b1) = next((a, b) for a, b in zip(points, points[1:]) if a[0] <= p_winner <= b[0])
+        blowout = b0 + (b1 - b0) * (p_winner - p0) / (p1 - p0)
+    return tuple((1 - blowout) * s for s in _CLOSE_SHARE) + (blowout,)
+
+
 # How many ways the scores of the remaining games are drawn for a result whose order turns on
 # fewest points allowed (step 5) with a tied team still to play.
 _PA_DRAWS = 64
@@ -453,11 +485,13 @@ def determine_scenarios(
 
     else:
         total_masks = 1 << num_remaining
+        # P(a wins) per remaining game, and where each game sits in the outcome mask.
+        game_probs = [_win_prob_fn(g.a, g.b, None, g.location_a) for g in remaining]
+        game_index = {(g.a, g.b): i for i, g in enumerate(remaining)}
         for outcome_mask in range(total_masks):
             mask_weight = 1.0
-            for bit_index, rem_game in enumerate(remaining):
+            for bit_index, p in enumerate(game_probs):
                 bit_value = (outcome_mask >> bit_index) & 1
-                p = _win_prob_fn(rem_game.a, rem_game.b, None, rem_game.location_a)
                 mask_weight *= p if bit_value else (1.0 - p)
 
             denom_weighted += mask_weight
@@ -541,15 +575,29 @@ def determine_scenarios(
                 # old one-game-at-a-time isolation approach could miss (e.g. a
                 # tiebreaker that only flips when Game A wins by 12+ AND Game B wins
                 # by 1–6 simultaneously). Each combination counts as often as those
-                # margins happen (``_MARGIN_SHARE``), not evenly.
+                # margins happen, not evenly: league-wide (``_MARGIN_SHARE``) for
+                # toss-up odds, and by how big a favourite each winner was for
+                # projected odds (``projected_margin_share``).
                 intra_pairs = [(rg.a, rg.b) for rg in intra_bucket_games]
                 n_intra = len(intra_pairs)
+                projected_shares = [
+                    projected_margin_share(
+                        game_probs[game_index[pair]]
+                        if (outcome_mask >> game_index[pair]) & 1
+                        else 1.0 - game_probs[game_index[pair]]
+                    )
+                    if win_prob_fn is not None
+                    else _MARGIN_SHARE
+                    for pair in intra_pairs
+                ]
                 for margin_combo in product(range(1, 13), repeat=n_intra):
                     branch_margins = dict(base_margins)
                     for (a, b), m in zip(intra_pairs, margin_combo):
                         branch_margins[(a, b)] = m
                     branch_weight = math.prod(_MARGIN_SHARE[m - 1] for m in margin_combo)
-                    effective_weight = mask_weight * branch_weight
+                    effective_weight = mask_weight * math.prod(
+                        shares[m - 1] for shares, m in zip(projected_shares, margin_combo)
+                    )
                     for final_order, local_flips, share in _resolve_with_scores(
                         teams, completed, remaining, outcome_mask, branch_margins, frozenset(intra_pairs)
                     ):
