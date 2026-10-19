@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   formatPct, oddsBucket, initials, marginText, joinNames, recordText, contrastRatio, clampToSurface,
-  teamUiColors, inkFor, escapeHtml,
+  teamUiColors, inkFor, escapeHtml, calculatedAt,
 } from "../html/static/js/format.js";
 
 test("0% and 100% are reserved for certainty", () => {
@@ -90,4 +90,11 @@ test("ink picks the more readable of white and neutral-900", () => {
 
 test("escapeHtml neutralizes markup", () => {
   assert.equal(escapeHtml(`<b>"O'Bannon" & co</b>`), "&lt;b&gt;&quot;O&#39;Bannon&quot; &amp; co&lt;/b&gt;");
+});
+
+test("calculation time reads in Central, whatever the reader's zone", () => {
+  assert.equal(calculatedAt("2026-10-24T14:47:03.12+00:00"), "Sat, Oct 24 at 9:47 AM CDT");
+  assert.equal(calculatedAt("2026-12-05T15:05:00Z"), "Sat, Dec 5 at 9:05 AM CST");
+  assert.equal(calculatedAt(null), "");
+  assert.equal(calculatedAt("not a time"), "");
 });

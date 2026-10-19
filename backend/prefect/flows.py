@@ -6,6 +6,8 @@ from prefect import serve
 from prefect.client.schemas.schedules import CronSchedule
 
 from backend.prefect.ahsfhs_schedule_pipeline import ahsfhs_schedule_data_flow
+from backend.prefect.ahsfhs_score_probe_pipeline import ahsfhs_score_probe_flow
+from backend.prefect.daily_update_pipeline import daily_update_flow
 from backend.prefect.misshsaa_school_pipeline import misshsaa_school_data_flow
 from backend.prefect.nces_school_pipeline import nces_school_data_flow
 from backend.prefect.playoff_pipeline import playoff_bracket_update
@@ -23,14 +25,23 @@ async def main():
         await regions_data_flow.to_deployment("regions-data-pipeline"),
         await nces_school_data_flow.to_deployment("nces-school-pipeline"),
         await misshsaa_school_data_flow.to_deployment("misshsaa-school-pipeline"),
-        await ahsfhs_schedule_data_flow.to_deployment(
-            "ahsfhs-schedule-data-pipeline",
+        # The scores are pulled at 9:00, and the recalculation starts as soon as the pull finishes.
+        await daily_update_flow.to_deployment(
+            "daily-update",
             schedule=CronSchedule(cron="0 9 * * *", timezone=_SCHEDULE_TIMEZONE),
         ),
-        await region_scenarios_data_flow.to_deployment(
-            "region-scenarios-data-pipeline",
-            # 9:30, half an hour after the scores are pulled, so a slow schedule pull finishes first.
-            schedule=CronSchedule(cron="30 9 * * *", timezone=_SCHEDULE_TIMEZONE),
+        # Each half of the daily update on its own, for a manual run.
+        await ahsfhs_schedule_data_flow.to_deployment("ahsfhs-schedule-data-pipeline"),
+        await region_scenarios_data_flow.to_deployment("region-scenarios-data-pipeline"),
+        # Every 15 minutes from Friday 9 PM to Saturday noon: how many of the night's
+        # final scores AHSFHS shows yet, to learn whether an earlier pull would find them.
+        await ahsfhs_score_probe_flow.to_deployment(
+            "ahsfhs-score-probe",
+            schedules=[
+                CronSchedule(cron="*/15 21-23 * * 5", timezone=_SCHEDULE_TIMEZONE),
+                CronSchedule(cron="*/15 0-11 * * 6", timezone=_SCHEDULE_TIMEZONE),
+                CronSchedule(cron="0 12 * * 6", timezone=_SCHEDULE_TIMEZONE),
+            ],
         ),
         await backfill_historical_snapshots.to_deployment("backfill-historical-snapshots"),
         await playoff_bracket_update.to_deployment("playoff-bracket-update"),

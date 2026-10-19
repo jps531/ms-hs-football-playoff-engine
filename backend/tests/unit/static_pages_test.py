@@ -1000,11 +1000,6 @@ def test_pictures_without_odds_leave_the_odds_mode_out_of_their_provenance():
     assert plain in settled and "Projected" not in settled
 
 
-def test_region_scenarios_run_after_the_scores_are_pulled():
-    flows = (Path(__file__).resolve().parents[2] / "prefect" / "flows.py").read_text()
-    assert 'CronSchedule(cron="30 9 * * *"' in flows
-
-
 def test_complete_scenario_cards_or_groups_and_ties_match_scenarios_js():
     """Mirrors scenarios.test.mjs: alternatives become OR groups; a tie left open is one unordered row."""
     from backend.helpers.static_pages import complete_scenario_cards, outcome_scenario_card
