@@ -383,13 +383,13 @@ function syncNav() {
   const onStandings = ["class", "region"].includes(route.page); // not the front page: it's neither
   const known = route.page !== "notfound";
   const targets = {
-    standings: known ? hrefWith({ page: route.region ? "region" : "class" }) : "/",
+    standings: known ? hrefWith({ page: route.region ? "region" : "class" }) : "/standings/1a",
     bracket: known ? hrefWith({ page: "bracket", region: null }) : "/brackets/1a",
   };
   for (const a of document.querySelectorAll("[data-nav]")) {
     const key = a.dataset.nav;
     if (key in targets) a.setAttribute("href", targets[key]);
-    const current = known && (key === "bracket" ? onBracket : key === "standings" ? onStandings : false);
+    const current = known && (key === "bracket" ? onBracket : key === "standings" ? onStandings : key === "home" && route.page === "landing");
     if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }

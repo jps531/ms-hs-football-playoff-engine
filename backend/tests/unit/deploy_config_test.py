@@ -145,10 +145,13 @@ def test_the_main_nav_is_in_the_page_from_the_start():
     assert "map $request_uri $nav_section" in NGINX
 
 
-def test_the_front_page_marks_no_nav_section_and_has_no_class_picker():
-    """ "/" is neither Standings nor Bracket, and has its own class grid instead of the picker."""
+def test_the_front_page_marks_home_and_has_no_class_picker():
+    """ "/" is Home on the phone tab bar (neither Standings nor Bracket), and has its own class grid
+    instead of the picker."""
     section = re.search(r"map \$request_uri \$nav_section \{(.*?)\}", NGINX, re.S).group(1)
-    assert "standings" in section and "(?:\\\\?|$)" not in section
+    assert '"~^/(?:\\?|$)"   "home"' in section
+    shell = (ROOT / "nginx" / "html" / "index.html").read_text()
+    assert '<a class="tab-bar__item" href="/" data-nav="home"<!--# if expr="$nav_section = home" -->' in shell
     picker = re.search(r"map \$request_uri \$show_class_picker \{(.*?)\}", NGINX, re.S).group(1)
     assert '"no"' in picker
     shell = (ROOT / "nginx" / "html" / "index.html").read_text()
