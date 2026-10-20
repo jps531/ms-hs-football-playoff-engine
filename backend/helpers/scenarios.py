@@ -445,42 +445,48 @@ def determine_scenarios(
         denom_weighted = 1.0
 
     elif n_samples is not None:
-        # Monte Carlo path: sample outcomes from the Elo joint distribution.
-        # Each game is drawn Bernoulli(p); sample frequency is Elo-weighted by
-        # construction, so weighted and unweighted counts are both accumulated
-        # uniformly (each sample contributes weight 1.0 / n_samples).
-        # Seeded RNG plus a canonical game order keeps the result reproducible
-        # for identical inputs.
+        # Monte Carlo path: each game drawn Bernoulli(p), so sample frequency is
+        # the probability by construction (each sample contributes 1.0 / n_samples).
+        # Projected (weighted) counts sample from the win probabilities; Toss-up
+        # (unweighted) counts get their own run with every game a coin flip, since
+        # sampling from Elo would make the two modes identical. Without a
+        # win_prob_fn the two runs would be the same, so one serves both.
+        # Seeded RNGs plus a canonical game order keep results reproducible.
         mc_remaining = sorted(remaining, key=lambda g: (g.a, g.b, g.location_a or ""))
-        rng = random.Random(seed if seed is not None else _monte_carlo_seed(teams, completed, remaining))  # NOSONAR
+        base_seed = seed if seed is not None else _monte_carlo_seed(teams, completed, remaining)
         win_probs = [_win_prob_fn(g.a, g.b, None, g.location_a) for g in mc_remaining]
-        for _ in range(n_samples):
-            outcome_mask = 0
-            for bit_index, p in enumerate(win_probs):
-                # Statistical Monte Carlo sampling only — not security-sensitive.
-                if rng.random() < p:  # NOSONAR
-                    outcome_mask |= 1 << bit_index
-            for final_order, local_flips, share in _resolve_with_scores(
-                teams, completed, mc_remaining, outcome_mask, base_margins, frozenset()
-            ):
-                all_coinflip_events.extend(local_flips)
-                _accumulate_slots(
-                    final_order,
-                    local_flips,
-                    share,
-                    share,
-                    first_counts,
-                    second_counts,
-                    third_counts,
-                    fourth_counts,
-                    first_counts_weighted,
-                    second_counts_weighted,
-                    third_counts_weighted,
-                    fourth_counts_weighted,
-                    seed_pairs,
-                    seed_pairs_weighted,
-                )
-            denom_weighted += 1.0
+        runs = [(win_probs, 1.0, 1.0, base_seed)]
+        if win_prob_fn is not None:
+            runs = [(win_probs, 0.0, 1.0, base_seed), ([0.5] * len(mc_remaining), 1.0, 0.0, base_seed + 1)]
+        for probs, unweighted_credit, weighted_credit, run_seed in runs:
+            rng = random.Random(run_seed)  # NOSONAR
+            for _ in range(n_samples):
+                outcome_mask = 0
+                for bit_index, p in enumerate(probs):
+                    # Statistical Monte Carlo sampling only — not security-sensitive.
+                    if rng.random() < p:  # NOSONAR
+                        outcome_mask |= 1 << bit_index
+                for final_order, local_flips, share in _resolve_with_scores(
+                    teams, completed, mc_remaining, outcome_mask, base_margins, frozenset()
+                ):
+                    all_coinflip_events.extend(local_flips)
+                    _accumulate_slots(
+                        final_order,
+                        local_flips,
+                        unweighted_credit * share,
+                        weighted_credit * share,
+                        first_counts,
+                        second_counts,
+                        third_counts,
+                        fourth_counts,
+                        first_counts_weighted,
+                        second_counts_weighted,
+                        third_counts_weighted,
+                        fourth_counts_weighted,
+                        seed_pairs,
+                        seed_pairs_weighted,
+                    )
+        denom_weighted = float(n_samples)
         denom = float(n_samples)
 
     else:

@@ -59,9 +59,7 @@ Note: `build_scenario_atoms` uses boolean minimization (Quine-McCluskey) over th
 
 At this range (common for 7-team regions early in the season, where R can reach 20+), full 2^R enumeration becomes impractical — 2^20 = 1,048,576 outcome masks produces millions of complete scenarios.
 
-The engine switches to **Monte Carlo sampling** (50,000 draws). Each sample draws a win/loss outcome for every remaining game according to each team's Elo win probability — so the resulting odds are **Elo-weighted**, not uniform. The sample frequency of any seeding outcome is proportional to its true probability under the Elo model.
-
-> **Known issue:** both the weighted and unweighted counts come from these same Elo-weighted samples, so at R > 15 Toss-up odds currently equal Projected odds instead of treating every game as a coin flip.
+The engine switches to **Monte Carlo sampling**, two runs of 50,000 draws each. For Projected odds, each sample draws a win/loss outcome for every remaining game according to each team's Elo win probability, so the sample frequency of any seeding outcome is its probability under the Elo model. For Toss-up odds, a separate run draws every game as a coin flip. (Without win probabilities the two runs would be identical, so one serves both.)
 
 `scenario_atoms` and `complete_scenarios` are both written as empty (`{}` / `[]`). With 15+ games remaining, scenario descriptions are not actionable ("to clinch 1st, Pearl needs to win the next 15 games and one of ~37,000 specific combinations of other results") and the storage cost would be enormous.
 
@@ -85,7 +83,7 @@ At R > 5, the frontend shows seeding odds (always available) and key insights (w
 | 1–5 | Exact (2^R × 12^R, margins weighted by 2025 frequency) | Yes, margin-accurate | Yes | Yes, margin-accurate | Yes |
 | 6–10 | 2^R at a default 7-point margin | Yes, win/loss only | Yes | Yes, 12^k verified | Key insights only |
 | 11–15 | 2^R at a default 7-point margin | Empty (QMC limit) | Yes, flat | Empty | No |
-| > 15 | Monte Carlo, 50K samples, Elo-weighted | Empty | Empty | Empty | No |
+| > 15 | Monte Carlo, 50K samples per mode (Elo for Projected, coin flips for Toss-up) | Empty | Empty | Empty | No |
 
 ---
 

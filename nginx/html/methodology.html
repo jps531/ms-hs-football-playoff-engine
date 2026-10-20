@@ -79,9 +79,9 @@
       <p>
         Early in the season, when a region has more than 15 games left and
         there are too many outcomes to list, we simulate the rest of the
-        schedule 50,000 times instead, using each team’s Elo rating to decide
-        who wins each game. Until a region gets down to 15 games, both odds
-        modes below show those simulated numbers.
+        schedule 50,000 times instead: once using each team’s Elo rating to set
+        its chance of winning each game, for Projected odds, and once with
+        every game a coin flip, for Toss-up odds.
       </p>
 
       <h2>Projected and toss-up odds</h2>
@@ -196,7 +196,7 @@
       <p>
         Given the same games, the rules give the same answer every time. That
         includes the early-season simulation: it’s seeded from the games
-        themselves, so the same games always produce the same 50,000 runs and
+        themselves, so the same games always produce the same simulated runs and
         the same odds, and the numbers only change when a result does. AI
         coding tools helped build the website and its code; they play no part
         in calculating the results.

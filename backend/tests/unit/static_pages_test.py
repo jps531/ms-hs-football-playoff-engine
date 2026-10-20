@@ -430,6 +430,7 @@ class TestLandingBody:
         assert f"<strong>{pipeline._R_MAX_ATOMS + 1} to {pipeline._R_MAX_COMPUTE}</strong>" in steps
         assert f"<strong>more than {pipeline._R_MAX_COMPUTE}</strong>" in steps
         assert "50,000 times" in steps
+        assert "Toss-up odds get their own 50,000 runs with every game a coin flip." in steps
         body = landing_body(None, {})
         assert "<li>When there are <strong>5 or fewer</strong>" in body
         words = {5: "five"}[DISPLAY_THRESHOLD]

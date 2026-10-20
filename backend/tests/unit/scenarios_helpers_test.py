@@ -301,6 +301,23 @@ class TestDetermineScenariosMonteCarlo:
             n_samples=n_samples,
         )
 
+    def test_toss_up_odds_treat_every_game_as_a_coin_flip(self):
+        """With win probabilities, Projected samples from them and Toss-up gets its own coin-flip run."""
+        favourite = self.TEAMS[0]
+
+        def heavy_favourite(a, b, d, loc):
+            """The first team wins 95% of its games; every other game is even."""
+            return 0.95 if a == favourite else 0.05 if b == favourite else 0.5
+
+        remaining = self._make_remaining()
+        r = determine_scenarios(self.TEAMS, [], remaining, win_prob_fn=heavy_favourite, n_samples=2_000)
+        even = determine_scenarios(self.TEAMS, [], remaining, n_samples=2_000)
+        assert r.first_counts_weighted[favourite] / r.denom_weighted > 0.6
+        # Toss-up ignores the favourite: about 1 in 7, like the run with no win probabilities at all.
+        assert r.first_counts[favourite] / r.denom == pytest.approx(1 / 7, abs=0.04)
+        assert r.first_counts[favourite] / r.denom == pytest.approx(even.first_counts[favourite] / even.denom, abs=0.04)
+        assert r.denom == r.denom_weighted == pytest.approx(2_000.0)
+
     def test_denom_equals_n_samples(self):
         """denom and denom_weighted both equal n_samples."""
         r = self._run(n_samples=500)
