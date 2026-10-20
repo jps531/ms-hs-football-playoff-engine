@@ -920,7 +920,7 @@ def insight_preview(example: dict | None, teams: dict) -> str:
         "matter what else happens:"
     )
     intro = (
-        f"Full scenarios appear once six or fewer region games remain; {left} are left. Until then, these are "
+        f"Full scenarios appear once five or fewer region games remain; {left} are left. Until then, these are "
         "results that settle a spot no matter what else happens."
     )
     grid = "".join(scenario_card(c, teams) for c in cards)
@@ -1504,14 +1504,15 @@ PRINCIPLES_HTML = (
 # Each step matches the pipeline's thresholds (region_scenarios_pipeline.py: _R_ALWAYS_MARGIN,
 # _R_MAX_ATOMS, _R_MAX_COMPUTE; api_helpers.DISPLAY_THRESHOLD); docs/SCENARIO_COMPUTATION.md has the detail.
 HOW_IT_WORKS_HTML = (
-    "When there are <strong>6 or fewer</strong> games remaining in a given region, our logic builds the final "
+    "When there are <strong>5 or fewer</strong> games remaining in a given region, our logic builds the final "
     "standings for each possible combination of outcomes, breaks any ties, and counts how often each team lands "
     "in each seed. From there, it produces odds for each team and easy-to-read scenarios for every possible "
-    "outcome. With 5 or fewer left, this includes every possible winning margin; with more than 5 left, any tie "
-    "that comes down to point differential is broken as if each remaining game were won by 7 points.",
-    "When there are <strong>7 to 10</strong> remaining games in a given region, we still build out each possible "
+    "outcome.",
+    "When there are <strong>6 to 10</strong> remaining games in a given region, we still build out each possible "
     "outcome, but only display scenario insights for key games, since the full scenario list is generally very "
-    "long at this stage.",
+    "long at this stage. From this point on, a tie that comes down to point differential is worked out as if each "
+    "remaining game were won by 7 points, so the odds in those races are close but not exact. The key-game "
+    "insights are still checked against every possible margin.",
     "When there are <strong>11 to 15</strong> remaining games in a region, we still build out each possible "
     "outcome, but do not display any scenarios, as there will be too many to reasonably display.",
     "When there are <strong>more than 15</strong> remaining games in a region, it becomes impractical to build out "

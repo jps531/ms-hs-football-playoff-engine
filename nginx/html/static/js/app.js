@@ -946,7 +946,7 @@ function scenariosSection(data, teams, prov, mode, focus) {
       : `<p class="prose muted">${focus ? `Nothing left to decide for ${esc(focus)}.` : "Every remaining outcome is already settled."}</p>`;
   } else {
     const cards = forFocus(insightCards(data.key_insights));
-    const intro = `Full scenarios appear once six or fewer region games remain; ${remainingCount} are left.`;
+    const intro = `Full scenarios appear once five or fewer region games remain; ${remainingCount} are left.`;
     body = cards.length
       ? `<p class="prose muted">${esc(intro)} Until then, these are results that settle a spot no matter what else happens.</p>
          <div class="scenario-group scenario-group--spaced">${grid(cards)}</div>`

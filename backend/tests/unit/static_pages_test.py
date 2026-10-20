@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
 
+import backend.helpers.static_pages as static_pages_module
 from backend.helpers.static_pages import (
     CARD_H,
     ODDS_COLUMNS,
@@ -421,14 +422,24 @@ class TestLandingBody:
         from backend.prefect import region_scenarios_pipeline as pipeline
 
         steps = " ".join(HOW_IT_WORKS_HTML)
+        # Full scenarios only where every margin is worked through, so none rests on the 7-point default.
+        assert DISPLAY_THRESHOLD == pipeline._R_ALWAYS_MARGIN
         assert f"<strong>{DISPLAY_THRESHOLD} or fewer</strong>" in steps
-        assert f"With {pipeline._R_ALWAYS_MARGIN} or fewer left, this includes every possible winning margin" in steps
         assert f"<strong>{DISPLAY_THRESHOLD + 1} to {pipeline._R_MAX_ATOMS}</strong>" in steps
+        assert "as if each remaining game were won by 7 points" in steps
         assert f"<strong>{pipeline._R_MAX_ATOMS + 1} to {pipeline._R_MAX_COMPUTE}</strong>" in steps
         assert f"<strong>more than {pipeline._R_MAX_COMPUTE}</strong>" in steps
         assert "50,000 times" in steps
         body = landing_body(None, {})
-        assert "<li>When there are <strong>6 or fewer</strong>" in body
+        assert "<li>When there are <strong>5 or fewer</strong>" in body
+        words = {5: "five"}[DISPLAY_THRESHOLD]
+        app_js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "app.js").read_text()
+        methodology = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "methodology.html").read_text()
+        for text in (app_js, methodology, Path(static_pages_module.__file__).read_text()):
+            assert (
+                f"Full scenarios appear once {words} or fewer" in text
+                or f"Once {words} or fewer region games remain, each team" in text
+            )
         assert "<p>This website is not associated with the MHSAA or any of its member schools.</p>" in body
         assert "<strong><em>No generative AI models are used to produce any metrics" in body
         assert '<a href="/feedback" data-feedback="other">feedback form</a>' in body
@@ -995,7 +1006,7 @@ def test_settled_spot_example_is_a_region_still_far_out():
     html = insight_preview({**_far_out(), "clazz": 3, "region": 6}, {})
     assert "Region 6-3A still has 8 region games left, too many for full scenarios" in html
     assert 'href="/standings/3a/6#scen-title"' in html and "Taylorsville clinches the region" in html
-    assert "Full scenarios appear once six or fewer region games remain; 8 are left." in html
+    assert "Full scenarios appear once five or fewer region games remain; 8 are left." in html
     earlier = insight_preview({**_far_out(), "clazz": 3, "region": 6, "earlier": True}, {})
     assert "Earlier in the season, with 8 region games left in Region 6-3A, these results would settle" in earlier
     assert insight_preview(None, {}) == ""

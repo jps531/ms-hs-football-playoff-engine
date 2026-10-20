@@ -124,7 +124,7 @@ from backend.helpers.win_probability import (
 # Constants
 # ---------------------------------------------------------------------------
 
-DISPLAY_THRESHOLD = 6
+DISPLAY_THRESHOLD = 5
 
 # A region_standings row belongs on public read paths only while its school is
 # active for that season. The pipeline already skips inactive schools when it
@@ -141,7 +141,10 @@ ACTIVE_SCHOOL_JOIN_RS = (
     " JOIN school_seasons active"
     " ON active.school = rs.school AND active.season = rs.season AND active.is_active"
 )
-"""Maximum remaining games for which the human-readable scenario list is shown."""
+"""Maximum remaining games for which the human-readable scenario list is shown: the most for which every
+winning margin is worked through (region_scenarios_pipeline._R_ALWAYS_MARGIN). With more left, ties that turn on
+point differential are broken at a default margin, so a scenario could say a result decides a place when the
+margin does."""
 
 CLINCHED_THRESHOLD = 1 - 1e-6
 """Minimum seeding probability required to consider a seed position clinched: certain, give or take
