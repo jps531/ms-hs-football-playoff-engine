@@ -14,9 +14,9 @@ The engine produces three distinct things for each class/region/date snapshot:
 
    **`paths` (API-level, not separately stored):** `GET /standings/{clazz}/{region}?include_team_scenarios=true` exposes each team's `scenario_atoms` entry as a `paths` list — one entry per achievable outcome (a specific seed, "playoffs" regardless of seed, or "eliminated"), each with its OR-of-AND conditions and the outcome's existing `p1`–`p4`/`p_playoffs` probability. This is computed at request time from the stored `scenario_atoms` (plus a live lookup of each condition's game date) — no separate column. The "playoffs" outcome doesn't exist as its own `scenario_atoms` bucket; it's derived by unioning the per-seed atom lists and re-running the same boolean minimizer (`_simplify_atom_list`) used internally by `build_scenario_atoms`. See `backend.helpers.api_helpers.build_team_paths`.
 
-3. **Key insights** — simple, unconditionally-true conditional statements extracted from `scenario_atoms` (e.g., "Taylorsville clinches 1st seed: Taylorsville beats Stringer" or "Murrah is eliminated: Starkville beats Terry"). Each insight has 1–3 `GameResult` conditions and is margin-verified before storage. Stored at all tiers where atoms exist (R ≤ 10). Shown at all R values: as a headlines banner at R ≤ 6 alongside the full scenario list, and as the only scenario-level content at R 7–10.
+3. **Key insights** — simple, unconditionally-true conditional statements extracted from `scenario_atoms` (e.g., "Taylorsville clinches 1st seed: Taylorsville beats Stringer" or "Murrah is eliminated: Starkville beats Terry"). Each insight has 1–3 `GameResult` conditions and is margin-verified before storage. Stored at all tiers where atoms exist (R ≤ 10). They feed each region's headline at every R, and they're the only scenario-level content shown at R 6–10.
 
-> **Note on margin accuracy at R = 6:** At R = 6, scenarios and insights are win/loss-only (no margin conditions). Full margin-sensitive computation is bounded at R ≤ 5 due to the memory cost of 12^6 enumeration at backfill scale.
+> **Note on margin accuracy above R = 5:** For R > 5, scenarios and odds are win/loss-only: a tie that reaches point differential (steps 3–4) is broken as if every remaining game were won by 7. Full margin-sensitive computation is bounded at R ≤ 5 due to the memory cost of 12^6 enumeration at backfill scale, so the scenario list is shown only at R ≤ 5 (see the display threshold below). Key insights stay exact at any R ≤ 10 because each is margin-verified.
 
 ---
 
@@ -35,13 +35,15 @@ The engine produces three distinct things for each class/region/date snapshot:
 
 The engine runs the complete `12^R × 2^R` enumeration: every possible win/loss combination AND every possible point margin combination for each outcome. This produces exact, margin-aware scenario atoms and complete scenarios.
 
+For the odds, each margin combination is weighted by how often those margins happened in 2025's 483 region games (`scenarios.py`): league-wide (`_MARGIN_SHARE`) for Toss-up odds, and by the winner's pregame Elo chance (`projected_margin_share`) for Projected odds. When a tie reaches fewest points allowed (step 5) with a tied team still to play, the remaining games' scores are drawn from 2025's score shapes (`_resolve_with_scores`), so an order only points allowed can give gets its share.
+
 Both `scenario_atoms` and `complete_scenarios` are stored and are eligible for UI display (subject to the display threshold below).
 
 **Why the full enumeration is feasible here:** R ≤ 5 means at most `12^5 × 2^5 = ~8M` combinations — runs in a few seconds. `_is_margin_sensitive_mask()` skips the 12^R inner loop for masks where margin doesn't affect tiebreakers, so actual runtime is typically well under this ceiling.
 
 ### R 6–10 — Win/loss enumeration, no margin
 
-Margin sensitivity is skipped entirely. All 2^R outcomes are enumerated once at a fixed default margin. `scenario_atoms` and `complete_scenarios` are stored.
+Margin sensitivity is skipped entirely. All 2^R outcomes are enumerated once at a fixed default margin of 7 points. `scenario_atoms` and `complete_scenarios` are stored, but the scenario list isn't shown (it could state a result decides a place when the margin does).
 
 Key insights are extracted and stored at this tier. Because atoms are computed with `ignore_margins=True`, each insight candidate is spot-checked across all 12^k margin combinations for its k condition games before being emitted — only claims that hold for every combination are stored (`margin_verified=True`). This makes them unconditionally true even at this tier despite the win/loss-only atoms.
 
@@ -59,19 +61,19 @@ At this range (common for 7-team regions early in the season, where R can reach 
 
 The engine switches to **Monte Carlo sampling** (50,000 draws). Each sample draws a win/loss outcome for every remaining game according to each team's Elo win probability — so the resulting odds are **Elo-weighted**, not uniform. The sample frequency of any seeding outcome is proportional to its true probability under the Elo model.
 
+> **Known issue:** both the weighted and unweighted counts come from these same Elo-weighted samples, so at R > 15 Toss-up odds currently equal Projected odds instead of treating every game as a coin flip.
+
 `scenario_atoms` and `complete_scenarios` are both written as empty (`{}` / `[]`). With 15+ games remaining, scenario descriptions are not actionable ("to clinch 1st, Pearl needs to win the next 15 games and one of ~37,000 specific combinations of other results") and the storage cost would be enormous.
 
 ---
 
-## Frontend Display Threshold: R ≤ 6
+## Frontend Display Threshold: R ≤ 5
 
-Even though scenario data is stored for R ≤ 15, the frontend only **renders the human-readable scenario list** when **R ≤ 6** (approximately the final two weeks of region play for every 2025 region).
+Even though scenario data is stored for R ≤ 15, the frontend only **renders the human-readable scenario list** when **R ≤ 5** (`DISPLAY_THRESHOLD` in `api_helpers.py`), the range where the engine works through every winning margin. Above it, scenarios are win/loss-only and could misstate a race that turns on point differential.
 
-At R ≤ 5, the engine guarantees full margin accuracy synchronously. At R = 6, scenarios are win/loss-only (no margin conditions) but are still compact and actionable: at most 64 distinct outcomes for a 6-game remaining window.
+At R > 5, the frontend shows seeding odds (always available) and key insights (when atoms exist, R ≤ 10, each margin-verified), but omits the full scenario list. The hosting page's per-team scenarios follow the same threshold.
 
-At R > 6, the number of distinct outcomes and conditions grows too large to present readably. The frontend shows seeding odds (always available) and key insights (when atoms exist, R ≤ 10), but omits the full scenario list.
-
-**API contract:** The `scenarios_available` flag on every standings response is `true` when `r_remaining ≤ 6`. The `key_insights` list is non-empty whenever actionable insights were extractable from the stored atoms (R ≤ 10, non-trivial standings). Both are computed at pipeline time and read directly from the snapshot.
+**API contract:** The `scenarios_available` flag on every standings response is `true` when `r_remaining ≤ 5`. The `key_insights` list is non-empty whenever actionable insights were extractable from the stored atoms (R ≤ 10, non-trivial standings). Both are computed at pipeline time and read directly from the snapshot.
 
 ---
 
@@ -80,9 +82,9 @@ At R > 6, the number of distinct outcomes and conditions grows too large to pres
 | Remaining games (R) | Odds method | Atoms stored | Complete scenarios stored | Key insights stored | Shown in UI |
 |---|---|---|---|---|---|
 | 0 | Exact (1 outcome) | Yes | Yes | Yes (facts only) | Yes |
-| 1–5 | Exact (2^R × 12^R) | Yes, margin-accurate | Yes | Yes, margin-accurate | Yes |
-| 6–10 | Exact (2^R, no margin) | Yes, win/loss only | Yes | Yes, 12^k verified | Yes (R=6), Key insights only (R 7–10) |
-| 11–15 | Exact (2^R, no margin) | Empty (QMC limit) | Yes, flat | Empty | No |
+| 1–5 | Exact (2^R × 12^R, margins weighted by 2025 frequency) | Yes, margin-accurate | Yes | Yes, margin-accurate | Yes |
+| 6–10 | 2^R at a default 7-point margin | Yes, win/loss only | Yes | Yes, 12^k verified | Key insights only |
+| 11–15 | 2^R at a default 7-point margin | Empty (QMC limit) | Yes, flat | Empty | No |
 | > 15 | Monte Carlo, 50K samples, Elo-weighted | Empty | Empty | Empty | No |
 
 ---
@@ -92,12 +94,19 @@ At R > 6, the number of distinct outcomes and conditions grows too large to pres
 ```python
 _R_ALWAYS_MARGIN = 5   # R ≤ this: full 12^R margin enumeration, synchronous
 _R_MAX_COMPUTE = 15    # R > this: Monte Carlo odds only, skip all scenario enumeration
+_R_MAX_ATOMS = 10      # R > this: no per-team atoms
+```
+
+In `api_helpers.py`:
+
+```python
+DISPLAY_THRESHOLD = 5  # R ≤ this: the scenario list is shown (equal to _R_ALWAYS_MARGIN)
 ```
 
 And in `scenario_viewer.py`:
 
 ```python
-# build_scenario_atoms() line ~1479:
-if R > 10:
+# build_scenario_atoms():
+if not remaining or len(remaining) > 10:
     return {}  # QMC complexity too high; atoms are empty at this range
 ```

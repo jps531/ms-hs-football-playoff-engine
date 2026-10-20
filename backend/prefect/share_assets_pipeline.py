@@ -39,6 +39,7 @@ from pathlib import Path
 import requests
 from prefect import flow, get_run_logger, task
 
+from backend.helpers.api_helpers import DISPLAY_THRESHOLD
 from backend.helpers.share_cards import (
     SITE_DESCRIPTION,
     SITE_NAME,
@@ -281,14 +282,14 @@ def build_share_assets(
             "scenario_payload": fetch(f"/standings/{c}/{r}?season={season}{on}&include_team_scenarios=true"),
         }
     # The "settles a spot" example: a region still too far out for full scenarios. Late in the season
-    # every region has them, so it's a region as it last stood with 7-10 region games left.
+    # every region has them, so it's a region as it last stood with 6-10 region games left.
     insight_regions, earlier = region_payloads, False
     insight_pick = pick_insight_region(region_payloads, prefer)
     if not insight_pick:
         eves = {
             k: eve
             for k, days in region_game_days.items()
-            if len(region_payloads.get(k, {}).get("standings", {}).get("remaining_games") or []) <= 6
+            if len(region_payloads.get(k, {}).get("standings", {}).get("remaining_games") or []) <= DISPLAY_THRESHOLD
             and (eve := insight_week_eve(days, class_dates.get(k[0], []), today))
         }
         insight_regions = _payloads_on(fetch, season, eves, class_dates, today)

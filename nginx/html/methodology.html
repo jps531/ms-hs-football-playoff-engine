@@ -36,7 +36,7 @@
         <span>Mississippi High School Football</span>
       </a>
       <nav class="site-nav" aria-label="Main">
-        <a class="site-nav__item" href="/" data-nav="standings">Standings</a>
+        <a class="site-nav__item" href="/standings/1a" data-nav="standings">Standings</a>
         <a class="site-nav__item" href="/brackets/1a" data-nav="bracket">Bracket</a>
         <a class="site-nav__item" href="/methodology" data-nav="method" aria-current="page">How it works</a>
       </nav>
@@ -148,7 +148,9 @@
         Because steps 3 and 4 depend on the score, not just the winner, some
         races turn on margin of victory. Once five or fewer region games remain,
         we work through every winning margin as well, which is why a scenario
-        can read “Raleigh beats Magee by 8–10.” Each margin counts as often as
+        can read “Raleigh beats Magee by 8–10.” With more games left, the odds
+        work out such a tie as if each remaining game were won by 7 points, so
+        they’re close but not exact. Each margin counts as often as
         it happened in 2025’s region games: across all of them for Toss-up
         odds, and among games where the winner had a similar chance for
         Projected odds. In 2025, a heavy favourite won by 12 or more over nine
@@ -161,14 +163,15 @@
 
       <h2>What the scenarios mean</h2>
       <p>
-        Once six or fewer region games remain, each team’s possible outcomes are
+        Once five or fewer region games remain, each team’s possible outcomes are
         listed with exactly what has to happen. Conditions joined by AND must all
         happen together. When there’s more than one way to get there, the
         alternatives are separated by OR, and any one of them is enough.
       </p>
       <p>
-        With seven to ten games left, we show only results that settle a spot
-        outright, no matter how every other game turns out. The headline at the
+        With six to ten games left, we show only results that settle a spot
+        outright, no matter how every other game turns out, checked against
+        every possible winning margin. The headline at the
         top of each region is drawn from these same proven facts.
       </p>
 
@@ -283,12 +286,14 @@
 
   <footer class="site-footer">
     <p><a href="/feedback">Send feedback or report a problem</a></p>
+    <p>This website is not associated with the MHSAA or any of its member schools.</p>
     <p>© 2025–2026 Paul Sullivan. All rights reserved.</p>
   </footer>
 
-  <!-- Phones: the same three destinations as a tab bar along the bottom. -->
+  <!-- Phones: Home plus the same three destinations, as a tab bar along the bottom. -->
   <nav class="tab-bar" aria-label="Main">
-    <a class="tab-bar__item" href="/" data-nav="standings"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg><span>Standings</span></a>
+    <a class="tab-bar__item" href="/" data-nav="home"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg><span>Home</span></a>
+    <a class="tab-bar__item" href="/standings/1a" data-nav="standings"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg><span>Standings</span></a>
     <a class="tab-bar__item" href="/brackets/1a" data-nav="bracket"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h5v6H3M3 13h5v6H3M8 8h5v8H8M13 12h8"/></svg><span>Bracket</span></a>
     <a class="tab-bar__item" href="/methodology" data-nav="method" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor" stroke="none"/></svg><span>How it works</span></a>
   </nav>

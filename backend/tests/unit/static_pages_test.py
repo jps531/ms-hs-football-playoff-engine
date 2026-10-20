@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
 
+import backend.helpers.static_pages as static_pages_module
 from backend.helpers.static_pages import (
     CARD_H,
     ODDS_COLUMNS,
@@ -390,13 +391,16 @@ class TestLandingBody:
     """The front page: who we are on the left, a tour of the site on the right."""
 
     def test_intro_and_every_tour_section(self):
-        """Welcome, helmet, what we do and how it works; then class, region (with its three scenario kinds) and bracket."""
+        """Welcome, helmet, about, principles and how it works; then the tour: class, region (with its scenario
+        kinds) and bracket."""
         body = landing_body(FEATURED, HELMETS)
         assert '<h1 class="landing-title">Mississippi High School Football</h1>' in body
         assert 'src="/static/helmet.webp"' in body
         for heading in (
-            "What we do",
+            "About the site",
+            "Principles",
             "How it works",
+            "Insights we provide",
             "Class standings",
             "Region breakdown",
             "Standings",
@@ -407,7 +411,38 @@ class TestLandingBody:
         ):
             assert f">{heading}</h" in body, heading
         assert body.index("Class standings") < body.index("Region breakdown") < body.index("Bracket page")
+        assert body.index("About the site") < body.index("Principles") < body.index(">How it works<")
+        assert body.index("Insights we provide") < body.index("Class standings")
         assert 'href="/methodology"' in body
+
+    def test_how_it_works_matches_the_pipeline_thresholds(self):
+        """The steps it lists are the ones the pipeline and API use, so the front page can't drift from the code."""
+        from backend.helpers.api_helpers import DISPLAY_THRESHOLD
+        from backend.helpers.static_pages import HOW_IT_WORKS_HTML
+        from backend.prefect import region_scenarios_pipeline as pipeline
+
+        steps = " ".join(HOW_IT_WORKS_HTML)
+        # Full scenarios only where every margin is worked through, so none rests on the 7-point default.
+        assert DISPLAY_THRESHOLD == pipeline._R_ALWAYS_MARGIN
+        assert f"<strong>{DISPLAY_THRESHOLD} or fewer</strong>" in steps
+        assert f"<strong>{DISPLAY_THRESHOLD + 1} to {pipeline._R_MAX_ATOMS}</strong>" in steps
+        assert "as if each remaining game were won by 7 points" in steps
+        assert f"<strong>{pipeline._R_MAX_ATOMS + 1} to {pipeline._R_MAX_COMPUTE}</strong>" in steps
+        assert f"<strong>more than {pipeline._R_MAX_COMPUTE}</strong>" in steps
+        assert "50,000 times" in steps
+        body = landing_body(None, {})
+        assert "<li>When there are <strong>5 or fewer</strong>" in body
+        words = {5: "five"}[DISPLAY_THRESHOLD]
+        app_js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "app.js").read_text()
+        methodology = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "methodology.html").read_text()
+        for text in (app_js, methodology, Path(static_pages_module.__file__).read_text()):
+            assert (
+                f"Full scenarios appear once {words} or fewer" in text
+                or f"Once {words} or fewer region games remain, each team" in text
+            )
+        assert "<p>This website is not associated with the MHSAA or any of its member schools.</p>" in body
+        assert "<strong><em>No generative AI models are used to produce any metrics" in body
+        assert '<a href="/feedback" data-feedback="other">feedback form</a>' in body
 
     def test_class_preview_is_the_class_page_in_miniature(self):
         """One link to the class page, with the featured region and the next one inside, as the class page draws them."""
@@ -424,11 +459,14 @@ class TestLandingBody:
         assert '<p class="title">Class 3A</p>' in card
 
     def test_each_card_is_introduced(self):
-        """A sentence before each example says what it is; 'most unsettled' only while the race is open."""
+        """A sentence before each example says what it is, naming the regions the preview shows; 'most
+        unsettled' only while the race is open."""
         body = landing_body({**FEATURED, "bracket_html": "<div>tree</div>"}, {})
-        assert "Here’s Class 3A as it stands right now, starting with Region 6:" in body
-        assert "Here’s Region 6-3A, the most unsettled race in the state right now:" in body
-        assert "And here’s the Class 3A bracket, with one game opened up the way it looks after you tap it:" in body
+        assert "Here’s Class 3A Regions 6 and 7 as they stand right now:" in body
+        assert "Here’s Region 6-3A, one of the most unsettled races in the state right now:" in body
+        assert "Here’s the Class 3A bracket, with one game opened up the way it looks after you tap it:" in body
+        alone = landing_body({**FEATURED, "class_standings": None}, {})
+        assert "Here’s Class 3A Region 6 as it stands right now:" in alone
         settled = landing_body({**FEATURED, "card": _card(6, 0)}, {})
         assert "Here’s Region 6-3A:" in settled and "most unsettled" not in settled
         assert "Class 3A bracket, with one game" not in settled  # no bracket preview, so no sentence for it
@@ -653,7 +691,7 @@ def test_front_page_has_every_classs_standings_and_bracket_under_the_helmet():
         in grid
     )
     body = landing_body(None, {})
-    assert body.index("landing-helmet") < body.index("landing-classes") < body.index("What we do")
+    assert body.index("landing-helmet") < body.index("landing-classes") < body.index("About the site")
     js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "landing.js").read_text()
     assert 'class="landing-classes__item" href="${path(c)}">${c}A<span class="visually-hidden">' in js
 
@@ -889,7 +927,7 @@ def test_after_the_season_the_examples_say_how_things_stood_going_into_the_final
         "what had to happen for the two likeliest champions of Region 6-3A going into its final week:" in out["title"]
     )
     assert "what decided the last playoff spots in Region 6-3A going into its final week:" in out["playoffs"]
-    assert "And what would put teams in Region 6-3A at a particular seed:" in out["seeding"]
+    assert "Here’s what would put teams in Region 6-3A at a particular seed:" in out["seeding"]
     assert "Going into its final week, Region 6-3A could finish 3 ways. Here are the first two:" in out["unique"]
 
 
@@ -968,7 +1006,7 @@ def test_settled_spot_example_is_a_region_still_far_out():
     html = insight_preview({**_far_out(), "clazz": 3, "region": 6}, {})
     assert "Region 6-3A still has 8 region games left, too many for full scenarios" in html
     assert 'href="/standings/3a/6#scen-title"' in html and "Taylorsville clinches the region" in html
-    assert "Full scenarios appear once six or fewer region games remain; 8 are left." in html
+    assert "Full scenarios appear once five or fewer region games remain; 8 are left." in html
     earlier = insight_preview({**_far_out(), "clazz": 3, "region": 6, "earlier": True}, {})
     assert "Earlier in the season, with 8 region games left in Region 6-3A, these results would settle" in earlier
     assert insight_preview(None, {}) == ""

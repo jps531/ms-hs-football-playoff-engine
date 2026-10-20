@@ -1169,7 +1169,7 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 
 .tab-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 12;
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--surface-page);
   border-top: 1px solid var(--border);

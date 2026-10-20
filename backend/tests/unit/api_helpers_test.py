@@ -168,8 +168,10 @@ class TestConstants:
     """Sanity-check that plan-specified constant values haven't drifted."""
 
     def test_display_threshold(self):
-        """DISPLAY_THRESHOLD should be 6."""
-        assert DISPLAY_THRESHOLD == 6
+        """Scenarios show only where every winning margin is worked through: 5 or fewer games left."""
+        from backend.prefect.region_scenarios_pipeline import _R_ALWAYS_MARGIN
+
+        assert DISPLAY_THRESHOLD == 5 == _R_ALWAYS_MARGIN
 
     def test_clinched_threshold(self):
         """CLINCHED_THRESHOLD is a certainty, allowing only for the odds' 32-bit storage: 99.9% isn't clinched."""
