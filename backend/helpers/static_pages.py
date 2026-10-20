@@ -1517,8 +1517,8 @@ HOW_IT_WORKS_HTML = (
     "outcome, but do not display any scenarios, as there will be too many to reasonably display.",
     "When there are <strong>more than 15</strong> remaining games in a region, it becomes impractical to build out "
     "each possible outcome. In these cases, we simulate the rest of the schedule 50,000 times, using each team’s "
-    "Elo rating to set its chance of winning each game. These simulated numbers are used to display each team’s "
-    "odds of finishing as each seed.",
+    "Elo rating to set its chance of winning each game. Toss-up odds get their own 50,000 runs with every game a "
+    "coin flip. These simulated numbers are used to display each team’s odds of finishing as each seed.",
     "Scores are sourced from AHSFHS and are updated every morning.",
 )
 NOT_AFFILIATED = "This website is not associated with the MHSAA or any of its member schools."
