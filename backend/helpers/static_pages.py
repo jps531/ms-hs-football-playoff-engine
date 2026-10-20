@@ -471,14 +471,21 @@ def _section(key: str, title: str, body: str, level: str = "h2") -> str:
     )
 
 
-def _class_preview(featured: dict, teams: dict[str, dict]) -> str:
-    """A small picture of the featured class's page (the featured region and the next one), as one link to it."""
-    clazz, region = featured["clazz"], featured["card"]["region"]
+def _class_preview_blocks(featured: dict) -> list[dict]:
+    """The regions the class preview shows: the featured region and the next one (or the one before, for
+    the class's last region), or the featured region alone when that's all there is."""
+    region = featured["card"]["region"]
     blocks = sorted((featured.get("class_standings") or {}).get("regions") or [], key=lambda b: b["region"])
     if not any(b["region"] == region for b in blocks):
         blocks = [{"region": region, "teams": featured["standings"]["teams"]}]
     at = next(i for i, b in enumerate(blocks) if b["region"] == region)
-    shown = blocks[at : at + 2] if at + 1 < len(blocks) else blocks[max(0, at - 1) : at + 1]
+    return blocks[at : at + 2] if at + 1 < len(blocks) else blocks[max(0, at - 1) : at + 1]
+
+
+def _class_preview(featured: dict, teams: dict[str, dict]) -> str:
+    """A small picture of the featured class's page (``_class_preview_blocks``), as one link to it."""
+    clazz = featured["clazz"]
+    shown = _class_preview_blocks(featured)
     tables = "".join(class_region_block(clazz, b, featured["mode"], teams, heading="p", link=False) for b in shown)
     return (
         f'<a class="landing-preview landing-preview--class" href="{class_path(clazz)}" '
@@ -946,7 +953,7 @@ def scenario_previews(example: dict | None, teams: dict) -> dict[str, str]:
     leads = {
         "title": f"Here’s what {'had' if final else 'has'} to happen for the two likeliest champions of {name}{then}:",
         "playoffs": f"Here’s what {'decided' if final else 'decides'} the last playoff spots in {name}{then}:",
-        "seeding": f"And what {'would put' if final else 'puts'} teams in {name} at a particular seed:",
+        "seeding": f"Here’s what {'would put' if final else 'puts'} teams in {name} at a particular seed:",
     }
     groups = outcome_cards(payload.get("teams") or [], example["mode"])
     out = dict(empty)
@@ -1473,17 +1480,47 @@ def _bracket_preview(featured: dict) -> str:
     )
 
 
-WHAT_WE_DO = (
-    "We work out every way each Mississippi high school football region race can still finish, then rank "
-    "each finish with the MHSAA’s own tiebreaker rules. That gives every team’s odds of making the playoffs "
-    "and of landing each seed, and the exact results it needs to get there. Every region, every class, "
-    "updated every morning."
+ABOUT_THE_SITE = (
+    "This website was developed to answer the question that comes up every October in Mississippi High School "
+    "Football: “What does our playoff picture look like?”",
+    "This website sets out to answer that question by providing scenarios for every way each region race can "
+    "finish based on the MHSAA’s tiebreaker rules. This allows us to determine each team’s odds of finishing in "
+    "each place and therefore in each playoff slot. From there, we look at the playoff bracket and give an outlook "
+    "for each playoff game, including which teams are likely to play in which slot and which teams are most likely "
+    "to play at home.",
 )
-HOW_IT_WORKS = (
-    "With a handful of region games left, we play out every possible combination of results; earlier in the "
-    "season we simulate the rest of the schedule 50,000 times. Projected odds weigh each game by the two "
-    "teams’ Elo ratings and home field; Toss-up odds treat every game as a coin flip. Scores come from AHSFHS."
+# Paragraphs of trusted markup (emphasis and a link), unlike the plain-text constants around them.
+PRINCIPLES_HTML = (
+    "The two core principles we kept in mind when building this website were <em>accuracy</em> and "
+    "<em>ease of use</em>. We never want to provide inaccurate information, and we never want any information to "
+    "be confusing. Please use our "
+    '<a href="/feedback" data-feedback="other">feedback form</a> if you see anything that violates either of '
+    "those principles.",
+    "To reinforce the “accuracy” principle, we want to make clear that the scenarios, headlines, and numbers on "
+    "this website all come from rules-based logic and math applied to completed games, the MHSAA’s tiebreaker "
+    "and playoff rules, and each team’s Elo rating. "
+    "<strong><em>No generative AI models are used to produce any metrics you see on this website</em></strong>.",
 )
+# Each step matches the pipeline's thresholds (region_scenarios_pipeline.py: _R_ALWAYS_MARGIN,
+# _R_MAX_ATOMS, _R_MAX_COMPUTE; api_helpers.DISPLAY_THRESHOLD); docs/SCENARIO_COMPUTATION.md has the detail.
+HOW_IT_WORKS_HTML = (
+    "When there are <strong>6 or fewer</strong> games remaining in a given region, our logic builds the final "
+    "standings for each possible combination of outcomes, breaks any ties, and counts how often each team lands "
+    "in each seed. From there, it produces odds for each team and easy-to-read scenarios for every possible "
+    "outcome. With 5 or fewer left, this includes every possible winning margin; with more than 5 left, any tie "
+    "that comes down to point differential is broken as if each remaining game were won by 7 points.",
+    "When there are <strong>7 to 10</strong> remaining games in a given region, we still build out each possible "
+    "outcome, but only display scenario insights for key games, since the full scenario list is generally very "
+    "long at this stage.",
+    "When there are <strong>11 to 15</strong> remaining games in a region, we still build out each possible "
+    "outcome, but do not display any scenarios, as there will be too many to reasonably display.",
+    "When there are <strong>more than 15</strong> remaining games in a region, it becomes impractical to build out "
+    "each possible outcome. In these cases, we simulate the rest of the schedule 50,000 times, using each team’s "
+    "Elo rating to set its chance of winning each game. These simulated numbers are used to display each team’s "
+    "odds of finishing as each seed.",
+    "Scores are sourced from AHSFHS and are updated every morning.",
+)
+NOT_AFFILIATED = "This website is not associated with the MHSAA or any of its member schools."
 
 
 CLASSES = range(1, 8)
@@ -1528,23 +1565,32 @@ def landing_body(
         '<h1 class="landing-title">Mississippi High School Football</h1>'
         '<img class="landing-helmet" src="/static/helmet.webp" width="1000" height="851" alt="">'
         f"{class_grid()}"
-        f"{_section('what', 'What we do', f'<p>{_e(WHAT_WE_DO)}</p>')}"
+        + _section("about", "About the site", "".join(f"<p>{_e(p)}</p>" for p in ABOUT_THE_SITE))
+        + _section("principles", "Principles", "".join(f"<p>{p}</p>" for p in PRINCIPLES_HTML))
         + _section(
             "how",
             "How it works",
-            f'<p>{_e(HOW_IT_WORKS)}</p><p><a href="/methodology">More on how the odds work</a></p>',
+            f'<ul class="landing-list">{"".join(f"<li>{i}</li>" for i in HOW_IT_WORKS_HTML)}</ul>'
+            f"<p>{_e(NOT_AFFILIATED)}</p>"
+            '<p><a href="/methodology">More on how the odds work</a></p>',
         )
         + "</div>"
     )
     class_extra = region_extra = bracket_extra = ""
     if featured:
         c, r = featured["clazz"], featured["card"]["region"]
-        unsettled = ", the most unsettled race in the state right now" if featured["card"]["teams_alive"] > 0 else ""
-        class_extra = _lead(f"Here’s Class {c}A as it stands right now, starting with Region {r}:") + _class_preview(
-            featured, teams
+        unsettled = (
+            ", one of the most unsettled races in the state right now" if featured["card"]["teams_alive"] > 0 else ""
         )
+        shown = [b["region"] for b in _class_preview_blocks(featured)]
+        class_lead = (
+            f"Here’s Class {c}A Regions {shown[0]} and {shown[1]} as they stand right now:"
+            if len(shown) == 2
+            else f"Here’s Class {c}A Region {shown[0]} as it stands right now:"
+        )
+        class_extra = _lead(class_lead) + _class_preview(featured, teams)
         region_extra = _lead(f"Here’s Region {r}-{c}A{unsettled}:") + _region_preview(featured, teams)
-        lead = f"And here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"
+        lead = f"Here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"
         bracket_extra = (_lead(lead) if featured.get("bracket_html") else "") + _bracket_preview(featured)
     examples = {**scenario_previews(scenario_example, teams), "settled": insight_preview(insight_example, teams)}
     region_scenarios = "".join(
@@ -1553,32 +1599,32 @@ def landing_body(
             (
                 "settling-results",
                 "Results that settle a spot",
-                "Before full scenarios are ready, the results that clinch a seed or a playoff spot, or knock a "
-                "team out, no matter what else happens.",
+                "Before full scenarios are ready, view the results that clinch a seed, clinch a playoff spot, or "
+                "knock a team out, no matter what else happens.",
                 "settled",
             ),
             (
                 "title-scenarios",
                 "Region title scenarios",
-                "Scenarios for how each eligible team can still win the region.",
+                "View scenarios for how each eligible team can still win the region.",
                 "title",
             ),
             (
                 "playoff-scenarios",
                 "Playoff spot scenarios",
-                "Scenarios for how each team on the bubble can still make or miss the playoffs.",
+                "View scenarios for how each team on the bubble can still make or miss the playoffs.",
                 "playoffs",
             ),
             (
                 "seeding-scenarios",
                 "Team seeding scenarios",
-                "Scenarios for how each eligible team can finish as a given seed.",
+                "View scenarios for how each eligible team can finish as a given seed.",
                 "seeding",
             ),
             (
                 "unique-scenarios",
                 "Unique region scenarios",
-                "Each unique seeding finish possible in a given region.",
+                "View each unique seeding finish possible in a given region.",
                 "unique",
             ),
         )
@@ -1586,9 +1632,14 @@ def landing_body(
     tour = (
         '<div class="landing-tour">'
         + _section(
+            "insights",
+            "Insights we provide",
+            "<p>Below are some explanations and examples of each insight that this website provides.</p>",
+        )
+        + _section(
             "class",
             "Class standings",
-            "<p>Standings for each region in each class.</p>"
+            "<p>View the standings for each region in each class, including:</p>"
             + _bullets(
                 (
                     "Each team’s region record",
@@ -1605,7 +1656,7 @@ def landing_body(
             _section(
                 "region-standings",
                 "Standings",
-                "<p>Detailed standings for a given region.</p>"
+                "<p>View detailed standings for a given region, including:</p>"
                 + _bullets(
                     (
                         "A headline summing up the race",
@@ -1624,7 +1675,7 @@ def landing_body(
         + _section(
             "bracket",
             "Bracket page",
-            "<p>Each class’s playoff bracket, filled in with who is likely to land in each spot. Pick a game to "
+            "<p>View each class’s playoff bracket, filled in with who is likely to land in each spot. Pick a game to "
             "see every team that could play there, how likely each matchup is, and who would host.</p>" + bracket_extra,
         )
         + "</div>"
