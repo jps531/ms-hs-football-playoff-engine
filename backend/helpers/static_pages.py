@@ -1585,12 +1585,10 @@ def landing_body(
         unsettled = (
             ", one of the most unsettled races in the state right now" if featured["card"]["teams_alive"] > 0 else ""
         )
-        shown = [b["region"] for b in _class_preview_blocks(featured)]
-        class_lead = (
-            f"Here’s Class {c}A Regions {shown[0]} and {shown[1]} as they stand right now:"
-            if len(shown) == 2
-            else f"Here’s Class {c}A Region {shown[0]} as it stands right now:"
-        )
+        # The preview's first region is always the one shown; whether the next fits beside it depends on
+        # the preview's width, so the sentence names only the first.
+        first = _class_preview_blocks(featured)[0]["region"]
+        class_lead = f"Here’s Class {c}A as it stands right now, starting with Region {first}:"
         class_extra = _lead(class_lead) + _class_preview(featured, teams)
         region_extra = _lead(f"Here’s Region {r}-{c}A{unsettled}:") + _region_preview(featured, teams)
         lead = f"Here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"

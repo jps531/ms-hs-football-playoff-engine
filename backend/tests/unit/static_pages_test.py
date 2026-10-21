@@ -464,14 +464,16 @@ class TestLandingBody:
         assert '<p class="title">Class 3A</p>' in card
 
     def test_each_card_is_introduced(self):
-        """A sentence before each example says what it is, naming the regions the preview shows; 'most
+        """A sentence before each example says what it is, naming the region the preview starts with; 'most
         unsettled' only while the race is open."""
         body = landing_body({**FEATURED, "bracket_html": "<div>tree</div>"}, {})
-        assert "Here’s Class 3A Regions 6 and 7 as they stand right now:" in body
+        assert "Here’s Class 3A as it stands right now, starting with Region 6:" in body
         assert "Here’s Region 6-3A, one of the most unsettled races in the state right now:" in body
         assert "Here’s the Class 3A bracket, with one game opened up the way it looks after you tap it:" in body
         alone = landing_body({**FEATURED, "class_standings": None}, {})
-        assert "Here’s Class 3A Region 6 as it stands right now:" in alone
+        assert "Here’s Class 3A as it stands right now, starting with Region 6:" in alone
+        last = landing_body({**FEATURED, "card": {**FEATURED["card"], "region": 7}}, {})
+        assert "starting with Region 6:" in last  # the class's last region: the preview starts one earlier
         settled = landing_body({**FEATURED, "card": _card(6, 0)}, {})
         assert "Here’s Region 6-3A:" in settled and "most unsettled" not in settled
         assert "Class 3A bracket, with one game" not in settled  # no bracket preview, so no sentence for it
