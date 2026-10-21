@@ -441,7 +441,11 @@ class TestLandingBody:
                 f"Full scenarios appear once {words} or fewer" in text
                 or f"Once {words} or fewer region games remain, each team" in text
             )
-        assert "<p>This website is not associated with the MHSAA or any of its member schools.</p>" in body
+        assert (
+            "</ul><p>Scores are sourced from AHSFHS and are updated every morning.</p>"
+            "<p><strong>This website is not associated with the MHSAA or any of its member schools.</strong></p>"
+        ) in body
+        assert "Football: <strong><em>“What does our playoff picture look like?”</em></strong>" in body
         assert "<strong><em>No generative AI models are used to produce any metrics" in body
         assert '<a href="/feedback" data-feedback="other">feedback form</a>' in body
 
