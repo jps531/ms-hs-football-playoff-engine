@@ -1480,9 +1480,10 @@ def _bracket_preview(featured: dict) -> str:
     )
 
 
-ABOUT_THE_SITE = (
+# Paragraphs of trusted markup (emphasis), like PRINCIPLES_HTML below.
+ABOUT_THE_SITE_HTML = (
     "This website was developed to answer the question that comes up every October in Mississippi High School "
-    "Football: “What does our playoff picture look like?”",
+    "Football: <strong><em>“What does our playoff picture look like?”</em></strong>",
     "This website sets out to answer that question by providing scenarios for every way each region race can "
     "finish based on the MHSAA’s tiebreaker rules. This allows us to determine each team’s odds of finishing in "
     "each place and therefore in each playoff slot. From there, we look at the playoff bracket and give an outlook "
@@ -1519,8 +1520,8 @@ HOW_IT_WORKS_HTML = (
     "each possible outcome. In these cases, we simulate the rest of the schedule 50,000 times, using each team’s "
     "Elo rating to set its chance of winning each game. Toss-up odds get their own 50,000 runs with every game a "
     "coin flip. These simulated numbers are used to display each team’s odds of finishing as each seed.",
-    "Scores are sourced from AHSFHS and are updated every morning.",
 )
+SCORES_SOURCE = "Scores are sourced from AHSFHS and are updated every morning."
 NOT_AFFILIATED = "This website is not associated with the MHSAA or any of its member schools."
 
 
@@ -1566,13 +1567,14 @@ def landing_body(
         '<h1 class="landing-title">Mississippi High School Football</h1>'
         '<img class="landing-helmet" src="/static/helmet.webp" width="1000" height="851" alt="">'
         f"{class_grid()}"
-        + _section("about", "About the site", "".join(f"<p>{_e(p)}</p>" for p in ABOUT_THE_SITE))
+        + _section("about", "About the site", "".join(f"<p>{p}</p>" for p in ABOUT_THE_SITE_HTML))
         + _section("principles", "Principles", "".join(f"<p>{p}</p>" for p in PRINCIPLES_HTML))
         + _section(
             "how",
             "How it works",
             f'<ul class="landing-list">{"".join(f"<li>{i}</li>" for i in HOW_IT_WORKS_HTML)}</ul>'
-            f"<p>{_e(NOT_AFFILIATED)}</p>"
+            f"<p>{_e(SCORES_SOURCE)}</p>"
+            f"<p><strong>{_e(NOT_AFFILIATED)}</strong></p>"
             '<p><a href="/methodology">More on how the odds work</a></p>',
         )
         + "</div>"
@@ -1583,12 +1585,10 @@ def landing_body(
         unsettled = (
             ", one of the most unsettled races in the state right now" if featured["card"]["teams_alive"] > 0 else ""
         )
-        shown = [b["region"] for b in _class_preview_blocks(featured)]
-        class_lead = (
-            f"Here’s Class {c}A Regions {shown[0]} and {shown[1]} as they stand right now:"
-            if len(shown) == 2
-            else f"Here’s Class {c}A Region {shown[0]} as it stands right now:"
-        )
+        # The preview's first region is always the one shown; whether the next fits beside it depends on
+        # the preview's width, so the sentence names only the first.
+        first = _class_preview_blocks(featured)[0]["region"]
+        class_lead = f"Here’s Class {c}A as it stands right now, starting with Region {first}:"
         class_extra = _lead(class_lead) + _class_preview(featured, teams)
         region_extra = _lead(f"Here’s Region {r}-{c}A{unsettled}:") + _region_preview(featured, teams)
         lead = f"Here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"
