@@ -1,10 +1,10 @@
-"""How soon a night's final scores reach AHSFHS: a Friday-night probe.
+"""How soon a night's final scores reach AHSFHS: a morning-after probe.
 
 The daily update pulls scores at 9:00 AM Central. To learn whether an earlier
 pull would find them, this flow checks a small sample of AHSFHS team pages
-(one team per region that plays on the night) every 15 minutes from Friday
-evening to Saturday noon, and records how many of the night's games already
-show a final score. It reads AHSFHS only; nothing is written to the database.
+(one team per region that played the night before) every 15 minutes from 6 to
+10 AM on Friday and Saturday (for Thursday's and Friday's games), and records
+how many of the night's games already show a final score. It reads AHSFHS only; nothing is written to the database.
 Each run's counts are logged and saved as a table artifact under the key
 ``ahsfhs-score-probe``, so the Prefect UI shows them run by run.
 """

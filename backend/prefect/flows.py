@@ -33,14 +33,14 @@ async def main():
         # Each half of the daily update on its own, for a manual run.
         await ahsfhs_schedule_data_flow.to_deployment("ahsfhs-schedule-data-pipeline"),
         await region_scenarios_data_flow.to_deployment("region-scenarios-data-pipeline"),
-        # Every 15 minutes from Friday 9 PM to Saturday noon: how many of the night's
-        # final scores AHSFHS shows yet, to learn whether an earlier pull would find them.
+        # Every 15 minutes from 6 to 10 AM on Friday and Saturday: how many of the previous
+        # night's final scores (Thursday's, then Friday's) AHSFHS shows yet, to learn whether
+        # an earlier pull would find them. AHSFHS posted Oct 23's scores in one batch, 7:30-8:15 AM.
         await ahsfhs_score_probe_flow.to_deployment(
             "ahsfhs-score-probe",
             schedules=[
-                CronSchedule(cron="*/15 21-23 * * 5", timezone=_SCHEDULE_TIMEZONE),
-                CronSchedule(cron="*/15 0-11 * * 6", timezone=_SCHEDULE_TIMEZONE),
-                CronSchedule(cron="0 12 * * 6", timezone=_SCHEDULE_TIMEZONE),
+                CronSchedule(cron="*/15 6-9 * * 5,6", timezone=_SCHEDULE_TIMEZONE),
+                CronSchedule(cron="0 10 * * 5,6", timezone=_SCHEDULE_TIMEZONE),
             ],
         ),
         await backfill_historical_snapshots.to_deployment("backfill-historical-snapshots"),
