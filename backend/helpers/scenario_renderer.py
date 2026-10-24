@@ -55,13 +55,13 @@ def _render_margin_condition(cond: MarginCondition, atom: list) -> str:
         l1 = _winner_label(cond.add[0], atom)
         l2 = _winner_label(cond.add[1], atom)
         if cond.op == "==":
-            return f"{l1}'s margin and {l2}'s margin combined total exactly {cond.threshold}"
+            return f"{l1}'s points margin and {l2}'s points margin combined total exactly {cond.threshold}"
         if cond.op in (">=", ">"):
             t = cond.threshold + (1 if cond.op == ">" else 0)
-            return f"{l1}'s margin and {l2}'s margin combined total {t} or more"
+            return f"{l1}'s points margin and {l2}'s points margin combined total {t} or more"
         else:
             t = cond.threshold - (1 if cond.op == "<" else 0)
-            return f"{l1}'s margin and {l2}'s margin combined total {t} or less"
+            return f"{l1}'s points margin and {l2}'s points margin combined total {t} or less"
 
     if len(cond.add) == 1 and len(cond.sub) == 1:
         add_label = _winner_label(cond.add[0], atom)
@@ -69,28 +69,28 @@ def _render_margin_condition(cond: MarginCondition, atom: list) -> str:
         if cond.op == "==":
             t = cond.threshold
             if t < 0:
-                return f"{sub_label}'s margin exceeds {add_label}'s by exactly {-t}"
+                return f"{sub_label}'s points margin exceeds {add_label}'s by exactly {-t}"
             if t == 0:
-                return f"{add_label}'s margin equals {sub_label}'s"
-            return f"{add_label}'s margin exceeds {sub_label}'s by exactly {t}"
+                return f"{add_label}'s points margin equals {sub_label}'s"
+            return f"{add_label}'s points margin exceeds {sub_label}'s by exactly {t}"
         if cond.op in (">=", ">"):
             t = cond.threshold + (1 if cond.op == ">" else 0)
             if t < 0:
-                return f"{sub_label}'s margin doesn't exceed {add_label}'s by more than {-t}"
+                return f"{sub_label}'s points margin doesn't exceed {add_label}'s by more than {-t}"
             if t == 0:
-                return f"{add_label}'s margin is at least as large as {sub_label}'s"
-            return f"{add_label}'s margin exceeds {sub_label}'s by {t} or more"
+                return f"{add_label}'s points margin is at least as large as {sub_label}'s"
+            return f"{add_label}'s points margin exceeds {sub_label}'s by {t} or more"
         else:
             t = cond.threshold - (1 if cond.op == "<" else 0)
             if t > 0:
-                return f"{add_label}'s margin doesn't exceed {sub_label}'s by more than {t}"
+                return f"{add_label}'s points margin doesn't exceed {sub_label}'s by more than {t}"
             if t == 0:
-                return f"{sub_label}'s margin is at least as large as {add_label}'s"
-            return f"{sub_label}'s margin exceeds {add_label}'s by {-t} or more"
+                return f"{sub_label}'s points margin is at least as large as {add_label}'s"
+            return f"{sub_label}'s points margin exceeds {add_label}'s by {-t} or more"
 
     # Fallback for other patterns
-    parts = [f"{_winner_label(p, atom)}'s margin" for p in cond.add]
-    parts += [f"\u2212{_winner_label(p, atom)}'s margin" for p in cond.sub]
+    parts = [f"{_winner_label(p, atom)}'s points margin" for p in cond.add]
+    parts += [f"\u2212{_winner_label(p, atom)}'s points margin" for p in cond.sub]
     return " + ".join(parts) + f" {cond.op} {cond.threshold}"
 
 
@@ -165,7 +165,7 @@ def _render_condition(cond, atom: list) -> str:
     if isinstance(cond, MarginCondition):
         return _render_margin_condition(cond, atom)
     if isinstance(cond, CoinFlipResult):
-        return f"{cond.winner} wins coin flip vs {cond.loser}"
+        return f"{cond.winner} wins the coin flip against {cond.loser}"
     if isinstance(cond, TiebreakDecision):
         return render_tiebreak_decision(cond)
     if isinstance(cond, TiebreakPlace):

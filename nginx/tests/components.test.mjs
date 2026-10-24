@@ -79,7 +79,7 @@ test("chip: subject team named, margin range shown", () => {
   const chip = conditionChip({ type: "game_result", school: "Raleigh", opponent: "Magee", required_result: "win", min_margin: 8, max_margin: 11 }, {});
   assert.equal(text(chip), "R Raleigh beats Magee by 8–10");
   assert.match(chip, /chip__subject">Raleigh</);
-  const flip = conditionChip({ type: "coin_flip", description: "Petal wins coin flip vs Stringer" }, {});
+  const flip = conditionChip({ type: "coin_flip", description: "Petal wins the coin flip against Stringer" }, {});
   assert.match(flip, /<svg/);
 });
 

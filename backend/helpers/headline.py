@@ -73,6 +73,24 @@ def _record(entry: TeamStandingsEntry) -> str:
     return f"{base}–{r.region_ties}" if r.region_ties else base
 
 
+def _lead_phrase(teams: list[TeamStandingsEntry], where: str = "") -> str:
+    """Who leads, by region record: "Magee leads at 3–0", "Magee and Seminary share the lead at 3–0",
+    or, with more than three level, "four teams share the lead at 3–1". Never one team picked out of
+    several that are level. *where* ("the region ") goes before "lead": "share the region lead"."""
+    first = teams[0].record
+    level = [
+        t
+        for t in teams
+        if (t.record.region_wins, t.record.region_losses, t.record.region_ties)
+        == (first.region_wins, first.region_losses, first.region_ties)
+    ]
+    record = _record(teams[0])
+    if len(level) == 1:
+        return f"{teams[0].school} leads {where}at {record}"
+    who = _join_names([t.school for t in level]) if len(level) <= 3 else f"{_count(len(level))} teams"
+    return f"{who} share the {where.replace('the ', '')}lead at {record}"
+
+
 class _Result(NamedTuple):
     """One required game result: *winner* beats *loser* by a margin in [lo, hi)."""
 
@@ -233,13 +251,10 @@ def build_region_headline(
         if clinch is not None:
             return _phrase_with_help(clinch, "clinches the region") + "."
         contenders = [t for t in teams if t.odds.p1 > 0]
-        leader = teams[0]
         if len(contenders) <= 1:
-            return f"{leader.school} leads the region at {_record(leader)}."
-        return (
-            f"{_count(len(contenders)).capitalize()} teams can still win the region, "
-            f"and {leader.school} leads at {_record(leader)}."
-        )
+            lead = _lead_phrase(teams, "the region ")
+            return f"{lead[0].upper()}{lead[1:]}."
+        return f"{_count(len(contenders)).capitalize()} teams can still win the region, and {_lead_phrase(teams)}."
 
     # 3. Title decided; the rest of the field (or just its seeding) isn't.
     champion = holders[1]

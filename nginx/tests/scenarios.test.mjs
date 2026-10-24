@@ -101,7 +101,7 @@ test("insights proving the same outcome merge into one card, joined by OR", () =
 test("complete scenarios become labeled boxes: seeds, who's out, and the results behind them", () => {
   const [card] = completeScenarioCards([{
     scenario_num: 2, sub_label: "a",
-    title: "Stringer beats Richton by 8 or more AND Stringer's margin and Lumberton's margin combined total 10 or more AND Lumberton beats Magee",
+    title: "Stringer beats Richton by 8 or more AND Stringer's points margin and Lumberton's points margin combined total 10 or more AND Lumberton beats Magee",
     game_winners: [{ winner: "Stringer", loser: "Richton" }, { winner: "Lumberton", loser: "Magee" }],
     conditions: [
       { type: "game_result", winner: "Stringer", loser: "Richton", min_margin: 8, max_margin: null },
@@ -117,7 +117,7 @@ test("complete scenarios become labeled boxes: seeds, who's out, and the results
   const [group] = card.groups;
   assert.deepEqual(group.map((c) => c.type), ["game_result", "text", "game_result", "coin_flip"]);
   assert.equal(group[0].min_margin, 8);
-  assert.equal(group[1].description, "Stringer's margin and Lumberton's margin combined total 10 or more");
+  assert.equal(group[1].description, "Stringer's points margin and Lumberton's points margin combined total 10 or more");
   assert.equal(group[3].description, "A coin flip settles the tie between Magee and Richton");
 });
 

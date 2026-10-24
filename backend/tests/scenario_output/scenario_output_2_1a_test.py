@@ -465,7 +465,7 @@ def test_div_dict_scenario1_sub_labels_distinct_titles():
 
 
 def test_div_dict_scenario4_sub_labels_distinct_titles():
-    """Scenarios 4a-4c: Ashland's margin, and when it's 12+ Falkner's too, decide the order."""
+    """Scenarios 4a-4c: Ashland's points margin, and when it's 12+ Falkner's too, decide the order."""
     assert _DIV_DICT["4a"]["title"] == "Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311"
     assert (
         _DIV_DICT["4b"]["title"] == "Falkner beats Potts Camp by 1\u201311 AND Ashland beats H. W. Byers by 12 or more"

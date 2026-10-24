@@ -792,7 +792,7 @@ def test_outcome_cards_title_elimination_and_order_match_scenarios_js():
 STRINGER = {
     "scenario_num": 2,
     "sub_label": "a",
-    "title": "Stringer beats Richton by 8 or more AND Stringer's margin and Lumberton's margin combined total 10 or more"
+    "title": "Stringer beats Richton by 8 or more AND Stringer's points margin and Lumberton's points margin combined total 10 or more"
     " AND Lumberton beats Magee",
     "game_winners": [{"winner": "Stringer", "loser": "Richton"}, {"winner": "Lumberton", "loser": "Magee"}],
     "conditions": [
@@ -820,7 +820,7 @@ def test_complete_scenario_cards_match_scenarios_js():
     [group] = card["groups"]
     assert [c["type"] for c in group] == ["game_result", "text", "game_result", "coin_flip"]
     assert group[0]["min_margin"] == 8
-    assert group[1]["description"] == "Stringer's margin and Lumberton's margin combined total 10 or more"
+    assert group[1]["description"] == "Stringer's points margin and Lumberton's points margin combined total 10 or more"
     assert group[3]["description"] == "A coin flip settles the tie between Magee and Richton"
 
     [fallback] = complete_scenario_cards([{

@@ -731,8 +731,8 @@ async function regionView(ctx) {
     </header>
     ${standingsTable(data, teams, mode, focus, clazz, schedule)}
     ${remaining.length ? gamesSection("remaining", "Remaining games", remaining, teams, focus) : ""}
-    ${remaining.length ? scenariosSection(data, teams, cardProv, mode, focus) : ""}
-    ${data.scenarios?.length ? allScenariosSection(data.scenarios, teams, focus) : ""}
+    ${remaining.length ? scenariosSection(data, teams, cardProv, mode, focus, !data.scenarios?.length) : ""}
+    ${data.scenarios?.length ? allScenariosSection(data.scenarios, teams, focus) + scenarioReport(focus) : ""}
     ${results.length ? gamesSection("results", "Completed games", results, teams, focus) : ""}
   </div>`;
 }
@@ -807,8 +807,7 @@ function standingsTable(data, teams, mode, focus, clazz, games) {
 function eloLine(elo) {
   if (elo == null) return "";
   return `<p class="detail__elo"><span class="detail__elo-label">Elo rating</span> <strong>${Math.round(elo)}</strong></p>
-    <p class="detail__note muted">The rating behind Projected odds, built from game results. Classes start from a baseline
-      of 1000 in 1A up to 1300 in 7A, and a 100-point edge is about a 64% chance to win on a neutral field.
+    <p class="detail__note muted">The rating behind Projected odds, built from game results.
       <a href="/methodology#elo">How the ratings work</a></p>`;
 }
 
@@ -859,9 +858,9 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
             <td>${p.hostOverall == null ? "" : esc(formatPct(p.hostOverall))}</td>
           </tr>`).join("")}</tbody>
         </table>
-        <p class="detail__note muted">Reaches round is the chance of playing in that round at all, so it includes
-          going further. Hosts, if it gets there assumes the team reaches that round; Hosts, overall is the chance
-          of reaching it and hosting.</p>
+        <p class="detail__note muted"><strong>Reaches round</strong> is the chance of playing in that round at all.
+          <strong>Hosts, if it gets there</strong> is the chance of the team hosting IF they reach that round;
+          <strong>Hosts, overall</strong> is the chance of the team both reaching that round AND hosting it.</p>
         <p class="detail__link"><a href="${esc(hrefWith({ page: "bracket", region: null, team: t.school }))}">See ${esc(t.school)}’s path in the bracket</a></p>
       </section>`
     : "";
@@ -916,7 +915,12 @@ function gamesSection(id, title, games, teams, focus) {
 
 // ------------------------------------------------------------ scenarios
 
-function scenariosSection(data, teams, prov, mode, focus) {
+/** The "report a scenario" link: under the Scenarios section when there is one, else under What has to happen. */
+function scenarioReport(focus) {
+  return `<p class="report-line"><button type="button" class="link-button" data-feedback="odds"${focus ? ` data-team="${esc(focus)}"` : ""}>See a scenario that can’t be right? Let us know.</button></p>`;
+}
+
+function scenariosSection(data, teams, prov, mode, focus, report = true) {
   const cardHtml = (c) => scenarioCard({
     ...c, team: teams[c.team], teams, provenanceHtml: c.p == null ? prov.plain : prov.odds,
   });
@@ -957,7 +961,7 @@ function scenariosSection(data, teams, prov, mode, focus) {
     <h2 class="section-title" id="scen-title">What has to happen</h2>
     ${focusNote}
     ${body}
-    <p class="report-line"><button type="button" class="link-button" data-feedback="odds"${focus ? ` data-team="${esc(focus)}"` : ""}>See a scenario that can’t be right? Let us know.</button></p>
+    ${report ? scenarioReport(focus) : ""}
   </section>`;
 }
 

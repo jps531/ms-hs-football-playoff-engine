@@ -669,7 +669,7 @@ def test_coin_flip_result_str() -> None:
     from backend.helpers.data_classes import CoinFlipResult
 
     cfr = CoinFlipResult(winner="Alpha", loser="Beta")
-    assert str(cfr) == "Alpha wins coin flip vs Beta"
+    assert str(cfr) == "Alpha wins the coin flip against Beta"
 
 
 # ---------------------------------------------------------------------------
