@@ -1,6 +1,7 @@
 """The morning update's order, and the Friday-night AHSFHS score probe's sampling and counts."""
 
 import logging
+import re
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -42,13 +43,24 @@ def test_only_the_daily_update_is_scheduled_each_morning():
     assert 'await region_scenarios_data_flow.to_deployment("region-scenarios-data-pipeline")' in flows
 
 
+def test_the_probe_runs_6_to_10_on_friday_and_saturday_mornings():
+    """Every 15 minutes from 6:00 to 10:00 AM Central on Fridays and Saturdays, and no other time."""
+    flows = (Path(__file__).resolve().parents[2] / "prefect" / "flows.py").read_text()
+    probe_block = flows[flows.index('"ahsfhs-score-probe"') : flows.index("await backfill_historical_snapshots")]
+    crons = re.findall(r'CronSchedule\(cron="([^"]+)"', probe_block)
+    assert crons == ["*/15 6-9 * * 5,6", "0 10 * * 5,6"]
+
+
 @pytest.mark.parametrize(
     ("local", "night"),
     [
         (datetime(2026, 10, 23, 21, 0), FRIDAY),  # Friday 9 PM: tonight
         (datetime(2026, 10, 23, 23, 45), FRIDAY),
         (datetime(2026, 10, 24, 0, 15), FRIDAY),  # after midnight: still Friday's games
-        (datetime(2026, 10, 24, 12, 0), FRIDAY),  # Saturday noon, the last probe
+        (datetime(2026, 10, 24, 12, 0), FRIDAY),  # Saturday noon
+        (datetime(2026, 10, 24, 6, 0), FRIDAY),  # Saturday 6 AM, the first morning probe
+        (datetime(2026, 10, 24, 10, 0), FRIDAY),  # Saturday 10 AM, the last
+        (datetime(2026, 10, 30, 6, 0), date(2026, 10, 29)),  # Friday morning: Thursday's games
     ],
 )
 def test_probe_looks_for_the_night_just_played(local, night):
