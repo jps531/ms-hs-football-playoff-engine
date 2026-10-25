@@ -8,7 +8,7 @@
 // Moving between pages pushes history; changing the season, week, odds
 // mode, or picked team replaces it, so Back goes to the previous page.
 
-import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate, calculatedAt } from "./format.js";
+import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate, calculatedSpan } from "./format.js";
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard, breadcrumbs,
@@ -283,6 +283,11 @@ async function render() {
       sheet?.close();
     }
     showContext(nextContext);
+    // The front page carries its own calculation times, whether just fetched or already on screen.
+    if (route.page === "landing") {
+      const d = app.querySelector(":scope > .landing")?.dataset ?? {};
+      nextComputedAt = d.computedFrom ? { from: d.computedFrom, to: d.computedTo } : null;
+    }
     showComputedAt(nextComputedAt);
     canonicalize(route.season);
     if (scrollToFocus && route.teamName && route.region) focusTeamRow();
@@ -309,7 +314,7 @@ async function render() {
 // visible title and controls, so it's hidden from screen readers.
 
 let nextContext = null; // set by the view being rendered
-let nextComputedAt = null; // when the shown numbers were calculated; region pages set it
+let nextComputedAt = null; // when the shown numbers were calculated: { from, to }, set by the view
 let headObserver = null;
 
 function contextHtml(title, summary, mode) {
@@ -322,11 +327,12 @@ function contextHtml(title, summary, mode) {
 }
 
 // The footer says when the numbers on screen were calculated: the real time
-// the pipeline wrote them, not the time it's scheduled to start.
-function showComputedAt(iso) {
+// the pipeline wrote them, not the time it's scheduled to start. A class's
+// regions are written minutes apart, so pages showing several give a span.
+function showComputedAt(span) {
   const slot = document.querySelector("[data-computed-at]");
   if (!slot) return;
-  const when = calculatedAt(iso);
+  const when = calculatedSpan(span?.from, span?.to);
   slot.textContent = when ? ` These numbers were calculated ${when}.` : "";
 }
 
@@ -647,6 +653,7 @@ async function classView(ctx) {
     ${controlsLine(ctx, shownWeeks, { asOf: data.as_of_date, mode, projectedAvailable })}
   </div>`;
   nextContext = contextHtml(`Class ${clazz}A`, controlsSummary, mode);
+  nextComputedAt = data.computed_from ? { from: data.computed_from, to: data.computed_to } : null;
   if (!data.regions.length) return head + notice("No standings have been published for this class yet.");
 
   const blocks = data.regions.map((r) => {
@@ -700,7 +707,8 @@ async function regionView(ctx) {
   const projectedAvailable = hasProjectedOdds(data.teams);
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
   const focus = data.teams.some((t) => t.school === ctx.team) ? ctx.team : null;
-  nextComputedAt = data.computation_state?.computed_at ?? null;
+  const at = data.computation_state?.computed_at ?? null;
+  nextComputedAt = at ? { from: at, to: at } : null;
 
   // Cards carry the same provenance as plain text, so a cropped screenshot
   // of one still says what it shows. The odds mode only where the card has
@@ -1051,6 +1059,8 @@ async function bracketView(ctx) {
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
   bracketData.summary = controlsSummary; // for the game sheet's provenance line
   nextContext = contextHtml(`${clazz}A Bracket`, controlsSummary, mode);
+  // The bracket's odds are worked out from these same region rows.
+  nextComputedAt = standings?.computed_from ? { from: standings.computed_from, to: standings.computed_to } : null;
   const focusNote = ctx.team
     ? `<p class="focus-note">Showing ${esc(ctx.team)}’s possible path. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
     : `<p class="focus-note muted">Tap a game to see who might play there, and pick a team to follow its path.</p>`;

@@ -20,6 +20,7 @@ from backend.helpers.static_pages import (
     insight_lines,
     json_ld,
     landing_body,
+    landing_computed_span,
     layout_results,
     locked_seeds,
     pick_featured,
@@ -389,6 +390,27 @@ def test_featured_race_is_the_most_open_one():
 
 class TestLandingBody:
     """The front page: who we are on the left, a tour of the site on the right."""
+
+    def test_carries_when_its_numbers_were_calculated(self):
+        """The page root carries the earliest and latest calculation times of everything it shows, for the
+        footer; with nothing calculated it carries none."""
+        state = lambda at: {"computation_state": {"computed_at": at}}  # noqa: E731
+        featured = {
+            **FEATURED,
+            "standings": {**FEATURED["standings"], **state("2026-10-24T14:10:00+00:00")},
+            "class_standings": {
+                **(FEATURED.get("class_standings") or {}),
+                "computed_from": "2026-10-24T14:05:00+00:00",
+                "computed_to": "2026-10-24T14:20:00+00:00",
+            },
+        }
+        earlier = {"standings": state("2026-10-17T14:12:00Z"), "scenario_payload": state("2026-10-17T14:12:00Z")}
+        assert landing_computed_span(featured) == ("2026-10-24T14:05:00+00:00", "2026-10-24T14:20:00+00:00")
+        assert landing_computed_span(featured, None, earlier) == ("2026-10-17T14:12:00Z", "2026-10-24T14:20:00+00:00")
+        assert landing_computed_span(None) == (None, None)
+        body = landing_body(featured, {})
+        assert 'data-computed-from="2026-10-24T14:05:00+00:00" data-computed-to="2026-10-24T14:20:00+00:00"' in body
+        assert "data-computed-from" not in landing_body(None, {})
 
     def test_intro_and_every_tour_section(self):
         """Welcome, helmet, about, principles and how it works; then the tour: class, region (with its scenario

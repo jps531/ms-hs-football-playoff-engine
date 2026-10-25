@@ -597,6 +597,9 @@ class ClassStandingsResponse(BaseModel):
     class_: int
     as_of_date: date
     regions: list[ClassRegionStandings]
+    # Earliest and latest time the rows shown were calculated (None for rows stored without one).
+    computed_from: datetime | None = None
+    computed_to: datetime | None = None
 
 
 # ---------------------------------------------------------------------------

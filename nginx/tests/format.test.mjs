@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   formatPct, oddsBucket, initials, marginText, joinNames, recordText, contrastRatio, clampToSurface,
-  teamUiColors, inkFor, escapeHtml, calculatedAt,
+  teamUiColors, inkFor, escapeHtml, calculatedSpan,
 } from "../html/static/js/format.js";
 
 test("0% and 100% are reserved for certainty", () => {
@@ -93,8 +93,27 @@ test("escapeHtml neutralizes markup", () => {
 });
 
 test("calculation time reads in Central, whatever the reader's zone", () => {
-  assert.equal(calculatedAt("2026-10-24T14:47:03.12+00:00"), "Sat, Oct 24 at 9:47 AM CDT");
-  assert.equal(calculatedAt("2026-12-05T15:05:00Z"), "Sat, Dec 5 at 9:05 AM CST");
-  assert.equal(calculatedAt(null), "");
-  assert.equal(calculatedAt("not a time"), "");
+  assert.equal(calculatedSpan("2026-10-24T14:47:03.12+00:00", "2026-10-24T14:47:03.12+00:00"), "Sat, Oct 24 at 9:47 AM CDT");
+  assert.equal(calculatedSpan("2026-12-05T15:05:00Z", "2026-12-05T15:05:00Z"), "Sat, Dec 5 at 9:05 AM CST");
+  assert.equal(calculatedSpan(null, null), "");
+  assert.equal(calculatedSpan("not a time", "not a time"), "");
+});
+
+test("a calculation span reads as one time, a span within a day, or a span across days", () => {
+  const one = "2026-10-24T14:10:00Z";
+  assert.equal(calculatedSpan(one, one), "Sat, Oct 24 at 9:10 AM CDT");
+  assert.equal(calculatedSpan(one, "2026-10-24T14:10:59Z"), "Sat, Oct 24 at 9:10 AM CDT");
+  assert.equal(calculatedSpan(one, null), "Sat, Oct 24 at 9:10 AM CDT");
+  assert.equal(calculatedSpan(null, one), "Sat, Oct 24 at 9:10 AM CDT");
+  assert.equal(calculatedSpan(null, null), "");
+  assert.equal(calculatedSpan("2026-10-24T14:05:00Z", "2026-10-24T14:20:00Z"), "Sat, Oct 24, between 9:05 and 9:20 AM CDT");
+  assert.equal(calculatedSpan("2026-10-24T16:50:00Z", "2026-10-24T17:10:00Z"), "Sat, Oct 24, between 11:50 AM and 12:10 PM CDT");
+  assert.equal(
+    calculatedSpan("2026-10-23T14:12:00Z", "2026-10-24T14:20:00Z"),
+    "between Fri, Oct 23 at 9:12 AM and Sat, Oct 24 at 9:20 AM CDT",
+  );
+  assert.equal(
+    calculatedSpan("2026-10-31T14:00:00Z", "2026-11-07T15:00:00Z"),
+    "between Sat, Oct 31 at 9:00 AM CDT and Sat, Nov 7 at 9:00 AM CST",
+  );
 });

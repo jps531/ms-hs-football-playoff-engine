@@ -196,3 +196,38 @@ def test_attach_elo_sets_ratings_and_leaves_unrated_teams_empty():
     entries = [SimpleNamespace(school="Oxford", elo=None), SimpleNamespace(school="Tupelo", elo=None)]
     attach_elo(entries, {"Oxford": 1642.4})
     assert [e.elo for e in entries] == [1642.4, None]
+
+
+def test_class_standings_report_when_their_rows_were_calculated():
+    """The class endpoint gives the earliest and latest calculation time of the rows it shows."""
+    from contextlib import asynccontextmanager
+    from datetime import UTC, datetime
+
+    from backend.api.routers import standings
+
+    early, late = datetime(2026, 10, 24, 14, 5, tzinfo=UTC), datetime(2026, 10, 24, 14, 20, tzinfo=UTC)
+    rows = [
+        (*_standings_row("Alpha"), 1, late),
+        (*_standings_row("Beta"), 1, early),
+        (*_standings_row("Gamma"), 2, None),  # stored before calculation times were kept
+    ]
+
+    class _Conn:
+        async def execute(self, sql, params):
+            async def gen():
+                for r in rows:
+                    yield r
+
+            return gen()
+
+    @asynccontextmanager
+    async def fake_conn():
+        yield _Conn()
+
+    with (
+        patch.object(standings, "get_conn", fake_conn),
+        patch.object(standings, "load_completed_region_games", AsyncMock(return_value=[])),
+    ):
+        result = asyncio.run(standings.get_class_standings(5, 2025, date(2025, 10, 3)))
+    assert (result.computed_from, result.computed_to) == (early, late)
+    assert [r.region for r in result.regions] == [1, 2]
