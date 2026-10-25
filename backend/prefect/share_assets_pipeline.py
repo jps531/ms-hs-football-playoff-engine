@@ -362,7 +362,7 @@ def _bracket_preview_html(fetch: Fetch, season: int, featured: dict, class_stand
     ctx = {
         "mode": "projected" if projected else "tossup",
         "results": layout_results(layout),
-        "seeds": locked_seeds(class_standings.get(clazz)),
+        "seeds": locked_seeds(class_standings.get(clazz), games),
         "teams": teams,
     }
     return bracket_preview_html(clazz, games, ctx)
@@ -408,7 +408,7 @@ def _write_bracket_assets(
         ctx = {
             "mode": "projected" if projected else "tossup",
             "results": layout_results(layout),
-            "seeds": locked_seeds(standings),
+            "seeds": locked_seeds(standings, games),
             "teams": teams_by_school or {},
         }
         page_body = bracket_body(clazz, games, ctx, f"{season} season · {stamp}")

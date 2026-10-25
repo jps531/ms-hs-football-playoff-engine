@@ -358,7 +358,7 @@ def test_team_road_adds_both_sides_and_finds_the_likeliest_opponent():
 def test_team_bracket_description_names_the_road():
     road = team_road(GAMES, "Raleigh", "tossup")
     assert team_bracket_description("Raleigh", road, 0.04) == (
-        "Raleigh’s likeliest road: First Round vs Tylertown, Second Round vs Union; 4% to win the state championship."
+        "Raleigh’s likeliest opponents: First Round vs Tylertown, Second Round vs Union; 4% to win the state championship."
     )
 
 

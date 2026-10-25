@@ -873,7 +873,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
       </section>`
     : "";
   return `<div class="detail__panels">${record}${seeding}${pathPanel}</div>
-    <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Something look wrong for ${esc(t.school)}? Let us know.</button></p>`;
+    <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Does something look wrong for ${esc(t.school)}? Let us know.</button></p>`;
 }
 
 function focusTeamRow() {
@@ -1006,7 +1006,6 @@ function allScenariosSection(scenarios, teams, focus, mode, provenanceHtml) {
 // picked team's side when one is picked. Hosting comes from the API.
 
 const LIST_CAP = 5; // occupants shown before "Show all"
-const MATCHUP_CAP = 6; // matchups / opponents shown before "Show all"
 
 /** Bracket UI state that isn't in the URL; reset when the class changes. */
 const bracketUi = { key: null, open: null, showAll: new Set(), half: "both", focus: null }; // open: the game in the sheet
@@ -1037,6 +1036,13 @@ async function bracketView(ctx) {
       if (s) seeds[t.school] = { region: r.region, seed: s };
     }
   }
+  // Without standings, a locked team's first-round spot still says its seed.
+  for (const g of games) {
+    for (const side of [g.side_a, g.side_b]) {
+      const team = side.feeders.length === 1 ? lockedTeam(side) : null;
+      if (team && !seeds[team]) seeds[team] = side.feeders[0];
+    }
+  }
 
   const key = `${season}:${clazz}`;
   if (bracketUi.key !== key) {
@@ -1063,7 +1069,7 @@ async function bracketView(ctx) {
   nextComputedAt = standings?.computed_from ? { from: standings.computed_from, to: standings.computed_to } : null;
   const focusNote = ctx.team
     ? `<p class="focus-note">Showing ${esc(ctx.team)}’s possible path. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
-    : `<p class="focus-note muted">Tap a game to see who might play there, and pick a team to follow its path.</p>`;
+    : `<p class="focus-note muted">Select a game to see all possible matchups and locations, and pick a team to follow its path.</p>`;
   return `<div class="page">
     <header class="entry-head bracket-head">
       ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: null })], [`${clazz}A Bracket`, null]])}
@@ -1181,7 +1187,7 @@ function focusRows(game, here) {
   const teamRow = (gutter) => treeLine(gutter, focus, focus, teams, teamSub, oddsCell(here.p) + spoken(" chance to play here"), " is-focus");
   // Every pairing here is under the API's 0.5% listing floor: too many long shots to name one.
   if (!top) return `${teamRow("")}${treeLine("vs", null, "Many opponents", teams, "Each under 0.5%", "", " trow--empty")}`;
-  const oppRow = (gutter) => treeLine(gutter, top.opponent, top.opponent, teams, oppSub, oddsCell(top.pMatchup) + spoken(" chance of this matchup"), "");
+  const oppRow = (gutter) => treeLine(gutter, top.opponent, top.opponent, teams, oppSub, oddsCell(top.p) + spoken(` chance of facing them if ${focus} gets here`), "");
   if (top.hosts === "team") return `${oppRow("")}${teamRow("at")}`;
   if (top.hosts === "opponent") return `${teamRow("")}${oppRow("at")}`;
   return `${teamRow("")}${oppRow("vs")}`;
@@ -1209,7 +1215,7 @@ function treeRow(game, sideKey, result, gutter) {
   }
   const locked = lockedTeam(side);
   if (locked) {
-    return row(" trow--locked", locked, locked, `${LOCK}<span class="visually-hidden">Locked in: </span>${esc(seedLabel(locked) ?? "Clinched")}`, "");
+    return row(" trow--locked", locked, locked, `${LOCK}<span class="visually-hidden">Locked in: </span>${esc(seedLabel(locked) ?? "Clinched a playoff spot")}`, "");
   }
   const list = occupants(side, mode);
   const firstRound = side.feeders.length === 1;
@@ -1397,7 +1403,7 @@ function sheetHtml(id) {
       </div>
       ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
       <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
-      <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Something look wrong in this game? Let us know.</button></p>
+      <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Does something look wrong in this game? Let us know.</button></p>
     </div>`;
 }
 
@@ -1444,7 +1450,7 @@ function bracketSide(game, sideKey, result, host) {
   const locked = lockedTeam(side);
   if (locked) {
     const label = seedLabel(locked);
-    return `<div class="bteam bteam--locked">${pickTeam(locked)}<span class="bteam__fact">${LOCK}<span class="visually-hidden">Locked in: </span>${label ? esc(label) : "Clinched"}</span>${homeTag}</div>`;
+    return `<div class="bteam bteam--locked">${pickTeam(locked)}<span class="bteam__fact">${LOCK}<span class="visually-hidden">Locked in: </span>${label ? esc(label) : "Clinched a playoff spot"}</span>${homeTag}</div>`;
   }
   const list = occupants(side, mode);
   const allKey = `${game.id}:${sideKey}`;
@@ -1459,11 +1465,13 @@ function bracketSide(game, sideKey, result, host) {
   return `<div class="bside">${label}<ul class="bside__list">${shown.map((o) => `<li class="bteam">${pickTeam(o.team)}${oddsCell(o.p)}</li>`).join("")}</ul>${more}</div>`;
 }
 
-/** Host wording from one team's point of view. */
-function hostText(team, hosts, pTeamHosts) {
+/** Host wording for a pairing, from whichever team is likelier to host: "60% chance Raleigh hosts". */
+function hostText(team, opponent, hosts, pTeamHosts) {
   if (hosts === "neutral") return "Neutral site";
-  if (hosts === "split") return `${formatPct(pTeamHosts)} chance ${team} hosts`;
-  return "";
+  if (hosts !== "split") return "";
+  return pTeamHosts >= 0.5
+    ? `${formatPct(pTeamHosts)} chance ${team} hosts`
+    : `${formatPct(1 - pTeamHosts)} chance ${opponent} hosts`;
 }
 
 /** "vs" when the picked team would host, "at" when the opponent would. */
@@ -1473,51 +1481,43 @@ const oppJoiner = (hosts) => (hosts === "opponent" ? "at" : "vs");
 function gameDetail(game) {
   const { mode, focus, teams } = bracketData;
   if (game.matchups == null) {
-    return `<p class="bgame__note muted">${esc(game.notes?.[0] ?? "Matchup odds aren’t available for this game yet.")}</p>`;
+    return '<p class="bgame__note muted">Matchup odds aren’t available for this game yet.</p>';
   }
   const here = focus ? teamInGame(game, focus, mode) : null;
   if (here && (here.p > 0 || here.locked)) {
     const opp = opponentsFor(game, focus, mode);
-    const key = `${game.id}:opp`;
-    const showAll = bracketUi.showAll.has(key);
-    const shown = showAll ? opp : opp.slice(0, MATCHUP_CAP);
     const intro = here.locked ? `${focus}’s possible opponents here` : `If ${focus} gets here (${formatPct(here.p)} chance)`;
     // These are conditional odds; say so, so they aren't read as the chance the game happens.
     const measure = here.locked ? "Chance of facing each one" : `Chance of facing each one, if ${focus} gets here`;
     return `<h4 class="bgame__heading">${esc(intro)}</h4>
       <p class="muted bgame__count">${esc(measure)}</p>
-      <ol class="opp-list">${shown.map((o) => {
-        const note = hostText(focus, o.hosts, o.pTeamHosts);
+      <ol class="opp-list">${opp.map((o) => {
+        const note = hostText(focus, o.opponent, o.hosts, o.pTeamHosts);
         return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}</span></span>${oddsCell(o.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
-      }).join("")}</ol>
-      ${opp.length > MATCHUP_CAP ? `<button type="button" class="bside__more" data-show-all="${esc(key)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${opp.length}`}</button>` : ""}`;
+      }).join("")}</ol>`;
   }
   const ms = gameMatchups(game, mode);
-  const key = `${game.id}:m`;
-  const showAll = bracketUi.showAll.has(key);
-  const shown = showAll ? ms : ms.slice(0, MATCHUP_CAP);
-  const other = game.other ? (mode === "projected" && game.other.p_matchup_weighted != null ? game.other.p_matchup_weighted : game.other.p_matchup) : 0;
+  const hidden = game.other?.count ?? 0; // possible pairings under 0.5% in both modes, not listed
   const sides = [game.side_a, game.side_b].map((side) => {
     const n = occupants(side, mode).length;
     return `<div><h4 class="bgame__heading">${esc(sideLabel(side.feeders))}</h4><p class="muted bgame__count">${n} possible ${n === 1 ? "team" : "teams"}</p></div>`;
   }).join('<p class="bgame__sides-vs muted" aria-hidden="true">vs</p>');
-  const rows = shown.map((m) => {
+  const rows = ms.map((m) => {
     // Home team last ("Clinton at Booneville"); "vs" when the host isn't settled or the site is neutral.
     const h = hosting(m.hostA);
     const [away, home] = h.host === "a" ? [m.b, m.a] : [m.a, m.b];
     const joiner = h.host === "a" || h.host === "b" ? "at" : "vs";
-    const note = h.host === "neutral" ? "Neutral site" : h.host === "split" ? `${formatPct(h.p)} chance ${m.a} hosts` : "";
+    const note = hostText(m.a, m.b, h.host === "a" ? "team" : h.host === "b" ? "opponent" : h.host, h.p);
     return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}</span></span>${oddsCell(m.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
   });
   if (!ms.length) {
     return `<div class="bgame__sides">${sides}</div>
-      <p class="muted bgame__count">So many teams could still meet here that no single matchup has even a 0.5% chance yet.</p>`;
+      <p class="muted bgame__count">So many teams could still meet here that ${hidden ? `none of the ${hidden} possible pairings has` : "no single matchup has"} even a 0.5% chance yet.</p>`;
   }
   return `<div class="bgame__sides">${sides}</div>
     <h4 class="bgame__heading">Most likely matchups</h4>
     <ol class="opp-list opp-list--matchups">${rows.join("")}</ol>
-    ${ms.length > MATCHUP_CAP ? `<button type="button" class="bside__more" data-show-all="${esc(key)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${ms.length}`}</button>` : ""}
-    ${other >= 0.0005 ? `<p class="muted bgame__count">Other pairings, each under 0.5%: ${esc(formatPct(other))} combined</p>` : ""}`;
+    ${hidden ? `<p class="muted bgame__count">Not showing ${hidden} other possible ${hidden === 1 ? "pairing" : "pairings"}, each under 0.5%</p>` : ""}`;
 }
 
 app.addEventListener("click", (e) => {

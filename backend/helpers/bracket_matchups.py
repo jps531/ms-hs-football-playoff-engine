@@ -513,10 +513,12 @@ def merge_modes(
             p_matchups = pg.matchups if pg else {}
             pairs = set(g.matchups) | set(p_matchups)
             rows = []
+            folded = 0  # possible pairings too unlikely to list
             for pair in pairs:
                 p_t, h_t = g.matchups.get(pair, (0.0, None))
                 p_w, h_w = p_matchups.get(pair, (0.0, None)) if pg else (None, None)
                 if max(p_t, p_w or 0.0) < floor:
+                    folded += max(p_t, p_w or 0.0) > 0
                     continue
                 rows.append(
                     {
@@ -535,6 +537,7 @@ def merge_modes(
             other = {
                 "p_matchup": _r(max(0.0, 1.0 - kept_t)) if g.matchups else 0.0,
                 "p_matchup_weighted": (_r(max(0.0, 1.0 - kept_w)) if p_matchups else 0.0) if pg else None,
+                "count": folded,
             }
         elif pg is not None:
             notes = notes or list(pg.notes)

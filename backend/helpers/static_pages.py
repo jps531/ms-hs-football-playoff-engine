@@ -1108,6 +1108,15 @@ def round_picks(col: dict, mode: str, results: dict) -> dict[str, str]:
     return picks
 
 
+def _split_host(a: str, b: str, p_host_a: float) -> str:
+    """Who'd likelier host an undecided pairing, and how likely: "60% chance Raleigh hosts"."""
+    return (
+        f"{format_pct(p_host_a)} chance {a} hosts"
+        if p_host_a >= 0.5
+        else f"{format_pct(1 - p_host_a)} chance {b} hosts"
+    )
+
+
 def _hosting(p_host_a: float | None) -> str:
     """Who hosts a pairing: "a", "b", "split" or "neutral" (bracket.js's ``hosting``)."""
     if p_host_a is None:
@@ -1166,14 +1175,23 @@ def layout_results(layout: dict | None) -> dict[str, dict]:
     return out
 
 
-def locked_seeds(class_standings: dict | None) -> dict[str, tuple[int, int]]:
-    """Teams sure of a seed: school -> (region, seed), for their "Region 3 #1 Seed" label."""
+def locked_seeds(class_standings: dict | None, games: list[dict] | None = None) -> dict[str, tuple[int, int]]:
+    """Teams sure of a seed: school -> (region, seed), for their "Region 3 #1 Seed" label.
+
+    From the standings, and failing that from the first-round spot a team is locked into in *games*.
+    """
     seeds = {}
     for block in (class_standings or {}).get("regions") or []:
         for t in block["teams"]:
             seed = next((k for k in (1, 2, 3, 4) if (t["odds"].get(f"p{k}") or 0) >= _LOCKED), None)
             if seed:
                 seeds[t["school"]] = (block["region"], seed)
+    for g in games or []:
+        for side in (g["side_a"], g["side_b"]):
+            feeders = side.get("feeders") or []
+            team = locked_team(side) if len(feeders) == 1 else None
+            if team and team not in seeds:
+                seeds[team] = (feeders[0]["region"], feeders[0]["seed"])
     return seeds
 
 
@@ -1202,7 +1220,7 @@ def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: 
     locked = locked_team(side)
     if locked:
         seed = ctx["seeds"].get(locked)
-        label = position_name(*seed) if seed else "Clinched"
+        label = position_name(*seed) if seed else "Clinched a playoff spot"
         sub = f'{LOCK}<span class="visually-hidden">Locked in: </span>{_e(label)}'
         return _tree_line(gutter, locked, locked, teams, sub, "", " trow--locked")
     listed = occupants(side, ctx["mode"])
@@ -1349,7 +1367,7 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
         '<div class="page static-page">'
         '<header class="entry-head bracket-head">'
         f'{breadcrumb_nav(bracket_trail(clazz))}<h1 class="title">Class {clazz}A Bracket</h1>{_provenance(stamp)}'
-        '<p class="focus-note muted">Tap a game to see who might play there, and pick a team to follow its path.</p>'
+        '<p class="focus-note muted">Select a game to see all possible matchups and locations, and pick a team to follow its path.</p>'
         "</header>"
         f'<div id="bracket-host">{half_control}'
         f'<div class="round-tabs" role="group" aria-label="Jump to a round">{tabs}</div>'
@@ -1373,7 +1391,7 @@ def _sheet_side(game: dict, side_key: str, host: str | None, ctx: dict) -> str:
     locked = locked_team(side)
     if locked:
         seed = ctx["seeds"].get(locked)
-        label = position_name(*seed) if seed else "Clinched"
+        label = position_name(*seed) if seed else "Clinched a playoff spot"
         return (
             f'<div class="bteam bteam--locked">{name(locked)}<span class="bteam__fact">{LOCK}'
             f'<span class="visually-hidden">Locked in: </span>{_e(label)}</span>{home}</div>'
@@ -1407,11 +1425,7 @@ def _sheet(game: dict, ctx: dict) -> str:
         h = _hosting(m["host_a"])
         away, home = (m["b"], m["a"]) if h == "a" else (m["a"], m["b"])
         word = "at" if h in ("a", "b") else "vs"
-        note = (
-            "Neutral site"
-            if h == "neutral"
-            else (f"{format_pct(m['host_a'])} chance {m['a']} hosts" if h == "split" else "")
-        )
+        note = "Neutral site" if h == "neutral" else (_split_host(m["a"], m["b"], m["host_a"]) if h == "split" else "")
         note_html = f'<span class="opp-list__host">{_e(note)}</span>' if note else ""
         rows.append(
             '<li><span class="mu__teams">'

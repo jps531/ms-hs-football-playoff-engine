@@ -901,10 +901,11 @@ class Matchup(BaseModel):
 
 
 class MatchupRemainder(BaseModel):
-    """Combined chance of every pairing too unlikely to list (below 0.5% in both modes)."""
+    """Combined chance of every pairing too unlikely to list (below 0.5% in both modes), and how many there are."""
 
     p_matchup: float
     p_matchup_weighted: float | None
+    count: int = 0
 
 
 class BracketMatchupGame(BaseModel):
