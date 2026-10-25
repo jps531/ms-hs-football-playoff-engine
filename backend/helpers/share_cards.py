@@ -155,7 +155,7 @@ def class_title(clazz: int) -> str:
 
 def class_description(clazz: int) -> str:
     """A class page's description."""
-    return f"Every Class {clazz}A region race in Mississippi: who’s in, who’s out, and what has to happen next."
+    return f"Every Class {clazz}A region race in Mississippi."
 
 
 def description(text: str, limit: int = DESCRIPTION_LIMIT) -> str:
@@ -442,7 +442,7 @@ def render_class_card(clazz: int, payload: dict, stamp: str, mode: str) -> Image
     leaders = [(r["region"], display_order(r["teams"])[0]) for r in regions if r.get("teams")]
     y = PAD + 58
     if len(leaders) <= 4:
-        draw.text((PAD, y + 50), "Who leads every region race", font=_inter(34, 600), fill=TEXT_2, anchor="ls")
+        draw.text((PAD, y + 50), "Who’s on top in every region race", font=_inter(34, 600), fill=TEXT_2, anchor="ls")
         y += 50
     rows = [
         (
@@ -465,7 +465,7 @@ def _class_table(draw, top: float, rows: list[tuple[str, str, str, float]]) -> N
     """Eight region leaders in two columns of four."""
     small = _inter(17, 600)
     col_w = (WIDTH - 2 * PAD - 48) / 2
-    _tracked(draw, (PAD, top), "REGION LEADERS", small, TEXT_2, 1.6)
+    _tracked(draw, (PAD, top), "WHO’S ON TOP", small, TEXT_2, 1.6)
     _tracked(draw, (PAD + col_w, top), "WINS REGION", small, TEXT_2, 1.6, anchor="rs")
     _tracked(draw, (WIDTH - PAD, top), "WINS REGION", small, TEXT_2, 1.6, anchor="rs")
     row_h = 74
