@@ -14,6 +14,7 @@ All tests use a 4-team "diamond" setup unless noted:
 """
 
 from backend.helpers.data_classes import CompletedGame, RemainingGame
+from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.tiebreakers import (
     base_bucket_order,
     build_h2h_maps,
@@ -413,7 +414,8 @@ def test_resolve_standings_with_trace_populates_step_trace():
 
     assert set(order) == set(teams)
     assert ("Alpha", "Beta") in trace
-    s2, s4 = trace[("Alpha", "Beta")]
+    s2, s4, outside = trace[("Alpha", "Beta")]
+    assert outside and all(isinstance(g, list) for g in outside)
     assert "Alpha" in s2 and "Beta" in s2
     assert "Alpha" in s4 and "Beta" in s4
 
@@ -439,7 +441,7 @@ def test_resolve_bucket_step_trace_collector_populated():
     )
 
     assert ("Alpha", "Beta") in collector
-    s2, _ = collector[("Alpha", "Beta")]
+    s2, _, _ = collector[("Alpha", "Beta")]
     assert "Alpha" in s2 and "Beta" in s2
 
 
@@ -508,3 +510,45 @@ def test_standings_from_mask_skips_game_with_non_region_team():
     assert result["Alpha"]["w"] == 1
     assert result["Beta"]["l"] == 1
     assert "External" not in result
+
+
+# ---------------------------------------------------------------------------
+# Steps 2 and 4: who the tied teams are compared against, in what order
+# ---------------------------------------------------------------------------
+
+
+def test_teams_above_a_tie_are_compared_in_the_order_their_own_tie_was_broken():
+    """3-7A (2025), a week in, with one set of results: Petal, Pearl and Oak Grove tie at 3-2 and
+    Petal wins it (2-0 head-to-head), then Pearl, then Oak Grove. Brandon, Meridian and Northwest
+    Rankin then tie at 2-3, level head-to-head, so step 2 compares them against the teams above,
+    highest-placed first: Petal, whom Brandon and Meridian beat and Northwest Rankin didn't. (Taken
+    alphabetically, Oak Grove came first, every one of them lost to it, and Pearl decided it instead.)"""
+    from backend.tests.scenario_output.scenario_output_3_7a_non_margin_test import (
+        _COMPLETED_B,
+        _REMAINING_B,
+        _TEAMS,
+    )
+
+    order = resolve_standings_for_mask(_TEAMS, _COMPLETED_B, _REMAINING_B, 134, {}, 7, 14)
+    assert order[:3] == ["Petal", "Pearl", "Oak Grove"]
+    assert order[5] == "Northwest Rankin"
+
+
+def test_teams_level_on_record_below_a_tie_count_as_one():
+    """With C and D level and no order between them, a tied team's step 2 and 4 entries against
+    them are its combined results: A (beat C, lost to D) and B (beat D, lost to C) are even."""
+    teams = ["A", "B", "C", "D"]
+    completed = get_completed_games(
+        [
+            {"school": w, "opponent": l, "date": "2026-10-01", "result": "W", "points_for": 20, "points_against": 10}
+            for w, l in (("A", "C"), ("D", "A"), ("B", "D"), ("C", "B"))
+        ]
+        + [
+            {"school": l, "opponent": w, "date": "2026-10-01", "result": "L", "points_for": 10, "points_against": 20}
+            for w, l in (("A", "C"), ("D", "A"), ("B", "D"), ("C", "B"))
+        ]
+    )
+    together, _ = step2_step4_arrays(teams, ["A", "B"], ["A", "B", "C", "D"], completed, [], 0, {}, ranks=[["C", "D"]])
+    assert together == {"A": [2], "B": [2]}
+    apart, _ = step2_step4_arrays(teams, ["A", "B"], ["A", "B", "C", "D"], completed, [], 0, {})
+    assert apart == {"A": [2, 0], "B": [0, 2]}  # one by one, C first: A ahead on C alone

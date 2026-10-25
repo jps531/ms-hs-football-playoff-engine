@@ -71,8 +71,8 @@ class TestCheckpointA:
         assert len(_REMAINING_A) == 15
 
     def test_scenario_count(self):
-        """R=15, ignore_margins=True produces 18773 scenarios."""
-        assert len(_SCENARIOS_A) == 18773
+        """R=15, ignore_margins=True produces 19199 scenarios."""
+        assert len(_SCENARIOS_A) == 19199
 
     def test_scenario_keys(self):
         """Every scenario dict has the required keys."""
@@ -100,8 +100,8 @@ class TestCheckpointA:
         assert all(sc["tiebreaker_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenario_count(self):
-        """1088 scenarios leave a tie to the tiebreaker (unresolvable by win-loss alone)."""
-        assert sum(1 for sc in _SCENARIOS_A if sc["open_groups"]) == 1088
+        """2288 scenarios leave a tie to the tiebreaker (unresolvable by win-loss alone)."""
+        assert sum(1 for sc in _SCENARIOS_A if sc["open_groups"]) == 2288
         assert all(sc["coinflip_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenarios_have_no_sub_label(self):
@@ -175,8 +175,8 @@ class TestCheckpointB:
         assert len(_REMAINING_B) == 12
 
     def test_scenario_count(self):
-        """R=12, ignore_margins=True produces 2334 scenarios."""
-        assert len(_SCENARIOS_B) == 2334
+        """R=12, ignore_margins=True produces 2392 scenarios."""
+        assert len(_SCENARIOS_B) == 2392
 
     def test_scenario_keys(self):
         """Every scenario dict has the required keys."""
@@ -204,8 +204,8 @@ class TestCheckpointB:
         assert all(sc["coinflip_groups"] is None for sc in _SCENARIOS_B)
 
     def test_tiebreaker_scenario_count(self):
-        """160 scenarios leave a tie to the tiebreaker: its order would turn on margins."""
-        assert sum(1 for sc in _SCENARIOS_B if sc["open_groups"]) == 160
+        """310 scenarios leave a tie to the tiebreaker: its order would turn on margins."""
+        assert sum(1 for sc in _SCENARIOS_B if sc["open_groups"]) == 310
 
     def test_tiebreaker_scenarios_have_no_sub_label(self):
         """Collapsed tiebreaker scenarios use sub_label='' — no margin sub-scenarios."""
@@ -238,15 +238,23 @@ class TestCheckpointB:
                     return
         pytest.fail("No tie within the top 4 found in checkpoint B")
 
-    def test_scenario_1279_seeding_and_tie(self):
-        """Scenario 1279 leaves a 3-way tie between Pearl, Petal, and Brandon (seeds 1-3) open; Oak Grove is 4th."""
-        sc = next(s for s in _SCENARIOS_B if s["scenario_num"] == 1279 and s["sub_label"] == "")
-        assert sc["seeding"][3] == "Oak Grove"
-        assert sc["open_groups"] == [(3, ("Brandon", "Pearl", "Petal"))]
+    @staticmethod
+    def _three_way_open():
+        """A scenario leaving a 3-way tie between Pearl, Petal, and Brandon (seeds 1-3) open, Oak Grove 4th."""
+        return next(
+            s
+            for s in _SCENARIOS_B
+            if s["open_groups"] == [(3, ("Brandon", "Pearl", "Petal"))] and s["seeding"][3] == "Oak Grove"
+        )
 
-    def test_scenario_1279_renders_tie(self):
-        """Scenario 1279 renders one '1-3.' line for Brandon, Pearl and Petal, in no order."""
-        sc = next(s for s in _SCENARIOS_B if s["scenario_num"] == 1279 and s["sub_label"] == "")
+    def test_scenario_with_three_way_tie_open(self):
+        """Some scenario leaves Brandon, Pearl and Petal's 3-way tie at seeds 1-3 open, with Oak Grove 4th."""
+        sc = self._three_way_open()
+        assert sc["sub_label"] == ""
+
+    def test_three_way_open_tie_renders(self):
+        """That scenario renders one '1-3.' line for Brandon, Pearl and Petal, in no order."""
+        sc = self._three_way_open()
         rendered = render_scenarios([sc])
         assert "1-3. Brandon, Pearl, and Petal: order decided by the tiebreaker" in rendered
 
