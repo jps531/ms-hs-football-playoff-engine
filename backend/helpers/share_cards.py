@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFont
 SITE_NAME = "Mississippi High School Football"
 SITE_TITLE = "Mississippi High School Football Playoff Races"
 SITE_DESCRIPTION = (
-    "Every Mississippi high school football region race: who’s in, who’s out, and exactly what has to happen next."
+    "Scenarios and odds for every Mississippi high school football region race, and an outlook for every playoff game."
 )
 SITE_HOST = "mshsfootball.com"
 
@@ -935,7 +935,7 @@ def render_site_card() -> Image.Image:
         y += 92
     for line in wrap(
         draw,
-        "Every region race: who’s in, who’s out, and exactly what has to happen next.",
+        SITE_DESCRIPTION,
         _inter(36, 600),
         WIDTH - 2 * PAD,
         3,
