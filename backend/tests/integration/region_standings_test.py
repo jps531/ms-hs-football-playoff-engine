@@ -1,5 +1,7 @@
 """Unit tests for Region 3-7A (2025 season) standings, scenario enumeration, and odds calculation."""
 
+import pytest
+
 from backend.helpers.data_helpers import get_completed_games
 from backend.helpers.scenarios import determine_odds, determine_scenarios
 from backend.tests.data.standings_2025_3_7a import (
@@ -36,10 +38,11 @@ def test_get_completed_games_3_7a():
 def test_determine_scenarios_3_7a():
     """Scenario seed counts match expected values for Region 3-7A (pre-final-week)."""
     r = determine_scenarios(teams_3_7a, expected_3_7a_completed_games, expected_3_7a_remaining_games)
-    assert r.first_counts == expected_3_7a_first_counts
-    assert r.second_counts == expected_3_7a_second_counts
-    assert r.third_counts == expected_3_7a_third_counts
-    assert r.fourth_counts == expected_3_7a_fourth_counts
+    # Sums of the same margin shares, so equal to the last few bits (their order can vary).
+    assert r.first_counts == pytest.approx(expected_3_7a_first_counts, rel=1e-12, abs=1e-12)
+    assert r.second_counts == pytest.approx(expected_3_7a_second_counts, rel=1e-12, abs=1e-12)
+    assert r.third_counts == pytest.approx(expected_3_7a_third_counts, rel=1e-12, abs=1e-12)
+    assert r.fourth_counts == pytest.approx(expected_3_7a_fourth_counts, rel=1e-12, abs=1e-12)
 
 
 def test_determine_odds_3_7a():

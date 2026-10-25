@@ -24,10 +24,6 @@ from backend.helpers.data_classes import (
 from backend.helpers.tiebreakers import (
     rank_to_slots,
     resolve_standings_for_mask,
-    sensitive_boundary_games,
-    standings_from_mask,
-    tie_bucket_groups,
-    unique_intra_bucket_games,
 )
 
 # -------------------------
@@ -528,32 +524,24 @@ def determine_scenarios(
                     )
                 continue
 
-            wl_totals = standings_from_mask(
+            # Margins matter only to a tie that reaches point differential (step 3): which ties get
+            # that far is settled by the winners alone (steps 1-2), and any group a later split
+            # restarts is made of the same teams. Every remaining game such a team plays feeds its
+            # point differential (steps 3-4) or points allowed (step 5), so all of them get every
+            # margin; a game between two other teams can't move any of it.
+            decisions: list = []
+            resolve_standings_for_mask(
                 teams,
                 completed,
                 remaining,
                 outcome_mask,
-                pa_for_winner,
-                base_margins,
+                margins=base_margins,
                 base_margin_default=7,
+                pa_win=pa_for_winner,
+                decision_collector=decisions,
             )
-            tie_buckets = tie_bucket_groups(teams, wl_totals)
-            intra_bucket_games = unique_intra_bucket_games(tie_buckets, remaining)
-            if intra_bucket_games:
-                # Also include boundary games (bucket team vs. outside team) whose
-                # margin is sensitive to the tiebreaker outcome under 12^N enumeration.
-                boundary = sensitive_boundary_games(
-                    tie_buckets,
-                    remaining,
-                    intra_bucket_games,
-                    teams,
-                    completed,
-                    outcome_mask,
-                    base_margins,
-                    pa_for_winner,
-                )
-                if boundary:
-                    intra_bucket_games = intra_bucket_games + boundary
+            tied = {t for step, group, _ in decisions if step >= 3 for t in group}
+            intra_bucket_games = [rg for rg in remaining if rg.a in tied or rg.b in tied]
             if not intra_bucket_games:
                 for final_order, local_flips, share in _resolve_with_scores(
                     teams, completed, remaining, outcome_mask, base_margins, frozenset()
