@@ -1408,7 +1408,7 @@ _COUNT_WORDS = {2: "Two", 3: "Three", 4: "Four"}
 _OPEN_REASON = {
     3: "order decided by the tiebreaker (point differential, then fewest points allowed)",
     4: "order decided by the tiebreaker (point differential, then fewest points allowed)",
-    5: "order decided by fewest points allowed in region games (then a coin flip)",
+    5: "order decided by fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
     6: "order decided by a coin flip",
 }
 

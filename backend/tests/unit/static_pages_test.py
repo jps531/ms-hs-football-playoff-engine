@@ -422,7 +422,7 @@ class TestLandingBody:
         from backend.prefect import region_scenarios_pipeline as pipeline
 
         steps = " ".join(HOW_IT_WORKS_HTML)
-        # Full scenarios only where every margin is worked through, so none rests on the 7-point default.
+        # Full scenarios only where every margin is worked through, so a point-differential race is stated exactly.
         assert DISPLAY_THRESHOLD == pipeline._R_ALWAYS_MARGIN
         assert f"<strong>{DISPLAY_THRESHOLD} or fewer</strong>" in steps
         assert f"<strong>{DISPLAY_THRESHOLD + 1} to {pipeline._R_MAX_ATOMS}</strong>" in steps
@@ -752,13 +752,13 @@ def test_outcome_cards_match_scenarios_js_for_the_2_7a_shape():
     assert g["title"] == []  # an unconditional #1 is a badge, not a card
     assert [c["title"] for c in g["playoffs"]] == [
         "MC makes the playoffs",
-        "Clinton makes the playoffs as the No. 4 seed",
+        "Clinton makes the playoffs as the #4 seed",
     ]
     assert [c["title"] for c in g["seeding"]] == [
-        "Starkville finishes third",
-        "Starkville finishes fourth",
-        "MC finishes third",
-        "MC finishes fourth",
+        "Starkville finishes as the #3 seed",
+        "Starkville finishes as the #4 seed",
+        "MC finishes as the #3 seed",
+        "MC finishes as the #4 seed",
     ]
 
 
@@ -792,7 +792,7 @@ def test_outcome_cards_title_elimination_and_order_match_scenarios_js():
 STRINGER = {
     "scenario_num": 2,
     "sub_label": "a",
-    "title": "Stringer beats Richton by 8 or more AND Stringer's margin and Lumberton's margin combined total 10 or more"
+    "title": "Stringer beats Richton by 8 or more AND Stringer's points margin and Lumberton's points margin combined total 10 or more"
     " AND Lumberton beats Magee",
     "game_winners": [{"winner": "Stringer", "loser": "Richton"}, {"winner": "Lumberton", "loser": "Magee"}],
     "conditions": [
@@ -820,7 +820,7 @@ def test_complete_scenario_cards_match_scenarios_js():
     [group] = card["groups"]
     assert [c["type"] for c in group] == ["game_result", "text", "game_result", "coin_flip"]
     assert group[0]["min_margin"] == 8
-    assert group[1]["description"] == "Stringer's margin and Lumberton's margin combined total 10 or more"
+    assert group[1]["description"] == "Stringer's points margin and Lumberton's points margin combined total 10 or more"
     assert group[3]["description"] == "A coin flip settles the tie between Magee and Richton"
 
     [fallback] = complete_scenario_cards([{
@@ -903,14 +903,14 @@ def test_front_page_shows_each_scenario_kind_linking_to_its_section():
     assert 'href="/standings/3a/6#scen-title"' in out["title"] and "A wins the region" in out["title"]
     assert out["title"].index("A wins the region") < out["title"].index("B wins the region")
     assert (
-        "B finishes second" in out["seeding"] and 'aria-label="Open Region 6-3A’s seeding scenarios"' in out["seeding"]
+        "B finishes as the #2 seed" in out["seeding"] and 'aria-label="Open Region 6-3A’s seeding scenarios"' in out["seeding"]
     )
     assert "Region 6-3A can still finish 3 ways. Here are the first two:" in out["unique"]
     assert 'href="/standings/3a/6#all-scen-title"' in out["unique"]
     assert "Scenario 2" in out["unique"] and "Scenario 3" not in out["unique"]
     assert STAMP in out["unique"]
     assert "the last playoff spots in Region 6-3A:" in out["playoffs"]
-    assert "C makes the playoffs as the No. 4 seed" in out["playoffs"]
+    assert "C makes the playoffs as the #4 seed" in out["playoffs"]
     assert (
         '<div class="scenario-group"><h3 class="sub-title">Playoff spots</h3><div class="scenario-grid">'
         in out["playoffs"]
@@ -1062,12 +1062,12 @@ def test_complete_scenario_cards_or_groups_and_ties_match_scenarios_js():
     assert len(card["groups"]) == 2 and card["groups"][1][1] == {"type": "text", "description": tiebreak["description"]}
     assert card["seeds"] == [
         {"team": "A", "seed": 1},
-        {"seed": "2–4", "teams": ["B", "C", "D"], "note": "Order decided by fewest points allowed in region games, then a coin flip"},
+        {"seed": "2–4", "teams": ["B", "C", "D"], "note": "Order decided by fewest total points allowed in region games. Teams that remain tied start the tiebreakers over among themselves, and a coin flip decides if they're tied on every other tiebreaker."},
     ]  # fmt: skip
     assert card["out"] == ["E"]
     html = outcome_scenario_card(card, {})
     assert '<li class="outcome__tie"><span class="outcome__seed">2–4</span>' in html
-    assert "then a coin flip</span>" in html
+    assert "a coin flip decides if they&#39;re tied on every other tiebreaker.</span>" in html
 
     [straddle] = complete_scenario_cards([{
         "scenario_num": 1, "sub_label": "", "title": "A beats B", "game_winners": [{"winner": "A", "loser": "B"}],

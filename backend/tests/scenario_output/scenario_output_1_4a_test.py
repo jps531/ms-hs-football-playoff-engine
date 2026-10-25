@@ -18,10 +18,10 @@ Eliminated: South Pontotoc
 Scenario structure (6 total — 4 masks, 2 with sub-scenarios):
   Mask 0 (NA beats COR, TC beats NP) → non-MS scenario 1:
     NA #1, COR #2, TC #3, NP #4
-  Mask 1 (COR beats NA, TC beats NP) → 3-way tie NA/NP/TC at 2-2; MS on TC's margin:
+  Mask 1 (COR beats NA, TC beats NP) → 3-way tie NA/NP/TC at 2-2; MS on TC's points margin:
     2a: TC wins by 1-7  → COR #1, NA #2, NP #3, TC #4  (NP wins H2H PD vs TC)
     2b: TC wins by 8+   → COR #1, NA #2, TC #3, NP #4  (TC wins H2H PD step)
-  Mask 2 (NA beats COR, NP beats TC) → 3-way tie COR/NA/NP at 3-1; MS on NA's margin:
+  Mask 2 (NA beats COR, NP beats TC) → 3-way tie COR/NA/NP at 3-1; MS on NA's points margin:
     3a: NA wins by 1-7  → COR #1, NA #2, NP #3, TC #4  (COR wins H2H PD vs NA)
     3b: NA wins by 8+   → NA #1, COR #2, NP #3, TC #4  (NA wins H2H PD step)
   Mask 3 (COR beats NA, NP beats TC) → non-MS scenario 4 (actual result):

@@ -26,13 +26,13 @@ test("2-7A shape: title locked, bubble teams and seeding become cards", () => {
   assert.deepEqual(g.title, []); // unconditional #1 is a badge, not a card
   assert.deepEqual(g.playoffs.map((c) => c.title), [
     "MC makes the playoffs",
-    "Clinton makes the playoffs as the No. 4 seed",
+    "Clinton makes the playoffs as the #4 seed",
   ]);
   assert.deepEqual(g.seeding.map((c) => c.title), [
-    "Starkville finishes third",
-    "Starkville finishes fourth",
-    "MC finishes third",
-    "MC finishes fourth",
+    "Starkville finishes as the #3 seed",
+    "Starkville finishes as the #4 seed",
+    "MC finishes as the #3 seed",
+    "MC finishes as the #4 seed",
   ]);
 });
 
@@ -101,7 +101,7 @@ test("insights proving the same outcome merge into one card, joined by OR", () =
 test("complete scenarios become labeled boxes: seeds, who's out, and the results behind them", () => {
   const [card] = completeScenarioCards([{
     scenario_num: 2, sub_label: "a",
-    title: "Stringer beats Richton by 8 or more AND Stringer's margin and Lumberton's margin combined total 10 or more AND Lumberton beats Magee",
+    title: "Stringer beats Richton by 8 or more AND Stringer's points margin and Lumberton's points margin combined total 10 or more AND Lumberton beats Magee",
     game_winners: [{ winner: "Stringer", loser: "Richton" }, { winner: "Lumberton", loser: "Magee" }],
     conditions: [
       { type: "game_result", winner: "Stringer", loser: "Richton", min_margin: 8, max_margin: null },
@@ -117,7 +117,7 @@ test("complete scenarios become labeled boxes: seeds, who's out, and the results
   const [group] = card.groups;
   assert.deepEqual(group.map((c) => c.type), ["game_result", "text", "game_result", "coin_flip"]);
   assert.equal(group[0].min_margin, 8);
-  assert.equal(group[1].description, "Stringer's margin and Lumberton's margin combined total 10 or more");
+  assert.equal(group[1].description, "Stringer's points margin and Lumberton's points margin combined total 10 or more");
   assert.equal(group[3].description, "A coin flip settles the tie between Magee and Richton");
 });
 
@@ -175,7 +175,7 @@ test("a tie left to the tiebreaker is one unordered row over its places", () => 
   }]);
   assert.deepEqual(card.seeds, [
     { team: "A", seed: 1 },
-    { seed: "2–4", teams: ["B", "C", "D"], note: "Order decided by fewest points allowed in region games, then a coin flip" },
+    { seed: "2–4", teams: ["B", "C", "D"], note: "Order decided by fewest total points allowed in region games. Teams that remain tied start the tiebreakers over among themselves, and a coin flip decides if they're tied on every other tiebreaker." },
   ]);
   assert.deepEqual(card.out, ["E"]);
 });

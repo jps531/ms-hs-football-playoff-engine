@@ -496,28 +496,28 @@ class TestRenderMarginCondition:
         cond = MarginCondition(add=(("A", "B"), ("C", "D")), sub=(), op="==", threshold=10)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
-        assert result == "A's margin and C's margin combined total exactly 10"
+        assert result == "A's points margin and C's points margin combined total exactly 10"
 
     def test_one_add_one_sub_ge_threshold_zero(self):
         """op='>=' with adjusted t==0 renders 'add is at least as large as sub' (line 67)."""
         cond = MarginCondition(add=(("A", "B"),), sub=(("C", "D"),), op=">=", threshold=0)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
-        assert result == "A's margin is at least as large as C's"
+        assert result == "A's points margin is at least as large as C's"
 
     def test_one_add_one_sub_le_threshold_zero(self):
         """op='<=' with adjusted t==0 renders 'sub is at least as large as add' (line 74)."""
         cond = MarginCondition(add=(("A", "B"),), sub=(("C", "D"),), op="<=", threshold=0)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
-        assert result == "C's margin is at least as large as A's"
+        assert result == "C's points margin is at least as large as A's"
 
     def test_fallback_multiple_operands(self):
         """len(add)==2, len(sub)==1 falls back to generic sum expression (lines 78–80)."""
         cond = MarginCondition(add=(("A", "B"), ("C", "D")), sub=(("E", "F"),), op=">=", threshold=5)
         atom = self._atom(("A", "B"), ("C", "D"), ("E", "F"))
         result = _render_margin_condition(cond, atom)
-        assert result == "A's margin + C's margin + \u2212E's margin >= 5"
+        assert result == "A's points margin + C's points margin + \u2212E's points margin >= 5"
 
 
 class TestRenderConditionUnknownType:
@@ -1170,7 +1170,7 @@ class TestAtomConditionDicts:
                 ],
                 "op": ">=",
                 "threshold": 10,
-                "description": "Mize/Raleigh's margin exceeds Petal/Stringer's by 10 or more",
+                "description": "Mize/Raleigh's points margin exceeds Petal/Stringer's by 10 or more",
             }
         ]
 
@@ -1178,7 +1178,7 @@ class TestAtomConditionDicts:
         """A CoinFlipResult (not tied to any remaining game) becomes a coin_flip dict with text only."""
         atom = [CoinFlipResult(winner="Petal", loser="Stringer")]
         out = atom_condition_dicts(atom, {})
-        assert out == [{"type": "coin_flip", "description": "Petal wins coin flip vs Stringer"}]
+        assert out == [{"type": "coin_flip", "description": "Petal wins the coin flip against Stringer"}]
 
     def test_pd_rank_becomes_description_only(self):
         """A PDRankCondition becomes a pd_rank dict with text only."""
@@ -1219,7 +1219,7 @@ class TestAtomConditionDicts:
         assert out == {
             "type": "tiebreak",
             "description": "Raleigh finishes ahead of both Magee and Seminary in their tie, which goes to "
-            "fewest points allowed in region games (then a coin flip)",
+            "fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
         }
 
 
@@ -1231,14 +1231,14 @@ class TestAtomConditionDicts:
             ("Magee", "Raleigh", "Seminary"),
             5,
             "Raleigh finishes 2nd of the three in the tie with Magee and "
-            "Seminary, which goes to fewest points allowed in region games (then a coin flip)",
+            "Seminary, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
         ),
         (
             3,
             ("Magee", "Raleigh", "Seminary"),
             5,
             "Raleigh finishes behind both Magee and Seminary in their tie, "
-            "which goes to fewest points allowed in region games (then a coin flip)",
+            "which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
         ),
         (1, ("Magee", "Raleigh"), 6, "Raleigh finishes ahead of Magee in their tie, which a coin flip decides"),
         (
@@ -1542,8 +1542,8 @@ def test_partial_b_brandon_meridian_and_og_pearl_known(team, expected):
 # ---------------------------------------------------------------------------
 # Partial C: Brandon/Meridian AND NWR/Petal known; only OG/Pearl TBD
 # ---------------------------------------------------------------------------
-# NWR beat Petal by 6 (the real result).  With NWR's margin fixed at 6,
-# the 5-way-tie tiebreaker becomes a function of Pearl's margin alone, so
+# NWR beat Petal by 6 (the real result).  With NWR's points margin fixed at 6,
+# the 5-way-tie tiebreaker becomes a function of Pearl's points margin alone, so
 # new single-game margin atoms appear on the OG/Pearl game.  This is the
 # most interesting partial state: complex structure remains but is now
 # one-dimensional rather than two-dimensional.
@@ -1673,7 +1673,7 @@ def test_partial_c_brandon_meridian_and_nwr_petal_known(team, expected):
 # margin vs OG — we construct the complete 15-game record with a specific
 # OG/Pearl score, run determine_scenarios, and confirm every team's seed.
 #
-# The 5-way-tie H2H PD formula (n=6 fixed, p=Pearl's margin):
+# The 5-way-tie H2H PD formula (n=6 fixed, p=Pearl's points margin):
 #   OG = 8-p,  Petal = 0,  Pearl = p-4,  NWR = 4,  Brandon = -8
 # Boundary crossings: p=4 (OG/NWR tie resolved by OG's H2H win over NWR),
 #   p=5 (NWR takes #1 outright), p=6 (Pearl=OG at 2; Pearl wins H2H vs OG),

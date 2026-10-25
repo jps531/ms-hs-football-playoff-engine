@@ -91,38 +91,38 @@ Falkner
 #1 seed if: (59.1%)
 1. Falkner beats Potts Camp
 2. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
-3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #2 seed if: (38.9%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
-3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes 2nd of the three in the tie with H. W. Byers and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes 2nd of the three in the tie with H. W. Byers and Potts Camp, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #3 seed if: (2.0%)
-1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes behind both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
+1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes behind both H. W. Byers and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)"""
 
 HWB_EXPECTED = """\
 H. W. Byers
 
 #1 seed if: (0.7%)
-1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes ahead of both Falkner and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
+1. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes ahead of both Falkner and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #2 seed if: (41.0%)
 1. Falkner beats Potts Camp AND H. W. Byers beats Ashland
 2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
-3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes ahead of both Ashland and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes ahead of both Ashland and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 4. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
-5. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes 2nd of the three in the tie with Falkner and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
+5. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes 2nd of the three in the tie with Falkner and Potts Camp, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #3 seed if: (16.4%)
-1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes 2nd of the three in the tie with Ashland and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
+1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes 2nd of the three in the tie with Ashland and Potts Camp, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
-3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes behind both Falkner and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND H. W. Byers finishes behind both Falkner and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #4 seed if: (41.8%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
-3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes behind both Ashland and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND H. W. Byers finishes behind both Ashland and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)"""
 
 POTTS_CAMP_EXPECTED = """\
 Potts Camp
@@ -130,38 +130,38 @@ Potts Camp
 #1 seed if: (40.2%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 1–11
-3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes ahead of both Falkner and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes ahead of both Falkner and H. W. Byers in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #2 seed if: (11.6%)
 1. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
-2. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes ahead of both Ashland and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
-3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes 2nd of the three in the tie with Falkner and H. W. Byers, which goes to fewest points allowed in region games (then a coin flip)
+2. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes ahead of both Ashland and H. W. Byers in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
+3. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes 2nd of the three in the tie with Falkner and H. W. Byers, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #3 seed if: (47.3%)
 1. Falkner beats Potts Camp AND H. W. Byers beats Ashland
 2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
-3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes 2nd of the three in the tie with Ashland and H. W. Byers, which goes to fewest points allowed in region games (then a coin flip)
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes 2nd of the three in the tie with Ashland and H. W. Byers, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 4. Potts Camp beats Falkner by 1–11 AND H. W. Byers beats Ashland
-5. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes behind both Falkner and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)
+5. Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Potts Camp finishes behind both Falkner and H. W. Byers in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #4 seed if: (0.9%)
-1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes behind both Ashland and H. W. Byers in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
+1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Potts Camp finishes behind both Ashland and H. W. Byers in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)"""
 
 ASHLAND_EXPECTED = """\
 Ashland
 
 #2 seed if: (8.4%)
-1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)
+1. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #3 seed if: (34.3%)
 1. Potts Camp beats Falkner AND Ashland beats H. W. Byers
 2. Falkner beats Potts Camp by 1–11 AND Ashland beats H. W. Byers by 12 or more
-3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes 2nd of the three in the tie with H. W. Byers and Potts Camp, which goes to fewest points allowed in region games (then a coin flip)
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes 2nd of the three in the tie with H. W. Byers and Potts Camp, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)
 
 #4 seed if: (57.3%)
 1. H. W. Byers beats Ashland
 2. Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1–11
-3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes behind both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)"""
+3. Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND Ashland finishes behind both H. W. Byers and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)"""
 
 # ---------------------------------------------------------------------------
 # build_scenario_atoms
@@ -221,7 +221,7 @@ def test_atoms_falkner_seed1_second_atom_margin_restricted():
 
 
 def test_atoms_falkner_seed1_third_atom_double_large_margin():
-    """Falkner #1 path 3: Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest points allowed in region games (then a coin flip)."""
+    """Falkner #1 path 3: Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND Falkner finishes ahead of both H. W. Byers and Potts Camp in their tie, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)."""
     assert [str(c) for c in _ATOMS["Falkner"][1][2]] == [
         "Potts Camp>Falkner by 12+",
         "H. W. Byers>Ashland by 12+",
@@ -459,21 +459,21 @@ def test_div_dict_scenario1_sub_labels_distinct_titles():
     )
     assert _DIV_DICT["1c"]["title"] == (
         "Potts Camp beats Falkner by 12 or more AND H. W. Byers beats Ashland by 12 or more AND "
-        "Falkner, H. W. Byers and Potts Camp are still level: fewest points allowed in region games "
-        "decides their order (then a coin flip)"
+        "Falkner, H. W. Byers and Potts Camp are still level: fewest total points allowed in region games "
+        "decides their order (any teams still tied start the tiebreakers over)"
     )
 
 
 def test_div_dict_scenario4_sub_labels_distinct_titles():
-    """Scenarios 4a-4c: Ashland's margin, and when it's 12+ Falkner's too, decide the order."""
+    """Scenarios 4a-4c: Ashland's points margin, and when it's 12+ Falkner's too, decide the order."""
     assert _DIV_DICT["4a"]["title"] == "Falkner beats Potts Camp AND Ashland beats H. W. Byers by 1\u201311"
     assert (
         _DIV_DICT["4b"]["title"] == "Falkner beats Potts Camp by 1\u201311 AND Ashland beats H. W. Byers by 12 or more"
     )
     assert _DIV_DICT["4c"]["title"] == (
         "Falkner beats Potts Camp by 12 or more AND Ashland beats H. W. Byers by 12 or more AND "
-        "Ashland, H. W. Byers and Potts Camp are still level: fewest points allowed in region games "
-        "decides their order (then a coin flip)"
+        "Ashland, H. W. Byers and Potts Camp are still level: fewest total points allowed in region games "
+        "decides their order (any teams still tied start the tiebreakers over)"
     )
 
 

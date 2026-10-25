@@ -884,7 +884,7 @@ class CoinFlipResult:
 
     def __str__(self) -> str:
         """Return a compact human-readable representation."""
-        return f"{self.winner} wins coin flip vs {self.loser}"
+        return f"{self.winner} wins the coin flip against {self.loser}"
 
 
 # --- Data class for one tiebreaker decision that depends on margins ---

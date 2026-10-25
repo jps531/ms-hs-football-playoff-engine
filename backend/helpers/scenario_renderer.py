@@ -55,13 +55,13 @@ def _render_margin_condition(cond: MarginCondition, atom: list) -> str:
         l1 = _winner_label(cond.add[0], atom)
         l2 = _winner_label(cond.add[1], atom)
         if cond.op == "==":
-            return f"{l1}'s margin and {l2}'s margin combined total exactly {cond.threshold}"
+            return f"{l1}'s points margin and {l2}'s points margin combined total exactly {cond.threshold}"
         if cond.op in (">=", ">"):
             t = cond.threshold + (1 if cond.op == ">" else 0)
-            return f"{l1}'s margin and {l2}'s margin combined total {t} or more"
+            return f"{l1}'s points margin and {l2}'s points margin combined total {t} or more"
         else:
             t = cond.threshold - (1 if cond.op == "<" else 0)
-            return f"{l1}'s margin and {l2}'s margin combined total {t} or less"
+            return f"{l1}'s points margin and {l2}'s points margin combined total {t} or less"
 
     if len(cond.add) == 1 and len(cond.sub) == 1:
         add_label = _winner_label(cond.add[0], atom)
@@ -69,28 +69,28 @@ def _render_margin_condition(cond: MarginCondition, atom: list) -> str:
         if cond.op == "==":
             t = cond.threshold
             if t < 0:
-                return f"{sub_label}'s margin exceeds {add_label}'s by exactly {-t}"
+                return f"{sub_label}'s points margin exceeds {add_label}'s by exactly {-t}"
             if t == 0:
-                return f"{add_label}'s margin equals {sub_label}'s"
-            return f"{add_label}'s margin exceeds {sub_label}'s by exactly {t}"
+                return f"{add_label}'s points margin equals {sub_label}'s"
+            return f"{add_label}'s points margin exceeds {sub_label}'s by exactly {t}"
         if cond.op in (">=", ">"):
             t = cond.threshold + (1 if cond.op == ">" else 0)
             if t < 0:
-                return f"{sub_label}'s margin doesn't exceed {add_label}'s by more than {-t}"
+                return f"{sub_label}'s points margin doesn't exceed {add_label}'s by more than {-t}"
             if t == 0:
-                return f"{add_label}'s margin is at least as large as {sub_label}'s"
-            return f"{add_label}'s margin exceeds {sub_label}'s by {t} or more"
+                return f"{add_label}'s points margin is at least as large as {sub_label}'s"
+            return f"{add_label}'s points margin exceeds {sub_label}'s by {t} or more"
         else:
             t = cond.threshold - (1 if cond.op == "<" else 0)
             if t > 0:
-                return f"{add_label}'s margin doesn't exceed {sub_label}'s by more than {t}"
+                return f"{add_label}'s points margin doesn't exceed {sub_label}'s by more than {t}"
             if t == 0:
-                return f"{sub_label}'s margin is at least as large as {add_label}'s"
-            return f"{sub_label}'s margin exceeds {add_label}'s by {-t} or more"
+                return f"{sub_label}'s points margin is at least as large as {add_label}'s"
+            return f"{sub_label}'s points margin exceeds {add_label}'s by {-t} or more"
 
     # Fallback for other patterns
-    parts = [f"{_winner_label(p, atom)}'s margin" for p in cond.add]
-    parts += [f"\u2212{_winner_label(p, atom)}'s margin" for p in cond.sub]
+    parts = [f"{_winner_label(p, atom)}'s points margin" for p in cond.add]
+    parts += [f"\u2212{_winner_label(p, atom)}'s points margin" for p in cond.sub]
     return " + ".join(parts) + f" {cond.op} {cond.threshold}"
 
 
@@ -109,12 +109,13 @@ def render_tiebreak_decision(cond: TiebreakDecision) -> str:
         # Step 4 only comes into it when step 3 left them level, so say so: read alone, it could match.
         lead = (
             f"{_join(cond.group)} level on point differential in games among them, so on point differential "
-            "against the rest of the region (capped at 12 a game, highest-placed opponent first)"
+            "(capped at 12 a game) against the highest-placed region team outside the tie, then the next-highest, "
+            "and so on until the tie is broken"
         )
     if len(cond.parts) == 1:
         return f"{lead}: {'both' if len(cond.group) == 2 else 'all'} level"
     top, *rest = cond.parts
-    first = f"{_join(top)} best" if len(top) == 1 else f"{_join(top)} level at the top"
+    first = f"{_join(top)} best" if len(top) == 1 else f"{_join(top)} tied for best"
     return f"{lead}: {first}, " + ", ".join(f"then {_join(p)}" + (", level" if len(p) > 1 else "") for p in rest)
 
 
@@ -124,7 +125,10 @@ def render_open_group(step: int, group) -> str:
     if step >= 6:
         return f"{teams} are level on every tiebreaker: a coin flip decides their order"
     if step == 5:
-        return f"{teams} are still level: fewest points allowed in region games decides their order (then a coin flip)"
+        return (
+            f"{teams} are still level: fewest total points allowed in region games decides their order "
+            "(any teams still tied start the tiebreakers over)"
+        )
     return (
         f"{teams} tie: their order is decided by point differential in games among them, then against "
         "the rest of the region (capped at 12 a game), then fewest points allowed"
@@ -135,13 +139,14 @@ _PLACE_WORDS = {2: "2nd", 3: "3rd", 4: "4th", 5: "5th", 6: "6th"}
 _COUNT_WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
 _TIE_DECIDED_BY = {
     6: "which a coin flip decides",
-    5: "which goes to fewest points allowed in region games (then a coin flip)",
+    5: "which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
 }
 
 
 def render_tiebreak_place(cond: TiebreakPlace) -> str:
     """A team's place in a tie left to the tiebreaker, in words, e.g. "Raleigh finishes ahead of both
-    Magee and Seminary in their tie, which goes to fewest points allowed in region games (then a coin flip)"."""
+    Magee and Seminary in their tie, which goes to fewest total points allowed in region games (any teams still tied
+    start the tiebreakers over)"."""
     others = [t for t in cond.group if t != cond.team]
     both = "both " if len(others) == 2 else ""
     if cond.place == 1:
@@ -165,7 +170,7 @@ def _render_condition(cond, atom: list) -> str:
     if isinstance(cond, MarginCondition):
         return _render_margin_condition(cond, atom)
     if isinstance(cond, CoinFlipResult):
-        return f"{cond.winner} wins coin flip vs {cond.loser}"
+        return f"{cond.winner} wins the coin flip against {cond.loser}"
     if isinstance(cond, TiebreakDecision):
         return render_tiebreak_decision(cond)
     if isinstance(cond, TiebreakPlace):

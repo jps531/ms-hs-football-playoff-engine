@@ -234,6 +234,21 @@ class TestTitleOpen:
         teams = [_entry("A", (0.9, 0.1, 0, 0), record=(3, 0)), _entry("B", (0, 0.9, 0.1, 0), record=(2, 1))]
         assert build_region_headline(teams, None, 12) == "A leads the region at 3–0."
 
+    def test_teams_level_at_the_top_are_all_named_or_none_are(self):
+        """A leader tied on record with others never gets picked out alone."""
+        two = [
+            _entry("A", (0.5, 0.3, 0.2, 0), record=(3, 1)),
+            _entry("B", (0.4, 0.4, 0.2, 0), record=(3, 1)),
+            _entry("C", (0.1, 0.3, 0.6, 0), record=(2, 2)),
+        ]
+        assert build_region_headline(two, None, 12) == (
+            "Three teams can still win the region, and A and B share the lead at 3–1."
+        )
+        four = [_entry(n, (0.25, 0.25, 0.25, 0.25), record=(3, 1)) for n in "ABCD"]
+        assert build_region_headline(four, None, 12) == (
+            "Four teams can still win the region, and four teams share the lead at 3–1."
+        )
+
 
 class TestTitleDecided:
     """#1 is locked but the rest of the field isn't."""

@@ -420,7 +420,7 @@ def test_render_coahoma_county_seed4_first_atom():
 
 
 def test_render_coahoma_county_has_margin_conditions():
-    """CC's margin-sensitive paths (from 3-way ties) state the tiebreaker decisions behind them."""
+    """CC's points margin-sensitive paths (from 3-way ties) state the tiebreaker decisions behind them."""
     rendered = render_team_scenarios("Coahoma County", _ATOMS, odds=_ODDS)
     assert "Point differential in games among Coahoma County, Holly Springs and Independence" in rendered
 

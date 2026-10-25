@@ -16,7 +16,7 @@ The engine produces three distinct things for each class/region/date snapshot:
 
 3. **Key insights** — simple, unconditionally-true conditional statements extracted from `scenario_atoms` (e.g., "Taylorsville clinches 1st seed: Taylorsville beats Stringer" or "Murrah is eliminated: Starkville beats Terry"). Each insight has 1–3 `GameResult` conditions and is margin-verified before storage. Stored at all tiers where atoms exist (R ≤ 10). They feed each region's headline at every R, and they're the only scenario-level content shown at R 6–10.
 
-> **Note on margin accuracy above R = 5:** For R > 5, scenarios and odds are win/loss-only: a tie that reaches point differential (steps 3–4) is broken as if every remaining game were won by 7. Full margin-sensitive computation is bounded at R ≤ 5 due to the memory cost of 12^6 enumeration at backfill scale, so the scenario list is shown only at R ≤ 5 (see the display threshold below). Key insights stay exact at any R ≤ 10 because each is margin-verified.
+> **Note on margin accuracy above R = 5:** For R > 5, the odds are win/loss-only: a tie that reaches point differential (steps 3–4) is broken as if every remaining game were won by 7, so those odds are close but not exact. Scenarios don't guess: `enumerate_division_scenarios` leaves such a tie open ("order decided by the tiebreaker"), so they stay accurate, just less specific. Full margin-sensitive computation is bounded at R ≤ 5 due to the memory cost of 12^6 enumeration at backfill scale, and the scenario list is shown only there, where a point-differential race is stated exactly (see the display threshold below). Key insights stay exact at any R ≤ 10 because each is margin-verified.
 
 ---
 
@@ -43,7 +43,7 @@ Both `scenario_atoms` and `complete_scenarios` are stored and are eligible for U
 
 ### R 6–10 — Win/loss enumeration, no margin
 
-Margin sensitivity is skipped entirely. All 2^R outcomes are enumerated once at a fixed default margin of 7 points. `scenario_atoms` and `complete_scenarios` are stored, but the scenario list isn't shown (it could state a result decides a place when the margin does).
+Margin sensitivity is skipped entirely. For the odds, all 2^R outcomes are enumerated once at a fixed default margin of 7 points. `scenario_atoms` and `complete_scenarios` are stored; any tie that reaches point differential is left open in them rather than settled at that default. The scenario list isn't shown at this tier (see the display threshold below).
 
 Key insights are extracted and stored at this tier. Because atoms are computed with `ignore_margins=True`, each insight candidate is spot-checked across all 12^k margin combinations for its k condition games before being emitted — only claims that hold for every combination are stored (`margin_verified=True`). This makes them unconditionally true even at this tier despite the win/loss-only atoms.
 
@@ -67,7 +67,7 @@ The engine switches to **Monte Carlo sampling**, two runs of 50,000 draws each. 
 
 ## Frontend Display Threshold: R ≤ 5
 
-Even though scenario data is stored for R ≤ 15, the frontend only **renders the human-readable scenario list** when **R ≤ 5** (`DISPLAY_THRESHOLD` in `api_helpers.py`), the range where the engine works through every winning margin. Above it, scenarios are win/loss-only and could misstate a race that turns on point differential.
+Even though scenario data is stored for R ≤ 15, the frontend only **renders the human-readable scenario list** when **R ≤ 5** (`DISPLAY_THRESHOLD` in `api_helpers.py`), the range where the engine works through every winning margin, so a race that turns on point differential is stated exactly. Above it, scenarios would leave such a tie open; they'd be accurate but less specific, and the list is withheld as a product choice.
 
 At R > 5, the frontend shows seeding odds (always available) and key insights (when atoms exist, R ≤ 10, each margin-verified), but omits the full scenario list. The hosting page's per-team scenarios follow the same threshold.
 
