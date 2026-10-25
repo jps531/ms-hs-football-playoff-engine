@@ -105,7 +105,7 @@ _CLASS_SELECT = (
             odds_first_round_home, odds_second_round_home, odds_quarterfinals_home, odds_semifinals_home,
             odds_first_round_home_weighted, odds_second_round_home_weighted,
             odds_quarterfinals_home_weighted, odds_semifinals_home_weighted,
-            region
+            region, computed_at
         FROM region_standings
         WHERE season = %s AND class = %s AND as_of_date <= %s"""
     + ACTIVE_SCHOOL_FILTER
@@ -188,7 +188,8 @@ async def get_class_standings(clazz: ClazzPath, season: SeasonQ, date: DateQ = N
     to today) for every school in the class — same per-team detail as
     ``GET /standings/{clazz}/{region}`` (odds, bracket_odds, home_game_odds,
     clinched, eliminated, coin_flip_needed), minus scenarios and
-    computation_state.
+    computation_state. ``computed_from``/``computed_to`` are the earliest and
+    latest times the rows shown were calculated.
     """
     as_of_date = date or today()
     async with get_conn() as conn:
@@ -201,6 +202,9 @@ async def get_class_standings(clazz: ClazzPath, season: SeasonQ, date: DateQ = N
     by_region, completed_by_region = group_rows_and_completed_by_region(rows, completed_games, key_fn=lambda r: r[39])
 
     latest_seen = max(row[15] for row in rows)
+    # When the numbers shown were calculated: the class's regions are written minutes apart in one
+    # run, and a region whose run failed keeps an older row, so a span rather than one time.
+    computed = [r[40] for r in rows if r[40] is not None]
     regions = []
     for region, region_rows in sorted(by_region.items()):
         team_entries = build_team_entries(region_rows, None, None)
@@ -209,7 +213,14 @@ async def get_class_standings(clazz: ClazzPath, season: SeasonQ, date: DateQ = N
         order = current_standings_order(teams, completed_by_region[region], odds_by_school)
         regions.append(ClassRegionStandings(region=region, teams=_reorder_team_entries(team_entries, order)))
 
-    return ClassStandingsResponse(season=season, class_=clazz, as_of_date=latest_seen, regions=regions)
+    return ClassStandingsResponse(
+        season=season,
+        class_=clazz,
+        as_of_date=latest_seen,
+        regions=regions,
+        computed_from=min(computed) if computed else None,
+        computed_to=max(computed) if computed else None,
+    )
 
 
 @router.get("/standings/{clazz}/{region}", responses=_404)

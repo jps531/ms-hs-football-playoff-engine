@@ -95,18 +95,38 @@ export function gameDate(iso) {
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-/**
- * "Sat, Oct 25 at 9:47 AM CDT" for a timestamp, in Mississippi's time zone
- * whatever the reader's, since the update schedule is Central.
- */
-export function calculatedAt(iso) {
-  if (!iso) return "";
+// The pieces of a timestamp in Mississippi's time zone, whatever the reader's
+// (the update schedule is Central): day ("Sat, Oct 24"), clock ("9:47"),
+// period ("AM") and zone ("CDT"); null for a missing or unreadable time.
+function centralParts(iso) {
+  if (!iso) return null;
   const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return "";
+  if (Number.isNaN(t.getTime())) return null;
   const zone = { timeZone: "America/Chicago" };
   const day = t.toLocaleDateString("en-US", { ...zone, weekday: "short", month: "short", day: "numeric" });
-  const time = t.toLocaleTimeString("en-US", { ...zone, hour: "numeric", minute: "2-digit", timeZoneName: "short" });
-  return `${day} at ${time}`;
+  const parts = new Intl.DateTimeFormat("en-US", { ...zone, hour: "numeric", minute: "2-digit", timeZoneName: "short" })
+    .formatToParts(t);
+  const part = (type) => parts.find((p) => p.type === type)?.value ?? "";
+  return { day, clock: `${part("hour")}:${part("minute")}`, period: part("dayPeriod"), zone: part("timeZoneName") };
+}
+
+/**
+ * When a set of numbers was calculated, given the earliest and latest times
+ * behind them: "Sat, Oct 24 at 9:10 AM CDT" when they share a minute,
+ * "Sat, Oct 24, between 9:05 and 9:20 AM CDT" within a day, and
+ * "between Fri, Oct 23 at 9:12 AM and Sat, Oct 24 at 9:20 AM CDT" across days.
+ * Either time alone stands for both.
+ */
+export function calculatedSpan(fromIso, toIso) {
+  const a = centralParts(fromIso) ?? centralParts(toIso);
+  const b = centralParts(toIso) ?? a;
+  if (!a) return "";
+  const full = (p) => `${p.day} at ${p.clock} ${p.period} ${p.zone}`;
+  if (full(a) === full(b)) return full(a);
+  if (a.zone !== b.zone) return `between ${full(a)} and ${full(b)}`;
+  if (a.day !== b.day) return `between ${a.day} at ${a.clock} ${a.period} and ${full(b)}`;
+  const start = a.period === b.period ? a.clock : `${a.clock} ${a.period}`;
+  return `${a.day}, between ${start} and ${b.clock} ${b.period} ${b.zone}`;
 }
 
 // ------------------------------------------------------------ color contrast

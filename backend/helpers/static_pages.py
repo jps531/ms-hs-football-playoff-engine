@@ -19,7 +19,7 @@ import html
 import json
 import re
 from collections.abc import Iterable
-from datetime import date
+from datetime import date, datetime
 from xml.sax.saxutils import escape as xml_escape
 
 from backend.helpers.color_contrast import contrast_ratio
@@ -1572,6 +1572,26 @@ def class_grid() -> str:
     )
 
 
+def landing_computed_span(
+    featured: dict | None, scenario_example: dict | None = None, insight_example: dict | None = None
+) -> tuple[str | None, str | None]:
+    """The earliest and latest times the front page's numbers were calculated, as stored (ISO), or Nones.
+
+    Covers everything the page shows: the featured class's standings (its preview, region card and bracket
+    all come from those rows) and the regions behind the scenario examples, which may be earlier snapshots.
+    """
+    stamps = []
+    if featured:
+        cs = featured.get("class_standings") or {}
+        stamps += [cs.get("computed_from"), cs.get("computed_to")]
+        stamps.append(((featured.get("standings") or {}).get("computation_state") or {}).get("computed_at"))
+    for ex in (scenario_example, insight_example):
+        for payload in (ex or {}).get("standings"), (ex or {}).get("scenario_payload"):
+            stamps.append(((payload or {}).get("computation_state") or {}).get("computed_at"))
+    times = sorted((datetime.fromisoformat(str(t)), str(t)) for t in stamps if t)
+    return (times[0][1], times[-1][1]) if times else (None, None)
+
+
 def landing_body(
     featured: dict | None,
     teams: dict[str, dict],
@@ -1704,7 +1724,10 @@ def landing_body(
         )
         + "</div>"
     )
-    return f'<div class="page landing">{intro}{tour}</div>\n'
+    # When the numbers shown were calculated, for the footer (the app reads these once the page is up).
+    start, end = landing_computed_span(featured, scenario_example, insight_example)
+    span = f' data-computed-from="{_e(start)}" data-computed-to="{_e(end)}"' if start else ""
+    return f'<div class="page landing"{span}>{intro}{tour}</div>\n'
 
 
 def sitemap_xml(site_url: str, pages: Iterable[tuple[str, date | None]]) -> str:
