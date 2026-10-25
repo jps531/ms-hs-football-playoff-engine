@@ -614,13 +614,16 @@ def outcome_scenario_card(card: dict, teams: dict, p: float | None = None) -> st
         if card["out"]
         else ""
     )
-    # Shared conditions once, then "AND ONE OF" the alternatives.
+    # Shared conditions once, then the alternatives in a box headed "AND ONE OF", so it's clear where they end.
     common = card.get("common") or []
-    shared = (
-        f'{condition_groups([common], teams)}<div class="and-oneof"><span>AND ONE OF</span></div>' if common else ""
+    alternatives = (
+        f'{condition_groups([common], teams)}<div class="oneof" role="group" aria-label="And one of">'
+        f'<span class="oneof__label" aria-hidden="true">AND ONE OF</span>{condition_groups(card["groups"], teams)}</div>'
+        if common
+        else condition_groups(card["groups"], teams)
     )
     body = (
-        f'<p class="outcome__if">IF</p><div class="scenario__body">{shared}{condition_groups(card["groups"], teams)}</div>'
+        f'<p class="outcome__if">IF</p><div class="scenario__body">{alternatives}</div>'
         if card["groups"] or common
         else ""
     )

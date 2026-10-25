@@ -1135,4 +1135,8 @@ def test_complete_scenario_cards_say_shared_conditions_once():
     }])  # fmt: skip
     assert [c["school"] for c in card["common"]] == ["A"]
     assert [[(c["school"], c["min_margin"]) for c in g] for g in card["groups"]] == [[("C", 1)], [("C", 10)]]
-    assert '<div class="and-oneof"><span>AND ONE OF</span></div>' in outcome_scenario_card(card, {})
+    html = outcome_scenario_card(card, {})
+    # The alternatives sit inside the box, after the shared conditions.
+    box = html.index('<div class="oneof" role="group" aria-label="And one of">')
+    assert '<span class="oneof__label" aria-hidden="true">AND ONE OF</span>' in html[box:]
+    assert html.index('class="or"') > box

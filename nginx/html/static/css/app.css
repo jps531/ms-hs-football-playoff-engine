@@ -817,12 +817,24 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   color: var(--text-on-inverse);
   font-size: 11px; line-height: 16px; font-weight: 600;
 }
-/* Between a scenario's shared conditions and its alternatives: "AND ONE OF". */
-.and-oneof { display: flex; justify-content: center; margin-block: 12px 4px; }
-.and-oneof span {
+/* A scenario's alternatives after its shared conditions: a box headed "AND ONE OF" on its top edge,
+   joined to the shared conditions above by the same line as an AND. */
+.oneof {
+  position: relative;
+  margin-top: 22px;
+  padding: 20px 10px 12px;
+  border: 1px solid var(--connector); border-radius: 10px;
+}
+.oneof::before {
+  content: ""; position: absolute; left: 50%; top: -23px;
+  width: 1px; height: 13px; background: var(--connector);
+}
+.oneof__label {
+  position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%);
   padding: 1px 10px; border: 1px solid var(--connector); border-radius: 6px;
+  background: var(--surface-card);
   color: var(--text-secondary);
-  font-size: 11px; line-height: 16px; font-weight: 600;
+  font-size: 11px; line-height: 16px; font-weight: 600; white-space: nowrap;
 }
 
 .notice { padding-block: 40px; color: var(--text-secondary); }
