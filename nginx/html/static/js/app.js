@@ -732,7 +732,7 @@ async function regionView(ctx) {
     ${standingsTable(data, teams, mode, focus, clazz, schedule)}
     ${remaining.length ? gamesSection("remaining", "Remaining games", remaining, teams, focus) : ""}
     ${remaining.length ? scenariosSection(data, teams, cardProv, mode, focus, !data.scenarios?.length) : ""}
-    ${data.scenarios?.length ? allScenariosSection(data.scenarios, teams, focus) + scenarioReport(focus) : ""}
+    ${data.scenarios?.length ? allScenariosSection(data.scenarios, teams, focus, mode, cardProv.odds) + scenarioReport(focus) : ""}
     ${results.length ? gamesSection("results", "Completed games", results, teams, focus) : ""}
   </div>`;
 }
@@ -973,16 +973,19 @@ function collapsible(label, count, body, open) {
 }
 
 /**
- * Every distinct way the region can finish, one box each. Long lists start
- * folded so they don't bury the completed games below.
+ * Every distinct way the region can finish, one box each, with its chance in
+ * the chosen odds mode. Long lists start folded so they don't bury the
+ * completed games below.
  */
-function allScenariosSection(scenarios, teams, focus) {
+function allScenariosSection(scenarios, teams, focus, mode, provenanceHtml) {
   const cards = completeScenarioCards(scenarios);
   const open = cards.length <= 12;
   return `<section class="section" aria-labelledby="all-scen-title">
     <details class="scenario-group scenario-group--section"${open ? " open" : ""}>
       <summary><h2 class="section-title" id="all-scen-title">Scenarios</h2><span class="muted">${cards.length} ${cards.length === 1 ? "way" : "ways"} the region can finish</span></summary>
-      <div class="scenario-grid">${cards.map((c) => outcomeScenarioCard(c, teams, { focus })).join("")}</div>
+      <div class="scenario-grid">${cards.map((c) => outcomeScenarioCard(c, teams, {
+        focus, p: mode === "projected" ? c.pWeighted : c.p, provenanceHtml,
+      })).join("")}</div>
     </details>
   </section>`;
 }

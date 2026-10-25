@@ -125,6 +125,9 @@ class RegionSeedingData:
     # None when not computed (the playoff update, whose seeds are all locked).
     seed_pairs: dict[tuple[str, int, str, int], float] | None = None
     seed_pairs_weighted: dict[tuple[str, int, str, int], float] | None = None
+    # Each remaining game's P(team a wins), in ``remaining`` order, for the complete scenarios'
+    # Projected odds. None without ratings (Projected then reads as Toss-up, as the odds do).
+    remaining_win_probs: list[float] | None = None
 
 
 # -------------------------
@@ -1017,6 +1020,7 @@ def get_region_seeding_odds(
         seed_pairs_weighted=(
             {k: v / r.denom_weighted for k, v in r.seed_pairs_weighted.items()} if r.denom_weighted else {}
         ),
+        remaining_win_probs=[win_prob_fn(g.a, g.b, None, g.location_a) for g in remaining] if win_prob_fn else None,
     )
 
 
@@ -1278,7 +1282,9 @@ def get_region_finish_scenarios(
     if R <= _R_ALWAYS_MARGIN:
         # Full margin-sensitive computation synchronously. Team paths and insights are read off the
         # complete scenarios, which state only what the tiebreaker decides.
-        complete_scenarios = enumerate_division_scenarios(teams, completed, remaining)
+        complete_scenarios = enumerate_division_scenarios(
+            teams, completed, remaining, scenario_odds=True, win_probs=seeding_data.remaining_win_probs
+        )
         scenario_atoms = team_atoms_from_scenarios(complete_scenarios, remaining)
         insights = extract_insights(
             scenario_atoms,

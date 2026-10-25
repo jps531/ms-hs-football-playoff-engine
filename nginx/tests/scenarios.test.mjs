@@ -130,23 +130,25 @@ test("scenarios without structured conditions fall back to their game winners", 
   assert.deepEqual(card.groups, [[{ type: "game_result", school: "A", opponent: "B", required_result: "win", min_margin: 1, max_margin: null }]]);
 });
 
-test("scenarios that read the same are merged, and the rest renumbered", () => {
-  const sc = (num, sub, title, outcomes) => ({
+test("one card per finish: scenarios reaching the same standings merge, each way once, with the finish's chance", () => {
+  const sc = (num, sub, title, outcomes, p = null) => ({
     scenario_num: num, sub_label: sub, title,
     game_winners: [], conditions: [{ type: "game_result", winner: title.split(" beats ")[0], loser: title.split(" beats ")[1], min_margin: 1, max_margin: null }],
-    outcomes,
+    outcomes, p, p_weighted: p == null ? null : p / 2,
   });
   const x = { A: "1", B: "2" };
   const y = { B: "1", A: "2" };
   const cards = completeScenarioCards([
-    sc(1, "", "A beats B", x),
-    sc(2, "a", "B beats A", y),
-    sc(2, "b", "B beats C", y),
-    sc(3, "a", "B beats A", y), // same as 2a
-    sc(3, "b", "B beats C", y), // same as 2b
-    sc(4, "", "C beats A", y),
+    sc(1, "", "A beats B", x, 0.25),
+    sc(2, "a", "B beats A", y, 0.75),
+    sc(2, "b", "B beats C", y, 0.75),
+    sc(3, "a", "B beats A", y, 0.75), // the same way again
+    sc(4, "", "C beats A", y, 0.75),
   ]);
-  assert.deepEqual(cards.map((c) => c.label), ["Scenario 1", "Scenario 2A", "Scenario 2B", "Scenario 3"]);
+  assert.deepEqual(cards.map((c) => c.label), ["Scenario 1", "Scenario 2"]);
+  assert.deepEqual(cards[1].groups.map((g) => `${g[0].school} beats ${g[0].opponent}`), ["B beats A", "B beats C", "C beats A"]);
+  assert.deepEqual([cards[0].p, cards[1].p, cards[1].pWeighted], [0.25, 0.75, 0.375]);
+  assert.equal(completeScenarioCards([sc(1, "", "A beats B", x)])[0].p, null); // an older snapshot: no odds
 });
 
 test("several ways to one outcome become OR groups, worded as the API words them", () => {

@@ -118,8 +118,11 @@ export const OPEN_TIE_NOTES = {
 
 /**
  * The region's complete scenarios — every distinct way the standings can
- * finish — as cards: { label, seeds, out, groups }, numbered in order with
- * duplicates removed.
+ * finish — as cards: { label, seeds, out, common, groups, p, pWeighted }, one
+ * card per finish, numbered in order. The API can list one finish more than
+ * once (different results reaching the same standings); those become one card
+ * whose ways are joined by OR, with the finish's chance (Toss-up `p`,
+ * Projected `pWeighted`; null when the snapshot has none).
  * `seeds` are the playoff seeds (1-4) as { seed, team }, except a tie the
  * scenario leaves to the tiebreaker, which is one { seed: "2–4", teams, note }
  * row over its places: its order isn't stated, so it isn't shown. `out` is the
@@ -175,47 +178,46 @@ export function completeScenarioCards(scenarios, playoffSeeds = 4) {
     }
     const straddle = ties.some((t) => order.some((x) => t.members.has(x.team) && x.seed > playoffSeeds));
     const out = order.filter((o) => o.seed > playoffSeeds && !ties.some((t) => t.members.has(o.team))).map((o) => o.team);
-    // Conditions every alternative shares are said once; the alternatives keep only what differs.
-    const key = (c) => JSON.stringify(c);
-    const common = groups.length > 1 ? groups[0].filter((c) => groups.every((g) => g.some((x) => key(x) === key(c)))) : [];
-    const shared = new Set(common.map(key));
     return {
-      label: `Scenario ${sc.scenario_num}${(sc.sub_label ?? "").toUpperCase()}`,
-      seeds,
-      out: straddle ? [...out, "the rest of the tie"] : out,
-      common,
-      groups: common.length ? groups.map((g) => g.filter((c) => !shared.has(key(c)))) : groups,
-      num: sc.scenario_num,
+      seeds, out: straddle ? [...out, "the rest of the tie"] : out, ways: groups, p: sc.p ?? null, pWeighted: sc.p_weighted ?? null,
     };
   });
-  return renumber(dedupe(cards));
+  return byFinish(cards).map((c, i) => ({ ...c, label: `Scenario ${i + 1}` }));
+}
+
+/** The margins a game-result chip allows, as [lo, hi] (hi null for unbounded). */
+const marginsOf = (c) => [c.min_margin ?? 1, c.max_margin ?? null];
+
+/** True when every condition of way `v` holds whenever way `w`'s do: `v` covers `w`. */
+function covers(v, w) {
+  return v.every((x) => w.some((y) => {
+    if (x.type !== "game_result" || y.type !== "game_result") return JSON.stringify(x) === JSON.stringify(y);
+    if (x.school !== y.school || x.opponent !== y.opponent || x.required_result !== y.required_result) return false;
+    const [xlo, xhi] = marginsOf(x);
+    const [ylo, yhi] = marginsOf(y);
+    return xlo <= ylo && (xhi === null || (yhi !== null && yhi <= xhi));
+  }));
 }
 
 /**
- * Drop scenarios that read the same as an earlier one. The API can split
- * one scenario over a game that changes nothing (its conditions leave that
- * game out), which would show two identical boxes.
+ * One card per finish, in order of first appearance: the ways to it from
+ * every scenario that reaches it, each once, joined by OR, with what every
+ * way shares said once (`common`).
  */
-function dedupe(cards) {
-  const seen = new Set();
-  return cards.filter((c) => {
-    const key = JSON.stringify([c.seeds, c.out, c.common, c.groups]);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/** Number what's left 1, 2, 3…, lettering a scenario's variants A, B, and so on. */
-function renumber(cards) {
-  const groups = [];
+function byFinish(cards) {
+  const key = (c) => JSON.stringify(c);
+  const finishes = new Map();
   for (const c of cards) {
-    const last = groups[groups.length - 1];
-    if (last && last[0].num === c.num) last.push(c);
-    else groups.push([c]);
+    const finish = JSON.stringify([c.seeds, c.out]);
+    const seen = finishes.get(finish);
+    if (!seen) finishes.set(finish, { ...c, ways: [...c.ways] });
+    else for (const w of c.ways) if (!seen.ways.some((x) => key(x) === key(w))) seen.ways.push(w);
   }
-  return groups.flatMap((group, i) => group.map(({ num, ...c }, k) => ({
-    ...c,
-    label: `Scenario ${i + 1}${group.length > 1 ? String.fromCharCode(65 + k) : ""}`,
-  })));
+  return [...finishes.values()].map(({ ways: listed, ...c }) => {
+    // A way another way already covers adds nothing ("B beats A by 9+" beside "B beats A").
+    const ways = listed.filter((w, i) => !listed.some((v, j) => j !== i && covers(v, w) && (!covers(w, v) || j < i)));
+    const common = ways.length > 1 ? ways[0].filter((x) => ways.every((w) => w.some((y) => key(y) === key(x)))) : [];
+    const shared = new Set(common.map(key));
+    return { ...c, common, groups: common.length ? ways.map((w) => w.filter((x) => !shared.has(key(x)))) : ways };
+  });
 }
