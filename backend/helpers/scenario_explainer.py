@@ -34,7 +34,6 @@ from dataclasses import dataclass
 from backend.helpers.data_classes import CompletedGame, RemainingGame
 from backend.helpers.data_helpers import normalize_pair
 from backend.helpers.tiebreakers import (
-    base_bucket_order,
     build_h2h_maps,
     resolve_standings_with_trace,
     standings_from_mask,
@@ -113,14 +112,14 @@ class BucketStepData:
 
     Attributes:
         step2: Per-team list of results (2=win, 1=tie, 0=loss, None=no game)
-            vs each outside team in ``outside`` order.
+            vs each outside group in ``outside`` order, summed over a group's teams.
         step4: Per-team list of capped (±12) point differentials vs each
-            outside team in ``outside`` order.
+            outside group in ``outside`` order, summed over a group's teams.
         h2h_pd_cap: Capped H2H point-differential map; defaultdict keyed by
             ``(a, b)`` (lex-normalised pair).
         wl_totals: Per-team W/L/T/PA totals from ``standings_from_mask``.
-        outside: Outside teams (not in the bucket) in base seeding order —
-            the column axis for ``step2`` and ``step4``.
+        outside: Outside groups (not in the bucket), best first: a team on its own, or teams
+            level on record compared as one — the column axis for ``step2`` and ``step4``.
     """
 
     step2: dict
@@ -128,6 +127,12 @@ class BucketStepData:
     h2h_pd_cap: dict
     wl_totals: dict
     outside: list
+
+
+def _join(names) -> str:
+    """ "A", "A and B", "A, B and C"."""
+    names = list(names)
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 def _step1_totals(sub_bucket: list[str], h2h_pts: dict) -> dict[str, float]:
@@ -189,8 +194,10 @@ def _non_h2h_clause(
     t2 = step_data.step2.get(team, [])
     o2 = step_data.step2.get(other, [])
 
-    # Step 2: first outside team where the two differ
-    for i, ext in enumerate(step_data.outside):
+    # Step 2: first outside team (or group level on record) where the two differ
+    for i, group in enumerate(step_data.outside):
+        group = [group] if isinstance(group, str) else group
+        ext = _join(group)
         t_res = t2[i] if i < len(t2) else None
         o_res = o2[i] if i < len(o2) else None
         # Higher raw value = better (2>1>0>None treated as very negative)
@@ -198,6 +205,8 @@ def _non_h2h_clause(
         o_key = o_res if o_res is not None else -(10**9)
         if t_key == o_key:
             continue
+        if len(group) > 1:
+            return f"had a {'better' if t_key > o_key else 'worse'} record vs {ext}"
         if t_key > o_key:
             if t_res == 2 and o_res == 0:
                 return f"beat {ext} while {other} lost"
@@ -437,7 +446,6 @@ def explain_seeding_outcome(
     """
     wl_totals = standings_from_mask(teams, completed, remaining, outcome_mask, pa_win, margins, base_margin_default)
     buckets = tie_bucket_groups(teams, wl_totals)
-    base_order = base_bucket_order(teams, wl_totals)
 
     coin_flip_collector: list[list[str]] = []
     final_order, step_trace = resolve_standings_with_trace(
@@ -458,8 +466,7 @@ def explain_seeding_outcome(
     for bucket in buckets:
         if len(bucket) > 1:
             bucket_key = tuple(sorted(bucket))
-            s2, s4 = step_trace[bucket_key]
-            outside = [t for t in base_order if t not in set(bucket)]
+            s2, s4, outside = step_trace[bucket_key]
             bucket_step_data[bucket_key] = BucketStepData(
                 step2=s2,
                 step4=s4,

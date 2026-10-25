@@ -150,6 +150,7 @@ def step2_step4_arrays(
     outcome_mask,
     margins,
     base_margin_default=7,
+    ranks=None,
 ):
     """Compute Step 2 and Step 4 arrays for each tied team.
 
@@ -158,6 +159,12 @@ def step2_step4_arrays(
     differential of ±12.  For completed games the actual differential is capped;
     for remaining games the simulated margin (from `margins` or
     `base_margin_default`) is used and then capped.
+
+    The outside teams are compared in *ranks* order: a list of groups, best first, each a team
+    already placed (a group of one) or teams level on record whose order isn't settled yet. A
+    group counts as one: a tied team's entry against it is the sum of its results (or capped point
+    differentials) against the group's teams, None when it played none of them. Without *ranks*,
+    each outside team in *base_order* is its own group.
 
     Args:
         _teams: Full list of region teams (unused directly; kept for signature
@@ -174,10 +181,9 @@ def step2_step4_arrays(
 
     Returns:
         A 2-tuple ``(step2, step4)`` where each is a dict mapping team name to
-        a list of values (one entry per outside opponent in base_order).
+        a list of values, one per group in ``outside_groups(bucket, base_order, ranks)``.
     """
-    bucket_set = set(bucket)
-    outside = [s for s in base_order if s not in bucket_set]
+    outside = outside_groups(bucket, base_order, ranks)
 
     comp_idx = {(cg.a, cg.b): cg for cg in completed}
     rem_idx = {(rg.a, rg.b): i for i, rg in enumerate(remaining)}
@@ -217,9 +223,25 @@ def step2_step4_arrays(
         else:  # b defeats a by m
             return -m_capped if team == a else m_capped
 
-    step2 = {s: [res_vs(s, o) for o in outside] for s in bucket}
-    step4 = {s: [pd_vs(s, o) for o in outside] for s in bucket}
+    def against(team, group, value):
+        """A tied team's sum against a group's teams, None when it played none of them."""
+        played = [v for v in (value(team, o) for o in group) if v is not None]
+        return sum(played) if played else None
+
+    step2 = {s: [against(s, g, res_vs) for g in outside] for s in bucket}
+    step4 = {s: [against(s, g, pd_vs) for g in outside] for s in bucket}
     return step2, step4
+
+
+def outside_groups(bucket, base_order, ranks=None) -> list[list[str]]:
+    """The teams outside *bucket*, best first, as the groups steps 2 and 4 compare against.
+
+    *ranks* (see ``step2_step4_arrays``) places them: already-placed teams one by one, teams level
+    on record whose order isn't settled yet together. Without it, each team in *base_order* alone.
+    """
+    bucket_set = set(bucket)
+    groups = ranks if ranks is not None else [[t] for t in base_order]
+    return [g for g in ([t for t in r if t not in bucket_set] for r in groups) if g]
 
 
 # -------------------------
@@ -301,6 +323,7 @@ def resolve_bucket(
     coin_flip_collector: list[list[str]] | None = None,
     step_trace_collector: dict | None = None,
     decision_collector: list | None = None,
+    ranks: list[list[str]] | None = None,
 ):
     """Apply tiebreaker Steps 1-6 to order a single tied group of teams.
 
@@ -357,11 +380,15 @@ def resolve_bucket(
                 continue
             step3[s] += h2h_pd_cap.get((s, o), 0)
 
+    if ranks is None:
+        # On its own: the teams above and below as they stand on record, the bucket one group.
+        ranks = [[t for t in g if t not in bucket] for g in tie_bucket_groups(teams, wl_totals)] + [list(bucket)]
+        ranks = [g for g in ranks if g]
     step2, step4 = step2_step4_arrays(
-        teams, bucket, base_order, completed, remaining, outcome_mask, margins, base_margin_default
+        teams, bucket, base_order, completed, remaining, outcome_mask, margins, base_margin_default, ranks=ranks
     )
     if step_trace_collector is not None:
-        step_trace_collector[tuple(sorted(bucket))] = (step2, step4)
+        step_trace_collector[tuple(sorted(bucket))] = (step2, step4, outside_groups(bucket, base_order, ranks))
 
     # ``pending`` is a list of groups still needing resolution.  Each entry is
     # either a singleton [team] (already placed) or a multi-team tied group.
@@ -401,11 +428,17 @@ def resolve_bucket(
             else:
                 # Split: each sub-group restarts from Step 1 (recursive call).
                 # Flatten the resolved sub-sequence into singletons so the
-                # outer loop does not re-process it.
-                for part in parts:
+                # outer loop does not re-process it. Parts are settled best first,
+                # so a part's steps 2 and 4 see the parts above it placed one by one
+                # and the parts below it as groups.
+                placed: list[str] = []
+                for k, part in enumerate(parts):
                     if len(part) == 1:
                         next_pending.append(part)
+                        placed.extend(part)
                     else:
+                        here = [[t] for t in placed] + [list(part)] + [list(p) for p in parts[k + 1 :]]
+                        sub_ranks = [r2 for r in ranks for r2 in (here if set(r) & set(g) else [r])]
                         resolved = resolve_bucket(
                             part,
                             teams,
@@ -419,8 +452,10 @@ def resolve_bucket(
                             coin_flip_collector,
                             step_trace_collector=step_trace_collector,
                             decision_collector=decision_collector,
+                            ranks=sub_ranks,
                         )
                         next_pending.extend([[t] for t in resolved])
+                        placed.extend(resolved)
         pending = next_pending
 
     # Step 6: any group that survived all 5 steps unresolved is a coin flip.
@@ -540,7 +575,12 @@ def resolve_standings_for_mask(
     base_order = base_bucket_order(teams, wl_totals)
     final = []
     coinflip_events: list[list[str]] = [] if coin_flip_collector is None else coin_flip_collector
-    for bucket in tie_bucket_groups(teams, wl_totals):
+    # Ties are broken best first ("ties for first place should be broken first"), so steps 2 and 4
+    # see the teams above a tie in the order their own ties were broken, and the teams below it
+    # still grouped by record: teams level on record count as one, as no order between them is set.
+    buckets = tie_bucket_groups(teams, wl_totals)
+    for k, bucket in enumerate(buckets):
+        ranks = [[t] for t in final] + [list(b) for b in buckets[k:]]
         final.extend(
             resolve_bucket(
                 bucket,
@@ -555,6 +595,7 @@ def resolve_standings_for_mask(
                 coin_flip_collector=coinflip_events,
                 step_trace_collector=step_trace_collector,
                 decision_collector=decision_collector,
+                ranks=ranks,
             )
         )
     return final
