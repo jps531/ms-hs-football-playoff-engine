@@ -27,9 +27,9 @@ export function feedbackSubject(category, context) {
 /** A problem with a general report's fields, as a sentence for the form, or null. */
 export function feedbackProblem({ message, email }) {
   const text = (message ?? "").trim();
-  if (!text) return "Please tell us what's wrong.";
-  if (text.length > MESSAGE_MAX) return `Please keep it under ${MESSAGE_MAX} characters.`;
-  if (email && !EMAIL.test(email.trim())) return "That email address doesn't look right. It's optional, so you can leave it blank.";
+  if (!text) return "Please tell us what’s wrong.";
+  if (text.length > MESSAGE_MAX) return `Please keep it to ${MESSAGE_MAX.toLocaleString("en-US")} characters or fewer.`;
+  if (email && !EMAIL.test(email.trim())) return "That email address doesn’t look right. It’s optional, so you can leave it blank.";
   return null;
 }
 
@@ -52,8 +52,8 @@ const score = (v) => (/^\d{1,3}$/.test(String(v ?? "").trim()) ? Number(v) : nul
 export function scoreProblem(game, { awayScore, homeScore }) {
   const away = score(awayScore);
   const home = score(homeScore);
-  if (away == null || home == null || away > 200 || home > 200) return "Enter both teams' final scores.";
-  if (away === game.awayScore && home === game.homeScore) return "That's the score we have. Change it to the correct final score.";
+  if (away == null || home == null || away > 200 || home > 200) return "Enter both teams’ final scores.";
+  if (away === game.awayScore && home === game.homeScore) return "That’s the score we have. Change it to the correct final score.";
   return null;
 }
 
@@ -76,11 +76,11 @@ export function scoreBody(game, { awayScore, homeScore, note, page, website }) {
 
 /** What to say when a submission fails, from the HTTP status (0 for no response) and the API's detail. */
 export function submissionError(status, detail) {
-  if (status === 403) return typeof detail === "string" ? detail : "The spam check didn't pass. Please try again.";
-  if (status === 429) return "You've sent several reports in a short time. Please wait a minute and try again.";
-  if (status === 503) return typeof detail === "string" ? detail : "We're getting more reports than usual. Please try again in a little while.";
-  if (status === 404) return "We couldn't find that game to correct. Please send it as general feedback instead.";
-  if (status === 422) return "Something in the form wasn't accepted. Please check it and try again.";
-  if (status === 0) return "Couldn't send. Check your connection and try again.";
+  if (status === 403) return typeof detail === "string" ? detail : "The spam check didn’t pass. Please try again.";
+  if (status === 429) return "You’ve sent a lot of reports in a short time. Please try again later.";
+  if (status === 503) return typeof detail === "string" ? detail : "We’re getting more reports than usual. Please try again in a little while.";
+  if (status === 404) return "We couldn’t find that game to correct. Please send it as general feedback instead.";
+  if (status === 422) return "Something in the form wasn’t accepted. Please check it and try again.";
+  if (status === 0) return "Couldn’t send. Check your connection and try again.";
   return "Something went wrong on our end. Please try again in a moment.";
 }
