@@ -797,14 +797,14 @@ def team_bracket_title(team: str, clazz: int) -> str:
 
 
 def team_bracket_description(team: str, road: list[dict], champion: float | None) -> str:
-    """ "Raleigh's likeliest road: First Round at home vs Tylertown, Second Round vs Hazlehurst, …; 4% to win…"."""
+    """ "Raleigh's likeliest opponents: First Round at home vs Tylertown, Second Round vs Hazlehurst, …; 4% to win…"."""
     stops = []
     for step in road:
         if step["round"] == "Championship Game" or not step["opponent"]:
             continue
         joiner = "at" if step["hosts"] == "opponent" else "vs"
         stops.append(f"{step['round']} {joiner} {step['opponent']}")
-    text = f"{team}’s likeliest road: {', '.join(stops[:3])}" if stops else f"{team}’s road through the bracket"
+    text = f"{team}’s likeliest opponents: {', '.join(stops[:3])}" if stops else f"{team}’s road through the bracket"
     if champion is not None:
         text += f"; {format_pct(champion)} to win the state championship"
     return f"{text}."
@@ -835,7 +835,15 @@ def render_bracket_card(
     top = PAD + 108 + 46
     row_h = min(52, (_TABLE_BOTTOM - (top + 14)) / max(1, len(rows)))
     _table(
-        draw, top, rows, "", ["SEMIFINALS", "CHAMPIONSHIP GAME", "CHAMPIONS"], PAD + 44, row_h, [176, 176, 176], gap=16
+        draw,
+        top,
+        rows,
+        "",
+        ["REACH SEMIFINALS", "REACH CHAMPIONSHIP", "WIN CHAMPIONSHIP"],
+        PAD + 44,
+        row_h,
+        [176, 176, 176],
+        gap=16,
     )
     _footer(draw, stamp)
     return img
@@ -891,7 +899,11 @@ def render_team_bracket_card(
                 "team": "Home",
                 "opponent": "Away",
                 "neutral": "Neutral site",
-                "split": f"{format_pct(step['p_team_hosts'])} chance at home"
+                "split": (
+                    f"{format_pct(step['p_team_hosts'])} chance at home"
+                    if step["p_team_hosts"] >= 0.5
+                    else f"{format_pct(1 - step['p_team_hosts'])} chance away"
+                )
                 if step["p_team_hosts"] is not None
                 else "",
             }[step["hosts"]]

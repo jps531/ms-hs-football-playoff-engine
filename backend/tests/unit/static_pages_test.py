@@ -336,12 +336,20 @@ class TestBracketPreview:
         assert first.index("Mize") < first.index("Raleigh")
 
     def test_sheet_lists_sides_and_matchups(self):
-        """Top occupants per side with a 'Show all', then the likeliest matchups with who hosts."""
+        """Top occupants per side with a 'Show all', then the possible matchups with who hosts."""
         html = bracket_preview_html(3, BRACKET, BRACKET_CTX)
         sheet = html[html.index('<div class="game-sheet bracket-preview__sheet">') :]
-        assert "Show all 4" in sheet and "Most likely matchups" in sheet
+        assert "Show all 4" in sheet and "Possible matchups" in sheet
         assert "50% chance Raleigh hosts" in sheet
         assert sheet.count('<li><span class="mu__teams">') == 2
+
+    def test_an_undecided_host_is_named_from_the_likelier_side(self):
+        """'X% chance Y hosts' names whichever team is likelier to host, so the chance is always at least 50%."""
+        games = [dict(g) for g in BRACKET]
+        games[4] = {**games[4], "matchups": [{**games[4]["matchups"][0], "p_host_a": 0.3, "p_host_a_weighted": 0.3}]}
+        html = bracket_preview_html(3, games, BRACKET_CTX)
+        sheet = html[html.index('<div class="game-sheet bracket-preview__sheet">') :]
+        assert "70% chance Seminary hosts" in sheet and "30%" not in sheet
 
     def test_results_show_scores(self):
         """A played game shows the score, winner first in weight, not odds."""
@@ -374,6 +382,12 @@ class TestBracketPreview:
         """A team certain of a seed gets that seed's label."""
         standings = {"regions": [{"region": 6, "teams": [_team("Raleigh", 1.0, 1.0), _team("Mize", 0.4, 0.2)]}]}
         assert locked_seeds(standings) == {"Raleigh": (6, 1)}
+
+    def test_locked_seeds_fall_back_to_the_first_round_spot(self):
+        """Without standings, a team locked into a first-round spot still gets that spot's seed; open spots don't."""
+        assert locked_seeds(None, BRACKET) == {"Raleigh": (1, 1)}
+        standings = {"regions": [{"region": 6, "teams": [_team("Raleigh", 1.0, 1.0)]}]}
+        assert locked_seeds(standings, BRACKET) == {"Raleigh": (6, 1)}  # the standings win
 
 
 COLORS = {"Seminary": {"color_variants": {"primary": {"raw": "#123456"}, "secondary": [{"raw": "#ffcc00"}]}}}
