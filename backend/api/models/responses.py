@@ -536,6 +536,11 @@ class ScenarioEntry(BaseModel):
     # `conditions` is the first.
     condition_groups: list[list[dict]] | None = None
     open_groups: list[OpenGroupModel] | None = None
+    # The chance of this scenario's finish (its seeds and open ties), Toss-up and Projected. Scenarios
+    # that reach the same finish by different results share it; the finishes' chances add up to 1.
+    # None for snapshots stored before scenarios carried odds, and for a simulated result.
+    p: float | None = None
+    p_weighted: float | None = None
 
 
 class KeyInsightConditionModel(BaseModel):

@@ -876,6 +876,8 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
                     for step, g in sc.get("open_groups") or []
                 ]
                 or None,
+                p=sc.get("p"),
+                p_weighted=sc.get("p_weighted"),
             )
         )
     return result

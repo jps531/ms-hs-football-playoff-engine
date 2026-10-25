@@ -234,11 +234,12 @@ export function gameCard(game, teams, { focus = null, report = false } = {}) {
 // ---------------------------------------------------- complete scenario
 
 /**
- * One complete scenario: its label, the seeds it produces (and who misses
- * out), then the results that produce it. `focus` highlights the picked
- * team's line.
+ * One complete scenario: its label (and its chance, when given), the seeds it
+ * produces (and who misses out), then the results that produce it. `focus`
+ * highlights the picked team's line; `provenanceHtml` goes under the head
+ * with the chance, so a cropped card still says what it shows.
  */
-export function outcomeScenarioCard({ label, seeds, out, groups, common = [] }, teams, { focus = null } = {}) {
+export function outcomeScenarioCard({ label, seeds, out, groups, common = [] }, teams, { focus = null, p = null, provenanceHtml = "" } = {}) {
   // A tie left to the tiebreaker is one row over its places: its teams, unordered, and what decides it.
   const seedRows = seeds.map(({ seed, team, teams: tied, note }) => (tied
     ? `<li class="outcome__tie${tied.includes(focus) ? " is-focus" : ""}"><span class="outcome__seed">${esc(seed)}</span>`
@@ -255,8 +256,11 @@ export function outcomeScenarioCard({ label, seeds, out, groups, common = [] }, 
   const body = groups.length || common.length
     ? `<p class="outcome__if">IF</p><div class="scenario__body">${shared}${conditionGroups(groups, teams)}</div>`
     : "";
+  const head = p == null
+    ? `<h4 class="scenario__title">${esc(label)}</h4>`
+    : `<div class="scenario__head"><h4 class="scenario__title">${esc(label)}</h4>${oddsCell(p)}</div>${provenanceHtml}`;
   return `<article class="scenario outcome">
-    <h4 class="scenario__title">${esc(label)}</h4>
+    ${head}
     <ol class="outcome__seeds" aria-label="Seeds">${seedRows.join("")}</ol>
     ${outLine}
     ${body}

@@ -595,8 +595,9 @@ def scenario_card(card: dict, teams: dict) -> str:
     )
 
 
-def outcome_scenario_card(card: dict, teams: dict) -> str:
-    """One complete scenario: every seed it produces, who's out, and the results (``outcomeScenarioCard``)."""
+def outcome_scenario_card(card: dict, teams: dict, p: float | None = None) -> str:
+    """One complete scenario: its chance (when given), every seed it produces, who's out, and the results
+    (``outcomeScenarioCard``)."""
     seeds = "".join(
         (
             f'<li class="outcome__tie"><span class="outcome__seed">{_e(s["seed"])}</span>'
@@ -623,8 +624,10 @@ def outcome_scenario_card(card: dict, teams: dict) -> str:
         if card["groups"] or common
         else ""
     )
+    title = f'<h4 class="scenario__title">{_e(card["label"])}</h4>'
+    head = title if p is None else f'<div class="scenario__head">{title}{_odds(p)}</div>'
     return (
-        f'<article class="scenario outcome"><h4 class="scenario__title">{_e(card["label"])}</h4>'
+        f'<article class="scenario outcome">{head}'
         f'<ol class="outcome__seeds" aria-label="Seeds">{seeds}</ol>{out}{body}</article>'
     )
 
@@ -693,9 +696,25 @@ OPEN_TIE_NOTES = {
 }
 
 
+def _covers(v: list[dict], w: list[dict]) -> bool:
+    """True when every condition of way *v* holds whenever way *w*'s do (scenarios.js's ``covers``)."""
+
+    def holds(x: dict, y: dict) -> bool:
+        if x["type"] != "game_result" or y["type"] != "game_result":
+            return x == y
+        if (x["school"], x["opponent"], x["required_result"]) != (y["school"], y["opponent"], y["required_result"]):
+            return False
+        xlo, xhi = x.get("min_margin") or 1, x.get("max_margin")
+        ylo, yhi = y.get("min_margin") or 1, y.get("max_margin")
+        return xlo <= ylo and (xhi is None or (yhi is not None and yhi <= xhi))
+
+    return all(any(holds(x, y) for y in w) for x in v)
+
+
 def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = 4) -> list[dict]:
     """Every distinct way the region can finish, as cards (scenarios.js's ``completeScenarioCards``):
-    deduplicated and renumbered 1, 2, 3… with variants lettered A, B…"""
+    one card per finish, its ways from every scenario reaching it joined by OR, numbered 1, 2, 3…,
+    with the finish's chance (``p`` Toss-up, ``p_weighted`` Projected; None when the snapshot has none)."""
     cards = []
     for sc in scenarios or []:
         phrases = (sc.get("title") or "").split(" AND ")
@@ -757,28 +776,29 @@ def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = 4
         out = [o["team"] for o in order if o["seed"] > playoff_seeds and o["team"] not in tied]
         if any(o["seed"] > playoff_seeds and o["team"] in tied for o in order):
             out.append("the rest of the tie")
-        # Conditions every alternative shares are said once; the alternatives keep only what differs.
-        common = [c for c in groups[0] if all(c in g for g in groups)] if len(groups) > 1 else []
-        if common:
-            groups = [[c for c in g if c not in common] for g in groups]
-        cards.append({"num": sc["scenario_num"], "seeds": seeds, "out": out, "common": common, "groups": groups})
-    seen, unique = set(), []
+        cards.append({"seeds": seeds, "out": out, "ways": groups, "p": sc.get("p"), "p_weighted": sc.get("p_weighted")})
+    # One card per finish: the ways to it from every scenario reaching it, each once.
+    finishes: dict[str, dict] = {}
     for c in cards:
-        key = repr((c["seeds"], c["out"], c["common"], c["groups"]))
-        if key not in seen:
-            seen.add(key)
-            unique.append(c)
-    runs: list[list[dict]] = []
-    for c in unique:
-        if runs and runs[-1][0]["num"] == c["num"]:
-            runs[-1].append(c)
+        finish = repr((c["seeds"], c["out"]))
+        if finish not in finishes:
+            finishes[finish] = {**c, "ways": list(c["ways"])}
         else:
-            runs.append([c])
-    return [
-        {**{k: v for k, v in c.items() if k != "num"}, "label": f"Scenario {i}{chr(65 + k) if len(run) > 1 else ''}"}
-        for i, run in enumerate(runs, start=1)
-        for k, c in enumerate(run)
-    ]
+            finishes[finish]["ways"] += [w for w in c["ways"] if w not in finishes[finish]["ways"]]
+    out_cards = []
+    for i, c in enumerate(finishes.values(), start=1):
+        listed = c.pop("ways")
+        # A way another way already covers adds nothing ("B beats A by 9+" beside "B beats A").
+        ways = [
+            w
+            for k, w in enumerate(listed)
+            if not any(j != k and _covers(v, w) and (not _covers(w, v) or j < k) for j, v in enumerate(listed))
+        ]
+        # Conditions every way shares are said once; the ways keep only what differs.
+        common = [x for x in ways[0] if all(x in w for w in ways)] if len(ways) > 1 else []
+        groups = [[x for x in w if x not in common] for w in ways] if common else ways
+        out_cards.append({**c, "common": common, "groups": groups, "label": f"Scenario {i}"})
+    return out_cards
 
 
 def _scenario_preview(
@@ -968,14 +988,18 @@ def scenario_previews(example: dict | None, teams: dict) -> dict[str, str]:
             )
     complete = complete_scenario_cards(payload.get("scenarios"))
     if complete:
-        cards = [outcome_scenario_card(c, teams) for c in complete[:SCENARIO_PREVIEW_CARDS]]
+        key = "p_weighted" if example["mode"] == "projected" else "p"
+        with_odds = all(c[key] is not None for c in complete)
+        cards = [
+            outcome_scenario_card(c, teams, c[key] if with_odds else None) for c in complete[:SCENARIO_PREVIEW_CARDS]
+        ]
         ways = f"{len(complete)} way{'s' if len(complete) != 1 else ''}"
         first = "Here’s the first:" if len(complete) == 1 else "Here are the first two:"
         lead = (
             f"Going into its final week, {name} could finish {ways}." if final else f"{name} can still finish {ways}."
         )
         out["unique"] = _lead(f"{lead} {first}") + _scenario_preview(
-            example, teams, "Scenarios", "", cards, "all-scen-title", "complete scenarios", odds=False
+            example, teams, "Scenarios", "", cards, "all-scen-title", "complete scenarios", odds=with_odds
         )
     return out
 

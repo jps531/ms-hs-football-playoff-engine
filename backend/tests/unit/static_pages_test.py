@@ -840,7 +840,13 @@ def test_complete_scenario_cards_match_scenarios_js():
         [sc(1, "A beats B", x), sc(2, "B beats A", y), sc(2, "B beats C", y), sc(3, "B beats A", y),
          sc(3, "B beats C", y), sc(4, "C beats A", y)]
     )  # fmt: skip
-    assert [c["label"] for c in cards] == ["Scenario 1", "Scenario 2A", "Scenario 2B", "Scenario 3"]
+    # One card per finish, like scenarios.js: every way to B-then-A once, joined by OR.
+    assert [c["label"] for c in cards] == ["Scenario 1", "Scenario 2"]
+    assert [f"{g[0]['school']} beats {g[0]['opponent']}" for g in cards[1]["groups"]] == [
+        "B beats A",
+        "B beats C",
+        "C beats A",
+    ]
 
 
 def test_margin_text_matches_format_js():
@@ -903,9 +909,10 @@ def test_front_page_shows_each_scenario_kind_linking_to_its_section():
     assert 'href="/standings/3a/6#scen-title"' in out["title"] and "A wins the region" in out["title"]
     assert out["title"].index("A wins the region") < out["title"].index("B wins the region")
     assert (
-        "B finishes as the #2 seed" in out["seeding"] and 'aria-label="Open Region 6-3A’s seeding scenarios"' in out["seeding"]
+        "B finishes as the #2 seed" in out["seeding"]
+        and 'aria-label="Open Region 6-3A’s seeding scenarios"' in out["seeding"]
     )
-    assert "Region 6-3A can still finish 3 ways. Here are the first two:" in out["unique"]
+    assert "Region 6-3A can still finish 2 ways. Here are the first two:" in out["unique"]
     assert 'href="/standings/3a/6#all-scen-title"' in out["unique"]
     assert "Scenario 2" in out["unique"] and "Scenario 3" not in out["unique"]
     assert STAMP in out["unique"]
@@ -918,7 +925,7 @@ def test_front_page_shows_each_scenario_kind_linking_to_its_section():
 
     body = landing_body(None, {}, _example())
     assert body.index("Region title scenarios") < body.index("two likeliest champions")
-    assert body.index("Unique region scenarios") < body.index("can still finish 3 ways")
+    assert body.index("Unique region scenarios") < body.index("can still finish 2 ways")
     order = ["Region title scenarios", "Playoff spot scenarios", "Team seeding scenarios", "Unique region scenarios"]
     assert [body.index(t) for t in order] == sorted(body.index(t) for t in order)  # the region page's order
     assert scenario_previews(None, {}) == {"title": "", "playoffs": "", "seeding": "", "unique": ""}
@@ -935,7 +942,7 @@ def test_after_the_season_the_examples_say_how_things_stood_going_into_the_final
     )
     assert "what decided the last playoff spots in Region 6-3A going into its final week:" in out["playoffs"]
     assert "Here’s what would put teams in Region 6-3A at a particular seed:" in out["seeding"]
-    assert "Going into its final week, Region 6-3A could finish 3 ways. Here are the first two:" in out["unique"]
+    assert "Going into its final week, Region 6-3A could finish 2 ways. Here are the first two:" in out["unique"]
 
 
 def test_final_week_eve_is_the_day_before_the_last_weeks_first_game():

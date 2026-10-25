@@ -7,6 +7,7 @@ game from the conditions.  Margin-sensitive masks (where winning margins change
 the seeding) are presented as lettered sub-scenarios (6a, 6b, …).
 """
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import product
@@ -1021,6 +1022,15 @@ _MAX_MARGIN_BLOCKS = 2
 _MAX_LISTED_OUTCOMES = 8
 
 
+def _finish_key(seeding, open_groups, places) -> tuple:
+    """One way the region can finish: its seeding, the ties left open, and where their teams can land."""
+    return (
+        tuple(seeding),
+        tuple((step, tuple(g)) for step, g in open_groups),
+        tuple(sorted((t, tuple(seeds)) for t, seeds in places)),
+    )
+
+
 def _margin_blocks(region: set[tuple[int, ...]], limit: int) -> list[list[tuple[int, int]]] | None:
     """*region* (margin combinations, 1-12 per game) as at most *limit* boxes of margin ranges, each
     box inside it and together covering it; None when it takes more."""
@@ -1166,6 +1176,8 @@ def enumerate_division_scenarios(
     pa_win: int = 14,
     base_margin_default: int = 7,
     precomputed: EnumeratedOutcomes | None = None,
+    scenario_odds: bool = False,
+    win_probs: list[float] | None = None,
 ) -> list[dict]:
     """Enumerate every distinct way the region can finish, each with exactly what makes it happen.
 
@@ -1200,6 +1212,13 @@ def enumerate_division_scenarios(
       (outcomes differing only below the playoff seeds are one outcome); an open group's places
       alphabetical. An open group wholly out of the playoffs isn't listed.
 
+    With ``scenario_odds`` (and every margin worked through), each dict also has ``p`` and
+    ``p_weighted``: the chance of its finish (its seeding, open groups and open places) with every game
+    a coin flip, and with each game at *win_probs* (P(``remaining[i].a`` wins); toss-up when None).
+    Margins count as often as they happened in 2025, league-wide for ``p`` and by the winner's chance
+    for ``p_weighted``, as the region's odds do. Several dicts can share a finish (different winners
+    reaching the same standings), and then share its chance; the finishes' chances add up to 1.
+
     ``scenario_atoms`` and ``precomputed`` are accepted for compatibility; ``precomputed`` only says
     whether margins are being ignored (``ignore_margins``), which leaves every margin-dependent group open.
     """
@@ -1209,6 +1228,30 @@ def enumerate_division_scenarios(
     open_from = 5 if exact else 3
     in_play = {t for rg in remaining for t in (rg.a, rg.b)}
     ref = {pair: base_margin_default for pair in pairs}
+
+    # For scenario odds: each set of winners' chance and the chance of each margin for each game's
+    # winner (index 0 toss-up, 1 projected), and each finish's chance as the sets of winners and
+    # margins that give it are found.
+    track = scenario_odds and exact
+    mask_weights: list[list[float]] = [[], []]
+    shares: list[list[list[tuple[float, ...]]]] = [[], []]
+    finish_odds: dict[tuple, list[float]] = defaultdict(lambda: [0.0, 0.0])
+
+    def add_finish(mask: int, seeding, open_groups, places, share=(1.0, 1.0)) -> None:
+        """Credit a finish with a share of one set of winners' chance."""
+        w = finish_odds[_finish_key(seeding, open_groups, places)]
+        w[0] += mask_weights[0][mask] * share[0]
+        w[1] += mask_weights[1][mask] * share[1]
+
+    if track:
+        from backend.helpers.scenarios import _MARGIN_SHARE, projected_margin_share
+
+        for mask in range(1 << R):
+            won = [win_probs[i] if mask >> i & 1 else 1 - win_probs[i] for i in range(R)] if win_probs else None
+            mask_weights[0].append(0.5**R)
+            mask_weights[1].append(math.prod(won) if won else 0.5**R)
+            shares[0].append([_MARGIN_SHARE] * R)
+            shares[1].append([projected_margin_share(p) for p in won] if won else [_MARGIN_SHARE] * R)
 
     def run(mask: int, margins: dict) -> tuple[tuple, tuple]:
         """(stated decisions, (seeding, open groups)) for one result."""
@@ -1229,19 +1272,28 @@ def enumerate_division_scenarios(
     for mask in range(1 << R):
         stated, (seeding, open_groups) = run(mask, ref)
         if not stated or not exact:
+            if track:
+                add_finish(mask, seeding, open_groups, ())
             outcomes[mask] = [((), open_groups, seeding, None)]
             table[mask] = (seeding, open_groups)
             continue
         signatures: dict = {}
         first: dict = {}
         regions: dict = defaultdict(set)
+        weights: dict[tuple, list[float]] = defaultdict(lambda: [0.0, 0.0])
         for combo in product(_MARGIN_RANGE, repeat=R):
             stated, outcome = run(mask, dict(zip(pairs, combo, strict=True)))
             signatures[frozenset(stated)] = outcome
+            if track:
+                w = weights[outcome]
+                w[0] += math.prod(shares[0][mask][i][m - 1] for i, m in enumerate(combo))
+                w[1] += math.prod(shares[1][mask][i][m - 1] for i, m in enumerate(combo))
             first.setdefault(outcome, combo)
             regions[outcome].add(combo)
         if len(first) == 1:  # the decisions vary, but never the outcome
             (seeding, open_groups) = next(iter(first))
+            if track:
+                add_finish(mask, seeding, open_groups, ())
             outcomes[mask] = [((), open_groups, seeding, None)]
             table[mask] = (seeding, open_groups)
             continue
@@ -1257,10 +1309,15 @@ def enumerate_division_scenarios(
             seeding, open_groups, places = _narrow_open(order, open_groups, list(first), playoff_seeds)
             if places:
                 open_places[mask] = places
+            if track:
+                add_finish(mask, seeding, open_groups, places or ())
             outcomes[mask] = [((), open_groups, seeding, None)]
             table[mask] = (seeding, open_groups)
             continue
         table[mask] = {combo: outcome for outcome, region in regions.items() for combo in region}
+        if track:
+            for (seeding, open_groups), share in weights.items():
+                add_finish(mask, seeding, open_groups, (), share)
         # Each outcome in plain margin ranges when a couple of blocks say it; else by its decisions.
         winners = _game_winners_for_mask(mask, remaining)
         terms = _simplest_terms(signatures)
@@ -1382,6 +1439,10 @@ def enumerate_division_scenarios(
             scenarios.append(
                 scenario(num, _sub_label(k), shared, alts[0], groups, seeding, alts if len(alts) > 1 else None)
             )
+    if track:
+        for sc in scenarios:
+            places = tuple((t, tuple(seeds)) for t, seeds in (sc["open_places"] or {}).items())
+            sc["p"], sc["p_weighted"] = finish_odds[_finish_key(sc["seeding"], sc["open_groups"] or (), places)]
     return scenarios
 
 

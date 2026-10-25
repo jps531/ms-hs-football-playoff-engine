@@ -173,3 +173,11 @@ test("breadcrumbs link every level but the page itself (static_pages.breadcrumb_
   );
   assert.match(breadcrumbs([["Home", "/"], ["A & B", null]]), /A &amp; B/);
 });
+
+test("a complete scenario shows its finish's chance, with what it covers, only when it has one", () => {
+  const card = { label: "Scenario 2", seeds: [{ seed: 1, team: "A" }], out: [], groups: [] };
+  const withOdds = outcomeScenarioCard(card, {}, { p: 0.391, provenanceHtml: '<p class="provenance">Through Week 9</p>' });
+  assert.match(withOdds, /<div class="scenario__head"><h4 class="scenario__title">Scenario 2<\/h4><span class="odds odds--2">39%<\/span><\/div><p class="provenance">/);
+  const without = outcomeScenarioCard(card, {});
+  assert.doesNotMatch(without, /odds--|provenance/);
+});
