@@ -5372,7 +5372,7 @@ class TestScenarioAlternativesAndOpenGroups:
         assert tiebreak["type"] == "tiebreak_decision" and tiebreak["description"].startswith("Point differential")
         [group] = entry.open_groups
         assert (group.step, group.teams) == (5, ["Magee", "Seminary"])
-        assert "fewest points allowed" in group.description
+        assert "fewest total points allowed" in group.description
 
     def test_simulation_keeps_only_the_alternatives_the_result_allows(self):
         """A 20-point Lumberton win rules out the 1-11 way; the scenario survives on the 12+ way alone."""

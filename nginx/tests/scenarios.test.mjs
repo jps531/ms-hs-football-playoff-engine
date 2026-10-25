@@ -26,13 +26,13 @@ test("2-7A shape: title locked, bubble teams and seeding become cards", () => {
   assert.deepEqual(g.title, []); // unconditional #1 is a badge, not a card
   assert.deepEqual(g.playoffs.map((c) => c.title), [
     "MC makes the playoffs",
-    "Clinton makes the playoffs as the No. 4 seed",
+    "Clinton makes the playoffs as the #4 seed",
   ]);
   assert.deepEqual(g.seeding.map((c) => c.title), [
-    "Starkville finishes third",
-    "Starkville finishes fourth",
-    "MC finishes third",
-    "MC finishes fourth",
+    "Starkville finishes as the #3 seed",
+    "Starkville finishes as the #4 seed",
+    "MC finishes as the #3 seed",
+    "MC finishes as the #4 seed",
   ]);
 });
 
@@ -175,7 +175,7 @@ test("a tie left to the tiebreaker is one unordered row over its places", () => 
   }]);
   assert.deepEqual(card.seeds, [
     { team: "A", seed: 1 },
-    { seed: "2–4", teams: ["B", "C", "D"], note: "Order decided by fewest points allowed in region games, then a coin flip" },
+    { seed: "2–4", teams: ["B", "C", "D"], note: "Order decided by fewest total points allowed in region games. Teams that remain tied start the tiebreakers over among themselves, and a coin flip decides if they're tied on every other tiebreaker." },
   ]);
   assert.deepEqual(card.out, ["E"]);
 });

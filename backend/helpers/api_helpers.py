@@ -142,9 +142,9 @@ ACTIVE_SCHOOL_JOIN_RS = (
     " ON active.school = rs.school AND active.season = rs.season AND active.is_active"
 )
 """Maximum remaining games for which the human-readable scenario list is shown: the most for which every
-winning margin is worked through (region_scenarios_pipeline._R_ALWAYS_MARGIN). With more left, ties that turn on
-point differential are broken at a default margin, so a scenario could say a result decides a place when the
-margin does."""
+winning margin is worked through (region_scenarios_pipeline._R_ALWAYS_MARGIN), so a race that turns on point
+differential is stated exactly ("beats Magee by 8-10"). With more left, scenarios stay accurate but leave such a
+tie open ("decided by the tiebreaker"); showing them from 5 is a choice of precision, not of correctness."""
 
 CLINCHED_THRESHOLD = 1 - 1e-6
 """Minimum seeding probability required to consider a seed position clinched: certain, give or take

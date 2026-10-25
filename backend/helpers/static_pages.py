@@ -278,7 +278,7 @@ def _insight_title(insight: dict) -> str | None:
     """The outcome, worded as the page's scenario cards word it (``insightCards`` in scenarios.js)."""
     team, kind, seed = insight["team"], insight["insight_type"], insight.get("seed")
     if kind == "clinch_seed":
-        return f"{team} clinches the region" if seed == 1 else f"{team} clinches the No. {seed} seed"
+        return f"{team} clinches the region" if seed == 1 else f"{team} clinches the #{seed} seed"
     if kind == "clinch_playoffs":
         return f"{team} clinches a playoff spot"
     if kind == "eliminated_if":
@@ -528,7 +528,6 @@ COIN = (
     '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">'
     '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.2"/></svg>'
 )
-ORDINAL_WORDS = {1: "first", 2: "second", 3: "third", 4: "fourth"}
 SCENARIO_PREVIEW_CARDS = 2  # cards per scenario preview
 
 
@@ -673,11 +672,11 @@ def outcome_cards(teams_payload: list[dict], mode: str) -> dict[str, list[dict]]
             elif only_seed is None:
                 groups["playoffs"].append(card(f"{school} makes the playoffs", playoffs))
             elif only_seed != 1:
-                groups["playoffs"].append(card(f"{school} makes the playoffs as the No. {only_seed} seed", playoffs))
+                groups["playoffs"].append(card(f"{school} makes the playoffs as the #{only_seed} seed", playoffs))
         if only_seed is not None:
             continue
         groups["seeding"] += [
-            card(f"{school} finishes {ORDINAL_WORDS.get(p['outcome']['value'], str(p['outcome']['value']) + 'th')}", p)
+            card(f"{school} finishes as the #{p['outcome']['value']} seed", p)
             for p in conditional
             if p["outcome"]["value"] != 1
         ]
@@ -689,7 +688,7 @@ def outcome_cards(teams_payload: list[dict], mode: str) -> dict[str, list[dict]]
 # What decides a tie a scenario leaves open, by the step it's left from (scenarios.js's OPEN_TIE_NOTES).
 OPEN_TIE_NOTES = {
     3: "Order decided by the tiebreaker: point differential, then fewest points allowed",
-    5: "Order decided by fewest points allowed in region games, then a coin flip",
+    5: "Order decided by fewest total points allowed in region games. Teams that remain tied start the tiebreakers over among themselves, and a coin flip decides if they're tied on every other tiebreaker.",
     6: "Order decided by a coin flip",
 }
 

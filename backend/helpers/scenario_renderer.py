@@ -109,12 +109,13 @@ def render_tiebreak_decision(cond: TiebreakDecision) -> str:
         # Step 4 only comes into it when step 3 left them level, so say so: read alone, it could match.
         lead = (
             f"{_join(cond.group)} level on point differential in games among them, so on point differential "
-            "against the rest of the region (capped at 12 a game, highest-placed opponent first)"
+            "(capped at 12 a game) against the highest-placed region team outside the tie, then the next-highest, "
+            "and so on until the tie is broken"
         )
     if len(cond.parts) == 1:
         return f"{lead}: {'both' if len(cond.group) == 2 else 'all'} level"
     top, *rest = cond.parts
-    first = f"{_join(top)} best" if len(top) == 1 else f"{_join(top)} level at the top"
+    first = f"{_join(top)} best" if len(top) == 1 else f"{_join(top)} tied for best"
     return f"{lead}: {first}, " + ", ".join(f"then {_join(p)}" + (", level" if len(p) > 1 else "") for p in rest)
 
 
@@ -124,7 +125,10 @@ def render_open_group(step: int, group) -> str:
     if step >= 6:
         return f"{teams} are level on every tiebreaker: a coin flip decides their order"
     if step == 5:
-        return f"{teams} are still level: fewest points allowed in region games decides their order (then a coin flip)"
+        return (
+            f"{teams} are still level: fewest total points allowed in region games decides their order "
+            "(any teams still tied start the tiebreakers over)"
+        )
     return (
         f"{teams} tie: their order is decided by point differential in games among them, then against "
         "the rest of the region (capped at 12 a game), then fewest points allowed"
@@ -135,13 +139,14 @@ _PLACE_WORDS = {2: "2nd", 3: "3rd", 4: "4th", 5: "5th", 6: "6th"}
 _COUNT_WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
 _TIE_DECIDED_BY = {
     6: "which a coin flip decides",
-    5: "which goes to fewest points allowed in region games (then a coin flip)",
+    5: "which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
 }
 
 
 def render_tiebreak_place(cond: TiebreakPlace) -> str:
     """A team's place in a tie left to the tiebreaker, in words, e.g. "Raleigh finishes ahead of both
-    Magee and Seminary in their tie, which goes to fewest points allowed in region games (then a coin flip)"."""
+    Magee and Seminary in their tie, which goes to fewest total points allowed in region games (any teams still tied
+    start the tiebreakers over)"."""
     others = [t for t in cond.group if t != cond.team]
     both = "both " if len(others) == 2 else ""
     if cond.place == 1:

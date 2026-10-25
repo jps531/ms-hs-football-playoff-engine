@@ -1219,7 +1219,7 @@ class TestAtomConditionDicts:
         assert out == {
             "type": "tiebreak",
             "description": "Raleigh finishes ahead of both Magee and Seminary in their tie, which goes to "
-            "fewest points allowed in region games (then a coin flip)",
+            "fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
         }
 
 
@@ -1231,14 +1231,14 @@ class TestAtomConditionDicts:
             ("Magee", "Raleigh", "Seminary"),
             5,
             "Raleigh finishes 2nd of the three in the tie with Magee and "
-            "Seminary, which goes to fewest points allowed in region games (then a coin flip)",
+            "Seminary, which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
         ),
         (
             3,
             ("Magee", "Raleigh", "Seminary"),
             5,
             "Raleigh finishes behind both Magee and Seminary in their tie, "
-            "which goes to fewest points allowed in region games (then a coin flip)",
+            "which goes to fewest total points allowed in region games (any teams still tied start the tiebreakers over)",
         ),
         (1, ("Magee", "Raleigh"), 6, "Raleigh finishes ahead of Magee in their tie, which a coin flip decides"),
         (

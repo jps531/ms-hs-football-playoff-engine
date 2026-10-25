@@ -1,7 +1,7 @@
 // Turns the API's per-team paths and key insights into the outcome cards the
 // region view shows. Pure data shaping, no DOM, so it runs under `node --test`.
 
-import { ordinalWord, joinNames } from "./format.js";
+import { joinNames } from "./format.js";
 
 const ODDS_KEYS = ["p1", "p2", "p3", "p4", "p_playoffs"];
 
@@ -65,14 +65,14 @@ export function outcomeCards(teamEntries, mode = "tossup") {
       } else if (onlySeed === null) {
         groups.playoffs.push(card(`${t.school} makes the playoffs`, playoffs));
       } else if (onlySeed !== 1) {
-        groups.playoffs.push(card(`${t.school} makes the playoffs as the No. ${onlySeed} seed`, playoffs));
+        groups.playoffs.push(card(`${t.school} makes the playoffs as the #${onlySeed} seed`, playoffs));
       }
       // A lone path to #1 is already the title card.
     }
     if (onlySeed !== null) continue;
     for (const p of conditionalSeeds) {
       if (p.outcome.value !== 1) {
-        groups.seeding.push(card(`${t.school} finishes ${ordinalWord(p.outcome.value)}`, p));
+        groups.seeding.push(card(`${t.school} finishes as the #${p.outcome.value} seed`, p));
       }
     }
   }
@@ -84,7 +84,7 @@ export function outcomeCards(teamEntries, mode = "tossup") {
 export function insightCards(insights) {
   const titleFor = (i) => {
     if (i.insight_type === "clinch_seed") {
-      return i.seed === 1 ? `${i.team} clinches the region` : `${i.team} clinches the No. ${i.seed} seed`;
+      return i.seed === 1 ? `${i.team} clinches the region` : `${i.team} clinches the #${i.seed} seed`;
     }
     if (i.insight_type === "clinch_playoffs") return `${i.team} clinches a playoff spot`;
     if (i.insight_type === "eliminated_if") return `${i.team} is eliminated`;
@@ -112,7 +112,7 @@ export function insightCards(insights) {
 /** What decides a tie a scenario leaves open, by the step it's left from. */
 export const OPEN_TIE_NOTES = {
   3: "Order decided by the tiebreaker: point differential, then fewest points allowed",
-  5: "Order decided by fewest points allowed in region games, then a coin flip",
+  5: "Order decided by fewest total points allowed in region games. Teams that remain tied start the tiebreakers over among themselves, and a coin flip decides if they're tied on every other tiebreaker.",
   6: "Order decided by a coin flip",
 };
 

@@ -740,10 +740,10 @@ async function regionView(ctx) {
 // label: the column header; seed: the same odds in the expanded row; full:
 // what the number measures, for screen readers and as the header's tooltip.
 const ODDS_COLUMNS = [
-  { key: "p1", label: "1st", seed: "1st seed", full: "Chance of finishing 1st (the #1 seed)", mid: false },
-  { key: "p2", label: "2nd", seed: "2nd seed", full: "Chance of finishing 2nd (the #2 seed)", mid: true },
-  { key: "p3", label: "3rd", seed: "3rd seed", full: "Chance of finishing 3rd (the #3 seed)", mid: true },
-  { key: "p4", label: "4th", seed: "4th seed", full: "Chance of finishing 4th (the #4 seed)", mid: true },
+  { key: "p1", label: "1st", seed: "#1 Seed", full: "Chance of finishing 1st (the #1 seed)", mid: false },
+  { key: "p2", label: "2nd", seed: "#2 Seed", full: "Chance of finishing 2nd (the #2 seed)", mid: true },
+  { key: "p3", label: "3rd", seed: "#3 Seed", full: "Chance of finishing 3rd (the #3 seed)", mid: true },
+  { key: "p4", label: "4th", seed: "#4 Seed", full: "Chance of finishing 4th (the #4 seed)", mid: true },
   { key: "p_playoffs", label: "Makes playoffs", seed: "Makes playoffs", full: "Chance of making the playoffs as any seed", mid: false },
 ];
 const ODDS_BY_KEY = Object.fromEntries(ODDS_COLUMNS.map((c) => [c.key, c]));
