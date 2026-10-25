@@ -1582,7 +1582,7 @@ function feedbackForm({ game = null, category = "other", context = null, page = 
         ${scoreInput("home", game.home, game.homeScore)}
       </fieldset>
       <label class="fb-field"><span>Where did you see it? <span class="muted">(optional)</span></span>
-        <textarea name="note" rows="2" maxlength="${NOTE_MAX}" placeholder="A link to the box score, a school’s post, etc…"></textarea>
+        <textarea name="note" rows="2" maxlength="${NOTE_MAX}" placeholder="A link to the box score, a school’s post, etc."></textarea>
       </label>
       ${honeypot}
       <div class="fb-turnstile"></div>
