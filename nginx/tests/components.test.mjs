@@ -181,3 +181,14 @@ test("a complete scenario shows its finish's chance, with what it covers, only w
   const without = outcomeScenarioCard(card, {});
   assert.doesNotMatch(without, /odds--|provenance/);
 });
+
+test("shared conditions come once, then the alternatives inside a box headed AND ONE OF (static_pages writes the same)", () => {
+  const win = (school, opponent) => ({ type: "game_result", school, opponent, required_result: "win", min_margin: 1, max_margin: null });
+  const card = { label: "Scenario 3", seeds: [{ seed: 1, team: "A" }], out: [], common: [win("A", "B")], groups: [[win("C", "D")], [win("D", "C")]] };
+  const html = outcomeScenarioCard(card, {});
+  const box = html.indexOf('<div class="oneof" role="group" aria-label="And one of"><span class="oneof__label" aria-hidden="true">AND ONE OF</span>');
+  assert.ok(box > html.indexOf(">A</span> beats B") && box < html.indexOf(">C</span> beats D"));
+  assert.ok(html.indexOf('class="or"') > box);
+  // Without shared conditions there's nothing to scope: no box, just the alternatives.
+  assert.doesNotMatch(outcomeScenarioCard({ ...card, common: [] }, {}), /oneof/);
+});

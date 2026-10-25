@@ -249,12 +249,14 @@ export function outcomeScenarioCard({ label, seeds, out, groups, common = [] }, 
   const outLine = out.length
     ? `<p class="outcome__out"><span class="outcome__out-label">Out</span> ${out.map((t) => (t === focus ? `<strong>${esc(t)}</strong>` : esc(t))).join(", ")}</p>`
     : "";
-  // Shared conditions once, then "AND ONE OF" the alternatives.
-  const shared = common.length
-    ? `${conditionGroups([common], teams)}<div class="and-oneof"><span>AND ONE OF</span></div>`
-    : "";
+  // Shared conditions once, then the alternatives in a box headed "AND ONE OF", so it's clear where
+  // they end.
+  const alternatives = common.length
+    ? `${conditionGroups([common], teams)}<div class="oneof" role="group" aria-label="And one of">`
+      + `<span class="oneof__label" aria-hidden="true">AND ONE OF</span>${conditionGroups(groups, teams)}</div>`
+    : conditionGroups(groups, teams);
   const body = groups.length || common.length
-    ? `<p class="outcome__if">IF</p><div class="scenario__body">${shared}${conditionGroups(groups, teams)}</div>`
+    ? `<p class="outcome__if">IF</p><div class="scenario__body">${alternatives}</div>`
     : "";
   const head = p == null
     ? `<h4 class="scenario__title">${esc(label)}</h4>`
