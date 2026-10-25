@@ -29,8 +29,8 @@ _log = logging.getLogger(__name__)
 _VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 _TIMEOUT_SECONDS = 5
 
-CHECK_FAILED = "The spam check didn't pass. Please try again."
-CHECK_UNAVAILABLE = "The spam check isn't responding right now. Please try again in a few minutes."
+CHECK_FAILED = "The spam check didn’t pass. Please try again."
+CHECK_UNAVAILABLE = "The spam check isn’t responding right now. Please try again in a few minutes."
 
 
 def _expected_hostname() -> str | None:

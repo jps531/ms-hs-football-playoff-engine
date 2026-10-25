@@ -139,7 +139,7 @@ async def _accept_form_submission(
     if recent is not None and recent[0] >= _MAX_PENDING_PER_HOUR:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="We're getting more reports than usual. Please try again in a little while.",
+            detail="We’re getting more reports than usual. Please try again in a little while.",
             headers={"Retry-After": "900"},
         )
     return await insert_submission(conn, stype, school, user_id, payload)

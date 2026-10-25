@@ -14,9 +14,10 @@ test("subjects name the category and what it's about, within the API's limit", (
 });
 
 test("general reports need a real message and, if given, a plausible email", () => {
-  assert.match(feedbackProblem({ message: "  " }), /tell us what's wrong/);
+  assert.match(feedbackProblem({ message: "  " }), /tell us what’s wrong/);
   assert.equal(feedbackProblem({ message: "28-21" }), null); // short is fine
-  assert.match(feedbackProblem({ message: "x".repeat(MESSAGE_MAX + 1) }), /under/);
+  assert.equal(feedbackProblem({ message: "x".repeat(MESSAGE_MAX + 1) }), "Please keep it to 2,000 characters or fewer.");
+  assert.equal(feedbackProblem({ message: "x".repeat(MESSAGE_MAX) }), null); // the limit itself is allowed
   assert.match(feedbackProblem({ message: "Raleigh can't finish 4th", email: "nope" }), /email/);
   assert.equal(feedbackProblem({ message: "Raleigh can't finish 4th", email: "" }), null);
   assert.equal(feedbackProblem({ message: "Raleigh can't finish 4th", email: "fan@example.com" }), null);
@@ -44,11 +45,11 @@ test("score body is the visiting team's side of the game", () => {
 });
 
 test("failures are explained in plain words", () => {
-  assert.match(submissionError(429), /wait a minute/);
-  assert.equal(submissionError(403, "The spam check didn't pass. Please try again."), "The spam check didn't pass. Please try again.");
+  assert.equal(submissionError(429), "You’ve sent a lot of reports in a short time. Please try again later.");
+  assert.equal(submissionError(403, "The spam check didn’t pass. Please try again."), "The spam check didn’t pass. Please try again.");
   assert.match(submissionError(403), /spam check/);
   assert.equal(submissionError(503, "Busy, try later."), "Busy, try later.");
-  assert.match(submissionError(404), /couldn't find that game/);
+  assert.match(submissionError(404), /couldn’t find that game/);
   assert.match(submissionError(0), /connection/);
   assert.match(submissionError(500), /our end/);
 });

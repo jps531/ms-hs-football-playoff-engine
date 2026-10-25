@@ -1555,7 +1555,7 @@ function feedbackContext({ team = null, about = null } = {}) {
   const parts = [];
   if (route.page === "region") parts.push(`Region ${route.region}-${route.clazz}A`);
   else if (route.page === "class") parts.push(`Class ${route.clazz}A`);
-  else if (route.page === "bracket") parts.push(`${route.clazz}A bracket`);
+  else if (route.page === "bracket") parts.push(`${route.clazz}A Bracket`);
   if (about) parts.push(about);
   if (team) parts.push(team);
   return parts.join(" · ") || null;
@@ -1582,7 +1582,7 @@ function feedbackForm({ game = null, category = "other", context = null, page = 
         ${scoreInput("home", game.home, game.homeScore)}
       </fieldset>
       <label class="fb-field"><span>Where did you see it? <span class="muted">(optional)</span></span>
-        <textarea name="note" rows="2" maxlength="${NOTE_MAX}" placeholder="A link to a box score, the school’s post…"></textarea>
+        <textarea name="note" rows="2" maxlength="${NOTE_MAX}" placeholder="A link to the box score, a school’s post, etc."></textarea>
       </label>
       ${honeypot}
       <div class="fb-turnstile"></div>
@@ -1613,7 +1613,7 @@ function feedbackPage() {
     <header class="entry-head">
       <h1 class="title">Send feedback</h1>
       <p class="prose">Spotted a wrong score, see odds or a scenario that can’t be right, or have an idea? Let us know.
-        To correct a specific game’s score, open its region and select “Wrong score?” on the game.</p>
+        To correct a region game’s score, open its region and select “Wrong score?” on the game. For any other game, choose “A score” below.</p>
     </header>
     <div class="fb-page">${feedbackForm({ page: "/feedback" })}</div>
   </div>`;
@@ -1636,7 +1636,7 @@ function openFeedback({ game = null, category = "other", team = null, about = nu
   feedbackSheet.innerHTML = `<div class="game-sheet__head">
       <div>
         <p class="game-sheet__kicker">Feedback</p>
-        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${game ? "Report a wrong score" : "Tell us what’s wrong"}</h2>
+        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${game ? "Report a wrong score" : "Send feedback"}</h2>
       </div>
       <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
@@ -1733,8 +1733,8 @@ function feedbackSent(form) {
 // The message's hint follows the category: a score report needs the game and the score.
 const MESSAGE_HINTS = {
   score: "Which game, and what was the final score?",
-  odds: "Which team, and what looks wrong?",
-  other: "The more specific, the faster we can fix it.",
+  odds: "What looks wrong?",
+  other: "The more specific, the faster we can fix it!",
 };
 
 document.addEventListener("change", (e) => {
