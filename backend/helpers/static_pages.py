@@ -1416,7 +1416,7 @@ def _team_label(name: str, teams: dict) -> str:
 
 
 def _sheet(game: dict, ctx: dict) -> str:
-    """The game sheet as it opens over the bracket: both sides, then the likeliest matchups."""
+    """The game sheet as it opens over the bracket: both sides, then their possible matchups."""
     host = settled_host(game, ctx["mode"])
     order, joiner = _side_order(host)
     kicker = " · ".join(x for x in (game["round"], HALF_NAMES.get(game.get("half"))) if x)
@@ -1434,7 +1434,7 @@ def _sheet(game: dict, ctx: dict) -> str:
             f"</span>{_odds(m['p'])}{note_html}</li>"
         )
     matchups = (
-        f'<h4 class="bgame__heading">Most likely matchups</h4><ol class="opp-list opp-list--matchups">{"".join(rows)}</ol>'
+        f'<h4 class="bgame__heading">Possible matchups</h4><ol class="opp-list opp-list--matchups">{"".join(rows)}</ol>'
         if rows
         else ""
     )

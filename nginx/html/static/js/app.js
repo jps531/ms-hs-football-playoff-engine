@@ -1477,7 +1477,7 @@ function hostText(team, opponent, hosts, pTeamHosts) {
 /** "vs" when the picked team would host, "at" when the opponent would. */
 const oppJoiner = (hosts) => (hosts === "opponent" ? "at" : "vs");
 
-/** Expanded game: a picked team's opponents here, or both sides and the likeliest matchups. */
+/** Expanded game: a picked team's opponents here, or both sides and their possible matchups. */
 function gameDetail(game) {
   const { mode, focus, teams } = bracketData;
   if (game.matchups == null) {
@@ -1515,7 +1515,7 @@ function gameDetail(game) {
       <p class="muted bgame__count">So many teams could still meet here that ${hidden ? `none of the ${hidden} possible pairings has` : "no single matchup has"} even a 0.5% chance yet.</p>`;
   }
   return `<div class="bgame__sides">${sides}</div>
-    <h4 class="bgame__heading">Most likely matchups</h4>
+    <h4 class="bgame__heading">Possible matchups</h4>
     <ol class="opp-list opp-list--matchups">${rows.join("")}</ol>
     ${hidden ? `<p class="muted bgame__count">Not showing ${hidden} other possible ${hidden === 1 ? "pairing" : "pairings"}, each under 0.5%</p>` : ""}`;
 }

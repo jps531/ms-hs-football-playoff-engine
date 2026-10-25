@@ -336,10 +336,10 @@ class TestBracketPreview:
         assert first.index("Mize") < first.index("Raleigh")
 
     def test_sheet_lists_sides_and_matchups(self):
-        """Top occupants per side with a 'Show all', then the likeliest matchups with who hosts."""
+        """Top occupants per side with a 'Show all', then the possible matchups with who hosts."""
         html = bracket_preview_html(3, BRACKET, BRACKET_CTX)
         sheet = html[html.index('<div class="game-sheet bracket-preview__sheet">') :]
-        assert "Show all 4" in sheet and "Most likely matchups" in sheet
+        assert "Show all 4" in sheet and "Possible matchups" in sheet
         assert "50% chance Raleigh hosts" in sheet
         assert sheet.count('<li><span class="mu__teams">') == 2
 
