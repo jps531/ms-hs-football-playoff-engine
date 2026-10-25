@@ -71,7 +71,7 @@ _T = TypeVar("_T")
 # calibration report can tell which model produced a published number. Bump
 # it whenever a change alters the odds themselves: Elo parameters, home-field
 # advantage, tiebreaker handling, simulation counts, bracket or hosting rules.
-MODEL_VERSION = "2026.4"  # 2026.4: toss-up simulated with coin flips (2026.3: projected margins)
+MODEL_VERSION = "2026.5"  # 2026.5: every margin a tied team plays is worked through (2026.4: coin-flip toss-up)
 
 
 def quote(value: _T) -> _T:
