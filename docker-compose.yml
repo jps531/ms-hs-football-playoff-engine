@@ -123,6 +123,9 @@ services:
       TURNSTILE_SECRET_KEY: "${TURNSTILE_SECRET_KEY:-}"
       # The Auth0 single-page app /moderate signs in with.
       AUTH0_SPA_CLIENT_ID: "${AUTH0_SPA_CLIENT_ID:-}"
+      # PostHog visit counts (docs/ANALYTICS.md); unset = off. The dashboard link is the owner's, on /moderate.
+      POSTHOG_PROJECT_KEY: "${POSTHOG_PROJECT_KEY:-}"
+      POSTHOG_DASHBOARD_URL: "${POSTHOG_DASHBOARD_URL:-}"
       # CORS origin; required (not *) once ENVIRONMENT isn't local.
       FRONTEND_ORIGIN: "${FRONTEND_ORIGIN:-*}"
       # Least-privilege role from sql/app_roles.sql; falls back to the owner until it exists.

@@ -514,7 +514,7 @@ async def list_championships(
 @router.get("/client-config")
 async def get_client_config(request: Request) -> ClientConfig:
     """Return the public keys the site's pages need: Turnstile's site key, the moderation page's Auth0 app,
-    and the Swagger UI path when this environment serves it.
+    the Swagger UI path when this environment serves it, and the PostHog project visit counts go to.
 
     Nothing here is secret; a value is null when that feature isn't set up on this server.
     """
@@ -524,4 +524,6 @@ async def get_client_config(request: Request) -> ClientConfig:
         auth0_domain=os.getenv("AUTH0_DOMAIN") or None,
         auth0_audience=os.getenv("AUTH0_AUDIENCE") or None,
         auth0_client_id=os.getenv("AUTH0_SPA_CLIENT_ID") or None,
+        posthog_key=os.getenv("POSTHOG_PROJECT_KEY") or None,
+        posthog_dashboard_url=os.getenv("POSTHOG_DASHBOARD_URL") or None,
     )
