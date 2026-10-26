@@ -1,7 +1,8 @@
 -- Apply to an existing database (init.sql only runs when the database is first
 -- created). Safe to run more than once: a second run finds nothing to rename.
 --
---   docker compose exec -T db psql -U postgres -d mshsfootball < sql/migrations/2026_10_leake_central_to_leake.sql
+--   docker compose --env-file .env.local --profile local-db exec -T db \
+--     psql -v ON_ERROR_STOP=1 -U postgres -d mshsfootball < sql/migrations/2026_10_leake_central_to_leake.sql
 --
 -- Leake County (1A-5) and Leake Central (4A-5) consolidated into Leake (5A-2)
 -- for 2026. AHSFHS and the MHSAA region page still say "Leake Central", so the
@@ -37,6 +38,17 @@ UPDATE schools s SET
     longitude           = COALESCE(s.longitude, src.longitude)
 FROM schools_effective src
 WHERE s.school = 'Leake' AND src.school = 'Leake Central';
+-- color_variants (the clamped colors the generic helmet is drawn in) is
+-- computed from the two hex colors alone (backend/helpers/color_variants.py),
+-- so when Leake's colors are Leake Central's, so are its variants.
+UPDATE schools s SET color_variants = src.color_variants
+FROM schools src, schools_effective le, schools_effective lce
+WHERE s.school = 'Leake' AND src.school = 'Leake Central'
+  AND le.school = 'Leake' AND lce.school = 'Leake Central'
+  AND src.color_variants IS NOT NULL
+  AND le.primary_color_hex   IS NOT DISTINCT FROM lce.primary_color_hex
+  AND le.secondary_color_hex IS NOT DISTINCT FROM lce.secondary_color_hex
+  AND s.color_variants IS DISTINCT FROM src.color_variants;
 
 -- Refuse to merge two sets of rows rather than guess which one is right.
 DO $$
