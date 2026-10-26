@@ -13,7 +13,7 @@ from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_values
 
 from backend.helpers.data_classes import School
-from backend.helpers.data_helpers import SPACE_RE, clean_school_name
+from backend.helpers.data_helpers import SPACE_RE, clean_school_name, school_name_for_season
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.web_helpers import fetch_article_text
 
@@ -166,10 +166,11 @@ def scrape_task(url: str, season: int) -> list[School]:
     logger = get_run_logger()
     logger.info("Fetching and parsing rendered text from %s", url)
     text = fetch_article_text(url)
-    rows = {
-        r["school"]: School(school=r["school"], class_=r["class"], region=r["region"], season=season)
-        for r in parse_regions_from_text(text)
-    }
+    # The MHSAA page can lag a school's new name (SCHOOL_RENAMES); file it under the site's name for the season.
+    rows = {}
+    for r in parse_regions_from_text(text):
+        name = school_name_for_season(r["school"], season)
+        rows[name] = School(school=name, class_=r["class"], region=r["region"], season=season)
 
     for override in _SEASON_OVERRIDES.get(season, []):
         school = override["school"]

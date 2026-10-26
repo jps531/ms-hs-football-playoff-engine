@@ -11,6 +11,13 @@
 export const CLASSES = [1, 2, 3, 4, 5, 6, 7];
 
 /** "St. Martin" -> "st-martin", "D'Iberville" -> "diberville". */
+/**
+ * Team links from before a school's new name (backend/helpers/data_helpers.py
+ * SCHOOL_RENAMES): an old ?team= slug finds the school by its new name in a
+ * season where the old name isn't there ("leake-central" in 2026 is Leake).
+ */
+export const FORMER_SLUGS = { "leake-central": "Leake" };
+
 export function slugify(name) {
   return String(name ?? "")
     .normalize("NFD").replace(/[̀-ͯ]/g, "")

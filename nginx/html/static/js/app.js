@@ -16,7 +16,7 @@ import {
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
-import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
+import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, submissionError,
@@ -174,7 +174,9 @@ async function navigate(url, { scroll = false, replace = false } = {}) {
 function resolveTeam(value, index) {
   if (!value) return null;
   const schools = Object.keys(index);
-  return schools.find((s) => slugify(s) === value) ?? (value in index ? value : null);
+  const found = schools.find((s) => slugify(s) === value) ?? (value in index ? value : null);
+  // A link from before a school's new name: the same school, under the name it goes by this season.
+  return found ?? (FORMER_SLUGS[value] in index ? FORMER_SLUGS[value] : null);
 }
 
 /**

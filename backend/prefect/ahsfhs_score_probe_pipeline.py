@@ -18,7 +18,7 @@ from prefect import flow, get_run_logger, task
 from prefect.artifacts import create_table_artifact
 
 from backend.helpers.data_classes import Game, School
-from backend.helpers.data_helpers import update_school_name_for_ahsfhs_search
+from backend.helpers.data_helpers import source_name_for_season, update_school_name_for_ahsfhs_search
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.web_helpers import fetch_article_text_from_ahsfhs
 from backend.prefect.ahsfhs_schedule_pipeline import get_existing_schools, parse_ahsfhs_schedule
@@ -84,7 +84,8 @@ def check_pages(schools: list[School], season: int, game_date: date) -> list[tup
     logger = get_run_logger()
     checked: list[tuple[School, list[Game] | None]] = []
     for school in schools:
-        url = f"https://www.ahsfhs.org/MISSISSIPPI/teams/gamesbyyear.asp?Team={update_school_name_for_ahsfhs_search(school.school)}&Year={season}"
+        source = source_name_for_season(school.school, season)  # a renamed school's page is still under its old name
+        url = f"https://www.ahsfhs.org/MISSISSIPPI/teams/gamesbyyear.asp?Team={update_school_name_for_ahsfhs_search(source)}&Year={season}"
         try:
             text = fetch_article_text_from_ahsfhs(url)
             games = parse_ahsfhs_schedule(
