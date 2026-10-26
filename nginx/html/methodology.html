@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>How the Odds Work · Mississippi High School Football Playoff Races</title>
-  <meta name="description" content="How the seeding odds and playoff scenarios for Mississippi high school football regions are calculated.">
+  <title>How it works — Mississippi High School Football</title>
+  <meta name="description" content="How the seeding odds, playoff scenarios, and bracket outlook for Mississippi high school football are calculated.">
   <meta property="og:site_name" content="Mississippi High School Football">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="How the Odds Work · Mississippi High School Football Playoff Races">
-  <meta property="og:description" content="How the seeding odds and playoff scenarios for Mississippi high school football regions are calculated.">
+  <meta property="og:title" content="How it works — Mississippi High School Football">
+  <meta property="og:description" content="How the seeding odds, playoff scenarios, and bracket outlook for Mississippi high school football are calculated.">
   <meta property="og:url" content="https://mshsfootball.com/methodology">
   <meta property="og:image" content="https://mshsfootball.com/static/og/site.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -59,12 +59,13 @@
 
   <main id="content" class="page article">
     <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li aria-current="page">How it works</li></ol></nav>
-    <h1 class="title">How the odds work</h1>
+    <h1 class="title">How it works</h1>
 
     <div class="prose">
       <p>
         Every number on this site comes from playing out the rest of a region’s
-        schedule every possible way, then applying the MHSAA’s own tiebreaker
+        schedule, every possible way when they can be counted and 50,000
+        simulated ways when they can’t, then applying the MHSAA’s own tiebreaker
         rules to each outcome. Nothing is hand-picked, and nothing is a pundit’s
         opinion.
       </p>
@@ -87,7 +88,7 @@
       <h2>Projected and toss-up odds</h2>
       <p>
         Every outcome can be counted two ways, and you can switch between them
-        at the top of each region.
+        at the top of each page.
       </p>
       <p>
         <strong>Projected</strong> weights each outcome by how likely it is.
@@ -145,17 +146,19 @@
         <li>A coin flip.</li>
       </ol>
       <p>
-        Because steps 3 and 4 depend on the score, not just the winner, some
-        races turn on margin of victory. Once five or fewer region games remain,
+        Because steps 3, 4 and 5 depend on the score, not just the winner, some
+        races turn on margin of victory or points allowed. Once five or fewer region games remain,
         we work through every winning margin as well, which is why a scenario
         can read “Raleigh beats Magee by 8–10.” With more games left, the odds
         work out such a tie as if each remaining game were won by 7 points, so
         they’re close but not exact. Each margin counts as often as
         it happened in 2025’s region games: across all of them for Toss-up
         odds, and among games where the winner had a similar chance for
-        Projected odds. In 2025, a heavy favourite won by 12 or more over nine
+        Projected odds. In 2025, a heavy favorite won by 12 or more over nine
         times in ten; a coin-flip game was won by that much about half the time.
-        While games remain, a tie that
+        When a tie comes down to points allowed with a tied team still to play,
+        the odds try the remaining games at scores drawn from 2025’s region
+        games. While games remain, a tie that
         would come down to a coin flip counts each way the flip could go
         equally. Once region play is over, a team whose tie can only be
         settled by a coin flip is marked with a coin.
@@ -166,10 +169,12 @@
         Once five or fewer region games remain, each team’s possible outcomes are
         listed with exactly what has to happen. Conditions joined by AND must all
         happen together. When there’s more than one way to get there, the
-        alternatives are separated by OR, and any one of them is enough.
+        alternatives are separated by OR, and any one of them is enough. When
+        every alternative shares some conditions, those come first, and the
+        alternatives follow in a box headed AND ONE OF.
         The Scenarios section lists every way the region can finish, one box
         each, with its chance in the odds mode you’ve picked; together they add
-        up to 100%.
+        up to 100% (give or take rounding).
       </p>
       <p>
         With six to ten games left, we show only results that settle a spot
@@ -185,6 +190,42 @@
         misses the playoffs in every one. We show 0% and 100% only for those
         certainties; anything short of that reads as less than 1% or more than
         99%.
+      </p>
+
+      <h2 id="bracket">How the bracket works</h2>
+      <p>
+        The bracket page follows the MHSAA’s playoff bracket for each class.
+        Every first-round spot belongs to a region seed (Region 3 #1 Seed, for
+        example), and every later game is fed by the winners of two earlier
+        ones. A team’s chance to play in a game is its chance of finishing in a
+        seed that feeds that game, combined with its chance of winning every
+        game on the way there. Once a playoff game is played, its winner is
+        fixed.
+      </p>
+      <p>
+        In Toss-up odds, every playoff game is a coin flip. In Projected odds,
+        a playoff game’s chances come from Elo ratings: for each seed, the
+        ratings of the teams that could finish there, weighted by how likely
+        each one is to get it, with the better seed treated as the home team.
+      </p>
+      <p>
+        A matchup’s chance is the chance of that exact game happening. Two
+        teams from the same region are handled together, using how often the
+        region’s possible finishes put each in its seed, so a matchup never
+        pairs teams in seeds the standings can’t give them at the same time.
+        Pairings under 0.5% in both odds modes aren’t listed; each game says
+        how many it leaves out.
+      </p>
+      <p>
+        Who hosts follows the MHSAA’s rules. When two teams from the same
+        region meet, the higher seed always hosts. Otherwise, the higher seed
+        hosts in the first round (and the second round, in 1A–4A); in the
+        quarterfinals, the team that has played fewer home playoff games hosts,
+        then the higher seed; and in the semifinals, the North and South
+        championships, the higher seed hosts. Equal seeds from different
+        regions go to the lower-numbered region in odd years and the
+        higher-numbered region in even years. The state championship is played
+        at a neutral site.
       </p>
 
       <h2>Rules, not AI</h2>
@@ -221,16 +262,16 @@
         are recalculated, which can take from a few minutes to about an hour.
         Results from a Friday night show up Saturday morning. The line under
         each region’s headline says which week the numbers cover, and the
-        bottom of each region page says when they were calculated.
+        bottom of each page says when they were calculated.
       </p>
 
       <h2>What we don’t do</h2>
       <p>
         We don’t publish point spreads, predicted scores, or betting lines,
-        and we don’t pick winners. Every percentage on this site answers one
-        of three questions about a team: where it could be seeded, whether it
-        could host, and how far it could advance. Seeds aren’t official until
-        the MHSAA announces them.
+        and we don’t pick winners. Every percentage on this site is the chance
+        of something in the standings or the bracket: a seed, a finish, a
+        playoff spot, a home game, a matchup, or a round reached. Seeds aren’t
+        official until the MHSAA announces them.
       </p>
 
       <h2>What the numbers can’t see</h2>
@@ -242,7 +283,7 @@
         <li>Injuries, suspensions, or other changes to who’s playing.</li>
         <li>Weather, travel, or anything else that happens on game day.</li>
         <li>Forfeits, score corrections, or schedule changes until they’re
-          recorded at the source.</li>
+          recorded at the source, or reported to us and approved.</li>
       </ul>
       <p>
         Early in the season, ratings rest on a class baseline, last year’s
@@ -281,6 +322,44 @@
         link the region page.
       </p>
 
+      <h2 id="future">What’s next</h2>
+      <p>
+        This season’s site is the first piece of a bigger one we’re building
+        for 2027. Here’s what’s on the way. The first list is what we plan to
+        have ready for next season; stretch goals are things we’d like to do
+        but can’t promise yet.
+      </p>
+      <p><strong>Coming in 2027</strong></p>
+      <ul class="bullets">
+        <li>Simulate mode: pick the winners of upcoming games and see how the
+          standings, odds, scenarios, and bracket change.</li>
+        <li>Team pages: one page for each team, with its schedule, results,
+          odds, and playoff path.</li>
+        <li>Real helmet artwork for every team, in place of the generic helmets
+          in team colors.</li>
+        <li>A home feed with every class’s races at a glance.</li>
+        <li>A report card for the odds: how often the chances we published
+          actually came true.</li>
+      </ul>
+      <p><strong>Stretch goals</strong></p>
+      <ul class="bullets">
+        <li>Faster scores: finals from posts on X on game nights, instead of
+          waiting for the next morning’s update.</li>
+        <li>A scoreboard, and a page for every game.</li>
+        <li>The top Elo ratings statewide and in each class.</li>
+        <li>A map of each team’s season, with travel distances and how far it
+          is to the championship venue.</li>
+        <li>A browser of every team’s helmets.</li>
+        <li>Championship history.</li>
+        <li>Accounts, so you can follow your favorite teams.</li>
+        <li>Email updates: a weekly newsletter, and alerts for the teams you
+          pick.</li>
+        <li>MAIS coverage: the same standings, odds, and scenarios for MAIS
+          schools.</li>
+        <li>A For Media page: each region’s standings, odds, and scenarios in a
+          form that’s easy to cite and reuse.</li>
+      </ul>
+
       <h2>About the author</h2>
       <!-- AUTHOR BIO: replace the placeholder paragraph below with your bio. -->
       <p class="muted">Author bio coming soon.</p>
@@ -289,6 +368,8 @@
 
   <footer class="site-footer">
     <p><a href="/feedback">Send feedback or report a problem</a></p>
+    <p>Seeds aren’t official until the MHSAA announces them. Odds are estimates and are not for wagering.</p>
+    <p>Scores from <a href="https://www.ahsfhs.org/">AHSFHS</a>. Updated each morning once the night’s scores are in.</p>
     <p>This website is not associated with the MHSAA or any of its member schools.</p>
     <p>© 2025–2026 Paul Sullivan. All rights reserved.</p>
   </footer>
