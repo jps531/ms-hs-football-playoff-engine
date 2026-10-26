@@ -95,7 +95,8 @@ The numbers are views and clicks, not people: opening the same page twice counts
    ```
 
    (or pass `POSTHOG_DASHBOARD_URL` instead of `POSTHOG_PROJECT_ID`). It prints the
-   dashboard's link. Run it once; if the dashboard exists it changes nothing, so delete the
+   dashboard's link; put that in `.env.local` as `POSTHOG_ACTIVITY_URL` and recreate the
+   API, and the owner sees an **Activity** link beside **Analytics** on `/moderate`. Run it once; if the dashboard exists it changes nothing, so delete the
    dashboard in PostHog first to rebuild it after the script changes.
 3. Delete the key afterwards if you won't run the script again.
 

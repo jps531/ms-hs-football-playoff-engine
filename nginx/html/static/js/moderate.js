@@ -83,10 +83,13 @@ function shell() {
   const docs = state.cfg.api_docs_url
     ? `<a class="mod-button" href="${esc(state.cfg.api_docs_url)}" target="_blank" rel="noopener">API Docs</a>`
     : "";
-  // The owner's links: the pipeline (Prefect) and, when this server sends visit counts, their dashboard.
-  const analytics = state.cfg.posthog_dashboard_url
-    ? `<a class="mod-button" href="${esc(state.cfg.posthog_dashboard_url)}" target="_blank" rel="noopener" data-owner-only hidden>Analytics</a>`
-    : "";
+  // The owner's links: the pipeline (Prefect) and, when this server sends visit counts, its PostHog
+  // dashboards (web analytics, and the "Site activity" one of feature use).
+  const ownerLink = (url, label) => (url
+    ? `<a class="mod-button" href="${esc(url)}" target="_blank" rel="noopener" data-owner-only hidden>${label}</a>`
+    : "");
+  const analytics = ownerLink(state.cfg.posthog_dashboard_url, "Analytics")
+    + ownerLink(state.cfg.posthog_activity_url, "Activity");
   root.innerHTML = `<div class="mod-account">
       <a class="mod-button" href="/prefect/" target="_blank" rel="noopener" data-prefect data-owner-only hidden>Prefect</a>
       ${analytics}
