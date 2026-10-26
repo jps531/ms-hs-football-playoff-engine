@@ -105,8 +105,12 @@ export async function startAnalytics(api) {
   });
 }
 
-/** Count a feature being used. *props* say which, never who: no names, emails or typed text. */
-export function track(name, props = {}) {
-  if (posthog) posthog.capture(name, props);
+/**
+ * Count a feature being used. *props* say which, never who: no names, emails or typed text.
+ * With *leaving*, the event goes out at once by beacon, since a link that loads a new page
+ * would otherwise unload this one before the next batch is sent.
+ */
+export function track(name, props = {}, { leaving = false } = {}) {
+  if (posthog) posthog.capture(name, props, leaving ? { transport: "sendBeacon", send_instantly: true } : undefined);
   else queue?.push([name, props]);
 }

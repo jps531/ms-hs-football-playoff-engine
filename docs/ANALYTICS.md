@@ -53,6 +53,7 @@ keep the two in step: a new event or property means a new line there.
 | `bracket_game_opened` | Opening a game's sheet | `class`, `round`, `game` |
 | `bracket_half_changed` | The North/South/Both control | `half` |
 | `scenarios_opened` | Opening a folded scenario group | `section` (its heading) |
+| `home_link_clicked` | Following a link on the front page | `to` (the link's path), `section` (the front-page section it's in: its heading id without `landing-`, or `classes` for the class buttons) |
 | `feedback_opened` | Opening the feedback form | `kind` (`score`, `odds`, `other`) |
 | `feedback_sent` | A report sent | `kind` (`score`, `feedback`) |
 
@@ -75,6 +76,31 @@ text.
    `https://us.posthog.com/project/12345/web`) as `POSTHOG_DASHBOARD_URL`, then
    recreate the API and nginx. The owner sees an **Analytics** link next to
    **Prefect** on `/moderate`.
+
+## The dashboard
+
+`scripts/posthog_dashboard.py` builds a PostHog dashboard named "Site activity" from these
+events: bar charts of the most viewed classes, regions and brackets (from page addresses), the
+most picked teams, the front-page links followed, the scenario groups opened, and the bracket
+games opened. Each panel shows the last 30 days, and the dashboard's date picker changes them.
+The numbers are views and clicks, not people: opening the same page twice counts twice.
+
+1. In PostHog, **Settings → User → Personal API keys**, create a key with the
+   `dashboard:write` and `insight:write` scopes. This is not the `phc_` project key, and it
+   doesn't go in `.env.local` or the repo: it can read and change the project.
+2. On any machine with Python 3:
+
+   ```
+   POSTHOG_PERSONAL_API_KEY=phx_... POSTHOG_PROJECT_ID=12345 python3 scripts/posthog_dashboard.py
+   ```
+
+   (or pass `POSTHOG_DASHBOARD_URL` instead of `POSTHOG_PROJECT_ID`). It prints the
+   dashboard's link. Run it once; if the dashboard exists it changes nothing, so delete the
+   dashboard in PostHog first to rebuild it after the script changes.
+3. Delete the key afterwards if you won't run the script again.
+
+The methodology page doesn't load `analytics.js`, so views of it aren't counted; a click
+from the front page to it is (`home_link_clicked`).
 
 ## Tagging the links you share
 
