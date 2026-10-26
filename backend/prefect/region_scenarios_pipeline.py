@@ -229,6 +229,9 @@ def fetch_all_season_schools(season: int) -> list[School]:
 def fetch_prior_season_elo(prior_season: int) -> dict[str, float]:
     """Fetch final Elo ratings from the prior season for cross-season carryover.
 
+    ``team_ratings`` holds a row per school per snapshot date, so each school's
+    most recent row is its final rating; earlier rows are mid-season snapshots.
+
     Returns an empty dict when no ratings exist for ``prior_season`` (e.g. the
     first season in the database), in which case ``compute_elo_ratings`` falls
     back to class priors for all teams.
@@ -236,7 +239,12 @@ def fetch_prior_season_elo(prior_season: int) -> dict[str, float]:
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT school, elo FROM team_ratings WHERE season = %s",
+                """
+                SELECT DISTINCT ON (school) school, elo
+                FROM team_ratings
+                WHERE season = %s
+                ORDER BY school, as_of_date DESC
+                """,
                 (prior_season,),
             )
             return {row[0]: row[1] for row in cur.fetchall()}
