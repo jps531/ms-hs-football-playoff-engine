@@ -1,7 +1,8 @@
 -- Apply to an existing database (init.sql only runs when the database is first
 -- created). Safe to run more than once: a second run finds nothing to rename.
 --
---   docker compose exec -T db psql -U postgres -d mshsfootball < sql/migrations/2026_10_leake_central_to_leake.sql
+--   docker compose --env-file .env.local --profile local-db exec -T db \
+--     psql -v ON_ERROR_STOP=1 -U postgres -d mshsfootball < sql/migrations/2026_10_leake_central_to_leake.sql
 --
 -- Leake County (1A-5) and Leake Central (4A-5) consolidated into Leake (5A-2)
 -- for 2026. AHSFHS and the MHSAA region page still say "Leake Central", so the
