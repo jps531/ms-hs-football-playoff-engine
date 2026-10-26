@@ -80,6 +80,7 @@ export async function startAnalytics(api) {
     api_host: "/relay",
     ui_host: cfg.posthog_ui_host || "https://us.posthog.com",
     cookieless_mode: "always",
+    person_profiles: "never", // no person records; identify() becomes a no-op
     capture_pageview: "history_change",
     capture_pageleave: false,
     autocapture: false,

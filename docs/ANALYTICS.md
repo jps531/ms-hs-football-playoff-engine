@@ -14,13 +14,23 @@ is the public description of this; keep the two in step.
   stays `script-src 'self'`. To update it, replace the file from the npm
   package and change the version in its header comment and here.
 - **Events go out through this site.** The library posts to `/relay/`, and
-  nginx forwards that to `us.i.posthog.com` (the `location ^~ /relay/` block),
+  nginx forwards that to `us.i.posthog.com` (the `location ^~ /relay/` block,
+  following [PostHog's nginx proxy guide](https://posthog.com/docs/advanced/proxy/nginx)),
   so `connect-src` stays `'self'` and most ad blockers leave it alone. nginx
-  passes the visitor's address as `X-Forwarded-For` and drops cookies and
-  `Authorization` both ways.
-- **No cookies or browser storage.** `cookieless_mode: "always"`: PostHog
-  counts unique visitors per day from a hash of the address and browser,
-  computed on its side with a salt that changes daily.
+  passes the visitor's address as `X-Forwarded-For` (PostHog's
+  [Cloudflare proxy guide](https://posthog.com/docs/advanced/proxy/cloudflare)
+  does the same, so visitors aren't all counted as the server) and drops cookies
+  and `Authorization` both ways. The vendored library needs no `/static/` or
+  `/array/` assets proxied, and flags are off, so the API host is all it uses.
+- **No cookies or browser storage.** `cookieless_mode: "always"` with
+  `person_profiles: "never"`: PostHog counts unique visitors per day from
+  `hash(project, daily salt, IP address, user agent, hostname)`, computed on its
+  servers; the salt changes daily and is deleted once that day's events are
+  processed ([PostHog: cookieless tracking](https://posthog.com/tutorials/cookieless-tracking)).
+  The trade-offs: someone who visits on two days counts as two visitors (weekly
+  and monthly uniques run high), two people on one network with the same browser
+  can count as one, and there's no location data: PostHog strips the IP before
+  its GeoIP step, so the web analytics world map stays empty.
 - **Only what's named.** Page views (including the app's in-page navigation,
   `capture_pageview: "history_change"`) and the events below. No autocapture,
   session recording, heatmaps, surveys, feature flags or exception capture.
@@ -50,10 +60,13 @@ text.
 
 1. Create a project on PostHog's **US** cloud (for the EU cloud, change the
    host in nginx's `/relay/` block to `eu.i.posthog.com`).
-2. In the project's settings, turn on **cookieless server hash mode** (cookieless
-   events are dropped without it), and turn on **Discard client IP data** so
-   addresses aren't stored with events. The methodology page says addresses
-   aren't kept, so check this before setting the key.
+2. In the project's settings:
+   - **Settings → Project → Web analytics → Enable cookieless tracking**, and
+     save. Without it PostHog ignores cookieless events.
+   - **Settings → Project → Privacy → IP data capture configuration**: discard
+     client IP data, so addresses aren't stored with events. (A US
+     organization doesn't discard by default.) The methodology page says
+     addresses aren't kept, so check this before setting the key.
 3. Put the project API key (`phc_…`) in `.env.local` as `POSTHOG_PROJECT_KEY`,
    and the project's web analytics URL (for example
    `https://us.posthog.com/project/12345/web`) as `POSTHOG_DASHBOARD_URL`, then
