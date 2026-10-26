@@ -327,6 +327,47 @@ def get_school_name_from_ahsfhs(s: str) -> str:
     return s
 
 
+# Schools that started going by a new name while the sources (AHSFHS, the MHSAA
+# region pages) still use the old one: (old name, new name, first season under
+# the new name). Seasons before that keep the old name, so history reads as it
+# happened. The old school is also the new one's predecessor for Elo carryover.
+# nginx/html/static/js/routes.js FORMER_SLUGS mirrors this for old team links.
+SCHOOL_RENAMES: list[tuple[str, str, int]] = [
+    # Leake County (1A-5) and Leake Central (4A-5) consolidated into Leake (5A-2) for 2026,
+    # on Leake Central's campus and under its identity.
+    ("Leake Central", "Leake", 2026),
+]
+
+
+def school_name_for_season(name: str, season: int) -> str:
+    """The site's name for a school the sources call *name*, in *season* ("Leake Central" in 2026 is "Leake")."""
+    for old, new, first in SCHOOL_RENAMES:
+        if name == old and season >= first:
+            return new
+    return name
+
+
+def source_name_for_season(name: str, season: int) -> str:
+    """What the sources still call the site's *name* in *season* (2026's "Leake" is AHSFHS's "Leake Central")."""
+    for old, new, first in SCHOOL_RENAMES:
+        if name == new and season >= first:
+            return old
+    return name
+
+
+def with_predecessor_ratings(prior: dict[str, float], season: int) -> dict[str, float]:
+    """Last season's final ratings, with each school renamed for *season* carrying its old name's rating.
+
+    A renamed school has no rating under its new name the season it changes; without this it would
+    start from its class's baseline instead of from where the same program finished.
+    """
+    out = dict(prior)
+    for old, new, first in SCHOOL_RENAMES:
+        if first == season and new not in out and old in out:
+            out[new] = out[old]
+    return out
+
+
 def as_float_or_none(x):
     """Convert a value to float, returning None for missing or invalid inputs.
 

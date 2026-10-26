@@ -107,14 +107,23 @@ After applying the correction, re-run both pipelines:
 
 ## 2026: Leake (5A Region 2)
 
-Leake County (1A Region 5) and Leake Central (4A Region 5) merged to form Leake (5A Region 2).
+Leake County (1A Region 5) and Leake Central (4A Region 5) merged to form Leake (5A Region 2),
+on Leake Central's campus and under its identity. AHSFHS and the MHSAA 2025–27 region page still
+call it "Leake Central", so the site records the new name itself:
 
-After running the Regions pipeline for 2026:
+- `SCHOOL_RENAMES` in `backend/helpers/data_helpers.py` says "Leake Central" is "Leake" from 2026
+  on. The regions, schedule and score pipelines file everything from 2026 under "Leake" (its own
+  games and every opponent's), and still fetch AHSFHS's "Leake Central" page for it. 2025 and
+  earlier keep Leake Central and Leake County as they were.
+- Leake's first season carries Leake Central's final 2025 Elo rating (`with_predecessor_ratings`),
+  as any school's does from one season to the next.
+- Old team links (`?team=leake-central`) still open Leake on 2026 pages (`FORMER_SLUGS` in
+  `nginx/html/static/js/routes.js`).
 
-```
-PATCH /api/v1/admin/school-seasons/Leake%20County/2026   {"is_active": false}
-PATCH /api/v1/admin/school-seasons/Leake%20Central/2026  {"is_active": false}
-PUT   /api/v1/admin/school-seasons/Leake/2026            {"class": 5, "region": 2, "copy_identity_from": "Leake Central"}
-```
+To move 2026 data stored before the rename, run
+`sql/migrations/2026_10_leake_central_to_leake.sql`, then the daily update (or
+`region-scenarios-data-pipeline` then `share-assets`) for 2026 so today's numbers pick up the Elo
+carryover. Earlier 2026 snapshots keep the Projected odds they were published with; run
+`backfill-historical-snapshots` for 2026 if past weeks should use the carried-over rating too.
 
-The `copy_identity_from` field copies Leake Central's mascot, colors, city, zip, and coordinates into Leake's `schools` row immediately — before the MHSAA identity and NCES pipelines run, so identity is available from day one. The corresponding entries in `seed_mhsaa_identity.sql` and `seed_private_school_locations.sql` become no-ops once those fields are populated (both use `COALESCE` and won't overwrite). If Leake ever gets its own MHSAA directory entry or NCES record, those pipeline-sourced values take precedence. Elo starts at the 5A class prior — no manual seeding needed for a program moving up two classes.
+For a future rename, add a line to `SCHOOL_RENAMES` and `FORMER_SLUGS`, and adapt the migration.

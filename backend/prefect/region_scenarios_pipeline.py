@@ -35,7 +35,7 @@ from backend.helpers.data_classes import (
     WinProbFn,
     equal_matchup_prob,
 )
-from backend.helpers.data_helpers import get_completed_games
+from backend.helpers.data_helpers import get_completed_games, with_predecessor_ratings
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.insights import extract_insights, serialize_insights
 from backend.helpers.scenario_serializers import (
@@ -1379,7 +1379,7 @@ def region_scenarios_data_flow(
     all_games = fetch_all_season_games(season)
     all_schools = fetch_all_season_schools(season)
     elo_cfg = EloConfig()
-    prior_elo = fetch_prior_season_elo(season - 1)
+    prior_elo = with_predecessor_ratings(fetch_prior_season_elo(season - 1), season)
     elo_ratings, games_count, elo_snapshots = compute_elo_ratings(
         all_games, all_schools, elo_cfg, prior_ratings=prior_elo or None
     )
@@ -1485,7 +1485,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
     all_games = fetch_all_season_games(season)
     all_schools = fetch_all_season_schools(season)
     elo_cfg = EloConfig()
-    prior_elo = fetch_prior_season_elo(season - 1)
+    prior_elo = with_predecessor_ratings(fetch_prior_season_elo(season - 1), season)
     elo_ratings, games_count, elo_snapshots = compute_elo_ratings(
         all_games, all_schools, elo_cfg, prior_ratings=prior_elo or None
     )

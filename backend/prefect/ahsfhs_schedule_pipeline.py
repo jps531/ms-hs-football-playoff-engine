@@ -21,6 +21,8 @@ from backend.helpers.data_helpers import (
     _normalize_ws,
     get_school_name_from_ahsfhs,
     parse_text_section,
+    school_name_for_season,
+    source_name_for_season,
     to_plain_text,
     update_school_name_for_ahsfhs_search,
 )
@@ -92,7 +94,8 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str, cl
         day = int(m.group("day"))
         date = f"{mon:02d}/{day:02d}/{season}"
 
-        opponent = get_school_name_from_ahsfhs(m.group("opp").strip())
+        # AHSFHS can lag a school's new name (SCHOOL_RENAMES); store it under the site's name for the season.
+        opponent = school_name_for_season(get_school_name_from_ahsfhs(m.group("opp").strip()), season)
         if opponent.lower().startswith("open"):
             continue  # skip OPEN weeks (handles "OPEN", "OPEN Playoffs", etc.)
 
@@ -196,7 +199,8 @@ def find_ahsfhs_schedule_for_schools(schools: list[School], season: int) -> list
     failed_schools: list[str] = []
 
     for school in schools:
-        url = f"https://www.ahsfhs.org/MISSISSIPPI/teams/gamesbyyear.asp?Team={update_school_name_for_ahsfhs_search(school.school)}&Year={season}"
+        source = source_name_for_season(school.school, season)  # a renamed school's page is still under its old name
+        url = f"https://www.ahsfhs.org/MISSISSIPPI/teams/gamesbyyear.asp?Team={update_school_name_for_ahsfhs_search(source)}&Year={season}"
 
         try:
             text = fetch_article_text_from_ahsfhs(url)
