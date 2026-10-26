@@ -20,6 +20,7 @@ def test_reports_configured_keys(monkeypatch):
     monkeypatch.setenv("AUTH0_SPA_CLIENT_ID", "spa")
     monkeypatch.setenv("POSTHOG_PROJECT_KEY", "phc_test")
     monkeypatch.setenv("POSTHOG_DASHBOARD_URL", "https://us.posthog.com/project/1/web")
+    monkeypatch.setenv("POSTHOG_ACTIVITY_URL", "https://us.posthog.com/project/1/dashboard/2")
     config = asyncio.run(meta.get_client_config(_request()))
     assert config.model_dump() == {
         "api_docs_url": "/docs",
@@ -29,6 +30,7 @@ def test_reports_configured_keys(monkeypatch):
         "auth0_client_id": "spa",
         "posthog_key": "phc_test",
         "posthog_dashboard_url": "https://us.posthog.com/project/1/web",
+        "posthog_activity_url": "https://us.posthog.com/project/1/dashboard/2",
     }
 
 
@@ -39,9 +41,11 @@ def test_unconfigured_features_are_null(monkeypatch):
     monkeypatch.delenv("AUTH0_SPA_CLIENT_ID", raising=False)
     monkeypatch.delenv("POSTHOG_PROJECT_KEY", raising=False)
     monkeypatch.delenv("POSTHOG_DASHBOARD_URL", raising=False)
+    monkeypatch.delenv("POSTHOG_ACTIVITY_URL", raising=False)
     config = asyncio.run(meta.get_client_config(_request(None)))
     assert config.turnstile_site_key is None
     assert config.api_docs_url is None
     assert config.auth0_client_id is None
     assert config.posthog_key is None and config.posthog_dashboard_url is None  # no visit counts
+    assert config.posthog_activity_url is None
     assert "secret" not in config.model_dump_json()

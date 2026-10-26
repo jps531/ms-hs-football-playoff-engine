@@ -126,6 +126,7 @@ services:
       # PostHog visit counts (docs/ANALYTICS.md); unset = off. The dashboard link is the owner's, on /moderate.
       POSTHOG_PROJECT_KEY: "${POSTHOG_PROJECT_KEY:-}"
       POSTHOG_DASHBOARD_URL: "${POSTHOG_DASHBOARD_URL:-}"
+      POSTHOG_ACTIVITY_URL: "${POSTHOG_ACTIVITY_URL:-}"
       # CORS origin; required (not *) once ENVIRONMENT isn't local.
       FRONTEND_ORIGIN: "${FRONTEND_ORIGIN:-*}"
       # Least-privilege role from sql/app_roles.sql; falls back to the owner until it exists.
