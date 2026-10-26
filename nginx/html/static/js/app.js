@@ -1784,6 +1784,19 @@ document.addEventListener("click", (e) => {
 
 // --------------------------------------------------------------- boot
 
+// Following a link on the front page: where it goes, and which part of the page it was in
+// (a section's heading id, or "classes" for the class buttons at the top).
+app?.addEventListener("click", (e) => {
+  const link = e.target.closest(".page.landing a[href]");
+  if (!link || e.button !== 0) return;
+  const to = new URL(link.href, location.href);
+  if (to.origin !== location.origin) return;
+  const section = link.closest(".landing-classes")
+    ? "classes"
+    : link.closest("section[aria-labelledby]")?.getAttribute("aria-labelledby").replace(/^landing-/, "") ?? null;
+  track("home_link_clicked", { to: to.pathname, section }, { leaving: true });
+});
+
 // Opening a folded group of scenarios (a click on its heading; groups that start open don't count).
 app?.addEventListener("click", (e) => {
   const summary = e.target.closest("details.scenario-group > summary");
