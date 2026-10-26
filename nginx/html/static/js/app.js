@@ -17,6 +17,7 @@ import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, slugify, parseLocation, buildPath } from "./routes.js";
+import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, submissionError,
 } from "./feedback.js";
@@ -189,7 +190,12 @@ function canonicalize(season) {
     odds: route.odds ?? storedOdds,
     team: route.teamName ? slugify(route.teamName) : null,
   }, { currentSeason });
-  if (canonical !== location.pathname + location.search) history.replaceState(null, "", canonical);
+  // An arrival link's campaign tags stay until analytics has counted them (analytics.js).
+  const tags = keepCampaignTags() ? campaignTags(location.search) : [];
+  const withTags = tags.length
+    ? `${canonical}${canonical.includes("?") ? "&" : "?"}${new URLSearchParams(tags)}`
+    : canonical;
+  if (withTags !== location.pathname + location.search) history.replaceState(null, "", withTags);
 }
 
 function stored(key, valid) {
@@ -482,6 +488,7 @@ function goToTeam(team) {
   openResults(false);
   teamSearch.blur();
   scrollToFocus = true;
+  track("team_search_used", { team: team.school });
   navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school }), { scroll: true });
 }
 
@@ -589,6 +596,7 @@ app.addEventListener("change", (e) => {
   const control = e.target.closest("[data-control]");
   if (!control) return;
   const value = control.value;
+  track(`${control.dataset.control}_changed`, { value });
   if (control.dataset.control === "season") {
     navigate(hrefWith({ season: Number(value), week: null, team: null }), { replace: true });
   } else if (control.dataset.control === "week") {
@@ -905,6 +913,7 @@ app.addEventListener("click", (e) => {
   // Picking a row selects that team (its playoff path opens and the
   // scenarios narrow to it); picking it again clears the selection.
   const selected = toggle.getAttribute("aria-expanded") === "true";
+  if (!selected) track("team_picked", { from: "standings", team: toggle.dataset.team });
   navigate(hrefWith({ team: selected ? null : toggle.dataset.team }), { replace: true });
 });
 
@@ -1424,6 +1433,7 @@ function onSheetClick(e) {
   const pick = e.target.closest("[data-pick-team]");
   if (pick) {
     const team = pick.dataset.pickTeam;
+    if (bracketData?.focus !== team) track("team_picked", { from: "bracket", team });
     sheetFocus = `[data-pick-team="${CSS.escape(team)}"]`;
     navigate(hrefWith({ team: bracketData?.focus === team ? null : team }), { replace: true });
   }
@@ -1523,11 +1533,14 @@ function gameDetail(game) {
 app.addEventListener("click", (e) => {
   const card = e.target.closest("[data-game-open]");
   if (card) {
+    const game = bracketData?.games.find((g) => g.id === card.dataset.gameOpen);
+    track("bracket_game_opened", { class: bracketData?.clazz, round: game?.round, game: card.dataset.gameOpen });
     openSheet(card.dataset.gameOpen);
     return;
   }
   const half = e.target.closest(".half-control [data-half]");
   if (half) {
+    track("bracket_half_changed", { half: half.dataset.half });
     bracketUi.half = half.dataset.half;
     rerenderBracket();
     return;
@@ -1631,6 +1644,7 @@ function openFeedback({ game = null, category = "other", team = null, about = nu
     });
   }
   const context = game ? null : feedbackContext({ team, about });
+  track("feedback_opened", { kind: game ? "score" : category });
   const page = location.pathname + location.search;
   removeTurnstile(feedbackSheet.querySelector("[data-fb-form]"));
   feedbackSheet.innerHTML = `<div class="game-sheet__head">
@@ -1716,6 +1730,7 @@ async function sendFeedback(form) {
 
 function feedbackSent(form) {
   const score = form.dataset.mode === "score";
+  track("feedback_sent", { kind: score ? "score" : "feedback" });
   const inSheet = Boolean(form.closest("dialog"));
   const done = document.createElement("div");
   done.className = "fb-sent";
@@ -1767,7 +1782,16 @@ document.addEventListener("click", (e) => {
 
 // --------------------------------------------------------------- boot
 
+// Opening a folded group of scenarios (a click on its heading; groups that start open don't count).
+app?.addEventListener("click", (e) => {
+  const summary = e.target.closest("details.scenario-group > summary");
+  if (summary && !summary.parentElement.open) {
+    track("scenarios_opened", { section: summary.querySelector("h2, h3")?.textContent.trim() ?? null });
+  }
+});
+
 if (app) {
   window.addEventListener("popstate", render);
+  startAnalytics(API);
   render();
 }
