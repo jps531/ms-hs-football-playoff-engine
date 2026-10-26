@@ -156,3 +156,20 @@ def test_the_front_page_marks_home_and_has_no_class_picker():
     assert '"no"' in picker
     shell = (ROOT / "nginx" / "html" / "index.html").read_text()
     assert '<div class="scrubber-bar"<!--# if expr="$show_class_picker = no" --> hidden<!--# endif -->>' in shell
+
+
+def test_visit_counts_go_out_through_this_site_and_carry_nothing_of_the_visitors():
+    """The analytics relay: PostHog's events leave through nginx, so the CSP stays 'self'; nginx still starts
+    when PostHog can't be resolved; cookies and auth never go either way; the visitor's address is passed on for
+    cookieless counting; and the vendored library is the only PostHog code the page loads."""
+    block = re.search(r"location \^~ /relay/ \{(.*?)\n        \}", NGINX, re.S).group(1)
+    # A variable host, resolved per request.
+    assert "resolver" in block and "proxy_pass         https://$posthog_host" in block
+    assert "proxy_ssl_verify   on" in block
+    for header in ('Cookie          ""', 'Authorization   ""', "X-Forwarded-For $remote_addr"):
+        assert f"proxy_set_header   {header}" in block
+    assert "proxy_hide_header  Set-Cookie" in block
+    assert "posthog" not in _csp()
+    analytics = (ROOT / "nginx" / "html" / "static" / "js" / "analytics.js").read_text()
+    assert 'api_host: "/relay"' in analytics and 'cookieless_mode: "always"' in analytics
+    assert 'import("./vendor/posthog-js.js")' in analytics
