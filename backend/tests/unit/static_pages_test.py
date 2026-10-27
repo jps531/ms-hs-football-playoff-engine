@@ -1203,7 +1203,7 @@ def test_why_blocks_and_explanation_match_scenarios_js():
           "outcomes": {"A": "1", "B": "2"}, "explanation": explanation}  # fmt: skip
     [card] = complete_scenario_cards([sc])
     html = outcome_scenario_card(card, {})
-    assert '<details class="outcome__why"><summary><span aria-hidden="true">💡</span> Explanation</summary>' in html
+    assert '<details class="outcome__why"><summary><svg class="outcome__explain-icon"' in html and "</svg>Explanation</summary>" in html
     assert "<li>s2 &amp; &lt;b&gt;</li>" in html and '<p class="why-tie__when">If Smithville beats Biggersville' in html
     [plain] = complete_scenario_cards([{**sc, "explanation": []}])
     assert "outcome__why" not in outcome_scenario_card(plain, {})

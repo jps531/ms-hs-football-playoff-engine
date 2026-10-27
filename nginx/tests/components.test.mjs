@@ -201,7 +201,8 @@ test("a card with ties has an Explanation button to its sheet; the sheet's ties 
   const card = { label: "Scenario 1", seeds: [], out: [], groups: [], why };
   const withButton = outcomeScenarioCard(card, {}, { explainId: 3 });
   assert.match(withButton, /<button type="button" class="outcome__explain" data-explain-open="3" aria-haspopup="dialog">/);
-  assert.equal(text(withButton.slice(withButton.indexOf("<button"))), "💡 Explanation of Scenario 1");
+  assert.equal(text(withButton.slice(withButton.indexOf("<button"))), "Explanation of Scenario 1");
+  assert.match(withButton, /<svg class="outcome__explain-icon"[^>]*aria-hidden="true"/);
   assert.ok(!withButton.includes("why-tie")); // the steps are in the sheet, not the card
   assert.ok(!outcomeScenarioCard(card, {}).includes("outcome__explain")); // in the sheet itself: no button
   assert.ok(!outcomeScenarioCard({ ...card, why: [] }, {}, { explainId: 3 }).includes("outcome__explain")); // no ties

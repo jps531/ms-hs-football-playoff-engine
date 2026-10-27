@@ -782,6 +782,8 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   cursor: pointer;
 }
 .outcome__explain:hover { background: var(--surface-raised); }
+.outcome__explain-icon { flex: none; width: 18px; height: 18px; }
+.outcome__why > summary .outcome__explain-icon { margin-right: 6px; }
 .outcome__why { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; font-size: 14px; line-height: 20px; }
 .outcome__why > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
 .why { font-size: 14px; line-height: 20px; }

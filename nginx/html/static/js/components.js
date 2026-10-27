@@ -12,6 +12,7 @@ import { playoffStatus } from "./standings.js";
 const ICONS = {
   check: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
   cross: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+  bulb: '<svg class="outcome__explain-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5h4M6.5 14h3"/><path d="M6 11.5c0-1.6-2.5-2.8-2.5-5.5a4.5 4.5 0 0 1 9 0c0 2.7-2.5 3.9-2.5 5.5"/></svg>',
   coin: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.2"/></svg>',
   // Odds-mode glyphs: the mode is never told apart by color (brief §3.4).
   trend: '<svg class="mode__glyph" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l4-4 3 3 5-6"/><path d="M10 5h4v4"/></svg>',
@@ -273,7 +274,7 @@ export function outcomeScenarioCard({ label, seeds, out, groups, common = [], wh
 /** The card's button to its explanation sheet (the app opens it by `data-explain-open`). */
 function explainButton(id, label) {
   return `<button type="button" class="outcome__explain" data-explain-open="${esc(id)}" aria-haspopup="dialog">`
-    + `<span aria-hidden="true">💡</span> Explanation<span class="visually-hidden"> of ${esc(label)}</span></button>`;
+    + `${ICONS.bulb}Explanation<span class="visually-hidden"> of ${esc(label)}</span></button>`;
 }
 
 /**

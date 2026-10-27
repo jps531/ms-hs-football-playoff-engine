@@ -160,6 +160,12 @@ BADGE_ICONS = {
     '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.2"/></svg>',
 }
 BADGE_ICONS["champion"] = BADGE_ICONS["clinched"]
+# The Explanation's lightbulb (ICONS.bulb in components.js).
+BULB_ICON = (
+    '<svg class="outcome__explain-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" '
+    'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5h4M6.5 14h3"/>'
+    '<path d="M6 11.5c0-1.6-2.5-2.8-2.5-5.5a4.5 4.5 0 0 1 9 0c0 2.7-2.5 3.9-2.5 5.5"/></svg>'
+)
 
 
 def team_colors(team: dict | None) -> tuple[str, str] | None:
@@ -710,7 +716,7 @@ def why_this_order(why: list[dict] | None) -> str:
         + f'<ol class="tiebreak__steps">{"".join(f"<li>{_e(s)}</li>" for s in w["steps"])}</ol></div>'
         for w in why
     )
-    return f'<details class="outcome__why"><summary><span aria-hidden="true">💡</span> Explanation</summary>{ties}</details>'
+    return f'<details class="outcome__why"><summary>{BULB_ICON}Explanation</summary>{ties}</details>'
 
 
 def _unconditional(path: dict) -> bool:
