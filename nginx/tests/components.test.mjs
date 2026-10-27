@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
-  gameCard, outcomeScenarioCard, breadcrumbs, whyThisOrder,
+  gameCard, outcomeScenarioCard, breadcrumbs, whyTies,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -193,11 +193,16 @@ test("shared conditions come once, then the alternatives inside a box headed AND
   assert.doesNotMatch(outcomeScenarioCard({ ...card, common: [] }, {}), /oneof/);
 });
 
-test("why this order is a closed disclosure, its text escaped, and absent without ties", () => {
-  const html = whyThisOrder([{ title: "A <b> and B, tied for 1st and 2nd", when: "If C beats D", steps: ["one", "two & three"] }]);
-  assert.ok(html.startsWith('<details class="outcome__why"><summary>Why this order</summary>') && !html.includes(" open"));
+test("a card with ties has an Explanation button to its sheet; the sheet's ties are escaped", () => {
+  const why = [{ title: "A <b> and B, tied for 1st and 2nd", when: "If C beats D", steps: ["one", "two & three"] }];
+  const html = whyTies(why);
   assert.ok(html.includes("A &lt;b&gt; and B") && html.includes("If C beats D:") && html.includes("<li>two &amp; three</li>"));
-  assert.equal(whyThisOrder([]), "");
-  const card = outcomeScenarioCard({ label: "Scenario 1", seeds: [], out: [], groups: [], why: [{ title: "T", when: null, steps: ["s"] }] }, {});
-  assert.ok(card.includes("Why this order") && !card.includes("why-tie__when"));
+  assert.ok(!whyTies([{ ...why[0], when: null }]).includes("why-tie__when"));
+  const card = { label: "Scenario 1", seeds: [], out: [], groups: [], why };
+  const withButton = outcomeScenarioCard(card, {}, { explainId: 3 });
+  assert.match(withButton, /<button type="button" class="outcome__explain" data-explain-open="3" aria-haspopup="dialog">/);
+  assert.equal(text(withButton.slice(withButton.indexOf("<button"))), "💡 Explanation of Scenario 1");
+  assert.ok(!withButton.includes("why-tie")); // the steps are in the sheet, not the card
+  assert.ok(!outcomeScenarioCard(card, {}).includes("outcome__explain")); // in the sheet itself: no button
+  assert.ok(!outcomeScenarioCard({ ...card, why: [] }, {}, { explainId: 3 }).includes("outcome__explain")); // no ties
 });

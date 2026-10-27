@@ -1003,6 +1003,22 @@ class TestScenariosToEntries:
         assert result is not None
         assert result[0].conditions is None
 
+    def test_explanation_passes_through(self):
+        """Each tie's explanation becomes a ScenarioTieExplanation; a snapshot stored without them gives None."""
+        explanation = [
+            {"teams": ["Alpha", "Beta"], "places": [1, 2], "steps": ["Head-to-head: Alpha beats Beta."],
+             "when": [[["Alpha", "Gamma"]], [["Delta", "Beta"], ["Alpha", "Delta"]]]},
+        ]  # fmt: skip
+        base = {"scenario_num": 1, "sub_label": "", "game_winners": [], "seeding": ["Alpha", "Beta"]}
+        [entry] = scenarios_to_entries([{**base, "explanation": explanation}])
+        [tie] = entry.explanation
+        assert (tie.teams, tie.places, tie.steps) == (["Alpha", "Beta"], [1, 2], ["Head-to-head: Alpha beats Beta."])
+        assert [[(g.winner, g.loser) for g in cube] for cube in tie.when] == [
+            [("Alpha", "Gamma")], [("Delta", "Beta"), ("Alpha", "Delta")]
+        ]
+        assert scenarios_to_entries([{**base, "explanation": []}])[0].explanation == []
+        assert scenarios_to_entries([base])[0].explanation is None
+
     def test_conditions_field_empty_list_when_conditions_atom_empty(self):
         """conditions is [] (not None) when conditions_atom is an empty list — e.g. a
         scenario fully decided by simulated results with nothing left to show."""

@@ -700,7 +700,8 @@ def why_blocks(explanation: list[dict] | None) -> list[dict]:
 
 
 def why_this_order(why: list[dict] | None) -> str:
-    """The card's "why this order" disclosure (components.js's ``whyThisOrder``), or nothing without ties."""
+    """The card's explanation, or nothing without ties: the app opens it in a sheet (components.js's
+    ``whyTies``); a page without script shows it in the card, as a disclosure."""
     if not why:
         return ""
     ties = "".join(
@@ -709,7 +710,7 @@ def why_this_order(why: list[dict] | None) -> str:
         + f'<ol class="tiebreak__steps">{"".join(f"<li>{_e(s)}</li>" for s in w["steps"])}</ol></div>'
         for w in why
     )
-    return f'<details class="outcome__why"><summary>Why this order</summary>{ties}</details>'
+    return f'<details class="outcome__why"><summary><span aria-hidden="true">💡</span> Explanation</summary>{ties}</details>'
 
 
 def _unconditional(path: dict) -> bool:

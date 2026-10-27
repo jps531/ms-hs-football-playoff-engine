@@ -1,5 +1,7 @@
 """Tests for scenario_serializers: round-trip fidelity for all serialization functions."""
 
+import json
+
 from backend.helpers.data_classes import (
     GameResult,
     HomeGameCondition,
@@ -293,6 +295,18 @@ def test_complete_scenarios_roundtrip_no_atom():
     assert result[0]["game_winners"] == [("Pearl", "Petal"), ("Oak Grove", "Brandon")]
     assert result[0]["conditions_atom"] is None
     assert result[0]["seeding"] == ("Pearl", "Petal", "Oak Grove", "Brandon", "Meridian", "NWR")
+
+
+def test_complete_scenarios_roundtrip_keeps_explanation():
+    """A scenario's tie explanations survive storage as plain JSON; one stored without them has no key."""
+    explanation = [{"teams": ["Pearl", "Petal"], "places": [1, 2], "steps": ["Head-to-head: Pearl beats Petal."],
+                    "when": [[["Pearl", "Brandon"]]]}]  # fmt: skip
+    base = {"scenario_num": 1, "sub_label": "", "game_winners": [("Pearl", "Petal")], "conditions_atom": None,
+            "seeding": ("Pearl", "Petal")}  # fmt: skip
+    stored = json.loads(json.dumps(serialize_complete_scenarios([{**base, "explanation": explanation}])))
+    [kept] = deserialize_complete_scenarios(stored)
+    assert kept["explanation"] == explanation
+    assert "explanation" not in deserialize_complete_scenarios(serialize_complete_scenarios([base]))[0]
 
 
 def test_complete_scenarios_roundtrip_with_atom():
