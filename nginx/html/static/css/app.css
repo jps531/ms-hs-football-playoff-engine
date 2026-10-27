@@ -580,7 +580,7 @@ button { font: inherit; color: inherit; }
   font-size: 12px; line-height: 16px;
   padding-block: 6px;
 }
-.standings .col-pos { width: 2.4em; padding-left: 12px; text-align: left; color: var(--text-secondary); }
+.standings .col-pos { width: 2.9em; padding-left: 12px; text-align: left; color: var(--text-secondary); white-space: nowrap; }
 .standings .col-team { text-align: left; width: 100%; }
 .standings tbody th { font-weight: 400; }
 .standings .col-odds { width: 4.4em; padding-inline: 2px; } /* 3px pushed the table 1px past a 375px phone */

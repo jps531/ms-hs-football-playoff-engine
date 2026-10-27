@@ -371,6 +371,12 @@ def standing_positions(ordered: list[dict]) -> list[int]:
     return out
 
 
+def position_labels(positions: list[int]) -> list[str]:
+    """Positions as the standings show them, a shared one marked as a tie: 1, T-2, T-2, 4
+    (``positionLabels`` in standings.js), so a shared number reads as a tie in the standings, not a seed."""
+    return [f"T-{p}" if positions.count(p) > 1 else str(p) for p in positions]
+
+
 def _pct_or_half(t: dict) -> float:
     """Region winning percentage, with a team that hasn't played counting as .500."""
     pct = _win_pct(t["record"])
@@ -402,7 +408,7 @@ def render_region_card(clazz: int, region: int, payload: dict, stamp: str, mode:
         y += 42
         draw.text((PAD, y), line, font=_inter(32, 600), fill=TEXT, anchor="ls")
     ordered = display_order(payload.get("teams") or [])
-    positions = standing_positions(ordered)
+    positions = position_labels(standing_positions(ordered))
     top = y + 40
     space = _TABLE_BOTTOM - (top + 14)
     fits = max(1, int(space // 40))
@@ -410,7 +416,7 @@ def render_region_card(clazz: int, region: int, payload: dict, stamp: str, mode:
     row_h = min(52, space / max(1, len(shown)))
     rows = [
         (
-            str(positions[i]),
+            positions[i],
             t["school"],
             _region_record(t),
             [mode_odds(t, k, mode) for k in ("p1", "p2", "p3", "p4", "p_playoffs")],
@@ -423,7 +429,7 @@ def render_region_card(clazz: int, region: int, payload: dict, stamp: str, mode:
         rows,
         "REGION",
         ["1ST", "2ND", "3RD", "4TH", "PLAYOFFS"],
-        PAD + 44,
+        PAD + 56,  # room for a tied position, "T-2"
         row_h,
         [88, 88, 88, 88, 116],
         gap=8,
@@ -582,8 +588,9 @@ def team_title(team: dict, clazz: int, region: int) -> str:
 def team_description(team: dict, clazz: int, region: int, mode: str) -> str:
     """One line of the team's numbers, for the link preview.
 
-    "Raleigh (5–1, 1–0 in Region 6-3A): 39% to win the region, >99% to make the
-    playoffs, 4% to win the state championship." Locked and finished outcomes are stated as facts.
+    "Raleigh (5–1, 1–0 in Region 6-3A), Projected odds: 39% to win the region, >99% to make the
+    playoffs, 4% to win the state championship." Locked and finished outcomes are stated as facts; a
+    line with a percentage names its odds mode up front, where trimming the line can't drop it.
     """
     overall, in_region = _records(team)
     name = f"{team['school']} ({overall}, {in_region} in Region {region}-{clazz}A)"
@@ -608,9 +615,16 @@ def team_description(team: dict, clazz: int, region: int, mode: str) -> str:
     path = playoff_path(team, mode, clazz)
     if path and path[-1][2] is not None:
         parts.append(f"{format_pct(path[-1][2])} to win the state championship")
+    if any("%" in p for p in parts):
+        name = f"{name}, {_mode_name(mode)}"
     if len(parts) > 1:
         return f"{name}: {', '.join(parts[:-1])}, {parts[-1]}."
     return f"{name}: {parts[0]}."
+
+
+def _mode_name(mode: str) -> str:
+    """The odds mode, as a preview names it."""
+    return "Projected odds" if mode == "projected" else "Toss-up odds"
 
 
 def _pill_row(draw: ImageDraw.ImageDraw, top: float, label: str, cells: list[tuple[str, float | None]]) -> None:
@@ -711,7 +725,7 @@ def bracket_description(clazz: int, favorites: list[dict], mode: str) -> str:
         return f"Who might play whom in the Class {clazz}A playoffs, and where."
     top = favorites[0]
     text = (
-        f"{top['school']} leads the Class {clazz}A bracket at "
+        f"{_mode_name(mode)}: {top['school']} leads the Class {clazz}A bracket at "
         f"{format_pct(_bracket_odds(top, 'champion', mode))} to win the state championship"
     )
     chasers = [f"{t['school']} ({format_pct(_bracket_odds(t, 'champion', mode))})" for t in favorites[1:3]]
@@ -798,15 +812,21 @@ def team_bracket_title(team: str, clazz: int) -> str:
     return f"{team}’s path in the Class {clazz}A bracket — {SITE_NAME}"
 
 
-def team_bracket_description(team: str, road: list[dict], champion: float | None) -> str:
-    """ "Raleigh's likeliest opponents: First Round vs Tylertown, Second Round at Hazlehurst, …; 4% to win…"."""
+def team_bracket_description(team: str, road: list[dict], champion: float | None, mode: str) -> str:
+    """ "Raleigh's likeliest opponents (Projected): First Round vs Tylertown, Second Round at Hazlehurst, …;
+    4% to win…"."""
     stops = []
     for step in road:
         if step["round"] == "Championship Game" or not step["opponent"]:
             continue
         joiner = "at" if step["hosts"] == "opponent" else "vs"
         stops.append(f"{step['round']} {joiner} {step['opponent']}")
-    text = f"{team}’s likeliest opponents: {', '.join(stops[:3])}" if stops else f"{team}’s road through the bracket"
+    label = "Projected" if mode == "projected" else "Toss-up"
+    text = (
+        f"{team}’s likeliest opponents ({label}): {', '.join(stops[:3])}"
+        if stops
+        else f"{team}’s road through the bracket ({label})"
+    )
     if champion is not None:
         text += f"; {format_pct(champion)} to win the state championship"
     return f"{text}."

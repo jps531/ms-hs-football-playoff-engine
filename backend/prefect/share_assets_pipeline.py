@@ -430,7 +430,7 @@ def _write_bracket_assets(
             out_dir / "meta" / name / f"{slug}.html",
             meta_tags(
                 team_bracket_title(team["school"], clazz),
-                description(team_bracket_description(team["school"], road, champion)),
+                description(team_bracket_description(team["school"], road, champion, mode)),
                 f"{site_url}/static/og/{name}/{slug}.png?v={version}",
                 f"{page}?team={slug}",
             ),

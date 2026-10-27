@@ -29,7 +29,7 @@ import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
 } from "./scenarios.js";
 import {
-  standingPositions, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
+  standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
   orient, byDay, teamSchedule,
 } from "./standings.js";
 
@@ -668,7 +668,7 @@ async function classView(ctx) {
 
   const blocks = data.regions.map((r) => {
     const ordered = displayOrder(r.teams);
-    const positions = standingPositions(ordered);
+    const positions = positionLabels(standingPositions(ordered));
     const complete = regionComplete(ordered);
     const rows = ordered.map((t, i) => {
       const o = oddsFor(t, mode);
@@ -773,7 +773,7 @@ function oddsHead(c, extra = "") {
 
 function standingsTable(data, teams, mode, focus, clazz, games) {
   const ordered = displayOrder(data.teams);
-  const positions = standingPositions(ordered);
+  const positions = positionLabels(standingPositions(ordered));
   const complete = !(data.remaining_games ?? []).length;
   const rows = ordered.map((t, i) => {
     const r = t.record;
