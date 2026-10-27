@@ -1778,7 +1778,8 @@ def landing_body(
             (
                 "unique-scenarios",
                 "Unique region scenarios",
-                "View each unique seeding finish possible in a given region.",
+                "View each unique seeding finish possible in a given region. When the playoff seeding in a "
+                "finish comes down to tiebreakers, open its Explanation to see how each tie breaks, step by step.",
                 "unique",
             ),
         )

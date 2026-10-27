@@ -1694,7 +1694,12 @@ def enumerate_division_scenarios(
             places = tuple((t, tuple(seeds)) for t, seeds in (sc["open_places"] or {}).items())
             sc["p"], sc["p_weighted"] = finish_odds[_finish_key(sc["seeding"], sc["open_groups"] or (), places)]
 
-    # Why each finish's ties break as they do, over every set of winners that gives it.
+    # Why each finish's ties break as they do, over every set of winners that gives it. Only where
+    # margins are exact (R <= 5, which is also where the scenario list is shown): with margins
+    # ignored, a step that turns on one could be explained wrongly.
+    if not exact:
+        return scenarios
+
     def finish_of(seeding, open_groups) -> tuple:
         return tuple(seeding), tuple((step, tuple(g)) for step, g in open_groups or ())
 

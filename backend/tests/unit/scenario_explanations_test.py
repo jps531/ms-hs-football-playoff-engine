@@ -75,3 +75,16 @@ def test_two_games_left_every_margin(key):
 def test_three_games_left_sampled_margins(key):
     """Every fifth 2025 region with three games left, one margin combination in 7."""
     assert check(key, 3, step=7) > 0
+
+
+def test_no_explanations_where_margins_are_ignored():
+    """With margins ignored (more than five games left), a step that turns on one could be explained
+    wrongly, so those scenarios carry no explanation; they aren't shown then anyway."""
+    from backend.helpers.scenario_viewer import enumerate_division_scenarios, enumerate_outcomes
+
+    key = sorted(REGION_RESULTS_2025)[0]
+    teams, completed, remaining = _cut(REGION_RESULTS_2025[key]["games"], 3)
+    exact = enumerate_division_scenarios(teams, completed, remaining)
+    assert all("explanation" in sc for sc in exact)
+    pre = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
+    assert not any("explanation" in sc for sc in enumerate_division_scenarios(teams, completed, remaining, precomputed=pre))
