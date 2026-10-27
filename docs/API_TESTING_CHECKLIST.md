@@ -8,11 +8,11 @@ The simulate, ratings, rankings and win-probability checks need the owner's toke
 
 ## Standings (`GET /api/v1/standings/{clazz}/{region}`)
 
-**1. Final-week odds should be 0.0 or 1.0 for all teams** ✅
-Pick any class/region after the final regular-season date — every team should be either `clinched: true` or `eliminated: true`, and all four odds fields should be exactly `0.0` or `1.0`. If you see fractional odds at the final date, the pipeline didn't finish running.
+**1. Final-week odds should be 0.0 or 1.0 for all teams, except in a coin-flip tie** ✅
+Pick any class/region after the final regular-season date — `odds.p1`–`p4` should be exactly `0.0` or `1.0`, and every team should be either `clinched: true` or `eliminated: true`. The one exception is a tie only a coin flip settles (`coin_flip_needed: true`): each flip result counts equally, so those teams show fractions such as `0.5`, and one whose playoff spot rides on the flip is neither clinched nor eliminated. Fractional odds anywhere else at the final date mean the pipeline didn't finish running.
 
-**2. Odds sum to ≤ 1.0 per position** ✅
-The sum of `odds_1st` across all teams should be ≤ 1.0 (exactly 1.0 when no team is eliminated yet, possibly less once some are). Same for 2nd/3rd/4th.
+**2. Odds sum to 1.0 per position** ✅
+Exactly one team finishes in each place, so the sum of `odds.p1` across a region's teams should be 1.0 (to within rounding noise). Same for `p2`–`p4`, in any region with at least four teams.
 
 **3. Time-travel consistency with `?date=`** ✅
 Hit the same region with `?date=YYYY-10-10` (mid-season), `?date=YYYY-10-24` (late season), and no date. Odds should move from fractional → sparser → binary. If mid-season returns the same binary result as end-of-season, the snapshot lookup is broken.
@@ -21,7 +21,7 @@ Hit the same region with `?date=YYYY-10-10` (mid-season), `?date=YYYY-10-24` (la
 Early in the season (e.g. `?date=YYYY-09-12`), `scenarios_available` should be `false` (too many remaining games). Around the final 2 weeks it should flip to `true` with an actual `scenarios` list populated with `game_winners`, `tiebreaker_groups`, `coinflip_groups`, and `outcomes`.
 
 **4a. Weighted seeding odds are present and plausible** ✅
-Each team in `teams[].odds` should have `p1_weighted`, `p2_weighted`, `p3_weighted`, `p4_weighted`, and `p_playoffs_weighted` alongside the unweighted values. The weighted odds will differ from unweighted when margin-sensitive computation has run (they should be close but not identical). All weighted odds should sum to ≤ 1.0 across teams per position.
+Each team in `teams[].odds` should have `p1_weighted`, `p2_weighted`, `p3_weighted`, `p4_weighted`, and `p_playoffs_weighted` alongside the unweighted values. The weighted (Projected) odds weight each outcome by Elo win probabilities, so they'll differ from the unweighted (Toss-up) ones whenever Elo ratings exist. Like the unweighted ones, they should sum to 1.0 across a region's teams per position.
 
 **4b. Bracket advancement odds are populated** ✅
 Each team in `teams[].bracket_odds` should have `second_round` through `champion` (unweighted and weighted). For a clinched 1-seed, `second_round` should be ≥ 0.9. For an eliminated team, all bracket odds should be `0.0`.
@@ -132,7 +132,7 @@ POST a known season's format (e.g. 2025) in dry-run mode. The response should sh
 Run the same POST twice without `dry_run`. The second call should succeed (no 500) and return the same `classes_inserted` / `slots_inserted` counts — ON CONFLICT DO NOTHING should swallow the duplicates silently.
 
 **17. `POST /championship-venue?dry_run=true` lists the right games**
-Body now takes `location` (not `location_id`) — a venue name or home_team string, e.g. `{"season": 2025, "location": "M.M. Roberts Stadium"}` or `{"season": 2025, "location": "Southern Miss"}`. After the championship games are ingested, call with `?dry_run=true`. The `games` list in the response should contain exactly one row per class (7 rows for a full season). If a class is missing, the AHSFHS scraper didn't import that game yet. The response's `classes` field should list every class the venue was assigned to (all classes for that season when `class` is omitted).
+The body takes `location` — a venue name or home_team string, e.g. `{"season": 2025, "location": "M.M. Roberts Stadium"}` or `{"season": 2025, "location": "Southern Miss"}`. After the championship games are ingested, call with `?dry_run=true`. The `games` list in the response should contain exactly one row per class (7 rows for a full season). If a class is missing, the AHSFHS scraper didn't import that game yet. The response's `classes` field should list every class the venue was assigned to (all classes for that season when `class` is omitted).
 
 **17a. Unknown/ambiguous `location` values are rejected**
 `{"location": "Nonexistent Stadium"}` should 404. If two seeded locations ever share the same `home_team` (or a string matches one location's `name` and a different location's `home_team`), the call should 409 with a detail message listing the conflicting location names.
@@ -141,7 +141,7 @@ Body now takes `location` (not `location_id`) — a venue name or home_team stri
 Call for a future/unscraped season (no Championship Game rows in `games`, ideally no `school_seasons` rows either). Should succeed (no 404), `classes` should come from the hardcoded MHSAA class-count-by-year fallback, `games: []`, `games_updated: 0`. Then `GET /admin/championship-venue?season=<that season>` should show the assignment.
 
 **18. `POST /championship-venue` overwrites an existing assignment**
-Apply the venue assignment, then call it again with a *different* `location`. The second call should succeed and reassign every matching Championship Game row to the new venue, and update `championship_venues` — this endpoint always overwrites, so it can be re-run to correct a mistake or reflect a venue change. It no longer 404s when no Championship Game rows exist for the given season/class — that's expected for a season not yet scraped.
+Apply the venue assignment, then call it again with a *different* `location`. The second call should succeed and reassign every matching Championship Game row to the new venue, and update `championship_venues` — this endpoint always overwrites, so it can be re-run to correct a mistake or reflect a venue change. It doesn't 404 when no Championship Game rows exist for the given season/class — that's expected for a season not yet scraped.
 
 **19. `GET /championship-venue` lists current assignments**
 Call with no params — should return every seeded/assigned `(season, class)` row, including the historical 1992–2026 seed data. Call with `?season=2023` — should return only that season's rows (classes 1–7), each with the correct `location_name` (e.g. `Vaught-Hemingway Stadium` for 2023).

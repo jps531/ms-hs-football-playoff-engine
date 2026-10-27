@@ -80,7 +80,8 @@ table updates) so they survive pipeline re-runs and leave the original scraped d
 After the season's games are scraped, run any relevant correction scripts before triggering
 the standings or playoff pipelines:
 ```
-psql $DATABASE_URL -f sql/corrections/<script>.sql
+docker compose --env-file .env.local --profile local-db exec -T db \
+  psql -U postgres -d mshsfootball < sql/corrections/<script>.sql
 ```
 
 Scripts are idempotent — re-running a script after pipelines have already processed is safe
@@ -100,8 +101,10 @@ Games affected: Salem vs McLaurin (8/29), Wilkinson County (9/5), Richton (9/12)
 Discovery Christian (10/3), West Lincoln (10/10), Mount Olive (10/24).
 
 After applying the correction, re-run both pipelines:
-1. `region_standings_pipeline(season=2025)`
-2. `playoff_bracket_update(season=2025)`
+1. `region-scenarios-data-pipeline` (Custom Run, season 2025)
+2. `playoff-bracket-update` (Custom Run, season 2025)
+
+Or run `backfill-historical-snapshots` for 2025, which does both and also redoes the past weeks.
 
 ---
 
