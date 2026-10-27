@@ -150,8 +150,8 @@ Run these in order — each depends on the previous step's data being in the dat
    - The pipeline defaults to the current year. Use a **Custom Run** in the Prefect UI to target a different season.
 3. Do a "Quick Run" of **NCES School Geographic Data Flow** (`nces-school-pipeline`) — fills in city, zip, latitude, and longitude for all public schools from the NCES EDGE API, then applies the private-school location seed for schools not in NCES
 4. Do a "Quick Run" of **MHSAA School Identity Data Flow** (`misshsaa-school-pipeline`) — scrapes mascot and primary/secondary colors from the MHSAA school directory
-5. Do a "Quick Run" of **AHSFHS Schedule Data Flow** (`ahsfhs-schedule-data-pipeline`) with the target season — seeds `schools` and `games` rows from the schedule
-6. Do a "Quick Run" of **Region Scenarios Data Flow** (`region-scenarios-data-pipeline`) with the target season — computes seeding odds, standings, and scenarios and writes the current snapshot to the database
+5. Run **AHSFHS Schedule Data Flow** (`ahsfhs-schedule-data-pipeline`) — writes the season's `games` rows from each school's AHSFHS schedule (a Quick Run is the current year; a Custom Run takes another season)
+6. Run **Region Scenarios Data Flow** (`region-scenarios-data-pipeline`) for the same season — computes seeding odds, standings, and scenarios and writes the current snapshot to the database
 
 Re-run steps 3-4 if schools move or rebrand. Re-run step 2 if MHSAA reclassifies schools (every two years) or if the playoff format changes.
 
@@ -163,7 +163,7 @@ The `playoff_formats` and `playoff_format_slots` tables (which define the bracke
 
 The `daily-update` deployment runs at 9:00 AM America/Chicago: it pulls the scores (**AHSFHS Schedule Data Flow**), then recalculates everything from them (**Region Scenarios Data Flow**, which writes `region_standings` and `region_scenarios`, runs **Playoff Bracket Update** for classes in the playoffs, and finishes by redrawing the share cards and page content). Nothing needs to be run by hand during the season.
 
-To run either half on its own (after a fix, or to target another season with a **Custom Run**), use `ahsfhs-schedule-data-pipeline` or `region-scenarios-data-pipeline`. Both default to the current calendar year.
+To run either half on its own (after a fix, or to target another season with a **Custom Run**), use `ahsfhs-schedule-data-pipeline` or `region-scenarios-data-pipeline`. Both default to the current calendar year. The moderation digest email (7:00 AM) and a temporary Friday/Saturday score-timing probe are scheduled too; [docs/PIPELINES.md](docs/PIPELINES.md) lists every deployment and when to run each by hand.
 
 #### After each playoff round
 
@@ -207,7 +207,18 @@ uv run ruff format .         # format (black-compatible)
 
 ### Testing
 
-Run the test suite from the repo root (coverage is enabled by default via `pyproject.toml`):
+CI (`.github/workflows/ci.yml`) runs on every pull request and every push to `main`, and a PR should be green before it's merged:
+
+- **tests:** `ruff check backend`, the Python tests, and the JavaScript tests (`node --test nginx/tests/*.test.mjs`).
+- **images:** both compose files resolve, the API and worker images build, the API image imports as a non-root user, a real Prefect flow runs in the worker image, and nginx accepts its config.
+
+To run the Python tests the way CI does (in parallel, without coverage; the fastest way through the whole suite):
+
+```
+uv run pytest backend/tests -q -p no:cacheprovider -o addopts="" -n auto
+```
+
+With coverage, which `pyproject.toml` turns on by default (slower: one process):
 
 ```
 uv run pytest

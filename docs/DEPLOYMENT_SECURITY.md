@@ -15,16 +15,16 @@ Items already fixed in code are **not** listed here — see git history for thos
 
 ### Environment Variables
 
-- [ ] Set `ENVIRONMENT=production` (public API docs off, `Secure` session cookie, wildcard CORS refused).
-- [ ] Set `FRONTEND_ORIGIN=https://yourdomain.com` — the API refuses to start with a wildcard in non-local mode, and Turnstile checks tokens against its hostname.
-- [ ] Rotate `POSTGRES_PASSWORD` from the `.env.example` placeholder to a 32+ character random password (e.g. `openssl rand -hex 32`). Compose has no fallback and refuses to start without one.
-- [ ] Ensure `.env.local` (and any other `.env.*` file) is never committed — `.gitignore` covers them but double-check with `git ls-files | grep env`.
+- [x] Set `ENVIRONMENT=production` (public API docs off, `Secure` session cookie, wildcard CORS refused).
+- [x] Set `FRONTEND_ORIGIN=https://yourdomain.com` — the API refuses to start with a wildcard in non-local mode, and Turnstile checks tokens against its hostname.
+- [x] Rotate `POSTGRES_PASSWORD` from the `.env.example` placeholder to a 32+ character random password (e.g. `openssl rand -hex 32`). Compose has no fallback and refuses to start without one.
+- [x] Ensure `.env.local` (and any other `.env.*` file) is never committed — `.gitignore` covers them but double-check with `git ls-files | grep env`.
 - [ ] Consider a secrets manager (AWS Secrets Manager, GCP Secret Manager, or Docker Secrets) instead of flat `.env` files for production credentials.
 
 ### Database
 
 - [x] The database port is published on `127.0.0.1` only (`docker-compose.yml`), so it isn't reachable from the internet even if the cloud firewall changes.
-- [ ] Create the API and pipeline roles (`sql/app_roles.sql`, steps in [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#database-roles)) and set `API_DB_*` / `PIPELINE_DB_*`. Until then both connect as the owner.
+- [x] Create the API and pipeline roles (`sql/app_roles.sql`, steps in [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#database-roles)) and set `API_DB_*` / `PIPELINE_DB_*`. Until then both connect as the owner.
 - [ ] Create a read-only DB user for any future read-replica or analytics access.
 
 ---

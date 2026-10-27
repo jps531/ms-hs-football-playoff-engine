@@ -187,16 +187,56 @@ In Auth0 → Applications → Your Application → Settings, add `https://mshsfo
 
 ## Deploying updates
 
+Note where you are, pull, and see what came in:
+
 ```
+PREV=$(git rev-parse HEAD)
 git pull
-docker compose --env-file .env.local --profile local-db up --build -d
+git log --oneline $PREV..HEAD
+git diff --stat $PREV HEAD
 ```
 
-If the pull changed `nginx/nginx.conf`, also recreate nginx. The config is bind-mounted as a single file, and `git pull` replaces that file rather than editing it, so a running container (and `nginx -s reload`) can keep seeing the old copy:
+Then work down this list, skipping what the pull didn't touch:
 
-```
-docker compose --env-file .env.local --profile local-db up -d --no-deps --force-recreate nginx
-```
+1. **New database migrations.** List them with
+   `git diff --name-only --diff-filter=A $PREV HEAD -- sql/migrations`, and apply
+   each before rebuilding (oldest name first), as the database owner:
+
+   ```
+   docker compose --env-file .env.local --profile local-db exec -T db \
+     psql -v ON_ERROR_STOP=1 -U postgres -d mshsfootball < sql/migrations/<file>.sql
+   ```
+
+   (`-U` is your `POSTGRES_USER`.) Every migration is written to be safe to run
+   more than once, so if you aren't sure one was applied, apply it again.
+   `sql/init.sql` already includes them all, so a new database needs none.
+2. **New settings.** If `.env.example` changed (`git diff $PREV HEAD -- .env.example`),
+   add anything new to `.env.local`.
+3. **Rebuild and restart:**
+
+   ```
+   docker compose --env-file .env.local --profile local-db up --build -d
+   ```
+
+4. **nginx's config.** If the pull changed `nginx/nginx.conf`, also recreate nginx.
+   The config is bind-mounted as a single file, and `git pull` replaces that file
+   rather than editing it, so a running container (and `nginx -s reload`) can keep
+   seeing the old copy:
+
+   ```
+   docker compose --env-file .env.local --profile local-db up -d --no-deps --force-recreate nginx
+   ```
+
+5. **A model change.** If `MODEL_VERSION` changed
+   (`git diff $PREV HEAD -- backend/prefect/region_scenarios_pipeline.py | grep MODEL_VERSION`),
+   run `backfill-historical-snapshots` (Custom Run) for each season that should
+   use the new model, then `region-scenarios-data-pipeline`, so today's snapshot
+   is written last. A PR that needs any other one-off step says so in its
+   description.
+6. **Check it:** `docker compose --env-file .env.local --profile local-db ps`
+   shows every service Up; a region page loads with today's numbers; the
+   Prefect UI shows the latest runs completed. [PIPELINES.md](PIPELINES.md) lists
+   every deployment.
 
 Required env vars: `ENVIRONMENT=production`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`,
 `API_DB_*`, `PIPELINE_DB_*`, `CLOUDINARY_*`, `FRONTEND_ORIGIN`, `SESSION_SECRET_KEY`.

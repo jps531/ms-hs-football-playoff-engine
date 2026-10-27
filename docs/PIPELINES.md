@@ -1,0 +1,51 @@
+# Pipelines
+
+Every Prefect deployment the worker serves (`backend/prefect/flows.py`), what it
+does, and when to run it by hand. Open them in the Prefect UI under
+**Deployments**: locally at `http://localhost:4200`, on the server through the
+**Prefect** link on `/moderate`. Anything that takes a season defaults to the
+current calendar year; use a **Custom Run** for another.
+
+Schedules are America/Chicago.
+
+## On a schedule
+
+| Deployment | When | What it does |
+|---|---|---|
+| `daily-update` | Daily, 9:00 AM | Pulls the scores (`ahsfhs-schedule-data-pipeline`), then recalculates everything from them (`region-scenarios-data-pipeline`). If the pull fails, nothing is recalculated, so the site keeps its last numbers and the time they were calculated. |
+| `submission-digest` | Daily, 7:00 AM | Emails `DIGEST_TO` what's waiting in the moderation queue; sends nothing when the queue is clear, and only logs the email when SMTP isn't set up. Also removes the contact email from feedback decided more than 90 days ago. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#daily-digest-email). |
+| `ahsfhs-score-probe` | Friday and Saturday, every 15 minutes 6:00–9:45 AM, and at 10:00 AM | A temporary measurement: checks one team page per region that played the night before and records how many of that night's games AHSFHS already shows a final score for (logged, and saved as the `ahsfhs-score-probe` table artifact). It writes nothing to the database. It's there to learn whether the 9:00 pull could run earlier; once the artifacts answer that, the 9:00 time can be adjusted and the probe removed from `flows.py`. |
+
+## The daily update's two halves
+
+Run on their own after a fix, or with a Custom Run for another season.
+
+| Deployment | What it does |
+|---|---|
+| `ahsfhs-schedule-data-pipeline` | Scrapes every school's AHSFHS schedule page into `games` (insert or update), then removes games a school's page no longer lists, such as the old date of a rescheduled game, so `games` mirrors AHSFHS. It covers the schools already in the database for that season (from `regions-data-pipeline`). |
+| `region-scenarios-data-pipeline` | From the games in the database: Elo and RPI, each region's seeding odds (Toss-up and Projected), playoff advancement and home-game odds, scenarios and key insights, written for today to `team_ratings`, `region_standings`, `region_seed_pairs`, `region_scenarios` and `region_computation_state`, plus each final game's pregame win probability. Classes already in the playoffs are left to `playoff-bracket-update`, which it runs at the end when any are; then it redraws the share assets (a failure there doesn't fail the update). |
+
+## By hand
+
+| Deployment | When to run it |
+|---|---|
+| `regions-data-pipeline` | Pre-season (every two years, when MHSAA reclassifies, or if the playoff format changes): writes each school's class and region for the season to `school_seasons`, adding new schools to `schools`. |
+| `nces-school-pipeline` | Pre-season, and when schools move: city, ZIP, latitude and longitude for public schools from the NCES EDGE API, then the private-school location seed. Fields with an override are left alone. |
+| `misshsaa-school-pipeline` | Pre-season, and when schools rebrand: mascot and colors from the MHSAA school directory. |
+| `backfill-historical-snapshots` | Once per season after importing a full season's games, again after re-importing them, and after any change that bumps `MODEL_VERSION` (so past weeks use the current model). Recomputes every game date's snapshot, runs `playoff-bracket-update` for the playoff dates, and deletes the season's regular-season rows dated between game dates, which would otherwise shadow them. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#deploying-updates). |
+| `playoff-bracket-update` | Rarely: the daily update and the backfill both run it. It reads the completed playoff games and writes one `region_standings` snapshot per class, region and round date; run it alone only to refresh those rows. |
+| `share-assets` | After a deploy or a rerun, to redraw now rather than at the next daily update: the link-preview cards and meta tags, the pre-rendered page content, and `sitemap.xml`. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#share-cards-link-previews). |
+
+The pre-season order is in the README's [Once per season](../README.md#once-per-season-pre-season-setup).
+
+## Scripts
+
+Run from the repository root.
+
+| Script | What it's for |
+|---|---|
+| `scripts/backup_db.sh` | Nightly database backup from cron; see [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#backups). |
+| `scripts/posthog_dashboard.py` | Builds the PostHog "Site activity" dashboard once; see [ANALYTICS.md](ANALYTICS.md#the-dashboard). |
+| `scripts/prefect_smoke.py` | CI only: checks that a real Prefect flow runs in the worker image. |
+| `backend/scripts/add_playoff_season.py` | Seeds a new season's playoff format into a running database; see [SEASON_SETUP.md](SEASON_SETUP.md). |
+| `backend/scripts/assign_championship_venue.py` | Older way to set the championship venue. It updates only the Championship Game rows in `games`, not `championship_venues`, so use `POST /api/v1/admin/championship-venue` instead (it does both; see [SEASON_SETUP.md](SEASON_SETUP.md)). |
