@@ -2,6 +2,8 @@
 
 All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running.
 
+**Owner only**: the public API serves what the site's pages show, and the site doesn't pick winners, rank teams, or offer what-if simulation yet. So the win-probability endpoints (`/games/probability`, `/games/probability/live`, `/games/probability/overtime`, `/games/upsets`), `/rankings`, `/ratings`, and every `…/simulate` endpoint require the owner's `Authorization: Bearer <token>` (401 without one, 403 for anyone else), and `GET /games` returns its win probabilities only to the owner. They're marked **(owner)** below.
+
 **Rate limits**: simulate endpoints (Standings, Hosting, Bracket) and most Submissions endpoints are IP-rate-limited via `slowapi` and return `429` when exceeded. Limits are noted per-row below.
 
 ## Meta
@@ -51,8 +53,8 @@ specific seed pinned to that exact position — not alphabetical order.
 | GET | `/{clazz}` | Full standings tables for every region in one class, one request. Params: `season` (required), `date` (optional, default latest). Each region returns the same per-team detail as `/{clazz}/{region}` (`odds`, `bracket_odds`, `home_game_odds`, `clinched`, `eliminated`, `coin_flip_needed`) minus `scenarios`/`computation_state`. Only reads from stored snapshots (no on-demand fallback); 404 if the class has no data yet. |
 | GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤5 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team `paths` breakdown to each team entry). See [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for the full computation model. |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team. Same params. |
-| POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds. Same `include_team_scenarios` param. Rate limited: 10/minute. |
-| POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team. Rate limited: 10/minute. |
+| POST | `/{clazz}/{region}/simulate` | **(owner)** Apply hypothetical game results and return updated seeding odds. Same `include_team_scenarios` param. Rate limited: 10/minute. |
+| POST | `/{clazz}/{region}/teams/{team}/simulate` | **(owner)** Same, filtered to one team. Rate limited: 10/minute. |
 
 **Response fields per team** (`teams[]`):
 - `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus Projected (Elo-weighted) variants `p1_weighted`–`p_playoffs_weighted`
@@ -77,8 +79,8 @@ Cross-region ranked list of teams for a given class (or statewide), sorted by an
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{clazz}` | All teams in a class ranked by the chosen metric. Required params: `season`, `sort_by`. Optional: `date`, `region`, `min_odds`, `limit` |
-| GET | `/statewide` | Top teams across all classes, ranked by Elo (the only metric that's meaningfully comparable across class sizes — playoff-odds columns aren't, since each class runs its own bracket). Params: `season` (required), `date`, `limit` (default 25) |
+| GET | `/{clazz}` | **(owner)** All teams in a class ranked by the chosen metric. Required params: `season`, `sort_by`. Optional: `date`, `region`, `min_odds`, `limit` |
+| GET | `/statewide` | **(owner)** Top teams across all classes, ranked by Elo (the only metric that's meaningfully comparable across class sizes — playoff-odds columns aren't, since each class runs its own bracket). Params: `season` (required), `date`, `limit` (default 25) |
 
 **`sort_by` values** (`/{clazz}` only):
 
@@ -107,9 +109,9 @@ Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, `e
 | GET | `/{clazz}` | Playoff home-game odds per round for every region in a class, in one call. Params: `season`, `date`, `include_scenarios` (bool, default `false` — adds hosting-condition text per team). Returns `{ season, class_, as_of_date, regions: [...] }`, one region-shaped entry (see below) per region in the class. |
 | GET | `/{clazz}/{region}` | Playoff home-game odds per round (1st round through semifinals), computed on-demand from seeding odds + bracket format. Params: `season`, `date`, `include_scenarios` (bool, default `false` — adds hosting-condition text per team). |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team. Same params. |
-| POST | `/{clazz}/simulate` | Apply hypothetical results and return updated hosting odds for every region in the class. Same query params as `GET /{clazz}`, plus a request body (see simulate input format under Bracket). Rate limited: 10/minute. |
-| POST | `/{clazz}/{region}/simulate` | Apply hypothetical results and return updated hosting odds. See simulate input format under Bracket. Rate limited: 10/minute. |
-| POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team. Rate limited: 10/minute. |
+| POST | `/{clazz}/simulate` | **(owner)** Apply hypothetical results and return updated hosting odds for every region in the class. Same query params as `GET /{clazz}`, plus a request body (see simulate input format under Bracket). Rate limited: 10/minute. |
+| POST | `/{clazz}/{region}/simulate` | **(owner)** Apply hypothetical results and return updated hosting odds. See simulate input format under Bracket. Rate limited: 10/minute. |
+| POST | `/{clazz}/{region}/teams/{team}/simulate` | **(owner)** Same, filtered to one team. Rate limited: 10/minute. |
 
 **Response fields per team** (`teams[]`):
 
@@ -128,7 +130,7 @@ For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` 
 | GET | `/` | Advancement odds for every seed slot in a class. Params: `season`, `class`, `date` |
 | GET | `/matchups` | Who might play whom, and where, in every game of a class's bracket. Params: `season`, `class`, `date`. See **Matchups** below. |
 | GET | `/slots/{slot}` | Every team still alive for one bracket slot/round, ranked by chance of reaching it. Params: `season`, `class`, `round` (default `first_round`), `date`, `include_conditions` (default `false`) |
-| POST | `/simulate` | Apply hypothetical bracket results and return updated odds. Rate limited: 10/minute. |
+| POST | `/simulate` | **(owner)** Apply hypothetical bracket results and return updated odds. Rate limited: 10/minute. |
 
 **`GET /slots/{slot}`** — `slot` is a first-round slot number from `playoff_format_slots`. `round` addresses the derived round-2+ game implied by the group of first-round slots feeding it (`second_round` is 1A-4A only; requesting it for 5A-7A returns 404). Unlike `GET /`, which shows one occupant per `(region, seed)` slot, this returns every team still mathematically alive for the slot pre-clinch, each with:
 - `school`, `p_reach` — probability the team plays in this slot's game.
@@ -207,16 +209,16 @@ A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Co
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Game schedule; filter by `season`, `class`, `region`, `team`, `date_from`, `date_to` |
-| GET | `/probability` | Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location`, `date` (optional — pins both teams' Elo ratings to the most recent snapshot on or before this date; defaults to the latest available) |
-| POST | `/probability/live` | In-game win probability. Body: `pregame_prob`, `current_margin`, `seconds_remaining` |
-| POST | `/probability/overtime` | MHSAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
-| GET | `/upsets` | Finished games sorted by the winner's pregame win probability, ascending (biggest upsets first). Params: `season` (required), `date_from`/`date_to` (optional, independent bounds — without either, defaults to the week containing the most recent final game so newly-finalized upsets appear immediately), `limit` (default 10) |
+| GET | `/probability` | **(owner)** Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location`, `date` (optional — pins both teams' Elo ratings to the most recent snapshot on or before this date; defaults to the latest available) |
+| POST | `/probability/live` | **(owner)** In-game win probability. Body: `pregame_prob`, `current_margin`, `seconds_remaining` |
+| POST | `/probability/overtime` | **(owner)** MHSAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
+| GET | `/upsets` | **(owner)** Finished games sorted by the winner's pregame win probability, ascending (biggest upsets first). Params: `season` (required), `date_from`/`date_to` (optional, independent bounds — without either, defaults to the week containing the most recent final game so newly-finalized upsets appear immediately), `limit` (default 10) |
 
 Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinals"` — `null` for regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
 
 Each game also includes `helmet_a` / `helmet_b` — the full helmet design record (see `/helmets` below) worn by `team_a`/`team_b` in that game, or `null`. These are populated **only** from that team's explicit `helmet_design_id` assignment on the game (see `PUT /games/{school}/{date}/helmet` below) — never inferred from a school's primary or most-recent design. A `null` value means the frontend should apply the resolution order documented under "Helmet designs CRUD" to pick a fallback for display.
 
-Each game also includes embedded win probability, always from `team_a`'s perspective (so `P(team_b) = 1 - P(team_a)`):
+**(owner)** For the owner, each game also includes embedded win probability, always from `team_a`'s perspective (so `P(team_b) = 1 - P(team_a)`); for everyone else the three fields are `null`:
 - `pregame_prob` (float | null) — Elo-based pregame win probability. For final games this is the value persisted at finalization (computed from ratings as of the game's own date — never a later snapshot, so it never reflects the game's own result). For not-yet-final games it's computed on the fly from the latest available ratings. `null` if either team is unrated.
 - `live_prob` (float | null) — non-null only while the game is in progress (`status` is one of the in-progress states). Regulation games route through the in-game model using `game_quarter`/`game_clock`; overtime games (`game_quarter > 4`) route through the OT model using the manually-tracked `ot_period_start_score_for`/`ot_period_start_score_against`/`ot_next_possession` state (see below) — `null`/incomplete OT state falls back to `pregame_prob`.
 - `prob_as_of` (timestamp | null) — when `pregame_prob` was computed (persisted finalization time), or now if `live_prob` is set.
@@ -227,9 +229,9 @@ Each game also includes embedded win probability, always from `team_a`'s perspec
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending. Without `date`: all stored snapshots for the season (one row per school per pipeline run). With `date`: one row per school — the most recent snapshot on or before that date. |
-| GET | `/{team}/trend` | Elo time-series for one team. Optional `date_from` / `date_to` |
-| GET | `/movers` | Biggest Elo risers/fallers between two rating snapshots. Params: `season` (required), `date_from`/`date_to` (optional — both given: used as the before/after snapshot targets directly; only `date_to`: paired with the snapshot immediately before it; only `date_from`: paired with the latest snapshot overall; neither: the two most recent snapshot dates for the season), `limit` (default 10, applied per direction). Teams present in only one snapshot are excluded. Returns `{"risers": [...], "fallers": [...]}`, each entry with `school`, `class_`, `region`, `elo_before`, `elo_after`, `delta` |
+| GET | `/` | **(owner)** Elo and RPI for teams; filter by `season`, `class`, `region`, `team`; sorted by Elo descending. Without `date`: all stored snapshots for the season (one row per school per pipeline run). With `date`: one row per school — the most recent snapshot on or before that date. |
+| GET | `/{team}/trend` | **(owner)** Elo time-series for one team. Optional `date_from` / `date_to` |
+| GET | `/movers` | **(owner)** Biggest Elo risers/fallers between two rating snapshots. Params: `season` (required), `date_from`/`date_to` (optional — both given: used as the before/after snapshot targets directly; only `date_to`: paired with the snapshot immediately before it; only `date_from`: paired with the latest snapshot overall; neither: the two most recent snapshot dates for the season), `limit` (default 10, applied per direction). Teams present in only one snapshot are excluded. Returns `{"risers": [...], "fallers": [...]}`, each entry with `school`, `class_`, `region`, `elo_before`, `elo_after`, `delta` |
 
 Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and `computed_at` (timestamp) for freshness tracking.
 

@@ -3,9 +3,10 @@
 from datetime import date
 from typing import Annotated, Any, LiteralString
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from psycopg import sql
 
+from backend.api.auth import get_optional_user, require_owner
 from backend.api.db import get_conn
 from backend.api.models.requests import LiveWinProbRequest, OTWinProbRequest
 from backend.api.models.responses import (
@@ -50,11 +51,16 @@ async def list_games(
     team: Annotated[str | None, Query()] = None,
     date_from: Annotated[date | None, Query()] = None,
     date_to: Annotated[date | None, Query()] = None,
+    viewer: Annotated[dict | None, Depends(get_optional_user)] = None,
 ) -> list[GameModel]:
     """Return games filtered by season, class, region, team, and/or date range.
 
     Each game appears once (from team_a's perspective). When a ``team`` filter
     is supplied, games are listed from that team's perspective.
+
+    The win probabilities (``pregame_prob``, ``live_prob``, ``prob_as_of``) are
+    the owner's only: the site doesn't pick winners, so the public API doesn't
+    either. Everyone else gets them as null.
     """
     # Build the base query joining back to school_seasons for class/region filters
     conditions: list[LiteralString] = ["g.season = %s"]
@@ -113,10 +119,14 @@ async def list_games(
     """).format(where_clause)
     async with get_conn() as conn:
         rows = [r async for r in await conn.execute(query, params)]
-    return build_game_models(rows, team_filter=team)
+    games = build_game_models(rows, team_filter=team)
+    if (viewer or {}).get("role") != "owner":
+        for g in games:
+            g.pregame_prob = g.live_prob = g.prob_as_of = None
+    return games
 
 
-@router.get("/games/probability", responses=_404)
+@router.get("/games/probability", dependencies=[Depends(require_owner)], responses=_404)
 async def pregame_win_probability(
     team_a: Annotated[str, Query()],
     team_b: Annotated[str, Query()],
@@ -173,7 +183,7 @@ async def pregame_win_probability(
     )
 
 
-@router.get("/games/upsets")
+@router.get("/games/upsets", dependencies=[Depends(require_owner)])
 async def games_upsets(
     season: SeasonQ,
     date_from: Annotated[date | None, Query()] = None,
@@ -231,14 +241,14 @@ async def games_upsets(
     return UpsetsResponse(upsets=upsets)
 
 
-@router.post("/games/probability/live")
+@router.post("/games/probability/live", dependencies=[Depends(require_owner)])
 async def live_win_probability(body: LiveWinProbRequest) -> LiveWinProbResponse:
     """Return in-game win probability (regulation) given current game state."""
     p = compute_in_game_win_prob(body.pregame_prob, body.current_margin, body.seconds_remaining)
     return LiveWinProbResponse(p_team_a=p)
 
 
-@router.post("/games/probability/overtime")
+@router.post("/games/probability/overtime", dependencies=[Depends(require_owner)])
 async def ot_win_probability(body: OTWinProbRequest) -> OTWinProbResponse:
     """Return OT win probability after team A's possession, before team B responds."""
     p = compute_ot_win_prob(body.pregame_prob, body.ot_scored_margin)

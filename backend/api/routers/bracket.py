@@ -4,8 +4,9 @@ from datetime import date
 from datetime import date as _date
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
+from backend.api.auth import require_owner
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import SimulateBracketRequest
@@ -320,7 +321,7 @@ async def get_bracket_slot(
     )
 
 
-@router.post("/bracket/simulate", responses=_404)
+@router.post("/bracket/simulate", dependencies=[Depends(require_owner)], responses=_404)
 @limiter.limit("10/minute")
 async def simulate_bracket(
     request: Request,
