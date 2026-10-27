@@ -290,6 +290,64 @@ def classes_in_playoffs(playoff_starts: dict[int, date], as_of: date) -> set[int
     return {c for c, start in playoff_starts.items() if start <= as_of}
 
 
+# Every per-class snapshot table, with how each stores ``class``.
+SNAPSHOT_TABLES = (
+    ("region_standings", int),
+    ("region_computation_state", int),
+    ("region_scenarios", str),
+    ("region_seed_pairs", int),
+)
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Clear {season} regular-season snapshots off its game dates")
+def clear_off_date_snapshots(
+    season: int, game_dates: list[date], playoff_starts: dict[int, date], today: date
+) -> dict[str, int]:
+    """Delete a season's regular-season snapshots dated on a day with no games.
+
+    The daily update dates its rows with the day it runs, so most of the season's
+    rows sit on days without games, while the backfill writes only game dates.
+    Readers take the newest snapshot on or before a date, and a past week is read
+    as of its Sunday, so a daily row left from older code would keep hiding the
+    backfilled game-date row before it. Such a row had the same inputs as that
+    game date (no game was played in between), so nothing is lost.
+
+    A class's dates from its first playoff game on belong to the playoff bracket
+    update, which clears its own (``clear_stale_playoff_snapshots``). Ratings keep
+    their game dates and *today*, the backfill's current-ratings row.
+
+    Args:
+        season:         Football season year.
+        game_dates:     Every date the backfill writes (the season's game dates).
+        playoff_starts: Each class's first playoff game date, for classes that have one.
+        today:          The date of the backfill's current team_ratings row.
+
+    Returns:
+        Rows deleted per table.
+    """
+    keep = list(game_dates)
+    deleted: dict[str, int] = {}
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            for table, class_type in SNAPSHOT_TABLES:
+                deleted[table] = 0
+                for clazz in range(1, 8):
+                    start = playoff_starts.get(clazz)
+                    cur.execute(
+                        f"DELETE FROM {table} WHERE season = %s AND class = %s "  # noqa: S608 -- fixed table names
+                        "AND NOT (as_of_date = ANY(%s)) AND (%s::date IS NULL OR as_of_date < %s::date)",
+                        (season, class_type(clazz), keep, start, start),
+                    )
+                    deleted[table] += cur.rowcount
+            cur.execute(
+                "DELETE FROM team_ratings WHERE season = %s AND NOT (as_of_date = ANY(%s))",
+                (season, [*keep, today]),
+            )
+            deleted["team_ratings"] = cur.rowcount
+        conn.commit()
+    return deleted
+
+
 def run_playoff_bracket_update(season: int) -> None:
     """Run the playoff bracket update as a subflow (rewrites every playoff-date row).
 
@@ -1506,10 +1564,12 @@ def region_scenarios_data_flow(
 def backfill_historical_snapshots(season: int | None = None) -> None:
     """Populate dated snapshots for every computed table across all game-dates in a season.
 
-    Run this once after importing a full historical season's games.  It writes
-    team_ratings, region_standings, region_scenarios, and region_computation_state
-    rows for each unique game-date so the frontend timeline can serve any past
-    date without on-the-fly recomputation.
+    Run this once after importing a full historical season's games, or after a
+    model change.  It writes team_ratings, region_standings, region_scenarios,
+    region_seed_pairs and region_computation_state rows for each unique
+    game-date so the frontend timeline can serve any past date without
+    on-the-fly recomputation, then deletes the regular-season rows dated between
+    game dates (``clear_off_date_snapshots``), which would otherwise shadow them.
 
     All data in the historical snapshots — seeding odds, weighted odds, W/L
     records, and tiebreaker inputs — are historically accurate at each snapshot
@@ -1604,6 +1664,10 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
                 get_region_finish_scenarios(
                     c, r, season, quote(seeding[(c, r)]), matchup_fns[c], as_of_date=cutoff_date
                 )
+
+    # The daily rows between game dates would shadow what was just written.
+    deleted = clear_off_date_snapshots(season, snap_dates, playoff_starts, today)
+    logger.info("Cleared regular-season snapshots dated off the game dates: %s", deleted)
 
     # Last, so every playoff date ends with playoff-aware rows no matter what
     # this backfill (or an earlier run) wrote.

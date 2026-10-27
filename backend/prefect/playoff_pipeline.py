@@ -26,6 +26,7 @@ from backend.helpers.data_classes import (
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.win_probability import EloConfig, compute_elo_ratings, make_matchup_prob_fn
 from backend.prefect.region_scenarios_pipeline import (
+    SNAPSHOT_TABLES,
     RegionSeedingData,
     fetch_all_season_games,
     fetch_all_season_schools,
@@ -249,13 +250,6 @@ def build_playoff_region_data(
 # Task D — clear snapshots that would shadow the playoff ones
 # ---------------------------------------------------------------------------
 
-# Every per-class snapshot table, with how each stores ``class``.
-_SNAPSHOT_TABLES = (
-    ("region_standings", int),
-    ("region_computation_state", int),
-    ("region_scenarios", str),
-    ("region_seed_pairs", int),
-)
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Clear stale {season} {clazz}A playoff-season snapshots")
@@ -283,7 +277,7 @@ def clear_stale_playoff_snapshots(
     deleted: dict[str, int] = {}
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            for table, class_type in _SNAPSHOT_TABLES:
+            for table, class_type in SNAPSHOT_TABLES:
                 cur.execute(
                     f"DELETE FROM {table} WHERE season = %s AND class = %s "  # noqa: S608 -- fixed table names
                     "AND as_of_date >= %s AND NOT (as_of_date = ANY(%s))",
