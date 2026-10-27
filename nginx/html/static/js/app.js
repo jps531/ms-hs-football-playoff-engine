@@ -8,7 +8,7 @@
 // Moving between pages pushes history; changing the season, week, odds
 // mode, or picked team replaces it, so Back goes to the previous page.
 
-import { escapeHtml as esc, formatPct, recordText, shortDate, gameDate, calculatedSpan } from "./format.js";
+import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDate, calculatedSpan } from "./format.js";
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard, breadcrumbs,
@@ -1042,8 +1042,8 @@ async function bracketView(ctx) {
   const seeds = {};
   for (const r of standings?.regions ?? []) {
     for (const t of r.teams) {
-      // Certain (give or take the odds' 32-bit storage), not merely likely.
-      const s = [1, 2, 3, 4].find((k) => (t.odds?.[`p${k}`] ?? 0) >= 1 - 1e-6);
+      // Certain, not merely likely.
+      const s = [1, 2, 3, 4].find((k) => isCertain(t.odds?.[`p${k}`]));
       if (s) seeds[t.school] = { region: r.region, seed: s };
     }
   }

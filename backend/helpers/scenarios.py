@@ -13,6 +13,7 @@ import random
 from collections import defaultdict
 from itertools import permutations, product
 
+from backend.helpers.certainty import NOISE, keep_uncertain
 from backend.helpers.data_classes import (
     BracketOdds,
     CompletedGame,
@@ -118,6 +119,8 @@ def _accumulate_slots(
     fourth_counts_weighted: defaultdict[str, float],
     pair_counts: dict[tuple[str, int, str, int], float] | None = None,
     pair_counts_weighted: dict[tuple[str, int, str, int], float] | None = None,
+    places_seen: dict[str, set[int]] | None = None,
+    open_groups: list[list[str]] | None = None,
 ) -> None:
     """Accumulate seed counts into counters, distributing evenly over coin-flip permutations.
 
@@ -135,11 +138,20 @@ def _accumulate_slots(
         first_counts … fourth_counts_weighted: Counters to update in-place.
         pair_counts, pair_counts_weighted: Optional same-region seed-pair
             counters (see ``_accumulate_pairs``), updated in-place.
+        places_seen: Optional dict, updated in-place, of the places (1-4, and 5
+            for out of the top four) each team can take: every place this branch
+            gives (when it carries any unweighted credit), exact however small
+            its share, so ``determine_odds`` can tell a certainty from a near one.
+        open_groups: Tied groups whose order margins could change but this
+            branch fixed (the 7-point default): each member is marked as able to
+            take any place the group spans.
     """
     if pair_counts is not None and pair_counts_weighted is not None:
         _accumulate_pairs(final_order, flip_groups, unweighted, weighted, pair_counts, pair_counts_weighted)
     if not flip_groups:
         slots = rank_to_slots(final_order)
+        if places_seen is not None and unweighted > 0:
+            _mark_places(slots, open_groups, places_seen)
         for team, (lo, hi) in slots.items():
             if lo <= 1 <= hi:
                 first_counts[team] += unweighted
@@ -163,6 +175,8 @@ def _accumulate_slots(
     w_share = weighted / n
     for ordering in orderings:
         slots = rank_to_slots(ordering)
+        if places_seen is not None and u_share > 0:
+            _mark_places(slots, open_groups, places_seen)
         for team, (lo, hi) in slots.items():
             if lo <= 1 <= hi:
                 first_counts[team] += u_share
@@ -176,6 +190,27 @@ def _accumulate_slots(
             if lo <= 4 <= hi:
                 fourth_counts[team] += u_share
                 fourth_counts_weighted[team] += w_share
+
+
+def _mark_places(slots: dict, open_groups: list[list[str]] | None, places_seen: dict[str, set[int]]) -> None:
+    """Record the places *slots* gives each team (5 for out of the top four), widened over *open_groups*.
+
+    A team is credited the seeds its slot range covers (as the counts are) and 5 only when the
+    range starts past 4; an open group's members can each take any place across the group's ranges.
+    """
+
+    def places(lo: int, hi: int) -> set[int]:
+        return {5} if lo > 4 else set(range(lo, min(hi, 4) + 1))
+
+    for team, (lo, hi) in slots.items():
+        places_seen.setdefault(team, set()).update(places(lo, hi))
+    for group in open_groups or ():
+        spans = [slots[t] for t in group if t in slots]
+        if spans:
+            lo, hi = min(a for a, _ in spans), max(b for _, b in spans)
+            span = {min(k, 5) for k in range(lo, hi + 1)}
+            for team in group:
+                places_seen.setdefault(team, set()).update(span)
 
 
 # How often each winning margin happens, 1-11 then 12 or more (the cap the point-differential
@@ -234,6 +269,7 @@ def _resolve_with_scores(
     outcome_mask: int,
     margins: dict,
     known_margins: frozenset = frozenset(),
+    decisions_out: list | None = None,
 ) -> list[tuple[list[str], list[list[str]], float]]:
     """The seedings one result can give, each with its share: ``[(order, coin-flip groups, share)]``.
 
@@ -244,6 +280,7 @@ def _resolve_with_scores(
     given for games in ``known_margins``, a draw of 12 or more for those at 12, drawn for the rest)
     and each order gets its share. So an order only points allowed can give gets the small share it
     deserves, not none. The draws are seeded from the result, so the same inputs give the same odds.
+    The resolver's tiebreaker decisions for the result are added to *decisions_out* when given.
     """
     decisions: list = []
     flips: list[list[str]] = []
@@ -258,6 +295,8 @@ def _resolve_with_scores(
         coin_flip_collector=flips,
         decision_collector=decisions,
     )
+    if decisions_out is not None:
+        decisions_out.extend(decisions)
     in_play = {t for g in remaining for t in (g.a, g.b)}
     if not any(step == 5 and set(group) & in_play for step, group, _ in decisions):
         return [(order, flips, 1.0)]
@@ -414,6 +453,8 @@ def determine_scenarios(
     denom_weighted: float = 0.0
     seed_pairs: dict[tuple[str, int, str, int], float] = {}
     seed_pairs_weighted: dict[tuple[str, int, str, int], float] = {}
+    places_seen: dict[str, set[int]] = {}
+    in_play = {t for g in remaining for t in (g.a, g.b)}
 
     pa_for_winner = 14
     base_margins = {(rem_game.a, rem_game.b): 7 for rem_game in remaining}
@@ -437,6 +478,7 @@ def determine_scenarios(
                 fourth_counts_weighted,
                 seed_pairs,
                 seed_pairs_weighted,
+                places_seen=places_seen,
             )
         denom = 1.0
         denom_weighted = 1.0
@@ -482,6 +524,7 @@ def determine_scenarios(
                         fourth_counts_weighted,
                         seed_pairs,
                         seed_pairs_weighted,
+                        places_seen=places_seen,
                     )
         denom_weighted = float(n_samples)
         denom = float(n_samples)
@@ -502,10 +545,15 @@ def determine_scenarios(
             if ignore_margins:
                 # Fast path: resolve once at the default margin, skip 12^N enumeration.
                 # Odds are approximate (margin tiebreakers not tracked), consistent with
-                # ignore_margins rendering mode.
-                for final_order, local_flips, share in _resolve_with_scores(
-                    teams, completed, remaining, outcome_mask, base_margins, frozenset()
-                ):
+                # ignore_margins rendering mode. A tie that reaches point differential
+                # (step 3) with a tied team still to play is left open for certainty:
+                # another margin could reorder it, so none of its places is certain.
+                decisions: list = []
+                resolved = _resolve_with_scores(
+                    teams, completed, remaining, outcome_mask, base_margins, frozenset(), decisions
+                )
+                open_groups = [list(group) for step, group, _ in decisions if step >= 3 and set(group) & in_play]
+                for final_order, local_flips, share in resolved:
                     all_coinflip_events.extend(local_flips)
                     _accumulate_slots(
                         final_order,
@@ -522,6 +570,8 @@ def determine_scenarios(
                         fourth_counts_weighted,
                         seed_pairs,
                         seed_pairs_weighted,
+                        places_seen=places_seen,
+                        open_groups=open_groups,
                     )
                 continue
 
@@ -563,6 +613,7 @@ def determine_scenarios(
                         fourth_counts_weighted,
                         seed_pairs,
                         seed_pairs_weighted,
+                        places_seen=places_seen,
                     )
             else:
                 # Enumerate all 12^N margin combinations for intra-bucket games.
@@ -612,6 +663,7 @@ def determine_scenarios(
                             fourth_counts_weighted,
                             seed_pairs,
                             seed_pairs_weighted,
+                            places_seen=places_seen,
                         )
 
         denom = float(1 << num_remaining)
@@ -631,6 +683,8 @@ def determine_scenarios(
         denom_weighted=denom_weighted,
         seed_pairs=seed_pairs,
         seed_pairs_weighted=seed_pairs_weighted,
+        places_seen=places_seen,
+        sampled=n_samples is not None,
     )
 
 
@@ -717,16 +771,39 @@ def compute_first_round_home_odds(
     return result
 
 
-# Odds are rounded here: past the float noise of summing thousands of shares (~1e-14), so it never
-# orders two level teams or reads as a chance; a real chance below one in a trillion counts as none.
+# Uncertain odds are rounded past the float noise of summing thousands of shares (~1e-14), so that
+# noise never orders two level teams.
 _ODDS_DIGITS = 12
 
 
-def determine_odds(teams, first_counts, second_counts, third_counts, fourth_counts, denom):
+def _tidy(p: float) -> float:
+    """A chance known not to be certain, rounded past float noise and kept uncertain."""
+    return keep_uncertain(round(p, _ODDS_DIGITS))
+
+
+def determine_odds(
+    teams,
+    first_counts,
+    second_counts,
+    third_counts,
+    fourth_counts,
+    denom,
+    *,
+    places_seen: dict[str, set[int]] | None = None,
+    sampled: bool = False,
+):
     """Convert accumulated seed counts into probability odds for each team.
 
     Computes per-team probabilities for finishing 1st through 4th, combined
     playoff odds, and clinch/elimination flags.
+
+    A chance is 0 or 1 only when the enumeration proves it (see ``certainty``):
+    from *places_seen*, the places each team can take (5 for out of the top
+    four), a seed it can't take is 0, the only place it can take is 1, and a
+    playoff spot is 1 when it can't finish out. Every other chance is kept
+    uncertain, however small, and none is certain when the counts are
+    *sampled*. Both odds modes use the same places, so they land on the same
+    certainties.
 
     Args:
         teams: List of all team names in the region.
@@ -736,18 +813,35 @@ def determine_odds(teams, first_counts, second_counts, third_counts, fourth_coun
         fourth_counts: Counter mapping team -> weighted count of 4th-seed outcomes.
         denom: Total number of equally-weighted outcomes (divisor for
             probabilities).
+        places_seen: ``ScenarioResults.places_seen``; without it, certainty is
+            read off the counts (a count of 0 is impossible, a total within float
+            noise of 1 certain).
+        sampled: ``ScenarioResults.sampled``.
 
     Returns:
         A dict mapping each team name to a StandingsOdds instance.
     """
+    counts = (first_counts, second_counts, third_counts, fourth_counts)
     odds: dict[str, StandingsOdds] = {}
     for school in teams:
-        raw = [c.get(school, 0.0) / denom for c in (first_counts, second_counts, third_counts, fourth_counts)]
-        p1, p2, p3, p4 = (round(p, _ODDS_DIGITS) for p in raw)
-        p_playoffs = round(sum(raw), _ODDS_DIGITS)
-        # Only a certainty (see _ODDS_DIGITS): a team with a 0.05% chance of missing out hasn't clinched.
-        clinched = p_playoffs >= 1.0
-        eliminated = p_playoffs <= 0.0
+        raw = [c.get(school, 0.0) / denom for c in counts]
+        if sampled:
+            p1, p2, p3, p4 = (_tidy(p) for p in raw)
+            p_playoffs = _tidy(sum(raw))
+        elif places_seen is not None:
+            seen = places_seen.get(school, set())
+            p1, p2, p3, p4 = (
+                (1.0 if seen == {k} else _tidy(p)) if k in seen else 0.0 for k, p in enumerate(raw, start=1)
+            )
+            if not seen - {5}:
+                p_playoffs = 0.0
+            else:
+                p_playoffs = _tidy(sum(raw)) if 5 in seen else 1.0
+        else:
+            p1, p2, p3, p4 = (_from_counts(p) for p in raw)
+            p_playoffs = _from_counts(sum(raw))
+        clinched = p_playoffs == 1.0
+        eliminated = p_playoffs == 0.0
         if clinched:
             final_playoffs = 1.0
         elif eliminated:
@@ -756,3 +850,26 @@ def determine_odds(teams, first_counts, second_counts, third_counts, fourth_coun
             final_playoffs = p_playoffs
         odds[school] = StandingsOdds(school, p1, p2, p3, p4, p_playoffs, final_playoffs, clinched, eliminated)
     return odds
+
+
+def _from_counts(p: float) -> float:
+    """A chance read off counts alone: 0 only for a count of 0, 1 within float noise of it, else kept uncertain."""
+    if p <= 0:
+        return 0.0
+    return 1.0 if p >= 1 - NOISE else _tidy(p)
+
+
+def odds_from_results(teams, r: ScenarioResults) -> tuple[dict[str, StandingsOdds], dict[str, StandingsOdds]]:
+    """Toss-up and Projected odds from one ``determine_scenarios`` result."""
+    exact = {"places_seen": r.places_seen, "sampled": r.sampled}
+    odds = determine_odds(teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom, **exact)
+    odds_weighted = determine_odds(
+        teams,
+        r.first_counts_weighted,
+        r.second_counts_weighted,
+        r.third_counts_weighted,
+        r.fourth_counts_weighted,
+        r.denom_weighted,
+        **exact,
+    )
+    return odds, odds_weighted

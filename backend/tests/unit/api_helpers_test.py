@@ -92,6 +92,7 @@ from backend.helpers.api_helpers import (
     venue_distance_miles,
     within_display_threshold,
 )
+from backend.helpers.certainty import CERTAIN_EPS, UNCERTAIN_FLOOR
 from backend.helpers.data_classes import (
     BracketOdds,
     CompletedGame,
@@ -174,9 +175,9 @@ class TestConstants:
         assert DISPLAY_THRESHOLD == 5 == _R_ALWAYS_MARGIN
 
     def test_clinched_threshold(self):
-        """CLINCHED_THRESHOLD is a certainty, allowing only for the odds' 32-bit storage: 99.9% isn't clinched."""
-        assert 0.999 < CLINCHED_THRESHOLD < 1.0
-        assert CLINCHED_THRESHOLD == pytest.approx(1 - 1e-6, abs=1e-12)
+        """CLINCHED_THRESHOLD is the shared certainty cutoff, above every chance that isn't certain."""
+        assert CLINCHED_THRESHOLD == 1 - CERTAIN_EPS
+        assert 1 - UNCERTAIN_FLOOR < CLINCHED_THRESHOLD < 1.0
 
 
 class TestToday:

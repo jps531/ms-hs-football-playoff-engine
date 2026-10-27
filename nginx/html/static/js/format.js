@@ -1,8 +1,9 @@
 // Pure formatting helpers. No DOM access, so they run under `node --test`.
 
-// Odds are float sums over enumerated outcomes; certainty can land a hair off
-// 0 or 1, so anything this close counts as mathematically certain.
-const EPS = 1e-9;
+// The one cutoff for reading a chance as certain (backend/helpers/certainty.py's
+// CERTAIN_EPS). The server keeps every chance that isn't certain at least one in
+// a million away from 0 and 1, so only a certainty comes this close.
+export const EPS = 1e-9;
 
 export function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({
@@ -41,6 +42,10 @@ export function oddsBucket(p) {
 
 export function isCertain(p) {
   return p != null && p >= 1 - EPS;
+}
+
+export function isImpossible(p) {
+  return p != null && p <= EPS;
 }
 
 const DROPPED_WORDS = new Set(["county", "high", "school", "academy"]);

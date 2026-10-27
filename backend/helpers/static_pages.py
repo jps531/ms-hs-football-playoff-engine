@@ -22,6 +22,7 @@ from collections.abc import Iterable
 from datetime import date, datetime
 from xml.sax.saxutils import escape as xml_escape
 
+from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.color_contrast import contrast_ratio
 from backend.helpers.share_cards import (
     display_order,
@@ -145,8 +146,8 @@ def initials(name: str) -> str:
 
 
 _HEX = re.compile(r"^#?[0-9a-fA-F]{6}$")
-# A seed is locked when it's certain, give or take the odds' 32-bit storage (mirrors app.js).
-_LOCKED = 1 - 1e-6
+# A seed is locked when it's certain (backend.helpers.certainty; mirrors app.js).
+_LOCKED = 1 - CERTAIN_EPS
 
 # The badge icons (ICONS in components.js).
 BADGE_ICONS = {

@@ -14,6 +14,7 @@ The odds shown here come from counting every way a region's remaining games can 
 - High school football schedules are small samples — a single game can drastically shift outcomes.
 - The model is not validated for predictive accuracy against external benchmarks.
 - Ties that would be settled by a coin flip are counted with each possible flip result weighted equally, not drawn at random.
+- 0% and 100% (and "clinched" and "eliminated") are shown only for outcomes proven certain by counting every ending, so never while the odds come from simulation; any other chance, however small, reads as less than 1% or more than 99%.
 
 A "70% chance of finishing 1st" means the team finishes first in 70% of the ways the rest of the season can play out, counted the way the selected odds mode describes. It is **not** a guarantee, a line, or an edge.
 

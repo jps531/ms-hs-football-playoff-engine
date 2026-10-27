@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   formatPct, oddsBucket, initials, marginText, joinNames, recordText, contrastRatio, clampToSurface,
-  teamUiColors, inkFor, escapeHtml, calculatedSpan,
+  teamUiColors, inkFor, escapeHtml, calculatedSpan, EPS, isCertain, isImpossible,
 } from "../html/static/js/format.js";
 
 test("0% and 100% are reserved for certainty", () => {
@@ -21,6 +21,14 @@ test("near-certain values never round to 0% or 100%", () => {
   assert.equal(formatPct(0.994), "99%");
   assert.equal(formatPct(0.646), "65%");
   assert.equal(formatPct(null), "—");
+});
+
+test("one certainty cutoff, matching the server's, inside its one-in-a-million floor", () => {
+  assert.equal(EPS, 1e-9); // backend/helpers/certainty.py CERTAIN_EPS
+  assert.ok(isCertain(1) && !isCertain(1 - 1e-6));
+  assert.ok(isImpossible(0) && !isImpossible(1e-6));
+  assert.equal(formatPct(1e-6), "<1%");
+  assert.equal(formatPct(1 - 1e-6), ">99%");
 });
 
 test("odds bucket follows the displayed, rounded value", () => {

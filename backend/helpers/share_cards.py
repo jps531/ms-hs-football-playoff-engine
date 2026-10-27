@@ -27,6 +27,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from backend.helpers.certainty import CERTAIN_EPS
+
 SITE_NAME = "Mississippi High School Football"
 SITE_TITLE = "Mississippi High School Football Playoff Races"
 SITE_DESCRIPTION = (
@@ -49,7 +51,7 @@ RULE = "#393939"  # --border (neutral-800)
 ODDS_BG = {1: "#393939", 2: "#07291D", 3: "#0D4632", 4: "#0F5B41", 5: "#137252"}  # --odds-1..5
 ODDS_TEXT = "#F2FBF8"  # --odds-text (brand-50)
 
-_EPS = 1e-9
+_EPS = CERTAIN_EPS  # 0% and 100% only for certainties (backend.helpers.certainty)
 DESCRIPTION_LIMIT = 155
 
 

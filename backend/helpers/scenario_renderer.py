@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import date
 from typing import cast
 
+from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.data_classes import (
     CoinFlipResult,
     GameResult,
@@ -251,10 +252,10 @@ def atoms_from_complete_scenarios(
 
 def _pct(p: float) -> str:
     """A probability as a percentage to one decimal, never rounding a possible outcome to 0 or a
-    possible miss to 100: "<0.1%" and ">99.9%" instead (float noise aside)."""
-    if 1e-9 < p < 0.0005:
+    possible miss to 100: "<0.1%" and ">99.9%" instead (see ``backend.helpers.certainty``)."""
+    if CERTAIN_EPS < p < 0.0005:
         return "<0.1%"
-    if 0.9995 < p < 1 - 1e-9:
+    if 0.9995 < p < 1 - CERTAIN_EPS:
         return ">99.9%"
     return f"{p * 100:.1f}%"
 

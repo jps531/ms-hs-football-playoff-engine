@@ -42,13 +42,14 @@ from backend.helpers.bracket_home_odds import (
     sf_home_team,
     was_home_r1,
 )
+from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.data_classes import FormatSlot, MatchupProbFn
 
 Position = tuple[int, int]  # (region, seed)
 PairKey = tuple[str, int, str, int]  # (team_a, seed_a, team_b, seed_b), team_a < team_b
 
-_EPS = 1e-9
-_LOCKED = 1 - 1e-6
+_EPS = CERTAIN_EPS
+_LOCKED = 1 - CERTAIN_EPS  # a certainty (backend.helpers.certainty)
 
 
 @dataclass
