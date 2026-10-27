@@ -3,7 +3,6 @@
 from backend.helpers.data_classes import (
     GameResult,
     HomeGameCondition,
-    HomeGameScenario,
     MarginCondition,
     PDRankCondition,
     RemainingGame,
@@ -12,13 +11,11 @@ from backend.helpers.scenario_serializers import (
     deserialize_atom,
     deserialize_complete_scenarios,
     deserialize_condition,
-    deserialize_home_game_scenario,
     deserialize_remaining_games,
     deserialize_scenario_atoms,
     serialize_atom,
     serialize_complete_scenarios,
     serialize_condition,
-    serialize_home_game_scenario,
     serialize_remaining_games,
     serialize_scenario_atoms,
 )
@@ -198,46 +195,6 @@ def test_home_game_condition_roundtrip_seed_required():
 # ---------------------------------------------------------------------------
 # HomeGameScenario serialization
 # ---------------------------------------------------------------------------
-
-
-def test_home_game_scenario_serialize():
-    """serialize_home_game_scenario produces conditions + explanation."""
-    sc = HomeGameScenario(
-        conditions=(
-            HomeGameCondition(kind="advances", round_name="Quarterfinals", region=None, seed=None, team_name=None),
-        ),
-        explanation="Higher seed (#1 vs #3)",
-    )
-    d = serialize_home_game_scenario(sc)
-    assert d["explanation"] == "Higher seed (#1 vs #3)"
-    assert d["conditions"] == [
-        {
-            "type": "home_game_condition",
-            "kind": "advances",
-            "round_name": "Quarterfinals",
-            "region": None,
-            "seed": None,
-            "team_name": None,
-        }
-    ]
-
-
-def test_home_game_scenario_roundtrip():
-    """A HomeGameScenario survives a serialize → deserialize round-trip unchanged."""
-    sc = HomeGameScenario(
-        conditions=(
-            HomeGameCondition(kind="seed_required", round_name=None, region=None, seed=2, team_name=None),
-            HomeGameCondition(kind="advances", round_name="Semifinals", region=3, seed=1, team_name="Pearl"),
-        ),
-        explanation=None,
-    )
-    assert deserialize_home_game_scenario(serialize_home_game_scenario(sc)) == sc
-
-
-def test_home_game_scenario_roundtrip_no_conditions():
-    """An unconditional HomeGameScenario (empty conditions) round-trips unchanged."""
-    sc = HomeGameScenario(conditions=(), explanation="Always the designated home team")
-    assert deserialize_home_game_scenario(serialize_home_game_scenario(sc)) == sc
 
 
 # ---------------------------------------------------------------------------

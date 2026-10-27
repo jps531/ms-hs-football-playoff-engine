@@ -1984,7 +1984,6 @@ class PlayoffBracketState:
 # Advancement round order for ceiling comparisons and _apply_round_ceilings.
 _ROUND_ADVANCEMENT_ORDER = ["second_round", "quarterfinals", "semifinals", "finals", "champion"]
 # Hosting round order (no 'finals'/'champion' — championship has its own node).
-_ROUND_HOSTING_ORDER = ["first_round", "second_round", "quarterfinals", "semifinals"]
 
 
 def _collect_possible_opponents(

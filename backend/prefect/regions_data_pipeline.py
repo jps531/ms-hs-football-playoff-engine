@@ -116,14 +116,6 @@ def parse_regions_from_text(text: str) -> list[dict]:
     return out
 
 
-@task(task_run_name="Fetch Regions Task")
-def fetch_regions(url: str) -> list[dict]:
-    """End-to-end: fetch, parse, clean."""
-    text = fetch_article_text(url)
-    rows = parse_regions_from_text(text)
-    return rows
-
-
 @task(task_run_name="Insert Regions Data")
 def insert_rows(rows: Iterable[School]) -> int:
     """

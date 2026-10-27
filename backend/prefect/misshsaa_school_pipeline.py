@@ -345,14 +345,3 @@ def misshsaa_school_data_flow() -> int:
     return updated
 
 
-@flow(name="Recompute School Color Variants")
-def recompute_school_colors_flow() -> int:
-    """Recompute color_variants for every school, without re-scraping the MHSAA directory.
-
-    Run this manually to backfill color_variants for existing rows (e.g. right
-    after the color_variants column is added to a database), or after an
-    algorithm_version bump — it's a lighter-weight alternative to a full
-    misshsaa_school_data_flow() run when nothing about the underlying colors
-    has changed.
-    """
-    return recompute_all_colors()

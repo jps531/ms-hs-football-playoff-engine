@@ -27,16 +27,6 @@ NOISE = 1e-12
 """Float noise from summing many exact shares; an exact count within this of 0 or 1 is 0 or 1."""
 
 
-def is_certain(p: float | None) -> bool:
-    """True when *p* reads as 100%."""
-    return p is not None and p >= 1 - CERTAIN_EPS
-
-
-def is_impossible(p: float | None) -> bool:
-    """True when *p* reads as 0%."""
-    return p is not None and p <= CERTAIN_EPS
-
-
 def keep_uncertain(p: float) -> float:
     """*p*, moved at least ``UNCERTAIN_FLOOR`` away from 0 and 1: for a chance known not to be certain."""
     return min(max(p, UNCERTAIN_FLOOR), 1 - UNCERTAIN_FLOOR)

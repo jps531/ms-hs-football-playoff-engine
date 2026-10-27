@@ -1,4 +1,4 @@
-"""Tests for scenario_viewer: enumerate_division_scenarios and render_division_scenarios."""
+"""Tests for scenario_viewer: enumerate_division_scenarios and the condition renderers."""
 
 from itertools import product
 
@@ -20,7 +20,6 @@ from backend.helpers.scenario_viewer import (
     build_scenario_atoms,
     enumerate_division_scenarios,
     enumerate_outcomes,
-    render_division_scenarios,
     render_scenarios,
 )
 from backend.helpers.tiebreakers import resolve_standings_for_mask
@@ -226,62 +225,6 @@ def test_full_season_single_scenario():
     assert sc["seeding"][:4] == ("Oak Grove", "Petal", "Brandon", "Northwest Rankin")
 
 
-def test_full_season_render_contains_no_remaining():
-    """Full-season render starts with the deterministic message."""
-    output = render_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games_full,
-        expected_3_7a_remaining_games_full,
-    )
-    assert "(no remaining games — standings are final)" in output
-    assert "1. Oak Grove" in output
-
-
-# ---------------------------------------------------------------------------
-# render_division_scenarios — structural render checks
-# ---------------------------------------------------------------------------
-
-
-def test_render_contains_all_scenario_labels():
-    """Rendered output contains all 6 scenario labels, and no sub-scenarios."""
-    output = render_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games,
-        _REMAINING,
-        scenario_atoms=expected_3_7a_scenarios,
-    )
-    for n in range(1, 7):
-        assert f"Scenario {n}:" in output
-    assert "Scenario 4a" not in output
-
-
-def test_render_eliminated_teams_shown():
-    """Render includes 'Eliminated:' lines listing non-seeded teams."""
-    output = render_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games,
-        _REMAINING,
-        scenario_atoms=expected_3_7a_scenarios,
-    )
-    assert "Eliminated:" in output
-    # Meridian is always eliminated (all 17 scenarios)
-    for line in output.splitlines():
-        if line.startswith("Eliminated:"):
-            assert "Meridian" in line
-
-
-def test_render_without_explicit_atoms_auto_computes():
-    """Without explicit scenario_atoms the scenarios are the same: they don't depend on atoms."""
-    output = render_division_scenarios(
-        teams_3_7a,
-        expected_3_7a_completed_games,
-        _REMAINING,
-        scenario_atoms=None,
-    )
-    assert output.count("Scenario 4") == 1
-    assert "order decided by the tiebreaker" in output
-
-
 # ---------------------------------------------------------------------------
 # MarginCondition op="==" rendering (covers new code paths)
 # ---------------------------------------------------------------------------
@@ -329,11 +272,6 @@ def test_margin_condition_satisfied_by_eq_op():
 
 
 # ---------------------------------------------------------------------------
-# 4c, 4d, 4i, 4j: verify "==" simplification was applied by _find_combined_atom
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # Full render snapshot — 3-7A division scenarios (algorithmic atoms)
 # ---------------------------------------------------------------------------
 
@@ -376,19 +314,6 @@ Scenario 6: Brandon beats Meridian AND Oak Grove beats Pearl AND Northwest Ranki
 3. Brandon
 4. Northwest Rankin
 Eliminated: Meridian, Pearl"""
-
-
-def test_render_division_scenarios_full_output():
-    """Full rendered output of all 17 division scenarios matches expected text exactly.
-
-    This is a golden-file regression test: if the rendered conditions for any
-    scenario change, the test fails.  Update _EXPECTED_3_7A_RENDER when the
-    output is intentionally changed.
-    """
-    result = render_division_scenarios(
-        teams_3_7a, expected_3_7a_completed_games, _REMAINING, scenario_atoms=_ATOMS_3_7A
-    )
-    assert result == _EXPECTED_3_7A_RENDER, f"\n--- EXPECTED ---\n{_EXPECTED_3_7A_RENDER}\n--- ACTUAL ---\n{result}"
 
 
 # ---------------------------------------------------------------------------
@@ -781,10 +706,6 @@ def test_render_scenarios_no_eliminated_line_when_all_advance():
     text = render_scenarios(scenarios, playoff_seeds=5)
     assert "Eliminated:" not in text
 
-
-# ---------------------------------------------------------------------------
-# Synthetic gap-closure tests — scenario_viewer.py internal helpers
-# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # _simplify_atom_list — Rule 1 with MarginCondition (line 651)
@@ -1488,11 +1409,6 @@ class TestBuildScenarioAtomsLargeRGate:
         eo = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
         result = build_scenario_atoms(teams, completed, remaining, precomputed=eo)
         assert result != {}
-
-
-# ---------------------------------------------------------------------------
-# Step 3c: PDRankCondition atoms in ignore_margins mode
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------

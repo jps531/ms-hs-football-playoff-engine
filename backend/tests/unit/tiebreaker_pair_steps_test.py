@@ -88,7 +88,7 @@ def test_standings_from_mask_tie_game():
 def test_build_h2h_maps_tie_game():
     """res_a == 0 gives both teams 0.5 H2H points and negated capped PD."""
     completed = [CompletedGame(a="Alpha", b="Beta", res_a=0, pd_a=4, pa_a=14, pa_b=18)]
-    h2h_points, capped_pd, _ = build_h2h_maps(completed, [], 0, {})
+    h2h_points, capped_pd = build_h2h_maps(completed, [], 0, {})
     assert h2h_points[("Alpha", "Beta")] == h2h_points[("Beta", "Alpha")]
     assert h2h_points[("Alpha", "Beta")] * 2 == 1
     # pd_a=4 → cap_a=4; capped_pd_map[("Alpha","Beta")] += 4, [("Beta","Alpha")] -= 4

@@ -7,20 +7,17 @@ lookup, school name cleaning, pair normalization, and completed-game parsing.
 
 import pytest
 
-from backend.helpers.data_classes import RawCompletedGame, School
+from backend.helpers.data_classes import RawCompletedGame
 from backend.helpers.data_helpers import (
     _color_to_hex,
     _colors_csv_to_hex,
-    _get_field,
     _month_to_num,
     _norm,
     _normalize_color,
     _normalize_mascot,
     _normalize_ws,
-    _pad,
     _parse_colors,
     _split_color_words,
-    as_float_or_none,
     clean_school_name,
     get_completed_games,
     get_school_name_from_ahsfhs,
@@ -212,56 +209,6 @@ def test_get_school_name_from_ahsfhs_strips_whitespace() -> None:
 
 
 # ---------------------------------------------------------------------------
-# as_float_or_none
-# ---------------------------------------------------------------------------
-
-
-def test_as_float_or_none_none_input() -> None:
-    """as_float_or_none returns None for a None input."""
-    assert as_float_or_none(None) is None
-
-
-def test_as_float_or_none_empty_string() -> None:
-    """as_float_or_none returns None for an empty string."""
-    assert as_float_or_none("") is None
-
-
-def test_as_float_or_none_blank_string() -> None:
-    """as_float_or_none returns None for a whitespace-only string."""
-    assert as_float_or_none("   ") is None
-
-
-def test_as_float_or_none_valid_string() -> None:
-    """as_float_or_none converts a numeric string to float."""
-    assert as_float_or_none("3.14") == pytest.approx(3.14)
-
-
-def test_as_float_or_none_valid_int() -> None:
-    """as_float_or_none converts an integer to float."""
-    assert as_float_or_none(42) == pytest.approx(42.0)
-
-
-def test_as_float_or_none_invalid_string() -> None:
-    """as_float_or_none returns None for a non-numeric string."""
-    assert as_float_or_none("not_a_number") is None
-
-
-# ---------------------------------------------------------------------------
-# _pad
-# ---------------------------------------------------------------------------
-
-
-def test_pad_single_digit() -> None:
-    """_pad zero-pads single-digit numbers to two characters."""
-    assert _pad(3) == "03"
-
-
-def test_pad_double_digit() -> None:
-    """_pad leaves two-digit numbers unchanged."""
-    assert _pad(11) == "11"
-
-
-# ---------------------------------------------------------------------------
 # _month_to_num
 # ---------------------------------------------------------------------------
 
@@ -368,36 +315,6 @@ def test_parse_text_section_non_greedy() -> None:
     result = parse_text_section(text, "A", "B")
     assert "content1" in result
     assert "content2" not in result
-
-
-# ---------------------------------------------------------------------------
-# _get_field
-# ---------------------------------------------------------------------------
-
-
-def test_get_field_from_dataclass() -> None:
-    """_get_field retrieves attribute values from dataclass instances by field name."""
-    school = School(school="Greenwood", season=2025, class_=5, region=3)
-    assert _get_field(school, "school") == "Greenwood"
-    assert _get_field(school, "class_") == 5
-
-
-def test_get_field_from_dict() -> None:
-    """_get_field retrieves values from dict-like objects."""
-    d = {"school": "Greenwood", "class": 5}
-    assert _get_field(d, "school") == "Greenwood"
-
-
-def test_get_field_alt_key_fallback() -> None:
-    """_get_field falls back to alt_key when the primary key is absent."""
-    d = {"class": 5}
-    assert _get_field(d, "class_", alt_key="class") == 5
-
-
-def test_get_field_missing_returns_none() -> None:
-    """_get_field returns None when the key is absent and no alt_key matches."""
-    d = {"school": "Greenwood"}
-    assert _get_field(d, "nonexistent") is None
 
 
 # ---------------------------------------------------------------------------
@@ -574,11 +491,6 @@ def test_get_completed_games_b_row_does_not_overwrite_a_row() -> None:
     games = get_completed_games([a_row, b_row])
     g = games[0]
     assert g.res_a == 1  # a-row result preserved; b-row discarded
-
-
-def test_get_field_non_mapping_non_dataclass_returns_none() -> None:
-    """_get_field returns None when r is neither a dataclass nor a Mapping."""
-    assert _get_field(42, "anything") is None
 
 
 # ---------------------------------------------------------------------------

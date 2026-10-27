@@ -459,7 +459,7 @@ def explain_seeding_outcome(
         coin_flip_collector,
     )
 
-    h2h_pts, h2h_pd_cap, _ = build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_default)
+    h2h_pts, h2h_pd_cap = build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_default)
 
     # Build BucketStepData from step data already computed inside resolve_bucket.
     bucket_step_data: dict[tuple, BucketStepData] = {}

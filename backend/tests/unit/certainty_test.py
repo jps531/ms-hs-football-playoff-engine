@@ -8,8 +8,6 @@ from backend.api.models.responses import BracketAdvancementOdds, HomeGameOdds
 from backend.helpers.certainty import (
     CERTAIN_EPS,
     UNCERTAIN_FLOOR,
-    is_certain,
-    is_impossible,
     keep_uncertain,
     settle,
     settle_pair,
@@ -33,7 +31,6 @@ class TestHelpers:
     def test_floor_is_far_outside_the_cutoff(self):
         """Every reader's cutoff sits well inside the floor, so a kept-uncertain chance never reads as certain."""
         assert CERTAIN_EPS < UNCERTAIN_FLOOR
-        assert not is_certain(1 - UNCERTAIN_FLOOR) and not is_impossible(UNCERTAIN_FLOOR)
 
     def test_keep_uncertain(self):
         assert keep_uncertain(0.0) == UNCERTAIN_FLOOR

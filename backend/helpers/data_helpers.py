@@ -8,7 +8,6 @@ helpers for mascot normalisation and colour parsing / hex mapping.
 
 import re
 import unicodedata
-from collections.abc import Mapping
 
 from bs4 import BeautifulSoup
 
@@ -368,31 +367,6 @@ def with_predecessor_ratings(prior: dict[str, float], season: int) -> dict[str, 
     return out
 
 
-def as_float_or_none(x):
-    """Convert a value to float, returning None for missing or invalid inputs.
-
-    Args:
-        x: Any value to attempt conversion.
-
-    Returns:
-        A float if conversion succeeds, or None if x is None, an empty string,
-        or otherwise cannot be converted.
-    """
-    if x is None:
-        return None
-    if isinstance(x, str) and x.strip() == "":
-        return None
-    try:
-        return float(x)
-    except (TypeError, ValueError):
-        return None
-
-
-def _pad(n: int) -> str:
-    """Zero-pad an integer to at least 2 digits."""
-    return f"{n:02d}"
-
-
 def _month_to_num(m: str) -> int | None:
     """Convert a month name or abbreviation to its 1-based integer number."""
     m = m.lower().rstrip(".")
@@ -457,31 +431,6 @@ def parse_text_section(text: str, start_phrase: str, end_phrase: str) -> str:
         return ""
 
     return match.group(1).strip()
-
-
-def _get_field(r: object, attr: str, alt_key: str | None = None):
-    """Fetch a named field from a dataclass instance or a Mapping.
-
-    Tries ``getattr`` first (dataclass path), then key lookup on the Mapping.
-    Falls back to ``alt_key`` to handle ``class`` / ``class_`` naming
-    discrepancies between dict rows and the School dataclass.
-
-    Args:
-        r: A School dataclass instance or a dict-like Mapping.
-        attr: Primary attribute/key name to fetch.
-        alt_key: Fallback key name tried when ``attr`` is absent in a Mapping.
-
-    Returns:
-        The field value, or None if neither ``attr`` nor ``alt_key`` is found.
-    """
-    if hasattr(r, attr):
-        return getattr(r, attr)
-    if isinstance(r, Mapping):
-        if attr in r:
-            return r[attr]
-        if alt_key and alt_key in r:
-            return r[alt_key]
-    return None
 
 
 def clean_school_name(raw: str) -> str:

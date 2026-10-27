@@ -2,17 +2,14 @@
 
 Wraps Playwright for JavaScript-rendered pages (MHSAA, AHSFHS) and the
 requests library for static content.  Also provides small utilities for
-fuzzy string matching, Next.js ``__NEXT_DATA__`` extraction, and recursive
-dict iteration used by the scraping pipelines.
+fuzzy string matching and recursive dict iteration used by the scraping
+pipelines.
 """
 
-import json
-import re
 import time
 from difflib import SequenceMatcher
 
 import requests
-from bs4 import BeautifulSoup
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
@@ -26,8 +23,6 @@ from backend.helpers.data_helpers import SPACE_RE
 # --- WEB REQUEST CONFIG ---
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
-
-AHSFHS_EXPECTED_TEXT = re.compile(r"\bDate\s+Opponent\s+Score\b", re.I)
 
 # -------------------------
 # Helpers
@@ -63,52 +58,9 @@ def fetch_article_text(url: str) -> str:
     return text
 
 
-def _probe_exists(url: str, timeout=10) -> bool:
-    """
-    Light probe: HEAD (follow redirects) -> fallback GET(stream=True).
-    Returns True if final status is 200.
-    """
-    headers = {"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"}
-    try:
-        r = requests.head(url, headers=headers, timeout=timeout, allow_redirects=True)
-        if r.status_code == 200:
-            return True
-        # Some CDNs don’t like HEAD; try a tiny GET
-        r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True, stream=True)
-        return r.status_code == 200
-    except requests.RequestException:
-        return False
-
-
-def _ensure_trailing_slash(u: str) -> str:
-    """Append a trailing slash to a URL if one is not already present."""
-    return u if u.endswith("/") else (u + "/")
-
-
 def _ratio(a: str, b: str) -> float:
     """Return the SequenceMatcher similarity ratio between two strings (0.0–1.0)."""
     return SequenceMatcher(None, a, b).ratio()
-
-
-def _extract_next_data(html: str) -> dict:
-    """Parse and return the ``__NEXT_DATA__`` JSON payload from a Next.js page.
-
-    Args:
-        html: Full HTML source of a Next.js-rendered page.
-
-    Returns:
-        The parsed JSON object from the ``<script id="__NEXT_DATA__">`` tag.
-
-    Raises:
-        RuntimeError: If the tag is missing or its content is empty.
-    """
-    soup = BeautifulSoup(html, "html.parser")
-    script = soup.find("script", id="__NEXT_DATA__")
-    if script is not None:
-        content = script.get_text()
-        if content:
-            return json.loads(content)
-    raise RuntimeError("Search page missing __NEXT_DATA__")
 
 
 def _iter_dicts(obj):

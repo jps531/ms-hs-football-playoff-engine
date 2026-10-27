@@ -120,20 +120,6 @@ def _configure() -> None:
     )
 
 
-def upload_logo(local_path: str, school_name: str, logo_type: LogoType = "primary") -> str:
-    """Upload a school logo and return the path to store in the DB."""
-    _configure()
-    public_id = f"logos/{logo_type}/{school_name.replace(' ', '_')}"
-    cloudinary.uploader.upload(
-        local_path,
-        public_id=public_id,
-        asset_folder=f"logos/{logo_type}",
-        overwrite=True,
-        invalidate=True,
-    )
-    return public_id
-
-
 def upload_helmet(local_path: str, school_name: str, year: int, image_type: HelmetImageType, helmet_id: int) -> str:
     """Upload a helmet image and return the path to store in the DB."""
     _configure()
@@ -174,9 +160,8 @@ def upload_submission_logo(local_path: str, school_name: str, logo_type: LogoTyp
 def upload_team_logo(local_path: str, school_name: str, logo_type: LogoType, team_logo_id: int) -> str:
     """Upload a published logo asset and return the path to store in team_logos.image_url.
 
-    Path: ``logos/{logo_type}/{school_normalized}_{team_logo_id}``. Distinct from
-    :func:`upload_logo` (the legacy school-column-only path) — this one is keyed by
-    team_logos.id, since a school can now have multiple historical assets per logo_type.
+    Path: ``logos/{logo_type}/{school_normalized}_{team_logo_id}``, keyed by team_logos.id,
+    since a school can have multiple historical assets per logo_type.
     A genuinely new upload, not a rename of any submitted reference.
     """
     _configure()

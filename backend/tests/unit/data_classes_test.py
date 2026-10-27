@@ -1,8 +1,7 @@
 """Unit tests for backend.helpers.data_classes.
 
 Covers the DB-mapped dataclass serialization/deserialization methods
-(as_db_tuple, from_db_tuple) for School, Game, Location, Bracket,
-BracketTeam, and BracketGame, plus the equal_win_prob default function,
+(as_db_tuple, from_db_tuple) for School, Game, Location and BracketTeam, plus the equal_win_prob default function,
 and the GameResult / MarginCondition scenario condition types.
 """
 
@@ -11,8 +10,6 @@ from datetime import date
 import pytest
 
 from backend.helpers.data_classes import (
-    Bracket,
-    BracketGame,
     BracketTeam,
     Game,
     GameResult,
@@ -53,26 +50,6 @@ _SCHOOL_FULL = School(
     primary_color="#003366",
     secondary_color="#FFFFFF",
 )
-
-
-def test_school_as_schools_tuple() -> None:
-    """as_schools_tuple returns the correct 8-field tuple for the schools table."""
-    t = _SCHOOL_FULL.as_schools_tuple()
-    assert t == (
-        "Greenwood",
-        "Greenwood",
-        "38930",
-        33.5162,
-        -90.1793,
-        "Bulldogs",
-        "#003366",
-        "#FFFFFF",
-    )
-
-
-def test_school_as_school_seasons_tuple() -> None:
-    """as_school_seasons_tuple returns (school, season, class_, region)."""
-    assert _SCHOOL_FULL.as_school_seasons_tuple() == ("Greenwood", 2025, 5, 3)
 
 
 def test_school_from_db_tuple_4col() -> None:
@@ -305,33 +282,6 @@ def test_location_from_db_tuple_bad_length_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bracket
-# ---------------------------------------------------------------------------
-
-_BRACKET = Bracket(name="2025 5A Bracket", season=2025, class_=5, source="mhsaa")
-
-
-def test_bracket_as_db_tuple() -> None:
-    """as_db_tuple returns a 4-field tuple for the brackets table."""
-    assert _BRACKET.as_db_tuple() == ("2025 5A Bracket", 2025, 5, "mhsaa")
-
-
-def test_bracket_from_db_tuple_4col() -> None:
-    """from_db_tuple with 4 columns populates all Bracket fields."""
-    b = Bracket.from_db_tuple(("2025 5A Bracket", 2025, 5, "mhsaa"))
-    assert b.name == "2025 5A Bracket"
-    assert b.season == 2025
-    assert b.class_ == 5
-    assert b.source == "mhsaa"
-
-
-def test_bracket_from_db_tuple_bad_length_raises() -> None:
-    """from_db_tuple raises ValueError for rows that don't have exactly 4 columns."""
-    with pytest.raises(ValueError):
-        Bracket.from_db_tuple(("name", 2025))
-
-
-# ---------------------------------------------------------------------------
 # BracketTeam
 # ---------------------------------------------------------------------------
 
@@ -339,7 +289,7 @@ _BRACKET_TEAM = BracketTeam(bracket_id=7, school="Greenwood", season=2025, seed=
 
 
 def test_bracket_team_as_db_tuple() -> None:
-    """as_db_tuple returns a 5-field tuple for the bracket_teams table."""
+    """as_db_tuple returns (bracket_id, school, season, seed, region)."""
     assert _BRACKET_TEAM.as_db_tuple() == (7, "Greenwood", 2025, 1, 3)
 
 
@@ -355,58 +305,6 @@ def test_bracket_team_from_db_tuple_bad_length_raises() -> None:
     """from_db_tuple raises ValueError for rows that don't have exactly 5 columns."""
     with pytest.raises(ValueError):
         BracketTeam.from_db_tuple((7, "Greenwood", 2025))
-
-
-# ---------------------------------------------------------------------------
-# BracketGame
-# ---------------------------------------------------------------------------
-
-_BRACKET_GAME_FULL = BracketGame(
-    bracket_id=7,
-    round="quarterfinals",
-    game_number=1,
-    home="Greenwood",
-    away="Starkville",
-    home_region=3,
-    home_seed=1,
-    away_region=2,
-    away_seed=2,
-    next_game_id=99,
-)
-
-
-def test_bracket_game_as_db_tuple() -> None:
-    """as_db_tuple returns a 10-field tuple for the bracket_games table."""
-    t = _BRACKET_GAME_FULL.as_db_tuple()
-    assert t == (7, "quarterfinals", 1, "Greenwood", "Starkville", 3, 1, 2, 2, 99)
-
-
-def test_bracket_game_from_db_tuple_3col() -> None:
-    """from_db_tuple with 3 columns sets matchup fields to None."""
-    bg = BracketGame.from_db_tuple((7, "quarterfinals", 1))
-    assert bg.bracket_id == 7
-    assert bg.round == "quarterfinals"
-    assert bg.game_number == 1
-    assert bg.home is None
-    assert bg.away is None
-    assert bg.home_region is None
-    assert bg.next_game_id is None
-
-
-def test_bracket_game_from_db_tuple_10col() -> None:
-    """from_db_tuple with 10 columns populates all BracketGame fields including matchup."""
-    row = (7, "quarterfinals", 1, "Greenwood", "Starkville", 3, 1, 2, 2, 99)
-    bg = BracketGame.from_db_tuple(row)
-    assert bg.home == "Greenwood"
-    assert bg.away == "Starkville"
-    assert bg.home_seed == 1
-    assert bg.next_game_id == 99
-
-
-def test_bracket_game_from_db_tuple_bad_length_raises() -> None:
-    """from_db_tuple raises ValueError for rows with neither 3 nor 10 columns."""
-    with pytest.raises(ValueError):
-        BracketGame.from_db_tuple((7, "quarterfinals", 1, "extra"))
 
 
 # ---------------------------------------------------------------------------

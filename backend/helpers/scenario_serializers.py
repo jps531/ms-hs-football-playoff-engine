@@ -10,12 +10,10 @@ Round-trip guarantee:
     deserialize_complete_scenarios(serialize_complete_scenarios(cs)) == cs
 """
 
-from typing import cast
 
 from backend.helpers.data_classes import (
     GameResult,
     HomeGameCondition,
-    HomeGameScenario,
     MarginCondition,
     PDRankCondition,
     TiebreakDecision,
@@ -141,22 +139,6 @@ def deserialize_atom(data: list[dict]) -> list:
 # ---------------------------------------------------------------------------
 # HomeGameScenario (a condition tuple + explanation, hosting-domain container)
 # ---------------------------------------------------------------------------
-
-
-def serialize_home_game_scenario(sc: HomeGameScenario) -> dict:
-    """Serialize a single HomeGameScenario to a JSON-safe dict."""
-    return {
-        "conditions": [serialize_condition(c) for c in sc.conditions],
-        "explanation": sc.explanation,
-    }
-
-
-def deserialize_home_game_scenario(d: dict) -> HomeGameScenario:
-    """Deserialize a dict produced by serialize_home_game_scenario back to a HomeGameScenario."""
-    return HomeGameScenario(
-        conditions=tuple(cast(HomeGameCondition, deserialize_condition(c)) for c in d["conditions"]),
-        explanation=d["explanation"],
-    )
 
 
 # ---------------------------------------------------------------------------

@@ -1731,27 +1731,6 @@ def render_scenarios(scenarios: list[dict], playoff_seeds: int = 4) -> str:
     return "\n".join(lines).rstrip()
 
 
-def render_division_scenarios(
-    teams: list[str],
-    completed: list[CompletedGame],
-    remaining: list[RemainingGame],
-    scenario_atoms: dict | None = None,
-    playoff_seeds: int = 4,
-    pa_win: int = 14,
-    base_margin_default: int = 7,
-) -> str:
-    """Enumerate all scenarios and render them as human-readable text.
-
-    Convenience wrapper that runs enumerate_division_scenarios() then
-    render_scenarios().  For production use, prefer loading pre-computed
-    scenarios from the database and calling render_scenarios() directly.
-    """
-    scenarios = enumerate_division_scenarios(
-        teams, completed, remaining, scenario_atoms, playoff_seeds, pa_win, base_margin_default
-    )
-    return render_scenarios(scenarios, playoff_seeds)
-
-
 # ---------------------------------------------------------------------------
 # Pre-playoff home-game scenario integration
 # ---------------------------------------------------------------------------
