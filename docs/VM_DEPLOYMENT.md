@@ -1,6 +1,6 @@
 # Production / VM Deployment (AWS Lightsail)
 
-This project is deployed on an AWS Lightsail Ubuntu instance (`mshsfootball.com`). On an x86_64 Linux VM the API runs in Docker normally — no Apple Silicon crypto limitation.
+This project is deployed on an AWS Lightsail Ubuntu instance (`mshsfootball.com`). The server runs the production compose file on its own, without `docker-compose.local.yml`: nginx in front, on ports 80 and 443.
 
 ## One-time instance setup
 

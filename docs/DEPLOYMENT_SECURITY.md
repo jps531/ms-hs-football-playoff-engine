@@ -18,7 +18,7 @@ Items already fixed in code are **not** listed here — see git history for thos
 - [ ] Set `ENVIRONMENT=production` (public API docs off, `Secure` session cookie, wildcard CORS refused).
 - [ ] Set `FRONTEND_ORIGIN=https://yourdomain.com` — the API refuses to start with a wildcard in non-local mode, and Turnstile checks tokens against its hostname.
 - [ ] Rotate `POSTGRES_PASSWORD` from the `.env.example` placeholder to a 32+ character random password (e.g. `openssl rand -hex 32`). Compose has no fallback and refuses to start without one.
-- [ ] Ensure `.env.local` and `.env.non-docker.local` are never committed — `.gitignore` covers them but double-check with `git ls-files | grep env`.
+- [ ] Ensure `.env.local` (and any other `.env.*` file) is never committed — `.gitignore` covers them but double-check with `git ls-files | grep env`.
 - [ ] Consider a secrets manager (AWS Secrets Manager, GCP Secret Manager, or Docker Secrets) instead of flat `.env` files for production credentials.
 
 ### Database

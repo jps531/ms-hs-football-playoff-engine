@@ -38,7 +38,7 @@ Click **Save Changes**.
 
 **Step 5 — Copy credentials to your `.env` files**
 
-In both `.env.local` and `.env.non-docker.local`:
+In `.env.local`:
 
 ```
 AUTH0_DOMAIN=<Domain from Step 2>
