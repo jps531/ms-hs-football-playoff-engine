@@ -1,6 +1,6 @@
-// Visit and feature counts, through PostHog Cloud, as the methodology page's
-// "What we measure" describes. Off unless the server has a PostHog project
-// key (client-config's posthog_key). No cookies or browser storage
+// Visit and feature counts, through PostHog Cloud, as the About page's
+// "What visitor metrics we capture" describes. Off unless the server has a
+// PostHog project key (client-config's posthog_key). No cookies or browser storage
 // (cookieless mode: PostHog counts unique visitors from a daily hash), no
 // autocapture or session recording: only page views and the named events
 // the app sends, which never carry form text or anything personal. The

@@ -18,12 +18,12 @@ outside the code.
   that doesn't exist (a region a class doesn't have) is caught by the app,
   which tells search engines `noindex`.
 - **Links between pages.** Breadcrumbs (Home › Class 3A › Region 6-3A) on
-  class, region, bracket and methodology pages, and the 1A–7A class picker in
+  class, region, bracket and About pages, and the 1A–7A class picker in
   every page's HTML.
 - **Structured data.** `BreadcrumbList` on each of those pages and `WebSite`
   (the site's name for search results) on the front page, as JSON-LD in the
   generated head tags.
-- **`sitemap.xml`** (front page, methodology, every class, region and bracket
+- **`sitemap.xml`** (front page, About page, every class, region and bracket
   page, with the snapshot date as `lastmod`), linked from `robots.txt`.
 - **Not indexed:** the API, its docs, `/moderate`, `/feedback` (an
   `X-Robots-Tag: noindex` header). `/api/` is deliberately *not* blocked in
@@ -48,7 +48,7 @@ outside the code.
    Without a `www` DNS record nobody reaches it anyway, so this is only needed
    if you add one.
 4. **Links from elsewhere** are what move a new site up: school and booster
-   pages, local sports writers (the methodology page has a citation line),
+   pages, local sports writers (the About page has a citation line),
    fan groups, your portfolio.
 
 ## Checking

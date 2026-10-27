@@ -3,8 +3,8 @@
 Visit and feature counts go to PostHog Cloud (US), set up so that nothing
 personal is stored: the only personal data PostHog receives is the IP address
 and browser that every request carries, which it hashes into a daily visitor
-count and then discards. The methodology page's "What we measure" section
-(`nginx/html/methodology.html#measure`) is the public description of this;
+count and then discards. The About page's "What visitor metrics we capture" section
+(`nginx/html/about.html#measure`) is the public description of this;
 keep the two in step: a new event or property means a new line there.
 
 ## How it's wired
@@ -69,7 +69,7 @@ text.
      save. Without it PostHog ignores cookieless events.
    - **Settings → Project → Privacy → IP data capture configuration**: discard
      client IP data, so addresses aren't stored with events. (A US
-     organization doesn't discard by default.) The methodology page says
+     organization doesn't discard by default.) The About page says
      addresses aren't kept, so check this before setting the key.
 3. Put the project API key (`phc_…`) in `.env.local` as `POSTHOG_PROJECT_KEY`,
    and the project's web analytics URL (for example
@@ -100,7 +100,7 @@ The numbers are views and clicks, not people: opening the same page twice counts
    dashboard in PostHog first to rebuild it after the script changes.
 3. Delete the key afterwards if you won't run the script again.
 
-The methodology page doesn't load `analytics.js`, so views of it aren't counted; a click
+The About page doesn't load `analytics.js`, so views of it aren't counted; a click
 from the front page to it is (`home_link_clicked`).
 
 ## Tagging the links you share
