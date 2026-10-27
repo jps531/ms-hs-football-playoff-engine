@@ -13,14 +13,14 @@ When a step separates some but not all of three or more tied teams, the teams st
 
 ## Raw rule text
 
-The text below was transcribed from the handbook before the site cited V7 and hasn't been compared line by line with that edition; confirm against the current handbook before relying on it for a rules dispute. Its list markers read as seven steps because of the page-break artifact noted below: markers 2 and 3 are one step. This is the policy the tiebreaker engine implements; see [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for how it's computed and stored, and [PLAYOFF_HOME_RULES.md](PLAYOFF_HOME_RULES.md) for the related playoff home-site rules.
+The text below was transcribed from an earlier edition of the handbook and checked against V7 in October 2026: the tiebreaker rules didn't change. Its list markers read as seven steps because of the page-break artifact noted below: markers 2 and 3 are one step. This is the policy the tiebreaker engine implements; see [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for how it's computed and stored, and [PLAYOFF_HOME_RULES.md](PLAYOFF_HOME_RULES.md) for the related playoff home-site rules.
 
 <!-- Steps 2-3 below carry a likely page-break/OCR artifact from the source
      document: "designated" is immediately followed by a "3." list marker and
      then "games." on its own line, mirroring the "designated region games"
      phrasing used in steps 1 and 4. Left as originally transcribed rather
-     than silently rewritten — verify against the current MHSAA handbook
-     before treating the exact wording of steps 2-3 as authoritative. -->
+     than silently rewritten; the October 2026 check against V7 confirmed
+     it's one step. -->
 
 1.	Head-to-head competition in the designated region games between the tied teams: three or more teams this will be combined records of the teams involved in the tie.
 2.	How the tied teams did against the highest ranked or seeded teams in the designated
