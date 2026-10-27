@@ -33,21 +33,6 @@ from backend.helpers.tiebreakers import (
 # -------------------------
 
 
-def pct_str(x: float) -> str:
-    """Format a float as a percentage string with no more than 2 significant digits.
-
-    Args:
-        x: A probability in the range [0, 1].
-
-    Returns:
-        A string like ``"50%"`` or ``"33%"``.
-    """
-    val = x * 100.0
-    if abs(val - round(val)) < 1e-9:
-        return f"{int(round(val))}%"
-    return f"{val:.0f}%".rstrip("0").rstrip(".")
-
-
 # -------------------------
 # Scenario enumeration
 # -------------------------

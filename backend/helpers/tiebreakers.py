@@ -79,10 +79,9 @@ def standings_from_mask(
 def build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_default=7):
     """Build head-to-head maps used by tiebreaker Steps 1 and 3.
 
-    Constructs three defaultdicts indexed by (team_a, team_b):
+    Constructs two defaultdicts indexed by (team_a, team_b):
     - Step 1: h2h_points (win=1, tie=0.5) among tied teams.
     - Step 3: capped head-to-head point differential (±12 per game).
-    - pd_uncap for diagnostics (raw, uncapped differential).
 
     Args:
         completed: List of CompletedGame instances for finished region games.
@@ -94,12 +93,11 @@ def build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_defa
             in `margins`.
 
     Returns:
-        A 3-tuple ``(h2h_points, capped_pd_map, pd_uncap)`` where each is a
+        A 2-tuple ``(h2h_points, capped_pd_map)`` where each is a
         defaultdict keyed by (team_a, team_b).
     """
     h2h_points = defaultdict(float)
     capped_pd_map = defaultdict(int)
-    pd_uncap = defaultdict(int)
     # Completed H2H
     for comp_game in completed:
         # Step 1: H2H points tally
@@ -114,9 +112,6 @@ def build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_defa
         cap_a = max(-12, min(12, comp_game.pd_a))
         capped_pd_map[(comp_game.a, comp_game.b)] += cap_a
         capped_pd_map[(comp_game.b, comp_game.a)] -= cap_a
-        # Raw margin (not used in sort, kept for reference)
-        pd_uncap[(comp_game.a, comp_game.b)] += comp_game.pd_a
-        pd_uncap[(comp_game.b, comp_game.a)] -= comp_game.pd_a
     # Remaining H2H (driven by mask & margins)
     for i, rem_game in enumerate(remaining):
         bit = (outcome_mask >> i) & 1
@@ -125,15 +120,11 @@ def build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_defa
             h2h_points[(rem_game.a, rem_game.b)] += 1.0
             capped_pd_map[(rem_game.a, rem_game.b)] += min(m, 12)
             capped_pd_map[(rem_game.b, rem_game.a)] -= min(m, 12)
-            pd_uncap[(rem_game.a, rem_game.b)] += m
-            pd_uncap[(rem_game.b, rem_game.a)] -= m
         else:
             h2h_points[(rem_game.b, rem_game.a)] += 1.0
             capped_pd_map[(rem_game.a, rem_game.b)] -= min(m, 12)
             capped_pd_map[(rem_game.b, rem_game.a)] += min(m, 12)
-            pd_uncap[(rem_game.a, rem_game.b)] -= m
-            pd_uncap[(rem_game.b, rem_game.a)] += m
-    return h2h_points, capped_pd_map, pd_uncap
+    return h2h_points, capped_pd_map
 
 
 # -------------------------
@@ -363,7 +354,7 @@ def resolve_bucket(
     if len(bucket) == 1:
         return bucket[:]
 
-    h2h_pts, h2h_pd_cap, _ = build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_default)
+    h2h_pts, h2h_pd_cap = build_h2h_maps(completed, remaining, outcome_mask, margins, base_margin_default)
     # Step 1 tally across the bucket
     step1 = dict.fromkeys(bucket, 0.0)
     for s in bucket:

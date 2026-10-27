@@ -81,11 +81,6 @@ export function marginText(min, max) {
   return ` by ${lo}–${max - 1}`;
 }
 
-const ORDINAL_WORDS = { 1: "first", 2: "second", 3: "third", 4: "fourth" };
-export function ordinalWord(n) {
-  return ORDINAL_WORDS[n] ?? `${n}th`;
-}
-
 /** "Oct 24" from an ISO date string, without timezone drift. */
 export function shortDate(iso) {
   if (!iso) return "";

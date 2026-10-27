@@ -15,7 +15,6 @@ from backend.helpers.insights import (
     _MAX_TOTAL_REGION,
     KeyInsight,
     _atom_is_simple_game_results,
-    _cond_game_indices,
     _conditions_frozenset,
     _deduplicate,
     _extract_clinch_playoffs_insights,
@@ -285,39 +284,6 @@ def test_masks_satisfying_condition_game_not_in_remaining():
     conds = (GameResult("X", "Y"),)
     masks = _masks_satisfying_conditions(conds, remaining)
     assert set(masks) == {0, 1}  # no constraint from X vs Y, so all masks valid
-
-
-# ---------------------------------------------------------------------------
-# _cond_game_indices
-# ---------------------------------------------------------------------------
-
-
-def test_cond_game_indices_single():
-    """Single condition maps to index 0."""
-    indices = _cond_game_indices((GameResult("Beta", "Gamma"),), _REMAINING_1)
-    assert indices == [0]
-
-
-def test_cond_game_indices_two_different_games():
-    """Two distinct conditions map to their respective indices."""
-    remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
-    conds = (GameResult("A", "B"), GameResult("C", "D"))
-    assert _cond_game_indices(conds, remaining) == [0, 1]
-
-
-def test_cond_game_indices_deduplicates():
-    """Duplicate conditions yield a deduplicated index list."""
-    remaining = [RemainingGame("A", "B"), RemainingGame("C", "D")]
-    conds = (GameResult("A", "B"), GameResult("A", "B"))
-    assert _cond_game_indices(conds, remaining) == [0]
-
-
-def test_cond_game_indices_reversed_pair():
-    """Condition with reversed winner/loser still maps to the correct index."""
-    # condition winner/loser may be reversed vs RemainingGame a/b order
-    remaining = [RemainingGame("Beta", "Gamma")]
-    conds = (GameResult("Gamma", "Beta"),)  # Gamma(b) wins
-    assert _cond_game_indices(conds, remaining) == [0]
 
 
 # ---------------------------------------------------------------------------

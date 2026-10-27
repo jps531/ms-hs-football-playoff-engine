@@ -121,7 +121,6 @@ class InGameConfig:
 #: Injectable in-game win probability function type.
 #: Called as ``fn(pregame_prob, current_margin, seconds_remaining)`` and returns
 #: P(team_a wins).  Use for regulation only; see ``compute_ot_win_prob`` for OT.
-InGameWinProbFn = Callable[[float, int, int], float]
 
 
 @dataclass(frozen=True)
@@ -219,8 +218,6 @@ class School:
 
     Maps to a JOIN of the ``schools`` table (static identity metadata) and
     the ``school_seasons`` table (per-season class/region assignment).
-    When writing to the database, use ``as_schools_tuple()`` for the
-    ``schools`` table and ``as_school_seasons_tuple()`` for ``school_seasons``.
     """
 
     school: str
@@ -235,22 +232,6 @@ class School:
     primary_color: str = ""
     secondary_color: str = ""
 
-    def as_schools_tuple(self):
-        """Positional tuple for the ``schools`` table (static fields only)."""
-        return (
-            self.school,
-            self.city,
-            self.zip,
-            self.latitude,
-            self.longitude,
-            self.mascot,
-            self.primary_color,
-            self.secondary_color,
-        )
-
-    def as_school_seasons_tuple(self):
-        """Positional tuple for the ``school_seasons`` table."""
-        return (self.school, self.season, self.class_, self.region)
 
     @classmethod
     def from_db_tuple(cls, row: Iterable):
@@ -481,55 +462,15 @@ class Location:
 
 
 # --- Data class for a row in the bracket table ---
-@dataclass
-class Bracket:
-    """DB-mapped dataclass for a row in the ``brackets`` table."""
-
-    name: str
-    season: int
-    class_: int
-    source: str | None
-
-    def as_db_tuple(self):
-        """Return a positional tuple suitable for INSERT/UPDATE queries."""
-        return (
-            self.name,
-            self.season,
-            self.class_,
-            self.source,
-        )
-
-    @classmethod
-    def from_db_tuple(cls, row: Iterable):
-        """Create a Bracket object from a database row tuple or sequence.
-
-        Args:
-            row: An iterable of 4 column values
-                (name, season, class_, source).
-
-        Returns:
-            A Bracket instance populated from the row.
-
-        Raises:
-            ValueError: If the row does not have exactly 4 columns.
-        """
-        row = tuple(row)
-        if len(row) == 4:
-            name, season, class_, source = row
-            return cls(
-                name=name,
-                season=season,
-                class_=class_,
-                source=source,
-            )
-        else:
-            raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
 
 
-# --- Data Class for a row in the bracket_teams table ---
+# --- Data class for one team's place in a playoff bracket ---
 @dataclass
 class BracketTeam:
-    """DB-mapped dataclass for a row in the ``bracket_teams`` table."""
+    """One team's seed and region in a playoff bracket, for ``apply_bracket_game_results``.
+
+    Not stored: there is no bracket table. ``bracket_id`` just groups the teams of one bracket.
+    """
 
     bracket_id: int
     school: str
@@ -595,96 +536,6 @@ class FormatSlot:
     away_region: int
     away_seed: int
     north_south: str
-
-
-# --- Data class for a row in the bracket_games table ---
-@dataclass
-class BracketGame:
-    """DB-mapped dataclass for a row in the ``bracket_games`` table."""
-
-    bracket_id: int
-    round: str
-    game_number: int
-    home: str | None
-    away: str | None
-    home_region: int | None
-    home_seed: int | None
-    away_region: int | None
-    away_seed: int | None
-    next_game_id: int | None
-
-    def as_db_tuple(self):
-        """Return a positional tuple suitable for INSERT/UPDATE queries."""
-        return (
-            self.bracket_id,
-            self.round,
-            self.game_number,
-            self.home,
-            self.away,
-            self.home_region,
-            self.home_seed,
-            self.away_region,
-            self.away_seed,
-            self.next_game_id,
-        )
-
-    @classmethod
-    def from_db_tuple(cls, row: Iterable):
-        """Create a BracketGame object from a database row tuple or sequence.
-
-        Args:
-            row: An iterable of column values.  Accepts rows with 3 columns
-                (bracket_id, round, game_number) — all matchup fields default
-                to None — or 10 columns (all fields).
-
-        Returns:
-            A BracketGame instance populated from the row.
-
-        Raises:
-            ValueError: If the row has an unexpected number of columns.
-        """
-        row = tuple(row)
-        if len(row) == 3:
-            bracket_id, round_, game_number = row
-            return cls(
-                bracket_id=bracket_id,
-                round=round_,
-                game_number=game_number,
-                home=None,
-                away=None,
-                home_region=None,
-                home_seed=None,
-                away_region=None,
-                away_seed=None,
-                next_game_id=None,
-            )
-        elif len(row) == 10:
-            (
-                bracket_id,
-                round_,
-                game_number,
-                home,
-                away,
-                home_region,
-                home_seed,
-                away_region,
-                away_seed,
-                next_game_id,
-            ) = row
-            return cls(
-                bracket_id=bracket_id,
-                round=round_,
-                game_number=game_number,
-                home=home,
-                away=away,
-                home_region=home_region,
-                home_seed=home_seed,
-                away_region=away_region,
-                away_seed=away_seed,
-                next_game_id=next_game_id,
-            )
-        else:
-            raise ValueError(f"Unexpected number of columns in DB row: {len(row)}")
 
 
 # --- Data class for raw results of completed games used in tiebreakers ---

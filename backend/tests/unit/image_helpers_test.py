@@ -18,7 +18,6 @@ from backend.helpers.image_helpers import (
     save_temp,
     sniff_image,
     upload_helmet,
-    upload_logo,
     upload_submission_helmet_image,
     upload_submission_logo,
     upload_team_logo,
@@ -83,40 +82,6 @@ class TestConfigure:
         monkeypatch.setenv("CLOUDINARY_API_SECRET", "testsecret")
         with pytest.raises(KeyError):
             _configure()
-
-
-class TestUploadLogo:
-    """upload_logo uploads to logos/{logo_type}/{school} and returns the public_id."""
-
-    def test_returns_expected_public_id(self, cloudinary_env):
-        """Return value is the Cloudinary public_id for the uploaded logo."""
-        with patch("cloudinary.config"), patch("cloudinary.uploader.upload"):
-            result = upload_logo("/tmp/logo.png", "Taylorsville", "primary")
-        assert result == "logos/primary/Taylorsville"
-
-    def test_spaces_replaced_with_underscores(self, cloudinary_env):
-        """School names with spaces are normalized to underscores in the path."""
-        with patch("cloudinary.config"), patch("cloudinary.uploader.upload"):
-            result = upload_logo("/tmp/logo.png", "South Panola", "secondary")
-        assert result == "logos/secondary/South_Panola"
-
-    def test_default_logo_type_is_primary(self, cloudinary_env):
-        """Omitting logo_type defaults to 'primary'."""
-        with patch("cloudinary.config"), patch("cloudinary.uploader.upload"):
-            result = upload_logo("/tmp/logo.png", "Taylorsville")
-        assert result == "logos/primary/Taylorsville"
-
-    def test_upload_called_with_correct_args(self, cloudinary_env):
-        """cloudinary.uploader.upload receives the correct public_id and folder."""
-        with patch("cloudinary.config"), patch("cloudinary.uploader.upload") as mock_upload:
-            upload_logo("/tmp/logo.png", "Taylorsville", "primary")
-        mock_upload.assert_called_once_with(
-            "/tmp/logo.png",
-            public_id="logos/primary/Taylorsville",
-            asset_folder="logos/primary",
-            overwrite=True,
-            invalidate=True,
-        )
 
 
 class TestUploadHelmet:

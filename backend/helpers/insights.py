@@ -98,22 +98,6 @@ def _masks_satisfying_conditions(
     return [m for m in range(1 << R) if all((m >> i) & 1 == bit for i, bit in required.items())]
 
 
-def _cond_game_indices(
-    conditions: tuple,
-    remaining: list[RemainingGame],
-) -> list[int]:
-    """Return remaining-game indices for each condition (in order, no duplicates)."""
-    seen: set[int] = set()
-    result: list[int] = []
-    for cond in conditions:
-        for i, rg in enumerate(remaining):
-            if {rg.a, rg.b} == {cond.winner, cond.loser} and i not in seen:
-                seen.add(i)
-                result.append(i)
-                break
-    return result
-
-
 def _overlaps(a: GameResult, b: GameResult) -> bool:
     """True when some result of their game satisfies both (same winner, margin ranges overlapping)."""
     if a.winner != b.winner:

@@ -16,7 +16,6 @@ from backend.helpers.scenarios import (
     compute_bracket_odds,
     compute_first_round_home_odds,
     determine_scenarios,
-    pct_str,
     projected_margin_share,
 )
 from backend.tests.data.standings_2025_3_7a import (
@@ -24,33 +23,6 @@ from backend.tests.data.standings_2025_3_7a import (
     expected_3_7a_remaining_games_full,
     teams_3_7a,
 )
-
-# ---------------------------------------------------------------------------
-# pct_str
-# ---------------------------------------------------------------------------
-
-
-class TestPctStr:
-    """Tests for pct_str formatting helper."""
-
-    def test_round_percentages(self):
-        """Round percentages (0%, 25%, 50%, 100%) render without decimal noise."""
-        assert pct_str(0.0) == "0%"
-        assert pct_str(0.5) == "50%"
-        assert pct_str(1.0) == "100%"
-        assert pct_str(0.25) == "25%"
-
-    def test_non_round_percentage(self):
-        """Non-integer percentages are rounded to the nearest whole number."""
-        # 1/3 → 33.333...% — takes the else branch
-        result = pct_str(1 / 3)
-        assert result == "33%"
-
-    def test_non_round_two_thirds(self):
-        """Two-thirds rounds up to 67%."""
-        result = pct_str(2 / 3)
-        assert result == "67%"
-
 
 # ---------------------------------------------------------------------------
 # compute_bracket_odds
