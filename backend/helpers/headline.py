@@ -33,7 +33,7 @@ _PLAYOFF_SEEDS = 4
 # "Locked" means certain (backend.helpers.certainty).
 _CERTAIN = 1 - CERTAIN_EPS
 
-# Scenario paths are margin-accurate only at R <= 5 (see SCENARIO_COMPUTATION.md);
+# Scenario paths are margin-accurate only at R <= 5 (see docs/architecture/SCENARIO_COMPUTATION.md);
 # at R = 6 they're win/loss-only, so they can't be stated as guarantees.
 _PATHS_MARGIN_ACCURATE_MAX_R = 5
 _MAX_HEADLINE_CONDITIONS = 3

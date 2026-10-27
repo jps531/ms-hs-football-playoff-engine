@@ -1,7 +1,7 @@
 # Playoff format template for a new MHSAA season.
 # Copy this file, rename it (e.g. playoff_formats_2027.yaml), fill in the
 # values, and run backend/scripts/add_playoff_season.py with it (its docstring
-# and docs/SEASON_SETUP.md have the command).
+# and docs/operations/SEASON_SETUP.md have the command).
 #
 # The script is idempotent: re-running for the same season skips existing rows.
 #

@@ -1636,7 +1636,7 @@ PRINCIPLES_HTML = (
     "<strong><em>No generative AI models are used to produce any metrics you see on this website</em></strong>.",
 )
 # Each step matches the pipeline's thresholds (region_scenarios_pipeline.py: _R_ALWAYS_MARGIN,
-# _R_MAX_ATOMS, _R_MAX_COMPUTE; api_helpers.DISPLAY_THRESHOLD); docs/SCENARIO_COMPUTATION.md has the detail.
+# _R_MAX_ATOMS, _R_MAX_COMPUTE; api_helpers.DISPLAY_THRESHOLD); docs/architecture/SCENARIO_COMPUTATION.md has the detail.
 HOW_IT_WORKS_HTML = (
     "When there are <strong>5 or fewer</strong> games remaining in a given region, our logic builds the final "
     "standings for each possible combination of outcomes, breaks any ties, and counts how often each team lands "

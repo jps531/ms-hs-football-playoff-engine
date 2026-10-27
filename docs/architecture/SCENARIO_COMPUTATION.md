@@ -100,7 +100,7 @@ The odds columns are `DOUBLE PRECISION` (`sql/migrations/2026_10_odds_double_pre
 | 0 | Exact (1 outcome) | Yes | Yes | Yes (facts only) | Yes |
 | 1–5 | Exact (2^R × 12^R, margins weighted by 2025 frequency) | Yes, margin-accurate | Yes | Yes, margin-accurate | Yes |
 | 6–10 | 2^R at a default 7-point margin | Yes, win/loss only | Yes | Yes, 12^k verified | Key insights only |
-| 11–15 | 2^R at a default 7-point margin | Empty (QMC limit) | Yes, flat | Empty | No |
+| 11–15 | 2^R at a default 7-point margin | Empty (Quine–McCluskey limit) | Yes, flat | Empty | No |
 | > 15 | Monte Carlo, 50K samples per mode (Elo for Projected, coin flips for Toss-up) | Empty | Empty | Empty | No |
 
 ---

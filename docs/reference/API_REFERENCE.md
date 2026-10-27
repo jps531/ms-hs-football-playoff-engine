@@ -6,6 +6,8 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 **Rate limits**: simulate endpoints (Standings, Hosting, Bracket) and most Submissions endpoints are IP-rate-limited via `slowapi` and return `429` when exceeded. Limits are noted per-row below.
 
+**Contents:** [Meta](#meta) · [Standings](#standings--standings) · [Rankings](#rankings--rankings) · [Hosting](#hosting--hosting) · [Bracket](#bracket--bracket) · [Games](#games--games) · [Ratings](#ratings--ratings) · [Insights](#insights--insights) · [Admin](#admin--admin) · [Images](#images--images) · [Auth](#auth--auth) · [Users](#users--users) · [Submissions](#submissions--submissions) · [Moderation](#moderation--moderation)
+
 ## Meta
 
 | Method | Path | Description |
@@ -51,12 +53,12 @@ specific seed pinned to that exact position — not alphabetical order.
 |--------|------|-------------|
 | GET | `/summary` | Statewide summary: one card per region across every class. Params: `season` (required), `date` (optional, default latest). Returns `leader`, `num_teams`, `num_clinched`, `num_eliminated`, `teams_alive`, `volatility`, and per-team `statuses` for every region. Each entry in `statuses[]` includes `status`, `clinched_seed` (the specific seed number the team has mathematically locked in, or `null`), and `record` (overall + region W/L/T). No scenario data is read. |
 | GET | `/{clazz}` | Full standings tables for every region in one class, one request. Params: `season` (required), `date` (optional, default latest). Each region returns the same per-team detail as `/{clazz}/{region}` (`odds`, `bracket_odds`, `home_game_odds`, `clinched`, `eliminated`, `coin_flip_needed`) minus `scenarios`/`computation_state`. Only reads from stored snapshots (no on-demand fallback); 404 if the class has no data yet. |
-| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤5 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team `paths` breakdown to each team entry). See [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for the full computation model. |
+| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤5 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team `paths` breakdown to each team entry). See [SCENARIO_COMPUTATION.md](../architecture/SCENARIO_COMPUTATION.md) for the full computation model. |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team. Same params. |
 | POST | `/{clazz}/{region}/simulate` | **(owner)** Apply hypothetical game results and return updated seeding odds. Same `include_team_scenarios` param. Rate limited: 10/minute. |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | **(owner)** Same, filtered to one team. Rate limited: 10/minute. |
 
-**Response fields per team** (`teams[]`):
+### Response fields per team (`teams[]`)
 - `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus Projected (Elo-weighted) variants `p1_weighted`–`p_playoffs_weighted`
 - `bracket_odds` — probability of advancing to each playoff round (`second_round` through `champion`), unweighted and weighted. `null` for on-demand/simulate paths.
 - `home_game_odds` — P(hosts round | reaches round) for each round (`first_round` through `semifinals`), unweighted and weighted. `null` for on-demand/simulate paths.
@@ -67,7 +69,7 @@ specific seed pinned to that exact position — not alphabetical order.
   - `conditions` — OR-of-AND-groups (outer array = alternative paths, inner array = conditions that must all hold), already ordered broadest/most-likely-first by the boolean minimizer. Each condition is tagged by `type`: `"game_result"` (the common case — `school`/`date`/`opponent`/`required_result`/`margin_class`/`min_margin`/`max_margin`, `school` always from the winner's perspective; `min_margin` is inclusive, `max_margin` exclusive and `null` when unbounded, so `8`/`11` means "by 8–10"), `"margin_sum"` (a linear margin constraint spanning multiple games — `games`/`op`/`threshold` instead of a single school/opponent, plus its plain-English rendering in `description`), or `"coin_flip"`/`"pd_rank"` (tiebreaker-only, not tied to any remaining game — `description` text only). `date` is `null` when the underlying game's date can't be resolved. `margin_class` is `null` except at R≤5 (margin-sensitive tier) — see SCENARIO_COMPUTATION.md.
   - `human_text` — fallback copy only; the structured `conditions` form is the contract, not this string
 
-**Top-level response fields**:
+### Top-level response fields
 - `scenarios` — when `scenarios_available` is `true`, each entry includes `game_winners` (which team wins each remaining game to produce this seeding), `tiebreaker_groups`, `coinflip_groups`, `outcomes` (team → seed number) and `explanation`: for each tie that reaches the playoff places in this finish, `teams`, `places`, `steps` (one sentence per tiebreaker step, as in `tiebreaks` below; a remaining game reads "X beats Y", and the steps stop where the order still depends on a margin, a score or a coin flip) and `when` (the alternative sets of remaining-game winners, `{winner, loser}`, under which these steps hold; empty when they hold however this finish comes about). An empty list when no tie reaches the playoff places; `null` for a snapshot stored before explanations were added. Computed only with five or fewer games left, where margins are exact (the only time `scenarios` is returned).
 - `headline` — one plain-English sentence stating the most interesting fact about the race right now (e.g. "Oxford has the region won, and Madison Central clinches the last playoff spot with a win over Clinton."). Built only from locked seeds, margin-verified key insights, and — with five or fewer games left — single-path scenario conditions, so it never states anything the engine hasn't proven. See `backend/helpers/headline.py`.
 - `key_insights` — each condition carries `winner`/`loser` plus `min_margin`/`max_margin` (same semantics as path conditions above).
@@ -83,7 +85,7 @@ Cross-region ranked list of teams for a given class (or statewide), sorted by an
 | GET | `/{clazz}` | **(owner)** All teams in a class ranked by the chosen metric. Required params: `season`, `sort_by`. Optional: `date`, `region`, `min_odds`, `limit` |
 | GET | `/statewide` | **(owner)** Top teams across all classes, ranked by Elo (the only metric that's meaningfully comparable across class sizes — playoff-odds columns aren't, since each class runs its own bracket). Params: `season` (required), `date`, `limit` (default 25) |
 
-**`sort_by` values** (`/{clazz}` only):
+### `sort_by` values (`/{clazz}` only)
 
 *Seeding odds* — `odds_1st`, `odds_2nd`, `odds_3rd`, `odds_4th`, `odds_playoffs` and their `_weighted` variants
 
@@ -93,7 +95,7 @@ Cross-region ranked list of teams for a given class (or statewide), sorted by an
 
 *Rating* — `elo`, `rpi` (sourced from `team_ratings`, joined in on matching `season`/`as_of_date`)
 
-**Optional params (`/{clazz}`):**
+### Optional params (`/{clazz}`)
 - `date` — use the most recent snapshot on or before this date (defaults to today)
 - `region` — restricts which rows are *returned*; never changes a team's `rank`, which always reflects position within the full class (this endpoint is cross-region by design)
 - `min_odds` — exclude teams with `sort_by` value ≤ this threshold (e.g. `0.001` drops eliminated teams). No natural equivalent for `elo`/`rpi`; a no-op there at the default of `0.0`
@@ -114,7 +116,7 @@ Each entry in `teams[]` includes `record`, `seeding_odds`, `bracket`, `home`, `e
 | POST | `/{clazz}/{region}/simulate` | **(owner)** Apply hypothetical results and return updated hosting odds. See simulate input format under Bracket. Rate limited: 10/minute. |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | **(owner)** Same, filtered to one team. Rate limited: 10/minute. |
 
-**Response fields per team** (`teams[]`):
+### Response fields per team (`teams[]`)
 
 Each team has four round entries (`first_round`, `second_round`, `quarterfinals`, `semifinals`), each with:
 - `p_host_given_reach` — P(hosts round | reaches round). `null` if the team cannot reach this round.
@@ -140,7 +142,7 @@ For 1A–4A classes, all four rounds are populated. For 5A–7A, `second_round` 
 - `host_conditions` — `null` unless `include_conditions=true` is passed; when present, the OR-of-AND-groups of conditions under which this team would host, given it reaches the round (an empty list means "computed, but this team never hosts"). Each condition is the same `PathConditionModel` envelope the standings `paths` field uses, with `type` values `bracket_advances` (another bracket position must advance) and `seed_required` (the team must finish with a specific seed — expanded into the underlying regular-season game(s) that determine it when that's computable, otherwise left as a descriptive condition). Pass `include_conditions=true` to populate it — this mirrors `/hosting`'s `include_scenarios`, since it runs the same combinatorially-guarded scenario computation (once per region feeding the slot).
 - `reach_conditions` — `null` unless `include_conditions=true` is passed (same flag as `host_conditions`, no separate opt-in); when present, the OR-of-AND-groups of conditions under which this team reaches the round *at all* — i.e. wins every round strictly before it (reaching a round means playing in it, not winning it). Never an empty list for a team present in `teams[]` (unlike `host_conditions`, which can be `[]` for a team that never hosts) — a single empty AND-group (`[[]]`) means reaching is unconditional (e.g. `first_round`, where nothing needs to be won). Uses `seed_required` (same as `host_conditions`) plus a new `bracket_win` type: the team must beat a specific opponent (identified by `region`/`seed`/`school`) in `round_name`. Enumerates every possible opponent per prior round (not a coarser "must win N rounds" summary) — bounded by bracket depth, up to 8 groups for a 1A-4A team reaching the semifinals.
 
-**Response fields per slot** (`teams[]`):
+### Response fields per slot (`teams[]`)
 - `region`, `seed` — bracket slot identifier. `school` is set only when a team has clinched that seed; otherwise `null`.
 - All 32 bracket slots are always returned. Eliminated teams appear with `school` populated and zero odds for all remaining rounds.
 - Advancement odds: `second_round`, `quarterfinals`, `semifinals`, `finals`, `champion` (non-weighted, 50/50 matchups).
@@ -247,9 +249,9 @@ Each rating entry includes `as_of_date` (pipeline run date), `games_played`, and
 
 Every endpoint in this router requires moderator+ (`Authorization: Bearer <token>`) via a router-level dependency — there is no anonymous or plain-`user` access to any `/admin/*` route, even where a per-row "Auth" note isn't repeated below.
 
-**Season setup**
+### Season setup
 
-A new season's playoff bracket format (`playoff_formats` and `playoff_format_slots`) has no endpoint: it's seeded from a YAML config in `sql/seeds/` by `backend/scripts/add_playoff_season.py`, run in the worker container (see [SEASON_SETUP.md](SEASON_SETUP.md#playoff-bracket-format)). The endpoints below assign the season's championship venue.
+A new season's playoff bracket format (`playoff_formats` and `playoff_format_slots`) has no endpoint: it's seeded from a YAML config in `sql/seeds/` by `backend/scripts/add_playoff_season.py`, run in the worker container (see [SEASON_SETUP.md](../operations/SEASON_SETUP.md#playoff-bracket-format)). The endpoints below assign the season's championship venue.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -270,18 +272,18 @@ A new season's playoff bracket format (`playoff_formats` and `playoff_format_slo
 | PUT | `/locations/{id}/overrides` | Set one override field on a venue. Valid fields: `home_team`, `latitude`, `longitude` |
 | DELETE | `/locations/{id}/overrides/{field}` | Clear one override field on a venue |
 
-**Games (manual-only columns)**
+### Games (manual-only columns)
 
 | Method | Path | Description |
 |--------|------|-------------|
 | PUT | `/games/{school}/{date}/helmet` | Assign or clear the helmet design worn by `school` in a game. Body: `{ "helmet_design_id": 42 }` (or `null` to clear) |
 
-**School seasons**
+### School seasons
 
 | Method | Path | Description |
 |--------|------|-------------|
 | PATCH | `/school-seasons/{school}/{season}` | Toggle `is_active` for a school in a season (pipeline never writes this column). Body: `{ "is_active": false }` |
-| PUT | `/school-seasons/{school}/{season}` | Create or overwrite a `school_seasons` row with explicit `class`, `region`, and `is_active` (upsert — safe to re-run). Creates the parent `schools` row if it doesn't exist. Use for mid-cycle changes the Regions pipeline can't handle: consolidations, closures, new schools. Requires moderator+. Body: `{ "class": 5, "region": 2, "is_active": true, "copy_identity_from": "Old School Name" }` — `copy_identity_from` is optional; when supplied, copies mascot, colors, city, zip, latitude, and longitude from that school into the new school's base columns immediately, before the MHSAA identity and NCES pipelines have run. 404s if the source school does not exist. See [SEASON_SETUP.md](SEASON_SETUP.md) for a worked consolidation example. |
+| PUT | `/school-seasons/{school}/{season}` | Create or overwrite a `school_seasons` row with explicit `class`, `region`, and `is_active` (upsert — safe to re-run). Creates the parent `schools` row if it doesn't exist. Use for mid-cycle changes the Regions pipeline can't handle: consolidations, closures, new schools. Requires moderator+. Body: `{ "class": 5, "region": 2, "is_active": true, "copy_identity_from": "Old School Name" }` — `copy_identity_from` is optional; when supplied, copies mascot, colors, city, zip, latitude, and longitude from that school into the new school's base columns immediately, before the MHSAA identity and NCES pipelines have run. 404s if the source school does not exist. See [SEASON_SETUP.md](../operations/SEASON_SETUP.md) for a worked consolidation example. |
 
 **Locations CRUD** — the pipeline never writes this table; venues are otherwise seeded by SQL only.
 

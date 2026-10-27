@@ -12,7 +12,7 @@
 --     -v api_password="$API_DB_PASSWORD" -v pipeline_password="$PIPELINE_DB_PASSWORD" \
 --     -f sql/app_roles.sql
 --
--- Fresh databases get it from sql/init_app_roles.sh. See docs/VM_DEPLOYMENT.md.
+-- Fresh databases get it from sql/init_app_roles.sh. See docs/operations/VM_DEPLOYMENT.md.
 
 \set ON_ERROR_STOP on
 

@@ -19,7 +19,7 @@
 --
 -- After running it, run the daily update (or region-scenarios-data-pipeline
 -- then share-assets) for 2026 so today's numbers carry Leake Central's 2025
--- Elo rating forward (see docs/SEASON_SETUP.md).
+-- Elo rating forward (see docs/operations/SEASON_SETUP.md).
 
 BEGIN;
 
@@ -77,7 +77,7 @@ BEGIN
 END $$;
 
 -- The season: Leake takes Leake Central's 2026 class and region (an existing
--- Leake row, e.g. from docs/SEASON_SETUP.md, is brought in line and made active).
+-- Leake row, e.g. from docs/operations/SEASON_SETUP.md, is brought in line and made active).
 INSERT INTO school_seasons (school, season, class, region, is_active)
 SELECT 'Leake', season, class, region, TRUE
 FROM school_seasons WHERE school = 'Leake Central' AND season >= 2026

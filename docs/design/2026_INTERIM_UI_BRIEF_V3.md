@@ -1,5 +1,9 @@
 # 2026 Interim UI — Brief v3
 
+> **Status (October 2026):** shipped. Items 2 (pre-rendered pages), 4 (the Elo
+> rating in the expanded team row) and 5 (the About page's "what we don't do"
+> and limits) are built; 3 and 6 are standing rules; 7 was verification for 2027.
+
 Follow-on to `2026_INTERIM_UI_BRIEF.md` (design system, banned patterns,
 accessibility floor) and `2026_INTERIM_UI_UPDATE.md` (URL shape, bracket view,
 OG images). Both still apply in full. This document assumes that work is
@@ -102,9 +106,9 @@ Two acceptable forms, in order of preference:
    or twenty statewide with ratings, as an illustration of what the model
    thinks.
 
-**Do not build a full rankings page.** Ratings density is the other site's
-entire product and competing there is both off-mission and a losing fight. The
-goal is to make the model legible, not to publish a leaderboard.
+**Do not build a full rankings page.** Ratings and power indexes are well
+covered elsewhere, and competing there is off-mission. The goal is to make the
+model legible, not to publish a leaderboard.
 
 Vocabulary rule, applied here and everywhere: **ratings are numbers, rankings
 are positions.** An Elo value is a rating. If a position is shown, it is a
@@ -139,10 +143,9 @@ to this site, and the clean per-region URLs now make a citation easy.
 
 ## 6. Labeling discipline
 
-A standing rule, prompted by a specific failure mode observed on a competing
-site, where a list of all-time program win totals is presented under the
-heading "Power Rankings" — leading a casual reader to take historical records
-as current-season strength.
+A standing rule, against a common failure: a list of all-time program win
+totals presented under a heading like "Power Rankings", which leads a casual
+reader to take historical records as current-season strength.
 
 **Every number on the site must be labeled with exactly what it measures, in
 terms a reader cannot misread.**
@@ -155,7 +158,7 @@ terms a reader cannot misread.**
   form.
 
 When a label is ambiguous, lengthen it. Precision costs a few characters and
-is the entire basis of the site's credibility relative to its neighbors.
+is the entire basis of the site's credibility.
 
 ---
 

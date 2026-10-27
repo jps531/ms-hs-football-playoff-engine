@@ -1,48 +1,48 @@
 # API Testing Checklist — Post Season Backfill
 
-Use these checks in the Swagger UI after seeding a full season to verify data integrity and algorithm correctness.
+Use these checks after seeding a full season to verify data integrity and algorithm correctness: in Swagger UI locally (`http://localhost:8000/docs`; production turns it off), or with `curl` against the server.
 
-The simulate, ratings, rankings and win-probability checks need the owner's token: in Swagger UI, **Authorize** with it first (they're owner only; see [API_REFERENCE.md](API_REFERENCE.md)).
+The simulate, ratings, rankings and win-probability checks need the owner's token: in Swagger UI, **Authorize** with it first (they're owner only; see [API_REFERENCE.md](../reference/API_REFERENCE.md)).
 
 ---
 
 ## Standings (`GET /api/v1/standings/{clazz}/{region}`)
 
-**1. Final-week odds should be 0.0 or 1.0 for all teams, except in a coin-flip tie** ✅
+**1. Final-week odds should be 0.0 or 1.0 for all teams, except in a coin-flip tie**
 Pick any class/region after the final regular-season date — `odds.p1`–`p4` should be exactly `0.0` or `1.0`, and every team should be either `clinched: true` or `eliminated: true`. The one exception is a tie only a coin flip settles (`coin_flip_needed: true`): each flip result counts equally, so those teams show fractions such as `0.5`, and one whose playoff spot rides on the flip is neither clinched nor eliminated. Fractional odds anywhere else at the final date mean the pipeline didn't finish running.
 
-**2. Odds sum to 1.0 per position** ✅
+**2. Odds sum to 1.0 per position**
 Exactly one team finishes in each place, so the sum of `odds.p1` across a region's teams should be 1.0 (to within rounding noise). Same for `p2`–`p4`, in any region with at least four teams.
 
-**3. Time-travel consistency with `?date=`** ✅
+**3. Time-travel consistency with `?date=`**
 Hit the same region with `?date=YYYY-10-10` (mid-season), `?date=YYYY-10-24` (late season), and no date. Odds should move from fractional → sparser → binary. If mid-season returns the same binary result as end-of-season, the snapshot lookup is broken.
 
-**4. `scenarios_available` flips at the right threshold** ✅
+**4. `scenarios_available` flips at the right threshold**
 Early in the season (e.g. `?date=YYYY-09-12`), `scenarios_available` should be `false` (too many remaining games). Around the final 2 weeks it should flip to `true` with an actual `scenarios` list populated with `game_winners`, `tiebreaker_groups`, `coinflip_groups`, and `outcomes`.
 
-**4a. Weighted seeding odds are present and plausible** ✅
+**4a. Weighted seeding odds are present and plausible**
 Each team in `teams[].odds` should have `p1_weighted`, `p2_weighted`, `p3_weighted`, `p4_weighted`, and `p_playoffs_weighted` alongside the unweighted values. The weighted (Projected) odds weight each outcome by Elo win probabilities, so they'll differ from the unweighted (Toss-up) ones whenever Elo ratings exist. Like the unweighted ones, they should sum to 1.0 across a region's teams per position.
 
-**4b. Bracket advancement odds are populated** ✅
+**4b. Bracket advancement odds are populated**
 Each team in `teams[].bracket_odds` should have `second_round` through `champion` (unweighted and weighted). For a clinched 1-seed, `second_round` should be ≥ 0.9. For an eliminated team, all bracket odds should be `0.0`.
 
-**4c. Home game odds are populated** ✅
+**4c. Home game odds are populated**
 Each team in `teams[].home_game_odds` should have `first_round` through `semifinals` (unweighted and weighted). The 1-seed's `first_round` should be `1.0` once clinched.
 
-**4d. `computation_state` reflects pipeline status** ✅
+**4d. `computation_state` reflects pipeline status**
 The response should include a `computation_state` object with `margin_sensitive` (boolean) and `margin_compute_status` (string). With five or fewer region games left expect `true` and `not_needed`; with more, `false` and `skipped`. (`pending`, `running` and `complete` are allowed by the schema but never written.)
 
 ---
 
 ## Games (`GET /api/v1/games`)
 
-**5. Game count sanity** ✅
+**5. Game count sanity**
 `GET /api/v1/games?season=YYYY&class=7&region=3` — count the returned games. A typical 7-team region plays 6 games each, so ~21 unique matchups total. Fewer than expected means some scraping missed a week.
 
-**6. No duplicate games** ✅
+**6. No duplicate games**
 Each game should appear exactly once. If you see the same matchup twice on the same date, the dedup logic has a bug.
 
-**7. All completed games have `status = "Final"` and `final: true`** ✅
+**7. All completed games have `status = "Final"` and `final: true`**
 After backfill, every game from before the season's end should have `final: true` and `status: "Final"`. Spot-check a known Week 1 game — score, status, and `final` should all be populated. Playoff games should have a non-null `round` (e.g. `"first_round"`, `"quarterfinals"`). Regular-season games should have `round: null`. Check that `overtime` is `0` for non-OT games and `> 0` for overtime results.
 
 **7a. Championship Game venue falls back to `championship_venues` when `location_id` is `NULL`**
@@ -52,22 +52,22 @@ Find (or seed) a Championship Game row with `location_id IS NULL` for a season/c
 
 ## Bracket (`GET /api/v1/bracket?season=YYYY&class=5`)
 
-**8. Clinched slots show the correct school** ✅
+**8. Clinched slots show the correct school**
 The `school` field on each bracket entry should match the actual seeding outcome from that season. Compare a few known seeds against actual MHSAA results — this is the highest-confidence sanity check.
 
-**9. Non-clinched slots have `school: null` early in the season** ✅
+**9. Non-clinched slots have `school: null` early in the season**
 Query with `?date=YYYY-10-01` — most slots should have `school: null` and fractional odds. If every slot shows a school name even on that early date, `clinched` flags were written too aggressively.
 
-**9a. Weighted advancement odds are present and differ from unweighted** ✅
+**9a. Weighted advancement odds are present and differ from unweighted**
 Each entry should have `second_round_weighted` through `champion_weighted` populated (not `null`) for a season with Elo ratings. For a clinched strong 1-seed, `second_round_weighted` should be higher than `second_round`.
 
-**9b. Hosting odds are present on every entry** ✅
+**9b. Hosting odds are present on every entry**
 Each entry should have a non-null `hosting` object with `first_round`, `second_round`, `quarterfinals`, `semifinals` — each with `p_host_given_reach` and `p_host_overall` fields. For a 5A–7A class, `hosting.second_round.p_host_given_reach` and `.p_host_overall` should both be `null`. For a 1A–4A class, `hosting.second_round` should be fully populated.
 
-**9c. Seed-1 first_round hosting p_host_given_reach is always 1.0** ✅
+**9c. Seed-1 first_round hosting p_host_given_reach is always 1.0**
 For every region, the seed-1 slot's `hosting.first_round.p_host_given_reach` should be exactly `1.0` — seed-1 is always the home team in round 1 by bracket definition.
 
-**9d. Weighted hosting fields are `null` for a season with no Elo data** ✅
+**9d. Weighted hosting fields are `null` for a season with no Elo data**
 Query the bracket for an older season that has no Elo ratings (e.g. `?season=2010`). All `*_weighted` fields — both advancement and hosting — should be `null`.
 
 **9e. Simulate with winner/loser school names returns updated odds**
@@ -92,37 +92,37 @@ Manually set `location`/`location_id` overrides (via `PUT /admin/games/{school}/
 
 ## Ratings (`GET /api/v1/ratings?season=YYYY`)
 
-**10. Elo ordering makes intuitive sense** ✅
+**10. Elo ordering makes intuitive sense**
 The highest-Elo teams per class should roughly match the teams that went deepest in the playoffs. If the #1 Elo team in 6A is a team that missed the playoffs, the cross-season carryover or K-factor is misconfigured.
 
-**11. Every active team has a rating** ✅
+**11. Every active team has a rating**
 `GET /api/v1/ratings?season=YYYY&class=7` — the count should match the number of 7A schools. A team missing a rating usually means they had no games scraped.
 
-**11a. Ratings include freshness metadata** ✅
+**11a. Ratings include freshness metadata**
 Each rating entry should include `as_of_date` (the pipeline run date), `games_played` (number of games contributing to the Elo/RPI), and `computed_at` (timestamp). If `games_played` is `0` for a team with known results, the pipeline didn't associate those games with ratings.
 
 ---
 
 ## Hosting (`GET /api/v1/hosting/{clazz}/{region}`)
 
-**12. 1-seeds always have the highest hosting odds** ✅
+**12. 1-seeds always have the highest hosting odds**
 For any completed region, the 1-seed's round-1 hosting odds should be `1.0` (they always host). If a lower seed shows higher odds than the 1-seed, there's a bracket-slot mapping bug.
 
-**12a. Eliminated playoff teams show correct historical hosting facts** ✅
+**12a. Eliminated playoff teams show correct historical hosting facts**
 For a team eliminated mid-bracket (e.g. lost in QF), their hosting odds for rounds they *played* should reflect the actual result (0 or 1), not all-zeros. Example: Leake County (1A region 5) on `?date=2025-11-21` — first_round and quarterfinals p_host_given_reach should be `1`, second_round p_host_given_reach should be `0`, semifinals should be `null`.
 
 ---
 
 ## Simulate (`POST /api/v1/standings/{clazz}/{region}/simulate`)
 
-**13. Simulating all remaining games produces binary odds** ✅
+**13. Simulating all remaining games produces binary odds**
 Take a mid-season snapshot (`?date=` week before the final week) and POST a `simulate` body filling in all remaining region games. Every team's odds should collapse to `0.0` or `1.0`. If they stay fractional, `apply_region_game_results` isn't draining the remaining game list correctly.
 
 ---
 
 ## Admin (`/api/v1/admin`)
 
-**14. `GET /locations` returns all venues** ✅
+**14. `GET /locations` returns all venues**
 The response should include M.M. Roberts Stadium (the usual championship site). If it's missing, the `locations` table wasn't seeded during init.
 
 **15. Seeding a playoff format is idempotent** (`backend/scripts/add_playoff_season.py`, not an endpoint; see [SEASON_SETUP.md](SEASON_SETUP.md))
