@@ -48,4 +48,3 @@ Run from the repository root.
 | `scripts/posthog_dashboard.py` | Builds the PostHog "Site activity" dashboard once; see [ANALYTICS.md](ANALYTICS.md#the-dashboard). |
 | `scripts/prefect_smoke.py` | CI only: checks that a real Prefect flow runs in the worker image. |
 | `backend/scripts/add_playoff_season.py` | Seeds a new season's playoff format into a running database; see [SEASON_SETUP.md](SEASON_SETUP.md). |
-| `backend/scripts/assign_championship_venue.py` | Older way to set the championship venue. It updates only the Championship Game rows in `games`, not `championship_venues`, so use `POST /api/v1/admin/championship-venue` instead (it does both; see [SEASON_SETUP.md](SEASON_SETUP.md)). |
