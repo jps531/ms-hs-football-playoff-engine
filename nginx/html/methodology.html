@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>How it works — Mississippi High School Football</title>
+  <title>About — Mississippi High School Football</title>
   <meta name="description" content="How the seeding odds, playoff scenarios, and bracket outlook for Mississippi high school football are calculated.">
   <meta property="og:site_name" content="Mississippi High School Football">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="How it works — Mississippi High School Football">
+  <meta property="og:title" content="About — Mississippi High School Football">
   <meta property="og:description" content="How the seeding odds, playoff scenarios, and bracket outlook for Mississippi high school football are calculated.">
   <meta property="og:url" content="https://mshsfootball.com/methodology">
   <meta property="og:image" content="https://mshsfootball.com/static/og/site.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://mshsfootball.com/methodology">
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://mshsfootball.com/"},{"@type":"ListItem","position":2,"name":"How it works","item":"https://mshsfootball.com/methodology"}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://mshsfootball.com/"},{"@type":"ListItem","position":2,"name":"About","item":"https://mshsfootball.com/methodology"}]}</script>
   <link rel="icon" type="image/png" href="/static/mark.png">
   <script>
     (() => {
@@ -38,7 +38,7 @@
       <nav class="site-nav" aria-label="Main">
         <a class="site-nav__item" href="/standings/1a" data-nav="standings">Standings</a>
         <a class="site-nav__item" href="/brackets/1a" data-nav="bracket">Bracket</a>
-        <a class="site-nav__item" href="/methodology" data-nav="method" aria-current="page">How it works</a>
+        <a class="site-nav__item" href="/methodology" data-nav="method" aria-current="page">About</a>
       </nav>
       <div class="theme-toggle" role="radiogroup" aria-label="Theme">
         <button type="button" class="theme-toggle__item" role="radio" aria-checked="false" tabindex="-1" data-theme="light" title="Light">
@@ -58,45 +58,121 @@
   </div>
 
   <main id="content" class="page article">
-    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li aria-current="page">How it works</li></ol></nav>
-    <h1 class="title">How it works</h1>
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li aria-current="page">About</li></ol></nav>
+    <h1 class="title">About</h1>
 
     <div class="prose">
+      <h2>About the site</h2>
       <p>
-        Every number on this site comes from playing out the rest of a region’s
-        schedule, every possible way when they can be counted and 50,000
-        simulated ways when they can’t, then applying the MHSAA’s own tiebreaker
-        rules to each outcome. Nothing is hand-picked, and nothing is a pundit’s
-        opinion.
+        This website was developed to answer the question that comes up every
+        October in Mississippi high school football:
+        <strong><em>“What does our playoff picture look like?”</em></strong>
+      </p>
+      <p>
+        This website sets out to answer that question by providing scenarios
+        for every way each region race can finish based on the MHSAA’s
+        tiebreaker rules. This allows us to determine each team’s odds of
+        finishing in each place and therefore in each playoff slot. From there,
+        we look at the playoff bracket and give an outlook for each playoff
+        game, including which teams are likely to play in which slot and which
+        teams are most likely to play at home.
       </p>
 
-      <h2>Every remaining game, every way it could go</h2>
+      <h2>How it works</h2>
+      <ul class="bullets">
+        <li>When there are <strong>5 or fewer</strong> games remaining in a
+          given region, our logic builds the final standings for each possible
+          combination of outcomes, breaks any ties, and counts how often each
+          team lands in each seed. From there, it produces odds for each team
+          and easy-to-read scenarios for every possible outcome.</li>
+        <li>When there are <strong>6 to 10</strong> remaining games in a given
+          region, we still build out each possible outcome, but only display
+          scenario insights for key games, since the full scenario list is
+          generally very long at this stage. From this point on, a tie that
+          comes down to point differential is worked out as if each remaining
+          game were won by 7 points, so the odds in those races are close but
+          not exact. The key-game insights are still checked against every
+          possible margin.</li>
+        <li>When there are <strong>11 to 15</strong> remaining games in a
+          region, we still build out each possible outcome, but do not display
+          any scenarios, as there will be too many to reasonably display.</li>
+        <li>When there are <strong>more than 15</strong> remaining games in a
+          region, it becomes impractical to build out each possible outcome. In
+          these cases, we simulate the rest of the schedule 50,000 times, using
+          each team’s Elo rating to set its chance of winning each game.
+          Toss-up odds get their own 50,000 runs with every game a coin flip.
+          These simulated numbers are used to display each team’s odds of
+          finishing as each seed.</li>
+      </ul>
+
+      <h3>How the site applies MHSAA tiebreaker rules</h3>
       <p>
-        A region with six games left has 64 ways those games can finish. We
-        build the final standings for each one, break any ties, and count how
-        often each team lands in each seed. A team that finishes first in 16
-        of the 64 has a 25% toss-up chance at the region title.
+        When teams finish with the same region record, they’re separated in
+        this order, following the region tiebreaker procedure in the
+        <a href="https://www.misshsaa.com/wp-content/uploads/2026/10/2026-27-MHSAA-Handbook-Final-V7.pdf#page=65">2026–27 MHSAA Handbook</a>:
+      </p>
+      <ol class="steps">
+        <li>Head-to-head results among the tied teams.</li>
+        <li>Results against the highest-finishing teams in the region, working down.</li>
+        <li>Point differential in region games among the tied teams, capped at 12 points per game.</li>
+        <li>Point differential, capped at 12, in region games against the highest-finishing teams, working down.</li>
+        <li>Fewest points allowed in all region games.</li>
+        <li>A coin flip.</li>
+      </ol>
+      <p>
+        Because steps 3, 4 and 5 depend on the score, not just who won, some
+        races turn on margin of victory or points allowed.
       </p>
       <p>
-        Early in the season, when a region has more than 15 games left and
-        there are too many outcomes to list, we simulate the rest of the
-        schedule 50,000 times instead: once using each team’s Elo rating to set
-        its chance of winning each game, for Projected odds, and once with
-        every game a coin flip, for Toss-up odds.
+        <strong>Margin of victory.</strong> Once five or fewer region games
+        remain, we work through every possible winning margin, which is why a
+        scenario can read “Raleigh beats Magee by 8–10.” Odds account for this
+        based on historical scoring margins. With more than five games left,
+        the odds treat every remaining game as won by 7 points, so a tie that
+        comes down to point differential is close but not exact.
+      </p>
+      <p>
+        <strong>Points allowed.</strong> When a tie comes down to fewest points
+        allowed and a tied team still has a game to play, the odds try the
+        remaining games at many different scores drawn from historical games,
+        so each way the tie could break gets its share.
+      </p>
+      <p>
+        <strong>Coin flips.</strong> Once region play is over, teams in a tie
+        that can only be settled by a coin flip are marked with a coin.
       </p>
 
-      <h2>Projected and toss-up odds</h2>
+      <h3>What the scenarios mean</h3>
       <p>
-        Every outcome can be counted two ways, and you can switch between them
-        at the top of each page.
+        Once five or fewer region games remain, each team’s possible outcomes
+        are listed with <strong>exactly</strong> what has to happen. Conditions
+        joined by <strong>AND</strong> must all happen together. When there’s
+        more than one way to get there, the alternatives are separated by
+        <strong>OR</strong>, and any one of them is enough. When every
+        alternative shares some conditions, those come first, and the
+        alternatives follow in a box headed <strong>AND ONE OF</strong>.
+      </p>
+      <p>
+        The Scenarios section lists every way the region can finish, one box
+        each, with its chance in the odds mode you’ve picked.
+      </p>
+      <p>
+        With six to ten games left, we show only results that settle a spot
+        outright, no matter how every other game turns out, checked against
+        every possible winning margin.
+      </p>
+
+      <h3>Projected and toss-up odds</h3>
+      <p>
+        Odds can be calculated two ways, and you can switch between them at
+        the top of each page.
       </p>
       <p>
         <strong>Projected</strong> weights each outcome by how likely it is.
-        Every team carries an Elo rating built from its results, with extra
-        credit for margin of victory and a carryover from last season, and
-        those ratings, plus home-field advantage, set each team’s chance of
-        winning each remaining game. A 70% favorite’s win counts for more
-        than its upset loss.
+        Every team carries an Elo rating built from its results, factoring in
+        margin of victory and a carryover from last season. Those ratings, plus
+        home-field advantage, set each team’s chance of winning each remaining
+        game.
       </p>
       <p>
         <strong>Toss-up</strong> treats every remaining game as a coin flip, so
@@ -105,11 +181,11 @@
         in, regardless of how likely any one game is.
       </p>
       <p>
-        Clinched and eliminated mean the same thing in both. A team that’s in
-        no matter what is 100% either way.
+        Clinched and eliminated mean the same thing in both odds modes. A team
+        that’s in no matter what is 100% either way.
       </p>
 
-      <h2 id="elo">How the Elo ratings work</h2>
+      <h3 id="elo">How the Elo ratings work</h3>
       <p>
         Each team’s Elo rating is a single number built from its game results.
         Beating a team raises a rating and losing lowers it, by more when the
@@ -118,11 +194,15 @@
         games.
       </p>
       <p>
-        Ratings start each season from a class baseline, 1000 in 1A rising by
-        50 per class to 1300 in 7A, and teams with a previous season start
-        halfway between that baseline and where they finished last year. The
-        home team gets a 65-point boost. A 100-point edge on a neutral field
-        works out to about a 64% chance to win; a 200-point edge, about 76%.
+        Ratings start from a class baseline, at 1000 in 1A rising by 50 per
+        class to 1300 in 7A; teams that played the previous season start
+        halfway between that baseline and where they finished it.
+      </p>
+      <p>
+        When evaluating the odds of a team winning a matchup, the home team
+        gets a 65-point boost. A 100-point edge in Elo rating on a neutral
+        field works out to about a 64% chance to win; a 200-point edge gives a
+        team about a 76% chance to win.
       </p>
       <p>
         A rating is a number, not a ranking: it says how strong the results
@@ -131,150 +211,115 @@
         opening its row in the standings.
       </p>
 
-      <h2>Breaking ties the way the MHSAA does</h2>
+      <h3>What “clinched” and “eliminated” mean</h3>
       <p>
-        When teams finish with the same region record, they’re separated in
-        this order, following the region tiebreaker procedure in the
-        <a href="https://www.misshsaa.com/wp-content/uploads/2026/06/2026-27-MHSAA-Handbook-Final-V6.pdf">2026–27 MHSAA Handbook</a>:
+        <strong>Clinched</strong> means a team makes the playoffs, or locks in
+        a specific seed, in every possible outcome of the remaining games.
       </p>
-      <ol class="steps">
-        <li>Head-to-head results among the tied teams.</li>
-        <li>Results against the highest-finishing teams in the region, working down. Teams with the same region record count as one when the tied teams’ results against them are compared.</li>
-        <li>Point differential in region games among the tied teams, capped at 12 points per game.</li>
-        <li>Point differential, capped at 12, in region games against the highest-finishing teams, compared the same way.</li>
-        <li>Fewest points allowed in all region games.</li>
-        <li>A coin flip.</li>
-      </ol>
       <p>
-        Because steps 3, 4 and 5 depend on the score, not just the winner, some
-        races turn on margin of victory or points allowed. Once five or fewer region games remain,
-        we work through every winning margin as well, which is why a scenario
-        can read “Raleigh beats Magee by 8–10.” With more games left, the odds
-        work out such a tie as if each remaining game were won by 7 points, so
-        they’re close but not exact. Each margin counts as often as
-        it happened in 2025’s region games: across all of them for Toss-up
-        odds, and among games where the winner had a similar chance for
-        Projected odds. In 2025, a heavy favorite won by 12 or more over nine
-        times in ten; a coin-flip game was won by that much about half the time.
-        When a tie comes down to points allowed with a tied team still to play,
-        the odds try the remaining games at scores drawn from 2025’s region
-        games. While games remain, a tie that
-        would come down to a coin flip counts each way the flip could go
-        equally. Once region play is over, a team whose tie can only be
-        settled by a coin flip is marked with a coin.
+        <strong>Eliminated</strong> means it misses the playoffs in every one.
+        We show 0% and 100% only for those certainties; anything short of that
+        reads as less than 1% or more than 99%.
       </p>
 
-      <h2>What the scenarios mean</h2>
-      <p>
-        Once five or fewer region games remain, each team’s possible outcomes are
-        listed with exactly what has to happen. Conditions joined by AND must all
-        happen together. When there’s more than one way to get there, the
-        alternatives are separated by OR, and any one of them is enough. When
-        every alternative shares some conditions, those come first, and the
-        alternatives follow in a box headed AND ONE OF.
-        The Scenarios section lists every way the region can finish, one box
-        each, with its chance in the odds mode you’ve picked; together they add
-        up to 100% (give or take rounding).
-      </p>
-      <p>
-        With six to ten games left, we show only results that settle a spot
-        outright, no matter how every other game turns out, checked against
-        every possible winning margin. The headline at the
-        top of each region is drawn from these same proven facts.
-      </p>
-
-      <h2>What “clinched” and “eliminated” mean</h2>
-      <p>
-        Clinched means a team makes the playoffs, or locks in a specific seed,
-        in every possible outcome of the remaining games. Eliminated means it
-        misses the playoffs in every one. We show 0% and 100% only for those
-        certainties; anything short of that reads as less than 1% or more than
-        99%.
-      </p>
-
-      <h2 id="bracket">How the bracket works</h2>
+      <h3 id="bracket">How the bracket works</h3>
       <p>
         The bracket page follows the MHSAA’s playoff bracket for each class.
         Every first-round spot belongs to a region seed (Region 3 #1 Seed, for
         example), and every later game is fed by the winners of two earlier
         ones. A team’s chance to play in a game is its chance of finishing in a
-        seed that feeds that game, combined with its chance of winning every
+        seed that feeds that game combined with its chance of winning every
         game on the way there. Once a playoff game is played, its winner is
         fixed.
       </p>
       <p>
-        In Toss-up odds, every playoff game is a coin flip. In Projected odds,
-        a playoff game’s chances come from Elo ratings: for each seed, the
-        ratings of the teams that could finish there, weighted by how likely
-        each one is to get it, with the better seed treated as the home team.
+        In <em>Toss-up</em> odds mode, every playoff game is a coin flip. In
+        <em>Projected</em> odds mode, a playoff game’s chances come from Elo
+        ratings. For each spot, that includes the ratings of the teams that
+        could finish there, weighted by how likely each one is to get it.
       </p>
       <p>
-        A matchup’s chance is the chance of that exact game happening. Two
-        teams from the same region are handled together, using how often the
-        region’s possible finishes put each in its seed, so a matchup never
-        pairs teams in seeds the standings can’t give them at the same time.
-        Pairings under 0.5% in both odds modes aren’t listed; each game says
-        how many it leaves out.
+        A matchup’s chance is the chance of that exact game happening. A
+        matchup never pairs teams in seeds the standings can’t give them at the
+        same time. Pairings under 0.5% in both odds modes aren’t listed; each
+        game says how many it leaves out.
       </p>
       <p>
-        Who hosts follows the MHSAA’s rules. When two teams from the same
-        region meet, the higher seed always hosts. Otherwise, the higher seed
-        hosts in the first round (and the second round, in 1A–4A); in the
-        quarterfinals, the team that has played fewer home playoff games hosts,
-        then the higher seed; and in the semifinals, the North and South
-        championships, the higher seed hosts. Equal seeds from different
-        regions go to the lower-numbered region in odd years and the
-        higher-numbered region in even years. The state championship is played
-        at a neutral site.
+        Who hosts follows the
+        <a href="https://www.misshsaa.com/2026/10/20/football-playoff-home-team-instructions-2/">MHSAA’s home team rules</a>.
       </p>
+      <ul class="bullets">
+        <li>When two teams from the same region meet, the higher seed always hosts.</li>
+        <li>The higher seed always hosts in the first round (and the second round, in 1A–4A).</li>
+        <li>In the quarterfinals, the team that has played fewer home playoff games hosts, then the higher seed.</li>
+        <li>In the semifinals (the North and South championships), the higher seed always hosts.</li>
+        <li>Equal seeds from different regions go to the lower-numbered region in odd years and the
+          higher-numbered region in even years. The state championship is played at a neutral site.</li>
+      </ul>
 
       <h2>Rules, not AI</h2>
       <p>
-        No AI model produces any number, scenario, or headline on this site.
-        Every result comes from fixed, written-down rules: counting every way
-        the remaining games can go, applying the MHSAA tiebreakers to each one,
-        and, for Projected odds, Elo ratings computed from game results. Even
-        the sentence at the top of each region is assembled from those proven
+        The scenarios, headlines, and numbers on this website all come from
+        rules-based logic and math applied to completed games, the MHSAA’s
+        tiebreaker and playoff rules, and each team’s Elo rating.
+        <strong>No generative AI models are used to produce any metrics you see
+        on this website.</strong>
+      </p>
+      <p>
+        Even the sentence at the top of each region is assembled from proven
         facts by a template, not written by a language model.
       </p>
       <p>
         Given the same games, the rules give the same answer every time. That
         includes the early-season simulation: it’s seeded from the games
-        themselves, so the same games always produce the same simulated runs and
-        the same odds, and the numbers only change when a result does. AI
-        coding tools helped build the website and its code; they play no part
-        in calculating the results.
+        themselves, so the same games always produce the same simulated runs
+        and the same odds, and the numbers only change when a result does.
+      </p>
+      <p>
+        AI coding tools <em>were</em> used to build the website and its code,
+        but they play no part in calculating the results.
       </p>
 
-      <h2>Where the scores come from</h2>
+      <h2>Information and Disclaimers</h2>
+
+      <h3>Where scores come from</h3>
       <p>
         Schedules and scores come from
-        <a href="https://www.ahsfhs.org/">AHSFHS</a>, the source of
-        truth this site relies on for Mississippi high school football results.
-        Region and classification assignments come from the MHSAA. When a
-        score is wrong at the source, it’s wrong here until it’s corrected.
+        <a href="https://www.ahsfhs.org/mississippi/index.asp">AHSFHS</a>, the
+        source of truth this site relies on for Mississippi high school
+        football results. When a score is wrong at the source, it’s wrong here
+        until it’s corrected there or reported to us and approved.
+      </p>
+      <p>
+        Region and classification assignments come from the
+        <a href="https://www.misshsaa.com/2024/11/19/2025-27-football-regions/">MHSAA</a>.
       </p>
 
-      <h2>When it updates</h2>
+      <h3>When it updates</h3>
       <p>
         Every morning at 9:00 AM Central, the latest scores are pulled. As soon
         as that finishes, the standings, odds, scenarios, and playoff brackets
         are recalculated, which can take from a few minutes to about an hour.
-        Results from a Friday night show up Saturday morning. The line under
-        each region’s headline says which week the numbers cover, and the
-        bottom of each page says when they were calculated.
+        <strong>Results from a Friday night show up Saturday morning.</strong>
+      </p>
+      <p>
+        The line under each region’s headline says which week the numbers
+        cover, and the bottom of each page says when they were calculated.
       </p>
 
-      <h2>What we don’t do</h2>
+      <h3>What we don’t do</h3>
       <p>
         We don’t publish point spreads, predicted scores, or betting lines,
-        and we don’t pick winners. Every percentage on this site is the chance
-        of something in the standings or the bracket: a seed, a finish, a
-        playoff spot, a home game, a matchup, or a round reached. Seeds aren’t
-        official until the MHSAA announces them.
+        and we don’t pick winners.
+      </p>
+      <p>
+        Every percentage on this site is the chance of something in the
+        standings or the bracket: a seed, a finish, a playoff spot, a home
+        game, a matchup, or a round reached. <strong>Seeds aren’t official
+        until the MHSAA announces them.</strong>
       </p>
 
-      <h2>What the numbers can’t see</h2>
+      <h3>What the numbers can’t see</h3>
       <p>
         The odds know only the schedule, the scores, and the rules. They
         don’t account for:
@@ -283,119 +328,172 @@
         <li>Injuries, suspensions, or other changes to who’s playing.</li>
         <li>Weather, travel, or anything else that happens on game day.</li>
         <li>Forfeits, score corrections, or schedule changes until they’re
-          recorded at the source, or reported to us and approved.</li>
+          recorded at the source or reported to us and approved.</li>
       </ul>
       <p>
         Early in the season, ratings rest on a class baseline, last year’s
-        results, and only a few games, so Projected odds say less in
-        September than they do in late October. High school seasons are
-        short, and a single game can swing a race. The model hasn’t yet been
-        checked against outside benchmarks; we’re keeping a record of every
-        published number so its accuracy can be measured after the season.
+        results, and only a few games, so Projected odds are often less
+        accurate in September than they are in late October. High school
+        seasons are short, and a single game can swing a race.
       </p>
       <p>
         A 70% chance of finishing first means the team finishes first in 70%
         of the ways the season can play out, counted the way the odds mode
-        describes. It isn’t a guarantee.
+        describes. <strong>It is very much not a guarantee.</strong>
       </p>
 
-      <h2>Not for gambling</h2>
+      <h3>Gambling disclaimer</h3>
       <p>
         The odds on this site are statistical estimates for information and
         entertainment only. They’re meant to help fans understand how a
-        playoff race might unfold. Do not use them to place bets or wagers of
-        any kind.
+        playoff race might unfold. <strong>Do not use them to place bets or
+        wagers of any kind.</strong>
       </p>
       <p>
-        This site, its operators, and its developers accept no responsibility,
-        legal or otherwise, for any losses arising from the use of these
-        numbers for gambling, sports betting, or wagering of any kind, legal
-        or illegal. Use for betting is entirely at your own risk; nothing here
-        is gambling advice, a betting service, or a prediction market. Sports
-        betting is heavily regulated in Mississippi, and wagering on high
-        school athletic events may be illegal under state and federal law.
+        <strong>This site, its operators, and its developers accept no
+        responsibility, legal or otherwise, for any losses arising from the use
+        of these numbers for gambling, sports betting, or wagering of any kind,
+        legal or illegal.</strong>
+      </p>
+      <p>
+        Use for betting is entirely at your own risk; nothing here is gambling
+        advice, a betting service, or a prediction market. Sports betting is
+        heavily regulated in Mississippi, and <strong>wagering on high school
+        athletic events is illegal under
+        <a href="https://www.sos.ms.gov/adminsearch/ACCode/00000682c.pdf">state law</a>.</strong>
       </p>
 
-      <h2>Using these numbers</h2>
+      <h3>Using these numbers</h3>
       <p>
         Using these numbers in a story? Please credit mshsfootball.com and
-        link the region page.
+        link the region page!
+      </p>
+      <p>
+        Use the <a href="/feedback">feedback form</a> or email
+        <a href="mailto:HailStateUnis@gmail.com">HailStateUnis@gmail.com</a> to
+        get in touch with us regarding any questions or concerns.
       </p>
 
-      <h2 id="measure">What we measure</h2>
+      <h3 id="measure">What visitor metrics we capture</h3>
       <p>
         We count visits to learn what’s useful and how people find the site. We
-        use PostHog to do it, with no cookies and nothing stored in your
-        browser, and we never record your name, email, or anything you type.
+        use <a href="https://posthog.com">PostHog</a> to do it, with no cookies
+        and nothing stored in your browser, and we never record your name,
+        email, or anything you type.
       </p>
       <p>
         When you view a page, we record the page’s address and title; the site
         or link that sent you here, including any campaign tag on the link
-        (like utm_source=facebook); and your browser, operating system, device
-        type, screen and window size, language, and time zone. We also count
-        when someone switches between Projected and Toss-up, picks or searches
-        for a team, opens a bracket game or switches bracket halves, opens a
-        folded group of scenarios, changes the week or season, follows a link
-        on the front page, or opens or sends the feedback form (only that it happened, never what it says).
-        Ad-click codes that other sites add to links, like Facebook’s fbclid,
-        are removed before anything is sent.
+        (like utm_source=facebook), as well as your browser, operating system,
+        device type, screen and window size, language, and time zone.
+      </p>
+      <p>
+        We also count when someone switches between Projected and Toss-up,
+        picks or searches for a team, opens a bracket game or switches bracket
+        halves, opens a folded group of scenarios, changes the week or season,
+        follows a link on the front page, or opens or sends the feedback form
+        (only that it happened, never what it says). Ad-click codes that other
+        sites add to links, like Facebook’s fbclid, are removed before anything
+        is sent.
       </p>
       <p>
         To count each day’s visitors without cookies, PostHog combines your IP
         address and browser into a code that changes every day and can’t be
-        reversed. We’ve set PostHog not to keep IP addresses.
+        reversed. We’ve set PostHog to <em>not</em> keep IP addresses.
       </p>
 
       <h2 id="future">What’s next</h2>
       <p>
-        This season’s site is the first piece of a bigger one we’re building
-        for 2027. Here’s what’s on the way. The first list is what we plan to
-        have ready for next season; stretch goals are things we’d like to do
-        but can’t promise yet.
+        This 2026 version of the site is the first piece of a bigger one we’re
+        building for 2027. Below is a list of items that we plan to add in the
+        future and another list of items that we’re considering adding in the
+        future! Use the <a href="/feedback">feedback form</a> to let us know a
+        feature you’d like to see that isn’t listed here.
       </p>
       <p><strong>Coming in 2027</strong></p>
       <ul class="bullets">
-        <li>Simulate mode: pick the winners of upcoming games and see how the
-          standings, odds, scenarios, and bracket change.</li>
-        <li>Team pages: one page for each team, with its schedule, results,
-          odds, and playoff path.</li>
-        <li>Real helmet artwork for every team, in place of the generic helmets
-          in team colors.</li>
-        <li>A home feed with every class’s races at a glance.</li>
-        <li>A report card for the odds: how often the chances we published
-          actually came true.</li>
+        <li><strong>Simulate Mode:</strong> pick the winners of upcoming games
+          and see how the standings, odds, scenarios, and bracket change.</li>
+        <li><strong>Team Pages:</strong> one page for each team, with its
+          schedule, results, odds, and playoff path.</li>
+        <li><strong>Real Helmet Artwork</strong> for every team, in place of
+          the generic helmets in team colors.</li>
+        <li><strong>Enhanced Home Page</strong> with every class’s races at a
+          glance.</li>
+        <li><strong>A Report Card for the Odds:</strong> how often the chances
+          we published actually came true.</li>
       </ul>
-      <p><strong>Stretch goals</strong></p>
+      <p><strong>In Consideration</strong></p>
       <ul class="bullets">
-        <li>Faster scores: finals from posts on X on game nights, instead of
-          waiting for the next morning’s update.</li>
-        <li>A scoreboard, and a page for every game.</li>
-        <li>The top Elo ratings statewide and in each class.</li>
-        <li>A map of each team’s season, with travel distances and how far it
-          is to the championship venue.</li>
-        <li>A browser of every team’s helmets.</li>
-        <li>Championship history.</li>
-        <li>Accounts, so you can follow your favorite teams.</li>
-        <li>Email updates: a weekly newsletter, and alerts for the teams you
-          pick.</li>
-        <li>Consolidation history on team pages: the schools that merged to
-          form each one, like Leake County and Leake Central into Leake.</li>
-        <li>MAIS coverage: the same standings, odds, and scenarios for MAIS
-          schools.</li>
-        <li>A For Media page: each region’s standings, odds, and scenarios in a
-          form that’s easy to cite and reuse.</li>
+        <li><strong>Faster / Live Scores:</strong> We’re looking into ways to
+          get scores faster, and potentially even as games are happening. Ways
+          we’re considering doing this include reading score updates posted to
+          social media during games or subscribing to a faster score feed.</li>
+        <li><strong>A Scoreboard</strong> and a page for every game.</li>
+        <li><strong>Elo Ratings</strong> displayed rankings-style statewide and
+          in each class.</li>
+        <li><strong>A Map</strong> of each team’s season, with travel distances
+          and how far it is to the championship venue.</li>
+        <li><strong>Helmet History</strong> for every team, with a form for
+          users to upload new or historical designs.</li>
+        <li><strong>Historical Seasons:</strong> Currently, we only show the
+          2025 and 2026 seasons, but we’d like to expand that further back,
+          showing previous championship venues, classifications, and playoff
+          formats.</li>
+        <li><strong>Team History</strong> on team pages, including previous
+          regions, classifications, and consolidation history, like recognizing
+          that Leake County and Leake Central merged into Leake.</li>
+        <li><strong>User Accounts</strong>, so you can follow your favorite
+          teams.</li>
+        <li><strong>Email Updates:</strong> a weekly newsletter along with
+          alerts for the teams you pick.</li>
+        <li><strong>MAIS Coverage:</strong> the same standings, odds, and
+          scenarios for MAIS schools.</li>
+        <li><strong>A “For Media” Page:</strong> each region’s standings, odds,
+          and scenarios in a form that’s easy to cite and reuse.</li>
       </ul>
 
       <h2>About the author</h2>
-      <!-- AUTHOR BIO: replace the placeholder paragraph below with your bio. -->
-      <p class="muted">Author bio coming soon.</p>
+      <p>
+        Hi! I’m <strong>Paul Sullivan</strong>, and I’m a Software Engineer who
+        is a 2016 graduate of Taylorsville High School and a 2020 graduate of
+        Mississippi State University.
+      </p>
+      <p>
+        I have a long history with, and love for, Mississippi high school
+        sports; my dad played football for Raleigh in the late 1980s, and I
+        covered Taylorsville for the <em>Smith County Reformer</em> from 2011
+        to 2015, while playing baseball for the Tartars from 2013 to 2016.
+      </p>
+      <p>
+        This website has been an idea I’ve had as a side project for years, as
+        figuring out the playoff races and scenarios has always been a source
+        of headaches and confusion. But I’d be lying if I said it wasn’t always
+        a fun logic problem to think out all of the different scenarios. So I
+        decided to utilize my skills as a Software Engineer to tackle this
+        problem and help others visualize all the ways that a season can play
+        out!
+      </p>
+      <p>Two special shoutouts:</p>
+      <ul class="bullets">
+        <li>My friend <strong>Tyler Smith</strong>, a huge Raleigh Lions fan,
+          with whom I’ve spent many nights over the years discussing different
+          region scenarios and playoff game locations.</li>
+        <li><strong>Brandon Shields</strong>, THE guy in Mississippi high
+          school sports reporting, who has painstakingly put together these
+          scenarios for years. Though I do not know Brandon personally, when I
+          was first developing a lot of the scenario logic during fall 2025,
+          his scenario articles were crucial in helping me double check my
+          logic and untangle the web of complex scenarios. You can find his
+          work at <a href="https://mississippigridiron.com">mississippigridiron.com</a>!</li>
+      </ul>
     </div>
   </main>
 
   <footer class="site-footer">
     <p><a href="/feedback">Send feedback or report a problem</a></p>
     <p>Seeds aren’t official until the MHSAA announces them. Odds are estimates and are not for wagering.</p>
-    <p>Scores from <a href="https://www.ahsfhs.org/">AHSFHS</a>. Updated each morning once the night’s scores are in.</p>
+    <p>Scores from <a href="https://www.ahsfhs.org/mississippi/index.asp">AHSFHS</a>. Updated each morning once the night’s scores are in.</p>
     <p>This website is not associated with the MHSAA or any of its member schools.</p>
     <p>© 2025–2026 Paul Sullivan. All rights reserved.</p>
   </footer>
@@ -405,7 +503,7 @@
     <a class="tab-bar__item" href="/" data-nav="home"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg><span>Home</span></a>
     <a class="tab-bar__item" href="/standings/1a" data-nav="standings"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg><span>Standings</span></a>
     <a class="tab-bar__item" href="/brackets/1a" data-nav="bracket"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h5v6H3M3 13h5v6H3M8 8h5v8H8M13 12h8"/></svg><span>Bracket</span></a>
-    <a class="tab-bar__item" href="/methodology" data-nav="method" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor" stroke="none"/></svg><span>How it works</span></a>
+    <a class="tab-bar__item" href="/methodology" data-nav="method" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor" stroke="none"/></svg><span>About</span></a>
   </nav>
 
   <script src="/static/js/theme.js" defer></script>

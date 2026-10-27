@@ -356,7 +356,7 @@ button { font: inherit; color: inherit; }
 /* Nippo carries the page's titles and headers (the site name, page titles
    including their class/region designation, and section headers); Inter
    carries everything people read or compare. Nippo's only weight is Bold. */
-.title, .section-title, .sub-title, .region-block__title, .article h2, .site-header__home span {
+.title, .section-title, .sub-title, .region-block__title, .article h2, .article h3, .site-header__home span {
   font-family: var(--font-display);
   font-weight: 700;
 }
@@ -845,13 +845,16 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .article .prose { margin-top: 20px; }
 .article h2 { margin-top: 36px; font-size: 20px; line-height: 26px; }
 .article h2 + p { margin-top: 8px; }
+.article h3 { margin-top: 28px; font-size: 17px; line-height: 22px; }
+.article h2 + h3 { margin-top: 16px; }
+.article h3 + p, .article h2 + ul.bullets { margin-top: 8px; }
 .article ol.steps { list-style: decimal; padding-left: 1.4em; margin-top: 8px; }
 .article ol.steps li + li { margin-top: 6px; }
 .article ol.steps + p { margin-top: 16px; }
 .article ul.bullets { list-style: disc; padding-left: 1.4em; margin-top: 8px; }
 .article ul.bullets li + li { margin-top: 6px; }
 .article ul.bullets + p { margin-top: 16px; }
-.article h2[id] { scroll-margin-top: 80px; }
+.article h2[id], .article h3[id] { scroll-margin-top: 80px; }
 
 .detail__link { margin-top: 14px; font-size: 14px; }
 

@@ -3,7 +3,7 @@
 Visit and feature counts go to PostHog Cloud (US), set up so that nothing
 personal is stored: the only personal data PostHog receives is the IP address
 and browser that every request carries, which it hashes into a daily visitor
-count and then discards. The methodology page's "What we measure" section
+count and then discards. The About page's "What visitor metrics we capture" section
 (`nginx/html/methodology.html#measure`) is the public description of this;
 keep the two in step: a new event or property means a new line there.
 
