@@ -45,6 +45,13 @@ matches, e.g. `complete_scenario_cards` ↔ `completeScenarioCards`), and
 to a card, a label or a sentence goes in both places, with both tests. The
 share cards' text helpers mirror `format.js` the same way.
 
+## Page parameters
+
+The path says what's shown and the query how (`routes.js`); defaults stay out of
+the URL. The pages take `season`, `week` (a past week's snapshot; omitted means
+the latest), `odds=tossup` (the default is Projected, the Elo-weighted odds) and
+`team` (opens that team's playoff path and shows only its scenarios).
+
 ## The JavaScript modules
 
 `static/js/`, as ES modules. Most are pure, with no DOM access, so the tests
@@ -85,4 +92,4 @@ hand because its license doesn't allow it in a public repository
 The site's pages need nginx (the server-side includes, the static files, the
 routes), and nginx only runs on the server, so pages aren't served locally. The
 JavaScript tests, the Python mirror tests and the API (`http://localhost:8000`)
-cover the logic; see the README's local setup.
+cover the logic; see [LOCAL_DEVELOPMENT.md](../operations/LOCAL_DEVELOPMENT.md).

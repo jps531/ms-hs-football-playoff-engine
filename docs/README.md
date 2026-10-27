@@ -1,7 +1,7 @@
 # Documentation
 
-Setting up a local copy is in the [repository README](../README.md); working on
-the code is in [CONTRIBUTING.md](../CONTRIBUTING.md).
+Setting up a local copy is in [LOCAL_DEVELOPMENT.md](operations/LOCAL_DEVELOPMENT.md);
+working on the code is in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## How it works (`architecture/`)
 
@@ -26,6 +26,7 @@ the code is in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 | Doc | What's in it |
 |---|---|
+| [LOCAL_DEVELOPMENT.md](operations/LOCAL_DEVELOPMENT.md) | Running the database, the API and Prefect locally in Docker, and making yourself the owner. |
 | [VM_DEPLOYMENT.md](operations/VM_DEPLOYMENT.md) | The server: setup, HTTPS, database roles, backups, deploying updates, share cards, moderation and spam protection. |
 | [PIPELINES.md](operations/PIPELINES.md) | Every Prefect deployment and script, its schedule, and when to run it by hand. |
 | [SEASON_SETUP.md](operations/SEASON_SETUP.md) | A new season's playoff format, championship venues, school consolidations and renames, data corrections. |
