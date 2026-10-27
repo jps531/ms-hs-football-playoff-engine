@@ -249,7 +249,7 @@ Every endpoint in this router requires moderator+ (`Authorization: Bearer <token
 
 **Season setup**
 
-A new season's playoff format is seeded with `backend/scripts/add_playoff_season.py` from a YAML config, not through the API (see [SEASON_SETUP.md](SEASON_SETUP.md)).
+A new season's playoff bracket format (`playoff_formats` and `playoff_format_slots`) has no endpoint: it's seeded from a YAML config in `sql/seeds/` by `backend/scripts/add_playoff_season.py`, run in the worker container (see [SEASON_SETUP.md](SEASON_SETUP.md#playoff-bracket-format)). The endpoints below assign the season's championship venue.
 
 | Method | Path | Description |
 |--------|------|-------------|
