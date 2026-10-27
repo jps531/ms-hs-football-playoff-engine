@@ -51,70 +51,61 @@ Before starting, create accounts and note your credentials for:
 
 ### Backend
 
-#### Start the Docker Containers
-
-Copy the environment template, fill in `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` from your Auth0 dashboard (see **Configure Auth0** below), then bring up the stack:
-
-```
-cp .env.example .env.local
-docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local --profile local-db up --build -d
-```
-
-The `--profile local-db` flag is required to start the local PostgreSQL container (`db` service). On a VM with an external database, omit it.
-
-This starts nginx (`localhost:80`), Prefect server/worker (internal), and a local PostgreSQL instance (`localhost:5432`).
-
-> **nginx reverse proxy**: All traffic enters through nginx on port 80. The Prefect UI is accessible at `http://localhost/prefect/` but only to the owner: a valid owner `Authorization: Bearer <token>` header or session cookie.
-
-#### Accessing the Prefect UI
-
-**Session cookie (recommended)**: in a browser, open Swagger UI (`/docs`), authorize with the owner account, then use "Try it out" on `POST /api/v1/auth/session` to mint a cookie. Since Swagger UI is served from the same origin as the API, the browser keeps the cookie automatically — navigate to `http://localhost/prefect/` in that same tab and it just works. Cookie lasts 24h; re-run the same request (or `POST` again) to refresh it, or `DELETE /api/v1/auth/session` to log out. The `/moderate` page does the same for the owner after sign-in, which is how its Prefect link opens.
-
-**ModHeader (fallback)**: browsers can't set custom headers on navigation requests, so the Bearer-token path still needs the **[ModHeader](https://modheader.com)** browser extension (Chrome/Firefox) if you'd rather not use the session cookie:
-
-1. Install ModHeader and add a request header:
-   - **Name**: `Authorization`
-   - **Value**: `Bearer <your token>`
-   - Set a URL filter to `localhost` so it only applies locally
-2. Get your token from Swagger UI — after authorizing, execute any endpoint (e.g. `GET /api/v1/users/me`) and copy the token from the `Authorization: Bearer ...` line in the curl command shown
-3. Navigate to `http://localhost/prefect/`
-
-Auth0 access tokens expire (typically after 24 hours), so you'll need to copy a fresh token from Swagger UI when that happens.
+Local development runs the database, the API and Prefect in Docker. nginx is production-only: its config answers only for `mshsfootball.com` over HTTPS, so the local overlay (`docker-compose.local.yml`) leaves it out and publishes the API and the Prefect UI directly.
 
 #### Configure Auth0
 
 Auth0 issues the RS256 JWT tokens the API validates. You need an **API resource** (sets the audience claim) and an **Application** (sets your domain and gives you Swagger UI login credentials). See [docs/AUTH0_SETUP.md](docs/AUTH0_SETUP.md) for step-by-step instructions.
 
-Copy the resulting values to both `.env.local` and `.env.non-docker.local`:
+#### Fill in the environment file
 
 ```
-AUTH0_DOMAIN=<your Auth0 domain>
-AUTH0_AUDIENCE=<your API identifier>
+cp .env.example .env.local
 ```
 
-#### Start the API (local development)
+Four values must be filled in; everything else has a working default or turns its feature off when blank:
 
-The FastAPI API runs **outside Docker** in local development due to a Docker Desktop on Apple Silicon limitation with asymmetric crypto. Run it natively against the Dockerized PostgreSQL:
+| Variable | Value |
+|---|---|
+| `POSTGRES_PASSWORD` | Any strong password (`openssl rand -hex 32`). It's set when the database is first created; changing it later doesn't change an existing database's password. |
+| `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | From Configure Auth0 |
+| `SESSION_SECRET_KEY` | `openssl rand -hex 32` |
+
+Keep `ENVIRONMENT=local` (Swagger UI on, local CORS) and `POSTGRES_HOST=db` (the database's name inside Docker). Leave `API_DB_*` and `PIPELINE_DB_*` blank unless you've created those roles (see [Database roles](docs/VM_DEPLOYMENT.md#database-roles)); blank, the services connect as `POSTGRES_USER`. `CLOUDINARY_*` is only needed for image uploads and image URLs.
+
+#### Start the containers
 
 ```
-cp .env.example .env.non-docker.local   # fill in all vars + POSTGRES_HOST=localhost
-backend/scripts/start-api.sh
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local --profile local-db up --build -d
 ```
 
-The script checks that the port is free, starts the server in the background, and waits until it's ready before returning. Logs go to `api.log` in the project root. Can be run from any directory.
+`--profile local-db` starts the local PostgreSQL container (`db`). On a VM with an external database, omit it.
+
+| Service | Where |
+|---|---|
+| API | `http://localhost:8000`, Swagger UI at `http://localhost:8000/docs` |
+| Prefect UI | `http://localhost:4200` |
+| PostgreSQL | `localhost:5432` |
+| Prefect worker | internal (runs the pipelines) |
+
+All three are published on `127.0.0.1` only. Locally the Prefect UI needs no sign-in, since only your machine can reach it; on the server it's behind nginx at `/prefect/`, for the owner only: sign in at `/moderate` and use its **Prefect** link, which sets the session cookie that lets it open.
 
 ```
-tail -f api.log                    # stream logs
-backend/scripts/stop-api.sh       # stop the server
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local --profile local-db logs -f api
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local --profile local-db up --build -d api prefect-worker
 ```
 
-The API is then available directly at `http://localhost:8000`. Swagger UI is at `http://localhost:8000/docs`.
+The first streams the API's logs. The second picks up a code change: the code is copied into the images rather than mounted, so the API (`backend/api`, `backend/helpers`) and the worker (the pipelines) need a rebuild to see it.
+
+> **Apple Silicon:** the overlay sets `OPENSSL_armcap=0` for the API and Prefect. Docker's Linux VM on Apple Silicon advertises CPU features that OpenSSL then tries to use but the VM can't run, so anything that loads it (the `cryptography` package, which the API's token checks and Prefect use) dies with "Illegal instruction" (exit code 132). The setting turns off OpenSSL's ARM feature detection; it's ignored on Intel, and production doesn't use it.
+
+The site's pages need nginx (server-side includes, the static files, the routes), so they aren't served locally; the front-end's logic is covered by the JavaScript tests (see [Frontend](#frontend-2026-interim-ui)).
 
 #### Promote yourself to owner
 
 The owner role grants access to admin and moderation endpoints. Without it, your account is a base `user` and you won't be able to approve submissions, manage other users, or access the Prefect UI.
 
-User rows are lazy-provisioned on the first authenticated API request, so you need to log in before the SQL update will find anything. Create your user in the Auth0 dashboard first (or sign in once at `/moderate` once `AUTH0_SPA_CLIENT_ID` is set):
+User rows are lazy-provisioned on the first authenticated API request, so you need to log in before the SQL update will find anything. Create your user in the Auth0 dashboard first (on the server, signing in once at `/moderate` does the same):
 
 1. In the Auth0 dashboard, go to **User Management → Users → Create User**.
 2. Enter an email and password. Leave **Connection** as `Username-Password-Authentication`. Click **Create**.
@@ -154,7 +145,7 @@ See [docs/VM_DEPLOYMENT.md](docs/VM_DEPLOYMENT.md) for the full AWS Lightsail se
 
 Run these in order — each depends on the previous step's data being in the database.
 
-1. Open the Prefect UI at `http://localhost/prefect/` (signed in as the owner) and go to **Deployments**
+1. Open the Prefect UI (locally `http://localhost:4200`; on the server, the **Prefect** link on `/moderate`, signed in as the owner) and go to **Deployments**
 2. Do a "Quick Run" of **Regions Data Flow** (`regions-data-pipeline`) — populates `school_seasons` (class/region assignments)
    - The pipeline defaults to the current year. Use a **Custom Run** in the Prefect UI to target a different season.
 3. Do a "Quick Run" of **NCES School Geographic Data Flow** (`nces-school-pipeline`) — fills in city, zip, latitude, and longitude for all public schools from the NCES EDGE API, then applies the private-school location seed for schools not in NCES

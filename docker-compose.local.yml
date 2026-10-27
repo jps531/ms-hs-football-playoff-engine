@@ -1,10 +1,33 @@
-# Local development overlay.
-# - Routes the nginx -> API upstream to the host machine because on Apple Silicon
-#   the API runs natively (not in Docker) due to an asymmetric-crypto limitation.
-# - Prevents the api Docker container from crash-looping on Apple Silicon.
+# Local development overlay: the database, the API, and Prefect, with no nginx.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local up --build -d
+#
+# - nginx is left out (it only starts with `--profile nginx`): its config answers
+#   only for mshsfootball.com over HTTPS, with the server's Let's Encrypt
+#   certificate, so locally it has nothing to serve. The API and the Prefect UI
+#   are published on loopback instead: http://localhost:8000 (Swagger at /docs)
+#   and http://localhost:4200.
+# - OPENSSL_armcap=0: on Apple Silicon, Docker's Linux VM advertises CPU
+#   features OpenSSL then uses but the VM can't run, and anything that loads
+#   OpenSSL (the cryptography package, so the API's token checks and Prefect)
+#   dies with "Illegal instruction" (exit 132). This turns off OpenSSL's
+#   ARM feature detection; it's ignored on Intel. Production doesn't use it.
 services:
   nginx:
-    extra_hosts:
-      - "api:host-gateway"
+    profiles: ["nginx"]
   api:
-    restart: "no"
+    environment:
+      OPENSSL_armcap: "0"
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+  prefect-server:
+    environment:
+      OPENSSL_armcap: "0"
+      # Served directly rather than under nginx's /prefect/.
+      PREFECT_UI_SERVE_BASE: "/"
+      PREFECT_UI_API_URL: "http://localhost:${PREFECT_PORT:-4200}/api"
+    ports:
+      - "127.0.0.1:${PREFECT_PORT:-4200}:${PREFECT_PORT:-4200}"
+  prefect-worker:
+    environment:
+      OPENSSL_armcap: "0"
