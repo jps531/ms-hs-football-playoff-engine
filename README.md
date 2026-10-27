@@ -288,4 +288,6 @@ Win probabilities, seeding odds, and playoff advancement percentages are statist
 
 ## License
 
-Copyright © 2025–2026 Paul Sullivan. All rights reserved. This software is proprietary and confidential — see [LICENSE](LICENSE).
+Copyright © 2025–2026 Paul Sullivan. All rights reserved.
+
+The code is public so anyone can read it and see how the site works, but it's source-available, not open source: using, copying or hosting it needs the author's written permission. Third-party components keep their own licenses. See [LICENSE](LICENSE).
