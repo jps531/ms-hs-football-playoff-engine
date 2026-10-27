@@ -239,7 +239,7 @@ export function gameCard(game, teams, { focus = null, report = false } = {}) {
  * highlights the picked team's line; `provenanceHtml` goes under the head
  * with the chance, so a cropped card still says what it shows.
  */
-export function outcomeScenarioCard({ label, seeds, out, groups, common = [] }, teams, { focus = null, p = null, provenanceHtml = "" } = {}) {
+export function outcomeScenarioCard({ label, seeds, out, groups, common = [], why = [] }, teams, { focus = null, p = null, provenanceHtml = "" } = {}) {
   // A tie left to the tiebreaker is one row over its places: its teams, unordered, and what decides it.
   const seedRows = seeds.map(({ seed, team, teams: tied, note }) => (tied
     ? `<li class="outcome__tie${tied.includes(focus) ? " is-focus" : ""}"><span class="outcome__seed">${esc(seed)}</span>`
@@ -266,7 +266,24 @@ export function outcomeScenarioCard({ label, seeds, out, groups, common = [] }, 
     <ol class="outcome__seeds" aria-label="Seeds">${seedRows.join("")}</ol>
     ${outLine}
     ${body}
+    ${whyThisOrder(why)}
   </article>`;
+}
+
+/**
+ * The card's "why this order": a closed disclosure with, for each tie
+ * reaching the playoff places, its teams and places, the results it holds
+ * for when it doesn't hold for all of them, and one numbered sentence per
+ * tiebreaker step. Nothing without ties.
+ */
+export function whyThisOrder(why) {
+  if (!why?.length) return "";
+  const ties = why.map((w) => `<div class="why-tie">
+      <p class="why-tie__title">${esc(w.title)}</p>
+      ${w.when ? `<p class="why-tie__when">${esc(w.when)}:</p>` : ""}
+      <ol class="tiebreak__steps">${w.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
+    </div>`);
+  return `<details class="outcome__why"><summary>Why this order</summary>${ties.join("")}</details>`;
 }
 
 // -------------------------------------------------------- class scrubber

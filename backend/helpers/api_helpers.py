@@ -50,6 +50,7 @@ from backend.api.models.responses import (
     ScenarioEntry,
     ScenarioGameOutcome,
     ScenarioPathModel,
+    ScenarioTieExplanation,
     SeasonDateEntry,
     SeedingOddsModel,
     SlotOutlookTeam,
@@ -915,6 +916,17 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
                 or None,
                 p=sc.get("p"),
                 p_weighted=sc.get("p_weighted"),
+                explanation=[
+                    ScenarioTieExplanation(
+                        teams=e["teams"],
+                        places=e["places"],
+                        steps=e["steps"],
+                        when=[[ScenarioGameOutcome(winner=w, loser=l) for w, l in cube] for cube in e["when"]],
+                    )
+                    for e in sc["explanation"]
+                ]
+                if "explanation" in sc
+                else None,
             )
         )
     return result

@@ -677,8 +677,39 @@ def outcome_scenario_card(card: dict, teams: dict, p: float | None = None) -> st
     head = title if p is None else f'<div class="scenario__head">{title}{_odds(p)}</div>'
     return (
         f'<article class="scenario outcome">{head}'
-        f'<ol class="outcome__seeds" aria-label="Seeds">{seeds}</ol>{out}{body}</article>'
+        f'<ol class="outcome__seeds" aria-label="Seeds">{seeds}</ol>{out}{body}{why_this_order(card.get("why"))}</article>'
     )
+
+
+def why_blocks(explanation: list[dict] | None) -> list[dict]:
+    """A scenario's "why this order" (scenarios.js's ``whyBlocks``): [{title, when, steps}], one per tie
+    reaching the playoff places; ``when`` None when it holds whichever way the finish comes about."""
+    out = []
+    for e in explanation or []:
+        first, last = _ordinal(e["places"][0]), _ordinal(e["places"][-1])
+        where = f"{first} and {last}" if len(e["places"]) == 2 else f"{first}–{last}"
+        results = [" and ".join(f"{g['winner']} beats {g['loser']}" for g in cube) for cube in (e.get("when") or [])]
+        out.append(
+            {
+                "title": f"{join_names(e['teams'])}, tied for {where}",
+                "when": f"If {', or '.join(results)}" if results else None,
+                "steps": e["steps"],
+            }
+        )
+    return out
+
+
+def why_this_order(why: list[dict] | None) -> str:
+    """The card's "why this order" disclosure (components.js's ``whyThisOrder``), or nothing without ties."""
+    if not why:
+        return ""
+    ties = "".join(
+        f'<div class="why-tie"><p class="why-tie__title">{_e(w["title"])}</p>'
+        + (f'<p class="why-tie__when">{_e(w["when"])}:</p>' if w["when"] else "")
+        + f'<ol class="tiebreak__steps">{"".join(f"<li>{_e(s)}</li>" for s in w["steps"])}</ol></div>'
+        for w in why
+    )
+    return f'<details class="outcome__why"><summary>Why this order</summary>{ties}</details>'
 
 
 def _unconditional(path: dict) -> bool:
@@ -825,7 +856,16 @@ def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = 4
         out = [o["team"] for o in order if o["seed"] > playoff_seeds and o["team"] not in tied]
         if any(o["seed"] > playoff_seeds and o["team"] in tied for o in order):
             out.append("the rest of the tie")
-        cards.append({"seeds": seeds, "out": out, "ways": groups, "p": sc.get("p"), "p_weighted": sc.get("p_weighted")})
+        cards.append(
+            {
+                "seeds": seeds,
+                "out": out,
+                "ways": groups,
+                "p": sc.get("p"),
+                "p_weighted": sc.get("p_weighted"),
+                "why": why_blocks(sc.get("explanation")),
+            }
+        )
     # One card per finish: the ways to it from every scenario reaching it, each once.
     finishes: dict[str, dict] = {}
     for c in cards:

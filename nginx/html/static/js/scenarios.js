@@ -180,6 +180,7 @@ export function completeScenarioCards(scenarios, playoffSeeds = 4) {
     const out = order.filter((o) => o.seed > playoffSeeds && !ties.some((t) => t.members.has(o.team))).map((o) => o.team);
     return {
       seeds, out: straddle ? [...out, "the rest of the tie"] : out, ways: groups, p: sc.p ?? null, pWeighted: sc.p_weighted ?? null,
+      why: whyBlocks(sc.explanation),
     };
   });
   return byFinish(cards).map((c, i) => ({ ...c, label: `Scenario ${i + 1}` }));
@@ -219,5 +220,33 @@ function byFinish(cards) {
     const common = ways.length > 1 ? ways[0].filter((x) => ways.every((w) => w.some((y) => key(y) === key(x)))) : [];
     const shared = new Set(common.map(key));
     return { ...c, common, groups: common.length ? ways.map((w) => w.filter((x) => !shared.has(key(x)))) : ways };
+  });
+}
+
+/** 1 → "1st", 2 → "2nd", 11 → "11th". */
+function ordinal(n) {
+  const suffix = n % 100 >= 10 && n % 100 <= 20 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th");
+  return `${n}${suffix}`;
+}
+
+/**
+ * A scenario's "why this order", from the API's `explanation` (one entry per
+ * tie reaching the playoff places): [{ title, when, steps }], where `title`
+ * is "Tupelo Christian and Smithville, tied for 1st and 2nd", `when` the
+ * results that pick the entry out among this finish's ("If Thrasher beats
+ * Biggersville", or null when it holds whichever way the finish comes
+ * about) and `steps` the sentences. Empty for a snapshot without them.
+ */
+export function whyBlocks(explanation) {
+  return (explanation ?? []).map((e) => {
+    const first = ordinal(e.places[0]);
+    const last = ordinal(e.places[e.places.length - 1]);
+    const where = e.places.length === 2 ? `${first} and ${last}` : `${first}–${last}`;
+    const results = (e.when ?? []).map((cube) => cube.map((g) => `${g.winner} beats ${g.loser}`).join(" and "));
+    return {
+      title: `${joinNames(e.teams)}, tied for ${where}`,
+      when: results.length ? `If ${results.join(", or ")}` : null,
+      steps: e.steps,
+    };
   });
 }

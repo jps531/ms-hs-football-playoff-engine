@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  outcomeCards, insightCards, oddsFor, hasProjectedOdds, outcomeProbability, completeScenarioCards } from "../html/static/js/scenarios.js";
+  outcomeCards, insightCards, oddsFor, hasProjectedOdds, outcomeProbability, completeScenarioCards, whyBlocks,
+} from "../html/static/js/scenarios.js";
 
 const cond = (w, l) => [{ type: "game_result", school: w, opponent: l }];
 const seed = (value, p, groups) => ({ outcome: { type: "seed", value }, p, conditions: groups });
@@ -204,4 +205,27 @@ test("what every alternative shares is said once; the alternatives keep only wha
   }]);
   assert.deepEqual(card.common.map((c) => c.school), ["A"]);
   assert.deepEqual(card.groups.map((g) => g.map((c) => [c.school, c.min_margin])), [[["C", 1]], [["C", 10]]]);
+});
+
+test("why this order: each tie's teams and places, the results it holds for, and its steps", () => {
+  const explanation = [
+    { teams: ["Tupelo Christian", "Smithville"], places: [1, 2], steps: ["Head-to-head: Tupelo Christian beats Smithville."], when: [] },
+    {
+      teams: ["Biggersville", "Tupelo Christian", "Smithville"], places: [1, 2, 3], steps: ["s1", "s2"],
+      when: [[{ winner: "Smithville", loser: "Biggersville" }], [{ winner: "A", loser: "B" }, { winner: "C", loser: "D" }]],
+    },
+  ];
+  assert.deepEqual(whyBlocks(explanation), [
+    { title: "Tupelo Christian and Smithville, tied for 1st and 2nd", when: null, steps: ["Head-to-head: Tupelo Christian beats Smithville."] },
+    {
+      title: "Biggersville, Tupelo Christian and Smithville, tied for 1st–3rd",
+      when: "If Smithville beats Biggersville, or A beats B and C beats D",
+      steps: ["s1", "s2"],
+    },
+  ]);
+  // Snapshots stored before explanations: nothing to show.
+  assert.deepEqual(whyBlocks(undefined), []);
+  // The card carries them, merged by finish like its ways.
+  const sc = { outcomes: { A: "1", B: "2" }, game_winners: [{ winner: "A", loser: "B" }], explanation: [explanation[0]] };
+  assert.deepEqual(completeScenarioCards([sc, { ...sc, game_winners: [] }])[0].why, whyBlocks([explanation[0]]));
 });

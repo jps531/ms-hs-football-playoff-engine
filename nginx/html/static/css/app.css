@@ -770,6 +770,13 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .outcome__tie-body { display: grid; gap: 4px; min-width: 0; }
 .outcome__tie-teams { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .outcome__tie-note { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+/* A card's "why this order": closed until asked for; each tie's teams, when it holds, and its steps. */
+.outcome__why { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; font-size: 14px; line-height: 20px; }
+.outcome__why > summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+.why-tie { margin-top: 10px; }
+.why-tie__title { font-weight: 600; }
+.why-tie__when { margin-top: 2px; color: var(--text-secondary); }
+.why-tie .tiebreak__steps { margin-top: 6px; }
 .outcome__out { margin-top: 8px; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
 .outcome__out-label { font-weight: 600; margin-right: 2px; }
 .outcome__out strong { color: var(--text-primary); }
