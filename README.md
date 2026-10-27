@@ -240,7 +240,7 @@ The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no 
 node --test nginx/tests/*.test.mjs
 ```
 
-Both fonts are self-hosted in `static/fonts/`: Inter (SIL OFL) and a Latin subset of Nippo, the display face (ITF Free Font License).
+Both fonts are self-hosted in `static/fonts/`: Inter (SIL OFL) and Nippo, the display face (ITF Free Font License). Nippo's license doesn't allow it in a public repository, so it's installed on the server by hand and titles fall back to Inter without it; see [backend/assets/fonts/README.md](backend/assets/fonts/README.md).
 
 ### Docstring coverage
 
