@@ -207,6 +207,7 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
         "alternatives": [[condition_dict, ...], ...] | null,
         "open_groups": [[step, [team, ...]], ...] | null,
         "open_places": {team: [seed, ...]} | null,
+        "place_terms": {team: [[seed, [[condition_dict, ...], ...]], ...]} | null,
         "tiebreaker_groups": [[team, ...], ...] | null,
         "coinflip_groups": [[team, ...], ...] | null,
         "seeding": [team, ...],
@@ -226,6 +227,12 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
                 "open_groups": [[step, list(g)] for step, g in sc["open_groups"]] if sc.get("open_groups") else None,
                 "open_places": {t: list(seeds) for t, seeds in sc["open_places"].items()}
                 if sc.get("open_places")
+                else None,
+                "place_terms": {
+                    t: [[seed, [serialize_atom(term) for term in ways]] for seed, ways in by_seed]
+                    for t, by_seed in sc["place_terms"].items()
+                }
+                if sc.get("place_terms")
                 else None,
                 "tiebreaker_groups": sc.get("tiebreaker_groups"),
                 "coinflip_groups": sc.get("coinflip_groups"),
@@ -251,6 +258,12 @@ def deserialize_complete_scenarios(data: list[dict]) -> list[dict]:
                 "open_groups": [(step, tuple(g)) for step, g in sc["open_groups"]] if sc.get("open_groups") else None,
                 "open_places": {t: list(seeds) for t, seeds in sc["open_places"].items()}
                 if sc.get("open_places")
+                else None,
+                "place_terms": {
+                    t: [(seed, [deserialize_atom(term) for term in ways]) for seed, ways in by_seed]
+                    for t, by_seed in sc["place_terms"].items()
+                }
+                if sc.get("place_terms")
                 else None,
                 "tiebreaker_groups": sc.get("tiebreaker_groups"),
                 "coinflip_groups": sc.get("coinflip_groups"),

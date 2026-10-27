@@ -295,28 +295,28 @@ def test_render_margin_condition_sum_eq():
     """op='==' with 2 addends renders as 'combined total exactly N'."""
     mc = MarginCondition(add=(_NWR_PET, _OG_PRL), sub=(), op="==", threshold=10)
     result = _render_margin_condition(mc, _DUMMY_ATOM)
-    assert result == "Northwest Rankin/Petal's points margin and Oak Grove/Pearl's points margin combined total exactly 10"
+    assert result == "Northwest Rankin/Petal's and Oak Grove/Pearl's winning margins add up to exactly 10 (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_positive():
     """op='==' diff with positive t renders as 'A exceeds B by exactly N'."""
     mc = MarginCondition(add=(_NWR_PET,), sub=(_OG_PRL,), op="==", threshold=2)
     result = _render_margin_condition(mc, _DUMMY_ATOM)
-    assert result == "Northwest Rankin/Petal's points margin exceeds Oak Grove/Pearl's by exactly 2"
+    assert result == "Northwest Rankin/Petal wins by exactly 2 more points than Oak Grove/Pearl (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_negative():
     """op='==' diff with negative t renders as 'B exceeds A by exactly N'."""
     mc = MarginCondition(add=(_NWR_PET,), sub=(_OG_PRL,), op="==", threshold=-3)
     result = _render_margin_condition(mc, _DUMMY_ATOM)
-    assert result == "Oak Grove/Pearl's points margin exceeds Northwest Rankin/Petal's by exactly 3"
+    assert result == "Oak Grove/Pearl wins by exactly 3 more points than Northwest Rankin/Petal (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_zero():
-    """op='==' diff with t=0 renders as 'A's points margin equals B's'."""
+    """op='==' diff with t=0 renders as 'A and B win by the same margin'."""
     mc = MarginCondition(add=(_NWR_PET,), sub=(_OG_PRL,), op="==", threshold=0)
     result = _render_margin_condition(mc, _DUMMY_ATOM)
-    assert result == "Northwest Rankin/Petal's points margin equals Oak Grove/Pearl's"
+    assert result == "Northwest Rankin/Petal and Oak Grove/Pearl win by the same margin (a margin over 12 counts as 12)"
 
 
 def test_margin_condition_satisfied_by_eq_op():
@@ -437,7 +437,7 @@ class TestBuildScenarioAtoms37A:
                 continue
             # Split on " AND " so each clause is checked individually.
             # A per-game point-sample clause looks like "Team A beats Team B by exactly N".
-            # MarginCondition clauses look like "X's points margin exceeds Y's by exactly N" — allowed.
+            # MarginCondition clauses look like "X wins by exactly N more points than Y" — allowed.
             clauses = line.split(" AND ")
             for clause in clauses:
                 if "beats" in clause and "by exactly" in clause:

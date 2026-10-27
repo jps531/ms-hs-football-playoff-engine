@@ -60,7 +60,7 @@ def test_finish_odds_add_up_and_match_the_region_odds_2025(clazz, region, left):
 
 
 def test_scenarios_without_odds_carry_none():
-    """Callers that don't ask (team paths, the check-a-score tool) get no odds, and pay nothing for them."""
+    """Callers that don't ask (team paths) get no odds, and pay nothing for them."""
     teams, completed, remaining = _cut(REGION_RESULTS_2025[(7, 2)]["games"], 2)
     assert all("p" not in s for s in enumerate_division_scenarios(teams, completed, remaining))
 

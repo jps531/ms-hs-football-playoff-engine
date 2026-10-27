@@ -50,49 +50,59 @@ def _winner_label(pair: tuple[str, str], atom: list) -> str:
     return f"{a}/{b}"
 
 
+# Point differential caps each game at 12, so margin comparisons are of capped margins; every one says so.
+_CAP_NOTE = " (a margin over 12 counts as 12)"
+
+
 def _render_margin_condition(cond: MarginCondition, atom: list) -> str:
-    """Render a MarginCondition as a plain-English phrase using winner labels from the atom."""
+    """Render a MarginCondition as a plain-English phrase using winner labels from the atom.
+
+    A comparison of two games reads "Sebastopol wins by at least 3 more points than McAdams", and a
+    sum "Sebastopol's and McAdams's winning margins add up to 10 or more", each with the 12-point cap.
+    """
     if len(cond.add) == 2 and not cond.sub:
         l1 = _winner_label(cond.add[0], atom)
         l2 = _winner_label(cond.add[1], atom)
         if cond.op == "==":
-            return f"{l1}'s points margin and {l2}'s points margin combined total exactly {cond.threshold}"
+            return f"{l1}'s and {l2}'s winning margins add up to exactly {cond.threshold}{_CAP_NOTE}"
         if cond.op in (">=", ">"):
             t = cond.threshold + (1 if cond.op == ">" else 0)
-            return f"{l1}'s points margin and {l2}'s points margin combined total {t} or more"
-        else:
-            t = cond.threshold - (1 if cond.op == "<" else 0)
-            return f"{l1}'s points margin and {l2}'s points margin combined total {t} or less"
+            return f"{l1}'s and {l2}'s winning margins add up to {t} or more{_CAP_NOTE}"
+        t = cond.threshold - (1 if cond.op == "<" else 0)
+        return f"{l1}'s and {l2}'s winning margins add up to {t} or less{_CAP_NOTE}"
 
     if len(cond.add) == 1 and len(cond.sub) == 1:
-        add_label = _winner_label(cond.add[0], atom)
-        sub_label = _winner_label(cond.sub[0], atom)
+        a = _winner_label(cond.add[0], atom)
+        b = _winner_label(cond.sub[0], atom)
         if cond.op == "==":
             t = cond.threshold
             if t < 0:
-                return f"{sub_label}'s points margin exceeds {add_label}'s by exactly {-t}"
+                a, b, t = b, a, -t
             if t == 0:
-                return f"{add_label}'s points margin equals {sub_label}'s"
-            return f"{add_label}'s points margin exceeds {sub_label}'s by exactly {t}"
-        if cond.op in (">=", ">"):
-            t = cond.threshold + (1 if cond.op == ">" else 0)
-            if t < 0:
-                return f"{sub_label}'s points margin doesn't exceed {add_label}'s by more than {-t}"
+                return f"{a} and {b} win by the same margin{_CAP_NOTE}"
+            return f"{a} wins by exactly {t} more {_points(t)} than {b}{_CAP_NOTE}"
+        # a's margin minus b's is at least t ("at_least") or at most t.
+        at_least = cond.op in (">=", ">")
+        t = cond.threshold + (1 if cond.op == ">" else -1 if cond.op == "<" else 0)
+        if t < 0:  # a − b ≥ −t is b − a ≤ t, and the other way round
+            a, b, t, at_least = b, a, -t, not at_least
+        if at_least:
             if t == 0:
-                return f"{add_label}'s points margin is at least as large as {sub_label}'s"
-            return f"{add_label}'s points margin exceeds {sub_label}'s by {t} or more"
-        else:
-            t = cond.threshold - (1 if cond.op == "<" else 0)
-            if t > 0:
-                return f"{add_label}'s points margin doesn't exceed {sub_label}'s by more than {t}"
-            if t == 0:
-                return f"{sub_label}'s points margin is at least as large as {add_label}'s"
-            return f"{sub_label}'s points margin exceeds {add_label}'s by {-t} or more"
+                return f"{a} wins by at least as many points as {b}{_CAP_NOTE}"
+            return f"{a} wins by at least {t} more {_points(t)} than {b}{_CAP_NOTE}"
+        if t == 0:
+            return f"{a} wins by no more points than {b}{_CAP_NOTE}"
+        return f"{a} wins by no more than {t} more {_points(t)} than {b}{_CAP_NOTE}"
 
     # Fallback for other patterns
-    parts = [f"{_winner_label(p, atom)}'s points margin" for p in cond.add]
-    parts += [f"\u2212{_winner_label(p, atom)}'s points margin" for p in cond.sub]
-    return " + ".join(parts) + f" {cond.op} {cond.threshold}"
+    parts = [f"{_winner_label(p, atom)}'s winning margin" for p in cond.add]
+    parts += [f"\u2212{_winner_label(p, atom)}'s winning margin" for p in cond.sub]
+    return " + ".join(parts) + f" {cond.op} {cond.threshold}{_CAP_NOTE}"
+
+
+def _points(n: int) -> str:
+    """"point" or "points"."""
+    return "point" if n == 1 else "points"
 
 
 def _join(names) -> str:
@@ -223,7 +233,9 @@ def atoms_from_complete_scenarios(
     open groups (a tie whose order the scenario leaves to the tiebreaker)
     reaches each of the group's places it can (``open_places``, else all of
     them) only by finishing there in that tie, so each of its atoms for those
-    places carries a ``TiebreakPlace``.
+    places carries a ``TiebreakPlace``, unless the scenario states the team's
+    places exactly in margins (``place_terms``): then each place's atoms are
+    the scenario's winners narrowed by those margin conditions.
     """
     out = playoff_seeds + 1
     atoms: dict[str, dict[int, list]] = {}
@@ -235,8 +247,13 @@ def atoms_from_complete_scenarios(
         ]
         seeding = list(sc.get("seeding", ()))
         open_of = {t: (step, tuple(g)) for step, g in sc.get("open_groups") or [] for t in g}
+        exact = sc.get("place_terms") or {}
         for seed_idx, team in enumerate(seeding):
             team_map = atoms.setdefault(team, {})
+            if team in exact:
+                for seed, ways in exact[team]:
+                    team_map.setdefault(seed, []).extend(_narrow(a, term) for a in alternatives for term in ways)
+                continue
             if team not in open_of:
                 team_map.setdefault(min(seed_idx + 1, out), []).extend(list(a) for a in alternatives)
                 continue
@@ -248,6 +265,14 @@ def atoms_from_complete_scenarios(
                     tie = TiebreakPlace(team, place, group, step)
                     team_map.setdefault(min(idx + 1, out), []).extend([*a, tie] for a in alternatives)
     return atoms
+
+
+def _narrow(atom: list, term) -> list:
+    """*atom* with *term*'s conditions: its margin ranges replace the same games' plain wins, and its
+    margin comparisons are added."""
+    ranged = {frozenset((c.winner, c.loser)): c for c in term if isinstance(c, GameResult)}
+    out = [ranged.pop(frozenset((c.winner, c.loser)), c) if isinstance(c, GameResult) else c for c in atom]
+    return out + list(ranged.values()) + [c for c in term if not isinstance(c, GameResult)]
 
 
 def _pct(p: float) -> str:
@@ -429,7 +454,10 @@ def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | No
             games = []
             for a, b in list(cond.add) + list(cond.sub):
                 pair = cast(tuple[str, str], tuple(sorted((a, b))))
-                games.append({"school": a, "date": game_dates.get(pair), "opponent": b})
+                # Each game from its winner's side, as a game_result is (as given if the atom doesn't say).
+                winner = _winner_label((a, b), atom)
+                winner = winner if winner in (a, b) else a
+                games.append({"school": winner, "date": game_dates.get(pair), "opponent": b if winner == a else a})
             result.append(
                 {
                     "type": "margin_sum",
