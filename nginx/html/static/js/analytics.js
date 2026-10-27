@@ -1,6 +1,6 @@
-// Visit and feature counts, through PostHog Cloud, as the methodology page's
-// "What we measure" describes. Off unless the server has a PostHog project
-// key (client-config's posthog_key). No cookies or browser storage
+// Visit and feature counts, through PostHog Cloud, as the About page's
+// "What visitor metrics we capture" describes. Off unless the server has a
+// PostHog project key (client-config's posthog_key). No cookies or browser storage
 // (cookieless mode: PostHog counts unique visitors from a daily hash), no
 // autocapture or session recording: only page views and the named events
 // the app sends, which never carry form text or anything personal. The
@@ -105,8 +105,12 @@ export async function startAnalytics(api) {
   });
 }
 
-/** Count a feature being used. *props* say which, never who: no names, emails or typed text. */
-export function track(name, props = {}) {
-  if (posthog) posthog.capture(name, props);
+/**
+ * Count a feature being used. *props* say which, never who: no names, emails or typed text.
+ * With *leaving*, the event goes out at once by beacon, since a link that loads a new page
+ * would otherwise unload this one before the next batch is sent.
+ */
+export function track(name, props = {}, { leaving = false } = {}) {
+  if (posthog) posthog.capture(name, props, leaving ? { transport: "sendBeacon", send_instantly: true } : undefined);
   else queue?.push([name, props]);
 }

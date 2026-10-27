@@ -449,7 +449,7 @@ class TestLandingBody:
         assert body.index("Class standings") < body.index("Region breakdown") < body.index("Bracket page")
         assert body.index("About the site") < body.index("Principles") < body.index(">How it works<")
         assert body.index("Insights we provide") < body.index("Class standings")
-        assert 'href="/methodology"' in body
+        assert 'href="/about"' in body
 
     def test_how_it_works_matches_the_pipeline_thresholds(self):
         """The steps it lists are the ones the pipeline and API use, so the front page can't drift from the code."""
@@ -471,8 +471,8 @@ class TestLandingBody:
         assert "<li>When there are <strong>5 or fewer</strong>" in body
         words = {5: "five"}[DISPLAY_THRESHOLD]
         app_js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "app.js").read_text()
-        methodology = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "methodology.html").read_text()
-        for text in (app_js, methodology, Path(static_pages_module.__file__).read_text()):
+        about = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "about.html").read_text()
+        for text in (app_js, about, Path(static_pages_module.__file__).read_text()):
             assert (
                 f"Full scenarios appear once {words} or fewer" in text
                 or f"Once {words} or fewer region games remain, each team" in text
@@ -541,12 +541,12 @@ class TestLandingBody:
 
 def test_sitemap_is_valid_xml_with_lastmod():
     """A well-formed sitemap; pages with a snapshot date carry it."""
-    xml = sitemap_xml("https://mshsfootball.com/", [("/", date(2026, 10, 14)), ("/methodology", None)])
+    xml = sitemap_xml("https://mshsfootball.com/", [("/", date(2026, 10, 14)), ("/about", None)])
     root = ET.fromstring(xml)
     ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
     assert [u.findtext("s:loc", namespaces=ns) for u in root] == [
         "https://mshsfootball.com/",
-        "https://mshsfootball.com/methodology",
+        "https://mshsfootball.com/about",
     ]
     assert root[0].findtext("s:lastmod", namespaces=ns) == "2026-10-14"
     assert root[1].find("s:lastmod", ns) is None
@@ -586,7 +586,7 @@ def test_pipeline_writes_page_content_front_page_and_sitemap(tmp_path):
     assert "Open the Region 6-3A page" in site and "2026 season · Through Week 8" in site  # the region's own payload
     assert "#scen-title" in site and "#all-scen-title" in site  # the scenario examples, from the scenarios read
     sitemap = (tmp_path / "sitemap.xml").read_text()
-    for path in ("/</loc>", "/standings/3a</loc>", "/standings/3a/6</loc>", "/methodology</loc>"):
+    for path in ("/</loc>", "/standings/3a</loc>", "/standings/3a/6</loc>", "/about</loc>"):
         assert path in sitemap
     assert "<lastmod>2026-10-09</lastmod>" in sitemap
     assert "/brackets/3a" not in sitemap  # no bracket odds yet, so no bracket page to list

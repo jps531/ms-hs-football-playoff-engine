@@ -1240,9 +1240,11 @@ class ClientConfig(BaseModel):
     auth0_audience: str | None
     auth0_client_id: str | None
     api_docs_url: str | None = None
-    # PostHog: the project key the site's visit counts go to, and the dashboard linked for the owner on /moderate.
+    # PostHog: the project key the site's visit counts go to, and the dashboards linked for the owner on /moderate
+    # (web analytics, and the "Site activity" dashboard scripts/posthog_dashboard.py builds).
     posthog_key: str | None = None
     posthog_dashboard_url: str | None = None
+    posthog_activity_url: str | None = None
 
 
 class ColorVariantsPreview(BaseModel):

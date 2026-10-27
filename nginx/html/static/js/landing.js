@@ -22,7 +22,7 @@ export const LANDING_FALLBACK = '<div class="page landing landing--fallback"><di
   + '<p class="landing-kicker">Welcome to</p><h1 class="landing-title">Mississippi High School Football</h1>'
   + '<p>Standings, playoff odds, and exactly what each team needs to happen, for every MHSAA region.</p>'
   + classGrid()
-  + '<p><a href="/methodology">How it works</a></p></div></div>';
+  + '<p><a href="/about">About this site</a></p></div></div>';
 
 /** Is this the pipeline's front page (and not, say, an error page)? */
 export function isFrontPage(html) {
