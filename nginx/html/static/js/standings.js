@@ -1,4 +1,4 @@
-import { isCertain, isImpossible } from "./format.js";
+import { isCertain, isImpossible, joinNames } from "./format.js";
 
 // Standings-table data shaping: tie-aware positions, a team's round-by-round
 // playoff path, and matching region games to scores and dates. No DOM, so it
@@ -249,4 +249,27 @@ export function snapshotDate(weeks, week, pastSeason) {
   const chosen = (week && weeks.find((w) => w.week === week)) || latest;
   if (pastSeason) return chosen.end;
   return chosen === latest ? null : chosen.end;
+}
+
+/** 1 → "1st", 2 → "2nd", 11 → "11th". */
+function ordinal(n) {
+  const suffix = n % 100 >= 10 && n % 100 <= 20 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th");
+  return `${n}${suffix}`;
+}
+
+/**
+ * The heading lines for one tie the API explains (a `tiebreaks` entry):
+ * { title: "Tied for 2nd–4th", teams: "Petal, Brandon and Northwest Rankin, all 3-2" }.
+ * Teams level in the standings can have different records (2-0 and 1-0 with
+ * a game unplayed), so a shared record is only said when it is one.
+ */
+export function tieHeading(tie) {
+  const first = ordinal(tie.places[0]);
+  const last = ordinal(tie.places[tie.places.length - 1]);
+  const where = tie.places.length === 2 ? `${first} and ${last}` : `${first}–${last}`;
+  const same = new Set(tie.records).size === 1;
+  const teams = same
+    ? `${joinNames(tie.teams)}, ${tie.teams.length === 2 ? "both" : "all"} ${tie.records[0]}`
+    : joinNames(tie.teams.map((t, i) => `${t} (${tie.records[i]})`));
+  return { title: `Tied for ${where}`, teams };
 }

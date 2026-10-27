@@ -35,6 +35,7 @@ from backend.helpers.api_helpers import (
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
     filter_to_team_or_404,
+    finished_region_tiebreaks,
     group_rows_and_completed_by_region,
     load_active_region_teams,
     load_completed_region_games,
@@ -275,6 +276,9 @@ async def get_standings(
         key_insights=snapshot.key_insights if snapshot.key_insights else None,
         computation_state=computation_state,
         headline=build_region_headline(team_entries, snapshot.key_insights, len(snapshot.remaining)),
+        tiebreaks=finished_region_tiebreaks(
+            snapshot.teams, snapshot.completed, snapshot.remaining, [e.school for e in team_entries]
+        ),
     )
 
 

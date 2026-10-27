@@ -58,6 +58,7 @@ from backend.api.models.responses import (
     TeamRankEntry,
     TeamStandingsEntry,
     TeamStatusModel,
+    TiebreakModel,
     TravelCumulativeEntry,
     TravelTripEntry,
     VenueModel,
@@ -113,6 +114,7 @@ from backend.helpers.scenario_serializers import (
 )
 from backend.helpers.scenario_viewer import _simplify_atom_list, build_scenario_atoms, team_atoms_from_scenarios
 from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
+from backend.helpers.tiebreak_explainer import explain_tiebreaks
 from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.helpers.win_probability import (
     EloConfig,
@@ -704,6 +706,40 @@ def current_standings_order(
     for i in range(1, len(teams) + 1):
         order.append(pinned[i] if i in pinned else next(fill_order))
     return order
+
+
+def finished_region_tiebreaks(
+    teams: list[str],
+    completed: list[CompletedGame],
+    remaining: list[RemainingGame],
+    shown_order: list[str],
+) -> list[TiebreakModel] | None:
+    """How each tie in a finished region's standings was broken, or None.
+
+    None while games remain (or before every team has played one): the explanations state actual
+    margins and points allowed. Also None if the tiebreaker's order differs from *shown_order*, the
+    table's: an explanation must never contradict the standings it sits under. Teams a coin flip
+    decides may be shown in either order.
+    """
+    played = {t for g in completed for t in (g.a, g.b)}
+    if remaining or not completed or not set(teams) <= played:
+        return None
+    order, ties = explain_tiebreaks(teams, completed)
+    flip_group = {t: g for tie in ties for g in tie.coin_flip for t in g}
+    if len(order) != len(shown_order) or any(
+        a != b and (a not in flip_group or flip_group.get(b) != flip_group[a]) for a, b in zip(order, shown_order)
+    ):
+        return None
+    return [
+        TiebreakModel(
+            teams=list(t.teams),
+            records=list(t.records),
+            places=list(t.places),
+            steps=list(t.steps),
+            coin_flip=[list(g) for g in t.coin_flip],
+        )
+        for t in ties
+    ]
 
 
 def team_clinched_seed(odds: StandingsOdds) -> int | None:

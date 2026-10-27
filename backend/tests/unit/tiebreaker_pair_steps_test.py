@@ -20,7 +20,6 @@ from backend.helpers.tiebreakers import (
     build_h2h_maps,
     resolve_bucket,
     resolve_standings_for_mask,
-    resolve_standings_with_trace,
     resolve_with_results,
     sensitive_boundary_games,
     standings_from_mask,
@@ -397,36 +396,35 @@ def test_resolve_bucket_no_collector_runs_silently():
 
 
 # ---------------------------------------------------------------------------
-# resolve_standings_with_trace — step_trace_collector populated
+# trace_collector — every step applied, in order
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_standings_with_trace_populates_step_trace():
-    """resolve_standings_with_trace returns step2/step4 arrays for each tie bucket.
-
-    The [Alpha, Beta] bucket has no H2H; step2/step4 arrays must be present
-    in the returned trace keyed by the sorted bucket tuple.
-    """
+def test_trace_records_every_step_applied_to_a_tie():
+    """The [Alpha, Beta] tie: each step applied is recorded with what it compared, up to the one
+    that splits them (or the coin flip), and the outside teams for steps 2 and 4."""
     teams = ["Alpha", "Beta", "Delta", "Gamma"]
-    remaining: list[RemainingGame] = []
+    trace: list = []
+    order = resolve_standings_for_mask(teams, _BASE_COMPLETED, [], 0, {}, trace_collector=trace)
 
-    order, trace = resolve_standings_with_trace(teams, _BASE_COMPLETED, remaining, outcome_mask=0, margins={})
+    steps = [t for t in trace if t.group == ("Alpha", "Beta")]
+    assert [t.step for t in steps] == list(range(1, len(steps) + 1))
+    assert all(set(t.values) == {"Alpha", "Beta"} for t in steps if t.step < 6)
+    last = steps[-1]
+    if last.step < 6:
+        assert [p[0] for p in last.parts] == [t for t in order if t in ("Alpha", "Beta")]
+    for t in steps:
+        assert bool(t.outside) == (t.step in (2, 4))
+        assert all(len(t.values[x]) == len(t.outside) for x in t.values) if t.step in (2, 4) else True
 
-    assert set(order) == set(teams)
-    assert ("Alpha", "Beta") in trace
-    s2, s4, outside = trace[("Alpha", "Beta")]
-    assert outside and all(isinstance(g, list) for g in outside)
-    assert "Alpha" in s2 and "Beta" in s2
-    assert "Alpha" in s4 and "Beta" in s4
 
-
-def test_resolve_bucket_step_trace_collector_populated():
-    """resolve_bucket stores (step2, step4) into step_trace_collector when provided."""
+def test_resolve_bucket_trace_collector_populated():
+    """resolve_bucket records its steps into trace_collector when provided."""
     teams = ["Alpha", "Beta", "Delta", "Gamma"]
     remaining: list[RemainingGame] = []
     wl_totals = standings_from_mask(teams, _BASE_COMPLETED, remaining, 0, pa_win=14, margins={})
     base_order = base_bucket_order(teams, wl_totals)
-    collector: dict = {}
+    collector: list = []
 
     resolve_bucket(
         ["Alpha", "Beta"],
@@ -437,12 +435,10 @@ def test_resolve_bucket_step_trace_collector_populated():
         remaining,
         outcome_mask=0,
         margins={},
-        step_trace_collector=collector,
+        trace_collector=collector,
     )
 
-    assert ("Alpha", "Beta") in collector
-    s2, _, _ = collector[("Alpha", "Beta")]
-    assert "Alpha" in s2 and "Beta" in s2
+    assert collector and collector[0].step == 1 and collector[0].group == ("Alpha", "Beta")
 
 
 # ---------------------------------------------------------------------------
