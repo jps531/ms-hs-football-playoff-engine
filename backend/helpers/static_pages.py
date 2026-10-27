@@ -96,8 +96,8 @@ def region_trail(clazz: int, region: int) -> Trail:
 
 
 def bracket_trail(clazz: int) -> Trail:
-    """Home › Class 3A › 3A Bracket."""
-    return [*class_trail(clazz), (f"{clazz}A Bracket", bracket_path(clazz))]
+    """Home › Class 3A › Class 3A Bracket."""
+    return [*class_trail(clazz), (f"Class {clazz}A Bracket", bracket_path(clazz))]
 
 
 def breadcrumb_nav(trail: Trail) -> str:
@@ -1522,8 +1522,8 @@ def _bracket_preview(featured: dict) -> str:
 
 # Paragraphs of trusted markup (emphasis), like PRINCIPLES_HTML below.
 ABOUT_THE_SITE_HTML = (
-    "This website was developed to answer the question that comes up every October in Mississippi High School "
-    "Football: <strong><em>“What does our playoff picture look like?”</em></strong>",
+    "This website was developed to answer the question that comes up every October in Mississippi high school "
+    "football: <strong><em>“What does our playoff picture look like?”</em></strong>",
     "This website sets out to answer that question by providing scenarios for every way each region race can "
     "finish based on the MHSAA’s tiebreaker rules. This allows us to determine each team’s odds of finishing in "
     "each place and therefore in each playoff slot. From there, we look at the playoff bracket and give an outlook "
@@ -1643,12 +1643,12 @@ def landing_body(
     if featured:
         c, r = featured["clazz"], featured["card"]["region"]
         unsettled = (
-            ", one of the most unsettled races in the state right now" if featured["card"]["teams_alive"] > 0 else ""
+            ", one of the most unsettled races in the state as of the latest update" if featured["card"]["teams_alive"] > 0 else ""
         )
         # The preview's first region is always the one shown; whether the next fits beside it depends on
         # the preview's width, so the sentence names only the first.
         first = _class_preview_blocks(featured)[0]["region"]
-        class_lead = f"Here’s Class {c}A as it stands right now, starting with Region {first}:"
+        class_lead = f"Here’s Class {c}A as of the latest update, starting with Region {first}:"
         class_extra = _lead(class_lead) + _class_preview(featured, teams)
         region_extra = _lead(f"Here’s Region {r}-{c}A{unsettled}:") + _region_preview(featured, teams)
         lead = f"Here’s the Class {c}A bracket, with one game opened up the way it looks after you tap it:"

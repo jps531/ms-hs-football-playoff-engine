@@ -481,7 +481,7 @@ class TestLandingBody:
             "</ul><p>Scores are sourced from AHSFHS and are updated every morning.</p>"
             "<p><strong>This website is not associated with the MHSAA or any of its member schools.</strong></p>"
         ) in body
-        assert "Football: <strong><em>“What does our playoff picture look like?”</em></strong>" in body
+        assert "football: <strong><em>“What does our playoff picture look like?”</em></strong>" in body
         assert "<strong><em>No generative AI models are used to produce any metrics" in body
         assert '<a href="/feedback" data-feedback="other">feedback form</a>' in body
 
@@ -503,11 +503,11 @@ class TestLandingBody:
         """A sentence before each example says what it is, naming the region the preview starts with; 'most
         unsettled' only while the race is open."""
         body = landing_body({**FEATURED, "bracket_html": "<div>tree</div>"}, {})
-        assert "Here’s Class 3A as it stands right now, starting with Region 6:" in body
-        assert "Here’s Region 6-3A, one of the most unsettled races in the state right now:" in body
+        assert "Here’s Class 3A as of the latest update, starting with Region 6:" in body
+        assert "Here’s Region 6-3A, one of the most unsettled races in the state as of the latest update:" in body
         assert "Here’s the Class 3A bracket, with one game opened up the way it looks after you tap it:" in body
         alone = landing_body({**FEATURED, "class_standings": None}, {})
-        assert "Here’s Class 3A as it stands right now, starting with Region 6:" in alone
+        assert "Here’s Class 3A as of the latest update, starting with Region 6:" in alone
         last = landing_body({**FEATURED, "card": {**FEATURED["card"], "region": 7}}, {})
         assert "starting with Region 6:" in last  # the class's last region: the preview starts one earlier
         settled = landing_body({**FEATURED, "card": _card(6, 0)}, {})
@@ -628,7 +628,7 @@ def test_breadcrumb_structured_data_uses_full_addresses():
     assert [(i["position"], i["name"], i["item"]) for i in data["itemListElement"]] == [
         (1, "Home", "https://mshsfootball.com/"),
         (2, "Class 3A", "https://mshsfootball.com/standings/3a"),
-        (3, "3A Bracket", "https://mshsfootball.com/brackets/3a"),
+        (3, "Class 3A Bracket", "https://mshsfootball.com/brackets/3a"),
     ]
 
 

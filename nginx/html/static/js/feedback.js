@@ -12,8 +12,9 @@ export const CATEGORIES = [
 
 export const MESSAGE_MAX = 2000;
 export const NOTE_MAX = 1000;
-// A form sent sooner than this after opening is almost certainly a script;
-// it's quietly treated as sent.
+// A form is never sent sooner than this after it opens: a send before then
+// waits out the rest (showing "Sending…"), so a quick real correction still
+// arrives while an instant scripted one is slowed.
 export const MIN_FILL_MS = 2500;
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -52,7 +53,8 @@ const score = (v) => (/^\d{1,3}$/.test(String(v ?? "").trim()) ? Number(v) : nul
 export function scoreProblem(game, { awayScore, homeScore }) {
   const away = score(awayScore);
   const home = score(homeScore);
-  if (away == null || home == null || away > 200 || home > 200) return "Enter both teams’ final scores.";
+  if (away == null || home == null) return "Enter both teams’ final scores.";
+  if (away > 200 || home > 200) return "Scores over 200 aren’t accepted. Please check the score.";
   if (away === game.awayScore && home === game.homeScore) return "That’s the score we have. Change it to the correct final score.";
   return null;
 }

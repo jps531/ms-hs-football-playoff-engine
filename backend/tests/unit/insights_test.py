@@ -113,32 +113,32 @@ def test_render_clinch_seed_1st():
     """Renders clinch_seed with seed=1 using "1st" ordinal."""
     conds = (GameResult("Taylorsville", "Stringer"),)
     rendered = _render_insight("clinch_seed", "Taylorsville", 1, conds)
-    assert rendered == "Taylorsville clinches 1st seed: Taylorsville beats Stringer"
+    assert rendered == "Taylorsville clinches the #1 seed: Taylorsville beats Stringer"
 
 
 def test_render_clinch_seed_2nd():
     """Renders clinch_seed with seed=2 using "2nd" ordinal."""
     conds = (GameResult("Pearl", "Petal"),)
-    assert _render_insight("clinch_seed", "Pearl", 2, conds) == "Pearl clinches 2nd seed: Pearl beats Petal"
+    assert _render_insight("clinch_seed", "Pearl", 2, conds) == "Pearl clinches the #2 seed: Pearl beats Petal"
 
 
 def test_render_clinch_seed_3rd():
     """Renders clinch_seed with seed=3 using "3rd" ordinal."""
     conds = (GameResult("A", "B"),)
-    assert "3rd seed" in _render_insight("clinch_seed", "A", 3, conds)
+    assert "the #3 seed" in _render_insight("clinch_seed", "A", 3, conds)
 
 
 def test_render_clinch_seed_4th():
     """Renders clinch_seed with seed=4 using "4th" ordinal."""
     conds = (GameResult("A", "B"),)
-    assert "4th seed" in _render_insight("clinch_seed", "A", 4, conds)
+    assert "the #4 seed" in _render_insight("clinch_seed", "A", 4, conds)
 
 
 def test_render_clinch_seed_fallback_ordinal():
     """Renders clinch_seed with seed ≥ 5 using ordinal fallback (e.g. "5th")."""
     conds = (GameResult("A", "B"),)
     rendered = _render_insight("clinch_seed", "A", 5, conds)
-    assert "5th seed" in rendered
+    assert "the #5 seed" in rendered
 
 
 def test_render_clinch_playoffs():
@@ -993,7 +993,7 @@ def test_serialize_deserialize_clinch_seed():
         seed=1,
         conditions=(GameResult("Taylorsville", "Stringer"),),
         margin_verified=True,
-        rendered="Taylorsville clinches 1st seed: Taylorsville beats Stringer",
+        rendered="Taylorsville clinches the #1 seed: Taylorsville beats Stringer",
         r_computed=8,
     )
     assert deserialize_insights(serialize_insights([ins])) == [ins]

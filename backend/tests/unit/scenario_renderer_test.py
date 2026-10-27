@@ -361,7 +361,7 @@ def test_division_scenarios_dict_scenario_4_leaves_the_tie_open():
     assert entry["title"] == (
         "Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND "
         "Northwest Rankin, Oak Grove, Pearl and Petal tie: their order is decided by point "
-        "differential in games among them, then against the rest of the region (capped at 12 a game), "
+        "differential in games among them, then in games against the highest-finishing teams (capped at 12 a game), "
         "then fewest points allowed"
     )
     assert entry["open_groups"] == [["Northwest Rankin", "Oak Grove", "Pearl", "Petal"]]

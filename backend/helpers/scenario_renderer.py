@@ -130,8 +130,8 @@ def render_open_group(step: int, group) -> str:
             "(any teams still tied start the tiebreakers over)"
         )
     return (
-        f"{teams} tie: their order is decided by point differential in games among them, then against "
-        "the rest of the region (capped at 12 a game), then fewest points allowed"
+        f"{teams} tie: their order is decided by point differential in games among them, then in games "
+        "against the highest-finishing teams (capped at 12 a game), then fewest points allowed"
     )
 
 
