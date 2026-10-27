@@ -275,7 +275,7 @@ def test_scenario_count():
 
 def test_scenario_shape():
     """Every scenario has the required keys."""
-    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "alternatives", "open_groups", "open_places", "tiebreaker_groups", "coinflip_groups"}
+    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "alternatives", "open_groups", "open_places", "place_terms", "tiebreaker_groups", "coinflip_groups"}
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required
 

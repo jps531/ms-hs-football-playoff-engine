@@ -86,6 +86,7 @@ class TestCheckpointA:
             "alternatives",
             "open_groups",
             "open_places",
+            "place_terms",
             "tiebreaker_groups",
             "coinflip_groups",
         }
@@ -191,6 +192,7 @@ class TestCheckpointB:
             "alternatives",
             "open_groups",
             "open_places",
+            "place_terms",
             "tiebreaker_groups",
             "coinflip_groups",
         }

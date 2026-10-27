@@ -465,7 +465,8 @@ def test_tiebreak_place_roundtrip():
 
 def test_complete_scenarios_keep_open_groups():
     """A group left to the tiebreaker stays open after the snapshot, so its places never read as an order;
-    the places its teams can reach, and a scenario's alternative conditions, all survive too."""
+    the places its teams can reach, the margins that give each team its place, and a scenario's
+    alternative conditions, all survive too."""
     from backend.helpers.scenario_serializers import deserialize_complete_scenarios, serialize_complete_scenarios
 
     sc = {
@@ -476,6 +477,12 @@ def test_complete_scenarios_keep_open_groups():
         "alternatives": [[GameResult("A", "B", 1, 8)], [GameResult("A", "B", 10, None)]],
         "open_groups": [(5, ("A", "C"))],
         "open_places": {"C": [2]},
+        "place_terms": {
+            "A": [
+                (1, [[GameResult("A", "B", 1, 8)]]),
+                (2, [[MarginCondition(add=(("A", "B"),), sub=(("C", "D"),), op=">=", threshold=3)]]),
+            ]
+        },
         "tiebreaker_groups": None,
         "coinflip_groups": None,
         "seeding": ("A", "C", "B"),
@@ -483,7 +490,8 @@ def test_complete_scenarios_keep_open_groups():
     assert deserialize_complete_scenarios(serialize_complete_scenarios([sc])) == [sc]
     # Older snapshots, from before open groups, still load.
     old = serialize_complete_scenarios([sc])[0]
-    del old["open_groups"], old["alternatives"], old["open_places"]
+    del old["open_groups"], old["alternatives"], old["open_places"], old["place_terms"]
     assert deserialize_complete_scenarios([old])[0]["open_groups"] is None
     assert deserialize_complete_scenarios([old])[0]["alternatives"] is None
     assert deserialize_complete_scenarios([old])[0]["open_places"] is None
+    assert deserialize_complete_scenarios([old])[0]["place_terms"] is None

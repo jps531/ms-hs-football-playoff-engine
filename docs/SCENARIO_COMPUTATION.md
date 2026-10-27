@@ -40,6 +40,8 @@ For the odds, each margin combination is weighted by how often those margins hap
 
 Both `scenario_atoms` and `complete_scenarios` are stored and are eligible for UI display (subject to the display threshold below).
 
+When one set of winners gives more than eight different finishes (`_MAX_LISTED_OUTCOMES`), its tie stays one complete scenario with the group left open rather than dozens of cards. If the order turns on at most two games' margins, each team's places in it are still stated exactly (`place_terms`, built by `_place_terms`): each place as up to two sets of margin ranges and comparisons between the margins, e.g. "McAdams wins by at least 3 more points than Sebastopol (a margin over 12 counts as 12)". The team paths and cards use those conditions; a team whose places would need more falls back to "finishes Nth in the tie, which goes to the tiebreaker".
+
 **Why the full enumeration is feasible here:** R ≤ 5 means at most `12^5 × 2^5 = ~8M` combinations — runs in a few seconds. `_is_margin_sensitive_mask()` skips the 12^R inner loop for masks where margin doesn't affect tiebreakers, so actual runtime is typically well under this ceiling.
 
 ### R 6–10 — Win/loss enumeration, no margin

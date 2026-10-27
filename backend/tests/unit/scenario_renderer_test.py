@@ -113,38 +113,44 @@ Oak Grove
 
 #1 seed if:
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes ahead of Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
 
 #2 seed if:
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 2nd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #3 seed if:
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 3rd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 1–3 AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
 
 #4 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes behind Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
-2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal"""
+1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12)"""
 
 NORTHWEST_RANKIN_EXPECTED = """\
 Northwest Rankin
 
 #1 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes ahead of Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
-2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
+1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12) AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #2 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 2nd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
-2. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
+1. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
+2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 4 or more AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 3 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #3 seed if:
-1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 3rd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
 
 #4 seed if:
 1. Brandon beats Meridian AND Oak Grove beats Pearl
 2. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes behind Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 3 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
 
 Eliminated if:
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin"""
@@ -216,38 +222,44 @@ Oak Grove
 
 #1 seed if: (25.3%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes ahead of Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
 
 #2 seed if: (26.2%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 2nd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #3 seed if: (33.4%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 3rd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 1–3 AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
 
 #4 seed if: (15.2%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes behind Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
-2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal"""
+1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12)"""
 
 NORTHWEST_RANKIN_WITH_ODDS_EXPECTED = """\
 Northwest Rankin
 
 #1 seed if: (22.1%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes ahead of Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
-2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
+1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12) AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #2 seed if: (14.5%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 2nd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
-2. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
+1. Meridian beats Brandon AND Oak Grove beats Pearl AND Northwest Rankin beats Petal
+2. Brandon beats Meridian AND Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 4 or more AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 3 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #3 seed if: (0.8%)
-1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 3rd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+1. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
 
 #4 seed if: (37.6%)
 1. Brandon beats Meridian AND Oak Grove beats Pearl
 2. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes behind Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 3 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
 
 Eliminated if: (25.0%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin"""
@@ -496,28 +508,28 @@ class TestRenderMarginCondition:
         cond = MarginCondition(add=(("A", "B"), ("C", "D")), sub=(), op="==", threshold=10)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
-        assert result == "A's points margin and C's points margin combined total exactly 10"
+        assert result == "A's and C's winning margins add up to exactly 10 (a margin over 12 counts as 12)"
 
     def test_one_add_one_sub_ge_threshold_zero(self):
         """op='>=' with adjusted t==0 renders 'add is at least as large as sub' (line 67)."""
         cond = MarginCondition(add=(("A", "B"),), sub=(("C", "D"),), op=">=", threshold=0)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
-        assert result == "A's points margin is at least as large as C's"
+        assert result == "A wins by at least as many points as C (a margin over 12 counts as 12)"
 
     def test_one_add_one_sub_le_threshold_zero(self):
         """op='<=' with adjusted t==0 renders 'sub is at least as large as add' (line 74)."""
         cond = MarginCondition(add=(("A", "B"),), sub=(("C", "D"),), op="<=", threshold=0)
         atom = self._atom(("A", "B"), ("C", "D"))
         result = _render_margin_condition(cond, atom)
-        assert result == "C's points margin is at least as large as A's"
+        assert result == "A wins by no more points than C (a margin over 12 counts as 12)"
 
     def test_fallback_multiple_operands(self):
         """len(add)==2, len(sub)==1 falls back to generic sum expression (lines 78–80)."""
         cond = MarginCondition(add=(("A", "B"), ("C", "D")), sub=(("E", "F"),), op=">=", threshold=5)
         atom = self._atom(("A", "B"), ("C", "D"), ("E", "F"))
         result = _render_margin_condition(cond, atom)
-        assert result == "A's points margin + C's points margin + \u2212E's points margin >= 5"
+        assert result == "A's winning margin + C's winning margin + \u2212E's winning margin >= 5 (a margin over 12 counts as 12)"
 
 
 class TestRenderConditionUnknownType:
@@ -1170,7 +1182,7 @@ class TestAtomConditionDicts:
                 ],
                 "op": ">=",
                 "threshold": 10,
-                "description": "Mize/Raleigh's points margin exceeds Petal/Stringer's by 10 or more",
+                "description": "Mize/Raleigh wins by at least 10 more points than Petal/Stringer (a margin over 12 counts as 12)",
             }
         ]
 
@@ -1363,17 +1375,20 @@ _PARTIAL_A_NWR = """\
 Northwest Rankin
 
 #1 seed if: (19.2%)
-1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes ahead of Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12) AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+2. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #2 seed if: (3.9%)
-1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 2nd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+1. Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal by 4 or more AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 3 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #3 seed if: (1.6%)
-1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes 3rd of the four in the tie with Oak Grove, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
 
 #4 seed if: (50.3%)
 1. Oak Grove beats Pearl
-2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Northwest Rankin finishes behind Oak Grove, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 3 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
 
 Eliminated if: (25.0%)
 1. Pearl beats Oak Grove AND Petal beats Northwest Rankin"""
@@ -1383,18 +1398,21 @@ Oak Grove
 
 #1 seed if: (25.5%)
 1. Oak Grove beats Pearl AND Northwest Rankin beats Petal
-2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes ahead of Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
 
 #2 seed if: (27.3%)
 1. Oak Grove beats Pearl AND Petal beats Northwest Rankin
-2. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 2nd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
+2. Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+3. Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #3 seed if: (41.8%)
-1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes 3rd of the four in the tie with Northwest Rankin, Pearl and Petal, which goes to the tiebreaker (point differential, then fewest points allowed)
-2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
+1. Pearl beats Oak Grove AND Petal beats Northwest Rankin
+2. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal by 1–3 AND Pearl's and Northwest Rankin's winning margins add up to 10 or less (a margin over 12 counts as 12)
+3. Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
 
 #4 seed if: (5.4%)
-1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Oak Grove finishes behind Northwest Rankin, Pearl and Petal in their tie, which goes to the tiebreaker (point differential, then fewest points allowed)"""
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+2. Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12)"""
 
 _PARTIAL_A_PEARL = """\
 Pearl

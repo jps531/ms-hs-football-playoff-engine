@@ -198,6 +198,7 @@ def test_scenario_entry_shape():
         "alternatives",
         "open_groups",
         "open_places",
+        "place_terms",
         "tiebreaker_groups",
         "coinflip_groups",
     }
