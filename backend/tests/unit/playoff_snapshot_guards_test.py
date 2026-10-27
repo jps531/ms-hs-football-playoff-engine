@@ -79,6 +79,9 @@ def flow_env(monkeypatch):
         "make_matchup_prob_fn": MagicMock(return_value=None),
         "get_region_finish_scenarios": finish,
         "run_playoff_bracket_update": lambda season: events.append(("playoff_update", season)),
+        "clear_off_date_snapshots": lambda season, dates, starts, today: events.append(
+            ("clear", season, list(dates), dict(starts), today)
+        ),
         # The flow redraws the share cards last; unstubbed it calls the API, fails, and waits out a
         # 30-second retry delay before the flow carries on.
         "write_share_assets": MagicMock(),
@@ -162,3 +165,70 @@ class TestBackfill:
         dates = {d for _, _, d in _written(flow_env.events)}
         assert dates == {date(2025, 10, 31), date(2025, 11, 7), date(2025, 11, 14)}
         assert ("playoff_update", 2025) not in flow_env.events
+
+    def test_daily_rows_between_game_dates_are_cleared_after_the_writes(self, flow_env):
+        """Once every game date is written, the rows between them go, before the playoff update."""
+        starts = {c: date(2025, 11, 7) for c in (1, 2, 3, 4)}
+        flow_env.set_playoff_starts(starts)
+        pipeline.backfill_historical_snapshots.fn(season=2025)
+
+        kinds = [e[0] for e in flow_env.events]
+        assert kinds.index("clear") > max(i for i, k in enumerate(kinds) if k == "write")
+        assert kinds[-1] == "playoff_update"
+        (clear,) = [e for e in flow_env.events if e[0] == "clear"]
+        game_dates = [date(2025, 10, 31), date(2025, 11, 7), date(2025, 11, 14)]
+        assert clear == ("clear", 2025, game_dates, starts, _FakeDate.pinned)
+
+
+class TestClearOffDateSnapshots:
+    """clear_off_date_snapshots: the SQL it sends."""
+
+    @staticmethod
+    def _run(monkeypatch, game_dates, starts, today):
+        """Run the task against a mocked cursor; return (deleted, [(sql, params)], conn)."""
+        cur = MagicMock()
+        cur.rowcount = 1
+        conn = MagicMock()
+        conn.cursor.return_value.__enter__.return_value = cur
+        monkeypatch.setattr(
+            pipeline,
+            "get_database_connection",
+            MagicMock(return_value=MagicMock(__enter__=lambda s: conn, __exit__=lambda *a: None)),
+        )
+        deleted = pipeline.clear_off_date_snapshots.fn(2025, game_dates, starts, today)
+        return deleted, [c.args for c in cur.execute.call_args_list], conn
+
+    def test_each_class_keeps_its_game_dates_and_its_playoff_rows(self, monkeypatch):
+        """Per table and class: rows off the game dates go, up to the class's first playoff game."""
+        game_dates = [date(2025, 10, 31), date(2025, 11, 7)]
+        starts = {1: date(2025, 11, 7)}
+        deleted, calls, conn = self._run(monkeypatch, game_dates, starts, date(2025, 11, 10))
+
+        snapshot_calls = calls[:-1]
+        assert len(snapshot_calls) == 4 * 7
+        for sql, _ in snapshot_calls:
+            assert "NOT (as_of_date = ANY(%s)) AND (%s::date IS NULL OR as_of_date < %s::date)" in sql
+        by_table: dict[str, list[tuple]] = {}
+        for sql, params in snapshot_calls:
+            by_table.setdefault(sql.split()[2], []).append(params)
+        assert list(by_table) == [t for t, _ in pipeline.SNAPSHOT_TABLES]
+        # 1A stops at its first playoff game; a class with none is cleared all season.
+        assert by_table["region_standings"][0] == (2025, 1, game_dates, date(2025, 11, 7), date(2025, 11, 7))
+        assert by_table["region_standings"][6] == (2025, 7, game_dates, None, None)
+        # region_scenarios stores class as text.
+        assert by_table["region_scenarios"][0][1] == "1"
+        assert deleted == {
+            "region_standings": 7,
+            "region_computation_state": 7,
+            "region_scenarios": 7,
+            "region_seed_pairs": 7,
+            "team_ratings": 1,
+        }
+        conn.commit.assert_called_once()
+
+    def test_ratings_keep_the_game_dates_and_todays_row(self, monkeypatch):
+        """team_ratings has no class: it keeps every game date and the backfill's row for today."""
+        _, calls, _ = self._run(monkeypatch, [date(2025, 10, 31)], {}, date(2025, 11, 10))
+        sql, params = calls[-1]
+        assert sql.split()[2] == "team_ratings"
+        assert params == (2025, [date(2025, 10, 31), date(2025, 11, 10)])

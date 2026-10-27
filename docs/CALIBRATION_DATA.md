@@ -8,7 +8,8 @@ as they were **published**, not as they were later recomputed.
 and it gets rewritten:
 
 - a rerun on the same day replaces that day's rows;
-- `backfill_historical_snapshots` recomputes past days in place;
+- `backfill_historical_snapshots` recomputes past game dates in place and
+  deletes the regular-season rows dated between them;
 - once a class reaches the playoffs, the playoff update deletes its daily rows
   between playoff dates.
 
