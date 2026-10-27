@@ -14,9 +14,9 @@ import time
 import urllib.request
 from typing import Annotated
 
+import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2AuthorizationCodeBearer
-from jose import JWTError, jwt
 
 AUTH0_DOMAIN = os.environ["AUTH0_DOMAIN"]
 AUTH0_AUDIENCE = os.environ["AUTH0_AUDIENCE"]
@@ -109,12 +109,12 @@ async def _decode_auth0_token(token: str) -> dict:
             )
         return jwt.decode(
             token,
-            rsa_key,
+            jwt.PyJWK(rsa_key).key,
             algorithms=_ALGORITHMS,
             audience=AUTH0_AUDIENCE,
             issuer=_ISSUER,
         )
-    except JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -244,7 +244,7 @@ def _decode_session_token(token: str) -> dict | None:
     """Verify a session token; return its claims, or None if invalid/expired/tampered."""
     try:
         return jwt.decode(token, SESSION_SECRET_KEY, algorithms=[_SESSION_ALGORITHM])
-    except JWTError:
+    except jwt.PyJWTError:
         return None
 
 
