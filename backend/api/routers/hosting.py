@@ -3,8 +3,9 @@
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
+from backend.api.auth import require_owner
 from backend.api.db import get_conn
 from backend.api.limiter import limiter
 from backend.api.models.requests import BracketGameResultRequest, GameResultRequest, SimulateBracketRequest
@@ -255,7 +256,7 @@ async def get_team_hosting(
     return filter_to_team_or_404(response, team, clazz, region)
 
 
-@router.post("/hosting/{clazz}/simulate", responses=_404)
+@router.post("/hosting/{clazz}/simulate", dependencies=[Depends(require_owner)], responses=_404)
 @limiter.limit("10/minute")
 async def simulate_class_hosting(
     request: Request,
@@ -374,7 +375,7 @@ async def simulate_class_hosting(
     return ClassHostingResponse(season=season, class_=clazz, as_of_date=as_of, regions=region_responses)
 
 
-@router.post("/hosting/{clazz}/{region}/simulate", responses=_404)
+@router.post("/hosting/{clazz}/{region}/simulate", dependencies=[Depends(require_owner)], responses=_404)
 @limiter.limit("10/minute")
 async def simulate_hosting(
     request: Request,
@@ -448,7 +449,7 @@ async def simulate_hosting(
     return HostingResponse(season=season, class_=clazz, region=region, as_of_date=as_of, teams=entries)
 
 
-@router.post("/hosting/{clazz}/{region}/teams/{team}/simulate", responses=_404)
+@router.post("/hosting/{clazz}/{region}/teams/{team}/simulate", dependencies=[Depends(require_owner)], responses=_404)
 @limiter.limit("10/minute")
 async def simulate_team_hosting(
     request: Request,

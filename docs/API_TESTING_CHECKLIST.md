@@ -2,6 +2,8 @@
 
 Use these checks in the Swagger UI after seeding a full season to verify data integrity and algorithm correctness.
 
+The simulate, ratings, rankings and win-probability checks need the owner's token: in Swagger UI, **Authorize** with it first (they're owner only; see [API_REFERENCE.md](API_REFERENCE.md)).
+
 ---
 
 ## Standings (`GET /api/v1/standings/{clazz}/{region}`)

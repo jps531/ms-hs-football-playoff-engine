@@ -3,15 +3,18 @@
 from datetime import date
 from typing import Annotated, Any, LiteralString
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from psycopg import sql
 
+from backend.api.auth import require_owner
 from backend.api.db import get_conn
 from backend.api.models.responses import EloSnapshot, EloTrendResponse, MoversResponse, TeamRatingModel
 from backend.helpers.api_helpers import build_movers_response
 from backend.helpers.query_helpers import and_join_conditions, append_optional_filters
 
-router = APIRouter(prefix="/api/v1", tags=["ratings"])
+# Owner only: lists sorted by Elo, and risers and fallers, are rankings in all but name, and the site
+# shows none (a team's own rating comes with its standings row).
+router = APIRouter(prefix="/api/v1", tags=["ratings"], dependencies=[Depends(require_owner)])
 
 SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
 _404: dict[int | str, dict[str, Any]] = {404: {"description": "Not found"}}

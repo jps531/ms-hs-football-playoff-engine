@@ -5,13 +5,16 @@ from datetime import date
 from enum import StrEnum
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Depends, Path, Query
 
+from backend.api.auth import require_owner
 from backend.api.db import get_conn
 from backend.api.models.responses import RankingsResponse, StatewideRankingsResponse
 from backend.helpers.api_helpers import build_rank_entry, build_ranked_teams_query, resolve_snapshot_dates, today
 
-router = APIRouter(prefix="/api/v1/rankings", tags=["rankings"])
+# Owner only: the site shows no rankings (About lists "Elo Ratings displayed rankings-style" as under
+# consideration), so the public API doesn't serve them either.
+router = APIRouter(prefix="/api/v1/rankings", tags=["rankings"], dependencies=[Depends(require_owner)])
 
 ClazzPath = Annotated[int, Path(ge=1, le=7)]
 SeasonQ = Annotated[int, Query(ge=1980, le=2040)]
