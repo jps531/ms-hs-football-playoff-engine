@@ -1,6 +1,20 @@
 Copyright (c) 2025-2026 Paul Sullivan. All rights reserved.
 
-This software and its source code are proprietary and confidential.
-Unauthorized copying, distribution, modification, or use of this software,
-in whole or in part, is strictly prohibited without the express written
-permission of the copyright owner.
+This repository is source-available, not open source. Its code is published so
+that anyone can read it and see how mshsfootball.com works, but publishing it
+grants no license to use it. Apart from viewing and forking it on GitHub, as
+GitHub's Terms of Service allow for public repositories, you may not copy,
+modify, distribute, run or host this software, in whole or in part, without the
+copyright owner's written permission. To ask for permission, write to
+HailStateUnis@gmail.com.
+
+Third-party components included in this repository keep their own licenses,
+which this notice doesn't change:
+
+- posthog-js (nginx/html/static/js/vendor/posthog-js.js): MIT License, see
+  nginx/html/static/js/vendor/posthog-js.LICENSE.
+- Inter (nginx/html/static/fonts/, backend/assets/fonts/): SIL Open Font
+  License 1.1, see Inter-LICENSE.txt in those folders.
+- Nippo (nginx/html/static/fonts/nippo-bold.woff2,
+  backend/assets/fonts/Nippo-Bold.otf): ITF Free Font License, from the Indian
+  Type Foundry via Fontshare.

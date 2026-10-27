@@ -21,7 +21,7 @@ This project is deployed on an AWS Lightsail Ubuntu instance (`mshsfootball.com`
    ```
    Log out and back in for the group change to take effect.
 
-5. Add a GitHub deploy key so the VM can clone the private repo:
+5. Add a GitHub deploy key so the VM can clone and pull the repo over SSH:
    ```
    ssh-keygen -t ed25519 -C "lightsail-football" -f ~/.ssh/github_deploy
    cat ~/.ssh/github_deploy.pub   # add this to GitHub → Settings → SSH keys

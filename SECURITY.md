@@ -1,8 +1,8 @@
 # Security policy
 
 This repository runs [mshsfootball.com](https://mshsfootball.com). Its source
-is public on purpose; nothing about the site's security depends on the code
-being secret.
+is public on purpose (source-available, not open source: see `LICENSE`), and
+nothing about the site's security depends on the code being secret.
 
 ## Reporting a vulnerability
 
