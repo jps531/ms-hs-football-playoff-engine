@@ -2,8 +2,8 @@
 
 > **STATUS: Not implemented.** This is a design proposal, not a description of
 > shipped functionality. None of the files, tables, env vars, or Docker
-> services described below exist in the codebase yet. See the project roadmap
-> for when this is planned to be picked up.
+> services described below exist in the codebase yet. The About page lists faster and live scores under
+> "What's next" (`nginx/html/about.html#future`).
 
 ## Context
 

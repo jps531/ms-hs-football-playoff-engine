@@ -93,6 +93,11 @@ erDiagram
         text round
         timestamptz kickoff_time
         int overtime
+        real pregame_prob
+        timestamptz pregame_prob_computed_at
+        int ot_period_start_score_for
+        int ot_period_start_score_against
+        text ot_next_possession
         jsonb overrides
         int helmet_design_id FK
     }

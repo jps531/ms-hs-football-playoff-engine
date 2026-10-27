@@ -34,7 +34,7 @@ Click **Save Changes**.
 
 1. Go to **Applications → APIs** and click on your API (`mshsfbanalytics`).
 2. Open the **Application Access** tab.
-3. Find your application (`mshsfbanalytics-local`) and toggle it **on**. Click **Update**.
+3. Find your application (`mshsfbanalytics-local`) and set **User Access** to **Authorized** (older dashboards: turn its toggle on, then click **Update**).
 
 **Step 5 — Copy credentials to your `.env` files**
 

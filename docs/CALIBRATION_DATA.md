@@ -41,8 +41,8 @@ The first archived version of a team's day is what was published for it:
 ```sql
 SELECT DISTINCT ON (school, season, as_of_date)
        school, season, as_of_date, computed_at, model_version,
-       (snapshot->>'odds_playoffs')::real          AS playoffs,
-       (snapshot->>'odds_playoffs_weighted')::real AS playoffs_projected
+       (snapshot->>'odds_playoffs')::double precision          AS playoffs,
+       (snapshot->>'odds_playoffs_weighted')::double precision AS playoffs_projected
 FROM region_standings_archive
 WHERE season = 2026 AND computed_at IS NOT NULL
 ORDER BY school, season, as_of_date, archived_at;

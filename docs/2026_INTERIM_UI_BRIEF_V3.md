@@ -5,44 +5,27 @@ accessibility floor) and `2026_INTERIM_UI_UPDATE.md` (URL shape, bracket view,
 OG images). Both still apply in full. This document assumes that work is
 shipped and covers what comes next.
 
-The work here came out of a competitive review of the two other Mississippi
-high school football sites that launched this fall. Section 1 explains what
-that review found, because it changes what matters and three of the five work
+Section 1 explains why these items matter, because three of the five work
 items below only make sense in that light.
 
 ---
 
 ## 1. Why these items
 
-**msprepsindex.com** is a ratings and spreads engine covering both MHSAA and
-MAIS — four power indexes, efficiency ratings, strength of schedule, point
-spreads, and a public model-accuracy dashboard. It has a projected bracket and
-an "if the season ended today" bracket, and it applies MHSAA tiebreakers to
-results already on the board. It does **not** enumerate scenarios: no
-conditional logic, no margin thresholds, no what-if simulation.
+Three things shape this work:
 
-**mississippiprepfootball.com** is one of fifty identical state sites in an
-SEO content network. Broad coverage — schools, coaches, championship history —
-and its playoff section is historical only, 2010 through 2025, with nothing
-for the current season.
-
-Three conclusions:
-
-1. **The scenario engine is the differentiator, and the bracket is not.** A
-   projected bracket already exists elsewhere. The minimal, margin-verified
+1. **The scenario engine is the differentiator, and the bracket is not.**
+   Projected brackets already exist elsewhere. The minimal, margin-verified
    condition set — "Taylorsville clinches with a win Friday, no help needed" —
    does not exist anywhere in this market. Information hierarchy should
    reflect that.
-2. **Both competitors server-render; we do not.** They have hundreds of
-   indexed pages. We currently have one page that says "This page needs
+2. **Other sites server-render; we do not.** They have hundreds of indexed
+   pages. We currently have one page that says "This page needs
    JavaScript to load the standings." That is the largest structural
    disadvantage we have, and it is fixable with work already underway.
-3. **Transparency is our strongest defensible position.** One competitor
-   describes a rigorous validation process while naming no sources at all; the
-   other defines its metrics well but never says where its scores come from or
-   how its primary index is actually computed. We credit AHSFHS by name, cite
-   the MHSAA handbook, and publish our update schedule. That advantage is
-   worth extending deliberately rather than leaving implicit.
+3. **Transparency is our strongest defensible position.** We credit AHSFHS
+   by name, cite the MHSAA handbook, and publish our update schedule. That
+   advantage is worth extending deliberately rather than leaving implicit.
 
 ---
 
@@ -88,8 +71,8 @@ same pipeline run, and let the provenance line state that snapshot in both.
 ## 3. Keep scenarios ahead of the bracket
 
 The bracket is the newest and most interesting thing to look at, which makes
-it tempting to promote. Don't. It is the one feature where a competitor
-already offers something comparable.
+it tempting to promote. Don't. It is the one feature where something
+comparable already exists elsewhere.
 
 - The default landing experience stays standings-and-scenarios. Entering the
   site should put a region race in front of the user, not a bracket.
@@ -131,14 +114,14 @@ ranking. Never use the words interchangeably.
 
 ## 5. Extend the methodology page
 
-It is already the strongest page on the site relative to the competition.
+It is already one of the strongest pages on the site.
 Three cheap additions make the advantage explicit:
 
 **A "what we don't do" section.** State plainly that the site does not publish
 point spreads, predicted scores, or betting lines, and that it produces
 probabilities about seeding, hosting, and advancement only. This is a real
 product boundary, it is the honest framing of the existing wagering
-disclaimer, and it distinguishes us from a competitor whose primary output is
+disclaimer, and it sets the site apart from products whose main output is
 spreads and over/unders.
 
 **Explicit limits.** Say what the model does not account for — injuries,

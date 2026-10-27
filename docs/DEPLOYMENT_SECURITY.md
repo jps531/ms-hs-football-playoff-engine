@@ -82,7 +82,7 @@ The Prefect UI (`/prefect/`) is the owner's only (the role is re-checked against
 
 - [x] **Pinned builds**: images by digest, Python packages from `uv.lock` with hashes checked.
 - [ ] **Dependency scanning**: `.github/dependabot.yml` is in the repo; turn on Dependabot alerts and security updates in GitHub (Settings → Code security), along with secret scanning + push protection, CodeQL default setup, and private vulnerability reporting (see `SECURITY.md`).
-- [ ] **Log aggregation**: Ship structured logs (the `_log.info(...)` calls added in admin/moderation routers) to a centralized service (Datadog, Loki, CloudWatch) so admin action history is queryable and alertable.
+- [ ] **Log aggregation**: Ship structured logs (the `_log.info(...)` calls in the admin and moderation routers) to a centralized service (Datadog, Loki, CloudWatch) so admin action history is queryable and alertable.
 - [ ] **DB backup**: schedule `scripts/backup_db.sh` with cron and turn on Lightsail automatic snapshots ([VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#backups)). Test a restore once.
 - [x] **Contact-email retention**: the daily digest flow removes the email from feedback decided more than 90 days ago.
 - [ ] **Incident response**: Document what to do if Cloudinary credentials are leaked (regenerate API key in Cloudinary console, rotate `CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET` in all deployment configs, restart API containers).

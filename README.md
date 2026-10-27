@@ -212,7 +212,6 @@ uv sync --dev
 uv run ruff check .          # lint
 uv run ruff check --fix .    # auto-fix safe issues
 uv run ruff format .         # format (black-compatible)
-uv run pyright               # pyright
 ```
 
 ### Testing
@@ -240,7 +239,7 @@ open htmlcov/index.html
 
 ### Frontend (2026 interim UI)
 
-The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no build step. It follows [docs/2026_INTERIM_UI_BRIEF.md](docs/2026_INTERIM_UI_BRIEF.md): pick a class, pick a region, read that region's race.
+The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no build step. Its look and feel follow the design system in [docs/2026_INTERIM_UI_BRIEF.md](docs/2026_INTERIM_UI_BRIEF.md) (§§2–7: what to avoid, color, type, components, pages, accessibility). That brief's scope (§1) has since been widened by its follow-ups, [docs/2026_INTERIM_UI_UPDATE.md](docs/2026_INTERIM_UI_UPDATE.md) and [docs/2026_INTERIM_UI_BRIEF_V3.md](docs/2026_INTERIM_UI_BRIEF_V3.md), which added the brackets and share images among other things.
 
 - `index.html` — the front page (`/`), the class view (`/standings/7a`), the region view (`/standings/7a/2`) and the bracket (`/brackets/7a`), rendered by `static/js/app.js` from the public `/api/v1` endpoints. Optional parameters: `season`, `week` (a past week's snapshot; omitted = latest), `odds=tossup` (default is Projected, the Elo-weighted columns), and `team` (opens that team's playoff path and shows only its scenarios — set by the header's team search or by picking the team's row)
 - `about.html` — served at `/about` (`/methodology`, its old address, redirects there)
@@ -260,7 +259,7 @@ Check that all public functions and modules have docstrings:
 uv run docstr-coverage backend -e "backend/prefect/|backend/tests" --skip-magic --skip-init
 ```
 
-That leaves out the Prefect pipelines and the tests, and skips magic methods and `__init__` (docstr-coverage doesn't read `pyproject.toml`, so the options go on the command line). As of October 2026 it reports 98.7% (78 missing).
+That leaves out the Prefect pipelines and the tests, and skips magic methods and `__init__` (docstr-coverage doesn't read `pyproject.toml`, so the options go on the command line). It prints the current coverage and lists what's missing.
 
 ### API Reference
 

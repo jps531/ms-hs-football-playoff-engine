@@ -9,8 +9,8 @@ outside the code.
   HTML. nginx puts the pipeline's copy of the others in the HTML (server-side
   includes, see `share_assets_pipeline.py`): the front page, every class and
   region page, and every bracket page. (`/feedback` and `/moderate` need
-  JavaScript.) The
-  app replaces it on load with the same markup, so nothing moves.
+  JavaScript.) The app replaces it on load with the same markup, so nothing
+  moves.
 - **One address per page.** Each page names its canonical URL; query-string
   variants (`?week=`, `?odds=`, `?season=`) point at the plain path;
   `www.mshsfootball.com` and `http://` redirect to `https://mshsfootball.com`.
