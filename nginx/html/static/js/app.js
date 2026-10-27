@@ -30,7 +30,7 @@ import {
 } from "./scenarios.js";
 import {
   standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
-  orient, byDay, teamSchedule,
+  orient, byDay, teamSchedule, tieHeading,
 } from "./standings.js";
 
 const API = "/api/v1";
@@ -748,6 +748,7 @@ async function regionView(ctx) {
       ${controls}
     </header>
     ${standingsTable(data, teams, mode, focus, clazz, schedule)}
+    ${data.tiebreaks?.length ? tiebreaksSection(data.tiebreaks) : ""}
     ${remaining.length ? gamesSection("remaining", "Remaining games", remaining, teams, focus) : ""}
     ${remaining.length ? scenariosSection(data, teams, cardProv, mode, focus, !data.scenarios?.length) : ""}
     ${data.scenarios?.length ? allScenariosSection(data.scenarios, teams, focus, mode, cardProv.odds) + scenarioReport(focus) : ""}
@@ -929,6 +930,26 @@ function gamesSection(id, title, games, teams, focus) {
   return `<section class="section" aria-labelledby="${id}-title">
     <h2 class="section-title" id="${id}-title">${title}</h2>
     ${days.join("")}
+  </section>`;
+}
+
+/**
+ * How each tie in a finished region's standings was broken: the API's
+ * sentences, one per tiebreaker step, in the order the steps were applied.
+ */
+function tiebreaksSection(ties) {
+  const blocks = ties.map((tie) => {
+    const { title, teams } = tieHeading(tie);
+    return `<div class="tiebreak">
+      <h3 class="tiebreak__title">${esc(title)}</h3>
+      <p class="tiebreak__teams">${esc(teams)}</p>
+      <ol class="tiebreak__steps">${tie.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
+    </div>`;
+  });
+  return `<section class="section" aria-labelledby="tiebreaks-title">
+    <h2 class="section-title" id="tiebreaks-title">How the ties were broken</h2>
+    <p class="section-lead">The MHSAA region tiebreakers, step by step, with the actual results. <a href="/about#tiebreakers">How the tiebreakers work</a></p>
+    ${blocks.join("")}
   </section>`;
 }
 

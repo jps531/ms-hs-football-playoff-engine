@@ -592,6 +592,21 @@ class KeyInsightModel(BaseModel):
     r_computed: int
 
 
+class TiebreakModel(BaseModel):
+    """How one tie in a finished region's standings was broken.
+
+    ``teams`` in the order they finished, with their region ``records`` and the ``places`` they
+    took; ``steps`` one sentence per tiebreaker step applied, in order, with the actual numbers;
+    ``coin_flip`` any groups level on every step, whose order a coin flip decides.
+    """
+
+    teams: list[str]
+    records: list[str]
+    places: list[int]
+    steps: list[str]
+    coin_flip: list[list[str]] = []
+
+
 class StandingsResponse(BaseModel):
     """Region standings with seeding odds and (if available) scenarios."""
 
@@ -606,6 +621,9 @@ class StandingsResponse(BaseModel):
     key_insights: list[KeyInsightModel] | None = None
     computation_state: ComputationStateModel | None = None
     headline: str | None = None
+    # Once every region game is played: how each tie in the standings was broken (an empty list
+    # when there were none). None while games remain.
+    tiebreaks: list[TiebreakModel] | None = None
 
 
 class ClassRegionStandings(BaseModel):

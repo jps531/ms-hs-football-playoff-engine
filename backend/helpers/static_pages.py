@@ -350,6 +350,48 @@ def _list_section(title: str, items: list[str]) -> str:
     return f'<section class="section"><h2 class="section-title">{_e(title)}</h2><ul class="static-list">{lis}</ul></section>'
 
 
+def _ordinal(n: int) -> str:
+    """1 → '1st', 2 → '2nd', 11 → '11th'."""
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def tie_heading(tie: dict) -> tuple[str, str]:
+    """A tie's heading lines (standings.js's ``tieHeading``): ("Tied for 2nd–4th", "Petal, Brandon and
+    Northwest Rankin, all 3-2"). A shared record only when it is one (2-0 and 1-0 can be level)."""
+    places = tie["places"]
+    first, last = _ordinal(places[0]), _ordinal(places[-1])
+    where = f"{first} and {last}" if len(places) == 2 else f"{first}–{last}"
+    records = tie["records"]
+    if len(set(records)) == 1:
+        each = "both" if len(tie["teams"]) == 2 else "all"
+        teams = f"{join_names(tie['teams'])}, {each} {records[0]}"
+    else:
+        teams = join_names([f"{t} ({r})" for t, r in zip(tie["teams"], records, strict=True)])
+    return f"Tied for {where}", teams
+
+
+def tiebreaks_section(ties: list[dict] | None) -> str:
+    """How a finished region's ties were broken (the API's ``tiebreaks``), or nothing without any."""
+    if not ties:
+        return ""
+    blocks = []
+    for tie in ties:
+        title, teams = tie_heading(tie)
+        steps = "".join(f"<li>{_e(s)}</li>" for s in tie["steps"])
+        blocks.append(
+            f'<div class="tiebreak"><h3 class="tiebreak__title">{_e(title)}</h3>'
+            f'<p class="tiebreak__teams">{_e(teams)}</p><ol class="tiebreak__steps">{steps}</ol></div>'
+        )
+    return (
+        '<section class="section" aria-labelledby="tiebreaks-title">'
+        '<h2 class="section-title" id="tiebreaks-title">How the ties were broken</h2>'
+        '<p class="section-lead">The MHSAA region tiebreakers, step by step, with the actual results. '
+        '<a href="/about#tiebreakers">How the tiebreakers work</a></p>'
+        f"{''.join(blocks)}</section>"
+    )
+
+
 def region_table(clazz: int, region: int, payload: dict, mode: str, teams: dict[str, dict], link: bool = True) -> str:
     """The region page's standings table: position, team, records, odds of each seed and the playoffs."""
     ordered = display_order(payload["teams"])
@@ -385,7 +427,8 @@ def region_body(
     teams: dict[str, dict],
     games: list[dict] | None = None,
 ) -> str:
-    """A region page's content: title, headline, snapshot line, standings, remaining games and conditions.
+    """A region page's content: title, headline, snapshot line, standings, how any ties were broken (once
+    every game is played), remaining games and conditions.
 
     *games* are the region's ``/games`` rows, for the remaining games' dates and sites.
     """
@@ -399,7 +442,8 @@ def region_body(
         f"{breadcrumb_nav(region_trail(clazz, region))}"
         f'<h1 class="title">Region {region}-{clazz}A</h1>{headline_html}{_provenance(stamp)}'
         "</header>"
-        f"{region_table(clazz, region, payload, mode, teams)}{schedule}{needs}"
+        f"{region_table(clazz, region, payload, mode, teams)}{tiebreaks_section(payload.get('tiebreaks'))}"
+        f"{schedule}{needs}"
         "</div>\n"
     )
 

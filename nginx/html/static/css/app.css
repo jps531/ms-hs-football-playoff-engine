@@ -664,6 +664,18 @@ button { font: inherit; color: inherit; }
 .section { margin-top: 56px; }
 .section > .section-title + * { margin-top: 16px; }
 
+/* How a finished region's ties were broken: one block per tie, a numbered step per tiebreaker applied. */
+.section-lead { font-size: 14px; line-height: 20px; color: var(--text-secondary); }
+.tiebreak { margin-top: 20px; }
+.tiebreak__title {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 15px; line-height: 20px;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.tiebreak__teams { margin-top: 2px; font-weight: 600; }
+.tiebreak__steps { display: grid; gap: 8px; margin-top: 10px; padding-left: 22px; list-style: decimal; }
+.tiebreak__steps li::marker { font-weight: 600; color: var(--text-secondary); }
+
 /* Region games: a card per game, grouped under each game day. */
 .game-day + .game-day { margin-top: 24px; }
 .game-day__title {

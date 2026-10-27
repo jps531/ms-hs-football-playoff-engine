@@ -29,6 +29,7 @@ from backend.helpers.static_pages import (
     round_picks,
     side_label,
     sitemap_xml,
+    tie_heading,
     tree_centers,
     tree_columns,
 )
@@ -77,6 +78,41 @@ def _region(**extra):
 def _text(fragment: str) -> str:
     """The fragment's visible text, tags stripped and whitespace collapsed."""
     return " ".join(re.sub(r"<[^>]+>", " ", fragment).split())
+
+
+_TIE = {
+    "teams": ["Petal", "Brandon", "Northwest Rankin"],
+    "records": ["3-2", "3-2", "3-2"],
+    "places": [2, 3, 4],
+    "steps": ["Head-to-head records against each other: … That doesn't separate them.", "Petal finishes 2nd <b>."],
+    "coin_flip": [],
+}
+
+
+class TestTiebreaks:
+    """How a finished region's ties were broken, on the pre-rendered page."""
+
+    def test_heading_says_the_places_and_a_shared_record_only_when_shared(self):
+        """Matches standings.js's tieHeading."""
+        assert tie_heading(_TIE) == ("Tied for 2nd–4th", "Petal, Brandon and Northwest Rankin, all 3-2")
+        assert tie_heading({**_TIE, "teams": ["A", "B"], "records": ["2-0", "1-0"], "places": [1, 2]}) == (
+            "Tied for 1st and 2nd",
+            "A (2-0) and B (1-0)",
+        )
+
+    def test_finished_region_shows_each_tie_with_its_steps_escaped(self):
+        """Under the table, each tie's heading and its steps in order, text escaped."""
+        body = region_body(3, 6, _region(remaining_games=[], tiebreaks=[_TIE]), STAMP, "projected", {})
+        text = _text(body)
+        assert "How the ties were broken" in text and "Tied for 2nd–4th" in text
+        assert text.index("Head-to-head records") < text.index("Petal finishes 2nd")
+        assert "&lt;b&gt;" in body and '<a href="/about#tiebreakers">' in body
+        assert body.index("</table>") < body.index("How the ties were broken")
+
+    def test_no_section_without_ties(self):
+        """No tiebreaks (games left, or no ties): no section."""
+        assert "How the ties were broken" not in region_body(3, 6, _region(), STAMP, "projected", {})
+        assert "How the ties were broken" not in region_body(3, 6, _region(tiebreaks=[]), STAMP, "projected", {})
 
 
 class TestRegionBody:

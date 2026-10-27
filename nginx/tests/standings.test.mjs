@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
-  orient, byDay, teamSchedule, playoffStatus,
+  orient, byDay, teamSchedule, playoffStatus, tieHeading,
 } from "../html/static/js/standings.js";
 
 const rec = (w, l, t = 0) => ({ record: { region_wins: w, region_losses: l, region_ties: t } });
@@ -233,4 +233,20 @@ test("a team's remaining games run by date, undated last, whatever order they ar
   ];
   const { upcoming } = teamSchedule("Simmons", [], remaining);
   assert.deepEqual(upcoming.map((g) => g.opponent), ["Riverside", "West Bolivar", "Shaw"]);
+});
+
+test("a tie's heading says its places, and a shared record only when it is one", () => {
+  assert.deepEqual(
+    tieHeading({ teams: ["Petal", "Brandon", "Northwest Rankin"], records: ["3-2", "3-2", "3-2"], places: [2, 3, 4] }),
+    { title: "Tied for 2nd–4th", teams: "Petal, Brandon and Northwest Rankin, all 3-2" },
+  );
+  assert.deepEqual(
+    tieHeading({ teams: ["East Marion", "North Forrest"], records: ["3-1", "3-1"], places: [1, 2] }),
+    { title: "Tied for 1st and 2nd", teams: "East Marion and North Forrest, both 3-1" },
+  );
+  // Level in the standings with a game unplayed: the same winning percentage, different records.
+  assert.deepEqual(
+    tieHeading({ teams: ["A", "B"], records: ["2-0", "1-0"], places: [1, 2] }),
+    { title: "Tied for 1st and 2nd", teams: "A (2-0) and B (1-0)" },
+  );
 });
