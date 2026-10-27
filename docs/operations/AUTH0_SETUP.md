@@ -40,7 +40,7 @@ AUTH0_DOMAIN=<Domain from step 2.4>
 AUTH0_AUDIENCE=<Identifier from step 1.4>
 ```
 
-Keep the **Client ID** and **Client Secret** handy: you type them into Swagger UI's **Authorize** dialog (see the README's [Promote yourself to owner](../../README.md#promote-yourself-to-owner)).
+Keep the **Client ID** and **Client Secret** handy: you type them into Swagger UI's **Authorize** dialog (see [Promote yourself to owner](LOCAL_DEVELOPMENT.md#4-promote-yourself-to-owner)).
 
 Swagger UI is only served with `ENVIRONMENT=local`. Production turns it off, so this application needs no production URLs.
 
@@ -62,7 +62,7 @@ The page signs in with Auth0 directly from the browser (authorization code + PKC
 
 A `users` row is created on a person's first authenticated request (signing in at `/moderate`, or calling `GET /api/v1/users/me` from Swagger UI). Everyone starts as `user`.
 
-- **Owner:** set once, by SQL. The README's [Promote yourself to owner](../../README.md#promote-yourself-to-owner) has the steps.
+- **Owner:** set once, by SQL. [Promote yourself to owner](LOCAL_DEVELOPMENT.md#4-promote-yourself-to-owner) has the steps.
 - **Moderator:** promote by Auth0 user ID (Auth0 → User Management → Users → the person → **user_id**, e.g. `auth0|65f…` or `google-oauth2|10…`), not by email: the stored email is only kept once Auth0 has verified it, and anyone can type someone else's address when signing up. On the server:
 
   ```

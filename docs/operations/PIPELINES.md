@@ -32,11 +32,23 @@ Run on their own after a fix, or with a Custom Run for another season.
 | `regions-data-pipeline` | Pre-season, and when MHSAA reclassifies (every two years): writes each school's class and region for the season to `school_seasons`, adding new schools to `schools`. |
 | `nces-school-pipeline` | Pre-season, and when schools move: city, ZIP, latitude and longitude for public schools from the NCES EDGE API, then the private-school location seed. Fields with an override are left alone. |
 | `misshsaa-school-pipeline` | Pre-season, and when schools rebrand: mascot and colors from the MHSAA school directory. |
-| `backfill-historical-snapshots` | Once per season after importing a full season's games, again after re-importing them, and after any change that bumps `MODEL_VERSION` (so past weeks use the current model). Recomputes every game date's snapshot, runs `playoff-bracket-update` for the playoff dates, and deletes the season's regular-season rows dated between game dates, which would otherwise shadow them. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#deploying-updates). |
-| `playoff-bracket-update` | Rarely: the daily update and the backfill both run it. It reads the completed playoff games and writes one `region_standings` snapshot per class, region and round date; run it alone only to refresh those rows. |
+| `backfill-historical-snapshots` | Once per season after importing a full season's games, again after re-importing them, and after any change that bumps `MODEL_VERSION` (so past weeks use the current model). Recomputes every game date's snapshot, runs `playoff-bracket-update` for the playoff dates, and deletes the season's regular-season rows dated between game dates, which would otherwise shadow them. Each snapshot uses only the games played by its date (`get_standings_for_region` applies the date to every aggregate), so past weeks show the records and odds as they stood then. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#deploying-updates). |
+| `playoff-bracket-update` | Rarely: the daily update and the backfill both run it. It reads the completed playoff games, marks eliminated teams, and writes one `region_standings` snapshot per class, region and round date. Once a class's playoffs start, the daily region run leaves its rows to this flow: the regular-season odds ignore playoff results, and a newer row would hide the playoff-aware ones. Run it alone only to refresh those rows. |
 | `share-assets` | After a deploy or a rerun, to redraw now rather than at the next daily update: the link-preview cards and meta tags, the pre-rendered page content, and `sitemap.xml`. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#share-cards-link-previews). |
 
-The pre-season order is in the README's [Once per season](../../README.md#once-per-season-pre-season-setup).
+## Pre-season order
+
+Run these in order; each needs the previous step's data in the database.
+
+1. `regions-data-pipeline`: each school's class and region for the season (`school_seasons`). A Quick Run is the current year; use a Custom Run for another season.
+2. `nces-school-pipeline`: city, ZIP, latitude and longitude for public schools from the NCES EDGE API, then the private-school location seed.
+3. `misshsaa-school-pipeline`: mascot and colors from the MHSAA school directory.
+4. `ahsfhs-schedule-data-pipeline`: the season's `games` rows from each school's AHSFHS schedule.
+5. `region-scenarios-data-pipeline` for the same season: odds, standings and scenarios for today.
+
+For a completed past season, follow with `backfill-historical-snapshots` so every past week has its snapshot.
+
+Re-run steps 2–3 if schools move or rebrand, and step 1 if MHSAA reclassifies (every two years). The bracket structure for 2025 and 2026 (`playoff_formats`, `playoff_format_slots`) is seeded when the database is created, from `sql/seeds/playoff_formats_2025.sql` and `_2026.sql`; a later season is added with the script in [SEASON_SETUP.md](SEASON_SETUP.md#playoff-bracket-format), along with any consolidations or closures.
 
 ## Scripts
 
