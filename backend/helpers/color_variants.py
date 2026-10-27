@@ -1,10 +1,10 @@
 """DB-touching wrapper around backend.helpers.color_contrast.
 
-This is the "one place" (docs/proposals/COLOR_CLAMP_SPEC.md §5) that
-recomputes and persists a school's ``color_variants`` blob. Called from five
-independent sites: submission approval, the direct admin school-override
-endpoint, the admin manual-repair endpoints, the MHSAA scrape pipeline, and
-the one-off backfill flow. All actual contrast math lives in
+This is the one place that recomputes and persists a school's
+``color_variants`` blob. Called from: submission approval, the admin
+school-override endpoints, the admin recompute-colors endpoints, the MHSAA
+school pipeline, and its Recompute School Color Variants flow (run by hand;
+not deployed). All actual contrast math lives in
 ``color_contrast.py`` — this module only reads the effective hex colors,
 calls it, and writes the result.
 

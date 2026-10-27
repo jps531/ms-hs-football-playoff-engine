@@ -58,7 +58,7 @@ _DEFAULT_CLASS_RATINGS: tuple[float, ...] = (
 class EloConfig:
     """Tunable parameters for the Elo rating model.
 
-    Defaults are calibrated for Mississippi high school football
+    Defaults are chosen for Mississippi high school football
     (10–12 games per team, 1A–7A classifications).
     """
 
@@ -151,10 +151,14 @@ def compute_pregame_win_prob(
 
 
 def _mov_multiplier(margin: int, elo_diff_winner: float, mov_exponent: float) -> float:
-    """FiveThirtyEight-style margin-of-victory multiplier.
+    """Margin-of-victory multiplier, loosely modelled on FiveThirtyEight's.
 
-    Discounts large winning margins when the favourite wins big; gives extra
-    credit to underdog upsets.  Returns 1.0 for ties (margin == 0).
+    Grows with the log of the margin, and shrinks a little as the rating gap
+    *elo_diff_winner* grows. The caller passes the gap's absolute value, so a
+    lopsided game counts slightly less whoever won it: there's no extra credit
+    for an upset. The caller also passes ``EloConfig.k_region`` (50) as
+    *mov_exponent*, so the shrink is 50 / (50 + gap / 50): about 0.83 for a
+    500-point gap. Returns 1.0 for ties (margin == 0).
     """
     if margin == 0:
         return 1.0
@@ -640,7 +644,7 @@ def compute_in_game_win_prob(
 ) -> float:
     """Return P(team_a wins) given current score and time remaining in regulation.
 
-    Uses a Gaussian remaining-score random walk calibrated for MSHAA 48-minute
+    Uses a Gaussian remaining-score random walk set for MHSAA's 48-minute
     rules.  Do not call this for overtime possessions; use ``compute_ot_win_prob``
     instead.
 
@@ -714,7 +718,7 @@ def compute_ot_win_prob(
     ``pregame_prob_a`` (each new OT period resets to the same team-strength
     contest).
 
-    MSHAA overtime is untimed alternating possessions (NFHS Kansas City
+    MHSAA overtime is untimed alternating possessions (NFHS Kansas City
     Tiebreaker format).  Scoring rates are adjusted by the Elo gap.
     """
     cfg = config or InGameConfig()

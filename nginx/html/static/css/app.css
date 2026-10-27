@@ -1168,11 +1168,11 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 .bgame .mark { width: 22px; height: 22px; }
 
 /* ------------------------------------------------------------ main nav */
-/* Standings, Bracket, How it works: header links on wide screens, a tab
+/* Standings, Bracket, About: header links on wide screens, a tab
    bar along the bottom on phones and small tablets. Only one is shown. */
 
 .site-nav { display: none; gap: 4px; }
-/* Pages without the team search (How it works): keep the nav beside the name. */
+/* Pages without the team search (About): keep the nav beside the name. */
 .site-nav:has(+ .theme-toggle) { margin-right: auto; }
 .site-nav__item {
   display: inline-flex; align-items: center;

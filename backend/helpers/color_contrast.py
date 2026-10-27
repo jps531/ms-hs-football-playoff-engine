@@ -7,8 +7,6 @@ lightness is adjusted, via a binary search that finds the minimal shift
 needed to clear the target ratio.  All computation is pure Python (plus
 ``coloraide`` for OKLCh conversion); no DB or Prefect imports here.
 
-See docs/proposals/COLOR_CLAMP_SPEC.md for the full design.
-
 Public API
 ----------
 ClampConfig               — tunable model parameters (surfaces, targets, iterations)

@@ -3,7 +3,7 @@
 Each outcome is a short English sentence like:
   "West Jones finishes 2-3, all alone in 3rd"
   "Hattiesburg finishes 4-1, tied with Wayne County, who they beat 20-13"
-  "Wayne County finishes 3-2, tied with Jones County — beat Wayne County while
+  "Wayne County finishes 3-2, tied with Jones County — beat Hattiesburg while
    Jones County lost, placing Wayne County 3rd"
 
 Phase 1 covers:

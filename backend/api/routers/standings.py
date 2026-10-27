@@ -231,11 +231,11 @@ async def get_standings(
     date: DateQ = None,
     include_team_scenarios: IncludeTeamScenariosQ = False,
 ) -> StandingsResponse:
-    """Return seeding odds and (when R≤6) scenario list for *clazz*A Region *region*.
+    """Return seeding odds and (when R≤5) scenario list for *clazz*A Region *region*.
 
     Pass ``include_team_scenarios=true`` to also receive a per-team ``paths``
     breakdown — minimized OR-of-AND conditions per achievable outcome (seed /
-    playoffs / eliminated) — only available when R≤6.
+    playoffs / eliminated) — only available when R≤5.
     """
     as_of = date or today()
     async with get_conn() as conn:

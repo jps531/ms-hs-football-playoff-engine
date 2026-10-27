@@ -72,14 +72,6 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
 
-[tool.docstr-coverage]
-# Exclude pipeline files (require live DB/Prefect) and tests from docstring coverage.
-# Paths are passed as CLI args: uv run docstr-coverage prefect_files scripts
-exclude = "backend/prefect/(ahsfhs_schedule_pipeline|database_helpers|flows|maxpreps_data_pipeline|playoff_bracket_pipeline|region_scenarios_pipeline|regions_data_pipeline|school_info_pipeline|template_pipeline|web_helpers)\\.py|backend/tests"
-skip_magic = true
-skip_init = true
-verbose = 2
-
 [tool.coverage.run]
 branch = true
 source = ["backend"]

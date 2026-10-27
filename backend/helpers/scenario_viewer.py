@@ -821,7 +821,7 @@ def enumerate_outcomes(
         base_margin_default: Default margin when no specific margin is set.
         ignore_margins: When True, skip margin enumeration entirely. Each mask
             is evaluated once with a fixed default margin and treated as
-            non-sensitive. Use for R≥5 initial display or R≥7 permanent mode.
+            non-sensitive. Used past 5 games left (the win/loss-only tier).
             Callers must not use the resulting atoms for margin-sensitive
             sub-scenario conditions — they will be absent.
 

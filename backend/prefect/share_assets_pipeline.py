@@ -15,13 +15,13 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
     meta/{class}-{region}.html, meta/{class}.html, meta/{class}-{region}/{team}.html,
     meta/bracket-{class}.html, meta/bracket-{class}/{team}.html
                               <title>, description, Open Graph / Twitter tags
-    body/{class}-{region}.html, body/{class}.html, body/site.html
+    body/{class}-{region}.html, body/{class}.html, body/bracket-{class}.html, body/site.html
                               the page's content as static HTML (backend.helpers.static_pages)
-    sitemap.xml               every region, class and bracket page, for search engines
+    sitemap.xml               the front page, About, and every region, class and bracket page
 
 nginx splices the matching ``meta/*.html`` into the app's ``index.html``
-<head> for /standings/{class}a/{region}[?team=<slug>] and /standings/{class}a
-(server-side include). A team without a file falls back to its region's tags,
+<head> for /standings/{class}a/{region}[?team=<slug>], /standings/{class}a and
+/brackets/{class}a[?team=<slug>] (server-side include). A team without a file falls back to its region's tags,
 anything else to the generic tags in ``index.html``. It also splices the
 matching ``body/*.html`` into ``<main>``, so the page reads without
 JavaScript; the app replaces it on load. Cards, tags and content all come

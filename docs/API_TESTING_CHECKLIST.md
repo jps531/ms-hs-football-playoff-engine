@@ -28,7 +28,7 @@ Each team in `teams[].bracket_odds` should have `second_round` through `champion
 Each team in `teams[].home_game_odds` should have `first_round` through `semifinals` (unweighted and weighted). The 1-seed's `first_round` should be `1.0` once clinched.
 
 **4d. `computation_state` reflects pipeline status** ✅
-The response should include a `computation_state` object with `margin_sensitive` (boolean) and `margin_compute_status` (string: `not_needed`, `pending`, `running`, `complete`, or `skipped`). When `margin_sensitive` is `false` and `margin_compute_status` is `pending`, the UI should indicate that odds are being refined.
+The response should include a `computation_state` object with `margin_sensitive` (boolean) and `margin_compute_status` (string). With five or fewer region games left expect `true` and `not_needed`; with more, `false` and `skipped`. (`pending`, `running` and `complete` are allowed by the schema but never written.)
 
 ---
 

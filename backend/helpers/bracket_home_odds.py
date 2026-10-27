@@ -1,8 +1,7 @@
 """Playoff home-game probability for rounds beyond the first.
 
-``compute_first_round_home_odds`` (in scenarios.py) handles the first round
-(and the second round for 1A-4A, where the same higher-seed-hosts rule applies).
-This module handles the remaining rounds:
+``compute_first_round_home_odds`` (in scenarios.py) handles the first round.
+This module handles the later rounds:
 
 * **Second round (1A-4A only)**: higher seed hosts.  Equal cross-region seeds use the same
   odd/even year tiebreak as QF/SF (odd years: lower region# hosts; even years: higher region#).

@@ -14,11 +14,14 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | GET | `/teams` | List teams; `season` required, optional `class` and `region` filters. Each team includes `helmet_url` — the full image URL of its resolved helmet for that season (same resolution order as `/teams/{team}/helmets/resolved`, right-side view preferred, else left), or `null` |
 | GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
 | GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
+| GET | `/teams/{team}/logos` | Logo asset history for a team (`team_logos` rows); optional `logo_type` (`primary`/`secondary`/`tertiary`) and `year` filters |
+| GET | `/teams/{team}/logos/resolved` | The logo asset to display for a team in a season: the primary row covering the season, else the covering row with the latest `year_start`, else `null`. Params: `season` (required), `logo_type` (default `primary`) |
 | GET | `/teams/{team}/helmets/resolved` | The single default helmet design to display for a team in a season — see "Primary helmet & display resolution order" below. Params: `season` (required) |
 | GET | `/teams/{team}/roadmap` | The team's full-season roadmap (regular season + playoffs) — see below. Params: `season` (required) |
 | GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag`, `sort` (`created_at` for newest-added first; default order is `school`, `year_first_worn`) |
 | GET | `/helmets/{id}` | Single helmet design with full metadata, images, `stats`, and `games_worn` — see below |
 | GET | `/championships` | Championship venue history (back to 1992) for the almanac page. Optional `season`, `class` filters |
+| GET | `/client-config` | The public settings the site's pages need: Turnstile's site key, the moderation page's Auth0 app, the Swagger UI path when this server serves it, the PostHog project key, and the PostHog dashboard links shown to the owner on `/moderate`. Nothing secret; a value is `null` when that feature isn't set up |
 
 **`GET /helmets` / `GET /helmets/{id}`** — every design (list items and the detail record) carries `created_at` and a `stats` object: `{appearances, games_tracked, wins, losses, ties, games_played}`. `appearances`/`games_tracked` are the same count — games with an explicit `helmet_design_id` assignment for this design (a design that's merely inferred as a team's primary is never counted, per the integrity rule below). `wins`/`losses`/`ties` are counted among those assigned games that have a result. `games_played` is the school's total **final** games across the seasons this design spans (see `helmet_covers_season` below), so the UI can render e.g. "6–1 in 7 tracked games (of 11 played)". `GET /helmets/{id}` additionally returns `games_worn: [{school, date, opponent, points_for, points_against, result, round}]` for every explicitly-assigned game, oldest first. 404 if the id doesn't exist.
 
@@ -46,13 +49,13 @@ specific seed pinned to that exact position — not alphabetical order.
 |--------|------|-------------|
 | GET | `/summary` | Statewide summary: one card per region across every class. Params: `season` (required), `date` (optional, default latest). Returns `leader`, `num_teams`, `num_clinched`, `num_eliminated`, `teams_alive`, `volatility`, and per-team `statuses` for every region. Each entry in `statuses[]` includes `status`, `clinched_seed` (the specific seed number the team has mathematically locked in, or `null`), and `record` (overall + region W/L/T). No scenario data is read. |
 | GET | `/{clazz}` | Full standings tables for every region in one class, one request. Params: `season` (required), `date` (optional, default latest). Each region returns the same per-team detail as `/{clazz}/{region}` (`odds`, `bracket_odds`, `home_game_odds`, `clinched`, `eliminated`, `coin_flip_needed`) minus `scenarios`/`computation_state`. Only reads from stored snapshots (no on-demand fallback); 404 if the class has no data yet. |
-| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤6 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team `paths` breakdown to each team entry). See [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for the full computation model. |
+| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤5 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team `paths` breakdown to each team entry). See [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for the full computation model. |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team. Same params. |
 | POST | `/{clazz}/{region}/simulate` | Apply hypothetical game results and return updated seeding odds. Same `include_team_scenarios` param. Rate limited: 10/minute. |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | Same, filtered to one team. Rate limited: 10/minute. |
 
 **Response fields per team** (`teams[]`):
-- `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus margin-weighted variants `p1_weighted`–`p_playoffs_weighted`
+- `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus Projected (Elo-weighted) variants `p1_weighted`–`p_playoffs_weighted`
 - `bracket_odds` — probability of advancing to each playoff round (`second_round` through `champion`), unweighted and weighted. `null` for on-demand/simulate paths.
 - `home_game_odds` — P(hosts round | reaches round) for each round (`first_round` through `semifinals`), unweighted and weighted. `null` for on-demand/simulate paths.
 - `clinched`, `eliminated`, `coin_flip_needed`
@@ -66,7 +69,7 @@ specific seed pinned to that exact position — not alphabetical order.
 - `scenarios` — when `scenarios_available` is `true`, each entry includes `game_winners` (which team wins each remaining game to produce this seeding), `tiebreaker_groups`, `coinflip_groups`, and `outcomes` (team → seed number)
 - `headline` — one plain-English sentence stating the most interesting fact about the race right now (e.g. "Oxford has the region won, and Madison Central clinches the last playoff spot with a win over Clinton."). Built only from locked seeds, margin-verified key insights, and — with five or fewer games left — single-path scenario conditions, so it never states anything the engine hasn't proven. See `backend/helpers/headline.py`.
 - `key_insights` — each condition carries `winner`/`loser` plus `min_margin`/`max_margin` (same semantics as path conditions above).
-- `computation_state` — `margin_sensitive` (bool), `margin_compute_status` (`not_needed` / `pending` / `running` / `complete` / `skipped`), and timestamps. Use `margin_compute_status` to show a "refining odds…" indicator while background margin computation is running.
+- `computation_state` — `margin_sensitive` (bool: whether the stored scenarios account for margins, true with five or fewer games left), `margin_compute_status` (`not_needed` with five or fewer left, `skipped` above that; the schema also allows `pending` / `running` / `complete`, but nothing writes them), `computed_at` (when the pipeline wrote this snapshot) and `margin_computed_at` (always `null`).
 
 ## Rankings — `/rankings`
 
@@ -206,7 +209,7 @@ A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Co
 | GET | `/` | Game schedule; filter by `season`, `class`, `region`, `team`, `date_from`, `date_to` |
 | GET | `/probability` | Pre-game win probability (Elo-based). Params: `team_a`, `team_b`, `season`, `location`, `date` (optional — pins both teams' Elo ratings to the most recent snapshot on or before this date; defaults to the latest available) |
 | POST | `/probability/live` | In-game win probability. Body: `pregame_prob`, `current_margin`, `seconds_remaining` |
-| POST | `/probability/overtime` | MSHAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
+| POST | `/probability/overtime` | MHSAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
 | GET | `/upsets` | Finished games sorted by the winner's pregame win probability, ascending (biggest upsets first). Params: `season` (required), `date_from`/`date_to` (optional, independent bounds — without either, defaults to the week containing the most recent final game so newly-finalized upsets appear immediately), `limit` (default 10) |
 
 Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinals"` — `null` for regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
@@ -256,6 +259,8 @@ Every endpoint in this router requires moderator+ (`Authorization: Bearer <token
 | GET | `/overrides` | Audit all active manual overrides across schools, locations, and games |
 | PUT | `/schools/{school}/overrides` | Set one override field on a school. Body: `{ "field": "display_name", "value": "West Jones" }`. Valid fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude` |
 | DELETE | `/schools/{school}/overrides/{field}` | Clear one override field, restoring the pipeline-written value |
+| POST | `/schools/{school}/recompute-colors` | Recompute one school's `color_variants` (the contrast-safe colors) from its current colors, e.g. after a data repair |
+| POST | `/schools/recompute-colors` | Recompute `color_variants` for the schools in the body's `schools` list, or every school when it's omitted. Returns `recomputed` and `clamp_failed_schools` |
 | PUT | `/games/{school}/{date}/overrides` | Set one override field on a game row (e.g. fix a miscategorized region game or a wrong score, or manually drive a game's live state — see below). Valid fields: `location`, `location_id`, `points_for`, `points_against`, `region_game`, `round`, `kickoff_time`, `game_status`, `game_quarter`, `game_clock`, `overtime`, `ot_period_start_score_for`, `ot_period_start_score_against`, `ot_next_possession` |
 | DELETE | `/games/{school}/{date}/overrides/{field}` | Clear one override field on a game row |
 | PUT | `/locations/{id}/overrides` | Set one override field on a venue. Valid fields: `home_team`, `latitude`, `longitude` |
@@ -299,6 +304,15 @@ Every endpoint in this router requires moderator+ (`Authorization: Bearer <token
 
 "Covers the season" is decided by the Postgres helper `helmet_covers_season()`: when a design's `years_worn` (non-contiguous spans, e.g. a throwback worn 2001–2005 and again in 2007) is set, a season counts only if it falls inside one of those spans; otherwise it falls back to the `year_first_worn`–`year_last_worn` outer bound (open-ended when `year_last_worn` is `null`). The same function backs `stats.games_played` on `GET /helmets`/`GET /helmets/{id}` below.
 
+**Team logo assets** — `team_logos` rows, one per logo asset and span of years. Create a row first to get an `id`, then upload its image via `POST /images/team-logos/{id}`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/logos` | Create a `team_logos` row. Optional `from_submission_id` links it to the logo submission it was cut from (404 if that submission doesn't exist, 422 if it isn't a logo submission waiting on its asset) |
+| PATCH | `/logos/{id}` | Update a row's years, primary flag, keyline flag or notes. The image is managed through `/images/team-logos/{id}` |
+| DELETE | `/logos/{id}` | Delete a row |
+| GET | `/logos/needs-recut` | Published logo assets without a keyline (`has_keyline = false`): the re-cut backlog |
+
 ## Images — `/images`
 
 Upload images to Cloudinary and write the resulting path back to the database. Returns `{ "path": "...", "url": "https://..." }`. Every endpoint in this router requires moderator+ (`Authorization: Bearer <token>`) — there is no anonymous image upload path.
@@ -306,6 +320,7 @@ Upload images to Cloudinary and write the resulting path back to the database. R
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/logos/{school}/{logo_type}` | Bearer (moderator+) | Upload a school logo (`primary`, `secondary`, or `tertiary`). Updates `schools.logo_{type}`. |
+| POST | `/team-logos/{team_logo_id}` | Bearer (moderator+) | Upload the image for an existing `team_logos` row (see Team logo assets under Admin). |
 | POST | `/helmets/{helmet_design_id}/{image_type}` | Bearer (moderator+) | Upload a helmet image (`left`, `right`, or `photo`). Looks up school and year from the existing `helmet_designs` row, uploads to `helmets/{type}/{School}_{year}_{id}`, and updates the corresponding column. |
 
 ## Auth — `/auth`
@@ -314,7 +329,7 @@ Authentication is handled by **Auth0**. Users log in via Auth0 and receive an RS
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/verify-moderator` | Bearer or session cookie (moderator+) | Internal endpoint called by nginx `auth_request` to gate the Prefect UI. Returns 200 for moderator/owner via either credential, 401/403 otherwise. Not shown in Swagger. |
+| GET | `/verify-moderator` | Bearer or session cookie (owner) | Internal endpoint called by nginx `auth_request` to gate the Prefect UI. Returns 200 for the owner via either credential, 401/403 otherwise (the path keeps its old name). Not shown in Swagger. |
 | POST | `/session` | Bearer | Mint a first-party session cookie for the caller (any authenticated user — role is checked at verify time, not mint time). Sets an httponly, `SameSite=Lax` cookie (`secure` outside local dev). Call once after Auth0 login completes; needed for contexts a Bearer header can't reach, e.g. navigating to the Prefect UI link. |
 | DELETE | `/session` | none | Clear the session cookie. Bearer-token access is unaffected. |
 
@@ -362,7 +377,9 @@ Requires a valid `Authorization: Bearer <token>` header with `moderator` or `own
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/submissions` | List submissions. Optional query params: `type` (`logo`/`helmet`/`colors`/`location`/`score`/`feedback`/`helmet_assignment`), `status_filter` (`pending`/`approved`/`rejected`), `unlinked` (bool — restricts to submissions with/without a linked `helmet_design_id`; `type=helmet&status_filter=approved&unlinked=true` is the "needs mockup" tab), `limit` (default 50), `offset` |
+| GET | `/queue` | The moderation page's view: submissions newest first with their payloads, plus `pending_counts` per type. Score submissions carry `current_game`, the game as the site shows it now. Params: `status_filter` (default `pending`; `all` for every status), `type`, `limit` (default 50, max 200), `offset` |
 | GET | `/submissions/{id}` | Get a single submission with its full payload. 404 if not found. |
+| GET | `/submissions/{id}/color-preview` | For a `colors` submission: the school's current contrast-safe color variants next to the ones approving it would store. Read-only. 404 if not found; 422 if not a `colors` submission. |
 | POST | `/submissions/{id}/approve` | Approve a pending submission and auto-apply it to the live database. Optional body: `{ "notes": "..." }`. 404 if not found; 409 if already reviewed. |
 | POST | `/submissions/{id}/reject` | Reject a pending submission. No changes are applied to the database. Optional body: `{ "notes": "..." }`. 404 if not found; 409 if already reviewed. |
 

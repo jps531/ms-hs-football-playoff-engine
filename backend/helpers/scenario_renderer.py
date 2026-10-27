@@ -901,10 +901,10 @@ def render_team_home_scenarios(
     designated home team in the first round) the block header includes
     ``"(100.0%)"`` and no numbered conditions are shown.
 
-    Probability suffixes (``p_host`` / ``p_host_weighted``) are taken from
-    the ``RoundHomeScenarios`` objects themselves; pass them in via
-    ``enumerate_home_game_scenarios``'s ``p_host_by_round`` /
-    ``p_host_weighted_by_round`` arguments.
+    Probability suffixes (``p_host_overall`` / ``p_host_overall_weighted``)
+    are taken from the ``RoundHomeScenarios`` objects themselves; pass them in
+    via ``enumerate_home_game_scenarios``'s ``p_host_overall_by_round`` /
+    ``p_host_overall_weighted_by_round`` arguments.
 
     Args:
         team:           School name of the target team.

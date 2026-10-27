@@ -797,7 +797,7 @@ def team_bracket_title(team: str, clazz: int) -> str:
 
 
 def team_bracket_description(team: str, road: list[dict], champion: float | None) -> str:
-    """ "Raleigh's likeliest opponents: First Round at home vs Tylertown, Second Round vs Hazlehurst, …; 4% to win…"."""
+    """ "Raleigh's likeliest opponents: First Round vs Tylertown, Second Round at Hazlehurst, …; 4% to win…"."""
     stops = []
     for step in road:
         if step["round"] == "Championship Game" or not step["opponent"]:

@@ -1,8 +1,9 @@
 """Scenario enumeration for region standings.
 
-Enumerates all 2^R outcome combinations for remaining games, resolves standings
-for each using margin-sensitive threshold detection, and accumulates per-team
-per-seed counts. No Prefect or database dependencies.
+Enumerates all 2^R winner combinations for the remaining games (or, past 15
+games, samples them: 50,000 runs per odds mode), resolves standings for each
+(with margin-sensitive threshold detection unless margins are ignored), and
+accumulates per-team per-seed counts. No Prefect or database dependencies.
 """
 
 import hashlib

@@ -159,7 +159,7 @@ export function breadcrumbs(trail) {
   return `<nav class="crumbs" aria-label="Breadcrumb"><ol>${items.join("")}</ol></nav>`;
 }
 
-/** Helmet + name: the only way a team is ever identified. */
+/** Helmet + name: how a team is usually shown. */
 export function teamLabel(name, teams) {
   return `<span class="team">${teamMark(name, teams?.[name])}<span class="team-name">${esc(name)}</span></span>`;
 }

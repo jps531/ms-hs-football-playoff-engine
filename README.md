@@ -1,14 +1,14 @@
 # ms-hs-football-playoff-engine
 
-An application that calculates standings and playoff scenarios for Mississippi High School Football.
+An application that calculates standings and playoff scenarios for Mississippi high school football (MHSAA).
 
 ## How It Works
 
 - Four Prefect pipelines ingest data from MHSAA (region assignments and school identity), the NCES EDGE API (school locations), and AHSFHS (schedules) into PostgreSQL.
-- Once game results are in, the tiebreaker engine enumerates every possible outcome across the 2^R remaining region games, applies the [7-step MHSAA tiebreaker algorithm](docs/SCENARIO_RULES.md) (head-to-head record → point differential vs. highest-ranked opponent → capped per-game margin → coin flip) to determine seedings, and uses boolean minimization to reduce the scenario space into concise human-readable conditions. See [docs/SCENARIO_COMPUTATION.md](docs/SCENARIO_COMPUTATION.md) for how computation tiers, margin sensitivity, and the R threshold interact.
+- Once game results are in, the tiebreaker engine works through the remaining region games (every outcome while there are 15 or fewer, and every winning margin while there are 5 or fewer; 50,000 simulated seasons per odds mode above 15), applies the [6-step MHSAA tiebreaker procedure](docs/SCENARIO_RULES.md) (head-to-head → results against the highest-finishing teams → capped point differential among the tied teams → capped point differential against the highest-finishing teams → fewest points allowed → coin flip) to determine seedings, and uses boolean minimization to reduce the scenario space into concise human-readable conditions. See [docs/SCENARIO_COMPUTATION.md](docs/SCENARIO_COMPUTATION.md) for how computation tiers, margin sensitivity, and the R threshold interact.
 - Results are stored as dated snapshots so the API can answer historical "what were the odds on date X?" queries without recomputation.
 - The FastAPI layer serves those snapshots for live requests, falls back to on-demand in-memory recomputation when no snapshot exists, and exposes a simulation endpoint that lets callers apply hypothetical results to explore what-if outcomes.
-- Elo ratings with a margin-of-victory multiplier and cross-season carryover drive pregame win probability, while a separate in-game model uses score margin and time remaining (plus MSHAA's untimed alternating-possession OT format) for live probability estimates.
+- Elo ratings with a margin-of-victory multiplier and cross-season carryover drive pregame win probability, while a separate in-game model uses score margin and time remaining (plus MHSAA's untimed alternating-possession OT format) for live probability estimates.
 
 ## Data Model
 
@@ -23,10 +23,13 @@ The following data model describes how data is stored and controlled in this app
 | `school_seasons` | Per-season class and region assignments (can change on MHSAA's two-year cycle). FK anchor for all season-scoped data. |
 | `locations` | Physical venues. Referenced by `games` for geocoding and home-field logic. |
 | `games` | School-perspective game rows — two rows per contest, so scores and results are always relative to the `school` column. Covers regular season and playoffs. |
-| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion, raw and Elo-weighted), and [home-game odds per round](docs/PLAYOFF_HOME_RULES.md) (raw and Elo-weighted). Appended each pipeline run; never overwritten. |
+| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion, raw and Elo-weighted), and [home-game odds per round](docs/PLAYOFF_HOME_RULES.md) (raw and Elo-weighted). One snapshot per school per date: a rerun on the same day replaces that day's rows, and `region_standings_archive` keeps every version written. |
 | `team_ratings` | Dated Elo and RPI snapshots. One row per school per season per `as_of_date`. |
 | `region_scenarios` | Serialized tiebreaker scenario trees (complete outcomes + minimized per-team conditions) plus pre-computed key insights (simple, unconditionally-true conditional statements like "Taylorsville clinches 1st seed: Taylorsville beats Stringer"). Computed once per pipeline run, read at request time. |
-| `region_computation_state` | Tracks background margin-sensitivity upgrade status per region (the two-phase computation model for regions with 5–6 games remaining). |
+| `region_computation_state` | Per region and snapshot date: how many region games remained, whether every winning margin was worked through (5 or fewer left), and when it was computed. |
+| `region_seed_pairs` | Per region and snapshot date: the chance that two teams land on two given seeds together, which the bracket matchups need. |
+| `region_standings_archive` | Append-only copy of every write to `region_standings`, for measuring published odds against results (see [docs/CALIBRATION_DATA.md](docs/CALIBRATION_DATA.md)). |
+| `team_logos` | Per-school logo asset history (primary, secondary, tertiary lines), mirroring `helmet_designs`. |
 | `playoff_formats` | Bracket template per class/season: size, number of regions, rounds. |
 | `playoff_format_slots` | First-round matchup slots. Adjacent pairs implicitly define the bracket tree for round-2 and beyond. |
 | `championship_venues` | One row per season/class recording which location hosts (or hosted) that class's championship game. Independent of `games` — can be set before that season's Championship Game rows exist; an explicit `games.location_id` wins over this table when both are present. |
@@ -61,11 +64,11 @@ The `--profile local-db` flag is required to start the local PostgreSQL containe
 
 This starts nginx (`localhost:80`), Prefect server/worker (internal), and a local PostgreSQL instance (`localhost:5432`).
 
-> **nginx reverse proxy**: All traffic enters through nginx on port 80. The Prefect UI is accessible at `http://localhost/prefect/` but requires a valid moderator `Authorization: Bearer <token>` header.
+> **nginx reverse proxy**: All traffic enters through nginx on port 80. The Prefect UI is accessible at `http://localhost/prefect/` but only to the owner: a valid owner `Authorization: Bearer <token>` header or session cookie.
 
 #### Accessing the Prefect UI
 
-**Session cookie (recommended)**: in a browser, open Swagger UI (`/docs`), authorize with a moderator/owner account, then use "Try it out" on `POST /api/v1/auth/session` to mint a cookie. Since Swagger UI is served from the same origin as the API, the browser keeps the cookie automatically — navigate to `http://localhost/prefect/` in that same tab and it just works. Cookie lasts 24h; re-run the same request (or `POST` again) to refresh it, or `DELETE /api/v1/auth/session` to log out. This is real cookie auth today, even without an admin frontend yet — a future frontend just needs to call `POST /session` once right after Auth0 login completes.
+**Session cookie (recommended)**: in a browser, open Swagger UI (`/docs`), authorize with the owner account, then use "Try it out" on `POST /api/v1/auth/session` to mint a cookie. Since Swagger UI is served from the same origin as the API, the browser keeps the cookie automatically — navigate to `http://localhost/prefect/` in that same tab and it just works. Cookie lasts 24h; re-run the same request (or `POST` again) to refresh it, or `DELETE /api/v1/auth/session` to log out. The `/moderate` page does the same for the owner after sign-in, which is how its Prefect link opens.
 
 **ModHeader (fallback)**: browsers can't set custom headers on navigation requests, so the Bearer-token path still needs the **[ModHeader](https://modheader.com)** browser extension (Chrome/Firefox) if you'd rather not use the session cookie:
 
@@ -111,7 +114,7 @@ The API is then available directly at `http://localhost:8000`. Swagger UI is at 
 
 The owner role grants access to admin and moderation endpoints. Without it, your account is a base `user` and you won't be able to approve submissions, manage other users, or access the Prefect UI.
 
-User rows are lazy-provisioned on the first authenticated API request, so you need to log in before the SQL update will find anything. Since there is no frontend yet, create your user directly in the Auth0 dashboard first:
+User rows are lazy-provisioned on the first authenticated API request, so you need to log in before the SQL update will find anything. Create your user in the Auth0 dashboard first (or sign in once at `/moderate` once `AUTH0_SPA_CLIENT_ID` is set):
 
 1. In the Auth0 dashboard, go to **User Management → Users → Create User**.
 2. Enter an email and password. Leave **Connection** as `Username-Password-Authentication`. Click **Create**.
@@ -131,7 +134,7 @@ Then run the promotion. Replace `auth0|YOUR_SUB_HERE` with your Auth0 user ID (t
 
 ```
 docker exec -it ms-hs-football-playoff-engine-db-1 psql -U postgres -d mshsfootball -c \
-  "UPDATE users SET role = 'owner' WHERE auth0_id = 'auth0|69f62102dc24a5830fa59fab';"
+  "UPDATE users SET role = 'owner' WHERE auth0_id = 'auth0|YOUR_SUB_HERE';"
 ```
 
 To reset the database and re-run the schema from scratch (e.g. after a schema change):
@@ -151,13 +154,13 @@ See [docs/VM_DEPLOYMENT.md](docs/VM_DEPLOYMENT.md) for the full AWS Lightsail se
 
 Run these in order — each depends on the previous step's data being in the database.
 
-1. Navigate to [the Local Prefect UI](http://localhost:4200/deployments)
-2. Do a "Quick Run" of the **Regions Data Pipeline** — populates `school_seasons` (class/region assignments)
+1. Open the Prefect UI at `http://localhost/prefect/` (signed in as the owner) and go to **Deployments**
+2. Do a "Quick Run" of **Regions Data Flow** (`regions-data-pipeline`) — populates `school_seasons` (class/region assignments)
    - The pipeline defaults to the current year. Use a **Custom Run** in the Prefect UI to target a different season.
-3. Do a "Quick Run" of the **NCES School Geographic Data Flow** — fills in city, zip, latitude, and longitude for all public schools from the NCES EDGE API, then applies the private-school location seed for schools not in NCES
-4. Do a "Quick Run" of the **MHSAA School Identity Data Flow** — scrapes mascot and primary/secondary colors from the MHSAA school directory
-5. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** with the target season — seeds `schools` and `games` rows from the schedule
-6. Do a "Quick Run" of the **Region Scenarios Data Pipeline** with the target season — computes seeding odds, standings, and scenarios and writes the current snapshot to the database
+3. Do a "Quick Run" of **NCES School Geographic Data Flow** (`nces-school-pipeline`) — fills in city, zip, latitude, and longitude for all public schools from the NCES EDGE API, then applies the private-school location seed for schools not in NCES
+4. Do a "Quick Run" of **MHSAA School Identity Data Flow** (`misshsaa-school-pipeline`) — scrapes mascot and primary/secondary colors from the MHSAA school directory
+5. Do a "Quick Run" of **AHSFHS Schedule Data Flow** (`ahsfhs-schedule-data-pipeline`) with the target season — seeds `schools` and `games` rows from the schedule
+6. Do a "Quick Run" of **Region Scenarios Data Flow** (`region-scenarios-data-pipeline`) with the target season — computes seeding odds, standings, and scenarios and writes the current snapshot to the database
 
 Re-run steps 3-4 if schools move or rebrand. Re-run step 2 if MHSAA reclassifies schools (every two years) or if the playoff format changes.
 
@@ -165,23 +168,15 @@ To backfill a **completed historical season** after steps 1-6, continue with the
 
 The `playoff_formats` and `playoff_format_slots` tables (which define the bracket structure) are **automatically seeded for 2025 and 2026** when the database is created — `sql/seeds/playoff_formats_2025.sql` and `sql/seeds/playoff_formats_2026.sql` are mounted as `docker-entrypoint-initdb.d` volumes in `docker-compose.yml` (with numeric prefixes, `05_`/`06_`, added at the mount target to control init order — the source filenames themselves have no prefix). No manual step is needed. See [New Season Setup](#new-season-setup) below for adding a future season.
 
-#### Once per week (regular season)
+#### Every day (automatic)
 
-1. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** — fetches the latest scores and marks games `final=TRUE`
-2. Do a "Quick Run" of the **Region Scenarios Pipeline** — reads the updated game results, runs the tiebreaker engine, and writes pre-computed standings odds and scenario data to `region_standings` and `region_scenarios`
+The `daily-update` deployment runs at 9:00 AM America/Chicago: it pulls the scores (**AHSFHS Schedule Data Flow**), then recalculates everything from them (**Region Scenarios Data Flow**, which writes `region_standings` and `region_scenarios`, runs **Playoff Bracket Update** for classes in the playoffs, and finishes by redrawing the share cards and page content). Nothing needs to be run by hand during the season.
 
-> **Season parameter:** Both of these pipelines default to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
-
-The API reads its data from these pre-computed snapshots; run this pipeline before serving fresh results.
+To run either half on its own (after a fix, or to target another season with a **Custom Run**), use `ahsfhs-schedule-data-pipeline` or `region-scenarios-data-pipeline`. Both default to the current calendar year.
 
 #### After each playoff round
 
-1. Do a "Quick Run" of the **AHSFHS Schedule Data Pipeline** — fetches playoff scores and marks games `final=TRUE`
-2. Do a "Quick Run" of the **Playoff Bracket Update** pipeline — reads completed playoff results, marks eliminated teams, sets alive teams to deterministic 1.0/0.0 seeding odds, and writes one `region_standings` snapshot per class/region dated to that round's game date
-
-> **Season parameter:** This pipeline defaults to the current calendar year. Use a **Custom Run** in the Prefect UI to target a different season.
-
-Run this after each round concludes (first round, second round, semifinals, finals). The scheduled Region Scenarios Pipeline also runs it automatically: from a class's first completed playoff game on, that pipeline leaves the class's `region_standings` rows alone and finishes by running Playoff Bracket Update. (Its regular-season odds ignore playoff results, and a newer row would hide the playoff-aware ones.)
+The daily update covers it: from a class's first completed playoff game on, the region run leaves that class's `region_standings` rows alone and finishes by running **Playoff Bracket Update** (`playoff-bracket-update`), which reads the completed playoff results, marks eliminated teams, and writes one `region_standings` snapshot per class/region dated to that round's game date. (The regular-season odds ignore playoff results, and a newer row would hide the playoff-aware ones.) Run `playoff-bracket-update` by hand only to refresh the playoff rows on their own.
 
 #### Once per season (after importing a full historical season)
 
@@ -234,7 +229,7 @@ Or with verbose output:
 uv run pytest -vv
 ```
 
-Coverage is measured with branch analysis and reported in the terminal after every run. The report excludes Prefect pipeline files (which require a live DB/Prefect environment) and focuses on the pure-logic modules: `tiebreakers.py`, `scenarios.py`, `data_helpers.py`, and `data_classes.py`.
+Coverage is measured with branch analysis and reported in the terminal after every run. It covers `backend/helpers/`, except `database_helpers.py` and `web_helpers.py`; the Prefect pipelines and the API (`backend/api/`), which need a live database or Prefect, are left out (`[tool.coverage]` in `pyproject.toml`).
 
 To generate a browsable HTML report:
 
@@ -247,7 +242,7 @@ open htmlcov/index.html
 
 The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no build step. It follows [docs/2026_INTERIM_UI_BRIEF.md](docs/2026_INTERIM_UI_BRIEF.md): pick a class, pick a region, read that region's race.
 
-- `index.html` — the class region list (`/?class=7`) and region view (`/?class=7&region=2`), rendered by `static/js/app.js` from the public `/api/v1` endpoints. Optional parameters: `season`, `week` (a past week's snapshot; omitted = latest), `odds=tossup` (default is Projected, the Elo-weighted columns), and `team` (opens that team's playoff path and shows only its scenarios — set by the header's team search or by picking the team's row)
+- `index.html` — the front page (`/`), the class view (`/standings/7a`), the region view (`/standings/7a/2`) and the bracket (`/brackets/7a`), rendered by `static/js/app.js` from the public `/api/v1` endpoints. Optional parameters: `season`, `week` (a past week's snapshot; omitted = latest), `odds=tossup` (default is Projected, the Elo-weighted columns), and `team` (opens that team's playoff path and shows only its scenarios — set by the header's team search or by picking the team's row)
 - `about.html` — served at `/about` (`/methodology`, its old address, redirects there)
 - `static/js/format.js`, `components.js`, `scenarios.js`, `standings.js` — pure, DOM-free modules (honest odds rounding, the odds ramp, badges, condition chips, outcome cards, tie-aware positions, playoff paths, region results), tested with Node's built-in runner:
 
@@ -255,17 +250,17 @@ The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no 
 node --test nginx/tests/*.test.mjs
 ```
 
-Inter is self-hosted (`static/fonts/`, SIL OFL); Nippo, the display face, loads from Fontshare's CDN.
+Both fonts are self-hosted in `static/fonts/`: Inter (SIL OFL) and a Latin subset of Nippo, the display face (ITF Free Font License).
 
 ### Docstring coverage
 
 Check that all public functions and modules have docstrings:
 
 ```
-uv run docstr-coverage backend
+uv run docstr-coverage backend -e "backend/prefect/|backend/tests" --skip-magic --skip-init
 ```
 
-The report excludes pipeline files (same omit list as test coverage) and skips magic methods and `__init__`. Current baseline: 100%.
+That leaves out the Prefect pipelines and the tests, and skips magic methods and `__init__` (docstr-coverage doesn't read `pyproject.toml`, so the options go on the command line). As of October 2026 it reports 98.7% (78 missing).
 
 ### API Reference
 

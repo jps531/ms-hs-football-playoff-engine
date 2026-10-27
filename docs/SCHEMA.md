@@ -22,7 +22,22 @@ erDiagram
         text logo_primary
         text logo_secondary
         text logo_tertiary
+        jsonb color_variants
         jsonb overrides
+    }
+    team_logos {
+        int id PK
+        text school FK
+        text logo_type
+        text image_url
+        int year_start
+        int year_end
+        boolean is_primary
+        boolean has_keyline
+        text notes
+        int source_submission_id FK
+        timestamptz created_at
+        timestamptz updated_at
     }
     helmet_designs {
         int id PK
@@ -124,6 +139,20 @@ erDiagram
         real odds_second_round_home_weighted
         real odds_quarterfinals_home_weighted
         real odds_semifinals_home_weighted
+        timestamptz computed_at
+        text model_version
+    }
+    region_standings_archive {
+        bigint id PK
+        text school
+        int season
+        date as_of_date
+        int class
+        int region
+        timestamptz computed_at
+        text model_version
+        timestamptz archived_at
+        jsonb snapshot "the whole region_standings row as written"
     }
     team_ratings {
         text school PK,FK
@@ -229,6 +258,9 @@ erDiagram
 
     schools ||--o{ school_seasons : "plays in"
     schools ||--o{ helmet_designs : "wears"
+    schools ||--o{ team_logos : "uses"
+    submissions ||--o{ team_logos : "cut from"
+    region_standings ||--o{ region_standings_archive : "every write copied to"
     schools ||--o{ team_ratings : "rated in"
     schools ||--o{ submissions : "submitted for"
     schools ||--o{ user_followed_teams : "followed by"

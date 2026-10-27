@@ -1,8 +1,11 @@
 """Prefect tasks and flow for computing region standings scenarios.
 
-Reads completed and remaining games from the DB, calls ``determine_scenarios()``
-and ``determine_odds()`` from ``scenarios.py``, and writes results to the
-``region_standings`` table.
+Reads completed and remaining games from the DB, computes Elo ratings and RPI,
+each region's seeding odds (Toss-up and Projected), playoff advancement and
+home-game odds, scenarios and key insights, and writes them for the run date to
+``team_ratings``, ``region_standings``, ``region_seed_pairs``,
+``region_scenarios`` and ``region_computation_state``, plus each final game's
+pregame win probability to ``games.pregame_prob``.
 """
 
 import bisect
@@ -1094,9 +1097,8 @@ def get_region_finish_scenarios(
         matchup_prob_fn:    Elo-based matchup probability function built from all
                             regions in the class.  Falls back to equal 50/50 when
                             ``None``.
-        as_of_date:         Date to write snapshots for.  Defaults to today.
-                            When provided explicitly (backfill mode), skips the
-                            background margin-sensitivity upgrade.
+        as_of_date:         Date to write snapshots for.  Defaults to today;
+                            backfills pass each past date.
         rounds_completed:   Playoff rounds already played (0 during regular season).
                             Passed through to bracket-odds helpers so alive teams
                             show 1.0 for past rounds and correct forward odds for

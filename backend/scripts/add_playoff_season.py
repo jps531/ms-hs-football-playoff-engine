@@ -1,10 +1,12 @@
 """CLI tool to seed playoff_formats and playoff_format_slots for a new season.
 
 Usage:
-    uv run python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_2025.yaml
+    uv run python backend/scripts/add_playoff_season.py --config path/to/playoff_formats_2027.yaml
 
-The YAML config describes the bracket structure for one season.  See
-sql/seeds/playoff_format_template.yaml for the format.  The script generates
+The YAML config describes the bracket structure for one season; copy
+sql/seeds/playoff_format_template.yaml to start one. (The 2025 and 2026
+formats are seeded by sql/seeds/playoff_formats_2025.sql and _2026.sql
+instead.)  The script generates
 idempotent SQL (ON CONFLICT DO NOTHING) and executes it against the database
 configured via DATABASE_URL or the standard Postgres env vars.
 
