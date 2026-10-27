@@ -9,7 +9,7 @@ import { STATUSES, itemHtml, typeFilters } from "./moderation.js";
 const API = "/api/v1";
 const PAGE_SIZE = 50;
 const RETURN_KEY = "mshsf.mod.return"; // the filters to come back to after signing in
-const TITLE = "Moderation · Mississippi High School Football";
+const TITLE = "Moderation — Mississippi High School Football";
 
 const root = document.getElementById("mod");
 const redirectUri = `${location.origin}/moderate`;

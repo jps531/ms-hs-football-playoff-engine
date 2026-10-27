@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFont
 SITE_NAME = "Mississippi High School Football"
 SITE_TITLE = "Mississippi High School Football Playoff Races"
 SITE_DESCRIPTION = (
-    "Scenarios and odds for every Mississippi high school football region race, and an outlook for every playoff game."
+    "Scenarios and odds for every MHSAA high school football region race, and an outlook for every playoff game."
 )
 SITE_HOST = "mshsfootball.com"
 
@@ -155,7 +155,7 @@ def class_title(clazz: int) -> str:
 
 def class_description(clazz: int) -> str:
     """A class page's description."""
-    return f"Every Class {clazz}A region race in Mississippi."
+    return f"Every MHSAA Class {clazz}A region race."
 
 
 def description(text: str, limit: int = DESCRIPTION_LIMIT) -> str:
@@ -682,7 +682,7 @@ def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str)
 
 def bracket_title(clazz: int) -> str:
     """The bracket page's title, as the app sets it."""
-    return f"Class {clazz}A Playoff Bracket — {SITE_NAME}"
+    return f"Class {clazz}A playoff bracket — {SITE_NAME}"
 
 
 def _bracket_odds(team: dict, key: str, mode: str) -> float:

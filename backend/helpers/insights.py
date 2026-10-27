@@ -69,9 +69,7 @@ def _render_insight(
         return f"{team} has been eliminated from the playoffs"
     cond_str = "; ".join(_render_game_result(c) for c in conditions)
     if insight_type == "clinch_seed":
-        ordinals = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
-        seed_str = ordinals.get(seed, f"{seed}th") if seed is not None else "unknown"
-        return f"{team} clinches {seed_str} seed: {cond_str}"
+        return f"{team} clinches the #{seed} seed: {cond_str}"
     if insight_type == "clinch_playoffs":
         return f"{team} clinches a playoff spot: {cond_str}"
     if insight_type == "eliminated_if":

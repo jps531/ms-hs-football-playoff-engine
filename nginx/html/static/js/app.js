@@ -364,7 +364,7 @@ const SITE = "Mississippi High School Football";
 
 function pageTitle(clazz, region, page) {
   if (page === "landing") return "Mississippi High School Football Playoff Races"; // as index.html's own <title>
-  if (page === "bracket") return `Class ${clazz}A Playoff Bracket — ${SITE}`;
+  if (page === "bracket") return `Class ${clazz}A playoff bracket — ${SITE}`;
   return region ? `Region ${region}-${clazz}A playoff race — ${SITE}` : `Class ${clazz}A playoff races — ${SITE}`;
 }
 
@@ -877,8 +877,8 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
           </tr>`).join("")}</tbody>
         </table>
         <p class="detail__note muted"><strong>Reaches round</strong> is the chance of playing in that round at all.
-          <strong>Hosts, if it gets there</strong> is the chance of the team hosting IF they reach that round;
-          <strong>Hosts, overall</strong> is the chance of the team both reaching that round AND hosting it.</p>
+          <strong>Hosts, if it gets there</strong> is the chance the team hosts, if it reaches that round.
+          <strong>Hosts, overall</strong> is the chance the team both reaches that round and hosts it.</p>
         <p class="detail__link"><a href="${esc(hrefWith({ page: "bracket", region: null, team: t.school }))}">See ${esc(t.school)}’s path in the bracket</a></p>
       </section>`
     : "";
@@ -1075,7 +1075,7 @@ async function bracketView(ctx) {
 
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
   bracketData.summary = controlsSummary; // for the game sheet's provenance line
-  nextContext = contextHtml(`${clazz}A Bracket`, controlsSummary, mode);
+  nextContext = contextHtml(`Class ${clazz}A Bracket`, controlsSummary, mode);
   // The bracket's odds are worked out from these same region rows.
   nextComputedAt = standings?.computed_from ? { from: standings.computed_from, to: standings.computed_to } : null;
   const focusNote = ctx.team
@@ -1083,7 +1083,7 @@ async function bracketView(ctx) {
     : `<p class="focus-note muted">Select a game to see all possible matchups and locations, and pick a team to follow its path.</p>`;
   return `<div class="page">
     <header class="entry-head bracket-head">
-      ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: null })], [`${clazz}A Bracket`, null]])}
+      ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: null })], [`Class ${clazz}A Bracket`, null]])}
       <h1 class="title">Class ${clazz}A Bracket</h1>
       ${controls}
       ${focusNote}
@@ -1570,7 +1570,7 @@ function feedbackContext({ team = null, about = null } = {}) {
   const parts = [];
   if (route.page === "region") parts.push(`Region ${route.region}-${route.clazz}A`);
   else if (route.page === "class") parts.push(`Class ${route.clazz}A`);
-  else if (route.page === "bracket") parts.push(`${route.clazz}A Bracket`);
+  else if (route.page === "bracket") parts.push(`Class ${route.clazz}A Bracket`);
   if (about) parts.push(about);
   if (team) parts.push(team);
   return parts.join(" · ") || null;
@@ -1691,14 +1691,14 @@ async function sendFeedback(form) {
   status.classList.toggle("is-error", Boolean(problem));
   status.textContent = problem ?? "";
   if (problem) return;
-  // Filled in faster than a person could: treat it as sent without sending.
-  if (Date.now() - Number(form.dataset.opened) < MIN_FILL_MS) {
-    feedbackSent(form);
-    return;
-  }
   const label = button.textContent;
   button.disabled = true;
   button.textContent = "Sending…";
+  // Sent within moments of opening the form: wait out the rest of the minimum, then send.
+  // A quick real correction still goes through; the honeypot, Turnstile and the API's limits
+  // handle scripts.
+  const wait = MIN_FILL_MS - (Date.now() - Number(form.dataset.opened));
+  if (wait > 0) await new Promise((resolve) => { setTimeout(resolve, wait); });
   const check = await turnstileToken(form);
   if (check.problem) {
     status.classList.add("is-error");
@@ -1739,7 +1739,7 @@ function feedbackSent(form) {
   done.setAttribute("role", "status");
   done.innerHTML = `<p class="fb-sent__title">Thanks, we’ve got it.</p>
     <p class="muted">${score
-      ? "A moderator will check the score. Once it’s approved, the standings and odds pick it up at the next morning’s update."
+      ? "A moderator will check the score. Once it’s approved, the standings and odds pick it up at the next update."
       : "A moderator will read it. If you left an email, we may follow up."}</p>
     ${inSheet ? '<button type="button" class="fb-submit" data-sheet-close>Done</button>' : '<a href="/feedback" class="fb-again">Send something else</a>'}`;
   removeTurnstile(form);
