@@ -813,11 +813,6 @@ function standingsTable(data, teams, mode, focus, clazz, games) {
 }
 
 /**
- * Expanded row, three panels side by side (stacked on phones): the team's
- * record and region schedule, its seeding odds, and its road through the
- * bracket.
- */
-/**
  * The team's Elo rating, the number Projected odds are built on (brief: make
  * the model legible). Ratings are numbers, not positions, so it's never called
  * a ranking. Nothing for a team without one.
@@ -829,6 +824,11 @@ function eloLine(elo) {
       <a href="/about#elo">How the ratings work</a></p>`;
 }
 
+/**
+ * Expanded row, three panels side by side (stacked on phones): the team's
+ * record and region schedule, its seeding odds, and its road through the
+ * bracket.
+ */
 function rowDetail(t, mode, clazz, complete, teams, games) {
   const r = t.record;
   const o = oddsFor(t, mode);
@@ -1486,7 +1486,7 @@ function hostText(team, opponent, hosts, pTeamHosts) {
     : `${formatPct(1 - pTeamHosts)} chance ${opponent} hosts`;
 }
 
-/** "vs" when the picked team would host, "at" when the opponent would. */
+/** "at" when the opponent would host; "vs" otherwise (the picked team hosts, either could, or a neutral site). */
 const oppJoiner = (hosts) => (hosts === "opponent" ? "at" : "vs");
 
 /** Expanded game: a picked team's opponents here, or both sides and their possible matchups. */

@@ -147,8 +147,9 @@ differential is stated exactly ("beats Magee by 8-10"). With more left, scenario
 tie open ("decided by the tiebreaker"); showing them from 5 is a choice of precision, not of correctness."""
 
 CLINCHED_THRESHOLD = 1 - 1e-6
-"""Minimum seeding probability required to consider a seed position clinched: certain, give or take
-the odds columns' REAL (32-bit) storage, never merely likely (a 0.05% chance is still a chance)."""
+"""Minimum seeding probability required to consider a seed position clinched: meant as certain, give or take
+the odds columns' REAL (32-bit) storage, never merely likely (a 0.05% chance is still a chance). It would
+also count a real chance under one in a million of anything else as clinched."""
 
 
 def within_display_threshold(remaining: list) -> bool:
@@ -3208,12 +3209,13 @@ def build_enriched_bracket_layout(
     """Enrich a ``BracketLayout`` with per-game participants and results.
 
     Each ``BracketGame`` node gains ``round``, ``participant_a``,
-    ``participant_b``, ``home_school``, and ``result``.  Confirmed DB results
+    ``participant_b``, ``home_team``, and ``result``.  Confirmed DB results
     take priority over simulated results for the same pair.
 
     ``participant_a`` is positional (format home slot on R1, feeds_from[0]
-    winner on R2+), not a hosting indicator.  ``home_school`` is set when one
-    participant's p_host_given_reach hosting odds for the round are 1.0.
+    winner on R2+), not a hosting indicator.  ``home_team`` is ``participant_a``
+    on R1 (the format home); on later rounds it is set when one participant's
+    p_host_given_reach hosting odds for the round are above 0.99, else None.
 
     Participants propagate round-by-round: R1 participants come from
     ``seed_to_school``; later-round participants are the winners of the

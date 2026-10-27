@@ -24,8 +24,9 @@ The engine produces three distinct things for each class/region/date snapshot:
 
 `R` is the count of unplayed region games at a given snapshot date. It determines how the engine behaves. For reference, the 2025 season regions have:
 
-- 4–5 team regions: ~6 total region games, R reaches 0 after ~3 game-weeks
-- 6–7 team regions: up to 21 total region games (C(7,2) = 21 for a 7-team round-robin), R reaches 0 after all games are played
+- 4-team regions: 6 region games (C(4,2)), played over 3 game-weeks
+- 5-team regions: 10 region games, over 5 game-weeks
+- 6–7 team regions: 15 or 21 region games (C(7,2) = 21 for a 7-team round-robin), over 5 or 7 game-weeks
 
 ---
 

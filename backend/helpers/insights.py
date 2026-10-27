@@ -4,8 +4,8 @@ Key insights are simple, unconditionally-true statements derived from the
 scenario atom structure — e.g. "Taylorsville clinches 1st seed if Taylorsville
 beats Stringer" or "Murrah is eliminated if Starkville beats Terry".
 
-Intended for display when R=7-10 (where full scenario lists are not shown) and
-as a "headlines" banner at R<=6 alongside the full scenario list.
+Shown as cards when 6-10 region games remain (where full scenario lists are
+not shown), and feed the region headline. None are built past 10 games left.
 
 Every conditional insight is checked before emission against every result
 meeting its conditions (every winner, margin and score): against the region's
@@ -42,7 +42,8 @@ class KeyInsight:
         team: The team this insight is about.
         seed: Seed being clinched (1-4) for clinch_seed; None for other types.
         conditions: Tuple of GameResult objects (empty for already_* types).
-        margin_verified: True if margin-verified or R<=4 (fully margin-accurate).
+        margin_verified: Always True: every insight is checked against every winner,
+            margin and score meeting its conditions before it's emitted.
         rendered: Pre-rendered human-readable text.
         r_computed: R value at time of computation.
     """

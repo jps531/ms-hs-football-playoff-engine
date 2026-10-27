@@ -291,10 +291,11 @@ FROM games;
 -- ---------------------------------------------------------------------------
 -- Region standings and playoff scenario odds
 -- ---------------------------------------------------------------------------
--- One row per school per season per pipeline run date (as_of_date). The
--- Prefect pipeline appends a new snapshot after each game week rather than
--- overwriting, so the API can answer "what were the odds as of date X?" by
--- finding the most recent row with as_of_date <= X.
+-- One row per school per season per pipeline run date (as_of_date). Each
+-- day's run writes a new snapshot, so the API can answer "what were the odds
+-- as of date X?" by finding the most recent row with as_of_date <= X. A rerun
+-- on the same day replaces that day's rows; region_standings_archive keeps
+-- every version written.
 --
 -- Unweighted odds treat all remaining outcomes as equally likely.
 -- Weighted odds apply per-game win probability derived from Elo ratings
@@ -356,11 +357,11 @@ CREATE INDEX IF NOT EXISTS idx_region_standings_lookup
 -- ---------------------------------------------------------------------------
 -- Materialized Elo ratings and RPI per school per season
 -- ---------------------------------------------------------------------------
--- One row per school per season. Overwritten on every pipeline run so the
--- frontend always reads ratings that are consistent with the seeding odds
--- stored in region_standings (both written in the same pipeline execution).
--- computed_at lets the frontend show a "ratings as of [time]" freshness indicator,
--- which is especially important during live-score-update runs.
+-- One row per school per season per date (as_of_date). Each pipeline run
+-- writes the current ratings for its run date, alongside the region_standings
+-- snapshot it computes the Projected odds from, plus one row per earlier game
+-- date (rpi NULL) for the rating timeline. A rerun on the same day replaces
+-- that day's rows.
 
 CREATE TABLE IF NOT EXISTS team_ratings (
   school        TEXT    NOT NULL REFERENCES schools(school),
@@ -380,8 +381,8 @@ CREATE INDEX IF NOT EXISTS idx_team_ratings_lookup
 -- ---------------------------------------------------------------------------
 -- Pre-computed region scenario data
 -- ---------------------------------------------------------------------------
--- One row per season/class/region. Updated by the Prefect pipeline after each
--- game-result batch. Stores all three artefacts needed to render scenario text
+-- One row per season/class/region per pipeline run date (as_of_date); a
+-- rerun on the same day replaces that day's row. Stores the artefacts needed to render scenario text
 -- at request time without re-running the tiebreaker engine or boolean minimizer:
 --   remaining_games    — ordered list of {a, b} game pairs; required to
 --                        deserialize MarginCondition.satisfied_by at render time.
@@ -437,18 +438,16 @@ CREATE TABLE IF NOT EXISTS region_seed_pairs (
 -- ---------------------------------------------------------------------------
 -- Region computation state
 -- ---------------------------------------------------------------------------
--- One row per season/class/region. Tracks the margin-sensitivity mode and
--- pipeline status for each region's scenario computation.
---
--- Two-phase computation tiers:
---   R ≤ 4  — always margin-sensitive; computed synchronously; status = 'not_needed'
---   R = 5–6 — win/loss-only first (margin_sensitive=FALSE, status='pending'),
---              then upgraded in the background (status='running' → 'complete',
---              margin_sensitive flips to TRUE once the upgrade lands)
---   R ≥ 7  — win/loss-only permanently; status = 'skipped'
---
--- The frontend uses margin_sensitive + margin_compute_status to decide whether
--- to show a "refining scenarios…" indicator.
+-- One row per season/class/region per pipeline run date (as_of_date), written
+-- with the matching region_scenarios row. Records whether that run's scenarios
+-- account for margins, by the number of region games left (R):
+--   R ≤ 5  — margin-sensitive scenarios; margin_sensitive = TRUE, status = 'not_needed'
+--   R ≥ 6  — win/loss-only scenarios (none at all past 15); margin_sensitive = FALSE,
+--            status = 'skipped'
+-- The odds follow the same split: past 5 games left they score every game at a
+-- 7-point margin. 'pending', 'running' and 'complete' are allowed by the CHECK
+-- but never written: they belong to a background margin upgrade that doesn't
+-- exist. The frontend reads only computed_at, for the "updated" time.
 
 CREATE TABLE IF NOT EXISTS region_computation_state (
   season                  INTEGER NOT NULL,
@@ -459,14 +458,14 @@ CREATE TABLE IF NOT EXISTS region_computation_state (
   margin_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,
   margin_compute_status   TEXT    NOT NULL DEFAULT 'not_needed'
                           CHECK (margin_compute_status IN (
-                            'not_needed',  -- R ≤ 4: always synchronous, no background job
-                            'pending',     -- R 5-6: win/loss data stored, background job queued
-                            'running',     -- R 5-6: background margin computation in progress
-                            'complete',    -- R 5-6: margin-sensitive data has been stored
-                            'skipped'      -- R ≥ 7: margin sensitivity permanently disabled
+                            'not_needed',  -- R ≤ 5: scenarios account for margins
+                            'pending',     -- never written (see above)
+                            'running',     -- never written
+                            'complete',    -- never written
+                            'skipped'      -- R ≥ 6: win/loss-only scenarios
                           )),
   computed_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  margin_computed_at      TIMESTAMPTZ,        -- NULL until margin-sensitive computation completes
+  margin_computed_at      TIMESTAMPTZ,        -- never written; always NULL
   PRIMARY KEY (season, class, region, as_of_date)
 );
 
@@ -860,7 +859,7 @@ COMMENT ON COLUMN games.game_quarter IS
   'Only populated when game_status is in_progress or end_ot. NULL otherwise.';
 COMMENT ON COLUMN games.game_clock IS
   'Clock remaining within the current regulation quarter in "MM:SS" format. '
-  'Always NULL for OT (MSHAA overtime is untimed alternating possessions). '
+  'Always NULL for OT (MHSAA overtime is untimed alternating possessions). '
   'Only populated when game_status is in_progress during regulation.';
 COMMENT ON COLUMN games.source IS
   'Data source that provided this game record (e.g. "maxpreps", "mhsaa").';
@@ -894,16 +893,17 @@ COMMENT ON COLUMN games.helmet_design_id IS
 -- region_standings
 
 COMMENT ON TABLE region_standings IS
-  'Pre-computed seeding probabilities and scenario data for each school, recalculated '
-  'after every game week. Unweighted odds treat all remaining outcomes as equally likely. '
-  'Weighted odds apply a naive win-probability estimate from current scoring margins.';
+  'Pre-computed seeding probabilities for each school, one snapshot per school per day '
+  '(a same-day rerun replaces it; region_standings_archive keeps every version). '
+  'Unweighted (Toss-up) odds treat every remaining winner as equally likely. '
+  'Weighted (Projected) odds use each game''s win probability from Elo ratings.';
 
 COMMENT ON COLUMN region_standings.school IS
   'School name; FK to schools(school, season).';
 COMMENT ON COLUMN region_standings.season IS
   'Season year; FK to schools(school, season).';
 COMMENT ON COLUMN region_standings.as_of_date IS
-  'Pipeline run date this snapshot was written. Rows are appended, never overwritten; query with as_of_date <= X to get historical odds.';
+  'Pipeline run date this snapshot was written. A same-day rerun replaces the row; query with as_of_date <= X to get historical odds.';
 COMMENT ON COLUMN region_standings.class IS
   'Denormalized from schools for query convenience.';
 COMMENT ON COLUMN region_standings.region IS
@@ -1002,9 +1002,9 @@ COMMENT ON COLUMN region_standings.odds_semifinals_home_weighted IS
 -- team_ratings
 
 COMMENT ON TABLE team_ratings IS
-  'Materialized Elo ratings and RPI for each school, recomputed on every pipeline '
-  'run and written alongside region_standings to guarantee consistency. '
-  'One row per school per season; overwritten (not appended) each run.';
+  'Elo ratings and RPI for each school, one row per school per season per date. '
+  'Each pipeline run writes its run date''s ratings (with RPI) and one row per earlier '
+  'game date (RPI NULL); a rerun on the same day replaces that day''s rows.';
 
 COMMENT ON COLUMN team_ratings.school IS
   'FK to schools(school). Canonical school name.';
@@ -1018,23 +1018,22 @@ COMMENT ON COLUMN team_ratings.elo IS
   'order. Starting rating blends the prior-season final Elo with the classification '
   'prior (1A=1000, 7A=1300, step 50) using EloConfig.carryover_factor (default 0.50). '
   'First-season teams (no prior row) start at the classification prior. '
-  'Updates use a margin-of-victory multiplier (FiveThirtyEight-style).';
+  'Updates use a margin-of-victory multiplier loosely modelled on FiveThirtyEight''s.';
 COMMENT ON COLUMN team_ratings.rpi IS
   'Rating Percentage Index: 0.25*WP + 0.50*OWP + 0.25*OOWP. '
   'Stored for display context only; does not affect win probability calculations. '
-  'NULL when the team has fewer than 3 completed games.';
+  'NULL when the team has fewer than 3 completed games, and on the per-game-date rows.';
 COMMENT ON COLUMN team_ratings.games_played IS
   'Number of completed, scored games processed when computing these ratings.';
 COMMENT ON COLUMN team_ratings.computed_at IS
-  'Timestamp of the pipeline run that produced these ratings. '
-  'Should match the computed_at of the corresponding region_standings rows.';
+  'When the pipeline wrote this row.';
 
 
 -- region_scenarios
 
 COMMENT ON TABLE region_scenarios IS
-  'Pre-computed scenario data for each season/class/region, updated by the Prefect '
-  'pipeline after each game-result batch. Avoids re-running the tiebreaker engine '
+  'Pre-computed scenario data for each season/class/region, one row per pipeline run '
+  'date (a same-day rerun replaces it). Avoids re-running the tiebreaker engine '
   'and boolean minimizer on every frontend request.';
 
 COMMENT ON COLUMN region_scenarios.season IS
@@ -1065,16 +1064,17 @@ COMMENT ON COLUMN region_scenarios.key_insights IS
   'Serialized list of KeyInsight objects extracted from scenario_atoms. '
   'Each insight is a simple, unconditionally-true conditional statement about a team''s '
   'seeding or playoff status (e.g. "Taylorsville clinches 1st seed: Taylorsville beats Stringer"). '
-  'Margin-verified for R>4. Empty array when no actionable insights exist.';
+  'Each is checked against every winner, margin and score meeting its conditions. '
+  'Shown as cards when 6 to 10 region games remain, and used in the region headline. '
+  'Empty array when no actionable insights exist (always, past 10 games left).';
 
 
 -- region_computation_state
 
 COMMENT ON TABLE region_computation_state IS
-  'Tracks the margin-sensitivity mode and background-job status for each region. '
-  'One row per season/class/region. Updated by the Prefect pipeline after each '
-  'game-result batch. Used by the frontend to decide whether to show a '
-  '"refining scenarios…" indicator while the background upgrade runs.';
+  'Whether each region''s stored scenarios account for margins, one row per '
+  'season/class/region per pipeline run date, written with the matching region_scenarios '
+  'row. The frontend reads only computed_at, for the "updated" time.';
 
 
 COMMENT ON COLUMN region_computation_state.season IS
@@ -1087,20 +1087,19 @@ COMMENT ON COLUMN region_computation_state.as_of_date IS
   'Pipeline run date this computation-state row was written. Part of the primary key so each pipeline run produces its own snapshot alongside the matching region_scenarios row.';
 COMMENT ON COLUMN region_computation_state.r_remaining IS
   'Number of unplayed region games at the time of last computation. '
-  'Determines which tier applies: ≤4 synchronous, 5-6 two-phase, ≥7 win/loss-only.';
+  'Determines which tier applies: ≤5 margin-sensitive scenarios, 6-15 win/loss-only, '
+  '>15 no scenarios (Monte Carlo odds).';
 COMMENT ON COLUMN region_computation_state.margin_sensitive IS
-  'TRUE if the currently stored scenario_atoms and odds reflect full margin-sensitive '
-  'computation. FALSE when only win/loss enumeration has been run (initial phase for R=5-6, '
-  'or permanently for R≥7).';
+  'TRUE when the stored scenarios account for margins (R≤5). FALSE when they are '
+  'win/loss-only (R≥6): every game is then scored at a 7-point margin, in the '
+  'scenarios and the odds.';
 COMMENT ON COLUMN region_computation_state.margin_compute_status IS
-  'Pipeline lifecycle state. See table comment for the full state machine. '
-  'not_needed: R≤4, always synchronous. '
-  'pending/running/complete: R=5-6 two-phase upgrade lifecycle. '
-  'skipped: R≥7, win/loss-only permanently.';
+  'not_needed: R≤5, scenarios account for margins. skipped: R≥6, win/loss-only. '
+  'pending/running/complete are allowed but never written.';
 COMMENT ON COLUMN region_computation_state.computed_at IS
-  'Timestamp of the most recent computation (win/loss or margin-sensitive).';
+  'When the pipeline wrote this row.';
 COMMENT ON COLUMN region_computation_state.margin_computed_at IS
-  'Timestamp when the margin-sensitive upgrade completed. NULL until complete.';
+  'Never written; always NULL.';
 
 -- playoff_formats
 

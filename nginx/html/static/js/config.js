@@ -1,5 +1,6 @@
-// The site's public client config from the API: Turnstile's site key and the
-// moderation page's Auth0 app. Fetched once per page; {} when unavailable.
+// The site's public client config from the API (GET /client-config): Turnstile's
+// site key, the moderation page's Auth0 app, the API docs path, the PostHog key
+// and the owner's dashboard links. Fetched once per page; {} when unavailable.
 
 let config = null;
 

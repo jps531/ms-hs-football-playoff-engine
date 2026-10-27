@@ -5,9 +5,11 @@ outside the code.
 
 ## In place
 
-- **Every page reads without JavaScript.** nginx puts the pipeline's copy of
-  the page in the HTML (server-side includes, see `share_assets_pipeline.py`):
-  the front page, every class and region page, and every bracket page. The
+- **Every content page reads without JavaScript.** The About page is plain
+  HTML. nginx puts the pipeline's copy of the others in the HTML (server-side
+  includes, see `share_assets_pipeline.py`): the front page, every class and
+  region page, and every bracket page. (`/feedback` and `/moderate` need
+  JavaScript.) The
   app replaces it on load with the same markup, so nothing moves.
 - **One address per page.** Each page names its canonical URL; query-string
   variants (`?week=`, `?odds=`, `?season=`) point at the plain path;
@@ -29,7 +31,8 @@ outside the code.
   `X-Robots-Tag: noindex` header). `/api/` is deliberately *not* blocked in
   `robots.txt`: Google runs the app when it renders a page, and the app needs
   the API.
-- **Speed:** fonts served from the site (no third-party requests), compressed
+- **Speed:** fonts served from the site (no third-party font requests; helmet
+  images come from Cloudinary), compressed
   text responses, fonts cached for a year and the app's files for 10 minutes.
 
 ## To do outside the code

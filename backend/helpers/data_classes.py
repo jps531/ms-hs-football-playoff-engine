@@ -98,7 +98,7 @@ class GameClock:
 class InGameConfig:
     """Tunable parameters for the in-game and OT win probability models.
 
-    Defaults are calibrated for MSHAA rules:
+    Defaults are set for MHSAA rules:
     four 12-minute quarters (2880 s total), 35-point running-clock rule,
     and OT possessions starting at the opponent's ~10-yard line (NFHS format).
     """

@@ -1,6 +1,19 @@
 # MHSAA Region Tiebreaker Procedure
 
-Raw MHSAA rule text (source handbook, not independently re-verified against a specific edition — confirm against the current handbook before relying on it for a rules dispute). This is the policy the tiebreaker engine implements; see [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for how it's computed and stored, and [PLAYOFF_HOME_RULES.md](PLAYOFF_HOME_RULES.md) for the related playoff home-site rules.
+The site cites the region tiebreaker procedure in the [2026–27 MHSAA Handbook](https://www.misshsaa.com/wp-content/uploads/2026/10/2026-27-MHSAA-Handbook-Final-V7.pdf#page=65) (V7, p. 65). There are six steps, applied in order until the tie is broken:
+
+1. Head-to-head results among the tied teams (combined records when three or more are tied).
+2. Results against the highest-finishing teams in the region, working down.
+3. Point differential in region games among the tied teams, capped at 12 points per game.
+4. Point differential, capped at 12 per game, in region games against the highest-finishing teams, working down.
+5. Fewest points allowed in all region games (no cap).
+6. A coin flip.
+
+When a step separates some but not all of three or more tied teams, the teams still tied start over at step 1.
+
+## Raw rule text
+
+The text below was transcribed from the handbook before the site cited V7 and hasn't been compared line by line with that edition; confirm against the current handbook before relying on it for a rules dispute. Its list markers read as seven steps because of the page-break artifact noted below: markers 2 and 3 are one step. This is the policy the tiebreaker engine implements; see [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for how it's computed and stored, and [PLAYOFF_HOME_RULES.md](PLAYOFF_HOME_RULES.md) for the related playoff home-site rules.
 
 <!-- Steps 2-3 below carry a likely page-break/OCR artifact from the source
      document: "designated" is immediately followed by a "3." list marker and

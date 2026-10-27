@@ -193,12 +193,14 @@ docker compose --env-file .env.local --profile local-db up --build -d
 If the pull changed `nginx/nginx.conf`, also recreate nginx. The config is bind-mounted as a single file, and `git pull` replaces that file rather than editing it, so a running container (and `nginx -s reload`) can keep seeing the old copy:
 
 ```
-docker compose --env-file .env.local --profile local-db up -d --force-recreate nginx
+docker compose --env-file .env.local --profile local-db up -d --no-deps --force-recreate nginx
 ```
 
 Required env vars: `ENVIRONMENT=production`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`,
 `API_DB_*`, `PIPELINE_DB_*`, `CLOUDINARY_*`, `FRONTEND_ORIGIN`, `SESSION_SECRET_KEY`.
-Optional: `AUTH0_SPA_CLIENT_ID`, `TURNSTILE_*`, `SMTP_*`, `DIGEST_TO` (see below).
+Optional: `AUTH0_SPA_CLIENT_ID`, `TURNSTILE_*`, `SMTP_*`, `DIGEST_TO` (see below), and
+`POSTHOG_PROJECT_KEY`, `POSTHOG_DASHBOARD_URL`, `POSTHOG_ACTIVITY_URL` (visit counts and the
+owner's dashboard links; see `.env.example`).
 
 Base images are pinned by digest in `docker-compose.yml` and the Dockerfiles, and
 Python packages come from `uv.lock` with their hashes checked, so a rebuild
@@ -243,7 +245,7 @@ URL and is fetched fresh.
 
 ## Feedback, moderation and spam protection
 
-The feedback form (`/feedback`, and the "Wrong score?" and "Tell us" links) files
+The feedback form (`/feedback`, and the "Wrong score?" and "Let us know" links) files
 submissions into the moderation queue. Moderators review them at `/moderate`, and
 a daily email lists what came in. Each piece below is off until it's configured.
 

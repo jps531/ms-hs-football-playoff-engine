@@ -80,7 +80,7 @@ export function outcomeCards(teamEntries, mode = "tossup") {
   return groups;
 }
 
-/** Key insights (one guaranteed path each) as cards, for 7-10 games left. */
+/** Key insights (one guaranteed path each) as cards, for 6-10 games left. */
 export function insightCards(insights) {
   const titleFor = (i) => {
     if (i.insight_type === "clinch_seed") {

@@ -5,7 +5,7 @@ The feedback form renders a Turnstile widget and sends its token as
 siteverify endpoint before a submission is queued. Each token is single-use.
 
 Turnstile is on when ``TURNSTILE_SECRET_KEY`` is set (the browser gets the
-matching ``TURNSTILE_SITE_KEY`` from ``/api/v1/meta/client-config``), so local
+matching ``TURNSTILE_SITE_KEY`` from ``/api/v1/client-config``), so local
 runs and tests need no keys; outside ``ENVIRONMENT=local`` a missing secret is
 logged as an error. If Cloudflare itself can't be reached the check fails
 closed (503, try again shortly): a spam check that waves everything through

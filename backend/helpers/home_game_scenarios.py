@@ -33,9 +33,8 @@ Dependencies
 Pre-playoff extension
 ---------------------
 When ``seed`` is ``None`` the bracket has not yet been set.  Pass
-``seed_scenarios`` (a dict mapping each possible seed the team could achieve
-to the list of seeding-scenario condition atoms from ``build_scenario_atoms``)
-to generate home-game scenarios that are further conditioned on the team's
+``achievable_seeds`` (the list of seeds the team could still finish as) to
+generate home-game scenarios that are further conditioned on the team's
 seeding outcome.  Each seeding path produces a ``HomeGameCondition`` with
 ``kind="seed_required"`` prepended to all downstream home-game conditions.
 
