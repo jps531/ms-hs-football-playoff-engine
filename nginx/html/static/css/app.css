@@ -855,6 +855,10 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .article ul.bullets li + li { margin-top: 6px; }
 .article ul.bullets + p { margin-top: 16px; }
 .article h2[id], .article h3[id] { scroll-margin-top: 80px; }
+.author { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
+.author > p { margin: 0; }
+.author + p { margin-top: 16px; }
+.author__photo { flex: none; width: 96px; height: 96px; border-radius: 50%; object-fit: cover; }
 
 .detail__link { margin-top: 14px; font-size: 14px; }
 

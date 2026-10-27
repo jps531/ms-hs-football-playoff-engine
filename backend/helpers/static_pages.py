@@ -1635,7 +1635,7 @@ def landing_body(
             f'<ul class="landing-list">{"".join(f"<li>{i}</li>" for i in HOW_IT_WORKS_HTML)}</ul>'
             f"<p>{_e(SCORES_SOURCE)}</p>"
             f"<p><strong>{_e(NOT_AFFILIATED)}</strong></p>"
-            '<p><a href="/methodology">More on how the odds work</a></p>',
+            '<p><a href="/about">More on how the odds work</a></p>',
         )
         + "</div>"
     )

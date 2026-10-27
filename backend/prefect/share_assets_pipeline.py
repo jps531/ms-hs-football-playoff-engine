@@ -165,7 +165,7 @@ def build_share_assets(
     )
     written = dict.fromkeys(keys, 0)
     teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
-    sitemap: list[tuple[str, date | None]] = [("/", today), ("/methodology", None)]
+    sitemap: list[tuple[str, date | None]] = [("/", today), ("/about", None)]
     region_payloads: dict[tuple[int, int], dict] = {}
     class_standings: dict[int, dict] = {}
     class_dates: dict[int, list[dict]] = {}
