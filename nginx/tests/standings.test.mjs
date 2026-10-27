@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  standingPositions, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
+  standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
   orient, byDay, teamSchedule, playoffStatus,
 } from "../html/static/js/standings.js";
 
@@ -17,6 +17,12 @@ test("positions follow winning percentage: 2-0 and 1-0 are both first", () => {
   assert.deepEqual(standingPositions([rec(2, 1), rec(1, 1, 1), rec(1, 1)]), [1, 2, 2]); // .667, .500, .500
   assert.deepEqual(standingPositions([rec(0, 0), rec(0, 0), rec(0, 0)]), [1, 1, 1]);
   assert.deepEqual(standingPositions([rec(1, 1), rec(0, 0)]), [1, 1]); // no games counts as .500
+});
+
+test("shared positions are marked as ties, so they don't read as seeds", () => {
+  assert.deepEqual(positionLabels([1, 2, 2, 4]), ["1", "T-2", "T-2", "4"]);
+  assert.deepEqual(positionLabels([1, 2, 3]), ["1", "2", "3"]);
+  assert.deepEqual(positionLabels(standingPositions([rec(2, 0), rec(1, 0), rec(0, 2)])), ["T-1", "T-1", "3"]);
 });
 
 const entry = {

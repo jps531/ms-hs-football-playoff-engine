@@ -16,6 +16,7 @@ from backend.helpers.share_cards import (
     meta_tags,
     odds_bucket,
     odds_mode,
+    position_labels,
     provenance,
     render_bracket_card,
     render_class_card,
@@ -198,6 +199,8 @@ def test_card_order_and_tied_positions_match_the_standings_table():
     ordered = display_order(api_order)
     assert [t["school"] for t in ordered] == ["Magee", "Raleigh", "Seminary", "Jefferson Davis County", "McLaurin"]
     assert standing_positions(ordered) == [1, 1, 1, 4, 4]
+    assert position_labels(standing_positions(ordered)) == ["T-1", "T-1", "T-1", "T-4", "T-4"]
+    assert position_labels([1, 2, 2, 4]) == ["1", "T-2", "T-2", "4"]  # a shared position reads as a tie, not a seed
     # A team that hasn't played sits with the .500 teams.
     fresh = [_team("A", 0.5, region_wins=1, region_losses=1), _team("B", 0.5, region_wins=0, region_losses=0)]
     assert standing_positions(display_order(fresh)) == [1, 1]
@@ -240,17 +243,19 @@ def test_team_status_matches_the_page_badges():
 def test_team_description_states_its_numbers():
     racing = _with_bracket(_team("Raleigh", 0.997, 0.39), second_round=0.6, champion=0.04)
     assert team_description(racing, 3, 6, "projected") == (
-        "Raleigh (6–2, 3–1 in Region 6-3A): 39% to win the region, >99% to make the playoffs, 4% to win the state championship."
+        "Raleigh (6–2, 3–1 in Region 6-3A), Projected odds: 39% to win the region, >99% to make the playoffs, 4% to win the state championship."
     )
     locked = _with_bracket(_team("Raleigh", 1.0, 1.0), second_round=0.8, champion=0.06)
     assert (
         team_description(locked, 3, 6, "projected")
-        == "Raleigh (6–2, 3–1 in Region 6-3A): locked in as the #1 seed, 6% to win the state championship."
+        == "Raleigh (6–2, 3–1 in Region 6-3A), Projected odds: locked in as the #1 seed, 6% to win the state championship."
     )
     # Can't win the region: it doesn't lead with "0% to win the region".
     chasing = _team("Magee", 0.28, 0.0)
-    assert team_description(chasing, 3, 6, "projected") == "Magee (6–2, 3–1 in Region 6-3A): 28% to make the playoffs."
-    out = {**_team("Mize", 0.0), "eliminated": True}
+    assert team_description(chasing, 3, 6, "projected") == "Magee (6–2, 3–1 in Region 6-3A), Projected odds: 28% to make the playoffs."
+    # The mode comes up front, so trimming a long line to the preview limit can't drop it.
+    assert team_description(chasing, 3, 6, "tossup").startswith("Magee (6–2, 3–1 in Region 6-3A), Toss-up odds: ")
+    out = {**_team("Mize", 0.0), "eliminated": True}  # facts only: no odds mode named
     assert team_description(out, 3, 6, "projected") == "Mize (6–2, 3–1 in Region 6-3A): out of the playoff race."
 
 
@@ -357,8 +362,8 @@ def test_team_road_adds_both_sides_and_finds_the_likeliest_opponent():
 
 def test_team_bracket_description_names_the_road():
     road = team_road(GAMES, "Raleigh", "tossup")
-    assert team_bracket_description("Raleigh", road, 0.04) == (
-        "Raleigh’s likeliest opponents: First Round vs Tylertown, Second Round vs Union; 4% to win the state championship."
+    assert team_bracket_description("Raleigh", road, 0.04, "tossup") == (
+        "Raleigh’s likeliest opponents (Toss-up): First Round vs Tylertown, Second Round vs Union; 4% to win the state championship."
     )
 
 
@@ -378,7 +383,7 @@ def test_bracket_favorites_and_description():
     favorites = bracket_favorites(teams, "projected")
     assert [t["school"] for t in favorites] == ["Raleigh", "Seminary", "Magee"]  # ties broken by the final, then semis
     assert bracket_description(3, favorites, "projected") == (
-        "Raleigh leads the Class 3A bracket at 12% to win the state championship, ahead of Seminary (5%) and Magee (5%)."
+        "Projected odds: Raleigh leads the Class 3A bracket at 12% to win the state championship, ahead of Seminary (5%) and Magee (5%)."
     )
     champ = [_bracket_team("Raleigh", 1.0, 1.0, 1.0)]
     assert bracket_description(3, champ, "projected") == "Raleigh won the Class 3A state championship."

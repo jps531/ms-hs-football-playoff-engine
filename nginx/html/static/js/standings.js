@@ -28,6 +28,15 @@ export function standingPositions(entries) {
 }
 
 /**
+ * Positions as the table shows them, a shared one marked as a tie: 1, T-2,
+ * T-2, 4. A bare shared number next to the "1st" odds column could read as a
+ * seed; "T-2" reads as a tie in the standings.
+ */
+export function positionLabels(positions) {
+  return positions.map((p) => (positions.filter((q) => q === p).length > 1 ? `T-${p}` : String(p)));
+}
+
+/**
  * Teams in display order:
  *   1. region winning percentage (a team without games counts as .500);
  *   2. games over .500, so 2-0 sits above 1-0 and 0-2 below 0-1;

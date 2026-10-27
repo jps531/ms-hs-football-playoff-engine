@@ -29,6 +29,7 @@ from backend.helpers.share_cards import (
     format_pct,
     mode_odds,
     odds_bucket,
+    position_labels,
     record_text,
     slugify,
     standing_positions,
@@ -307,7 +308,7 @@ def insight_lines(insights: Iterable[dict] | None) -> list[str]:
     return [f"{title} if {' or if '.join(conditions)}" for title, conditions in ways.values()]
 
 
-def _row_start(team: dict, pos: int) -> str:
+def _row_start(team: dict, pos: str) -> str:
     """A table row's opening and position cell; eliminated teams are dimmed as in the app."""
     cls = "is-eliminated" if team.get("eliminated") else ""
     return f'<tr class="{cls}"><td class="col-pos">{pos}</td>'
@@ -352,7 +353,7 @@ def _list_section(title: str, items: list[str]) -> str:
 def region_table(clazz: int, region: int, payload: dict, mode: str, teams: dict[str, dict], link: bool = True) -> str:
     """The region page's standings table: position, team, records, odds of each seed and the playoffs."""
     ordered = display_order(payload["teams"])
-    positions = standing_positions(ordered)
+    positions = position_labels(standing_positions(ordered))
     page = region_path(clazz, region)
     complete = not payload.get("remaining_games")
     rows = []
@@ -410,7 +411,7 @@ def class_region_block(
     record, odds of 1st and of the playoffs). ``link=False`` for a preview that is itself one link."""
     region = block["region"]
     ordered = display_order(block["teams"])
-    positions = standing_positions(ordered)
+    positions = position_labels(standing_positions(ordered))
     page = region_path(clazz, region)
     complete = region_complete(ordered)
     title = f'<a href="{page}">Region {region}</a>' if link else f"Region {region}"
