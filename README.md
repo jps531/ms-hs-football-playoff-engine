@@ -153,7 +153,7 @@ Run these in order — each depends on the previous step's data being in the dat
 5. Run **AHSFHS Schedule Data Flow** (`ahsfhs-schedule-data-pipeline`) — writes the season's `games` rows from each school's AHSFHS schedule (a Quick Run is the current year; a Custom Run takes another season)
 6. Run **Region Scenarios Data Flow** (`region-scenarios-data-pipeline`) for the same season — computes seeding odds, standings, and scenarios and writes the current snapshot to the database
 
-Re-run steps 3-4 if schools move or rebrand. Re-run step 2 if MHSAA reclassifies schools (every two years) or if the playoff format changes.
+Re-run steps 3-4 if schools move or rebrand. Re-run step 2 if MHSAA reclassifies schools (every two years). A new season's playoff bracket format is a separate step: see [New Season Setup](#new-season-setup).
 
 To backfill a **completed historical season** after steps 1-6, continue with the steps below.
 
@@ -267,16 +267,17 @@ That leaves out the Prefect pipelines and the tests, and skips magic methods and
 
 Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running. For the complete endpoint reference see [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
 
-Key endpoints summary:
+Key endpoints summary (**owner** marks the ones only the owner can call; see the reference's opening note):
 - `/api/v1/standings/{clazz}/{region}` — seeding odds + scenarios + bracket/home-game odds snapshots
 - `/api/v1/standings/{clazz}` — full standings tables for every region in one class, no scenarios
 - `/api/v1/standings/summary` — statewide grand-view summary: leader, clinch/elimination counts, and volatility per region across every class
-- `/api/v1/rankings/{clazz}` — cross-region ranked list of teams sorted by any odds metric or Elo/RPI, with rank movement vs. the previous snapshot
-- `/api/v1/hosting/{clazz}/{region}` — playoff hosting odds (p_host_given_reach + p_host_overall, raw + Elo-weighted) per round; simulate endpoint accepts winner/loser school names
-- `/api/v1/bracket` — bracket advancement odds per (region, seed) slot, including Elo-weighted advancement, non-weighted and weighted hosting odds per round; simulate endpoint (playoff mode only, same winner/loser format) returns the same full set of fields
+- `/api/v1/hosting/{clazz}/{region}` — playoff hosting odds (p_host_given_reach + p_host_overall, raw + Elo-weighted) per round
+- `/api/v1/bracket` — bracket advancement odds per (region, seed) slot, including Elo-weighted advancement, non-weighted and weighted hosting odds per round
+- `/api/v1/bracket/matchups` — who might play whom, and where, in every game of a class's bracket (the bracket page)
 - `/api/v1/bracket/slots/{slot}` — every team still alive for one bracket slot/round pre-clinch, ranked by chance of reaching it, with raw + Elo-weighted reach/hosting odds
-- `/api/v1/ratings` — Elo and RPI snapshots per team
 - `/api/v1/seasons/{season}/dates` — notable game dates for a timeline scrubber (round, week, game count, human `description`); optional `class` filter resolves 1A-4A/5A-7A's offset playoff schedules unambiguously
+- **owner:** `/api/v1/rankings/{clazz}` (cross-region ranked list by any odds metric or Elo/RPI, with rank movement) and `/api/v1/ratings` (Elo and RPI snapshots per team)
+- **owner:** the `…/simulate` endpoints under standings, hosting and bracket, which apply hypothetical results (by school name; the bracket and hosting ones also take (region, seed) slot references)
 
 ## Disclaimer
 

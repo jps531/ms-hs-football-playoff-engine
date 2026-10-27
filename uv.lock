@@ -1813,6 +1813,7 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
+    { name = "pyyaml" },
     { name = "requests" },
     { name = "slowapi" },
 ]
@@ -1844,6 +1845,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pydantic", specifier = ">=2.0,<2.10" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.31" },
     { name = "slowapi", specifier = ">=0.1.9" },
 ]

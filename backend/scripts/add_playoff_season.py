@@ -1,16 +1,22 @@
-"""CLI tool to seed playoff_formats and playoff_format_slots for a new season.
+"""Seed playoff_formats and playoff_format_slots for a new season.
 
-Usage:
-    uv run python backend/scripts/add_playoff_season.py --config path/to/playoff_formats_2027.yaml
+The season's bracket structure lives in a YAML config next to the other seeds:
+copy sql/seeds/playoff_format_template.yaml to sql/seeds/playoff_formats_YYYY.yaml
+and fill it in. (2025 and 2026 are seeded at database creation by
+sql/seeds/playoff_formats_2025.sql and _2026.sql instead.)
 
-The YAML config describes the bracket structure for one season; copy
-sql/seeds/playoff_format_template.yaml to start one. (The 2025 and 2026
-formats are seeded by sql/seeds/playoff_formats_2025.sql and _2026.sql
-instead.)  The script generates
-idempotent SQL (ON CONFLICT DO NOTHING) and executes it against the database
-configured via DATABASE_URL or the standard Postgres env vars.
+On the server, run it in the worker container, which has the code, sql/seeds/
+and the database settings (rebuild the worker first if the config is new):
 
-Re-running for the same season is safe — rows already present are skipped.
+    docker compose --env-file .env.local --profile local-db exec prefect-worker \\
+        python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_2027.yaml --dry-run
+
+Drop --dry-run to write. Locally, the same works with the local overlay's
+compose files. The database connection comes from the POSTGRES_* environment
+variables (backend.helpers.database_helpers.get_database_connection).
+
+Re-running for the same season is safe: rows already there are skipped
+(ON CONFLICT DO NOTHING), and the counts printed are the rows actually added.
 """
 
 import argparse
@@ -29,25 +35,33 @@ def _load_config(path: Path) -> dict:
 
 
 def _validate(cfg: dict) -> None:
-    """Raise ValueError if the config is missing required keys."""
-    required_top = {"season", "classes"}
-    missing = required_top - cfg.keys()
+    """Raise ValueError if the config is missing a key or has an impossible value."""
+    missing = {"season", "classes"} - cfg.keys()
     if missing:
         raise ValueError(f"Config missing required keys: {missing}")
+    if not cfg["classes"]:
+        raise ValueError("Config lists no classes")
     for cls_cfg in cfg["classes"]:
-        for key in ("class", "num_regions", "seeds_per_region", "num_rounds", "slots"):
+        for key in ("class", "num_regions", "num_rounds", "slots"):
             if key not in cls_cfg:
                 raise ValueError(f"Class config missing key '{key}': {cls_cfg}")
+        if cls_cfg["class"] not in range(1, 8):
+            raise ValueError(f"Class must be 1-7, got {cls_cfg['class']!r}")
+        if not cls_cfg["slots"]:
+            raise ValueError(f"Class {cls_cfg['class']} lists no slots")
         for slot in cls_cfg["slots"]:
-            for k in ("slot", "home_region", "home_seed", "away_region", "away_seed", "north_south"):
-                if k not in slot:
-                    raise ValueError(f"Slot missing key '{k}': {slot}")
+            for key in ("slot", "home_region", "home_seed", "away_region", "away_seed", "north_south"):
+                if key not in slot:
+                    raise ValueError(f"Class {cls_cfg['class']} slot missing key '{key}': {slot}")
             if slot["north_south"] not in ("N", "S"):
-                raise ValueError(f"north_south must be 'N' or 'S', got: {slot['north_south']!r}")
+                raise ValueError(f"Class {cls_cfg['class']} slot {slot['slot']}: north_south must be N or S")
 
 
-def _seed(cfg: dict, dry_run: bool) -> None:
-    """Insert playoff_formats and playoff_format_slots rows from config."""
+def _seed(cfg: dict, dry_run: bool) -> tuple[int, int]:
+    """Insert playoff_formats and playoff_format_slots rows from config.
+
+    Returns the number of format and slot rows added (0 for rows already there).
+    """
     season = cfg["season"]
     classes = cfg["classes"]
 
@@ -62,13 +76,20 @@ def _seed(cfg: dict, dry_run: bool) -> None:
         )
         for c in classes
     ]
+    total_slots = sum(len(c["slots"]) for c in classes)
+
+    if dry_run:
+        print(f"[dry-run] The config has {len(format_rows)} classes and {total_slots} slots for season {season}:")
+        for r in format_rows:
+            print(f"  class={r[1]}, num_regions={r[2]}, num_rounds={r[4]}")
+        print("[dry-run] Nothing written; rows already in the database would be skipped.")
+        return 0, 0
 
     format_sql = """
         INSERT INTO playoff_formats (season, class, num_regions, seeds_per_region, num_rounds, notes)
         VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (season, class) DO NOTHING
     """
-
     slot_sql = """
         INSERT INTO playoff_format_slots (format_id, slot, home_region, home_seed, away_region, away_seed, north_south)
         SELECT f.id, %s, %s, %s, %s, %s, %s
@@ -76,20 +97,13 @@ def _seed(cfg: dict, dry_run: bool) -> None:
         WHERE f.season = %s AND f.class = %s
         ON CONFLICT DO NOTHING
     """
-
-    if dry_run:
-        print(f"[dry-run] Would insert {len(format_rows)} playoff_formats rows for season {season}:")
-        for r in format_rows:
-            print(f"  class={r[1]}, num_regions={r[2]}, num_rounds={r[4]}")
-        total_slots = sum(len(c["slots"]) for c in classes)
-        print(f"[dry-run] Would insert {total_slots} playoff_format_slots rows.")
-        return
-
+    formats_added = slots_added = 0
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            cur.executemany(format_sql, format_rows)
+            for row in format_rows:
+                cur.execute(format_sql, row)
+                formats_added += cur.rowcount
             for cls_cfg in classes:
-                clazz = cls_cfg["class"]
                 for slot in cls_cfg["slots"]:
                     cur.execute(
                         slot_sql,
@@ -101,20 +115,25 @@ def _seed(cfg: dict, dry_run: bool) -> None:
                             slot["away_seed"],
                             slot["north_south"],
                             season,
-                            clazz,
+                            cls_cfg["class"],
                         ),
                     )
+                    slots_added += cur.rowcount
         conn.commit()
 
-    total_slots = sum(len(c["slots"]) for c in classes)
-    print(f"Seeded playoff format for season {season}: {len(format_rows)} classes, {total_slots} slots.")
+    skipped = formats_added < len(format_rows) or slots_added < total_slots
+    print(
+        f"Season {season}: added {formats_added} of {len(format_rows)} classes and "
+        f"{slots_added} of {total_slots} slots" + (" (the rest were already there)." if skipped else ".")
+    )
+    return formats_added, slots_added
 
 
 def main() -> None:
     """Entry point."""
     parser = argparse.ArgumentParser(description="Seed playoff bracket format for a new season.")
     parser.add_argument("--config", required=True, type=Path, help="Path to YAML config file")
-    parser.add_argument("--dry-run", action="store_true", help="Print what would be inserted without writing")
+    parser.add_argument("--dry-run", action="store_true", help="Check the config and print it without writing")
     args = parser.parse_args()
 
     if not args.config.exists():

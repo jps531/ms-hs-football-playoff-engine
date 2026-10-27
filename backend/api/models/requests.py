@@ -148,37 +148,6 @@ class OTWinProbRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class PlayoffSlotRequest(BaseModel):
-    """One first-round matchup slot in the bracket."""
-
-    slot: int
-    home_region: int
-    home_seed: int
-    away_region: int
-    away_seed: int
-    north_south: str = Field(pattern="^[NS]$")
-
-
-class PlayoffClassRequest(BaseModel):
-    """Bracket structure for a single MHSAA classification."""
-
-    class_: int = Field(alias="class", ge=1, le=7)
-    num_regions: int
-    seeds_per_region: int = 4
-    num_rounds: int
-    notes: str | None = None
-    slots: list[PlayoffSlotRequest] = Field(min_length=1)
-
-    model_config = {"populate_by_name": True}
-
-
-class PlayoffFormatRequest(BaseModel):
-    """Request body for seeding a full season's playoff bracket format."""
-
-    season: int
-    classes: list[PlayoffClassRequest] = Field(min_length=1)
-
-
 class AssignChampionshipVenueRequest(BaseModel):
     """Request body for assigning a venue to championship games."""
 

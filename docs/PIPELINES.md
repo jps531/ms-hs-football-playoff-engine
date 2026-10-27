@@ -29,7 +29,7 @@ Run on their own after a fix, or with a Custom Run for another season.
 
 | Deployment | When to run it |
 |---|---|
-| `regions-data-pipeline` | Pre-season (every two years, when MHSAA reclassifies, or if the playoff format changes): writes each school's class and region for the season to `school_seasons`, adding new schools to `schools`. |
+| `regions-data-pipeline` | Pre-season, and when MHSAA reclassifies (every two years): writes each school's class and region for the season to `school_seasons`, adding new schools to `schools`. |
 | `nces-school-pipeline` | Pre-season, and when schools move: city, ZIP, latitude and longitude for public schools from the NCES EDGE API, then the private-school location seed. Fields with an override are left alone. |
 | `misshsaa-school-pipeline` | Pre-season, and when schools rebrand: mascot and colors from the MHSAA school directory. |
 | `backfill-historical-snapshots` | Once per season after importing a full season's games, again after re-importing them, and after any change that bumps `MODEL_VERSION` (so past weeks use the current model). Recomputes every game date's snapshot, runs `playoff-bracket-update` for the playoff dates, and deletes the season's regular-season rows dated between game dates, which would otherwise shadow them. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#deploying-updates). |
@@ -47,4 +47,4 @@ Run from the repository root.
 | `scripts/backup_db.sh` | Nightly database backup from cron; see [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#backups). |
 | `scripts/posthog_dashboard.py` | Builds the PostHog "Site activity" dashboard once; see [ANALYTICS.md](ANALYTICS.md#the-dashboard). |
 | `scripts/prefect_smoke.py` | CI only: checks that a real Prefect flow runs in the worker image. |
-| `backend/scripts/add_playoff_season.py` | Seeds a new season's playoff format into a running database; see [SEASON_SETUP.md](SEASON_SETUP.md). |
+| `backend/scripts/add_playoff_season.py` | Seeds a new season's playoff bracket format (`playoff_formats`, `playoff_format_slots`) from a YAML config into a running database, run in the worker container; see [SEASON_SETUP.md](SEASON_SETUP.md#playoff-bracket-format). |

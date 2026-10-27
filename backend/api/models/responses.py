@@ -1176,15 +1176,6 @@ class BulkColorRecomputeResult(BaseModel):
     clamp_failed_schools: list[str]
 
 
-class PlayoffFormatSeedResult(BaseModel):
-    """Result of seeding a playoff bracket format."""
-
-    season: int
-    classes_inserted: int
-    slots_inserted: int
-    dry_run: bool
-
-
 class ChampionshipGameRow(BaseModel):
     """One game row updated by assign-championship-venue."""
 
