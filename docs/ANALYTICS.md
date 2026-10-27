@@ -53,6 +53,7 @@ keep the two in step: a new event or property means a new line there.
 | `bracket_game_opened` | Opening a game's sheet | `class`, `round`, `game` |
 | `bracket_half_changed` | The North/South/Both control | `half` |
 | `scenarios_opened` | Opening a folded scenario group | `section` (its heading) |
+| `scenario_explanation_opened` | Opening a scenario card's Explanation sheet | `place` (e.g. `Region 1-7A`), `scenario` (the card's label, e.g. `Scenario 3`) |
 | `home_link_clicked` | Following a link on the front page | `to` (the link's path), `section` (the front-page section it's in: its heading id without `landing-`, or `classes` for the class buttons) |
 | `feedback_opened` | Opening the feedback form | `kind` (`score`, `odds`, `other`) |
 | `feedback_sent` | A report sent | `kind` (`score`, `feedback`) |
