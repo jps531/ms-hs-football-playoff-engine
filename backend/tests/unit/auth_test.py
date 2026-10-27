@@ -1,11 +1,18 @@
 """Unit tests for backend.api.auth: session cookies, stored emails, the JWKS cache, and the Prefect gate."""
 
 import asyncio
+import base64
+import hashlib
+import hmac
+import json
 import time
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi import HTTPException
-from jose import jwt
+from jwt.algorithms import RSAAlgorithm
 from starlette.requests import Request
 
 from backend.api import auth
@@ -36,7 +43,9 @@ class TestMintAndDecodeSessionToken:
     def test_tampered_signature_returns_none(self):
         """A token signed with the wrong secret decodes to None, not an error."""
         token = jwt.encode(
-            {"db_id": 7, "role": "moderator", "exp": int(time.time()) + 3600}, "wrong-secret", algorithm="HS256"
+            {"db_id": 7, "role": "moderator", "exp": int(time.time()) + 3600},
+            "a-different-secret-at-least-32-bytes-long",
+            algorithm="HS256",
         )
         assert _decode_session_token(token) is None
 
@@ -86,6 +95,66 @@ def test_an_unknown_key_refetches_the_key_set_but_not_too_often(monkeypatch):
     assert len(fetched) == 2
     auth._get_jwks()  # within the TTL: cached
     assert len(fetched) == 2
+
+
+_AUTH0_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_AUTH0_JWK = {**RSAAlgorithm.to_jwk(_AUTH0_KEY.public_key(), as_dict=True), "kid": "k1", "use": "sig"}
+
+
+def _auth0_token(key=_AUTH0_KEY, algorithm="RS256", kid="k1", **claims) -> str:
+    """An access token as Auth0 signs one, with these claims changed."""
+    payload = {"sub": "auth0|1", "aud": auth.AUTH0_AUDIENCE, "iss": auth._ISSUER, "exp": int(time.time()) + 600}
+    return jwt.encode({**payload, **claims}, key, algorithm=algorithm, headers={"kid": kid})
+
+
+def _decode_auth0(monkeypatch, token):
+    """``_decode_auth0_token`` against a key set holding just our test key."""
+    monkeypatch.setattr(auth, "_get_jwks", lambda force=False: {"keys": [_AUTH0_JWK]})
+    return asyncio.run(auth._decode_auth0_token(token))
+
+
+def test_auth0_token_signed_with_the_key_set_decodes(monkeypatch):
+    """A token Auth0 signed (RS256, a kid in the key set, our audience and issuer) gives its claims."""
+    assert _decode_auth0(monkeypatch, _auth0_token())["sub"] == "auth0|1"
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        pytest.param(lambda: _auth0_token(aud="someone-else"), id="wrong audience"),
+        pytest.param(lambda: _auth0_token(iss="https://evil.example/"), id="wrong issuer"),
+        pytest.param(lambda: _auth0_token(exp=int(time.time()) - 60), id="expired"),
+        pytest.param(
+            lambda: _auth0_token(key=rsa.generate_private_key(public_exponent=65537, key_size=2048)),
+            id="another key",
+        ),
+        pytest.param(lambda: _auth0_token(kid="k2"), id="unknown kid"),
+        pytest.param(lambda: "not-a-jwt", id="malformed"),
+    ],
+)
+def test_auth0_token_that_isnt_ours_is_a_401(monkeypatch, token):
+    """Every other token is refused with a 401."""
+    with pytest.raises(HTTPException) as err:
+        _decode_auth0(monkeypatch, token())
+    assert err.value.status_code == 401
+
+
+def test_auth0_token_forged_with_the_public_key_is_a_401(monkeypatch):
+    """HS256 signed with the public key (which anyone can fetch) isn't accepted: only RS256 is."""
+
+    def b64(data: bytes) -> str:
+        """Base64url without padding, as in a JWT."""
+        return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+    claims = {"sub": "auth0|1", "aud": auth.AUTH0_AUDIENCE, "iss": auth._ISSUER, "exp": int(time.time()) + 600}
+    signing_input = (
+        f"{b64(json.dumps({'alg': 'HS256', 'typ': 'JWT', 'kid': 'k1'}).encode())}.{b64(json.dumps(claims).encode())}"
+    )
+    public_der = _AUTH0_KEY.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    forged = f"{signing_input}.{b64(hmac.new(public_der, signing_input.encode(), hashlib.sha256).digest())}"
+    with pytest.raises(HTTPException) as err:
+        _decode_auth0(monkeypatch, forged)
+    assert err.value.status_code == 401
 
 
 def _cookie_request(token: str | None) -> Request:

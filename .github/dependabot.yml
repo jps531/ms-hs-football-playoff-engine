@@ -7,7 +7,7 @@
 #   "Dependabot security updates" in Settings -> Code security), also bundled.
 # - Python updates are lockfile-only: Dependabot stays inside the ranges in
 #   pyproject.toml and never rewrites them, so a deliberate cap (prefect<3,
-#   pydantic<2.10, anyio<4 — see the comments there) can't be lifted by a bot.
+#   pydantic<2.10, anyio<5 — see the comments there) can't be lifted by a bot.
 #   Raising a cap is a change a person makes, with the tests to back it.
 # - Every PR runs CI (.github/workflows/ci.yml): the tests, and building the
 #   images. Merge only when it's green.
