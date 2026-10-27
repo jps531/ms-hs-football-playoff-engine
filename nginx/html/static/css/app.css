@@ -770,6 +770,28 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .outcome__tie-body { display: grid; gap: 4px; min-width: 0; }
 .outcome__tie-teams { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .outcome__tie-note { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+/* A card's "Explanation": a button to its sheet in the app; on the pre-rendered
+   page (no script), a disclosure in the card. Each tie's teams, when it holds,
+   and its steps. */
+.outcome__explain {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; margin-top: 10px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-page); color: var(--text-primary);
+  font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.outcome__explain:hover { background: var(--surface-raised); }
+.outcome__explain-icon { flex: none; width: 18px; height: 18px; }
+.outcome__why > summary .outcome__explain-icon { margin-right: 6px; }
+.outcome__why { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; font-size: 14px; line-height: 20px; }
+.outcome__why > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.why { font-size: 14px; line-height: 20px; }
+.why .sub-title { font-size: 17px; line-height: 22px; }
+.why-tie { margin-top: 10px; }
+.why-tie__title { font-size: inherit; font-weight: 600; }
+.why-tie__when { margin-top: 2px; color: var(--text-secondary); }
+.why-tie .tiebreak__steps { margin-top: 6px; }
 .outcome__out { margin-top: 8px; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
 .outcome__out-label { font-weight: 600; margin-right: 2px; }
 .outcome__out strong { color: var(--text-primary); }

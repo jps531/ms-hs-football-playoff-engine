@@ -195,6 +195,7 @@ class TestCheckpointB:
             "place_terms",
             "tiebreaker_groups",
             "coinflip_groups",
+            "explanation",
         }
         for sc in _SCENARIOS_B:
             assert set(sc.keys()) == required

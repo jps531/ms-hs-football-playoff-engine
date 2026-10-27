@@ -20,6 +20,7 @@ from backend.helpers.data_classes import (
     TiebreakDecision,
 )
 from backend.helpers.scenario_renderer import _render_atom, atoms_from_complete_scenarios
+from backend.helpers.tiebreak_explainer import explain_scenario_ties
 from backend.helpers.tiebreakers import resolve_standings_for_mask
 
 # ---------------------------------------------------------------------------
@@ -1336,6 +1337,75 @@ def _simplest_terms(signatures: dict) -> dict:
     return terms
 
 
+def _cube_cover(wanted: set[int], within: set[int], remaining: list[RemainingGame]) -> list[list[tuple[str, str]]]:
+    """Results that pick out exactly the masks *wanted* among the masks *within*, as an OR of ANDs.
+
+    Each AND is a set of game results (a cube of masks: those results, the other games either way);
+    a cube may take in masks outside *within* (they can't happen here), never one of *within* that
+    isn't *wanted*. Greedy: the cube covering the most masks still uncovered, fewest results first.
+    Empty when *wanted* is all of *within* (it holds whatever else happens).
+    """
+    if wanted >= within:
+        return []
+    R = len(remaining)
+    cubes = []
+    for spec in product((None, 1, 0), repeat=R):
+        fixed = [(i, v) for i, v in enumerate(spec) if v is not None]
+        inside = {m for m in within if all((m >> i & 1) == v for i, v in fixed)}
+        if inside and inside <= wanted:
+            cubes.append((fixed, inside))
+    out, left = [], set(wanted)
+    while left:
+        fixed, inside = max(cubes, key=lambda c: (len(c[1] & left), -len(c[0])))
+        left -= inside
+        out.append([(remaining[i].a, remaining[i].b) if v else (remaining[i].b, remaining[i].a) for i, v in fixed])
+    return out
+
+
+def _finish_explanations(
+    teams: list[str],
+    completed: list[CompletedGame],
+    remaining: list[RemainingGame],
+    finish_masks: dict[tuple, set[int]],
+    playoff_seeds: int,
+    base_margin_default: int,
+    pa_win: int,
+) -> dict[tuple, list[dict]]:
+    """For each finish (seeding, open groups), how each of its ties reaching the playoff places breaks.
+
+    A tie's explanation depends only on the winners (``explain_scenario_ties``), so each set of
+    winners is explained once. A finish reached by several sets of winners lists each tie's
+    explanation once, with the results that pick it out among the finish's sets of winners
+    (``when``, an OR of ANDs; empty when it holds for all of them).
+    """
+    ref = {(g.a, g.b): base_margin_default for g in remaining}
+    told: dict[int, list] = {}
+    out: dict[tuple, list[dict]] = {}
+    for finish, masks in finish_masks.items():
+        seeding = finish[0]
+        blocks: dict[tuple, set[int]] = defaultdict(set)
+        for mask in masks:
+            if mask not in told:
+                told[mask] = explain_scenario_ties(
+                    teams, completed, remaining, mask, ref, playoff_seeds, base_margin_default, pa_win
+                )
+            for tie in told[mask]:
+                blocks[(frozenset(tie.teams), tie.places, tie.steps)].add(mask)
+        listed = []
+        for (members, places, steps), with_it in blocks.items():
+            listed.append(
+                {
+                    # In the finish's order (a tie it leaves open is listed in its places alphabetically).
+                    "teams": sorted(members, key=seeding.index),
+                    "places": list(places),
+                    "steps": list(steps),
+                    "when": [[list(r) for r in cube] for cube in _cube_cover(with_it, masks, remaining)],
+                }
+            )
+        out[finish] = sorted(listed, key=lambda e: (e["places"], e["when"]))
+    return out
+
+
 def enumerate_division_scenarios(
     teams: list[str],
     completed: list[CompletedGame],
@@ -1623,6 +1693,25 @@ def enumerate_division_scenarios(
         for sc in scenarios:
             places = tuple((t, tuple(seeds)) for t, seeds in (sc["open_places"] or {}).items())
             sc["p"], sc["p_weighted"] = finish_odds[_finish_key(sc["seeding"], sc["open_groups"] or (), places)]
+
+    # Why each finish's ties break as they do, over every set of winners that gives it. Only where
+    # margins are exact (R <= 5, which is also where the scenario list is shown): with margins
+    # ignored, a step that turns on one could be explained wrongly.
+    if not exact:
+        return scenarios
+
+    def finish_of(seeding, open_groups) -> tuple:
+        return tuple(seeding), tuple((step, tuple(g)) for step, g in open_groups or ())
+
+    finish_masks: dict[tuple, set[int]] = defaultdict(set)
+    for mask, outs in outcomes.items():
+        for out in outs:
+            finish_masks[finish_of(out[2], out[1])].add(mask)
+    explained = _finish_explanations(
+        teams, completed, remaining, finish_masks, playoff_seeds, base_margin_default, pa_win
+    )
+    for sc in scenarios:
+        sc["explanation"] = explained.get(finish_of(sc["seeding"], sc["open_groups"]), [])
     return scenarios
 
 

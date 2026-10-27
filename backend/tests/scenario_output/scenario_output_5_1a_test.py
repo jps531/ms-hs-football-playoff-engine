@@ -201,6 +201,7 @@ def test_scenario_entry_shape():
         "place_terms",
         "tiebreaker_groups",
         "coinflip_groups",
+        "explanation",
     }
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required

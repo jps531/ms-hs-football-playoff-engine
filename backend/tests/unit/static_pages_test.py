@@ -1176,3 +1176,34 @@ def test_complete_scenario_cards_say_shared_conditions_once():
     box = html.index('<div class="oneof" role="group" aria-label="And one of">')
     assert '<span class="oneof__label" aria-hidden="true">AND ONE OF</span>' in html[box:]
     assert html.index('class="or"') > box
+
+
+def test_why_blocks_and_explanation_match_scenarios_js():
+    """Mirrors scenarios.test.mjs (whyBlocks): each tie's teams and places, the results it holds for, and its steps;
+    the pre-rendered card shows them in a closed disclosure, escaped."""
+    from backend.helpers.static_pages import complete_scenario_cards, outcome_scenario_card, why_blocks
+
+    explanation = [
+        {"teams": ["Tupelo Christian", "Smithville"], "places": [1, 2], "steps": ["Head-to-head: Tupelo Christian beats Smithville."], "when": []},
+        {
+            "teams": ["Biggersville", "Tupelo Christian", "Smithville"], "places": [1, 2, 3], "steps": ["s1", "s2 & <b>"],
+            "when": [[{"winner": "Smithville", "loser": "Biggersville"}], [{"winner": "A", "loser": "B"}, {"winner": "C", "loser": "D"}]],
+        },
+    ]  # fmt: skip
+    assert why_blocks(explanation) == [
+        {"title": "Tupelo Christian and Smithville, tied for 1st and 2nd", "when": None, "steps": ["Head-to-head: Tupelo Christian beats Smithville."]},
+        {
+            "title": "Biggersville, Tupelo Christian and Smithville, tied for 1st–3rd",
+            "when": "If Smithville beats Biggersville, or A beats B and C beats D",
+            "steps": ["s1", "s2 & <b>"],
+        },
+    ]  # fmt: skip
+    assert why_blocks(None) == []  # snapshots stored before explanations
+    sc = {"scenario_num": 1, "sub_label": "", "game_winners": [{"winner": "A", "loser": "B"}],
+          "outcomes": {"A": "1", "B": "2"}, "explanation": explanation}  # fmt: skip
+    [card] = complete_scenario_cards([sc])
+    html = outcome_scenario_card(card, {})
+    assert '<details class="outcome__why"><summary><svg class="outcome__explain-icon"' in html and "</svg>Explanation</summary>" in html
+    assert "<li>s2 &amp; &lt;b&gt;</li>" in html and '<p class="why-tie__when">If Smithville beats Biggersville' in html
+    [plain] = complete_scenario_cards([{**sc, "explanation": []}])
+    assert "outcome__why" not in outcome_scenario_card(plain, {})

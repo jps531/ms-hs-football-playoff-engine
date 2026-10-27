@@ -102,12 +102,19 @@ def _check_region(teams, games, trace_steps: Counter):
         assert tie.places == tuple(range(tie.places[0], tie.places[0] + len(tie.teams)))
         text = " ".join(tie.steps)
         flipped = {t for g in tie.coin_flip for t in g}
+        undecided = {t for g in tie.undecided for t in g}
         for t in tie.teams:
             stated = re.findall(rf"{re.escape(t)} finishes (\d+)(?:st|nd|rd|th)", text)
-            if t in flipped:
-                assert stated == [], (t, text)  # a coin flip's order isn't stated
+            if t in flipped or t in undecided:
+                assert stated == [], (t, text)  # a coin flip's order, or one not settled, isn't stated
             else:
                 assert stated == [str(place[t])], (t, text)  # stated once, and right
+        # A tie is left undecided only where its next step goes down teams above whose order a coin flip decides.
+        for g in tie.undecided:
+            assert any(
+                f"{_join(g)} are still level, so it goes to their" in s and "a coin flip decides" in s
+                for s in tie.steps
+            )
         for g in tie.coin_flip:
             places = _join(_ordinal(p) for p in sorted(place[t] for t in g))
             assert (

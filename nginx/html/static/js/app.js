@@ -11,7 +11,7 @@
 import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDate, calculatedSpan } from "./format.js";
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
-  ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard, breadcrumbs,
+  ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -751,7 +751,7 @@ async function regionView(ctx) {
     ${data.tiebreaks?.length ? tiebreaksSection(data.tiebreaks) : ""}
     ${remaining.length ? gamesSection("remaining", "Remaining games", remaining, teams, focus) : ""}
     ${remaining.length ? scenariosSection(data, teams, cardProv, mode, focus, !data.scenarios?.length) : ""}
-    ${data.scenarios?.length ? allScenariosSection(data.scenarios, teams, focus, mode, cardProv.odds) + scenarioReport(focus) : ""}
+    ${data.scenarios?.length ? allScenariosSection(data.scenarios, teams, focus, mode, cardProv.odds, `Region ${region}-${clazz}A`) + scenarioReport(focus) : ""}
     ${results.length ? gamesSection("results", "Completed games", results, teams, focus) : ""}
   </div>`;
 }
@@ -1015,19 +1015,72 @@ function collapsible(label, count, body, open) {
 /**
  * Every distinct way the region can finish, one box each, with its chance in
  * the chosen odds mode. Long lists start folded so they don't bury the
- * completed games below.
+ * completed games below. A card whose seeding goes to the tiebreakers opens
+ * its explanation in a sheet.
  */
-function allScenariosSection(scenarios, teams, focus, mode, provenanceHtml) {
+function allScenariosSection(scenarios, teams, focus, mode, provenanceHtml, place) {
   const cards = completeScenarioCards(scenarios);
   const open = cards.length <= 12;
+  explainData = { cards, teams, focus, mode, provenanceHtml, place };
   return `<section class="section" aria-labelledby="all-scen-title">
     <details class="scenario-group scenario-group--section"${open ? " open" : ""}>
       <summary><h2 class="section-title" id="all-scen-title">Scenarios</h2><span class="muted">${cards.length} ${cards.length === 1 ? "way" : "ways"} the region can finish</span></summary>
-      <div class="scenario-grid">${cards.map((c) => outcomeScenarioCard(c, teams, {
-        focus, p: mode === "projected" ? c.pWeighted : c.p, provenanceHtml,
+      <div class="scenario-grid">${cards.map((c, i) => outcomeScenarioCard(c, teams, {
+        focus, p: mode === "projected" ? c.pWeighted : c.p, provenanceHtml, explainId: i,
       })).join("")}</div>
     </details>
   </section>`;
+}
+
+// ---------------------------------------------------- explanation sheet
+// A scenario card's "Explanation" opens a sheet (the game sheet's look) with
+// the whole scenario again and, under it, how the tiebreakers order each tie.
+
+let explainData = null; // the region's scenario cards, from the last render
+let explainSheet = null;
+let explainOpen = null; // the open card's index, to refocus its button on close
+
+function openExplanation(i) {
+  const card = explainData?.cards[i];
+  if (!card) return;
+  if (!explainSheet) {
+    explainSheet = document.createElement("dialog");
+    explainSheet.className = "game-sheet";
+    explainSheet.setAttribute("aria-labelledby", "explain-sheet-title");
+    document.body.append(explainSheet);
+    explainSheet.addEventListener("click", (e) => {
+      if (e.target === explainSheet || e.target.closest("[data-sheet-close]")) explainSheet.close();
+    });
+    explainSheet.addEventListener("close", () => {
+      const at = explainOpen;
+      explainOpen = null;
+      if (at != null) document.querySelector(`[data-explain-open="${at}"]`)?.focus({ preventScroll: true });
+    });
+  }
+  explainOpen = i;
+  explainSheet.innerHTML = explanationHtml(card);
+  if (!explainSheet.open) explainSheet.showModal();
+  explainSheet.scrollTop = 0;
+  explainSheet.querySelector(".game-sheet__body").scrollTop = 0;
+}
+
+function explanationHtml(card) {
+  const { teams, focus, mode, provenanceHtml, place } = explainData;
+  return `<div class="game-sheet__head">
+      <div>
+        <p class="game-sheet__kicker">${esc(place)} · Explanation</p>
+        <h2 class="game-sheet__title" id="explain-sheet-title" tabindex="-1" autofocus>${esc(card.label)}</h2>
+        ${provenanceHtml}
+      </div>
+      <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
+    </div>
+    <div class="game-sheet__body">
+      ${outcomeScenarioCard({ ...card, label: "The scenario" }, teams, { focus, p: mode === "projected" ? card.pWeighted : card.p })}
+      <section class="why" aria-label="Why this order">
+        <h3 class="sub-title">Why this order</h3>
+        ${whyTies(card.why)}
+      </section>
+    </div>`;
 }
 
 // ------------------------------------------------------------- bracket
@@ -1554,6 +1607,13 @@ function gameDetail(game) {
 }
 
 app.addEventListener("click", (e) => {
+  const explain = e.target.closest("[data-explain-open]");
+  if (explain) {
+    const i = Number(explain.dataset.explainOpen);
+    track("scenario_explanation_opened", { place: explainData?.place, scenario: explainData?.cards[i]?.label });
+    openExplanation(i);
+    return;
+  }
   const card = e.target.closest("[data-game-open]");
   if (card) {
     const game = bracketData?.games.find((g) => g.id === card.dataset.gameOpen);

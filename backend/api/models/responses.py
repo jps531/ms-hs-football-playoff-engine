@@ -544,6 +544,22 @@ class OpenGroupModel(BaseModel):
     description: str
 
 
+class ScenarioTieExplanation(BaseModel):
+    """How one tie reaching the playoff places breaks in a scenario's finish ("why this order").
+
+    ``teams`` in the finish's order (a tie it leaves open, in its places alphabetically), ``places``
+    the places they take, ``steps`` one sentence per tiebreaker step applied, in order, as far as
+    the winners decide it (a step turning on a margin or a score still to come ends it, saying so).
+    ``when`` picks it out among the results giving this finish: any one set of results (each all
+    of its game results) is enough; empty when it holds whichever way the finish comes about.
+    """
+
+    teams: list[str]
+    places: list[int]
+    steps: list[str]
+    when: list[list[ScenarioGameOutcome]] = []
+
+
 class ScenarioEntry(BaseModel):
     """One complete-scenario entry: the game results that produce a specific seeding."""
 
@@ -566,6 +582,9 @@ class ScenarioEntry(BaseModel):
     # None for snapshots stored before scenarios carried odds, and for a simulated result.
     p: float | None = None
     p_weighted: float | None = None
+    # How the finish's ties reaching the playoff places break; every scenario reaching the same finish
+    # carries the same list. Empty when it has no such tie; None for snapshots stored before it.
+    explanation: list[ScenarioTieExplanation] | None = None
 
 
 class KeyInsightConditionModel(BaseModel):

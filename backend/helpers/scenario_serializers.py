@@ -193,7 +193,9 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
         "tiebreaker_groups": [[team, ...], ...] | null,
         "coinflip_groups": [[team, ...], ...] | null,
         "seeding": [team, ...],
-        "p": float, "p_weighted": float   (only when the scenario carries its finish's odds)
+        "p": float, "p_weighted": float   (only when the scenario carries its finish's odds),
+        "explanation": [{"teams": [...], "places": [...], "steps": [...], "when": [[[winner, loser], ...], ...]}, ...]
+                         (how its finish's ties break; absent in snapshots stored before it)
     }
     """
     result = []
@@ -219,7 +221,7 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
                 "tiebreaker_groups": sc.get("tiebreaker_groups"),
                 "coinflip_groups": sc.get("coinflip_groups"),
                 "seeding": list(sc["seeding"]),
-                **{k: sc[k] for k in ("p", "p_weighted") if k in sc},
+                **{k: sc[k] for k in ("p", "p_weighted", "explanation") if k in sc},
             }
         )
     return result
@@ -250,7 +252,7 @@ def deserialize_complete_scenarios(data: list[dict]) -> list[dict]:
                 "tiebreaker_groups": sc.get("tiebreaker_groups"),
                 "coinflip_groups": sc.get("coinflip_groups"),
                 "seeding": tuple(sc["seeding"]),
-                **{k: sc[k] for k in ("p", "p_weighted") if k in sc},
+                **{k: sc[k] for k in ("p", "p_weighted", "explanation") if k in sc},
             }
         )
     return result
