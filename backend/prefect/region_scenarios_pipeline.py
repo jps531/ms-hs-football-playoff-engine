@@ -71,7 +71,7 @@ _T = TypeVar("_T")
 # calibration report can tell which model produced a published number. Bump
 # it whenever a change alters the odds themselves: Elo parameters, home-field
 # advantage, tiebreaker handling, simulation counts, bracket or hosting rules.
-MODEL_VERSION = "2026.6"  # 2026.6: steps 2 and 4 compare against teams in finishing order (2026.5: every margin)
+MODEL_VERSION = "2026.7"  # 2026.7: Elo carryover reads the final prior rating, and a renamed school carries its predecessor's (2026.6: steps 2 and 4 in finishing order)
 
 
 def quote(value: _T) -> _T:
