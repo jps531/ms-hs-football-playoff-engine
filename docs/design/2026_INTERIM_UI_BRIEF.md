@@ -1,5 +1,11 @@
 # 2026 Interim UI — Design Brief
 
+> **Status (October 2026):** §1's scope has been widened by the follow-ups
+> ([2026_INTERIM_UI_UPDATE.md](2026_INTERIM_UI_UPDATE.md),
+> [2026_INTERIM_UI_BRIEF_V3.md](2026_INTERIM_UI_BRIEF_V3.md)), which added the
+> brackets, share images and past weeks among other things. §§2–7, the design
+> system, still govern the site.
+
 Build guidance for the temporary 2026-season UI: region scenarios and odds
 only. This is a narrow, shippable slice of a larger product that launches for
 the 2027 season. Everything here is written so the interim build is a genuine

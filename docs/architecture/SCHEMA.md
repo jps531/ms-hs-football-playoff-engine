@@ -1,10 +1,38 @@
-# Schema Diagram
+# Schema
+
+What each table holds, then the entity-relationship diagram. Column-level detail is in `sql/init.sql`, whose `COMMENT ON` statements describe the tables and columns.
+
+## Tables
+
+| Table | Description |
+|-------|-------------|
+| `schools` | Static school identity: location (city, zip, lat/lon), mascot, colors, and Cloudinary logo paths (`logo_primary`, `logo_secondary`, `logo_tertiary`). Never duplicated across seasons. |
+| `helmet_designs` | Per-school helmet design history. One row per distinct design; `year_first_worn`/`year_last_worn` span multiple seasons. Stores Cloudinary image paths for left-view mockup, right-view mockup, and photo. |
+| `school_seasons` | Per-season class and region assignments (can change on MHSAA's two-year cycle). FK anchor for all season-scoped data. |
+| `locations` | Physical venues. Referenced by `games` for geocoding and home-field logic. |
+| `games` | School-perspective game rows — two rows per contest, so scores and results are always relative to the `school` column. Covers regular season and playoffs. |
+| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion, raw and Elo-weighted), and [home-game odds per round](PLAYOFF_HOME_RULES.md) (raw and Elo-weighted). One snapshot per school per date: a rerun on the same day replaces that day's rows, and `region_standings_archive` keeps every version written. |
+| `team_ratings` | Dated Elo and RPI snapshots. One row per school per season per `as_of_date`. |
+| `region_scenarios` | Serialized tiebreaker scenario trees (complete outcomes + minimized per-team conditions) plus pre-computed key insights (simple, unconditionally-true conditional statements like "Taylorsville clinches 1st seed: Taylorsville beats Stringer"). Computed once per pipeline run, read at request time. |
+| `region_computation_state` | Per region and snapshot date: how many region games remained, whether every winning margin was worked through (5 or fewer left), and when it was computed. |
+| `region_seed_pairs` | Per region and snapshot date: the chance that two teams land on two given seeds together, which the bracket matchups need. |
+| `region_standings_archive` | Append-only copy of every write to `region_standings`, for measuring published odds against results (see [docs/architecture/CALIBRATION_DATA.md](CALIBRATION_DATA.md)). |
+| `team_logos` | Per-school logo asset history (primary, secondary, tertiary lines), mirroring `helmet_designs`. |
+| `playoff_formats` | Bracket template per class/season: size, number of regions, rounds. |
+| `playoff_format_slots` | First-round matchup slots. Adjacent pairs implicitly define the bracket tree for round-2 and beyond. |
+| `championship_venues` | One row per season/class recording which location hosts (or hosted) that class's championship game. Independent of `games` — can be set before that season's Championship Game rows exist; an explicit `games.location_id` wins over this table when both are present. |
+| `submissions` | User-submitted corrections and new assets (logos, helmet designs, colors, GPS coordinates, scores, feedback). Rows enter the queue with `status='pending'` and are approved or rejected by a moderator via the moderation API. Approved submissions are auto-applied to the live tables (except helmet submissions, which require manual mockup creation). Has an optional `user_id` FK for linking submissions to registered users. |
+| `users` | Registered user accounts with role (`user`/`moderator`/`owner`), profile fields (display name, phone, hometown), and a favorite team FK. Identity is managed by Auth0; `auth0_id` stores the Auth0 `sub` claim. Rows are lazy-provisioned on first authenticated request. |
+| `user_followed_teams` | Many-to-many join between users and the schools they follow. |
+| `user_attended_games` | Many-to-many join between users and games they marked as attended. References the composite PK `(school, date)` on `games`. |
 
 `schools`, `games`, and `locations` each have an `overrides` JSONB column and a matching
 `*_effective` view (`schools_effective`, `games_effective`, `locations_effective`) that merges
 the override over the raw column. All reads (API and pipeline) go through the `*_effective`
 views; all writes go to the base tables, and `overrides` is never written by the pipeline —
 only via the admin override endpoints. See [API_REFERENCE.md](../reference/API_REFERENCE.md#admin--admin).
+
+## Diagram
 
 ```mermaid
 erDiagram

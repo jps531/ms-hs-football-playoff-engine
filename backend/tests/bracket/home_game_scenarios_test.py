@@ -1779,7 +1779,7 @@ class TestNoContradictoryQFConditions:
 
 # ---------------------------------------------------------------------------
 # 14. enumerate_reach_scenarios / enumerate_reach_scenarios_for_team
-#     (reach_conditions -- API_FRONTEND_GAPS.md §3)
+#     (reach_conditions)
 # ---------------------------------------------------------------------------
 
 

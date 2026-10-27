@@ -1,5 +1,8 @@
 # 2026 Interim UI — Update Spec
 
+> **Status (October 2026):** shipped: the URL shape, the bracket view (and its
+> matchup odds) and the share images and meta tags.
+
 Follow-on to `docs/design/2026_INTERIM_UI_BRIEF.md`. Everything in that brief still
 applies — the banned patterns, the tokens, the typography, the accessibility
 floor. This document adds three things and does not revise anything already

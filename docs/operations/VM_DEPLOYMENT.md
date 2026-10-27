@@ -175,15 +175,9 @@ echo | openssl s_client -connect mshsfootball.com:443 -servername mshsfootball.c
   | openssl x509 -noout -enddate -ext subjectAltName
 ```
 
-## Auth0 URL updates
+## Auth0
 
-In Auth0 → Applications → Your Application → Settings, add `https://mshsfootball.com` to each field alongside the existing localhost entries (comma-separated):
-
-- **Allowed Callback URLs:** `http://localhost:8000/docs/oauth2-redirect, https://mshsfootball.com/docs/oauth2-redirect`
-- **Allowed Web Origins:** `http://localhost:8000, https://mshsfootball.com`
-- **Allowed Logout URLs:** `http://localhost:8000, https://mshsfootball.com`
-
-`AUTH0_AUDIENCE` is the **Identifier** value from Auth0 → Applications → APIs → your API.
+All the Auth0 setup, production's included (the `/moderate` page's application and promoting moderators), is in [AUTH0_SETUP.md](AUTH0_SETUP.md). The server uses the same tenant, `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` as local development.
 
 ## Deploying updates
 
@@ -293,35 +287,7 @@ a daily email lists what came in. Each piece below is off until it's configured.
 
 ### Moderation page (`/moderate`)
 
-The page signs in with Auth0 directly from the browser (authorization code + PKCE),
-so it needs its own Auth0 application:
-
-1. Auth0 → Applications → **Create Application** → **Single Page Web Applications**
-   (name it e.g. "MSHSF moderation").
-2. In its Settings:
-   - **Allowed Callback URLs:** `https://mshsfootball.com/moderate`
-   - **Allowed Logout URLs:** `https://mshsfootball.com/moderate`
-   - **Allowed Web Origins:** `https://mshsfootball.com`
-   - Add the `http://localhost` equivalents if you test locally.
-3. Authorize the app for your API: Applications → APIs → your API →
-   **Application Access** (older dashboards: **Machine to Machine Applications**),
-   find the new app and set **User Access** to **Authorized** (older dashboards:
-   turn its toggle on). No scopes are needed. Skipping this gives
-   `Client "…" is not authorized to access resource server "…"` on sign-in.
-4. Put its **Client ID** in `.env.local` as `AUTH0_SPA_CLIENT_ID` and recreate the API.
-
-Only users whose row in `users` has role `moderator` or `owner` see the queue. A
-user row is created on first sign-in. Promote it by its Auth0 user ID (Auth0 →
-User Management → Users → the person → **user_id**, e.g. `auth0|65f…` or
-`google-oauth2|10…`), not by email: the stored email is only kept once Auth0 has
-verified it, and anyone can type someone else's address when signing up.
-
-```
-UPDATE users SET role = 'moderator' WHERE auth0_id = 'auth0|65f0c0ffee…';
-```
-
-The Prefect UI is the owner's only: the page shows its "Prefect" link, and sets
-the session cookie that lets it open without a Bearer header, only for the owner.
+Moderators review submissions at `/moderate`, which signs in with its own Auth0 application: set it up, put its Client ID in `.env.local` as `AUTH0_SPA_CLIENT_ID`, and promote moderators, as [AUTH0_SETUP.md](AUTH0_SETUP.md#3-the-moderation-page-application-moderate) describes. The page shows the owner a **Prefect** link and sets the session cookie that lets it open.
 
 ### Turnstile (spam check on the form)
 
