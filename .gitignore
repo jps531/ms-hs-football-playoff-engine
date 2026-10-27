@@ -62,3 +62,8 @@ htmlcov/
 scripts/*.txt
 scripts/*.png
 scripts/*.csv
+
+# Nippo (ITF Free Font License): licensed for the site's own use, not for a
+# public repository. Installed on the server by hand; see backend/assets/fonts/README.md.
+backend/assets/fonts/[Nn]ippo*
+nginx/html/static/fonts/[Nn]ippo*

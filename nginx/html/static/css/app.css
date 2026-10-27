@@ -10,14 +10,15 @@
   src: url("/static/fonts/inter-latin-wght-normal.woff2") format("woff2");
 }
 /* Nippo Bold (Indian Type Foundry, ITF Free Font License), served from this
-   site: a Latin subset of backend/assets/fonts/Nippo-Bold.otf, the file the
-   share cards draw with, so there's no third-party stylesheet to wait on. */
+   site so there's no third-party stylesheet to wait on: Fontshare's own
+   webfont, unmodified. It isn't in the repository (the license doesn't allow
+   that); without it, titles fall back to Inter. See backend/assets/fonts/README.md. */
 @font-face {
   font-family: "Nippo";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("/static/fonts/nippo-bold.woff2") format("woff2");
+  src: url("/static/fonts/Nippo-Bold.woff2") format("woff2");
 }
 
 /* ------------------------------------------------------------------ tokens */

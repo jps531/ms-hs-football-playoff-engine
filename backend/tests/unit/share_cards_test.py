@@ -420,3 +420,17 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     assert '<h1 class="title">Class 3A Bracket</h1>' in page and 'class="tslot"' in page
     assert '"@type":"BreadcrumbList"' in (tmp_path / "meta" / "bracket-3.html").read_text()
     assert "Raleigh leads the Class 3A bracket" in (tmp_path / "meta" / "bracket-3.html").read_text()
+
+
+def test_titles_fall_back_to_inter_bold_without_the_nippo_file(tmp_path, monkeypatch, caplog):
+    """Nippo isn't in the repository (its license), so without the file the cards still draw, in Inter Bold."""
+    import backend.helpers.share_cards as sc
+
+    monkeypatch.setattr(sc, "NIPPO", tmp_path / "Nippo-Bold.otf")
+    sc._nippo.cache_clear()
+    try:
+        font = sc._nippo(30)
+        assert font.getname()[0] == "Inter" and "Nippo-Bold.otf not found" in caplog.text
+        assert render_site_card().size == (WIDTH, HEIGHT)
+    finally:
+        sc._nippo.cache_clear()

@@ -17,6 +17,7 @@ so a card says exactly what the page says.
 from __future__ import annotations
 
 import html
+import logging
 import math
 import re
 import unicodedata
@@ -37,8 +38,12 @@ SITE_DESCRIPTION = (
 SITE_HOST = "mshsfootball.com"
 
 FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+# Nippo's license covers this site's own use, not copies in a public repository,
+# so the file isn't committed (backend/assets/fonts/README.md says where it comes from).
 NIPPO = FONT_DIR / "Nippo-Bold.otf"
 INTER = FONT_DIR / "inter-latin-wght-normal.woff2"
+
+_log = logging.getLogger(__name__)
 
 WIDTH, HEIGHT = 1200, 630
 PAD = 64
@@ -208,8 +213,11 @@ def _inter(size: int, weight: int) -> ImageFont.FreeTypeFont:
 
 @cache
 def _nippo(size: int) -> ImageFont.FreeTypeFont:
-    """Nippo Bold at *size* px, for titles."""
-    return ImageFont.truetype(str(NIPPO), size)
+    """Nippo Bold at *size* px, for titles; Inter Bold when the Nippo file isn't installed (tests, CI)."""
+    if NIPPO.exists():
+        return ImageFont.truetype(str(NIPPO), size)
+    _log.warning("%s not found: drawing titles in Inter Bold (see backend/assets/fonts/README.md)", NIPPO)
+    return _inter(size, 700)
 
 
 def fit(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, width: float) -> str:
