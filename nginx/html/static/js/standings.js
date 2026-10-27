@@ -1,4 +1,4 @@
-import { isCertain } from "./format.js";
+import { isCertain, isImpossible } from "./format.js";
 
 // Standings-table data shaping: tie-aware positions, a team's round-by-round
 // playoff path, and matching region games to scores and dates. No DOM, so it
@@ -117,7 +117,7 @@ export function playoffStatus(entry, clazz) {
   rounds.forEach((r, k) => { if (isCertain(r.reach)) i = k; });
   if (i < 0) return null;
   const next = path[i + 1];
-  if (next.reach != null && next.reach <= 1e-9) {
+  if (isImpossible(next.reach)) {
     return { kind: "lost", label: `Lost in ${rounds[i].round}` };
   }
   if (i === 0) return null; // in the bracket, first round still to play

@@ -78,6 +78,7 @@ from backend.helpers.bracket_home_odds import (
     slot_index_for,
     was_home_r1,
 )
+from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.data_classes import (
     AppliedGameResult,
     BracketOdds,
@@ -146,10 +147,9 @@ winning margin is worked through (region_scenarios_pipeline._R_ALWAYS_MARGIN), s
 differential is stated exactly ("beats Magee by 8-10"). With more left, scenarios stay accurate but leave such a
 tie open ("decided by the tiebreaker"); showing them from 5 is a choice of precision, not of correctness."""
 
-CLINCHED_THRESHOLD = 1 - 1e-6
-"""Minimum seeding probability required to consider a seed position clinched: meant as certain, give or take
-the odds columns' REAL (32-bit) storage, never merely likely (a 0.05% chance is still a chance). It would
-also count a real chance under one in a million of anything else as clinched."""
+CLINCHED_THRESHOLD = 1 - CERTAIN_EPS
+"""Minimum seeding probability that reads as a clinched seed: only a certainty reaches it, since odds that
+aren't certain are kept at least one in a million short of 1 (``backend.helpers.certainty``)."""
 
 
 def within_display_threshold(remaining: list) -> bool:
@@ -2967,6 +2967,8 @@ async def recompute_scenarios_from_games(  # pragma: no cover
         results.third_counts,
         results.fourth_counts,
         results.denom,
+        places_seen=results.places_seen,
+        sampled=results.sampled,
     )
     return teams, completed, remaining, odds, results.coinflip_teams
 

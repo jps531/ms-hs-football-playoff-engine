@@ -108,37 +108,37 @@ erDiagram
         int region_wins
         int region_losses
         int region_ties
-        real odds_1st
-        real odds_2nd
-        real odds_3rd
-        real odds_4th
-        real odds_1st_weighted
-        real odds_2nd_weighted
-        real odds_3rd_weighted
-        real odds_4th_weighted
-        real odds_playoffs
+        double odds_1st
+        double odds_2nd
+        double odds_3rd
+        double odds_4th
+        double odds_1st_weighted
+        double odds_2nd_weighted
+        double odds_3rd_weighted
+        double odds_4th_weighted
+        double odds_playoffs
         boolean clinched
         boolean eliminated
         boolean coin_flip_needed
-        real odds_second_round "advancement odds; second_round unweighted/weighted pair repeats for quarterfinals, semifinals, finals, champion"
-        real odds_quarterfinals
-        real odds_semifinals
-        real odds_finals
-        real odds_champion
-        real odds_playoffs_weighted
-        real odds_second_round_weighted
-        real odds_quarterfinals_weighted
-        real odds_semifinals_weighted
-        real odds_finals_weighted
-        real odds_champion_weighted
-        real odds_first_round_home "P(hosts round | reaches round); unweighted/weighted pair repeats for second_round, quarterfinals, semifinals"
-        real odds_second_round_home
-        real odds_quarterfinals_home
-        real odds_semifinals_home
-        real odds_first_round_home_weighted
-        real odds_second_round_home_weighted
-        real odds_quarterfinals_home_weighted
-        real odds_semifinals_home_weighted
+        double odds_second_round "advancement odds; second_round unweighted/weighted pair repeats for quarterfinals, semifinals, finals, champion"
+        double odds_quarterfinals
+        double odds_semifinals
+        double odds_finals
+        double odds_champion
+        double odds_playoffs_weighted
+        double odds_second_round_weighted
+        double odds_quarterfinals_weighted
+        double odds_semifinals_weighted
+        double odds_finals_weighted
+        double odds_champion_weighted
+        double odds_first_round_home "P(hosts round | reaches round); unweighted/weighted pair repeats for second_round, quarterfinals, semifinals"
+        double odds_second_round_home
+        double odds_quarterfinals_home
+        double odds_semifinals_home
+        double odds_first_round_home_weighted
+        double odds_second_round_home_weighted
+        double odds_quarterfinals_home_weighted
+        double odds_semifinals_home_weighted
         timestamptz computed_at
         text model_version
     }

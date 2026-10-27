@@ -26,12 +26,12 @@ likely to finish on top.
 from typing import NamedTuple
 
 from backend.api.models.responses import KeyInsightModel, TeamStandingsEntry
+from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.scenario_renderer import margin_phrase
 
 _PLAYOFF_SEEDS = 4
-# Odds are floats summed over enumerated outcomes; a certainty can land a hair
-# above or below 1.0, so "locked" means within this tolerance of it.
-_CERTAIN = 1 - 1e-9
+# "Locked" means certain (backend.helpers.certainty).
+_CERTAIN = 1 - CERTAIN_EPS
 
 # Scenario paths are margin-accurate only at R <= 5 (see SCENARIO_COMPUTATION.md);
 # at R = 6 they're win/loss-only, so they can't be stated as guarantees.

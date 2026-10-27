@@ -76,6 +76,19 @@ At R > 5, the frontend shows seeding odds (always available) and key insights (w
 
 ---
 
+## Certainty: when a chance reads 0% or 100%
+
+The site shows 0% and 100%, and "clinched" and "eliminated", only for certainties (`backend/helpers/certainty.py`). Certainty is never read off a float, since an Elo-weighted chance can be smaller than any rounding keeps:
+
+- **From the endings, not the odds.** Enumeration records every place each team can take (1–4, or out) in some ending, however small its share (`ScenarioResults.places_seen`). A seed no ending gives a team is 0%; the only place a team can take is 100%; a team that no ending leaves out has clinched. Toss-up and Projected weigh the same endings, so they're certain together.
+- **Margins left open.** At R 6–15 every game is scored at 7 points. A tie that reaches point differential (step 3) with a tied team still to play could fall the other way at another margin, so each team in it can take any place the tie spans. A team is called clinched or eliminated only when that holds at every margin.
+- **Simulation proves nothing.** At R > 15 an ending no run drew is still possible, so no chance is 0% or 100% and nobody is clinched or eliminated.
+- **Everything else is kept uncertain.** A chance that isn't certain is stored at least one in a million (`UNCERTAIN_FLOOR`) away from 0 and 1, so every reader shows it as "<1%" or ">99%". The site uses one cutoff for "certain" everywhere (`CERTAIN_EPS`, the same in `format.js`). Advancement and hosting odds, built from the seed odds, are settled the same way in pairs (the pipeline writer and the API response models), with float noise within 1e-12 of 0 or 1 snapped to it (so a derived chance under one in a trillion would read as 0%).
+
+The odds columns are `DOUBLE PRECISION` (`sql/migrations/2026_10_odds_double_precision.sql`); as `REAL` they rounded anything within about 6e-8 of 1 to exactly 1.
+
+---
+
 ## Summary Table
 
 | Remaining games (R) | Odds method | Atoms stored | Complete scenarios stored | Key insights stored | Shown in UI |

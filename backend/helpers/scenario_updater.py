@@ -124,6 +124,8 @@ def apply_region_game_results(
         scenario_results.third_counts,
         scenario_results.fourth_counts,
         scenario_results.denom,
+        places_seen=scenario_results.places_seen,
+        sampled=scenario_results.sampled,
     )
     return scenario_results, odds
 

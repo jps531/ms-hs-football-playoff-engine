@@ -179,6 +179,11 @@ class ScenarioResults:
     # happen together, which the per-seed counts alone can't give.
     seed_pairs: dict[tuple[str, int, str, int], float] = field(default_factory=dict)
     seed_pairs_weighted: dict[tuple[str, int, str, int], float] = field(default_factory=dict)
+    # The places each team can take, 1-4 and 5 for out of the top four, from every enumerated ending
+    # however small its share (and every place an open margin tie spans): what makes 0% or 100% exact.
+    places_seen: dict[str, set[int]] = field(default_factory=dict)
+    # True for Monte Carlo odds, which prove nothing certain: an ending no run drew is still possible.
+    sampled: bool = False
 
 
 # -------------------------

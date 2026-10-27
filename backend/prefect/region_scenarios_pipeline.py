@@ -24,6 +24,7 @@ from backend.helpers.bracket_home_odds import (
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
 )
+from backend.helpers.certainty import settle_pair
 from backend.helpers.data_classes import (
     BracketOdds,
     CompletedGame,
@@ -54,8 +55,8 @@ from backend.helpers.scenario_viewer import (
 from backend.helpers.scenarios import (
     compute_bracket_odds,
     compute_first_round_home_odds,
-    determine_odds,
     determine_scenarios,
+    odds_from_results,
 )
 from backend.helpers.win_probability import (
     EloConfig,
@@ -74,7 +75,7 @@ _T = TypeVar("_T")
 # calibration report can tell which model produced a published number. Bump
 # it whenever a change alters the odds themselves: Elo parameters, home-field
 # advantage, tiebreaker handling, simulation counts, bracket or hosting rules.
-MODEL_VERSION = "2026.7"  # 2026.7: Elo carryover reads the final prior rating, and a renamed school carries its predecessor's (2026.6: steps 2 and 4 in finishing order)
+MODEL_VERSION = "2026.8"  # 2026.8: 0% and 100% only for certainties (backend.helpers.certainty), odds stored at full precision (2026.7: Elo carryover reads the final prior rating)
 
 
 def quote(value: _T) -> _T:
@@ -695,7 +696,7 @@ def write_region_standings(
 
     Args:
         standings: List of Standings instances from ``fetch_region_standings``.
-        odds: Dict mapping school name to StandingsOdds (from ``determine_odds``).
+        odds: Dict mapping school name to StandingsOdds (from ``odds_from_results``).
         clazz: MHSAA classification (1-7).
         region: Region number within the class.
         season: Football season year.
@@ -730,6 +731,43 @@ def write_region_standings(
         ow = odds_weighted.get(team.school, _empty_odds)
         b = bracket_odds.get(team.school, _empty_bracket)
         bw = bracket_odds_weighted.get(team.school, _empty_bracket)
+        # Each Toss-up chance and its Projected twin, settled together: 0% and 100% only for
+        # certainties (backend.helpers.certainty). The seeding odds already are; the advancement and
+        # hosting odds built from them may carry float noise or be smaller than any rounding keeps.
+        (
+            (p1, p1w),
+            (p2, p2w),
+            (p3, p3w),
+            (p4, p4w),
+            (pp, ppw),
+            (r2, r2w),
+            (qf, qfw),
+            (sf, sfw),
+            (fi, fiw),
+            (ch, chw),
+            (h1, h1w),
+            (h2, h2w),
+            (hq, hqw),
+            (hs, hsw),
+        ) = (
+            settle_pair(t, w)
+            for t, w in (
+                (o.p1, ow.p1),
+                (o.p2, ow.p2),
+                (o.p3, ow.p3),
+                (o.p4, ow.p4),
+                (o.p_playoffs, ow.p_playoffs),
+                (b.second_round, bw.second_round),
+                (b.quarterfinals, bw.quarterfinals),
+                (b.semifinals, bw.semifinals),
+                (b.finals, bw.finals),
+                (b.champion, bw.champion),
+                (ho.first_round.get(team.school, 0.0), how.first_round.get(team.school, 0.0)),
+                (ho.second_round.get(team.school, 0.0), how.second_round.get(team.school, 0.0)),
+                (ho.quarterfinals.get(team.school, 0.0), how.quarterfinals.get(team.school, 0.0)),
+                (ho.semifinals.get(team.school, 0.0), how.semifinals.get(team.school, 0.0)),
+            )
+        )
         data_by_school.append(
             (
                 team.school,
@@ -743,36 +781,36 @@ def write_region_standings(
                 team.region_wins,
                 team.region_losses,
                 team.region_ties,
-                o.p1,
-                o.p2,
-                o.p3,
-                o.p4,
-                ow.p1,  # odds_1st_weighted
-                ow.p2,  # odds_2nd_weighted
-                ow.p3,  # odds_3rd_weighted
-                ow.p4,  # odds_4th_weighted
-                o.p_playoffs,
+                p1,
+                p2,
+                p3,
+                p4,
+                p1w,  # odds_1st_weighted
+                p2w,  # odds_2nd_weighted
+                p3w,  # odds_3rd_weighted
+                p4w,  # odds_4th_weighted
+                pp,  # odds_playoffs
                 o.clinched,
                 o.eliminated,
-                b.second_round,
-                b.quarterfinals,
-                b.semifinals,
-                b.finals,
-                b.champion,
-                ow.p_playoffs,  # odds_playoffs_weighted
-                bw.second_round,  # odds_second_round_weighted
-                bw.quarterfinals,  # odds_quarterfinals_weighted
-                bw.semifinals,  # odds_semifinals_weighted
-                bw.finals,  # odds_finals_weighted
-                bw.champion,  # odds_champion_weighted
-                ho.first_round.get(team.school, 0.0),  # odds_first_round_home
-                ho.second_round.get(team.school, 0.0),  # odds_second_round_home
-                ho.quarterfinals.get(team.school, 0.0),  # odds_quarterfinals_home
-                ho.semifinals.get(team.school, 0.0),  # odds_semifinals_home
-                how.first_round.get(team.school, 0.0),  # odds_first_round_home_weighted
-                how.second_round.get(team.school, 0.0),  # odds_second_round_home_weighted
-                how.quarterfinals.get(team.school, 0.0),  # odds_quarterfinals_home_weighted
-                how.semifinals.get(team.school, 0.0),  # odds_semifinals_home_weighted
+                r2,
+                qf,
+                sf,
+                fi,
+                ch,
+                ppw,  # odds_playoffs_weighted
+                r2w,  # odds_second_round_weighted
+                qfw,  # odds_quarterfinals_weighted
+                sfw,  # odds_semifinals_weighted
+                fiw,  # odds_finals_weighted
+                chw,  # odds_champion_weighted
+                h1,  # odds_first_round_home
+                h2,  # odds_second_round_home
+                hq,  # odds_quarterfinals_home
+                hs,  # odds_semifinals_home
+                h1w,  # odds_first_round_home_weighted
+                h2w,  # odds_second_round_home_weighted
+                hqw,  # odds_quarterfinals_home_weighted
+                hsw,  # odds_semifinals_home_weighted
                 team.school in coinflip_teams,  # coin_flip_needed
                 MODEL_VERSION,  # model_version (computed_at is NOW(), in the template)
             )
@@ -1011,15 +1049,7 @@ def get_region_seeding_odds(
         n_samples=50_000 if use_sampling else None,
     )
 
-    odds = determine_odds(teams, r.first_counts, r.second_counts, r.third_counts, r.fourth_counts, r.denom)
-    odds_weighted = determine_odds(
-        teams,
-        r.first_counts_weighted,
-        r.second_counts_weighted,
-        r.third_counts_weighted,
-        r.fourth_counts_weighted,
-        r.denom_weighted,
-    )
+    odds, odds_weighted = odds_from_results(teams, r)
     return RegionSeedingData(
         odds=odds,
         odds_weighted=odds_weighted,

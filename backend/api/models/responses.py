@@ -3,7 +3,9 @@
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+from backend.helpers.certainty import settle_pair
 
 # Alias used where a field is literally named `date` and also needs a default
 # value (e.g. `date: date | None = None`): in a class body, an annotated
@@ -294,6 +296,11 @@ class BracketAdvancementOdds(BaseModel):
     finals_weighted: float
     champion_weighted: float
 
+    @model_validator(mode="after")
+    def _settle(self) -> "BracketAdvancementOdds":
+        """0% and 100% only for certainties, the two modes together (``backend.helpers.certainty``)."""
+        return _settle_pairs(self, ("second_round", "quarterfinals", "semifinals", "finals", "champion"))
+
 
 class HomeGameOdds(BaseModel):
     """P(hosts round | reaches round) for each playoff round (unweighted and margin-weighted)."""
@@ -306,6 +313,24 @@ class HomeGameOdds(BaseModel):
     second_round_weighted: float
     quarterfinals_weighted: float
     semifinals_weighted: float
+
+    @model_validator(mode="after")
+    def _settle(self) -> "HomeGameOdds":
+        """0% and 100% only for certainties, the two modes together (``backend.helpers.certainty``)."""
+        return _settle_pairs(self, ("first_round", "second_round", "quarterfinals", "semifinals"))
+
+
+def _settle_pairs(model, fields: tuple[str, ...]):
+    """Settle each ``field`` / ``field_weighted`` pair on *model* in place and return it.
+
+    Odds stored since the pipeline settled them pass through unchanged; this catches the ones
+    computed on demand (simulations, regions without a snapshot).
+    """
+    for name in fields:
+        t, w = settle_pair(getattr(model, name), getattr(model, f"{name}_weighted"))
+        setattr(model, name, t)
+        setattr(model, f"{name}_weighted", w)
+    return model
 
 
 class ComputationStateModel(BaseModel):
