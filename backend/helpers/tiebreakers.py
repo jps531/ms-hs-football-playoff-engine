@@ -2,7 +2,10 @@
 
 Implements the 6-step tiebreaker sequence (H2H record -> vs-outside record ->
 H2H capped PD -> capped PD vs outside -> fewest PA in all region games -> coin
-flip), per the MHSAA handbook. No Prefect or database dependencies.
+flip), per the MHSAA handbook. Whenever a step separates some of the tied teams
+but not all, the teams still level start over at step 1; steps 2 and 4 go down
+the teams outside the tie one at a time, so they stop at the first one that
+separates any of the tied teams. No Prefect or database dependencies.
 """
 
 from collections import defaultdict
@@ -297,6 +300,20 @@ def _key_step4(step4_row):
     return tuple(-(x if x is not None else -(10**9)) for x in step4_row)
 
 
+def _first_difference(group, vectors) -> int | None:
+    """The first outside group (index into a step 2 or 4 vector) where *group*'s teams differ, or None.
+
+    Steps 2 and 4 go down the teams outside the tie one at a time: the first one where the tied
+    teams' results (or point differentials) differ is the one that separates them, and any teams
+    still level there start over at step 1 rather than going on down the list.
+    """
+    width = len(vectors[group[0]])
+    for i in range(width):
+        if len({_key_step2([vectors[t][i]]) for t in group}) > 1:
+            return i
+    return None
+
+
 def _partition_by(items, key_func):
     """Partition a list of teams into groups with equal keys.
 
@@ -345,7 +362,10 @@ def resolve_bucket(
     Steps are applied sequentially.  After any step splits a group — whether
     a 3+ tie into sub-groups or a larger tie reduced to a 2-team sub-group —
     each sub-group restarts from Step 1 (head-to-head), as required by MHSAA
-    rules.  A group still tied after all 5 deterministic steps is a coin flip:
+    rules.  Steps 2 and 4 compare the tied teams against the outside teams one
+    at a time, best first, and split them at the first one where they differ
+    (``_first_difference``): teams still level there restart from Step 1, not
+    from the next outside team.  A group still tied after all 5 deterministic steps is a coin flip:
     recorded in ``coin_flip_collector`` and sorted alphabetically as a proxy.
 
     Args:
@@ -436,7 +456,16 @@ def resolve_bucket(
             if len(g) <= 1:
                 next_pending.append(g)
                 continue
-            parts = _partition_by(g, key_func=key_builder)
+            if step in (2, 4):
+                vectors = step2 if step == 2 else step4
+                first = _first_difference(g, vectors)
+                parts = (
+                    [sorted(g)]
+                    if first is None
+                    else _partition_by(g, key_func=lambda t, i=first, v=vectors: _key_step2([v[t][i]]))
+                )
+            else:
+                parts = _partition_by(g, key_func=key_builder)
             if decision_collector is not None and step >= 3:
                 decision_collector.append((step, tuple(g), tuple(tuple(p) for p in parts)))
             if trace_collector is not None:

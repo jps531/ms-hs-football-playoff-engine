@@ -148,8 +148,8 @@ def test_2025_regions(key):
 
 
 def test_2025_region_3_7a_reads_as_it_was_decided():
-    """Three teams 1-1 against each other: results against Oak Grove separate Petal, then
-    Brandon and Northwest Rankin start over at head-to-head."""
+    """Three teams 1-1 against each other: results against Oak Grove separate Petal, and that's
+    where step 2 stops: Brandon and Northwest Rankin start over at head-to-head."""
     g = REGION_RESULTS_2025[(7, 3)]["games"]
     _, ties = explain_tiebreaks(teams_from_games(g), get_completed_games(expand_results(g)))
     (tie,) = [t for t in ties if "Petal" in t.teams]
@@ -160,8 +160,7 @@ def test_2025_region_3_7a_reads_as_it_was_decided():
         "(Brandon beat Northwest Rankin 3-0; Petal beat Brandon 27-21; Northwest Rankin beat Petal 34-28). "
         "That doesn't separate them.",
         "Results against the highest-placed region teams outside the tie, working down: against Oak Grove (1st): "
-        "Petal won, Brandon and Northwest Rankin lost; Brandon and Northwest Rankin had the same results against "
-        "the rest. Petal finishes 2nd; Brandon and Northwest Rankin are still tied.",
+        "Petal won, Brandon and Northwest Rankin lost. Petal finishes 2nd; Brandon and Northwest Rankin are still tied.",
         "Brandon and Northwest Rankin start over at head-to-head: Brandon beat Northwest Rankin 3-0. "
         "Brandon finishes 3rd; Northwest Rankin finishes 4th.",
     )
@@ -288,3 +287,28 @@ class TestFinishedRegionTiebreaks:
         ]
         out = finished_region_tiebreaks(self.TEAMS, games, [], ["D", "B", "A", "C"])
         assert out is not None and out[0].coin_flip == [["A", "B"]]
+
+
+def test_a_team_separated_by_step_4_sends_the_rest_back_to_head_to_head():
+    """T2, T3 and T4 are 3-1 and level through step 3. Against T0, the first team outside the tie,
+    T2 and T4 are +12 and T3 +7: step 4 stops there, putting T3 3rd, and T2 and T4 start over at
+    head-to-head, where T4 beat T2. Going on down to T1 (T2 +12, T4 +7) would have put T2 1st."""
+    games = [
+        _game("T0", "T1", 21, 7),
+        _game("T2", "T0", 21, 7),
+        _game("T3", "T0", 14, 7),
+        _game("T4", "T0", 21, 7),
+        _game("T2", "T1", 21, 7),
+        _game("T3", "T1", 14, 7),
+        _game("T4", "T1", 14, 7),
+        _game("T2", "T3", 14, 7),
+        _game("T4", "T2", 14, 7),
+        _game("T3", "T4", 14, 7),
+    ]
+    order, (tie,) = explain_tiebreaks(["T0", "T1", "T2", "T3", "T4"], games)
+    assert order == ["T4", "T2", "T3", "T0", "T1"]
+    assert tie.steps[-2:] == (
+        "Point differential against the highest-placed region teams outside the tie, capped at 12 a game, working "
+        "down: against T0 (4th): T2 +12, T4 +12, T3 +7. T2 and T4 are still tied; T3 finishes 3rd.",
+        "T2 and T4 start over at head-to-head: T4 beat T2 14-7. T4 finishes 1st; T2 finishes 2nd.",
+    )

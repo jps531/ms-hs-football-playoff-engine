@@ -123,34 +123,18 @@ def _key(v):
     return v if v is not None else float("-inf")
 
 
-def _against(step: TiebreakStep, region: _Region, describe, same: str) -> str:
-    """Steps 2 and 4: the teams outside the tie, best first, as far as it takes to separate the group.
+def _against(step: TiebreakStep, region: _Region, describe) -> str:
+    """Steps 2 and 4: the teams outside the tie, best first, down to the first one that separates them.
 
-    Walks the outside groups in order and, at each, states the results of the teams not yet
-    separated, up to the last one that separates any of them; teams it never separates are said to
-    have had the same results against the rest.
+    The step goes down the outside teams one at a time and stops at the first where the tied teams
+    differ (teams still level there start over at step 1), so that's as far as this goes.
     """
-    classes = [list(step.group)]
-    clauses: list[tuple[str, bool]] = []
+    clauses = []
     for i, og in enumerate(step.outside):
-        active = [c for c in classes if len(c) > 1]
-        if not active:
+        clauses.append(f"against {region.outside_label(og)}: {describe(list(step.group), og, i)}")
+        if len({_key(step.values[t][i]) for t in step.group}) > 1:
             break
-        shown = [t for c in active for t in c]
-        refined = []
-        for c in classes:
-            by: dict = {}
-            for t in c:
-                by.setdefault(_key(step.values[t][i]), []).append(t)
-            refined.extend(by[k] for k in sorted(by, reverse=True))
-        clauses.append((f"against {region.outside_label(og)}: {describe(shown, og, i)}", len(refined) > len(classes)))
-        classes = refined
-    last = max(k for k, (_, split) in enumerate(clauses) if split)
-    text = "; ".join(c for c, _ in clauses[: last + 1])
-    level = [c for c in classes if len(c) > 1]
-    if level and last + 1 < len(clauses):
-        text += "; " + "; ".join(f"{_join(c)} had the same {same} against the rest" for c in level)
-    return text
+    return "; ".join(clauses)
 
 
 def _results_vs(step: TiebreakStep, region: _Region):
@@ -232,7 +216,7 @@ def _sentence(step: TiebreakStep, region: _Region, restart: bool) -> str:
         else:
             facts = (
                 "Results against the highest-placed region teams outside the tie, working down: "
-                f"{_against(step, region, _results_vs(step, region), 'results')}."
+                f"{_against(step, region, _results_vs(step, region))}."
             )
     elif step.step == 3:
         values = ", ".join(f"{t} {_signed(step.values[t])}" for t in sorted(step.group, key=lambda t: -step.values[t]))
@@ -246,7 +230,7 @@ def _sentence(step: TiebreakStep, region: _Region, restart: bool) -> str:
         else:
             facts = (
                 "Point differential against the highest-placed region teams outside the tie, capped at 12 a game, "
-                f"working down: {_against(step, region, _pd_vs(step), 'point differential')}."
+                f"working down: {_against(step, region, _pd_vs(step))}."
             )
     elif step.step == 5:
         values = ", ".join(f"{t} {step.values[t]}" for t in sorted(step.group, key=lambda t: step.values[t]))

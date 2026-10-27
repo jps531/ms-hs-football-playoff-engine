@@ -9,7 +9,7 @@ The site cites the region tiebreaker procedure in the [2026–27 MHSAA Handbook]
 5. Fewest points allowed in all region games (no cap).
 6. A coin flip.
 
-When a step separates some but not all of three or more tied teams, the teams still tied start over at step 1.
+When a step separates some but not all of three or more tied teams, the teams still tied start over at step 1. Steps 2 and 4 go down the teams outside the tie one at a time, so they stop at the first one where the tied teams differ: teams still level there start over at step 1, not at the next team down (the handbook's note: when a team is eliminated from the tiebreaker and two remain tied, "the tiebreaker will revert to the first step").
 
 ## Raw rule text
 

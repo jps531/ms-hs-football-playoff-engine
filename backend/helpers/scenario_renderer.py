@@ -121,7 +121,7 @@ def render_tiebreak_decision(cond: TiebreakDecision) -> str:
         lead = (
             f"{_join(cond.group)} level on point differential in games among them, so on point differential "
             "(capped at 12 a game) against the highest-placed region team outside the tie, then the next-highest, "
-            "and so on until the tie is broken"
+            "and so on, stopping at the first team where they differ"
         )
     if len(cond.parts) == 1:
         return f"{lead}: {'both' if len(cond.group) == 2 else 'all'} level"

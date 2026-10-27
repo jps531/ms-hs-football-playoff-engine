@@ -92,11 +92,13 @@ def test_odds_count_every_margin_a_tied_team_plays():
     """2A-4 (2025) with four left: a tied team's games against the rest of the region decide step 4,
     with no game left among the tied teams themselves. The odds used to work through margins only
     when such a game remained, putting East Webster at 58.1% for #1; every result and margin gives
-    60.3%, as the finishes do."""
+    61.2%, as the finishes do. (60.3% before steps 2 and 4 stopped at the first outside team that
+    separates the tied teams: going on down the list gave the #1 seed to the wrong team in some
+    margins.)"""
     teams, completed, remaining = _cut(REGION_RESULTS_2025[(2, 4)]["games"], 4)
     r = determine_scenarios(teams, completed, remaining)
-    assert r.first_counts["East Webster"] / r.denom == pytest.approx(0.602933, abs=1e-6)
-    assert r.first_counts["Kemper County"] / r.denom == pytest.approx(0.147067, abs=1e-6)
+    assert r.first_counts["East Webster"] / r.denom == pytest.approx(0.612081, abs=1e-6)
+    assert r.first_counts["Kemper County"] / r.denom == pytest.approx(0.137919, abs=1e-6)
     finishes = _finishes(enumerate_division_scenarios(teams, completed, remaining, scenario_odds=True))
     first = defaultdict(float)
     for (seeding, _, _), (p, _) in finishes.items():
