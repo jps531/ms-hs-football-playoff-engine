@@ -60,7 +60,7 @@ Key values to set:
 - `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` — from your Auth0 dashboard (same tenant as local dev)
 - `FRONTEND_ORIGIN=https://mshsfootball.com`
 
-Install the Nippo font files, which aren't in the repository: the two copies described in [backend/assets/fonts/README.md](../backend/assets/fonts/README.md#nippo). Without them the site and share cards use Inter for titles.
+Install the Nippo font files, which aren't in the repository: the two copies described in [backend/assets/fonts/README.md](../../backend/assets/fonts/README.md#nippo). Without them the site and share cards use Inter for titles.
 
 Then bring up the stack (PostgreSQL runs in Docker alongside the other services):
 ```

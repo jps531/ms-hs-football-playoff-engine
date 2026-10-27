@@ -51,7 +51,7 @@ specific seed pinned to that exact position — not alphabetical order.
 |--------|------|-------------|
 | GET | `/summary` | Statewide summary: one card per region across every class. Params: `season` (required), `date` (optional, default latest). Returns `leader`, `num_teams`, `num_clinched`, `num_eliminated`, `teams_alive`, `volatility`, and per-team `statuses` for every region. Each entry in `statuses[]` includes `status`, `clinched_seed` (the specific seed number the team has mathematically locked in, or `null`), and `record` (overall + region W/L/T). No scenario data is read. |
 | GET | `/{clazz}` | Full standings tables for every region in one class, one request. Params: `season` (required), `date` (optional, default latest). Each region returns the same per-team detail as `/{clazz}/{region}` (`odds`, `bracket_odds`, `home_game_odds`, `clinched`, `eliminated`, `coin_flip_needed`) minus `scenarios`/`computation_state`. Only reads from stored snapshots (no on-demand fallback); 404 if the class has no data yet. |
-| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤5 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team `paths` breakdown to each team entry). See [SCENARIO_COMPUTATION.md](SCENARIO_COMPUTATION.md) for the full computation model. |
+| GET | `/{clazz}/{region}` | Seeding odds for all teams; includes human-readable scenarios when ≤5 games remain and key insights (simple clinch/elimination facts) when ≤10 games remain. Params: `season`, `date`, `include_team_scenarios` (bool, default `false` — adds a per-team `paths` breakdown to each team entry). See [SCENARIO_COMPUTATION.md](../architecture/SCENARIO_COMPUTATION.md) for the full computation model. |
 | GET | `/{clazz}/{region}/teams/{team}` | Same, filtered to one team. Same params. |
 | POST | `/{clazz}/{region}/simulate` | **(owner)** Apply hypothetical game results and return updated seeding odds. Same `include_team_scenarios` param. Rate limited: 10/minute. |
 | POST | `/{clazz}/{region}/teams/{team}/simulate` | **(owner)** Same, filtered to one team. Rate limited: 10/minute. |
@@ -249,7 +249,7 @@ Every endpoint in this router requires moderator+ (`Authorization: Bearer <token
 
 **Season setup**
 
-A new season's playoff bracket format (`playoff_formats` and `playoff_format_slots`) has no endpoint: it's seeded from a YAML config in `sql/seeds/` by `backend/scripts/add_playoff_season.py`, run in the worker container (see [SEASON_SETUP.md](SEASON_SETUP.md#playoff-bracket-format)). The endpoints below assign the season's championship venue.
+A new season's playoff bracket format (`playoff_formats` and `playoff_format_slots`) has no endpoint: it's seeded from a YAML config in `sql/seeds/` by `backend/scripts/add_playoff_season.py`, run in the worker container (see [SEASON_SETUP.md](../operations/SEASON_SETUP.md#playoff-bracket-format)). The endpoints below assign the season's championship venue.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -281,7 +281,7 @@ A new season's playoff bracket format (`playoff_formats` and `playoff_format_slo
 | Method | Path | Description |
 |--------|------|-------------|
 | PATCH | `/school-seasons/{school}/{season}` | Toggle `is_active` for a school in a season (pipeline never writes this column). Body: `{ "is_active": false }` |
-| PUT | `/school-seasons/{school}/{season}` | Create or overwrite a `school_seasons` row with explicit `class`, `region`, and `is_active` (upsert — safe to re-run). Creates the parent `schools` row if it doesn't exist. Use for mid-cycle changes the Regions pipeline can't handle: consolidations, closures, new schools. Requires moderator+. Body: `{ "class": 5, "region": 2, "is_active": true, "copy_identity_from": "Old School Name" }` — `copy_identity_from` is optional; when supplied, copies mascot, colors, city, zip, latitude, and longitude from that school into the new school's base columns immediately, before the MHSAA identity and NCES pipelines have run. 404s if the source school does not exist. See [SEASON_SETUP.md](SEASON_SETUP.md) for a worked consolidation example. |
+| PUT | `/school-seasons/{school}/{season}` | Create or overwrite a `school_seasons` row with explicit `class`, `region`, and `is_active` (upsert — safe to re-run). Creates the parent `schools` row if it doesn't exist. Use for mid-cycle changes the Regions pipeline can't handle: consolidations, closures, new schools. Requires moderator+. Body: `{ "class": 5, "region": 2, "is_active": true, "copy_identity_from": "Old School Name" }` — `copy_identity_from` is optional; when supplied, copies mascot, colors, city, zip, latitude, and longitude from that school into the new school's base columns immediately, before the MHSAA identity and NCES pipelines have run. 404s if the source school does not exist. See [SEASON_SETUP.md](../operations/SEASON_SETUP.md) for a worked consolidation example. |
 
 **Locations CRUD** — the pipeline never writes this table; venues are otherwise seeded by SQL only.
 

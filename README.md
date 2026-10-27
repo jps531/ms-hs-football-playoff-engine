@@ -5,7 +5,7 @@ An application that calculates standings and playoff scenarios for Mississippi h
 ## How It Works
 
 - Four Prefect pipelines ingest data from MHSAA (region assignments and school identity), the NCES EDGE API (school locations), and AHSFHS (schedules) into PostgreSQL.
-- Once game results are in, the tiebreaker engine works through the remaining region games (every outcome while there are 15 or fewer, and every winning margin while there are 5 or fewer; 50,000 simulated seasons per odds mode above 15), applies the [6-step MHSAA tiebreaker procedure](docs/SCENARIO_RULES.md) (head-to-head → results against the highest-finishing teams → capped point differential among the tied teams → capped point differential against the highest-finishing teams → fewest points allowed → coin flip) to determine seedings, and uses boolean minimization to reduce the scenario space into concise human-readable conditions. Ties are explained step by step with the actual results (`backend/helpers/tiebreak_explainer.py`): on each scenario card whose playoff seeding goes to the tiebreakers while 5 or fewer games remain, and in the standings once a region's games are all played. See [docs/SCENARIO_COMPUTATION.md](docs/SCENARIO_COMPUTATION.md) for how computation tiers, margin sensitivity, and the R threshold interact.
+- Once game results are in, the tiebreaker engine works through the remaining region games (every outcome while there are 15 or fewer, and every winning margin while there are 5 or fewer; 50,000 simulated seasons per odds mode above 15), applies the [6-step MHSAA tiebreaker procedure](docs/architecture/SCENARIO_RULES.md) (head-to-head → results against the highest-finishing teams → capped point differential among the tied teams → capped point differential against the highest-finishing teams → fewest points allowed → coin flip) to determine seedings, and uses boolean minimization to reduce the scenario space into concise human-readable conditions. Ties are explained step by step with the actual results (`backend/helpers/tiebreak_explainer.py`): on each scenario card whose playoff seeding goes to the tiebreakers while 5 or fewer games remain, and in the standings once a region's games are all played. See [docs/architecture/SCENARIO_COMPUTATION.md](docs/architecture/SCENARIO_COMPUTATION.md) for how computation tiers, margin sensitivity, and the R threshold interact.
 - Results are stored as dated snapshots so the API can answer historical "what were the odds on date X?" queries without recomputation.
 - The FastAPI layer serves those snapshots for live requests, falls back to on-demand in-memory recomputation when no snapshot exists, and has what-if simulation endpoints that apply hypothetical results (owner only for now, like its win-probability, rankings and ratings endpoints: the public API serves what the site shows).
 - Elo ratings with a margin-of-victory multiplier and cross-season carryover drive pregame win probability, while a separate in-game model uses score margin and time remaining (plus MHSAA's untimed alternating-possession OT format) for live probability estimates.
@@ -23,12 +23,12 @@ The following data model describes how data is stored and controlled in this app
 | `school_seasons` | Per-season class and region assignments (can change on MHSAA's two-year cycle). FK anchor for all season-scoped data. |
 | `locations` | Physical venues. Referenced by `games` for geocoding and home-field logic. |
 | `games` | School-perspective game rows — two rows per contest, so scores and results are always relative to the `school` column. Covers regular season and playoffs. |
-| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion, raw and Elo-weighted), and [home-game odds per round](docs/PLAYOFF_HOME_RULES.md) (raw and Elo-weighted). One snapshot per school per date: a rerun on the same day replaces that day's rows, and `region_standings_archive` keeps every version written. |
+| `region_standings` | Dated snapshots of seeding odds (1st–4th, raw and strength-weighted), playoff odds, playoff bracket advancement odds (2nd round through champion, raw and Elo-weighted), and [home-game odds per round](docs/architecture/PLAYOFF_HOME_RULES.md) (raw and Elo-weighted). One snapshot per school per date: a rerun on the same day replaces that day's rows, and `region_standings_archive` keeps every version written. |
 | `team_ratings` | Dated Elo and RPI snapshots. One row per school per season per `as_of_date`. |
 | `region_scenarios` | Serialized tiebreaker scenario trees (complete outcomes + minimized per-team conditions) plus pre-computed key insights (simple, unconditionally-true conditional statements like "Taylorsville clinches 1st seed: Taylorsville beats Stringer"). Computed once per pipeline run, read at request time. |
 | `region_computation_state` | Per region and snapshot date: how many region games remained, whether every winning margin was worked through (5 or fewer left), and when it was computed. |
 | `region_seed_pairs` | Per region and snapshot date: the chance that two teams land on two given seeds together, which the bracket matchups need. |
-| `region_standings_archive` | Append-only copy of every write to `region_standings`, for measuring published odds against results (see [docs/CALIBRATION_DATA.md](docs/CALIBRATION_DATA.md)). |
+| `region_standings_archive` | Append-only copy of every write to `region_standings`, for measuring published odds against results (see [docs/architecture/CALIBRATION_DATA.md](docs/architecture/CALIBRATION_DATA.md)). |
 | `team_logos` | Per-school logo asset history (primary, secondary, tertiary lines), mirroring `helmet_designs`. |
 | `playoff_formats` | Bracket template per class/season: size, number of regions, rounds. |
 | `playoff_format_slots` | First-round matchup slots. Adjacent pairs implicitly define the bracket tree for round-2 and beyond. |
@@ -38,7 +38,7 @@ The following data model describes how data is stored and controlled in this app
 | `user_followed_teams` | Many-to-many join between users and the schools they follow. |
 | `user_attended_games` | Many-to-many join between users and games they marked as attended. References the composite PK `(school, date)` on `games`. |
 
-See [docs/SCHEMA.md](docs/SCHEMA.md) for the full entity-relationship diagram.
+See [docs/architecture/SCHEMA.md](docs/architecture/SCHEMA.md) for the full entity-relationship diagram.
 
 ## Prerequisites
 
@@ -55,7 +55,7 @@ Local development runs the database, the API and Prefect in Docker. nginx is pro
 
 #### Configure Auth0
 
-Auth0 issues the RS256 JWT tokens the API validates. You need an **API resource** (sets the audience claim) and an **Application** (sets your domain and gives you Swagger UI login credentials). See [docs/AUTH0_SETUP.md](docs/AUTH0_SETUP.md) for step-by-step instructions.
+Auth0 issues the RS256 JWT tokens the API validates. You need an **API resource** (sets the audience claim) and an **Application** (sets your domain and gives you Swagger UI login credentials). See [docs/operations/AUTH0_SETUP.md](docs/operations/AUTH0_SETUP.md) for step-by-step instructions.
 
 #### Fill in the environment file
 
@@ -71,7 +71,7 @@ Four values must be filled in; everything else has a working default or turns it
 | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | From Configure Auth0 |
 | `SESSION_SECRET_KEY` | `openssl rand -hex 32` |
 
-Keep `ENVIRONMENT=local` (Swagger UI on, local CORS) and `POSTGRES_HOST=db` (the database's name inside Docker). Leave `API_DB_*` and `PIPELINE_DB_*` blank unless you've created those roles (see [Database roles](docs/VM_DEPLOYMENT.md#database-roles)); blank, the services connect as `POSTGRES_USER`. `CLOUDINARY_*` is only needed for image uploads and image URLs.
+Keep `ENVIRONMENT=local` (Swagger UI on, local CORS) and `POSTGRES_HOST=db` (the database's name inside Docker). Leave `API_DB_*` and `PIPELINE_DB_*` blank unless you've created those roles (see [Database roles](docs/operations/VM_DEPLOYMENT.md#database-roles)); blank, the services connect as `POSTGRES_USER`. `CLOUDINARY_*` is only needed for image uploads and image URLs.
 
 #### Start the containers
 
@@ -139,7 +139,7 @@ The `-v` flag removes the postgres data volume; the container will re-run `sql/i
 
 #### Production / VM deployment
 
-See [docs/VM_DEPLOYMENT.md](docs/VM_DEPLOYMENT.md) for the full AWS Lightsail setup guide (instance creation, DNS, SSL, Auth0 URL updates, and deploying updates).
+See [docs/operations/VM_DEPLOYMENT.md](docs/operations/VM_DEPLOYMENT.md) for the full AWS Lightsail setup guide (instance creation, DNS, SSL, Auth0 URL updates, and deploying updates).
 
 #### Once per season (pre-season setup)
 
@@ -163,7 +163,7 @@ The `playoff_formats` and `playoff_format_slots` tables (which define the bracke
 
 The `daily-update` deployment runs at 9:00 AM America/Chicago: it pulls the scores (**AHSFHS Schedule Data Flow**), then recalculates everything from them (**Region Scenarios Data Flow**, which writes `region_standings` and `region_scenarios`, runs **Playoff Bracket Update** for classes in the playoffs, and finishes by redrawing the share cards and page content). Nothing needs to be run by hand during the season.
 
-To run either half on its own (after a fix, or to target another season with a **Custom Run**), use `ahsfhs-schedule-data-pipeline` or `region-scenarios-data-pipeline`. Both default to the current calendar year. The moderation digest email (7:00 AM) and a temporary Friday/Saturday score-timing probe are scheduled too; [docs/PIPELINES.md](docs/PIPELINES.md) lists every deployment and when to run each by hand.
+To run either half on its own (after a fix, or to target another season with a **Custom Run**), use `ahsfhs-schedule-data-pipeline` or `region-scenarios-data-pipeline`. Both default to the current calendar year. The moderation digest email (7:00 AM) and a temporary Friday/Saturday score-timing probe are scheduled too; [docs/operations/PIPELINES.md](docs/operations/PIPELINES.md) lists every deployment and when to run each by hand.
 
 #### After each playoff round
 
@@ -181,7 +181,7 @@ After the pre-season setup steps (1–6) have completed for a season, run the fo
 
 ### New Season Setup
 
-When MHSAA reclassifies schools or consolidations occur mid-cycle, additional manual steps are required after the pipelines run. See [docs/SEASON_SETUP.md](docs/SEASON_SETUP.md) for the full guide covering playoff bracket format seeding and school consolidation/closure procedures.
+When MHSAA reclassifies schools or consolidations occur mid-cycle, additional manual steps are required after the pipelines run. See [docs/operations/SEASON_SETUP.md](docs/operations/SEASON_SETUP.md) for the full guide covering playoff bracket format seeding and school consolidation/closure procedures.
 
 ## Development Reference
 
@@ -241,7 +241,7 @@ open htmlcov/index.html
 
 ### Frontend (2026 interim UI)
 
-The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no build step. Its look and feel follow the design system in [docs/2026_INTERIM_UI_BRIEF.md](docs/2026_INTERIM_UI_BRIEF.md) (§§2–7: what to avoid, color, type, components, pages, accessibility). That brief's scope (§1) has since been widened by its follow-ups, [docs/2026_INTERIM_UI_UPDATE.md](docs/2026_INTERIM_UI_UPDATE.md) and [docs/2026_INTERIM_UI_BRIEF_V3.md](docs/2026_INTERIM_UI_BRIEF_V3.md), which added the brackets and share images among other things.
+The public site is static HTML/CSS/JS served by nginx from `nginx/html/` — no build step. Its look and feel follow the design system in [docs/design/2026_INTERIM_UI_BRIEF.md](docs/design/2026_INTERIM_UI_BRIEF.md) (§§2–7: what to avoid, color, type, components, pages, accessibility). That brief's scope (§1) has since been widened by its follow-ups, [docs/design/2026_INTERIM_UI_UPDATE.md](docs/design/2026_INTERIM_UI_UPDATE.md) and [docs/design/2026_INTERIM_UI_BRIEF_V3.md](docs/design/2026_INTERIM_UI_BRIEF_V3.md), which added the brackets and share images among other things.
 
 - `index.html` — the front page (`/`), the class view (`/standings/7a`), the region view (`/standings/7a/2`) and the bracket (`/brackets/7a`), rendered by `static/js/app.js` from the public `/api/v1` endpoints. Optional parameters: `season`, `week` (a past week's snapshot; omitted = latest), `odds=tossup` (default is Projected, the Elo-weighted columns), and `team` (opens that team's playoff path and shows only its scenarios — set by the header's team search or by picking the team's row)
 - `about.html` — served at `/about` (`/methodology`, its old address, redirects there)
@@ -265,7 +265,7 @@ That leaves out the Prefect pipelines and the tests, and skips magic methods and
 
 ### API Reference
 
-Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running. For the complete endpoint reference see [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
+Interactive docs are at [localhost:8000/docs](http://localhost:8000/docs) when the server is running. For the complete endpoint reference see [docs/reference/API_REFERENCE.md](docs/reference/API_REFERENCE.md).
 
 Key endpoints summary (**owner** marks the ones only the owner can call; see the reference's opening note):
 - `/api/v1/standings/{clazz}/{region}` — seeding odds + scenarios + bracket/home-game odds snapshots
@@ -281,7 +281,7 @@ Key endpoints summary (**owner** marks the ones only the owner can call; see the
 
 ## Disclaimer
 
-Win probabilities, seeding odds, and playoff advancement percentages are statistical estimates for informational and entertainment purposes only — not gambling advice. See [docs/ODDS_DISCLAIMER.md](docs/ODDS_DISCLAIMER.md) for full details.
+Win probabilities, seeding odds, and playoff advancement percentages are statistical estimates for informational and entertainment purposes only — not gambling advice. See [docs/reference/ODDS_DISCLAIMER.md](docs/reference/ODDS_DISCLAIMER.md) for full details.
 
 ## License
 

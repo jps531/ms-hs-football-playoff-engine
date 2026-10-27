@@ -1,4 +1,4 @@
-"""Create the "Site activity" dashboard in PostHog from the events docs/ANALYTICS.md lists.
+"""Create the "Site activity" dashboard in PostHog from the events docs/reference/ANALYTICS.md lists.
 
 Each panel is a bar chart of the last 30 days (the dashboard's date picker changes it), one bar per
 class, region, team, link or game, biggest first. The counts are views and clicks, not people: one

@@ -36,7 +36,7 @@ Run on their own after a fix, or with a Custom Run for another season.
 | `playoff-bracket-update` | Rarely: the daily update and the backfill both run it. It reads the completed playoff games and writes one `region_standings` snapshot per class, region and round date; run it alone only to refresh those rows. |
 | `share-assets` | After a deploy or a rerun, to redraw now rather than at the next daily update: the link-preview cards and meta tags, the pre-rendered page content, and `sitemap.xml`. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#share-cards-link-previews). |
 
-The pre-season order is in the README's [Once per season](../README.md#once-per-season-pre-season-setup).
+The pre-season order is in the README's [Once per season](../../README.md#once-per-season-pre-season-setup).
 
 ## Scripts
 
@@ -45,6 +45,6 @@ Run from the repository root.
 | Script | What it's for |
 |---|---|
 | `scripts/backup_db.sh` | Nightly database backup from cron; see [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#backups). |
-| `scripts/posthog_dashboard.py` | Builds the PostHog "Site activity" dashboard once; see [ANALYTICS.md](ANALYTICS.md#the-dashboard). |
+| `scripts/posthog_dashboard.py` | Builds the PostHog "Site activity" dashboard once; see [ANALYTICS.md](../reference/ANALYTICS.md#the-dashboard). |
 | `scripts/prefect_smoke.py` | CI only: checks that a real Prefect flow runs in the worker image. |
 | `backend/scripts/add_playoff_season.py` | Seeds a new season's playoff bracket format (`playoff_formats`, `playoff_format_slots`) from a YAML config into a running database, run in the worker container; see [SEASON_SETUP.md](SEASON_SETUP.md#playoff-bracket-format). |

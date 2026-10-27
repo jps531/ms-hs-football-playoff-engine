@@ -123,7 +123,7 @@ services:
       TURNSTILE_SECRET_KEY: "${TURNSTILE_SECRET_KEY:-}"
       # The Auth0 single-page app /moderate signs in with.
       AUTH0_SPA_CLIENT_ID: "${AUTH0_SPA_CLIENT_ID:-}"
-      # PostHog visit counts (docs/ANALYTICS.md); unset = off. The dashboard link is the owner's, on /moderate.
+      # PostHog visit counts (docs/reference/ANALYTICS.md); unset = off. The dashboard link is the owner's, on /moderate.
       POSTHOG_PROJECT_KEY: "${POSTHOG_PROJECT_KEY:-}"
       POSTHOG_DASHBOARD_URL: "${POSTHOG_DASHBOARD_URL:-}"
       POSTHOG_ACTIVITY_URL: "${POSTHOG_ACTIVITY_URL:-}"

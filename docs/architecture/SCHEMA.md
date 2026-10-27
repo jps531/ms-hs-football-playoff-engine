@@ -4,7 +4,7 @@
 `*_effective` view (`schools_effective`, `games_effective`, `locations_effective`) that merges
 the override over the raw column. All reads (API and pipeline) go through the `*_effective`
 views; all writes go to the base tables, and `overrides` is never written by the pipeline —
-only via the admin override endpoints. See [API_REFERENCE.md](API_REFERENCE.md#admin--admin).
+only via the admin override endpoints. See [API_REFERENCE.md](../reference/API_REFERENCE.md#admin--admin).
 
 ```mermaid
 erDiagram

@@ -1,6 +1,6 @@
 # 2026 Interim UI — Update Spec
 
-Follow-on to `docs/2026_INTERIM_UI_BRIEF.md`. Everything in that brief still
+Follow-on to `docs/design/2026_INTERIM_UI_BRIEF.md`. Everything in that brief still
 applies — the banned patterns, the tokens, the typography, the accessibility
 floor. This document adds three things and does not revise anything already
 shipped except the URL shape.

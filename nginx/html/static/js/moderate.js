@@ -244,7 +244,7 @@ root.addEventListener("submit", (e) => {
 async function boot() {
   state.cfg = await clientConfig(API);
   if (!state.cfg.auth0_client_id || !state.cfg.auth0_domain || !state.cfg.auth0_audience) {
-    message("Sign-in isn’t set up on this server", "Set AUTH0_SPA_CLIENT_ID for the API (see docs/VM_DEPLOYMENT.md).");
+    message("Sign-in isn’t set up on this server", "Set AUTH0_SPA_CLIENT_ID for the API (see docs/operations/VM_DEPLOYMENT.md).");
     return;
   }
   const params = new URLSearchParams(location.search);
