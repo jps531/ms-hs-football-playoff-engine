@@ -22,7 +22,6 @@ from backend.api.models.requests import (
     PatchLocationRequest,
     PatchSchoolSeasonRequest,
     PatchTeamLogoRequest,
-    PlayoffFormatRequest,
     SchoolOverrideField,
     SetGameHelmetRequest,
     SetGameOverrideRequest,
@@ -40,7 +39,6 @@ from backend.api.models.responses import (
     LocationDetailModel,
     LocationModel,
     OverrideAuditRow,
-    PlayoffFormatSeedResult,
     TeamLogoModel,
 )
 from backend.helpers.api_helpers import (
@@ -97,77 +95,6 @@ async def list_locations() -> list[LocationModel]:
     async with get_conn() as conn:
         rows = await conn.execute("SELECT id, name, city, home_team FROM locations ORDER BY name")
         return [LocationModel(id=r[0], name=r[1], city=r[2], home_team=r[3]) async for r in rows]
-
-
-# ---------------------------------------------------------------------------
-# Playoff format seeding
-# ---------------------------------------------------------------------------
-
-
-@router.post("/playoff-format")
-async def seed_playoff_format(
-    body: PlayoffFormatRequest,
-    dry_run: Annotated[bool, Query()] = False,
-) -> PlayoffFormatSeedResult:
-    """Seed playoff_formats and playoff_format_slots for a new season.
-
-    Idempotent — rows already present are skipped (ON CONFLICT DO NOTHING).
-    Pass ``?dry_run=true`` to preview the counts without writing.
-    """
-    season = body.season
-    total_slots = sum(len(c.slots) for c in body.classes)
-
-    if dry_run:
-        return PlayoffFormatSeedResult(
-            season=season,
-            classes_inserted=len(body.classes),
-            slots_inserted=total_slots,
-            dry_run=True,
-        )
-
-    _log.info("admin: seeding playoff format season=%s classes=%s", season, [c.class_ for c in body.classes])
-    format_sql = """
-        INSERT INTO playoff_formats (season, class, num_regions, seeds_per_region, num_rounds, notes)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (season, class) DO NOTHING
-    """
-    slot_sql = """
-        INSERT INTO playoff_format_slots
-            (format_id, slot, home_region, home_seed, away_region, away_seed, north_south)
-        SELECT f.id, $1, $2, $3, $4, $5, $6
-        FROM playoff_formats f
-        WHERE f.season = $7 AND f.class = $8
-        ON CONFLICT DO NOTHING
-    """
-
-    async with get_conn() as conn:
-        for cls in body.classes:
-            notes = cls.notes or f"{cls.class_}A — {cls.num_regions * cls.seeds_per_region}-team bracket"
-            await conn.execute(
-                format_sql,
-                (season, cls.class_, cls.num_regions, cls.seeds_per_region, cls.num_rounds, notes),
-            )
-            for slot in cls.slots:
-                await conn.execute(
-                    slot_sql,
-                    (
-                        slot.slot,
-                        slot.home_region,
-                        slot.home_seed,
-                        slot.away_region,
-                        slot.away_seed,
-                        slot.north_south,
-                        season,
-                        cls.class_,
-                    ),
-                )
-
-    return PlayoffFormatSeedResult(
-        season=season,
-        classes_inserted=len(body.classes),
-        slots_inserted=total_slots,
-        dry_run=False,
-    )
 
 
 # ---------------------------------------------------------------------------

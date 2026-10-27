@@ -249,9 +249,10 @@ Every endpoint in this router requires moderator+ (`Authorization: Bearer <token
 
 **Season setup**
 
+A new season's playoff format is seeded with `backend/scripts/add_playoff_season.py` from a YAML config, not through the API (see [SEASON_SETUP.md](SEASON_SETUP.md)).
+
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/playoff-format` | Seed `playoff_formats` + `playoff_format_slots` for a new season. Idempotent. `?dry_run=true` to preview counts without writing |
 | GET | `/championship-venue` | List all currently assigned championship venues (`season`, `class_`, `location_id`, `location_name`). Optional `season` filter. |
 | POST | `/championship-venue` | Assign a season's championship venue. Body: `season`, `location` (matched case-insensitively against a venue's `name` or `home_team`; 404 if none match, 409 if several do), optional `class` (default: every class). Upserts `championship_venues`, which works before the season's Championship Game rows exist, and copies the venue (`location_id`, `location = 'neutral'`) onto any that do. `?dry_run=true` to preview affected rows without writing |
 

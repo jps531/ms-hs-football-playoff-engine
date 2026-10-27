@@ -10,11 +10,14 @@ When MHSAA reclassifies schools (every two years) or the bracket structure chang
    ```yaml
    - ./sql/seeds/playoff_formats_YYYY.sql:/docker-entrypoint-initdb.d/NN_playoff_formats_YYYY.sql:ro
    ```
-4. To seed an **already-running** database without restarting, use the script (idempotent):
+4. To seed an **already-running** database, run the script in the worker container, which has the code, `sql/seeds/` and the database settings. Pull and rebuild the worker first (`docker compose … up --build -d prefect-worker`) so the image has the new YAML, then check it with `--dry-run` and run it for real:
    ```
-   uv run python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_YYYY.yaml
+   docker compose --env-file .env.local --profile local-db exec prefect-worker \
+     python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_YYYY.yaml --dry-run
+   docker compose --env-file .env.local --profile local-db exec prefect-worker \
+     python backend/scripts/add_playoff_season.py --config sql/seeds/playoff_formats_YYYY.yaml
    ```
-   Or POST directly to `POST /api/v1/admin/playoff-format` via the Swagger UI. Use `?dry_run=true` first to preview counts.
+   It checks the config first (classes 1–7, every slot complete, `north_south` of `N` or `S`), skips rows already there, and prints how many it added. Locally, add `-f docker-compose.yml -f docker-compose.local.yml` to the commands.
 
 After the championship games are ingested by the AHSFHS pipeline, assign the venue:
 

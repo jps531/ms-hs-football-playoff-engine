@@ -125,11 +125,8 @@ Take a mid-season snapshot (`?date=` week before the final week) and POST a `sim
 **14. `GET /locations` returns all venues** ✅
 The response should include M.M. Roberts Stadium (the usual championship site). If it's missing, the `locations` table wasn't seeded during init.
 
-**15. `POST /playoff-format?dry_run=true` reports the right counts**
-POST a known season's format (e.g. 2025) in dry-run mode. The response should show the exact number of classes and slots you expect from the YAML config — without writing anything. Then POST without `dry_run` and re-run with `dry_run=true` again; counts should stay the same (idempotency check).
-
-**16. `POST /playoff-format` is truly idempotent**
-Run the same POST twice without `dry_run`. The second call should succeed (no 500) and return the same `classes_inserted` / `slots_inserted` counts — ON CONFLICT DO NOTHING should swallow the duplicates silently.
+**15. Seeding a playoff format is idempotent** (`backend/scripts/add_playoff_season.py`, not an endpoint; see [SEASON_SETUP.md](SEASON_SETUP.md))
+Run the script for a new season's YAML with `--dry-run`: it should list the classes and slot count without writing. Run it for real: it should report every class and slot added. Run it again: it should report 0 added ("the rest were already there"), with no error.
 
 **17. `POST /championship-venue?dry_run=true` lists the right games**
 The body takes `location` — a venue name or home_team string, e.g. `{"season": 2025, "location": "M.M. Roberts Stadium"}` or `{"season": 2025, "location": "Southern Miss"}`. After the championship games are ingested, call with `?dry_run=true`. The `games` list in the response should contain exactly one row per class (7 rows for a full season). If a class is missing, the AHSFHS scraper didn't import that game yet. The response's `classes` field should list every class the venue was assigned to (all classes for that season when `class` is omitted).
