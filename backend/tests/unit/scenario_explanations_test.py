@@ -144,6 +144,40 @@ def test_region_8_1a_states_the_margins_its_order_turns_on():
     assert "Taylorsville +1 to +11, Stringer 0, Lumberton −11 to −1" in taylorsville_first[0]["steps"][2]
 
 
+def test_a_finish_too_varied_to_label_is_explained_by_winners(monkeypatch):
+    """A finish with more results than its conditions can be worked out over is explained by winners
+    alone: each tie stops at the first step counting a margin still to come, and ``when`` names only
+    winners. Still exact: at every result, the explanations whose ``when`` holds are its ties, in
+    those words."""
+    from backend.helpers import scenario_viewer
+
+    monkeypatch.setattr(scenario_viewer, "_MAX_LABEL_POINTS", 0)
+    teams, completed, remaining = _cut(REGION_RESULTS_2025[(1, 8)]["games"], 2)
+    scenarios = _scenarios(teams, completed, remaining)
+    pairs = [(g.a, g.b) for g in remaining]
+    stops = 0
+    for mask in range(1 << len(pairs)):
+        for combo in product(MARGINS, repeat=len(pairs)):
+            margins = dict(zip(pairs, combo, strict=True))
+            raw: list = []
+            resolve_standings_for_mask(teams, completed, remaining, mask, margins, decision_collector=raw)
+            decisions = {TiebreakDecision(s, g, p) for s, g, p in raw}
+            run = scenario_trace(teams, completed, remaining, mask, margins)
+            want = {
+                _key(t.teams, t.places, t.steps)
+                for t in MergedTrace(run).ties(teams, completed, remaining, mask, left_open=True)
+            }
+            for sc in scenarios:
+                if _matches(sc, mask, margins, remaining, decisions):
+                    got = [e for e in sc["explanation"] if _holds(e, mask, margins, remaining)]
+                    assert {_key(e["teams"], e["places"], e["steps"]) for e in got} == want, (mask, combo)
+                    assert all(
+                        len(c) == 4 and (c[2], c[3]) == (1, None) for e in got for cube in e["when"] for c in cube
+                    )
+                    stops += sum("decides it from here" in step for e in got for step in e["steps"])
+    assert stops
+
+
 def test_no_explanations_where_margins_are_ignored():
     """With margins ignored (more than five games left), a step that turns on one could be explained
     wrongly, so those scenarios carry no explanation; they aren't shown then anyway."""

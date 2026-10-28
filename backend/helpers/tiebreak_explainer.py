@@ -380,7 +380,8 @@ def _stop(
     counts points allowed in every region game, so a tied team still to play makes it turn on a score.
     Steps 2 and 4 go down the teams above the tie in order, which that step 5 or a coin flip may
     leave unsettled. A tie the scenario leaves open (*left_open*: it has too many outcomes to list,
-    each team's places stated instead) ends at the first step counting a margin still to come.
+    each team's places stated instead; True for every tie) ends at the first step counting a margin
+    still to come.
     """
     names = _join(step.group)
     group = set(step.group)
@@ -392,7 +393,7 @@ def _stop(
                 f"{names} are still level, so it goes to their {what} against the region teams above them, "
                 f"in order, and {why}."
             )
-    if any(group <= set(g) for g in left_open):
+    if left_open is True or any(group <= set(g) for g in left_open):
         left = sum(frozenset((x, y)) in to_play for x in group for y in group if x < y)
         if step.step == 3 and left:
             which = (
