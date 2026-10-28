@@ -471,10 +471,12 @@ button { font: inherit; color: inherit; }
   padding: 1px 7px 1px 5px;
   border-radius: 6px;
   font-size: 12px; line-height: 18px; font-weight: 500;
-  white-space: nowrap;
   vertical-align: 1px;
+  /* A long one ("Advanced to Second Round") wraps inside the chip on a narrow screen rather than
+     widening the standings past it; the icon stays beside the first line. */
+  min-width: 0; max-width: 100%;
 }
-.badge svg { width: 12px; height: 12px; flex: none; }
+.badge svg { width: 12px; height: 12px; flex: none; align-self: flex-start; margin-top: 3px; }
 .badge--clinched, .badge--champion { background: var(--state-clinched); color: #FFFFFF; }
 .badge--eliminated { background: var(--state-eliminated); color: #FFFFFF; }
 .badge--coinflip { background: var(--state-coinflip); color: var(--neutral-900); }
@@ -668,6 +670,10 @@ button { font: inherit; color: inherit; }
 @media (max-width: 40em) {
   .standings .col-mid, .standings .col-overall { display: none; }
   .table-hint { display: block; }
+  /* A status chip that doesn't fit beside the name takes its own line across the whole team cell
+     (under the chevron and helmet too), so "Advanced to Second Round" needs at most two lines. */
+  .standings .row-toggle, .standings .team-link { flex-wrap: wrap; row-gap: 4px; }
+  .standings .row-toggle__label { display: contents; }
 }
 @media (max-width: 22em) {
   .standings .col-pos { display: none; }
