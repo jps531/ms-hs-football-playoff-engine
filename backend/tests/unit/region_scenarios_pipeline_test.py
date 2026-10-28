@@ -164,6 +164,15 @@ def test_a_refresh_rewrites_only_the_explanations():
     assert [sc["p"] for sc in new] == [sc["p"] for sc in old]
 
 
+def test_a_refresh_takes_snapshots_still_storing_the_retired_fields():
+    """Snapshots stored before tiebreaker_groups/coinflip_groups were dropped carry them as null:
+    they still match, and are written back without them."""
+    teams, completed, remaining = _region_8_1a()
+    current = _stored(teams, completed, remaining)
+    old = [{**sc, "tiebreaker_groups": None, "coinflip_groups": None, "explanation": []} for sc in current]
+    assert refreshed_scenarios(old, teams, completed, remaining) == current
+
+
 def test_a_refresh_leaves_a_snapshot_from_other_games_alone():
     """Scenarios rebuilt from games that aren't the snapshot's don't match it: nothing is returned."""
     teams, completed, remaining = _region_8_1a()

@@ -1699,6 +1699,9 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
 # Stored with the scenarios but not compared when explanations are refreshed: the odds (worked out
 # with each game's win chance, which isn't needed to rebuild the scenarios) and the explanations.
 _NOT_COMPARED = ("p", "p_weighted", "explanation")
+# Fields scenarios no longer carry: older snapshots still store them (always null), so they aren't
+# compared, and a refresh writes the scenarios back without them.
+_RETIRED = ("tiebreaker_groups", "coinflip_groups")
 
 
 def refreshed_scenarios(
@@ -1717,11 +1720,14 @@ def refreshed_scenarios(
 
     def compared(sc: dict) -> dict:
         """A scenario without what a refresh doesn't compare."""
-        return {k: v for k, v in sc.items() if k not in _NOT_COMPARED}
+        return {k: v for k, v in sc.items() if k not in _NOT_COMPARED + _RETIRED}
 
     if [compared(sc) for sc in stored] != [compared(sc) for sc in fresh]:
         return None
-    return [{**old, "explanation": new.get("explanation", [])} for old, new in zip(stored, fresh, strict=True)]
+    return [
+        {**{k: v for k, v in old.items() if k not in _RETIRED}, "explanation": new.get("explanation", [])}
+        for old, new in zip(stored, fresh, strict=True)
+    ]
 
 
 @flow(name="Refresh Scenario Explanations")
