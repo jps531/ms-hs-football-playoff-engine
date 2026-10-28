@@ -145,13 +145,6 @@ export function completeScenarioCards(scenarios, playoffSeeds = 4) {
       // Older snapshots carry no description; their title then lines up with a single group.
       : { type: "text", description: c.description ?? phrases[i] ?? "" });
     const groups = sources.map((source) => source.map(chip)).filter((g) => g.length);
-    for (const group of sc.coinflip_groups ?? []) {
-      if (group.length > 1) {
-        const flip = { type: "coin_flip", description: `A coin flip settles the tie ${group.length === 2 ? "between" : "among"} ${joinNames(group)}` };
-        if (groups.length) groups.forEach((g) => g.push(flip));
-        else groups.push([flip]);
-      }
-    }
     const order = Object.entries(sc.outcomes ?? {})
       .map(([team, seed]) => ({ team, seed: Number(seed) }))
       .sort((a, b) => a.seed - b.seed);

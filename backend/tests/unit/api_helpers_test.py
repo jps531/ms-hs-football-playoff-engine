@@ -947,8 +947,6 @@ class TestScenariosToEntries:
                 "scenario_num": 1,
                 "sub_label": "1",
                 "game_winners": [("Alpha", "Beta")],
-                "tiebreaker_groups": None,
-                "coinflip_groups": None,
                 "seeding": ["Alpha", "Beta", "Gamma", "Delta"],
             }
         ]
@@ -5389,8 +5387,6 @@ class TestScenarioAlternativesAndOpenGroups:
             "conditions_atom": low,
             "alternatives": [low, high],
             "open_groups": [(5, ("Magee", "Seminary"))],
-            "tiebreaker_groups": None,
-            "coinflip_groups": None,
             "seeding": ("Lumberton", "Magee", "Seminary", "Stringer"),
         }
 

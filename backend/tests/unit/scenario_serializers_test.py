@@ -454,8 +454,6 @@ def test_complete_scenarios_keep_open_groups():
                 (2, [[MarginCondition(add=(("A", "B"),), sub=(("C", "D"),), op=">=", threshold=3)]]),
             ]
         },
-        "tiebreaker_groups": None,
-        "coinflip_groups": None,
         "seeding": ("A", "C", "B"),
     }
     assert deserialize_complete_scenarios(serialize_complete_scenarios([sc])) == [sc]
@@ -466,3 +464,6 @@ def test_complete_scenarios_keep_open_groups():
     assert deserialize_complete_scenarios([old])[0]["alternatives"] is None
     assert deserialize_complete_scenarios([old])[0]["open_places"] is None
     assert deserialize_complete_scenarios([old])[0]["place_terms"] is None
+    # Snapshots stored while every scenario carried tiebreaker_groups/coinflip_groups (always null) load too.
+    stored = {**serialize_complete_scenarios([sc])[0], "tiebreaker_groups": None, "coinflip_groups": None}
+    assert deserialize_complete_scenarios([stored]) == [sc]

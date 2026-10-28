@@ -190,8 +190,6 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
         "open_groups": [[step, [team, ...]], ...] | null,
         "open_places": {team: [seed, ...]} | null,
         "place_terms": {team: [[seed, [[condition_dict, ...], ...]], ...]} | null,
-        "tiebreaker_groups": [[team, ...], ...] | null,
-        "coinflip_groups": [[team, ...], ...] | null,
         "seeding": [team, ...],
         "p": float, "p_weighted": float   (only when the scenario carries its finish's odds),
         "explanation": [{"teams": [...], "places": [...], "steps": [...],
@@ -220,8 +218,6 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
                 }
                 if sc.get("place_terms")
                 else None,
-                "tiebreaker_groups": sc.get("tiebreaker_groups"),
-                "coinflip_groups": sc.get("coinflip_groups"),
                 "seeding": list(sc["seeding"]),
                 **{k: sc[k] for k in ("p", "p_weighted", "explanation") if k in sc},
             }
@@ -251,8 +247,6 @@ def deserialize_complete_scenarios(data: list[dict]) -> list[dict]:
                 }
                 if sc.get("place_terms")
                 else None,
-                "tiebreaker_groups": sc.get("tiebreaker_groups"),
-                "coinflip_groups": sc.get("coinflip_groups"),
                 "seeding": tuple(sc["seeding"]),
                 **{k: sc[k] for k in ("p", "p_weighted", "explanation") if k in sc},
             }

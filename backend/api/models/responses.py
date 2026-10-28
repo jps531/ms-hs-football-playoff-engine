@@ -581,8 +581,6 @@ class ScenarioEntry(BaseModel):
     sub_label: str
     title: str | None = None
     game_winners: list[ScenarioGameOutcome]
-    tiebreaker_groups: list[list[str]] | None = None
-    coinflip_groups: list[list[str]] | None = None
     outcomes: dict[str, str]  # team → seed number ("1"–"4")
     conditions: list[dict] | None = (
         None  # structured form of `title` (GameResult/MarginCondition/PDRankCondition/TiebreakDecision dicts)

@@ -109,17 +109,15 @@ test("complete scenarios become labeled boxes: seeds, who's out, and the results
       { type: "margin_condition", add: [["Richton", "Stringer"], ["Lumberton", "Magee"]], sub: [], op: ">=", threshold: 10 },
       { type: "game_result", winner: "Lumberton", loser: "Magee", min_margin: 1, max_margin: null },
     ],
-    coinflip_groups: [["Magee", "Richton"]],
     outcomes: { Lumberton: "2", Stringer: "1", Magee: "4", Richton: "3", Taylorsville: "5" },
   }]);
   assert.equal(card.label, "Scenario 1"); // numbered by position on the page
   assert.deepEqual(card.seeds.map((s) => [s.seed, s.team]), [[1, "Stringer"], [2, "Lumberton"], [3, "Richton"], [4, "Magee"]]);
   assert.deepEqual(card.out, ["Taylorsville"]);
   const [group] = card.groups;
-  assert.deepEqual(group.map((c) => c.type), ["game_result", "text", "game_result", "coin_flip"]);
+  assert.deepEqual(group.map((c) => c.type), ["game_result", "text", "game_result"]);
   assert.equal(group[0].min_margin, 8);
   assert.equal(group[1].description, "Stringer's points margin and Lumberton's points margin combined total 10 or more");
-  assert.equal(group[3].description, "A coin flip settles the tie between Magee and Richton");
 });
 
 test("scenarios without structured conditions fall back to their game winners", () => {

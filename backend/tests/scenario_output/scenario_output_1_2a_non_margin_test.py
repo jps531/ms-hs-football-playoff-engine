@@ -87,8 +87,6 @@ class TestCheckpointA:
             "open_groups",
             "open_places",
             "place_terms",
-            "tiebreaker_groups",
-            "coinflip_groups",
         }
         for sc in _SCENARIOS_A:
             assert set(sc.keys()) == required
@@ -96,10 +94,6 @@ class TestCheckpointA:
     def test_no_margin_sensitive_scenarios(self):
         """With ignore_margins=True, conditions_atom is always None."""
         assert all(sc["conditions_atom"] is None for sc in _SCENARIOS_A)
-
-    def test_no_tiebreaker_groups(self):
-        """No tiebreaker_groups with 0 completed games."""
-        assert all(sc["tiebreaker_groups"] is None for sc in _SCENARIOS_A)
 
     def test_coinflip_scenario_count(self):
         """16 scenarios leave a tie to the tiebreaker; none claims a coin flip.
@@ -110,13 +104,6 @@ class TestCheckpointA:
         """
         assert sum(1 for sc in _SCENARIOS_A if sc["open_groups"]) == 16
         assert all(step == 3 for sc in _SCENARIOS_A for step, _ in sc["open_groups"] or [])
-        assert all(sc["coinflip_groups"] is None for sc in _SCENARIOS_A)
-
-    def test_coinflip_scenarios_have_no_sub_label(self):
-        """Collapsed coin-flip scenarios use sub_label=''."""
-        for sc in _SCENARIOS_A:
-            if sc["coinflip_groups"] is not None:
-                assert sc["sub_label"] == ""
 
     def test_unique_seedings(self):
         """All 24 permutations of 4 teams appear."""
@@ -129,8 +116,6 @@ class TestCheckpointA:
         assert sc["scenario_num"] == 1
         assert sc["sub_label"] == ""
         assert sc["seeding"] == ("Walnut", "Hatley", "Hamilton", "Baldwyn")
-        assert sc["tiebreaker_groups"] is None
-        assert sc["coinflip_groups"] is None
 
     def test_scenario_2_coinflip_three_way(self):
         """Scenario 2 leaves the 3-way tie among Hamilton, Hatley, Walnut to the tiebreaker."""
@@ -193,20 +178,10 @@ class TestCheckpointB:
             "open_groups",
             "open_places",
             "place_terms",
-            "tiebreaker_groups",
-            "coinflip_groups",
             "explanation",
         }
         for sc in _SCENARIOS_B:
             assert set(sc.keys()) == required
-
-    def test_no_tiebreaker_groups(self):
-        """ignore_margins=False: tiebreaker_groups is always None."""
-        assert all(sc["tiebreaker_groups"] is None for sc in _SCENARIOS_B)
-
-    def test_no_coinflip_groups(self):
-        """ignore_margins=False: coin flips are expanded into sub-scenarios, not collapsed."""
-        assert all(sc["coinflip_groups"] is None for sc in _SCENARIOS_B)
 
     def test_plain_scenario_count(self):
         """8 scenarios have no margin constraint (conditions_atom is None)."""

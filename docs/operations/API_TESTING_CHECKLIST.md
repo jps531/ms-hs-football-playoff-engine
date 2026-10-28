@@ -18,7 +18,7 @@ Exactly one team finishes in each place, so the sum of `odds.p1` across a region
 Hit the same region with `?date=YYYY-10-10` (mid-season), `?date=YYYY-10-24` (late season), and no date. Odds should move from fractional → sparser → binary. If mid-season returns the same binary result as end-of-season, the snapshot lookup is broken.
 
 **4. `scenarios_available` flips at the right threshold**
-Early in the season (e.g. `?date=YYYY-09-12`), `scenarios_available` should be `false` (too many remaining games). Around the final 2 weeks it should flip to `true` with an actual `scenarios` list populated with `game_winners`, `tiebreaker_groups`, `coinflip_groups`, and `outcomes`.
+Early in the season (e.g. `?date=YYYY-09-12`), `scenarios_available` should be `false` (too many remaining games). Around the final 2 weeks it should flip to `true` with an actual `scenarios` list populated with `game_winners`, `open_groups`, and `outcomes`.
 
 **4a. Weighted seeding odds are present and plausible**
 Each team in `teams[].odds` should have `p1_weighted`, `p2_weighted`, `p3_weighted`, `p4_weighted`, and `p_playoffs_weighted` alongside the unweighted values. The weighted (Projected) odds weight each outcome by Elo win probabilities, so they'll differ from the unweighted (Toss-up) ones whenever Elo ratings exist. Like the unweighted ones, they should sum to 1.0 across a region's teams per position.
