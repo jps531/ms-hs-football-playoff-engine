@@ -802,9 +802,9 @@ def team_road(games: list[dict], team: str, mode: str) -> list[dict]:
             p_hosts = None if row["neutral"] else row["host"] / row["p"] if row["p"] > _EPS else None
             if p_hosts is None:
                 hosts = "neutral"
-            elif p_hosts >= 0.995:
+            elif p_hosts >= 1 - _EPS:  # the host only when it's certain; anything short of it is a split
                 hosts = "team"
-            elif p_hosts <= 0.005:
+            elif p_hosts <= _EPS:
                 hosts = "opponent"
             else:
                 hosts = "split"

@@ -7,6 +7,8 @@
 //   /bracket/matchups   -> games[] (sides, occupants, matchups, hosting)
 // Hosting always comes from the API; nothing here applies MHSAA rules.
 
+import { isCertain, isImpossible } from "./format.js";
+
 const SEED_NAMES = { 1: "#1 Seed", 2: "#2 Seed", 3: "#3 Seed", 4: "#4 Seed" };
 
 /** "Region 3 #1 Seed", "Region 4 #2 Seed". */
@@ -144,12 +146,14 @@ export function gameState(game, result) {
 
 /**
  * Who hosts a pairing, as data for a label: { host: "a" | "b" | "split" |
- * "neutral", p } where p is side A's chance of hosting.
+ * "neutral", p } where p is side A's chance of hosting. A side is the host
+ * only when that's certain; anything short of it, however close, is a split
+ * with its chance (">99% chance Tupelo hosts").
  */
 export function hosting(pHostA) {
   if (pHostA == null) return { host: "neutral", p: null };
-  if (pHostA >= 0.995) return { host: "a", p: 1 };
-  if (pHostA <= 0.005) return { host: "b", p: 0 };
+  if (isCertain(pHostA)) return { host: "a", p: 1 };
+  if (isImpossible(pHostA)) return { host: "b", p: 0 };
   return { host: "split", p: pHostA };
 }
 

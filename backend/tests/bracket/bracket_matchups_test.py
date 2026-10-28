@@ -338,3 +338,15 @@ def test_regions_without_same_date_pairs_need_a_fallback_unless_their_seeds_are_
     stored = {1: (date(2026, 10, 9), pairs), 2: (date(2026, 10, 9), pairs)}
     # 1: pairs match its snapshot. 2: pairs only from an older date. 3: no pairs at all. 4: locked.
     assert regions_needing_fallback(odds, dates, stored) == [2, 3]
+
+
+def test_payload_rounding_never_makes_a_chance_certain():
+    """0.01% resolution, but a chance that isn't 0 or 1 stays at least 0.01% from both, so it reads as
+    ">99%" or "<1%", never 100% or 0%; certainties (to float noise) stay exact."""
+    from backend.helpers.bracket_matchups import _r
+
+    assert _r(None) is None
+    assert _r(0.99996) == 0.9999 and _r(0.00004) == 0.0001
+    assert _r(0.123456) == 0.1235
+    assert _r(1.0) == 1.0 and _r(1 - 1e-12) == 1.0
+    assert _r(0.0) == 0.0 and _r(1e-12) == 0.0

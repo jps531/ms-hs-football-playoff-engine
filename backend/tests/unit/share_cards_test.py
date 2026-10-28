@@ -434,3 +434,13 @@ def test_titles_fall_back_to_inter_bold_without_the_nippo_file(tmp_path, monkeyp
         assert render_site_card().size == (WIDTH, HEIGHT)
     finally:
         sc._nippo.cache_clear()
+
+
+def test_team_road_names_a_host_only_when_hosting_is_certain():
+    """A 99.99% chance of hosting is a split with its chance, not "at home"; only a certainty is "team"."""
+    near = [{**GAMES[0], "matchups": [_mu("Raleigh", "Tylertown", 0.6, 0.9999), _mu("Magee", "Tylertown", 0.4, 1.0)]}]
+    first = team_road(near, "Raleigh", "tossup")[0]
+    assert first["hosts"] == "split" and abs(first["p_team_hosts"] - 0.9999) < 1e-12
+    away = [{**GAMES[0], "matchups": [_mu("Raleigh", "Tylertown", 0.6, 0.0001), _mu("Magee", "Tylertown", 0.4, 1.0)]}]
+    assert team_road(away, "Raleigh", "tossup")[0]["hosts"] == "split"
+    assert team_road(GAMES, "Raleigh", "tossup")[0]["hosts"] == "team"  # p_host_a exactly 1
