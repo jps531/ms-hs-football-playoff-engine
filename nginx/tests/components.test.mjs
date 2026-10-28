@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
-  gameCard, outcomeScenarioCard, breadcrumbs, whyTies,
+  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -206,4 +206,20 @@ test("a card with ties has an Explanation button to its sheet; the sheet's ties 
   assert.ok(!withButton.includes("why-tie")); // the steps are in the sheet, not the card
   assert.ok(!outcomeScenarioCard(card, {}).includes("outcome__explain")); // in the sheet itself: no button
   assert.ok(!outcomeScenarioCard({ ...card, why: [] }, {}, { explainId: 3 }).includes("outcome__explain")); // no ties
+});
+
+test("table mode: the odds mode over a table's odds columns, as static_pages.py's table_mode draws it", () => {
+  assert.equal(text(tableMode("projected")), "Projected odds");
+  assert.equal(text(tableMode("tossup")), "Toss-up odds");
+  assert.ok(tableMode("tossup").includes('aria-hidden="true"')); // the caption's own words say it to screen readers
+  assert.equal(tableMode(null), "");
+});
+
+test("scenario cards: the heading level is one below the heading they sit under", () => {
+  const card = { title: "Raleigh clinches the region", groups: [], teams: {} };
+  assert.ok(scenarioCard(card).includes('<h4 class="scenario__title">'));
+  assert.ok(scenarioCard({ ...card, level: 3 }).includes('<h3 class="scenario__title">'));
+  const outcome = { label: "Scenario 1", seeds: [], out: [], groups: [] };
+  assert.ok(outcomeScenarioCard(outcome, {}).includes('<h4 class="scenario__title">Scenario 1</h4>'));
+  assert.ok(outcomeScenarioCard(outcome, {}, { level: 3, p: 0.5 }).includes('<h3 class="scenario__title">Scenario 1</h3>'));
 });
