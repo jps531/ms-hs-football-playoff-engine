@@ -141,6 +141,10 @@ button { font: inherit; color: inherit; }
   border-radius: 4px;
 }
 .dark :focus-visible { outline-color: var(--brand-400); }
+/* The page heading (and <main>, when there's none) take focus after moving pages
+   (app.js settleFocus), so screen readers start there. They aren't controls, so
+   no ring: the next Tab still goes on from there. */
+#app:focus, #app h1[tabindex="-1"]:focus { outline: none; }
 
 .visually-hidden {
   position: absolute !important;
