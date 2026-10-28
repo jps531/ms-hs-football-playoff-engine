@@ -538,6 +538,11 @@ def test_normalize_mascot_maroon_tide_lowercase_no_plural() -> None:
     assert _normalize_mascot("maroon tide") == "Maroon Tide"
 
 
+def test_normalize_mascot_golden_wave_no_plural() -> None:
+    """Tupelo's 'Golden Wave' is in the no-plural set: it stays 'Golden Wave', not 'Golden Waves'."""
+    assert _normalize_mascot("GOLDEN WAVE") == "Golden Wave"
+
+
 def test_normalize_mascot_greenwave_pluralized() -> None:
     """'Greenwave' is not in the no-plural set and does not end in 's', so it gains one."""
     assert _normalize_mascot("Greenwave") == "Greenwaves"
