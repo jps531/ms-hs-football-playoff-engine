@@ -83,6 +83,32 @@ def test_postgres_is_loopback_only_and_has_no_default_password():
     assert "${POSTGRES_PASSWORD:?" in COMPOSE
 
 
+def _service(name: str) -> str:
+    """One service's block in docker-compose.yml."""
+    return re.search(rf"^  {name}:\n(.*?)(?=^  \S|^\S)", COMPOSE, re.M | re.S).group(1)
+
+
+def test_prefect_is_reachable_only_through_the_owner_check():
+    """Prefect 2's server has no login of its own, so the owner check is all that keeps its API from the internet.
+
+    That's why Prefect's advisories about bypassing its built-in auth, or about endpoints that skip
+    it, can't be exploited here. Publish a Prefect port, or proxy to Prefect without asking the API,
+    and they can.
+    """
+    for service in ("prefect-server", "prefect-worker"):
+        assert "ports:" not in _service(service), f"{service} publishes a port"
+    config = re.sub(r"#.*", "", NGINX)
+    blocks = re.findall(r"location ([^{]+)\{(.*?)\n        \}", config, re.S)
+    to_prefect = {path.strip(): body for path, body in blocks if re.search(r"proxy_pass\s+http://prefect\b", body)}
+    assert set(to_prefect) == {"/prefect/api/", "/prefect/"}
+    for path, body in to_prefect.items():
+        assert re.search(r"^\s*auth_request\s+/internal/auth/verify-moderator;", body, re.M), path
+    # The check itself: internal-only, and the API endpoint that lets only the owner through.
+    check = re.search(r"location = /internal/auth/verify-moderator \{(.*?)\n        \}", config, re.S).group(1)
+    assert re.search(r"^\s*internal;", check, re.M)
+    assert re.search(r"proxy_pass\s+http://api/api/v1/auth/verify-moderator;", check)
+
+
 def test_app_roles_cannot_alter_the_schema():
     """The API and pipeline roles get row access only; fresh databases create them too."""
     roles = (ROOT / "sql" / "app_roles.sql").read_text()
