@@ -29,6 +29,7 @@ def _stub_run_logger(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_the_new_name_starts_in_its_first_season_and_history_keeps_the_old():
+    """Leake Central is Leake from 2026 on and keeps its old name before; other schools are untouched."""
     assert school_name_for_season("Leake Central", 2026) == "Leake"
     assert school_name_for_season("Leake Central", 2027) == "Leake"
     assert school_name_for_season("Leake Central", 2025) == "Leake Central"
@@ -45,7 +46,9 @@ def test_the_sources_are_still_asked_for_the_old_name():
 
 
 def test_other_schools_games_against_it_are_filed_under_the_new_name():
+    """An opponent's schedule that still says Leake Central files the 2026 game under Leake."""
     def opponent(season: int) -> str:
+        """The opponent's name on a parsed Neshoba Central game against Leake Central in *season*."""
         text = f"Opponent Score Fri., Oct. 2 vs. Leake Central 21 14 W {season} Season Totals"
         [game] = schedule.parse_ahsfhs_schedule(
             text, season=season, school_name="Neshoba Central", url="http://x", clazz=5
@@ -75,6 +78,7 @@ def test_the_region_page_files_it_under_the_new_name(monkeypatch: pytest.MonkeyP
 
 
 def test_elo_carries_over_from_the_old_name_in_the_first_season_only():
+    """Leake starts 2026 with Leake Central's rating; later seasons carry Leake's own, and the input isn't changed."""
     prior = {"Leake Central": 1210.0, "Leake County": 980.0, "Raleigh": 1150.0}
     carried = with_predecessor_ratings(prior, 2026)
     assert carried["Leake"] == 1210.0 and carried["Raleigh"] == 1150.0

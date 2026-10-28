@@ -19,6 +19,7 @@ from backend.tests.unit.scenario_coverage_test import _cut
 
 
 def _fields(o):
+    """An odds row's seed and playoff chances, in order."""
     return (o.p1, o.p2, o.p3, o.p4, o.p_playoffs)
 
 
@@ -28,16 +29,19 @@ def _honest(p):
 
 
 class TestHelpers:
+    """keep_uncertain and settle: how chances are kept off, or snapped onto, 0 and 1."""
     def test_floor_is_far_outside_the_cutoff(self):
         """Every reader's cutoff sits well inside the floor, so a kept-uncertain chance never reads as certain."""
         assert CERTAIN_EPS < UNCERTAIN_FLOOR
 
     def test_keep_uncertain(self):
+        """0 and 1 move in to the floor; a chance in between is unchanged."""
         assert keep_uncertain(0.0) == UNCERTAIN_FLOOR
         assert keep_uncertain(1.0) == 1 - UNCERTAIN_FLOOR
         assert keep_uncertain(0.3) == 0.3
 
     def test_settle_snaps_float_noise_and_keeps_the_rest(self):
+        """Float noise on 0 or 1 snaps to it; a real but tiny chance stays at the floor."""
         assert settle(1e-15) == 0.0
         assert settle(0.9999999999999998) == 1.0
         assert settle(1e-10) == UNCERTAIN_FLOOR
@@ -52,6 +56,7 @@ class TestHelpers:
 
 
 class TestDetermineOdds:
+    """determine_odds: 0% and 100% only for places the endings prove."""
     def test_tiny_real_chance_is_not_zero(self):
         """A seed some ending gives, with a share smaller than any rounding keeps, isn't 0%."""
         counts = ({"A": 1.0 - 1e-20, "B": 1e-20}, {"A": 1e-20, "B": 1.0 - 1e-20}, {}, {})
@@ -66,6 +71,7 @@ class TestDetermineOdds:
         assert odds["B"].p1 == UNCERTAIN_FLOOR and odds["A"].p1 == 1.0
 
     def test_only_place_is_certain(self):
+        """A team whose only place in any ending is 3rd is certain of it; one never in the top four is eliminated."""
         counts = ({"A": 0.5, "B": 0.5}, {"A": 0.5, "B": 0.5}, {"C": 1.0}, {})
         seen = {"A": {1, 2}, "B": {1, 2}, "C": {3}, "D": {5}}
         odds = determine_odds(["A", "B", "C", "D"], *counts, 1.0, places_seen=seen)
@@ -80,6 +86,7 @@ class TestDetermineOdds:
         assert odds["A"].p_playoffs == 1 - UNCERTAIN_FLOOR
 
     def test_sampled_odds_are_never_certain(self):
+        """Sampled (Monte Carlo) odds prove nothing, so none is 0 or 1 and nobody is clinched or eliminated."""
         counts = ({"A": 1.0}, {"B": 1.0}, {"C": 1.0}, {"D": 1.0})
         odds = determine_odds(["A", "B", "C", "D", "E"], *counts, 1.0, sampled=True)
         for o in odds.values():
@@ -88,10 +95,12 @@ class TestDetermineOdds:
 
 
 def _round_robin(teams):
+    """Every pair of *teams* playing once, as remaining games."""
     return [RemainingGame(a, b) for a, b in combinations(sorted(teams), 2)]
 
 
 class TestDetermineScenarios:
+    """determine_scenarios: what the endings prove, enumerated or sampled."""
     def test_four_team_region_everyone_clinched(self):
         """Four teams, four spots: every team is in whatever happens, in both modes."""
         teams = ["A", "B", "C", "D"]
@@ -107,6 +116,7 @@ class TestDetermineScenarios:
         teams = ["A", "B", "C", "D", "E"]
 
         def win_prob(a, b, d, loc):
+            """A loses every game with a one-in-a-million chance of winning; others are coin flips."""
             return 1e-6 if a == "A" else (1 - 1e-6 if b == "A" else 0.5)
 
         r = determine_scenarios(teams, [], _round_robin(teams), win_prob_fn=win_prob, ignore_margins=True)
@@ -116,6 +126,7 @@ class TestDetermineScenarios:
         assert not odds_w["A"].eliminated
 
     def test_sampling_proves_nothing(self):
+        """Odds from sampled seasons are never clinched or eliminated, whatever the samples showed."""
         teams = ["A", "B", "C", "D", "E"]
         r = determine_scenarios(teams, [], _round_robin(teams), n_samples=50)
         assert r.sampled
@@ -138,7 +149,9 @@ class TestDetermineScenarios:
 
 
 class TestResponseModels:
+    """The response models settle chances computed on demand and pass stored ones through."""
     def test_bracket_odds_settle_on_demand_values(self):
+        """Bracket odds snap float noise on 0 or 1 and keep a tiny real chance (in either mode) at the floor."""
         b = BracketAdvancementOdds(
             second_round=0.9999999999999998,
             quarterfinals=0.0,
@@ -157,6 +170,7 @@ class TestResponseModels:
         assert (b.champion, b.champion_weighted) == (UNCERTAIN_FLOOR, UNCERTAIN_FLOOR)
 
     def test_home_odds_stored_values_pass_through(self):
+        """Home-game odds read from storage, already settled, come out unchanged."""
         values = dict(first_round=1.0, second_round=0.0, quarterfinals=0.4, semifinals=UNCERTAIN_FLOOR)
         h = HomeGameOdds(**values, **{f"{k}_weighted": v for k, v in values.items()})
         assert h.model_dump() == {**values, **{f"{k}_weighted": v for k, v in values.items()}}

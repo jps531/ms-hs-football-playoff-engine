@@ -37,6 +37,7 @@ def _scenarios(teams, completed, remaining):
 
 
 def _cases():
+    """Every 2025 region with one, two and three region games left."""
     for (clazz, region), fixture in sorted(REGION_RESULTS_2025.items()):
         for left in (1, 2, 3):
             if len(fixture["games"]) > left:
@@ -45,6 +46,7 @@ def _cases():
 
 @pytest.mark.parametrize(("clazz", "region", "left"), list(_cases()))
 def test_scenarios_cover_every_outcome_2025(clazz, region, left):
+    """Every result and margin has a scenario, and each scenario that matches gives the right seeding."""
     teams, completed, remaining = _cut(REGION_RESULTS_2025[(clazz, region)]["games"], left)
     report = coverage_problems(teams, completed, remaining, _scenarios(teams, completed, remaining))
     assert report.ok, report.summary(remaining)
@@ -69,6 +71,7 @@ _R36_LEFT = [
 
 
 def test_scenarios_cover_every_outcome_3a_region_6_2026():
+    """The same check on 2026's Region 6-3A, sampling 300 margin combinations per set of winners."""
     games = [dict(winner=w, loser=l, winner_score=a, loser_score=b, date=d) for w, l, a, b, d in _R36_PLAYED]
     teams = teams_from_games(games)
     completed = get_completed_games(expand_results(games))
@@ -87,6 +90,7 @@ _ONE_LEFT = [RemainingGame("A", "B")]
 
 
 def _scenario(num, winners, seeding, conditions=None):
+    """A stored scenario: its winners, seeding and (optionally) its conditions."""
     return {
         "scenario_num": num,
         "sub_label": "",
@@ -100,6 +104,7 @@ _RIGHT = [_scenario(1, [("A", "B")], ("A", "B")), _scenario(2, [("B", "A")], ("B
 
 
 def test_checker_passes_a_complete_list_and_flags_a_missing_scenario():
+    """The checker passes a full list, and with one scenario missing names every outcome it would cover."""
     assert coverage_problems(_PAIR, [], _ONE_LEFT, _RIGHT).ok
     report = coverage_problems(_PAIR, [], _ONE_LEFT, _RIGHT[:1])
     assert len(report.uncovered) == 12 and not report.wrong  # B's win, at every margin
@@ -107,11 +112,13 @@ def test_checker_passes_a_complete_list_and_flags_a_missing_scenario():
 
 
 def test_checker_flags_a_scenario_whose_conditions_match_the_wrong_seeding():
+    """A scenario whose conditions match outcomes it seeds wrongly is flagged at every margin."""
     report = coverage_problems(_PAIR, [], _ONE_LEFT, [_RIGHT[0], _scenario(2, [("B", "A")], ("A", "B"))])
     assert not report.uncovered and len(report.wrong) == 12 and report.wrong[0][3] == ["2"]
 
 
 def test_checker_reads_margin_conditions():
+    """A scenario limited to some of a game's margins leaves the others uncovered."""
     narrow = [_scenario(1, [("A", "B")], ("A", "B"), [GameResult("A", "B", 1, 6)]), _RIGHT[1]]
     report = coverage_problems(_PAIR, [], _ONE_LEFT, narrow)
     assert sorted(m[("A", "B")] for _, m, _ in report.uncovered) == list(range(6, 13))

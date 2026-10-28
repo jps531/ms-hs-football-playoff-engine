@@ -821,6 +821,7 @@ def _covers(v: list[dict], w: list[dict]) -> bool:
     """True when every condition of way *v* holds whenever way *w*'s do (scenarios.js's ``covers``)."""
 
     def holds(x: dict, y: dict) -> bool:
+        """True when condition *x* holds whenever *y* does: the same result with *y*'s margins inside *x*'s."""
         if x["type"] != "game_result" or y["type"] != "game_result":
             return x == y
         if (x["school"], x["opponent"], x["required_result"]) != (y["school"], y["opponent"], y["required_result"]):
@@ -846,6 +847,7 @@ def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = P
         sources = sc.get("condition_groups") or [sc.get("conditions") or winners]
 
         def chip(c: dict, i: int) -> dict:
+            """One stored condition as a card chip: a game result, or text (the *i*-th title phrase for an older snapshot without a description)."""
             if c["type"] == "game_result":
                 return {
                     "type": "game_result",
@@ -1693,6 +1695,7 @@ def class_grid() -> str:
     ``classGrid`` writes the same). Hidden words make each link say what it opens."""
 
     def row(key: str, label: str, path) -> str:
+        """One row of class buttons, each linking to *path* for its class, under the heading *label*."""
         items = "".join(
             f'<li><a class="landing-classes__item" href="{path(c)}">{c}A'
             f'<span class="visually-hidden"> {label.lower()}</span></a></li>'

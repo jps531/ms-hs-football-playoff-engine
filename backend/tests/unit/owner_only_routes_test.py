@@ -44,17 +44,20 @@ PUBLIC = {
 
 
 def _routes():
+    """Every API route, keyed by (method, path)."""
     return {
         (method, r.path): r for r in app.routes if isinstance(r, APIRoute) for method in r.methods if method != "HEAD"
     }
 
 
 def _owner_gated(route: APIRoute) -> bool:
+    """True when *route* depends on require_owner."""
     return any(d.dependency is require_owner for d in route.dependencies)
 
 
 @pytest.mark.parametrize(("method", "path"), sorted(OWNER_ONLY))
 def test_route_is_owner_only(method, path):
+    """Each route in OWNER_ONLY still exists and needs the owner."""
     routes = _routes()
     assert (method, path) in routes, f"{method} {path} no longer exists"
     assert _owner_gated(routes[(method, path)])
@@ -62,10 +65,12 @@ def test_route_is_owner_only(method, path):
 
 @pytest.mark.parametrize(("method", "path"), sorted(PUBLIC))
 def test_site_routes_stay_public(method, path):
+    """Each route the site and share cards read stays open to everyone."""
     assert not _owner_gated(_routes()[(method, path)])
 
 
 def _game(**probs) -> GameModel:
+    """A scheduled game, with the win probabilities in *probs*."""
     return GameModel(
         game_id=1,
         season=2026,
@@ -84,9 +89,13 @@ def _game(**probs) -> GameModel:
 
 @asynccontextmanager
 async def _no_db():
+    """A connection whose queries return no rows."""
     class _Conn:
+        """Answers every query with no rows."""
         async def execute(self, *_a, **_k):
+            """No rows, whatever the query."""
             class _Rows:
+                """An empty async result."""
                 def __aiter__(self):
                     return self
 

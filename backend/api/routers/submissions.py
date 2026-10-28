@@ -47,6 +47,7 @@ from backend.api.models.responses import HelmetAssignmentAlreadyConfirmed, Submi
 from backend.api.turnstile import verify_turnstile
 from backend.helpers.image_helpers import (
     LogoType,
+    check_upload,
     save_and_upload,
     upload_submission_helmet_image,
     upload_submission_logo,
@@ -204,6 +205,8 @@ async def submit_logo(
     async with get_conn() as conn:
         await require_school_exists(conn, school)
         await _require_under_account_cap(conn, user_id)
+    # Before anything is stored: a refused file leaves no submission behind.
+    await check_upload(file)
 
     payload = build_logo_initial_payload(logo_type)
     # Insert first so we get the submission_id for Cloudinary path construction.
@@ -263,6 +266,9 @@ async def submit_helmet(
     async with get_conn() as conn:
         await require_school_exists(conn, form.school)
         await _require_under_account_cap(conn, user_id)
+    # Every file before anything is stored: one refused file leaves no half-made submission behind.
+    for upload in [*images, *([logo_image] if logo_image is not None else [])]:
+        await check_upload(upload)
 
     payload = build_helmet_initial_payload(
         year_first_worn=form.year_first_worn,

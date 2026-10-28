@@ -186,6 +186,7 @@ def _mark_places(slots: dict, open_groups: list[list[str]] | None, places_seen: 
     """
 
     def places(lo: int, hi: int) -> set[int]:
+        """The places a slot range from *lo* to *hi* credits: the seeds it covers, or 5 when it starts past 4."""
         return {5} if lo > 4 else set(range(lo, min(hi, 4) + 1))
 
     for team, (lo, hi) in slots.items():

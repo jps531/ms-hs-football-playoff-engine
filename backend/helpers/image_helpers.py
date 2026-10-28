@@ -80,6 +80,19 @@ def save_temp(filename: str | None, contents: bytes, suffix: str | None = None) 
     return tmp.name
 
 
+async def check_upload(file: UploadFile) -> None:
+    """Refuse *file* (HTTP 422) unless it's an allowed image within the size limits, by what its bytes
+    are (:func:`sniff_image`); leave it ready to be read again.
+
+    Call it before storing anything about a submission, so a refused file doesn't leave a submission
+    with no image behind it. :func:`save_and_upload` checks again as it uploads.
+    """
+    contents = await file.read()
+    validate_upload(file.content_type, len(contents))
+    sniff_image(contents)
+    await file.seek(0)
+
+
 async def save_and_upload(file: UploadFile, upload_fn: Callable[[str], str]) -> str:
     """Read, validate, and temp-save *file*, call ``upload_fn(tmp_path)``, then clean up.
 

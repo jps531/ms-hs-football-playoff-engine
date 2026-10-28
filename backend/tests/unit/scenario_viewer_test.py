@@ -1632,6 +1632,7 @@ class TestSimplifyAtomListTiePlaces:
     """Rule 5: a team's every place in one tie, otherwise alike, is the rest alone."""
 
     def test_every_place_in_the_tie_drops_the_tie(self):
+        """A team taking either place in a two-team tie is every place it can take there, so the tie condition drops out."""
         from backend.helpers.data_classes import TiebreakPlace
 
         g = GameResult("A", "B")
@@ -1640,6 +1641,7 @@ class TestSimplifyAtomListTiePlaces:
         assert _simplify_atom_list(atoms) == [[g]]
 
     def test_some_places_in_the_tie_stay(self):
+        """Two of three places in a three-team tie isn't all of them, so the alternatives stay as they are."""
         from backend.helpers.data_classes import TiebreakPlace
 
         g = GameResult("A", "B")

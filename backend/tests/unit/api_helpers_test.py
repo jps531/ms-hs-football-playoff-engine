@@ -5359,11 +5359,13 @@ class TestScenarioAlternativesAndOpenGroups:
 
     @staticmethod
     def _decision():
+        """A step-3 tiebreaker decision: Magee ahead of Raleigh and Seminary."""
         from backend.helpers.data_classes import TiebreakDecision
 
         return TiebreakDecision(3, ("Magee", "Raleigh", "Seminary"), (("Magee",), ("Raleigh", "Seminary")))
 
     def _scenario(self):
+        """A stored scenario with two alternatives (a Lumberton win by 1-12, or by 12+ with the decision) and a tie left open at step 5."""
         low = [GameResult("Lumberton", "Taylorsville", 1, 12), GameResult("Stringer", "Resurrection")]
         high = [GameResult("Lumberton", "Taylorsville", 12, None), self._decision()]
         return {
@@ -5379,6 +5381,7 @@ class TestScenarioAlternativesAndOpenGroups:
         }
 
     def test_entries_carry_every_alternative_and_open_group(self):
+        """The API entry keeps both alternatives, the decision in words, and the open tie with its description."""
         from backend.helpers.api_helpers import scenarios_to_entries
 
         [entry] = scenarios_to_entries([self._scenario()])
@@ -5398,6 +5401,7 @@ class TestScenarioAlternativesAndOpenGroups:
         assert sc["game_winners"] == []
 
     def test_simulation_drops_a_scenario_no_alternative_allows(self):
+        """Simulating a Taylorsville win rules out a scenario every alternative of which needs Lumberton to win."""
         body = [_GameResult("Taylorsville", "Lumberton", winner_score=27, loser_score=7)]
         assert filter_scenarios_by_simulation([self._scenario()], body) == []
 

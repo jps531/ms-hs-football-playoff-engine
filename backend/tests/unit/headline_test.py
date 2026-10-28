@@ -223,6 +223,7 @@ class TestTitleOpen:
         assert build_region_headline(self._teams(a_paths=[path]), [], 6).startswith("Two teams can still win")
 
     def test_paths_with_alternatives_are_not_a_single_clinch(self):
+        """A #1 path with two alternative ways isn't read as one team clinching: the title race stays open."""
         group = [PathConditionModel(type="game_result", school="Taylorsville", opponent="Mize", required_result="win")]
         path = ScenarioPathModel(
             outcome=PathOutcomeModel(type="seed", value=1), p=0.75, conditions=[group, group], human_text=""

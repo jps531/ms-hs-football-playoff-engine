@@ -129,6 +129,7 @@ class TestEnumerateDivisionScenariosCoinFlip:
         assert set(_SCENARIOS[0]["seeding"][:2]) == {"Alpha", "Beta"}
 
     def test_title_says_a_coin_flip_decides(self):
+        """The scenario's title says the two teams are level on every tiebreaker and a coin flip orders them."""
         from backend.helpers.scenario_renderer import render_scenario_title
 
         assert render_scenario_title(_SCENARIOS[0]) == (

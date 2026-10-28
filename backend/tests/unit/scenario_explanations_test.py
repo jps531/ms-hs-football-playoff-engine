@@ -26,6 +26,7 @@ def _holds(entry: dict, mask: int, remaining) -> bool:
     index = {(g.a, g.b): i for i, g in enumerate(remaining)}
 
     def won(w, l):
+        """True when *w* beat *l* in this set of winners."""
         i = index.get((w, l), index.get((l, w)))
         return (mask >> i & 1) == (1 if (w, l) in index else 0)
 
@@ -33,6 +34,7 @@ def _holds(entry: dict, mask: int, remaining) -> bool:
 
 
 def _key(teams, places, steps) -> tuple:
+    """An explanation's identity: its teams, places and steps."""
     return frozenset(teams), tuple(places), tuple(steps)
 
 

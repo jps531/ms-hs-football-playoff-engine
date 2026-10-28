@@ -26,6 +26,7 @@ from backend.tests.unit.scenario_coverage_test import _R36_LEFT, _R36_PLAYED, _c
 
 
 def _cases():
+    """Every 2025 region with one, two and three region games left."""
     for (clazz, region), fixture in sorted(REGION_RESULTS_2025.items()):
         for left in (1, 2, 3):
             if len(fixture["games"]) > left:
@@ -33,6 +34,7 @@ def _cases():
 
 
 def _check(teams, completed, remaining, samples):
+    """Every team path and key insight holds for every result checked (*samples* margin combinations per set of winners; all when None)."""
     scenarios = enumerate_division_scenarios(teams, completed, remaining)
     atoms = team_atoms_from_scenarios(scenarios, remaining)
     report = team_path_problems(teams, completed, remaining, atoms, samples_per_mask=samples)
@@ -45,11 +47,13 @@ def _check(teams, completed, remaining, samples):
 
 @pytest.mark.parametrize(("clazz", "region", "left"), list(_cases()))
 def test_team_paths_and_insights_hold_2025(clazz, region, left):
+    """Team paths and insights hold in every 2025 region (sampled with three games left)."""
     teams, completed, remaining = _cut(REGION_RESULTS_2025[(clazz, region)]["games"], left)
     _check(teams, completed, remaining, None if left < 3 else 40)
 
 
 def test_team_paths_and_insights_hold_3a_region_6_2026():
+    """The same check on 2026's Region 6-3A, sampling 200 margin combinations per set of winners."""
     games = [dict(winner=w, loser=l, winner_score=a, loser_score=b, date=d) for w, l, a, b, d in _R36_PLAYED]
     teams = teams_from_games(games)
     completed = get_completed_games(expand_results(games))
@@ -103,6 +107,7 @@ _RIGHT = {
 
 
 def test_path_checker_passes_right_paths_and_flags_false_and_missing_ones():
+    """The path checker passes right paths, and flags a path that's false and a place left out."""
     assert team_path_problems(_PAIR, [], _ONE_LEFT, _RIGHT).ok
     wrong = {"A": {1: [[]]}, "B": _RIGHT["B"]}  # "A is first whatever happens"
     report = team_path_problems(_PAIR, [], _ONE_LEFT, wrong)
@@ -125,6 +130,7 @@ def test_path_checker_treats_a_place_on_points_allowed_as_uncertain():
 
 
 def test_insight_checker_flags_a_false_insight():
+    """The insight checker flags only the insight that doesn't hold."""
     false = KeyInsight("clinch_seed", "A", 1, (GameResult("A", "B", 1, 6),), True, "A clinches", 1)
     true = KeyInsight("clinch_seed", "A", 1, (GameResult("A", "B"),), True, "A clinches too", 1)
     lie = KeyInsight("clinch_seed", "B", 1, (GameResult("A", "B"),), True, "B clinches", 1)
@@ -151,6 +157,7 @@ def test_a_result_without_a_points_allowed_tie_has_one_order():
 
 
 def test_text_odds_never_round_a_possible_place_to_zero():
+    """Odds in text read 0% and 100% only when certain; a tiny chance reads "<0.1%" or ">99.9%"."""
     from backend.helpers.scenario_renderer import _pct
 
     assert [_pct(x) for x in (0.0, 0.0001, 0.25, 0.9999, 1.0)] == ["0.0%", "<0.1%", "25.0%", ">99.9%", "100.0%"]

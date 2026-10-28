@@ -75,6 +75,7 @@ SUBMITTED = datetime(2026, 10, 14, 9, 30)
 
 
 def test_new_feedback_is_queued_with_its_context():
+    """New feedback is stored with its category and the page it came from."""
     conn = FakeConn([None, (3,), (41, SUBMITTED)])  # no repeat, 3 in the last hour, then the insert
     with _patch_conn(conn):
         res = _call(submissions.submit_feedback(_request(), _feedback(page="/standings/3a/6?team=raleigh")))
@@ -85,6 +86,7 @@ def test_new_feedback_is_queued_with_its_context():
 
 
 def test_a_repeat_of_pending_feedback_returns_the_original():
+    """The same feedback sent again while the first is pending returns the first, storing nothing new."""
     conn = FakeConn([(17, SUBMITTED)])
     with _patch_conn(conn):
         res = _call(submissions.submit_feedback(_request(), _feedback()))
@@ -93,6 +95,7 @@ def test_a_repeat_of_pending_feedback_returns_the_original():
 
 
 def test_a_flooded_queue_refuses_new_reports():
+    """Past the hourly limit of pending reports: 503 with Retry-After, and nothing stored."""
     conn = FakeConn([None, (submissions._MAX_PENDING_PER_HOUR,)])
     with _patch_conn(conn), pytest.raises(HTTPException) as err:
         _call(submissions.submit_feedback(_request(), _feedback()))
@@ -102,6 +105,7 @@ def test_a_flooded_queue_refuses_new_reports():
 
 
 def test_a_filled_honeypot_looks_accepted_but_stores_nothing():
+    """Feedback or a score correction with the honeypot filled gets a normal-looking reply and stores nothing."""
     conn = FakeConn([])
     with _patch_conn(conn):
         feedback = _call(submissions.submit_feedback(_request(), _feedback(website="http://spam.example")))
@@ -119,6 +123,7 @@ def test_a_filled_honeypot_looks_accepted_but_stores_nothing():
 
 def test_score_corrections_go_through_the_same_guard():
     # (the school/game existence checks are patched out) no repeat, quiet hour, insert
+    """A score correction goes through the same repeat and flood checks and is stored with its note."""
     conn = FakeConn([None, (0,), (52, SUBMITTED)])
     body = SubmitScoreRequest(
         school="Raleigh",
@@ -146,6 +151,7 @@ def test_limits_key_on_the_visitor_not_on_nginx():
 
 
 def test_form_fields_are_validated():
+    """A bad email, a page on another site, or an unknown category is refused; blank email and page are fine."""
     with pytest.raises(ValueError):
         _feedback(email="not-an-email")
     with pytest.raises(ValueError):
@@ -224,3 +230,150 @@ def test_an_account_at_the_daily_cap_is_refused():
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(submissions._require_under_account_cap(conn, 7))
     assert exc_info.value.status_code == 429
+
+
+# ------------------------------------------------------------- logo and helmet uploads
+# The files are checked (type, size, and what the bytes really are) before anything is stored,
+# so a refused file leaves no submission without an image in the moderation queue.
+
+
+def _upload(contents: bytes, content_type: str = "image/png", name: str = "logo.png"):
+    """An uploaded file as FastAPI hands it to the endpoint."""
+    import io
+
+    from fastapi import UploadFile
+    from starlette.datastructures import Headers
+
+    return UploadFile(io.BytesIO(contents), filename=name, headers=Headers({"content-type": content_type}))
+
+
+def _png() -> bytes:
+    """A real, tiny PNG."""
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), (200, 30, 30)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class _Stored:
+    """Patches what the upload endpoints store and upload; records what happened."""
+
+    def __init__(self):
+        self.inserted: list[tuple] = []
+        self.uploaded: list[str] = []
+
+    def __enter__(self):
+        async def ok(*args, **kwargs):
+            """The school exists; the account is under its cap."""
+
+        async def insert(conn, stype, school, user_id, payload):
+            """Store the submission; return its id and time."""
+            self.inserted.append((stype, school, user_id))
+            return 41, SUBMITTED
+
+        async def update(conn, submission_id, payload):
+            """Record the image paths on the submission."""
+
+        async def upload(file, fn):
+            """Stand in for Cloudinary: read the file and return a path."""
+            await file.read()
+            self.uploaded.append(file.filename)
+            return f"staged/{file.filename}"
+
+        self._patches = [
+            patch.object(submissions, "require_school_exists", ok),
+            patch.object(submissions, "_require_under_account_cap", ok),
+            patch.object(submissions, "insert_submission", insert),
+            patch.object(submissions, "update_submission_payload", update),
+            patch.object(submissions, "save_and_upload", upload),
+            _patch_conn(FakeConn([])),
+        ]
+        for p in self._patches:
+            p.start()
+        return self
+
+    def __exit__(self, *exc):
+        for p in self._patches:
+            p.stop()
+        return False
+
+
+USER = {"db_id": 7, "role": "user"}
+
+
+def test_a_logo_that_is_a_real_image_is_stored_and_uploaded():
+    """A real PNG: one pending logo submission, then its image is uploaded."""
+    with _Stored() as stored:
+        out = _call(submissions.submit_logo(_request(), USER, "Raleigh", "primary", _upload(_png())))
+    assert out.id == 41 and stored.inserted == [("logo", "Raleigh", 7)] and stored.uploaded == ["logo.png"]
+
+
+@pytest.mark.parametrize(
+    ("contents", "content_type"),
+    [
+        (b"<html><script>alert(1)</script></html>", "image/png"),  # a page renamed .png
+        (b"%PDF-1.7", "application/pdf"),  # not an image type at all
+        (b"", "image/png"),  # empty
+    ],
+)
+def test_a_logo_that_isnt_an_allowed_image_is_refused_before_anything_is_stored(contents, content_type):
+    """422, and no submission row: the moderation queue never gets an entry with no image."""
+    with _Stored() as stored:
+        with pytest.raises(HTTPException) as err:
+            _call(submissions.submit_logo(_request(), USER, "Raleigh", "primary", _upload(contents, content_type)))
+    assert err.value.status_code == 422
+    assert stored.inserted == [] and stored.uploaded == []
+
+
+def test_an_oversized_logo_is_refused_before_anything_is_stored():
+    """Past the size limit: 422, nothing stored."""
+    from backend.helpers.image_helpers import MAX_UPLOAD_FILE_BYTES
+
+    big = _png() + b"\0" * MAX_UPLOAD_FILE_BYTES
+    with _Stored() as stored:
+        with pytest.raises(HTTPException) as err:
+            _call(submissions.submit_logo(_request(), USER, "Raleigh", "primary", _upload(big)))
+    assert err.value.status_code == 422 and stored.inserted == []
+
+
+def _helmet_form():
+    """The helmet form's text fields."""
+    return submissions._HelmetForm(school="Raleigh", year_first_worn=2024, description="Gold shell, black mask")
+
+
+def test_a_helmet_with_one_bad_image_among_good_ones_stores_nothing():
+    """Every file is checked first, so a bad third image doesn't leave a submission with two."""
+    images = [_upload(_png(), name="a.png"), _upload(_png(), name="b.png"), _upload(b"<svg onload=x>", name="c.png")]
+    with _Stored() as stored:
+        with pytest.raises(HTTPException) as err:
+            _call(submissions.submit_helmet(_request(), USER, _helmet_form(), images, [], None))
+    assert err.value.status_code == 422 and stored.inserted == [] and stored.uploaded == []
+
+
+def test_a_helmet_with_good_images_and_a_logo_uploads_each():
+    """All real images: one submission, every image and the logo uploaded."""
+    images = [_upload(_png(), name="left.png"), _upload(_png(), name="right.png")]
+    with _Stored() as stored:
+        _call(
+            submissions.submit_helmet(
+                _request(), USER, _helmet_form(), images, ["left", "right"], _upload(_png(), name="logo.png")
+            )
+        )
+    assert stored.inserted == [("helmet", "Raleigh", 7)]
+    assert stored.uploaded == ["left.png", "right.png", "logo.png"]
+
+
+@pytest.mark.parametrize(
+    ("count", "labels", "detail"),
+    [(6, [], "At most 5 images"), (2, ["left"], "same length"), (1, ["sideways"], "Invalid image label")],
+)
+def test_helmet_image_limits_and_labels_are_checked_first(count, labels, detail):
+    """Too many images, labels that don't line up, or an unknown label: 422 before any database work."""
+    images = [_upload(_png(), name=f"{i}.png") for i in range(count)]
+    with _Stored() as stored:
+        with pytest.raises(HTTPException) as err:
+            _call(submissions.submit_helmet(_request(), USER, _helmet_form(), images, labels, None))
+    assert err.value.status_code == 422 and detail in err.value.detail and stored.inserted == []

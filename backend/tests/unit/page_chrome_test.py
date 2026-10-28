@@ -51,6 +51,7 @@ def _lines(fragment: str) -> list[str]:
 
 
 def _footer(page: str) -> list[str]:
+    """The lines of *page*'s footer, as words."""
     return _lines(_block(page, r'<footer class="site-footer">.*?</footer>'))
 
 

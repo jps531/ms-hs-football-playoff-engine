@@ -1101,9 +1101,11 @@ def _pieces_with(points: set[tuple[int, ...]], k: int, limit: int, forms: list) 
     full = {f: (min(_value(f, p) for p in grid), max(_value(f, p) for p in grid)) for f in forms}
 
     def within(bounds, p):
+        """True when *p* meets every ``(form, lo, hi)`` bound in *bounds*."""
         return all(lo <= _value(f, p) <= hi for f, lo, hi in bounds)
 
     def hull(group):
+        """The tightest bounds on each form around *group*, and every grid point inside them."""
         bounds = [(f, min(_value(f, p) for p in group), max(_value(f, p) for p in group)) for f in forms]
         return bounds, {p for p in grid if within(bounds, p)}
 
@@ -1131,6 +1133,7 @@ def _pieces_with(points: set[tuple[int, ...]], k: int, limit: int, forms: list) 
         needed += [(f, None, hi) for f, _, hi in bounds if hi < full[f][1]]
 
         def allows(constraints):
+            """Every grid point the *constraints* allow, with the grid's own range for any side they leave open."""
             span = {f: list(full[f]) for f in forms}
             for f, lo, hi in constraints:
                 if lo is not None:
@@ -1651,6 +1654,7 @@ def enumerate_division_scenarios(
     entries.sort(key=lambda e: e[0])
 
     def scenario(num, sub, winners, atom, open_groups, seeding, alternatives=None, places=(), terms=()):
+        """One scenario as the pipeline stores it, from its number, winners, conditions and finish."""
         return {
             "scenario_num": num,
             "sub_label": sub,
@@ -1702,6 +1706,7 @@ def enumerate_division_scenarios(
         return scenarios
 
     def finish_of(seeding, open_groups) -> tuple:
+        """The finish an outcome gives (its seeding and the ties left open), as a hashable key."""
         return tuple(seeding), tuple((step, tuple(g)) for step, g in open_groups or ())
 
     finish_masks: dict[tuple, set[int]] = defaultdict(set)
