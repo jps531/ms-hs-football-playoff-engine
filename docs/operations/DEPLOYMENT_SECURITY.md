@@ -35,6 +35,8 @@ Items already fixed in code are **not** listed here — see git history for thos
 
 The Prefect UI (`/prefect/`) is the owner's only (the role is re-checked against the database on every request), but is still reachable over the public internet. A compromised owner account exposes pipeline controls and execution logs.
 
+- [x] Prefect 2's server has no login of its own: nginx's owner check (`auth_request` on `/prefect/` and `/prefect/api/`) is the only thing between its API and the internet, and Prefect publishes no port. `test_prefect_is_reachable_only_through_the_owner_check` in `backend/tests/unit/deploy_config_test.py` fails if either changes. It is also why Prefect's security advisories, whose fixes are in Prefect 3, are out of reach here: those about getting around Prefect's own auth have no auth to get around, and those about its API endpoints can only be reached by the owner. Re-check that for each new advisory; the flows are Prefect 2 (`pyproject.toml` caps it), and moving to 3 is a rewrite of them.
+
 - [ ] **IP allowlist**: Restrict `/prefect/` and `/api/v1/admin/*` to a known IP range (office/VPN) via nginx `allow`/`deny`:
   ```nginx
   location /prefect/ {
