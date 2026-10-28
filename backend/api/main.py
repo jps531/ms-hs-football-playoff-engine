@@ -34,6 +34,7 @@ from backend.api.routers import (
     submissions,
     users,
 )
+from backend.version import VERSION
 
 _ENV = os.getenv("ENVIRONMENT", "local")
 _FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
@@ -56,7 +57,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MS HS Football Playoff Engine API",
     description="Playoff scenarios, seeding odds, win probabilities, and bracket advancement for Mississippi high school football.",
-    version="1.0.0",
+    version=VERSION,
     lifespan=lifespan,
     docs_url="/docs" if _ENV == "local" else None,
     redoc_url="/redoc" if _ENV == "local" else None,
