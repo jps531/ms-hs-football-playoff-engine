@@ -44,6 +44,7 @@ from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.engine_settings import CLASSES, ENUMERATE_MAX_LEFT, FULL_MARGINS_MAX_LEFT, MONTE_CARLO_SAMPLES
 from backend.helpers.insights import extract_insights, serialize_insights
 from backend.helpers.scenario_serializers import (
+    deserialize_remaining_games,
     serialize_complete_scenarios,
     serialize_remaining_games,
     serialize_scenario_atoms,
@@ -1693,3 +1694,91 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         run_playoff_bracket_update(season)
 
     logger.info("Backfill complete for season %d: %d dates processed", season, len(snap_dates))
+
+
+# Stored with the scenarios but not compared when explanations are refreshed: the odds (worked out
+# with each game's win chance, which isn't needed to rebuild the scenarios) and the explanations.
+_NOT_COMPARED = ("p", "p_weighted", "explanation")
+
+
+def refreshed_scenarios(
+    stored: list[dict], teams: list[str], completed: list[CompletedGame], remaining: list[RemainingGame]
+) -> list[dict] | None:
+    """A snapshot's stored scenarios (*stored*, as ``serialize_complete_scenarios`` wrote them) with
+    each one's "why this order" explanation worked out again from the games, and nothing else changed.
+
+    Returns None when the scenarios rebuilt from *completed* and *remaining* aren't the stored ones
+    (their numbers, conditions or finishes differ): those games aren't the ones the snapshot was
+    computed from, or the scenarios have changed since, so it needs a full recomputation instead.
+    """
+    fresh = json.loads(
+        json.dumps(serialize_complete_scenarios(enumerate_division_scenarios(teams, completed, remaining)))
+    )
+
+    def compared(sc: dict) -> dict:
+        """A scenario without what a refresh doesn't compare."""
+        return {k: v for k, v in sc.items() if k not in _NOT_COMPARED}
+
+    if [compared(sc) for sc in stored] != [compared(sc) for sc in fresh]:
+        return None
+    return [{**old, "explanation": new.get("explanation", [])} for old, new in zip(stored, fresh, strict=True)]
+
+
+@flow(name="Refresh Scenario Explanations")
+def refresh_scenario_explanations(season: int | None = None) -> dict[str, int]:
+    """Work out again the "why this order" explanations stored with a season's scenario snapshots.
+
+    For use after a change to how explanations are worded or labelled, instead of a full backfill:
+    each stored snapshot with 1 to ``FULL_MARGINS_MAX_LEFT`` region games left (the only ones that
+    carry explanations that depend on games still to play) has its scenarios rebuilt from the games
+    as of its date (the games it stored as left to play, and every final game before them), and,
+    when they match what is stored, only the explanations are written back: odds, standings,
+    insights and brackets are left as they are. A snapshot whose rebuilt scenarios don't match is
+    left alone and counted as ``mismatched`` (it needs the region scenarios pipeline or a backfill).
+    """
+    if season is None:
+        season = date.today().year
+    logger = get_run_logger()
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT class, region, as_of_date, remaining_games, complete_scenarios FROM region_scenarios "
+                "WHERE season = %s ORDER BY as_of_date, class, region",
+                (season,),
+            )
+            rows = cur.fetchall()
+    counts = {"refreshed": 0, "unchanged": 0, "mismatched": 0, "skipped": 0}
+    teams_of: dict[tuple[int, int], list[str]] = {}
+    for clazz, region, as_of, remaining_json, stored in rows:
+        remaining = deserialize_remaining_games(remaining_json or [])
+        if not stored or not 1 <= len(remaining) <= FULL_MARGINS_MAX_LEFT:
+            counts["skipped"] += 1
+            continue
+        c, r = int(clazz), int(region)
+        if (c, r) not in teams_of:
+            teams_of[(c, r)] = fetch_region_teams.fn(c, r, season)
+        teams = teams_of[(c, r)]
+        left = {frozenset((g.a, g.b)) for g in remaining}
+        completed = [
+            g for g in fetch_completed_pairs.fn(teams, season, cutoff_date=as_of) if frozenset((g.a, g.b)) not in left
+        ]
+        new = refreshed_scenarios(stored, teams, completed, remaining)
+        if new is None:
+            logger.warning("%dA Region %d on %s: rebuilt scenarios don't match the stored ones; left as is", c, r, as_of)
+            counts["mismatched"] += 1
+            continue
+        if new == stored:
+            counts["unchanged"] += 1
+            continue
+        with get_database_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE region_scenarios SET complete_scenarios = %s "
+                    "WHERE season = %s AND class = %s AND region = %s AND as_of_date = %s",
+                    (Json(new), season, clazz, region, as_of),
+                )
+            conn.commit()
+        counts["refreshed"] += 1
+        logger.info("%dA Region %d on %s: explanations refreshed", c, r, as_of)
+    logger.info("Scenario explanations for %d: %s", season, counts)
+    return counts

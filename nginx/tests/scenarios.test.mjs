@@ -223,6 +223,13 @@ test("why this order: each tie's teams and places, the results it holds for, and
       steps: ["s1", "s2"],
     },
   ]);
+  // Margins read as the chips do: 12 or more, a range, exactly one.
+  const margins = [{
+    teams: ["A", "B", "C"], places: [1, 2, 3], steps: ["s"],
+    when: [[{ winner: "C", loser: "D", min_margin: 1, max_margin: null }, { winner: "A", loser: "B", min_margin: 12, max_margin: null }],
+      [{ winner: "A", loser: "B", min_margin: 1, max_margin: 12 }, { winner: "D", loser: "C", min_margin: 5, max_margin: 6 }]],
+  }];
+  assert.equal(whyBlocks(margins)[0].when, "If C beats D and A beats B by 12+, or A beats B by 1–11 and D beats C by exactly 5");
   // Snapshots stored before explanations: nothing to show.
   assert.deepEqual(whyBlocks(undefined), []);
   // The card carries them, merged by finish like its ways.

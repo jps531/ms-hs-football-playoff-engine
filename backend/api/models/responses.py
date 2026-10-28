@@ -544,20 +544,34 @@ class OpenGroupModel(BaseModel):
     description: str
 
 
+class ScenarioTieCondition(BaseModel):
+    """One game result an explanation's ``when`` needs: ``winner`` beats ``loser``, by at least
+    ``min_margin`` and less than ``max_margin`` (None: no upper limit; a margin of 12 counts as 12 or
+    more, as point differential is capped there). A plain win is 1 and None."""
+
+    winner: str
+    loser: str
+    min_margin: int = 1
+    max_margin: int | None = None
+
+
 class ScenarioTieExplanation(BaseModel):
     """How one tie reaching the playoff places breaks in a scenario's finish ("why this order").
 
     ``teams`` in the finish's order (a tie it leaves open, in its places alphabetically), ``places``
-    the places they take, ``steps`` one sentence per tiebreaker step applied, in order, as far as
-    the winners decide it (a step turning on a margin or a score still to come ends it, saying so).
-    ``when`` picks it out among the results giving this finish: any one set of results (each all
-    of its game results) is enough; empty when it holds whichever way the finish comes about.
+    the places they take, ``steps`` one sentence per tiebreaker step applied, in order, with the
+    numbers it compared; one that varies with the margins ``when`` allows is given as the range it
+    takes ("+1 to +11"). Only a step turning on a score still to come (fewest points allowed), or a
+    tie the scenario leaves open, ends it early, saying what decides it from there. ``when`` picks
+    it out among the results giving this finish, starting from one of the scenario's ways: any one
+    set of results (each all of its game results) is enough; empty when it holds whichever way the
+    finish comes about.
     """
 
     teams: list[str]
     places: list[int]
     steps: list[str]
-    when: list[list[ScenarioGameOutcome]] = []
+    when: list[list[ScenarioTieCondition]] = []
 
 
 class ScenarioEntry(BaseModel):

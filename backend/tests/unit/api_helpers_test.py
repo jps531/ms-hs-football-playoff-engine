@@ -1017,6 +1017,20 @@ class TestScenariosToEntries:
         assert scenarios_to_entries([{**base, "explanation": []}])[0].explanation == []
         assert scenarios_to_entries([base])[0].explanation is None
 
+    def test_explanation_conditions_carry_their_margins(self):
+        """A ``when`` condition stored with its margins keeps them; one stored before margins were
+        stated ([winner, loser]) reads as any margin."""
+        explanation = [
+            {"teams": ["Alpha", "Beta"], "places": [1, 2], "steps": ["..."],
+             "when": [[["Alpha", "Gamma", 12, None], ["Delta", "Beta", 1, 12]], [["Alpha", "Delta"]]]},
+        ]  # fmt: skip
+        base = {"scenario_num": 1, "sub_label": "", "game_winners": [], "seeding": ["Alpha", "Beta"]}
+        [entry] = scenarios_to_entries([{**base, "explanation": explanation}])
+        assert [[(g.winner, g.loser, g.min_margin, g.max_margin) for g in cube] for cube in entry.explanation[0].when] == [
+            [("Alpha", "Gamma", 12, None), ("Delta", "Beta", 1, 12)],
+            [("Alpha", "Delta", 1, None)],
+        ]
+
     def test_conditions_field_empty_list_when_conditions_atom_empty(self):
         """conditions is [] (not None) when conditions_atom is an empty list — e.g. a
         scenario fully decided by simulated results with nothing left to show."""

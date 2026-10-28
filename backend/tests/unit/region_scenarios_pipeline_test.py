@@ -1,8 +1,9 @@
 """Unit tests for backend/prefect/region_scenarios_pipeline.py's pure helpers.
 
-Only ``compute_pregame_prob_rows`` is tested here — it's pure Python (no DB,
-no Prefect task wrapper), extracted specifically so this leakage-avoidance
-logic can be verified without mocking a database connection.
+``compute_pregame_prob_rows`` and ``refreshed_scenarios`` are tested here — both pure Python (no
+DB, no Prefect task wrapper), extracted so their logic can be verified without mocking a database
+connection: the pregame probabilities' leakage avoidance, and an explanation refresh that changes
+nothing but the explanations.
 """
 
 from datetime import date
@@ -11,7 +12,7 @@ import pytest
 
 from backend.helpers.data_classes import Game, GameStatus
 from backend.helpers.win_probability import EloConfig, compute_pregame_win_prob
-from backend.prefect.region_scenarios_pipeline import compute_pregame_prob_rows
+from backend.prefect.region_scenarios_pipeline import compute_pregame_prob_rows, refreshed_scenarios
 
 _CFG = EloConfig()
 
@@ -129,3 +130,42 @@ class TestComputePregameProbRows:
         )
         probs = [prob for _school, _date, prob in rows]
         assert sum(probs) == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------- refreshed_scenarios
+
+
+def _region_8_1a():
+    """2025 Region 8-1A with its last two region games left (the Oct 24 snapshot)."""
+    from backend.tests.data.results_2025_ground_truth import REGION_RESULTS_2025
+    from backend.tests.unit.scenario_coverage_test import _cut
+
+    return _cut(REGION_RESULTS_2025[(1, 8)]["games"], 2)
+
+
+def _stored(teams, completed, remaining) -> list[dict]:
+    """The snapshot as the pipeline stores it (odds included), read back as JSON."""
+    import json
+
+    from backend.helpers.scenario_serializers import serialize_complete_scenarios
+    from backend.helpers.scenario_viewer import enumerate_division_scenarios
+
+    scenarios = enumerate_division_scenarios(teams, completed, remaining, scenario_odds=True)
+    return json.loads(json.dumps(serialize_complete_scenarios(scenarios)))
+
+
+def test_a_refresh_rewrites_only_the_explanations():
+    """Old explanations are replaced with what the scenarios give now; odds and conditions stay."""
+    teams, completed, remaining = _region_8_1a()
+    current = _stored(teams, completed, remaining)
+    old = [{**sc, "explanation": [{"teams": [], "places": [], "steps": ["old"], "when": []}]} for sc in current]
+    new = refreshed_scenarios(old, teams, completed, remaining)
+    assert new == current
+    assert [sc["p"] for sc in new] == [sc["p"] for sc in old]
+
+
+def test_a_refresh_leaves_a_snapshot_from_other_games_alone():
+    """Scenarios rebuilt from games that aren't the snapshot's don't match it: nothing is returned."""
+    teams, completed, remaining = _region_8_1a()
+    stored = _stored(teams, completed, remaining)
+    assert refreshed_scenarios(stored, teams, completed[1:], remaining) is None
