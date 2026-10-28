@@ -543,6 +543,11 @@ def test_normalize_mascot_golden_wave_no_plural() -> None:
     assert _normalize_mascot("GOLDEN WAVE") == "Golden Wave"
 
 
+def test_normalize_mascot_fighting_irish_no_plural() -> None:
+    """St. Patrick's 'Fighting Irish' is in the no-plural set: it doesn't become 'Fighting Irishs'."""
+    assert _normalize_mascot("Fighting Irish") == "Fighting Irish"
+
+
 def test_normalize_mascot_greenwave_pluralized() -> None:
     """'Greenwave' is not in the no-plural set and does not end in 's', so it gains one."""
     assert _normalize_mascot("Greenwave") == "Greenwaves"
