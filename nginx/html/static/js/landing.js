@@ -4,9 +4,9 @@
 // app fetches the same file. One renderer, so the page never changes under the
 // reader and there's no second copy to keep in step.
 
-export const FRONT_PAGE_URL = "/share/front.html";
+import { CLASSES } from "./routes.js";
 
-const CLASSES = [1, 2, 3, 4, 5, 6, 7];
+export const FRONT_PAGE_URL = "/share/front.html";
 
 /** Every class's standings and bracket, a button each (static_pages.py's class_grid writes the same). */
 export function classGrid() {

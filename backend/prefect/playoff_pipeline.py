@@ -30,6 +30,7 @@ from backend.prefect.region_scenarios_pipeline import (
     RegionSeedingData,
     fetch_all_season_games,
     fetch_all_season_schools,
+    fetch_class_regions,
     fetch_completed_pairs,
     fetch_num_rounds,
     fetch_region_teams,
@@ -317,7 +318,7 @@ def playoff_bracket_update(season: int | None = None) -> None:
     elo_ratings, _, elo_snapshots = compute_elo_ratings(all_games, all_schools, elo_cfg)
     snapshot_dates = [snap[0] for snap in elo_snapshots]
 
-    class_regions: dict[int, list[int]] = {c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)}
+    class_regions = fetch_class_regions(season)
 
     for clazz, regions in class_regions.items():
         playoff_games = fetch_completed_playoff_games(season, clazz)

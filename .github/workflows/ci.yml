@@ -34,11 +34,12 @@ jobs:
         run: uv sync --frozen --python 3.11
       - name: Lint
         run: uv run --frozen ruff check backend
-      - name: Python tests (one worker per CPU)
-        run: uv run --frozen pytest backend/tests -q -p no:cacheprovider -o addopts="" -n auto
+      # Node before the Python tests too: renderer_parity_test.py runs the site's JavaScript.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
+      - name: Python tests (one worker per CPU)
+        run: uv run --frozen pytest backend/tests -q -p no:cacheprovider -o addopts="" -n auto
       - name: JavaScript tests
         run: node --test nginx/tests/*.test.mjs
 

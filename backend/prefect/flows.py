@@ -17,6 +17,8 @@ from backend.prefect.share_assets_pipeline import share_assets_flow
 from backend.prefect.submission_digest_pipeline import submission_digest_flow
 
 _SCHEDULE_TIMEZONE = "America/Chicago"
+# The daily update's start (the pages say "each morning at 9:00 Central"; copy_settings_test checks them).
+DAILY_UPDATE_HOUR = 9
 
 
 async def main():
@@ -28,7 +30,7 @@ async def main():
         # The scores are pulled at 9:00, and the recalculation starts as soon as the pull finishes.
         await daily_update_flow.to_deployment(
             "daily-update",
-            schedule=CronSchedule(cron="0 9 * * *", timezone=_SCHEDULE_TIMEZONE),
+            schedule=CronSchedule(cron=f"0 {DAILY_UPDATE_HOUR} * * *", timezone=_SCHEDULE_TIMEZONE),
         ),
         # Each half of the daily update on its own, for a manual run.
         await ahsfhs_schedule_data_flow.to_deployment("ahsfhs-schedule-data-pipeline"),

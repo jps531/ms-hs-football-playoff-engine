@@ -19,6 +19,7 @@ from backend.helpers.data_classes import (
     RemainingGame,
     TiebreakDecision,
 )
+from backend.helpers.engine_settings import PLAYOFF_SEEDS
 from backend.helpers.scenario_renderer import _render_atom, atoms_from_complete_scenarios
 from backend.helpers.tiebreak_explainer import explain_scenario_ties
 from backend.helpers.tiebreakers import resolve_standings_for_mask
@@ -909,7 +910,7 @@ def enumerate_outcomes(
 
 
 def team_atoms_from_scenarios(
-    complete_scenarios: list[dict], remaining: list[RemainingGame], playoff_seeds: int = 4
+    complete_scenarios: list[dict], remaining: list[RemainingGame], playoff_seeds: int = PLAYOFF_SEEDS
 ) -> dict[str, dict[int, list[list]]]:
     """Per-team per-seed atoms (``build_scenario_atoms``' shape) read off the region's complete scenarios.
 
@@ -968,7 +969,7 @@ def build_scenario_atoms(
     remaining: list[RemainingGame],
     pa_win: int = 14,
     base_margin_default: int = 7,
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     precomputed: EnumeratedOutcomes | None = None,
 ) -> dict:
     """Build per-team per-seed scenario atoms: what each team needs for each place it can finish.
@@ -1411,7 +1412,7 @@ def enumerate_division_scenarios(
     completed: list[CompletedGame],
     remaining: list[RemainingGame],
     scenario_atoms: dict | None = None,
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
     precomputed: EnumeratedOutcomes | None = None,
@@ -1743,7 +1744,7 @@ _OPEN_REASON = {
 }
 
 
-def render_scenarios(scenarios: list[dict], playoff_seeds: int = 4) -> str:
+def render_scenarios(scenarios: list[dict], playoff_seeds: int = PLAYOFF_SEEDS) -> str:
     """Render a pre-computed scenario list (from enumerate_division_scenarios or DB) as text.
 
     This is the decoupled rendering path — it does not re-run enumeration, so it
@@ -1833,7 +1834,7 @@ def build_pre_playoff_home_scenarios(
     teams: list[str],
     completed: list[CompletedGame],
     remaining: list[RemainingGame],
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     win_prob_fn=None,
     team_lookup: dict | None = None,
 ) -> tuple[list, dict]:
@@ -1969,7 +1970,7 @@ def render_team_pre_playoff_home_scenarios(
     teams: list[str],
     completed: list[CompletedGame],
     remaining: list[RemainingGame],
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     win_prob_fn=None,
     team_lookup: dict | None = None,
 ) -> str:

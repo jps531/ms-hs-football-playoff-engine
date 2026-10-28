@@ -489,23 +489,22 @@ class TestLandingBody:
 
     def test_how_it_works_matches_the_pipeline_thresholds(self):
         """The steps it lists are the ones the pipeline and API use, so the front page can't drift from the code."""
-        from backend.helpers.api_helpers import DISPLAY_THRESHOLD
+        from backend.helpers.engine_settings import ENUMERATE_MAX_LEFT, FULL_MARGINS_MAX_LEFT, MONTE_CARLO_SAMPLES
         from backend.helpers.static_pages import HOW_IT_WORKS_HTML
         from backend.prefect import region_scenarios_pipeline as pipeline
 
         steps = " ".join(HOW_IT_WORKS_HTML)
         # Full scenarios only where every margin is worked through, so a point-differential race is stated exactly.
-        assert DISPLAY_THRESHOLD == pipeline._R_ALWAYS_MARGIN
-        assert f"<strong>{DISPLAY_THRESHOLD} or fewer</strong>" in steps
-        assert f"<strong>{DISPLAY_THRESHOLD + 1} to {pipeline._R_MAX_ATOMS}</strong>" in steps
+        assert f"<strong>{FULL_MARGINS_MAX_LEFT} or fewer</strong>" in steps
+        assert f"<strong>{FULL_MARGINS_MAX_LEFT + 1} to {pipeline._R_MAX_ATOMS}</strong>" in steps
         assert "as if each remaining game were won by 7 points" in steps
-        assert f"<strong>{pipeline._R_MAX_ATOMS + 1} to {pipeline._R_MAX_COMPUTE}</strong>" in steps
-        assert f"<strong>more than {pipeline._R_MAX_COMPUTE}</strong>" in steps
-        assert "50,000 times" in steps
-        assert "Toss-up odds get their own 50,000 runs with every game a coin flip." in steps
+        assert f"<strong>{pipeline._R_MAX_ATOMS + 1} to {ENUMERATE_MAX_LEFT}</strong>" in steps
+        assert f"<strong>more than {ENUMERATE_MAX_LEFT}</strong>" in steps
+        assert f"{MONTE_CARLO_SAMPLES:,} times" in steps
+        assert f"Toss-up odds get their own {MONTE_CARLO_SAMPLES:,} runs with every game a coin flip." in steps
         body = landing_body(None, {})
         assert "<li>When there are <strong>5 or fewer</strong>" in body
-        words = {5: "five"}[DISPLAY_THRESHOLD]
+        words = {5: "five"}[FULL_MARGINS_MAX_LEFT]
         app_js = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "static" / "js" / "app.js").read_text()
         about = (Path(__file__).resolve().parents[3] / "nginx" / "html" / "about.html").read_text()
         for text in (app_js, about, Path(static_pages_module.__file__).read_text()):

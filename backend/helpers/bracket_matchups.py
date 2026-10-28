@@ -44,6 +44,7 @@ from backend.helpers.bracket_home_odds import (
 )
 from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.data_classes import FormatSlot, MatchupProbFn
+from backend.helpers.engine_settings import LISTING_FLOOR
 
 Position = tuple[int, int]  # (region, seed)
 PairKey = tuple[str, int, str, int]  # (team_a, seed_a, team_b, seed_b), team_a < team_b
@@ -472,7 +473,7 @@ def _r(p: float | None) -> float | None:
 def merge_modes(
     tossup: list[GameOutlook],
     projected: list[GameOutlook] | None,
-    floor: float = 0.005,
+    floor: float = LISTING_FLOOR,
 ) -> list[dict]:
     """Combine Toss-up and Projected outlooks into one payload per game.
 

@@ -85,6 +85,10 @@ def flow_env(monkeypatch):
         # The flow redraws the share cards last; unstubbed it calls the API, fails, and waits out a
         # 30-second retry delay before the flow carries on.
         "write_share_assets": MagicMock(),
+        # Each class's regions as school_seasons has them (2025: 1-8 for 1A-4A, 1-4 for 5A-7A).
+        "fetch_class_regions": MagicMock(
+            return_value={c: [r for cc, r in ALL_REGIONS if cc == c] for c in range(1, 8)}
+        ),
         "date": _FakeDate,
     }
     for name, value in stubs.items():
@@ -232,3 +236,20 @@ class TestClearOffDateSnapshots:
         sql, params = calls[-1]
         assert sql.split()[2] == "team_ratings"
         assert params == (2025, [date(2025, 10, 31), date(2025, 11, 10)])
+
+
+def test_class_regions_come_from_the_seasons_schools(monkeypatch):
+    """fetch_class_regions: each class's regions as school_seasons assigns them, not a fixed 8-or-4 split."""
+    cur = MagicMock()
+    cur.fetchall.return_value = [(1, 1), (1, 2), (5, 1), (5, 3)]
+    conn = MagicMock()
+    conn.cursor.return_value.__enter__.return_value = cur
+    monkeypatch.setattr(
+        pipeline,
+        "get_database_connection",
+        MagicMock(return_value=MagicMock(__enter__=lambda s: conn, __exit__=lambda *a: None)),
+    )
+    assert pipeline.fetch_class_regions.fn(2026) == {1: [1, 2], 5: [1, 3]}
+    sql, params = cur.execute.call_args.args
+    assert "FROM school_seasons WHERE season = %s AND is_active" in sql
+    assert params == (2026, [1, 2, 3, 4, 5, 6, 7])

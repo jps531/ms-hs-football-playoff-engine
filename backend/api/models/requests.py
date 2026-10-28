@@ -406,7 +406,7 @@ class SubmitFeedbackRequest(BaseModel):
     scenarios, or anything else (``category``), with an optional email for a reply."""
 
     subject: str = Field(min_length=1, max_length=200)
-    message: str = Field(min_length=1, max_length=5000)
+    message: str = Field(min_length=1, max_length=2000)  # the form's limit too (feedback.js MESSAGE_MAX)
     category: FeedbackCategory = "other"
     page: str | None = _PagePath
     email: str | None = Field(default=None, max_length=254, pattern=r"^$|^[^@\s]+@[^@\s]+\.[^@\s]+$")

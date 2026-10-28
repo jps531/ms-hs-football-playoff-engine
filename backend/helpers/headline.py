@@ -27,15 +27,14 @@ from typing import NamedTuple
 
 from backend.api.models.responses import KeyInsightModel, TeamStandingsEntry
 from backend.helpers.certainty import CERTAIN_EPS
+from backend.helpers.engine_settings import FULL_MARGINS_MAX_LEFT, PLAYOFF_SEEDS
 from backend.helpers.scenario_renderer import margin_phrase
 
-_PLAYOFF_SEEDS = 4
 # "Locked" means certain (backend.helpers.certainty).
 _CERTAIN = 1 - CERTAIN_EPS
 
-# Scenario paths are margin-accurate only at R <= 5 (see docs/architecture/SCENARIO_COMPUTATION.md);
-# at R = 6 they're win/loss-only, so they can't be stated as guarantees.
-_PATHS_MARGIN_ACCURATE_MAX_R = 5
+# Scenario paths are margin-accurate only at R <= FULL_MARGINS_MAX_LEFT (see
+# docs/architecture/SCENARIO_COMPUTATION.md); past it they're win/loss-only, so they can't be stated as guarantees.
 _MAX_HEADLINE_CONDITIONS = 3
 
 _NUMBER_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
@@ -48,7 +47,7 @@ def _seed_prob(entry: TeamStandingsEntry, seed: int) -> float:
 
 def _locked_seed(entry: TeamStandingsEntry) -> int | None:
     """Return the seed this team has mathematically locked in, if any."""
-    for seed in range(1, _PLAYOFF_SEEDS + 1):
+    for seed in range(1, PLAYOFF_SEEDS + 1):
         if _seed_prob(entry, seed) >= _CERTAIN:
             return seed
     return None
@@ -218,7 +217,7 @@ def build_region_headline(
         return None
     insights = key_insights or []
     by_team = {t.school: t for t in teams}
-    paths_usable = 0 < remaining_games <= _PATHS_MARGIN_ACCURATE_MAX_R
+    paths_usable = 0 < remaining_games <= FULL_MARGINS_MAX_LEFT
     projected = _uses_projected(teams)
 
     def p_title(e: TeamStandingsEntry) -> float:
@@ -236,9 +235,9 @@ def build_region_headline(
             holders[seed] = entry.school
 
     # 1. Field and seeding fully settled.
-    if all(seed in holders for seed in range(1, _PLAYOFF_SEEDS + 1)):
+    if all(seed in holders for seed in range(1, PLAYOFF_SEEDS + 1)):
         champion = holders[1]
-        rest = _join_names([holders[s] for s in range(2, _PLAYOFF_SEEDS + 1)])
+        rest = _join_names([holders[s] for s in range(2, PLAYOFF_SEEDS + 1)])
         verb = "won" if remaining_games == 0 else "has won"
         return f"{champion} {verb} the region, with {rest} joining them in the playoffs."
 
@@ -259,7 +258,7 @@ def build_region_headline(
     # 3. Title decided; the rest of the field (or just its seeding) isn't.
     champion = holders[1]
     clinched = [t for t in teams if t.clinched]
-    open_spots = _PLAYOFF_SEEDS - len(clinched)
+    open_spots = PLAYOFF_SEEDS - len(clinched)
     if open_spots <= 0:
         return f"{champion} has the region won, and the playoff field is set with seeding still to decide."
 

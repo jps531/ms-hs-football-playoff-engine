@@ -38,7 +38,8 @@ def test_region_scenarios_run_after_the_scores_are_pulled(monkeypatch):
 def test_only_the_daily_update_is_scheduled_each_morning():
     """Its two halves keep deployments for manual runs but no schedule of their own."""
     flows = (Path(__file__).resolve().parents[2] / "prefect" / "flows.py").read_text()
-    assert flows.count('CronSchedule(cron="0 9 * * *"') == 1
+    assert flows.count('CronSchedule(cron=f"0 {DAILY_UPDATE_HOUR} * * *"') == 1
+    assert "DAILY_UPDATE_HOUR = 9\n" in flows
     assert 'await ahsfhs_schedule_data_flow.to_deployment("ahsfhs-schedule-data-pipeline")' in flows
     assert 'await region_scenarios_data_flow.to_deployment("region-scenarios-data-pipeline")' in flows
 

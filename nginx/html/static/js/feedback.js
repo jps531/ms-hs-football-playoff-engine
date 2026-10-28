@@ -10,6 +10,8 @@ export const CATEGORIES = [
   { value: "other", label: "Something else", subject: "Feedback" },
 ];
 
+// The API's limits on the same fields (backend/api/models/requests.py; copy_settings_test checks them).
+export const SUBJECT_MAX = 200;
 export const MESSAGE_MAX = 2000;
 export const NOTE_MAX = 1000;
 // A form is never sent sooner than this after it opens: a send before then
@@ -19,10 +21,10 @@ export const MIN_FILL_MS = 2500;
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-/** "Odds or scenarios · Region 6-3A · Raleigh", at most 200 characters (the API's limit). */
+/** "Odds or scenarios · Region 6-3A · Raleigh", at most SUBJECT_MAX characters (the API's limit). */
 export function feedbackSubject(category, context) {
   const base = (CATEGORIES.find((c) => c.value === category) ?? CATEGORIES[2]).subject;
-  return (context ? `${base} · ${context}` : base).slice(0, 200);
+  return (context ? `${base} · ${context}` : base).slice(0, SUBJECT_MAX);
 }
 
 /** A problem with a general report's fields, as a sentence for the form, or null. */

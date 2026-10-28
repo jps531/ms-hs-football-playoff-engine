@@ -39,7 +39,7 @@ from pathlib import Path
 import requests
 from prefect import flow, get_run_logger, task
 
-from backend.helpers.api_helpers import DISPLAY_THRESHOLD
+from backend.helpers.engine_settings import CLASSES, FULL_MARGINS_MAX_LEFT
 from backend.helpers.share_cards import (
     SITE_DESCRIPTION,
     SITE_NAME,
@@ -94,7 +94,6 @@ API_URL = os.environ.get("SHARE_API_URL", "http://api:8000/api/v1")
 OUTPUT_DIR = os.environ.get("SHARE_OUTPUT_DIR", "/opt/share")
 SITE_URL = os.environ.get("SITE_URL", "https://mshsfootball.com")
 
-CLASSES = range(1, 8)
 
 Fetch = Callable[[str], object | None]
 
@@ -289,7 +288,7 @@ def build_share_assets(
         eves = {
             k: eve
             for k, days in region_game_days.items()
-            if len(region_payloads.get(k, {}).get("standings", {}).get("remaining_games") or []) <= DISPLAY_THRESHOLD
+            if len(region_payloads.get(k, {}).get("standings", {}).get("remaining_games") or []) <= FULL_MARGINS_MAX_LEFT
             and (eve := insight_week_eve(days, class_dates.get(k[0], []), today))
         }
         insight_regions = _payloads_on(fetch, season, eves, class_dates, today)
