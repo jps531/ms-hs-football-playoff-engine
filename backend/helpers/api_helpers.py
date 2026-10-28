@@ -2381,7 +2381,7 @@ async def load_playoff_results(  # pragma: no cover
         FROM games_effective g
         JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
         WHERE g.season = %s AND ss.class = %s AND g.final AND g.round IS NOT NULL
-          AND g.date <= %s AND g.points_for > g.points_against
+          AND g.game_date <= %s AND g.points_for > g.points_against
         """,
         (season, clazz, as_of),
     )
@@ -2473,7 +2473,7 @@ async def _load_and_build_playoff_bracket_state(  # pragma: no cover
                SUM(CASE WHEN points_for < points_against THEN 1 ELSE 0 END)::int AS losses
         FROM games_effective
         WHERE season = %s AND final = TRUE AND round IS NOT NULL
-          AND date <= %s AND school = ANY(%s)
+          AND game_date <= %s AND school = ANY(%s)
         GROUP BY school
         """,
         (season, as_of, list(school_to_seed.keys())),
@@ -2489,7 +2489,7 @@ async def _load_and_build_playoff_bracket_state(  # pragma: no cover
         SELECT g.school, g.opponent, g.points_for, g.points_against
         FROM games_effective g
         WHERE g.season = %s AND g.final = TRUE AND g.round IS NOT NULL
-          AND g.date <= %s AND g.school = ANY(%s)
+          AND g.game_date <= %s AND g.school = ANY(%s)
           AND g.points_for > g.points_against
         """,
         (season, as_of, list(school_to_seed.keys())),
@@ -2627,7 +2627,7 @@ async def load_completed_region_games(  # pragma: no cover
         """
         SELECT school, opponent, points_for, points_against, date
         FROM games_effective
-        WHERE season = %s AND region_game = TRUE AND final = TRUE AND date <= %s
+        WHERE season = %s AND region_game = TRUE AND final = TRUE AND game_date <= %s
           AND school = ANY(%s)
         ORDER BY date
         """,

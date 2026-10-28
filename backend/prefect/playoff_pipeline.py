@@ -104,10 +104,11 @@ def fetch_completed_playoff_games(season: int, clazz: int) -> list[Game]:
         clazz:  MHSAA classification (1–7).
 
     Returns:
-        List of ``Game`` objects sorted by date, one row per school per game.
+        List of ``Game`` objects sorted by date, one row per school per game. Each
+        ``date`` is the game's ``game_date``, the same in both schools' rows.
     """
     sql = """
-        SELECT g.school, g.date, g.season, g.location_id, g.points_for,
+        SELECT g.school, g.game_date, g.season, g.location_id, g.points_for,
                g.points_against, g.round, g.kickoff_time, g.opponent,
                g.result, g.game_status, g.source, g.location,
                g.region_game, g.final, g.overtime
@@ -117,7 +118,7 @@ def fetch_completed_playoff_games(season: int, clazz: int) -> list[Game]:
           AND g.final  = TRUE
           AND g.round  IS NOT NULL
           AND ss.class = %s
-        ORDER BY g.date
+        ORDER BY g.game_date
     """
     with get_database_connection() as conn:
         with conn.cursor() as cur:

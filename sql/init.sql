@@ -284,7 +284,18 @@ SELECT
   pregame_prob, pregame_prob_computed_at,
   COALESCE((overrides->>'ot_period_start_score_for')::int,     ot_period_start_score_for)     AS ot_period_start_score_for,
   COALESCE((overrides->>'ot_period_start_score_against')::int, ot_period_start_score_against) AS ot_period_start_score_against,
-  COALESCE(overrides->>'ot_next_possession',      ot_next_possession) AS ot_next_possession
+  COALESCE(overrides->>'ot_next_possession',      ot_next_possession) AS ot_next_possession,
+  -- The game's own date, the same in both schools' rows. The two rows of one
+  -- game can carry dates a day apart (each school's page is scraped on its
+  -- own), and anything cut off at a date must put both rows on the same side
+  -- of it. The later of the two dates wins. Rows of the same two schools more
+  -- than 3 days apart are different games (a playoff rematch, say).
+  GREATEST(date, (
+    SELECT MAX(o.date)
+    FROM games o
+    WHERE o.season = games.season AND o.school = games.opponent AND o.opponent = games.school
+      AND o.date BETWEEN games.date - 3 AND games.date + 3
+  )) AS game_date
 FROM games;
 
 

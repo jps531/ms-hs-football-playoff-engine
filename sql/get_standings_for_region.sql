@@ -26,7 +26,7 @@ region_records AS (
   LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
-   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
+   AND (p_cutoff_date IS NULL OR g.game_date <= p_cutoff_date)
   GROUP BY ds.school, ds.class, ds.region, ds.season
 ),
 overall_records AS (
@@ -39,7 +39,7 @@ overall_records AS (
   LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
-   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
+   AND (p_cutoff_date IS NULL OR g.game_date <= p_cutoff_date)
   GROUP BY ds.school
 ),
 region_base AS (
@@ -80,7 +80,7 @@ h2h AS (
    AND g.final        = TRUE
    AND g.region_game  = TRUE
    AND g.opponent     = t2.school
-   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
+   AND (p_cutoff_date IS NULL OR g.game_date <= p_cutoff_date)
   GROUP BY t1.school, t1.tie_group_key
 ),
 h2h_pd_capped AS (
@@ -98,7 +98,7 @@ h2h_pd_capped AS (
    AND g.final        = TRUE
    AND g.region_game  = TRUE
    AND g.opponent     = t2.school
-   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
+   AND (p_cutoff_date IS NULL OR g.game_date <= p_cutoff_date)
   GROUP BY t1.school, t1.tie_group_key
 ),
 region_points_allowed AS (
@@ -109,7 +109,7 @@ region_points_allowed AS (
   LEFT JOIN games_effective g
     ON g.school = ds.school
    AND g.season = ds.season
-   AND (p_cutoff_date IS NULL OR g.date <= p_cutoff_date)
+   AND (p_cutoff_date IS NULL OR g.game_date <= p_cutoff_date)
   GROUP BY ds.school
 ),
 ranked AS (
