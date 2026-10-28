@@ -11,7 +11,11 @@ from backend.prefect.daily_update_pipeline import daily_update_flow
 from backend.prefect.misshsaa_school_pipeline import misshsaa_school_data_flow
 from backend.prefect.nces_school_pipeline import nces_school_data_flow
 from backend.prefect.playoff_pipeline import playoff_bracket_update
-from backend.prefect.region_scenarios_pipeline import backfill_historical_snapshots, region_scenarios_data_flow
+from backend.prefect.region_scenarios_pipeline import (
+    backfill_historical_snapshots,
+    refresh_scenario_explanations,
+    region_scenarios_data_flow,
+)
 from backend.prefect.regions_data_pipeline import regions_data_flow
 from backend.prefect.share_assets_pipeline import share_assets_flow
 from backend.prefect.submission_digest_pipeline import submission_digest_flow
@@ -46,6 +50,8 @@ async def main():
             ],
         ),
         await backfill_historical_snapshots.to_deployment("backfill-historical-snapshots"),
+        # After a change to how explanations are worded: rewrites only those, far faster than a backfill.
+        await refresh_scenario_explanations.to_deployment("refresh-scenario-explanations"),
         await playoff_bracket_update.to_deployment("playoff-bracket-update"),
         # Also runs at the end of the daily region update; this is for a manual redraw.
         await share_assets_flow.to_deployment("share-assets"),

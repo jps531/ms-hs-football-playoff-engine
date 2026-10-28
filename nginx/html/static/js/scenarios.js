@@ -1,7 +1,7 @@
 // Turns the API's per-team paths and key insights into the outcome cards the
 // region view shows. Pure data shaping, no DOM, so it runs under `node --test`.
 
-import { joinNames } from "./format.js";
+import { joinNames, marginText } from "./format.js";
 
 const ODDS_KEYS = ["p1", "p2", "p3", "p4", "p_playoffs"];
 
@@ -233,16 +233,18 @@ function ordinal(n) {
  * A scenario's "why this order", from the API's `explanation` (one entry per
  * tie reaching the playoff places): [{ title, when, steps }], where `title`
  * is "Tupelo Christian and Smithville, tied for 1st and 2nd", `when` the
- * results that pick the entry out among this finish's ("If Thrasher beats
- * Biggersville", or null when it holds whichever way the finish comes
- * about) and `steps` the sentences. Empty for a snapshot without them.
+ * results that pick the entry out among this finish's, margins included
+ * ("If Thrasher beats Biggersville by 12+", or null when it holds whichever
+ * way the finish comes about) and `steps` the sentences. Empty for a
+ * snapshot without them.
  */
 export function whyBlocks(explanation) {
   return (explanation ?? []).map((e) => {
     const first = ordinal(e.places[0]);
     const last = ordinal(e.places[e.places.length - 1]);
     const where = e.places.length === 2 ? `${first} and ${last}` : `${first}–${last}`;
-    const results = (e.when ?? []).map((cube) => cube.map((g) => `${g.winner} beats ${g.loser}`).join(" and "));
+    const results = (e.when ?? []).map((cube) =>
+      cube.map((g) => `${g.winner} beats ${g.loser}${marginText(g.min_margin, g.max_margin)}`).join(" and "));
     return {
       title: `${joinNames(e.teams)}, tied for ${where}`,
       when: results.length ? `If ${results.join(", or ")}` : null,

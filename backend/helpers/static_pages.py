@@ -723,12 +723,18 @@ def outcome_scenario_card(card: dict, teams: dict, p: float | None = None, level
 
 def why_blocks(explanation: list[dict] | None) -> list[dict]:
     """A scenario's "why this order" (scenarios.js's ``whyBlocks``): [{title, when, steps}], one per tie
-    reaching the playoff places; ``when`` None when it holds whichever way the finish comes about."""
+    reaching the playoff places; ``when`` the results that pick it out, margins included ("If Thrasher
+    beats Biggersville by 12+"), None when it holds whichever way the finish comes about."""
     out = []
     for e in explanation or []:
         first, last = _ordinal(e["places"][0]), _ordinal(e["places"][-1])
         where = f"{first} and {last}" if len(e["places"]) == 2 else f"{first}–{last}"
-        results = [" and ".join(f"{g['winner']} beats {g['loser']}" for g in cube) for cube in (e.get("when") or [])]
+        results = [
+            " and ".join(
+                f"{g['winner']} beats {g['loser']}{margin_text(g.get('min_margin'), g.get('max_margin'))}" for g in cube
+            )
+            for cube in (e.get("when") or [])
+        ]
         out.append(
             {
                 "title": f"{join_names(e['teams'])}, tied for {where}",

@@ -112,8 +112,19 @@ EXPLANATION = [
         "places": [2, 3],
         "when": [[{"winner": "A", "loser": "B"}]],
         "steps": ["Head-to-head: B beat C.", "B finishes 2nd."],
-    }
-]
+    },
+    {
+        "teams": ["A", "B", "C"],
+        "places": [1, 2, 3],
+        "when": [
+            [{"winner": "C", "loser": "D", "min_margin": 1, "max_margin": None},
+             {"winner": "A", "loser": "B", "min_margin": 12, "max_margin": None}],
+            [{"winner": "A", "loser": "B", "min_margin": 1, "max_margin": 12},
+             {"winner": "D", "loser": "C", "min_margin": 5, "max_margin": 6}],
+        ],
+        "steps": ["Point differential in their games against each other, capped at 12 a game: A 0, B 0, C 0."],
+    },
+]  # fmt: skip
 
 CONDITION = {"type": "game_result", "school": "Mize", "opponent": "Raleigh", "required_result": "win", "min_margin": 8}
 SCENARIO_CARD = {"title": "Mize clinches the region", "team": "Mize", "p": 0.25, "groups": [[CONDITION]]}

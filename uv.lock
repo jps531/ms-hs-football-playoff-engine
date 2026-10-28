@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -1805,6 +1805,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "griffe" },
     { name = "lxml" },
+    { name = "numpy" },
     { name = "pandas" },
     { name = "pillow" },
     { name = "playwright" },
@@ -1837,6 +1838,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.0" },
     { name = "griffe", specifier = "<1.0" },
     { name = "lxml", specifier = ">=5.2" },
+    { name = "numpy", specifier = ">=2.0" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "playwright", specifier = ">=1.47" },

@@ -194,8 +194,10 @@ def serialize_complete_scenarios(scenarios: list[dict]) -> list[dict]:
         "coinflip_groups": [[team, ...], ...] | null,
         "seeding": [team, ...],
         "p": float, "p_weighted": float   (only when the scenario carries its finish's odds),
-        "explanation": [{"teams": [...], "places": [...], "steps": [...], "when": [[[winner, loser], ...], ...]}, ...]
-                         (how its finish's ties break; absent in snapshots stored before it)
+        "explanation": [{"teams": [...], "places": [...], "steps": [...],
+                         "when": [[[winner, loser, min_margin, max_margin], ...], ...]}, ...]
+                         (how its finish's ties break; absent in snapshots stored before it; max_margin
+                         exclusive or null; snapshots stored before margins were stated have [winner, loser])
     }
     """
     result = []

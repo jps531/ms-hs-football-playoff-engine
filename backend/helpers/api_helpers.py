@@ -50,6 +50,7 @@ from backend.api.models.responses import (
     ScenarioEntry,
     ScenarioGameOutcome,
     ScenarioPathModel,
+    ScenarioTieCondition,
     ScenarioTieExplanation,
     SeasonDateEntry,
     SeedingOddsModel,
@@ -873,6 +874,13 @@ def remaining_to_models(remaining: list[RemainingGame]) -> list[RemainingGameMod
     return [RemainingGameModel(team_a=r.a, team_b=r.b, location_a=r.location_a) for r in remaining]
 
 
+def _tie_condition(cond: list) -> ScenarioTieCondition:
+    """A stored ``when`` condition: [winner, loser, least margin, greatest + 1 or None], or, in
+    snapshots stored before margins were stated, [winner, loser] (any margin)."""
+    w, l, lo, hi = (*cond, 1, None) if len(cond) == 2 else cond
+    return ScenarioTieCondition(winner=w, loser=l, min_margin=lo, max_margin=hi)
+
+
 def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[ScenarioEntry] | None:
     """Convert complete scenario dicts to ``ScenarioEntry`` response objects, or ``None`` if empty."""
     if not complete_scenarios:
@@ -915,7 +923,7 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
                         teams=e["teams"],
                         places=e["places"],
                         steps=e["steps"],
-                        when=[[ScenarioGameOutcome(winner=w, loser=l) for w, l in cube] for cube in e["when"]],
+                        when=[[_tie_condition(c) for c in cube] for cube in e["when"]],
                     )
                     for e in sc["explanation"]
                 ]

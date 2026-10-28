@@ -8,9 +8,12 @@ the seeding) are presented as lettered sub-scenarios (6a, 6b, …).
 """
 
 import math
+from array import array
 from collections import defaultdict
 from dataclasses import dataclass
-from itertools import product
+from itertools import combinations, product
+
+import numpy as np
 
 from backend.helpers.data_classes import (
     CompletedGame,
@@ -21,7 +24,7 @@ from backend.helpers.data_classes import (
 )
 from backend.helpers.engine_settings import PLAYOFF_SEEDS
 from backend.helpers.scenario_renderer import _render_atom, atoms_from_complete_scenarios
-from backend.helpers.tiebreak_explainer import explain_scenario_ties
+from backend.helpers.tiebreak_explainer import MergedTrace, ScenarioTrace, counts_a_margin, scenario_trace
 from backend.helpers.tiebreakers import resolve_standings_for_mask
 
 # ---------------------------------------------------------------------------
@@ -1341,28 +1344,128 @@ def _simplest_terms(signatures: dict) -> dict:
     return terms
 
 
-def _cube_cover(wanted: set[int], within: set[int], remaining: list[RemainingGame]) -> list[list[tuple[str, str]]]:
-    """Results that pick out exactly the masks *wanted* among the masks *within*, as an OR of ANDs.
+# A "why this order" entry's conditions (``when``) are built from one of its card's ways plus at most
+# this many more game results; results that still aren't covered get one set of conditions each.
+_MAX_EXTRA_RESULTS = 2
 
-    Each AND is a set of game results (a cube of masks: those results, the other games either way);
-    a cube may take in masks outside *within* (they can't happen here), never one of *within* that
-    isn't *wanted*. Greedy: the cube covering the most masks still uncovered, fewest results first.
-    Empty when *wanted* is all of *within* (it holds whatever else happens).
+
+def _anchor(way, remaining: list[RemainingGame]) -> dict[int, tuple[int, int, int]]:
+    """A card's way as the game results it names: game index -> (1 if ``a`` wins else 0, least
+    margin, greatest margin), 12 meaning 12 or more. Its other conditions are left out."""
+    index = {frozenset((g.a, g.b)): i for i, g in enumerate(remaining)}
+    out = {}
+    for c in way:
+        if isinstance(c, GameResult):
+            w, l, lo, hi = c.winner, c.loser, c.min_margin, (c.max_margin - 1 if c.max_margin else _MARGIN_RANGE[-1])
+        elif isinstance(c, tuple) and len(c) == 2:
+            (w, l), lo, hi = c, _MARGIN_RANGE[0], _MARGIN_RANGE[-1]
+        else:
+            continue
+        i = index[frozenset((w, l))]
+        out[i] = (1 if remaining[i].a == w else 0, lo, hi)
+    return out
+
+
+# A finish whose results, counted in the margin ranges that change anything, come to more than
+# this many is labelled by winners alone, its explanations stopping where a margin decides (as with
+# a tie left open): the conditions would otherwise take too long to work out, and too many words.
+_MAX_LABEL_POINTS = 4096
+
+
+def _when(
+    points: list[tuple[int, tuple[int, ...]]],
+    target: int,
+    anchors: list[dict],
+    cells: list[list[tuple[int, int]]],
+    remaining: list[RemainingGame],
+) -> list[list[list]]:
+    """The results that pick out *target* (a bitset over *points*) among *points*, as an OR of ANDs.
+
+    *points* are the results giving one finish: (winners, for each game the index of its margin
+    range in *cells*, the ranges within which nothing changes). Each AND is one of the card's ways
+    (*anchors*) with up to ``_MAX_EXTRA_RESULTS`` more game results or a narrower margin; it may take
+    in results outside the finish (they can't happen there), never one in it outside *target*.
+    Greedy: the AND taking in the most results still uncovered, fewest conditions first. Empty when
+    *target* is every result. Each condition is [winner, loser, least margin, greatest margin + 1 or None].
     """
-    if wanted >= within:
+    everything = (1 << len(points)) - 1
+    if target == everything:
         return []
-    R = len(remaining)
-    cubes = []
-    for spec in product((None, 1, 0), repeat=R):
-        fixed = [(i, v) for i, v in enumerate(spec) if v is not None]
-        inside = {m for m in within if all((m >> i & 1) == v for i, v in fixed)}
-        if inside and inside <= wanted:
-            cubes.append((fixed, inside))
-    out, left = [], set(wanted)
+    n = len(remaining)
+    top = _MARGIN_RANGE[-1]
+
+    def span(g: int, lo: int, hi: int) -> tuple[int, int]:
+        """The cells of game *g* inside margins *lo*-*hi* (they line up: the cells are cut at every
+        way's margins), as first and last index."""
+        inside = [k for k, (a, b) in enumerate(cells[g]) if lo <= a and b <= hi]
+        return inside[0], inside[-1]
+
+    cache: dict = {}
+
+    def lit(g: int, bit: int, i: int, j: int) -> int:
+        """The points with game *g* won by its ``a`` side (*bit* 1) or ``b`` (0), in cells *i*-*j*."""
+        key = (g, bit, i, j)
+        if key not in cache:
+            out = 0
+            for k, (mask, at) in enumerate(points):
+                if (mask >> g & 1) == bit and i <= at[g] <= j:
+                    out |= 1 << k
+            cache[key] = out
+        return cache[key]
+
+    def ranges(g: int, i: int, j: int) -> list[tuple[int, int]]:
+        """Every run of game *g*'s cells within *i*-*j*."""
+        return [(a, b) for a in range(i, j + 1) for b in range(a, j + 1)]
+
+    cubes: list[tuple[int, int, tuple]] = []  # (points, conditions, literals)
+    for anchor in anchors or [{}]:
+        held = {g: (bit, *span(g, lo, hi)) for g, (bit, lo, hi) in anchor.items()}
+        base = everything
+        for g, (bit, i, j) in held.items():
+            base &= lit(g, bit, i, j)
+        if not base & target:
+            continue
+        narrow = [[(g, bit, a, b) for a, b in ranges(g, i, j) if (a, b) != (i, j)] for g, (bit, i, j) in held.items()]
+        last = {g: len(cells[g]) - 1 for g in range(n)}
+        extra = [(g, bit, a, b) for g in range(n) if g not in held for a, b in ranges(g, 0, last[g]) for bit in (1, 0)]
+        choices: list[tuple] = [()]
+        for opts in narrow:
+            choices += [c + (o,) for c in choices for o in opts]
+        for k in range(_MAX_EXTRA_RESULTS + 1):
+            for picked in combinations(extra, k):
+                if len({g for g, *_ in picked}) < k:
+                    continue
+                for narrowed in choices:
+                    pts = base
+                    for item in narrowed + picked:
+                        pts &= lit(*item)
+                    if pts and not pts & ~target:
+                        named = {**held, **{g: v for g, *v in narrowed}, **{g: v for g, *v in picked}}
+                        conds = tuple(sorted((g, *v) for g, v in named.items()))
+                        cubes.append((pts, len(conds), conds))
+    chosen, left = [], target
     while left:
-        fixed, inside = max(cubes, key=lambda c: (len(c[1] & left), -len(c[0])))
-        left -= inside
-        out.append([(remaining[i].a, remaining[i].b) if v else (remaining[i].b, remaining[i].a) for i, v in fixed])
+        best = max(cubes, key=lambda c: (bin(c[0] & left).count("1"), -c[1]), default=None)
+        if best is None or not best[0] & left:
+            # A result no AND above picks out alone: name it exactly.
+            k = (left & -left).bit_length() - 1
+            mask, at = points[k]
+            conds = tuple((g, mask >> g & 1, at[g], at[g]) for g in range(n))
+            pts = everything
+            for item in conds:
+                pts &= lit(*item)
+            best = (pts, n, conds)
+        chosen.append(best[2])
+        left &= ~best[0]
+    out = []
+    for conds in chosen:
+        cube = []
+        for g, bit, i, j in conds:
+            rg = remaining[g]
+            w, l = (rg.a, rg.b) if bit else (rg.b, rg.a)
+            lo, hi = cells[g][i][0], cells[g][j][1]
+            cube.append([w, l, lo, None if hi >= top else hi + 1])
+        out.append(cube)
     return out
 
 
@@ -1371,43 +1474,157 @@ def _finish_explanations(
     completed: list[CompletedGame],
     remaining: list[RemainingGame],
     finish_masks: dict[tuple, set[int]],
+    table: dict[int, object],
+    finish_of,
+    ways: dict[tuple, list],
+    gathered: dict[int, tuple],
     playoff_seeds: int,
     base_margin_default: int,
     pa_win: int,
 ) -> dict[tuple, list[dict]]:
     """For each finish (seeding, open groups), how each of its ties reaching the playoff places breaks.
 
-    A tie's explanation depends only on the winners (``explain_scenario_ties``), so each set of
-    winners is explained once. A finish reached by several sets of winners lists each tie's
-    explanation once, with the results that pick it out among the finish's sets of winners
-    (``when``, an OR of ANDs; empty when it holds for all of them).
+    Each result giving the finish (its winners and margins) is explained with the margins known
+    (``scenario_trace``); results with the same winners where the tiebreaker takes the same steps
+    are explained together, a number that varies over them as a range (``MergedTrace``). Where no
+    step counts a margin of a game still to play, one run explains every margin; where the margins
+    were walked already (*gathered*: each walked combination's (finish, key) as an index into its
+    list, with their ``MergedTrace``s), those runs are used. Each explanation is listed once, with
+    the results that pick it out among the finish's (``when``, an OR of ANDs built from the card's
+    *ways*; empty when it holds for all of them). A finish with too many results to label that way
+    (``_MAX_LABEL_POINTS``) is explained and labelled by winners alone.
     """
-    ref = {(g.a, g.b): base_margin_default for g in remaining}
-    told: dict[int, list] = {}
+    R = len(remaining)
+    pairs = [(g.a, g.b) for g in remaining]
+    ref = dict.fromkeys(pairs, base_margin_default)
+    shape = (len(_MARGIN_RANGE),) * R
+    entries: dict[tuple, tuple] = {}  # identity -> (members, places, steps)
+    # mask -> {finish: frozenset of identities} for every margin, or (slots, ids): each walked
+    # combination's index into slots, a slot being (finish, identities).
+    labels: dict[int, object] = {}
+    runs: dict[int, ScenarioTrace] = {}
+
+    def told(merged: MergedTrace, mask: int, finish: tuple, left_open=None) -> frozenset:
+        """The identities of what *merged* explains in *finish*, recorded for listing."""
+        ids = []
+        if left_open is None:
+            left_open = [g for step, g in finish[1] if step <= 4]
+        for tie in merged.ties(teams, completed, remaining, mask, playoff_seeds, pa_win, left_open):
+            ident = (frozenset(tie.teams), tie.places, tie.steps)
+            entries[ident] = ident
+            ids.append(ident)
+        return frozenset(ids)
+
+    for mask in sorted(set().union(*finish_masks.values()) if finish_masks else ()):
+        known = table[mask]
+        run = runs[mask] = scenario_trace(teams, completed, remaining, mask, ref, base_margin_default, pa_win)
+        if not isinstance(known, dict) and not counts_a_margin(run, remaining):
+            finish = finish_of(*known)
+            labels[mask] = {finish: told(MergedTrace(run), mask, finish)}
+            continue
+        merged, order, walked = gathered.get(mask, ({}, {}, None))
+        # A walk whose finishes aren't the mask's (its ties were then left open instead) is redone.
+        if not isinstance(known, dict) and {f for f, _ in order} != {finish_of(*known)}:
+            walked = None
+        if walked is None:
+            merged, order, walked = {}, {}, array("i")
+            for combo in product(_MARGIN_RANGE, repeat=R):
+                finish = finish_of(*(known[combo] if isinstance(known, dict) else known))
+                one = scenario_trace(
+                    teams, completed, remaining, mask, dict(zip(pairs, combo, strict=True)), base_margin_default, pa_win
+                )
+                k = (finish, one.key)
+                if k in merged:
+                    merged[k].add(one)
+                else:
+                    merged[k] = MergedTrace(one)
+                walked.append(order.setdefault(k, len(order)))
+        slots = [None] * len(order)
+        for k, i in order.items():
+            slots[i] = (k[0], told(merged[k], mask, k[0]))
+        labels[mask] = (slots, walked)
+
     out: dict[tuple, list[dict]] = {}
     for finish, masks in finish_masks.items():
         seeding = finish[0]
-        blocks: dict[tuple, set[int]] = defaultdict(set)
+        anchors = [_anchor(w, remaining) for w in ways.get(finish, [])]
+        catalog: dict[frozenset, int] = {}
+        grids: dict[int, object] = {}  # mask -> its label at each margin combination (-1: another finish)
         for mask in masks:
-            if mask not in told:
-                told[mask] = explain_scenario_ties(
-                    teams, completed, remaining, mask, ref, playoff_seeds, base_margin_default, pa_win
-                )
-            for tie in told[mask]:
-                blocks[(frozenset(tie.teams), tie.places, tie.steps)].add(mask)
-        listed = []
-        for (members, places, steps), with_it in blocks.items():
-            listed.append(
-                {
-                    # In the finish's order (a tie it leaves open is listed in its places alphabetically).
-                    "teams": sorted(members, key=seeding.index),
-                    "places": list(places),
-                    "steps": list(steps),
-                    "when": [[list(r) for r in cube] for cube in _cube_cover(with_it, masks, remaining)],
-                }
-            )
-        out[finish] = sorted(listed, key=lambda e: (e["places"], e["when"]))
+            lab = labels[mask]
+            if isinstance(lab, dict):
+                grids[mask] = catalog.setdefault(lab[finish], len(catalog))
+            else:
+                slots, walked = lab
+                lut = np.array([catalog.setdefault(ids, len(catalog)) if f == finish else -1 for f, ids in slots])
+                grids[mask] = lut[np.frombuffer(walked, dtype=np.int32)].reshape(shape)
+        # Each game's margins cut where anything changes along it, or where a way's range ends.
+        cuts: list[set[int]] = [set() for _ in range(R)]
+        for grid in grids.values():
+            if isinstance(grid, np.ndarray):
+                for g in range(R):
+                    moved = np.diff(grid, axis=g) != 0
+                    changes = moved.any(axis=tuple(a for a in range(R) if a != g))
+                    cuts[g] |= {int(v) + 1 for v in np.nonzero(changes)[0]}
+        for a in anchors:
+            for g, (_, lo, hi) in a.items():
+                cuts[g] |= {lo - 1, hi} - {0, _MARGIN_RANGE[-1]}
+        cells = [
+            [(lo, hi) for lo, hi in zip([1, *[c + 1 for c in sorted(cut)]], [*sorted(cut), 12], strict=True)]
+            for cut in cuts
+        ]
+        size = math.prod(len(c) for c in cells)
+        if size * len(masks) > _MAX_LABEL_POINTS:
+            out[finish] = _winner_explanations(finish, masks, runs, told, entries, anchors, remaining)
+            continue
+        points: list[tuple[int, tuple]] = []
+        ident_of: list[frozenset] = []
+        by_index = {i: ids for ids, i in catalog.items()}
+        for mask in sorted(masks):
+            grid = grids[mask]
+            for at in product(*(range(len(c)) for c in cells)):
+                if isinstance(grid, np.ndarray):
+                    hit = int(grid[tuple(cells[g][i][0] - 1 for g, i in enumerate(at))])
+                    if hit < 0:
+                        continue
+                else:
+                    hit = grid
+                points.append((mask, at))
+                ident_of.append(by_index[hit])
+        out[finish] = _listed(points, ident_of, entries, seeding, anchors, cells, remaining)
     return out
+
+
+def _listed(points, ident_of, entries, seeding, anchors, cells, remaining) -> list[dict]:
+    """A finish's explanations, each once, with the results (*points*) it applies to (*ident_of*)."""
+    listed = []
+    for ident in dict.fromkeys(i for ids in ident_of for i in ids):
+        target = 0
+        for k, ids in enumerate(ident_of):
+            if ident in ids:
+                target |= 1 << k
+        members, places, steps = entries[ident]
+        listed.append(
+            {
+                # In the finish's order (a tie it leaves open is listed in its places alphabetically).
+                "teams": sorted(members, key=seeding.index),
+                "places": list(places),
+                "steps": list(steps),
+                "when": _when(points, target, anchors, cells, remaining),
+            }
+        )
+    return sorted(listed, key=lambda e: (e["places"], [[c[:3] + [c[3] or 13] for c in cube] for cube in e["when"]]))
+
+
+def _winner_explanations(finish, masks, runs, told, entries, anchors, remaining) -> list[dict]:
+    """A finish explained and labelled by winners alone: each tie's steps stop at the first that
+    counts a margin still to come, saying the margins decide it from there, so the words hold at
+    every margin, and ``when`` names only winners (the card's ways without their margins)."""
+    whole = [[(1, 12)] for _ in remaining]
+    points = [(mask, (0,) * len(remaining)) for mask in sorted(masks)]
+    ident_of = [told(MergedTrace(runs[mask]), mask, finish, True) for mask, _ in points]
+    plain = [{g: (bit, 1, 12) for g, (bit, _, _) in a.items()} for a in anchors]
+    return _listed(points, ident_of, entries, finish[0], plain, whole, remaining)
 
 
 def enumerate_division_scenarios(
@@ -1500,15 +1717,36 @@ def enumerate_division_scenarios(
             shares[0].append([_MARGIN_SHARE] * R)
             shares[1].append([projected_margin_share(p) for p in won] if won else [_MARGIN_SHARE] * R)
 
-    def run(mask: int, margins: dict) -> tuple[tuple, tuple]:
-        """(stated decisions, (seeding, open groups)) for one result."""
+    def run(mask: int, margins: dict, traced: list | None = None) -> tuple[tuple, tuple]:
+        """(stated decisions, (seeding, open groups)) for one result; with *traced*, its
+        ``ScenarioTrace`` (for the explanations) is appended to it."""
         decisions: list = []
+        trace: list | None = [] if traced is not None else None
         order = resolve_standings_for_mask(
-            teams, completed, remaining, mask, margins, base_margin_default, pa_win, decision_collector=decisions
+            teams,
+            completed,
+            remaining,
+            mask,
+            margins,
+            base_margin_default,
+            pa_win,
+            decision_collector=decisions,
+            trace_collector=trace,
         )
+        if traced is not None:
+            traced.append(ScenarioTrace(order, trace, tuple(margins[p] for p in pairs)))
         stated, open_groups = _decision_signature(decisions, open_from, in_play)
         seeding, shown = _settle_open(order, open_groups, playoff_seeds)
         return stated, (seeding, shown)
+
+    def finish_of(seeding, open_groups) -> tuple:
+        """The finish an outcome gives (its seeding and the ties left open), as a hashable key."""
+        return tuple(seeding), tuple((step, tuple(g)) for step, g in open_groups or ())
+
+    # mask -> the explanation runs gathered while its margins were walked: ({(finish, key): MergedTrace},
+    # {(finish, key): index}, each combination's index in walk order), so the explanations needn't
+    # run the tiebreaker again.
+    gathered: dict[int, tuple] = {}
 
     # mask -> list of (stated, open_groups, seeding, first margin combination), one per outcome and term.
     outcomes: dict[int, list] = {}
@@ -1530,8 +1768,18 @@ def enumerate_division_scenarios(
         first: dict = {}
         regions: dict = defaultdict(set)
         weights: dict[tuple, list[float]] = defaultdict(lambda: [0.0, 0.0])
+        merged: dict[tuple, MergedTrace] = {}
+        order: dict[tuple, int] = {}
+        walked = array("i")
         for combo in product(_MARGIN_RANGE, repeat=R):
-            stated, outcome = run(mask, dict(zip(pairs, combo, strict=True)))
+            one: list = []
+            stated, outcome = run(mask, dict(zip(pairs, combo, strict=True)), one)
+            k = (finish_of(*outcome), one[0].key)
+            if k in merged:
+                merged[k].add(one[0])
+            else:
+                merged[k] = MergedTrace(one[0])
+            walked.append(order.setdefault(k, len(order)))
             signatures[frozenset(stated)] = outcome
             if track:
                 w = weights[outcome]
@@ -1539,6 +1787,7 @@ def enumerate_division_scenarios(
                 w[1] += math.prod(shares[1][mask][i][m - 1] for i, m in enumerate(combo))
             first.setdefault(outcome, combo)
             regions[outcome].add(combo)
+        gathered[mask] = (merged, order, walked)
         if len(first) == 1:  # the decisions vary, but never the outcome
             (seeding, open_groups) = next(iter(first))
             if track:
@@ -1705,16 +1954,27 @@ def enumerate_division_scenarios(
     if not exact:
         return scenarios
 
-    def finish_of(seeding, open_groups) -> tuple:
-        """The finish an outcome gives (its seeding and the ties left open), as a hashable key."""
-        return tuple(seeding), tuple((step, tuple(g)) for step, g in open_groups or ())
-
     finish_masks: dict[tuple, set[int]] = defaultdict(set)
     for mask, outs in outcomes.items():
         for out in outs:
             finish_masks[finish_of(out[2], out[1])].add(mask)
+    # The ways each finish's card lists (any one is enough), to state each explanation's conditions from.
+    ways: dict[tuple, list] = defaultdict(list)
+    for sc in scenarios:
+        listed = sc["alternatives"] or ([sc["conditions_atom"]] if sc["conditions_atom"] else [sc["game_winners"]])
+        ways[finish_of(sc["seeding"], sc["open_groups"])].extend(listed)
     explained = _finish_explanations(
-        teams, completed, remaining, finish_masks, playoff_seeds, base_margin_default, pa_win
+        teams,
+        completed,
+        remaining,
+        finish_masks,
+        table,
+        finish_of,
+        ways,
+        gathered,
+        playoff_seeds,
+        base_margin_default,
+        pa_win,
     )
     for sc in scenarios:
         sc["explanation"] = explained.get(finish_of(sc["seeding"], sc["open_groups"]), [])
