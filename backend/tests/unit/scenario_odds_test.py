@@ -24,6 +24,7 @@ def _finishes(scenarios):
 
 
 def _cases():
+    """Every 2025 region with one and two region games left."""
     for (clazz, region), fixture in sorted(REGION_RESULTS_2025.items()):
         for left in (1, 2):
             if len(fixture["games"]) > left:

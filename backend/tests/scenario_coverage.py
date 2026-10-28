@@ -49,6 +49,7 @@ class CoverageReport:
         pairs = [(g.a, g.b) for g in remaining]
 
         def result(mask, margins):
+            """One checked outcome in words: each remaining game's winner, loser and margin."""
             parts = []
             for i, (a, b) in enumerate(pairs):
                 w, l = (a, b) if mask >> i & 1 else (b, a)
@@ -64,6 +65,7 @@ class CoverageReport:
 
 
 def _label(scenario: dict) -> str:
+    """A scenario's label as the site shows it: its number and sub-label ("3b")."""
     return f"{scenario['scenario_num']}{scenario.get('sub_label') or ''}"
 
 
@@ -264,6 +266,7 @@ def team_path_problems(
             report.checked += 1
 
             def can_hold(c) -> bool:
+                """True when condition *c* holds for this outcome: a tiebreaker decision the resolver made, a place the team can take within its tie, or a game result met by these winners and margins."""
                 if isinstance(c, TiebreakDecision):
                     return c in decisions
                 if isinstance(c, TiebreakPlace):

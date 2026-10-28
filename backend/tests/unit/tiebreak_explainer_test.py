@@ -269,14 +269,17 @@ class TestFinishedRegionTiebreaks:
     TEAMS = ["A", "B", "C", "D"]
 
     def test_served_when_finished_and_in_the_tables_order(self):
+        """With every game played, each tie is explained, in the standings' order."""
         out = finished_region_tiebreaks(self.TEAMS, self.GAMES, [], ["A", "B", "C", "D"])
         assert [t.teams for t in out] == [["A", "B"], ["C", "D"]]
         assert out[0].steps == ["Head-to-head: A beat B 21-14. A finishes 1st; B finishes 2nd."]
 
     def test_not_while_games_remain(self):
+        """Nothing while a region game is left."""
         assert finished_region_tiebreaks(self.TEAMS, self.GAMES, [RemainingGame("A", "B")], self.TEAMS) is None
 
     def test_not_before_every_team_has_played(self):
+        """Nothing while a team hasn't played or no games are in."""
         assert finished_region_tiebreaks([*self.TEAMS, "E"], self.GAMES, [], [*self.TEAMS, "E"]) is None
         assert finished_region_tiebreaks(self.TEAMS, [], [], self.TEAMS) is None
 
@@ -285,6 +288,7 @@ class TestFinishedRegionTiebreaks:
         assert finished_region_tiebreaks(self.TEAMS, self.GAMES, [], ["B", "A", "C", "D"]) is None
 
     def test_coin_flip_teams_may_be_shown_in_either_order(self):
+        """Teams a coin flip orders are reported as a coin flip, whichever order the table shows them in."""
         games = [
             _game("A", "C", 14, 7),
             _game("B", "C", 14, 7),

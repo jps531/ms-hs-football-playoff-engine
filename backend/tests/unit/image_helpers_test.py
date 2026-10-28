@@ -411,3 +411,31 @@ class TestSniffImage:
 
         asyncio.run(save_and_upload(file, upload_fn))
         assert seen["path"].endswith(".png")
+
+
+class TestCheckUpload:
+    """check_upload: refuse a file before anything is stored, and leave a good one readable."""
+
+    @staticmethod
+    def _file(contents: bytes, content_type: str = "image/png") -> UploadFile:
+        """An uploaded file with *contents*."""
+        from starlette.datastructures import Headers
+
+        return UploadFile(io.BytesIO(contents), filename="x.png", headers=Headers({"content-type": content_type}))
+
+    def test_a_real_image_passes_and_can_be_read_again(self):
+        """After the check the file reads from the start, so the upload gets every byte."""
+        from backend.helpers.image_helpers import check_upload
+
+        f = self._file(PNG)
+        asyncio.run(check_upload(f))
+        assert asyncio.run(f.read()) == PNG
+
+    @pytest.mark.parametrize(("contents", "content_type"), [(b"<html></html>", "image/png"), (PNG, "text/html")])
+    def test_a_disguised_or_mistyped_file_is_refused(self, contents, content_type):
+        """The bytes and the declared type both have to be an allowed image."""
+        from backend.helpers.image_helpers import check_upload
+
+        with pytest.raises(HTTPException) as err:
+            asyncio.run(check_upload(self._file(contents, content_type)))
+        assert err.value.status_code == 422

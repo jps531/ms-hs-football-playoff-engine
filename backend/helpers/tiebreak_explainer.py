@@ -187,6 +187,7 @@ def _results_vs(step: TiebreakStep, region: _Region):
     """Step 2's wording for one outside group: who won, lost, tied or didn't play."""
 
     def describe(shown, og, i):
+        """How each team in *shown* did against outside group *og* (the step's *i*-th): who won, tied, lost or didn't play them."""
         if len(og) == 1:
             past = {2: "won", 1: "tied", 0: "lost", None: "didn't play them"}
             now = {2: "win", 1: "tie", 0: "lose", None: "don't play them"}
@@ -216,6 +217,7 @@ def _pd_vs(step: TiebreakStep):
     """Step 4's wording for one outside group: each team's capped point differential."""
 
     def describe(shown, _og, i):
+        """Each team in *shown*'s capped point differential against the step's *i*-th outside group, best first."""
         return ", ".join(
             f"{t} {_signed(step.values[t][i])}" if step.values[t][i] is not None else f"{t} didn't play them"
             for t in sorted(shown, key=lambda t: _key(step.values[t][i]), reverse=True)

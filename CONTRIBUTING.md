@@ -55,15 +55,17 @@ and `web_helpers.py`. The Prefect pipelines and the API (`backend/api/`), which
 need a live database or Prefect, are left out (`[tool.coverage]`). For a
 browsable report: `uv run pytest --cov-report=html`, then open `htmlcov/index.html`.
 
-**Docstrings.** To check that public functions and modules have them:
+**Docstrings.** Every module, class and function in `backend/` has one, tests and
+nested helpers included. To check (`-v 3` lists anything missing):
 
 ```
-uv run docstr-coverage backend -e "backend/prefect/|backend/tests" --skip-magic --skip-init
+uv run docstr-coverage backend --skip-magic --skip-init
 ```
 
-That leaves out the pipelines and the tests and skips magic methods and
-`__init__` (docstr-coverage doesn't read `pyproject.toml`, so the options go on
-the command line). It prints the current coverage and what's missing.
+That skips magic methods and `__init__` (docstr-coverage doesn't read
+`pyproject.toml`, so the options go on the command line). To leave a folder out,
+`-e` takes a pattern matched against the full path from its start, so it needs a
+leading `.*`: `-e ".*/(prefect|tests)/.*"` checks only the API and helpers.
 
 ## Things that must change together
 

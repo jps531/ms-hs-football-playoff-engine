@@ -87,6 +87,7 @@ OUTCOME_TEAMS = [
 # Complete scenarios: margins and a coin flip (Stringer), OR groups with a tiebreaker decision and a
 # tie left open, one that straddles the playoff line, and shared conditions said once.
 def _win(w, l, lo=1, hi=None):
+    """A stored game-result condition: *w* beats *l* by *lo* to *hi* (no upper bound when None)."""
     return {"type": "game_result", "winner": w, "loser": l, "min_margin": lo, "max_margin": hi}
 
 
@@ -135,6 +136,7 @@ FEEDERS = [
 
 
 def _result(winner, loser, w, l):
+    """A played game in the bracket layout: its winner, loser and score."""
     return {"result": {"winner": {"school": winner}, "loser": {"school": loser}, "winner_score": w, "loser_score": l}}
 
 

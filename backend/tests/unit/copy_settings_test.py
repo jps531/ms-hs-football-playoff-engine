@@ -41,6 +41,7 @@ def _words(text: str) -> str:
 
 
 def _count(pattern: str, text: str) -> int:
+    """How many times *pattern* matches *text*'s words."""
     return len(re.findall(pattern, _words(text)))
 
 
@@ -111,9 +112,11 @@ def test_the_feedback_forms_limits_are_the_apis():
     js = (HTML / "static" / "js" / "feedback.js").read_text()
 
     def limit(name: str) -> int:
+        """The limit feedback.js exports as *name*."""
         return int(re.search(rf"export const {name} = (\d+);", js).group(1))
 
     def api(model, field: str) -> int:
+        """The API model's max_length for *field*."""
         return next(m.max_length for m in model.model_fields[field].metadata if hasattr(m, "max_length"))
 
     assert limit("SUBJECT_MAX") == api(SubmitFeedbackRequest, "subject")

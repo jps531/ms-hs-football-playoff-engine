@@ -36,6 +36,7 @@ from backend.prefect.share_assets_pipeline import build_share_assets
 
 
 def _team(name, p_playoffs, p1=0.0, weighted=True, region_wins=3, region_losses=1):
+    """A team's standings entry with these odds (its Projected twins zero when not *weighted*)."""
     w = (lambda v: v) if weighted else (lambda v: 0.0)
     return {
         "school": name,
@@ -100,11 +101,13 @@ def test_provenance_says_what_the_page_says():
 
 
 def test_odds_mode_is_projected_only_when_weighted_odds_exist():
+    """Cards say Projected only when the teams have Elo-weighted odds; otherwise Toss-up."""
     assert odds_mode(TEAMS) == "projected"
     assert odds_mode([_team("A", 0.5, weighted=False)]) == "tossup"
 
 
 def test_description_keeps_the_headline_and_cuts_long_ones_at_a_word():
+    """A short headline is the description as is; a long one is cut at a word, within 155 characters, with an ellipsis."""
     short = "Raleigh clinches the region with a win over Seminary."
     assert description(short) == short
     long = "Raleigh clinches the region with a win over Seminary, " * 5
@@ -114,6 +117,7 @@ def test_description_keeps_the_headline_and_cuts_long_ones_at_a_word():
 
 
 def test_meta_tags_escape_and_carry_every_preview_tag():
+    """The title, description and URLs are escaped, and every tag link previews read is there."""
     tags = meta_tags(
         'Region 6-3A "race" & more', "D'Iberville <wins>", "https://x/og.png?v=1&a=2", "https://x/standings/3a/6"
     )
@@ -131,6 +135,7 @@ def test_meta_tags_escape_and_carry_every_preview_tag():
 
 
 def test_headline_wraps_to_at_most_three_lines():
+    """A long headline wraps to three lines that fit the card, the last ending in an ellipsis; a short one stays one line."""
     draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
     font = _inter(34, 600)
     lines = wrap(draw, "word " * 200, font, 1072, 3)
@@ -140,6 +145,7 @@ def test_headline_wraps_to_at_most_three_lines():
 
 
 def test_cards_render_at_link_preview_size():
+    """Region, class and site cards render at the link-preview size, even with no headline or teams."""
     region = render_region_card(
         3, 6, {"headline": "Raleigh has it won.", "teams": TEAMS}, "Through Week 8 · Oct 9 · Projected", "projected"
     )
@@ -222,6 +228,7 @@ def test_slugs_match_the_site():
 
 
 def test_team_status_matches_the_page_badges():
+    """A team card's status is the page's badge: clinched (with its seed when locked), eliminated, or none; then the playoff run."""
     locked = _team("Raleigh", 1.0, 1.0)
     assert team_status(locked, 3) == ("clinched", "Clinched #1")
     assert team_status({**_team("Magee", 0.4), "eliminated": True}, 3) == ("eliminated", "Eliminated")
@@ -241,6 +248,7 @@ def test_team_status_matches_the_page_badges():
 
 
 def test_team_description_states_its_numbers():
+    """A team's description gives its record, the odds mode, and the odds that apply (no "0% to win the region"; none once it's out)."""
     racing = _with_bracket(_team("Raleigh", 0.997, 0.39), second_round=0.6, champion=0.04)
     assert team_description(racing, 3, 6, "projected") == (
         "Raleigh (6–2, 3–1 in Region 6-3A), Projected odds: 39% to win the region, >99% to make the playoffs, 4% to win the state championship."
@@ -260,6 +268,7 @@ def test_team_description_states_its_numbers():
 
 
 def test_team_card_renders_with_and_without_a_playoff_path():
+    """A team card renders at preview size for both bracket shapes and with a long school name."""
     team = _with_bracket(_team("Jefferson Davis County Attendance Center", 0.6, 0.1), second_round=0.3, champion=0.01)
     for clazz in (3, 6):  # 5A-7A have no second round
         assert render_team_card(clazz, 6, team, "Through Week 8 · Oct 9 · Projected", "projected").size == (
@@ -270,6 +279,7 @@ def test_team_card_renders_with_and_without_a_playoff_path():
 
 
 def test_team_files_for_teams_no_longer_in_a_region_are_removed(tmp_path):
+    """Writing a region's team files removes one for a team no longer there and writes each current team's card and tags."""
     api = {
         "/seasons": [{"season": 2026}],
         "/standings/3?season=2026": {"as_of_date": "2026-10-09", "regions": [{"region": 6, "teams": TEAMS}]},
@@ -293,10 +303,12 @@ def test_team_files_for_teams_no_longer_in_a_region_are_removed(tmp_path):
 
 
 def _occ(team, p, locked=False):
+    """A bracket side's occupant: *team*, its chance of being there, and whether it's locked in."""
     return {"team": team, "p_reach": p, "p_reach_weighted": None, "is_locked": locked}
 
 
 def _mu(a, b, p, host_a):
+    """A bracket matchup: *a* vs *b*, its chance, and *a*'s chance of hosting."""
     return {
         "team_a": a,
         "team_b": b,
@@ -361,6 +373,7 @@ def test_team_road_adds_both_sides_and_finds_the_likeliest_opponent():
 
 
 def test_team_bracket_description_names_the_road():
+    """A team's bracket description names its likeliest opponent in each round and its title chance."""
     road = team_road(GAMES, "Raleigh", "tossup")
     assert team_bracket_description("Raleigh", road, 0.04, "tossup") == (
         "Raleigh’s likeliest opponents (Toss-up): First Round vs Tylertown, Second Round vs Union; 4% to win the state championship."
@@ -368,12 +381,14 @@ def test_team_bracket_description_names_the_road():
 
 
 def _bracket_team(name, semis, final, champ, playoffs=1.0):
+    """A team with these semifinal, final and championship odds (both modes)."""
     t = _team(name, playoffs)
     odds = {"second_round": 0.8, "quarterfinals": 0.5, "semifinals": semis, "finals": final, "champion": champ}
     return {**t, "bracket_odds": {**odds, **{f"{k}_weighted": v for k, v in odds.items()}}}
 
 
 def test_bracket_favorites_and_description():
+    """The bracket's favorites are the likeliest champions (ties broken by the final, then the semifinal); the description follows the season to its champion."""
     teams = [
         _bracket_team("Magee", 0.3, 0.15, 0.05),
         _bracket_team("Raleigh", 0.4, 0.2, 0.12),
@@ -391,6 +406,7 @@ def test_bracket_favorites_and_description():
 
 
 def test_bracket_cards_render():
+    """The class bracket card and a team's bracket card render at preview size."""
     teams = [_bracket_team(n, 0.3, 0.15, 0.05) for n in ("Raleigh", "Magee", "Seminary Attendance Center Long Name")]
     regions = {t["school"]: 6 for t in teams}
     assert render_bracket_card(3, teams, regions, "x", "projected").size == (WIDTH, HEIGHT)
@@ -399,6 +415,7 @@ def test_bracket_cards_render():
 
 
 def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
+    """The pipeline writes a bracket card and tags for each team with a road, removes stale ones, and writes the bracket page."""
     teams = [_bracket_team("Raleigh", 0.4, 0.2, 0.12), _bracket_team("Union", 0.3, 0.1, 0.05)]
     api = {
         "/seasons": [{"season": 2026}],

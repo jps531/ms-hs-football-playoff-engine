@@ -194,3 +194,140 @@ def test_prefect_gate_refuses_a_moderator_bearer(monkeypatch):
     with pytest.raises(HTTPException) as err:
         asyncio.run(auth.get_owner_via_cookie_or_bearer(_cookie_request(None), creds))
     assert err.value.status_code == 403
+
+
+# ------------------------------------------------------------------ users and roles
+# get_current_user turns a valid Auth0 token into our user (creating the row on a first sign-in),
+# and the require_* dependencies gate every moderator and owner route on that user's role.
+
+
+class _FakeDB:
+    """Stands in for backend.api.db.get_conn: answers the users lookup, records what's run."""
+
+    def __init__(self, row):
+        self.row = row  # (id, role, is_active) for the sub, or None for a first sign-in
+        self.statements: list[tuple[str, tuple]] = []
+
+    def get_conn(self):
+        """An async context manager yielding a connection whose execute() answers from self.row."""
+        db = self
+
+        class _Result:
+            """A query's result: the one row it returns."""
+            def __init__(self, row):
+                self._row = row
+
+            async def fetchone(self):
+                """The one row the query returns."""
+                return self._row
+
+        class _Conn:
+            """Answers the users lookup from the stored row and an insert with a new base user."""
+            async def execute(self, sql, params):
+                """Record the statement; a lookup returns the stored row, an insert the new one."""
+                db.statements.append((sql, params))
+                return _Result(db.row if "SELECT" in sql else (7, "user", True))
+
+        class _Ctx:
+            """``async with get_conn() as conn``."""
+            async def __aenter__(self):
+                return _Conn()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _Ctx()
+
+
+def _signed_in(monkeypatch, row, userinfo=None):
+    """Patch token validation to accept any token as ``auth0|abc`` and the database to *row*."""
+
+    async def decode(token):
+        """Any token is valid for auth0|abc."""
+        return {"sub": "auth0|abc"}
+
+    db = _FakeDB(row)
+    monkeypatch.setattr(auth, "_decode_auth0_token", decode)
+    monkeypatch.setattr("backend.api.db.get_conn", db.get_conn)
+    monkeypatch.setattr(auth, "_get_userinfo", lambda token: userinfo or {})
+    return db
+
+
+def test_a_known_active_user_gets_their_id_and_role(monkeypatch):
+    """The token's claims, plus our row's id and role."""
+    _signed_in(monkeypatch, (3, "moderator", True))
+    user = asyncio.run(auth.get_current_user("tok"))
+    assert (user["sub"], user["db_id"], user["role"]) == ("auth0|abc", 3, "moderator")
+
+
+def test_a_deactivated_account_is_refused(monkeypatch):
+    """A valid token for a deactivated account is a 401, whatever its role."""
+    _signed_in(monkeypatch, (3, "owner", False))
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(auth.get_current_user("tok"))
+    assert err.value.status_code == 401
+
+
+@pytest.mark.parametrize(("verified", "stored"), [(True, "a@b.c"), (False, "")])
+def test_a_first_sign_in_creates_a_base_user_keeping_only_a_verified_email(monkeypatch, verified, stored):
+    """No row yet: one is created as a plain user (never a moderator), with the email only if verified."""
+    db = _signed_in(monkeypatch, None, {"email": "a@b.c", "email_verified": verified, "name": "Pat"})
+    user = asyncio.run(auth.get_current_user("tok"))
+    assert (user["db_id"], user["role"]) == (7, "user")
+    sql, params = db.statements[-1]
+    assert sql.strip().startswith("INSERT INTO users") and "role" not in sql.split("VALUES")[0]
+    assert params == ("auth0|abc", stored, "Pat")
+
+
+def test_an_invalid_token_never_reaches_the_database(monkeypatch):
+    """A token that fails validation is a 401 before any lookup."""
+
+    async def reject(token):
+        """Every token fails validation."""
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    db = _FakeDB((1, "owner", True))
+    monkeypatch.setattr(auth, "_decode_auth0_token", reject)
+    monkeypatch.setattr("backend.api.db.get_conn", db.get_conn)
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(auth.get_current_user("tok"))
+    assert err.value.status_code == 401 and db.statements == []
+
+
+@pytest.mark.parametrize(
+    ("role", "moderator_ok", "owner_ok"),
+    [("user", False, False), ("moderator", True, False), ("owner", True, True), (None, False, False)],
+)
+def test_role_checks_let_through_only_the_roles_they_name(role, moderator_ok, owner_ok):
+    """Moderator routes take moderators and the owner; owner routes only the owner; anything else is a 403."""
+    payload = {"db_id": 1, "role": role}
+    assert auth.require_user(payload) is payload
+    for check, ok in ((auth.require_moderator, moderator_ok), (auth.require_owner, owner_ok)):
+        if ok:
+            assert check(payload) is payload
+        else:
+            with pytest.raises(HTTPException) as err:
+                check(payload)
+            assert err.value.status_code == 403
+
+
+def test_an_optional_user_is_none_without_a_token_or_with_a_bad_one(monkeypatch):
+    """Public routes that note who's signed in never fail for an anonymous or invalid caller."""
+    assert asyncio.run(auth.get_optional_user(None)) is None
+
+    async def reject(token):
+        """Every token fails."""
+        raise HTTPException(status_code=401)
+
+    monkeypatch.setattr(auth, "get_current_user", reject)
+    creds = auth.HTTPAuthorizationCredentials(scheme="Bearer", credentials="bad")
+    assert asyncio.run(auth.get_optional_user(creds)) is None
+    assert auth.optional_user_id(None) is None and auth.optional_user_id({"db_id": 4}) == 4
+
+
+@pytest.mark.parametrize(("row", "expected"), [(("owner", True), "owner"), (("owner", False), None), (None, None)])
+def test_the_current_role_is_none_for_a_missing_or_deactivated_account(monkeypatch, row, expected):
+    """_current_role (the Prefect gate's re-check) reads the users table as it is now."""
+
+    monkeypatch.setattr("backend.api.db.get_conn", _FakeDB(row).get_conn)
+    assert asyncio.run(auth._current_role(1)) == expected

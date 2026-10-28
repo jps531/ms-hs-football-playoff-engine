@@ -39,16 +39,19 @@ CAP = " (a margin over 12 counts as 12)"
 @pytest.fixture(scope="module")
 def scenarios():
     # Through a snapshot and back, as the API reads them.
+    """The region's complete scenarios, through a snapshot and back as the API reads them."""
     built = enumerate_division_scenarios(TEAMS, COMPLETED, REMAINING)
     return deserialize_complete_scenarios(serialize_complete_scenarios(built))
 
 
 @pytest.fixture(scope="module")
 def atoms(scenarios):
+    """Each team's seed conditions, read off the scenarios."""
     return atoms_from_complete_scenarios(scenarios)
 
 
 def test_five_way_tie_states_every_teams_places(scenarios):
+    """The scenario where all five finish 2-2 states places for every team."""
     tie = next(s for s in scenarios if s.get("place_terms"))
     assert set(tie["game_winners"]) == {("Sebastopol", "Ethel"), ("McAdams", "Nanih Waiya")}
     assert set(tie["place_terms"]) == set(TEAMS)
@@ -62,6 +65,7 @@ def test_paths_are_exact(atoms):
 
 
 def _cards(atoms, team, seed):
+    """The rendered conditions for *team* finishing *seed* that turn on a margin."""
     return sorted(
         _render_atom(a)
         for a in atoms[team][seed]
@@ -70,6 +74,7 @@ def _cards(atoms, team, seed):
 
 
 def test_cards_read_as_margins(atoms):
+    """Each team's margin-dependent places read as margin ranges and comparisons between the two margins."""
     both = "Sebastopol beats Ethel AND McAdams beats Nanih Waiya"
     assert _cards(atoms, "Sebastopol", 5) == [f"{both} AND McAdams wins by at least 3 more points than Sebastopol{CAP}"]
     assert _cards(atoms, "Sebastopol", 3) == ["Sebastopol beats Ethel by 11 or more AND McAdams beats Nanih Waiya"]
@@ -108,6 +113,7 @@ def test_pieces_are_exact_and_limited():
     ],
 )
 def test_comparison_wording(op, threshold, text):
+    """A comparison between the two margins reads in words for each operator and threshold."""
     atom = [GameResult("Sebastopol", "Ethel"), GameResult("McAdams", "Nanih Waiya")]
     cond = MarginCondition(
         add=(("McAdams", "Nanih Waiya"),), sub=(("Ethel", "Sebastopol"),), op=op, threshold=threshold

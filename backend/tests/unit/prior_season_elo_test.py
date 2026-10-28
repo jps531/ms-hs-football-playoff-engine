@@ -51,5 +51,6 @@ def test_each_school_gets_its_latest_dated_rating(monkeypatch):
 
 
 def test_no_prior_season_means_no_carryover(monkeypatch):
+    """With no ratings from the season before, no team carries a rating over."""
     result, _, _ = _fetch(monkeypatch, [])
     assert result == {}

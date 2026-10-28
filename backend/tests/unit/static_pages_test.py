@@ -784,10 +784,12 @@ def _cond(w, l):
 
 
 def _seed(value, groups):
+    """A team path to seed *value*, under *groups* of conditions."""
     return {"outcome": {"type": "seed", "value": value}, "conditions": groups}
 
 
 def _playoffs(groups):
+    """A team path to the playoffs (any seed), under *groups* of conditions."""
     return {"outcome": {"type": "playoffs"}, "conditions": groups}
 
 
@@ -805,6 +807,7 @@ def _odds(p1, p2, p3, p4, w=None):
 
 
 def test_outcome_cards_match_scenarios_js_for_the_2_7a_shape():
+    """Mirrors scenarios.test.mjs: no card for an unconditional #1, then the playoff and seeding cards in order."""
     from backend.helpers.static_pages import outcome_cards
 
     teams = [
@@ -834,6 +837,7 @@ def test_outcome_cards_match_scenarios_js_for_the_2_7a_shape():
 
 
 def test_outcome_cards_title_elimination_and_order_match_scenarios_js():
+    """Mirrors scenarios.test.mjs: title cards, an elimination card when it's the shorter way to say it, and title cards ordered by the mode's chance."""
     from backend.helpers.static_pages import outcome_cards
 
     mize = [{"school": "Mize", "odds": _odds(0.25, 0, 0, 0),
@@ -877,6 +881,7 @@ STRINGER = {
 
 
 def test_complete_scenario_cards_match_scenarios_js():
+    """Mirrors scenarios.test.mjs: numbered by position, seeds in order, who's out, the conditions with the coin flip, and finishes merged."""
     from backend.helpers.static_pages import complete_scenario_cards
 
     [card] = complete_scenario_cards([STRINGER])
@@ -902,6 +907,7 @@ def test_complete_scenario_cards_match_scenarios_js():
                                     "min_margin": 1, "max_margin": None}]]  # fmt: skip
 
     def sc(num, title, outcomes):
+        """A stored scenario in the older shape: *title* is "W beats L", with its outcomes."""
         w, l = title.split(" beats ")
         return {"scenario_num": num, "title": title, "outcomes": outcomes,
                 "conditions": [{"type": "game_result", "winner": w, "loser": l, "min_margin": 1, "max_margin": None}]}  # fmt: skip
@@ -921,6 +927,7 @@ def test_complete_scenario_cards_match_scenarios_js():
 
 
 def test_margin_text_matches_format_js():
+    """Margin wording matches format.js's marginText: none for any margin, "by 8+", "by exactly 3", ranges."""
     from backend.helpers.static_pages import margin_text
 
     assert margin_text(1, None) == margin_text(None, None) == ""
@@ -938,6 +945,7 @@ def _entry(open_teams, scenarios=True, bubble=True):
 
 
 def test_scenario_region_is_the_featured_one_when_its_title_is_open():
+    """The scenario example is the featured region while its title is open, else its class's most open race, else the most open anywhere."""
     from backend.helpers.static_pages import pick_scenario_region
 
     regions = {(3, 5): _entry(1), (3, 6): _entry(2), (3, 7): _entry(3), (5, 1): _entry(4), (4, 2): _entry(5, False)}
@@ -973,6 +981,7 @@ def _example():
 
 
 def test_front_page_shows_each_scenario_kind_linking_to_its_section():
+    """Each scenario preview shows its kind's cards, in order, linking to the region's scenarios section."""
     from backend.helpers.static_pages import scenario_previews
 
     out = scenario_previews(_example(), {})
@@ -1005,6 +1014,7 @@ def test_front_page_shows_each_scenario_kind_linking_to_its_section():
 
 
 def test_after_the_season_the_examples_say_how_things_stood_going_into_the_final_week():
+    """After the season the previews say they're how things stood going into the final week."""
     from backend.helpers.static_pages import scenario_previews
 
     out = scenario_previews({**_example(), "final": True}, {})
@@ -1017,6 +1027,7 @@ def test_after_the_season_the_examples_say_how_things_stood_going_into_the_final
 
 
 def test_final_week_eve_is_the_day_before_the_last_weeks_first_game():
+    """The final week's eve is the day before that week's first game."""
     from backend.prefect.share_assets_pipeline import final_week_eve
 
     dates = [
@@ -1065,6 +1076,7 @@ INSIGHTS = [
 
 
 def test_insight_cards_match_scenarios_js():
+    """Mirrors scenarios.test.mjs: one card per insight, its conditions as chips, two ways joined by OR."""
     from backend.helpers.static_pages import insight_cards
 
     cards = insight_cards(INSIGHTS)
@@ -1083,6 +1095,7 @@ def _far_out(cards=True, scenarios=False):
 
 
 def test_settled_spot_example_is_a_region_still_far_out():
+    """The settles-a-spot example is a region still too far out for full scenarios, with cards to show."""
     from backend.helpers.static_pages import insight_preview, pick_insight_region
 
     regions = {(3, 6): _far_out(), (3, 7): _far_out(scenarios=True), (4, 1): _far_out(cards=False)}
@@ -1100,6 +1113,7 @@ def test_settled_spot_example_is_a_region_still_far_out():
 
 
 def test_insight_week_eve_is_the_last_with_seven_to_ten_games_left():
+    """The insight example's date is the last past eve with seven to ten region games left."""
     from backend.prefect.share_assets_pipeline import insight_week_eve
 
     dates = [{"date": f"2026-10-{d:02d}", "kind": "games", "week": w} for w, d in ((8, 2), (9, 9), (10, 16), (11, 23))]
@@ -1111,6 +1125,7 @@ def test_insight_week_eve_is_the_last_with_seven_to_ten_games_left():
 
 
 def test_pictures_without_odds_leave_the_odds_mode_out_of_their_provenance():
+    """Previews with odds carry the odds mode in their provenance; those without (complete scenarios, insights) leave it out."""
     from backend.helpers.share_cards import provenance
     from backend.helpers.static_pages import insight_preview, scenario_previews
 
@@ -1161,6 +1176,7 @@ def test_complete_scenario_cards_say_shared_conditions_once():
     from backend.helpers.static_pages import complete_scenario_cards, outcome_scenario_card
 
     def win(w, l, lo=1, hi=None):
+        """A stored game-result condition: *w* beats *l* by *lo* to *hi*."""
         return {"type": "game_result", "winner": w, "loser": l, "min_margin": lo, "max_margin": hi}
 
     [card] = complete_scenario_cards([{
