@@ -126,14 +126,10 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str, cl
                 result = tag
                 game_status = "final"
         else:
-            # No result: determine if the game has happened yet or not
-            if m.group("pfor") and m.group("pagn"):
-                result = "W" if int(m.group("pfor")) > int(m.group("pagn")) else "L"
-                game_status = "final"
-            else:
-                result = None
-                game_status = ""
-
+            # No result means the game hasn't been played: the pattern only matches a score
+            # together with its W/L, so there is no score here either.
+            result = None
+            game_status = ""
             overtime = 0
 
         round_text = m.group("round")

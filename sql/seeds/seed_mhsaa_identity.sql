@@ -2,8 +2,9 @@
 -- from — or not matchable by — the MHSAA school directory pipeline.
 --
 -- Run automatically by the MHSAA School Identity Data Flow after the
--- directory scrape completes.  Safe to re-run (COALESCE(NULLIF(...))
--- leaves already-populated fields untouched).
+-- directory scrape completes.  Safe to re-run: each value is written as given,
+-- replacing what the scrape stored (COALESCE(NULLIF(...)) keeps the stored
+-- value only where the value given here is empty, or Leake's source is).
 
 -- West Bolivar: not present in MHSAA school directory
 UPDATE schools SET

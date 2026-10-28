@@ -213,8 +213,9 @@ _COLOR_HEX_MAP: dict[str, str] = {
     "silver": "#C0C0C0",
 }
 
-# Mascots that must NOT gain a trailing "s" during pluralisation.
-_MASCOT_NO_PLURAL = frozenset({"maroon tide"})
+# Mascots that must NOT gain a trailing "s" during pluralisation: collective nouns the schools
+# use as is (Tupelo's "Golden Wave", not "Golden Waves").
+_MASCOT_NO_PLURAL = frozenset({"maroon tide", "golden wave"})
 
 
 # -------------------------
@@ -677,7 +678,7 @@ def _normalize_mascot(mascot: str) -> str:
     3. Title-case.
     4. Pluralise: append ``"s"`` unless the mascot already ends in ``"s"``
        or its lower-cased form is listed in ``_MASCOT_NO_PLURAL``
-       (e.g. ``"Maroon Tide"`` stays unchanged).
+       (e.g. ``"Maroon Tide"`` and ``"Golden Wave"`` stay unchanged).
     """
     if not mascot:
         return ""
