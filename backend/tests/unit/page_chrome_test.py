@@ -24,7 +24,7 @@ PAGES = {
 COMMON_FOOTER = [
     "Send feedback or report a problem",
     "This website is not associated with the MHSAA or any of its member schools.",
-    "© 2025–2026 Paul Sullivan. All rights reserved.",
+    "© 2025–2026 Paul Sullivan. All rights reserved. · Version",  # then the version (version_test.py)
 ]
 # Only where the site's numbers are shown (the app's pages and About, which explains them): the
 # 404 and moderation pages show no odds or scores, so they leave these out.

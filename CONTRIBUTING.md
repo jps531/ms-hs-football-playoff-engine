@@ -81,6 +81,18 @@ leading `.*`: `-e ".*/(prefect|tests)/.*"` checks only the API and helpers.
 | Anything that changes the odds themselves (Elo, home-field advantage, tiebreakers, simulation counts, bracket or hosting rules) | Bump `MODEL_VERSION` in `backend/prefect/region_scenarios_pipeline.py`, and say in the PR that past seasons need `backfill-historical-snapshots` ([CALIBRATION_DATA.md](docs/architecture/CALIBRATION_DATA.md)). |
 | A setting read from the environment | `.env.example`, the service's `environment:` in `docker-compose.yml`, and the doc for the feature. |
 | A Prefect deployment or its schedule | [PIPELINES.md](docs/operations/PIPELINES.md). |
+| The site's version (`backend/version.py`) | `pyproject.toml` (then `uv lock`), the footer of the four HTML pages, and an entry in [CHANGELOG.md](CHANGELOG.md). `version_test.py` fails until they match. See [Releases](#releases). |
+
+## Releases
+
+The site's version (`VERSION` in `backend/version.py`, shown in every page's footer) is MAJOR.MINOR.PATCH:
+MAJOR for a change in what the site is (a new sport, a redesign), MINOR for a new feature or a change
+in how the numbers are worked out, PATCH for a fix. It is not `MODEL_VERSION`
+(`region_scenarios_pipeline.py`), which marks snapshots computed by a different odds model.
+
+A PR that changes what readers get bumps it, with its CHANGELOG.md entry, in that same PR; a PR that
+changes only docs, tests or tooling doesn't. After it merges, tag the merge commit `vX.Y.Z` (a GitHub
+release with the CHANGELOG entry as its notes).
 
 ## Don't
 
