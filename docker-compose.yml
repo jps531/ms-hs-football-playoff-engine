@@ -82,6 +82,11 @@ services:
       dockerfile: Dockerfile.prefect
     container_name: prefect-worker_${ENVIRONMENT}
     restart: unless-stopped
+    # A flow that runs away is stopped on its own, instead of starving Postgres, the API and nginx
+    # on the same VM (4 GB). The heaviest regular work, a region with five games left, peaks around
+    # 300 MB; swap is capped too, so the limit can't be dodged by swapping the whole VM to a crawl.
+    mem_limit: 2g
+    memswap_limit: 2g
     environment:
       <<: *env-common
       # Share cards: read from the API, written where nginx serves them.

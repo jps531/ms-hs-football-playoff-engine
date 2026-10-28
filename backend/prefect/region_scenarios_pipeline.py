@@ -1699,6 +1699,9 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
 # Stored with the scenarios but not compared when explanations are refreshed: the odds (worked out
 # with each game's win chance, which isn't needed to rebuild the scenarios) and the explanations.
 _NOT_COMPARED = ("p", "p_weighted", "explanation")
+# Fields scenarios no longer carry: older snapshots still store them (always null), so they aren't
+# compared, and a refresh writes the scenarios back without them.
+_RETIRED = ("tiebreaker_groups", "coinflip_groups")
 
 
 def refreshed_scenarios(
@@ -1717,11 +1720,14 @@ def refreshed_scenarios(
 
     def compared(sc: dict) -> dict:
         """A scenario without what a refresh doesn't compare."""
-        return {k: v for k, v in sc.items() if k not in _NOT_COMPARED}
+        return {k: v for k, v in sc.items() if k not in _NOT_COMPARED + _RETIRED}
 
     if [compared(sc) for sc in stored] != [compared(sc) for sc in fresh]:
         return None
-    return [{**old, "explanation": new.get("explanation", [])} for old, new in zip(stored, fresh, strict=True)]
+    return [
+        {**{k: v for k, v in old.items() if k not in _RETIRED}, "explanation": new.get("explanation", [])}
+        for old, new in zip(stored, fresh, strict=True)
+    ]
 
 
 @flow(name="Refresh Scenario Explanations")
@@ -1739,19 +1745,32 @@ def refresh_scenario_explanations(season: int | None = None) -> dict[str, int]:
     if season is None:
         season = date.today().year
     logger = get_run_logger()
+    # Only the snapshots that carry explanations, by key: a season's stored scenarios together run to
+    # gigabytes once parsed (those with many games left list thousands), so each is loaded on its own.
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT class, region, as_of_date, remaining_games, complete_scenarios FROM region_scenarios "
-                "WHERE season = %s ORDER BY as_of_date, class, region",
-                (season,),
+                "SELECT class, region, as_of_date, jsonb_array_length(remaining_games) BETWEEN 1 AND %s "
+                "FROM region_scenarios WHERE season = %s ORDER BY as_of_date, class, region",
+                (FULL_MARGINS_MAX_LEFT, season),
             )
-            rows = cur.fetchall()
+            keys = cur.fetchall()
     counts = {"refreshed": 0, "unchanged": 0, "mismatched": 0, "skipped": 0}
     teams_of: dict[tuple[int, int], list[str]] = {}
-    for clazz, region, as_of, remaining_json, stored in rows:
+    for clazz, region, as_of, explained in keys:
+        if not explained:
+            counts["skipped"] += 1
+            continue
+        with get_database_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT remaining_games, complete_scenarios FROM region_scenarios "
+                    "WHERE season = %s AND class = %s AND region = %s AND as_of_date = %s",
+                    (season, clazz, region, as_of),
+                )
+                remaining_json, stored = cur.fetchone()
         remaining = deserialize_remaining_games(remaining_json or [])
-        if not stored or not 1 <= len(remaining) <= FULL_MARGINS_MAX_LEFT:
+        if not stored:
             counts["skipped"] += 1
             continue
         c, r = int(clazz), int(region)

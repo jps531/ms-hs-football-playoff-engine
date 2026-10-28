@@ -4,7 +4,7 @@ This project is deployed on an AWS Lightsail Ubuntu instance (`mshsfootball.com`
 
 ## One-time instance setup
 
-1. Create a Lightsail instance: **Linux/Unix → OS Only → Ubuntu 22.04 LTS**, General purpose, 4 GB RAM minimum. Assign a static IP immediately after creation (first one is free).
+1. Create a Lightsail instance: **Linux/Unix → OS Only → Ubuntu 22.04 LTS**, General purpose, 4 GB RAM minimum. Assign a static IP immediately after creation (first one is free). The Prefect worker is capped at 2 GB (`mem_limit` in `docker-compose.yml`), so a flow that runs away is stopped on its own rather than starving Postgres, the API and nginx; on a bigger instance it can be raised.
 
 2. Open firewall ports in the Lightsail **Networking** tab: HTTP (80) and HTTPS (443). SSH (22) is open by default.
 

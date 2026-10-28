@@ -109,6 +109,13 @@ def test_prefect_is_reachable_only_through_the_owner_check():
     assert re.search(r"proxy_pass\s+http://api/api/v1/auth/verify-moderator;", check)
 
 
+def test_the_worker_has_a_memory_limit():
+    """A flow that runs out of control is stopped by itself, not with the database and site beside it."""
+    worker = _service("prefect-worker")
+    assert re.search(r"^\s*mem_limit: 2g$", worker, re.M)
+    assert re.search(r"^\s*memswap_limit: 2g$", worker, re.M)
+
+
 def test_app_roles_cannot_alter_the_schema():
     """The API and pipeline roles get row access only; fresh databases create them too."""
     roles = (ROOT / "sql" / "app_roles.sql").read_text()
