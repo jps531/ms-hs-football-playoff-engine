@@ -41,6 +41,15 @@ export function modeLabel(mode) {
 }
 
 /**
+ * The odds mode over a table's odds columns ("Projected odds"), so a table
+ * cropped from the page still says which odds it shows. Screen readers get
+ * the mode from the caption's own words.
+ */
+export function tableMode(mode) {
+  return ODDS_MODES[mode] ? `<span class="table-mode" aria-hidden="true">${modeLabel(mode)} odds</span>` : "";
+}
+
+/**
  * What the reader is looking at. Each segment owns its leading separator so
  * an omitted segment never leaves an orphaned dot.
  *   { label: "Week 9", date: "2025-10-24" }  -> "Through Week 9 · Oct 24"
@@ -196,10 +205,11 @@ export function conditionGroups(groups, teams) {
 
 // -------------------------------------------------------- scenario card
 
-export function scenarioCard({ title, p = null, groups, provenanceHtml = "", team = null, teams }) {
+/** An outcome card; `level` is its heading's level, one below the heading it sits under. */
+export function scenarioCard({ title, p = null, groups, provenanceHtml = "", team = null, teams, level = 4 }) {
   const odds = p == null ? "" : oddsCell(p);
   return `<article class="scenario"${teamColorStyle(team)}>
-    <div class="scenario__head"><h4 class="scenario__title">${esc(title)}\u00a0<span class="scenario__if">IF</span></h4>${odds}</div>
+    <div class="scenario__head"><h${level} class="scenario__title">${esc(title)}\u00a0<span class="scenario__if">IF</span></h${level}>${odds}</div>
     ${provenanceHtml}
     <div class="scenario__body">${conditionGroups(groups, teams)}</div>
   </article>`;
@@ -238,9 +248,10 @@ export function gameCard(game, teams, { focus = null, report = false } = {}) {
  * One complete scenario: its label (and its chance, when given), the seeds it
  * produces (and who misses out), then the results that produce it. `focus`
  * highlights the picked team's line; `provenanceHtml` goes under the head
- * with the chance, so a cropped card still says what it shows.
+ * with the chance, so a cropped card still says what it shows. `level` is
+ * its heading's level, one below the heading it sits under.
  */
-export function outcomeScenarioCard({ label, seeds, out, groups, common = [], why = [] }, teams, { focus = null, p = null, provenanceHtml = "", explainId = null } = {}) {
+export function outcomeScenarioCard({ label, seeds, out, groups, common = [], why = [] }, teams, { focus = null, p = null, provenanceHtml = "", explainId = null, level = 4 } = {}) {
   // A tie left to the tiebreaker is one row over its places: its teams, unordered, and what decides it.
   const seedRows = seeds.map(({ seed, team, teams: tied, note }) => (tied
     ? `<li class="outcome__tie${tied.includes(focus) ? " is-focus" : ""}"><span class="outcome__seed">${esc(seed)}</span>`
@@ -259,9 +270,8 @@ export function outcomeScenarioCard({ label, seeds, out, groups, common = [], wh
   const body = groups.length || common.length
     ? `<p class="outcome__if">IF</p><div class="scenario__body">${alternatives}</div>`
     : "";
-  const head = p == null
-    ? `<h4 class="scenario__title">${esc(label)}</h4>`
-    : `<div class="scenario__head"><h4 class="scenario__title">${esc(label)}</h4>${oddsCell(p)}</div>${provenanceHtml}`;
+  const title = `<h${level} class="scenario__title">${esc(label)}</h${level}>`;
+  const head = p == null ? title : `<div class="scenario__head">${title}${oddsCell(p)}</div>${provenanceHtml}`;
   return `<article class="scenario outcome">
     ${head}
     <ol class="outcome__seeds" aria-label="Seeds">${seedRows.join("")}</ol>

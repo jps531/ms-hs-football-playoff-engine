@@ -410,6 +410,9 @@ button { font: inherit; color: inherit; }
 }
 .provenance--controls .sep { color: var(--text-secondary); }
 .provenance--controls .seg { display: inline-flex; align-items: center; gap: 6px; }
+/* A wrapped segment's dot (app.js markLineStarts). Hidden, not removed: taking it out of the line
+   could let the segment fit back on the line above, where it needs the dot. */
+.provenance--controls .seg.is-line-start > .sep { visibility: hidden; }
 .ctl { display: inline-flex; align-items: center; gap: 4px; }
 .inline-select select {
   appearance: none;
@@ -650,9 +653,17 @@ button { font: inherit; color: inherit; }
 .standings tr.detail .path td, .standings tr.detail .path th { padding: 4px 14px 4px 0; }
 .standings tr.detail .path thead th { text-align: left; }
 
-/* Narrow (or zoomed) viewports keep two odds columns: 1st and Playoffs. */
+/* The odds mode over the odds columns, as part of the table (its caption). */
+.standings caption .table-mode {
+  display: flex; justify-content: flex-end; align-items: center; gap: 4px;
+  font-size: 12px; line-height: 16px; color: var(--text-secondary);
+}
+
+/* Narrow (or zoomed) viewports keep two odds columns: 1st and Playoffs; a line under the table says where the rest are. */
+.table-hint { display: none; margin-top: 8px; font-size: 13px; line-height: 18px; }
 @media (max-width: 40em) {
   .standings .col-mid, .standings .col-overall { display: none; }
+  .table-hint { display: block; }
 }
 @media (max-width: 22em) {
   .standings .col-pos { display: none; }
@@ -1179,8 +1190,6 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 .bgame__detail[hidden] { display: none; }
 .bgame__heading { font-size: 14px; line-height: 20px; font-weight: 600; }
 .bgame__count, .bgame__note { font-size: 13px; line-height: 18px; }
-.bgame__sides { display: grid; gap: 4px; }
-.bgame__sides-vs { font-size: 12px; }
 
 .opp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .opp-list li {
@@ -1237,7 +1246,7 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 }
 .tab-bar__item svg { width: 24px; height: 24px; }
 .tab-bar__item:hover { color: var(--text-primary); }
-.tab-bar__item[aria-current="page"] { color: var(--accent-identity); }
+.tab-bar__item[aria-current="page"] { color: var(--link); } /* --accent-identity is too light for 12px text on white */
 .tab-bar__item:focus-visible { outline-offset: -4px; }
 body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 
@@ -1278,6 +1287,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   cursor: pointer;
 }
 .game-card__report:hover { color: var(--link); }
+@media (pointer: coarse) { .game-card__report { min-height: 44px; } } /* a full-size target for a finger */
 
 .fb-page { max-width: 36rem; }
 .fb-form { display: grid; gap: 18px; }
@@ -1313,6 +1323,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .fb-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 .fb-status { min-height: 20px; font-size: 14px; line-height: 20px; }
 .fb-status.is-error { color: var(--state-eliminated); font-weight: 600; }
+.fb-form [aria-invalid="true"] { border-color: var(--state-eliminated); }
 .fb-actions { display: flex; }
 .fb-submit {
   min-height: 44px; padding: 0 20px;
@@ -1326,6 +1337,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .fb-sent { display: grid; gap: 10px; justify-items: start; padding-block: 8px; }
 .fb-sent__title { font-size: 18px; font-weight: 700; }
 .dark .fb-status.is-error { color: #F87171; } /* the badge red is too dark to read as text here */
+.dark .fb-form [aria-invalid="true"] { border-color: #F87171; }
 /* Cloudflare Turnstile: invisible unless Cloudflare asks for a click */
 .fb-turnstile:empty { display: none; }
 
@@ -1470,6 +1482,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media (max-width: 959px) {
   .landing-helmet { max-width: 280px; margin-inline: auto; }
   .landing-intro > .landing-kicker, .landing-intro > .landing-title { text-align: center; }
+}
+/* Phones: a smaller helmet, so the class buttons under it are on the first screen. */
+@media (max-width: 599px) {
+  .landing-helmet { max-width: 168px; }
 }
 .landing-heading { font-size: 22px; line-height: 26px; letter-spacing: 0.02em; }
 .landing-subheading { font-size: 17px; line-height: 22px; letter-spacing: 0.02em; }

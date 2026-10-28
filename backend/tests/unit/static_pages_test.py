@@ -1207,3 +1207,50 @@ def test_why_blocks_and_explanation_match_scenarios_js():
     assert "<li>s2 &amp; &lt;b&gt;</li>" in html and '<p class="why-tie__when">If Smithville beats Biggersville' in html
     [plain] = complete_scenario_cards([{**sc, "explanation": []}])
     assert "outcome__why" not in outcome_scenario_card(plain, {})
+
+
+class TestReadability:
+    """Headings, captions and labels the pre-rendered pages share with the app (FRONTEND.md)."""
+
+    def test_region_table_says_its_odds_mode_and_where_the_other_seeds_are(self):
+        """The caption shows the mode over the odds columns; narrow screens drop 2nd–4th (``col-mid``) and say
+        where they went, as app.js's ``standingsTable`` does."""
+        for mode, name in (("projected", "Projected"), ("tossup", "Toss-up")):
+            body = region_body(3, 6, _region(), STAMP, mode, {})
+            caption = re.search(r"<caption>(.*?)</caption>", body).group(1)
+            assert f'<span class="mode mode--{mode}">' in caption and f"{name}</span> odds" in caption
+        body = region_body(3, 6, _region(), STAMP, "projected", {})
+        head = re.search(r"<thead>(.*?)</thead>", body).group(1)
+        assert head.count("col-odds col-mid") == 3
+        row = re.search(r"<tbody><tr.*?</tr>", body).group(0)
+        assert row.count("col-odds col-mid") == 3
+        assert '<p class="table-hint muted">Select a team to see its odds of every seed.</p>' in body
+
+    def test_class_tables_say_their_odds_mode(self):
+        """Each region block's table carries the mode, like the region page's."""
+        body = class_body(3, {"regions": [{"region": 6, "teams": TEAMS}]}, STAMP, "tossup", {})
+        assert "standings and toss-up odds</span>" in body
+        assert '<span class="mode mode--tossup">' in body
+
+    def test_bracket_round_titles_sit_under_the_page_title(self):
+        """Rounds are h2s under the page's h1, so the heading outline doesn't skip a level."""
+        html = bracket_body(3, BRACKET, BRACKET_CTX, STAMP)
+        assert '<h2 class="tcol__title">First Round</h2>' in html
+        assert '<h3 class="tcol__title">' not in html
+
+    def test_scenario_cards_take_their_heading_level(self):
+        """A card's heading is one below the heading it sits under (components.js's ``level``)."""
+        card = {"title": "Raleigh clinches the region", "team": "Raleigh", "groups": [], "p": None}
+        assert '<h4 class="scenario__title">' in static_pages_module.scenario_card(card, {})
+        assert '<h3 class="scenario__title">' in static_pages_module.scenario_card(card, {}, level=3)
+        outcome = {"label": "Scenario 1", "seeds": [], "out": [], "groups": []}
+        assert '<h3 class="scenario__title">Scenario 1</h3>' in static_pages_module.outcome_scenario_card(
+            outcome, {}, level=3
+        )
+
+    def test_every_sheet_side_says_where_it_comes_from(self):
+        """Later rounds name their feeders over the list too, now that the sheet has no separate summary of
+        the sides (app.js's ``bracketSide``)."""
+        side = _side([(1, 1), (2, 4)], [("Raleigh", 0.6, False), ("Mize", 0.4, False)])
+        html = static_pages_module._sheet_side({"side_a": side}, "a", None, BRACKET_CTX)
+        assert '<p class="bside__label">Region 1 #1 Seed or Region 2 #4 Seed</p>' in html

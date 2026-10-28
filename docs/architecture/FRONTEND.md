@@ -52,6 +52,17 @@ the URL. The pages take `season`, `week` (a past week's snapshot; omitted means
 the latest), `odds=tossup` (the default is Projected, the Elo-weighted odds) and
 `team` (opens that team's playoff path and shows only its scenarios).
 
+## Keyboard and screen readers
+
+Rendering replaces `<main>`, and with it whatever had focus, so `app.js` puts
+focus back itself (`settleFocus`). A change to how the page is shown (a
+dropdown, a team row) returns focus to that control and, for the dropdowns,
+announces what's now on screen through `#app-status` ("Region 1-7A, Week 7,
+Oct 9, Toss-up"). Moving to another page, or Back and Forward, focuses the new
+page's `<h1>`. The game, explanation and feedback sheets are modal `<dialog>`s
+that return focus to the control that opened them. Headings don't skip
+levels: scenario cards take a `level` one below the heading they sit under.
+
 ## The JavaScript modules
 
 `static/js/`, as ES modules. Most are pure, with no DOM access, so the tests

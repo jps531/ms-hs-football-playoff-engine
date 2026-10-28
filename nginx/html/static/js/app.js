@@ -11,7 +11,7 @@
 import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDate, calculatedSpan } from "./format.js";
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
-  ODDS_MODES, modeLabel, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
+  ODDS_MODES, modeLabel, tableMode, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -162,12 +162,73 @@ function hrefWith(changes) {
 
 /** Go to another page (push) or change how this one is shown (replace). */
 async function navigate(url, { scroll = false, replace = false } = {}) {
+  const key = focusKey(document.activeElement);
   if (replace) history.replaceState(null, "", url);
   else history.pushState(null, "", url);
   const token = renderToken + 1;
   await render();
+  if (token !== renderToken) return;
   // Go to the top once the new page is in (not while the old one is still showing).
-  if (scroll && token === renderToken) window.scrollTo(0, 0);
+  if (scroll) window.scrollTo(0, 0);
+  settleFocus(replace ? key : null);
+}
+
+// ------------------------------------------------------------- focus
+// Rendering replaces the page's markup, and with it whatever had focus,
+// which would drop a keyboard or screen reader user back at the top of the
+// document. So after a change to how this page is shown, focus returns to
+// the same control (its replacement) and the change is announced; after
+// moving to another page, focus goes to the new page's heading.
+
+/** A selector that finds an element's replacement after a re-render, or null. */
+function focusKey(el) {
+  if (!el || el === document.body || !el.isConnected) return null;
+  const attr = (name) => `[${name}="${CSS.escape(el.getAttribute(name))}"]`;
+  if (el.matches("[data-control]")) return attr("data-control");
+  if (el.matches(".row-toggle[data-team]")) return `.row-toggle${attr("data-team")}`;
+  if (el.matches("[data-class]")) return `.scrubber ${attr("data-class")}`;
+  if (el.matches("[data-nav]")) return `${el.closest(".tab-bar") ? ".tab-bar" : ".site-nav"} ${attr("data-nav")}`;
+  return el.id ? `#${CSS.escape(el.id)}` : null;
+}
+
+/**
+ * Put focus where it belongs once a render is in: the replacement of the
+ * control `key` names (a view change), else the page's heading (a new page).
+ * Focus a render already placed (the team row the search jumped to), and
+ * focus inside an open sheet, stay where they are.
+ */
+function settleFocus(key) {
+  const active = document.activeElement;
+  if (document.querySelector("dialog[open]")) return;
+  if (active && active !== document.body && active !== app && app.contains(active)) return;
+  const same = key && document.querySelector(key);
+  if (same) {
+    same.focus({ preventScroll: true });
+    if (key.startsWith("[data-control")) announce(contextText());
+    return;
+  }
+  const heading = app.querySelector("h1");
+  if (heading) {
+    heading.setAttribute("tabindex", "-1");
+    heading.focus({ preventScroll: true });
+  } else {
+    app.focus({ preventScroll: true });
+  }
+  if (key) announce(contextText());
+}
+
+/** What's on screen in a sentence for screen readers: the context bar's words. */
+function contextText() {
+  return contextBar.querySelector(".context-bar__inner").textContent.replace(/\s*·\s*/g, ", ").replace(/\s+/g, " ").trim();
+}
+
+/** Say something through the page's status region (index.html's #app-status). */
+function announce(text) {
+  const region = document.getElementById("app-status");
+  if (!region || !text) return;
+  region.textContent = "";
+  // A fresh node a moment later, so the same words twice are still read.
+  setTimeout(() => { region.textContent = text; }, 50);
 }
 
 /** The school a `team` value names: its slug, or the name itself (old links). */
@@ -291,6 +352,7 @@ async function render() {
       sheet?.close();
     }
     showContext(nextContext);
+    markLineStarts();
     // The front page carries its own calculation times, whether just fetched or already on screen.
     if (route.page === "landing") {
       const d = app.querySelector(":scope > .landing")?.dataset ?? {};
@@ -583,10 +645,29 @@ function controlsLine(ctx, weeks, { asOf, mode, projectedAvailable }) {
   }
   const help = mode ? MODE_HELP : "";
   // Each separator travels with the segment after it, so a wrapped line
-  // never ends on a dangling dot.
+  // never ends on a dangling dot; one that starts a line is hidden
+  // (markLineStarts), so none starts on one either.
   const segs = parts.map((part, i) => (i === 0 ? part : `<span class="seg">${sep}${part}</span>`));
   return `<p class="provenance provenance--controls">${segs.join("")}</p>${help}`;
 }
+
+/** Hide the separator of each controls-line segment that wrapped onto a new line. */
+function markLineStarts() {
+  for (const line of document.querySelectorAll(".provenance--controls")) {
+    let prev = null;
+    for (const seg of line.children) {
+      if (seg.classList.contains("seg")) {
+        seg.classList.remove("is-line-start");
+        if (prev && seg.offsetTop > prev.offsetTop + prev.offsetHeight / 2) seg.classList.add("is-line-start");
+      }
+      prev = seg;
+    }
+  }
+}
+let lineFrame = 0;
+window.addEventListener("resize", () => {
+  if (!lineFrame) lineFrame = requestAnimationFrame(() => { lineFrame = 0; markLineStarts(); });
+});
 
 const MODE_HELP = `<div class="mode-help" id="mode-help" hidden>
   <p><strong>Projected</strong> weighs every way the season can finish by how likely it is, using each team’s Elo rating and home-field advantage to set its chance of winning each game.</p>
@@ -684,7 +765,7 @@ async function classView(ctx) {
     return `<section class="region-block" aria-labelledby="region-${r.region}">
       <h2 class="region-block__title" id="region-${r.region}"><a href="${esc(hrefWith({ region: r.region, team: null }))}">Region ${r.region}</a></h2>
       <table class="standings standings--compact">
-        <caption class="visually-hidden">Region ${r.region}-${clazz}A standings</caption>
+        <caption><span class="visually-hidden">Region ${r.region}-${clazz}A standings and ${mode === "projected" ? "projected" : "toss-up"} odds</span>${tableMode(mode)}</caption>
         <thead><tr>
           <th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>
           <th scope="col" class="col-team">Team</th>
@@ -766,6 +847,9 @@ const ODDS_COLUMNS = [
   { key: "p_playoffs", label: "Makes playoffs", seed: "Makes playoffs", full: "Chance of making the playoffs as any seed", mid: false },
 ];
 const ODDS_BY_KEY = Object.fromEntries(ODDS_COLUMNS.map((c) => [c.key, c]));
+// Under the region table on narrow screens, which leave out the mid columns (and the
+// headers' tooltips never show on a phone): where the rest of the odds are.
+const TABLE_HINT = "Select a team to see its odds of every seed.";
 
 /** An odds column header: the short label on screen, what it measures for screen readers and on hover. */
 function oddsHead(c, extra = "") {
@@ -801,7 +885,7 @@ function standingsTable(data, teams, mode, focus, clazz, games) {
 
   const oddsHeads = ODDS_COLUMNS.map((c) => oddsHead(c, c.mid ? " col-mid" : ""));
   return `<table class="standings">
-    <caption class="visually-hidden">Standings and ${mode === "projected" ? "projected" : "toss-up"} odds of finishing in each playoff position. Select a team to see its playoff path and scenarios.</caption>
+    <caption><span class="visually-hidden">Standings and ${mode === "projected" ? "projected" : "toss-up"} odds of finishing in each playoff position. Select a team to see its playoff path and scenarios.</span>${tableMode(mode)}</caption>
     <thead><tr>
       <th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>
       <th scope="col" class="col-team">Team</th>
@@ -810,7 +894,8 @@ function standingsTable(data, teams, mode, focus, clazz, games) {
       ${oddsHeads.join("")}
     </tr></thead>
     <tbody>${rows.join("")}</tbody>
-  </table>`;
+  </table>
+  <p class="table-hint muted">${TABLE_HINT}</p>`;
 }
 
 /**
@@ -837,7 +922,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
 
   const opponent = (g) => `<span class="sched__joiner">${esc(g.joiner)}</span>${teamLabel(g.opponent, teams)}`;
   const schedList = (title, rows) => (rows.length
-    ? `<h4 class="detail__sub">${title}</h4><ul class="sched">${rows.join("")}</ul>`
+    ? `<h3 class="detail__sub">${title}</h3><ul class="sched">${rows.join("")}</ul>`
     : "");
   const playedRows = completed.map((g) => `<li>${opponent(g)}`
     + `<span class="sched__result">${esc(`${g.scoreFor}–${g.scoreAgainst}`)} <span class="sched__wl sched__wl--${g.result}">${g.result}</span></span></li>`);
@@ -846,7 +931,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
     ? '<p class="detail__note">A coin flip is needed to settle a tie involving this team.</p>'
     : "";
   const record = `<section class="detail__panel" aria-label="Record">
-      <h3 class="detail__title">Record</h3>
+      <h2 class="detail__title">Record</h2>
       <p class="detail__records">
         <span><strong>${esc(recordText(r.region_wins, r.region_losses, r.region_ties))}</strong> Region</span>
         <span><strong>${esc(recordText(r.wins, r.losses, r.ties))}</strong> Overall</span>
@@ -857,7 +942,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
     </section>`;
 
   const seeding = `<section class="detail__panel" aria-label="Seeding odds">
-      <h3 class="detail__title">Seeding odds</h3>
+      <h2 class="detail__title">Seeding odds</h2>
       <dl class="detail__odds">${ODDS_COLUMNS.map((c) => `<div><dt>${c.seed}</dt><dd>${oddsCell(o[c.key])}</dd></div>`).join("")}</dl>
       ${eloLine(t.elo)}
     </section>`;
@@ -867,8 +952,9 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
   const path = t.eliminated && !t.clinched ? [] : playoffPath(t, mode, clazz);
   const pathPanel = path.length
     ? `<section class="detail__panel detail__panel--path" aria-label="Playoff path">
-        <h3 class="detail__title">Playoff path</h3>
+        <h2 class="detail__title">Playoff path</h2>
         <table class="path">
+          <caption class="visually-hidden">${esc(t.school)}’s chance of reaching and hosting each playoff round</caption>
           <thead><tr><th scope="col">Round</th><th scope="col">Reaches round</th><th scope="col">Hosts, if it gets there</th><th scope="col">Hosts, overall</th></tr></thead>
           <tbody>${path.map((p) => `<tr>
             <th scope="row">${esc(p.round)}</th>
@@ -888,7 +974,9 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
 }
 
 function focusTeamRow() {
-  document.getElementById("focus-row")?.scrollIntoView({ block: "center" });
+  const row = document.getElementById("focus-row");
+  row?.scrollIntoView({ block: "center" });
+  row?.querySelector(".row-toggle")?.focus({ preventScroll: true });
 }
 
 app.addEventListener("click", (e) => {
@@ -961,10 +1049,11 @@ function scenarioReport(focus) {
 }
 
 function scenariosSection(data, teams, prov, mode, focus, report = true) {
-  const cardHtml = (c) => scenarioCard({
-    ...c, team: teams[c.team], teams, provenanceHtml: c.p == null ? prov.plain : prov.odds,
+  // Cards sit under a group's h3, or (the insight cards) straight under the section's h2.
+  const cardHtml = (level) => (c) => scenarioCard({
+    ...c, team: teams[c.team], teams, provenanceHtml: c.p == null ? prov.plain : prov.odds, level,
   });
-  const grid = (cards) => `<div class="scenario-grid">${cards.map(cardHtml).join("")}</div>`;
+  const grid = (cards, level = 4) => `<div class="scenario-grid">${cards.map(cardHtml(level)).join("")}</div>`;
   const forFocus = (cards) => (focus ? cards.filter((c) => c.team === focus) : cards);
   const remainingCount = data.remaining_games.length;
   const focusNote = focus
@@ -993,7 +1082,7 @@ function scenariosSection(data, teams, prov, mode, focus, report = true) {
     const intro = `Full scenarios appear once five or fewer region games remain; ${remainingCount} are left.`;
     body = cards.length
       ? `<p class="prose muted">${esc(intro)} Until then, these are results that settle a spot no matter what else happens.</p>
-         <div class="scenario-group scenario-group--spaced">${grid(cards)}</div>`
+         <div class="scenario-group scenario-group--spaced">${grid(cards, 3)}</div>`
       : `<p class="prose muted">${esc(intro)}</p>`;
   }
 
@@ -1026,7 +1115,7 @@ function allScenariosSection(scenarios, teams, focus, mode, provenanceHtml, plac
     <details class="scenario-group scenario-group--section"${open ? " open" : ""}>
       <summary><h2 class="section-title" id="all-scen-title">Scenarios</h2><span class="muted">${cards.length} ${cards.length === 1 ? "way" : "ways"} the region can finish</span></summary>
       <div class="scenario-grid">${cards.map((c, i) => outcomeScenarioCard(c, teams, {
-        focus, p: mode === "projected" ? c.pWeighted : c.p, provenanceHtml, explainId: i,
+        focus, p: mode === "projected" ? c.pWeighted : c.p, provenanceHtml, explainId: i, level: 3,
       })).join("")}</div>
     </details>
   </section>`;
@@ -1075,7 +1164,7 @@ function explanationHtml(card) {
       <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
     <div class="game-sheet__body">
-      ${outcomeScenarioCard({ ...card, label: "The scenario" }, teams, { focus, p: mode === "projected" ? card.pWeighted : card.p })}
+      ${outcomeScenarioCard({ ...card, label: "The scenario" }, teams, { focus, p: mode === "projected" ? card.pWeighted : card.p, level: 3 })}
       <section class="why" aria-label="Why this order">
         <h3 class="sub-title">Why this order</h3>
         ${whyTies(card.why)}
@@ -1199,7 +1288,7 @@ function bracketHtml() {
       ${cols.map((c, i) => `<button type="button" class="round-tabs__item" data-round-jump="${i}" aria-current="${i === 0}" aria-label="${esc(c.name)}" title="${esc(c.name)}">${esc(shortRound(c.name))}</button>`).join("")}
     </div>`;
   const columns = cols.map((c) => `<section class="tcol" aria-label="${esc(c.name)}">
-      <h3 class="tcol__title">${esc(c.name)}</h3>
+      <h2 class="tcol__title">${esc(c.name)}</h2>
       <ol class="tcol__body">${c.games.map(({ game }) => `<li class="tslot">${treeCard(game, path)}</li>`).join("")}</ol>
     </section>`).join("");
   return `${halfControl}${tabs}
@@ -1542,8 +1631,8 @@ function bracketSide(game, sideKey, result, host) {
   const allKey = `${game.id}:${sideKey}`;
   const showAll = bracketUi.showAll.has(allKey);
   const shown = showAll ? list : list.slice(0, LIST_CAP);
-  const firstRound = side.feeders.length === 1;
-  const label = firstRound || homeTag ? `<p class="bside__label">${firstRound ? esc(sideLabel(side.feeders)) : ""}${homeTag}</p>` : "";
+  // Where the side comes from ("Region 2 #4 Seed", "Region 1 or 2 (Any Seed)"), over who might fill it.
+  const label = `<p class="bside__label">${esc(sideLabel(side.feeders))}${homeTag}</p>`;
   const more = list.length > LIST_CAP
     ? `<button type="button" class="bside__more" data-show-all="${esc(allKey)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${list.length}`}</button>`
     : "";
@@ -1575,7 +1664,7 @@ function gameDetail(game) {
     const intro = here.locked ? `${focus}’s possible opponents here` : `If ${focus} gets here (${formatPct(here.p)} chance)`;
     // These are conditional odds; say so, so they aren't read as the chance the game happens.
     const measure = here.locked ? "Chance of facing each one" : `Chance of facing each one, if ${focus} gets here`;
-    return `<h4 class="bgame__heading">${esc(intro)}</h4>
+    return `<h3 class="bgame__heading">${esc(intro)}</h3>
       <p class="muted bgame__count">${esc(measure)}</p>
       <ol class="opp-list">${opp.map((o) => {
         const note = hostText(focus, o.opponent, o.hosts, o.pTeamHosts);
@@ -1584,10 +1673,6 @@ function gameDetail(game) {
   }
   const ms = gameMatchups(game, mode);
   const hidden = game.other?.count ?? 0; // possible pairings under 0.5% in both modes, not listed
-  const sides = [game.side_a, game.side_b].map((side) => {
-    const n = occupants(side, mode).length;
-    return `<div><h4 class="bgame__heading">${esc(sideLabel(side.feeders))}</h4><p class="muted bgame__count">${n} possible ${n === 1 ? "team" : "teams"}</p></div>`;
-  }).join('<p class="bgame__sides-vs muted" aria-hidden="true">vs</p>');
   const rows = ms.map((m) => {
     // Home team last ("Clinton at Booneville"); "vs" when the host isn't settled or the site is neutral.
     const h = hosting(m.hostA);
@@ -1597,11 +1682,10 @@ function gameDetail(game) {
     return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}</span></span>${oddsCell(m.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
   });
   if (!ms.length) {
-    return `<div class="bgame__sides">${sides}</div>
-      <p class="muted bgame__count">So many teams could still meet here that ${hidden ? `none of the ${hidden} possible pairings has` : "no single matchup has"} even a 0.5% chance yet.</p>`;
+    return `<p class="muted bgame__count">So many teams could still meet here that ${hidden ? `none of the ${hidden} possible pairings has` : "no single matchup has"} even a 0.5% chance yet.</p>`;
   }
-  return `<div class="bgame__sides">${sides}</div>
-    <h4 class="bgame__heading">Possible matchups</h4>
+  // Each side's teams are listed above it, so the matchups follow directly.
+  return `<h3 class="bgame__heading">Possible matchups</h3>
     <ol class="opp-list opp-list--matchups">${rows.join("")}</ol>
     ${hidden ? `<p class="muted bgame__count">Not showing ${hidden} other possible ${hidden === 1 ? "pairing" : "pairings"}, each under 0.5%</p>` : ""}`;
 }
@@ -1663,8 +1747,9 @@ function feedbackContext({ team = null, about = null } = {}) {
  */
 function feedbackForm({ game = null, category = "other", context = null, page = "/" } = {}) {
   const honeypot = `<div class="fb-hp" aria-hidden="true"><label>Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>`;
-  const status = '<p class="fb-status" role="status" aria-live="polite"></p>';
   const opened = Date.now();
+  // The fields a problem is about point at this line (sendFeedback), so it's read with them.
+  const status = `<p class="fb-status" id="fb-status-${opened}" role="status" aria-live="polite"></p>`;
   if (game) {
     const scoreInput = (name, team, value) => `<label class="fb-score">
         <span class="fb-score__team">${esc(team)}</span>
@@ -1771,6 +1856,7 @@ async function sendFeedback(form) {
   }
   status.classList.toggle("is-error", Boolean(problem));
   status.textContent = problem ?? "";
+  markProblem(form, problem ? problemFields(form, data) : [], status.id);
   if (problem) return;
   const label = button.textContent;
   button.disabled = true;
@@ -1809,6 +1895,30 @@ async function sendFeedback(form) {
   resetTurnstile(form); // the token was used up
   button.disabled = false;
   button.textContent = label;
+}
+
+/**
+ * The fields a form problem is about: both scores for a score correction
+ * (they're checked as a pair); else the message, or the email when the
+ * message is fine.
+ */
+function problemFields(form, data) {
+  if (form.dataset.mode === "score") return [form.elements.away, form.elements.home];
+  const messageOk = !feedbackProblem({ message: String(data.get("message") || ""), email: "" });
+  return [messageOk ? form.elements.email : form.elements.message];
+}
+
+/** Mark `fields` invalid, tie them to the problem's sentence, and put the cursor in the first. */
+function markProblem(form, fields, statusId) {
+  for (const el of form.querySelectorAll("[aria-invalid]")) {
+    el.removeAttribute("aria-invalid");
+    el.removeAttribute("aria-describedby");
+  }
+  for (const el of fields) {
+    el.setAttribute("aria-invalid", "true");
+    el.setAttribute("aria-describedby", statusId);
+  }
+  fields[0]?.focus();
 }
 
 function feedbackSent(form) {
@@ -1887,7 +1997,12 @@ app?.addEventListener("click", (e) => {
 });
 
 if (app) {
-  window.addEventListener("popstate", render);
+  // Back and Forward move between pages, so focus goes to the page's heading.
+  window.addEventListener("popstate", async () => {
+    const token = renderToken + 1;
+    await render();
+    if (token === renderToken) settleFocus(null);
+  });
   startAnalytics(API);
   render();
 }

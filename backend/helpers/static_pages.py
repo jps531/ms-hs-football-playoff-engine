@@ -45,13 +45,17 @@ ODDS_COLUMNS = (
     ("p_playoffs", "Makes playoffs", "Chance of making the playoffs as any seed"),
 )
 ODDS_BY_KEY = {key: (label, full) for key, label, full in ODDS_COLUMNS}
+# The columns narrow screens leave out (app.js's ODDS_COLUMNS ``mid``); the expanded row has them.
+MID_COLUMNS = {"p2", "p3", "p4"}
+# Under the region table on narrow screens, where those columns are gone (app.js's ``TABLE_HINT``).
+TABLE_HINT = "Select a team to see its odds of every seed."
 
 
-def _odds_head(key: str) -> str:
+def _odds_head(key: str, extra: str = "") -> str:
     """An odds column header: the short label on screen, what it measures for screen readers and on hover."""
     label, full = ODDS_BY_KEY[key]
     return (
-        f'<th scope="col" class="col-odds" title="{full}"><span aria-hidden="true">{label}</span>'
+        f'<th scope="col" class="col-odds{extra}" title="{full}"><span aria-hidden="true">{label}</span>'
         f'<span class="visually-hidden">{full}</span></th>'
     )
 
@@ -160,6 +164,19 @@ BADGE_ICONS = {
     '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.2"/></svg>',
 }
 BADGE_ICONS["champion"] = BADGE_ICONS["clinched"]
+# The odds modes' glyphs (ICONS.trend and ICONS.dice in components.js).
+MODE_ICONS = {
+    "projected": '<svg class="mode__glyph" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" '
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l4-4 3 3 5-6"/>'
+    '<path d="M10 5h4v4"/></svg>',
+    "tossup": '<svg class="mode__glyph" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" '
+    'stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/>'
+    '<circle cx="5.8" cy="5.8" r=".9" fill="currentColor" stroke="none"/>'
+    '<circle cx="10.2" cy="10.2" r=".9" fill="currentColor" stroke="none"/>'
+    '<circle cx="10.2" cy="5.8" r=".9" fill="currentColor" stroke="none"/>'
+    '<circle cx="5.8" cy="10.2" r=".9" fill="currentColor" stroke="none"/></svg>',
+}
+MODE_LABELS = {"projected": "Projected", "tossup": "Toss-up"}
 # The Explanation's lightbulb (ICONS.bulb in components.js).
 BULB_ICON = (
     '<svg class="outcome__explain-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" '
@@ -229,6 +246,16 @@ def _badge(team: dict, clazz: int, complete: bool = False) -> str:
         badges.append(("coinflip", "Coin flip"))
     return "".join(
         f'<span class="badge badge--{_e(kind)}">{BADGE_ICONS.get(kind, "")}{_e(label)}</span>' for kind, label in badges
+    )
+
+
+def table_mode(mode: str) -> str:
+    """The odds mode over a table's odds columns, "Projected odds" (components.js's ``tableMode``)."""
+    if mode not in MODE_LABELS:
+        return ""
+    return (
+        f'<span class="table-mode" aria-hidden="true"><span class="mode mode--{mode}">'
+        f"{MODE_ICONS[mode]}{MODE_LABELS[mode]}</span> odds</span>"
     )
 
 
@@ -406,21 +433,25 @@ def region_table(clazz: int, region: int, payload: dict, mode: str, teams: dict[
     complete = not payload.get("remaining_games")
     rows = []
     for pos, team in zip(positions, ordered, strict=True):
-        odds = "".join(f'<td class="col-odds">{_odds(mode_odds(team, key, mode))}</td>' for key, _, _ in ODDS_COLUMNS)
+        odds = "".join(
+            f'<td class="col-odds{" col-mid" if key in MID_COLUMNS else ""}">{_odds(mode_odds(team, key, mode))}</td>'
+            for key, _, _ in ODDS_COLUMNS
+        )
         rows.append(
             f"{_row_start(team, pos)}{_team_cell(team, page, clazz, teams, complete, link)}"
             f'<td class="col-rec">{_region_record(team)}</td>'
             f'<td class="col-rec col-overall">{_overall_record(team)}</td>{odds}</tr>'
         )
-    heads = "".join(_odds_head(key) for key, _, _ in ODDS_COLUMNS)
+    heads = "".join(_odds_head(key, " col-mid" if key in MID_COLUMNS else "") for key, _, _ in ODDS_COLUMNS)
     return (
         '<table class="standings">'
-        f'<caption class="visually-hidden">Region {region}-{clazz}A standings and {MODE_NAMES[mode]} odds of '
-        "finishing in each playoff position.</caption>"
+        f'<caption><span class="visually-hidden">Region {region}-{clazz}A standings and {MODE_NAMES[mode]} odds of '
+        f"finishing in each playoff position.</span>{table_mode(mode)}</caption>"
         '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
         '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
         f'<th scope="col" class="col-rec col-overall">Overall</th>{heads}</tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table>"
+        f'<p class="table-hint muted">{TABLE_HINT}</p>'
     )
 
 
@@ -478,7 +509,8 @@ def class_region_block(
         f'<section class="region-block"{labelled}>'
         f'<{heading} class="region-block__title"{heading_id}>{title}</{heading}>'
         '<table class="standings standings--compact">'
-        f'<caption class="visually-hidden">Region {region}-{clazz}A standings</caption>'
+        f'<caption><span class="visually-hidden">Region {region}-{clazz}A standings and {MODE_NAMES[mode]} odds'
+        f"</span>{table_mode(mode)}</caption>"
         '<thead><tr><th scope="col" class="col-pos"><span class="visually-hidden">Position</span></th>'
         '<th scope="col" class="col-team">Team</th><th scope="col" class="col-rec">Region</th>'
         f"{_odds_head('p1')}{_odds_head('p_playoffs')}</tr></thead>"
@@ -636,20 +668,21 @@ def condition_groups(groups: list[list[dict]], teams: dict) -> str:
     return f'<div class="conditions">{joined}</div>'
 
 
-def scenario_card(card: dict, teams: dict) -> str:
-    """An outcome card: what happens, its odds, and the results that make it happen (``scenarioCard``)."""
+def scenario_card(card: dict, teams: dict, level: int = 4) -> str:
+    """An outcome card: what happens, its odds, and the results that make it happen (``scenarioCard``);
+    *level* is its heading's level, one below the heading it sits under."""
     odds = "" if card.get("p") is None else _odds(card["p"])
     return (
         f'<article class="scenario"{_team_style(teams.get(card["team"]))}>'
-        f'<div class="scenario__head"><h4 class="scenario__title">{_e(card["title"])}\u00a0'
-        f'<span class="scenario__if">IF</span></h4>{odds}</div>'
+        f'<div class="scenario__head"><h{level} class="scenario__title">{_e(card["title"])}\u00a0'
+        f'<span class="scenario__if">IF</span></h{level}>{odds}</div>'
         f'<div class="scenario__body">{condition_groups(card["groups"], teams)}</div></article>'
     )
 
 
-def outcome_scenario_card(card: dict, teams: dict, p: float | None = None) -> str:
+def outcome_scenario_card(card: dict, teams: dict, p: float | None = None, level: int = 4) -> str:
     """One complete scenario: its chance (when given), every seed it produces, who's out, and the results
-    (``outcomeScenarioCard``)."""
+    (``outcomeScenarioCard``); *level* is its heading's level, one below the heading it sits under."""
     seeds = "".join(
         (
             f'<li class="outcome__tie"><span class="outcome__seed">{_e(s["seed"])}</span>'
@@ -679,7 +712,7 @@ def outcome_scenario_card(card: dict, teams: dict, p: float | None = None) -> st
         if card["groups"] or common
         else ""
     )
-    title = f'<h4 class="scenario__title">{_e(card["label"])}</h4>'
+    title = f'<h{level} class="scenario__title">{_e(card["label"])}</h{level}>'
     head = title if p is None else f'<div class="scenario__head">{title}{_odds(p)}</div>'
     return (
         f'<article class="scenario outcome">{head}'
@@ -1449,7 +1482,7 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
         for i, c in enumerate(cols)
     )
     columns = "".join(
-        f'<section class="tcol" aria-label="{_e(c["name"])}"><h3 class="tcol__title">{_e(c["name"])}</h3>'
+        f'<section class="tcol" aria-label="{_e(c["name"])}"><h2 class="tcol__title">{_e(c["name"])}</h2>'
         f'<ol class="tcol__body" style="height:{height:g}px">'
         + "".join(
             f'<li class="tslot" style="transform:translateY({centers[r][i] - CARD_H / 2:g}px)">'
@@ -1493,12 +1526,7 @@ def _sheet_side(game: dict, side_key: str, host: str | None, ctx: dict) -> str:
             f'<span class="visually-hidden">Locked in: </span>{_e(label)}</span>{home}</div>'
         )
     listed = occupants(side, ctx["mode"])
-    first_round = len(side["feeders"]) == 1
-    label = (
-        f'<p class="bside__label">{_e(side_label(side["feeders"])) if first_round else ""}{home}</p>'
-        if first_round or home
-        else ""
-    )
+    label = f'<p class="bside__label">{_e(side_label(side["feeders"]))}{home}</p>'
     if not listed:
         return f'<div class="bside">{label}<p class="bside__empty muted">No team can get here</p></div>'
     items = "".join(f'<li class="bteam">{name(o["team"])}{_odds(o["p"])}</li>' for o in listed[:SHEET_LIST])
@@ -1530,7 +1558,7 @@ def _sheet(game: dict, ctx: dict) -> str:
             f"</span>{_odds(m['p'])}{note_html}</li>"
         )
     matchups = (
-        f'<h4 class="bgame__heading">Possible matchups</h4><ol class="opp-list opp-list--matchups">{"".join(rows)}</ol>'
+        f'<h3 class="bgame__heading">Possible matchups</h3><ol class="opp-list opp-list--matchups">{"".join(rows)}</ol>'
         if rows
         else ""
     )
