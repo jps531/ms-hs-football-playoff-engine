@@ -18,8 +18,26 @@ def _csp() -> str:
 
 
 def _inline_scripts(html: str) -> list[str]:
-    """The bodies of a page's inline <script> elements (not src=, not JSON-LD data blocks)."""
-    return re.findall(r"<script>(.*?)</script>", html, re.S)
+    """The bodies of a page's inline <script> elements (not src=, not JSON-LD data blocks).
+
+    Any attributes and any case: an inline script missed here would pass this test and then be
+    blocked by the browser.
+    """
+    scripts = re.findall(r"<script\b([^>]*)>(.*?)</script\b[^>]*>", html, re.S | re.I)
+    return [
+        body
+        for attrs, body in scripts
+        if not re.search(r"\bsrc\s*=", attrs, re.I) and not re.search(r"application/ld\+json", attrs, re.I)
+    ]
+
+
+def test_inline_scripts_are_found_whatever_their_attributes_or_case():
+    """Only external scripts and JSON-LD data blocks are left out."""
+    html = (
+        '<script>a()</script><SCRIPT>b()</SCRIPT><script type="module">c()</script foo>'
+        '<script src="/x.js"></script><script type="application/ld+json">{}</script>'
+    )
+    assert _inline_scripts(html) == ["a()", "b()", "c()"]
 
 
 def test_every_inline_script_is_allowed_by_its_hash():
