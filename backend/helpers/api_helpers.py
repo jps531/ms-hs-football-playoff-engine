@@ -93,6 +93,7 @@ from backend.helpers.data_classes import (
     StoredHostingOdds,
     TiebreakDecision,
 )
+from backend.helpers.engine_settings import FULL_MARGINS_MAX_LEFT, PLAYOFF_SEEDS
 from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios, enumerate_reach_scenarios_for_team
 from backend.helpers.insights import _conditions_frozenset, deserialize_insights
 from backend.helpers.query_helpers import and_join_conditions
@@ -128,8 +129,6 @@ from backend.helpers.win_probability import (
 # Constants
 # ---------------------------------------------------------------------------
 
-DISPLAY_THRESHOLD = 5
-
 # A region_standings row belongs on public read paths only while its school is
 # active for that season. The pipeline already skips inactive schools when it
 # computes, but a school marked inactive after earlier snapshots were written
@@ -145,11 +144,6 @@ ACTIVE_SCHOOL_JOIN_RS = (
     " JOIN school_seasons active"
     " ON active.school = rs.school AND active.season = rs.season AND active.is_active"
 )
-"""Maximum remaining games for which the human-readable scenario list is shown: the most for which every
-winning margin is worked through (region_scenarios_pipeline._R_ALWAYS_MARGIN), so a race that turns on point
-differential is stated exactly ("beats Magee by 8-10"). With more left, scenarios stay accurate but leave such a
-tie open ("decided by the tiebreaker"); showing them from 5 is a choice of precision, not of correctness."""
-
 CLINCHED_THRESHOLD = 1 - CERTAIN_EPS
 """Minimum seeding probability that reads as a clinched seed: only a certainty reaches it, since odds that
 aren't certain are kept at least one in a million short of 1 (``backend.helpers.certainty``)."""
@@ -160,17 +154,17 @@ def within_display_threshold(remaining: list) -> bool:
 
     An empty list counts as within threshold (there's simply nothing to enumerate).
     """
-    return len(remaining) <= DISPLAY_THRESHOLD
+    return len(remaining) <= FULL_MARGINS_MAX_LEFT
 
 
 def has_displayable_scenarios(remaining: list) -> bool:
-    """True when *remaining* is non-empty and within ``DISPLAY_THRESHOLD``.
+    """True when *remaining* is non-empty and within ``FULL_MARGINS_MAX_LEFT``.
 
     Unlike ``within_display_threshold``, an empty list returns False — used where
     "no remaining games" means there's nothing left to compute (already decided),
     as opposed to "trivially available".
     """
-    return bool(remaining) and len(remaining) <= DISPLAY_THRESHOLD
+    return bool(remaining) and len(remaining) <= FULL_MARGINS_MAX_LEFT
 
 
 # ---------------------------------------------------------------------------
@@ -1355,7 +1349,7 @@ async def _compute_seed_atoms_if_pre_playoff(
     The ``seed_atoms`` dict is ``None`` when the region has no remaining games
     (fully decided — every team's seed is already clinched, so no
     ``seed_required`` placeholder can occur) or when the remaining-game count
-    exceeds ``DISPLAY_THRESHOLD`` (the same combinatorial-blowup guard
+    exceeds ``FULL_MARGINS_MAX_LEFT`` (the same combinatorial-blowup guard
     standings scenario enumeration uses). The ``remaining`` games list is
     always returned (even when ``seed_atoms`` is ``None``) so callers can
     build ``game_dates`` for §8-style condition expansion without a second
@@ -2907,7 +2901,7 @@ def build_team_paths(
     seed_map: dict[int, list[list]],
     game_dates: dict[tuple[str, str], date | None],
     odds: StandingsOdds | None,
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
 ) -> list[ScenarioPathModel]:
     """Build the §8 ``paths`` list for one team from its raw ``scenario_atoms`` entry.
 

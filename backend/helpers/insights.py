@@ -22,10 +22,10 @@ from backend.helpers.data_classes import (
     RemainingGame,
     StandingsOdds,
 )
+from backend.helpers.engine_settings import PLAYOFF_SEEDS
 from backend.helpers.scenario_renderer import _render_game_result
 from backend.helpers.scenario_serializers import deserialize_condition, serialize_condition
 
-_PLAYOFF_SEEDS = 4
 _MAX_CONDITIONS = 3
 _MAX_CLINCH_PER_TEAM = 3
 _MAX_ELIM_PER_TEAM = 3
@@ -169,7 +169,7 @@ def _verify_insight_margins(
     r_computed: int,
     expected_seed: int | None = None,
     expected_in_playoffs: bool | None = None,
-    playoff_seeds: int = _PLAYOFF_SEEDS,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
     complete_scenarios: list[dict] | None = None,
@@ -215,7 +215,7 @@ def _extract_clinch_seed_insights(
     remaining: list[RemainingGame],
     odds: dict[str, StandingsOdds],
     r_computed: int,
-    playoff_seeds: int = _PLAYOFF_SEEDS,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
     complete_scenarios: list[dict] | None = None,
@@ -267,7 +267,7 @@ def _extract_clinch_playoffs_insights(
     odds: dict[str, StandingsOdds],
     r_computed: int,
     clinch_seed_insights: list[KeyInsight],
-    playoff_seeds: int = _PLAYOFF_SEEDS,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
     complete_scenarios: list[dict] | None = None,
@@ -330,7 +330,7 @@ def _extract_elimination_insights(
     remaining: list[RemainingGame],
     odds: dict[str, StandingsOdds],
     r_computed: int,
-    playoff_seeds: int = _PLAYOFF_SEEDS,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
     complete_scenarios: list[dict] | None = None,
@@ -410,7 +410,7 @@ def extract_insights(
     remaining: list[RemainingGame],
     odds: dict[str, StandingsOdds] | None = None,
     r_computed: int = 0,
-    playoff_seeds: int = _PLAYOFF_SEEDS,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     pa_win: int = 14,
     base_margin_default: int = 7,
     complete_scenarios: list[dict] | None = None,

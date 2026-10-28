@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 from backend.helpers.data_classes import CompletedGame, RemainingGame
 from backend.helpers.data_helpers import normalize_pair
+from backend.helpers.engine_settings import PLAYOFF_SEEDS
 from backend.helpers.tiebreakers import TiebreakStep, resolve_standings_for_mask, standings_from_mask, tie_bucket_groups
 
 
@@ -420,7 +421,7 @@ def explain_scenario_ties(
     remaining: list[RemainingGame],
     mask: int,
     margins: dict,
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     base_margin_default: int = 7,
     pa_win: int = 14,
 ) -> list[TieExplanation]:

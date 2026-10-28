@@ -17,6 +17,7 @@ from backend.helpers.data_classes import (
     TiebreakDecision,
     TiebreakPlace,
 )
+from backend.helpers.engine_settings import PLAYOFF_SEEDS
 from backend.helpers.scenario_serializers import serialize_atom, serialize_condition
 
 
@@ -219,7 +220,7 @@ def render_scenario_title(sc: dict) -> str:
 
 
 def atoms_from_complete_scenarios(
-    complete_scenarios: list[dict], playoff_seeds: int = 4
+    complete_scenarios: list[dict], playoff_seeds: int = PLAYOFF_SEEDS
 ) -> dict[str, dict[int, list[list]]]:
     """Reconstruct a per-team per-seed atom dict from stored complete-scenario dicts.
 
@@ -288,7 +289,7 @@ def _pct(p: float) -> str:
 def render_team_scenarios(
     team: str,
     scenarios: dict[str, dict[int, list[list]]],
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     odds: dict | None = None,
     weighted_odds: dict | None = None,
 ) -> str:
@@ -617,7 +618,7 @@ _SEED_FIELD_NAMES = ["one_seed", "two_seed", "three_seed", "four_seed"]
 
 def division_scenarios_as_dict(
     scenarios: list[dict],
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
 ) -> dict[str, dict]:
     """Return division scenarios as a structured dict keyed by scenario label.
 
@@ -681,7 +682,7 @@ def division_scenarios_as_dict(
 
 def team_scenarios_as_dict(
     scenarios: dict,
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
     odds: dict | None = None,
     weighted_odds: dict | None = None,
 ) -> dict[str, dict]:

@@ -26,7 +26,6 @@ from backend.api.models.responses import (
 )
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
-    DISPLAY_THRESHOLD,
     PlayoffBracketState,
     _apply_round_ceilings,
     _collect_possible_opponents,
@@ -103,6 +102,7 @@ from backend.helpers.data_classes import (
     StoredHostingOdds,
     equal_matchup_prob,
 )
+from backend.helpers.engine_settings import FULL_MARGINS_MAX_LEFT
 from backend.helpers.scenario_renderer import atom_condition_dicts
 from backend.helpers.scenario_viewer import build_scenario_atoms
 from backend.helpers.scenarios import determine_odds, determine_scenarios
@@ -170,9 +170,7 @@ class TestConstants:
 
     def test_display_threshold(self):
         """Scenarios show only where every winning margin is worked through: 5 or fewer games left."""
-        from backend.prefect.region_scenarios_pipeline import _R_ALWAYS_MARGIN
-
-        assert DISPLAY_THRESHOLD == 5 == _R_ALWAYS_MARGIN
+        assert FULL_MARGINS_MAX_LEFT == 5
 
     def test_clinched_threshold(self):
         """CLINCHED_THRESHOLD is the shared certainty cutoff, above every chance that isn't certain."""
@@ -816,35 +814,35 @@ class TestTeamClinchedSeed:
 
 
 class TestWithinDisplayThreshold:
-    """within_display_threshold: len(remaining) <= DISPLAY_THRESHOLD, empty list counts as within."""
+    """within_display_threshold: len(remaining) <= FULL_MARGINS_MAX_LEFT, empty list counts as within."""
 
     def test_empty_list_is_within_threshold(self):
         """Zero remaining games is trivially within threshold."""
         assert within_display_threshold([]) is True
 
     def test_at_threshold_is_within(self):
-        """Exactly DISPLAY_THRESHOLD games is within threshold."""
-        assert within_display_threshold(list(range(DISPLAY_THRESHOLD))) is True
+        """Exactly FULL_MARGINS_MAX_LEFT games is within threshold."""
+        assert within_display_threshold(list(range(FULL_MARGINS_MAX_LEFT))) is True
 
     def test_over_threshold_is_not_within(self):
-        """More than DISPLAY_THRESHOLD games is not within threshold."""
-        assert within_display_threshold(list(range(DISPLAY_THRESHOLD + 1))) is False
+        """More than FULL_MARGINS_MAX_LEFT games is not within threshold."""
+        assert within_display_threshold(list(range(FULL_MARGINS_MAX_LEFT + 1))) is False
 
 
 class TestHasDisplayableScenarios:
-    """has_displayable_scenarios: non-empty AND len(remaining) <= DISPLAY_THRESHOLD."""
+    """has_displayable_scenarios: non-empty AND len(remaining) <= FULL_MARGINS_MAX_LEFT."""
 
     def test_empty_list_has_no_displayable_scenarios(self):
         """Zero remaining games means nothing to display (unlike within_display_threshold)."""
         assert has_displayable_scenarios([]) is False
 
     def test_at_threshold_is_displayable(self):
-        """A non-empty list at exactly DISPLAY_THRESHOLD is displayable."""
-        assert has_displayable_scenarios(list(range(DISPLAY_THRESHOLD))) is True
+        """A non-empty list at exactly FULL_MARGINS_MAX_LEFT is displayable."""
+        assert has_displayable_scenarios(list(range(FULL_MARGINS_MAX_LEFT))) is True
 
     def test_over_threshold_is_not_displayable(self):
-        """More than DISPLAY_THRESHOLD games is not displayable."""
-        assert has_displayable_scenarios(list(range(DISPLAY_THRESHOLD + 1))) is False
+        """More than FULL_MARGINS_MAX_LEFT games is not displayable."""
+        assert has_displayable_scenarios(list(range(FULL_MARGINS_MAX_LEFT + 1))) is False
 
 
 # ---------------------------------------------------------------------------

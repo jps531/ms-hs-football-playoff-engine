@@ -72,7 +72,7 @@ The engine switches to **Monte Carlo sampling**, two runs of 50,000 draws each. 
 
 ## Frontend Display Threshold: R ≤ 5
 
-Even though scenario data is stored for R ≤ 15, the frontend only **renders the human-readable scenario list** when **R ≤ 5** (`DISPLAY_THRESHOLD` in `api_helpers.py`), the range where the engine works through every winning margin, so a race that turns on point differential is stated exactly. Above it, scenarios would leave such a tie open; they'd be accurate but less specific, and the list is withheld as a product choice.
+Even though scenario data is stored for R ≤ 15, the frontend only **renders the human-readable scenario list** when **R ≤ 5** (`FULL_MARGINS_MAX_LEFT` in `engine_settings.py`), the range where the engine works through every winning margin, so a race that turns on point differential is stated exactly. Above it, scenarios would leave such a tie open; they'd be accurate but less specific, and the list is withheld as a product choice.
 
 At R > 5, the frontend shows seeding odds (always available) and key insights (when atoms exist, R ≤ 10, each margin-verified), but omits the full scenario list. The hosting page's per-team scenarios follow the same threshold.
 
@@ -105,18 +105,21 @@ The odds columns are `DOUBLE PRECISION` (`sql/migrations/2026_10_odds_double_pre
 
 ---
 
-## Relevant constants in `region_scenarios_pipeline.py`
+## Relevant constants
+
+In `backend/helpers/engine_settings.py`, shared by the pipeline, the API, the headline and the
+pre-rendered pages (the site's wording that states them is tested against them):
 
 ```python
-_R_ALWAYS_MARGIN = 5   # R ≤ this: full 12^R margin enumeration, synchronous
-_R_MAX_COMPUTE = 15    # R > this: Monte Carlo odds only, skip all scenario enumeration
-_R_MAX_ATOMS = 10      # R > this: no per-team atoms
+FULL_MARGINS_MAX_LEFT = 5    # R ≤ this: full 12^R margin enumeration, synchronous; the scenario list is shown
+ENUMERATE_MAX_LEFT = 15      # R > this: Monte Carlo odds only, skip all scenario enumeration
+MONTE_CARLO_SAMPLES = 50_000 # samples per odds mode above ENUMERATE_MAX_LEFT
 ```
 
-In `api_helpers.py`:
+In `region_scenarios_pipeline.py`:
 
 ```python
-DISPLAY_THRESHOLD = 5  # R ≤ this: the scenario list is shown (equal to _R_ALWAYS_MARGIN)
+_R_MAX_ATOMS = 10      # R > this: no per-team atoms
 ```
 
 And in `scenario_viewer.py`:

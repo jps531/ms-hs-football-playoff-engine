@@ -44,6 +44,10 @@ matches, e.g. `complete_scenario_cards` ↔ `completeScenarioCards`), and
 `backend/tests/unit/static_pages_test.py` mirrors the JavaScript tests. A change
 to a card, a label or a sentence goes in both places, with both tests. The
 share cards' text helpers mirror `format.js` the same way.
+`backend/tests/unit/renderer_parity_test.py` runs both sides on the same input
+(the JavaScript under Node, through `nginx/tests/parity/run.mjs`) and fails if
+their answers differ; it also checks the sentences `app.js` and the pre-rendered
+pages both write, word for word.
 
 ## Page parameters
 

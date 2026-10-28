@@ -23,6 +23,7 @@ from backend.helpers.data_classes import (
     WinProbFn,
     equal_win_prob,
 )
+from backend.helpers.engine_settings import PLAYOFF_SEEDS
 from backend.helpers.tiebreakers import (
     rank_to_slots,
     resolve_standings_for_mask,
@@ -65,7 +66,7 @@ def _accumulate_pairs(
     weighted: float,
     pair_counts: dict[tuple[str, int, str, int], float],
     pair_counts_weighted: dict[tuple[str, int, str, int], float],
-    playoff_seeds: int = 4,
+    playoff_seeds: int = PLAYOFF_SEEDS,
 ) -> None:
     """Credit every pair of playoff seeds in this outcome to its two teams.
 

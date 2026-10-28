@@ -24,6 +24,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.color_contrast import contrast_ratio
+from backend.helpers.engine_settings import CLASSES, PLAYOFF_SEEDS
 from backend.helpers.share_cards import (
     display_order,
     format_pct,
@@ -831,7 +832,7 @@ def _covers(v: list[dict], w: list[dict]) -> bool:
     return all(any(holds(x, y) for y in w) for x in v)
 
 
-def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = 4) -> list[dict]:
+def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = PLAYOFF_SEEDS) -> list[dict]:
     """Every distinct way the region can finish, as cards (scenarios.js's ``completeScenarioCards``):
     one card per finish, its ways from every scenario reaching it joined by OR, numbered 1, 2, 3…,
     with the finish's chance (``p`` Toss-up, ``p_weighted`` Projected; None when the snapshot has none)."""
@@ -1663,8 +1664,8 @@ PRINCIPLES_HTML = (
     "and playoff rules, and each team’s Elo rating. "
     "<strong><em>No generative AI models are used to produce any metrics you see on this website</em></strong>.",
 )
-# Each step matches the pipeline's thresholds (region_scenarios_pipeline.py: _R_ALWAYS_MARGIN,
-# _R_MAX_ATOMS, _R_MAX_COMPUTE; api_helpers.DISPLAY_THRESHOLD); docs/architecture/SCENARIO_COMPUTATION.md has the detail.
+# Each step matches the pipeline's thresholds (engine_settings.py: FULL_MARGINS_MAX_LEFT, ENUMERATE_MAX_LEFT,
+# MONTE_CARLO_SAMPLES; region_scenarios_pipeline._R_MAX_ATOMS); docs/architecture/SCENARIO_COMPUTATION.md has the detail.
 HOW_IT_WORKS_HTML = (
     "When there are <strong>5 or fewer</strong> games remaining in a given region, our logic builds the final "
     "standings for each possible combination of outcomes, breaks any ties, and counts how often each team lands "
@@ -1686,7 +1687,6 @@ SCORES_SOURCE = "Scores are sourced from AHSFHS and are updated every morning."
 NOT_AFFILIATED = "This website is not associated with the MHSAA or any of its member schools."
 
 
-CLASSES = range(1, 8)
 
 
 def class_grid() -> str:

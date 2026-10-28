@@ -41,6 +41,7 @@ from backend.helpers.data_classes import (
 )
 from backend.helpers.data_helpers import get_completed_games, with_predecessor_ratings
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.engine_settings import CLASSES, ENUMERATE_MAX_LEFT, FULL_MARGINS_MAX_LEFT, MONTE_CARLO_SAMPLES
 from backend.helpers.insights import extract_insights, serialize_insights
 from backend.helpers.scenario_serializers import (
     serialize_complete_scenarios,
@@ -149,6 +150,23 @@ def fetch_region_teams(clazz: int, region: int, season: int) -> list[str]:
                 (clazz, region, season),
             )
             return [r[0] for r in cur.fetchall()]
+
+
+@task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} Regions by Class")
+def fetch_class_regions(season: int) -> dict[int, list[int]]:
+    """Each class's region numbers for the season, from its active schools' assignments (``school_seasons``,
+    which the regions pipeline loads before anything else runs). Classes without schools are left out."""
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT class, region FROM school_seasons WHERE season = %s AND is_active "
+                "AND class = ANY(%s) ORDER BY class, region",
+                (season, list(CLASSES)),
+            )
+            regions: dict[int, list[int]] = {}
+            for clazz, region in cur.fetchall():
+                regions.setdefault(clazz, []).append(region)
+            return regions
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Fetch {season} All Season Games for Win Probability")
@@ -331,7 +349,7 @@ def clear_off_date_snapshots(
         with conn.cursor() as cur:
             for table, class_type in SNAPSHOT_TABLES:
                 deleted[table] = 0
-                for clazz in range(1, 8):
+                for clazz in CLASSES:
                     start = playoff_starts.get(clazz)
                     cur.execute(
                         f"DELETE FROM {table} WHERE season = %s AND class = %s "  # noqa: S608 -- fixed table names
@@ -1045,10 +1063,10 @@ def write_region_scenarios(
 
 
 # R thresholds for margin computation mode
-_R_ALWAYS_MARGIN = 5  # R ≤ this: always full margin, synchronous
-_R_MAX_COMPUTE = 15  # R > this: Monte Carlo odds, skip scenario enumeration entirely
+# FULL_MARGINS_MAX_LEFT (R ≤ this: always full margin, synchronous) and ENUMERATE_MAX_LEFT (R > this:
+# Monte Carlo odds, no scenario enumeration) are in backend.helpers.engine_settings.
 _R_MAX_ATOMS = 10  # R > this: no per-team atoms (the insights read off them aren't shown past 10 left)
-# R > _R_ALWAYS_MARGIN and R ≤ _R_MAX_COMPUTE: win/loss enumeration, no margin
+# R > FULL_MARGINS_MAX_LEFT and R ≤ ENUMERATE_MAX_LEFT: win/loss enumeration, no margin
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="Seeding Odds {season} {region}-{clazz}A")
@@ -1097,14 +1115,14 @@ def get_region_seeding_odds(
         win_prob_fn = make_win_prob_fn_from_ratings(elo_ratings, elo_snapshots or [], elo_config)
 
     R = len(remaining)
-    use_sampling = R > _R_MAX_COMPUTE
+    use_sampling = R > ENUMERATE_MAX_LEFT
     r = determine_scenarios(
         teams,
         completed,
         remaining,
         win_prob_fn=win_prob_fn,
-        ignore_margins=use_sampling or (R > _R_ALWAYS_MARGIN),
-        n_samples=50_000 if use_sampling else None,
+        ignore_margins=use_sampling or (R > FULL_MARGINS_MAX_LEFT),
+        n_samples=MONTE_CARLO_SAMPLES if use_sampling else None,
     )
 
     odds, odds_weighted = odds_from_results(teams, r)
@@ -1377,7 +1395,7 @@ def get_region_finish_scenarios(
 
     R = len(remaining)
 
-    if R <= _R_ALWAYS_MARGIN:
+    if R <= FULL_MARGINS_MAX_LEFT:
         # Full margin-sensitive computation synchronously. Team paths and insights are read off the
         # complete scenarios, which state only what the tiebreaker decides.
         complete_scenarios = enumerate_division_scenarios(
@@ -1406,7 +1424,7 @@ def get_region_finish_scenarios(
             margin_compute_status="not_needed",
             key_insights=insights,
         )
-    elif R > _R_MAX_COMPUTE:
+    elif R > ENUMERATE_MAX_LEFT:
         # Too many remaining games to enumerate scenarios: write empty atoms/scenarios.
         # Monte Carlo odds are written by get_region_seeding_odds; scenario text is
         # not meaningful or displayable at this R.
@@ -1424,7 +1442,7 @@ def get_region_finish_scenarios(
         )
         return {}
     else:
-        # R > _R_ALWAYS_MARGIN and R ≤ _R_MAX_COMPUTE: win/loss-only, no margin.
+        # R > FULL_MARGINS_MAX_LEFT and R ≤ ENUMERATE_MAX_LEFT: win/loss-only, no margin.
         precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
         complete_scenarios = enumerate_division_scenarios(teams, completed, remaining, precomputed=precomputed_wl)
         scenario_atoms = team_atoms_from_scenarios(complete_scenarios, remaining) if R <= _R_MAX_ATOMS else {}
@@ -1504,16 +1522,18 @@ def region_scenarios_data_flow(
     q_elo_ratings = quote(elo_ratings)
     q_elo_snapshots = quote(elo_snapshots)
 
+    class_regions = fetch_class_regions(season)
+
     def _regions_for(c: int) -> list[int]:
-        """Return valid region numbers for class c (1–8 for 1A–4A; 1–4 for 5A–7A)."""
-        return list(range(1, 9)) if c <= 4 else list(range(1, 5))
+        """The class's region numbers this season (from its schools: 1–8 for 1A–4A and 1–4 for 5A–7A in 2025–26)."""
+        return class_regions.get(c, [])
 
     # Classes already in the playoffs belong to the playoff bracket update,
     # which runs at the end of this flow; computing them here would write
     # rows that ignore every playoff result.
     in_playoffs = classes_in_playoffs(fetch_playoff_start_dates(season), flow_run_date)
     if clazz is None or region is None:
-        targets = [(c, r) for c in range(1, 8) for r in _regions_for(c)]
+        targets = [(c, r) for c in CLASSES for r in _regions_for(c)]
     else:
         targets = [(clazz, region)]
     skipped = sorted({c for c, _ in targets if c in in_playoffs})
@@ -1620,9 +1640,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         idx = bisect.bisect_right(snap_dates, cutoff) - 1
         return elo_snapshots[idx][1] if idx >= 0 else elo_ratings
 
-    all_class_regions: dict[int, list[int]] = {
-        c: list(range(1, 9)) if c <= 4 else list(range(1, 5)) for c in range(1, 8)
-    }
+    all_class_regions = fetch_class_regions(season)
     playoff_starts = fetch_playoff_start_dates(season)
 
     for cutoff_date in snap_dates:

@@ -69,7 +69,10 @@ the command line). It prints the current coverage and what's missing.
 
 | When you change… | …also change |
 |---|---|
-| A page's content, a card, or a label in the JavaScript (`nginx/html/static/js/`) | Its Python mirror in `backend/helpers/static_pages.py` (pre-rendered pages) and both sets of tests ([FRONTEND.md](docs/architecture/FRONTEND.md)). The share cards' text helpers mirror `format.js` the same way. |
+| A page's content, a card, or a label in the JavaScript (`nginx/html/static/js/`) | Its Python mirror in `backend/helpers/static_pages.py` (pre-rendered pages) and both sets of tests ([FRONTEND.md](docs/architecture/FRONTEND.md)). The share cards' text helpers mirror `format.js` the same way. `renderer_parity_test.py` fails if the two disagree. |
+| A setting the site states in words (`backend/helpers/engine_settings.py`: the games-left cutoffs, the sample count, the 0.5% listing floor; the daily update's hour in `flows.py`) | The wording on About, the front page, the footers and in `app.js`. `copy_settings_test.py` fails until they match. |
+| The header, tab bar or footer of one HTML page | The same lines in the other three (`index.html`, `about.html`, `404.html`, `moderate.html`); `page_chrome_test.py` lists the differences that are on purpose. |
+| A feedback form limit (`feedback.js`) | The API's field limit in `backend/api/models/requests.py`, and the other way round. |
 | An analytics event or property | [ANALYTICS.md](docs/reference/ANALYTICS.md)'s table and the About page's description (`nginx/html/about.html#measure`). |
 | An endpoint, a parameter or a response field | [API_REFERENCE.md](docs/reference/API_REFERENCE.md). |
 | The database schema | `sql/init.sql` (new databases), a migration in `sql/migrations/` (existing ones), and [SCHEMA.md](docs/architecture/SCHEMA.md). A migration starts with a header saying how to apply it and is safe to run more than once. |
