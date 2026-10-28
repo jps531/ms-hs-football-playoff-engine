@@ -465,9 +465,20 @@ def locked_pairs(teams: dict[str, dict[int, float]]) -> dict[PairKey, float] | N
     return pairs
 
 
+_STEP = 1e-4  # the payload's resolution: 0.01%
+
+
 def _r(p: float | None) -> float | None:
-    """Round a probability for the payload (0.01% resolution; keeps the response small)."""
-    return None if p is None else round(p, 4)
+    """Round a probability for the payload to 0.01%, which keeps the response small, without letting
+    rounding make it certain: a chance that isn't 0 or 1 (to ``CERTAIN_EPS``) stays at least 0.01%
+    away from both, so a 99.996% chance is sent as 0.9999, never 1, and reads as ">99%"."""
+    if p is None:
+        return None
+    if p <= CERTAIN_EPS:
+        return 0.0
+    if p >= 1 - CERTAIN_EPS:
+        return 1.0
+    return min(max(round(p, 4), _STEP), 1 - _STEP)
 
 
 def merge_modes(

@@ -57,8 +57,14 @@ test("game states: played, determined, partial, projected", () => {
 test("hosting labels come straight from the API's odds", () => {
   assert.deepEqual(hosting(null), { host: "neutral", p: null });
   assert.deepEqual(hosting(1), { host: "a", p: 1 });
-  assert.deepEqual(hosting(0.001), { host: "b", p: 0 });
+  assert.deepEqual(hosting(0), { host: "b", p: 0 });
   assert.deepEqual(hosting(0.4), { host: "split", p: 0.4 });
+});
+
+test("a side hosts only when that's certain: anything short of it is a split with its chance", () => {
+  assert.deepEqual(hosting(0.9999), { host: "split", p: 0.9999 });
+  assert.deepEqual(hosting(0.001), { host: "split", p: 0.001 });
+  assert.deepEqual(hosting(1 - 1e-12), { host: "a", p: 1 }); // float noise on a certainty is still certain
 });
 
 test("matchups in the odds mode, likeliest first", () => {

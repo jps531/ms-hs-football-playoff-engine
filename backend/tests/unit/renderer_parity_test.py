@@ -201,6 +201,7 @@ CASES = [
     *[(f"tableMode {m}", sp.table_mode(m), _call("components", "tableMode", m), "html") for m in ("projected", "tossup")],
     ("genericHelmet", sp.generic_helmet("#112233", "#445566"), _call("components", "genericHelmet", {"shell": "#112233", "stripe": "#445566"}), "html"),
     ("classGrid", sp.class_grid(), _call("landing", "classGrid"), "html"),
+    *[(f"hosting {p}", sp._hosting(p), _call("bracket", "hosting", p), "host") for p in (None, 0, 0.001, 0.4, 0.9999, 1 - 1e-12, 1)],
 ]  # fmt: skip
 
 
@@ -229,6 +230,8 @@ def test_python_and_javascript_agree(js_answers, name, python, how):
         assert _words(python) == _words(js)
     elif how == "html":
         assert python == js
+    elif how == "host":
+        assert python == js["host"]
     elif how == "schools":
         assert python == [t["school"] for t in js]
     elif how == "columns":

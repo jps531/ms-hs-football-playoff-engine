@@ -2432,21 +2432,23 @@ async def _load_and_build_playoff_bracket_state(  # pragma: no cover
     seed_rows = await conn.execute(
         """
         SELECT DISTINCT ON (rs.school) rs.school, rs.region,
-               CASE WHEN rs.odds_1st > 0.99 THEN 1
-                    WHEN rs.odds_2nd > 0.99 THEN 2
-                    WHEN rs.odds_3rd > 0.99 THEN 3
-                    WHEN rs.odds_4th > 0.99 THEN 4
+               CASE WHEN rs.odds_1st >= %(certain)s THEN 1
+                    WHEN rs.odds_2nd >= %(certain)s THEN 2
+                    WHEN rs.odds_3rd >= %(certain)s THEN 3
+                    WHEN rs.odds_4th >= %(certain)s THEN 4
                END AS seed
         FROM region_standings rs"""
         + ACTIVE_SCHOOL_JOIN_RS
         + """
-        WHERE rs.season = %s AND rs.class = %s
+        WHERE rs.season = %(season)s AND rs.class = %(clazz)s
           AND rs.clinched = TRUE
-          AND (rs.odds_1st > 0.99 OR rs.odds_2nd > 0.99 OR rs.odds_3rd > 0.99 OR rs.odds_4th > 0.99)
-          AND rs.as_of_date <= %s
+          AND (rs.odds_1st >= %(certain)s OR rs.odds_2nd >= %(certain)s
+               OR rs.odds_3rd >= %(certain)s OR rs.odds_4th >= %(certain)s)
+          AND rs.as_of_date <= %(as_of)s
         ORDER BY rs.school, rs.as_of_date DESC
         """,
-        (season, clazz, as_of),
+        # A seed only once it's certain: a team merely likely to finish 1st isn't placed there.
+        {"season": season, "clazz": clazz, "as_of": as_of, "certain": CLINCHED_THRESHOLD},
     )
     school_to_seed: dict[str, tuple[int, int]] = {}
     async for school, reg, seed in seed_rows:
@@ -3389,11 +3391,12 @@ def build_enriched_bracket_layout(
                     if p_host_given_reach_by_team:
                         if p_a and p_a.school:
                             a_given_reach = (p_host_given_reach_by_team.get(p_a.school) or {}).get(round_name)
-                            if a_given_reach is not None and a_given_reach > 0.99:
+                            # The home team only when hosting is certain; otherwise there is none yet.
+                            if a_given_reach is not None and a_given_reach >= CLINCHED_THRESHOLD:
                                 home_team = p_a
                         if home_team is None and p_b and p_b.school:
                             b_given_reach = (p_host_given_reach_by_team.get(p_b.school) or {}).get(round_name)
-                            if b_given_reach is not None and b_given_reach > 0.99:
+                            if b_given_reach is not None and b_given_reach >= CLINCHED_THRESHOLD:
                                 home_team = p_b
 
                 venue: VenueModel | None = None

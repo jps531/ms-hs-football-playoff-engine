@@ -1248,12 +1248,13 @@ def _split_host(a: str, b: str, p_host_a: float) -> str:
 
 
 def _hosting(p_host_a: float | None) -> str:
-    """Who hosts a pairing: "a", "b", "split" or "neutral" (bracket.js's ``hosting``)."""
+    """Who hosts a pairing: "a", "b", "split" or "neutral" (bracket.js's ``hosting``). A side hosts only
+    when that's certain; anything short of it is a split."""
     if p_host_a is None:
         return "neutral"
-    if p_host_a >= 0.995:
+    if p_host_a >= _LOCKED:
         return "a"
-    if p_host_a <= 0.005:
+    if p_host_a <= CERTAIN_EPS:
         return "b"
     return "split"
 
@@ -1685,8 +1686,6 @@ HOW_IT_WORKS_HTML = (
 )
 SCORES_SOURCE = "Scores are sourced from AHSFHS and are updated every morning."
 NOT_AFFILIATED = "This website is not associated with the MHSAA or any of its member schools."
-
-
 
 
 def class_grid() -> str:
