@@ -174,19 +174,22 @@ def fetch_class_regions(season: int) -> dict[int, list[int]]:
 def fetch_all_season_games(season: int, cutoff_date: date | None = None) -> list[Game]:
     """Fetch all final, scored games for the season (used to build Elo/RPI ratings).
 
+    Each game's ``date`` is its ``game_date``, the same in both schools' rows, so
+    the two rows dedupe to one game even when the source dated them differently.
+
     Args:
         cutoff_date: When provided, only games on or before this date are returned.
                      Used by the historical backfill flow to reconstruct past state.
     """
     base_query = (
-        "SELECT school, date, season, location_id, points_for, points_against, "
+        "SELECT school, game_date, season, location_id, points_for, points_against, "
         "       round, kickoff_time, opponent, result, game_status, source, "
         "       location, region_game, final, overtime "
         "FROM games_effective "
         "WHERE season=%s AND final=TRUE AND points_for IS NOT NULL AND points_against IS NOT NULL"
     )
     if cutoff_date is not None:
-        base_query += " AND date <= %s"
+        base_query += " AND game_date <= %s"
         params: tuple = (season, cutoff_date)
     else:
         params = (season,)
@@ -285,7 +288,7 @@ def fetch_playoff_start_dates(season: int) -> dict[int, date]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT ss.class, MIN(g.date)
+                SELECT ss.class, MIN(g.game_date)
                 FROM games_effective g
                 JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
                 WHERE g.season = %s AND g.final = TRUE AND g.round IS NOT NULL
@@ -538,7 +541,9 @@ def write_pregame_probabilities(
     """Persist ``pregame_prob`` onto both mirror rows of every final game.
 
     See ``compute_pregame_prob_rows`` for the (pure, unit-tested) selection
-    and lookup logic; this task just writes the resulting rows.
+    and lookup logic; this task just writes the resulting rows. Their dates are
+    game dates (see ``fetch_all_season_games``), so each is matched to the
+    school's row by ``game_date``: that row's own date can be a day earlier.
     """
     rows = compute_pregame_prob_rows(games, elo_snapshots, initial_ratings, elo_cfg)
     if not rows:
@@ -547,8 +552,9 @@ def write_pregame_probabilities(
     sql = """
         UPDATE games AS g
         SET pregame_prob = v.prob, pregame_prob_computed_at = NOW()
-        FROM (VALUES %s) AS v(school, game_date, prob)
-        WHERE g.school = v.school AND g.date = v.game_date::date
+        FROM (VALUES %s) AS v(school, game_date, prob), games_effective AS e
+        WHERE e.school = v.school AND e.game_date = v.game_date::date
+          AND g.school = e.school AND g.date = e.date
     """
     with get_database_connection() as conn:
         with conn.cursor() as cur:
@@ -562,17 +568,20 @@ def write_pregame_probabilities(
 def fetch_completed_pairs(teams: list[str], season: int, cutoff_date: date | None = None) -> list[CompletedGame]:
     """Fetch and normalize all finalized region games among the given teams.
 
+    Rows are dated by ``game_date``, so a game's two rows dedupe to one game (and
+    fall on the same side of a cutoff) even when the source dated them differently.
+
     Args:
         cutoff_date: When provided, only games on or before this date are returned.
                      Used by the historical backfill flow to reconstruct past state.
     """
     base_query = (
-        "SELECT school, opponent, date, result, points_for, points_against "
+        "SELECT school, opponent, game_date, result, points_for, points_against "
         "FROM games_effective "
         "WHERE season=%s AND final=TRUE AND region_game=TRUE"
     )
     if cutoff_date is not None:
-        base_query += " AND date <= %s"
+        base_query += " AND game_date <= %s"
         params: tuple = (season, cutoff_date, teams, teams)
     else:
         params = (season, teams, teams)
@@ -610,12 +619,12 @@ def fetch_remaining_pairs(teams: list[str], season: int, cutoff_date: date | Non
     location from the lex-first team's perspective ('home'/'away'/'neutral').
 
     Args:
-        cutoff_date: When provided, treats games with date > cutoff_date as
+        cutoff_date: When provided, treats games played after cutoff_date as
                      remaining (historical reconstruction mode). Without it,
                      fetches games currently marked final=FALSE.
     """
     if cutoff_date is not None:
-        date_filter = "date > %s AND region_game=TRUE"
+        date_filter = "game_date > %s AND region_game=TRUE"
         params: tuple = (season, cutoff_date, teams, teams)
     else:
         date_filter = "final=FALSE AND region_game=TRUE"
