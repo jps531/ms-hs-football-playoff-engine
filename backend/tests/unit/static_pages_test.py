@@ -875,13 +875,12 @@ STRINGER = {
         {"type": "margin_condition", "add": [], "sub": [], "op": ">=", "threshold": 10},
         {"type": "game_result", "winner": "Lumberton", "loser": "Magee", "min_margin": 1, "max_margin": None},
     ],
-    "coinflip_groups": [["Magee", "Richton"]],
     "outcomes": {"Lumberton": "2", "Stringer": "1", "Magee": "4", "Richton": "3", "Taylorsville": "5"},
 }
 
 
 def test_complete_scenario_cards_match_scenarios_js():
-    """Mirrors scenarios.test.mjs: numbered by position, seeds in order, who's out, the conditions with the coin flip, and finishes merged."""
+    """Mirrors scenarios.test.mjs: numbered by position, seeds in order, who's out, the conditions, and finishes merged."""
     from backend.helpers.static_pages import complete_scenario_cards
 
     [card] = complete_scenario_cards([STRINGER])
@@ -894,10 +893,9 @@ def test_complete_scenario_cards_match_scenarios_js():
     ]
     assert card["out"] == ["Taylorsville"]
     [group] = card["groups"]
-    assert [c["type"] for c in group] == ["game_result", "text", "game_result", "coin_flip"]
+    assert [c["type"] for c in group] == ["game_result", "text", "game_result"]
     assert group[0]["min_margin"] == 8
     assert group[1]["description"] == "Stringer's points margin and Lumberton's points margin combined total 10 or more"
-    assert group[3]["description"] == "A coin flip settles the tie between Magee and Richton"
 
     [fallback] = complete_scenario_cards([{
         "scenario_num": 1, "sub_label": "", "title": "A beats B",

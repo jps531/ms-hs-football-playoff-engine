@@ -1671,7 +1671,6 @@ def enumerate_division_scenarios(
       open only because it has too many outcomes to list, each seed it can take (``playoff_seeds +
       1`` meaning out) with the margin conditions that give it, any one of which is enough (see
       ``_place_terms``); a team not listed is left to the tiebreaker.
-    - ``tiebreaker_groups``, ``coinflip_groups``: always None (kept for stored-snapshot compatibility).
     - ``seeding`` (tuple[str, ...]): the playoff seeds in order, then the teams out alphabetically
       (outcomes differing only below the playoff seeds are one outcome); an open group's places
       alphabetical. An open group wholly out of the playoffs isn't listed.
@@ -1914,8 +1913,6 @@ def enumerate_division_scenarios(
             "open_places": {t: list(seeds) for t, seeds in places} or None,
             "place_terms": {t: [(seed, [list(term) for term in ways]) for seed, ways in by_seed] for t, by_seed in terms}
             or None,
-            "tiebreaker_groups": None,
-            "coinflip_groups": None,
             "seeding": seeding,
         }
 
@@ -2015,9 +2012,8 @@ def render_scenarios(scenarios: list[dict], playoff_seeds: int = PLAYOFF_SEEDS) 
     This is the decoupled rendering path — it does not re-run enumeration, so it
     can be called cheaply at request time using scenarios loaded from the database.
 
-    A group whose order a scenario leaves to the tiebreaker (``open_groups``,
-    or older snapshots' ``tiebreaker_groups``/``coinflip_groups``) is shown as
-    one line over its places, saying what decides it, never as an order.
+    A group whose order a scenario leaves to the tiebreaker (``open_groups``) is
+    shown as one line over its places, saying what decides it, never as an order.
 
     Example output::
 
@@ -2048,8 +2044,6 @@ def render_scenarios(scenarios: list[dict], playoff_seeds: int = PLAYOFF_SEEDS) 
         seeding = list(sc["seeding"])
         # Groups whose order isn't stated: shown as one line over their places, never in an order.
         groups = [(step, list(g)) for step, g in sc.get("open_groups") or []]
-        groups += [(3, list(g)) for g in sc.get("tiebreaker_groups") or []]  # older stored scenarios
-        groups += [(6, list(g)) for g in sc.get("coinflip_groups") or []]
         at: dict[int, tuple[int, list[str]]] = {}
         for step, group in groups:
             spots = sorted(seeding.index(t) for t in group if t in seeding)

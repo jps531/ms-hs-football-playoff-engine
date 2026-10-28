@@ -867,11 +867,6 @@ def complete_scenario_cards(scenarios: list[dict] | None, playoff_seeds: int = P
             return {"type": "text", "description": c.get("description") or (phrases[i] if i < len(phrases) else "")}
 
         groups = [g for g in ([chip(c, i) for i, c in enumerate(source)] for source in sources) if g]
-        for group in sc.get("coinflip_groups") or []:
-            if len(group) > 1:
-                word = "between" if len(group) == 2 else "among"
-                flip = {"type": "coin_flip", "description": f"A coin flip settles the tie {word} {join_names(group)}"}
-                groups = [[*g, flip] for g in groups] or [[flip]]
         order = sorted(
             ({"team": t, "seed": int(n)} for t, n in (sc.get("outcomes") or {}).items()), key=lambda o: o["seed"]
         )

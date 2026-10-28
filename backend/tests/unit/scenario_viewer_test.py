@@ -1497,7 +1497,7 @@ class TestRenderScenariosEdgeCases:
     """render_scenarios branches for cross-boundary tie groups and group interiors."""
 
     @staticmethod
-    def _sc(seeding, tiebreaker_groups=None, coinflip_groups=None):
+    def _sc(seeding, open_groups=None):
         """Build a minimal scenario dict for render_scenarios."""
         return {
             "scenario_num": 1,
@@ -1505,8 +1505,7 @@ class TestRenderScenariosEdgeCases:
             "conditions_atom": None,
             "game_winners": [("A", "B")],
             "seeding": tuple(seeding),
-            "tiebreaker_groups": tiebreaker_groups,
-            "coinflip_groups": coinflip_groups,
+            "open_groups": open_groups,
         }
 
     def test_tie_group_spanning_playoff_boundary_falls_through(self):
@@ -1517,18 +1516,17 @@ class TestRenderScenariosEdgeCases:
         """
         sc = self._sc(
             seeding=["A", "B", "C", "D", "E"],
-            tiebreaker_groups=[["D", "E"]],
+            open_groups=[(3, ("D", "E"))],
         )
         rendered = render_scenarios([sc], playoff_seeds=4)
         assert "4. D or E: order decided by the tiebreaker" in rendered
         assert "Eliminated: the rest of that tie" in rendered
 
     def test_overlapping_groups_hit_interior_continue(self):
-        """Overlapping stored groups: the first claims its places and the rest render normally."""
+        """Overlapping groups: the first claims its places and the rest render normally."""
         sc = self._sc(
             seeding=["A", "B", "C", "D"],
-            tiebreaker_groups=[["A", "B"]],
-            coinflip_groups=[["B", "C"]],
+            open_groups=[(3, ("A", "B")), (6, ("B", "C"))],
         )
         rendered = render_scenarios([sc], playoff_seeds=4)
         assert "1-2. A and B: order decided by the tiebreaker" in rendered

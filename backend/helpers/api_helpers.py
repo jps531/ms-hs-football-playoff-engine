@@ -906,8 +906,6 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
                 sub_label=sc["sub_label"],
                 title=render_scenario_title(sc),
                 game_winners=[ScenarioGameOutcome(winner=w, loser=l) for w, l in sc.get("game_winners", [])],
-                tiebreaker_groups=sc.get("tiebreaker_groups"),
-                coinflip_groups=sc.get("coinflip_groups"),
                 outcomes={team: str(idx + 1) for idx, team in enumerate(seeding)},
                 conditions=described(conditions_atom) if conditions_atom is not None else None,
                 condition_groups=[described(a) for a in alternatives] if alternatives else None,
