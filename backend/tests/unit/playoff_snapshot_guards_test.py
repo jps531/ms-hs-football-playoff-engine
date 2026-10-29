@@ -59,7 +59,7 @@ def flow_env(monkeypatch):
     """Mock every DB/engine call the two flows make, recording region writes and playoff updates."""
     events: list[tuple] = []
 
-    def finish(c, r, season, seeding, matchup_fn, as_of_date=None):
+    def finish(c, r, season, seeding, matchup_fn, as_of_date=None, reuse=None):
         """Stand-in for get_region_finish_scenarios: record the region_standings write."""
         events.append(("write", c, r, as_of_date))
 

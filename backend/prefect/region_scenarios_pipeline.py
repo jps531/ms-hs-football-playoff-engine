@@ -1076,6 +1076,37 @@ def write_region_scenarios(
 # FULL_MARGINS_MAX_LEFT (R ≤ this: always full margin, synchronous) and ENUMERATE_MAX_LEFT (R > this:
 # Monte Carlo odds, no scenario enumeration) are in backend.helpers.engine_settings.
 _R_MAX_ATOMS = 10  # R > this: no per-team atoms (the insights read off them aren't shown past 10 left)
+
+
+class Reuse:
+    """What a backfill can reuse from one date to the next, region by region.
+
+    A region's seeding odds are worked out from its teams, its games played and left, and each game
+    left's win chance, and nothing else (the sampling past 15 games left is seeded from the games), so
+    a date where all of those are what they were on the region's last date gives the same odds. Its
+    scenarios, team paths and insights don't depend on the win chances at all with more than
+    ``FULL_MARGINS_MAX_LEFT`` games left (each scenario's Projected chance does, with fewer), so they
+    carry over as long as the games do. Only the last date's results are kept for each region: most
+    dates repeat the one before, and keeping every date would hold far more in memory.
+    """
+
+    def __init__(self) -> None:
+        self._last: dict[tuple, tuple] = {}
+        self.reused = {"odds": 0, "scenarios": 0}
+        self.worked_out = {"odds": 0, "scenarios": 0}
+
+    def get(self, kind: str, clazz: int, region: int, key: tuple):
+        """The region's last *kind* result if it came from *key*, else None."""
+        last = self._last.get((kind, clazz, region))
+        if last is not None and last[0] == key:
+            self.reused[kind] += 1
+            return last[1]
+        return None
+
+    def put(self, kind: str, clazz: int, region: int, key: tuple, value) -> None:
+        """Keep *value*, worked out from *key*, as the region's last *kind* result."""
+        self.worked_out[kind] += 1
+        self._last[(kind, clazz, region)] = (key, value)
 # R > FULL_MARGINS_MAX_LEFT and R ≤ ENUMERATE_MAX_LEFT: win/loss enumeration, no margin
 
 
@@ -1088,6 +1119,7 @@ def get_region_seeding_odds(
     elo_snapshots: list[tuple[date, dict[str, float], dict[str, int]]] | None = None,
     elo_config: EloConfig | None = None,
     cutoff_date: date | None = None,
+    reuse: Reuse | None = None,
 ) -> RegionSeedingData:
     """Phase 1: fetch games, enumerate outcomes, and return seeding odds.
 
@@ -1109,6 +1141,8 @@ def get_region_seeding_odds(
         cutoff_date:   When provided, only games on or before this date are
                        treated as completed; later games are treated as remaining.
                        Used by the historical backfill flow.
+        reuse:         The backfill's ``Reuse``: the region's last odds, returned
+                       as they are when its teams, games and win chances match.
 
     Returns:
         A ``RegionSeedingData`` containing unweighted and weighted seeding
@@ -1123,6 +1157,12 @@ def get_region_seeding_odds(
     win_prob_fn: WinProbFn | None = None
     if elo_ratings is not None:
         win_prob_fn = make_win_prob_fn_from_ratings(elo_ratings, elo_snapshots or [], elo_config)
+    win_probs = [win_prob_fn(g.a, g.b, None, g.location_a) for g in remaining] if win_prob_fn else None
+
+    # Everything the odds are worked out from (determine_scenarios asks win_prob_fn only for these).
+    key = (tuple(teams), tuple(completed), tuple(remaining), tuple(win_probs) if win_probs is not None else None)
+    if reuse is not None and (same := reuse.get("odds", clazz, region, key)) is not None:
+        return same
 
     R = len(remaining)
     use_sampling = R > ENUMERATE_MAX_LEFT
@@ -1136,7 +1176,7 @@ def get_region_seeding_odds(
     )
 
     odds, odds_weighted = odds_from_results(teams, r)
-    return RegionSeedingData(
+    data = RegionSeedingData(
         odds=odds,
         odds_weighted=odds_weighted,
         coinflip_teams=r.coinflip_teams,
@@ -1147,8 +1187,11 @@ def get_region_seeding_odds(
         seed_pairs_weighted=(
             {k: v / r.denom_weighted for k, v in r.seed_pairs_weighted.items()} if r.denom_weighted else {}
         ),
-        remaining_win_probs=[win_prob_fn(g.a, g.b, None, g.location_a) for g in remaining] if win_prob_fn else None,
+        remaining_win_probs=win_probs,
     )
+    if reuse is not None:
+        reuse.put("odds", clazz, region, key, data)
+    return data
 
 
 def _pairs_json(pairs: dict[tuple[str, int, str, int], float]) -> str:
@@ -1197,6 +1240,7 @@ def get_region_finish_scenarios(
     rounds_completed: int = 0,
     all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
     round_snapshots: dict[int, dict[int, dict[str, StandingsOdds]]] | None = None,
+    reuse: Reuse | None = None,
 ):
     """Phase 2: compute bracket/home odds and write results to DB.
 
@@ -1228,6 +1272,11 @@ def get_region_finish_scenarios(
                             Searched newest-first when opponents are no longer
                             alive in *all_region_odds* or when r2_home history
                             must be resolved from an earlier round's data.
+        reuse:              The backfill's ``Reuse``: the region's last scenarios,
+                            team paths and insights, used as they are when its
+                            games (and, with five or fewer left, win chances) match.
+                            The bracket and hosting odds, which turn on the whole
+                            class, are always worked out.
     """
     logger = get_run_logger()
 
@@ -1404,23 +1453,38 @@ def get_region_finish_scenarios(
         )
 
     R = len(remaining)
+    # What the scenarios, paths and insights are worked out from: the games, and with five or fewer
+    # left also the win chances (each scenario's Projected chance). The insights also read the
+    # Toss-up odds, which the games alone decide.
+    key = (
+        tuple(teams),
+        tuple(completed),
+        tuple(remaining),
+        tuple(seeding_data.remaining_win_probs or ()) if R <= FULL_MARGINS_MAX_LEFT else None,
+    )
+    same = reuse.get("scenarios", clazz, region, key) if reuse is not None and R <= ENUMERATE_MAX_LEFT else None
 
     if R <= FULL_MARGINS_MAX_LEFT:
         # Full margin-sensitive computation synchronously. Team paths and insights are read off the
         # complete scenarios, which state only what the tiebreaker decides.
-        complete_scenarios = enumerate_division_scenarios(
-            teams, completed, remaining, scenario_odds=True, win_probs=seeding_data.remaining_win_probs
-        )
-        scenario_atoms = team_atoms_from_scenarios(complete_scenarios, remaining)
-        insights = extract_insights(
-            scenario_atoms,
-            teams,
-            completed,
-            remaining,
-            odds=stored_odds,
-            r_computed=R,
-            complete_scenarios=complete_scenarios,
-        )
+        if same is not None:
+            complete_scenarios, scenario_atoms, insights = same
+        else:
+            complete_scenarios = enumerate_division_scenarios(
+                teams, completed, remaining, scenario_odds=True, win_probs=seeding_data.remaining_win_probs
+            )
+            scenario_atoms = team_atoms_from_scenarios(complete_scenarios, remaining)
+            insights = extract_insights(
+                scenario_atoms,
+                teams,
+                completed,
+                remaining,
+                odds=stored_odds,
+                r_computed=R,
+                complete_scenarios=complete_scenarios,
+            )
+            if reuse is not None:
+                reuse.put("scenarios", clazz, region, key, (complete_scenarios, scenario_atoms, insights))
         write_region_scenarios.fn(
             clazz,
             region,
@@ -1453,18 +1517,23 @@ def get_region_finish_scenarios(
         return {}
     else:
         # R > FULL_MARGINS_MAX_LEFT and R ≤ ENUMERATE_MAX_LEFT: win/loss-only, no margin.
-        precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
-        complete_scenarios = enumerate_division_scenarios(teams, completed, remaining, precomputed=precomputed_wl)
-        scenario_atoms = team_atoms_from_scenarios(complete_scenarios, remaining) if R <= _R_MAX_ATOMS else {}
-        insights = extract_insights(
-            scenario_atoms,
-            teams,
-            completed,
-            remaining,
-            odds=stored_odds,
-            r_computed=R,
-            complete_scenarios=complete_scenarios,
-        )
+        if same is not None:
+            complete_scenarios, scenario_atoms, insights = same
+        else:
+            precomputed_wl = enumerate_outcomes(teams, completed, remaining, ignore_margins=True)
+            complete_scenarios = enumerate_division_scenarios(teams, completed, remaining, precomputed=precomputed_wl)
+            scenario_atoms = team_atoms_from_scenarios(complete_scenarios, remaining) if R <= _R_MAX_ATOMS else {}
+            insights = extract_insights(
+                scenario_atoms,
+                teams,
+                completed,
+                remaining,
+                odds=stored_odds,
+                r_computed=R,
+                complete_scenarios=complete_scenarios,
+            )
+            if reuse is not None:
+                reuse.put("scenarios", clazz, region, key, (complete_scenarios, scenario_atoms, insights))
         write_region_scenarios.fn(
             clazz,
             region,
@@ -1652,6 +1721,8 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
 
     all_class_regions = fetch_class_regions(season)
     playoff_starts = fetch_playoff_start_dates(season)
+    # Each region's last results, reused on a date where what they're worked out from hasn't changed.
+    reuse = Reuse()
 
     for cutoff_date in snap_dates:
         # From a class's first playoff game on, its dates are written by the
@@ -1678,6 +1749,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
                     elo_snapshots=quote([]),
                     elo_config=elo_cfg,
                     cutoff_date=cutoff_date,
+                    reuse=quote(reuse),
                 )
 
         # Build per-class matchup probability functions from cutoff-date ratings.
@@ -1690,8 +1762,16 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         for c, regions in class_regions.items():
             for r in regions:
                 get_region_finish_scenarios(
-                    c, r, season, quote(seeding[(c, r)]), matchup_fns[c], as_of_date=cutoff_date
+                    c, r, season, quote(seeding[(c, r)]), matchup_fns[c], as_of_date=cutoff_date, reuse=quote(reuse)
                 )
+
+    logger.info(
+        "Reused odds for %d region-dates (worked out %d) and scenarios for %d (worked out %d)",
+        reuse.reused["odds"],
+        reuse.worked_out["odds"],
+        reuse.reused["scenarios"],
+        reuse.worked_out["scenarios"],
+    )
 
     # The daily rows between game dates would shadow what was just written.
     deleted = clear_off_date_snapshots(season, snap_dates, playoff_starts, today)
