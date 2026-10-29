@@ -2,7 +2,7 @@
 -- Classes 1A-4A: 8 regions, 32 teams, 5 rounds
 -- Classes 5A-7A: 4 regions, 16 teams, 4 rounds
 --
--- This seed is also included in sql/init.sql (run automatically on DB creation).
+-- docker-compose.yml runs this file when the database is first created (sql/init.sql doesn't include it).
 -- Re-running this file is idempotent (ON CONFLICT DO NOTHING).
 
 INSERT INTO playoff_formats (season, class, num_regions, seeds_per_region, num_rounds, notes)
