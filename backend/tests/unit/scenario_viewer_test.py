@@ -10,7 +10,7 @@ from backend.helpers.data_classes import (
     RemainingGame,
 )
 from backend.helpers.data_helpers import get_completed_games
-from backend.helpers.scenario_renderer import _render_margin_condition
+from backend.helpers.scenario_renderer import render_margin_condition
 from backend.helpers.scenario_viewer import (
     _find_tiebreaker_groups,
     _format_team_list,
@@ -69,11 +69,9 @@ def _atom_satisfied(atom, mask, margins):
 
 
 def test_3_7a_scenario_count():
-    """3-7A lists 6 scenarios: one per set of winners that decides the seeding.
-
-    With Brandon, Pearl and Northwest Rankin all winning, five teams tie and their order has 12
-    possible top-4 finishes, more than are listed one by one, so that's a single scenario leaving
-    the tie to the tiebreaker.
+    """3-7A lists 17 scenarios: one per set of winners that decides the seeding, except that with
+    Brandon, Pearl and Northwest Rankin all winning, five teams tie and their order has 12 possible
+    top-4 finishes, each of which can be stated in margins, so each is its own sub-scenario (4a-4l).
     """
     scenarios = enumerate_division_scenarios(
         teams_3_7a,
@@ -81,22 +79,26 @@ def test_3_7a_scenario_count():
         _REMAINING,
         scenario_atoms=expected_3_7a_scenarios,
     )
-    assert len(scenarios) == 6
+    assert len(scenarios) == 17
 
 
-def test_3_7a_five_way_tie_left_to_the_tiebreaker():
-    """The five-way tie is one scenario naming the tie (the four whose places vary; Brandon is always
-    fifth), with no order or margins made up for it."""
+def test_3_7a_five_way_tie_listed_in_margins():
+    """The five-way tie's 12 finishes are each a sub-scenario stated in margins alone (margin ranges
+    and comparisons of the two margins that matter), with no tie left open."""
     scenarios = enumerate_division_scenarios(
         teams_3_7a,
         expected_3_7a_completed_games,
         _REMAINING,
         scenario_atoms=expected_3_7a_scenarios,
     )
-    assert not [sc for sc in scenarios if sc["sub_label"]]
-    sc4 = next(sc for sc in scenarios if sc["scenario_num"] == 4)
-    assert sc4["open_groups"] == [(3, ("Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
-    assert sc4["conditions_atom"] is None
+    subs = [sc for sc in scenarios if sc["scenario_num"] == 4]
+    assert [sc["sub_label"] for sc in subs] == list("abcdefghijkl")
+    for sc in subs:
+        assert sc["open_groups"] is None
+        for atom in sc["alternatives"] or [sc["conditions_atom"]]:
+            assert all(isinstance(c, (GameResult, MarginCondition)) for c in atom)
+    assert any(isinstance(c, MarginCondition) for sc in subs for c in sc["conditions_atom"])
+    assert len({sc["seeding"][:4] for sc in subs}) == 12
 
 
 def test_3_7a_grouped_scenarios_omit_irrelevant_game():
@@ -237,28 +239,28 @@ _DUMMY_ATOM = [GameResult("Brandon", "Meridian")]
 def test_render_margin_condition_sum_eq():
     """op='==' with 2 addends renders as 'combined total exactly N'."""
     mc = MarginCondition(add=(_NWR_PET, _OG_PRL), sub=(), op="==", threshold=10)
-    result = _render_margin_condition(mc, _DUMMY_ATOM)
+    result = render_margin_condition(mc, _DUMMY_ATOM)
     assert result == "Northwest Rankin/Petal's and Oak Grove/Pearl's winning margins add up to exactly 10 (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_positive():
     """op='==' diff with positive t renders as 'A exceeds B by exactly N'."""
     mc = MarginCondition(add=(_NWR_PET,), sub=(_OG_PRL,), op="==", threshold=2)
-    result = _render_margin_condition(mc, _DUMMY_ATOM)
+    result = render_margin_condition(mc, _DUMMY_ATOM)
     assert result == "Northwest Rankin/Petal wins by exactly 2 more points than Oak Grove/Pearl (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_negative():
     """op='==' diff with negative t renders as 'B exceeds A by exactly N'."""
     mc = MarginCondition(add=(_NWR_PET,), sub=(_OG_PRL,), op="==", threshold=-3)
-    result = _render_margin_condition(mc, _DUMMY_ATOM)
+    result = render_margin_condition(mc, _DUMMY_ATOM)
     assert result == "Oak Grove/Pearl wins by exactly 3 more points than Northwest Rankin/Petal (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_zero():
     """op='==' diff with t=0 renders as 'A and B win by the same margin'."""
     mc = MarginCondition(add=(_NWR_PET,), sub=(_OG_PRL,), op="==", threshold=0)
-    result = _render_margin_condition(mc, _DUMMY_ATOM)
+    result = render_margin_condition(mc, _DUMMY_ATOM)
     assert result == "Northwest Rankin/Petal and Oak Grove/Pearl win by the same margin (a margin over 12 counts as 12)"
 
 
@@ -337,44 +339,36 @@ class TestBuildScenarioAtoms37A:
         """Return enumerate_division_scenarios output built from algorithmic atoms."""
         return _SCENARIOS_3_7A
 
-    def test_produces_6_scenarios(self):
-        """build_scenario_atoms atoms yield the same 6 scenarios (scenarios don't depend on atoms)."""
-        assert len(self._scenarios()) == 6
+    def test_produces_17_scenarios(self):
+        """build_scenario_atoms atoms yield the same 17 scenarios (scenarios don't depend on atoms)."""
+        assert len(self._scenarios()) == 17
 
-    def test_five_way_tie_is_one_scenario(self):
-        """The five-way tie is left to the tiebreaker rather than split into sub-scenarios."""
-        assert not [sc for sc in self._scenarios() if sc["sub_label"]]
-        assert [sc["open_groups"] for sc in self._scenarios() if sc["scenario_num"] == 4] == [
-            [(3, ("Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
-        ]
+    def test_five_way_tie_is_split_by_margins(self):
+        """The five-way tie is split into sub-scenarios 4a-4l, none leaving the tie open."""
+        subs = [sc for sc in self._scenarios() if sc["scenario_num"] == 4]
+        assert len(subs) == 12
+        assert all(sc["open_groups"] is None for sc in subs)
 
     def test_render_uses_range_descriptions_not_exact_values(self):
-        """Rendered output uses range-based wording, not per-game point samples.
-
-        The old exact-margin-sample implementation produced "Team A beats Team B by exactly N"
-        for per-game GameResult conditions (unit-width intervals).  The correct output uses
-        ranges like "by 1–5" or "by 6 or more".  Joint MarginCondition rendering ("margin
-        exceeds X by exactly 2") is still allowed — we only reject point-sample GameResults.
-        """
+        """Rendered output uses range-based wording, not per-game point samples: each Scenario 4 line
+        states a game's margin as a range ("by 1–5", "by 6 or more"), and "by exactly N" only where
+        the range really is that one margin (sub-scenario 4f, Northwest Rankin by exactly 1)."""
         output = render_scenarios(self._scenarios())
-        for line in output.splitlines():
-            if not line.startswith("Scenario 4"):
-                continue
-            # Split on " AND " so each clause is checked individually.
-            # A per-game point-sample clause looks like "Team A beats Team B by exactly N".
-            # MarginCondition clauses look like "X wins by exactly N more points than Y" — allowed.
-            clauses = line.split(" AND ")
-            for clause in clauses:
-                if "beats" in clause and "by exactly" in clause:
-                    raise AssertionError(
-                        f"Per-game point-sample condition found (expected a range): {clause!r}\nFull line: {line!r}"
-                    )
+        exact = [
+            clause
+            for line in output.splitlines()
+            if line.startswith("Scenario 4")
+            for clause in line.split(" AND ")
+            if "beats" in clause and "by exactly" in clause
+        ]
+        assert exact == ["Northwest Rankin beats Petal by exactly 1"]
 
     def test_render_contains_joint_constraints(self):
-        """The five-way tie renders as left to the tiebreaker, not as margin arithmetic."""
+        """The five-way tie renders as margin comparisons in plain words, not as left to the tiebreaker."""
         output = render_scenarios(self._scenarios())
-        assert "order decided by the tiebreaker (point differential, then fewest points allowed)" in output
-        assert "combined total" not in output and "margin exceeds" not in output
+        assert "order decided by the tiebreaker" not in output
+        assert "Pearl wins by exactly 2 more points than Northwest Rankin" in output
+        assert "Pearl's and Northwest Rankin's winning margins add up to 11 or more" in output
 
     def test_render_scenario_1_correct(self):
         """Scenario 1 is deterministic: Pearl wins, Petal wins, Brandon game irrelevant."""
@@ -1070,16 +1064,17 @@ _SCENARIOS_PC = enumerate_division_scenarios(teams_3_7a, _COMPLETED_PC, _REMAINI
 
 
 def test_partial_a_scenario_count():
-    """Partial A (Brandon/Meridian known) produces 4 scenarios, one per set of winners."""
-    assert len(_SCENARIOS_PA) == 4
+    """Partial A (Brandon/Meridian known) produces 15 scenarios: one per set of winners, the five-way
+    tie's 12 finishes each its own."""
+    assert len(_SCENARIOS_PA) == 15
 
 
 def test_partial_a_scenario_labels():
-    """Partial A's five-way tie (Pearl and NWR win) has too many finishes to list: scenario 3 leaves it open.
-    Brandon finishes fifth at every margin, so the tie it leaves open is the other four."""
-    assert not [sc for sc in _SCENARIOS_PA if sc["sub_label"]]
-    sc3 = next(sc for sc in _SCENARIOS_PA if sc["scenario_num"] == 3)
-    assert sc3["open_groups"] == [(3, ("Northwest Rankin", "Oak Grove", "Pearl", "Petal"))]
+    """Partial A's five-way tie (Pearl and NWR win) has 12 finishes, each stated in margins: 3a-3l."""
+    assert [f"{sc['scenario_num']}{sc['sub_label']}" for sc in _SCENARIOS_PA] == (
+        ["1", "2"] + [f"3{c}" for c in "abcdefghijkl"] + ["4"]
+    )
+    assert all(sc["open_groups"] is None for sc in _SCENARIOS_PA)
 
 
 def test_partial_a_deterministic_seedings():
@@ -1266,8 +1261,88 @@ Scenario 2: Oak Grove beats Pearl AND Petal beats Northwest Rankin
 4. Northwest Rankin
 Eliminated: Meridian, Pearl
 
-Scenario 3: Pearl beats Oak Grove AND Northwest Rankin beats Petal
-1-4. Northwest Rankin, Oak Grove, Pearl, and Petal: order decided by the tiebreaker (point differential, then fewest points allowed)
+Scenario 3a: Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
+1. Oak Grove
+2. Petal
+3. Northwest Rankin
+4. Pearl
+Eliminated: Brandon, Meridian
+
+Scenario 3b: Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl's and Northwest Rankin's winning margins add up to 9 or less (a margin over 12 counts as 12)
+1. Oak Grove
+2. Northwest Rankin
+3. Petal
+4. Pearl
+Eliminated: Brandon, Meridian
+
+Scenario 3c: Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to exactly 10 (a margin over 12 counts as 12)
+1. Oak Grove
+2. Northwest Rankin
+3. Pearl
+4. Petal
+Eliminated: Brandon, Meridian
+
+Scenario 3d: Pearl beats Oak Grove by 1–5 AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+1. Northwest Rankin
+2. Oak Grove
+3. Pearl
+4. Petal
+Eliminated: Brandon, Meridian
+
+Scenario 3e: Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl wins by exactly 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+1. Petal
+2. Oak Grove
+3. Northwest Rankin
+4. Pearl
+Eliminated: Brandon, Meridian
+
+Scenario 3f: Pearl beats Oak Grove by 4–5 AND Northwest Rankin beats Petal by exactly 1
+1. Petal
+2. Oak Grove
+3. Pearl
+4. Northwest Rankin
+Eliminated: Brandon, Meridian
+
+Scenario 3g: Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 9 or less (a margin over 12 counts as 12)
+1. Petal
+2. Pearl
+3. Oak Grove
+4. Northwest Rankin
+Eliminated: Brandon, Meridian
+
+Scenario 3h: Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by exactly 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+1. Northwest Rankin
+2. Pearl
+3. Petal
+4. Oak Grove
+Eliminated: Brandon, Meridian
+
+Scenario 3i: Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
+1. Northwest Rankin
+2. Pearl
+3. Oak Grove
+4. Petal
+Eliminated: Brandon, Meridian
+
+Scenario 3j: Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl's and Northwest Rankin's winning margins add up to exactly 10 (a margin over 12 counts as 12)
+1. Pearl
+2. Petal
+3. Oak Grove
+4. Northwest Rankin
+Eliminated: Brandon, Meridian
+
+Scenario 3k: Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 3 more points than Northwest Rankin (a margin over 12 counts as 12)
+1. Pearl
+2. Northwest Rankin
+3. Petal
+4. Oak Grove
+Eliminated: Brandon, Meridian
+
+Scenario 3l: Pearl beats Oak Grove AND Northwest Rankin beats Petal by 1–3 AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+1. Pearl
+2. Petal
+3. Northwest Rankin
+4. Oak Grove
 Eliminated: Brandon, Meridian
 
 Scenario 4: Oak Grove beats Pearl AND Northwest Rankin beats Petal

@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.0.2
+
+- **Scenarios a tie's margins decide are listed one by one.** When one set of results in a region's
+  last games leaves a tie the winning margins can order nine to twelve different ways, each of
+  which can be put in margins, its card said only that the tiebreaker decides it. Now each order is its own card with the margins that
+  give it: a range ("by 1–3") or, where it needs one, a comparison of two games' margins ("McAdams
+  wins by at least 3 more points than Sebastopol"). Region 5-1A's last week is one. A card that
+  named the tiebreaker steps behind its order also says the margins instead, where that's short.
+
 ## 1.0.1
 
 - **A game the two schools' schedules date a day apart now counts once.** Some games are dated a day

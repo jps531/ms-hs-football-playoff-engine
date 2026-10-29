@@ -88,6 +88,7 @@ from backend.helpers.data_classes import (
     CompletedGame,
     FormatSlot,
     GameResult,
+    MarginCondition,
     MatchupProbFn,
     RemainingGame,
     StandingsOdds,
@@ -104,6 +105,7 @@ from backend.helpers.scenario_renderer import (
     atom_condition_dicts,
     build_host_conditions,
     build_reach_conditions,
+    render_margin_condition,
     render_open_group,
     render_scenario_title,
     render_tiebreak_decision,
@@ -886,12 +888,14 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
     if not complete_scenarios:
         return None
     def described(atom: list) -> list[dict]:
-        """The atom's conditions as dicts, each tiebreaker decision with its sentence."""
+        """The atom's conditions as dicts, each tiebreaker decision and margin comparison with its sentence."""
         out = []
         for cond in atom:
             d = serialize_condition(cond)
             if isinstance(cond, TiebreakDecision):
                 d["description"] = render_tiebreak_decision(cond)
+            elif isinstance(cond, MarginCondition):
+                d["description"] = render_margin_condition(cond, atom)
             out.append(d)
         return out
 
