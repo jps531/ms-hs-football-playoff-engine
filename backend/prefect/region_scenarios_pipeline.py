@@ -10,6 +10,8 @@ pregame win probability to ``games.pregame_prob``.
 
 import bisect
 import json
+import pickle
+import zlib
 from dataclasses import dataclass as _dataclass
 from datetime import date
 from typing import TypeVar
@@ -55,6 +57,7 @@ from backend.helpers.scenario_viewer import (
     team_atoms_from_scenarios,
 )
 from backend.helpers.scenarios import (
+    ResolvedOutcomes,
     compute_bracket_odds,
     compute_first_round_home_odds,
     determine_scenarios,
@@ -1099,17 +1102,25 @@ class Reuse:
         self.reused = {"odds": 0, "standings": 0, "scenarios": 0}
         self.worked_out = {"odds": 0, "standings": 0, "scenarios": 0}
 
+    # Kept pickled and compressed, since every region's last results are held at once: with fifteen
+    # games left a 6-team region's outcome standings take ~90-120 MB as they are (twelve such regions
+    # ran a backfill out of its 2 GB) and ~0.5 MB packed, its ~19,000 scenarios ~25 MB and ~0.2 MB.
+    # Each comes back in under a second, against about a minute to work them out again.
+    _PACKED = frozenset({"standings", "scenarios"})
+
     def get(self, kind: str, clazz: int, region: int, key: tuple):
         """The region's last *kind* result if it came from *key*, else None."""
         last = self._last.get((kind, clazz, region))
         if last is not None and last[0] == key:
             self.reused[kind] += 1
-            return last[1]
+            return pickle.loads(zlib.decompress(last[1])) if kind in self._PACKED else last[1]  # noqa: S301
         return None
 
     def put(self, kind: str, clazz: int, region: int, key: tuple, value) -> None:
         """Keep *value*, worked out from *key*, as the region's last *kind* result."""
         self.worked_out[kind] += 1
+        if kind in self._PACKED:
+            value = zlib.compress(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL), 6)
         self._last[(kind, clazz, region)] = (key, value)
 # R > FULL_MARGINS_MAX_LEFT and R ≤ ENUMERATE_MAX_LEFT: win/loss enumeration, no margin
 
@@ -1178,7 +1189,7 @@ def get_region_seeding_odds(
         resolved = reuse.get("standings", clazz, region, games)
     fresh = resolved is None and reuse is not None and FULL_MARGINS_MAX_LEFT < R <= ENUMERATE_MAX_LEFT
     if fresh:
-        resolved = []
+        resolved = ResolvedOutcomes()
     r = determine_scenarios(
         teams,
         completed,

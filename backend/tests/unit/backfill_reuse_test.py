@@ -157,7 +157,7 @@ def test_scenarios_carry_over_while_only_ratings_change_with_six_or_more_left(fi
     _finish(reuse, _seeding(remaining, [0.7] * 6), 10)
     assert finish_env.calls.call_count == 1
     assert [w["as_of_date"].day for w in finish_env.written] == [3, 10]
-    assert finish_env.written[0]["complete_scenarios"] is finish_env.written[1]["complete_scenarios"]
+    assert finish_env.written[0]["complete_scenarios"] == finish_env.written[1]["complete_scenarios"]
 
 
 def test_scenarios_are_worked_out_again_when_win_chances_change_with_five_or_fewer_left(finish_env):
@@ -188,9 +188,19 @@ def _chances(seed: int):
     return lambda a, b, d, loc: p[(a, b)]
 
 
+def test_resolved_outcomes_hold_each_distinct_standings_once():
+    """Kept once per distinct standings, the outcomes still read back exactly as they went in."""
+    entries = [([(["A", "B"], [], 1.0)], []), ([(["B", "A"], [], 1.0)], []), ([(["A", "B"], [], 1.0)], [])]
+    held = pipeline.ResolvedOutcomes()
+    for entry in entries:
+        held.append(entry)
+    assert len(held) == 3 and held.distinct() == 2
+    assert [held[i] for i in range(3)] == entries
+
+
 def test_replayed_standings_give_exactly_the_odds_worked_out_afresh():
     """Standings resolved once, re-weighted for other win chances: every count exactly as computed anew."""
-    resolved: list = []
+    resolved = pipeline.ResolvedOutcomes()
     first = pipeline.determine_scenarios(
         TEAMS5, COMPLETED, REMAINING8, win_prob_fn=_chances(1), ignore_margins=True, resolved=resolved
     )

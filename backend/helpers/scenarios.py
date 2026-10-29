@@ -10,6 +10,7 @@ import hashlib
 import logging
 import math
 import random
+from array import array
 from collections import defaultdict
 from itertools import permutations, product
 
@@ -365,6 +366,52 @@ def _monte_carlo_seed(teams: list[str], completed: list[CompletedGame], remainin
     return int.from_bytes(digest[:8], "big")
 
 
+class ResolvedOutcomes:
+    """Each outcome's standings for ``determine_scenarios``' ``resolved``, each distinct one held once.
+
+    A region with fifteen games left has 32,768 outcomes but only a few thousand different standings
+    among them. Each outcome here is an index into the distinct ones, and ``outcomes[mask]`` gives
+    back the very same values (they're only ever read), which also makes it small to store: pickled
+    and compressed, a 6-team region's comes to about half a megabyte (see the backfill's ``Reuse``).
+    """
+
+    def __init__(self) -> None:
+        self._which = array("i")
+        self._distinct: list[tuple[list, list]] = []
+        self._index: dict[tuple, int] = {}
+
+    def __len__(self) -> int:
+        return len(self._which)
+
+    def append(self, entry: tuple[list, list]) -> None:
+        """Add the next outcome's (standings with their shares, ties left open)."""
+        outcome, open_groups = entry
+        key = (
+            tuple((tuple(order), tuple(tuple(g) for g in flips), share) for order, flips, share in outcome),
+            tuple(tuple(g) for g in open_groups),
+        )
+        at = self._index.get(key)
+        if at is None:
+            at = self._index[key] = len(self._distinct)
+            self._distinct.append(entry)
+        self._which.append(at)
+
+    def __getitem__(self, mask: int) -> tuple[list, list]:
+        return self._distinct[self._which[mask]]
+
+    def distinct(self) -> int:
+        """How many different standings the outcomes have."""
+        return len(self._distinct)
+
+    def __getstate__(self) -> tuple:
+        """What reading it back needs; the lookup used while filling it is left out."""
+        return self._which, self._distinct
+
+    def __setstate__(self, state: tuple) -> None:
+        self._which, self._distinct = state
+        self._index = {}
+
+
 def determine_scenarios(
     teams: list[str],
     completed: list[CompletedGame],
@@ -373,7 +420,7 @@ def determine_scenarios(
     ignore_margins: bool = False,
     n_samples: int | None = None,
     seed: int | None = None,
-    resolved: list | None = None,
+    resolved: "ResolvedOutcomes | list | None" = None,
 ) -> ScenarioResults:
     """Enumerate all seeding scenarios for a region and compute seed-count totals.
 
@@ -412,10 +459,10 @@ def determine_scenarios(
         seed: Optional RNG seed for Monte Carlo sampling.  Defaults to a hash
             of ``teams``, ``completed``, and ``remaining``.
         resolved: With ``ignore_margins`` (and no sampling), each outcome's
-            standings, which the win chances don't change: an empty list is
-            filled with them, one entry per outcome, and a full one from an
-            earlier call with the same teams and games is used instead of
-            resolving them again. The counts come out exactly as if resolved,
+            standings, which the win chances don't change: an empty
+            ``ResolvedOutcomes`` (or list) is filled with them, one entry per
+            outcome, and a full one from an earlier call with the same teams and
+            games is used instead of resolving them again. The counts come out exactly as if resolved,
             in the same order, so a backfill can re-weight one region's outcomes
             for each date's win chances rather than work them out every date.
 
