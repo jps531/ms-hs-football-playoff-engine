@@ -1086,14 +1086,18 @@ class Reuse:
     a date where all of those are what they were on the region's last date gives the same odds. Its
     scenarios, team paths and insights don't depend on the win chances at all with more than
     ``FULL_MARGINS_MAX_LEFT`` games left (each scenario's Projected chance does, with fewer), so they
-    carry over as long as the games do. Only the last date's results are kept for each region: most
-    dates repeat the one before, and keeping every date would hold far more in memory.
+    carry over as long as the games do. And with six to fifteen games left, where the odds take
+    each outcome's standings at face value, those standings don't depend on the win chances either,
+    so when only the win chances changed, the odds are re-weighted from the last date's standings
+    rather than worked out again (``determine_scenarios``' ``resolved``). Only the last date's results
+    are kept for each region: most dates repeat the one before, and keeping every date would hold
+    far more in memory.
     """
 
     def __init__(self) -> None:
         self._last: dict[tuple, tuple] = {}
-        self.reused = {"odds": 0, "scenarios": 0}
-        self.worked_out = {"odds": 0, "scenarios": 0}
+        self.reused = {"odds": 0, "standings": 0, "scenarios": 0}
+        self.worked_out = {"odds": 0, "standings": 0, "scenarios": 0}
 
     def get(self, kind: str, clazz: int, region: int, key: tuple):
         """The region's last *kind* result if it came from *key*, else None."""
@@ -1166,6 +1170,15 @@ def get_region_seeding_odds(
 
     R = len(remaining)
     use_sampling = R > ENUMERATE_MAX_LEFT
+    # Each outcome's standings, which the win chances don't change: re-weighted rather than resolved
+    # again while the games stay the same (win/loss enumeration only; see Reuse).
+    resolved = None
+    games = (tuple(teams), tuple(completed), tuple(remaining))
+    if reuse is not None and FULL_MARGINS_MAX_LEFT < R <= ENUMERATE_MAX_LEFT:
+        resolved = reuse.get("standings", clazz, region, games)
+    fresh = resolved is None and reuse is not None and FULL_MARGINS_MAX_LEFT < R <= ENUMERATE_MAX_LEFT
+    if fresh:
+        resolved = []
     r = determine_scenarios(
         teams,
         completed,
@@ -1173,7 +1186,10 @@ def get_region_seeding_odds(
         win_prob_fn=win_prob_fn,
         ignore_margins=use_sampling or (R > FULL_MARGINS_MAX_LEFT),
         n_samples=MONTE_CARLO_SAMPLES if use_sampling else None,
+        resolved=resolved,
     )
+    if fresh:  # kept only once complete, so a retried task never finds half the outcomes
+        reuse.put("standings", clazz, region, games, resolved)  # type: ignore[union-attr]
 
     odds, odds_weighted = odds_from_results(teams, r)
     data = RegionSeedingData(
@@ -1766,9 +1782,11 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
                 )
 
     logger.info(
-        "Reused odds for %d region-dates (worked out %d) and scenarios for %d (worked out %d)",
+        "Reused odds for %d region-dates (worked out %d, %d of those re-weighted from the last date's "
+        "standings) and scenarios for %d (worked out %d)",
         reuse.reused["odds"],
         reuse.worked_out["odds"],
+        reuse.reused["standings"],
         reuse.reused["scenarios"],
         reuse.worked_out["scenarios"],
     )

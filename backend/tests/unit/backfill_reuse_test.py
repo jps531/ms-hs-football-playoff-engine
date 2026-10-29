@@ -29,8 +29,8 @@ def test_reuse_returns_a_result_only_for_the_same_inputs():
     assert reuse.get("odds", 1, 5, ("other",)) is None
     assert reuse.get("odds", 1, 6, ("k",)) is None
     assert reuse.get("scenarios", 1, 5, ("k",)) is None
-    assert reuse.reused == {"odds": 1, "scenarios": 0}
-    assert reuse.worked_out == {"odds": 1, "scenarios": 0}
+    assert reuse.reused == {"odds": 1, "standings": 0, "scenarios": 0}
+    assert reuse.worked_out == {"odds": 1, "standings": 0, "scenarios": 0}
 
 
 def test_reuse_keeps_only_each_regions_last_result():
@@ -169,3 +169,70 @@ def test_scenarios_are_worked_out_again_when_win_chances_change_with_five_or_few
     _finish(reuse, _seeding(remaining, [0.7, 0.6]), 10)
     assert finish_env.calls.call_count == 2
     assert [w["as_of_date"].day for w in finish_env.written] == [3, 4, 10]
+
+
+# Five teams, eight games left: the win/loss-only odds, whose standings can be re-weighted.
+TEAMS5 = ["A", "B", "C", "D", "E"]
+REMAINING8 = [
+    RemainingGame(a, b, "neutral")
+    for a, b in (("A", "C"), ("A", "D"), ("A", "E"), ("B", "C"), ("B", "D"), ("B", "E"), ("C", "E"), ("D", "E"))
+]
+
+
+def _chances(seed: int):
+    """A win-chance function giving each game its own chance, different for each *seed*."""
+    import random
+
+    rng = random.Random(seed)
+    p = {(g.a, g.b): rng.uniform(0.2, 0.8) for g in REMAINING8}
+    return lambda a, b, d, loc: p[(a, b)]
+
+
+def test_replayed_standings_give_exactly_the_odds_worked_out_afresh():
+    """Standings resolved once, re-weighted for other win chances: every count exactly as computed anew."""
+    resolved: list = []
+    first = pipeline.determine_scenarios(
+        TEAMS5, COMPLETED, REMAINING8, win_prob_fn=_chances(1), ignore_margins=True, resolved=resolved
+    )
+    assert len(resolved) == 1 << len(REMAINING8)
+    assert first == pipeline.determine_scenarios(
+        TEAMS5, COMPLETED, REMAINING8, win_prob_fn=_chances(1), ignore_margins=True
+    )
+    for seed in (2, 3):
+        fresh = pipeline.determine_scenarios(
+            TEAMS5, COMPLETED, REMAINING8, win_prob_fn=_chances(seed), ignore_margins=True
+        )
+        replayed = pipeline.determine_scenarios(
+            TEAMS5, COMPLETED, REMAINING8, win_prob_fn=_chances(seed), ignore_margins=True, resolved=resolved
+        )
+        assert replayed == fresh
+        assert replayed.first_counts_weighted != first.first_counts_weighted  # the chances did change them
+
+
+def test_standings_are_only_replayed_without_margins():
+    """With margins the standings depend on them (and their weights on the win chances): refused."""
+    with pytest.raises(ValueError):
+        pipeline.determine_scenarios(TEAMS, COMPLETED, _remaining(2), resolved=[])
+
+
+def test_the_backfill_reweights_when_only_win_chances_change(monkeypatch):
+    """Six to fifteen games left, new ratings: the odds are re-weighted from the stored standings, not
+    resolved again, and come out exactly as worked out afresh."""
+    monkeypatch.setattr(pipeline, "fetch_region_teams", SimpleNamespace(fn=lambda c, r, s: TEAMS5))
+    monkeypatch.setattr(pipeline, "fetch_completed_pairs", SimpleNamespace(fn=lambda t, s, cutoff_date: COMPLETED))
+    monkeypatch.setattr(pipeline, "fetch_remaining_pairs", SimpleNamespace(fn=lambda t, s, cutoff_date: REMAINING8))
+    from backend.helpers import scenarios
+
+    resolves = MagicMock(side_effect=scenarios._resolve_with_scores)
+    monkeypatch.setattr("backend.helpers.scenarios._resolve_with_scores", resolves)
+    ratings = {"A": 1600.0, "B": 1550.0, "C": 1500.0, "D": 1450.0, "E": 1400.0}
+    reuse = Reuse()
+    pipeline.get_region_seeding_odds.fn(5, 1, 2025, elo_ratings=ratings, elo_snapshots=[], reuse=reuse)
+    resolved_once = resolves.call_count
+    moved = {**ratings, "E": 1500.0}
+    reweighted = pipeline.get_region_seeding_odds.fn(5, 1, 2025, elo_ratings=moved, elo_snapshots=[], reuse=reuse)
+    assert resolves.call_count == resolved_once  # nothing resolved again
+    assert reuse.reused["standings"] == 1
+    afresh = pipeline.get_region_seeding_odds.fn(5, 1, 2025, elo_ratings=moved, elo_snapshots=[])
+    assert reweighted.odds == afresh.odds and reweighted.odds_weighted == afresh.odds_weighted
+    assert reweighted.seed_pairs_weighted == afresh.seed_pairs_weighted
