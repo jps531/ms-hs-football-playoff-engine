@@ -373,6 +373,7 @@ def determine_scenarios(
     ignore_margins: bool = False,
     n_samples: int | None = None,
     seed: int | None = None,
+    resolved: list | None = None,
 ) -> ScenarioResults:
     """Enumerate all seeding scenarios for a region and compute seed-count totals.
 
@@ -410,6 +411,13 @@ def determine_scenarios(
             instead of exhaustive 2^R enumeration.  Forces ``ignore_margins``.
         seed: Optional RNG seed for Monte Carlo sampling.  Defaults to a hash
             of ``teams``, ``completed``, and ``remaining``.
+        resolved: With ``ignore_margins`` (and no sampling), each outcome's
+            standings, which the win chances don't change: an empty list is
+            filled with them, one entry per outcome, and a full one from an
+            earlier call with the same teams and games is used instead of
+            resolving them again. The counts come out exactly as if resolved,
+            in the same order, so a backfill can re-weight one region's outcomes
+            for each date's win chances rather than work them out every date.
 
     Returns:
         A ``ScenarioResults`` instance with unweighted and weighted seed counts,
@@ -518,6 +526,9 @@ def determine_scenarios(
 
     else:
         total_masks = 1 << num_remaining
+        replay = resolved is not None and len(resolved) > 0
+        if resolved is not None and (not ignore_margins or (replay and len(resolved) != total_masks)):
+            raise ValueError("resolved outcomes are only for ignore_margins, one per outcome")
         # P(a wins) per remaining game, and where each game sits in the outcome mask.
         game_probs = [_win_prob_fn(g.a, g.b, None, g.location_a) for g in remaining]
         game_index = {(g.a, g.b): i for i, g in enumerate(remaining)}
@@ -535,12 +546,17 @@ def determine_scenarios(
                 # ignore_margins rendering mode. A tie that reaches point differential
                 # (step 3) with a tied team still to play is left open for certainty:
                 # another margin could reorder it, so none of its places is certain.
-                decisions: list = []
-                resolved = _resolve_with_scores(
-                    teams, completed, remaining, outcome_mask, base_margins, frozenset(), decisions
-                )
-                open_groups = [list(group) for step, group, _ in decisions if step >= 3 and set(group) & in_play]
-                for final_order, local_flips, share in resolved:
+                if replay:
+                    outcome, open_groups = resolved[outcome_mask]  # type: ignore[index]
+                else:
+                    decisions: list = []
+                    outcome = _resolve_with_scores(
+                        teams, completed, remaining, outcome_mask, base_margins, frozenset(), decisions
+                    )
+                    open_groups = [list(group) for step, group, _ in decisions if step >= 3 and set(group) & in_play]
+                    if resolved is not None:
+                        resolved.append((outcome, open_groups))
+                for final_order, local_flips, share in outcome:
                     all_coinflip_events.extend(local_flips)
                     _accumulate_slots(
                         final_order,
