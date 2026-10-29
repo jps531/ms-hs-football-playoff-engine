@@ -7,7 +7,7 @@
 --   2025: Regions 1v2 and 3v4 (adjacent pairs)
 --   2026: Regions 1v3 and 2v4 (diagonal pairs); same change in South half (5v7, 6v8)
 --
--- This seed is also included in sql/init.sql (run automatically on DB creation).
+-- docker-compose.yml runs this file when the database is first created (sql/init.sql doesn't include it).
 -- Re-running this file is idempotent (ON CONFLICT DO NOTHING).
 
 INSERT INTO playoff_formats (season, class, num_regions, seeds_per_region, num_rounds, notes)
