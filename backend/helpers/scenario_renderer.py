@@ -55,7 +55,7 @@ def _winner_label(pair: tuple[str, str], atom: list) -> str:
 _CAP_NOTE = " (a margin over 12 counts as 12)"
 
 
-def _render_margin_condition(cond: MarginCondition, atom: list) -> str:
+def render_margin_condition(cond: MarginCondition, atom: list) -> str:
     """Render a MarginCondition as a plain-English phrase using winner labels from the atom.
 
     A comparison of two games reads "Sebastopol wins by at least 3 more points than McAdams", and a
@@ -180,7 +180,7 @@ def _render_condition(cond, atom: list) -> str:
     if isinstance(cond, GameResult):
         return _render_game_result(cond)
     if isinstance(cond, MarginCondition):
-        return _render_margin_condition(cond, atom)
+        return render_margin_condition(cond, atom)
     if isinstance(cond, CoinFlipResult):
         return f"{cond.winner} wins the coin flip against {cond.loser}"
     if isinstance(cond, TiebreakDecision):
@@ -237,10 +237,37 @@ def atoms_from_complete_scenarios(
     places carries a ``TiebreakPlace``, unless the scenario states the team's
     places exactly in margins (``place_terms``): then each place's atoms are
     the scenario's winners narrowed by those margin conditions.
+
+    Sub-scenarios listing one set of winners' outcomes can carry ``place_terms``, the
+    same in each, for the teams whose places over all of them can be stated in
+    margins: those teams' paths come from them once, narrowing the winners the
+    sub-scenarios name, rather than from each sub-scenario's conditions in turn.
     """
     out = playoff_seeds + 1
     atoms: dict[str, dict[int, list]] = {}
+    # Each listed set of winners with place_terms: the game winners its sub-scenarios name.
+    listed: dict[int, list] = {}
     for sc in complete_scenarios:
+        if sc.get("sub_label") and sc.get("place_terms"):
+            named = listed.setdefault(sc["scenario_num"], [])
+            named += [tuple(w) for w in sc.get("game_winners", []) if tuple(w) not in named]
+    for sc in complete_scenarios:
+        if sc.get("sub_label") and sc.get("place_terms"):
+            # The teams it states, once for the whole set (from its first sub-scenario); the rest below.
+            winners = listed.pop(sc["scenario_num"], None)
+            if winners is not None:
+                base = [GameResult(winner=w, loser=l) for w, l in winners]
+                for team, by_seed in sc["place_terms"].items():
+                    for seed, ways in by_seed:
+                        atoms.setdefault(team, {}).setdefault(seed, []).extend(_narrow(base, term) for term in ways)
+            stated = set(sc["place_terms"])
+            alternatives = sc.get("alternatives") or [sc["conditions_atom"]]
+            for seed_idx, team in enumerate(sc.get("seeding", ())):
+                if team not in stated:
+                    atoms.setdefault(team, {}).setdefault(min(seed_idx + 1, out), []).extend(
+                        list(a) for a in alternatives
+                    )
+            continue
         alternatives = sc.get("alternatives") or [sc.get("conditions_atom")]
         alternatives = [
             a if a is not None else [GameResult(winner=w, loser=l) for w, l in sc.get("game_winners", [])]
@@ -465,7 +492,7 @@ def atom_condition_dicts(atom: list, game_dates: dict[tuple[str, str], date | No
                     "games": games,
                     "op": cond.op,
                     "threshold": cond.threshold,
-                    "description": _render_margin_condition(cond, atom),
+                    "description": render_margin_condition(cond, atom),
                 }
             )
         elif isinstance(cond, CoinFlipResult):

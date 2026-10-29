@@ -1027,6 +1027,9 @@ _MAX_MARGIN_BLOCKS = 2
 # them is one scenario with the tie left open, not dozens of cards, and each team's places in it are
 # stated in margins where that's short (``_place_terms``).
 _MAX_LISTED_OUTCOMES = 8
+# Up to this many are still listed when every one of them can be stated in margins alone (see
+# ``_outcome_margins``): a card per outcome with its margins beats one card saying "the tiebreaker decides".
+_MAX_LISTED_IN_MARGINS = 12
 
 
 def _finish_key(seeding, open_groups, places) -> tuple:
@@ -1063,8 +1066,8 @@ def _margin_blocks(region: set[tuple[int, ...]], limit: int) -> list[list[tuple[
     return boxes
 
 
-# A tie with more outcomes than ``_MAX_LISTED_OUTCOMES`` stays one scenario with its group left open,
-# but when its order turns on at most this many games' margins, each team's place in it is still
+# A tie with more outcomes than ``_MAX_LISTED_OUTCOMES`` (and not all of them stated in margins, or more
+# than ``_MAX_LISTED_IN_MARGINS``) stays one scenario with its group left open, but when its order turns on at most this many games' margins, each team's place in it is still
 # stated exactly: as at most ``_MAX_PLACE_PIECES`` sets of margin ranges and comparisons between the
 # margins ("McAdams wins by at least 3 more points than Sebastopol").
 _MAX_EXACT_PLACE_GAMES = 2
@@ -1174,14 +1177,7 @@ def _place_terms(
     if any(groups for _, groups in regions):
         return {}
     cell = {combo: seeding for (seeding, _), combos in regions.items() for combo in combos}
-    dims = []
-    for i in range(len(pairs)):
-        seen: dict = {}
-        for combo, seeding in cell.items():
-            key = combo[:i] + combo[i + 1 :]
-            if seen.setdefault(key, seeding) != seeding:
-                dims.append(i)
-                break
+    dims = _deciding_games(cell, len(pairs))
     if not dims or len(dims) > _MAX_EXACT_PLACE_GAMES:
         return {}
     out = playoff_seeds + 1
@@ -1205,6 +1201,70 @@ def _place_terms(
     return result
 
 
+def _deciding_games(cell: dict, games: int) -> list[int]:
+    """The games (indexes) whose margin changes the outcome somewhere in *cell* (margin combination ->
+    outcome): those where two combinations differing only in that game's margin differ in outcome."""
+    dims = []
+    for i in range(games):
+        seen: dict = {}
+        for combo, outcome in cell.items():
+            key = combo[:i] + combo[i + 1 :]
+            if seen.setdefault(key, outcome) != outcome:
+                dims.append(i)
+                break
+    return dims
+
+
+def _outcome_margins(regions: dict, pairs: list, winners: list[tuple[str, str]]) -> dict:
+    """Each outcome of one set of winners that can be stated in margins alone, stated so.
+
+    *regions* maps each outcome to the margin combinations giving it. An outcome is stated as at most
+    ``_MAX_MARGIN_BLOCKS`` sets of margin ranges ("A beats B by 1-7"), or, failing that and when the
+    outcome turns on at most two games' margins, as at most ``_MAX_PLACE_PIECES`` sets of margin ranges
+    and comparisons between the two margins ("McAdams wins by at least 3 more points than Sebastopol").
+    Returns ``{outcome: [(conditions, first combination), ...]}`` for those outcomes, one entry per
+    set, any one of which is enough; each set's conditions name only the games it needs a margin for.
+    """
+    cell = {combo: outcome for outcome, combos in regions.items() for combo in combos}
+    dims = _deciding_games(cell, len(pairs))
+    out: dict = {}
+    for outcome, region in regions.items():
+        blocks = _margin_blocks(region, _MAX_MARGIN_BLOCKS)
+        if blocks is not None:
+            out[outcome] = [
+                (
+                    tuple(
+                        GameResult(w, l, lo, None if hi == _MARGIN_RANGE[-1] else hi + 1)
+                        for (w, l), (lo, hi) in zip(winners, box, strict=True)
+                        if (lo, hi) != (_MARGIN_RANGE[0], _MARGIN_RANGE[-1])
+                    ),
+                    tuple(lo for lo, _ in box),
+                )
+                for box in blocks
+            ]
+            continue
+        if not dims or len(dims) > _MAX_EXACT_PLACE_GAMES:
+            continue
+        # The other games' margins never change the outcome, so the region is the same over them.
+        points = {tuple(combo[i] for i in dims) for combo in region}
+        pieces = _linear_pieces(points, len(dims), _MAX_PLACE_PIECES)
+        if pieces is None:
+            continue
+        listed = []
+        for piece in pieces:
+            inside = min(
+                p
+                for p in points
+                if all((lo is None or _value(f, p) >= lo) and (hi is None or _value(f, p) <= hi) for f, lo, hi in piece)
+            )
+            first = [_MARGIN_RANGE[0]] * len(pairs)
+            for i, m in zip(dims, inside, strict=True):
+                first[i] = m
+            listed.append((_piece_conditions(piece, dims, pairs, winners), tuple(first)))
+        out[outcome] = listed
+    return out
+
+
 def _piece_conditions(piece: list, dims: list[int], pairs: list, winners: list[tuple[str, str]]) -> tuple:
     """One piece's bounds as conditions: margin ranges (``GameResult``) and comparisons (``MarginCondition``)."""
     conds: list = []
@@ -1217,6 +1277,9 @@ def _piece_conditions(piece: list, dims: list[int], pairs: list, winners: list[t
             continue
         add = tuple(pairs[i] for i, c in used if c > 0)
         sub = tuple(pairs[i] for i, c in used if c < 0)
+        if lo is not None and lo == hi:  # "exactly", not "at least and at most" the same number
+            conds.append(MarginCondition(add=add, sub=sub, op="==", threshold=lo))
+            continue
         if lo is not None:
             conds.append(MarginCondition(add=add, sub=sub, op=">=", threshold=lo))
         if hi is not None:
@@ -1794,8 +1857,10 @@ def enumerate_division_scenarios(
             outcomes[mask] = [((), open_groups, seeding, None)]
             table[mask] = (seeding, open_groups)
             continue
-        if len(first) > _MAX_LISTED_OUTCOMES:
-            # Too many to list: leave each tie that reaches step 3 open. Which ties reach it doesn't
+        winners = _game_winners_for_mask(mask, remaining)
+        in_margins = _outcome_margins(regions, pairs, winners) if len(first) <= _MAX_LISTED_IN_MARGINS else {}
+        if len(first) > _MAX_LISTED_OUTCOMES and len(in_margins) < len(first):
+            # Too many to list (or to list in margins): leave each tie that reaches step 3 open. Which ties reach it doesn't
             # depend on margins (steps 1-2 don't), so this is one outcome for every margin; it still
             # says where a team always lands, and which places the others can reach.
             decisions: list = []
@@ -1806,7 +1871,7 @@ def enumerate_division_scenarios(
             seeding, open_groups, places = _narrow_open(order, open_groups, list(first), playoff_seeds)
             if places:
                 open_places[mask] = places
-            terms = _place_terms(regions, pairs, _game_winners_for_mask(mask, remaining), playoff_seeds)
+            terms = _place_terms(regions, pairs, winners, playoff_seeds)
             if terms:
                 place_terms[mask] = tuple(sorted(terms.items()))
             if track:
@@ -1818,22 +1883,30 @@ def enumerate_division_scenarios(
         if track:
             for (seeding, open_groups), share in weights.items():
                 add_finish(mask, seeding, open_groups, (), share)
-        # Each outcome in plain margin ranges when a couple of blocks say it; else by its decisions.
-        winners = _game_winners_for_mask(mask, remaining)
+        # Each team's places over these outcomes, for its paths: one statement for all of them rather
+        # than one per sub-scenario, for each team whose places can be stated so (``_place_terms``); a
+        # team whose place doesn't vary has it at any margin (one empty term). Only for the sets listed
+        # past ``_MAX_LISTED_OUTCOMES``: with fewer, each sub-scenario's own conditions read better (one
+        # can drop a game whose result doesn't matter to it). Not with a tie left open.
+        if len(first) > _MAX_LISTED_OUTCOMES and not any(groups for _, groups in regions):
+            out = playoff_seeds + 1
+            places_of: dict[str, set[int]] = defaultdict(set)
+            for seeding, _ in regions:
+                for idx, team in enumerate(seeding):
+                    places_of[team].add(min(idx + 1, out))
+            whole = {t: ((min(p), ((),)),) for t, p in places_of.items() if len(p) == 1}
+            whole.update(_place_terms(regions, pairs, winners, playoff_seeds))
+            if whole:
+                place_terms[mask] = tuple(sorted(whole.items()))
+        # Each outcome in margins when that's short (``_outcome_margins``); else by its decisions.
         terms = _simplest_terms(signatures)
         listed = []
-        for outcome, region in regions.items():
+        for outcome in regions:
             seeding, open_groups = outcome
-            blocks = _margin_blocks(region, _MAX_MARGIN_BLOCKS)
-            if blocks is not None:
-                for box in blocks:
-                    # Only the games the outcome needs a margin for; the rest are plain wins.
-                    ranges = tuple(
-                        GameResult(w, l, lo, None if hi == _MARGIN_RANGE[-1] else hi + 1)
-                        for (w, l), (lo, hi) in zip(winners, box, strict=True)
-                        if (lo, hi) != (_MARGIN_RANGE[0], _MARGIN_RANGE[-1])
-                    )
-                    listed.append((ranges, open_groups, seeding, tuple(lo for lo, _ in box)))
+            if outcome in in_margins:
+                # Only the games the outcome needs a margin for; the rest are plain wins.
+                for conditions, key in in_margins[outcome]:
+                    listed.append((conditions, open_groups, seeding, key))
             else:
                 for term in terms[outcome]:
                     stated = tuple(sorted(term, key=lambda d: (d.step, d.group)))
@@ -1898,7 +1971,8 @@ def enumerate_division_scenarios(
             by_listing[frozenset((st, o, sd, free) for st, o, sd, _, free in outs)].append(mask)
     for masks in by_listing.values():
         for group in _valid_merge_groups(masks):
-            entries.append((min(group), "multi", None, _common_game_winners(group, remaining), outcomes[min(group)]))
+            winners = _common_game_winners(group, remaining)
+            entries.append((min(group), "multi", None, winners, (outcomes[min(group)], place_terms.get(min(group), ()))))
     entries.sort(key=lambda e: e[0])
 
     def scenario(num, sub, winners, atom, open_groups, seeding, alternatives=None, places=(), terms=()):
@@ -1923,6 +1997,7 @@ def enumerate_division_scenarios(
             scenarios.append(scenario(num, "", winners, None, open_groups, seeding, places=places, terms=terms))
             continue
         winners = open_groups  # for "multi" entries this slot carries the merged group's winners
+        data, terms = data  # its listing, and each team's places over all of it (``place_terms``)
         # One sub-scenario per outcome; the different ways to it (margin blocks, or tiebreaker routes)
         # are its alternatives, any one of which is enough.
         by_result: dict[tuple, list] = {}
@@ -1938,7 +2013,9 @@ def enumerate_division_scenarios(
             shared = [w for w in ways[0][0] if all(w in mine for mine, _ in ways)]
             alts = [atom for _, atom in ways]
             scenarios.append(
-                scenario(num, _sub_label(k), shared, alts[0], groups, seeding, alts if len(alts) > 1 else None)
+                scenario(
+                    num, _sub_label(k), shared, alts[0], groups, seeding, alts if len(alts) > 1 else None, terms=terms
+                )
             )
     if track:
         for sc in scenarios:

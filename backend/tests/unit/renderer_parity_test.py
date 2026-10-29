@@ -85,13 +85,16 @@ OUTCOME_TEAMS = [
 
 
 # Complete scenarios: margins and a coin flip (Stringer), OR groups with a tiebreaker decision and a
-# tie left open, one that straddles the playoff line, and shared conditions said once.
+# tie left open, one that straddles the playoff line, shared conditions said once, and a comparison of
+# two games' margins.
 def _win(w, l, lo=1, hi=None):
     """A stored game-result condition: *w* beats *l* by *lo* to *hi* (no upper bound when None)."""
     return {"type": "game_result", "winner": w, "loser": l, "min_margin": lo, "max_margin": hi}
 
 
 _DECISION = {"type": "tiebreak_decision", "description": "Point differential in games among A, B and C: A best"}
+_COMPARISON = {"type": "margin_condition", "add": [["C", "D"]], "sub": [["A", "B"]], "op": ">=", "threshold": 3,
+               "description": "C wins by at least 3 more points than A (a margin over 12 counts as 12)"}  # fmt: skip
 SCENARIOS = [
     STRINGER,
     {"scenario_num": 1, "sub_label": "a", "title": "", "game_winners": [{"winner": "A", "loser": "B"}],
@@ -104,6 +107,9 @@ SCENARIOS = [
     {"scenario_num": 3, "sub_label": "a", "title": "", "game_winners": [],
      "condition_groups": [[_win("A", "B"), _win("C", "D", 1, 8)], [_win("A", "B"), _win("C", "D", 10)]],
      "outcomes": {"A": "1", "B": "2", "C": "3", "D": "4"}, "p": 0.25, "p_weighted": 0.3},
+    {"scenario_num": 4, "sub_label": "b", "title": "", "game_winners": [],
+     "conditions": [_win("A", "B", 1, 4), _win("C", "D"), _COMPARISON],
+     "outcomes": {"C": "1", "A": "2", "B": "3", "D": "4"}},
 ]  # fmt: skip
 
 EXPLANATION = [

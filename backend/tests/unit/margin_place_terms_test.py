@@ -1,16 +1,16 @@
-"""A tie too varied to list as scenarios still says, team by team, exactly which margins give each place.
+"""A tie whose order the margins decide says, team by team, exactly which margins give each place.
 
 The fixture is 2026's Region 5-1A with two games left (Ethel at Sebastopol, McAdams at Nanih Waiya). If
 Sebastopol and McAdams both win, all five teams finish 2-2 and the two margins decide nine different
-orders: too many to list, so the scenario leaves the tie open, but each team's places are stated in
-margin ranges and comparisons between the two margins.
+orders. Each is stated in margin ranges and comparisons between the two margins, so each is its own
+sub-scenario (3a-3i), and each team's places over all nine are stated the same way, once, for its paths.
 """
 
 import pytest
 
 from backend.helpers.data_classes import GameResult, MarginCondition, RemainingGame
 from backend.helpers.data_helpers import get_completed_games
-from backend.helpers.scenario_renderer import _render_atom, _render_margin_condition, atoms_from_complete_scenarios
+from backend.helpers.scenario_renderer import _render_atom, atoms_from_complete_scenarios, render_margin_condition
 from backend.helpers.scenario_serializers import deserialize_complete_scenarios, serialize_complete_scenarios
 from backend.helpers.scenario_viewer import _linear_pieces, enumerate_division_scenarios
 from backend.tests.data.results_2025_ground_truth import expand_results
@@ -51,10 +51,13 @@ def atoms(scenarios):
 
 
 def test_five_way_tie_states_every_teams_places(scenarios):
-    """The scenario where all five finish 2-2 states places for every team."""
-    tie = next(s for s in scenarios if s.get("place_terms"))
-    assert set(tie["game_winners"]) == {("Sebastopol", "Ethel"), ("McAdams", "Nanih Waiya")}
-    assert set(tie["place_terms"]) == set(TEAMS)
+    """Where all five finish 2-2, each of the nine orders is a sub-scenario stated in margins, and each
+    carries every team's places over all nine."""
+    tie = [s for s in scenarios if s["scenario_num"] == 3]
+    assert [s["sub_label"] for s in tie] == list("abcdefghi")
+    assert all(set(s["game_winners"]) == {("Sebastopol", "Ethel"), ("McAdams", "Nanih Waiya")} for s in tie)
+    assert all(s["open_groups"] is None and set(s["place_terms"]) == set(TEAMS) for s in tie)
+    assert any(isinstance(c, MarginCondition) for s in tie for c in s["conditions_atom"])
 
 
 def test_paths_are_exact(atoms):
@@ -118,4 +121,4 @@ def test_comparison_wording(op, threshold, text):
     cond = MarginCondition(
         add=(("McAdams", "Nanih Waiya"),), sub=(("Ethel", "Sebastopol"),), op=op, threshold=threshold
     )
-    assert _render_margin_condition(cond, atom) == text + CAP
+    assert render_margin_condition(cond, atom) == text + CAP

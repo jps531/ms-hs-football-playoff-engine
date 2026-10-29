@@ -992,6 +992,32 @@ class TestScenariosToEntries:
             }
         ]
 
+    def test_margin_comparison_carries_its_sentence(self):
+        """A comparison of two games' margins comes with its sentence, worded from the atom's winners."""
+        atom = [
+            GameResult("Sebastopol", "Ethel", 1, 4),
+            GameResult("McAdams", "Nanih Waiya"),
+            MarginCondition(add=(("McAdams", "Nanih Waiya"),), sub=(("Ethel", "Sebastopol"),), op=">=", threshold=3),
+        ]
+        scenarios = [
+            {
+                "scenario_num": 3,
+                "sub_label": "b",
+                "game_winners": [("Sebastopol", "Ethel"), ("McAdams", "Nanih Waiya")],
+                "conditions_atom": atom,
+                "seeding": ["Ethel", "Nanih Waiya", "Noxapater", "McAdams", "Sebastopol"],
+            }
+        ]
+        [entry] = scenarios_to_entries(scenarios)
+        assert entry.conditions[2] == {
+            "type": "margin_condition",
+            "add": [["McAdams", "Nanih Waiya"]],
+            "sub": [["Ethel", "Sebastopol"]],
+            "op": ">=",
+            "threshold": 3,
+            "description": "McAdams wins by at least 3 more points than Sebastopol (a margin over 12 counts as 12)",
+        }
+
     def test_conditions_field_none_when_no_conditions_atom(self):
         """conditions is None when the scenario dict has no conditions_atom."""
         scenarios = [{"scenario_num": 1, "sub_label": "1", "game_winners": [], "seeding": ["Alpha", "Beta"]}]
