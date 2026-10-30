@@ -17,10 +17,16 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import ParamSpec, TypeVar
 
-from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.database_helpers import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER, get_conn
 
 # Any fixed number; Postgres advisory locks are keyed by integers.
 LOCK_KEY = 2026_10_30
+
+
+def _lock_connection():
+    """A new connection for the lock's session."""
+    return get_conn(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
+
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -51,9 +57,10 @@ def exclusive_run(wait: bool = True) -> Iterator[bool]:
                 _depth -= 1
         return
 
-    # Closed explicitly: psycopg2's ``with conn`` only ends the transaction, and the lock
-    # lasts as long as the connection's session does.
-    conn = get_database_connection()
+    # A connection of its own, even inside a shared transaction (database_helpers), closed
+    # explicitly: psycopg2's ``with conn`` only ends a transaction, and the lock lasts as long
+    # as the connection's session does.
+    conn = _lock_connection()
     try:
         conn.autocommit = True
         with conn.cursor() as cur:

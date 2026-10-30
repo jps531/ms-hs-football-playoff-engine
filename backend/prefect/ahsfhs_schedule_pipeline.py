@@ -234,6 +234,9 @@ _INCOMING_TABLE_SQL = """
         final BOOLEAN, overtime INTEGER
     ) ON COMMIT DROP
 """
+# Dropped once insert_rows is done with it, too: inside the daily update's one transaction
+# (database_helpers.shared_transaction) nothing commits until the end.
+_DROP_INCOMING_SQL = "DROP TABLE IF EXISTS incoming"
 
 # A game AHSFHS now lists a few days from the date we have it on: the school's
 # only row against the same opponent within three days, at a date this run
@@ -442,6 +445,7 @@ def insert_rows(game_records: Iterable[Game]) -> int:
             cur.execute(_CHANGED_UNDER_CORRECTION_SQL)
             changed = cur.fetchall()
             cur.execute(_UPSERT_SQL)
+            cur.execute(_DROP_INCOMING_SQL)
             regrouped = [c for season in sorted({r.season for r in game_records}) for c in reconcile_game_ids(cur, season)]
         conn.commit()
 

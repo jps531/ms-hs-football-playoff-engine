@@ -11,8 +11,10 @@ In production the docs URL is disabled to prevent public schema exposure.
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from psycopg.errors import LockNotAvailable
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -66,6 +68,17 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]  # slowapi handler typed narrower than Starlette's ExceptionHandler protocol
+
+
+# The text a write gets while the daily update holds the rows it needs (see db.LOCK_TIMEOUT_MS).
+UPDATE_RUNNING = "The daily update is running. Please try again in a few minutes."
+
+
+@app.exception_handler(LockNotAvailable)
+async def _update_running(request: Request, exc: LockNotAvailable) -> JSONResponse:
+    """A write that timed out waiting for the daily update's row locks: try again later, not a 500."""
+    return JSONResponse(status_code=503, content={"detail": UPDATE_RUNNING}, headers={"Retry-After": "300"})
+
 
 app.add_middleware(
     CORSMiddleware,

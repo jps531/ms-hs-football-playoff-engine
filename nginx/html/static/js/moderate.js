@@ -189,7 +189,9 @@ async function decide(form, decision) {
     const res = await api(`/moderation/submissions/${id}/${decision}`, { method: "POST", body: { notes } });
     if (!res.ok) {
       const detail = (await res.json().catch(() => null))?.detail;
-      throw new Error(res.status === 409 ? `Already reviewed: ${detail ?? ""}`.trim() : detail || `That didn’t work (HTTP ${res.status}).`);
+      // The API says what went wrong ("Submission 7 has already been approved", "Oxford already has
+      // another game on 2026-10-10", the daily update running): show it as is.
+      throw new Error(typeof detail === "string" && detail ? detail : `That didn’t work (HTTP ${res.status}).`);
     }
     const updated = await res.json();
     const index = state.items.findIndex((i) => i.id === id);
