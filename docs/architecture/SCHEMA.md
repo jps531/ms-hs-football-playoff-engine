@@ -24,7 +24,7 @@ What each table holds, then the entity-relationship diagram. Column-level detail
 | `submissions` | User-submitted corrections and new assets (logos, helmet designs, colors, GPS coordinates, scores, feedback). Rows enter the queue with `status='pending'` and are approved or rejected by a moderator via the moderation API. Approved submissions are auto-applied to the live tables (except helmet submissions, which require manual mockup creation). Has an optional `user_id` FK for linking submissions to registered users. |
 | `users` | Registered user accounts with role (`user`/`moderator`/`owner`), profile fields (display name, phone, hometown), and a favorite team FK. Identity is managed by Auth0; `auth0_id` stores the Auth0 `sub` claim. Rows are lazy-provisioned on first authenticated request. |
 | `user_followed_teams` | Many-to-many join between users and the schools they follow. |
-| `user_attended_games` | Many-to-many join between users and games they marked as attended. References the composite PK `(school, date)` on `games`. |
+| `user_attended_games` | Many-to-many join between users and games they marked as attended. References the composite PK `(school, date)` on `games`, and follows a game the schedule pipeline moves to a new date (`ON UPDATE CASCADE`). |
 
 `schools`, `games`, and `locations` each have an `overrides` JSONB column and a matching
 `*_effective` view (`schools_effective`, `games_effective`, `locations_effective`) that merges

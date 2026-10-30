@@ -580,7 +580,7 @@ CREATE TABLE IF NOT EXISTS user_attended_games (
     date        DATE        NOT NULL,
     attended_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, school, date),
-    FOREIGN KEY (school, date) REFERENCES games(school, date) ON DELETE CASCADE
+    FOREIGN KEY (school, date) REFERENCES games(school, date) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 

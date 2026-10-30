@@ -10,6 +10,7 @@ submission type uses.
 """
 
 import json
+from datetime import date
 from typing import Any
 
 from fastapi import HTTPException
@@ -140,16 +141,15 @@ async def apply_submission(conn: Any, row: tuple) -> None:
 
     elif stype == "score":
         game_date, overrides = build_score_overrides(payload)
+        own_date, opponent_row = await find_score_rows(conn, school, game_date)
         for field, value in overrides:
-            await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, game_date, field, value))
+            await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, own_date, field, value))
         # The opponent's row of the same game, so both teams' records agree. An
-        # out-of-state opponent has no row; the override then matches nothing.
-        opponent = await (
-            await conn.execute("SELECT opponent FROM games WHERE school = %s AND date = %s", (school, game_date))
-        ).fetchone()
-        if opponent is not None:
+        # out-of-state opponent has no row; then only the school's row changes.
+        if opponent_row is not None:
+            opponent, opponent_date = opponent_row
             for field, value in build_opponent_score_overrides(payload):
-                await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (opponent[0], game_date, field, value))
+                await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (opponent, opponent_date, field, value))
 
     elif stype == "helmet_assignment":
         game_date, helmet_design_id = build_helmet_assignment_override(payload)
@@ -158,6 +158,51 @@ async def apply_submission(conn: Any, row: tuple) -> None:
             "UPDATE games SET helmet_design_id = %s WHERE school = %s AND date = %s",
             (helmet_design_id, school, game_date),
         )
+
+
+# The school's rows within three days of the reported date, nearest first, each
+# with its opponent's row of the same game: the opponent's row whose opponent
+# is the school, nearest in date (the two schools' pages can date one game a
+# day apart).
+_SCORE_ROWS_SQL = """
+    SELECT g.date, o.school, o.date
+    FROM games g
+    LEFT JOIN LATERAL (
+        SELECT o.school, o.date FROM games o
+        WHERE o.school = g.opponent AND o.opponent = g.school AND o.season = g.season
+          AND o.date BETWEEN g.date - 3 AND g.date + 3
+        ORDER BY abs(o.date - g.date), o.date DESC
+        LIMIT 1
+    ) o ON TRUE
+    WHERE g.school = %s AND g.date BETWEEN %s::date - 3 AND %s::date + 3
+    ORDER BY abs(g.date - %s::date)
+"""
+
+
+async def find_score_rows(conn: Any, school: str, game_date: str) -> tuple[date, tuple[str, date] | None]:
+    """The rows an approved score correction goes on: the school's date and the opponent's (school, date).
+
+    The school's row on the reported date, or, when the schedule has since
+    moved the game by a few days, its only row within three days of it. The
+    opponent's row is None when the opponent has none (an out-of-state team).
+
+    Raises:
+        HTTPException 409: the school has no game near that date, or more than
+            one and none on it, so a moderator should check which was meant.
+    """
+    reported = date.fromisoformat(game_date)
+    rows = await (await conn.execute(_SCORE_ROWS_SQL, (school, game_date, game_date, game_date))).fetchall()
+    exact = [r for r in rows if r[0] == reported]
+    if exact:
+        row = exact[0]
+    elif len(rows) == 1:
+        row = rows[0]
+    else:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{school} has {'no game' if not rows else 'more than one game'} within 3 days of {game_date}",
+        )
+    return row[0], (row[1], row[2]) if row[1] is not None else None
 
 
 def assemble_optional_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -141,6 +141,94 @@ def test_nothing_scraped_touches_nothing(monkeypatch: pytest.MonkeyPatch) -> Non
     cur.execute.assert_not_called()
 
 
+# ---------------------------------------------------------------------------
+# insert_rows: a moved game keeps its corrections; AHSFHS changes under one are reported
+# ---------------------------------------------------------------------------
+
+
+def _scraped(school: str, iso: str):
+    """A scraped game stand-in with the one method insert_rows calls."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(school=school, as_db_tuple=lambda: (school, iso))
+
+
+def _insert_db(monkeypatch: pytest.MonkeyPatch, moved: list, removed: list, kept: list, changed: list):
+    """A mocked connection answering insert_rows' four reads in order; return its cursor."""
+    cur, conn = _mock_db(monkeypatch, deleted=[], kept=[])
+    cur.fetchall.side_effect = [moved, removed, kept, changed]
+    monkeypatch.setattr(pipeline, "execute_values", lambda *a, **k: None)
+    return cur, conn
+
+
+def test_insert_moves_a_game_before_pruning_and_upserting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The move runs before anything near the new date is removed, so the moved row (with its
+    corrections, helmet and attendance) is the one updated, all in one transaction."""
+    from datetime import date as _date
+
+    cur, conn = _insert_db(
+        monkeypatch,
+        moved=[("Alpha", _date(2026, 10, 23), _date(2026, 10, 24), "Beta")],
+        removed=[],
+        kept=[],
+        changed=[],
+    )
+    assert pipeline.insert_rows.fn([_scraped("Alpha", "2026-10-24")]) == 1
+
+    statements = [c.args[0] for c in cur.execute.call_args_list]
+    move = statements.index("UPDATE games SET date = %s WHERE school = %s AND date = %s")
+    assert cur.execute.call_args_list[move].args[1] == (_date(2026, 10, 24), "Alpha", _date(2026, 10, 23))
+    assert statements.index(pipeline._MOVED_GAMES_SQL) < move < statements.index(pipeline._STALE_NEARBY_SQL)
+    assert statements.index(pipeline._CHANGED_UNDER_CORRECTION_SQL) < statements.index(pipeline._UPSERT_SQL)
+    conn.commit.assert_called_once()
+
+
+def test_insert_never_removes_a_finished_or_corrected_row() -> None:
+    assert "g.final IS NOT TRUE" in pipeline._STALE_NEARBY_SQL
+    assert "g.overrides = '{}'::jsonb" in pipeline._STALE_NEARBY_SQL
+    assert "DELETE" not in pipeline._UPSERT_SQL
+    assert "overrides" not in pipeline._UPSERT_SQL.split("ON CONFLICT")[0]
+
+
+def test_insert_stores_ahsfhs_scores_so_a_later_change_shows() -> None:
+    """The score fields take AHSFHS's value even when corrected (games_effective reads the correction first)."""
+    for field in pipeline._SCORE_FIELDS:
+        line = next(x for x in pipeline._UPSERT_SQL.splitlines() if x.strip().startswith(field))
+        assert "overrides" not in line, line
+
+
+def test_insert_reports_score_changes_under_a_correction(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from datetime import date as _date
+
+    _insert_db(
+        monkeypatch,
+        moved=[],
+        removed=[],
+        kept=[("Alpha", _date(2026, 10, 23), "Beta", True)],
+        changed=[
+            ("Alpha", _date(2026, 10, 24), "Beta", "points_for", "14", "17", "21"),
+            ("Alpha", _date(2026, 10, 24), "Beta", "result", "L", "W", "W"),
+        ],
+    )
+    with caplog.at_level(logging.WARNING):
+        pipeline.insert_rows.fn([_scraped("Alpha", "2026-10-24")])
+    assert "points_for 14 -> 17, which still differs from the approved correction (21)" in caplog.text
+    assert "result L -> W, which now agrees with the approved correction (W)" in caplog.text
+    assert "kept because it has manual overrides" in caplog.text
+
+
+def test_attended_games_follow_a_moved_game() -> None:
+    """Moving a game's row fails unless the attendance rows' foreign key cascades the new date."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    fk = "FOREIGN KEY (school, date) REFERENCES games(school, date) ON UPDATE CASCADE ON DELETE CASCADE"
+    assert fk in (root / "sql/init.sql").read_text()
+    assert fk in (root / "sql/migrations/2026_10_attended_games_follow_moves.sql").read_text()
+
+
 # ---------------------------------------------------------------- results, overtime, sites
 # How a game line on an AHSFHS schedule becomes a game row: these decide the scores, the
 # overtime count, forfeits, home/away and region games everything downstream reads.
