@@ -20,7 +20,7 @@ import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./rout
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
-  submissionError,
+  playoffScoreProblem, playoffScoreBody, submissionError,
 } from "./feedback.js";
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
@@ -1236,7 +1236,7 @@ async function bracketView(ctx) {
     if (first) bracketUi.half = first.half;
   }
   bracketData = {
-    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz,
+    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz, season,
   };
 
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
@@ -1580,6 +1580,7 @@ function sheetHtml(id) {
       </div>
       ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
       <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
+      ${!result && lockedTeam(game.side_a) && lockedTeam(game.side_b) ? `<p class="report-line"><button type="button" class="link-button" data-playoff-report="${esc(game.id)}">Already played? Report the final score.</button></p>` : ""}
       <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Does something look wrong in this game? Let us know.</button></p>
     </div>`;
 }
@@ -1596,6 +1597,19 @@ function onSheetClick(e) {
     else bracketUi.showAll.add(k);
     refreshSheet();
     sheet.querySelector(`[data-show-all="${CSS.escape(k)}"]`)?.focus({ preventScroll: true });
+    return;
+  }
+  const report = e.target.closest("[data-playoff-report]");
+  if (report) {
+    const game = bracketData.games.find((g) => g.id === report.dataset.playoffReport);
+    const { order, joiner } = sideOrder(settledHost(game));
+    const sideTeam = (k) => lockedTeam(k === "a" ? game.side_a : game.side_b);
+    openFeedback({
+      playoffGame: {
+        season: bracketData.season, clazz: bracketData.clazz, id: game.id, round: game.round, joiner,
+        teamA: sideTeam("a"), teamB: sideTeam("b"), order,
+      },
+    });
     return;
   }
   const pick = e.target.closest("[data-pick-team]");
@@ -1749,11 +1763,38 @@ function feedbackContext({ team = null, about = null } = {}) {
  * a finished game, or the final score for one with none yet. Otherwise it's
  * a general report starting on `category`, about `context`.
  */
-function feedbackForm({ game = null, dateGame = null, category = "other", context = null, page = "/" } = {}) {
+function feedbackForm({ game = null, dateGame = null, playoffGame = null, category = "other", context = null, page = "/" } = {}) {
   const honeypot = `<div class="fb-hp" aria-hidden="true"><label>Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>`;
   const opened = Date.now();
   // The fields a problem is about point at this line (sendFeedback), so it's read with them.
   const status = `<p class="fb-status" id="fb-status-${opened}" role="status" aria-live="polite"></p>`;
+  if (playoffGame) {
+    const g = playoffGame;
+    const team = (k) => (k === "a" ? g.teamA : g.teamB);
+    const scoreInput = (k) => `<label class="fb-score">
+        <span class="fb-score__team">${esc(team(k))}</span>
+        <input type="text" name="points_${k}" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" required>
+      </label>`;
+    return `<form class="fb-form" novalidate data-fb-form data-mode="playoff" data-opened="${opened}" data-page="${esc(page)}" data-game="${esc(JSON.stringify(g))}">
+      <p class="fb-about">${esc(team(g.order[0]))} ${esc(g.joiner)} ${esc(team(g.order[1]))} · ${esc(g.round)}</p>
+      <label class="fb-field"><span>The date it was played</span>
+        <input type="date" name="date" min="${esc(g.season)}-01-01" max="${esc(today())}" required>
+      </label>
+      <fieldset class="fb-scores">
+        <legend>The final score</legend>
+        ${scoreInput(g.order[0])}
+        ${scoreInput(g.order[1])}
+      </fieldset>
+      <label class="fb-field"><span>Where did you see it? <span class="muted">(optional)</span></span>
+        <textarea name="note" rows="2" maxlength="${NOTE_MAX}" placeholder="A link to the box score, a school’s post, etc."></textarea>
+      </label>
+      ${honeypot}
+      <div class="fb-turnstile"></div>
+      ${status}
+      <div class="fb-actions"><button type="submit" class="fb-submit">Send score</button></div>
+      <p class="fb-fine muted">A moderator checks every score before it changes the bracket.</p>
+    </form>`;
+  }
   if (dateGame) {
     const g = dateGame;
     return `<form class="fb-form" novalidate data-fb-form data-mode="date" data-opened="${opened}" data-page="${esc(page)}" data-game="${esc(JSON.stringify(g))}">
@@ -1825,7 +1866,7 @@ function feedbackPage() {
   </div>`;
 }
 
-function openFeedback({ game = null, dateGame = null, category = "other", team = null, about = null } = {}) {
+function openFeedback({ game = null, dateGame = null, playoffGame = null, category = "other", team = null, about = null } = {}) {
   if (sheet?.open) sheet.close(); // from the bracket's game sheet: one sheet at a time
   if (!feedbackSheet) {
     feedbackSheet = document.createElement("dialog");
@@ -1836,18 +1877,18 @@ function openFeedback({ game = null, dateGame = null, category = "other", team =
       if (e.target === feedbackSheet || e.target.closest("[data-sheet-close]")) feedbackSheet.close();
     });
   }
-  const context = game || dateGame ? null : feedbackContext({ team, about });
-  track("feedback_opened", { kind: game ? "score" : dateGame ? "date" : category });
+  const context = game || dateGame || playoffGame ? null : feedbackContext({ team, about });
+  track("feedback_opened", { kind: game || playoffGame ? "score" : dateGame ? "date" : category });
   const page = location.pathname + location.search;
   removeTurnstile(feedbackSheet.querySelector("[data-fb-form]"));
   feedbackSheet.innerHTML = `<div class="game-sheet__head">
       <div>
         <p class="game-sheet__kicker">Feedback</p>
-        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${dateGame ? "Report the right date" : !game ? "Send feedback" : game.awayScore == null ? "Report a final score" : "Report a wrong score"}</h2>
+        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${dateGame ? "Report the right date" : playoffGame ? "Report a final score" : !game ? "Send feedback" : game.awayScore == null ? "Report a final score" : "Report a wrong score"}</h2>
       </div>
       <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
-    <div class="game-sheet__body">${feedbackForm({ game, dateGame, category, context, page })}</div>`;
+    <div class="game-sheet__body">${feedbackForm({ game, dateGame, playoffGame, category, context, page })}</div>`;
   feedbackSheet.showModal();
   mountTurnstile(feedbackSheet.querySelector("[data-fb-form]"), API);
 }
@@ -1868,6 +1909,15 @@ async function sendFeedback(form) {
     problem = scoreProblem(game, values);
     body = scoreBody(game, { ...values, page, website });
     path = "/submissions/scores";
+  } else if (form.dataset.mode === "playoff") {
+    const game = JSON.parse(form.dataset.game);
+    const values = {
+      date: String(data.get("date") || ""), pointsA: data.get("points_a"), pointsB: data.get("points_b"),
+      note: String(data.get("note") || ""), today: today(),
+    };
+    problem = playoffScoreProblem(game, values);
+    body = playoffScoreBody(game, { ...values, page, website });
+    path = "/submissions/playoff-scores";
   } else if (form.dataset.mode === "date") {
     const game = JSON.parse(form.dataset.game);
     const values = { newDate: data.get("new_date"), note: String(data.get("note") || "") };
@@ -1936,6 +1986,10 @@ async function sendFeedback(form) {
 function problemFields(form, data) {
   if (form.dataset.mode === "score") return [form.elements.away, form.elements.home];
   if (form.dataset.mode === "date") return [form.elements.new_date];
+  if (form.dataset.mode === "playoff") {
+    const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(String(data.get("date") || ""));
+    return dateOk ? [form.elements.points_a, form.elements.points_b] : [form.elements.date];
+  }
   const messageOk = !feedbackProblem({ message: String(data.get("message") || ""), email: "" });
   return [messageOk ? form.elements.email : form.elements.message];
 }
@@ -1955,7 +2009,7 @@ function markProblem(form, fields, statusId) {
 
 function feedbackSent(form) {
   const { mode } = form.dataset;
-  track("feedback_sent", { kind: mode === "score" || mode === "date" ? mode : "feedback" });
+  track("feedback_sent", { kind: mode === "score" || mode === "playoff" ? "score" : mode === "date" ? "date" : "feedback" });
   const inSheet = Boolean(form.closest("dialog"));
   const done = document.createElement("div");
   done.className = "fb-sent";
@@ -1963,6 +2017,7 @@ function feedbackSent(form) {
   done.innerHTML = `<p class="fb-sent__title">Thanks, we’ve got it.</p>
     <p class="muted">${{
     score: "A moderator will check the score. Once it’s approved, the standings and odds pick it up at the next update.",
+    playoff: "A moderator will check the score. Once it’s approved, the bracket picks it up at the next update.",
     date: "A moderator will check the date. Once it’s approved, the game moves to it, and the standings and odds pick it up at the next update.",
   }[mode] ?? "A moderator will read it. If you left an email, we may follow up."}</p>
     ${inSheet ? '<button type="button" class="fb-submit" data-sheet-close>Done</button>' : '<a href="/feedback" class="fb-again">Send something else</a>'}`;

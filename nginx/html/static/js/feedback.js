@@ -3,6 +3,7 @@
 // `node --test`. Reports go to the API's moderation queue:
 //   POST /api/v1/submissions/scores    a specific game's final score, or a correction to it
 //   POST /api/v1/submissions/dates     the right date for a specific game
+//   POST /api/v1/submissions/playoff-scores  a settled bracket game's final score
 //   POST /api/v1/submissions/feedback  anything else (category: score, odds, other)
 
 export const CATEGORIES = [
@@ -93,6 +94,36 @@ export function dateProblem(game, { newDate }) {
 /** Request body for /submissions/dates: the game as the visiting team's, on the date it's shown on. */
 export function dateBody(game, { newDate, note, page, website }) {
   const body = { school: game.away, date: game.date, new_date: String(newDate).trim(), page };
+  if (note?.trim()) body.note = note.trim().slice(0, NOTE_MAX);
+  if (website) body.website = website;
+  return body;
+}
+
+/** A problem with a playoff score report (date ISO from a date input; `today` ISO), as a sentence, or null. */
+export function playoffScoreProblem(game, { date, pointsA, pointsB, today }) {
+  if (!ISO_DATE.test(String(date ?? ""))) return "Choose the date the game was played.";
+  if (date > today) return "That date hasn’t come yet. Report the score once the game is played.";
+  if (date.slice(0, 4) !== String(game.season)) return "The date has to be in the game’s season.";
+  const a = score(pointsA);
+  const b = score(pointsB);
+  if (a == null || b == null) return "Enter both teams’ final scores.";
+  if (a > 200 || b > 200) return "Scores over 200 aren’t accepted. Please check the score.";
+  return null;
+}
+
+/** Request body for /submissions/playoff-scores: the bracket game, its sides' teams and points. */
+export function playoffScoreBody(game, { date, pointsA, pointsB, note, page, website }) {
+  const body = {
+    season: game.season,
+    class_: game.clazz,
+    game: game.id,
+    team_a: game.teamA,
+    team_b: game.teamB,
+    date,
+    points_a: Number(pointsA),
+    points_b: Number(pointsB),
+    page,
+  };
   if (note?.trim()) body.note = note.trim().slice(0, NOTE_MAX);
   if (website) body.website = website;
   return body;

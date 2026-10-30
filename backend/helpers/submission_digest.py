@@ -109,11 +109,14 @@ def summary(item: DigestItem) -> str:
         game = item.current_game
         opponent = f" vs {game['opponent']}" if game and game.get("opponent") else ""
         line = f"{item.school}{opponent}, {_game_date(p.get('date'))}: reported {_score(p.get('points_for'), p.get('points_against'))}"
-        line += (
-            f" (site shows {_score(game.get('points_for'), game.get('points_against'))})"
-            if game
-            else " (no game on the site that day)"
-        )
+        if game:
+            line += f" (site shows {_score(game.get('points_for'), game.get('points_against'))})"
+        elif p.get("playoff"):
+            po = p["playoff"]
+            line = line.replace(f"{item.school},", f"{item.school} vs {po.get('opponent')},", 1)
+            line += f" (a {po.get('round')} game not on the schedule yet: approving adds it)"
+        else:
+            line += " (no game on the site that day)"
         return line + (f". Source: {_clip(p['note'], 160)}" if p.get("note") else "")
     if item.type == "date":
         game = item.current_game

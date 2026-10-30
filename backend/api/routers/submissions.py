@@ -43,9 +43,11 @@ from backend.api.models.requests import (
     SubmitFeedbackRequest,
     SubmitHelmetAssignmentRequest,
     SubmitLocationRequest,
+    SubmitPlayoffScoreRequest,
     SubmitScoreRequest,
 )
 from backend.api.models.responses import HelmetAssignmentAlreadyConfirmed, SubmissionCreatedResponse
+from backend.api.routers.bracket import matchups_outlook
 from backend.api.turnstile import verify_turnstile
 from backend.helpers.image_helpers import (
     LogoType,
@@ -386,6 +388,92 @@ async def submit_score(
         submission_id, submitted_at = await _accept_form_submission(conn, "score", body.school, user_id, payload)
 
     return SubmissionCreatedResponse(id=submission_id, type="score", school=body.school, submitted_at=submitted_at)
+
+
+def playoff_host(game: dict, team_a: str, team_b: str) -> str | None:
+    """Who hosts a settled bracket game: "a", "b", "neutral" (the championship), or None when it isn't certain."""
+    if game["id"] == "final":
+        return "neutral"
+    row = next((m for m in game.get("matchups") or [] if (m["team_a"], m["team_b"]) == (team_a, team_b)), None)
+    if row is None:
+        return None
+    p = row["p_host_a"]
+    return "neutral" if p is None else "a" if p == 1.0 else "b" if p == 0.0 else None
+
+
+def locked_team(side: dict) -> str | None:
+    """The team certain to fill a bracket game's side, if there is one."""
+    return next((o["team"] for o in side["occupants"] if o["is_locked"]), None)
+
+
+@router.post(
+    "/playoff-scores",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        403: {"description": "Spam check failed"},
+        404: {"description": "No bracket for that class and season"},
+        422: {"description": "Not a settled, unplayed bracket game, or a date in the future"},
+        503: {"description": "Too many reports right now"},
+    },
+)
+@limiter.limit(_FORM_LIMIT)
+async def submit_playoff_score(
+    request: Request, body: SubmitPlayoffScoreRequest, current_user: OptionalUser = None
+) -> SubmissionCreatedResponse:
+    """Report the final score of a playoff game, for moderator review.
+
+    The game must be one the bracket has settled (both teams known) and not yet played, as
+    ``/bracket/matchups`` shows it today, and its date can't be after today in Mississippi.
+    When the schedule already has the game, the report goes on it like any score report; when
+    it doesn't, approving the report adds the game for both schools on the reported date, in
+    its round, at the bracket's host. A repeat of a pending report returns the original.
+    """
+    if body.website:
+        return _honeypot_response("score", body.team_a)
+    await verify_turnstile(body.turnstile_token, client_ip(request))
+    today = datetime.now(_MISSISSIPPI).date()
+    if body.date > today:
+        raise HTTPException(status_code=422, detail="That game hasn’t been played yet")
+    if body.date.year != body.season:
+        raise HTTPException(status_code=422, detail="The date has to be in the game’s season.")
+    async with get_conn() as conn:
+        _, games = await matchups_outlook(conn, body.season, body.class_, today)
+        game = next((g for g in games if g["id"] == body.game), None)
+        if (
+            game is None
+            or game["decided"]
+            or locked_team(game["side_a"]) != body.team_a
+            or locked_team(game["side_b"]) != body.team_b
+        ):
+            raise HTTPException(
+                status_code=422, detail="That game isn’t set yet, or already has a score. Please refresh the bracket."
+            )
+        existing = await (
+            await conn.execute(
+                "SELECT game_id, date FROM games WHERE season = %s AND school = %s AND opponent = %s AND round = %s",
+                (body.season, body.team_a, body.team_b, game["round"]),
+            )
+        ).fetchone()
+        payload: dict[str, Any] = {
+            "date": (existing[1] if existing else body.date).isoformat(),
+            "points_for": body.points_a,
+            "points_against": body.points_b,
+        }
+        if existing:
+            payload["game_id"] = existing[0]
+        else:
+            payload["playoff"] = {
+                "season": body.season,
+                "class": body.class_,
+                "round": game["round"],
+                "opponent": body.team_b,
+                "host": playoff_host(game, body.team_a, body.team_b),
+            }
+        payload.update({k: v for k, v in (("note", body.note), ("page", body.page)) if v})
+        user_id = optional_user_id(current_user)
+        submission_id, submitted_at = await _accept_form_submission(conn, "score", body.team_a, user_id, payload)
+
+    return SubmissionCreatedResponse(id=submission_id, type="score", school=body.team_a, submitted_at=submitted_at)
 
 
 @router.post(

@@ -396,6 +396,52 @@ class TestApplySubmission:
             asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
         assert not any("recompute_requests" in sql for sql, _ in conn.calls)
 
+    def test_playoff_score_adds_both_rows_then_scores_them(self):
+        """Not on the schedule: both schools' rows are added on the reported date, in the round, at the host."""
+
+        class Conn(FakeConn):
+            """Answers the lookups in order: no game yet, no clash for either school, the new row's id."""
+
+            def __init__(self):
+                super().__init__()
+                self.answers = [None, None, None, (501,)]
+                self.fetchall_result = [(date(2026, 11, 20), "Raleigh", date(2026, 11, 20))]
+
+            async def fetchone(self):
+                return self.answers.pop(0) if self.answers else None
+
+        conn = Conn()
+        payload = {
+            "date": "2026-11-20",
+            "points_for": 21,
+            "points_against": 35,
+            "playoff": {"season": 2026, "class": 3, "round": "Quarterfinals", "opponent": "Raleigh", "host": "b"},
+        }
+        asyncio.run(apply_submission(conn, _submission_row("score", "Union", payload)))
+        inserts = [p for sql, p in conn.calls if "INSERT INTO games" in sql]
+        assert inserts == [
+            ("Union", date(2026, 11, 20), 2026, "Raleigh", "away", "Quarterfinals", None),
+            ("Raleigh", date(2026, 11, 20), 2026, "Union", "home", "Quarterfinals", 501),
+        ]
+        lookup = next(p for sql, p in conn.calls if "g.game_id = %s" in sql)
+        assert lookup[1] == 501  # then scored like any report, by the new game's id
+        assert ("Raleigh", date(2026, 11, 20), "result", "W") in [
+            p for sql, p in conn.calls if "set_game_override" in sql
+        ]
+
+    def test_playoff_score_without_a_known_host_is_left_to_the_moderator(self):
+        conn = FakeConn()
+        payload = {
+            "date": "2026-11-20",
+            "points_for": 21,
+            "points_against": 35,
+            "playoff": {"season": 2026, "class": 3, "round": "Quarterfinals", "opponent": "Raleigh", "host": None},
+        }
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(apply_submission(conn, _submission_row("score", "Union", payload)))
+        assert exc.value.status_code == 409 and "who hosted" in exc.value.detail
+        assert not any("INSERT INTO games" in sql for sql, _ in conn.calls)
+
     def test_score_without_an_opponent_row_corrects_just_the_school(self):
         """No row for the opponent (an out-of-state team): only the school's row changes."""
         conn = FakeConn()

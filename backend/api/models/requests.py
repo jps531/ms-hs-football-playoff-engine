@@ -393,6 +393,27 @@ class SubmitScoreRequest(BaseModel):
     turnstile_token: str | None = _TurnstileToken
 
 
+class SubmitPlayoffScoreRequest(BaseModel):
+    """Report the final score of a playoff game the schedule doesn't have a score for yet.
+
+    ``game`` is the bracket game's id from ``/bracket/matchups``; ``team_a``/``team_b`` are its
+    side A and side B teams, and ``points_a``/``points_b`` their points.
+    """
+
+    season: int
+    class_: int = Field(ge=1, le=7)
+    game: str = Field(max_length=20)
+    team_a: str = Field(max_length=100)
+    team_b: str = Field(max_length=100)
+    date: date_type
+    points_a: int = Field(ge=0, le=200)
+    points_b: int = Field(ge=0, le=200)
+    note: str | None = Field(default=None, max_length=1000)
+    page: str | None = _PagePath
+    website: str | None = _Honeypot
+    turnstile_token: str | None = _TurnstileToken
+
+
 class SubmitDateRequest(BaseModel):
     """Report that a game is on the wrong date: the date it's shown on, and the right one."""
 

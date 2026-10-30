@@ -144,7 +144,10 @@ async def apply_submission(conn: Any, row: tuple) -> None:
 
     elif stype == "score":
         game_date, overrides = build_score_overrides(payload)
-        own_date, opponent_row = await find_score_rows(conn, school, game_date, payload.get("game_id"))
+        game_id = payload.get("game_id")
+        if game_id is None and "playoff" in payload:  # a playoff game the schedule didn't have when reported
+            game_id = await add_playoff_game(conn, school, date.fromisoformat(game_date), payload["playoff"])
+        own_date, opponent_row = await find_score_rows(conn, school, game_date, game_id)
         for field, value in overrides:
             await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, own_date, field, value))
         # The opponent's row of the same game, so both teams' records agree. An
@@ -290,6 +293,58 @@ async def queue_recompute(conn: Any, school: str, game_date: date, from_date: da
     refused approval queues nothing.
     """
     await conn.execute(_QUEUE_RECOMPUTE_SQL, (from_date, school, game_date))
+
+
+# The schedule's rows of a playoff game, if it has the game by now: the
+# reporting school's row against that opponent in that round, within three days
+# of the reported date.
+_PLAYOFF_GAME_SQL = """
+    SELECT game_id FROM games
+    WHERE season = %s AND school = %s AND opponent = %s AND round = %s
+      AND date BETWEEN %s::date - 3 AND %s::date + 3
+"""
+_ADD_PLAYOFF_ROW_SQL = """
+    INSERT INTO games (school, date, season, opponent, location, round, final, source, region_game, game_id)
+    VALUES (%s, %s, %s, %s, %s, %s, FALSE, 'report', FALSE, COALESCE(%s, nextval(pg_get_serial_sequence('games', 'game_id'))))
+    RETURNING game_id
+"""
+_SIDE_LOCATION = {"a": ("home", "away"), "b": ("away", "home"), "neutral": ("neutral", "neutral")}
+
+
+async def add_playoff_game(conn: Any, school: str, game_date: date, playoff: dict) -> int:
+    """The ``game_id`` of the reported playoff game, adding both schools' rows when the schedule lacks it.
+
+    *playoff* is the report's ``playoff`` part: season, class, round, opponent, and the host the
+    bracket settled on ("a" for *school*, "b" for the opponent, "neutral"), or None if it couldn't.
+    The rows are added unplayed on *game_date*; the score goes on them like any other report. The
+    schedule pipeline later updates them, or moves them a few days, when AHSFHS lists the game.
+
+    Raises:
+        HTTPException 409: the host isn't known, so the rows can't be added; or either school
+            already has another game that day.
+    """
+    season, opponent, rnd = playoff["season"], playoff["opponent"], playoff["round"]
+    found = await (
+        await conn.execute(_PLAYOFF_GAME_SQL, (season, school, opponent, rnd, game_date, game_date))
+    ).fetchone()
+    if found is not None:
+        return found[0]
+    if playoff.get("host") not in _SIDE_LOCATION:
+        raise HTTPException(
+            status_code=409, detail=f"The bracket doesn't say who hosted {school} vs {opponent}; add the game by hand"
+        )
+    for team in (school, opponent):
+        clash = await (
+            await conn.execute("SELECT 1 FROM games WHERE school = %s AND date = %s", (team, game_date))
+        ).fetchone()
+        if clash is not None:
+            raise HTTPException(status_code=409, detail=f"{team} already has another game on {game_date.isoformat()}")
+    own_location, opponent_location = _SIDE_LOCATION[playoff["host"]]
+    row = await (
+        await conn.execute(_ADD_PLAYOFF_ROW_SQL, (school, game_date, season, opponent, own_location, rnd, None))
+    ).fetchone()
+    await conn.execute(_ADD_PLAYOFF_ROW_SQL, (opponent, game_date, season, school, opponent_location, rnd, row[0]))
+    return row[0]
 
 
 def assemble_optional_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

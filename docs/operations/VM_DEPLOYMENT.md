@@ -281,7 +281,7 @@ URL and is fetched fresh.
 
 ## Feedback, moderation and spam protection
 
-The feedback form (`/feedback`, and the "Wrong score?", "Report score", "Wrong date?" and "Let us know" links) files
+The feedback form (`/feedback`, and the "Wrong score?", "Report score", "Wrong date?", the bracket's "Report the final score" and "Let us know" links) files
 submissions into the moderation queue. Moderators review them at `/moderate`, and
 a daily email lists what came in. Each piece below is off until it's configured.
 
