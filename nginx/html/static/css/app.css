@@ -1288,8 +1288,8 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .report-line { margin-top: 16px; font-size: 14px; line-height: 20px; }
 .report-line .link-button { min-height: 44px; text-align: left; } /* a line of its own, so a full-size target */
 
+.game-card__reports { justify-self: end; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 14px; }
 .game-card__report {
-  justify-self: end;
   min-height: 32px; padding: 0 2px;
   border: 0; background: none;
   color: var(--text-secondary); font: inherit; font-size: 13px;

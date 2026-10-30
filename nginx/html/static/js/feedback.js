@@ -2,6 +2,7 @@
 // to tell someone when a submission fails. No DOM, so it runs under
 // `node --test`. Reports go to the API's moderation queue:
 //   POST /api/v1/submissions/scores    a specific game's final score, or a correction to it
+//   POST /api/v1/submissions/dates     the right date for a specific game
 //   POST /api/v1/submissions/feedback  anything else (category: score, odds, other)
 
 export const CATEGORIES = [
@@ -73,6 +74,25 @@ export function scoreBody(game, { awayScore, homeScore, note, page, website }) {
     points_against: Number(homeScore),
     page,
   };
+  if (note?.trim()) body.note = note.trim().slice(0, NOTE_MAX);
+  if (website) body.website = website;
+  return body;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A problem with a date report (`newDate` from a date input, ISO), as a sentence for the form, or null. */
+export function dateProblem(game, { newDate }) {
+  const value = String(newDate ?? "").trim();
+  if (!ISO_DATE.test(value)) return "Choose the date the game is (or was) played.";
+  if (value === game.date) return "That’s the date we have. Change it to the right date.";
+  if (value.slice(0, 4) !== game.date.slice(0, 4)) return "The new date has to be in the same season as the game.";
+  return null;
+}
+
+/** Request body for /submissions/dates: the game as the visiting team's, on the date it's shown on. */
+export function dateBody(game, { newDate, note, page, website }) {
+  const body = { school: game.away, date: game.date, new_date: String(newDate).trim(), page };
   if (note?.trim()) body.note = note.trim().slice(0, NOTE_MAX);
   if (website) body.website = website;
   return body;

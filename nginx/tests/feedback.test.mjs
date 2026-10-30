@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  feedbackSubject, feedbackProblem, feedbackBody, scoreProblem, scoreBody, submissionError, MESSAGE_MAX,
+  feedbackSubject, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody, submissionError, MESSAGE_MAX,
 } from "../html/static/js/feedback.js";
 
 const GAME = { date: "2026-10-09", away: "Seminary", home: "Raleigh", awayScore: 21, homeScore: 28 };
@@ -58,4 +58,15 @@ test("failures are explained in plain words", () => {
   assert.match(submissionError(404), /couldn’t find that game/);
   assert.match(submissionError(0), /connection/);
   assert.match(submissionError(500), /our end/);
+});
+
+test("a date report needs a new date in the game's season, and sends the visiting team's side", () => {
+  const game = { date: "2026-10-09", away: "Seminary", home: "Raleigh", joiner: "at" };
+  assert.match(dateProblem(game, { newDate: "" }), /Choose the date/);
+  assert.match(dateProblem(game, { newDate: "2026-10-09" }), /date we have/);
+  assert.match(dateProblem(game, { newDate: "2025-10-10" }), /same season/);
+  assert.equal(dateProblem(game, { newDate: "2026-10-10" }), null);
+  assert.deepEqual(dateBody(game, { newDate: "2026-10-10", note: " MHSAA moved it ", page: "/standings/3a/6" }), {
+    school: "Seminary", date: "2026-10-09", new_date: "2026-10-10", page: "/standings/3a/6", note: "MHSAA moved it",
+  });
 });

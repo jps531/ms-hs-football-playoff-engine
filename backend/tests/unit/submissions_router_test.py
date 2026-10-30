@@ -14,7 +14,7 @@ from starlette.requests import Request
 
 from backend.api import turnstile
 from backend.api.limiter import client_ip
-from backend.api.models.requests import SubmitFeedbackRequest, SubmitScoreRequest
+from backend.api.models.requests import SubmitDateRequest, SubmitFeedbackRequest, SubmitScoreRequest
 from backend.api.routers import submissions
 
 
@@ -157,6 +157,42 @@ def test_a_score_for_a_game_not_yet_played_is_refused():
         _call(submissions.submit_score(_request(), body))
     assert (exc.value.status_code, exc.value.detail) == (422, "That game hasn’t been played yet")
     assert conn.calls == []
+
+
+def _date_report(conn, **kw):
+    """Send a date report through the router with the school/game checks patched out (game 77)."""
+    body = SubmitDateRequest(**{"school": "Raleigh", "date": date(2026, 10, 9), "new_date": date(2026, 10, 10), **kw})
+    with (
+        _patch_conn(conn),
+        patch.object(submissions, "require_school_exists"),
+        patch.object(submissions, "require_game_id", AsyncMock(return_value=77)),
+    ):
+        return _call(submissions.submit_date(_request(), body))
+
+
+def test_a_date_report_is_stored_with_the_game_and_both_dates():
+    # season lookup, no repeat, quiet hour, insert
+    conn = FakeConn([(2026,), None, (0,), (53, SUBMITTED)])
+    res = _date_report(conn, note="Moved for weather")
+    assert (res.id, res.type, res.school) == (53, "date", "Raleigh")
+    stored = conn.calls[-1][1][3]
+    assert '"game_id": 77' in stored and '"date": "2026-10-09"' in stored and '"new_date": "2026-10-10"' in stored
+
+
+@pytest.mark.parametrize(
+    ("new_date", "season", "detail"),
+    [
+        (date(2026, 10, 9), None, "That’s the date we have. Change it to the right date."),
+        (date(2027, 10, 9), (2026,), "The new date has to be in the same season as the game."),
+    ],
+    ids=["same date", "another season"],
+)
+def test_a_date_report_needs_a_new_date_in_the_games_season(new_date, season, detail):
+    conn = FakeConn([season] if season else [])
+    with pytest.raises(HTTPException) as exc:
+        _date_report(conn, new_date=new_date)
+    assert (exc.value.status_code, exc.value.detail) == (422, detail)
+    assert not any("INSERT" in sql for sql, _ in conn.calls)
 
 
 def test_limits_key_on_the_visitor_not_on_nginx():

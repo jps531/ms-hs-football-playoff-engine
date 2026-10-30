@@ -54,6 +54,23 @@ class TestSummary:
         item = DigestItem(7, "score", "pending", "Oxford", {"date": "2026-10-10", "points_for": 1, "points_against": 0})
         assert summary(item).endswith("reported 1–0 (no game on the site that day)")
 
+    def test_date_shows_reported_and_current_date(self):
+        item = DigestItem(
+            8,
+            "date",
+            "pending",
+            "Oxford",
+            {"date": "2026-10-09", "game_id": 77, "new_date": "2026-10-10", "note": "Moved for weather"},
+            current_game={"opponent": "Tupelo", "points_for": None, "points_against": None, "date": "2026-10-09"},
+        )
+        assert type_label(item) == "Date correction"
+        assert (
+            summary(item)
+            == "Oxford vs Tupelo: reported on Sat Oct 10 (site shows Fri Oct 9). Source: Moved for weather"
+        )
+        gone = DigestItem(8, "date", "pending", "Oxford", {"date": "2026-10-09", "new_date": "2026-10-10"})
+        assert summary(gone) == "Oxford: reported on Sat Oct 10 (the game is no longer on the site)"
+
     def test_feedback_drops_the_category_from_the_subject(self):
         """The label carries the category; the line carries what it's about and the message, flattened."""
         assert type_label(_feedback()) == "Feedback · Odds or scenarios"

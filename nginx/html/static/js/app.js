@@ -19,7 +19,8 @@ import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from 
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
-  CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, submissionError,
+  CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
+  submissionError,
 } from "./feedback.js";
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
@@ -1748,11 +1749,28 @@ function feedbackContext({ team = null, about = null } = {}) {
  * a finished game, or the final score for one with none yet. Otherwise it's
  * a general report starting on `category`, about `context`.
  */
-function feedbackForm({ game = null, category = "other", context = null, page = "/" } = {}) {
+function feedbackForm({ game = null, dateGame = null, category = "other", context = null, page = "/" } = {}) {
   const honeypot = `<div class="fb-hp" aria-hidden="true"><label>Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>`;
   const opened = Date.now();
   // The fields a problem is about point at this line (sendFeedback), so it's read with them.
   const status = `<p class="fb-status" id="fb-status-${opened}" role="status" aria-live="polite"></p>`;
+  if (dateGame) {
+    const g = dateGame;
+    return `<form class="fb-form" novalidate data-fb-form data-mode="date" data-opened="${opened}" data-page="${esc(page)}" data-game="${esc(JSON.stringify(g))}">
+      <p class="fb-about">${esc(g.away)} ${esc(g.joiner)} ${esc(g.home)} · shown on ${esc(gameDate(g.date))}</p>
+      <label class="fb-field"><span>The right date</span>
+        <input type="date" name="new_date" value="${esc(g.date)}" min="${esc(g.date.slice(0, 4))}-01-01" max="${esc(g.date.slice(0, 4))}-12-31" required>
+      </label>
+      <label class="fb-field"><span>Where did you see it? <span class="muted">(optional)</span></span>
+        <textarea name="note" rows="2" maxlength="${NOTE_MAX}" placeholder="A link to the school’s schedule, a post, etc."></textarea>
+      </label>
+      ${honeypot}
+      <div class="fb-turnstile"></div>
+      ${status}
+      <div class="fb-actions"><button type="submit" class="fb-submit">Send correction</button></div>
+      <p class="fb-fine muted">A moderator checks every correction before it changes the schedule.</p>
+    </form>`;
+  }
   if (game) {
     const scoreInput = (name, team, value) => `<label class="fb-score">
         <span class="fb-score__team">${esc(team)}</span>
@@ -1801,13 +1819,13 @@ function feedbackPage() {
     <header class="entry-head">
       <h1 class="title">Send feedback</h1>
       <p class="prose">Spotted a wrong score, see odds or a scenario that can’t be right, or have an idea? Let us know.
-        To correct a region game’s score, open its region and select “Wrong score?” on the game, or “Report score” on one that has no score yet. For any other game, choose “A score” below.</p>
+        To correct a region game’s score, open its region and select “Wrong score?” on the game, or “Report score” on one that has no score yet; “Wrong date?” reports a game on the wrong day. For any other game, choose “A score” below.</p>
     </header>
     <div class="fb-page">${feedbackForm({ page: "/feedback" })}</div>
   </div>`;
 }
 
-function openFeedback({ game = null, category = "other", team = null, about = null } = {}) {
+function openFeedback({ game = null, dateGame = null, category = "other", team = null, about = null } = {}) {
   if (sheet?.open) sheet.close(); // from the bracket's game sheet: one sheet at a time
   if (!feedbackSheet) {
     feedbackSheet = document.createElement("dialog");
@@ -1818,18 +1836,18 @@ function openFeedback({ game = null, category = "other", team = null, about = nu
       if (e.target === feedbackSheet || e.target.closest("[data-sheet-close]")) feedbackSheet.close();
     });
   }
-  const context = game ? null : feedbackContext({ team, about });
-  track("feedback_opened", { kind: game ? "score" : category });
+  const context = game || dateGame ? null : feedbackContext({ team, about });
+  track("feedback_opened", { kind: game ? "score" : dateGame ? "date" : category });
   const page = location.pathname + location.search;
   removeTurnstile(feedbackSheet.querySelector("[data-fb-form]"));
   feedbackSheet.innerHTML = `<div class="game-sheet__head">
       <div>
         <p class="game-sheet__kicker">Feedback</p>
-        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${!game ? "Send feedback" : game.awayScore == null ? "Report a final score" : "Report a wrong score"}</h2>
+        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${dateGame ? "Report the right date" : !game ? "Send feedback" : game.awayScore == null ? "Report a final score" : "Report a wrong score"}</h2>
       </div>
       <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
-    <div class="game-sheet__body">${feedbackForm({ game, category, context, page })}</div>`;
+    <div class="game-sheet__body">${feedbackForm({ game, dateGame, category, context, page })}</div>`;
   feedbackSheet.showModal();
   mountTurnstile(feedbackSheet.querySelector("[data-fb-form]"), API);
 }
@@ -1850,6 +1868,12 @@ async function sendFeedback(form) {
     problem = scoreProblem(game, values);
     body = scoreBody(game, { ...values, page, website });
     path = "/submissions/scores";
+  } else if (form.dataset.mode === "date") {
+    const game = JSON.parse(form.dataset.game);
+    const values = { newDate: data.get("new_date"), note: String(data.get("note") || "") };
+    problem = dateProblem(game, values);
+    body = dateBody(game, { ...values, page, website });
+    path = "/submissions/dates";
   } else {
     const values = {
       category: String(data.get("category") || "other"),
@@ -1911,6 +1935,7 @@ async function sendFeedback(form) {
  */
 function problemFields(form, data) {
   if (form.dataset.mode === "score") return [form.elements.away, form.elements.home];
+  if (form.dataset.mode === "date") return [form.elements.new_date];
   const messageOk = !feedbackProblem({ message: String(data.get("message") || ""), email: "" });
   return [messageOk ? form.elements.email : form.elements.message];
 }
@@ -1929,16 +1954,17 @@ function markProblem(form, fields, statusId) {
 }
 
 function feedbackSent(form) {
-  const score = form.dataset.mode === "score";
-  track("feedback_sent", { kind: score ? "score" : "feedback" });
+  const { mode } = form.dataset;
+  track("feedback_sent", { kind: mode === "score" || mode === "date" ? mode : "feedback" });
   const inSheet = Boolean(form.closest("dialog"));
   const done = document.createElement("div");
   done.className = "fb-sent";
   done.setAttribute("role", "status");
   done.innerHTML = `<p class="fb-sent__title">Thanks, we’ve got it.</p>
-    <p class="muted">${score
-      ? "A moderator will check the score. Once it’s approved, the standings and odds pick it up at the next update."
-      : "A moderator will read it. If you left an email, we may follow up."}</p>
+    <p class="muted">${{
+    score: "A moderator will check the score. Once it’s approved, the standings and odds pick it up at the next update.",
+    date: "A moderator will check the date. Once it’s approved, the game moves to it, and the standings and odds pick it up at the next update.",
+  }[mode] ?? "A moderator will read it. If you left an email, we may follow up."}</p>
     ${inSheet ? '<button type="button" class="fb-submit" data-sheet-close>Done</button>' : '<a href="/feedback" class="fb-again">Send something else</a>'}`;
   removeTurnstile(form);
   form.replaceWith(done);
@@ -1966,6 +1992,12 @@ document.addEventListener("submit", (e) => {
 });
 
 document.addEventListener("click", (e) => {
+  const dateReport = e.target.closest("[data-date-report]");
+  if (dateReport) {
+    const d = dateReport.dataset;
+    openFeedback({ dateGame: { date: d.date, away: d.away, home: d.home, joiner: d.joiner } });
+    return;
+  }
   const report = e.target.closest("[data-score-report]");
   if (report) {
     const d = report.dataset;

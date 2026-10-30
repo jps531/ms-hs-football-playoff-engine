@@ -43,16 +43,16 @@ SITE_URL = os.environ.get("SITE_URL", "https://mshsfootball.com")
 UNRESOLVED = ("pending", "accepted_pending_asset")
 
 # Every submission still waiting, newest first, flagged new if it came in during the last
-# %s hours, with the live game a score correction would change (see the moderation queue).
+# %s hours, with the live game a score or date report would change (see the moderation queue).
 _WAITING_SQL = """
     SELECT s.id, s.type::text, s.status::text, s.school, s.payload,
            g.school IS NOT NULL, g.opponent, g.points_for, g.points_against,
-           s.submitted_at >= NOW() - make_interval(hours => %s), s.submitted_at, NOW()
+           s.submitted_at >= NOW() - make_interval(hours => %s), s.submitted_at, g.date, NOW()
     FROM submissions s
     LEFT JOIN games_effective g
-      ON s.type = 'score'
+      ON s.type IN ('score', 'date')
      AND g.school = s.school
-     AND CASE WHEN s.type <> 'score' THEN FALSE
+     AND CASE WHEN s.type NOT IN ('score', 'date') THEN FALSE
               WHEN s.payload ? 'game_id' THEN g.game_id = (s.payload->>'game_id')::bigint
               ELSE g.date = (s.payload->>'date')::date END
     WHERE s.status::text IN %s
@@ -62,7 +62,11 @@ _WAITING_SQL = """
 
 def row_to_item(row: tuple) -> DigestItem:
     """Map a _WAITING_SQL row (without its trailing NOW()) to a DigestItem."""
-    game = {"opponent": row[6], "points_for": row[7], "points_against": row[8]} if row[5] else None
+    game = (
+        {"opponent": row[6], "points_for": row[7], "points_against": row[8], "date": row[11].isoformat()}
+        if row[5]
+        else None
+    )
     return DigestItem(
         id=row[0],
         type=row[1],
@@ -84,7 +88,7 @@ def load_waiting_submissions(hours: int) -> tuple[list[DigestItem], datetime]:
         if not rows:
             cur.execute("SELECT NOW()")
             return [], cur.fetchone()[0]
-    return [row_to_item(r) for r in rows], rows[0][11]
+    return [row_to_item(r) for r in rows], rows[0][12]
 
 
 def smtp_settings() -> dict | None:

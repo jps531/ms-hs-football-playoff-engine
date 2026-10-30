@@ -393,6 +393,18 @@ class SubmitScoreRequest(BaseModel):
     turnstile_token: str | None = _TurnstileToken
 
 
+class SubmitDateRequest(BaseModel):
+    """Report that a game is on the wrong date: the date it's shown on, and the right one."""
+
+    school: str
+    date: date_type
+    new_date: date_type
+    note: str | None = Field(default=None, max_length=1000)
+    page: str | None = _PagePath
+    website: str | None = _Honeypot
+    turnstile_token: str | None = _TurnstileToken
+
+
 class SubmitHelmetAssignmentRequest(BaseModel):
     """Submit or confirm which helmet design a school wore in a specific game."""
 

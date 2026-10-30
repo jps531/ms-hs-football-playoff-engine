@@ -123,7 +123,7 @@ test("game card: visitor on top with the joiner, winner bolded, a readable summa
 test("game card: a completed game can be reported as a wrong score, with everything the form needs", () => {
   const game = { date: "2026-10-09", away: "Seminary", home: "Raleigh", joiner: "at", awayScore: 21, homeScore: 28, winner: "Raleigh" };
   const html = gameCard(game, {}, { report: true });
-  assert.match(html, /data-score-report data-date="2026-10-09" data-away="Seminary" data-home="Raleigh" data-away-score="21" data-home-score="28"/);
+  assert.match(html, /data-score-report data-date="2026-10-09" data-away="Seminary" data-home="Raleigh" data-joiner="at" data-away-score="21" data-home-score="28"/);
   assert.match(html, /Wrong score\?<span class="visually-hidden"> Report a correction for Seminary 21, Raleigh 28/);
   assert.doesNotMatch(gameCard(game, {}), /data-score-report/);
   assert.doesNotMatch(gameCard({ away: "A", home: "B", joiner: "vs" }, {}, { report: true }), /data-score-report/);
@@ -137,6 +137,18 @@ test("game card: a game with no score yet can have its final score reported from
   assert.doesNotMatch(gameCard(game, {}, { report: true, today: "2026-10-29" }), /data-score-report/); // not played yet
   assert.doesNotMatch(gameCard({ ...game, date: null }, {}, { report: true, today: "2026-10-30" }), /data-score-report/); // date to be announced
   assert.doesNotMatch(gameCard(game, {}, { today: "2026-10-30" }), /data-score-report/);
+});
+
+test("game card: a game with a date can be reported as on the wrong date, before or after it's played", () => {
+  const upcoming = { date: "2026-11-06", away: "Seminary", home: "Raleigh", joiner: "at" };
+  const html = gameCard(upcoming, {}, { report: true, today: "2026-10-30" });
+  assert.match(html, /data-date-report data-date="2026-11-06" data-away="Seminary" data-home="Raleigh" data-joiner="at">Wrong date\?<span class="visually-hidden"> Report the right date for Seminary at Raleigh/);
+  assert.doesNotMatch(html, /data-score-report/); // not played yet: only the date
+  const played = gameCard({ ...upcoming, date: "2026-10-09", awayScore: 21, homeScore: 28, winner: "Raleigh" }, {}, { report: true });
+  assert.ok(played.indexOf("Wrong date?") < played.indexOf("Wrong score?"));
+  assert.match(played, /class="game-card__reports"/);
+  assert.doesNotMatch(gameCard({ ...upcoming, date: null }, {}, { report: true }), /game-card__reports/);
+  assert.doesNotMatch(gameCard(upcoming, {}), /data-date-report/);
 });
 
 test("scenario box lists the seeds, who's out, then IF and the conditions", () => {

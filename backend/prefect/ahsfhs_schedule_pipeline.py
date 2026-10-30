@@ -6,6 +6,7 @@ Afterwards, games a school's page no longer lists (e.g. the old date of a
 rescheduled game) are removed, so the table mirrors AHSFHS.
 """
 
+import dataclasses
 import json
 import re
 import time
@@ -320,6 +321,57 @@ _UPSERT_SQL = """
 """
 
 
+# Rows whose date a moderator corrected (an approved date report): the row
+# sits at the corrected date, and overrides.ahsfhs_date keeps the date AHSFHS
+# listed it on.
+_DATE_CORRECTIONS_SQL = """
+    SELECT school, opponent, date, (overrides->>'ahsfhs_date')::date
+    FROM games
+    WHERE season = %s AND overrides ? 'ahsfhs_date'
+"""
+
+
+@task(task_run_name="Apply Corrected Game Dates for {season}")
+def apply_date_corrections(game_records: Iterable[Game], season: int) -> list[Game]:
+    """Put each scraped game whose date a moderator corrected on its corrected date.
+
+    A scraped game is the corrected row's game when it's the same school and
+    opponent, and AHSFHS's date is within three days of the date AHSFHS had
+    when the correction was approved. Every later step (moving, pruning,
+    removing unlisted games) then sees the corrected date, so the game
+    stays where the correction put it.
+    """
+    game_records = list(game_records)
+    with get_database_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_DATE_CORRECTIONS_SQL, (season,))
+            corrected = cur.fetchall()
+    if not corrected:
+        return game_records
+
+    logger = get_run_logger()
+    out = []
+    for g in game_records:
+        match = next(
+            (
+                (row_date, listed)
+                for school, opponent, row_date, listed in corrected
+                if school == g.school and opponent == g.opponent and abs((g.date - listed).days) <= 3
+            ),
+            None,
+        )
+        if match is None or match[0] == g.date:
+            if match is not None:
+                logger.info("AHSFHS now lists %s's game vs %s on its corrected date, %s", g.school, g.opponent, g.date)
+            out.append(g)
+            continue
+        logger.info(
+            "AHSFHS lists %s's game vs %s on %s; keeping the corrected date, %s", g.school, g.opponent, g.date, match[0]
+        )
+        out.append(dataclasses.replace(g, date=match[0]))
+    return out
+
+
 # Each changed game_id, and the submissions that named the row by its old one
 # (a submission names a game by (game_id, school)).
 _SET_GAME_ID_SQL = "UPDATE games SET game_id = %s WHERE school = %s AND date = %s"
@@ -555,6 +607,7 @@ def ahsfhs_schedule_data_flow(season: int | None = None) -> int:
         season = date.today().year
     existing_schools = get_existing_schools(season)
     game_records = find_ahsfhs_schedule_for_schools(existing_schools, season)
+    game_records = apply_date_corrections(game_records, season)
     updated_count = insert_rows(game_records)
     remove_unlisted_games(game_records, season)
     return updated_count
