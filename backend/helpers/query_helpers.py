@@ -23,6 +23,16 @@ async def require_game_exists(conn, school: str, game_date) -> None:  # pragma: 
         raise HTTPException(status_code=404, detail=f"Game for '{school}' on {game_date} not found")
 
 
+async def require_game_id(conn, school: str, game_date) -> int:  # pragma: no cover
+    """The ``game_id`` of *school*'s game on *game_date*; HTTP 404 if there's no such game."""
+    row = await (
+        await conn.execute("SELECT game_id FROM games WHERE school = %s AND date = %s", (school, game_date))
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Game for '{school}' on {game_date} not found")
+    return row[0]
+
+
 async def require_location_exists(conn, location_id: int) -> None:  # pragma: no cover
     """Raise HTTP 404 if no location exists with *location_id*."""
     row = await (await conn.execute("SELECT 1 FROM locations WHERE id = %s", (location_id,))).fetchone()

@@ -141,7 +141,7 @@ async def apply_submission(conn: Any, row: tuple) -> None:
 
     elif stype == "score":
         game_date, overrides = build_score_overrides(payload)
-        own_date, opponent_row = await find_score_rows(conn, school, game_date)
+        own_date, opponent_row = await find_score_rows(conn, school, game_date, payload.get("game_id"))
         for field, value in overrides:
             await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (school, own_date, field, value))
         # The opponent's row of the same game, so both teams' records agree. An
@@ -154,54 +154,68 @@ async def apply_submission(conn: Any, row: tuple) -> None:
     elif stype == "helmet_assignment":
         game_date, helmet_design_id = build_helmet_assignment_override(payload)
         await require_helmet_design_exists(conn, helmet_design_id)
-        await conn.execute(
-            "UPDATE games SET helmet_design_id = %s WHERE school = %s AND date = %s",
-            (helmet_design_id, school, game_date),
-        )
+        if "game_id" in payload:  # submitted since games had ids: follows the game if its date changed
+            await conn.execute(
+                "UPDATE games SET helmet_design_id = %s WHERE school = %s AND game_id = %s",
+                (helmet_design_id, school, payload["game_id"]),
+            )
+        else:
+            await conn.execute(
+                "UPDATE games SET helmet_design_id = %s WHERE school = %s AND date = %s",
+                (helmet_design_id, school, game_date),
+            )
 
 
-# The school's rows within three days of the reported date, nearest first, each
-# with its opponent's row of the same game: the opponent's row whose opponent
-# is the school, nearest in date (the two schools' pages can date one game a
-# day apart).
+# The school's row of a game, with the opponent's row of the same game (none
+# for an out-of-state opponent): by the game's id, or, for a submission made
+# before games had ids, the school's rows within three days of its date,
+# nearest first.
 _SCORE_ROWS_SQL = """
     SELECT g.date, o.school, o.date
     FROM games g
-    LEFT JOIN LATERAL (
-        SELECT o.school, o.date FROM games o
-        WHERE o.school = g.opponent AND o.opponent = g.school AND o.season = g.season
-          AND o.date BETWEEN g.date - 3 AND g.date + 3
-        ORDER BY abs(o.date - g.date), o.date DESC
-        LIMIT 1
-    ) o ON TRUE
-    WHERE g.school = %s AND g.date BETWEEN %s::date - 3 AND %s::date + 3
+    LEFT JOIN games o ON o.game_id = g.game_id AND o.school <> g.school
+    WHERE g.school = %s AND {where}
     ORDER BY abs(g.date - %s::date)
 """
+_BY_ID = _SCORE_ROWS_SQL.format(where="g.game_id = %s")
+_BY_DATE = _SCORE_ROWS_SQL.format(where="g.date BETWEEN %s::date - 3 AND %s::date + 3")
 
 
-async def find_score_rows(conn: Any, school: str, game_date: str) -> tuple[date, tuple[str, date] | None]:
+async def find_score_rows(
+    conn: Any, school: str, game_date: str, game_id: int | None = None
+) -> tuple[date, tuple[str, date] | None]:
     """The rows an approved score correction goes on: the school's date and the opponent's (school, date).
 
-    The school's row on the reported date, or, when the schedule has since
-    moved the game by a few days, its only row within three days of it. The
+    The school's row of game *game_id*, wherever its date has moved. A
+    submission without one (made before games had ids) takes the school's row
+    on the reported date, or its only row within three days of it. The
     opponent's row is None when the opponent has none (an out-of-state team).
 
     Raises:
-        HTTPException 409: the school has no game near that date, or more than
-            one and none on it, so a moderator should check which was meant.
+        HTTPException 409: the game is no longer on the school's schedule, or
+            (without an id) more than one game is near the date and none on
+            it, so a moderator should check which was meant.
     """
-    reported = date.fromisoformat(game_date)
-    rows = await (await conn.execute(_SCORE_ROWS_SQL, (school, game_date, game_date, game_date))).fetchall()
-    exact = [r for r in rows if r[0] == reported]
-    if exact:
-        row = exact[0]
-    elif len(rows) == 1:
+    if game_id is not None:
+        rows = await (await conn.execute(_BY_ID, (school, game_id, game_date))).fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=409, detail=f"{school}'s game reported for {game_date} is no longer on its schedule"
+            )
         row = rows[0]
     else:
-        raise HTTPException(
-            status_code=409,
-            detail=f"{school} has {'no game' if not rows else 'more than one game'} within 3 days of {game_date}",
-        )
+        reported = date.fromisoformat(game_date)
+        rows = await (await conn.execute(_BY_DATE, (school, game_date, game_date, game_date))).fetchall()
+        exact = [r for r in rows if r[0] == reported]
+        if exact:
+            row = exact[0]
+        elif len(rows) == 1:
+            row = rows[0]
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{school} has {'no game' if not rows else 'more than one game'} within 3 days of {game_date}",
+            )
     return row[0], (row[1], row[2]) if row[1] is not None else None
 
 
@@ -241,19 +255,23 @@ def _optional_context(body: Any, fields: tuple[str, ...]) -> dict[str, Any]:
     return out
 
 
-def build_score_payload(body: Any) -> dict[str, Any]:
-    """Build a 'score' submission payload from a ``SubmitScoreRequest`` body."""
+def build_score_payload(body: Any, game_id: int) -> dict[str, Any]:
+    """Build a 'score' submission payload from a ``SubmitScoreRequest`` body and the game's ``game_id``.
+
+    The date is what the reporter saw; ``game_id`` finds the game even if its date changes before review.
+    """
     return {
         "date": body.date.isoformat(),
+        "game_id": game_id,
         "points_for": body.points_for,
         "points_against": body.points_against,
         **_optional_context(body, ("note", "page")),
     }
 
 
-def build_helmet_assignment_payload(body: Any) -> dict[str, Any]:
-    """Build a 'helmet_assignment' submission payload from a ``SubmitHelmetAssignmentRequest`` body."""
-    return {"date": body.date.isoformat(), "helmet_design_id": body.helmet_design_id}
+def build_helmet_assignment_payload(body: Any, game_id: int) -> dict[str, Any]:
+    """Build a 'helmet_assignment' submission payload from a ``SubmitHelmetAssignmentRequest`` body and ``game_id``."""
+    return {"date": body.date.isoformat(), "game_id": game_id, "helmet_design_id": body.helmet_design_id}
 
 
 def build_feedback_payload(body: Any) -> dict[str, Any]:

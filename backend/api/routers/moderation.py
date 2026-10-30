@@ -90,8 +90,9 @@ async def list_submissions(
     return [build_submission_summary(r) for r in rows]
 
 
-# Each queue row is a submission plus, for a score, the submitting school's live game that day.
-# CASE keeps the date cast to score rows, whose payload date is always ISO.
+# Each queue row is a submission plus, for a score, the submitting school's live game: by its
+# game_id, or by the reported date for one made before games had ids. CASE keeps the casts to
+# score rows, whose payload date is always ISO.
 _QUEUE_SELECT = """
     SELECT s.id, s.type, s.status, s.school, s.submitted_at, s.reviewed_at, s.payload, s.moderator_notes,
            s.helmet_design_id,
@@ -100,7 +101,9 @@ _QUEUE_SELECT = """
     LEFT JOIN games_effective g
       ON s.type = 'score'
      AND g.school = s.school
-     AND g.date = CASE WHEN s.type = 'score' THEN (s.payload->>'date')::date END
+     AND CASE WHEN s.type <> 'score' THEN FALSE
+              WHEN s.payload ? 'game_id' THEN g.game_id = (s.payload->>'game_id')::bigint
+              ELSE g.date = (s.payload->>'date')::date END
     WHERE (%s::text IS NULL OR s.status::text = %s::text)
       AND (%s::text IS NULL OR s.type::text = %s::text)
     ORDER BY s.submitted_at DESC

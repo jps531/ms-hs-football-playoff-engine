@@ -52,7 +52,7 @@ from backend.helpers.image_helpers import (
     upload_submission_helmet_image,
     upload_submission_logo,
 )
-from backend.helpers.query_helpers import require_game_exists, require_helmet_design_exists, require_school_exists
+from backend.helpers.query_helpers import require_game_id, require_helmet_design_exists, require_school_exists
 from backend.helpers.submission_helpers import (
     build_colors_payload,
     build_feedback_payload,
@@ -369,10 +369,10 @@ async def submit_score(
     await verify_turnstile(body.turnstile_token, client_ip(request))
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
-        await require_game_exists(conn, body.school, body.date)
+        game_id = await require_game_id(conn, body.school, body.date)
 
         user_id = optional_user_id(current_user)
-        payload = build_score_payload(body)
+        payload = build_score_payload(body, game_id)
         submission_id, submitted_at = await _accept_form_submission(conn, "score", body.school, user_id, payload)
 
     return SubmissionCreatedResponse(id=submission_id, type="score", school=body.school, submitted_at=submitted_at)
@@ -395,7 +395,7 @@ async def submit_helmet_assignment(
     """
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
-        await require_game_exists(conn, body.school, body.date)
+        game_id = await require_game_id(conn, body.school, body.date)
         await require_helmet_design_exists(conn, body.helmet_design_id)
 
         design_school = await (
@@ -422,7 +422,7 @@ async def submit_helmet_assignment(
 
         user_id = current_user["db_id"]
         await _require_under_account_cap(conn, user_id)
-        payload = build_helmet_assignment_payload(body)
+        payload = build_helmet_assignment_payload(body, game_id)
         submission_id, submitted_at = await insert_submission(conn, "helmet_assignment", body.school, user_id, payload)
 
     return SubmissionCreatedResponse(

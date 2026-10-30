@@ -150,13 +150,16 @@ def _scraped(school: str, iso: str):
     """A scraped game stand-in with the one method insert_rows calls."""
     from types import SimpleNamespace
 
-    return SimpleNamespace(school=school, as_db_tuple=lambda: (school, iso))
+    return SimpleNamespace(school=school, season=2026, as_db_tuple=lambda: (school, iso))
 
 
-def _insert_db(monkeypatch: pytest.MonkeyPatch, moved: list, removed: list, kept: list, changed: list):
-    """A mocked connection answering insert_rows' four reads in order; return its cursor."""
+def _insert_db(
+    monkeypatch: pytest.MonkeyPatch, moved: list, removed: list, kept: list, changed: list, season_rows: list = ()
+):
+    """A mocked connection answering insert_rows' five reads in order (the last is the season's rows
+    for reconcile_game_ids); return its cursor."""
     cur, conn = _mock_db(monkeypatch, deleted=[], kept=[])
-    cur.fetchall.side_effect = [moved, removed, kept, changed]
+    cur.fetchall.side_effect = [moved, removed, kept, changed, list(season_rows)]
     monkeypatch.setattr(pipeline, "execute_values", lambda *a, **k: None)
     return cur, conn
 
@@ -180,6 +183,29 @@ def test_insert_moves_a_game_before_pruning_and_upserting(monkeypatch: pytest.Mo
     assert cur.execute.call_args_list[move].args[1] == (_date(2026, 10, 24), "Alpha", _date(2026, 10, 23))
     assert statements.index(pipeline._MOVED_GAMES_SQL) < move < statements.index(pipeline._STALE_NEARBY_SQL)
     assert statements.index(pipeline._CHANGED_UNDER_CORRECTION_SQL) < statements.index(pipeline._UPSERT_SQL)
+    conn.commit.assert_called_once()
+
+
+def test_insert_gives_a_new_row_its_opponents_game_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After the upsert, the season's rows are re-paired: Beta's new row joins Alpha's game, and a
+    submission that named Beta's row by its old id follows it."""
+    from datetime import date as _date
+
+    d = _date(2026, 10, 23)
+    cur, conn = _insert_db(
+        monkeypatch,
+        moved=[],
+        removed=[],
+        kept=[],
+        changed=[],
+        season_rows=[("Alpha", d, "Beta", 5), ("Beta", d, "Alpha", 9)],
+    )
+    pipeline.insert_rows.fn([_scraped("Beta", "2026-10-23")])
+
+    calls = [(c.args[0], c.args[1] if len(c.args) > 1 else None) for c in cur.execute.call_args_list]
+    upsert = [sql for sql, _ in calls].index(pipeline._UPSERT_SQL)
+    assert (pipeline._SET_GAME_ID_SQL, (5, "Beta", d)) in calls[upsert:]
+    assert (pipeline._REMAP_SUBMISSIONS_SQL, (5, "Beta", 9)) in calls[upsert:]
     conn.commit.assert_called_once()
 
 
