@@ -410,6 +410,21 @@ class TestBracketPreview:
         html = bracket_preview_html(3, BRACKET, {**BRACKET_CTX, "results": results})
         assert "tgame--played" in html and ">35<" in html and "trow--result is-winner" in html
 
+    def test_a_bye_reads_bye_with_no_opponent(self):
+        """A seed a small region can't fill: the card says BYE with no "vs", and the sheet says why."""
+        import backend.helpers.static_pages as sp
+
+        game = {**BRACKET[2], "side_b": {**_side([(4, 4)], []), "bye": True}, "matchups": []}
+        card = sp._tree_card(game, BRACKET_CTX, False)
+        assert "tgame--bye" in card and ">BYE<" in card and "Bay Springs" in card
+        assert card.index("Bay Springs") < card.index("BYE")
+        assert re.findall(r'class="trow__gutter">([^<]*)<', card) == ["", ""]
+        sheet = sp._sheet(game, BRACKET_CTX)
+        assert ">Bye<" in sheet and "bgame__vs" not in sheet and "Region 4 #4 Seed" not in sheet.split("bgame__detail")[0]
+        assert "There is no Region 4 #4 Seed, so the Region 3 #1 Seed gets a bye." in sheet
+        locked = {**game, "side_a": _side([(3, 1)], [("Bay Springs", 1.0, True)])}
+        assert "There is no Region 4 #4 Seed, so Bay Springs gets a bye." in sp._sheet(locked, BRACKET_CTX)
+
     def test_too_small_a_bracket_draws_nothing(self):
         """Fewer than two rounds in a half: no preview (the landing just links)."""
         assert bracket_preview_html(3, BRACKET[:4], BRACKET_CTX) == ""

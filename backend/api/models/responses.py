@@ -952,10 +952,16 @@ class MatchupOccupant(BaseModel):
 
 
 class MatchupSide(BaseModel):
-    """One side of a bracket game: where it comes from and who might fill it."""
+    """One side of a bracket game: where it comes from and who might fill it.
+
+    ``bye`` is true for a first-round side whose seed doesn't exist: its region has too few teams
+    for it (a three-team region has no #4 seed). ``occupants`` is then empty, and the other side's
+    team advances to the next round without playing.
+    """
 
     feeders: list[MatchupFeeder]
     occupants: list[MatchupOccupant]
+    bye: bool = False
 
 
 class Matchup(BaseModel):

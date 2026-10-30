@@ -272,6 +272,7 @@ def _drawn() -> str:
     from backend.tests.unit.static_pages_test import BRACKET_CTX, STAMP, _far_out, _region
 
     ties = [{**_TIE, "teams": ["A", "B"], "records": ["2-0", "1-0"], "places": [1, 2]}]
+    bye = {**BRACKET[2], "side_b": {**BRACKET[2]["side_b"], "occupants": [], "bye": True}, "matchups": []}
     parts = [
         sp.region_body(3, 6, _region(remaining_games=[], tiebreaks=ties), STAMP, "projected", {}),
         sp.region_body(3, 6, _region(), STAMP, "projected", {}),
@@ -279,6 +280,8 @@ def _drawn() -> str:
         sp.bracket_body(3, BRACKET, {**BRACKET_CTX, "seeds": {}}, STAMP),  # a locked team without its seed
         sp.insight_preview({**_far_out(), "clazz": 3, "region": 6}, {}),
         sp._sheet(BRACKET[0], BRACKET_CTX),
+        sp._sheet(bye, BRACKET_CTX),
+        sp._tree_card(bye, BRACKET_CTX, False),
         sp.landing_body(None, {}),
     ]
     return _words(" ".join(parts))
@@ -295,6 +298,8 @@ SHARED_SENTENCES = [
     "Clinched a playoff spot",
     "Locked in: ",
     "More on how the odds work",
+    "BYE",
+    "gets a bye.",
 ]
 
 

@@ -1015,6 +1015,7 @@ body:has(.bracket-head) :is(.site-header, .scrubber-bar__inner, .context-bar__in
 .trow--result.is-winner .trow__name, .trow--result.is-winner .trow__value { font-weight: 700; }
 .trow.is-focus .trow__name { font-weight: 700; }
 .trow--empty .trow__name { color: var(--text-secondary); font-weight: 400; }
+.trow--bye .trow__name { color: var(--text-secondary); font-weight: 600; letter-spacing: 0.04em; }
 
 /* Phones: one round per screen with the next peeking in, round tabs to jump. */
 @media (max-width: 48em) {

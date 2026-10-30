@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.1.2
+
+- **A bye reads as a bye.** When a region has only three teams, the team that would have played its
+  #4 seed in the first round gets a bye. The bracket now shows “BYE” there, and the game's sheet
+  says why: “There is no Region 1 #4 Seed, so Calhoun City gets a bye.” Before, it showed “No team
+  can get here” and said that so many teams could still meet there that no matchup had even a 0.5%
+  chance, which wasn't true.
+
 ## 1.1.1
 
 - **Another class keeps your week.** Switching class on the standings or a bracket stays on the season

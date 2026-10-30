@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups,
+  positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups, byeSide,
   teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout, roundPicks,
 } from "../html/static/js/bracket.js";
 
@@ -52,6 +52,15 @@ test("game states: played, determined, partial, projected", () => {
   assert.equal(gameState({ ...QF, side_a: lockedSide("A"), side_b: lockedSide("B") }, null), "determined");
   assert.equal(gameState(QF, { winner: "A" }), "played");
   assert.equal(lockedTeam(lockedSide("A")), "A");
+});
+
+test("a seed a small region can't fill is a bye, whichever side it's on", () => {
+  const bye = { feeders: [{ region: 1, seed: 4 }], occupants: [], bye: true };
+  const lockedSide = { feeders: [{ region: 3, seed: 1 }], occupants: [occ("Calhoun City", 1, 1, true)] };
+  assert.equal(byeSide({ side_a: lockedSide, side_b: bye }), "b");
+  assert.equal(byeSide({ side_a: bye, side_b: QF.side_b }), "a");
+  assert.equal(byeSide(QF), null);
+  assert.equal(gameState({ side_a: lockedSide, side_b: bye }, null), "bye");
 });
 
 test("hosting labels come straight from the API's odds", () => {
