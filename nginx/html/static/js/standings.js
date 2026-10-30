@@ -232,6 +232,19 @@ export function teamSchedule(team, results, remaining) {
 }
 
 /**
+ * The played week to show for week number `week` (null = the newest), from
+ * `weeks` (oldest first). Week numbers are calendar weeks, the same in every
+ * class, so a week chosen in one class carries to another; when the other
+ * class didn't play that week, it's that class's nearest earlier week (its
+ * first, if it has none earlier).
+ */
+export function pickWeek(weeks, week) {
+  if (!weeks.length) return null;
+  if (!week) return weeks[weeks.length - 1];
+  return [...weeks].reverse().find((w) => w.week <= week) ?? weeks[0];
+}
+
+/**
  * The snapshot date to request for a chosen week, or null for "latest".
  * `weeks` are played weeks oldest first ({ week, end }), `week` the chosen
  * week number (null = the newest). Snapshots dated after a week's games but
@@ -246,7 +259,7 @@ export function teamSchedule(team, results, remaining) {
 export function snapshotDate(weeks, week, pastSeason) {
   if (!weeks.length) return null;
   const latest = weeks[weeks.length - 1];
-  const chosen = (week && weeks.find((w) => w.week === week)) || latest;
+  const chosen = pickWeek(weeks, week);
   if (pastSeason) return chosen.end;
   return chosen === latest ? null : chosen.end;
 }

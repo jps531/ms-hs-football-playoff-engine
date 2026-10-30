@@ -30,7 +30,7 @@ import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
 } from "./scenarios.js";
 import {
-  standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
+  standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate, pickWeek,
   orient, byDay, teamSchedule, tieHeading,
 } from "./standings.js";
 
@@ -480,7 +480,8 @@ document.addEventListener("click", (e) => {
   navigate(link.getAttribute("href"), { scroll: true });
 });
 
-const classHref = (clazz) => hrefWith({ clazz, region: null, team: null, week: null });
+// Another class keeps the season and week (pickWeek: the same calendar week, or its nearest earlier one).
+const classHref = (clazz) => hrefWith({ clazz, region: null, team: null });
 
 scrubberHost.addEventListener("click", (e) => {
   const item = e.target.closest("[data-class]");
@@ -618,9 +619,7 @@ function controlsLine(ctx, weeks, { asOf, mode, projectedAvailable }) {
     // Without an explicit week, show the week the snapshot actually covers,
     // which can trail the calendar (e.g. before the morning recompute).
     const covered = asOf ? [...weeks].reverse().find((w) => w.firstDate <= asOf) : null;
-    const chosen = ctx.week && weeks.some((w) => w.week === ctx.week)
-      ? ctx.week
-      : (covered ?? weeks[weeks.length - 1]).week;
+    const chosen = ctx.week ? pickWeek(weeks, ctx.week).week : (covered ?? weeks[weeks.length - 1]).week;
     const options = [...weeks].reverse().map((w) => ({ value: w.week, label: w.label }));
     const shown = weeks.find((w) => w.week === chosen);
     parts.push(`<span class="ctl">Through ${select("week", "Through week", options, chosen)}</span>`);

@@ -5,6 +5,13 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.1.1
+
+- **Another class keeps your week.** Switching class on the standings or a bracket stays on the season
+  and week you picked: the same calendar week, under that class's name for it (2025's “Second Round”
+  in 1A–4A is “First Round” in 5A–7A). If that class didn't play that week, it shows the closest
+  earlier week it did. Before, it went back to the latest week.
+
 ## 1.1.0
 
 - **Report a game's final score.** A region game from today or earlier that has no score yet has a

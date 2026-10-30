@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
+  standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate, pickWeek,
   orient, byDay, teamSchedule, playoffStatus, tieHeading,
 } from "../html/static/js/standings.js";
 
@@ -189,6 +189,16 @@ test("no played weeks or an unknown week falls back sensibly", () => {
   assert.equal(snapshotDate([], 3, true), null);
   assert.equal(snapshotDate(WEEKS, 99, false), null);
   assert.equal(snapshotDate(WEEKS, 99, true), "2025-12-07");
+});
+
+test("a week carried from another class: that week, else this class's nearest earlier one", () => {
+  assert.equal(pickWeek(WEEKS, 11).week, 11);
+  assert.equal(pickWeek(WEEKS, 13).week, 11); // not played here: the week before
+  assert.equal(pickWeek(WEEKS, 3).week, 10); // before this class's first week: its first
+  assert.equal(pickWeek(WEEKS, null).week, 15);
+  assert.equal(pickWeek([], 11), null);
+  assert.equal(snapshotDate(WEEKS, 13, true), "2025-11-09");
+  assert.equal(snapshotDate(WEEKS, 13, false), "2025-11-09");
 });
 
 test("remaining games keep the schedule's home team, listed second with at", () => {
