@@ -11,6 +11,11 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   and week you picked: the same calendar week, under that class's name for it (2025's “Second Round”
   in 1A–4A is “First Round” in 5A–7A). If that class didn't play that week, it shows the closest
   earlier week it did. Before, it went back to the latest week.
+- **Each class remembers its team.** A team you pick in a class stays picked there for the rest of
+  your visit: look at other classes, and it's there again when you come back, on the class's standings
+  and its bracket. A team picked in one class doesn't affect another. “Show every team”, or picking the
+  team again, clears it. The class page now marks the picked team's row too. Before, switching class
+  cleared the pick.
 
 ## 1.1.0
 
