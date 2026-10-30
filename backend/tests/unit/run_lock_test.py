@@ -21,7 +21,7 @@ def _sql(conn: MagicMock) -> list[str]:
 
 def test_waits_for_the_lock_then_releases_it_and_closes(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = _conn()
-    monkeypatch.setattr(run_lock, "get_database_connection", lambda: conn)
+    monkeypatch.setattr(run_lock, "_lock_connection", lambda: conn)
     with run_lock.exclusive_run() as held:
         assert held
     assert _sql(conn) == ["SELECT pg_advisory_lock(%s)", "SELECT pg_advisory_unlock(%s)"]
@@ -31,7 +31,7 @@ def test_waits_for_the_lock_then_releases_it_and_closes(monkeypatch: pytest.Monk
 
 def test_without_waiting_a_busy_lock_is_reported_not_taken(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = _conn(free=False)
-    monkeypatch.setattr(run_lock, "get_database_connection", lambda: conn)
+    monkeypatch.setattr(run_lock, "_lock_connection", lambda: conn)
     with run_lock.exclusive_run(wait=False) as held:
         assert not held
     assert _sql(conn) == ["SELECT pg_try_advisory_lock(%s)"]
@@ -41,7 +41,7 @@ def test_without_waiting_a_busy_lock_is_reported_not_taken(monkeypatch: pytest.M
 def test_a_subflow_of_the_holder_goes_straight_through(monkeypatch: pytest.MonkeyPatch) -> None:
     """The daily update holds the lock and runs the region update, which takes it again."""
     conns = [_conn()]
-    monkeypatch.setattr(run_lock, "get_database_connection", lambda: conns[-1])
+    monkeypatch.setattr(run_lock, "_lock_connection", lambda: conns[-1])
     with run_lock.exclusive_run() as outer:
         with run_lock.exclusive_run(wait=False) as inner:
             assert outer and inner
@@ -52,7 +52,7 @@ def test_a_subflow_of_the_holder_goes_straight_through(monkeypatch: pytest.Monke
 
 def test_the_lock_is_released_when_the_flow_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = _conn()
-    monkeypatch.setattr(run_lock, "get_database_connection", lambda: conn)
+    monkeypatch.setattr(run_lock, "_lock_connection", lambda: conn)
 
     @run_lock.holds_update_lock
     def flow_body(season: int) -> None:

@@ -1592,8 +1592,13 @@ def region_scenarios_data_flow(
     season: int | None = None,
     clazz: int | None = None,
     region: int | None = None,
+    share_assets: bool = True,
 ) -> dict[str, object]:
-    """Region Scenarios Data Flow"""
+    """Region Scenarios Data Flow
+
+    Ends by redrawing the share images, unless *share_assets* is False (the daily update draws
+    them itself, once its transaction has committed).
+    """
     if season is None:
         season = date.today().year
     logger = get_run_logger()
@@ -1688,10 +1693,11 @@ def region_scenarios_data_flow(
 
     # Link previews: redraw every region and class card from what the site now
     # serves. A failure here shouldn't fail the data update itself.
-    try:
-        write_share_assets(season)
-    except Exception:
-        logger.exception("Share assets failed; the region update itself completed")
+    if share_assets:
+        try:
+            write_share_assets(season)
+        except Exception:
+            logger.exception("Share assets failed; the region update itself completed")
     return scenario_dicts
 
 

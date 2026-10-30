@@ -24,4 +24,4 @@ def _update_lock_without_a_database(monkeypatch: pytest.MonkeyPatch) -> None:
 
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (True,)
-    monkeypatch.setattr(run_lock, "get_database_connection", lambda: conn)
+    monkeypatch.setattr(run_lock, "_lock_connection", lambda: conn)

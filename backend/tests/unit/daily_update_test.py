@@ -16,23 +16,53 @@ CENTRAL = ZoneInfo("America/Chicago")
 FRIDAY = date(2026, 10, 23)
 
 
-def test_region_scenarios_run_after_the_scores_are_pulled(monkeypatch):
-    """The morning update recalculates only once the pull has finished, and not at all if it fails."""
+def _daily(monkeypatch, pull=None, recalc=None):
+    """Run the daily update with its steps and its transaction recorded in order; return the record."""
+    from contextlib import contextmanager
+
     calls = []
-    monkeypatch.setattr(daily, "ahsfhs_schedule_data_flow", lambda season: calls.append(("pull", season)))
-    monkeypatch.setattr(daily, "region_scenarios_data_flow", lambda season: calls.append(("recalc", season)))
+
+    @contextmanager
+    def transaction():
+        calls.append("begin")
+        try:
+            yield
+        except BaseException:
+            calls.append("rollback")
+            raise
+        calls.append("commit")
+
+    monkeypatch.setattr(daily, "shared_transaction", transaction)
+    monkeypatch.setattr(daily, "ahsfhs_schedule_data_flow", pull or (lambda season: calls.append(("pull", season))))
+    monkeypatch.setattr(
+        daily,
+        "region_scenarios_data_flow",
+        recalc or (lambda season, share_assets: calls.append(("recalc", season, share_assets))),
+    )
+    monkeypatch.setattr(daily, "write_share_assets", lambda season: calls.append(("images", season)))
+    return calls
+
+
+def test_the_pull_and_the_recalculation_are_one_transaction_and_images_follow_the_commit(monkeypatch):
+    """The recalculation starts once the pull is done; the share images are drawn after the commit."""
+    calls = _daily(monkeypatch)
     daily.daily_update_flow.fn(2026)
-    assert calls == [("pull", 2026), ("recalc", 2026)]
+    assert calls == ["begin", ("pull", 2026), ("recalc", 2026, False), "commit", ("images", 2026)]
 
-    def failed_pull(season):
-        """A pull that fails partway."""
-        raise RuntimeError("AHSFHS down")
 
-    calls.clear()
-    monkeypatch.setattr(daily, "ahsfhs_schedule_data_flow", failed_pull)
+@pytest.mark.parametrize("failing", ["pull", "recalc"])
+def test_a_failure_anywhere_keeps_none_of_the_update(monkeypatch, failing):
+    """A failed pull recalculates nothing; a failed recalculation drops the pulled scores too."""
+
+    def fail(*args, **kwargs):
+        """A step that fails partway."""
+        raise RuntimeError(f"{failing} failed")
+
+    calls = _daily(monkeypatch, **{failing: fail})
     with pytest.raises(RuntimeError):
         daily.daily_update_flow.fn(2026)
-    assert calls == []
+    assert calls[0] == "begin" and calls[-1] == "rollback"
+    assert "commit" not in calls and ("images", 2026) not in calls
 
 
 def test_only_the_daily_update_is_scheduled_each_morning():

@@ -15,6 +15,10 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   for 10 minutes, the standings, odds and scenarios are worked out again from the earliest date the
   corrections change, past weeks included. Before, a correction waited for the next morning's update,
   and past weeks kept the old numbers.
+- **The morning update appears all at once.** The new scores, standings, odds and scenarios replace
+  the old ones together when the whole update is done. Before, the scores showed first and each
+  region's numbers as it was worked out. If the update fails partway, the site keeps the previous
+  day's numbers whole.
 - **Report a game's right date.** Every region game with a date has a “Wrong date?” button. Once a
   moderator approves the report, the game moves to that date for both teams.
 

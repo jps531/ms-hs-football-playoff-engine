@@ -19,8 +19,19 @@ _DB_NAME = os.getenv("POSTGRES_DB", "mshsfootball")
 _DB_USER = os.getenv("POSTGRES_USER", "postgres")
 _DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
 
+# A write that waits more than this for a row lock gives up (the daily update holds the season's
+# game rows for its whole run, in one transaction); main.py answers it with a 503.
+LOCK_TIMEOUT_MS = 5000
+
 # make_conninfo quotes each value, so a password with a space or quote still works.
-_conninfo = make_conninfo(host=_DB_HOST, port=_DB_PORT, dbname=_DB_NAME, user=_DB_USER, password=_DB_PASSWORD)
+_conninfo = make_conninfo(
+    host=_DB_HOST,
+    port=_DB_PORT,
+    dbname=_DB_NAME,
+    user=_DB_USER,
+    password=_DB_PASSWORD,
+    options=f"-c lock_timeout={LOCK_TIMEOUT_MS}",
+)
 
 pool: AsyncConnectionPool | None = None
 
