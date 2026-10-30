@@ -1317,7 +1317,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .fb-cat input:focus-visible + span { outline: 2px solid var(--link); outline-offset: 2px; }
 .fb-field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
 .fb-field .muted { font-weight: 400; }
-.fb-form textarea, .fb-form input[type="email"], .fb-score input {
+.fb-form textarea, .fb-form input[type="email"], .fb-form input[type="date"], .fb-score input {
   width: 100%; padding: 10px 12px;
   font: inherit; font-size: 16px; font-weight: 400; /* 16px: no iOS zoom on focus */
   color: var(--text-primary);
