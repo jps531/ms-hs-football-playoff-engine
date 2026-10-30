@@ -390,6 +390,7 @@ def playoff_bracket_update(season: int | None = None) -> None:
                     rounds_completed=rounds_completed,
                     all_region_odds=all_region_odds,
                     round_snapshots=round_snapshots,
+                    return_atoms=False,  # not used, and Prefect would keep every one until the run ends
                 )
 
             round_snapshots[rounds_completed] = all_region_odds
