@@ -314,6 +314,27 @@ class TestApplySubmission:
         assert exc.value.status_code == 409
         assert not [c for c in conn.calls if "set_game_override" in c[0]]
 
+    def test_score_with_a_game_id_finds_the_game_by_it(self):
+        """Submitted with the game's id: the lookup goes by it, so a date change since doesn't matter."""
+        conn = FakeConn()
+        conn.fetchall_result = [(date(2025, 9, 6), "Mize", date(2025, 9, 6))]
+        payload = {"date": "2025-09-05", "game_id": 77, "points_for": 21, "points_against": 14}
+        asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
+        sql, params = conn.calls[0]
+        assert "g.game_id = %s" in sql and params == ("Taylorsville", 77, "2025-09-05")
+        assert {(p[0], p[1]) for s, p in conn.calls if "set_game_override" in s} == {
+            ("Taylorsville", date(2025, 9, 6)),
+            ("Mize", date(2025, 9, 6)),
+        }
+
+    def test_score_for_a_game_no_longer_on_the_schedule_is_refused(self):
+        conn = FakeConn()
+        payload = {"date": "2025-09-05", "game_id": 77, "points_for": 21, "points_against": 14}
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
+        assert exc.value.status_code == 409
+        assert "no longer on its schedule" in exc.value.detail
+
     def test_score_without_an_opponent_row_corrects_just_the_school(self):
         """No row for the opponent (an out-of-state team): only the school's row changes."""
         conn = FakeConn()
@@ -339,6 +360,15 @@ class TestApplySubmission:
                 "UPDATE games SET helmet_design_id = %s WHERE school = %s AND date = %s",
                 (42, "Taylorsville", "2025-09-05"),
             )
+        ]
+
+    @patch("backend.helpers.submission_helpers.require_helmet_design_exists", new_callable=AsyncMock)
+    def test_helmet_assignment_with_a_game_id_follows_the_game(self, _mock_require_exists):
+        conn = FakeConn()
+        payload = {"date": "2025-09-05", "game_id": 77, "helmet_design_id": 42}
+        asyncio.run(apply_submission(conn, _submission_row("helmet_assignment", "Taylorsville", payload)))
+        assert conn.calls == [
+            ("UPDATE games SET helmet_design_id = %s WHERE school = %s AND game_id = %s", (42, "Taylorsville", 77))
         ]
 
     def test_unrecognized_type_is_a_silent_no_op(self):
@@ -407,8 +437,8 @@ class TestBuildScorePayload:
     def test_maps_fields_and_isoformats_date(self):
         """date is ISO-formatted; points_for/points_against pass through unchanged."""
         body = SubmitScoreRequest(school="Taylorsville", date=date(2025, 9, 5), points_for=21, points_against=14)
-        result = build_score_payload(body)
-        assert result == {"date": "2025-09-05", "points_for": 21, "points_against": 14}
+        result = build_score_payload(body, 77)
+        assert result == {"date": "2025-09-05", "game_id": 77, "points_for": 21, "points_against": 14}
 
 
 class TestBuildHelmetAssignmentPayload:
@@ -417,8 +447,8 @@ class TestBuildHelmetAssignmentPayload:
     def test_maps_fields_and_isoformats_date(self):
         """date is ISO-formatted; helmet_design_id passes through unchanged."""
         body = SubmitHelmetAssignmentRequest(school="Taylorsville", date=date(2025, 9, 5), helmet_design_id=42)
-        result = build_helmet_assignment_payload(body)
-        assert result == {"date": "2025-09-05", "helmet_design_id": 42}
+        result = build_helmet_assignment_payload(body, 77)
+        assert result == {"date": "2025-09-05", "game_id": 77, "helmet_design_id": 42}
 
 
 class TestBuildFeedbackPayload:

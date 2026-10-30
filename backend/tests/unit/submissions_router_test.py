@@ -6,7 +6,7 @@ Mocks get_conn with a FakeConn that answers each query in order, as in moderatio
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import date, datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -136,11 +136,12 @@ def test_score_corrections_go_through_the_same_guard():
     with (
         _patch_conn(conn),
         patch.object(submissions, "require_school_exists"),
-        patch.object(submissions, "require_game_exists"),
+        patch.object(submissions, "require_game_id", AsyncMock(return_value=77)),
     ):
         res = _call(submissions.submit_score(_request(), body))
     assert (res.id, res.school) == (52, "Raleigh")
     assert '"note": "Final was 28-21"' in conn.calls[-1][1][3]
+    assert '"game_id": 77' in conn.calls[-1][1][3]  # finds the game if its date changes before review
 
 
 def test_limits_key_on_the_visitor_not_on_nginx():

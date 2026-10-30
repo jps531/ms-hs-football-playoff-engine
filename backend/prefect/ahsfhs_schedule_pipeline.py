@@ -27,6 +27,7 @@ from backend.helpers.data_helpers import (
     update_school_name_for_ahsfhs_search,
 )
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.game_ids import GameIdChange, GameRow, assign_game_ids
 from backend.helpers.web_helpers import fetch_article_text_from_ahsfhs
 
 # -------------------------
@@ -319,6 +320,35 @@ _UPSERT_SQL = """
 """
 
 
+# Each changed game_id, and the submissions that named the row by its old one
+# (a submission names a game by (game_id, school)).
+_SET_GAME_ID_SQL = "UPDATE games SET game_id = %s WHERE school = %s AND date = %s"
+_REMAP_SUBMISSIONS_SQL = """
+    UPDATE submissions SET payload = jsonb_set(payload, '{game_id}', to_jsonb(%s::bigint))
+    WHERE school = %s AND payload ? 'game_id' AND (payload->>'game_id')::bigint = %s
+"""
+
+
+def reconcile_game_ids(cur, season: int) -> list[GameIdChange]:
+    """Give each of *season*'s games one ``game_id`` across both schools' rows (see ``game_ids``).
+
+    Run after rows are written, in the same transaction: a new row starts with
+    an id of its own, and joins its opponent's row's id here.
+    """
+    cur.execute("SELECT school, date, opponent, game_id FROM games WHERE season = %s", (season,))
+    rows = [GameRow(*r) for r in cur.fetchall()]
+
+    def new_id() -> int:
+        cur.execute("SELECT nextval(pg_get_serial_sequence('games', 'game_id'))")
+        return cur.fetchone()[0]
+
+    changes = assign_game_ids(rows, new_id)
+    for c in changes:
+        cur.execute(_SET_GAME_ID_SQL, (c.new, c.school, c.date))
+        cur.execute(_REMAP_SUBMISSIONS_SQL, (c.new, c.school, c.old))
+    return changes
+
+
 @task(task_run_name="Insert/Update AHSFHS Game Records")
 def insert_rows(game_records: Iterable[Game]) -> int:
     """Write this run's scraped games, in one transaction.
@@ -329,6 +359,8 @@ def insert_rows(game_records: Iterable[Game]) -> int:
        lists, are removed unless they're finished or corrected (then reported).
     3. Each scraped game is inserted or updated. A score AHSFHS changed under
        an approved correction is reported; the correction still shows.
+    4. Each season's ``game_id``s are brought in line with which rows are one
+       game (``reconcile_game_ids``): a new row joins its opponent's row's id.
 
     Returns the number of scraped rows written.
     """
@@ -357,6 +389,7 @@ def insert_rows(game_records: Iterable[Game]) -> int:
             cur.execute(_CHANGED_UNDER_CORRECTION_SQL)
             changed = cur.fetchall()
             cur.execute(_UPSERT_SQL)
+            regrouped = [c for season in sorted({r.season for r in game_records}) for c in reconcile_game_ids(cur, season)]
         conn.commit()
 
     for school, old_date, new_date, opponent in moved:
@@ -371,6 +404,8 @@ def insert_rows(game_records: Iterable[Game]) -> int:
             opponent,
             "it has manual overrides" if overridden else "it's a finished game",
         )
+    for c in regrouped:
+        logger.info("%s's %s row is now game %s (was %s)", c.school, c.date, c.new, c.old)
     for school, game_date, opponent, field, before, now, corrected in changed:
         verdict = "now agrees with" if now == corrected else "still differs from"
         logger.warning(

@@ -52,7 +52,9 @@ _WAITING_SQL = """
     LEFT JOIN games_effective g
       ON s.type = 'score'
      AND g.school = s.school
-     AND g.date = CASE WHEN s.type = 'score' THEN (s.payload->>'date')::date END
+     AND CASE WHEN s.type <> 'score' THEN FALSE
+              WHEN s.payload ? 'game_id' THEN g.game_id = (s.payload->>'game_id')::bigint
+              ELSE g.date = (s.payload->>'date')::date END
     WHERE s.status::text IN %s
     ORDER BY s.submitted_at DESC
 """

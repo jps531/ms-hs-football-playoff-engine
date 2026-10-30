@@ -32,9 +32,15 @@ the override over the raw column. All reads (API and pipeline) go through the `*
 views; all writes go to the base tables, and `overrides` is never written by the pipeline —
 only via the admin override endpoints. See [API_REFERENCE.md](../reference/API_REFERENCE.md#admin--admin).
 
+`games` has a row per school per game, and both schools' rows of one game share a `game_id`. Two
+rows are one game when each is the other's nearest match: the opponent's row against this school,
+same season, within 3 days (rows further apart are different games, like a playoff rematch). The
+schedule pipeline keeps the ids in line on every run (`backend/helpers/game_ids.py`). A game keeps
+its `game_id` when its date changes, so score and helmet submissions record it, and approving one
+finds the game by it.
+
 `games_effective` also has `game_date`, the game's own date, the same in both schools' rows. The
-source sometimes dates a game's two rows a day apart; `game_date` is the later of the two (rows of
-the same two schools more than 3 days apart are different games, like a playoff rematch). Everything
+source sometimes dates a game's two rows a day apart; `game_date` is the later of the two. Everything
 that asks which games had been played by a date (`get_standings_for_region`'s cutoff, the past-week
 snapshots, Elo and RPI, the playoff results as of a date) goes by `game_date`; a school's schedule
 still shows its own row's `date`.
@@ -135,6 +141,7 @@ erDiagram
         text ot_next_possession
         jsonb overrides
         int helmet_design_id FK
+        bigint game_id
     }
     region_standings {
         text school FK

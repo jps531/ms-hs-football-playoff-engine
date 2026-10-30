@@ -1,12 +1,15 @@
-"""``games_effective.game_date`` gives a game one date in both schools' rows. The migration that adds it
-repeats the view (``sql/init.sql``) and the standings function (``sql/get_standings_for_region.sql``);
-these fail until it matches them, and until every date cutoff on games goes by ``game_date``."""
+"""``games_effective.game_date`` gives a game one date in both schools' rows. The migrations repeat the
+view (``sql/init.sql``) and the standings function (``sql/get_standings_for_region.sql``); these fail until
+the newest migration of each matches, and until every date cutoff on games goes by ``game_date``."""
 
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = (ROOT / "sql/migrations/2026_10_game_date.sql").read_text()
+
+# The newest migration that re-creates the view (file names don't sort by date).
+VIEW_MIGRATION = (ROOT / "sql/migrations/2026_10_game_id.sql").read_text()
 
 
 def _view(sql: str) -> str:
@@ -23,19 +26,18 @@ def _function(sql: str) -> str:
     return match.group(0)
 
 
-def test_the_migration_creates_the_view_init_sql_does():
-    assert _view(MIGRATION) == _view((ROOT / "sql/init.sql").read_text())
+def test_the_latest_migration_creates_the_view_init_sql_does():
+    assert _view(VIEW_MIGRATION) == _view((ROOT / "sql/init.sql").read_text())
 
 
 def test_the_migration_creates_the_standings_function_its_file_does():
     assert _function(MIGRATION) == _function((ROOT / "sql/get_standings_for_region.sql").read_text())
 
 
-def test_game_date_pairs_rows_only_within_a_few_days():
-    """A playoff rematch (weeks later) must stay a game of its own."""
-    view = _view(MIGRATION)
-    assert "AS game_date" in view
-    assert "o.date BETWEEN games.date - 3 AND games.date + 3" in view
+def test_game_date_is_the_latest_date_of_the_games_rows():
+    """Both schools' rows share a game_id (paired within a few days, so a playoff rematch is its own game)."""
+    view = _view(VIEW_MIGRATION)
+    assert "(SELECT MAX(o.date) FROM games o WHERE o.game_id = games.game_id) AS game_date" in view
 
 
 def test_the_standings_cutoff_goes_by_game_date():
