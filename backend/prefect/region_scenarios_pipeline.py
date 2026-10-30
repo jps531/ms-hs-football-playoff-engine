@@ -1268,6 +1268,7 @@ def get_region_finish_scenarios(
     all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
     round_snapshots: dict[int, dict[int, dict[str, StandingsOdds]]] | None = None,
     reuse: Reuse | None = None,
+    return_atoms: bool = True,
 ):
     """Phase 2: compute bracket/home odds and write results to DB.
 
@@ -1304,6 +1305,12 @@ def get_region_finish_scenarios(
                             games (and, with five or fewer left, win chances) match.
                             The bracket and hosting odds, which turn on the whole
                             class, are always worked out.
+        return_atoms:       Return the region's team paths (``scenario_atoms``);
+                            False returns None. Prefect keeps every task's result
+                            until its flow run ends, so a flow that calls this for
+                            every region on every date (the backfill, the playoff
+                            update) and doesn't use the result passes False: kept,
+                            a season's paths came to over a gigabyte.
     """
     logger = get_run_logger()
 
@@ -1541,7 +1548,7 @@ def get_region_finish_scenarios(
             margin_sensitive=False,
             margin_compute_status="skipped",
         )
-        return {}
+        return {} if return_atoms else None
     else:
         # R > FULL_MARGINS_MAX_LEFT and R ≤ ENUMERATE_MAX_LEFT: win/loss-only, no margin.
         if same is not None:
@@ -1575,7 +1582,7 @@ def get_region_finish_scenarios(
             key_insights=insights,
         )
 
-    return scenario_atoms
+    return scenario_atoms if return_atoms else None
 
 
 @flow(name="Region Scenarios Data Flow")
@@ -1789,7 +1796,14 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         for c, regions in class_regions.items():
             for r in regions:
                 get_region_finish_scenarios(
-                    c, r, season, quote(seeding[(c, r)]), matchup_fns[c], as_of_date=cutoff_date, reuse=quote(reuse)
+                    c,
+                    r,
+                    season,
+                    quote(seeding[(c, r)]),
+                    matchup_fns[c],
+                    as_of_date=cutoff_date,
+                    reuse=quote(reuse),
+                    return_atoms=False,
                 )
 
     logger.info(
