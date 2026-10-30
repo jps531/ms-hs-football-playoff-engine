@@ -19,6 +19,9 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   the old ones together when the whole update is done. Before, the scores showed first and each
   region's numbers as it was worked out. If the update fails partway, the site keeps the previous
   day's numbers whole.
+- **Report a playoff game's final score.** On a bracket, a game whose two teams are set and that has
+  no result yet has “Already played? Report the final score.” A moderator checks it, adding the game
+  for both teams if the schedule doesn't have it yet.
 - **Report a game's right date.** Every region game with a date has a “Wrong date?” button. Once a
   moderator approves the report, the game moves to that date for both teams.
 

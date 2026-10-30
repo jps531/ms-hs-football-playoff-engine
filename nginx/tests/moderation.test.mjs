@@ -179,3 +179,18 @@ test("a date report shows the date on the site now and the reported one, and app
   assert.equal(decisionLabels("date").approve, "Apply correction");
   assert.match(itemHtml({ ...item, current_game: null }), /no longer on the schedule/);
 });
+
+test("a playoff score for a game not on the schedule says approving adds it, and where", () => {
+  const item = {
+    id: 11, type: "score", status: "pending", school: "Union", submitted_at: "2026-11-21T12:00:00Z", reviewed_at: null,
+    payload: {
+      date: "2026-11-20", points_for: 21, points_against: 35,
+      playoff: { season: 2026, class: 3, round: "Quarterfinals", opponent: "Raleigh", host: "b" },
+    },
+    current_game: null,
+  };
+  const html = itemHtml(item);
+  assert.match(html, /Union at Raleigh · /);
+  assert.match(html, /Not on the schedule yet\. Approving adds this Quarterfinals game at Raleigh on this date\./);
+  assert.match(html, /<th scope="col">Raleigh<\/th>/);
+});

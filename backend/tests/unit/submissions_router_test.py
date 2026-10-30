@@ -429,3 +429,100 @@ def test_helmet_image_limits_and_labels_are_checked_first(count, labels, detail)
         with pytest.raises(HTTPException) as err:
             _call(submissions.submit_helmet(_request(), USER, _helmet_form(), images, labels, None))
     assert err.value.status_code == 422 and detail in err.value.detail and stored.inserted == []
+
+
+# ---------------------------------------------------------------------------
+# Playoff score reports: a settled, unplayed bracket game's final score
+# ---------------------------------------------------------------------------
+
+_QF = {
+    "id": "N-2-1",
+    "round": "Quarterfinals",
+    "decided": False,
+    "side_a": {"occupants": [{"team": "Union", "is_locked": True}]},
+    "side_b": {"occupants": [{"team": "Raleigh", "is_locked": True}]},
+    "matchups": [{"team_a": "Union", "team_b": "Raleigh", "p_host_a": 0.0}],
+}
+
+
+def _playoff_report(conn, game=_QF, **kw):
+    """Send a playoff score report for *game* (the bracket's view of it) through the router."""
+    from backend.api.models.requests import SubmitPlayoffScoreRequest
+
+    fields = {
+        "season": 2026,
+        "class_": 3,
+        "game": "N-2-1",
+        "team_a": "Union",
+        "team_b": "Raleigh",
+        "date": date(2026, 10, 23),
+        "points_a": 21,
+        "points_b": 35,
+    }
+    body = SubmitPlayoffScoreRequest(**{**fields, **kw})
+    with (
+        _patch_conn(conn),
+        patch.object(submissions, "matchups_outlook", AsyncMock(return_value=(date(2026, 10, 23), [game]))),
+    ):
+        return _call(submissions.submit_playoff_score(_request(), body))
+
+
+def test_a_playoff_score_for_a_game_not_on_the_schedule_carries_the_bracket_game():
+    # existing game lookup, no repeat, quiet hour, insert
+    conn = FakeConn([None, None, (0,), (61, SUBMITTED)])
+    res = _playoff_report(conn)
+    assert (res.id, res.type, res.school) == (61, "score", "Union")
+    stored = conn.calls[-1][1][3]
+    assert (
+        '"playoff": {"season": 2026, "class": 3, "round": "Quarterfinals", "opponent": "Raleigh", "host": "b"}'
+        in stored
+    )
+    assert '"date": "2026-10-23"' in stored and '"points_for": 21' in stored and "game_id" not in stored
+
+
+def test_a_playoff_score_for_a_scheduled_game_goes_on_that_game():
+    """AHSFHS lists it (on its own date): an ordinary score report on that game."""
+    conn = FakeConn([(88, date(2026, 10, 24)), None, (0,), (62, SUBMITTED)])
+    _playoff_report(conn)
+    stored = conn.calls[-1][1][3]
+    assert '"game_id": 88' in stored and '"date": "2026-10-24"' in stored and "playoff" not in stored
+
+
+@pytest.mark.parametrize(
+    "game",
+    [
+        {**_QF, "decided": True},
+        {
+            **_QF,
+            "side_b": {
+                "occupants": [{"team": "Raleigh", "is_locked": False}, {"team": "Seminary", "is_locked": False}]
+            },
+        },
+        {**_QF, "id": "S-2-1"},
+    ],
+    ids=["already played", "not settled", "another game"],
+)
+def test_only_a_settled_unplayed_bracket_game_can_be_reported(game):
+    conn = FakeConn([])
+    with pytest.raises(HTTPException) as exc:
+        _playoff_report(conn, game=game)
+    assert exc.value.status_code == 422 and "isn’t set yet" in exc.value.detail
+
+
+def test_a_playoff_score_dated_in_the_future_is_refused():
+    with pytest.raises(HTTPException) as exc:
+        _playoff_report(FakeConn([]), date=date(2099, 11, 20), season=2099)
+    assert (exc.value.status_code, exc.value.detail) == (422, "That game hasn’t been played yet")
+
+
+def test_the_host_is_the_brackets_when_it_is_certain():
+    assert submissions.playoff_host(_QF, "Union", "Raleigh") == "b"
+    assert (
+        submissions.playoff_host({**_QF, "matchups": [{**_QF["matchups"][0], "p_host_a": 1.0}]}, "Union", "Raleigh")
+        == "a"
+    )
+    assert submissions.playoff_host({**_QF, "id": "final"}, "Union", "Raleigh") == "neutral"
+    assert (
+        submissions.playoff_host({**_QF, "matchups": [{**_QF["matchups"][0], "p_host_a": 0.5}]}, "Union", "Raleigh")
+        is None
+    )

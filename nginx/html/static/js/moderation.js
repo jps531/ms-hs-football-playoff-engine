@@ -91,11 +91,14 @@ export function scoreChange(item) {
   const current = game
     ? { for: game.points_for, against: game.points_against, result: game.result ?? result(game.points_for, game.points_against) }
     : null;
+  // A playoff game the schedule didn't have yet: approving adds it (see scoreHtml).
+  const playoff = !game && p.playoff ? p.playoff : null;
   return {
     date: p.date,
     school: item.school,
-    opponent: game?.opponent ?? null,
-    location: game?.location ?? null,
+    opponent: game?.opponent ?? playoff?.opponent ?? null,
+    location: game?.location ?? (playoff ? PLAYOFF_LOCATION[playoff.host] ?? null : null),
+    playoff,
     current,
     reported,
     changed: {
@@ -112,6 +115,8 @@ export function pageLink(page) {
 }
 
 const LOCATION_WORD = { home: "vs", away: "at", neutral: "vs" };
+// A playoff report's host ("a" the reporting school, "b" its opponent) as the school's location.
+const PLAYOFF_LOCATION = { a: "home", b: "away", neutral: "neutral" };
 
 function scoreHtml(item) {
   const s = scoreChange(item);
@@ -119,9 +124,13 @@ function scoreHtml(item) {
     ? `<td class="is-changed"><span>${value ?? "–"}</span><span class="visually-hidden"> (changed)</span></td>`
     : `<td>${value ?? "–"}</td>`);
   const opponent = s.opponent ? `${LOCATION_WORD[s.location] ?? "vs"} ${esc(s.opponent)}` : "";
+  const where = { a: `at ${s.school}`, b: `at ${s.opponent}`, neutral: "at a neutral site" };
+  const missing = s.playoff
+    ? `Not on the schedule yet. Approving adds this ${esc(s.playoff.round)} game ${esc(where[s.playoff.host] ?? "")} on this date.`
+    : `No game for ${esc(s.school)} that day`;
   const current = s.current
     ? `<tr><th scope="row">On the site</th>${cell(s.current.for)}${cell(s.current.against)}<td class="mod-score__result">${s.current.result ?? ""}</td></tr>`
-    : `<tr><th scope="row">On the site</th><td colspan="3" class="muted">No game for ${esc(s.school)} that day</td></tr>`;
+    : `<tr><th scope="row">On the site</th><td colspan="3" class="muted">${missing}</td></tr>`;
   return `<p class="mod-card__about">${esc(s.school)} ${opponent} · ${esc(gameDate(s.date) || s.date || "")}</p>
     <table class="mod-score">
       <thead><tr><td></td><th scope="col">${esc(s.school)}</th><th scope="col">${esc(s.opponent ?? "Opponent")}</th><td></td></tr></thead>

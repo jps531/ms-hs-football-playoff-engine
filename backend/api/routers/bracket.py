@@ -172,6 +172,46 @@ def _as_standings_odds(seed_odds: dict[int, dict[str, dict[int, float]]]) -> dic
     return out
 
 
+async def matchups_outlook(conn, season: int, class_: int, as_of: date) -> tuple[date | None, list[dict]]:
+    """The newest standings date, and every game of *class_*'s bracket as ``/bracket/matchups`` gives it.
+
+    Also what a playoff score report is checked against (``submissions.submit_score``).
+
+    Raises:
+        HTTPException 404: no playoff format, or no standings, for the class and season.
+    """
+    slots = await _load_format_slots(conn, season, class_)
+    if not slots:
+        raise HTTPException(status_code=404, detail=f"No playoff format for {class_}A season {season}")
+    odds_t, odds_w, standings_dates = await load_region_seed_odds(conn, season, class_, as_of)
+    if not odds_t:
+        raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
+    stored_t, stored_w = await load_region_seed_pairs(conn, season, class_, as_of)
+    # A region whose newest snapshot has standings but no pairs (written
+    # before pairs existed) uses its newest snapshot that has both, so its
+    # seed odds and pairs still come from one computation.
+    stale = regions_needing_fallback(odds_t, standings_dates, stored_t)
+    fallback = await load_region_fallback_snapshots(conn, season, class_, as_of, stale)
+    for region, (snap, seeds_t, seeds_w, pairs_t, pairs_w) in fallback.items():
+        odds_t[region], odds_w[region] = seeds_t, seeds_w
+        stored_t[region], stored_w[region] = (snap, pairs_t), (snap, pairs_w)
+        standings_dates[region] = snap
+    results = await load_playoff_results(conn, season, class_, as_of)
+    elo_ratings = await _load_elo_ratings(conn, season, as_of)
+
+    tossup = bracket_outlook(
+        slots, season, odds_t, pairs_for_regions(odds_t, standings_dates, stored_t), equal_matchup_prob, results
+    )
+    projected = None
+    has_projected = any(p > 0 for teams in odds_w.values() for by in teams.values() for p in by.values())
+    if elo_ratings and has_projected:
+        matchup_fn = make_matchup_prob_fn(elo_ratings, _as_standings_odds(odds_w), EloConfig())
+        projected = bracket_outlook(
+            slots, season, odds_w, pairs_for_regions(odds_w, standings_dates, stored_w), matchup_fn, results
+        )
+    return max(standings_dates.values()) if standings_dates else None, merge_modes(tossup, projected)
+
+
 @router.get("/bracket/matchups", responses=_404)
 async def get_bracket_matchups(
     season: SeasonQ,
@@ -193,41 +233,8 @@ async def get_bracket_matchups(
     """
     as_of = date or today()
     async with get_conn() as conn:
-        slots = await _load_format_slots(conn, season, class_)
-        if not slots:
-            raise HTTPException(status_code=404, detail=f"No playoff format for {class_}A season {season}")
-        odds_t, odds_w, standings_dates = await load_region_seed_odds(conn, season, class_, as_of)
-        if not odds_t:
-            raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
-        stored_t, stored_w = await load_region_seed_pairs(conn, season, class_, as_of)
-        # A region whose newest snapshot has standings but no pairs (written
-        # before pairs existed) uses its newest snapshot that has both, so its
-        # seed odds and pairs still come from one computation.
-        stale = regions_needing_fallback(odds_t, standings_dates, stored_t)
-        fallback = await load_region_fallback_snapshots(conn, season, class_, as_of, stale)
-        for region, (snap, seeds_t, seeds_w, pairs_t, pairs_w) in fallback.items():
-            odds_t[region], odds_w[region] = seeds_t, seeds_w
-            stored_t[region], stored_w[region] = (snap, pairs_t), (snap, pairs_w)
-            standings_dates[region] = snap
-        results = await load_playoff_results(conn, season, class_, as_of)
-        elo_ratings = await _load_elo_ratings(conn, season, as_of)
-
-    tossup = bracket_outlook(
-        slots, season, odds_t, pairs_for_regions(odds_t, standings_dates, stored_t), equal_matchup_prob, results
-    )
-    projected = None
-    has_projected = any(p > 0 for teams in odds_w.values() for by in teams.values() for p in by.values())
-    if elo_ratings and has_projected:
-        matchup_fn = make_matchup_prob_fn(elo_ratings, _as_standings_odds(odds_w), EloConfig())
-        projected = bracket_outlook(
-            slots, season, odds_w, pairs_for_regions(odds_w, standings_dates, stored_w), matchup_fn, results
-        )
-    return BracketMatchupsResponse(
-        season=season,
-        class_=class_,
-        as_of_date=max(standings_dates.values()) if standings_dates else None,
-        games=merge_modes(tossup, projected),
-    )
+        as_of_date, games = await matchups_outlook(conn, season, class_, as_of)
+    return BracketMatchupsResponse(season=season, class_=class_, as_of_date=as_of_date, games=games)
 
 
 @router.get("/bracket/slots/{slot}", responses=_404)
