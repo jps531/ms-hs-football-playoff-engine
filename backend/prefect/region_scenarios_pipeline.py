@@ -13,7 +13,7 @@ import json
 import pickle
 import zlib
 from dataclasses import dataclass as _dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import TypeVar
 
 from prefect import flow, get_run_logger, task
@@ -45,6 +45,7 @@ from backend.helpers.data_helpers import get_completed_games, with_predecessor_r
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.engine_settings import CLASSES, ENUMERATE_MAX_LEFT, FULL_MARGINS_MAX_LEFT, MONTE_CARLO_SAMPLES
 from backend.helpers.insights import extract_insights, serialize_insights
+from backend.helpers.run_lock import holds_update_lock
 from backend.helpers.scenario_serializers import (
     deserialize_remaining_games,
     serialize_complete_scenarios,
@@ -1586,6 +1587,7 @@ def get_region_finish_scenarios(
 
 
 @flow(name="Region Scenarios Data Flow")
+@holds_update_lock
 def region_scenarios_data_flow(
     season: int | None = None,
     clazz: int | None = None,
@@ -1694,8 +1696,17 @@ def region_scenarios_data_flow(
 
 
 @flow(name="Backfill Historical Snapshots")
-def backfill_historical_snapshots(season: int | None = None) -> None:
+@holds_update_lock
+def backfill_historical_snapshots(
+    season: int | None = None, from_date: date | None = None, superseded_after: datetime | None = None
+) -> bool:
     """Populate dated snapshots for every computed table across all game-dates in a season.
+
+    With *from_date*, only the snapshots dated on or after it are worked out again (the recompute
+    after a correction: earlier dates can't have changed); the ratings are always worked out for
+    the whole season. With *superseded_after*, it stops between dates once a newer correction has
+    been approved for the season (``recompute_requests.requested_at`` later than it), and returns
+    False: the recompute starts over once corrections stop coming in. It returns True when done.
 
     Run this once after importing a full historical season's games, or after a
     model change.  It writes team_ratings, region_standings, region_scenarios,
@@ -1742,7 +1753,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
 
     if not elo_snapshots:
         logger.info("No game-date snapshots — nothing to backfill.")
-        return
+        return True
 
     snap_dates = [snap[0] for snap in elo_snapshots]
 
@@ -1758,7 +1769,13 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
     # Each region's last results, reused on a date where what they're worked out from hasn't changed.
     reuse = Reuse()
 
+    worked = 0
     for cutoff_date in snap_dates:
+        if from_date is not None and cutoff_date < from_date:
+            continue
+        if superseded_after is not None and recompute_superseded(season, superseded_after):
+            logger.info("A newer correction was approved for %d; stopping before %s to start over", season, cutoff_date)
+            return False
         # From a class's first playoff game on, its dates are written by the
         # playoff bracket update below; snapshots computed here would ignore
         # the playoff results and overwrite (or shadow) the playoff-aware rows.
@@ -1767,6 +1784,7 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
         if not class_regions:
             continue
         logger.info("Backfilling region standings/scenarios for %s", cutoff_date)
+        worked += 1
         ratings_at = _ratings_at_cutoff(cutoff_date)
         q_ratings_at = quote(ratings_at)
 
@@ -1825,7 +1843,16 @@ def backfill_historical_snapshots(season: int | None = None) -> None:
     if playoff_starts:
         run_playoff_bracket_update(season)
 
-    logger.info("Backfill complete for season %d: %d dates processed", season, len(snap_dates))
+    logger.info("Backfill complete for season %d: %d dates processed", season, worked)
+    return True
+
+
+def recompute_superseded(season: int, requested_at: datetime) -> bool:
+    """Whether a correction for *season* was approved after *requested_at* (see ``recompute_requests``)."""
+    with get_database_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT requested_at > %s FROM recompute_requests WHERE season = %s", (requested_at, season))
+        row = cur.fetchone()
+    return bool(row and row[0])
 
 
 # Stored with the scenarios but not compared when explanations are refreshed: the odds (worked out
@@ -1863,6 +1890,7 @@ def refreshed_scenarios(
 
 
 @flow(name="Refresh Scenario Explanations")
+@holds_update_lock
 def refresh_scenario_explanations(season: int | None = None) -> dict[str, int]:
     """Work out again the "why this order" explanations stored with a season's scenario snapshots.
 

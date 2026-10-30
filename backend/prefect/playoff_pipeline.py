@@ -24,6 +24,7 @@ from backend.helpers.data_classes import (
     StandingsOdds,
 )
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.run_lock import holds_update_lock
 from backend.helpers.win_probability import EloConfig, compute_elo_ratings, make_matchup_prob_fn
 from backend.prefect.region_scenarios_pipeline import (
     SNAPSHOT_TABLES,
@@ -296,6 +297,7 @@ def clear_stale_playoff_snapshots(
 
 
 @flow(name="Playoff Bracket Update")
+@holds_update_lock
 def playoff_bracket_update(season: int | None = None) -> None:
     """Update region_standings with post-round bracket and home-game odds.
 

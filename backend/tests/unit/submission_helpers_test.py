@@ -372,6 +372,30 @@ class TestApplySubmission:
             asyncio.run(apply_submission(conn, _submission_row("date", "Taylorsville", payload)))
         assert exc.value.status_code == 409
 
+    def test_approved_score_queues_a_recompute_from_the_games_earlier_row(self):
+        """The two rows can be a day apart; the recompute starts from the earlier one."""
+        conn = FakeConn()
+        conn.fetchall_result = [(date(2025, 9, 5), "Mize", date(2025, 9, 4))]
+        payload = {"date": "2025-09-05", "game_id": 77, "points_for": 21, "points_against": 14}
+        asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
+        queued = [p for sql, p in conn.calls if "INSERT INTO recompute_requests" in sql]
+        assert queued == [(date(2025, 9, 4), "Taylorsville", date(2025, 9, 5))]
+
+    def test_approved_date_queues_a_recompute_from_the_earlier_of_old_and_new(self):
+        conn = FakeConn()
+        conn.fetchall_result = [("Taylorsville", date(2025, 9, 12))]
+        payload = {"date": "2025-09-12", "game_id": 77, "new_date": "2025-09-05"}
+        asyncio.run(apply_submission(conn, _submission_row("date", "Taylorsville", payload)))
+        queued = [p for sql, p in conn.calls if "INSERT INTO recompute_requests" in sql]
+        assert queued == [(date(2025, 9, 5), "Taylorsville", date(2025, 9, 5))]
+
+    def test_a_refused_approval_queues_nothing(self):
+        conn = FakeConn()
+        payload = {"date": "2025-09-05", "game_id": 77, "points_for": 21, "points_against": 14}
+        with pytest.raises(HTTPException):
+            asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
+        assert not any("recompute_requests" in sql for sql, _ in conn.calls)
+
     def test_score_without_an_opponent_row_corrects_just_the_school(self):
         """No row for the opponent (an out-of-state team): only the school's row changes."""
         conn = FakeConn()

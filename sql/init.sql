@@ -585,6 +585,20 @@ CREATE TABLE IF NOT EXISTS user_attended_games (
 
 
 -- ---------------------------------------------------------------------------
+-- Recompute requests: approved corrections waiting to be worked into the numbers
+-- ---------------------------------------------------------------------------
+-- Approving a score or date report records the season and the earliest date it
+-- changes. The recompute-after-corrections flow runs once no approval has come
+-- in for a while (backend/prefect/recompute_pipeline.py), recomputing the past
+-- snapshots from that date and today's numbers, then deletes the row.
+CREATE TABLE IF NOT EXISTS recompute_requests (
+    season       INTEGER     PRIMARY KEY,
+    from_date    DATE        NOT NULL,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
+-- ---------------------------------------------------------------------------
 -- Submission queue (user-submitted corrections and new assets)
 -- ---------------------------------------------------------------------------
 

@@ -29,6 +29,7 @@ from backend.helpers.data_helpers import (
 )
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.game_ids import GameIdChange, GameRow, assign_game_ids
+from backend.helpers.run_lock import holds_update_lock
 from backend.helpers.web_helpers import fetch_article_text_from_ahsfhs
 
 # -------------------------
@@ -599,6 +600,7 @@ def get_existing_schools(season: int) -> list[School]:
 
 
 @flow(name="AHSFHS Schedule Data Flow")
+@holds_update_lock
 def ahsfhs_schedule_data_flow(season: int | None = None) -> int:
     """
     Flow to scrape and update school rows with AHSFHS schedule data.
