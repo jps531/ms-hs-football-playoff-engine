@@ -234,7 +234,7 @@ Then work down this list, skipping what the pull didn't touch:
 
 Required env vars: `ENVIRONMENT=production`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, all `POSTGRES_*`,
 `API_DB_*`, `PIPELINE_DB_*`, `CLOUDINARY_*`, `FRONTEND_ORIGIN`, `SESSION_SECRET_KEY`.
-Optional: `AUTH0_SPA_CLIENT_ID`, `TURNSTILE_*`, `SMTP_*`, `DIGEST_TO` (see below), and
+Optional: `AUTH0_SPA_CLIENT_ID`, `TURNSTILE_*`, `SMTP_*`, `DIGEST_TO` and `ALERT_TO` (see below), and
 `POSTHOG_PROJECT_KEY`, `POSTHOG_DASHBOARD_URL`, `POSTHOG_ACTIVITY_URL` (visit counts and the
 owner's dashboard links; see `.env.example`).
 
@@ -305,6 +305,10 @@ whose content blocker stops the widget loading is told to allow
 `challenges.cloudflare.com`.
 
 ### Daily digest email
+
+The same SMTP settings send the owner an alert when the daily update stops itself (an AHSFHS
+playoff game that disagrees with the bracket; see PIPELINES.md), to `ALERT_TO`, or `DIGEST_TO`
+when that's empty.
 
 The `submission-digest` deployment runs at 7:00 America/Chicago and emails
 `DIGEST_TO` a reminder whenever anything is waiting for a decision (pending, or a

@@ -16,7 +16,7 @@ CENTRAL = ZoneInfo("America/Chicago")
 FRIDAY = date(2026, 10, 23)
 
 
-def _daily(monkeypatch, pull=None, recalc=None):
+def _daily(monkeypatch, pull=None, recalc=None, problems=()):
     """Run the daily update with its steps and its transaction recorded in order; return the record."""
     from contextlib import contextmanager
 
@@ -40,6 +40,8 @@ def _daily(monkeypatch, pull=None, recalc=None):
         recalc or (lambda season, share_assets: calls.append(("recalc", season, share_assets))),
     )
     monkeypatch.setattr(daily, "write_share_assets", lambda season: calls.append(("images", season)))
+    monkeypatch.setattr(daily, "check_playoff_games", lambda season: calls.append(("check", season)) or problems)
+    monkeypatch.setattr(daily, "send_alert", lambda subject, text: calls.append(("alert", subject, text)))
     return calls
 
 
@@ -47,7 +49,7 @@ def test_the_pull_and_the_recalculation_are_one_transaction_and_images_follow_th
     """The recalculation starts once the pull is done; the share images are drawn after the commit."""
     calls = _daily(monkeypatch)
     daily.daily_update_flow.fn(2026)
-    assert calls == ["begin", ("pull", 2026), ("recalc", 2026, False), "commit", ("images", 2026)]
+    assert calls == ["begin", ("pull", 2026), ("check", 2026), ("recalc", 2026, False), "commit", ("images", 2026)]
 
 
 @pytest.mark.parametrize("failing", ["pull", "recalc"])
@@ -169,3 +171,16 @@ def test_probe_records_its_counts(monkeypatch):
     assert saved["key"] == "ahsfhs-score-probe"
     assert saved["table"][0]["game_date"] == "2026-10-23" and saved["table"][0]["final"] == 1
     assert "1 of 1 sampled games on 2026-10-23 final" in saved["description"]
+
+
+def test_a_playoff_game_that_disagrees_with_the_bracket_stops_the_update_and_emails(monkeypatch):
+    """Nothing is recalculated or kept, and the owner gets every disagreement."""
+    problem = "3A: AHSFHS has Raleigh playing Seminary in the Quarterfinals, but the bracket has Raleigh playing Union"
+    calls = _daily(monkeypatch, problems=[problem])
+    with pytest.raises(daily.PlayoffBracketMismatch, match="Raleigh playing Seminary"):
+        daily.daily_update_flow.fn(2026)
+    alert = next(c for c in calls if c[0] == "alert")
+    assert alert[1] == "Daily update stopped: 1 AHSFHS playoff game(s) disagree with the bracket"
+    assert f"- {problem}" in alert[2] and "still shows" in alert[2]
+    assert calls[-1] == "rollback"
+    assert not any(c[0] in ("recalc", "images") for c in calls if isinstance(c, tuple))

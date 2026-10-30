@@ -24,11 +24,13 @@ from backend.helpers.data_classes import (
     StandingsOdds,
 )
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.playoff_check import PlayoffRow, contradictions, round_order, settled_games
 from backend.helpers.run_lock import holds_update_lock
 from backend.helpers.win_probability import EloConfig, compute_elo_ratings, make_matchup_prob_fn
 from backend.prefect.region_scenarios_pipeline import (
     SNAPSHOT_TABLES,
     RegionSeedingData,
+    fetch_all_format_slots,
     fetch_all_season_games,
     fetch_all_season_schools,
     fetch_class_regions,
@@ -254,7 +256,6 @@ def build_playoff_region_data(
 # ---------------------------------------------------------------------------
 
 
-
 @task(retries=2, retry_delay_seconds=10, task_run_name="Clear stale {season} {clazz}A playoff-season snapshots")
 def clear_stale_playoff_snapshots(
     season: int, clazz: int, first_playoff_date: date, playoff_dates: list[date]
@@ -294,6 +295,48 @@ def clear_stale_playoff_snapshots(
 # ---------------------------------------------------------------------------
 # Flow
 # ---------------------------------------------------------------------------
+
+
+# Every playoff row of a class's schools, scheduled or final, as the site has it.
+_PLAYOFF_ROWS_SQL = """
+    SELECT g.school, g.opponent, g.round, CASE WHEN g.final THEN g.result END, g.game_date
+    FROM games_effective g
+    JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+    WHERE g.season = %s AND ss.class = %s AND g.round IS NOT NULL
+"""
+
+
+class PlayoffBracketMismatch(RuntimeError):
+    """AHSFHS's playoff games disagree with the bracket's settled games."""
+
+
+@task(task_run_name="Check {season} Playoff Games Against the Bracket")
+def check_playoff_games(season: int) -> list[str]:
+    """Every disagreement between AHSFHS's playoff rows and the bracket's settled games, per class.
+
+    See ``backend.helpers.playoff_check``. A game the bracket hasn't settled, or one AHSFHS
+    doesn't list yet, is fine; only a contradiction is reported.
+    """
+    problems: list[str] = []
+    for clazz in sorted(fetch_class_regions(season)):
+        with get_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(_PLAYOFF_ROWS_SQL, (season, clazz))
+            raw = cur.fetchall()
+        if not raw:
+            continue
+        slots = fetch_all_format_slots.fn(clazz, season)
+        if not slots:
+            continue
+        first_playoff_date = min(r[4] for r in raw)
+        seeds = {
+            pos: school for school, pos in fetch_actual_seedings.fn(season, clazz, before=first_playoff_date).items()
+        }
+        rows = [PlayoffRow(school, opponent, rnd, result) for school, opponent, rnd, result, _ in raw]
+        wins = {(r.school, r.opponent) for r in rows if r.result == "W"}
+        problems += [
+            f"{clazz}A: {p}" for p in contradictions(rows, settled_games(slots, seeds, wins), round_order(slots))
+        ]
+    return problems
 
 
 @flow(name="Playoff Bracket Update")

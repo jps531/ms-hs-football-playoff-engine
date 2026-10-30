@@ -91,10 +91,14 @@ def load_waiting_submissions(hours: int) -> tuple[list[DigestItem], datetime]:
     return [row_to_item(r) for r in rows], rows[0][12]
 
 
-def smtp_settings() -> dict | None:
-    """The SMTP settings from the environment, or None when mail isn't configured."""
+def smtp_settings(recipients_from: tuple[str, ...] = ("DIGEST_TO",)) -> dict | None:
+    """The SMTP settings from the environment, or None when mail isn't configured.
+
+    The recipients come from the first of *recipients_from* that's set (comma-separated).
+    """
     host = os.environ.get("SMTP_HOST", "").strip()
-    recipients = [a.strip() for a in os.environ.get("DIGEST_TO", "").split(",") if a.strip()]
+    listed = next((os.environ[v] for v in recipients_from if os.environ.get(v, "").strip()), "")
+    recipients = [a.strip() for a in listed.split(",") if a.strip()]
     if not host or not recipients:
         return None
     port = int(os.environ.get("SMTP_PORT", "587"))
@@ -188,3 +192,23 @@ def submission_digest_flow(hours: int = 24) -> int:
         return 0
     send_digest(build_digest(items, SITE_URL, now, hours))
     return len(items)
+
+
+def send_alert(subject: str, text: str) -> bool:
+    """Email the owner (``ALERT_TO``, else ``DIGEST_TO``) about something the pipelines refused to do.
+
+    Returns False, and logs the alert, when mail isn't configured.
+    """
+    logger = get_run_logger()
+    settings = smtp_settings(("ALERT_TO", "DIGEST_TO"))
+    if settings is None:
+        logger.error("SMTP_HOST or ALERT_TO/DIGEST_TO not set; not sending.\n%s\n\n%s", subject, text)
+        return False
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = settings["sender"]
+    message["To"] = ", ".join(settings["recipients"])
+    message.set_content(text)
+    send_message(message, settings)
+    logger.info("Sent %r to %d recipient(s)", subject, len(settings["recipients"]))
+    return True
