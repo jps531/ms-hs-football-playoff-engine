@@ -27,6 +27,7 @@ from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.playoff_check import PlayoffRow, contradictions, round_order, settled_games
 from backend.helpers.run_lock import holds_update_lock
 from backend.helpers.win_probability import EloConfig, compute_elo_ratings, make_matchup_prob_fn
+from backend.prefect.failure_alerts import alert_on_failure
 from backend.prefect.region_scenarios_pipeline import (
     SNAPSHOT_TABLES,
     RegionSeedingData,
@@ -339,7 +340,16 @@ def check_playoff_games(season: int) -> list[str]:
     return problems
 
 
-@flow(name="Playoff Bracket Update")
+@flow(
+    name="Playoff Bracket Update",
+    on_failure=[
+        alert_on_failure(
+            "playoff bracket update",
+            "Some playoff dates may have been rewritten and others not. Run the playoff-bracket-update "
+            "deployment again once the cause is fixed.",
+        )
+    ],
+)
 @holds_update_lock
 def playoff_bracket_update(season: int | None = None) -> None:
     """Update region_standings with post-round bracket and home-game odds.

@@ -26,6 +26,7 @@ than ``EMAIL_RETENTION_DAYS`` ago: it was only ever there for a reply.
 
 from __future__ import annotations
 
+import logging
 import os
 import smtplib
 import ssl
@@ -33,6 +34,7 @@ from datetime import datetime
 from email.message import EmailMessage
 
 from prefect import flow, get_run_logger, task
+from prefect.exceptions import MissingContextError
 
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.submission_digest import DigestEmail, DigestItem, build_digest
@@ -197,9 +199,13 @@ def submission_digest_flow(hours: int = 24) -> int:
 def send_alert(subject: str, text: str) -> bool:
     """Email the owner (``ALERT_TO``, else ``DIGEST_TO``) about something the pipelines refused to do.
 
-    Returns False, and logs the alert, when mail isn't configured.
+    Returns False, and logs the alert, when mail isn't configured. Works outside a flow run too
+    (a failure hook has none), logging to the module's logger there.
     """
-    logger = get_run_logger()
+    try:
+        logger = get_run_logger()
+    except MissingContextError:
+        logger = logging.getLogger(__name__)
     settings = smtp_settings(("ALERT_TO", "DIGEST_TO"))
     if settings is None:
         logger.error("SMTP_HOST or ALERT_TO/DIGEST_TO not set; not sending.\n%s\n\n%s", subject, text)

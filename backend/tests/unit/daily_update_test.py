@@ -45,6 +45,88 @@ def _daily(monkeypatch, pull=None, recalc=None, problems=()):
     return calls
 
 
+def test_things_to_look_at_are_emailed_once_the_update_is_done(monkeypatch):
+    """A step's notes go out in one email after the commit and the images; a clean day sends nothing."""
+    from backend.helpers import attention
+
+    def pull(season):
+        calls.append(("pull", season))
+        attention.note(attention.SKIPPED_SCHOOLS, "Aberdeen")
+
+    calls = _daily(monkeypatch, pull=pull)
+    attention.note(attention.SKIPPED_SCHOOLS, "left over from an earlier run")  # cleared at the start
+    daily.daily_update_flow.fn(2026)
+    assert calls[:-1] == ["begin", ("pull", 2026), ("check", 2026), ("recalc", 2026, False), "commit", ("images", 2026)]
+    _, subject, text = calls[-1]
+    assert subject == "Daily update done, 1 thing to look at"
+    assert "- Aberdeen" in text and "left over" not in text
+
+    calls = _daily(monkeypatch)
+    daily.daily_update_flow.fn(2026)
+    assert not any(isinstance(c, tuple) and c[0] == "alert" for c in calls)
+
+
+def test_failed_share_images_are_among_the_things_to_look_at(monkeypatch):
+    calls = _daily(monkeypatch)
+
+    def images(season):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(daily, "write_share_assets", images)
+    monkeypatch.setattr(daily, "get_run_logger", lambda: logging.getLogger("test"))
+    daily.daily_update_flow.fn(2026)
+    _, subject, text = calls[-1]
+    assert "Share images (1)" in text and "Drawing them failed: OSError: disk full" in text
+
+
+def test_a_committed_update_is_completed_though_its_share_images_failed(monkeypatch):
+    """A real run: the images' failed task run doesn't make Prefect fail it, so no failure email.
+
+    Prefect would otherwise take the run's state from its task runs, and the failure email would
+    say none of the update was kept.
+    """
+    from prefect import task
+    from prefect.testing.utilities import prefect_test_harness
+
+    calls = _daily(monkeypatch)
+
+    @task
+    def images(season):
+        """The share images' task, failing."""
+        raise OSError("disk full")
+
+    monkeypatch.setattr(daily, "write_share_assets", images)
+    hook_calls = []
+    monkeypatch.setattr(daily.daily_update_flow, "on_failure", [lambda *a: hook_calls.append(a)])
+    with prefect_test_harness():
+        state = daily.daily_update_flow(2026, return_state=True)
+    assert state.is_completed() and not hook_calls
+    assert "commit" in calls and calls[-1][1] == "Daily update done, 1 thing to look at"
+
+
+def test_a_failed_update_emails_its_failure_but_not_its_notes(monkeypatch):
+    """The notes of a run that's rolled back are moot: the failure email (the flow's hook) covers it."""
+    from backend.helpers import attention
+
+    def pull(season):
+        attention.note(attention.SKIPPED_SCHOOLS, "Aberdeen")
+        raise RuntimeError("database went away")
+
+    calls = _daily(monkeypatch, pull=pull)
+    with pytest.raises(RuntimeError):
+        daily.daily_update_flow.fn(2026)
+    assert not any(isinstance(c, tuple) and c[0] == "alert" for c in calls)
+    assert len(daily.daily_update_flow.on_failure) == 1
+
+
+def test_the_scheduled_updates_email_their_failures():
+    from backend.prefect.playoff_pipeline import playoff_bracket_update
+    from backend.prefect.recompute_pipeline import recompute_after_corrections
+
+    for f in (daily.daily_update_flow, recompute_after_corrections, playoff_bracket_update):
+        assert [h.__name__ for h in f.on_failure] == ["hook"], f.name
+
+
 def test_the_pull_and_the_recalculation_are_one_transaction_and_images_follow_the_commit(monkeypatch):
     """The recalculation starts once the pull is done; the share images are drawn after the commit."""
     calls = _daily(monkeypatch)

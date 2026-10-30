@@ -17,10 +17,13 @@ of it is kept) and emails the owner.
 from datetime import date
 
 from prefect import flow, get_run_logger
+from prefect.states import Completed, State
 
+from backend.helpers import attention
 from backend.helpers.database_helpers import shared_transaction
 from backend.helpers.run_lock import holds_update_lock
 from backend.prefect.ahsfhs_schedule_pipeline import ahsfhs_schedule_data_flow
+from backend.prefect.failure_alerts import alert_on_failure
 from backend.prefect.playoff_pipeline import PlayoffBracketMismatch, check_playoff_games
 from backend.prefect.region_scenarios_pipeline import region_scenarios_data_flow
 from backend.prefect.share_assets_pipeline import write_share_assets
@@ -37,10 +40,28 @@ seeds), then run the daily-update deployment again.
 """
 
 
-@flow(name="Daily Update Flow")
+@flow(
+    name="Daily Update Flow",
+    on_failure=[
+        alert_on_failure(
+            "daily update",
+            "None of it was kept (the update is all or nothing), so the site still shows the previous numbers.",
+            already_emailed=(PlayoffBracketMismatch,),
+        )
+    ],
+)
 @holds_update_lock
-def daily_update_flow(season: int | None = None) -> None:
-    """Run the AHSFHS schedule pull, then the region scenarios update, as one transaction."""
+def daily_update_flow(season: int | None = None) -> State:
+    """Run the AHSFHS schedule pull, then the region scenarios update, as one transaction.
+
+    A failure emails the owner (``failure_alerts``). A run that succeeds but noted things to look at
+    (``attention``) emails those, once it's done.
+
+    Once the transaction commits, the run is Completed, even if the share images then fail. Prefect
+    would otherwise mark it Failed for their failed task run, and the failure email would say none
+    of the update was kept.
+    """
+    attention.clear()
     with shared_transaction():
         ahsfhs_schedule_data_flow(season)
         problems = check_playoff_games(season or date.today().year)
@@ -54,5 +75,9 @@ def daily_update_flow(season: int | None = None) -> None:
     # Link previews, from the committed numbers. A failure here shouldn't fail the update.
     try:
         write_share_assets(season)
-    except Exception:
+    except Exception as e:
         get_run_logger().exception("Share assets failed; the daily update itself completed")
+        attention.note(attention.SHARE_IMAGES, f"Drawing them failed: {type(e).__name__}: {e}")
+    if notes := attention.take():
+        send_alert(*attention.render(notes, season or date.today().year))
+    return Completed(message="Committed")
