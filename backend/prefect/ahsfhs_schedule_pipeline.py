@@ -16,6 +16,7 @@ from datetime import date, datetime
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_values
 
+from backend.helpers import attention
 from backend.helpers.data_classes import Game, School
 from backend.helpers.data_helpers import (
     _month_to_num,
@@ -220,6 +221,8 @@ def find_ahsfhs_schedule_for_schools(schools: list[School], season: int) -> list
         logger.warning(
             "Skipped %d school(s) due to fetch/parse errors: %s", len(failed_schools), ", ".join(failed_schools)
         )
+        for school in failed_schools:
+            attention.note(attention.SKIPPED_SCHOOLS, school)
 
     return records
 
@@ -454,12 +457,17 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     for school, game_date, opponent in removed:
         logger.info("Removed %s's %s game vs %s: AHSFHS lists another game that week", school, game_date, opponent)
     for school, game_date, opponent, overridden in kept:
+        reason = "it has manual overrides" if overridden else "it's a finished game"
         logger.warning(
             "%s's %s game vs %s is no longer on its AHSFHS schedule (another game is listed that week); kept because %s",
             school,
             game_date,
             opponent,
-            "it has manual overrides" if overridden else "it's a finished game",
+            reason,
+        )
+        attention.note(
+            attention.KEPT_OFF_SCHEDULE,
+            f"{school}'s {game_date} game vs {opponent} (AHSFHS lists another game that week); {reason}",
         )
     for c in regrouped:
         logger.info("%s's %s row is now game %s (was %s)", c.school, c.date, c.new, c.old)
@@ -484,6 +492,10 @@ def insert_rows(game_records: Iterable[Game]) -> int:
             before,
             now,
             corrected,
+        )
+        attention.note(
+            attention.CHANGED_UNDER_CORRECTION,
+            f"{school}'s {game_date} game vs {opponent}: {field} {before} -> {now} on AHSFHS; the correction is {corrected}",
         )
 
     return len(game_records)
@@ -575,6 +587,7 @@ def remove_unlisted_games(game_records: Iterable[Game], season: int) -> int:
             opponent,
             reason,
         )
+        attention.note(attention.KEPT_OFF_SCHEDULE, f"{school}'s {game_date} game vs {opponent}; {reason}")
     return len(deleted)
 
 

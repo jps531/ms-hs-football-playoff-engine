@@ -306,9 +306,12 @@ whose content blocker stops the widget loading is told to allow
 
 ### Daily digest email
 
-The same SMTP settings send the owner an alert when the daily update stops itself (an AHSFHS
-playoff game that disagrees with the bracket; see PIPELINES.md), to `ALERT_TO`, or `DIGEST_TO`
-when that's empty.
+The same SMTP settings send the owner alerts, to `ALERT_TO`, or `DIGEST_TO` when that's empty:
+when the daily update, the recompute after corrections or the playoff bracket update fails
+(at most one email per flow every 6 hours), when the daily update stops itself over a playoff
+game that disagrees with the bracket, and when a daily update that succeeded has things to look
+at (unreadable AHSFHS pages, scores changed under a correction, games kept though no longer on
+AHSFHS, failed share images). See PIPELINES.md, "Emails to the owner".
 
 The `submission-digest` deployment runs at 7:00 America/Chicago and emails
 `DIGEST_TO` a reminder whenever anything is waiting for a decision (pending, or a

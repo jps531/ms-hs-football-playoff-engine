@@ -388,3 +388,32 @@ def test_no_corrections_leave_the_scrape_alone(monkeypatch: pytest.MonkeyPatch) 
     cur.fetchall.side_effect = [[]]
     games = [_listed("Alpha", "Beta", "2026-10-23")]
     assert pipeline.apply_date_corrections.fn(games, 2026) == games
+
+
+def test_things_to_look_at_are_noted_for_the_daily_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A changed score under a correction and a kept off-schedule game also go in the daily update's email."""
+    from datetime import date as _date
+
+    from backend.helpers import attention
+
+    attention.clear()
+    _insert_db(
+        monkeypatch,
+        moved=[],
+        removed=[],
+        kept=[("Alpha", _date(2026, 10, 23), "Beta", True)],
+        changed=[
+            ("Alpha", _date(2026, 10, 24), "Beta", "points_for", "14", "17", "21"),
+            ("Alpha", _date(2026, 10, 24), "Beta", "result", "L", "W", "W"),  # AHSFHS caught up: not noted
+        ],
+    )
+    pipeline.insert_rows.fn([_scraped("Alpha", "2026-10-24")])
+    notes = attention.take()
+    assert notes == {
+        attention.CHANGED_UNDER_CORRECTION: [
+            "Alpha's 2026-10-24 game vs Beta: points_for 14 -> 17 on AHSFHS; the correction is 21"
+        ],
+        attention.KEPT_OFF_SCHEDULE: [
+            "Alpha's 2026-10-23 game vs Beta (AHSFHS lists another game that week); it has manual overrides"
+        ],
+    }

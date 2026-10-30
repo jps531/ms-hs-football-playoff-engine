@@ -22,6 +22,7 @@ from prefect import flow, get_run_logger
 
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.run_lock import exclusive_run
+from backend.prefect.failure_alerts import alert_on_failure
 from backend.prefect.region_scenarios_pipeline import backfill_historical_snapshots, region_scenarios_data_flow
 
 # How long after the last approval the recompute waits, so a batch of approvals runs once.
@@ -53,7 +54,16 @@ def finish_request(season: int, requested_at: datetime) -> bool:
     return done
 
 
-@flow(name="Recompute After Corrections")
+@flow(
+    name="Recompute After Corrections",
+    on_failure=[
+        alert_on_failure(
+            "recompute after corrections",
+            "The approved corrections stay queued and the next run (every 5 minutes) tries again. Until one "
+            "succeeds, some or all of the standings, odds and scenarios may not include them yet.",
+        )
+    ],
+)
 def recompute_after_corrections() -> list[str]:
     """Recompute each season with approved corrections once they've stopped coming in for a while.
 
