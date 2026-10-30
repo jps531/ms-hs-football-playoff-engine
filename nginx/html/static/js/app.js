@@ -30,7 +30,7 @@ import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
 } from "./scenarios.js";
 import {
-  standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate,
+  standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate, pickWeek,
   orient, byDay, teamSchedule, tieHeading,
 } from "./standings.js";
 
@@ -274,6 +274,29 @@ function store(key, value) {
   try { localStorage.setItem(key, String(value)); } catch { /* storage unavailable */ }
 }
 
+// The team picked in each class, per season ("2025:3" -> "Oxford"), kept for the visit. Picking a
+// team anywhere in a class records it, and only clearing the pick ("Show every team", or picking the
+// team again) forgets it. So coming back to a class shows its team again, and another class has its own.
+const PICKS = "mshsf.picks";
+const picks = (() => {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(PICKS));
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  } catch {
+    return {};
+  }
+})();
+/** The team picked in `clazz` this season (or `season`), or null. */
+function pickedTeam(clazz, season = route.season ?? currentSeason) {
+  return picks[`${season}:${clazz}`] ?? null;
+}
+function setPick(clazz, team) {
+  const key = `${route.season ?? currentSeason}:${clazz}`;
+  if (team) picks[key] = team;
+  else delete picks[key];
+  try { sessionStorage.setItem(PICKS, JSON.stringify(picks)); } catch { /* storage unavailable */ }
+}
+
 // ------------------------------------------------------------- render
 
 /**
@@ -333,7 +356,11 @@ async function render() {
     currentSeason = all[0];
     const season = all.includes(route.season) ? route.season : all[0];
     route.season = season === currentSeason ? null : season;
-    route.teamName = resolveTeam(route.team, await teamsBySchool(season));
+    const index = await teamsBySchool(season);
+    route.teamName = resolveTeam(route.team, index);
+    if (route.page !== "landing" && route.teamName && index[route.teamName]?.class_ === route.clazz) {
+      setPick(route.clazz, route.teamName);
+    }
     const ctx = { ...route, team: route.teamName, season, seasons: all, currentSeason };
     renderScrubber(route.page === "landing" ? null : route.clazz); // again, now that the picked team is known (the view links carry it)
     loadTeamSearch(season);
@@ -453,15 +480,15 @@ function renderScrubber(clazz) {
 /**
  * Main nav (header links and the phone tab bar): Standings and Bracket are
  * the two views of the current class, and switching keeps the class,
- * season, week, odds mode, and picked team.
+ * season, week, odds mode, and the class's picked team.
  */
 function syncNav() {
   const onBracket = route.page === "bracket";
   const onStandings = ["class", "region"].includes(route.page); // not the front page: it's neither
   const known = route.page !== "notfound";
   const targets = {
-    standings: known ? hrefWith({ page: route.region ? "region" : "class" }) : "/standings/1a",
-    bracket: known ? hrefWith({ page: "bracket", region: null }) : "/brackets/1a",
+    standings: known ? hrefWith({ page: route.region ? "region" : "class", team: route.teamName ?? pickedTeam(route.clazz) }) : "/standings/1a",
+    bracket: known ? hrefWith({ page: "bracket", region: null, team: route.teamName ?? pickedTeam(route.clazz) }) : "/brackets/1a",
   };
   for (const a of document.querySelectorAll("[data-nav]")) {
     const key = a.dataset.nav;
@@ -480,7 +507,9 @@ document.addEventListener("click", (e) => {
   navigate(link.getAttribute("href"), { scroll: true });
 });
 
-const classHref = (clazz) => hrefWith({ clazz, region: null, team: null, week: null });
+// Another class keeps the season and week (pickWeek: the same calendar week, or its nearest earlier
+// one), and shows the team picked in it, if any.
+const classHref = (clazz) => hrefWith({ clazz, region: null, team: pickedTeam(clazz) });
 
 scrubberHost.addEventListener("click", (e) => {
   const item = e.target.closest("[data-class]");
@@ -618,9 +647,7 @@ function controlsLine(ctx, weeks, { asOf, mode, projectedAvailable }) {
     // Without an explicit week, show the week the snapshot actually covers,
     // which can trail the calendar (e.g. before the morning recompute).
     const covered = asOf ? [...weeks].reverse().find((w) => w.firstDate <= asOf) : null;
-    const chosen = ctx.week && weeks.some((w) => w.week === ctx.week)
-      ? ctx.week
-      : (covered ?? weeks[weeks.length - 1]).week;
+    const chosen = ctx.week ? pickWeek(weeks, ctx.week).week : (covered ?? weeks[weeks.length - 1]).week;
     const options = [...weeks].reverse().map((w) => ({ value: w.week, label: w.label }));
     const shown = weeks.find((w) => w.week === chosen);
     parts.push(`<span class="ctl">Through ${select("week", "Through week", options, chosen)}</span>`);
@@ -682,7 +709,7 @@ app.addEventListener("change", (e) => {
   const value = control.value;
   track(`${control.dataset.control}_changed`, { value });
   if (control.dataset.control === "season") {
-    navigate(hrefWith({ season: Number(value), week: null, team: null }), { replace: true });
+    navigate(hrefWith({ season: Number(value), week: null, team: pickedTeam(route.clazz, Number(value)) }), { replace: true });
   } else if (control.dataset.control === "week") {
     const latest = control.options[0].value; // options run newest first
     navigate(hrefWith({ week: value === latest ? null : Number(value) }), { replace: true });
@@ -755,7 +782,8 @@ async function classView(ctx) {
     const rows = ordered.map((t, i) => {
       const o = oddsFor(t, mode);
       const rec = t.record;
-      return `<tr class="${t.eliminated ? "is-eliminated" : ""}">
+      const cls = [t.eliminated ? "is-eliminated" : "", t.school === ctx.team ? "is-focus" : ""].filter(Boolean).join(" ");
+      return `<tr class="${cls}">
         <td class="col-pos">${positions[i]}</td>
         <th scope="row" class="col-team"><a class="team-link" href="${esc(hrefWith({ region: r.region, team: t.school }))}">${teamMark(t.school, teams[t.school])}<span class="row-toggle__label"><span class="team-name">${esc(t.school)}</span>${statusBadges(t, { regionComplete: complete, clazz })}</span></a></th>
         <td class="col-rec">${esc(recordText(rec.region_wins, rec.region_losses, rec.region_ties))}</td>
@@ -764,7 +792,7 @@ async function classView(ctx) {
       </tr>`;
     });
     return `<section class="region-block" aria-labelledby="region-${r.region}">
-      <h2 class="region-block__title" id="region-${r.region}"><a href="${esc(hrefWith({ region: r.region, team: null }))}">Region ${r.region}</a></h2>
+      <h2 class="region-block__title" id="region-${r.region}"><a href="${esc(hrefWith({ region: r.region, team: r.teams.some((t) => t.school === ctx.team) ? ctx.team : null }))}">Region ${r.region}</a></h2>
       <table class="standings standings--compact">
         <caption><span class="visually-hidden">Region ${r.region}-${clazz}A standings and ${mode === "projected" ? "projected" : "toss-up"} odds</span>${tableMode(mode)}</caption>
         <thead><tr>
@@ -824,7 +852,7 @@ async function regionView(ctx) {
   nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode);
   return `<div class="page">
     <header class="region-head">
-      ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ region: null, team: null })], [`Region ${region}-${clazz}A`, null]])}
+      ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ region: null, team: pickedTeam(clazz) })], [`Region ${region}-${clazz}A`, null]])}
       <h1 class="title">Region ${region}-${clazz}A</h1>
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
       ${controls}
@@ -995,6 +1023,7 @@ app.addEventListener("click", (e) => {
     const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/?'], a[href='/']");
     if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
       e.preventDefault();
+      if (link.hasAttribute("data-unpick")) setPick(route.clazz, null);
       navigate(link.getAttribute("href"), {
         scroll: !link.hasAttribute("data-keep-scroll"),
         replace: link.hasAttribute("data-replace"),
@@ -1006,6 +1035,7 @@ app.addEventListener("click", (e) => {
   // scenarios narrow to it); picking it again clears the selection.
   const selected = toggle.getAttribute("aria-expanded") === "true";
   if (!selected) track("team_picked", { from: "standings", team: toggle.dataset.team });
+  else setPick(route.clazz, null);
   navigate(hrefWith({ team: selected ? null : toggle.dataset.team }), { replace: true });
 });
 
@@ -1060,7 +1090,7 @@ function scenariosSection(data, teams, prov, mode, focus, report = true) {
   const forFocus = (cards) => (focus ? cards.filter((c) => c.team === focus) : cards);
   const remainingCount = data.remaining_games.length;
   const focusNote = focus
-    ? `<p class="focus-note">Showing ${esc(focus)} only. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
+    ? `<p class="focus-note">Showing ${esc(focus)} only. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace data-unpick>Show every team</a></p>`
     : "";
 
   let body;
@@ -1245,11 +1275,11 @@ async function bracketView(ctx) {
   // The bracket's odds are worked out from these same region rows.
   nextComputedAt = standings?.computed_from ? { from: standings.computed_from, to: standings.computed_to } : null;
   const focusNote = ctx.team
-    ? `<p class="focus-note">Showing ${esc(ctx.team)}’s possible path. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace>Show every team</a></p>`
+    ? `<p class="focus-note">Showing ${esc(ctx.team)}’s possible path. <a href="${esc(hrefWith({ team: null }))}" data-keep-scroll data-replace data-unpick>Show every team</a></p>`
     : `<p class="focus-note muted">Select a game to see all possible matchups and locations, and pick a team to follow its path.</p>`;
   return `<div class="page">
     <header class="entry-head bracket-head">
-      ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: null })], [`Class ${clazz}A Bracket`, null]])}
+      ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: pickedTeam(clazz) })], [`Class ${clazz}A Bracket`, null]])}
       <h1 class="title">Class ${clazz}A Bracket</h1>
       ${controls}
       ${focusNote}
@@ -1616,6 +1646,7 @@ function onSheetClick(e) {
   if (pick) {
     const team = pick.dataset.pickTeam;
     if (bracketData?.focus !== team) track("team_picked", { from: "bracket", team });
+    else setPick(route.clazz, null);
     sheetFocus = `[data-pick-team="${CSS.escape(team)}"]`;
     navigate(hrefWith({ team: bracketData?.focus === team ? null : team }), { replace: true });
   }
