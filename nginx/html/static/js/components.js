@@ -220,10 +220,13 @@ export function scenarioCard({ title, p = null, groups, provenanceHtml = "", tea
 /**
  * One region game: the visitor on top with "at" (or "vs" at a neutral
  * site), the home team below. Finished games add each side's score and
- * bold the winner. `game` is { away, home, joiner, awayScore?, homeScore?,
- * winner? }; `focus` outlines the card when the picked team plays in it.
+ * bold the winner. `game` is { date?, away, home, joiner, awayScore?,
+ * homeScore?, winner? }; `focus` outlines the card when the picked team
+ * plays in it. With `report`, a finished game offers "Wrong score?", and a
+ * game without a score whose date is `today` (ISO) or earlier offers
+ * "Report score".
  */
-export function gameCard(game, teams, { focus = null, report = false } = {}) {
+export function gameCard(game, teams, { focus = null, report = false, today = null } = {}) {
   const played = game.awayScore != null && game.homeScore != null;
   const side = (name, score) => {
     const won = played && game.winner === name;
@@ -239,6 +242,7 @@ export function gameCard(game, teams, { focus = null, report = false } = {}) {
     <div class="game-card__row" aria-hidden="true">${side(game.away, game.awayScore)}<span class="game-card__joiner">${esc(game.joiner)}</span></div>
     <div class="game-card__row" aria-hidden="true">${side(game.home, game.homeScore)}</div>
     ${report && played ? `<button type="button" class="game-card__report" data-score-report data-date="${esc(game.date)}" data-away="${esc(game.away)}" data-home="${esc(game.home)}" data-away-score="${esc(game.awayScore)}" data-home-score="${esc(game.homeScore)}">Wrong score?<span class="visually-hidden"> Report a correction for ${esc(label)}</span></button>` : ""}
+    ${report && !played && game.date && today && game.date <= today ? `<button type="button" class="game-card__report" data-score-report data-date="${esc(game.date)}" data-away="${esc(game.away)}" data-home="${esc(game.home)}" data-joiner="${esc(game.joiner)}">Report score<span class="visually-hidden"> for ${esc(label)}</span></button>` : ""}
   </li>`;
 }
 

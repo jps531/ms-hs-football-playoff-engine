@@ -68,7 +68,9 @@ def build_score_overrides(payload: dict) -> tuple[str, list[tuple[str, str]]]:
     """Return (game_date, [(field, value), ...]) game-override pairs for an approved 'score' submission.
 
     The stored result is overridden along with the score, so a correction that
-    changes the winner doesn't leave a stale W or L behind.
+    changes the winner doesn't leave a stale W or L behind, and the game is
+    marked final, so a score reported for a game the source hasn't finished
+    counts as played.
     """
     game_date: str = payload["date"]
     pf, pa = int(payload["points_for"]), int(payload["points_against"])
@@ -76,6 +78,7 @@ def build_score_overrides(payload: dict) -> tuple[str, list[tuple[str, str]]]:
         ("points_for", str(pf)),
         ("points_against", str(pa)),
         ("result", _result(pf, pa)),
+        ("final", "true"),
     ]
     return game_date, overrides
 
@@ -86,7 +89,7 @@ def build_opponent_score_overrides(payload: dict) -> list[tuple[str, str]]:
     Each game has a row per school, so both are corrected to keep the two teams' records in agreement.
     """
     pf, pa = int(payload["points_for"]), int(payload["points_against"])
-    return [("points_for", str(pa)), ("points_against", str(pf)), ("result", _result(pa, pf))]
+    return [("points_for", str(pa)), ("points_against", str(pf)), ("result", _result(pa, pf)), ("final", "true")]
 
 
 def build_helmet_assignment_override(payload: dict) -> tuple[str, int]:

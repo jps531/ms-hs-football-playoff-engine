@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = (ROOT / "sql/migrations/2026_10_game_date.sql").read_text()
 
 # The newest migration that re-creates the view (file names don't sort by date).
-VIEW_MIGRATION = (ROOT / "sql/migrations/2026_10_game_id.sql").read_text()
+VIEW_MIGRATION = (ROOT / "sql/migrations/2026_10_final_override.sql").read_text()
 
 
 def _view(sql: str) -> str:

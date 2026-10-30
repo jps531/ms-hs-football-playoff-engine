@@ -1795,7 +1795,7 @@ wheels = [
 
 [[package]]
 name = "ms-hs-football-playoff-engine"
-version = "1.0.2"
+version = "1.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

@@ -262,7 +262,7 @@ CREATE OR REPLACE VIEW games_effective AS
 SELECT
   school, date, season, opponent,
   COALESCE(overrides->>'result',      result)      AS result,
-  final,
+  COALESCE((overrides->>'final')::boolean,        final)          AS final,
   COALESCE((overrides->>'overtime')::int,         overtime)       AS overtime,
   COALESCE(overrides->>'game_status', game_status) AS game_status,
   COALESCE((overrides->>'game_quarter')::smallint, game_quarter)  AS game_quarter,

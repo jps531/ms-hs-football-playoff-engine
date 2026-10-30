@@ -5,6 +5,13 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.1.0
+
+- **Report a game's final score.** A region game from today or earlier that has no score yet has a
+  “Report score” button, next to the “Wrong score?” one on finished games. A moderator checks the
+  score, and once it's approved, the next update of the standings, odds and scenarios counts the game
+  as played for both teams.
+
 ## 1.0.2
 
 - **Scenarios a tie's margins decide are listed one by one.** When one set of results in a region's

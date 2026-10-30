@@ -238,11 +238,14 @@ def test_insert_reports_score_changes_under_a_correction(
             ("Alpha", _date(2026, 10, 24), "Beta", "result", "L", "W", "W"),
         ],
     )
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         pipeline.insert_rows.fn([_scraped("Alpha", "2026-10-24")])
-    assert "points_for 14 -> 17, which still differs from the approved correction (21)" in caplog.text
-    assert "result L -> W, which now agrees with the approved correction (W)" in caplog.text
-    assert "kept because it has manual overrides" in caplog.text
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("points_for 14 -> 17, which still differs from the approved correction (21)" in m for m in warnings)
+    assert any("kept because it has manual overrides" in m for m in warnings)
+    # AHSFHS catching up with a reported score is routine: logged, not a warning.
+    assert not any("result" in m and "agrees" in m for m in warnings)
+    assert "AHSFHS now agrees with the approved correction to Alpha's 2026-10-24 game vs Beta: result W" in caplog.text
 
 
 def test_attended_games_follow_a_moved_game() -> None:

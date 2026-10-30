@@ -129,6 +129,16 @@ test("game card: a completed game can be reported as a wrong score, with everyth
   assert.doesNotMatch(gameCard({ away: "A", home: "B", joiner: "vs" }, {}, { report: true }), /data-score-report/);
 });
 
+test("game card: a game with no score yet can have its final score reported from its day on", () => {
+  const game = { date: "2026-10-30", away: "Seminary", home: "Raleigh", joiner: "at" };
+  const html = gameCard(game, {}, { report: true, today: "2026-10-30" });
+  assert.match(html, /data-score-report data-date="2026-10-30" data-away="Seminary" data-home="Raleigh" data-joiner="at">Report score<span class="visually-hidden"> for Seminary at Raleigh/);
+  assert.doesNotMatch(html, /data-away-score/);
+  assert.doesNotMatch(gameCard(game, {}, { report: true, today: "2026-10-29" }), /data-score-report/); // not played yet
+  assert.doesNotMatch(gameCard({ ...game, date: null }, {}, { report: true, today: "2026-10-30" }), /data-score-report/); // date to be announced
+  assert.doesNotMatch(gameCard(game, {}, { today: "2026-10-30" }), /data-score-report/);
+});
+
 test("scenario box lists the seeds, who's out, then IF and the conditions", () => {
   const html = outcomeScenarioCard({
     label: "Scenario 2A",
