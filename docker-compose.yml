@@ -100,6 +100,7 @@ services:
       SMTP_SECURITY: "${SMTP_SECURITY:-}"
       SMTP_FROM: "${SMTP_FROM:-}"
       DIGEST_TO: "${DIGEST_TO:-}"
+      ALERT_TO: "${ALERT_TO:-}"
       SITE_URL: "${SITE_URL:-https://mshsfootball.com}"
       # Least-privilege role from sql/app_roles.sql; falls back to the owner until it exists.
       POSTGRES_USER: "${PIPELINE_DB_USER:-${POSTGRES_USER:-postgres}}"
