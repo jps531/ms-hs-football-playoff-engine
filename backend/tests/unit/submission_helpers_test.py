@@ -157,10 +157,12 @@ class TestBuildScoreOverrides:
     """build_score_overrides maps a 'score' submission payload to (game_date, overrides)."""
 
     def test_returns_date_and_stringified_scores(self):
-        """Returns the game_date plus points_for/points_against as string override pairs."""
+        """Returns the game_date plus the score, result and final flag as string override pairs.
+
+        final is set so a score reported for a game the source hasn't finished counts as played."""
         game_date, overrides = build_score_overrides({"date": "2025-09-05", "points_for": 21, "points_against": 14})
         assert game_date == "2025-09-05"
-        assert overrides == [("points_for", "21"), ("points_against", "14"), ("result", "W")]
+        assert overrides == [("points_for", "21"), ("points_against", "14"), ("result", "W"), ("final", "true")]
 
     def test_result_follows_the_corrected_score(self):
         """A loss or a tie is recorded as such, so a changed winner can't leave a stale result."""
@@ -173,6 +175,7 @@ class TestBuildScoreOverrides:
             ("points_for", "14"),
             ("points_against", "21"),
             ("result", "L"),
+            ("final", "true"),
         ]
 
 
@@ -266,9 +269,11 @@ class TestApplySubmission:
             ("Taylorsville", date(2025, 9, 5), "points_for", "21"),
             ("Taylorsville", date(2025, 9, 5), "points_against", "14"),
             ("Taylorsville", date(2025, 9, 5), "result", "W"),
+            ("Taylorsville", date(2025, 9, 5), "final", "true"),
             ("Mize", date(2025, 9, 5), "points_for", "14"),
             ("Mize", date(2025, 9, 5), "points_against", "21"),
             ("Mize", date(2025, 9, 5), "result", "L"),
+            ("Mize", date(2025, 9, 5), "final", "true"),
         ]
 
     def test_score_corrects_the_opponents_row_dated_a_day_apart(self):

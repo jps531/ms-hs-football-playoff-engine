@@ -407,9 +407,18 @@ def insert_rows(game_records: Iterable[Game]) -> int:
     for c in regrouped:
         logger.info("%s's %s row is now game %s (was %s)", c.school, c.date, c.new, c.old)
     for school, game_date, opponent, field, before, now, corrected in changed:
-        verdict = "now agrees with" if now == corrected else "still differs from"
+        if now == corrected:  # AHSFHS caught up with a reported score: routine
+            logger.info(
+                "AHSFHS now agrees with the approved correction to %s's %s game vs %s: %s %s",
+                school,
+                game_date,
+                opponent,
+                field,
+                corrected,
+            )
+            continue
         logger.warning(
-            "AHSFHS changed %s's %s game vs %s: %s %s -> %s, which %s the approved correction (%s). "
+            "AHSFHS changed %s's %s game vs %s: %s %s -> %s, which still differs from the approved correction (%s). "
             "The correction still shows; clear it if AHSFHS is now right.",
             school,
             game_date,
@@ -417,7 +426,6 @@ def insert_rows(game_records: Iterable[Game]) -> int:
             field,
             before,
             now,
-            verdict,
             corrected,
         )
 

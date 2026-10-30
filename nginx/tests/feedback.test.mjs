@@ -36,6 +36,10 @@ test("a score correction must be two whole scores, different from what we have",
   assert.match(scoreProblem(GAME, { awayScore: "2.5", homeScore: "28" }), /both/);
   assert.match(scoreProblem(GAME, { awayScore: "21", homeScore: "28" }), /score we have/);
   assert.equal(scoreProblem(GAME, { awayScore: "24", homeScore: "28" }), null);
+  // A game with no score yet: any valid final score is new.
+  const unplayed = { ...GAME, awayScore: null, homeScore: null };
+  assert.equal(scoreProblem(unplayed, { awayScore: "21", homeScore: "28" }), null);
+  assert.match(scoreProblem(unplayed, { awayScore: "", homeScore: "" }), /both/);
 });
 
 test("score body is the visiting team's side of the game", () => {
@@ -49,6 +53,8 @@ test("failures are explained in plain words", () => {
   assert.equal(submissionError(403, "The spam check didn’t pass. Please try again."), "The spam check didn’t pass. Please try again.");
   assert.match(submissionError(403), /spam check/);
   assert.equal(submissionError(503, "Busy, try later."), "Busy, try later.");
+  assert.equal(submissionError(422, "That game hasn’t been played yet"), "That game hasn’t been played yet");
+  assert.match(submissionError(422, [{ msg: "x" }]), /wasn’t accepted/);
   assert.match(submissionError(404), /couldn’t find that game/);
   assert.match(submissionError(0), /connection/);
   assert.match(submissionError(500), /our end/);

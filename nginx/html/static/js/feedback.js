@@ -1,7 +1,7 @@
 // The feedback form's data: subjects, validation, request bodies, and what
 // to tell someone when a submission fails. No DOM, so it runs under
 // `node --test`. Reports go to the API's moderation queue:
-//   POST /api/v1/submissions/scores    a corrected score for a specific game
+//   POST /api/v1/submissions/scores    a specific game's final score, or a correction to it
 //   POST /api/v1/submissions/feedback  anything else (category: score, odds, other)
 
 export const CATEGORIES = [
@@ -51,13 +51,13 @@ export function feedbackBody({ category, context, message, email, page, website 
 
 const score = (v) => (/^\d{1,3}$/.test(String(v ?? "").trim()) ? Number(v) : null);
 
-/** A problem with a score correction, as a sentence for the form, or null. */
+/** A problem with a score report (a correction, or a final score for a game with none yet), as a sentence for the form, or null. */
 export function scoreProblem(game, { awayScore, homeScore }) {
   const away = score(awayScore);
   const home = score(homeScore);
   if (away == null || home == null) return "Enter both teams’ final scores.";
   if (away > 200 || home > 200) return "Scores over 200 aren’t accepted. Please check the score.";
-  if (away === game.awayScore && home === game.homeScore) return "That’s the score we have. Change it to the correct final score.";
+  if (game.awayScore != null && away === game.awayScore && home === game.homeScore) return "That’s the score we have. Change it to the correct final score.";
   return null;
 }
 
@@ -84,7 +84,7 @@ export function submissionError(status, detail) {
   if (status === 429) return "You’ve sent a lot of reports in a short time. Please try again later.";
   if (status === 503) return typeof detail === "string" ? detail : "We’re getting more reports than usual. Please try again in a little while.";
   if (status === 404) return "We couldn’t find that game to correct. Please send it as general feedback instead.";
-  if (status === 422) return "Something in the form wasn’t accepted. Please check it and try again.";
+  if (status === 422) return typeof detail === "string" ? detail : "Something in the form wasn’t accepted. Please check it and try again.";
   if (status === 0) return "Couldn’t send. Check your connection and try again.";
   return "Something went wrong on our end. Please try again in a moment.";
 }

@@ -30,6 +30,7 @@ import json
 from datetime import UTC, datetime
 from functools import partial
 from typing import Annotated, Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 
@@ -66,6 +67,9 @@ from backend.helpers.submission_helpers import (
     insert_submission,
     update_submission_payload,
 )
+
+# A score can be reported from the game's day on, by the date in Mississippi.
+_MISSISSIPPI = ZoneInfo("America/Chicago")
 
 router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 
@@ -352,6 +356,7 @@ async def submit_location(
     responses={
         403: {"description": "Spam check failed"},
         404: {"description": "School or game not found"},
+        422: {"description": "The game is in the future"},
         503: {"description": "Too many reports right now"},
     },
 )
@@ -359,9 +364,10 @@ async def submit_location(
 async def submit_score(
     request: Request, body: SubmitScoreRequest, current_user: OptionalUser = None
 ) -> SubmissionCreatedResponse:
-    """Submit a corrected game score for moderator review.
+    """Submit a game's final score, or a correction to it, for moderator review.
 
-    Both the school and the game (school + date) must already exist in the database.
+    Both the school and the game (school + date) must already exist in the database, and the
+    game must not be in the future (Mississippi time); it needn't have a score yet.
     A repeat of a pending correction returns the original; see the module notes on flood guards.
     """
     if body.website:
@@ -370,6 +376,8 @@ async def submit_score(
     async with get_conn() as conn:
         await require_school_exists(conn, body.school)
         game_id = await require_game_id(conn, body.school, body.date)
+        if body.date > datetime.now(_MISSISSIPPI).date():
+            raise HTTPException(status_code=422, detail="That game hasn’t been played yet")
 
         user_id = optional_user_id(current_user)
         payload = build_score_payload(body, game_id)
@@ -410,7 +418,7 @@ async def submit_helmet_assignment(
 
         current = await (
             await conn.execute(
-                "SELECT helmet_design_id FROM games WHERE school = %s AND date = %s", (body.school, body.date)
+                "SELECT helmet_design_id FROM games WHERE school = %s AND game_id = %s", (body.school, game_id)
             )
         ).fetchone()
         assert current is not None

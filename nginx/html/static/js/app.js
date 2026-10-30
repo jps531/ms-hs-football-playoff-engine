@@ -1010,10 +1010,12 @@ app.addEventListener("click", (e) => {
 
 /** Region games as a card grid under a heading for each game day. */
 function gamesSection(id, title, games, teams, focus) {
-  const report = id === "results"; // played games can be reported as a wrong score
+  // A finished game can be reported as a wrong score, and one from today or
+  // earlier that has no score yet can have its final score reported.
+  const now = today();
   const days = byDay(games).map(({ date, items }) => `<div class="game-day">
       <h3 class="game-day__title">${date ? esc(gameDate(date)) : "Date to be announced"}</h3>
-      <ul class="game-grid">${items.map((g) => gameCard(g, teams, { focus, report })).join("")}</ul>
+      <ul class="game-grid">${items.map((g) => gameCard(g, teams, { focus, report: true, today: now })).join("")}</ul>
     </div>`);
   return `<section class="section" aria-labelledby="${id}-title">
     <h2 class="section-title" id="${id}-title">${title}</h2>
@@ -1742,8 +1744,9 @@ function feedbackContext({ team = null, about = null } = {}) {
 }
 
 /**
- * The form. `game` (a completed region game) makes it a score correction;
- * otherwise it's a general report starting on `category`, about `context`.
+ * The form. `game` (a region game) makes it a score report: a correction for
+ * a finished game, or the final score for one with none yet. Otherwise it's
+ * a general report starting on `category`, about `context`.
  */
 function feedbackForm({ game = null, category = "other", context = null, page = "/" } = {}) {
   const honeypot = `<div class="fb-hp" aria-hidden="true"><label>Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>`;
@@ -1755,10 +1758,14 @@ function feedbackForm({ game = null, category = "other", context = null, page = 
         <span class="fb-score__team">${esc(team)}</span>
         <input type="text" name="${name}" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${esc(value)}" autocomplete="off" required>
       </label>`;
+    const played = game.awayScore != null && game.homeScore != null;
+    const about = played
+      ? `${game.away} ${game.awayScore}, ${game.home} ${game.homeScore}`
+      : `${game.away} ${game.joiner} ${game.home}`;
     return `<form class="fb-form" novalidate data-fb-form data-mode="score" data-opened="${opened}" data-page="${esc(page)}" data-game="${esc(JSON.stringify(game))}">
-      <p class="fb-about">${esc(game.away)} ${esc(game.awayScore)}, ${esc(game.home)} ${esc(game.homeScore)} · ${esc(gameDate(game.date))}</p>
+      <p class="fb-about">${esc(about)} · ${esc(gameDate(game.date))}</p>
       <fieldset class="fb-scores">
-        <legend>The correct final score</legend>
+        <legend>${played ? "The correct final score" : "The final score"}</legend>
         ${scoreInput("away", game.away, game.awayScore)}
         ${scoreInput("home", game.home, game.homeScore)}
       </fieldset>
@@ -1768,8 +1775,8 @@ function feedbackForm({ game = null, category = "other", context = null, page = 
       ${honeypot}
       <div class="fb-turnstile"></div>
       ${status}
-      <div class="fb-actions"><button type="submit" class="fb-submit">Send correction</button></div>
-      <p class="fb-fine muted">A moderator checks every correction before it changes the standings.</p>
+      <div class="fb-actions"><button type="submit" class="fb-submit">${played ? "Send correction" : "Send score"}</button></div>
+      <p class="fb-fine muted">A moderator checks every ${played ? "correction" : "score"} before it changes the standings.</p>
     </form>`;
   }
   const cats = CATEGORIES.map((c) => `<label class="fb-cat"><input type="radio" name="category" value="${c.value}"${c.value === category ? " checked" : ""}><span>${esc(c.label)}</span></label>`).join("");
@@ -1794,7 +1801,7 @@ function feedbackPage() {
     <header class="entry-head">
       <h1 class="title">Send feedback</h1>
       <p class="prose">Spotted a wrong score, see odds or a scenario that can’t be right, or have an idea? Let us know.
-        To correct a region game’s score, open its region and select “Wrong score?” on the game. For any other game, choose “A score” below.</p>
+        To correct a region game’s score, open its region and select “Wrong score?” on the game, or “Report score” on one that has no score yet. For any other game, choose “A score” below.</p>
     </header>
     <div class="fb-page">${feedbackForm({ page: "/feedback" })}</div>
   </div>`;
@@ -1818,7 +1825,7 @@ function openFeedback({ game = null, category = "other", team = null, about = nu
   feedbackSheet.innerHTML = `<div class="game-sheet__head">
       <div>
         <p class="game-sheet__kicker">Feedback</p>
-        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${game ? "Report a wrong score" : "Send feedback"}</h2>
+        <h2 class="game-sheet__title" id="feedback-title" tabindex="-1" autofocus>${!game ? "Send feedback" : game.awayScore == null ? "Report a final score" : "Report a wrong score"}</h2>
       </div>
       <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
@@ -1962,8 +1969,9 @@ document.addEventListener("click", (e) => {
   const report = e.target.closest("[data-score-report]");
   if (report) {
     const d = report.dataset;
+    const score = (v) => (v == null ? null : Number(v)); // no score yet: reporting the final
     openFeedback({
-      game: { date: d.date, away: d.away, home: d.home, awayScore: Number(d.awayScore), homeScore: Number(d.homeScore) },
+      game: { date: d.date, away: d.away, home: d.home, joiner: d.joiner, awayScore: score(d.awayScore), homeScore: score(d.homeScore) },
     });
     return;
   }

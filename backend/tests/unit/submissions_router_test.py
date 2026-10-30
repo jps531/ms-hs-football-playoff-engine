@@ -144,6 +144,21 @@ def test_score_corrections_go_through_the_same_guard():
     assert '"game_id": 77' in conn.calls[-1][1][3]  # finds the game if its date changes before review
 
 
+def test_a_score_for_a_game_not_yet_played_is_refused():
+    """A game's score can be reported from its day on (Mississippi time), even before it has one."""
+    conn = FakeConn([])
+    body = SubmitScoreRequest(school="Raleigh", date=date(2099, 10, 9), points_for=28, points_against=21)
+    with (
+        _patch_conn(conn),
+        patch.object(submissions, "require_school_exists"),
+        patch.object(submissions, "require_game_id", AsyncMock(return_value=77)),
+        pytest.raises(HTTPException) as exc,
+    ):
+        _call(submissions.submit_score(_request(), body))
+    assert (exc.value.status_code, exc.value.detail) == (422, "That game hasn’t been played yet")
+    assert conn.calls == []
+
+
 def test_limits_key_on_the_visitor_not_on_nginx():
     """Behind nginx every request comes from nginx's address; X-Real-IP carries the visitor's."""
     assert client_ip(_request({"X-Real-IP": "203.0.113.9"})) == "203.0.113.9"

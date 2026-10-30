@@ -23,11 +23,22 @@ async def require_game_exists(conn, school: str, game_date) -> None:  # pragma: 
         raise HTTPException(status_code=404, detail=f"Game for '{school}' on {game_date} not found")
 
 
+# The game *school* plays in that has a row dated *game_date*: its own row, or
+# else its opponent's (the two schools' rows can be dated a day apart, and the
+# site lists a game under one of them), provided *school* has a row in it too.
+_GAME_ID_SQL = """
+    SELECT x.game_id
+    FROM games x
+    WHERE x.date = %(date)s AND (x.school = %(school)s OR x.opponent = %(school)s)
+      AND EXISTS (SELECT 1 FROM games own WHERE own.game_id = x.game_id AND own.school = %(school)s)
+    ORDER BY x.school = %(school)s DESC
+    LIMIT 1
+"""
+
+
 async def require_game_id(conn, school: str, game_date) -> int:  # pragma: no cover
-    """The ``game_id`` of *school*'s game on *game_date*; HTTP 404 if there's no such game."""
-    row = await (
-        await conn.execute("SELECT game_id FROM games WHERE school = %s AND date = %s", (school, game_date))
-    ).fetchone()
+    """The ``game_id`` of *school*'s game on *game_date* (either school's row's date); HTTP 404 if none."""
+    row = await (await conn.execute(_GAME_ID_SQL, {"school": school, "date": game_date})).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Game for '{school}' on {game_date} not found")
     return row[0]
