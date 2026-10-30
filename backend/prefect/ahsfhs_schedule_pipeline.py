@@ -221,85 +221,92 @@ def find_ahsfhs_schedule_for_schools(schools: list[School], season: int) -> list
     return records
 
 
-@task(task_run_name="Insert/Update AHSFHS Game Records")
-def insert_rows(game_records: Iterable[Game]) -> int:
-    """
-    Insert all found schedule data.
-    Returns the number of rows actually inserted (cursor.rowcount sum).
-    """
-    if not game_records:
-        return 0
+# This run's scraped rows, loaded into a temporary table so the steps below can
+# each read them. The column order is Game.as_db_tuple()'s.
+_INCOMING_TABLE_SQL = """
+    CREATE TEMP TABLE incoming (
+        school TEXT, date DATE, season INTEGER, location_id INTEGER, points_for INTEGER,
+        points_against INTEGER, "round" TEXT, kickoff_time TIMESTAMPTZ, opponent TEXT,
+        result TEXT, game_status TEXT, source TEXT, location TEXT, region_game BOOLEAN,
+        final BOOLEAN, overtime INTEGER
+    ) ON COMMIT DROP
+"""
 
-    logger = get_run_logger()
+# A game AHSFHS now lists a few days from the date we have it on: the school's
+# only row against the same opponent within three days, at a date this run
+# doesn't list, and no row yet at the new date. Moving that row keeps
+# everything attached to it (approved corrections, the helmet worn, the games
+# people marked as attended) where replacing it would lose them.
+_MOVED_GAMES_SQL = """
+    SELECT g.school, g.date, i.date, g.opponent
+    FROM incoming i
+    JOIN games g ON g.school = i.school AND g.opponent = i.opponent
+        AND g.date <> i.date AND g.date BETWEEN i.date - 3 AND i.date + 3
+    WHERE NOT EXISTS (SELECT 1 FROM games x WHERE x.school = i.school AND x.date = i.date)
+      AND NOT EXISTS (SELECT 1 FROM incoming j WHERE j.school = g.school AND j.date = g.date)
+      AND (SELECT count(*) FROM games y WHERE y.school = i.school AND y.opponent = i.opponent
+               AND y.date BETWEEN i.date - 3 AND i.date + 3) = 1
+      AND (SELECT count(*) FROM incoming k WHERE k.school = i.school AND k.opponent = i.opponent
+               AND k.date BETWEEN g.date - 3 AND g.date + 3) = 1
+    ORDER BY g.school, g.date
+"""
 
-    logger.info("Inserting/Updating %d game records into games table", len(list(game_records)))
-    rows_data = [r.as_db_tuple() for r in game_records]
-    logger.info("Raw game records: %s", game_records)
-    logger.info("Prepared %d rows for insertion: %s", len(rows_data), rows_data)
+# Rows within three days of a scraped game, at a date this run doesn't list:
+# what the source had there before (a different opponent, say). Unplayed rows
+# without corrections are removed; the others are kept and reported, the same
+# rule as remove_unlisted_games.
+_STALE_NEARBY_SQL = """
+    DELETE FROM games g
+    WHERE EXISTS (SELECT 1 FROM incoming i WHERE i.school = g.school
+                      AND g.date BETWEEN i.date - 3 AND i.date + 3)
+      AND NOT EXISTS (SELECT 1 FROM incoming j WHERE j.school = g.school AND j.date = g.date)
+      AND g.final IS NOT TRUE
+      AND g.overrides = '{}'::jsonb
+    RETURNING g.school, g.date, g.opponent
+"""
+_KEPT_NEARBY_SQL = """
+    SELECT g.school, g.date, g.opponent, g.overrides <> '{}'::jsonb AS overridden
+    FROM games g
+    WHERE EXISTS (SELECT 1 FROM incoming i WHERE i.school = g.school
+                      AND g.date BETWEEN i.date - 3 AND i.date + 3)
+      AND NOT EXISTS (SELECT 1 FROM incoming j WHERE j.school = g.school AND j.date = g.date)
+    ORDER BY g.school, g.date
+"""
 
-    # --- do the updates ---
-    sql = """
-    WITH incoming_raw AS (
-        SELECT *
-        FROM (VALUES %s) AS v(
-            school, date, season, location_id, points_for, points_against,
-            "round", kickoff_time, opponent, result, game_status, source,
-            location, region_game, final, overtime
-        )
-    ),
-    incoming AS (
-        SELECT
-            school::text          AS school,
-            date::date            AS date,
-            season::integer       AS season,
-            location_id::integer  AS location_id,
-            points_for::integer   AS points_for,
-            points_against::integer AS points_against,
-            "round"::text         AS "round",
-            kickoff_time::timestamptz AS kickoff_time,
-            opponent::text        AS opponent,
-            result::text          AS result,
-            game_status::text     AS game_status,
-            source::text          AS source,
-            location::text        AS location,
-            region_game::boolean  AS region_game,
-            final::boolean        AS final,
-            overtime::integer     AS overtime
-        FROM incoming_raw
-    ),
-    preserved AS (
-        SELECT g.school, g.date, g.overrides
-        FROM games g
-        JOIN incoming i ON g.school = i.school
-            AND g.date BETWEEN i.date - INTERVAL '3 days'
-                            AND i.date + INTERVAL '3 days'
-    ),
-    deleted AS (
-        DELETE FROM games g
-        USING incoming i
-        WHERE g.school = i.school
-        AND g.date BETWEEN i.date - INTERVAL '3 days'
-                        AND i.date + INTERVAL '3 days'
-        RETURNING g.*
-    )
+# Score fields whose AHSFHS value has changed since the last run on a row
+# whose value was corrected by hand. Read before the upsert, which then stores
+# the new value: the correction still wins (games_effective reads overrides
+# first), but a moderator should look at whether it's still right.
+_SCORE_FIELDS = ("points_for", "points_against", "result")
+_CHANGED_UNDER_CORRECTION_SQL = " UNION ALL ".join(
+    f"""
+    SELECT g.school, g.date, g.opponent, '{field}', g.{field}::text, NULLIF(i.{field}::text, ''), g.overrides->>'{field}'
+    FROM games g JOIN incoming i ON i.school = g.school AND i.date = g.date
+    WHERE g.overrides ? '{field}' AND NULLIF(i.{field}::text, '') IS DISTINCT FROM g.{field}::text
+      AND NULLIF(i.{field}::text, '') IS NOT NULL"""
+    for field in _SCORE_FIELDS
+)
+
+# The score fields always take AHSFHS's value (the corrections live in
+# overrides, which games_effective reads first), so the next run can tell when
+# AHSFHS changes it. The other fields a correction can set keep the stored
+# value while it's overridden, as before.
+_UPSERT_SQL = """
     INSERT INTO games
         (school, date, season, location_id, points_for, points_against,
         "round", kickoff_time, opponent, result, game_status, source,
-        location, region_game, final, overtime, overrides)
-    SELECT
-        i.school, i.date, i.season, i.location_id, i.points_for, i.points_against,
-        i."round", i.kickoff_time, i.opponent, i.result, i.game_status, i.source,
-        i.location, i.region_game, i.final, i.overtime,
-        COALESCE(p.overrides, '{}'::jsonb)
-    FROM incoming i
-    LEFT JOIN preserved p ON p.school = i.school AND p.date = i.date
+        location, region_game, final, overtime)
+    SELECT school, date, season, location_id, points_for, points_against,
+        "round", kickoff_time, opponent, result, game_status, source,
+        location, region_game, final, overtime
+    FROM incoming
     ON CONFLICT (school, date) DO UPDATE SET
         location        = CASE WHEN games.overrides ? 'location'       THEN games.location       ELSE COALESCE(NULLIF(EXCLUDED.location,''),    games.location)       END,
         location_id     = CASE WHEN games.overrides ? 'location_id'    THEN games.location_id    ELSE COALESCE(EXCLUDED.location_id,            games.location_id)    END,
         opponent        = COALESCE(NULLIF(EXCLUDED.opponent,''),        games.opponent),
-        points_for      = CASE WHEN games.overrides ? 'points_for'     THEN games.points_for     ELSE COALESCE(EXCLUDED.points_for,             games.points_for)     END,
-        points_against  = CASE WHEN games.overrides ? 'points_against' THEN games.points_against ELSE COALESCE(EXCLUDED.points_against,         games.points_against) END,
-        result          = CASE WHEN games.overrides ? 'result'      THEN games.result      ELSE COALESCE(NULLIF(EXCLUDED.result,''),      games.result)      END,
+        points_for      = COALESCE(EXCLUDED.points_for,                 games.points_for),
+        points_against  = COALESCE(EXCLUDED.points_against,             games.points_against),
+        result          = COALESCE(NULLIF(EXCLUDED.result,''),          games.result),
         final           = COALESCE(EXCLUDED.final,                      games.final),
         overtime        = COALESCE(EXCLUDED.overtime,                   games.overtime),
         game_status     = CASE WHEN games.overrides ? 'game_status' THEN games.game_status ELSE COALESCE(EXCLUDED.game_status,                games.game_status) END,
@@ -309,17 +316,77 @@ def insert_rows(game_records: Iterable[Game]) -> int:
         "round"         = CASE WHEN games.overrides ? 'round'          THEN games."round"        ELSE COALESCE(NULLIF(EXCLUDED."round",''),     games."round")        END,
         kickoff_time    = CASE WHEN games.overrides ? 'kickoff_time'   THEN games.kickoff_time   ELSE COALESCE(EXCLUDED.kickoff_time,           games.kickoff_time)   END
         -- overrides column is never written by the pipeline
-    ;
-    """
+"""
 
-    template = "(" + ", ".join(["%s"] * 16) + ")"
+
+@task(task_run_name="Insert/Update AHSFHS Game Records")
+def insert_rows(game_records: Iterable[Game]) -> int:
+    """Write this run's scraped games, in one transaction.
+
+    1. A game AHSFHS moved by up to three days is moved in place (see
+       ``_MOVED_GAMES_SQL``), so its corrections, helmet and attendance stay.
+    2. Other rows within three days of a scraped game, at a date it no longer
+       lists, are removed unless they're finished or corrected (then reported).
+    3. Each scraped game is inserted or updated. A score AHSFHS changed under
+       an approved correction is reported; the correction still shows.
+
+    Returns the number of scraped rows written.
+    """
+    game_records = list(game_records)
+    if not game_records:
+        return 0
+
+    logger = get_run_logger()
+
+    logger.info("Inserting/Updating %d game records into games table", len(game_records))
+    rows_data = [r.as_db_tuple() for r in game_records]
+    logger.info("Prepared %d rows for insertion: %s", len(rows_data), rows_data)
 
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            execute_values(cur, sql, rows_data, template=template, page_size=500)
+            cur.execute(_INCOMING_TABLE_SQL)
+            execute_values(cur, "INSERT INTO incoming VALUES %s", rows_data, page_size=500)
+            cur.execute(_MOVED_GAMES_SQL)
+            moved = cur.fetchall()
+            for school, old_date, new_date, _opponent in moved:
+                cur.execute("UPDATE games SET date = %s WHERE school = %s AND date = %s", (new_date, school, old_date))
+            cur.execute(_STALE_NEARBY_SQL)
+            removed = cur.fetchall()
+            cur.execute(_KEPT_NEARBY_SQL)
+            kept = cur.fetchall()
+            cur.execute(_CHANGED_UNDER_CORRECTION_SQL)
+            changed = cur.fetchall()
+            cur.execute(_UPSERT_SQL)
         conn.commit()
 
-    return len(list(game_records))
+    for school, old_date, new_date, opponent in moved:
+        logger.info("Moved %s's game vs %s from %s to %s, as AHSFHS now lists it", school, opponent, old_date, new_date)
+    for school, game_date, opponent in removed:
+        logger.info("Removed %s's %s game vs %s: AHSFHS lists another game that week", school, game_date, opponent)
+    for school, game_date, opponent, overridden in kept:
+        logger.warning(
+            "%s's %s game vs %s is no longer on its AHSFHS schedule (another game is listed that week); kept because %s",
+            school,
+            game_date,
+            opponent,
+            "it has manual overrides" if overridden else "it's a finished game",
+        )
+    for school, game_date, opponent, field, before, now, corrected in changed:
+        verdict = "now agrees with" if now == corrected else "still differs from"
+        logger.warning(
+            "AHSFHS changed %s's %s game vs %s: %s %s -> %s, which %s the approved correction (%s). "
+            "The correction still shows; clear it if AHSFHS is now right.",
+            school,
+            game_date,
+            opponent,
+            field,
+            before,
+            now,
+            verdict,
+            corrected,
+        )
+
+    return len(game_records)
 
 
 # Each scraped school's listed dates, passed as one JSON object

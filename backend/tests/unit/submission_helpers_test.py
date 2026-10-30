@@ -50,6 +50,7 @@ class FakeConn:
         """Start with no recorded calls and no queued fetchone() result."""
         self.calls: list[tuple[str, tuple]] = []
         self.fetchone_result: tuple | None = None
+        self.fetchall_result: list[tuple] = []
 
     async def execute(self, sql: str, params: tuple = ()):
         """Record the call and return self, so `.fetchone()` can be chained."""
@@ -59,6 +60,10 @@ class FakeConn:
     async def fetchone(self):
         """Return whatever the test set as fetchone_result."""
         return self.fetchone_result
+
+    async def fetchall(self):
+        """Return whatever the test set as fetchall_result."""
+        return self.fetchall_result
 
 
 def _submission_row(stype: str, school: str | None, payload: dict, submission_id: int = 1) -> tuple:
@@ -252,24 +257,67 @@ class TestApplySubmission:
     def test_score_sets_game_overrides_on_both_teams_rows(self):
         """A 'score' submission overrides the school's row (score and result), then the opponent's, mirrored."""
         conn = FakeConn()
-        conn.fetchone_result = ("Mize",)
+        conn.fetchall_result = [(date(2025, 9, 5), "Mize", date(2025, 9, 5))]
         payload = {"date": "2025-09-05", "points_for": 21, "points_against": 14}
         row = _submission_row("score", "Taylorsville", payload)
         asyncio.run(apply_submission(conn, row))
         override = "SELECT set_game_override(%s, %s, %s, %s)"
         assert [params for sql, params in conn.calls if sql == override] == [
-            ("Taylorsville", "2025-09-05", "points_for", "21"),
-            ("Taylorsville", "2025-09-05", "points_against", "14"),
-            ("Taylorsville", "2025-09-05", "result", "W"),
-            ("Mize", "2025-09-05", "points_for", "14"),
-            ("Mize", "2025-09-05", "points_against", "21"),
-            ("Mize", "2025-09-05", "result", "L"),
+            ("Taylorsville", date(2025, 9, 5), "points_for", "21"),
+            ("Taylorsville", date(2025, 9, 5), "points_against", "14"),
+            ("Taylorsville", date(2025, 9, 5), "result", "W"),
+            ("Mize", date(2025, 9, 5), "points_for", "14"),
+            ("Mize", date(2025, 9, 5), "points_against", "21"),
+            ("Mize", date(2025, 9, 5), "result", "L"),
         ]
 
-    def test_score_without_an_opponent_row_corrects_just_the_school(self):
-        """No row for the opponent (e.g. a game lookup that finds nothing): only the school's row changes."""
+    def test_score_corrects_the_opponents_row_dated_a_day_apart(self):
+        """The two schools' pages can date one game a day apart; the opponent's row is corrected on its own date."""
         conn = FakeConn()
-        conn.fetchone_result = None
+        conn.fetchall_result = [(date(2025, 9, 5), "Mize", date(2025, 9, 4))]
+        payload = {"date": "2025-09-05", "points_for": 21, "points_against": 14}
+        asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
+        assert {(p[0], p[1]) for sql, p in conn.calls if "set_game_override" in sql} == {
+            ("Taylorsville", date(2025, 9, 5)),
+            ("Mize", date(2025, 9, 4)),
+        }
+
+    def test_score_follows_a_game_the_schedule_moved(self):
+        """Reported for 9-5, but the schedule has since moved the school's only game that week to 9-6."""
+        conn = FakeConn()
+        conn.fetchall_result = [(date(2025, 9, 6), "Mize", date(2025, 9, 6))]
+        payload = {"date": "2025-09-05", "points_for": 21, "points_against": 14}
+        asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
+        assert {p[1] for sql, p in conn.calls if "set_game_override" in sql} == {date(2025, 9, 6)}
+
+    def test_score_prefers_the_row_on_the_reported_date(self):
+        conn = FakeConn()
+        conn.fetchall_result = [(date(2025, 9, 5), None, None), (date(2025, 9, 3), "Mize", date(2025, 9, 3))]
+        payload = {"date": "2025-09-05", "points_for": 21, "points_against": 14}
+        asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
+        assert {(p[0], p[1]) for sql, p in conn.calls if "set_game_override" in sql} == {
+            ("Taylorsville", date(2025, 9, 5))
+        }
+
+    @pytest.mark.parametrize(
+        "rows",
+        [[], [(date(2025, 9, 3), "Mize", date(2025, 9, 3)), (date(2025, 9, 7), "Pelahatchie", date(2025, 9, 7))]],
+        ids=["no game", "two games, neither on the date"],
+    )
+    def test_score_without_a_clear_game_is_refused(self, rows):
+        """Nothing is changed when the game can't be told apart: a moderator checks which was meant."""
+        conn = FakeConn()
+        conn.fetchall_result = rows
+        payload = {"date": "2025-09-05", "points_for": 21, "points_against": 14}
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(apply_submission(conn, _submission_row("score", "Taylorsville", payload)))
+        assert exc.value.status_code == 409
+        assert not [c for c in conn.calls if "set_game_override" in c[0]]
+
+    def test_score_without_an_opponent_row_corrects_just_the_school(self):
+        """No row for the opponent (an out-of-state team): only the school's row changes."""
+        conn = FakeConn()
+        conn.fetchall_result = [(date(2025, 9, 5), None, None)]
         asyncio.run(
             apply_submission(
                 conn,
