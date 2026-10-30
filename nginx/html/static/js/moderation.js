@@ -13,6 +13,7 @@ export const STATUSES = [
 
 const TYPE_LABELS = {
   score: "Score correction",
+  date: "Date correction",
   feedback: "Feedback",
   colors: "Colors",
   logo: "Logo",
@@ -46,7 +47,7 @@ export function feedbackAbout(payload) {
 
 /** The button wording for a type: what approving actually does. */
 export function decisionLabels(type) {
-  if (type === "score") return { approve: "Apply correction", reject: "Reject" };
+  if (type === "score" || type === "date") return { approve: "Apply correction", reject: "Reject" };
   if (type === "feedback") return { approve: "Mark handled", reject: "Dismiss" };
   if (type === "logo") return { approve: "Accept", reject: "Reject" };
   return { approve: "Approve", reject: "Reject" };
@@ -132,6 +133,26 @@ function scoreHtml(item) {
     ${item.payload?.note ? `<p class="mod-card__meta"><span class="muted">Source:</span> ${esc(item.payload.note)}</p>` : ""}`;
 }
 
+/** A date report: the game, the date the site has it on now, and the reported one. */
+function dateHtml(item) {
+  const p = item.payload ?? {};
+  const game = item.current_game;
+  const opponent = game?.opponent ? ` ${LOCATION_WORD[game.location] ?? "vs"} ${esc(game.opponent)}` : "";
+  const day = (iso) => esc(gameDate(iso) || iso || "");
+  const current = game
+    ? `<tr><th scope="row">On the site</th><td>${day(game.date)}</td></tr>`
+    : `<tr><th scope="row">On the site</th><td class="muted">The game is no longer on the schedule</td></tr>`;
+  return `<p class="mod-card__about">${esc(item.school)}${opponent} · reported while shown on ${day(p.date)}</p>
+    <table class="mod-score">
+      <tbody>
+        ${current}
+        <tr><th scope="row">Reported</th><td class="is-changed"><span>${day(p.new_date)}</span><span class="visually-hidden"> (changed)</span></td></tr>
+      </tbody>
+    </table>
+    <p class="mod-card__meta muted">Approving moves both schools' rows of the game to the reported date.</p>
+    ${p.note ? `<p class="mod-card__meta"><span class="muted">Source:</span> ${esc(p.note)}</p>` : ""}`;
+}
+
 function feedbackHtml(item) {
   const p = item.payload ?? {};
   const about = feedbackAbout(p);
@@ -194,7 +215,9 @@ function reviewedHtml(item) {
 }
 
 export function itemHtml(item, now = Date.now()) {
-  const body = item.type === "score" ? scoreHtml(item) : item.type === "feedback" ? feedbackHtml(item) : payloadHtml(item);
+  const body = item.type === "score" ? scoreHtml(item)
+    : item.type === "date" ? dateHtml(item)
+      : item.type === "feedback" ? feedbackHtml(item) : payloadHtml(item);
   const submitted = new Date(item.submitted_at);
   return `<article class="mod-card" id="submission-${item.id}" data-id="${item.id}" aria-labelledby="submission-${item.id}-title">
     <header class="mod-card__head">

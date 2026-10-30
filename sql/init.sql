@@ -589,7 +589,7 @@ CREATE TABLE IF NOT EXISTS user_attended_games (
 -- ---------------------------------------------------------------------------
 
 CREATE TYPE submission_type AS ENUM (
-    'logo', 'helmet', 'colors', 'location', 'score', 'feedback', 'helmet_assignment'
+    'logo', 'helmet', 'colors', 'location', 'score', 'feedback', 'helmet_assignment', 'date'
 );
 
 -- 'accepted_pending_asset' is a terminal-ish state between pending and

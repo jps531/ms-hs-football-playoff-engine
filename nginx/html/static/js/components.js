@@ -217,14 +217,27 @@ export function scenarioCard({ title, p = null, groups, provenanceHtml = "", tea
 
 // ------------------------------------------------------------- game card
 
+/** A game card's report links: "Wrong date?", and "Wrong score?" or "Report score" (see gameCard). */
+function reportButtons(game, label, played, today) {
+  if (!game.date) return "";
+  const at = `data-date="${esc(game.date)}" data-away="${esc(game.away)}" data-home="${esc(game.home)}" data-joiner="${esc(game.joiner)}"`;
+  const buttons = [`<button type="button" class="game-card__report" data-date-report ${at}>Wrong date?<span class="visually-hidden"> Report the right date for ${esc(label)}</span></button>`];
+  if (played) {
+    buttons.push(`<button type="button" class="game-card__report" data-score-report ${at} data-away-score="${esc(game.awayScore)}" data-home-score="${esc(game.homeScore)}">Wrong score?<span class="visually-hidden"> Report a correction for ${esc(label)}</span></button>`);
+  } else if (today && game.date <= today) {
+    buttons.push(`<button type="button" class="game-card__report" data-score-report ${at}>Report score<span class="visually-hidden"> for ${esc(label)}</span></button>`);
+  }
+  return `<div class="game-card__reports">${buttons.join("")}</div>`;
+}
+
 /**
  * One region game: the visitor on top with "at" (or "vs" at a neutral
  * site), the home team below. Finished games add each side's score and
  * bold the winner. `game` is { date?, away, home, joiner, awayScore?,
  * homeScore?, winner? }; `focus` outlines the card when the picked team
- * plays in it. With `report`, a finished game offers "Wrong score?", and a
- * game without a score whose date is `today` (ISO) or earlier offers
- * "Report score".
+ * plays in it. With `report`, a game with a date offers "Wrong date?"; a
+ * finished game also offers "Wrong score?", and a game without a score whose
+ * date is `today` (ISO) or earlier "Report score".
  */
 export function gameCard(game, teams, { focus = null, report = false, today = null } = {}) {
   const played = game.awayScore != null && game.homeScore != null;
@@ -241,8 +254,7 @@ export function gameCard(game, teams, { focus = null, report = false, today = nu
     <span class="visually-hidden">${esc(label)}</span>
     <div class="game-card__row" aria-hidden="true">${side(game.away, game.awayScore)}<span class="game-card__joiner">${esc(game.joiner)}</span></div>
     <div class="game-card__row" aria-hidden="true">${side(game.home, game.homeScore)}</div>
-    ${report && played ? `<button type="button" class="game-card__report" data-score-report data-date="${esc(game.date)}" data-away="${esc(game.away)}" data-home="${esc(game.home)}" data-away-score="${esc(game.awayScore)}" data-home-score="${esc(game.homeScore)}">Wrong score?<span class="visually-hidden"> Report a correction for ${esc(label)}</span></button>` : ""}
-    ${report && !played && game.date && today && game.date <= today ? `<button type="button" class="game-card__report" data-score-report data-date="${esc(game.date)}" data-away="${esc(game.away)}" data-home="${esc(game.home)}" data-joiner="${esc(game.joiner)}">Report score<span class="visually-hidden"> for ${esc(label)}</span></button>` : ""}
+    ${report ? reportButtons(game, label, played, today) : ""}
   </li>`;
 }
 

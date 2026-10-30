@@ -39,6 +39,7 @@ from backend.api.db import get_conn
 from backend.api.limiter import client_ip, limiter
 from backend.api.models.requests import (
     SubmitColorsRequest,
+    SubmitDateRequest,
     SubmitFeedbackRequest,
     SubmitHelmetAssignmentRequest,
     SubmitLocationRequest,
@@ -56,6 +57,7 @@ from backend.helpers.image_helpers import (
 from backend.helpers.query_helpers import require_game_id, require_helmet_design_exists, require_school_exists
 from backend.helpers.submission_helpers import (
     build_colors_payload,
+    build_date_payload,
     build_feedback_payload,
     build_helmet_assignment_payload,
     build_helmet_image_fields,
@@ -136,7 +138,7 @@ async def _accept_form_submission(
         await conn.execute(
             """
             SELECT COUNT(*) FROM submissions
-            WHERE type IN ('feedback', 'score') AND status = 'pending'
+            WHERE type IN ('feedback', 'score', 'date') AND status = 'pending'
               AND submitted_at > NOW() - INTERVAL '1 hour'
             """
         )
@@ -384,6 +386,47 @@ async def submit_score(
         submission_id, submitted_at = await _accept_form_submission(conn, "score", body.school, user_id, payload)
 
     return SubmissionCreatedResponse(id=submission_id, type="score", school=body.school, submitted_at=submitted_at)
+
+
+@router.post(
+    "/dates",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        403: {"description": "Spam check failed"},
+        404: {"description": "School or game not found"},
+        422: {"description": "The new date is the same, or outside the game's season"},
+        503: {"description": "Too many reports right now"},
+    },
+)
+@limiter.limit(_FORM_LIMIT)
+async def submit_date(
+    request: Request, body: SubmitDateRequest, current_user: OptionalUser = None
+) -> SubmissionCreatedResponse:
+    """Report that a game is on the wrong date, for moderator review.
+
+    The school and the game (school + the date it's shown on) must exist. The new date must
+    differ and fall in the game's season. Approving it moves both schools' rows of the game.
+    A repeat of a pending report returns the original; see the module notes on flood guards.
+    """
+    if body.website:
+        return _honeypot_response("date", body.school)
+    await verify_turnstile(body.turnstile_token, client_ip(request))
+    if body.new_date == body.date:
+        raise HTTPException(status_code=422, detail="That’s the date we have. Change it to the right date.")
+    async with get_conn() as conn:
+        await require_school_exists(conn, body.school)
+        game_id = await require_game_id(conn, body.school, body.date)
+        season = await (
+            await conn.execute("SELECT season FROM games WHERE game_id = %s LIMIT 1", (game_id,))
+        ).fetchone()
+        if season is None or body.new_date.year != season[0]:
+            raise HTTPException(status_code=422, detail="The new date has to be in the same season as the game.")
+
+        user_id = optional_user_id(current_user)
+        payload = build_date_payload(body, game_id)
+        submission_id, submitted_at = await _accept_form_submission(conn, "date", body.school, user_id, payload)
+
+    return SubmissionCreatedResponse(id=submission_id, type="date", school=body.school, submitted_at=submitted_at)
 
 
 @router.post("/helmet-assignments", status_code=status.HTTP_201_CREATED, responses=_ACCOUNT_RESPONSES)

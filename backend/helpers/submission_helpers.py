@@ -154,6 +154,9 @@ async def apply_submission(conn: Any, row: tuple) -> None:
             for field, value in build_opponent_score_overrides(payload):
                 await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (opponent, opponent_date, field, value))
 
+    elif stype == "date":
+        await move_game(conn, payload["game_id"], date.fromisoformat(payload["new_date"]), payload["date"])
+
     elif stype == "helmet_assignment":
         game_date, helmet_design_id = build_helmet_assignment_override(payload)
         await require_helmet_design_exists(conn, helmet_design_id)
@@ -222,6 +225,48 @@ async def find_score_rows(
     return row[0], (row[1], row[2]) if row[1] is not None else None
 
 
+# Moves one school's row of a game to its corrected date, keeping the date
+# AHSFHS listed it on (the first time; a second correction keeps the original)
+# so the schedule pipeline keeps the game where the correction put it.
+_MOVE_ROW_SQL = """
+    UPDATE games
+    SET date = %s,
+        overrides = CASE WHEN overrides ? 'ahsfhs_date' THEN overrides
+                         ELSE overrides || jsonb_build_object('ahsfhs_date', date::text) END
+    WHERE school = %s AND date = %s
+"""
+
+
+async def move_game(conn: Any, game_id: int, new_date: date, reported_date: str) -> None:
+    """Move both schools' rows of game *game_id* to *new_date* (an approved date report).
+
+    Moving the rows keeps everything attached to them (score corrections, the
+    helmet worn, attendance, which follows by ``ON UPDATE CASCADE``).
+
+    Raises:
+        HTTPException 409: the game is no longer on the schedule, or a school
+            already has another game on *new_date*; nothing is changed.
+    """
+    rows = await (
+        await conn.execute("SELECT school, date FROM games WHERE game_id = %s ORDER BY school FOR UPDATE", (game_id,))
+    ).fetchall()
+    if not rows:
+        raise HTTPException(
+            status_code=409, detail=f"The game reported for {reported_date} is no longer on the schedule"
+        )
+    for school, _ in rows:
+        clash = await (
+            await conn.execute(
+                "SELECT 1 FROM games WHERE school = %s AND date = %s AND game_id <> %s", (school, new_date, game_id)
+            )
+        ).fetchone()
+        if clash is not None:
+            raise HTTPException(status_code=409, detail=f"{school} already has another game on {new_date.isoformat()}")
+    for school, row_date in rows:
+        if row_date != new_date:
+            await conn.execute(_MOVE_ROW_SQL, (new_date, school, row_date))
+
+
 def assemble_optional_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """Return ``{key: val}`` for each ``(key, val)`` pair where *val* is not ``None``.
 
@@ -268,6 +313,19 @@ def build_score_payload(body: Any, game_id: int) -> dict[str, Any]:
         "game_id": game_id,
         "points_for": body.points_for,
         "points_against": body.points_against,
+        **_optional_context(body, ("note", "page")),
+    }
+
+
+def build_date_payload(body: Any, game_id: int) -> dict[str, Any]:
+    """Build a 'date' submission payload from a ``SubmitDateRequest`` body and the game's ``game_id``.
+
+    ``date`` is the date the reporter saw the game on; ``new_date`` the one they say is right.
+    """
+    return {
+        "date": body.date.isoformat(),
+        "game_id": game_id,
+        "new_date": body.new_date.isoformat(),
         **_optional_context(body, ("note", "page")),
     }
 

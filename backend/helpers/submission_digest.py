@@ -15,6 +15,7 @@ from typing import Any
 CATEGORY_LABELS = {"score": "Score report", "odds": "Odds or scenarios", "other": "Feedback"}
 TYPE_LABELS = {
     "score": "Score correction",
+    "date": "Date correction",
     "feedback": "Feedback",
     "colors": "Colors",
     "logo": "Logo",
@@ -113,6 +114,12 @@ def summary(item: DigestItem) -> str:
             if game
             else " (no game on the site that day)"
         )
+        return line + (f". Source: {_clip(p['note'], 160)}" if p.get("note") else "")
+    if item.type == "date":
+        game = item.current_game
+        opponent = f" vs {game['opponent']}" if game and game.get("opponent") else ""
+        line = f"{item.school}{opponent}: reported on {_game_date(p.get('new_date'))}"
+        line += f" (site shows {_game_date(game.get('date'))})" if game else " (the game is no longer on the site)"
         return line + (f". Source: {_clip(p['note'], 160)}" if p.get("note") else "")
     if item.type == "feedback":
         return f"{about(item)}: {_clip(p.get('message') or '')}".removeprefix(": ")

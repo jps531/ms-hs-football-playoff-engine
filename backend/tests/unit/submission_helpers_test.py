@@ -340,6 +340,38 @@ class TestApplySubmission:
         assert exc.value.status_code == 409
         assert "no longer on its schedule" in exc.value.detail
 
+    def test_date_moves_both_rows_and_keeps_ahsfhs_date(self):
+        """Both rows of the game move to the new date (the opponent's row was a day apart)."""
+        conn = FakeConn()
+        conn.fetchall_result = [("Mize", date(2025, 9, 4)), ("Taylorsville", date(2025, 9, 5))]
+        payload = {"date": "2025-09-05", "game_id": 77, "new_date": "2025-09-06"}
+        asyncio.run(apply_submission(conn, _submission_row("date", "Taylorsville", payload)))
+        moves = [params for sql, params in conn.calls if sql.lstrip().startswith("UPDATE games")]
+        assert moves == [
+            (date(2025, 9, 6), "Mize", date(2025, 9, 4)),
+            (date(2025, 9, 6), "Taylorsville", date(2025, 9, 5)),
+        ]
+        update = next(sql for sql, _ in conn.calls if sql.lstrip().startswith("UPDATE games"))
+        assert "jsonb_build_object('ahsfhs_date', date::text)" in update
+        assert "WHEN overrides ? 'ahsfhs_date' THEN overrides" in update  # a second correction keeps the original
+
+    def test_date_onto_another_game_is_refused(self):
+        conn = FakeConn()
+        conn.fetchall_result = [("Taylorsville", date(2025, 9, 5))]
+        conn.fetchone_result = (1,)  # Taylorsville already plays someone on the new date
+        payload = {"date": "2025-09-05", "game_id": 77, "new_date": "2025-09-12"}
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(apply_submission(conn, _submission_row("date", "Taylorsville", payload)))
+        assert (exc.value.status_code, exc.value.detail) == (409, "Taylorsville already has another game on 2025-09-12")
+        assert not any(sql.lstrip().startswith("UPDATE games") for sql, _ in conn.calls)
+
+    def test_date_for_a_game_no_longer_on_the_schedule_is_refused(self):
+        conn = FakeConn()
+        payload = {"date": "2025-09-05", "game_id": 77, "new_date": "2025-09-06"}
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(apply_submission(conn, _submission_row("date", "Taylorsville", payload)))
+        assert exc.value.status_code == 409
+
     def test_score_without_an_opponent_row_corrects_just_the_school(self):
         """No row for the opponent (an out-of-state team): only the school's row changes."""
         conn = FakeConn()

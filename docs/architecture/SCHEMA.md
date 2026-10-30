@@ -37,7 +37,8 @@ rows are one game when each is the other's nearest match: the opponent's row aga
 same season, within 3 days (rows further apart are different games, like a playoff rematch). The
 schedule pipeline keeps the ids in line on every run (`backend/helpers/game_ids.py`). A game keeps
 its `game_id` when its date changes, so score and helmet submissions record it, and approving one
-finds the game by it.
+finds the game by it. An approved date report moves both rows of the game to the reported date and records
+the date AHSFHS had in `overrides.ahsfhs_date`; the schedule pipeline keeps the game on the corrected date.
 
 `games_effective` also has `game_date`, the game's own date, the same in both schools' rows. The
 source sometimes dates a game's two rows a day apart; `game_date` is the later of the two. Everything

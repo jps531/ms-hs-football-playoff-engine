@@ -330,3 +330,61 @@ def test_a_whole_schedule_parses_game_by_game() -> None:
         (f"{SEASON}-09-05", "L", "away", False),
         (f"{SEASON}-09-12", "W", "home", True),
     ]
+
+
+# ---------------------------------------------------------------------------
+# apply_date_corrections: a game whose date a moderator corrected stays there
+# ---------------------------------------------------------------------------
+
+
+def _listed(school: str, opponent: str, iso: str):
+    """A scraped game stand-in for apply_date_corrections: school, opponent and date."""
+    from datetime import date as _date
+
+    from backend.helpers.data_classes import Game
+
+    return Game(
+        school=school,
+        date=_date.fromisoformat(iso),
+        season=2026,
+        location_id=None,
+        points_for=None,
+        points_against=None,
+        round=None,
+        kickoff_time=None,
+        opponent=opponent,
+        result=None,
+        game_status=None,
+        source="ahsfhs",
+        location="home",
+        region_game=False,
+        final=False,
+    )
+
+
+def test_a_corrected_game_keeps_its_corrected_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AHSFHS still lists Alpha–Beta on 10-23 (or moved it a day); the correction put it on 10-30."""
+    from datetime import date as _date
+
+    cur, _ = _mock_db(monkeypatch, deleted=[], kept=[])
+    cur.fetchall.side_effect = [[("Alpha", "Beta", _date(2026, 10, 30), _date(2026, 10, 23))]]
+    games = [
+        _listed("Alpha", "Beta", "2026-10-24"),
+        _listed("Alpha", "Gamma", "2026-10-23"),
+        _listed("Beta", "Alpha", "2026-10-23"),
+    ]
+
+    out = pipeline.apply_date_corrections.fn(games, 2026)
+
+    assert [(g.school, g.opponent, g.date.isoformat()) for g in out] == [
+        ("Alpha", "Beta", "2026-10-30"),  # within 3 days of the date AHSFHS had: the corrected date
+        ("Alpha", "Gamma", "2026-10-23"),  # another opponent: untouched
+        ("Beta", "Alpha", "2026-10-23"),  # Beta's own row has no correction recorded: untouched
+    ]
+
+
+def test_no_corrections_leave_the_scrape_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    cur, _ = _mock_db(monkeypatch, deleted=[], kept=[])
+    cur.fetchall.side_effect = [[]]
+    games = [_listed("Alpha", "Beta", "2026-10-23")]
+    assert pipeline.apply_date_corrections.fn(games, 2026) == games

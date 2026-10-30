@@ -1,6 +1,7 @@
 """Pydantic response models for the playoff engine REST API."""
 
 from datetime import date, datetime
+from datetime import date as date_type
 from typing import Any
 
 from pydantic import BaseModel, model_validator
@@ -1271,13 +1272,14 @@ class SubmissionDetail(SubmissionSummary):
 
 
 class CurrentGameScore(BaseModel):
-    """The live game row (games_effective) a score submission would correct, from the submitting school's side."""
+    """The live game row (games_effective) a score or date report would correct, from the submitting school's side."""
 
     opponent: str | None
     location: str | None
     points_for: int | None
     points_against: int | None
     result: str | None
+    date: date_type | None = None
 
 
 class ModerationQueueItem(SubmissionDetail):

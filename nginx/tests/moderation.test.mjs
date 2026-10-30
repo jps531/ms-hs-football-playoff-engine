@@ -163,3 +163,19 @@ test("an unauthorized-client error says where to fix it", () => {
   assert.equal(explainAuthError("Nope"), "Nope");
   assert.equal(explainAuthError(undefined), undefined);
 });
+
+test("a date report shows the date on the site now and the reported one, and approving applies it", () => {
+  const item = {
+    id: 9, type: "date", status: "pending", school: "Oxford", submitted_at: "2026-10-14T12:00:00Z", reviewed_at: null,
+    payload: { date: "2026-10-09", game_id: 77, new_date: "2026-10-10", note: "Moved for weather" },
+    current_game: { opponent: "Tupelo", location: "home", points_for: null, points_against: null, result: null, date: "2026-10-09" },
+  };
+  const html = itemHtml(item);
+  assert.match(html, />Date correction</);
+  assert.match(html, /Oxford vs Tupelo · reported while shown on Fri, Oct 9/);
+  assert.match(html, /On the site<\/th><td>Fri, Oct 9</);
+  assert.match(html, /Reported<\/th><td class="is-changed"><span>Sat, Oct 10</);
+  assert.match(html, /Moved for weather/);
+  assert.equal(decisionLabels("date").approve, "Apply correction");
+  assert.match(itemHtml({ ...item, current_game: null }), /no longer on the schedule/);
+});

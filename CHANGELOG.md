@@ -11,6 +11,8 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   “Report score” button, next to the “Wrong score?” one on finished games. A moderator checks the
   score, and once it's approved, the next update of the standings, odds and scenarios counts the game
   as played for both teams.
+- **Report a game's right date.** Every region game with a date has a “Wrong date?” button. Once a
+  moderator approves the report, the game moves to that date for both teams.
 
 ## 1.0.2
 

@@ -90,18 +90,18 @@ async def list_submissions(
     return [build_submission_summary(r) for r in rows]
 
 
-# Each queue row is a submission plus, for a score, the submitting school's live game: by its
+# Each queue row is a submission plus, for a score or date report, the submitting school's live game: by its
 # game_id, or by the reported date for one made before games had ids. CASE keeps the casts to
-# score rows, whose payload date is always ISO.
+# score and date rows, whose payload date is always ISO.
 _QUEUE_SELECT = """
     SELECT s.id, s.type, s.status, s.school, s.submitted_at, s.reviewed_at, s.payload, s.moderator_notes,
            s.helmet_design_id,
-           g.school IS NOT NULL, g.opponent, g.location, g.points_for, g.points_against, g.result
+           g.school IS NOT NULL, g.opponent, g.location, g.points_for, g.points_against, g.result, g.date
     FROM submissions s
     LEFT JOIN games_effective g
-      ON s.type = 'score'
+      ON s.type IN ('score', 'date')
      AND g.school = s.school
-     AND CASE WHEN s.type <> 'score' THEN FALSE
+     AND CASE WHEN s.type NOT IN ('score', 'date') THEN FALSE
               WHEN s.payload ? 'game_id' THEN g.game_id = (s.payload->>'game_id')::bigint
               ELSE g.date = (s.payload->>'date')::date END
     WHERE (%s::text IS NULL OR s.status::text = %s::text)
@@ -117,7 +117,7 @@ def _row_to_queue_item(row: tuple) -> ModerationQueueItem:
     game = None
     if row[9]:
         game = CurrentGameScore(
-            opponent=row[10], location=row[11], points_for=row[12], points_against=row[13], result=row[14]
+            opponent=row[10], location=row[11], points_for=row[12], points_against=row[13], result=row[14], date=row[15]
         )
     return ModerationQueueItem(**detail.model_dump(), current_game=game)
 
