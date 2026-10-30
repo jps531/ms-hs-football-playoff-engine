@@ -153,9 +153,13 @@ async def apply_submission(conn: Any, row: tuple) -> None:
             opponent, opponent_date = opponent_row
             for field, value in build_opponent_score_overrides(payload):
                 await conn.execute("SELECT set_game_override(%s, %s, %s, %s)", (opponent, opponent_date, field, value))
+        dates = [own_date] + ([opponent_row[1]] if opponent_row is not None else [])
+        await queue_recompute(conn, school, own_date, min(dates))
 
     elif stype == "date":
-        await move_game(conn, payload["game_id"], date.fromisoformat(payload["new_date"]), payload["date"])
+        new_date = date.fromisoformat(payload["new_date"])
+        old_dates = await move_game(conn, payload["game_id"], new_date, payload["date"])
+        await queue_recompute(conn, school, new_date, min([new_date, *old_dates]))
 
     elif stype == "helmet_assignment":
         game_date, helmet_design_id = build_helmet_assignment_override(payload)
@@ -237,8 +241,8 @@ _MOVE_ROW_SQL = """
 """
 
 
-async def move_game(conn: Any, game_id: int, new_date: date, reported_date: str) -> None:
-    """Move both schools' rows of game *game_id* to *new_date* (an approved date report).
+async def move_game(conn: Any, game_id: int, new_date: date, reported_date: str) -> list[date]:
+    """Move both schools' rows of game *game_id* to *new_date* (an approved date report); return their old dates.
 
     Moving the rows keeps everything attached to them (score corrections, the
     helmet worn, attendance, which follows by ``ON UPDATE CASCADE``).
@@ -265,6 +269,27 @@ async def move_game(conn: Any, game_id: int, new_date: date, reported_date: str)
     for school, row_date in rows:
         if row_date != new_date:
             await conn.execute(_MOVE_ROW_SQL, (new_date, school, row_date))
+    return [row_date for _, row_date in rows]
+
+
+# Approved corrections waiting to be worked into the numbers: one row per
+# season, from the earliest date any of them changes; each approval also
+# restarts the quiet period the recompute waits for (recompute_pipeline).
+_QUEUE_RECOMPUTE_SQL = """
+    INSERT INTO recompute_requests (season, from_date, requested_at)
+    SELECT season, %s, NOW() FROM games WHERE school = %s AND date = %s
+    ON CONFLICT (season) DO UPDATE
+    SET from_date = LEAST(recompute_requests.from_date, EXCLUDED.from_date), requested_at = NOW()
+"""
+
+
+async def queue_recompute(conn: Any, school: str, game_date: date, from_date: date) -> None:
+    """Ask for the standings, odds and scenarios to be worked out again from *from_date*.
+
+    *school*'s row on *game_date* names the season. Runs in the approval's transaction, so a
+    refused approval queues nothing.
+    """
+    await conn.execute(_QUEUE_RECOMPUTE_SQL, (from_date, school, game_date))
 
 
 def assemble_optional_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

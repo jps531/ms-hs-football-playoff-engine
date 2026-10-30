@@ -11,6 +11,7 @@ from backend.prefect.daily_update_pipeline import daily_update_flow
 from backend.prefect.misshsaa_school_pipeline import misshsaa_school_data_flow
 from backend.prefect.nces_school_pipeline import nces_school_data_flow
 from backend.prefect.playoff_pipeline import playoff_bracket_update
+from backend.prefect.recompute_pipeline import recompute_after_corrections
 from backend.prefect.region_scenarios_pipeline import (
     backfill_historical_snapshots,
     refresh_scenario_explanations,
@@ -50,6 +51,12 @@ async def main():
             ],
         ),
         await backfill_historical_snapshots.to_deployment("backfill-historical-snapshots"),
+        # Every 5 minutes: once no correction has been approved for 10 minutes, works the approved
+        # ones into the numbers (past weeks from the earliest date they change, then today's).
+        await recompute_after_corrections.to_deployment(
+            "recompute-after-corrections",
+            schedule=CronSchedule(cron="*/5 * * * *", timezone=_SCHEDULE_TIMEZONE),
+        ),
         # After a change to how explanations are worded: rewrites only those, far faster than a backfill.
         await refresh_scenario_explanations.to_deployment("refresh-scenario-explanations"),
         await playoff_bracket_update.to_deployment("playoff-bracket-update"),

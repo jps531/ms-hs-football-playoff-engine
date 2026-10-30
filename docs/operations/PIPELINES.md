@@ -14,7 +14,12 @@ Schedules are America/Chicago.
 |---|---|---|
 | `daily-update` | Daily, 9:00 AM | Pulls the scores (`ahsfhs-schedule-data-pipeline`), then recalculates everything from them (`region-scenarios-data-pipeline`). If the pull fails, nothing is recalculated, so the site keeps its last numbers and the time they were calculated. |
 | `submission-digest` | Daily, 7:00 AM | Emails `DIGEST_TO` what's waiting in the moderation queue; sends nothing when the queue is clear, and only logs the email when SMTP isn't set up. Also removes the contact email from feedback decided more than 90 days ago. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#daily-digest-email). |
+| `recompute-after-corrections` | Every 5 minutes | Works approved score and date corrections into the numbers. Approving one records its season and the earliest date it changes (`recompute_requests`); once no correction has been approved for 10 minutes, this recomputes that season's past snapshots from that date (`backfill-historical-snapshots` with `from_date`), then, for the current season, today's numbers and the share images (`region-scenarios-data-pipeline`). A correction approved meanwhile stops it between dates, and it starts over from the earliest date once they stop. Most runs find nothing waiting and finish at once. |
 | `ahsfhs-score-probe` | Friday and Saturday, every 15 minutes 6:00–9:45 AM, and at 10:00 AM | A temporary measurement: checks one team page per region that played the night before and records how many of that night's games AHSFHS already shows a final score for (logged, and saved as the `ahsfhs-score-probe` table artifact). It writes nothing to the database. It's there to learn whether the 9:00 pull could run earlier; once the artifacts answer that, the 9:00 time can be adjusted and the probe removed from `flows.py`. |
+
+### One heavy update at a time
+
+The daily update, the schedule pull, the region update, the backfill, the playoff bracket update, the explanation refresh and the recompute after corrections share a lock (`backend/helpers/run_lock.py`, a Postgres advisory lock). Each waits for whichever is running to finish before it starts; the recompute instead skips its turn and tries again 5 minutes later. A flow run as part of another (the daily update's two halves, the backfill inside the recompute) goes straight through.
 
 ## The daily update's two halves
 
