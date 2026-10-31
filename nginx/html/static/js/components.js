@@ -144,7 +144,7 @@ export function genericHelmet({ shell, stripe }, size = 24) {
  * bracket_image.py traces them for the share images.
  */
 export function trophyIcon(size = 56) {
-  return `<svg class="trophy" viewBox="0 0 40 56" width="${size * 40 / 56}" height="${size}" aria-hidden="true">${TROPHY_SHAPES}</svg>`;
+  return `<svg class="trophy" viewBox="0 0 40 56" width="${Math.round(size * 4000 / 56) / 100}" height="${size}" aria-hidden="true">${TROPHY_SHAPES}</svg>`;
 }
 export const TROPHY_SHAPES = '<rect x="5.5" y="50" width="29" height="4.5" rx="1" fill="#6B4426"/>'
   + '<rect x="8" y="40.5" width="24" height="10.5" rx="1" fill="#8A5A33"/>'
@@ -160,14 +160,45 @@ export const TROPHY_SHAPES = '<rect x="5.5" y="50" width="29" height="4.5" rx="1
   + '<path d="M18.2 5.4H21.8M18 7.6H22M18 9.8H22M18.2 12H21.8" stroke="#A87A12" stroke-width="1.2" stroke-linecap="round"/>';
 
 /**
+ * Where a season's championship games are played, from the API's
+ * /championships location: "Davis Wade Stadium, Starkville" (every venue is
+ * in Mississippi, so the state is left off). Null when none is on record.
+ * static_pages.venue_name() is the same.
+ */
+export function venueName(venue) {
+  if (!venue?.name) return null;
+  const city = String(venue.city ?? "").replace(/,\s*MS$/i, "").trim();
+  return city ? `${venue.name}, ${city}` : venue.name;
+}
+
+/** "Projected champion" with a small trophy, over "Winona · 22%"; *champ* is projectedChampion()'s. */
+export function championLine(champ) {
+  return `<p class="champ-line"><span class="champ-line__label">${trophyIcon(18)}Projected champion:</span> `
+    + `<span class="champ-line__team"><strong>${esc(champ.team)}</strong> · ${esc(formatPct(champ.p))}</span></p>`;
+}
+
+/**
+ * Under the championship game's card in the bracket: where it's played, and
+ * while it's still to play in Projected odds, the projected champion (*champ*,
+ * or null). "" when there's neither. static_pages.final_note() is the same.
+ */
+export function finalNote(venue, champ) {
+  const where = venueName(venue);
+  const parts = `${where ? `<p class="tfinal__venue">${esc(where)}</p>` : ""}${champ ? championLine(champ) : ""}`;
+  return parts ? `<div class="tfinal">${parts}</div>` : "";
+}
+
+/**
  * A finished season's champion, over its bracket: the trophy, "2025 Class 3A
- * State Champion", the team, and the championship game's result. *result* is
- * layoutResults()'s for the final ({ winner, loser, winnerScore, loserScore }).
+ * State Champion", the team, and the championship game's result and venue.
+ * *result* is layoutResults()'s for the final ({ winner, loser, winnerScore,
+ * loserScore }); *venue* the season's championship venue, or null.
  * static_pages.py's champion_banner() writes the same.
  */
-export function championBanner(season, clazz, result, teams) {
+export function championBanner(season, clazz, result, teams, venue = null) {
   const score = result.winnerScore != null && result.loserScore != null ? ` ${result.winnerScore}–${result.loserScore}` : "";
-  const beat = result.loser ? `<p class="champion__game">Beat ${esc(result.loser)}${score} in the Championship Game</p>` : "";
+  const where = venueName(venue);
+  const beat = result.loser ? `<p class="champion__game">Beat ${esc(result.loser)}${score} in the Championship Game${where ? ` at ${esc(where)}` : ""}</p>` : "";
   return `<section class="champion" aria-label="State champion">${trophyIcon(56)}`
     + `<div class="champion__text"><p class="champion__label">${esc(String(season))} Class ${esc(String(clazz))}A State Champion</p>`
     + `<p class="champion__team">${teamLabel(result.winner, teams)}</p>${beat}</div></section>`;

@@ -382,6 +382,13 @@ def _bracket_preview_html(fetch: Fetch, season: int, featured: dict, class_stand
     return bracket_preview_html(clazz, games, ctx)
 
 
+def _venue(fetch: Fetch, season: int, clazz: int) -> dict | None:
+    """Where the class's championship game is played that season (a ``/championships`` location), or
+    None when none is on record."""
+    rows = fetch(f"/championships?season={season}&class={clazz}") or []
+    return rows[0].get("location") if rows else None
+
+
 def _write_bracket_assets(
     out_dir: Path,
     site_url: str,
@@ -420,6 +427,7 @@ def _write_bracket_assets(
     )
     matchups = fetch(f"/bracket/matchups?season={season}&class={clazz}") or {}
     games = matchups.get("games") or []
+    venue = _venue(fetch, season, clazz)
     image = None
     if games:
         layout = (fetch(f"/bracket?season={season}&class={clazz}") or {}).get("bracket_layout")
@@ -430,6 +438,7 @@ def _write_bracket_assets(
             "seeds": locked_seeds(standings, games),
             "teams": teams_by_school or {},
             "season": season,
+            "venue": venue,
         }
         page_body = bracket_body(clazz, games, ctx, f"{season} season · {stamp}")
         if page_body:
@@ -445,6 +454,7 @@ def _write_bracket_assets(
             projected,
             image_stamps or {},
             teams_by_school or {},
+            venue,
         )
     current: set[str] = set()
     for team in favorites:
@@ -455,7 +465,7 @@ def _write_bracket_assets(
         current.add(slug)
         _write_png(
             out_dir / "og" / name / f"{slug}.png",
-            render_team_bracket_card(clazz, regions.get(team["school"]), team, road, stamp, mode),
+            render_team_bracket_card(clazz, regions.get(team["school"]), team, road, stamp, mode, venue),
         )
         champion = (team.get("bracket_odds") or {}).get("champion_weighted" if mode == "projected" else "champion")
         _write_text(
@@ -494,6 +504,7 @@ def _write_bracket_images(
     projected: bool,
     stamps: dict[str, str],
     teams: dict,
+    venue: dict | None = None,
 ) -> str:
     """The bracket's images to share, every view in both themes; the Projected ones only when there are
     Projected odds (a stale one is removed). Returns the light whole-bracket image's URL (for the
@@ -509,7 +520,7 @@ def _write_bracket_images(
                     continue
                 stamp = stamps.get(version, f"{season} season")
                 image = render_bracket_image(
-                    clazz, season, games, results, seeds, half, version == "blank", stamp, teams, theme
+                    clazz, season, games, results, seeds, half, version == "blank", stamp, teams, theme, venue
                 )
                 _write_png(path, image)
     return f"{site_url}/static/bracket/{season}/{clazz}a-all-{'odds' if projected else 'blank'}-light.png"
@@ -548,13 +559,16 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
                 else f"{season} season · {provenance(date.fromisoformat(as_of) if as_of else None, dates, None, today)}"
             )
             seeds = locked_seeds(None, games)
+            venue = _venue(fetch, season, clazz)
             if teams is None:
                 teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
             for view, half in BRACKET_VIEWS.items():
                 for theme in BRACKET_THEMES:
                     _write_png(
                         folder / f"{clazz}a-{view}-blank-{theme}.png",
-                        render_bracket_image(clazz, season, games, results, seeds, half, True, stamp, teams, theme),
+                        render_bracket_image(
+                            clazz, season, games, results, seeds, half, True, stamp, teams, theme, venue
+                        ),
                     )
             written += 1
     return written

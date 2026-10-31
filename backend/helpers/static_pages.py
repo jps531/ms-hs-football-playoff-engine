@@ -234,18 +234,60 @@ TROPHY_SHAPES = (
 def trophy_icon(size: int = 56) -> str:
     """The state championship trophy, *size* px tall (components.js's ``trophyIcon``)."""
     return (
-        f'<svg class="trophy" viewBox="0 0 40 56" width="{size * 40 / 56:g}" height="{size}" aria-hidden="true">'
+        f'<svg class="trophy" viewBox="0 0 40 56" width="{round(size * 4000 / 56) / 100:g}" height="{size}" aria-hidden="true">'
         f"{TROPHY_SHAPES}</svg>"
     )
 
 
-def champion_banner(season: int, clazz: int, result: dict, teams: dict) -> str:
+def venue_name(venue: dict | None) -> str | None:
+    """Where a season's championship games are played (components.js's ``venueName``): "Davis Wade
+    Stadium, Starkville", the state left off. None when no venue is on record."""
+    if not venue or not venue.get("name"):
+        return None
+    city = re.sub(r",\s*MS$", "", str(venue.get("city") or ""), flags=re.IGNORECASE).strip()
+    return f"{venue['name']}, {city}" if city else venue["name"]
+
+
+def projected_champion(game: dict | None, result: dict | None) -> dict | None:
+    """The team likeliest to win the championship game in Projected odds, as {team, p} (bracket.js's
+    ``projectedChampion``). None once it's played, without Projected odds, or on a tie for likeliest."""
+    if not game or game.get("id") != "final" or result:
+        return None
+    listed = sorted(
+        (o for k in ("side_a", "side_b") for o in game[k]["occupants"] if (o.get("p_champion_weighted") or 0) > 0),
+        key=lambda o: -o["p_champion_weighted"],
+    )
+    if not listed or (len(listed) > 1 and listed[1]["p_champion_weighted"] == listed[0]["p_champion_weighted"]):
+        return None
+    return {"team": listed[0]["team"], "p": listed[0]["p_champion_weighted"]}
+
+
+def champion_line(champ: dict) -> str:
+    """The projected champion with a small trophy (components.js's ``championLine``): "Projected champion"
+    over "Winona · 22%"."""
+    return (
+        f'<p class="champ-line"><span class="champ-line__label">{trophy_icon(18)}Projected champion:</span> '
+        f'<span class="champ-line__team"><strong>{_e(champ["team"])}</strong> · {_e(format_pct(champ["p"]))}</span></p>'
+    )
+
+
+def final_note(venue: dict | None, champ: dict | None) -> str:
+    """Under the championship game's card: where it's played and the projected champion
+    (components.js's ``finalNote``). "" when there's neither."""
+    where = venue_name(venue)
+    parts = (f'<p class="tfinal__venue">{_e(where)}</p>' if where else "") + (champion_line(champ) if champ else "")
+    return f'<div class="tfinal">{parts}</div>' if parts else ""
+
+
+def champion_banner(season: int, clazz: int, result: dict, teams: dict, venue: dict | None = None) -> str:
     """A finished season's champion, over its bracket (components.js's ``championBanner``): the trophy,
-    "2025 Class 3A State Champion", the team, and the championship game's result."""
+    "2025 Class 3A State Champion", the team, and the championship game's result and venue."""
     scores = result.get("winner_score") is not None and result.get("loser_score") is not None
     score = f" {result['winner_score']}–{result['loser_score']}" if scores else ""
+    where = venue_name(venue)
+    at = f" at {_e(where)}" if where else ""
     beat = (
-        f'<p class="champion__game">Beat {_e(result["loser"])}{_e(score)} in the Championship Game</p>'
+        f'<p class="champion__game">Beat {_e(result["loser"])}{_e(score)} in the Championship Game{at}</p>'
         if result.get("loser")
         else ""
     )
@@ -1547,7 +1589,7 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
     )
     final = ctx["results"].get("final") or {}
     champion = (
-        champion_banner(ctx["season"], clazz, final, ctx.get("teams") or {})
+        champion_banner(ctx["season"], clazz, final, ctx.get("teams") or {}, ctx.get("venue"))
         if final.get("winner") and ctx.get("season")
         else ""
     )
@@ -1556,7 +1598,7 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
         f'<ol class="tcol__body" style="height:{height:g}px">'
         + "".join(
             f'<li class="tslot" style="transform:translateY({centers[r][i] - CARD_H / 2:g}px)">'
-            f"{_tree_card(g['game'], ctx, False)}</li>"
+            f"{_tree_card(g['game'], ctx, False)}{_final_note(g['game'], ctx)}</li>"
             for i, g in enumerate(c["games"])
         )
         + "</ol></section>"
@@ -1574,6 +1616,16 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
         f'<div class="tree" style="--card-h:{CARD_H}px"><div class="tree__cols">{columns}</div></div>'
         "</div></div>\n"
     )
+
+
+def _final_note(game: dict, ctx: dict) -> str:
+    """The note under the championship game's card, as app.js shows it (the projected champion in
+    Projected odds only); "" for every other game."""
+    if game["id"] != "final":
+        return ""
+    result = ctx["results"].get("final")
+    champ = projected_champion(game, result) if ctx["mode"] == "projected" else None
+    return final_note(ctx.get("venue"), champ)
 
 
 def _sheet_side(game: dict, side_key: str, host: str | None, ctx: dict) -> str:
@@ -1621,7 +1673,8 @@ def _sheet(game: dict, ctx: dict) -> str:
         h = _hosting(m["host_a"])
         away, home = (m["b"], m["a"]) if h == "a" else (m["a"], m["b"])
         word = "at" if h in ("a", "b") else "vs"
-        note = "Neutral site" if h == "neutral" else (_split_host(m["a"], m["b"], m["host_a"]) if h == "split" else "")
+        site = (ctx.get("venue") or {}).get("name") or "Neutral site"
+        note = site if h == "neutral" else (_split_host(m["a"], m["b"], m["host_a"]) if h == "split" else "")
         note_html = f'<span class="opp-list__host">{_e(note)}</span>' if note else ""
         rows.append(
             '<li><span class="mu__teams">'

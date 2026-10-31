@@ -180,6 +180,28 @@ def _tree(games: list[dict]) -> dict:
 
 # --------------------------------------------------------------- the pairs
 
+VENUE = {"name": "Davis Wade Stadium", "city": "Starkville, MS"}
+
+
+def _champ_occ(team: str, p: float, pw: float | None) -> dict:
+    """A championship game occupant with its chance to win it."""
+    return {
+        "team": team,
+        "p_reach": 0.5,
+        "p_reach_weighted": 0.5,
+        "is_locked": False,
+        "p_champion": p,
+        "p_champion_weighted": pw,
+    }
+
+
+FINAL = {
+    "id": "final",
+    "side_a": {"feeders": [], "occupants": [_champ_occ("Winona", 0.25, 0.22), _champ_occ("Kossuth", 0.25, 0.3)]},
+    "side_b": {"feeders": [], "occupants": [_champ_occ("Raleigh", 0.25, 0.4)]},
+}
+FINAL_TIED = {**FINAL, "side_b": {"feeders": [], "occupants": [_champ_occ("Raleigh", 0.25, 0.3)]}}
+
 # (name, Python's answer, the JavaScript call, how to compare: "data" or "words")
 CASES = [
     ("completeScenarioCards", sp.complete_scenario_cards(SCENARIOS), _call("scenarios", "completeScenarioCards", SCENARIOS), "data"),
@@ -231,6 +253,14 @@ CASES = [
        "words")
       for i, r in enumerate(({"winner": "Raleigh", "loser": "Noxubee County", "winner_score": 12, "loser_score": 6},
                              {"winner": "Raleigh", "loser": "Noxubee County"}))],
+    *[(f"venueName {i}", sp.venue_name(v), _call("components", "venueName", v), "data")
+      for i, v in enumerate((VENUE, {"name": "M.M. Roberts Stadium", "city": None}, None))],
+    *[(f"finalNote {i}", sp.final_note(v, c), _call("components", "finalNote", v, c), "html")
+      for i, (v, c) in enumerate(((VENUE, {"team": "Winona", "p": 0.2217}), (VENUE, None), (None, None)))],
+    *[(f"projectedChampion {i}", sp.projected_champion(g, r), _call("bracket", "projectedChampion", g, r), "data")
+      for i, (g, r) in enumerate(((FINAL, None), (FINAL, {"winner": "Raleigh"}), (FINAL_TIED, None)))],
+    ("championBanner venue", sp.champion_banner(2025, 3, {"winner": "Raleigh", "loser": "Mize", "winner_score": 12, "loser_score": 6}, {}, VENUE),
+     _call("components", "championBanner", 2025, 3, {"winner": "Raleigh", "loser": "Mize", "winnerScore": 12, "loserScore": 6}, {}, VENUE), "words"),
     ("classGrid", sp.class_grid(), _call("landing", "classGrid"), "html"),
     *[(f"hosting {p}", sp._hosting(p), _call("bracket", "hosting", p), "host") for p in (None, 0, 0.001, 0.4, 0.9999, 1 - 1e-12, 1)],
     # bracket.js's hosting rules against bracket_home_odds.py's, every way they can differ.

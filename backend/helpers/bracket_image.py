@@ -47,10 +47,12 @@ from backend.helpers.static_pages import (
     locked_team,
     occupants,
     position_name,
+    projected_champion,
     round_picks,
     settled_host,
     team_colors,
     tree_columns,
+    venue_name,
 )
 
 SQUARE = (2000, 2000)  # one half
@@ -432,6 +434,26 @@ def _subtitle(final: bool, blank: bool, season: int) -> str:
 TROPHY_H = 260
 
 
+def _projected_champion(draw, t: Theme, champ: dict, x: float, room: float, y: float, card_w: float) -> None:
+    """The projected champion, centered under the championship card at baseline *y*: "Projected champion"
+    over "Winona · 22%"."""
+    label_font, team_font = _inter(24, 500), _inter(30, 600)
+    label = "Projected champion"
+    draw.text(
+        (x + (card_w - draw.textlength(label, font=label_font)) / 2, y),
+        label,
+        font=label_font,
+        fill=t.text_2,
+        anchor="ls",
+    )
+    pct = f" · {format_pct(champ['p'])}"
+    name = fit(draw, champ["team"], team_font, room - draw.textlength(pct, font=team_font))
+    width = draw.textlength(name + pct, font=team_font)
+    left = x + (card_w - width) / 2
+    draw.text((left, y + 40), name, font=team_font, fill=t.text, anchor="ls")
+    draw.text((left + draw.textlength(name, font=team_font), y + 40), pct, font=team_font, fill=t.text_2, anchor="ls")
+
+
 def render_bracket_image(
     clazz: int,
     season: int,
@@ -443,13 +465,15 @@ def render_bracket_image(
     stamp: str,
     teams: dict | None = None,
     theme: str = "dark",
+    venue: dict | None = None,
 ) -> Image.Image:
     """The bracket image: *view* "N" or "S" (that half, square) or "all" (both halves, wide), in
     *theme* "dark" or "light".
 
     *results* are played games by id (``static_pages.layout_results``); *seeds* each locked-in team's
     (region, seed) (``static_pages.locked_seeds``); *stamp* where the numbers are from; *teams* the
-    API's teams by school, for their helmets.
+    API's teams by school, for their helmets; *venue* the class's championship venue (the API's
+    ``/championships`` location), named under the championship game when it's on record.
     """
     t = THEMES[theme]
     final = is_final(games, results)
@@ -512,6 +536,21 @@ def render_bracket_image(
                 paint.join(sx, sy, x + card_w, cy)
             else:
                 paint.join(sx + card_w, sy, x, cy)
+        # Under the card: where it's played, then the champion (or, in the projected image, the
+        # projected one), each line centered on the card.
+        base = cy + paint.h / 2
+        where = venue_name(venue)
+        if where:
+            font = _inter(24, 500)
+            text = fit(draw, where, font, card_w + gap)
+            draw.text(
+                (x + (card_w - draw.textlength(text, font=font)) / 2, base + 42),
+                text,
+                font=font,
+                fill=t.text_2,
+                anchor="ls",
+            )
+            base += 40
         champion = (results.get("final") or {}).get("winner")
         if champion:
             cup = trophy(TROPHY_H)
@@ -519,5 +558,7 @@ def render_bracket_image(
             font = _inter(30, 600)
             text = fit(draw, f"Champion: {champion}", font, card_w + gap)
             tw = draw.textlength(text, font=font)
-            draw.text((x + (card_w - tw) / 2, cy + paint.h / 2 + 50), text, font=font, fill=t.text, anchor="ls")
+            draw.text((x + (card_w - tw) / 2, base + 50), text, font=font, fill=t.text, anchor="ls")
+        elif not blank and (champ := projected_champion(final_game, None)):
+            _projected_champion(draw, t, champ, x, card_w + gap, base + 50, card_w)
     return img

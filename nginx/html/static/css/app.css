@@ -1140,6 +1140,28 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 }
 .bgame__site { font-size: 13px; }
 
+/* Under the championship game's card: where it's played, and the projected champion. Out of the
+   tree's flow, so the cards keep their places. */
+.tfinal {
+  position: absolute; top: calc(100% + 10px); left: 0; right: 0;
+  display: grid; gap: 6px; justify-items: center; text-align: center;
+}
+.tfinal__venue { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+/* On phones the rounds condense and the final can sit at the bottom of its column: leave room for its
+   note, which the strip would otherwise cut off. */
+@media (max-width: 48em) {
+  .tcol__body:has(.tfinal) { margin-bottom: 84px; }
+}
+/* "Projected champion:" with its trophy, then the team and its chance: two lines under the bracket's
+   narrow card, one where there's room. */
+.champ-line { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.champ-line__label { display: inline-flex; align-items: center; gap: 4px; }
+.champ-line .trophy { flex: none; }
+.champ-line__team { white-space: nowrap; }
+.champ-line strong { color: var(--text-primary); font-weight: 600; }
+.tfinal .champ-line__label { display: flex; justify-content: center; }
+.tfinal .champ-line__team { display: block; }
+
 .bteam {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   min-height: 44px; min-width: 0;
