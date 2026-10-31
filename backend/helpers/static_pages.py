@@ -214,6 +214,48 @@ def generic_helmet(shell: str, stripe: str, size: int = 24) -> str:
     )
 
 
+# The state championship trophy (components.js's trophyIcon and TROPHY_SHAPES, shape for shape).
+TROPHY_SHAPES = (
+    '<rect x="5.5" y="50" width="29" height="4.5" rx="1" fill="#6B4426"/>'
+    '<rect x="8" y="40.5" width="24" height="10.5" rx="1" fill="#8A5A33"/>'
+    '<rect x="10.5" y="42.6" width="19" height="6.6" rx="0.6" fill="#1F1F1F"/>'
+    '<path d="M15 44.6H25M13.5 46H26.5M16 47.4H24" stroke="#C9A33A" stroke-width="0.7" stroke-linecap="round"/>'
+    '<path d="M12.5 40.5C13.5 37.6 16.6 36.8 18.4 36.6H21.6C23.4 36.8 26.5 37.6 27.5 40.5Z" fill="#C8961C"/>'
+    '<rect x="18.3" y="31" width="3.4" height="6" fill="#C8961C"/>'
+    '<path d="M15 27.6H25L23 31.4H17Z" fill="#D9A520"/>'
+    '<ellipse cx="20" cy="28" rx="5" ry="1" fill="#A87A12"/>'
+    '<ellipse cx="20" cy="15" rx="11" ry="13.6" fill="#D9A520"/>'
+    '<path d="M12.6 8.5C11.4 11.6 11.2 16.4 12.4 20.4" stroke="#F3D27A" stroke-width="1.6" stroke-linecap="round" fill="none"/>'
+    '<path d="M20 2.6V27.4" stroke="#A87A12" stroke-width="0.9" stroke-linecap="round"/>'
+    '<path d="M18.2 5.4H21.8M18 7.6H22M18 9.8H22M18.2 12H21.8" stroke="#A87A12" stroke-width="1.2" stroke-linecap="round"/>'
+)
+
+
+def trophy_icon(size: int = 56) -> str:
+    """The state championship trophy, *size* px tall (components.js's ``trophyIcon``)."""
+    return (
+        f'<svg class="trophy" viewBox="0 0 40 56" width="{size * 40 / 56:g}" height="{size}" aria-hidden="true">'
+        f"{TROPHY_SHAPES}</svg>"
+    )
+
+
+def champion_banner(season: int, clazz: int, result: dict, teams: dict) -> str:
+    """A finished season's champion, over its bracket (components.js's ``championBanner``): the trophy,
+    "2025 Class 3A State Champion", the team, and the championship game's result."""
+    scores = result.get("winner_score") is not None and result.get("loser_score") is not None
+    score = f" {result['winner_score']}–{result['loser_score']}" if scores else ""
+    beat = (
+        f'<p class="champion__game">Beat {_e(result["loser"])}{_e(score)} in the Championship Game</p>'
+        if result.get("loser")
+        else ""
+    )
+    return (
+        f'<section class="champion" aria-label="State champion">{trophy_icon(56)}'
+        f'<div class="champion__text"><p class="champion__label">{season} Class {clazz}A State Champion</p>'
+        f'<p class="champion__team">{_team_label(result["winner"], teams)}</p>{beat}</div></section>'
+    )
+
+
 def _mark(school: str, team: dict | None, size: int = 24) -> str:
     """The team's mark as the app's ``teamMark`` draws it: its helmet image, else a helmet in its colors,
     else its initials."""
@@ -1479,7 +1521,8 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
     each game between the two that feed it (app.js's ``bracketView``/``bracketHtml``). The lines
     joining games, and tapping a game, come with the app.
 
-    *ctx* holds ``mode``, ``results``, ``seeds`` and ``teams``. Returns "" without games.
+    *ctx* holds ``mode``, ``results``, ``seeds`` and ``teams``, and ``season`` for a finished season's
+    champion. Returns "" without games.
     """
     cols = tree_columns(games)
     if not cols:
@@ -1502,6 +1545,12 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
         f'aria-label="{_e(c["name"])}" title="{_e(c["name"])}">{_e(ROUND_SHORT.get(c["name"], c["name"]))}</button>'
         for i, c in enumerate(cols)
     )
+    final = ctx["results"].get("final") or {}
+    champion = (
+        champion_banner(ctx["season"], clazz, final, ctx.get("teams") or {})
+        if final.get("winner") and ctx.get("season")
+        else ""
+    )
     columns = "".join(
         f'<section class="tcol" aria-label="{_e(c["name"])}"><h2 class="tcol__title">{_e(c["name"])}</h2>'
         f'<ol class="tcol__body" style="height:{height:g}px">'
@@ -1517,6 +1566,7 @@ def bracket_body(clazz: int, games: list[dict], ctx: dict, stamp: str) -> str:
         '<div class="page static-page">'
         '<header class="entry-head bracket-head">'
         f'{breadcrumb_nav(bracket_trail(clazz))}<h1 class="title">Class {clazz}A Bracket</h1>{_provenance(stamp)}'
+        f"{champion}"
         '<p class="focus-note muted">Select a game to see all possible matchups and locations, and pick a team to follow its path.</p>'
         "</header>"
         f'<div id="bracket-host">{half_control}'

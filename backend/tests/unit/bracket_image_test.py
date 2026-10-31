@@ -2,7 +2,16 @@
 
 from PIL import Image
 
-from backend.helpers.bracket_image import SQUARE, WIDE, helmet, is_final, picks_for, render_bracket_image, slot
+from backend.helpers.bracket_image import (
+    SQUARE,
+    TROPHY_H,
+    WIDE,
+    helmet,
+    is_final,
+    picks_for,
+    render_bracket_image,
+    slot,
+)
 from backend.helpers.static_pages import layout_results
 from backend.tests.unit.static_pages_test import BRACKET, _side
 
@@ -103,3 +112,19 @@ def test_the_subtitles_say_what_the_image_shows():
         == "Teams and results so far · Open first-round spots show the seed that goes there"
     )
     assert _subtitle(True, True, 2025) == "2025 season · Final"
+
+
+def test_a_finished_bracket_draws_the_trophy_over_the_championship_game():
+    """The whole bracket, once the final is played, gets the trophy (gold); without its result it doesn't."""
+    from backend.helpers.bracket_image import trophy
+
+    cup = trophy(TROPHY_H)
+    assert cup.height == TROPHY_H and cup.mode == "RGBA"
+    assert cup.getpixel((cup.width * 5 // 8, cup.height // 4))[:3] == (0xD9, 0xA5, 0x20)  # the ball
+    results = {g["id"]: {"winner": "Raleigh", "loser": "Mize", "winner_score": 1, "loser_score": 0} for g in BRACKET}
+    done = render_bracket_image(3, 2025, BRACKET, results, SEEDS, "all", True, "x")
+    open_ = render_bracket_image(
+        3, 2025, BRACKET, {k: v for k, v in results.items() if k != "final"}, SEEDS, "all", True, "x"
+    )
+    gold = lambda img: sum(1 for px in img.getdata() if px == (0xD9, 0xA5, 0x20))  # noqa: E731
+    assert gold(done) > 1000 and gold(open_) == 0

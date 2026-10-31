@@ -12,7 +12,7 @@ import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDat
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, tableMode, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
-  conditionGroups, allOfConditions, conditionsThen,
+  conditionGroups, allOfConditions, conditionsThen, championBanner,
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -1285,6 +1285,7 @@ async function bracketView(ctx) {
       ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: pickedTeam(clazz) })], [`Class ${clazz}A Bracket`, null]])}
       <h1 class="title">Class ${clazz}A Bracket</h1>
       ${controls}
+      ${bracketData.results.final?.winner ? championBanner(season, clazz, bracketData.results.final, teams) : ""}
       ${focusNote}
     </header>
     <div id="bracket-host">${bracketHtml()}</div>

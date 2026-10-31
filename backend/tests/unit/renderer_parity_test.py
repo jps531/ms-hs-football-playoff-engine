@@ -224,6 +224,13 @@ CASES = [
       for i, t in enumerate(BADGE_TEAMS)],
     *[(f"tableMode {m}", sp.table_mode(m), _call("components", "tableMode", m), "html") for m in ("projected", "tossup")],
     ("genericHelmet", sp.generic_helmet("#112233", "#445566"), _call("components", "genericHelmet", {"shell": "#112233", "stripe": "#445566"}), "html"),
+    ("trophyIcon", sp.trophy_icon(), _call("components", "trophyIcon"), "html"),
+    *[(f"championBanner {i}", sp.champion_banner(2025, 3, r, {}),
+       _call("components", "championBanner", 2025, 3,
+             {"winner": r["winner"], "loser": r.get("loser"), "winnerScore": r.get("winner_score"), "loserScore": r.get("loser_score")}, {}),
+       "words")
+      for i, r in enumerate(({"winner": "Raleigh", "loser": "Noxubee County", "winner_score": 12, "loser_score": 6},
+                             {"winner": "Raleigh", "loser": "Noxubee County"}))],
     ("classGrid", sp.class_grid(), _call("landing", "classGrid"), "html"),
     *[(f"hosting {p}", sp._hosting(p), _call("bracket", "hosting", p), "host") for p in (None, 0, 0.001, 0.4, 0.9999, 1 - 1e-12, 1)],
     # bracket.js's hosting rules against bracket_home_odds.py's, every way they can differ.

@@ -5,6 +5,13 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.5.0
+
+- **The state champion, with a trophy.** A finished season's bracket now opens with its champion: a
+  gold football trophy modeled on the MHSAA's, then “2025 Class 3A State Champion”, the team, and the
+  championship game's score. The image of the whole bracket shows the trophy over the championship
+  game too. Looking at the bracket as of an earlier week, before the final, doesn't show it.
+
 ## 1.4.0
 
 - **A playoff path reads in order.** A team's “How?” for a later playoff game now lists the

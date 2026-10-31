@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
-  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode, allOfConditions, conditionsThen,
+  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode, allOfConditions, conditionsThen, championBanner,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -279,4 +279,12 @@ test("conditions read in the order they're played: the regular season, then the 
   // Nothing before the games: just the games. No games left: no AND after the box.
   assert.match(text(conditionsThen({ common: [], alternatives: [] }, [win], {})), /^W W wins its First Round game/);
   assert.doesNotMatch(conditionsThen({ common: [], alternatives: [[[c("A", "B")], [c("C", "D")]]] }, [], {}), /class="and"/);
+});
+
+test("championBanner: the trophy, the champion and the championship game", () => {
+  const html = championBanner(2025, 3, { winner: "Raleigh", loser: "Mize", winnerScore: 12, loserScore: 6 }, {});
+  assert.match(html, /<section class="champion" aria-label="State champion"><svg class="trophy" viewBox="0 0 40 56" width="40" height="56" aria-hidden="true">/);
+  assert.match(html, /<p class="champion__label">2025 Class 3A State Champion<\/p>/);
+  assert.match(html, /Beat Mize 12–6 in the Championship Game/);
+  assert.doesNotMatch(championBanner(2025, 3, { winner: "Raleigh", loser: "Mize" }, {}), /–/);
 });

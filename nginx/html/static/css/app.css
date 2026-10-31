@@ -1226,6 +1226,23 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
   letter-spacing: 0.04em; text-transform: uppercase;
 }
 
+/* A finished season's champion, over its bracket: the trophy, then who won and how. */
+.champion {
+  display: flex; align-items: center; gap: 16px;
+  margin-top: 16px; padding: 14px 18px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-card);
+}
+.champion .trophy { flex: none; }
+.champion__text { display: grid; gap: 4px; min-width: 0; }
+.champion__label {
+  font-family: var(--font-display); font-size: 13px; line-height: 18px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary);
+}
+.champion__team { font-size: 20px; line-height: 26px; font-weight: 600; }
+.champion__team .mark { width: 28px; height: 28px; }
+.champion__game { font-size: 14px; line-height: 20px; color: var(--text-secondary); }
+
 /* "How?" on a first-round team or matchup: what has to happen, folded away until asked for. */
 .how-toggle {
   display: inline-flex; align-items: center; gap: 2px; flex: none;

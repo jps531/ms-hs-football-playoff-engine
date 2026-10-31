@@ -162,6 +162,59 @@ def helmet(shell: str, stripe: str, size: int, pale_edge: str) -> Image.Image:
     return img.resize((size, size), Image.LANCZOS)
 
 
+# ------------------------------------------------------------- the trophy
+# The state championship trophy (components.js TROPHY_SHAPES, static_pages.TROPHY_SHAPES) in its
+# 40x56 viewBox, shape for shape and in the same order.
+_FOOT = [
+    (12.5, 40.5),
+    *_curve((12.5, 40.5), (13.5, 37.6), (16.6, 36.8), (18.4, 36.6)),
+    (21.6, 36.6),
+    *_curve((21.6, 36.6), (23.4, 36.8), (26.5, 37.6), (27.5, 40.5)),
+]
+_HIGHLIGHT = [(12.6, 8.5), *_curve((12.6, 8.5), (11.4, 11.6), (11.2, 16.4), (12.4, 20.4))]
+_LACES = [((18.2, 5.4), (21.8, 5.4)), ((18, 7.6), (22, 7.6)), ((18, 9.8), (22, 9.8)), ((18.2, 12), (21.8, 12))]
+_PLAQUE_LINES = [((15, 44.6), (25, 44.6)), ((13.5, 46), (26.5, 46)), ((16, 47.4), (24, 47.4))]
+
+
+@cache
+def trophy(height: int) -> Image.Image:
+    """The state championship trophy, *height* px tall (RGBA), drawn 4x and scaled down for smooth edges."""
+    k = height * 4 / 56
+    img = Image.new("RGBA", (round(40 * k), round(56 * k)), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    pt = lambda p: (p[0] * k, p[1] * k)  # noqa: E731
+
+    def rect(x, y, w, h, r, color):
+        draw.rounded_rectangle((x * k, y * k, (x + w) * k, (y + h) * k), radius=r * k, fill=color)
+
+    def ellipse(cx, cy, rx, ry, color):
+        draw.ellipse(((cx - rx) * k, (cy - ry) * k, (cx + rx) * k, (cy + ry) * k), fill=color)
+
+    def stroke(points, color, width):
+        """A line with round ends, as the SVG's stroke-linecap round."""
+        pts = [pt(p) for p in points]
+        draw.line(pts, fill=color, width=round(width * k), joint="curve")
+        r = width * k / 2
+        for x, y in (pts[0], pts[-1]):
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=color)
+
+    rect(5.5, 50, 29, 4.5, 1, "#6B4426")
+    rect(8, 40.5, 24, 10.5, 1, "#8A5A33")
+    rect(10.5, 42.6, 19, 6.6, 0.6, "#1F1F1F")
+    for line in _PLAQUE_LINES:
+        stroke(line, "#C9A33A", 0.7)
+    draw.polygon([pt(p) for p in _FOOT], fill="#C8961C")
+    rect(18.3, 31, 3.4, 6, 0, "#C8961C")
+    draw.polygon([pt(p) for p in [(15, 27.6), (25, 27.6), (23, 31.4), (17, 31.4)]], fill="#D9A520")
+    ellipse(20, 28, 5, 1, "#A87A12")
+    ellipse(20, 15, 11, 13.6, "#D9A520")
+    stroke(_HIGHLIGHT, "#F3D27A", 1.6)
+    stroke([(20, 2.6), (20, 27.4)], "#A87A12", 0.9)
+    for line in _LACES:
+        stroke(line, "#A87A12", 1.2)
+    return img.resize((round(img.width / 4), height), Image.LANCZOS)
+
+
 def is_final(games: list[dict], results: dict) -> bool:
     """Every game, the championship included, has been played."""
     return bool(games) and all(g["id"] in results for g in games)
@@ -375,6 +428,10 @@ def _subtitle(final: bool, blank: bool, season: int) -> str:
     return "Projected odds · Each open spot shows one team that could be there, and their chance"
 
 
+# The trophy over a finished season's championship game, in px.
+TROPHY_H = 260
+
+
 def render_bracket_image(
     clazz: int,
     season: int,
@@ -457,6 +514,8 @@ def render_bracket_image(
                 paint.join(sx + card_w, sy, x, cy)
         champion = (results.get("final") or {}).get("winner")
         if champion:
+            cup = trophy(TROPHY_H)
+            img.paste(cup, (round(x + (card_w - cup.width) / 2), round(cy - paint.h / 2 - 32 - cup.height)), cup)
             font = _inter(30, 600)
             text = fit(draw, f"Champion: {champion}", font, card_w + gap)
             tw = draw.textlength(text, font=font)
