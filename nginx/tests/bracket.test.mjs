@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups, byeSide,
+  positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups, byeSide, pathTo,
   teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout, roundPicks,
 } from "../html/static/js/bracket.js";
 
@@ -224,4 +224,36 @@ test("a side whose every team is likelier elsewhere still shows its likeliest", 
   const picks = roundPicks(only, "tossup");
   assert.equal(picks.get("N-0-0:a"), "A");
   assert.equal(picks.has("N-0-0:b"), false); // the tree falls back to the side's likeliest, A
+});
+
+test("a team's way to a later game: each seed that leads there, and each playoff game to win", () => {
+  const f = (region, seed) => ({ region, seed });
+  const side = (feeders, occ = [], extra = {}) => ({ feeders, occupants: occ, ...extra });
+  const T = (p, locked = false) => occ("T", p, p, locked);
+  // First round: R1#1 vs R2#4, R2#2 vs R1#3; then a quarterfinal and a semifinal side over all four.
+  const g0 = { id: "N-0-0", round: "First Round", side_a: side([f(1, 1)], [T(0.6)]), side_b: side([f(2, 4)], [occ("D", 1)]) };
+  const g1 = { id: "N-0-1", round: "First Round", side_a: side([f(2, 2)], [occ("B", 1)]), side_b: side([f(1, 3)], [T(0.4)]) };
+  const qf = { id: "N-1-0", round: "Quarterfinals", side_a: side([f(1, 1), f(2, 4)], [T(0.5)]), side_b: side([f(2, 2), f(1, 3)], [T(0.2)]) };
+  const sf = { id: "N-2-0", round: "Semifinals", side_a: side([f(1, 1), f(2, 4), f(2, 2), f(1, 3)], [T(0.4)]), side_b: side([f(9, 1)]) };
+  const games = [g0, g1, qf, sf];
+  const short = (ways) => ways.map((w) => [positionName(w.feeder), w.seedLocked, w.wins.map((x) => `${x.round}${x.opponent ? ` vs ${x.opponent}` : ""}`)]);
+
+  // One seed leads to the quarterfinal's side A: win the first-round game against its position.
+  assert.deepEqual(short(pathTo(games, {}, qf, "a", "T", "tossup")), [["Region 1 #1 Seed", false, ["First Round vs Region 2 #4 Seed"]]]);
+  // Two seeds lead to the semifinal: either way, two games; the quarterfinal opponent isn't known yet.
+  assert.deepEqual(short(pathTo(games, {}, sf, "a", "T", "tossup")), [
+    ["Region 1 #1 Seed", false, ["First Round vs Region 2 #4 Seed", "Quarterfinals"]],
+    ["Region 1 #3 Seed", false, ["First Round vs Region 2 #2 Seed", "Quarterfinals"]],
+  ]);
+  // Won its first-round game: only the quarterfinal is left that way. Lost it: that way is gone.
+  assert.deepEqual(short(pathTo(games, { "N-0-0": { winner: "T" } }, sf, "a", "T", "tossup"))[0], ["Region 1 #1 Seed", false, ["Quarterfinals"]]);
+  assert.deepEqual(short(pathTo(games, { "N-0-0": { winner: "D" } }, sf, "a", "T", "tossup")).map((w) => w[0]), ["Region 1 #3 Seed"]);
+  // A bye needs no win; a locked seed needs no conditions; a locked opponent is named.
+  const bye = [{ ...g0, side_a: side([f(1, 1)], [T(1, true)]), side_b: side([f(2, 4)], [], { bye: true }) }, g1, qf, sf];
+  assert.deepEqual(short(pathTo(bye, {}, qf, "a", "T", "tossup")), [["Region 1 #1 Seed", true, []]]);
+  const named = pathTo(games, {}, qf, "a", "T", "tossup")[0].wins[0];
+  assert.equal(named.byPosition, true);
+  assert.equal(pathTo([{ ...g0, side_b: side([f(2, 4)], [occ("D", 1, 1, true)]) }, g1, qf, sf], {}, qf, "a", "T", "tossup")[0].wins[0].opponent, "D");
+  // A team that can't take any seed on that side has no way there.
+  assert.deepEqual(pathTo(games, {}, qf, "a", "Z", "tossup"), []);
 });

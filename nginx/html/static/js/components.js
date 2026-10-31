@@ -183,6 +183,11 @@ export function conditionChip(cond, teams) {
     const verb = cond.required_result === "loss" ? "loses to" : "beats";
     return `<span class="chip">${teamMark(subject, teams?.[subject])}<span><span class="chip__subject">${esc(subject)}</span> ${verb} ${esc(cond.opponent)}${esc(marginText(cond.min_margin, cond.max_margin))}</span></span>`;
   }
+  if (cond.type === "playoff_win") {
+    // "wins its First Round game vs the Region 2 #2 Seed", "wins its Quarterfinal game vs Neshoba Central"
+    const vs = cond.opponent ? ` vs ${cond.byPosition ? "the " : ""}${cond.opponent}` : "";
+    return `<span class="chip">${teamMark(cond.school, teams?.[cond.school])}<span><span class="chip__subject">${esc(cond.school)}</span> wins its ${esc(cond.round.replace(/s$/, ""))} game${esc(vs)}</span></span>`;
+  }
   if (cond.type === "coin_flip") {
     return `<span class="chip chip--text">${ICONS.coin}<span>${esc(cond.description)}</span></span>`;
   }

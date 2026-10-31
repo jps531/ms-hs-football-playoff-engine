@@ -25,7 +25,7 @@ import {
 } from "./feedback.js";
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
-  teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks, byeSide,
+  teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks, byeSide, pathTo,
 } from "./bracket.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards, seedNeeds, allOf,
@@ -1714,7 +1714,7 @@ function bracketSide(game, sideKey, result, host) {
     : "";
   if (!list.length) return `<div class="bside">${label}<p class="bside__empty muted">No team can get here</p></div>`;
   const items = shown.map((o) => {
-    const how = sideHow(game, side, o.team);
+    const how = sideHow(game, sideKey, o.team);
     return `<li><div class="bteam">${pickTeam(o.team)}${how?.iff ? IF_TAG : ""}${oddsCell(o.p)}${how?.button ?? ""}</div>${how?.panel ?? ""}</li>`;
   });
   return `<div class="bside">${label}<ul class="bside__list">${items.join("")}</ul>${more}</div>`;
@@ -1787,35 +1787,92 @@ function regionLink(feeder, team) {
   return `<a href="${esc(href)}" data-sheet-link>See ${esc(regionName(feeder))}</a>`;
 }
 
-/** What `team` needs to be the side's seed, as a panel ({ html, iff }; see howToggle), or the loading/failed note. */
-function needsHtml(feeder, team) {
+/**
+ * What `team` needs to be `feeder`'s seed, in parts: { state, html, iff } for
+ * "loading", "error" or "exact" (its conditions, or that it's clinched, with
+ * `groups`: [[]] when clinched), else
+ * "open" (no exact list yet) with the region page's `caveat`, the related
+ * key insight `cards` (HTML, maybe empty) and the region `link`.
+ */
+function needsParts(feeder, team) {
   const entry = regionNeeds(feeder.region);
-  if (entry.status === "loading") return { html: '<p class="how__note muted">Loading…</p>' };
-  if (entry.status === "error") return { html: `<p class="how__note">This couldn't be loaded. ${regionLink(feeder, team)}</p>` };
+  const link = `<p class="how__note">${regionLink(feeder, team)}</p>`;
+  if (entry.status === "loading") return { state: "loading", html: '<p class="how__note muted">Loading…</p>' };
+  if (entry.status === "error") return { state: "error", html: `<p class="how__note">This couldn't be loaded. ${regionLink(feeder, team)}</p>` };
   const needs = seedNeeds(entry.data, team, feeder.seed);
   const { teams } = bracketData;
-  if (needs.kind === "paths") return { html: conditionGroups(needs.groups, teams), iff: true };
-  if (needs.kind === "clinched") return { html: `<p class="how__note">${esc(team)} has clinched this spot.</p>` };
+  if (needs.kind === "paths") return { state: "exact", html: conditionGroups(needs.groups, teams), iff: true, groups: needs.groups };
+  if (needs.kind === "clinched") return { state: "exact", html: `<p class="how__note">${esc(team)} has clinched this spot.</p>`, groups: [[]] };
+  const cards = needs.kind === "insights"
+    ? needs.cards.map((c) => `<p class="how__title">${esc(c.title)} ${IF_TAG}</p>${conditionGroups(c.groups, teams)}`).join("")
+    : "";
   // The region page's own words for why there's no exact list yet.
   const left = entry.data.remaining_games?.length ?? 0;
-  const before = entry.data.scenarios_available
-    ? ""
-    : `<p class="how__note muted">Full scenarios appear once five or fewer region games remain; ${left} are left.${
-      needs.kind === "insights" ? " Until then, these are results that settle a spot no matter what else happens." : ""}</p>`;
-  if (needs.kind === "insights") {
-    const cards = needs.cards.map((c) => `<p class="how__title">${esc(c.title)} ${IF_TAG}</p>${conditionGroups(c.groups, teams)}`);
-    return { html: `${before}${cards.join("")}<p class="how__note">${regionLink(feeder, team)}</p>` };
-  }
-  return { html: `${before}<p class="how__note">${regionLink(feeder, team)}</p>` };
+  const caveat = entry.data.scenarios_available ? "" : `Full scenarios appear once five or fewer region games remain; ${left} are left.`;
+  return { state: "open", cards, caveat, link };
 }
 
-/** A side's team "How?": what it needs to be this seed. Open by default for the picked team. */
-function sideHow(game, side, team) {
-  if (!hasHow(game) || side.bye || lockedTeam(side)) return null;
-  const feeder = side.feeders[0];
-  const key = `${game.id}:${team}`;
+/** The region page's caveat as a note, with its "Until then" when insights follow. */
+const caveatNote = (caveat, withCards) => (caveat
+  ? `<p class="how__note muted">${caveat}${withCards ? " Until then, these are results that settle a spot no matter what else happens." : ""}</p>`
+  : "");
+
+/** What `team` needs to be the side's seed, as a panel ({ html, iff }; see howToggle). */
+function needsHtml(feeder, team) {
+  const parts = needsParts(feeder, team);
+  if (parts.state !== "open") return parts;
+  return { html: `${caveatNote(parts.caveat, Boolean(parts.cards))}${parts.cards}${parts.link}` };
+}
+
+/**
+ * A side's team "How?", open by default for the picked team. In the first
+ * round, what it needs to be this seed; later, to get here: a seed that leads
+ * here, then each playoff game on the way.
+ */
+function sideHow(game, sideKey, team) {
+  const side = sideKey === "a" ? game.side_a : game.side_b;
+  if (bracketData.results[game.id] || side.bye || lockedTeam(side)) return null;
+  // By side too: in a later round a team can be on both sides (by different seeds).
+  const key = `${game.id}:${sideKey}:${team}`;
   const open = bracketUi.how.get(key) ?? team === bracketData.focus;
-  return howToggle(key, `What ${team} needs to be the ${positionName(feeder)}`, open, () => needsHtml(feeder, team));
+  if (hasHow(game)) {
+    const feeder = side.feeders[0];
+    return howToggle(key, `What ${team} needs to be the ${positionName(feeder)}`, open, () => needsHtml(feeder, team));
+  }
+  const ways = pathTo(bracketData.games, bracketData.results, game, sideKey, team, bracketData.mode);
+  if (!ways.length) return null;
+  return howToggle(key, `What ${team} needs to reach this ${game.round.replace(/s$/, "")} game`, open, () => pathHtml(ways, team));
+}
+
+/**
+ * A team's ways to a later-round game (bracket.js's `pathTo`) as a panel:
+ * each seed that leads here, labeled, with its conditions and the playoff
+ * games it has to win, one chip each; several seeds are a "ONE OF" box.
+ */
+function pathHtml(ways, team) {
+  const { teams } = bracketData;
+  const parts = ways.map((w) => (w.seedLocked ? { state: "exact", groups: [[]] } : needsParts(w.feeder, team)));
+  if (parts.some((x) => x.state === "loading" || x.state === "error")) return parts.find((x) => x.state === "loading") ?? parts.find((x) => x.state === "error");
+  const shown = ways.map((w, i) => {
+    const label = `<p class="how__as">As the ${esc(positionName(w.feeder))}</p>`;
+    const wins = w.wins.map((x) => ({ type: "playoff_win", school: team, ...x }));
+    const part = parts[i];
+    if (part.state === "exact") {
+      return `${label}<div>${allOfConditions(allOf([part.groups, [wins]]), teams)}</div>`;
+    }
+    // No exact list for this seed yet: what there is, then the games.
+    return `${label}${part.cards}${wins.length ? `<p class="how__note">With this seed, it has to win:</p>${conditionGroups([wins], teams)}` : ""}`;
+  });
+  // A team's seeds are all in its own region, so the region's caveat and link are said once.
+  const open = parts.filter((x) => x.state === "open");
+  const before = open.length ? caveatNote(open[0].caveat, open.some((x) => x.cards)) : "";
+  const after = open.length ? open[0].link : "";
+  const iff = !open.length;
+  const body = shown.length === 1
+    ? `<div>${shown[0]}</div>`
+    : `<div class="oneof oneof--first" role="group" aria-label="One of"><span class="oneof__label" aria-hidden="true">ONE OF</span>`
+      + `<div class="conditions">${shown.map((x) => `<div class="how__way">${x}</div>`).join('<div class="or"><span>OR</span></div>')}</div></div>`;
+  return { html: `${before}${body}${after}`, iff };
 }
 
 /** A matchup's "How?" (`a` from side A, `b` from side B): both teams' paths at once, when both are known. */
