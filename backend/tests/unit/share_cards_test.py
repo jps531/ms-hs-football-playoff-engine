@@ -179,7 +179,7 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         "/standings/3/7?season=2026": {"as_of_date": "2026-10-09", "headline": None, "teams": TEAMS},
     }
     written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com/", date(2026, 10, 14))
-    assert written == {"regions": 2, "classes": 1, "teams": 8, "brackets": 0, "bracket_teams": 0}
+    assert written == {"regions": 2, "classes": 1, "teams": 8, "brackets": 0, "bracket_teams": 0, "past_brackets": 0}
     for name in ("site.png", "3.png", "3-6.png", "3-7.png"):
         assert Image.open(tmp_path / "og" / name).size == (WIDTH, HEIGHT)
     meta = (tmp_path / "meta" / "3-6.html").read_text()
@@ -437,6 +437,44 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     assert '<h1 class="title">Class 3A Bracket</h1>' in page and 'class="tslot"' in page
     assert '"@type":"BreadcrumbList"' in (tmp_path / "meta" / "bracket-3.html").read_text()
     assert "Raleigh leads the Class 3A bracket" in (tmp_path / "meta" / "bracket-3.html").read_text()
+    # The bracket's images to share: every view blank; no Projected ones without Projected odds. The
+    # sitemap lists the whole-bracket image with the bracket page.
+    images = sorted(p.name for p in (tmp_path / "bracket" / "2026").iterdir())
+    assert images == ["3a-all-blank.png", "3a-north-blank.png", "3a-south-blank.png"]
+    sitemap = (tmp_path / "sitemap.xml").read_text()
+    assert (
+        "<loc>https://mshsfootball.com/brackets/3a</loc><lastmod>2026-10-09</lastmod><image:image>"
+        "<image:loc>https://mshsfootball.com/static/bracket/2026/3a-all-blank.png</image:loc></image:image>"
+    ) in sitemap
+
+
+def test_past_seasons_get_their_final_bracket_images_once(tmp_path):
+    """A past season's bracket is drawn as of its last week of games, blank (results), and not again next run."""
+    teams = [_bracket_team("Raleigh", 0.4, 0.2, 0.12), _bracket_team("Union", 0.3, 0.1, 0.05)]
+    calls: list[str] = []
+    api = {
+        "/seasons": [{"season": 2026}, {"season": 2025}],
+        "/standings/3?season=2026": {"as_of_date": "2026-10-09", "regions": [{"region": 6, "teams": teams}]},
+        "/seasons/2026/dates?class=3": {"dates": DATES},
+        "/standings/3/6?season=2026": {"as_of_date": "2026-10-09", "headline": None, "teams": teams},
+        "/seasons/2025/dates?class=3": {"dates": [{"date": "2025-12-05", "kind": "games", "week": 15, "description": "Championship Game"}]},
+        # Its last game day was Friday, Dec 5: the bracket as of that week's Sunday, Dec 7.
+        "/bracket/matchups?season=2025&class=3&date=2025-12-07": {"as_of_date": "2025-12-07", "games": GAMES},
+    }
+
+    def fetch(path):
+        calls.append(path)
+        return api.get(path)
+
+    assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 1
+    assert sorted(p.name for p in (tmp_path / "bracket" / "2025").iterdir()) == [
+        "3a-all-blank.png",
+        "3a-north-blank.png",
+        "3a-south-blank.png",
+    ]
+    calls.clear()
+    assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0
+    assert not [c for c in calls if "season=2025" in c]  # already drawn: not fetched again
 
 
 def test_titles_fall_back_to_inter_bold_without_the_nippo_file(tmp_path, monkeypatch, caplog):

@@ -26,7 +26,9 @@ outside the code.
   (the site's name for search results) on the front page, as JSON-LD in the
   generated head tags.
 - **`sitemap.xml`** (front page, About page, every class, region and bracket
-  page, with the snapshot date as `lastmod`), linked from `robots.txt`.
+  page, with the snapshot date as `lastmod`), linked from `robots.txt`. Each
+  bracket page lists its whole-bracket image (`/static/bracket/{season}/{class}a-all-*.png`,
+  Google's image extension) so it can show up in image search.
 - **Not indexed:** the API, its docs, `/moderate`, `/feedback` (an
   `X-Robots-Tag: noindex` header). `/api/` is deliberately *not* blocked in
   `robots.txt`: Google runs the app when it renders a page, and the app needs

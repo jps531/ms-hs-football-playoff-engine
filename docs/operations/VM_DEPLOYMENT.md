@@ -256,7 +256,12 @@ its own, it gets the generic tags in `index.html`.
 
 The same run writes each region and class page's content as static HTML
 (`body/*.html`: the headline, standings table, remaining games, what each team
-needs, and the snapshot line), plus a front-page index and `sitemap.xml`.
+needs, and the snapshot line), plus a front-page index and `sitemap.xml`. It
+also draws each class's whole bracket as images to share
+(`bracket/{season}/{class}a-{north|south|all}-{odds|blank}.png`, served at
+`/static/bracket/`): each half square, the whole bracket wide; Projected odds,
+or blank (locked-in teams and results only). Past seasons' final brackets are
+drawn once and kept.
 nginx includes a page's content inside `<main>`, so search engines and
 browsers without JavaScript get the real race; the app replaces it on load.
 Links to an older week, season or odds mode skip it, since the latest snapshot
