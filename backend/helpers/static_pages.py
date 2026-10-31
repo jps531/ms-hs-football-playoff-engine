@@ -239,13 +239,14 @@ def trophy_icon(size: int = 56) -> str:
     )
 
 
-def venue_name(venue: dict | None) -> str | None:
+def venue_name(venue: dict | None, sep: str = " • ") -> str | None:
     """Where a season's championship games are played (components.js's ``venueName``): "Davis Wade
-    Stadium • Starkville", the state left off. None when no venue is on record."""
+    Stadium • Starkville", the state left off; in a sentence (*sep* " in "), "Davis Wade Stadium in
+    Starkville". None when no venue is on record."""
     if not venue or not venue.get("name"):
         return None
     city = re.sub(r",\s*MS$", "", str(venue.get("city") or ""), flags=re.IGNORECASE).strip()
-    return f"{venue['name']} • {city}" if city else venue["name"]
+    return f"{venue['name']}{sep}{city}" if city else venue["name"]
 
 
 def projected_champion(game: dict | None, result: dict | None) -> dict | None:
@@ -284,7 +285,7 @@ def champion_banner(season: int, clazz: int, result: dict, teams: dict, venue: d
     "2025 Class 3A State Champion", the team, and the championship game's result and venue."""
     scores = result.get("winner_score") is not None and result.get("loser_score") is not None
     score = f" {result['winner_score']}–{result['loser_score']}" if scores else ""
-    where = venue_name(venue)
+    where = venue_name(venue, " in ")
     at = f" at {_e(where)}" if where else ""
     beat = (
         f'<p class="champion__game">Beat {_e(result["loser"])}{_e(score)} in the Championship Game{at}</p>'

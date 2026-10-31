@@ -162,13 +162,14 @@ export const TROPHY_SHAPES = '<rect x="5.5" y="50" width="29" height="4.5" rx="1
 /**
  * Where a season's championship games are played, from the API's
  * /championships location: "Davis Wade Stadium • Starkville" (every venue is
- * in Mississippi, so the state is left off). Null when none is on record.
+ * in Mississippi, so the state is left off); in a sentence (*sep* " in "),
+ * "Davis Wade Stadium in Starkville". Null when none is on record.
  * static_pages.venue_name() is the same.
  */
-export function venueName(venue) {
+export function venueName(venue, sep = " • ") {
   if (!venue?.name) return null;
   const city = String(venue.city ?? "").replace(/,\s*MS$/i, "").trim();
-  return city ? `${venue.name} • ${city}` : venue.name;
+  return city ? `${venue.name}${sep}${city}` : venue.name;
 }
 
 /** "Projected champion" with a small trophy, over "Winona · 22%"; *champ* is projectedChampion()'s. */
@@ -197,7 +198,7 @@ export function finalNote(venue, champ) {
  */
 export function championBanner(season, clazz, result, teams, venue = null) {
   const score = result.winnerScore != null && result.loserScore != null ? ` ${result.winnerScore}–${result.loserScore}` : "";
-  const where = venueName(venue);
+  const where = venueName(venue, " in ");
   const beat = result.loser ? `<p class="champion__game">Beat ${esc(result.loser)}${score} in the Championship Game${where ? ` at ${esc(where)}` : ""}</p>` : "";
   return `<section class="champion" aria-label="State champion">${trophyIcon(56)}`
     + `<div class="champion__text"><p class="champion__label">${esc(String(season))} Class ${esc(String(clazz))}A State Champion</p>`

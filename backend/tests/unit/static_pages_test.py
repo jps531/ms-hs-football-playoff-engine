@@ -805,7 +805,7 @@ def test_the_championship_game_card_says_where_its_played_and_the_projected_cham
         },
         "x",
     )
-    assert "in the Championship Game at Davis Wade Stadium • Starkville</p>" in banner
+    assert "in the Championship Game at Davis Wade Stadium in Starkville</p>" in banner
     assert "Projected champion" not in banner
 
 

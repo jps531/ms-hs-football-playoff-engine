@@ -300,5 +300,5 @@ test("venueName, finalNote and the banner's venue: where the championship game i
   assert.equal(finalNote(null, null), "");
   assert.equal(text(finalNote(venue, null)), "Davis Wade Stadium • Starkville");
   const banner = championBanner(2025, 3, { winner: "Raleigh", loser: "Mize", winnerScore: 12, loserScore: 6 }, {}, venue);
-  assert.match(banner, /Beat Mize 12–6 in the Championship Game at Davis Wade Stadium • Starkville<\/p>/);
+  assert.match(banner, /Beat Mize 12–6 in the Championship Game at Davis Wade Stadium in Starkville<\/p>/);
 });

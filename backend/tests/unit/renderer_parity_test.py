@@ -255,6 +255,7 @@ CASES = [
                              {"winner": "Raleigh", "loser": "Noxubee County"}))],
     *[(f"venueName {i}", sp.venue_name(v), _call("components", "venueName", v), "data")
       for i, v in enumerate((VENUE, {"name": "M.M. Roberts Stadium", "city": None}, None))],
+    ("venueName in a sentence", sp.venue_name(VENUE, " in "), _call("components", "venueName", VENUE, " in "), "data"),
     *[(f"finalNote {i}", sp.final_note(v, c), _call("components", "finalNote", v, c), "html")
       for i, (v, c) in enumerate(((VENUE, {"team": "Winona", "p": 0.2217}), (VENUE, None), (None, None)))],
     *[(f"projectedChampion {i}", sp.projected_champion(g, r), _call("bracket", "projectedChampion", g, r), "data")
