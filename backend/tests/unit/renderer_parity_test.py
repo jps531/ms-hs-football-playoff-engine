@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+import backend.helpers.bracket_home_odds as odds
 import backend.helpers.share_cards as cards
 import backend.helpers.static_pages as sp
 from backend.tests.unit.static_pages_test import (
@@ -40,6 +41,10 @@ from backend.tests.unit.static_pages_test import (
 )
 
 ROOT = Path(__file__).resolve().parents[3]
+
+# Two positions meeting in a playoff game: same region, cross-region with different seeds, and
+# equal seeds from lower/higher-numbered regions (the odd/even-year tiebreak).
+HOST_PAIRS = [((1, 1), (1, 3)), ((1, 4), (1, 2)), ((1, 2), (2, 3)), ((3, 4), (2, 1)), ((1, 2), (4, 2)), ((5, 1), (2, 1))]
 RUNNER = ROOT / "nginx" / "tests" / "parity" / "run.mjs"
 
 
@@ -221,6 +226,15 @@ CASES = [
     ("genericHelmet", sp.generic_helmet("#112233", "#445566"), _call("components", "genericHelmet", {"shell": "#112233", "stripe": "#445566"}), "html"),
     ("classGrid", sp.class_grid(), _call("landing", "classGrid"), "html"),
     *[(f"hosting {p}", sp._hosting(p), _call("bracket", "hosting", p), "host") for p in (None, 0, 0.001, 0.4, 0.9999, 1 - 1e-12, 1)],
+    # bracket.js's hosting rules against bracket_home_odds.py's, every way they can differ.
+    *[(f"{fn} {x} {y} {season}", "x" if rule(*x, *y, season) == x else "y",
+       _call("bracket", fn, {"region": x[0], "seed": x[1]}, {"region": y[0], "seed": y[1]}, season), "data")
+      for fn, rule in (("secondRoundHost", odds.r2_home_team), ("semifinalHost", odds.sf_home_team))
+      for x, y in HOST_PAIRS for season in (2025, 2026)],
+    *[(f"quarterfinalHost {x} {hx} {y} {hy} {season}",
+       "x" if odds.qf_home_team(x[0], x[1], hx >= 1, hx >= 2, y[0], y[1], hy >= 1, hy >= 2, season) == x else "y",
+       _call("bracket", "quarterfinalHost", {"region": x[0], "seed": x[1]}, hx, {"region": y[0], "seed": y[1]}, hy, season), "data")
+      for x, y in HOST_PAIRS for hx in (0, 1, 2) for hy in (0, 1, 2) for season in (2025, 2026)],
 ]  # fmt: skip
 
 

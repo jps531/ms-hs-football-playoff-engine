@@ -143,7 +143,9 @@ export function byeSide(game) {
  * first-round position on that side it can still take (by the odds `mode`),
  * earliest seed first, each with whether that seed is already its own and the
  * playoff games it still has to win to get here, in order:
- *   [{ feeder, seedLocked, wins: [{ round, opponent, byPosition }] }]
+ *   [{ feeder, seedLocked, wins: [{ round, opponent, byPosition, depth }] }]
+ * (`depth`: how many first-round positions feed that game, so wins sort into
+ * the order they're played).
  * A bye needs no win and a game it already won drops out; a position whose
  * game was won by someone else is gone. An opponent is named once locked in
  * ("Neshoba Central"), or by position in the first round ("Region 2 #2 Seed",
@@ -179,11 +181,136 @@ export function pathTo(games, results, game, sideKey, team, mode) {
       const other = holds(g.side_a, feeder) ? g.side_b : g.side_a;
       const opponent = lockedTeam(other);
       const byPosition = !opponent && other.feeders.length === 1;
-      wins.push({ round: g.round, opponent: opponent ?? (byPosition ? positionName(other.feeders[0]) : null), byPosition });
+      wins.push({ round: g.round, opponent: opponent ?? (byPosition ? positionName(other.feeders[0]) : null), byPosition, depth: all(g).length });
     }
     if (!gone) out.push({ feeder, seedLocked, wins });
   }
   return out.sort((x, y) => x.feeder.seed - y.feeder.seed);
+}
+
+// ------------------------------------------------------ who hosts
+// MHSAA's hosting rules, as backend/helpers/bracket_home_odds.py has them
+// (r2_home_team, qf_home_team, sf_home_team): "x" or "y" hosts. A position
+// is { region, seed }. Same-region opponents: the better seed always hosts.
+
+/** Better seed hosts; equal seeds from different regions: odd years the lower region number, even years the higher. */
+function bySeed(x, y, season) {
+  if (x.seed !== y.seed) return x.seed < y.seed ? "x" : "y";
+  if (season % 2 === 1) return x.region < y.region ? "x" : "y";
+  return x.region > y.region ? "x" : "y";
+}
+
+/** Second round (r2_home_team): the better seed hosts. */
+export function secondRoundHost(x, y, season) {
+  return x.region === y.region ? (x.seed < y.seed ? "x" : "y") : bySeed(x, y, season);
+}
+
+/** Semifinals (sf_home_team): the better seed hosts; home games played don't count. */
+export function semifinalHost(x, y, season) {
+  return x.region === y.region ? (x.seed < y.seed ? "x" : "y") : bySeed(x, y, season);
+}
+
+/** Quarterfinals (qf_home_team): fewer playoff home games so far hosts (`homesX`, `homesY`), then the better seed. */
+export function quarterfinalHost(x, homesX, y, homesY, season) {
+  if (x.region === y.region) return x.seed < y.seed ? "x" : "y";
+  if (homesX !== homesY) return homesX < homesY ? "x" : "y";
+  return bySeed(x, y, season);
+}
+
+/**
+ * A later-round matchup's ways, each with who hosts it: `a` on side A and
+ * `b` on side B, every pairing of their ways here (pathTo), as
+ * [{ a: way, b: way, host: "a" | "b" | null }] (null at the neutral
+ * championship, or when it can't be told). A way's wins are in order of
+ * play; in a quarterfinal of a class with a second round the host also
+ * turns on whom each team beat there, so when it does the pairing splits by
+ * that opponent, named on the team's Second Round win: one team's when that
+ * alone decides it, else both.
+ */
+export function matchupWays(games, results, game, a, b, mode, season) {
+  const at = (f) => `${f.region}:${f.seed}`;
+  const firstSide = (f) => {
+    for (const g of games) {
+      for (const [key, side] of [["a", g.side_a], ["b", g.side_b]]) {
+        if (side.feeders.length === 1 && at(side.feeders[0]) === at(f)) return { game: g, key, side };
+      }
+    }
+    return null;
+  };
+  // A first-round side is the slot's home position on side A (bracket_matchups' feeders).
+  const homeInFirst = (f) => firstSide(f)?.key === "a";
+  const positionOf = (team) => {
+    for (const g of games) {
+      for (const side of [g.side_a, g.side_b]) if (side.feeders.length === 1 && lockedTeam(side) === team) return side.feeders[0];
+    }
+    return null;
+  };
+  // Who a position's Second Round opponent can be: the other first-round game feeding that game.
+  const secondRoundFoes = (f) => {
+    const r2 = games.find((g) => g.round === "Second Round" && [g.side_a, g.side_b].some((sd) => sd.feeders.some((x) => at(x) === at(f))));
+    if (!r2) return null;
+    const mine = r2.side_a.feeders.some((x) => at(x) === at(f)) ? "a" : "b";
+    const result = results[r2.id];
+    if (result) {
+      const beat = positionOf(result.loser);
+      return beat ? [{ foe: beat, played: true }] : null;
+    }
+    const other = mine === "a" ? r2.side_b : r2.side_a;
+    const before = firstSide(other.feeders[0])?.game;
+    if (!before) return null;
+    const done = results[before.id];
+    if (done) {
+      const won = positionOf(done.winner);
+      return won ? [{ foe: won, team: done.winner }] : null;
+    }
+    const bye = byeSide(before);
+    const sides = bye ? [bye === "a" ? before.side_b : before.side_a] : [before.side_a, before.side_b];
+    return sides.map((sd) => ({ foe: sd.feeders[0], team: lockedTeam(sd) }));
+  };
+  const waysA = pathTo(games, results, game, "a", a, mode);
+  const waysB = pathTo(games, results, game, "b", b, mode);
+  const withQf = game.round === "Quarterfinals" && games.some((g) => g.half === game.half && g.round === "Second Round");
+  const name = (z) => (z.team ? { opponent: z.team, byPosition: false } : { opponent: positionName(z.foe), byPosition: true });
+  const out = [];
+  for (const wa of waysA) {
+    for (const wb of waysB) {
+      const x = wa.feeder;
+      const y = wb.feeder;
+      if (game.id === "final") {
+        out.push({ a: wa, b: wb, host: null });
+      } else if (game.round === "Second Round") {
+        out.push({ a: wa, b: wb, host: secondRoundHost(x, y, season) === "x" ? "a" : "b" });
+      } else if (game.round === "Semifinals") {
+        out.push({ a: wa, b: wb, host: semifinalHost(x, y, season) === "x" ? "a" : "b" });
+      } else if (!withQf) {
+        out.push({ a: wa, b: wb, host: quarterfinalHost(x, homeInFirst(x) ? 1 : 0, y, homeInFirst(y) ? 1 : 0, season) === "x" ? "a" : "b" });
+      } else {
+        const fa = secondRoundFoes(x);
+        const fb = secondRoundFoes(y);
+        if (!fa || !fb) {
+          out.push({ a: wa, b: wb, host: null });
+          continue;
+        }
+        const homes = (f, z) => (homeInFirst(f) ? 1 : 0) + (secondRoundHost(f, z.foe, season) === "x" ? 1 : 0);
+        const combos = fa.flatMap((za) => fb.map((zb) => ({ za, zb, host: quarterfinalHost(x, homes(x, za), y, homes(y, zb), season) === "x" ? "a" : "b" })));
+        if (combos.every((c) => c.host === combos[0].host)) {
+          out.push({ a: wa, b: wb, host: combos[0].host });
+          continue;
+        }
+        // An opponent decides it: name it on that Second Round win, and only the one(s) that matter.
+        const named = (w, z) => (z.played ? w : { ...w, wins: w.wins.map((v) => (v.round === "Second Round" ? { ...v, ...name(z) } : v)) });
+        const onlyBy = (key) => combos.every((c) => combos.every((d) => c[key] !== d[key] || c.host === d.host));
+        if (onlyBy("za")) {
+          for (const za of fa) out.push({ a: named(wa, za), b: wb, host: combos.find((c) => c.za === za).host });
+        } else if (onlyBy("zb")) {
+          for (const zb of fb) out.push({ a: wa, b: named(wb, zb), host: combos.find((c) => c.zb === zb).host });
+        } else {
+          for (const c of combos) out.push({ a: named(wa, c.za), b: named(wb, c.zb), host: c.host });
+        }
+      }
+    }
+  }
+  return out;
 }
 
 /**

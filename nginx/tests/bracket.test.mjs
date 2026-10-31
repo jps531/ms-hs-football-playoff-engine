@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups, byeSide, pathTo,
+  matchupWays,
   teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout, roundPicks,
 } from "../html/static/js/bracket.js";
 
@@ -256,4 +257,44 @@ test("a team's way to a later game: each seed that leads there, and each playoff
   assert.equal(pathTo([{ ...g0, side_b: side([f(2, 4)], [occ("D", 1, 1, true)]) }, g1, qf, sf], {}, qf, "a", "T", "tossup")[0].wins[0].opponent, "D");
   // A team that can't take any seed on that side has no way there.
   assert.deepEqual(pathTo(games, {}, qf, "a", "Z", "tossup"), []);
+});
+
+test("a later matchup's ways each say who hosts; a 1A-4A quarterfinal splits by second-round opponent when that decides it", () => {
+  const f = (region, seed) => ({ region, seed });
+  const side = (feeders, occ = []) => ({ feeders, occupants: occ });
+  const fr = (id, a, b, ta, tb) => ({ id, round: "First Round", half: "N", side_a: side([a], [occ(ta, 1)]), side_b: side([b], [occ(tb, 1)]) });
+  // Two first-round games feed each second-round game; two second-round games feed the quarterfinal.
+  const g = [
+    fr("N-0-0", f(1, 1), f(2, 4), "A", "B"), fr("N-0-1", f(2, 2), f(1, 3), "C", "D"),
+    fr("N-0-2", f(2, 1), f(1, 4), "E", "F"), fr("N-0-3", f(1, 2), f(2, 3), "G", "H"),
+  ];
+  const r2a = { id: "N-1-0", round: "Second Round", half: "N", side_a: side([f(1, 1), f(2, 4)], [occ("A", 1)]), side_b: side([f(2, 2), f(1, 3)], [occ("C", 0.5), occ("D", 0.5)]) };
+  const r2b = { id: "N-1-1", round: "Second Round", half: "N", side_a: side([f(2, 1), f(1, 4)], [occ("E", 1)]), side_b: side([f(1, 2), f(2, 3)], [occ("G", 1)]) };
+  const qf = { id: "N-2-0", round: "Quarterfinals", half: "N", side_a: side([...r2a.side_a.feeders, ...r2a.side_b.feeders], [occ("A", 1)]), side_b: side([...r2b.side_a.feeders, ...r2b.side_b.feeders], [occ("E", 1)]) };
+  const games = [...g, r2a, r2b, qf];
+  // Second round: the better seed hosts (A as the #1 seed over C or D).
+  assert.deepEqual(matchupWays(games, {}, r2a, "A", "C", "tossup", 2026).map((w) => w.host), ["a"]);
+  // Quarterfinal, A (Region 1 #1, home in round 1) vs E (Region 2 #1, home in round 1). Both #1 seeds hosted their
+  // second-round games too (A over C/D, E over G), so it's equal home games and equal seeds: even years, the higher
+  // region hosts (E); odd years the lower (A). One way each, no split.
+  assert.deepEqual(matchupWays(games, {}, qf, "A", "E", "tossup", 2026).map((w) => w.host), ["b"]);
+  assert.deepEqual(matchupWays(games, {}, qf, "A", "E", "tossup", 2025).map((w) => w.host), ["a"]);
+  // Same region: the better seed hosts whatever happened in round 2 (D, Region 1 #3, over F, Region 1 #4).
+  assert.deepEqual(matchupWays(games, {}, qf, "D", "F", "tossup", 2026).map((w) => w.host), ["a"]);
+  // D (Region 1 #3) vs H (Region 2 #3), equal seeds, both away in round 1. Round 2 gives D a home game only
+  // against Region 2 #4 (against Region 1 #1 the #1 hosts), and H one only against Region 1 #4. Fewer home
+  // games hosts; level, 2026 (even) goes to the higher region, H. So the pairing splits four ways, each naming
+  // both second-round opponents, and D hosts only when it played at Region 1 #1 and H hosted Region 1 #4.
+  const split = matchupWays(games, {}, qf, "D", "H", "tossup", 2026).map((w) => [
+    w.host, w.a.wins.find((x) => x.round === "Second Round").opponent, w.b.wins.find((x) => x.round === "Second Round").opponent,
+  ]);
+  assert.deepEqual(split, [
+    ["b", "Region 1 #1 Seed", "Region 2 #1 Seed"],
+    ["a", "Region 1 #1 Seed", "Region 1 #4 Seed"],
+    ["b", "Region 2 #4 Seed", "Region 2 #1 Seed"],
+    ["b", "Region 2 #4 Seed", "Region 1 #4 Seed"],
+  ]);
+  // Semifinal-style rule, by seed alone.
+  const sf = { ...qf, id: "N-3-0", round: "Semifinals" };
+  assert.deepEqual(matchupWays([...games.slice(0, 6), sf], {}, sf, "A", "E", "tossup", 2025).map((w) => w.host), ["a"]);
 });

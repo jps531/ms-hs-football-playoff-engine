@@ -226,18 +226,23 @@ export function allOfConditions({ common, alternatives }, teams) {
 }
 
 /**
- * Conditions in the order they happen: `groups` (OR-of-AND: a seed's
- * regular-season results), then `after`, which must all hold too (its
- * playoff games). Several ways go in a "ONE OF" box, joined to what follows
- * by an AND. Nothing in `groups` (an empty way) leaves just `after`.
+ * Conditions in the order they happen: `regular` (scenarios.js's `allOf` of
+ * the regular-season requirements: a seed's results, or two teams'), then
+ * `after`, which must all hold too (playoff games, in order). Shared results
+ * first, each set of alternatives in its own box ("ONE OF", then "AND ONE
+ * OF"), then an AND down to the games. Nothing before the games leaves just
+ * the games.
  */
-export function conditionsThen(groups, after, teams) {
-  const ways = groups.some((g) => !g.length) ? [] : groups;
-  if (!ways.length) return after.length ? conditionGroups([after], teams) : "";
-  if (ways.length === 1) return conditionGroups([[...ways[0], ...after]], teams);
-  const box = `<div class="oneof oneof--first" role="group" aria-label="One of">`
-    + `<span class="oneof__label" aria-hidden="true">ONE OF</span>${conditionGroups(ways, teams)}</div>`;
-  return after.length ? `${box}<div class="and"><span>AND</span></div>${conditionGroups([after], teams)}` : box;
+export function conditionsThen(regular, after, teams) {
+  const { common, alternatives } = regular;
+  if (!alternatives.length) return common.length || after.length ? conditionGroups([[...common, ...after]], teams) : "";
+  let html = common.length ? conditionGroups([common], teams) : "";
+  for (const ways of alternatives) {
+    const first = !html;
+    html += `<div class="oneof${first ? " oneof--first" : ""}" role="group" aria-label="${first ? "One of" : "And one of"}">`
+      + `<span class="oneof__label" aria-hidden="true">${first ? "ONE OF" : "AND ONE OF"}</span>${conditionGroups(ways, teams)}</div>`;
+  }
+  return after.length ? `${html}<div class="and"><span>AND</span></div>${conditionGroups([after], teams)}` : html;
 }
 
 // -------------------------------------------------------- scenario card

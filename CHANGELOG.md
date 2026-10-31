@@ -5,11 +5,16 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
-## 1.3.1
+## 1.4.0
 
 - **A playoff path reads in order.** A team's “How?” for a later playoff game now lists the
   regular-season results its seed needs first, then the playoff games it has to win. Before, the
   playoff games could come first.
+- **What it takes for a later playoff matchup, and who hosts it.** Each possible matchup in a
+  second-round or later game now has a “How?” too: the seeds that lead both teams there, with what
+  each takes, then each playoff game they have to win. When either team could host, it's split into
+  “Noxubee County hosts IF” and “Thomas E. Edwards hosts IF”, following the MHSAA's hosting rules;
+  in a quarterfinal that can come down to whom a team beat in the second round, which it then names.
 
 ## 1.3.0
 
