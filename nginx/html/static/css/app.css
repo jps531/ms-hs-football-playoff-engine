@@ -1247,7 +1247,7 @@ dialog.game-sheet .bteam:has(> .scenario__if) .bteam__name { flex: 0 1 auto; }
 /* A later-round path: which seed it's by, over that seed's conditions and games. */
 .how__as { margin-bottom: 8px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text-secondary); text-align: center; }
 .how__way .how__note { margin-block: 8px; }
-.oneof--first { margin-top: 10px; }
+.oneof--first { margin-top: 14px; }
 .oneof--first::before { display: none; }
 .opp-list .team + .odds { justify-self: end; }
 .mu__teams { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

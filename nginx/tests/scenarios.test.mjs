@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  outcomeCards, insightCards, oddsFor, hasProjectedOdds, outcomeProbability, completeScenarioCards, whyBlocks, seedNeeds, allOf,
+  outcomeCards, insightCards, oddsFor, hasProjectedOdds, outcomeProbability, completeScenarioCards, whyBlocks, seedNeeds, allOf, seedsTogether,
 } from "../html/static/js/scenarios.js";
 
 const cond = (w, l) => [{ type: "game_result", school: w, opponent: l }];
@@ -263,4 +263,22 @@ test("a matchup's requirements combine: single ways shared, several ways boxed, 
   assert.deepEqual(allOf([[[c("A")]], [[c("B")], [c("C")]]]), { common: [c("A")], alternatives: [[[c("B")], [c("C")]]] });
   assert.deepEqual(allOf([[[]], [[c("B")]]]), { common: [c("B")], alternatives: [] });
   assert.deepEqual(allOf([[[c("A")], []], [[c("B")]]]), { common: [c("B")], alternatives: [] }); // one way needs nothing: already met
+  // The same result needed twice (two teams of one region) is said once; a way it already covers settles that choice.
+  assert.deepEqual(allOf([[[c("A"), c("B")]], [[c("A")]]]), { common: [c("A"), c("B")], alternatives: [] });
+  assert.deepEqual(allOf([[[c("A")]], [[c("A"), c("C")], [c("D")]]]), { common: [c("A")], alternatives: [[[c("C")], [c("D")]]] });
+  assert.deepEqual(allOf([[[c("A")]], [[c("A")], [c("D")]]]), { common: [c("A")], alternatives: [] });
+});
+
+test("two teams of one region can hold two seeds at once only if some scenario has it", () => {
+  const region = {
+    scenarios_available: true,
+    scenarios: [
+      { outcomes: { A: "1", B: "2", C: "3" } },
+      { outcomes: { B: "1", A: "2", C: "3" }, open_groups: [{ teams: ["A", "C"], step: 3 }] },
+    ],
+  };
+  assert.equal(seedsTogether(region, "A", 1, "B", 2), true);
+  assert.equal(seedsTogether(region, "A", 3, "B", 1), true); // A's tie with C leaves A at 2 or 3
+  assert.equal(seedsTogether(region, "A", 1, "B", 3), false);
+  assert.equal(seedsTogether({ scenarios_available: false }, "A", 1, "B", 2), null);
 });

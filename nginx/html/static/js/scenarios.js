@@ -140,17 +140,47 @@ export function seedNeeds(region, team, seed) {
  * teams' paths to their seeds), as { common, alternatives }: the conditions
  * of every single-way requirement together, then each multi-way one's ways,
  * shown in its own "AND ONE OF" box. A requirement already met (an empty
- * way) drops out.
+ * way) drops out, and a condition is said once.
  */
 export function allOf(requirements) {
+  const key = (c) => JSON.stringify(c);
   const common = [];
+  const seen = new Set();
   const alternatives = [];
   for (const groups of requirements) {
     if (!groups.length || groups.some((g) => !g.length)) continue;
-    if (groups.length === 1) common.push(...groups[0]);
-    else alternatives.push(groups);
+    if (groups.length > 1) {
+      alternatives.push(groups);
+      continue;
+    }
+    for (const c of groups[0]) {
+      if (!seen.has(key(c))) common.push(c);
+      seen.add(key(c));
+    }
   }
-  return { common, alternatives };
+  // Two teams of one region can need the same result: say it once. A way that needs only what's
+  // already required leaves nothing to choose, so its set of alternatives drops out.
+  const left = alternatives
+    .map((ways) => ways.map((w) => w.filter((c) => !seen.has(key(c)))))
+    .filter((ways) => !ways.some((w) => !w.length));
+  return { common, alternatives: left };
+}
+
+/**
+ * Whether two teams of one region can finish as `seedA` and `seedB` at once:
+ * some complete scenario of `region` (its standings with scenarios) puts
+ * them there. A tie the scenario leaves open counts as any of its places.
+ * Without scenarios, unknown: null.
+ */
+export function seedsTogether(region, teamA, seedA, teamB, seedB) {
+  if (!region?.scenarios_available || !region.scenarios?.length) return null;
+  return region.scenarios.some((sc) => {
+    const places = (team) => {
+      const tie = (sc.open_groups ?? []).find((g) => g.teams.includes(team));
+      return tie ? tie.teams.map((t) => Number(sc.outcomes?.[t])) : [Number(sc.outcomes?.[team])];
+    };
+    return places(teamA).includes(seedA) && places(teamB).includes(seedB);
+  });
 }
 
 /** What decides a tie a scenario leaves open, by the step it's left from. */

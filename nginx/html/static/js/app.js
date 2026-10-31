@@ -12,7 +12,7 @@ import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDat
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, tableMode, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
-  conditionGroups, allOfConditions,
+  conditionGroups, allOfConditions, conditionsThen,
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -26,9 +26,10 @@ import {
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
   teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks, byeSide, pathTo,
+  matchupWays,
 } from "./bracket.js";
 import {
-  outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards, seedNeeds, allOf,
+  outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards, seedNeeds, allOf, seedsTogether,
 } from "./scenarios.js";
 import {
   standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate, pickWeek,
@@ -1854,11 +1855,13 @@ function pathHtml(ways, team) {
   const parts = ways.map((w) => (w.seedLocked ? { state: "exact", groups: [[]] } : needsParts(w.feeder, team)));
   if (parts.some((x) => x.state === "loading" || x.state === "error")) return parts.find((x) => x.state === "loading") ?? parts.find((x) => x.state === "error");
   const shown = ways.map((w, i) => {
-    const label = `<p class="how__as">As the ${esc(positionName(w.feeder))}</p>`;
+    // Which seed it's by, while that's still open; a clinched seed goes without saying.
+    const label = w.seedLocked ? "" : `<p class="how__as">As the ${esc(positionName(w.feeder))}</p>`;
     const wins = w.wins.map((x) => ({ type: "playoff_win", school: team, ...x }));
     const part = parts[i];
     if (part.state === "exact") {
-      return `${label}<div>${allOfConditions(allOf([part.groups, [wins]]), teams)}</div>`;
+      // The regular season first, then the playoff games: in the order they're played.
+      return `${label}<div>${conditionsThen(allOf([part.groups]), wins, teams)}</div>`;
     }
     // No exact list for this seed yet: what there is, then the games.
     return `${label}${part.cards}${wins.length ? `<p class="how__note">With this seed, it has to win:</p>${conditionGroups([wins], teams)}` : ""}`;
@@ -1877,7 +1880,8 @@ function pathHtml(ways, team) {
 
 /** A matchup's "How?" (`a` from side A, `b` from side B): both teams' paths at once, when both are known. */
 function matchupHow(game, a, b) {
-  if (!hasHow(game)) return null;
+  if (bracketData.results[game.id]) return null;
+  if (!hasHow(game)) return laterMatchupHow(game, a, b);
   const parts = [[game.side_a, a], [game.side_b, b]].filter(([side]) => !lockedTeam(side));
   if (!parts.length) return null;
   const key = `${game.id}:${a}|${b}`;
@@ -1895,6 +1899,58 @@ function matchupHow(game, a, b) {
     // Otherwise each team's part on its own.
     const blocks = loaded.map((x) => `<p class="how__title">${esc(x.team)} as the ${esc(positionName(x.side.feeders[0]))}</p>${needsHtml(x.side.feeders[0], x.team).html}`);
     return { html: blocks.join("") };
+  });
+}
+
+/**
+ * A later-round matchup's "How?": each pairing of the two teams' ways here
+ * (bracket.js's `matchupWays`), its regular-season results first, then each
+ * playoff game in the order they're played. When the host depends on the
+ * way, one section per host, "{team} hosts IF", likelier host first.
+ * Pairings of two teams of one region that its scenarios never have
+ * together are left out. Without exact scenarios, each team's own way.
+ */
+function laterMatchupHow(game, a, b) {
+  const { games, results, mode, season, teams } = bracketData;
+  const all = matchupWays(games, results, game, a, b, mode, season);
+  if (!all.length) return null;
+  const key = `${game.id}:${a}|${b}`;
+  const open = bracketUi.how.get(key) ?? false;
+  return howToggle(key, `What it takes for ${a} and ${b} to meet here`, open, () => {
+    const part = (w, team) => (w.seedLocked ? { state: "exact", groups: [[]] } : needsParts(w.feeder, team));
+    const parts = all.map((w) => [part(w.a, a), part(w.b, b)]);
+    if (parts.flat().some((x) => x.state === "loading")) return { html: '<p class="how__note muted">Loading…</p>' };
+    if (parts.flat().some((x) => x.state !== "exact")) {
+      // No exact list yet for a seed: each team's own way here.
+      const own = [["a", a], ["b", b]].map(([k, team]) => {
+        const ways = pathTo(games, results, game, k, team, mode);
+        return `<p class="how__title">${esc(team)}</p>${ways.length ? pathHtml(ways, team).html : ""}`;
+      });
+      return { html: own.join("") };
+    }
+    const possible = all.map((w, i) => ({ w, i })).filter(({ w }) => {
+      if (w.a.feeder.region !== w.b.feeder.region || (w.a.seedLocked && w.b.seedLocked)) return true;
+      return seedsTogether(regionNeeds(w.a.feeder.region).data, a, w.a.feeder.seed, b, w.b.feeder.seed) !== false;
+    });
+    const drawn = ({ w, i }) => {
+      // Each team's seed while it's still open; a clinched one goes without saying.
+      const seeds = [[w.a, a], [w.b, b]].filter(([x]) => !x.seedLocked).map(([x, team]) => `${esc(team)} as the ${esc(positionName(x.feeder))}`);
+      const label = seeds.length ? `<p class="how__as">${seeds.join(" · ")}</p>` : "";
+      const wins = [...w.a.wins.map((x) => ({ type: "playoff_win", school: a, ...x })), ...w.b.wins.map((x) => ({ type: "playoff_win", school: b, ...x }))]
+        .sort((x, y) => x.depth - y.depth);
+      return `${label}<div>${conditionsThen(allOf([parts[i][0].groups, parts[i][1].groups]), wins, teams)}</div>`;
+    };
+    const block = (list) => (list.length === 1
+      ? `<div>${drawn(list[0])}</div>`
+      : `<div class="oneof oneof--first" role="group" aria-label="One of"><span class="oneof__label" aria-hidden="true">ONE OF</span>`
+        + `<div class="conditions">${list.map((x) => `<div class="how__way">${drawn(x)}</div>`).join('<div class="or"><span>OR</span></div>')}</div></div>`);
+    const hosts = [...new Set(possible.map(({ w }) => w.host))];
+    if (hosts.length < 2) return { html: block(possible), iff: true };
+    // Likelier host first.
+    const hostA = gameMatchups(game, mode).find((m) => m.a === a && m.b === b)?.hostA ?? 0.5;
+    const order = hostA >= 0.5 ? ["a", "b"] : ["b", "a"];
+    const sections = order.map((h) => `<p class="how__title">${esc(h === "a" ? a : b)} hosts ${IF_TAG}</p>${block(possible.filter(({ w }) => w.host === h))}`);
+    return { html: sections.join("") };
   });
 }
 
@@ -1920,7 +1976,10 @@ function gameDetail(game) {
       <p class="muted bgame__count">${esc(measure)}</p>
       <ol class="opp-list">${opp.map((o) => {
         const note = hostText(focus, o.opponent, o.hosts, o.pTeamHosts);
-        const how = here.sides[0] === "a" ? matchupHow(game, focus, o.opponent) : matchupHow(game, o.opponent, focus);
+        // Which side each is on, from the matchup itself: in a later round the picked team can be on either.
+        const aFirst = (game.matchups ?? []).some((m) => m.team_a === focus && m.team_b === o.opponent);
+        const how = aFirst || (here.sides[0] === "a" && !(game.matchups ?? []).some((m) => m.team_a === o.opponent && m.team_b === focus))
+          ? matchupHow(game, focus, o.opponent) : matchupHow(game, o.opponent, focus);
         return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(o.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
       }).join("")}</ol>`;
   }
