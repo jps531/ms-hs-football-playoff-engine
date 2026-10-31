@@ -5,6 +5,16 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.7.0
+
+- **Share a bracket as an image.** “Share this bracket”, under a bracket's controls, opens a choice of
+  images: the North half, the South half or the whole bracket; with Projected odds or blank (results
+  and teams that are set, no odds); light or dark. It starts on the half you're looking at, your odds
+  (blank in Toss-up odds, which has no image) and your theme, and shows the image before you send it.
+  Where the browser can share files (most phones), Share hands the image to any app; anywhere, you can
+  download it, or copy its link, which for this season always shows the latest update. Past seasons' brackets can be shared too, blank, as they
+  ended. The images are of the latest update, so the button shows only there, not on an earlier week.
+
 ## 1.6.0
 
 - **The projected champion.** Under the Championship Game on a bracket, in Projected odds: the team
