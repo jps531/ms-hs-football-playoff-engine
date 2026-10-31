@@ -1831,7 +1831,9 @@ function matchupHow(game, a, b) {
     const needs = loaded.map((x) => (x.entry.status === "ok" ? seedNeeds(x.entry.data, x.team, x.side.feeders[0].seed) : null));
     // Both paths known: one set of conditions, everything joined by AND.
     if (needs.every((n) => n && (n.kind === "paths" || n.kind === "clinched"))) {
-      return { html: allOfConditions(allOf(needs.map((n) => (n.kind === "paths" ? n.groups : [[]]))), bracketData.teams), iff: true };
+      // One block, so the panel's spacing doesn't pull the "AND ONE OF" box off the line joining it to what's above.
+      const all = allOfConditions(allOf(needs.map((n) => (n.kind === "paths" ? n.groups : [[]]))), bracketData.teams);
+      return { html: `<div>${all}</div>`, iff: true };
     }
     // Otherwise each team's part on its own.
     const blocks = loaded.map((x) => `<p class="how__title">${esc(x.team)} as the ${esc(positionName(x.side.feeders[0]))}</p>${needsHtml(x.side.feeders[0], x.team).html}`);
