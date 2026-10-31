@@ -18,7 +18,7 @@ from backend.helpers.bracket_home_odds import (
     compute_semifinal_home_odds,
     equal_matchup_prob,
 )
-from backend.helpers.bracket_matchups import bracket_outlook, locked_pairs
+from backend.helpers.bracket_matchups import bracket_outlook, locked_pairs, merge_modes
 from backend.helpers.data_classes import StandingsOdds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
 
@@ -226,6 +226,31 @@ def test_played_games_are_fixed_and_locked_seeds_need_no_stored_pairs():
     }
     assert games["N-0-0"].decided
     assert games["N-1-0"].side_a.occupants == {away: pytest.approx(1.0)}
+
+
+def test_a_seed_a_small_region_cant_fill_is_a_bye_and_its_opponent_advances():
+    """A three-team region has no #4 seed: that side is a bye, and the team it would have played goes on.
+
+    A region with no seeding odds at all (none published yet) leaves every seed open, and isn't a bye.
+    """
+    odds = {r: {f"R{r}S{s}": {s: 1.0} for s in (1, 2, 3, 4)} for r in range(1, 5)}
+    del odds[2]["R2S4"]  # region 2 has three teams
+    del odds[4]  # region 4's odds aren't published yet
+    pairs = {r: locked_pairs(odds[r]) for r in odds}
+    games = bracket_outlook(SLOTS_5A_7A_2025, SEASON, odds, pairs, equal_matchup_prob)
+    first = [g for g in games if g.round_name == "First Round"]
+    byes = [(g.game_id, side.feeders) for g in first for side in (g.side_a, g.side_b) if side.bye]
+    assert byes == [(g.game_id, [(2, 4)]) for g in first if (2, 4) in g.side_a.feeders + g.side_b.feeders]
+    assert len(byes) == 1
+    game = next(g for g in first if g.game_id == byes[0][0])
+    other = game.side_a if game.side_b.bye else game.side_b
+    team = next(iter(other.occupants))
+    after = next(g for g in games if g.round_name != "First Round" and (2, 4) in g.side_a.feeders + g.side_b.feeders)
+    side = after.side_a if (2, 4) in after.side_a.feeders else after.side_b
+    assert side.occupants == {team: pytest.approx(1.0)}
+    assert not any(s.bye for g in games if g.round_name != "First Round" for s in (g.side_a, g.side_b))
+    payload = merge_modes(games, None)
+    assert sum(g["side_a"]["bye"] + g["side_b"]["bye"] for g in payload) == 1  # and the API says so
 
 
 def test_locked_pairs_only_when_every_seed_is_locked():

@@ -24,7 +24,7 @@ import {
 } from "./feedback.js";
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
-  teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks,
+  teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks, byeSide,
 } from "./bracket.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
@@ -1356,14 +1356,20 @@ function sideOrder(host) {
   };
 }
 
-const STATE_LABEL = { played: "Final", determined: "Matchup set", partial: "One spot set", projected: "" };
+const STATE_LABEL = { played: "Final", bye: "Bye", determined: "Matchup set", partial: "One spot set", projected: "" };
+
+/** Sides top to bottom and the word between them: home team last, or for a bye, the team over "BYE" and no word. */
+function gameOrder(game) {
+  const bye = byeSide(game);
+  return bye ? { order: [bye === "a" ? "b" : "a", bye], joiner: "" } : sideOrder(settledHost(game));
+}
 
 /** A compact game card in the tree: one row per side. Tapping it opens the game sheet. */
 function treeCard(game, path) {
   const { results, focus, mode } = bracketData;
   const result = results[game.id] ?? null;
   const state = gameState(game, result);
-  const { order, joiner } = sideOrder(settledHost(game));
+  const { order, joiner } = gameOrder(game);
   const onPath = path ? path.has(game.id) : null;
   const cls = ["tgame", `tgame--${state}`, onPath === true ? "is-path" : "", onPath === false ? "is-off" : ""].filter(Boolean).join(" ");
   const here = focus && !result ? teamInGame(game, focus, mode) : null;
@@ -1392,6 +1398,7 @@ function focusRows(game, here) {
   const teamSub = firstRound ? esc(positionName(mySide.feeders[0])) : "Chance to play here";
   const oppSub = firstRound ? esc(positionName(theirSide.feeders[0])) : "Likeliest opponent";
   const teamRow = (gutter) => treeLine(gutter, focus, focus, teams, teamSub, oddsCell(here.p) + spoken(" chance to play here"), " is-focus");
+  if (byeSide(game)) return `${teamRow("")}${treeLine("", null, "BYE", teams, "", "", " trow--bye")}`;
   // Every pairing here is under the API's 0.5% listing floor: too many long shots to name one.
   if (!top) return `${teamRow("")}${treeLine("vs", null, "Many opponents", teams, "Each under 0.5%", "", " trow--empty")}`;
   const oppRow = (gutter) => treeLine(gutter, top.opponent, top.opponent, teams, oppSub, oddsCell(top.p) + spoken(` chance of facing them if ${focus} gets here`), "");
@@ -1424,6 +1431,7 @@ function treeRow(game, sideKey, result, gutter) {
   if (locked) {
     return row(" trow--locked", locked, locked, `${LOCK}<span class="visually-hidden">Locked in: </span>${esc(seedLabel(locked) ?? "Clinched a playoff spot")}`, "");
   }
+  if (side.bye) return row(" trow--bye", null, "BYE", "", "");
   const list = occupants(side, mode);
   const firstRound = side.feeders.length === 1;
   if (!list.length) return row(" trow--empty", null, "No team can get here", "", "");
@@ -1588,11 +1596,13 @@ function sheetHtml(id) {
   const result = bracketData.results[game.id] ?? null;
   const state = gameState(game, result);
   const host = settledHost(game);
-  const { order, joiner } = sideOrder(host);
+  const bye = byeSide(game);
+  const { order, joiner } = gameOrder(game);
   const sideOf = (k) => (k === "a" ? game.side_a : game.side_b);
   const known = order.map((k) => lockedTeam(sideOf(k)) ?? (result ? (k === "a" ? result.winner : result.loser) : null));
-  const title = known[0] && known[1] ? `${known[0]} ${joiner} ${known[1]}` : "Who might play here";
-  const kicker = [game.round, game.id !== "final" ? HALF_NAMES[game.half] : null, STATE_LABEL[state] || null].filter(Boolean).join(" · ");
+  const title = bye ? "Bye" : known[0] && known[1] ? `${known[0]} ${joiner} ${known[1]}` : "Who might play here";
+  // A bye's title already says so.
+  const kicker = [game.round, game.id !== "final" ? HALF_NAMES[game.half] : null, bye ? null : STATE_LABEL[state] || null].filter(Boolean).join(" · ");
   return `<div class="game-sheet__head">
       <div>
         <p class="game-sheet__kicker">${esc(kicker)}</p>
@@ -1604,9 +1614,9 @@ function sheetHtml(id) {
     <div class="game-sheet__body">
       <div class="bgame bgame--sheet">
         ${bracketSide(game, order[0], result, host)}
-        <div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
-        ${bracketSide(game, order[1], result, host)}
-        ${host === "neutral" ? '<p class="bgame__site muted">Neutral site</p>' : ""}
+        ${bye ? "" : `<div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
+        ${bracketSide(game, order[1], result, host)}`}
+        ${host === "neutral" && !bye ? '<p class="bgame__site muted">Neutral site</p>' : ""}
       </div>
       ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
       <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
@@ -1703,6 +1713,12 @@ const oppJoiner = (hosts) => (hosts === "opponent" ? "at" : "vs");
 /** Expanded game: a picked team's opponents here, or both sides and their possible matchups. */
 function gameDetail(game) {
   const { mode, focus, teams } = bracketData;
+  const bye = byeSide(game);
+  if (bye) {
+    const [mine, missing] = bye === "a" ? [game.side_b, game.side_a] : [game.side_a, game.side_b];
+    const who = lockedTeam(mine) ?? `the ${positionName(mine.feeders[0])}`;
+    return `<p class="bgame__note">There is no ${esc(positionName(missing.feeders[0]))}, so ${esc(who)} gets a bye.</p>`;
+  }
   if (game.matchups == null) {
     return '<p class="bgame__note muted">Matchup odds aren’t available for this game yet.</p>';
   }

@@ -129,14 +129,26 @@ export function lockedTeam(side) {
 }
 
 /**
+ * The side of a first-round game whose seed doesn't exist ("a" or "b"), or
+ * null. The API marks it `bye`: its region has too few teams for that seed
+ * (a three-team region has no #4 seed), so the other side's team advances
+ * without playing.
+ */
+export function byeSide(game) {
+  return game.side_a.bye ? "a" : game.side_b.bye ? "b" : null;
+}
+
+/**
  * How settled a game is:
  *   "played"     — it has a result (scores, winner)
+ *   "bye"        — one side's seed doesn't exist (byeSide)
  *   "determined" — both teams locked, not yet played
  *   "partial"    — one side locked, the other open
  *   "projected"  — neither side locked
  */
 export function gameState(game, result) {
   if (result) return "played";
+  if (byeSide(game)) return "bye";
   const a = lockedTeam(game.side_a);
   const b = lockedTeam(game.side_b);
   if (a && b) return "determined";

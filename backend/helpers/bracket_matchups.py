@@ -55,10 +55,15 @@ _LOCKED = 1 - CERTAIN_EPS  # a certainty (backend.helpers.certainty)
 
 @dataclass
 class SideOutlook:
-    """Who can fill one side of a game: team -> P(team plays here on this side)."""
+    """Who can fill one side of a game: team -> P(team plays here on this side).
+
+    ``bye`` marks a first-round side whose seed doesn't exist: its region has teams, but too few for
+    that seed (a three-team region has no #4 seed), so the other side's team advances without playing.
+    """
 
     feeders: list[Position]
     occupants: dict[str, float]
+    bye: bool = False
 
 
 @dataclass
@@ -381,6 +386,19 @@ def _team_side(side: dict[Position, float], occupants: dict[Position, dict[str, 
     return {t: p / total for t, p in teams.items() if p > _EPS} if total > _EPS else {}
 
 
+def _is_bye(feeders: list[Position], occupants: dict[Position, dict[str, float]]) -> bool:
+    """Whether a side is one seed no team can take while its region has teams for other seeds.
+
+    Every region with at least as many teams as playoff seeds fills each seed, so an empty seed
+    with the region's other seeds filled means the region is too small to have it. A region with
+    no seeding odds at all (none published yet) leaves every seed empty, and isn't a bye.
+    """
+    if len(feeders) != 1 or occupants.get(feeders[0]):
+        return False
+    region = feeders[0][0]
+    return any(teams for (r, _), teams in occupants.items() if r == region)
+
+
 def _game_outlook(
     bracket: _Bracket,
     node: _Node,
@@ -394,6 +412,8 @@ def _game_outlook(
         round_name = _round_names(len(bracket.rounds[node.half]))[node.round_index]
     side_a = SideOutlook(bracket.feeders(node, 0), _team_side(node.side_a, occupants))
     side_b = SideOutlook(bracket.feeders(node, 1), _team_side(node.side_b, occupants))
+    for side in (side_a, side_b):
+        side.bye = _is_bye(side.feeders, occupants)
 
     weights: dict[tuple[str, str], float] = {}
     hosts: dict[tuple[str, str], float] = {}
@@ -494,7 +514,7 @@ def merge_modes(
 
     Returns:
         One dict per game: ``id``, ``round``, ``half``, ``decided``,
-        ``side_a``/``side_b`` (``feeders`` and ``occupants``), ``matchups``
+        ``side_a``/``side_b`` (``feeders``, ``occupants`` and ``bye``), ``matchups``
         (or None when a needed joint seeding was missing), ``other``, ``notes``.
     """
     by_id = {g.game_id: g for g in projected} if projected is not None else {}
@@ -515,7 +535,11 @@ def merge_modes(
                 for team in teams
             ]
             occ.sort(key=lambda o: (-(o["p_reach_weighted"] or 0.0), -o["p_reach"], o["team"]))
-            return {"feeders": [{"region": r, "seed": s} for r, s in t_side.feeders], "occupants": occ}
+            return {
+                "feeders": [{"region": r, "seed": s} for r, s in t_side.feeders],
+                "occupants": occ,
+                "bye": t_side.bye,
+            }
 
         p_side_a = pg.side_a if pg else None
         p_side_b = pg.side_b if pg else None

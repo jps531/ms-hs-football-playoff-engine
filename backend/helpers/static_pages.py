@@ -1357,6 +1357,8 @@ def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: 
         label = position_name(*seed) if seed else "Clinched a playoff spot"
         sub = f'{LOCK}<span class="visually-hidden">Locked in: </span>{_e(label)}'
         return _tree_line(gutter, locked, locked, teams, sub, "", " trow--locked")
+    if side.get("bye"):
+        return _tree_line(gutter, None, "BYE", teams, "", "", " trow--bye")
     listed = occupants(side, ctx["mode"])
     if not listed:
         return _tree_line(gutter, None, "No team can get here", teams, "", "", " trow--empty")
@@ -1376,12 +1378,26 @@ def _side_order(host: str | None) -> tuple[list[str], str]:
     return (["b", "a"] if host == "a" else ["a", "b"]), ("at" if host in ("a", "b") else "vs")
 
 
+def bye_side(game: dict) -> str | None:
+    """The side of a first-round game whose seed doesn't exist, or None (bracket.js's ``byeSide``)."""
+    return "a" if game["side_a"].get("bye") else "b" if game["side_b"].get("bye") else None
+
+
+def _game_order(game: dict, host: str | None) -> tuple[list[str], str]:
+    """Sides top to bottom and the word between them; for a bye, the team over "BYE" and no word (app.js's
+    ``gameOrder``)."""
+    bye = bye_side(game)
+    return ([("b" if bye == "a" else "a"), bye], "") if bye else _side_order(host)
+
+
 def _tree_card(game: dict, ctx: dict, selected: bool) -> str:
     """A compact game card, as the tree draws it; the selected one is the game whose sheet is open."""
     result = ctx["results"].get(game["id"])
     state = (
         "played"
         if result
+        else "bye"
+        if bye_side(game)
         else (
             "determined"
             if locked_team(game["side_a"]) and locked_team(game["side_b"])
@@ -1390,7 +1406,7 @@ def _tree_card(game: dict, ctx: dict, selected: bool) -> str:
             else "projected"
         )
     )
-    order, joiner = _side_order(settled_host(game, ctx["mode"]))
+    order, joiner = _game_order(game, settled_host(game, ctx["mode"]))
     rows = _tree_row(game, order[0], result, "", ctx) + _tree_row(game, order[1], result, joiner, ctx)
     where = ", ".join(x for x in (game["round"], STATE_LABEL[state]) if x)
     return (
@@ -1399,7 +1415,7 @@ def _tree_card(game: dict, ctx: dict, selected: bool) -> str:
     )
 
 
-STATE_LABEL = {"played": "Final", "determined": "Matchup set", "partial": "One spot set", "projected": ""}
+STATE_LABEL = {"played": "Final", "bye": "Bye", "determined": "Matchup set", "partial": "One spot set", "projected": ""}
 HALF_NAMES = {"N": "North", "S": "South"}
 ROUND_SHORT = {
     "First Round": "R1",
@@ -1547,7 +1563,8 @@ def _team_label(name: str, teams: dict) -> str:
 def _sheet(game: dict, ctx: dict) -> str:
     """The game sheet as it opens over the bracket: both sides, then their possible matchups."""
     host = settled_host(game, ctx["mode"])
-    order, joiner = _side_order(host)
+    bye = bye_side(game)
+    order, joiner = _game_order(game, host)
     kicker = " · ".join(x for x in (game["round"], HALF_NAMES.get(game.get("half"))) if x)
     rows = []
     for m in game_matchups(game, ctx["mode"])[:SHEET_MATCHUPS]:
@@ -1567,14 +1584,25 @@ def _sheet(game: dict, ctx: dict) -> str:
         if rows
         else ""
     )
+    if bye:
+        mine, missing = game[f"side_{order[0]}"], game[f"side_{bye}"]
+        gap, at = missing["feeders"][0], mine["feeders"][0]
+        who = locked_team(mine) or f"the {position_name(at['region'], at['seed'])}"
+        matchups = (
+            f'<p class="bgame__note">There is no {_e(position_name(gap["region"], gap["seed"]))}, '
+            f"so {_e(who)} gets a bye.</p>"
+        )
+    second = (
+        ""
+        if bye
+        else f'<div class="bgame__vs" aria-hidden="true"><span>{joiner}</span></div>{_sheet_side(game, order[1], host, ctx)}'
+    )
     return (
         '<div class="game-sheet bracket-preview__sheet">'
         f'<div class="game-sheet__head"><div><p class="game-sheet__kicker">{_e(kicker)}</p>'
-        '<p class="game-sheet__title">Who might play here</p></div></div>'
+        f'<p class="game-sheet__title">{"Bye" if bye else "Who might play here"}</p></div></div>'
         '<div class="game-sheet__body"><div class="bgame bgame--sheet">'
-        f"{_sheet_side(game, order[0], host, ctx)}"
-        f'<div class="bgame__vs" aria-hidden="true"><span>{joiner}</span></div>'
-        f"{_sheet_side(game, order[1], host, ctx)}"
+        f"{_sheet_side(game, order[0], host, ctx)}{second}"
         f'</div><div class="bgame__detail">{matchups}</div></div></div>'
     )
 
