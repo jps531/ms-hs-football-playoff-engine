@@ -203,6 +203,23 @@ export function conditionGroups(groups, teams) {
   return `<div class="conditions">${rendered.join('<div class="or"><span>OR</span></div>')}</div>`;
 }
 
+/**
+ * Requirements that must all hold (scenarios.js's `allOf`): their shared
+ * conditions, then each set of alternatives in a box headed "AND ONE OF"
+ * ("ONE OF" when nothing comes before it). A lone set of alternatives needs
+ * no box.
+ */
+export function allOfConditions({ common, alternatives }, teams) {
+  if (!common.length && alternatives.length === 1) return conditionGroups(alternatives[0], teams);
+  let html = common.length ? conditionGroups([common], teams) : "";
+  for (const ways of alternatives) {
+    const label = html ? "AND ONE OF" : "ONE OF";
+    html += `<div class="oneof${label === "ONE OF" ? " oneof--first" : ""}" role="group" aria-label="${label === "ONE OF" ? "One of" : "And one of"}">`
+      + `<span class="oneof__label" aria-hidden="true">${label}</span>${conditionGroups(ways, teams)}</div>`;
+  }
+  return html;
+}
+
 // -------------------------------------------------------- scenario card
 
 /** An outcome card; `level` is its heading's level, one below the heading it sits under. */

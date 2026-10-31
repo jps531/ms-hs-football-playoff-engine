@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
-  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode,
+  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode, allOfConditions,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -244,4 +244,16 @@ test("scenario cards: the heading level is one below the heading they sit under"
   const outcome = { label: "Scenario 1", seeds: [], out: [], groups: [] };
   assert.ok(outcomeScenarioCard(outcome, {}).includes('<h4 class="scenario__title">Scenario 1</h4>'));
   assert.ok(outcomeScenarioCard(outcome, {}, { level: 3, p: 0.5 }).includes('<h3 class="scenario__title">Scenario 1</h3>'));
+});
+
+test("conditions that must all hold: shared ones first, then each set of alternatives in its own box", () => {
+  const c = (w, l) => ({ type: "game_result", school: w, opponent: l, required_result: "win", min_margin: 1, max_margin: null });
+  // One team's single way, the other's two: the way, then "AND ONE OF" the two.
+  const both = text(allOfConditions({ common: [c("A", "B")], alternatives: [[[c("C", "D")], [c("E", "F")]]] }, {}));
+  assert.match(both, /^A A beats B AND ONE OF C C beats D OR E E beats F$/); // each chip starts with its helmet's initial
+  // Two sets of alternatives and nothing shared: the first box says ONE OF.
+  const two = text(allOfConditions({ common: [], alternatives: [[[c("A", "B")], [c("C", "D")]], [[c("E", "F")], [c("G", "H")]]] }, {}));
+  assert.match(two, /^ONE OF A A beats B OR C C beats D AND ONE OF E E beats F OR G G beats H$/);
+  // A lone set of alternatives needs no box.
+  assert.doesNotMatch(allOfConditions({ common: [], alternatives: [[[c("A", "B")], [c("C", "D")]]] }, {}), /oneof/);
 });

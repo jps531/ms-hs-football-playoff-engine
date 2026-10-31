@@ -1204,7 +1204,7 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 
 .opp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .opp-list li {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
   gap: 2px 10px;
 }
 .opp-list .team { min-width: 0; }
@@ -1213,6 +1213,39 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 .opp-list--matchups li + li { border-top: 1px solid var(--border); }
 .opp-list .team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .opp-list__host { grid-column: 1 / -1; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+
+/* The sheet's sections ruled off edge to edge (the sides, the matchups, then the rest), its
+   teams and matchups by hairlines, and "Possible matchups" as a section header. */
+.game-sheet__body > :is(.bgame__detail, .game-sheet__hint) {
+  margin-inline: -20px; padding: 14px 20px 0;
+  border-top: 1px solid var(--border);
+}
+.bgame--sheet .bside__list > li + li { border-top: 1px solid var(--border); }
+.bgame__heading--section {
+  font-family: var(--font-display); font-size: 13px; line-height: 20px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+
+/* "How?" on a first-round team or matchup: what has to happen, folded away until asked for. */
+.how-toggle {
+  display: inline-flex; align-items: center; gap: 2px; flex: none;
+  min-height: 32px; padding: 0 6px 0 9px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: none; color: var(--text-secondary);
+  font: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.how-toggle:hover { color: var(--text-primary); background: var(--surface-raised); }
+.how-toggle svg { width: 12px; height: 12px; }
+.how-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+/* An open "How?" puts IF right after the team's name. */
+dialog.game-sheet .bteam:has(> .scenario__if) .bteam__name { flex: 0 1 auto; }
+.bteam > .scenario__if { margin-right: auto; }
+.how { grid-column: 1 / -1; display: grid; gap: 10px; padding: 6px 0 14px; }
+.how__note, .how__title { font-size: 13px; line-height: 18px; }
+.how__title { font-weight: 600; }
+.oneof--first { margin-top: 10px; }
+.oneof--first::before { display: none; }
 .opp-list .team + .odds { justify-self: end; }
 .mu__teams { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .mu__line { display: flex; align-items: center; gap: 6px; min-width: 0; }

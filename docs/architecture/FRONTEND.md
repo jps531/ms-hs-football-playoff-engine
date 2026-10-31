@@ -74,7 +74,7 @@ run them under Node.
 
 | Module | Role |
 |---|---|
-| `app.js` | The app: routing, fetching, rendering each page, the bracket's game sheet and the scenario explanation sheet. |
+| `app.js` | The app: routing, fetching, rendering each page, the bracket's game sheet and the scenario explanation sheet. A first-round game's sheet loads its two regions' standings (with `include_team_scenarios`) when it opens, for each team's and matchup's "How?". |
 | `routes.js` | URL shape: path for what's shown, query for how; former team slugs. |
 | `components.js` | Reusable pieces that return HTML strings: odds cells, badges, condition chips, scenario cards, breadcrumbs. |
 | `format.js` | Odds rounding (0% and 100% only for certainties), records, dates. |

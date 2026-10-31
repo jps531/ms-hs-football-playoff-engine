@@ -109,6 +109,50 @@ export function insightCards(insights) {
   return [...cards.values()];
 }
 
+/**
+ * What a team needs to finish as `seed` in its region, for a bracket game's
+ * "How?". `region` is the region's standings with team scenarios:
+ *   { kind: "paths", groups }   its exact conditions (OR of AND groups), as
+ *                               the region page states them
+ *   { kind: "clinched" }        it already has that seed
+ *   { kind: "insights", cards } full scenarios aren't out yet (more than five
+ *                               games left): its key insights for this seed,
+ *                               a playoff spot, or elimination. Each is
+ *                               enough on its own, not the only way.
+ *   { kind: "none" }            nothing to state (link to the region instead)
+ */
+export function seedNeeds(region, team, seed) {
+  const entry = region?.teams?.find((t) => t.school === team);
+  if (!entry) return { kind: "none" };
+  if (region.scenarios_available && entry.paths?.length) {
+    const path = entry.paths.find((p) => p.outcome.type === "seed" && p.outcome.value === seed);
+    if (!path) return { kind: "none" };
+    return isUnconditional(path) ? { kind: "clinched" } : { kind: "paths", groups: path.conditions };
+  }
+  const related = (region?.key_insights ?? []).filter((i) => i.team === team && (
+    (i.insight_type === "clinch_seed" && i.seed === seed) || i.insight_type === "clinch_playoffs" || i.insight_type === "eliminated_if"));
+  const cards = insightCards(related);
+  return cards.length ? { kind: "insights", cards } : { kind: "none" };
+}
+
+/**
+ * Requirements that must all hold, each OR-of-AND groups (a matchup: both
+ * teams' paths to their seeds), as { common, alternatives }: the conditions
+ * of every single-way requirement together, then each multi-way one's ways,
+ * shown in its own "AND ONE OF" box. A requirement already met (an empty
+ * way) drops out.
+ */
+export function allOf(requirements) {
+  const common = [];
+  const alternatives = [];
+  for (const groups of requirements) {
+    if (!groups.length || groups.some((g) => !g.length)) continue;
+    if (groups.length === 1) common.push(...groups[0]);
+    else alternatives.push(groups);
+  }
+  return { common, alternatives };
+}
+
 /** What decides a tie a scenario leaves open, by the step it's left from. */
 export const OPEN_TIE_NOTES = {
   3: "Order decided by the tiebreaker: point differential, then fewest points allowed",

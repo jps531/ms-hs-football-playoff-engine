@@ -5,6 +5,16 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.2.0
+
+- **What it takes to reach a first-round playoff game.** In a first-round game on a bracket, each
+  team that could play there, and each possible matchup, has a “How?” that opens what has to happen:
+  the same conditions the region's page lists for that seed, and for a matchup, both teams' at once.
+  The team you've picked opens on its own. Until a region has five or fewer region games left, it shows the
+  results that would settle the spot, if there are any, and links to the region.
+- **A tidier game sheet.** Its teams and matchups are separated by lines, and “Possible matchups” is
+  a section header.
+
 ## 1.1.2
 
 - **A bye reads as a bye.** When a region has only three teams, the team that would have played its

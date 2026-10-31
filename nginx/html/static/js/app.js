@@ -12,6 +12,7 @@ import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDat
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, tableMode, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
+  conditionGroups, allOfConditions,
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -27,7 +28,7 @@ import {
   teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks, byeSide,
 } from "./bracket.js";
 import {
-  outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards,
+  outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards, seedNeeds, allOf,
 } from "./scenarios.js";
 import {
   standingPositions, positionLabels, playoffPath, regionGames, displayOrder, regionComplete, snapshotDate, pickWeek,
@@ -1215,7 +1216,8 @@ function explanationHtml(card) {
 const LIST_CAP = 5; // occupants shown before "Show all"
 
 /** Bracket UI state that isn't in the URL; reset when the class changes. */
-const bracketUi = { key: null, open: null, showAll: new Set(), half: "both", focus: null }; // open: the game in the sheet
+// open: the game in the sheet; how: each "How?" opened or closed by hand (else the picked team's is open)
+const bracketUi = { key: null, open: null, showAll: new Set(), how: new Map(), half: "both", focus: null };
 let bracketData = null; // what the last bracket render used, for in-place updates
 
 async function bracketView(ctx) {
@@ -1255,7 +1257,7 @@ async function bracketView(ctx) {
   if (bracketUi.key !== key) {
     // Phones show one half at a time; wide screens start with both.
     const half = matchMedia("(max-width: 48em)").matches ? "N" : "both";
-    Object.assign(bracketUi, { key, open: null, showAll: new Set(), half, focus: null });
+    Object.assign(bracketUi, { key, open: null, showAll: new Set(), how: new Map(), half, focus: null });
   }
   // One half at a time (phones): show the picked team's half when the pick changes.
   if (ctx.team !== bracketUi.focus) {
@@ -1266,7 +1268,7 @@ async function bracketView(ctx) {
     if (first) bracketUi.half = first.half;
   }
   bracketData = {
-    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz, season,
+    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz, season, date,
   };
 
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
@@ -1580,6 +1582,8 @@ function refreshSheet() {
   const body = sheet.querySelector(".game-sheet__body");
   const top = body?.scrollTop ?? 0;
   const outer = sheet.scrollTop;
+  const how = document.activeElement?.closest?.("[data-how]")?.dataset.how;
+  if (how && !sheetFocus) sheetFocus = `[data-how="${CSS.escape(how)}"]`;
   sheet.innerHTML = sheetHtml(bracketUi.open);
   sheet.querySelector(".game-sheet__body").scrollTop = top;
   sheet.scrollTop = outer;
@@ -1606,7 +1610,7 @@ function sheetHtml(id) {
   return `<div class="game-sheet__head">
       <div>
         <p class="game-sheet__kicker">${esc(kicker)}</p>
-        <h2 class="game-sheet__title" id="game-sheet-title" tabindex="-1" autofocus>${esc(title)}</h2>
+        <h2 class="game-sheet__title${title === "Who might play here" ? " visually-hidden" : ""}" id="game-sheet-title" tabindex="-1" autofocus>${esc(title)}</h2>
         <p class="game-sheet__prov provenance">${contextHtml(`Class ${bracketData.clazz}A`, bracketData.summary, bracketData.mode)}</p>
       </div>
       <button type="button" class="game-sheet__close" data-sheet-close>${CLOSE}<span class="visually-hidden">Close</span></button>
@@ -1628,6 +1632,20 @@ function sheetHtml(id) {
 function onSheetClick(e) {
   if (e.target === sheet || e.target.closest("[data-sheet-close]")) {
     sheet.close();
+    return;
+  }
+  const how = e.target.closest("[data-how]");
+  if (how) {
+    bracketUi.how.set(how.dataset.how, how.getAttribute("aria-expanded") !== "true");
+    refreshSheet();
+    return;
+  }
+  // A link to a region leaves the bracket: close the sheet and go there in place.
+  const link = e.target.closest("a[data-sheet-link]");
+  if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
+    e.preventDefault();
+    sheet.close();
+    navigate(link.getAttribute("href"), { scroll: true });
     return;
   }
   const more = e.target.closest("[data-show-all]");
@@ -1695,7 +1713,11 @@ function bracketSide(game, sideKey, result, host) {
     ? `<button type="button" class="bside__more" data-show-all="${esc(allKey)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${list.length}`}</button>`
     : "";
   if (!list.length) return `<div class="bside">${label}<p class="bside__empty muted">No team can get here</p></div>`;
-  return `<div class="bside">${label}<ul class="bside__list">${shown.map((o) => `<li class="bteam">${pickTeam(o.team)}${oddsCell(o.p)}</li>`).join("")}</ul>${more}</div>`;
+  const items = shown.map((o) => {
+    const how = sideHow(game, side, o.team);
+    return `<li><div class="bteam">${pickTeam(o.team)}${how?.iff ? IF_TAG : ""}${oddsCell(o.p)}${how?.button ?? ""}</div>${how?.panel ?? ""}</li>`;
+  });
+  return `<div class="bside">${label}<ul class="bside__list">${items.join("")}</ul>${more}</div>`;
 }
 
 /** Host wording for a pairing, from whichever team is likelier to host: "60% chance Raleigh hosts". */
@@ -1709,6 +1731,113 @@ function hostText(team, opponent, hosts, pTeamHosts) {
 
 /** "at" when the opponent would host; "vs" otherwise (the picked team hosts, either could, or a neutral site). */
 const oppJoiner = (hosts) => (hosts === "opponent" ? "at" : "vs");
+
+// ------------------------------------------------- first-round "How?"
+// A first-round side is one region's seed, so what a team needs to be there
+// is its path to that seed, as the region page states it; a matchup needs
+// both teams' paths. The two regions load when the sheet asks for them.
+
+const IF_TAG = '<span class="scenario__if">IF</span>';
+const regionCache = new Map(); // season:class:region:date -> { status: "loading" | "ok" | "error", data }
+
+/** One region's standings with team scenarios, as of the bracket's date; loads it the first time, then redraws the sheet. */
+function regionNeeds(region) {
+  const { season, clazz, date } = bracketData;
+  const key = `${season}:${clazz}:${region}:${date ?? ""}`;
+  let entry = regionCache.get(key);
+  if (!entry) {
+    entry = { status: "loading", data: null };
+    regionCache.set(key, entry);
+    getJSON(`/standings/${clazz}/${region}?season=${season}&include_team_scenarios=true${date ? `&date=${date}` : ""}`)
+      .then((data) => Object.assign(entry, { status: "ok", data }), () => { entry.status = "error"; })
+      .then(() => refreshSheet());
+  }
+  return entry;
+}
+
+/** A first-round game not yet played: the only games with a "How?". */
+function hasHow(game) {
+  return game.round === "First Round" && game.side_a.feeders.length === 1 && game.side_b.feeders.length === 1
+    && !bracketData.results[game.id];
+}
+
+/**
+ * A "How?" toggle and, when open, its panel: { open, iff, button, panel }.
+ * `label` says what it explains, for screen readers. `body()` gives the
+ * panel as { html, iff }; `iff` when it's exactly the conditions, so the
+ * row can say IF before them.
+ */
+function howToggle(key, label, open, body) {
+  const id = `how-${key.replace(/[^a-z0-9]+/gi, "-")}`;
+  const shown = open ? body() : null;
+  return {
+    open,
+    iff: Boolean(shown?.iff),
+    button: `<button type="button" class="how-toggle" data-how="${esc(key)}" aria-expanded="${open}" aria-controls="${id}">How?<span class="visually-hidden"> ${esc(label)}</span>${chevronIcon}</button>`,
+    panel: shown ? `<div class="how" id="${id}">${shown.html}</div>` : "",
+  };
+}
+
+/** "Region 1-6A": the region a first-round position is in, for a link to it. */
+const regionName = (feeder) => `Region ${feeder.region}-${bracketData.clazz}A`;
+
+/** A link to a region's page (with this team picked), which closes the sheet. */
+function regionLink(feeder, team) {
+  const href = hrefWith({ page: "region", clazz: bracketData.clazz, region: feeder.region, team });
+  return `<a href="${esc(href)}" data-sheet-link>See ${esc(regionName(feeder))}</a>`;
+}
+
+/** What `team` needs to be the side's seed, as a panel ({ html, iff }; see howToggle), or the loading/failed note. */
+function needsHtml(feeder, team) {
+  const entry = regionNeeds(feeder.region);
+  if (entry.status === "loading") return { html: '<p class="how__note muted">Loading…</p>' };
+  if (entry.status === "error") return { html: `<p class="how__note">This couldn't be loaded. ${regionLink(feeder, team)}</p>` };
+  const needs = seedNeeds(entry.data, team, feeder.seed);
+  const { teams } = bracketData;
+  if (needs.kind === "paths") return { html: conditionGroups(needs.groups, teams), iff: true };
+  if (needs.kind === "clinched") return { html: `<p class="how__note">${esc(team)} has clinched this spot.</p>` };
+  // The region page's own words for why there's no exact list yet.
+  const left = entry.data.remaining_games?.length ?? 0;
+  const before = entry.data.scenarios_available
+    ? ""
+    : `<p class="how__note muted">Full scenarios appear once five or fewer region games remain; ${left} are left.${
+      needs.kind === "insights" ? " Until then, these are results that settle a spot no matter what else happens." : ""}</p>`;
+  if (needs.kind === "insights") {
+    const cards = needs.cards.map((c) => `<p class="how__title">${esc(c.title)} ${IF_TAG}</p>${conditionGroups(c.groups, teams)}`);
+    return { html: `${before}${cards.join("")}<p class="how__note">${regionLink(feeder, team)}</p>` };
+  }
+  return { html: `${before}<p class="how__note">${regionLink(feeder, team)}</p>` };
+}
+
+/** A side's team "How?": what it needs to be this seed. Open by default for the picked team. */
+function sideHow(game, side, team) {
+  if (!hasHow(game) || side.bye || lockedTeam(side)) return null;
+  const feeder = side.feeders[0];
+  const key = `${game.id}:${team}`;
+  const open = bracketUi.how.get(key) ?? team === bracketData.focus;
+  return howToggle(key, `What ${team} needs to be the ${positionName(feeder)}`, open, () => needsHtml(feeder, team));
+}
+
+/** A matchup's "How?" (`a` from side A, `b` from side B): both teams' paths at once, when both are known. */
+function matchupHow(game, a, b) {
+  if (!hasHow(game)) return null;
+  const parts = [[game.side_a, a], [game.side_b, b]].filter(([side]) => !lockedTeam(side));
+  if (!parts.length) return null;
+  const key = `${game.id}:${a}|${b}`;
+  const open = bracketUi.how.get(key) ?? false;
+  return howToggle(key, `What it takes for ${a} and ${b} to meet here`, open, () => {
+    const loaded = parts.map(([side, team]) => ({ side, team, entry: regionNeeds(side.feeders[0].region) }));
+    if (loaded.some((x) => x.entry.status === "loading")) return { html: '<p class="how__note muted">Loading…</p>' };
+    const needs = loaded.map((x) => (x.entry.status === "ok" ? seedNeeds(x.entry.data, x.team, x.side.feeders[0].seed) : null));
+    // Both paths known: one set of conditions, everything joined by AND.
+    if (needs.every((n) => n && (n.kind === "paths" || n.kind === "clinched"))) {
+      return { html: allOfConditions(allOf(needs.map((n) => (n.kind === "paths" ? n.groups : [[]]))), bracketData.teams), iff: true };
+    }
+    // Otherwise each team's part on its own.
+    const blocks = loaded.map((x) => `<p class="how__title">${esc(x.team)} as the ${esc(positionName(x.side.feeders[0]))}</p>${needsHtml(x.side.feeders[0], x.team).html}`);
+    return { html: blocks.join("") };
+  });
+}
 
 /** Expanded game: a picked team's opponents here, or both sides and their possible matchups. */
 function gameDetail(game) {
@@ -1732,7 +1861,8 @@ function gameDetail(game) {
       <p class="muted bgame__count">${esc(measure)}</p>
       <ol class="opp-list">${opp.map((o) => {
         const note = hostText(focus, o.opponent, o.hosts, o.pTeamHosts);
-        return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}</span></span>${oddsCell(o.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
+        const how = here.sides[0] === "a" ? matchupHow(game, focus, o.opponent) : matchupHow(game, o.opponent, focus);
+        return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(o.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
       }).join("")}</ol>`;
   }
   const ms = gameMatchups(game, mode);
@@ -1743,13 +1873,14 @@ function gameDetail(game) {
     const [away, home] = h.host === "a" ? [m.b, m.a] : [m.a, m.b];
     const joiner = h.host === "a" || h.host === "b" ? "at" : "vs";
     const note = hostText(m.a, m.b, h.host === "a" ? "team" : h.host === "b" ? "opponent" : h.host, h.p);
-    return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}</span></span>${oddsCell(m.p)}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}</li>`;
+    const how = matchupHow(game, m.a, m.b);
+    return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(m.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
   });
   if (!ms.length) {
     return `<p class="muted bgame__count">So many teams could still meet here that ${hidden ? `none of the ${hidden} possible pairings has` : "no single matchup has"} even a 0.5% chance yet.</p>`;
   }
   // Each side's teams are listed above it, so the matchups follow directly.
-  return `<h3 class="bgame__heading">Possible matchups</h3>
+  return `<h3 class="bgame__heading bgame__heading--section">Possible matchups</h3>
     <ol class="opp-list opp-list--matchups">${rows.join("")}</ol>
     ${hidden ? `<p class="muted bgame__count">Not showing ${hidden} other possible ${hidden === 1 ? "pairing" : "pairings"}, each under 0.5%</p>` : ""}`;
 }
