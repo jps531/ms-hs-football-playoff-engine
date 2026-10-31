@@ -241,11 +241,11 @@ def trophy_icon(size: int = 56) -> str:
 
 def venue_name(venue: dict | None) -> str | None:
     """Where a season's championship games are played (components.js's ``venueName``): "Davis Wade
-    Stadium, Starkville", the state left off. None when no venue is on record."""
+    Stadium • Starkville", the state left off. None when no venue is on record."""
     if not venue or not venue.get("name"):
         return None
     city = re.sub(r",\s*MS$", "", str(venue.get("city") or ""), flags=re.IGNORECASE).strip()
-    return f"{venue['name']}, {city}" if city else venue["name"]
+    return f"{venue['name']} • {city}" if city else venue["name"]
 
 
 def projected_champion(game: dict | None, result: dict | None) -> dict | None:

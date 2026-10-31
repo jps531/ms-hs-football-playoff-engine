@@ -161,14 +161,14 @@ export const TROPHY_SHAPES = '<rect x="5.5" y="50" width="29" height="4.5" rx="1
 
 /**
  * Where a season's championship games are played, from the API's
- * /championships location: "Davis Wade Stadium, Starkville" (every venue is
+ * /championships location: "Davis Wade Stadium • Starkville" (every venue is
  * in Mississippi, so the state is left off). Null when none is on record.
  * static_pages.venue_name() is the same.
  */
 export function venueName(venue) {
   if (!venue?.name) return null;
   const city = String(venue.city ?? "").replace(/,\s*MS$/i, "").trim();
-  return city ? `${venue.name}, ${city}` : venue.name;
+  return city ? `${venue.name} • ${city}` : venue.name;
 }
 
 /** "Projected champion" with a small trophy, over "Winona · 22%"; *champ* is projectedChampion()'s. */

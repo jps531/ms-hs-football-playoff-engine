@@ -14,9 +14,9 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
 - **Each team's chance to win it all.** Opening the Championship Game lists the teams likeliest to
   win the state championship, with their chances.
 - **Where the championship is played.** Where a championship game said “Neutral site”, it now names
-  the venue on record for that season, such as “Davis Wade Stadium, Starkville”: under the game on the
+  the venue on record for that season, such as “Davis Wade Stadium • Starkville”: under the game on the
   bracket, in its details, on the state champion's card (“in the Championship Game at Davis Wade
-  Stadium, Starkville”), on the image of the whole bracket, and on a team's bracket image.
+  Stadium • Starkville”), on the image of the whole bracket, and on a team's bracket image.
 
 ## 1.5.0
 

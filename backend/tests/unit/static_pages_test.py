@@ -790,10 +790,10 @@ def test_the_championship_game_card_says_where_its_played_and_the_projected_cham
     ]}  # fmt: skip
     html = bracket_body(3, games, {**BRACKET_CTX, "venue": venue}, "x")
     note = html[html.index('<div class="tfinal">') :]
-    assert note.startswith('<div class="tfinal"><p class="tfinal__venue">Davis Wade Stadium, Starkville</p>')
+    assert note.startswith('<div class="tfinal"><p class="tfinal__venue">Davis Wade Stadium • Starkville</p>')
     assert "Projected champion:</span> <span class=\"champ-line__team\"><strong>Raleigh</strong> · 31%</span>" in note
     tossup = bracket_body(3, games, {**BRACKET_CTX, "mode": "tossup", "venue": venue}, "x")
-    assert "Projected champion" not in tossup and "Davis Wade Stadium, Starkville" in tossup
+    assert "Projected champion" not in tossup and "Davis Wade Stadium • Starkville" in tossup
     banner = bracket_body(
         3,
         games,
@@ -805,7 +805,7 @@ def test_the_championship_game_card_says_where_its_played_and_the_projected_cham
         },
         "x",
     )
-    assert "in the Championship Game at Davis Wade Stadium, Starkville</p>" in banner
+    assert "in the Championship Game at Davis Wade Stadium • Starkville</p>" in banner
     assert "Projected champion" not in banner
 
 
