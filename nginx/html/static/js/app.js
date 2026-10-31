@@ -15,6 +15,10 @@ import {
   conditionGroups, allOfConditions, conditionsThen, championBanner, finalNote, championLine, venueName,
 } from "./components.js";
 import { matchTeams } from "./search.js";
+import {
+  SHARE_VIEWS, SHARE_VERSIONS, SHARE_THEMES, shareVersions, shareDefaults, bracketImagePath, bracketImageName,
+  bracketImageLabel,
+} from "./share.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
@@ -1271,8 +1275,18 @@ async function bracketView(ctx) {
     if (first) bracketUi.half = first.half;
   }
   bracketData = {
-    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz, season, date,
+    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz, season, date, currentSeason: ctx.currentSeason,
     venue: venues?.[0]?.location ?? null,
+    asOf: matchupRes.as_of_date,
+    // The images to share are drawn for the newest numbers only (a past season's once, for its end),
+    // so the Share button shows only where the page shows those.
+    share: games.length && (!weeks.length || pickWeek(weeks, ctx.week) === weeks[weeks.length - 1])
+      ? shareVersions({
+        projectedAvailable,
+        final: Boolean(layoutResults(layoutRes?.bracket_layout).final?.winner),
+        pastSeason: ctx.season !== ctx.currentSeason,
+      })
+      : null,
   };
 
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
@@ -1288,6 +1302,7 @@ async function bracketView(ctx) {
       ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: pickedTeam(clazz) })], [`Class ${clazz}A Bracket`, null]])}
       <h1 class="title">Class ${clazz}A Bracket</h1>
       ${controls}
+      ${bracketData.share ? `<p class="share-line"><button type="button" class="share-button" data-share-open aria-haspopup="dialog">${SHARE_ICON}Share this bracket</button></p>` : ""}
       ${bracketData.results.final?.winner ? championBanner(season, clazz, bracketData.results.final, teams, bracketData.venue) : ""}
       ${focusNote}
     </header>
@@ -1558,6 +1573,172 @@ function rerenderBracket() {
   if (!host || !bracketData) return;
   host.innerHTML = bracketHtml();
   wireBracket();
+}
+
+// ------------------------------------------------------------ share
+// "Share this bracket" opens a sheet to pick one of the images the server drew
+// (which half, Projected odds or blank, light or dark), see it, and send it:
+// the device's share sheet with the image attached where the browser can,
+// else a download, or the image's link copied.
+
+const SHARE_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12.5V3"/><path d="M6.5 6.5 10 3l3.5 3.5"/><path d="M5 9.5H4.5A1.5 1.5 0 0 0 3 11v4.5A1.5 1.5 0 0 0 4.5 17h11a1.5 1.5 0 0 0 1.5-1.5V11a1.5 1.5 0 0 0-1.5-1.5H15"/></svg>';
+
+let shareSheet = null;
+const shareUi = { choice: null, status: "", image: null }; // image: { path, blob } once loaded, or { path, failed }
+
+function shareDialog() {
+  if (shareSheet) return shareSheet;
+  shareSheet = document.createElement("dialog");
+  shareSheet.className = "game-sheet share-sheet";
+  shareSheet.setAttribute("aria-labelledby", "share-sheet-title");
+  document.body.append(shareSheet);
+  shareSheet.addEventListener("click", onShareClick);
+  shareSheet.addEventListener("close", () => document.querySelector("[data-share-open]")?.focus({ preventScroll: true }));
+  return shareSheet;
+}
+
+function openShare() {
+  const { mode, share } = bracketData;
+  shareUi.choice = shareDefaults({ half: bracketUi.half, mode, versions: share, dark: document.documentElement.classList.contains("dark") });
+  shareUi.status = "";
+  const s = shareDialog();
+  s.innerHTML = shareHtml();
+  if (!s.open) s.showModal();
+  loadShareImage();
+}
+
+/** The chosen image's address, fresh for this update (the file at its address is replaced each update). */
+function shareSrc() {
+  const { season, clazz, asOf } = bracketData;
+  return `${bracketImagePath(season, clazz, shareUi.choice)}${asOf ? `?v=${encodeURIComponent(asOf)}` : ""}`;
+}
+
+/** Fetch the chosen image ahead of a tap on Share, which must hand it over at once to keep the tap's permission. */
+async function loadShareImage() {
+  const path = shareSrc();
+  if (shareUi.image?.path === path) return;
+  shareUi.image = { path };
+  try {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    if (shareUi.image?.path === path) shareUi.image = { path, blob };
+  } catch {
+    if (shareUi.image?.path === path) shareUi.image = { path, failed: true };
+  }
+  if (shareUi.image?.path === path) refreshShare();
+}
+
+const canShareFiles = () => {
+  try {
+    return Boolean(navigator.canShare?.({ files: [new File([""], "x.png", { type: "image/png" })] }));
+  } catch {
+    return false;
+  }
+};
+
+function shareHtml() {
+  const { clazz, share, season, currentSeason } = bracketData;
+  const c = shareUi.choice;
+  const group = (label, key, options) => `<div class="share-sheet__group" role="group" aria-label="${esc(label)}">
+      <p class="share-sheet__label" aria-hidden="true">${esc(label)}</p>
+      <div class="half-control">${options.map((o) => `<button type="button" class="half-control__item" data-share-opt="${key}:${o.key}" aria-pressed="${c[key] === o.key}">${esc(o.label)}</button>`).join("")}</div>
+    </div>`;
+  const img = shareUi.image;
+  const ready = Boolean(img?.blob);
+  const preview = img?.failed
+    ? '<p class="share-sheet__missing muted">This image isn’t available yet. It’s drawn after each update, so try again later.</p>'
+    : `<img class="share-sheet__preview" src="${esc(shareSrc())}" alt="${esc(bracketImageLabel(clazz, c))}">`;
+  const disabled = ready ? "" : " disabled";
+  return `<div class="game-sheet__head">
+      <div><h2 class="game-sheet__title" id="share-sheet-title" tabindex="-1" autofocus>Share this bracket</h2>
+        <p class="game-sheet__prov provenance">Class ${esc(String(clazz))}A · ${season === currentSeason ? "as of the latest update" : `${esc(String(season))} season, at its end`}</p></div>
+      <button type="button" class="game-sheet__close" data-share-close>${CLOSE}<span class="visually-hidden">Close</span></button>
+    </div>
+    <div class="game-sheet__body share-sheet__body">
+      ${group("Show", "view", SHARE_VIEWS)}
+      ${share.length > 1 ? group("Odds", "version", SHARE_VERSIONS) : ""}
+      ${group("Theme", "theme", SHARE_THEMES)}
+      <div class="share-sheet__frame${c.view === "all" ? " is-wide" : ""}">${preview}</div>
+      <div class="share-sheet__actions">
+        ${canShareFiles() ? `<button type="button" class="share-sheet__primary" data-share-act="share"${disabled}>${SHARE_ICON}Share</button>` : ""}
+        <button type="button" class="share-sheet__secondary" data-share-act="download"${disabled}>Download image</button>
+        <button type="button" class="share-sheet__secondary" data-share-act="copy"${img?.failed ? " disabled" : ""}>Copy image link</button>
+      </div>
+      <p class="share-sheet__status muted" role="status">${esc(shareUi.status)}</p>
+    </div>`;
+}
+
+/** Redraw the open share sheet (an option chosen, the image loaded), keeping focus on the same control. */
+function refreshShare() {
+  if (!shareSheet?.open) return;
+  const focused = document.activeElement?.closest?.("[data-share-opt], [data-share-act]");
+  const key = focused?.dataset.shareOpt ?? focused?.dataset.shareAct;
+  shareSheet.innerHTML = shareHtml();
+  const again = key && shareSheet.querySelector(`[data-share-opt="${CSS.escape(key)}"], [data-share-act="${CSS.escape(key)}"]`);
+  (again && !again.disabled ? again : shareSheet.querySelector(".game-sheet__title"))?.focus({ preventScroll: true });
+}
+
+function onShareClick(e) {
+  if (e.target === shareSheet || e.target.closest("[data-share-close]")) {
+    shareSheet.close();
+    return;
+  }
+  const opt = e.target.closest("[data-share-opt]");
+  if (opt) {
+    const [key, value] = opt.dataset.shareOpt.split(":");
+    shareUi.choice = { ...shareUi.choice, [key]: value };
+    shareUi.status = "";
+    refreshShare();
+    loadShareImage();
+    return;
+  }
+  const act = e.target.closest("[data-share-act]");
+  if (act && !act.disabled) shareAction(act.dataset.shareAct);
+}
+
+async function shareAction(how) {
+  const { season, clazz, currentSeason } = bracketData;
+  const c = shareUi.choice;
+  const name = bracketImageName(season, clazz, c);
+  const page = `${location.origin}/brackets/${clazz}a${season !== currentSeason ? `?season=${season}` : ""}`;
+  const done = (status) => {
+    track("bracket_image_shared", { class: clazz, season, view: c.view, version: c.version, theme: c.theme, method: how });
+    shareUi.status = status;
+    refreshShare();
+  };
+  if (how === "copy") {
+    try {
+      await navigator.clipboard.writeText(`${location.origin}${bracketImagePath(season, clazz, c)}`);
+      done(season === currentSeason ? "Link copied. It always shows the latest update." : "Link copied.");
+    } catch {
+      shareUi.status = "Couldn’t copy the link here.";
+      refreshShare();
+    }
+    return;
+  }
+  const blob = shareUi.image?.blob;
+  if (!blob) return;
+  if (how === "share") {
+    const file = new File([blob], name, { type: "image/png" });
+    try {
+      await navigator.share({ files: [file], title: bracketImageLabel(clazz, c), text: `${bracketImageLabel(clazz, c)}: ${page}` });
+      done("");
+    } catch (err) {
+      if (err?.name === "AbortError") return; // closed the share sheet
+      shareUi.status = "Couldn’t open sharing here; download the image instead.";
+      refreshShare();
+    }
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  done("Downloaded.");
 }
 
 // ------------------------------------------------------------ game sheet
@@ -2042,6 +2223,11 @@ app.addEventListener("click", (e) => {
     const i = Number(explain.dataset.explainOpen);
     track("scenario_explanation_opened", { place: explainData?.place, scenario: explainData?.cards[i]?.label });
     openExplanation(i);
+    return;
+  }
+  if (e.target.closest("[data-share-open]")) {
+    track("bracket_share_opened", { class: bracketData?.clazz });
+    openShare();
     return;
   }
   const card = e.target.closest("[data-game-open]");

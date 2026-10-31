@@ -52,6 +52,8 @@ keep the two in step: a new event or property means a new line there.
 | `team_search_used` | Choosing a team from the search box | `team` |
 | `bracket_game_opened` | Opening a game's sheet | `class`, `round`, `game` |
 | `bracket_half_changed` | The North/South/Both control | `half` |
+| `bracket_share_opened` | Opening “Share this bracket” | `class` |
+| `bracket_image_shared` | Sharing, downloading or copying the link to a bracket image | `class`, `season`, `view` (`north`/`south`/`all`), `version` (`odds`/`blank`), `theme`, `method` (`share`/`download`/`copy`) |
 | `scenarios_opened` | Opening a folded scenario group | `section` (its heading) |
 | `scenario_explanation_opened` | Opening a scenario card's Explanation sheet | `place` (e.g. `Region 1-7A`), `scenario` (the card's label, e.g. `Scenario 3`) |
 | `home_link_clicked` | Following a link on the front page | `to` (the link's path), `section` (the front-page section it's in: its heading id without `landing-`, or `classes` for the class buttons) |

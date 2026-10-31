@@ -1631,3 +1631,50 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .detail__elo { margin-top: 12px; font-size: 15px; font-variant-numeric: tabular-nums; }
 .detail__elo-label { color: var(--text-secondary); }
 .detail__elo + .detail__note { margin-top: 4px; font-size: 13px; line-height: 18px; }
+
+/* "Share this bracket", under the bracket's controls, and the sheet it opens: which image (half,
+   odds, theme), a preview of it, and how to send it. */
+.share-line { margin-top: 12px; }
+.share-button {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 40px; padding: 0 14px 0 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: none; color: var(--text-primary);
+  font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.share-button:hover { background: var(--surface-raised); }
+.share-button svg, .share-sheet__primary svg { width: 18px; height: 18px; flex: none; }
+.share-sheet__body { display: grid; gap: 14px; }
+.share-sheet__group { display: grid; gap: 6px; }
+.share-sheet__label {
+  font-size: 12px; line-height: 16px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary);
+}
+.share-sheet .half-control { margin-bottom: 0; display: flex; flex-wrap: wrap; }
+.share-sheet .half-control__item { flex: 1 1 auto; min-height: 40px; }
+/* A fixed height (not an aspect ratio, which a max-height can't hold against a 2000px image) with
+   the image fitted inside it. */
+.share-sheet__frame {
+  display: flex; align-items: center; justify-content: center;
+  height: min(36vh, 24rem); padding: 6px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+.share-sheet__frame.is-wide { height: min(26vh, 18rem); }
+.share-sheet__preview { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
+.share-sheet__missing { padding: 16px; font-size: 14px; text-align: center; }
+.share-sheet__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.share-sheet__primary, .share-sheet__secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  flex: 1 1 auto; min-height: 44px; padding: 0 16px;
+  border-radius: 8px;
+  font: inherit; font-size: 15px; font-weight: 600;
+  cursor: pointer;
+}
+.share-sheet__primary { border: 0; background: var(--scrubber-selected-bg); color: var(--scrubber-selected-text); }
+.share-sheet__secondary { border: 1px solid var(--border); background: none; color: var(--text-primary); }
+.share-sheet__secondary:hover { background: var(--surface-raised); }
+:is(.share-sheet__primary, .share-sheet__secondary):disabled { opacity: 0.5; cursor: default; }
+.share-sheet__status { min-height: 20px; font-size: 14px; line-height: 20px; }
