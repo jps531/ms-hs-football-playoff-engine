@@ -1900,14 +1900,17 @@ def landing_body(
     return f'<div class="page landing"{span}>{intro}{tour}</div>\n'
 
 
-def sitemap_xml(site_url: str, pages: Iterable[tuple[str, date | None]]) -> str:
-    """A sitemap of *pages* ((path, last modified)), for search engines."""
+def sitemap_xml(site_url: str, pages: Iterable[tuple]) -> str:
+    """A sitemap of *pages* ((path, last modified[, image URLs])), for search engines; a page's images
+    (the bracket's image) are listed with it for image search."""
     site = site_url.rstrip("/")
     entries = []
-    for path, modified in pages:
+    for path, modified, *rest in pages:
         lastmod = f"<lastmod>{modified.isoformat()}</lastmod>" if modified else ""
-        entries.append(f"<url><loc>{xml_escape(site + path)}</loc>{lastmod}</url>")
+        images = "".join(f"<image:image><image:loc>{xml_escape(u)}</image:loc></image:image>" for u in (rest[0] if rest else []))
+        entries.append(f"<url><loc>{xml_escape(site + path)}</loc>{lastmod}{images}</url>")
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "\n".join(entries) + "\n</urlset>\n"
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+        ' xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n' + "\n".join(entries) + "\n</urlset>\n"
     )

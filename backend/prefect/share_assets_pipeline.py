@@ -17,7 +17,13 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
                               <title>, description, Open Graph / Twitter tags
     body/{class}-{region}.html, body/{class}.html, body/bracket-{class}.html, body/site.html
                               the page's content as static HTML (backend.helpers.static_pages)
+    bracket/{season}/{class}a-{view}-{version}.png
+                              the whole bracket as one image, to share: view "north" or "south"
+                              (that half, square) or "all" (both halves, wide); version "odds"
+                              (Projected) or "blank" (locked-in teams and results only). Past
+                              seasons get their final bracket ("blank") once.
     sitemap.xml               the front page, About, and every region, class and bracket page
+                              (a bracket page lists its whole-bracket image)
 
 nginx splices the matching ``meta/*.html`` into the app's ``index.html``
 <head> for /standings/{class}a/{region}[?team=<slug>], /standings/{class}a and
@@ -39,6 +45,7 @@ from pathlib import Path
 import requests
 from prefect import flow, get_run_logger, task
 
+from backend.helpers.bracket_image import is_final, render_bracket_image
 from backend.helpers.engine_settings import CLASSES, FULL_MARGINS_MAX_LEFT
 from backend.helpers.share_cards import (
     SITE_DESCRIPTION,
@@ -143,12 +150,12 @@ def build_share_assets(
 
     Returns counts of what was written: {"regions", "classes", "teams", "brackets", "bracket_teams"}.
     """
-    keys = ("regions", "classes", "teams", "brackets", "bracket_teams")
+    keys = ("regions", "classes", "teams", "brackets", "bracket_teams", "past_brackets")
+    all_seasons = [s["season"] for s in fetch("/seasons") or []]
     if season is None:
-        seasons = fetch("/seasons") or []
-        if not seasons:
+        if not all_seasons:
             return dict.fromkeys(keys, 0)
-        season = seasons[0]["season"]
+        season = all_seasons[0]
     site_url = site_url.rstrip("/")
     _write_png(out_dir / "og" / "site.png", render_site_card())
     # The front page's head: its canonical address and the site's name for search results.
@@ -198,11 +205,17 @@ def build_share_assets(
         sitemap.append((class_path(clazz), as_of))
         written["classes"] += 1
 
-        bracket = _write_bracket_assets(out_dir, site_url, clazz, season, standings, stamp, mode, version, fetch, teams)
+        image_stamps = {
+            "odds": f"{season} season · {provenance(as_of, dates, 'projected', today)}",
+            "blank": f"{season} season · {provenance(as_of, dates, None, today)}",
+        }
+        bracket = _write_bracket_assets(
+            out_dir, site_url, clazz, season, standings, stamp, mode, version, fetch, teams, image_stamps
+        )
         written["brackets"] += bracket["brackets"]
         written["bracket_teams"] += bracket["bracket_teams"]
         if bracket["brackets"]:
-            sitemap.append((bracket_path(clazz), as_of))
+            sitemap.append((bracket_path(clazz), as_of, [bracket["image"]] if bracket["image"] else []))
 
         for region in sorted(r["region"] for r in standings["regions"]):
             payload = fetch(f"/standings/{clazz}/{region}?season={season}")
@@ -288,7 +301,8 @@ def build_share_assets(
         eves = {
             k: eve
             for k, days in region_game_days.items()
-            if len(region_payloads.get(k, {}).get("standings", {}).get("remaining_games") or []) <= FULL_MARGINS_MAX_LEFT
+            if len(region_payloads.get(k, {}).get("standings", {}).get("remaining_games") or [])
+            <= FULL_MARGINS_MAX_LEFT
             and (eve := insight_week_eve(days, class_dates.get(k[0], []), today))
         }
         insight_regions = _payloads_on(fetch, season, eves, class_dates, today)
@@ -301,6 +315,7 @@ def build_share_assets(
     _write_text(out_dir / "body" / "site.html", landing_body(featured, teams, scenario_example, insight_example))
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
+    written["past_brackets"] = _write_past_brackets(fetch, out_dir, [s for s in all_seasons if s < season], today)
     return written
 
 
@@ -378,14 +393,18 @@ def _write_bracket_assets(
     version: str,
     fetch: Fetch,
     teams_by_school: dict | None = None,
-) -> dict[str, int]:
-    """The class bracket card, its page content, and each playoff team's road card; removes ones for teams
-    no longer in it."""
+    image_stamps: dict[str, str] | None = None,
+) -> dict:
+    """The class bracket card, its page content, its images to share, and each playoff team's road card;
+    removes ones for teams no longer in it. *image_stamps* label the images ("odds": Projected, "blank").
+
+    Returns {"brackets", "bracket_teams", "image"}: counts, and the whole-bracket image's URL (or None).
+    """
     teams = [t for r in standings["regions"] for t in r["teams"]]
     regions = {t["school"]: r["region"] for r in standings["regions"] for t in r["teams"]}
     favorites = bracket_favorites(teams, mode)
     if not favorites:  # no bracket odds yet (e.g. before any region is computed)
-        return {"brackets": 0, "bracket_teams": 0}
+        return {"brackets": 0, "bracket_teams": 0, "image": None}
     name = f"bracket-{clazz}"
     page = f"{site_url}/brackets/{clazz}a"
     _write_png(out_dir / "og" / f"{name}.png", render_bracket_card(clazz, favorites, regions, stamp, mode))
@@ -401,6 +420,7 @@ def _write_bracket_assets(
     )
     matchups = fetch(f"/bracket/matchups?season={season}&class={clazz}") or {}
     games = matchups.get("games") or []
+    image = None
     if games:
         layout = (fetch(f"/bracket?season={season}&class={clazz}") or {}).get("bracket_layout")
         projected = any(o.get("p_reach_weighted") is not None for g in games for o in g["side_a"]["occupants"])
@@ -413,6 +433,9 @@ def _write_bracket_assets(
         page_body = bracket_body(clazz, games, ctx, f"{season} season · {stamp}")
         if page_body:
             _write_text(out_dir / "body" / f"{name}.html", page_body)
+        image = _write_bracket_images(
+            out_dir, site_url, clazz, season, games, ctx["results"], ctx["seeds"], projected, image_stamps or {}
+        )
     current: set[str] = set()
     for team in favorites:
         road = team_road(games, team["school"], mode)
@@ -436,7 +459,75 @@ def _write_bracket_assets(
         )
     _remove_others(out_dir / "meta" / name, ".html", current)
     _remove_others(out_dir / "og" / name, ".png", current)
-    return {"brackets": 1, "bracket_teams": len(current)}
+    return {"brackets": 1, "bracket_teams": len(current), "image": image}
+
+
+BRACKET_VIEWS = {"north": "N", "south": "S", "all": "all"}
+
+
+def _write_bracket_images(
+    out_dir: Path,
+    site_url: str,
+    clazz: int,
+    season: int,
+    games: list[dict],
+    results: dict,
+    seeds: dict,
+    projected: bool,
+    stamps: dict[str, str],
+) -> str:
+    """The bracket's images to share, every view; the Projected ones only when there are Projected odds
+    (a stale one is removed). Returns the whole-bracket image's URL, Projected when there is one."""
+    folder = out_dir / "bracket" / str(season)
+    for view, half in BRACKET_VIEWS.items():
+        for version in ("odds", "blank"):
+            path = folder / f"{clazz}a-{view}-{version}.png"
+            if version == "odds" and not projected:
+                path.unlink(missing_ok=True)
+                continue
+            image = render_bracket_image(
+                clazz, season, games, results, seeds, half, version == "blank", stamps.get(version, f"{season} season")
+            )
+            _write_png(path, image)
+    return f"{site_url}/static/bracket/{season}/{clazz}a-all-{'odds' if projected else 'blank'}.png"
+
+
+def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today: date) -> int:
+    """Each past season's final bracket images (blank: results only), once: a season already drawn is
+    skipped. As of the end of the class's last week of games, as its bracket page shows it."""
+    written = 0
+    for season in seasons:
+        for clazz in CLASSES:
+            folder = out_dir / "bracket" / str(season)
+            paths = [folder / f"{clazz}a-{view}-blank.png" for view in BRACKET_VIEWS]
+            if all(p.exists() for p in paths):
+                continue
+            dates = (fetch(f"/seasons/{season}/dates?class={clazz}") or {}).get("dates", [])
+            played = sorted(date.fromisoformat(str(d["date"])[:10]) for d in dates if d.get("kind") == "games")
+            if not played:
+                continue
+            last = played[-1]
+            end = last + timedelta(days=(6 - last.weekday()))  # that week's Sunday, as the bracket page asks for
+            matchups = fetch(f"/bracket/matchups?season={season}&class={clazz}&date={end}") or {}
+            games = matchups.get("games") or []
+            if not games:
+                continue
+            layout = (fetch(f"/bracket?season={season}&class={clazz}&date={end}") or {}).get("bracket_layout")
+            results = layout_results(layout)
+            as_of = matchups.get("as_of_date")
+            stamp = (
+                f"{season} season · Final"
+                if is_final(games, results)
+                else f"{season} season · {provenance(date.fromisoformat(as_of) if as_of else None, dates, None, today)}"
+            )
+            seeds = locked_seeds(None, games)
+            for view, half in BRACKET_VIEWS.items():
+                _write_png(
+                    folder / f"{clazz}a-{view}-blank.png",
+                    render_bracket_image(clazz, season, games, results, seeds, half, True, stamp),
+                )
+            written += 1
+    return written
 
 
 def _remove_others(folder: Path, suffix: str, keep: set[str]) -> None:
