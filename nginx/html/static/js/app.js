@@ -12,7 +12,7 @@ import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDat
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, tableMode, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
-  conditionGroups, allOfConditions,
+  conditionGroups, allOfConditions, conditionsThen,
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -1858,7 +1858,8 @@ function pathHtml(ways, team) {
     const wins = w.wins.map((x) => ({ type: "playoff_win", school: team, ...x }));
     const part = parts[i];
     if (part.state === "exact") {
-      return `${label}<div>${allOfConditions(allOf([part.groups, [wins]]), teams)}</div>`;
+      // The regular season first, then the playoff games: in the order they're played.
+      return `${label}<div>${conditionsThen(part.groups, wins, teams)}</div>`;
     }
     // No exact list for this seed yet: what there is, then the games.
     return `${label}${part.cards}${wins.length ? `<p class="how__note">With this seed, it has to win:</p>${conditionGroups([wins], teams)}` : ""}`;

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
-  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode, allOfConditions,
+  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode, allOfConditions, conditionsThen,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -263,4 +263,17 @@ test("a playoff game to win reads as one chip, naming the opponent when it's kno
   assert.match(chip({ round: "First Round", opponent: "Region 2 #2 Seed", byPosition: true }), /Center Hill wins its First Round game vs the Region 2 #2 Seed$/);
   assert.match(chip({ round: "Quarterfinals", opponent: "Neshoba Central", byPosition: false }), /Center Hill wins its Quarterfinal game vs Neshoba Central$/);
   assert.match(chip({ round: "Semifinals", opponent: null }), /Center Hill wins its Semifinal game$/);
+});
+
+test("a path reads in the order it's played: the regular season, then the playoff games", () => {
+  const c = (w, l) => ({ type: "game_result", school: w, opponent: l, required_result: "win", min_margin: 1, max_margin: null });
+  const win = { type: "playoff_win", school: "W", round: "First Round", opponent: "Region 1 #3 Seed", byPosition: true };
+  // Several ways to the seed: the ONE OF box first, then AND the games.
+  const two = text(conditionsThen([[c("A", "B")], [c("C", "D")]], [win], {}));
+  assert.match(two, /^ONE OF A A beats B OR C C beats D AND W W wins its First Round game vs the Region 1 #3 Seed$/);
+  // One way: its results, then the games, in one line of ANDs.
+  assert.match(text(conditionsThen([[c("A", "B")]], [win], {})), /^A A beats B AND W W wins its First Round game/);
+  // A locked seed: just the games. No games left: just the seed's ways.
+  assert.match(text(conditionsThen([[]], [win], {})), /^W W wins its First Round game/);
+  assert.doesNotMatch(conditionsThen([[c("A", "B")], [c("C", "D")]], [], {}), /class="and"/);
 });

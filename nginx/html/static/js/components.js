@@ -225,6 +225,21 @@ export function allOfConditions({ common, alternatives }, teams) {
   return html;
 }
 
+/**
+ * Conditions in the order they happen: `groups` (OR-of-AND: a seed's
+ * regular-season results), then `after`, which must all hold too (its
+ * playoff games). Several ways go in a "ONE OF" box, joined to what follows
+ * by an AND. Nothing in `groups` (an empty way) leaves just `after`.
+ */
+export function conditionsThen(groups, after, teams) {
+  const ways = groups.some((g) => !g.length) ? [] : groups;
+  if (!ways.length) return after.length ? conditionGroups([after], teams) : "";
+  if (ways.length === 1) return conditionGroups([[...ways[0], ...after]], teams);
+  const box = `<div class="oneof oneof--first" role="group" aria-label="One of">`
+    + `<span class="oneof__label" aria-hidden="true">ONE OF</span>${conditionGroups(ways, teams)}</div>`;
+  return after.length ? `${box}<div class="and"><span>AND</span></div>${conditionGroups([after], teams)}` : box;
+}
+
 // -------------------------------------------------------- scenario card
 
 /** An outcome card; `level` is its heading's level, one below the heading it sits under. */

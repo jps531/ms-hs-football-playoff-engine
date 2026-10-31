@@ -5,6 +5,12 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.3.1
+
+- **A playoff path reads in order.** A team's “How?” for a later playoff game now lists the
+  regular-season results its seed needs first, then the playoff games it has to win. Before, the
+  playoff games could come first.
+
 ## 1.3.0
 
 - **What it takes to reach any playoff game.** Every team listed in a later playoff game on a bracket
