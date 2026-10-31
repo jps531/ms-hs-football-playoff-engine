@@ -2,7 +2,7 @@
 
 from PIL import Image
 
-from backend.helpers.bracket_image import SQUARE, WIDE, is_final, picks_for, render_bracket_image, slot
+from backend.helpers.bracket_image import SQUARE, WIDE, helmet, is_final, picks_for, render_bracket_image, slot
 from backend.helpers.static_pages import layout_results
 from backend.tests.unit.static_pages_test import BRACKET, _side
 
@@ -75,3 +75,31 @@ def test_layout_results_feed_the_image():
     }
     img = render_bracket_image(3, 2026, BRACKET, layout_results(layout), SEEDS, "N", True, "x")
     assert isinstance(img, Image.Image)
+
+
+def test_both_themes_draw_with_helmets_in_each_teams_colors():
+    """Light and dark differ; a team with colors gets its helmet (a pale one outlined so it shows on white)."""
+    teams = {"Raleigh": {"color_variants": {"primary": {"raw": "#800000"}, "secondary": [{"raw": "#FFFFFF"}]}}}
+    dark = render_bracket_image(3, 2026, BRACKET, {}, SEEDS, "N", True, "x", teams, "dark")
+    light = render_bracket_image(3, 2026, BRACKET, {}, SEEDS, "N", True, "x", teams, "light")
+    assert dark.getpixel((5, 5)) == (0x16, 0x16, 0x16) and light.getpixel((5, 5)) == (0xFF, 0xFF, 0xFF)
+    icon = helmet("#800000", "#FFFFFF", 64, "#A4A3A4")
+    assert icon.size == (64, 64) and icon.mode == "RGBA"
+    assert icon.getpixel((18, 34))[:3] == (0x80, 0x00, 0x00)  # the shell, in the team's color
+    pale = helmet("#FFFFFF", "#CC0000", 64, "#A4A3A4")
+    assert any(px[:3] == (0xA4, 0xA3, 0xA4) for px in pale.getdata() if px[3] == 255)  # outlined in grey on light
+
+
+def test_the_subtitles_say_what_the_image_shows():
+    """Capitalized after the dot; "their chance"."""
+    from backend.helpers.bracket_image import _subtitle
+
+    assert (
+        _subtitle(False, False, 2026)
+        == "Projected odds · Each open spot shows one team that could be there, and their chance"
+    )
+    assert (
+        _subtitle(False, True, 2026)
+        == "Teams and results so far · Open first-round spots show the seed that goes there"
+    )
+    assert _subtitle(True, True, 2025) == "2025 season · Final"
