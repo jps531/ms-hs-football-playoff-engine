@@ -12,7 +12,7 @@ import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDat
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, tableMode, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
-  conditionGroups, allOfConditions, conditionsThen, championBanner,
+  conditionGroups, allOfConditions, conditionsThen, championBanner, finalNote, championLine, venueName,
 } from "./components.js";
 import { matchTeams } from "./search.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -26,7 +26,7 @@ import {
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
   teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks, byeSide, pathTo,
-  matchupWays,
+  matchupWays, championOdds, projectedChampion,
 } from "./bracket.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards, seedNeeds, allOf, seedsTogether,
@@ -1226,11 +1226,13 @@ async function bracketView(ctx) {
   const weeks = await playedWeeks(season, clazz);
   const date = dateParam(ctx, weeks);
   const dq = date ? `&date=${date}` : "";
-  const [layoutRes, matchupRes, standings, teams] = await Promise.all([
+  const [layoutRes, matchupRes, standings, teams, venues] = await Promise.all([
     getJSON(`/bracket?season=${season}&class=${clazz}${dq}`).catch(() => null),
     getJSON(`/bracket/matchups?season=${season}&class=${clazz}${dq}`),
     getJSON(`/standings/${clazz}?season=${season}${dq}`).catch(() => null),
     teamsBySchool(season),
+    // Where this class's championship game is played; without it, it's just "Neutral site".
+    getJSON(`/championships?season=${season}&class=${clazz}`).catch(() => null),
   ]);
   const shownWeeks = weeksUpToLatest(ctx, weeks, date, matchupRes.as_of_date);
   const games = matchupRes.games;
@@ -1270,6 +1272,7 @@ async function bracketView(ctx) {
   }
   bracketData = {
     games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz, season, date,
+    venue: venues?.[0]?.location ?? null,
   };
 
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
@@ -1285,7 +1288,7 @@ async function bracketView(ctx) {
       ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: pickedTeam(clazz) })], [`Class ${clazz}A Bracket`, null]])}
       <h1 class="title">Class ${clazz}A Bracket</h1>
       ${controls}
-      ${bracketData.results.final?.winner ? championBanner(season, clazz, bracketData.results.final, teams) : ""}
+      ${bracketData.results.final?.winner ? championBanner(season, clazz, bracketData.results.final, teams, bracketData.venue) : ""}
       ${focusNote}
     </header>
     <div id="bracket-host">${bracketHtml()}</div>
@@ -1326,12 +1329,23 @@ function bracketHtml() {
     </div>`;
   const columns = cols.map((c) => `<section class="tcol" aria-label="${esc(c.name)}">
       <h2 class="tcol__title">${esc(c.name)}</h2>
-      <ol class="tcol__body">${c.games.map(({ game }) => `<li class="tslot">${treeCard(game, path)}</li>`).join("")}</ol>
+      <ol class="tcol__body">${c.games.map(({ game }) => `<li class="tslot">${treeCard(game, path)}${game.id === "final" ? finalNote(bracketData.venue, shownChampion(game)) : ""}</li>`).join("")}</ol>
     </section>`).join("");
   return `${halfControl}${tabs}
     <div class="tree" style="--card-h:${CARD_H}px">
       <div class="tree__cols">${columns}<svg class="tree__lines" aria-hidden="true"></svg></div>
     </div>`;
+}
+
+/** The projected champion to show for the championship game: Projected odds only, and only before it's played. */
+function shownChampion(game) {
+  return bracketData.mode === "projected" ? projectedChampion(game, bracketData.results[game.id] ?? null) : null;
+}
+
+/** Where a neutral-site game is played: the championship venue when it's on record (*short*: the stadium alone). */
+function siteName(short = false) {
+  const v = bracketData.venue;
+  return (short ? v?.name : venueName(v)) || "Neutral site";
 }
 
 /** A team's seed label once it's locked: "Region 3 #1 Seed". */
@@ -1622,7 +1636,8 @@ function sheetHtml(id) {
         ${bracketSide(game, order[0], result, host)}
         ${bye ? "" : `<div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
         ${bracketSide(game, order[1], result, host)}`}
-        ${host === "neutral" && !bye ? '<p class="bgame__site muted">Neutral site</p>' : ""}
+        ${host === "neutral" && !bye ? `<p class="bgame__site muted">${esc(siteName())}</p>` : ""}
+        ${shownChampion(game) ? championLine(shownChampion(game)) : ""}
       </div>
       ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
       <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
@@ -1724,7 +1739,7 @@ function bracketSide(game, sideKey, result, host) {
 
 /** Host wording for a pairing, from whichever team is likelier to host: "60% chance Raleigh hosts". */
 function hostText(team, opponent, hosts, pTeamHosts) {
-  if (hosts === "neutral") return "Neutral site";
+  if (hosts === "neutral") return siteName(true);
   if (hosts !== "split") return "";
   return pTeamHosts >= 0.5
     ? `${formatPct(pTeamHosts)} chance ${team} hosts`
@@ -1965,7 +1980,7 @@ function gameDetail(game) {
     return `<p class="bgame__note">There is no ${esc(positionName(missing.feeders[0]))}, so ${esc(who)} gets a bye.</p>`;
   }
   if (game.matchups == null) {
-    return '<p class="bgame__note muted">Matchup odds aren’t available for this game yet.</p>';
+    return `<p class="bgame__note muted">Matchup odds aren’t available for this game yet.</p>${titleOdds(game)}`;
   }
   const here = focus ? teamInGame(game, focus, mode) : null;
   if (here && (here.p > 0 || here.locked)) {
@@ -1982,7 +1997,7 @@ function gameDetail(game) {
         const how = aFirst || (here.sides[0] === "a" && !(game.matchups ?? []).some((m) => m.team_a === o.opponent && m.team_b === focus))
           ? matchupHow(game, focus, o.opponent) : matchupHow(game, o.opponent, focus);
         return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(o.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
-      }).join("")}</ol>`;
+      }).join("")}</ol>${titleOdds(game)}`;
   }
   const ms = gameMatchups(game, mode);
   const hidden = game.other?.count ?? 0; // possible pairings under 0.5% in both modes, not listed
@@ -1996,12 +2011,29 @@ function gameDetail(game) {
     return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(m.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
   });
   if (!ms.length) {
-    return `<p class="muted bgame__count">So many teams could still meet here that ${hidden ? `none of the ${hidden} possible pairings has` : "no single matchup has"} even a 0.5% chance yet.</p>`;
+    return `<p class="muted bgame__count">So many teams could still meet here that ${hidden ? `none of the ${hidden} possible pairings has` : "no single matchup has"} even a 0.5% chance yet.</p>${titleOdds(game)}`;
   }
   // Each side's teams are listed above it, so the matchups follow directly.
   return `<h3 class="bgame__heading bgame__heading--section">Possible matchups</h3>
     <ol class="opp-list opp-list--matchups">${rows.join("")}</ol>
-    ${hidden ? `<p class="muted bgame__count">Not showing ${hidden} other possible ${hidden === 1 ? "pairing" : "pairings"}, each under 0.5%</p>` : ""}`;
+    ${hidden ? `<p class="muted bgame__count">Not showing ${hidden} other possible ${hidden === 1 ? "pairing" : "pairings"}, each under 0.5%</p>` : ""}
+    ${titleOdds(game)}`;
+}
+
+/** The championship game, still to play: each team's chance to win it all, likeliest first. */
+function titleOdds(game) {
+  const { mode, teams, results } = bracketData;
+  if (results[game.id]) return "";
+  const list = championOdds(game, mode);
+  if (!list.length) return "";
+  const allKey = `${game.id}:title`;
+  const showAll = bracketUi.showAll.has(allKey);
+  const shown = showAll ? list : list.slice(0, LIST_CAP);
+  const more = list.length > LIST_CAP
+    ? `<button type="button" class="bside__more" data-show-all="${esc(allKey)}" aria-expanded="${showAll}">${showAll ? "Show fewer" : `Show all ${list.length}`}</button>`
+    : "";
+  return `<h3 class="bgame__heading bgame__heading--section">Chance to win the state championship</h3>
+    <ol class="opp-list">${shown.map((o) => `<li><span class="mu__teams"><span class="mu__line">${teamLabel(o.team, teams)}</span></span>${oddsCell(o.p)}</li>`).join("")}</ol>${more}`;
 }
 
 app.addEventListener("click", (e) => {

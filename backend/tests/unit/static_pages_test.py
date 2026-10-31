@@ -780,6 +780,35 @@ def test_a_finished_bracket_names_its_champion_under_the_trophy():
     assert "champion" not in bracket_body(3, BRACKET, {**BRACKET_CTX, "season": 2026}, "x")
 
 
+def test_the_championship_game_card_says_where_its_played_and_the_projected_champion():
+    """Under the final's card: the venue, then (Projected odds, before it's played) the likeliest champion."""
+    venue = {"name": "Davis Wade Stadium", "city": "Starkville, MS"}
+    games = [dict(g) for g in BRACKET]
+    final = next(g for g in games if g["id"] == "final")
+    final["side_a"] = {**final["side_a"], "occupants": [
+        {"team": "Raleigh", "p_reach": 0.5, "p_reach_weighted": 0.6, "is_locked": False, "p_champion": 0.25, "p_champion_weighted": 0.31},
+    ]}  # fmt: skip
+    html = bracket_body(3, games, {**BRACKET_CTX, "venue": venue}, "x")
+    note = html[html.index('<div class="tfinal">') :]
+    assert note.startswith('<div class="tfinal"><p class="tfinal__venue">Davis Wade Stadium • Starkville</p>')
+    assert "Projected champion:</span> <span class=\"champ-line__team\"><strong>Raleigh</strong> · 31%</span>" in note
+    tossup = bracket_body(3, games, {**BRACKET_CTX, "mode": "tossup", "venue": venue}, "x")
+    assert "Projected champion" not in tossup and "Davis Wade Stadium • Starkville" in tossup
+    banner = bracket_body(
+        3,
+        games,
+        {
+            **BRACKET_CTX,
+            "venue": venue,
+            "season": 2025,
+            "results": {"final": {"winner": "Raleigh", "loser": "Mize", "winner_score": 12, "loser_score": 6}},
+        },
+        "x",
+    )
+    assert "in the Championship Game at Davis Wade Stadium in Starkville</p>" in banner
+    assert "Projected champion" not in banner
+
+
 def test_front_page_has_every_classs_standings_and_bracket_under_the_helmet():
     """Two rows of seven buttons, each saying what it opens; the same markup as landing.js's classGrid."""
     from backend.helpers.static_pages import class_grid

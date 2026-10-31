@@ -941,14 +941,18 @@ class MatchupOccupant(BaseModel):
 
     ``p_reach`` is the chance this team is the one on this side (the side's
     values sum to 1). ``is_locked`` means it's certain: seed clinched and every
-    game before this one won. ``*_weighted`` is Projected (Elo) odds; null when
-    no ratings exist.
+    game before this one won. ``p_champion`` (the championship game only, null
+    elsewhere) is the chance it wins the state championship, the same figure as
+    its ``bracket_odds.champion``. ``*_weighted`` is Projected (Elo) odds; null
+    when no ratings exist.
     """
 
     team: str
     p_reach: float
     p_reach_weighted: float | None
     is_locked: bool
+    p_champion: float | None = None
+    p_champion_weighted: float | None = None
 
 
 class MatchupSide(BaseModel):

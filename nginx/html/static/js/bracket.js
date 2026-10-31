@@ -83,6 +83,36 @@ export function occupants(side, mode) {
 }
 
 /**
+ * Each team's chance to win the state championship, from the championship
+ * game's occupants (the API's p_champion, the same figure as a team's
+ * bracket_odds.champion): [{ team, p }], likeliest first. [] for any other
+ * game, or when the API doesn't send it.
+ */
+export function championOdds(game, mode) {
+  if (game?.id !== "final") return [];
+  return [...game.side_a.occupants, ...game.side_b.occupants]
+    .filter((o) => o.p_champion != null)
+    .map((o) => ({ team: o.team, p: pick(o, "p_champion", mode) ?? 0 }))
+    .filter((o) => o.p > 0)
+    .sort((a, b) => b.p - a.p || a.team.localeCompare(b.team));
+}
+
+/**
+ * The projected champion: the team likeliest to win the championship game in
+ * Projected odds, as { team, p }. Null when it's been played (*result*),
+ * without Projected odds, or when two teams tie for likeliest.
+ * static_pages.projected_champion() is the same.
+ */
+export function projectedChampion(game, result) {
+  if (game?.id !== "final" || result) return null;
+  const list = [...game.side_a.occupants, ...game.side_b.occupants]
+    .filter((o) => o.p_champion_weighted > 0)
+    .sort((a, b) => b.p_champion_weighted - a.p_champion_weighted);
+  if (!list.length || list[1]?.p_champion_weighted === list[0].p_champion_weighted) return null;
+  return { team: list[0].team, p: list[0].p_champion_weighted };
+}
+
+/**
  * Which team each open side of a tree column shows, so no team shows in two
  * slots of one round: Map of `${gameId}:${a|b}` to team. Taking every
  * (team, side) chance in the column, likeliest first, a team goes to the

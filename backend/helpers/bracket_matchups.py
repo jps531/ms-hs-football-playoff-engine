@@ -83,6 +83,8 @@ class GameOutlook:
     matchups: dict[tuple[str, str], tuple[float, float | None]] | None
     decided: bool = False
     notes: list[str] = field(default_factory=list)
+    # The championship only: team -> P(team wins it), from the same recursion as the reach odds.
+    champions: dict[str, float] | None = None
 
 
 def _round_names(rounds_in_half: int) -> list[str]:
@@ -459,6 +461,7 @@ def _game_outlook(
         matchups=matchups,
         decided=node.decided,
         notes=notes,
+        champions=_team_side(node.winner, occupants) if node.round_index == -1 else None,
     )
 
 
@@ -523,7 +526,8 @@ def merge_modes(
         pg = by_id.get(g.game_id)
 
         def side(t_side: SideOutlook, p_side: SideOutlook | None) -> dict:
-            """Occupants of one side in both modes, likeliest first."""
+            """Occupants of one side in both modes, likeliest first; in the championship, each one's
+            chance to win it too."""
             teams = set(t_side.occupants) | set(p_side.occupants if p_side else {})
             occ = [
                 {
@@ -534,6 +538,12 @@ def merge_modes(
                 }
                 for team in teams
             ]
+            if g.champions is not None:
+                for o in occ:
+                    o["p_champion"] = _r(g.champions.get(o["team"], 0.0))
+                    o["p_champion_weighted"] = (
+                        _r(pg.champions.get(o["team"], 0.0)) if pg and pg.champions is not None else None
+                    )
             occ.sort(key=lambda o: (-(o["p_reach_weighted"] or 0.0), -o["p_reach"], o["team"]))
             return {
                 "feeders": [{"region": r, "seed": s} for r, s in t_side.feeders],

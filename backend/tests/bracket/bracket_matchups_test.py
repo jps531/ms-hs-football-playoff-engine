@@ -273,6 +273,9 @@ def test_reach_and_hosting_match_existing_odds_with_uneven_games(label, slots, n
     games = bracket_outlook(slots, SEASON, odds, pairs, _lopsided)
     for g in games:
         assert sum(p for p, _ in g.matchups.values()) == pytest.approx(1.0)
+        assert (g.champions is not None) == (g.game_id == "final")
+    final = games[-1]
+    assert sum(final.champions.values()) == pytest.approx(1.0)
     for region in range(1, n + 1):
         standings = _standings(odds[region])
         adv = compute_bracket_advancement_odds(region, standings, slots, _lopsided)
@@ -281,6 +284,8 @@ def test_reach_and_hosting_match_existing_odds_with_uneven_games(label, slots, n
         for team in standings:
             assert _reach(games, team, "Semifinals") == pytest.approx(adv[team].semifinals, abs=1e-9)
             assert _reach(games, team, "Championship Game") == pytest.approx(adv[team].finals, abs=1e-9)
+            # The chance to win it all is the team pages' figure too.
+            assert final.champions.get(team, 0.0) == pytest.approx(adv[team].champion, abs=1e-9)
             assert _host_overall(games, team, "Quarterfinals") == pytest.approx(qf[team], abs=1e-9)
             assert _host_overall(games, team, "Semifinals") == pytest.approx(sf[team], abs=1e-9)
 
@@ -375,3 +380,21 @@ def test_payload_rounding_never_makes_a_chance_certain():
     assert _r(0.123456) == 0.1235
     assert _r(1.0) == 1.0 and _r(1 - 1e-12) == 1.0
     assert _r(0.0) == 0.0 and _r(1e-12) == 0.0
+
+
+def test_the_championship_says_each_teams_chance_to_win_it_in_both_modes():
+    """Only the final's occupants carry ``p_champion``; each mode's figures add up to 1."""
+    from backend.helpers.bracket_matchups import merge_modes
+
+    odds, pairs = _class(SLOTS_5A_7A_2025, 4, seed=3)
+    tossup = bracket_outlook(SLOTS_5A_7A_2025, SEASON, odds, pairs, equal_matchup_prob)
+    projected = bracket_outlook(SLOTS_5A_7A_2025, SEASON, odds, pairs, _lopsided)
+    games = merge_modes(tossup, projected)
+    for g in games[:-1]:
+        assert all("p_champion" not in o for k in ("side_a", "side_b") for o in g[k]["occupants"])
+    final = [o for k in ("side_a", "side_b") for o in games[-1][k]["occupants"]]
+    assert sum(o["p_champion"] for o in final) == pytest.approx(1.0, abs=1e-3)
+    assert sum(o["p_champion_weighted"] for o in final) == pytest.approx(1.0, abs=1e-3)
+    assert all(o["p_champion"] <= o["p_reach"] for o in final)
+    no_projected = merge_modes(tossup, None)[-1]
+    assert all(o["p_champion_weighted"] is None for o in no_projected["side_a"]["occupants"])

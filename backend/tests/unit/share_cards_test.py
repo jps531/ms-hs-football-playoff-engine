@@ -426,6 +426,9 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
         "/seasons/2026/dates?class=3": {"dates": DATES},
         "/standings/3/6?season=2026": {"as_of_date": "2026-10-09", "headline": "Raleigh leads.", "teams": teams},
         "/bracket/matchups?season=2026&class=3": {"games": GAMES},
+        "/championships?season=2026&class=3": [
+            {"season": 2026, "class_": 3, "location": {"name": "Davis Wade Stadium", "city": "Starkville, MS"}}
+        ],
     }
     (tmp_path / "og" / "bracket-3").mkdir(parents=True)
     (tmp_path / "og" / "bracket-3" / "gone.png").write_bytes(b"old")
@@ -440,6 +443,7 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     assert "https://mshsfootball.com/static/og/bracket-3/raleigh.png?v=20261009" in meta
     page = (tmp_path / "body" / "bracket-3.html").read_text()  # the bracket page itself, readable without JavaScript
     assert '<h1 class="title">Class 3A Bracket</h1>' in page and 'class="tslot"' in page
+    assert '<p class="tfinal__venue">Davis Wade Stadium • Starkville</p>' in page  # where the final is played
     assert '"@type":"BreadcrumbList"' in (tmp_path / "meta" / "bracket-3.html").read_text()
     assert "Raleigh leads the Class 3A bracket" in (tmp_path / "meta" / "bracket-3.html").read_text()
     # The bracket's images to share: every view blank; no Projected ones without Projected odds. The

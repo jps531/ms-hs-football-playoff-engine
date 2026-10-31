@@ -128,3 +128,25 @@ def test_a_finished_bracket_draws_the_trophy_over_the_championship_game():
     )
     gold = lambda img: sum(1 for px in img.getdata() if px == (0xD9, 0xA5, 0x20))  # noqa: E731
     assert gold(done) > 1000 and gold(open_) == 0
+
+
+def test_the_whole_bracket_names_the_venue_and_in_projected_odds_the_projected_champion():
+    """Under the championship game: the venue when it's on record; the projected champion only in the
+    Projected image, never the blank one."""
+    games = [dict(g) for g in BRACKET]
+    final = next(g for g in games if g["id"] == "final")
+    champ = {"p_champion": 0.25, "p_champion_weighted": 0.31}
+    final["side_a"] = {
+        **final["side_a"],
+        "occupants": [{"team": "Raleigh", "p_reach": 0.5, "p_reach_weighted": 0.6, "is_locked": False, **champ}],
+    }
+    venue = {"name": "Davis Wade Stadium", "city": "Starkville, MS"}
+
+    def draw(blank, venue, games=games):
+        """The whole bracket's image as bytes."""
+        return render_bracket_image(3, 2026, games, {}, SEEDS, "all", blank, "x", None, "dark", venue).tobytes()
+
+    assert draw(False, venue) != draw(False, None)  # the venue line
+    assert draw(False, None) != draw(False, None, BRACKET)  # the projected champion
+    assert draw(True, None) == draw(True, None, BRACKET)  # not in the blank image
+    assert draw(True, venue) != draw(True, None)

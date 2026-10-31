@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups, byeSide, pathTo,
-  matchupWays,
+  matchupWays, championOdds, projectedChampion,
   teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout, roundPicks,
 } from "../html/static/js/bracket.js";
 
@@ -297,4 +297,24 @@ test("a later matchup's ways each say who hosts; a 1A-4A quarterfinal splits by 
   // Semifinal-style rule, by seed alone.
   const sf = { ...qf, id: "N-3-0", round: "Semifinals" };
   assert.deepEqual(matchupWays([...games.slice(0, 6), sf], {}, sf, "A", "E", "tossup", 2025).map((w) => w.host), ["a"]);
+});
+
+
+test("championOdds and projectedChampion: the championship game's chance to win it all", () => {
+  const champ = (team, p, pw) => ({ ...occ(team, 0.5), p_champion: p, p_champion_weighted: pw });
+  const final = {
+    id: "final",
+    side_a: { feeders: [], occupants: [champ("Winona", 0.25, 0.22), champ("Kossuth", 0.25, 0.3)] },
+    side_b: { feeders: [], occupants: [champ("Raleigh", 0.25, 0.4), champ("Seminary", 0.25, 0.08)] },
+  };
+  assert.deepEqual(championOdds(final, "projected").map((o) => o.team), ["Raleigh", "Kossuth", "Winona", "Seminary"]);
+  assert.deepEqual(championOdds(final, "tossup")[0], { team: "Kossuth", p: 0.25 });
+  assert.deepEqual(projectedChampion(final, null), { team: "Raleigh", p: 0.4 });
+  // Played, a tie at the top, no Projected odds, or another game: none.
+  assert.equal(projectedChampion(final, { winner: "Raleigh" }), null);
+  const tied = { ...final, side_b: { feeders: [], occupants: [champ("Raleigh", 0.25, 0.3)] } };
+  assert.equal(projectedChampion(tied, null), null);
+  const noProjected = { ...final, side_a: { feeders: [], occupants: [champ("Winona", 1, null)] }, side_b: { feeders: [], occupants: [] } };
+  assert.equal(projectedChampion(noProjected, null), null);
+  assert.deepEqual(championOdds({ ...final, id: "N-3-0" }, "projected"), []);
 });

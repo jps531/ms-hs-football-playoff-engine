@@ -880,9 +880,11 @@ def render_bracket_card(
 
 
 def render_team_bracket_card(
-    clazz: int, region: int | None, team: dict, road: list[dict], stamp: str, mode: str
+    clazz: int, region: int | None, team: dict, road: list[dict], stamp: str, mode: str, venue: dict | None = None
 ) -> Image.Image:
-    """A team's road through the bracket: each round's chance, likeliest opponent, and who'd host."""
+    """A team's road through the bracket: each round's chance, likeliest opponent, and who'd host, or for
+    the championship game where it's played (*venue*, the API's ``/championships`` location, when it's
+    on record)."""
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
     draw = ImageDraw.Draw(img)
     kicker = f"CLASS {clazz}A BRACKET" + (f" · REGION {region}-{clazz}A" if region else "")
@@ -928,7 +930,7 @@ def render_team_bracket_card(
             where = {
                 "team": "Home",
                 "opponent": "Away",
-                "neutral": "Neutral site",
+                "neutral": (venue or {}).get("name") or "Neutral site",
                 "split": (
                     f"{format_pct(step['p_team_hosts'])} chance at home"
                     if step["p_team_hosts"] >= 0.5

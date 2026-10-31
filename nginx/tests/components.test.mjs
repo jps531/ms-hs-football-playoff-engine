@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   oddsCell, provenance, teamStatuses, statusBadges, infoButton, teamMark, conditionChip, conditionGroups, classScrubber,
-  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode, allOfConditions, conditionsThen, championBanner,
+  gameCard, outcomeScenarioCard, breadcrumbs, whyTies, scenarioCard, tableMode, allOfConditions, conditionsThen, championBanner, venueName, finalNote,
 } from "../html/static/js/components.js";
 
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -287,4 +287,18 @@ test("championBanner: the trophy, the champion and the championship game", () =>
   assert.match(html, /<p class="champion__label">2025 Class 3A State Champion<\/p>/);
   assert.match(html, /Beat Mize 12–6 in the Championship Game/);
   assert.doesNotMatch(championBanner(2025, 3, { winner: "Raleigh", loser: "Mize" }, {}), /–/);
+});
+
+
+test("venueName, finalNote and the banner's venue: where the championship game is played", () => {
+  const venue = { name: "Davis Wade Stadium", city: "Starkville, MS" };
+  assert.equal(venueName(venue), "Davis Wade Stadium • Starkville");
+  assert.equal(venueName({ name: "M.M. Roberts Stadium", city: null }), "M.M. Roberts Stadium");
+  assert.equal(venueName(null), null);
+  const note = finalNote(venue, { team: "Winona", p: 0.22 });
+  assert.equal(text(note), "Davis Wade Stadium • Starkville Projected champion: Winona · 22%");
+  assert.equal(finalNote(null, null), "");
+  assert.equal(text(finalNote(venue, null)), "Davis Wade Stadium • Starkville");
+  const banner = championBanner(2025, 3, { winner: "Raleigh", loser: "Mize", winnerScore: 12, loserScore: 6 }, {}, venue);
+  assert.match(banner, /Beat Mize 12–6 in the Championship Game at Davis Wade Stadium in Starkville<\/p>/);
 });

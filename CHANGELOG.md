@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.6.0
+
+- **The projected champion.** Under the Championship Game on a bracket, in Projected odds: the team
+  likeliest to win the state championship and its chance, “Projected champion: Seminary · 42%”. It's
+  the same chance the team's own page gives, and it's left off in Toss-up odds and once the game is
+  played. The image of the whole bracket with Projected odds shows it too.
+- **Each team's chance to win it all.** Opening the Championship Game lists the teams likeliest to
+  win the state championship, with their chances.
+- **Where the championship is played.** Where a championship game said “Neutral site”, it now names
+  the venue on record for that season, such as “Davis Wade Stadium • Starkville”: under the game on the
+  bracket, in its details, on the state champion's card (“in the Championship Game at Davis Wade
+  Stadium in Starkville”), on the image of the whole bracket, and on a team's bracket image.
+
 ## 1.5.0
 
 - **The state champion, with a trophy.** A finished season's bracket now opens with its champion: a
