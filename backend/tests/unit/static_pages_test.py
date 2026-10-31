@@ -769,6 +769,17 @@ def test_bracket_page_has_every_game_positioned_with_breadcrumbs():
     assert bracket_body(3, [], BRACKET_CTX, "x") == ""
 
 
+def test_a_finished_bracket_names_its_champion_under_the_trophy():
+    """The trophy, the season and class, the champion and the championship game; nothing until it's played."""
+    final = {"winner": "Raleigh", "loser": "Mize", "winner_score": 12, "loser_score": 6}
+    html = bracket_body(3, BRACKET, {**BRACKET_CTX, "results": {"final": final}, "season": 2025}, "x")
+    assert '<section class="champion" aria-label="State champion"><svg class="trophy"' in html
+    assert '<p class="champion__label">2025 Class 3A State Champion</p>' in html
+    assert '<p class="champion__game">Beat Mize 12–6 in the Championship Game</p>' in html
+    assert "Raleigh" in html[html.index("champion__team") :]
+    assert "champion" not in bracket_body(3, BRACKET, {**BRACKET_CTX, "season": 2026}, "x")
+
+
 def test_front_page_has_every_classs_standings_and_bracket_under_the_helmet():
     """Two rows of seven buttons, each saying what it opens; the same markup as landing.js's classGrid."""
     from backend.helpers.static_pages import class_grid

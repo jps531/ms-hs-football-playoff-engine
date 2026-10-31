@@ -136,6 +136,44 @@ export function genericHelmet({ shell, stripe }, size = 24) {
 }
 
 /**
+ * The state championship trophy, after the MHSAA's own: a gold football on
+ * end (laces at the top, a seam down the middle) on a gold cup, on a wooden
+ * base with a black plaque. Its colors are the trophy's, the same in both
+ * themes. Decorative: the words beside it say what it means. *size* is its
+ * height in px. static_pages.py's TROPHY_SHAPES draws the same shapes, and
+ * bracket_image.py traces them for the share images.
+ */
+export function trophyIcon(size = 56) {
+  return `<svg class="trophy" viewBox="0 0 40 56" width="${size * 40 / 56}" height="${size}" aria-hidden="true">${TROPHY_SHAPES}</svg>`;
+}
+export const TROPHY_SHAPES = '<rect x="5.5" y="50" width="29" height="4.5" rx="1" fill="#6B4426"/>'
+  + '<rect x="8" y="40.5" width="24" height="10.5" rx="1" fill="#8A5A33"/>'
+  + '<rect x="10.5" y="42.6" width="19" height="6.6" rx="0.6" fill="#1F1F1F"/>'
+  + '<path d="M15 44.6H25M13.5 46H26.5M16 47.4H24" stroke="#C9A33A" stroke-width="0.7" stroke-linecap="round"/>'
+  + '<path d="M12.5 40.5C13.5 37.6 16.6 36.8 18.4 36.6H21.6C23.4 36.8 26.5 37.6 27.5 40.5Z" fill="#C8961C"/>'
+  + '<rect x="18.3" y="31" width="3.4" height="6" fill="#C8961C"/>'
+  + '<path d="M15 27.6H25L23 31.4H17Z" fill="#D9A520"/>'
+  + '<ellipse cx="20" cy="28" rx="5" ry="1" fill="#A87A12"/>'
+  + '<ellipse cx="20" cy="15" rx="11" ry="13.6" fill="#D9A520"/>'
+  + '<path d="M12.6 8.5C11.4 11.6 11.2 16.4 12.4 20.4" stroke="#F3D27A" stroke-width="1.6" stroke-linecap="round" fill="none"/>'
+  + '<path d="M20 2.6V27.4" stroke="#A87A12" stroke-width="0.9" stroke-linecap="round"/>'
+  + '<path d="M18.2 5.4H21.8M18 7.6H22M18 9.8H22M18.2 12H21.8" stroke="#A87A12" stroke-width="1.2" stroke-linecap="round"/>';
+
+/**
+ * A finished season's champion, over its bracket: the trophy, "2025 Class 3A
+ * State Champion", the team, and the championship game's result. *result* is
+ * layoutResults()'s for the final ({ winner, loser, winnerScore, loserScore }).
+ * static_pages.py's champion_banner() writes the same.
+ */
+export function championBanner(season, clazz, result, teams) {
+  const score = result.winnerScore != null && result.loserScore != null ? ` ${result.winnerScore}–${result.loserScore}` : "";
+  const beat = result.loser ? `<p class="champion__game">Beat ${esc(result.loser)}${score} in the Championship Game</p>` : "";
+  return `<section class="champion" aria-label="State champion">${trophyIcon(56)}`
+    + `<div class="champion__text"><p class="champion__label">${esc(String(season))} Class ${esc(String(clazz))}A State Champion</p>`
+    + `<p class="champion__team">${teamLabel(result.winner, teams)}</p>${beat}</div></section>`;
+}
+
+/**
  * Helmet image when one exists, else a generic helmet in the team's colors,
  * else initials in a neutral squircle. Always decorative (alt="") because
  * it's never shown without the team name beside it.

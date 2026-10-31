@@ -429,6 +429,7 @@ def _write_bracket_assets(
             "results": layout_results(layout),
             "seeds": locked_seeds(standings, games),
             "teams": teams_by_school or {},
+            "season": season,
         }
         page_body = bracket_body(clazz, games, ctx, f"{season} season · {stamp}")
         if page_body:
