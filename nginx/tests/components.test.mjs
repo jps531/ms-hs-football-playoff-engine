@@ -257,3 +257,10 @@ test("conditions that must all hold: shared ones first, then each set of alterna
   // A lone set of alternatives needs no box.
   assert.doesNotMatch(allOfConditions({ common: [], alternatives: [[[c("A", "B")], [c("C", "D")]]] }, {}), /oneof/);
 });
+
+test("a playoff game to win reads as one chip, naming the opponent when it's known", () => {
+  const chip = (o) => text(conditionChip({ type: "playoff_win", school: "Center Hill", ...o }, {}));
+  assert.match(chip({ round: "First Round", opponent: "Region 2 #2 Seed", byPosition: true }), /Center Hill wins its First Round game vs the Region 2 #2 Seed$/);
+  assert.match(chip({ round: "Quarterfinals", opponent: "Neshoba Central", byPosition: false }), /Center Hill wins its Quarterfinal game vs Neshoba Central$/);
+  assert.match(chip({ round: "Semifinals", opponent: null }), /Center Hill wins its Semifinal game$/);
+});

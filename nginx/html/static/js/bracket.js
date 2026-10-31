@@ -139,6 +139,54 @@ export function byeSide(game) {
 }
 
 /**
+ * How `team` can reach side `sideKey` of `game`: one entry for each
+ * first-round position on that side it can still take (by the odds `mode`),
+ * earliest seed first, each with whether that seed is already its own and the
+ * playoff games it still has to win to get here, in order:
+ *   [{ feeder, seedLocked, wins: [{ round, opponent, byPosition }] }]
+ * A bye needs no win and a game it already won drops out; a position whose
+ * game was won by someone else is gone. An opponent is named once locked in
+ * ("Neshoba Central"), or by position in the first round ("Region 2 #2 Seed",
+ * `byPosition`), else left null. The games on the way are the ones the
+ * position plays in whose feeders all come into this side.
+ */
+export function pathTo(games, results, game, sideKey, team, mode) {
+  const side = sideKey === "a" ? game.side_a : game.side_b;
+  const at = (f) => `${f.region}:${f.seed}`;
+  const within = new Set(side.feeders.map(at));
+  const all = (g) => [...g.side_a.feeders, ...g.side_b.feeders];
+  const holds = (s, f) => s.feeders.some((x) => at(x) === at(f));
+  const out = [];
+  for (const feeder of side.feeders) {
+    const first = games.find((g) => [g.side_a, g.side_b].some((s) => s.feeders.length === 1 && holds(s, feeder)));
+    if (!first) continue;
+    const start = holds(first.side_a, feeder) ? first.side_a : first.side_b;
+    const seedLocked = lockedTeam(start) === team;
+    if (!seedLocked && !occupants(start, mode).some((o) => o.team === team)) continue;
+    const chain = games
+      .filter((g) => g !== game && all(g).some((x) => at(x) === at(feeder)) && all(g).every((x) => within.has(at(x))))
+      .sort((x, y) => all(x).length - all(y).length);
+    const wins = [];
+    let gone = false;
+    for (const g of chain) {
+      if (byeSide(g)) continue; // through without playing
+      const result = results[g.id];
+      if (result) {
+        if (result.winner === team) continue;
+        gone = true;
+        break;
+      }
+      const other = holds(g.side_a, feeder) ? g.side_b : g.side_a;
+      const opponent = lockedTeam(other);
+      const byPosition = !opponent && other.feeders.length === 1;
+      wins.push({ round: g.round, opponent: opponent ?? (byPosition ? positionName(other.feeders[0]) : null), byPosition });
+    }
+    if (!gone) out.push({ feeder, seedLocked, wins });
+  }
+  return out.sort((x, y) => x.feeder.seed - y.feeder.seed);
+}
+
+/**
  * How settled a game is:
  *   "played"     — it has a result (scores, winner)
  *   "bye"        — one side's seed doesn't exist (byeSide)

@@ -5,6 +5,13 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.3.0
+
+- **What it takes to reach any playoff game.** Every team listed in a later playoff game on a bracket
+  now has a “How?” too: the seed or seeds that lead there, with what each one takes, and each playoff
+  game it has to win on the way, naming the opponent once it's known. Games it has already won drop
+  out, and a bye needs no win. The team you've picked opens on its own, on either side of the game.
+
 ## 1.2.0
 
 - **What it takes to reach a first-round playoff game.** In a first-round game on a bracket, each
