@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  outcomeCards, insightCards, oddsFor, hasProjectedOdds, outcomeProbability, completeScenarioCards, whyBlocks,
+  outcomeCards, insightCards, oddsFor, hasProjectedOdds, outcomeProbability, completeScenarioCards, whyBlocks, seedNeeds, allOf,
 } from "../html/static/js/scenarios.js";
 
 const cond = (w, l) => [{ type: "game_result", school: w, opponent: l }];
@@ -233,4 +233,34 @@ test("why this order: each tie's teams and places, the results it holds for, and
   // The card carries them, merged by finish like its ways.
   const sc = { outcomes: { A: "1", B: "2" }, game_winners: [{ winner: "A", loser: "B" }], explanation: [explanation[0]] };
   assert.deepEqual(completeScenarioCards([sc, { ...sc, game_winners: [] }])[0].why, whyBlocks([explanation[0]]));
+});
+
+test("a team's needs for one seed: its exact path, clinched, related key insights, or nothing", () => {
+  const win = (w, l) => ({ type: "game_result", school: w, opponent: l, required_result: "win", min_margin: 1, max_margin: null });
+  const region = {
+    scenarios_available: true,
+    teams: [{ school: "A", paths: [
+      { outcome: { type: "seed", value: 1 }, conditions: [[win("A", "B")]] },
+      { outcome: { type: "seed", value: 2 }, conditions: [[]] },
+    ] }],
+  };
+  assert.deepEqual(seedNeeds(region, "A", 1), { kind: "paths", groups: [[win("A", "B")]] });
+  assert.deepEqual(seedNeeds(region, "A", 2), { kind: "clinched" });
+  assert.deepEqual(seedNeeds(region, "A", 3), { kind: "none" });
+  assert.deepEqual(seedNeeds(region, "Z", 1), { kind: "none" });
+  // Before full scenarios: only insights about this team and this seed (or its playoff spot, or elimination).
+  const insight = (type, team, seed) => ({ insight_type: type, team, seed, conditions: [{ winner: team, loser: "B", min_margin: 1, max_margin: null }] });
+  const early = {
+    scenarios_available: false, teams: [{ school: "A", paths: null }],
+    key_insights: [insight("clinch_seed", "A", 1), insight("clinch_seed", "A", 2), insight("clinch_playoffs", "A", null), insight("clinch_seed", "C", 1)],
+  };
+  assert.deepEqual(seedNeeds(early, "A", 1).cards.map((c) => c.title), ["A clinches the region", "A clinches a playoff spot"]);
+  assert.deepEqual(seedNeeds({ ...early, key_insights: [] }, "A", 1), { kind: "none" });
+});
+
+test("a matchup's requirements combine: single ways shared, several ways boxed, met ones dropped", () => {
+  const c = (w) => ({ type: "game_result", school: w, opponent: "X" });
+  assert.deepEqual(allOf([[[c("A")]], [[c("B")], [c("C")]]]), { common: [c("A")], alternatives: [[[c("B")], [c("C")]]] });
+  assert.deepEqual(allOf([[[]], [[c("B")]]]), { common: [c("B")], alternatives: [] });
+  assert.deepEqual(allOf([[[c("A")], []], [[c("B")]]]), { common: [c("B")], alternatives: [] }); // one way needs nothing: already met
 });

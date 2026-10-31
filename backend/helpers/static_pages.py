@@ -1580,7 +1580,7 @@ def _sheet(game: dict, ctx: dict) -> str:
             f"</span>{_odds(m['p'])}{note_html}</li>"
         )
     matchups = (
-        f'<h3 class="bgame__heading">Possible matchups</h3><ol class="opp-list opp-list--matchups">{"".join(rows)}</ol>'
+        f'<h3 class="bgame__heading bgame__heading--section">Possible matchups</h3><ol class="opp-list opp-list--matchups">{"".join(rows)}</ol>'
         if rows
         else ""
     )
