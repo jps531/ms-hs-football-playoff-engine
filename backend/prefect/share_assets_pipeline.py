@@ -17,11 +17,11 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
                               <title>, description, Open Graph / Twitter tags
     body/{class}-{region}.html, body/{class}.html, body/bracket-{class}.html, body/site.html
                               the page's content as static HTML (backend.helpers.static_pages)
-    bracket/{season}/{class}a-{view}-{version}.png
+    bracket/{season}/{class}a-{view}-{version}-{theme}.png
                               the whole bracket as one image, to share: view "north" or "south"
                               (that half, square) or "all" (both halves, wide); version "odds"
-                              (Projected) or "blank" (locked-in teams and results only). Past
-                              seasons get their final bracket ("blank") once.
+                              (Projected) or "blank" (locked-in teams and results only); theme
+                              "dark" or "light". Past seasons get their final bracket ("blank") once.
     sitemap.xml               the front page, About, and every region, class and bracket page
                               (a bracket page lists its whole-bracket image)
 
@@ -434,7 +434,16 @@ def _write_bracket_assets(
         if page_body:
             _write_text(out_dir / "body" / f"{name}.html", page_body)
         image = _write_bracket_images(
-            out_dir, site_url, clazz, season, games, ctx["results"], ctx["seeds"], projected, image_stamps or {}
+            out_dir,
+            site_url,
+            clazz,
+            season,
+            games,
+            ctx["results"],
+            ctx["seeds"],
+            projected,
+            image_stamps or {},
+            teams_by_school or {},
         )
     current: set[str] = set()
     for team in favorites:
@@ -463,6 +472,14 @@ def _write_bracket_assets(
 
 
 BRACKET_VIEWS = {"north": "N", "south": "S", "all": "all"}
+BRACKET_THEMES = ("dark", "light")
+
+
+def _drop_unthemed(folder: Path, clazz: int) -> None:
+    """Remove the images named before they came in two themes (``{class}a-{view}-{version}.png``)."""
+    for view in BRACKET_VIEWS:
+        for version in ("odds", "blank"):
+            (folder / f"{clazz}a-{view}-{version}.png").unlink(missing_ok=True)
 
 
 def _write_bracket_images(
@@ -475,21 +492,26 @@ def _write_bracket_images(
     seeds: dict,
     projected: bool,
     stamps: dict[str, str],
+    teams: dict,
 ) -> str:
-    """The bracket's images to share, every view; the Projected ones only when there are Projected odds
-    (a stale one is removed). Returns the whole-bracket image's URL, Projected when there is one."""
+    """The bracket's images to share, every view in both themes; the Projected ones only when there are
+    Projected odds (a stale one is removed). Returns the light whole-bracket image's URL (for the
+    sitemap), Projected when there is one."""
     folder = out_dir / "bracket" / str(season)
+    _drop_unthemed(folder, clazz)
     for view, half in BRACKET_VIEWS.items():
         for version in ("odds", "blank"):
-            path = folder / f"{clazz}a-{view}-{version}.png"
-            if version == "odds" and not projected:
-                path.unlink(missing_ok=True)
-                continue
-            image = render_bracket_image(
-                clazz, season, games, results, seeds, half, version == "blank", stamps.get(version, f"{season} season")
-            )
-            _write_png(path, image)
-    return f"{site_url}/static/bracket/{season}/{clazz}a-all-{'odds' if projected else 'blank'}.png"
+            for theme in BRACKET_THEMES:
+                path = folder / f"{clazz}a-{view}-{version}-{theme}.png"
+                if version == "odds" and not projected:
+                    path.unlink(missing_ok=True)
+                    continue
+                stamp = stamps.get(version, f"{season} season")
+                image = render_bracket_image(
+                    clazz, season, games, results, seeds, half, version == "blank", stamp, teams, theme
+                )
+                _write_png(path, image)
+    return f"{site_url}/static/bracket/{season}/{clazz}a-all-{'odds' if projected else 'blank'}-light.png"
 
 
 def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today: date) -> int:
@@ -497,9 +519,13 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
     skipped. As of the end of the class's last week of games, as its bracket page shows it."""
     written = 0
     for season in seasons:
+        teams: dict | None = None
         for clazz in CLASSES:
             folder = out_dir / "bracket" / str(season)
-            paths = [folder / f"{clazz}a-{view}-blank.png" for view in BRACKET_VIEWS]
+            _drop_unthemed(folder, clazz)
+            paths = [
+                folder / f"{clazz}a-{view}-blank-{theme}.png" for view in BRACKET_VIEWS for theme in BRACKET_THEMES
+            ]
             if all(p.exists() for p in paths):
                 continue
             dates = (fetch(f"/seasons/{season}/dates?class={clazz}") or {}).get("dates", [])
@@ -521,11 +547,14 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
                 else f"{season} season · {provenance(date.fromisoformat(as_of) if as_of else None, dates, None, today)}"
             )
             seeds = locked_seeds(None, games)
+            if teams is None:
+                teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
             for view, half in BRACKET_VIEWS.items():
-                _write_png(
-                    folder / f"{clazz}a-{view}-blank.png",
-                    render_bracket_image(clazz, season, games, results, seeds, half, True, stamp),
-                )
+                for theme in BRACKET_THEMES:
+                    _write_png(
+                        folder / f"{clazz}a-{view}-blank-{theme}.png",
+                        render_bracket_image(clazz, season, games, results, seeds, half, True, stamp, teams, theme),
+                    )
             written += 1
     return written
 

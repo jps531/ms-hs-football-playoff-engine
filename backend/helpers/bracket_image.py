@@ -5,6 +5,11 @@ Two versions. **Projected odds**: every open spot shows the team the bracket pag
 there. **Blank**: only what's settled, locked-in teams and results; an open first-round spot shows
 the seed that goes there, a later one stays empty. A season that's over is the same either way.
 
+Each in the site's two themes: dark, and light (for print). Teams carry their helmets, drawn in
+their colors as the site's ``genericHelmet`` SVG draws them (Pillow can't read SVG, so its shapes
+are traced here). A team with an uploaded helmet image would still get the drawn one; none has one
+yet.
+
 Pure, like ``share_cards``: it takes the API's ``/bracket/matchups`` games and played results and
 returns a Pillow image. ``backend/prefect/share_assets_pipeline.py`` writes the files. The image
 says what it shows (the class, the half, the version) and where its numbers are from (the stamp), so
@@ -13,8 +18,12 @@ a copy passed around stays honest.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from functools import cache
+
 from PIL import Image, ImageDraw
 
+from backend.helpers.color_contrast import contrast_ratio
 from backend.helpers.share_cards import (
     BG,
     ODDS_BG,
@@ -34,19 +43,123 @@ from backend.helpers.share_cards import (
 from backend.helpers.static_pages import (
     HALF_NAMES,
     _game_order,
+    initials,
     locked_team,
     occupants,
     position_name,
     round_picks,
     settled_host,
+    team_colors,
     tree_columns,
 )
 
 SQUARE = (2000, 2000)  # one half
 WIDE = (3600, 2025)  # both halves, 16:9
-CARD = "#272727"  # --surface-card, dark (neutral-900)
-LINE = "#7B7A7B"  # --connector, dark (neutral-500)
 MODE = "projected"  # the odds version is Projected only
+
+
+@dataclass(frozen=True)
+class Theme:
+    """The site's color tokens for one theme (nginx/html/static/css/app.css)."""
+
+    bg: str  # --surface-page
+    card: str  # --surface-card
+    edge: str | None  # a card's border, where the page and the card are the same color
+    text: str  # --text-primary
+    text_2: str  # --text-secondary
+    rule: str  # --border
+    line: str  # --connector
+    odds: dict[int, str]  # --odds-1..5
+    odds_text: str  # --odds-text
+    pale_edge: str  # a pale helmet's outline (.mark--pale)
+
+
+THEMES = {
+    "dark": Theme(BG, "#272727", None, TEXT, TEXT_2, RULE, "#7B7A7B", ODDS_BG, ODDS_TEXT, "#FFFFFF"),
+    "light": Theme(
+        "#FFFFFF",
+        "#FFFFFF",
+        "#DFDEDF",
+        "#272727",
+        "#5C5B5C",
+        "#DFDEDF",
+        "#A4A3A4",
+        {1: "#F7F7F7", 2: "#E1F7EF", 3: "#C2EFDF", 4: "#9BE6CD", 5: "#66DDB5"},
+        "#272727",
+        "#A4A3A4",
+    ),
+}
+
+
+# ------------------------------------------------------------- helmets
+# The site's generic helmet (components.js genericHelmet, static_pages.generic_helmet) in its 32x28
+# viewBox: the shell, its stripe, the facemask and the ear hole.
+
+
+def _curve(p0, p1, p2, p3, steps: int = 20) -> list[tuple[float, float]]:
+    """A cubic Bezier from *p0* to *p3* as points (without *p0*)."""
+    out = []
+    for i in range(1, steps + 1):
+        t = i / steps
+        u = 1 - t
+        out.append(
+            (
+                u**3 * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t**3 * p3[0],
+                u**3 * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t**3 * p3[1],
+            )
+        )
+    return out
+
+
+_SHELL = [
+    (2.5, 16.2),
+    *_curve((2.5, 16.2), (2.5, 8.2), (8.8, 2.6), (16.4, 2.6)),
+    *_curve((16.4, 2.6), (22.4, 2.6), (26.6, 6.2), (27.8, 11.3)),
+    (20.2, 12.2),
+    (19.2, 19.4),
+    (21.4, 22.9),
+    *_curve((21.4, 22.9), (18.8, 25.2), (14.6, 26), (10.6, 25.2)),
+    *_curve((10.6, 25.2), (5.6, 24.2), (2.5, 20.9), (2.5, 16.2)),
+]
+_STRIPE = [(5.2, 11.8), *_curve((5.2, 11.8), (7.2, 7.4), (11, 5), (15.6, 4.6))]
+_MASK = [[(20, 13), (30.2, 13), (30.2, 22.4), (21.6, 22.4)], [(19.6, 17.8), (30.2, 17.8)], [(25, 13), (25, 22.4)]]
+_GREY = "#8C8C8C"
+
+
+@cache
+def helmet(shell: str, stripe: str, size: int, pale_edge: str) -> Image.Image:
+    """A team's helmet in its colors, *size* px square (RGBA), drawn 4x and scaled down for smooth edges.
+
+    The shell is outlined in white, or in *pale_edge* when it's too pale to show against white.
+    """
+    big = size * 4
+    k = big / 32
+    dy = (big - 28 * k) / 2
+    pt = lambda p: (p[0] * k, p[1] * k + dy)  # noqa: E731
+    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    def stroke(points, color, width):
+        """A line with round ends and joints, as the SVG's stroke-linecap/linejoin round."""
+        pts = [pt(p) for p in points]
+        draw.line(pts, fill=color, width=round(width * k), joint="curve")
+        r = width * k / 2
+        for x, y in (pts[0], pts[-1]):
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=color)
+
+    for part in _MASK:
+        stroke(part, _GREY, 1.7)
+    edge = pale_edge if contrast_ratio(shell, "#FFFFFF") < 1.6 else "#FFFFFF"
+    shape = [pt(p) for p in _SHELL]
+    draw.line(
+        [*shape, shape[0]], fill=edge, width=round(1.5 * k), joint="curve"
+    )  # under the fill: its outer half shows
+    draw.polygon(shape, fill=shell)
+    stroke(_STRIPE, stripe, 1.8)
+    cx, cy = pt((12.4, 16.4))
+    r = 1.6 * k
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=_GREY)
+    return img.resize((size, size), Image.LANCZOS)
 
 
 def is_final(games: list[dict], results: dict) -> bool:
@@ -122,10 +235,14 @@ def _centers(rounds: list[list[dict]], top: float, height: float) -> list[list[f
 
 
 class _Painter:
-    """Draws cards and lines at one scale."""
+    """Draws cards and lines at one scale, in one theme."""
 
-    def __init__(self, draw: ImageDraw.ImageDraw, card_w: float, row_h: float):
-        self.draw = draw
+    def __init__(self, img: Image.Image, card_w: float, row_h: float, theme: Theme, teams: dict):
+        self.img = img
+        self.draw = ImageDraw.Draw(img)
+        self.theme = theme
+        self.teams = teams
+        self.mark = round(row_h * 0.62)
         self.w = card_w
         self.row_h = row_h
         self.h = 2 * row_h + 6
@@ -137,30 +254,50 @@ class _Painter:
     def card(self, game: dict, x: float, cy: float, rows: list[dict]) -> None:
         """A game's card, its left edge at *x*, centered on *cy*: one row per side, home team last."""
         top = cy - self.h / 2
-        self.draw.rounded_rectangle((x, top, x + self.w, top + self.h), radius=10, fill=CARD)
-        self.draw.line((x + 12, cy, x + self.w - 12, cy), fill=RULE, width=2)
+        t = self.theme
+        self.draw.rounded_rectangle((x, top, x + self.w, top + self.h), radius=10, fill=t.card, outline=t.edge, width=2)
+        self.draw.line((x + 12, cy, x + self.w - 12, cy), fill=t.rule, width=2)
         for i, view in enumerate(rows):
             self._row(view, x, top + 3 + i * self.row_h)
 
+    def _mark(self, team: str, x: float, mid: float) -> None:
+        """A team's helmet in its colors; its initials when it has no colors."""
+        t = self.theme
+        colors = team_colors(self.teams.get(team))
+        top = round(mid - self.mark / 2)
+        if colors:
+            icon = helmet(colors[0], colors[1], self.mark, t.pale_edge)
+            self.img.paste(icon, (round(x), top), icon)
+            return
+        self.draw.rounded_rectangle((x, top, x + self.mark, top + self.mark), radius=self.mark / 2, fill=t.rule)
+        font = _inter(round(self.mark * 0.4), 600)
+        self.draw.text((x + self.mark / 2, mid), initials(team), font=font, fill=t.text_2, anchor="mm")
+
     def _row(self, view: dict, x: float, top: float) -> None:
-        """One side: its name (and seed or position under it), then its score or chance on the right."""
+        """One side: its helmet and name (and seed or position under it), then its score or chance on the right."""
+        t = self.theme
         pad = 16
         right = x + self.w - pad
         mid = top + self.row_h / 2
         value_w = 0.0
+        if view["kind"] in ("won", "lost", "locked", "pick") and view["name"]:
+            self._mark(view["name"], x + pad, mid)
+            x += self.mark + 10
         if view["score"] is not None:
             font = self.name if view["kind"] == "won" else self.name_light
             text = str(view["score"])
-            self.draw.text((right, mid), text, font=font, fill=TEXT if view["kind"] == "won" else TEXT_2, anchor="rm")
+            self.draw.text(
+                (right, mid), text, font=font, fill=t.text if view["kind"] == "won" else t.text_2, anchor="rm"
+            )
             value_w = self.draw.textlength(text, font=font) + 12
         elif view["pct"] is not None:
             pill_w = self.row_h * 1.35
             pill_h = self.row_h * 0.62
             box = (right - pill_w, mid - pill_h / 2, right, mid + pill_h / 2)
-            self.draw.rounded_rectangle(box, radius=6, fill=ODDS_BG[odds_bucket(view["pct"])])
-            self.draw.text((right - 10, mid), format_pct(view["pct"]), font=self.pill, fill=ODDS_TEXT, anchor="rm")
+            self.draw.rounded_rectangle(box, radius=6, fill=t.odds[odds_bucket(view["pct"])])
+            self.draw.text((right - 10, mid), format_pct(view["pct"]), font=self.pill, fill=t.odds_text, anchor="rm")
             value_w = pill_w + 12
-        width = self.w - 2 * pad - value_w
+        width = right - (x + pad) - value_w
         muted = view["kind"] in ("open", "empty", "bye", "lost")
         font = self.name_light if view["kind"] in ("open", "empty", "lost") else self.name
         # A long name steps down in size (twice at most) before it's ever cut short.
@@ -174,14 +311,14 @@ class _Painter:
                 (x + pad, mid - 2),
                 fit(self.draw, view["name"], font, width),
                 font=font,
-                fill=TEXT_2 if muted else TEXT,
+                fill=t.text_2 if muted else t.text,
                 anchor="ls",
             )
             self.draw.text(
                 (x + pad, mid + 4),
                 fit(self.draw, view["sub"], self.sub, width),
                 font=self.sub,
-                fill=TEXT_2,
+                fill=t.text_2,
                 anchor="lt",
             )
         elif view["name"]:
@@ -189,14 +326,16 @@ class _Painter:
                 (x + pad, mid),
                 fit(self.draw, view["name"], font, width),
                 font=font,
-                fill=TEXT_2 if muted else TEXT,
+                fill=t.text_2 if muted else t.text,
                 anchor="lm",
             )
 
     def join(self, x_from: float, y_from: float, x_to: float, y_to: float) -> None:
         """An elbow from one card's edge to the next round's card: across, up or down, across."""
         mid = (x_from + x_to) / 2
-        self.draw.line([(x_from, y_from), (mid, y_from), (mid, y_to), (x_to, y_to)], fill=LINE, width=3, joint="curve")
+        self.draw.line(
+            [(x_from, y_from), (mid, y_from), (mid, y_to), (x_to, y_to)], fill=self.theme.line, width=3, joint="curve"
+        )
 
 
 def _rows(game: dict, results: dict, seeds: dict, picks: dict, blank: bool) -> list[dict]:
@@ -205,26 +344,26 @@ def _rows(game: dict, results: dict, seeds: dict, picks: dict, blank: bool) -> l
     return [slot(game, k, results, seeds, picks, blank) for k in order]
 
 
-def _header(draw, size: tuple[int, int], pad: int, title: str, subtitle: str) -> float:
+def _header(draw, t: Theme, pad: int, title: str, subtitle: str) -> float:
     """Title and subtitle; returns where the bracket may start."""
-    draw.text((pad, pad + 70), title, font=_nippo(88), fill=TEXT, anchor="ls")
-    draw.text((pad, pad + 128), subtitle, font=_inter(36, 500), fill=TEXT_2, anchor="ls")
+    draw.text((pad, pad + 70), title, font=_nippo(88), fill=t.text, anchor="ls")
+    draw.text((pad, pad + 128), subtitle, font=_inter(36, 500), fill=t.text_2, anchor="ls")
     return pad + 190
 
 
-def _footer(draw, size: tuple[int, int], pad: int, stamp: str) -> float:
+def _footer(draw, t: Theme, size: tuple[int, int], pad: int, stamp: str) -> float:
     """The stamp and the site's address along the bottom; returns where the bracket must end."""
     width, height = size
     base = height - pad + 4
-    _tracked(draw, (pad, base), stamp.upper(), _inter(26, 600), TEXT_2, 2)
-    draw.text((width - pad, base), SITE_HOST, font=_inter(34, 600), fill=TEXT, anchor="rs")
+    _tracked(draw, (pad, base), stamp.upper(), _inter(26, 600), t.text_2, 2)
+    draw.text((width - pad, base), SITE_HOST, font=_inter(34, 600), fill=t.text, anchor="rs")
     return height - pad - 60
 
 
-def _label(draw, name: str, x: float, width: float, base: float, font) -> None:
+def _label(draw, t: Theme, name: str, x: float, width: float, base: float, font) -> None:
     """A round's name over its column, letter-spaced and centered."""
     text = name.upper()
-    _tracked(draw, (x + (width - _tracked_width(draw, text, font, 1.5)) / 2, base), text, font, TEXT_2, 1.5)
+    _tracked(draw, (x + (width - _tracked_width(draw, text, font, 1.5)) / 2, base), text, font, t.text_2, 1.5)
 
 
 def _subtitle(final: bool, blank: bool, season: int) -> str:
@@ -232,8 +371,8 @@ def _subtitle(final: bool, blank: bool, season: int) -> str:
     if final:
         return f"{season} season · Final"
     if blank:
-        return "Teams and results so far · open first-round spots show the seed that goes there"
-    return "Projected odds · each open spot shows one team that could be there, and its chance"
+        return "Teams and results so far · Open first-round spots show the seed that goes there"
+    return "Projected odds · Each open spot shows one team that could be there, and their chance"
 
 
 def render_bracket_image(
@@ -245,22 +384,27 @@ def render_bracket_image(
     view: str,
     blank: bool,
     stamp: str,
+    teams: dict | None = None,
+    theme: str = "dark",
 ) -> Image.Image:
-    """The bracket image: *view* "N" or "S" (that half, square) or "all" (both halves, wide).
+    """The bracket image: *view* "N" or "S" (that half, square) or "all" (both halves, wide), in
+    *theme* "dark" or "light".
 
     *results* are played games by id (``static_pages.layout_results``); *seeds* each locked-in team's
-    (region, seed) (``static_pages.locked_seeds``); *stamp* where the numbers are from.
+    (region, seed) (``static_pages.locked_seeds``); *stamp* where the numbers are from; *teams* the
+    API's teams by school, for their helmets.
     """
+    t = THEMES[theme]
     final = is_final(games, results)
     blank = blank or final
     picks = {} if blank else picks_for(games, results)
     size = WIDE if view == "all" else SQUARE
     pad = 72
-    img = Image.new("RGB", size, BG)
+    img = Image.new("RGB", size, t.bg)
     draw = ImageDraw.Draw(img)
     title = f"Class {clazz}A Bracket" + ("" if view == "all" else f" · {HALF_NAMES.get(view, view)}")
-    top = _header(draw, size, pad, title, _subtitle(final, blank, season))
-    bottom = _footer(draw, size, pad, stamp)
+    top = _header(draw, t, pad, title, _subtitle(final, blank, season))
+    bottom = _footer(draw, t, size, pad, stamp)
     labels_h = 44
     body_top, body_h = top + labels_h, bottom - top - labels_h
 
@@ -275,7 +419,7 @@ def render_bracket_image(
     card_w = (size[0] - 2 * pad - gap * (cols - 1)) / cols
     first = max(len(r[0]) for r in rounds.values() if r)
     row_h = min(64.0, body_h / first * 0.4)
-    paint = _Painter(draw, card_w, row_h)
+    paint = _Painter(img, card_w, row_h, t, teams or {})
     label_font = _inter(24, 600)
 
     def column_x(h: str, k: int) -> float:
@@ -290,7 +434,7 @@ def render_bracket_image(
         mirrored = view == "all" and h == "S"
         for k, games_k in enumerate(rs):
             x = column_x(h, k)
-            _label(draw, games_k[0]["round"], x, card_w, top + 30, label_font)
+            _label(draw, t, games_k[0]["round"], x, card_w, top + 30, label_font)
             for i, g in enumerate(games_k):
                 paint.card(g, x, centers[k][i], _rows(g, results, seeds, picks, blank))
                 if k + 1 < len(rs):
@@ -304,7 +448,7 @@ def render_bracket_image(
     if final_game:
         x = pad + depth * (card_w + gap)
         cy = sum(c for _, _, c in sf_centers) / len(sf_centers)
-        _label(draw, final_game["round"], x, card_w, top + 30, label_font)
+        _label(draw, t, final_game["round"], x, card_w, top + 30, label_font)
         paint.card(final_game, x, cy, _rows(final_game, results, seeds, picks, blank))
         for h, sx, sy in sf_centers:
             if h == "S":
@@ -316,5 +460,5 @@ def render_bracket_image(
             font = _inter(30, 600)
             text = fit(draw, f"Champion: {champion}", font, card_w + gap)
             tw = draw.textlength(text, font=font)
-            draw.text((x + (card_w - tw) / 2, cy + paint.h / 2 + 50), text, font=font, fill=TEXT, anchor="ls")
+            draw.text((x + (card_w - tw) / 2, cy + paint.h / 2 + 50), text, font=font, fill=t.text, anchor="ls")
     return img

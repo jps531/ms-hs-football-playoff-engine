@@ -260,7 +260,10 @@ def test_team_description_states_its_numbers():
     )
     # Can't win the region: it doesn't lead with "0% to win the region".
     chasing = _team("Magee", 0.28, 0.0)
-    assert team_description(chasing, 3, 6, "projected") == "Magee (6–2, 3–1 in Region 6-3A), Projected odds: 28% to make the playoffs."
+    assert (
+        team_description(chasing, 3, 6, "projected")
+        == "Magee (6–2, 3–1 in Region 6-3A), Projected odds: 28% to make the playoffs."
+    )
     # The mode comes up front, so trimming a long line to the preview limit can't drop it.
     assert team_description(chasing, 3, 6, "tossup").startswith("Magee (6–2, 3–1 in Region 6-3A), Toss-up odds: ")
     out = {**_team("Mize", 0.0), "eliminated": True}  # facts only: no odds mode named
@@ -426,6 +429,8 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     }
     (tmp_path / "og" / "bracket-3").mkdir(parents=True)
     (tmp_path / "og" / "bracket-3" / "gone.png").write_bytes(b"old")
+    (tmp_path / "bracket" / "2026").mkdir(parents=True)
+    (tmp_path / "bracket" / "2026" / "3a-all-odds.png").write_bytes(b"named before themes")
     written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
     assert (written["brackets"], written["bracket_teams"]) == (1, 2)
     assert sorted(p.name for p in (tmp_path / "og" / "bracket-3").iterdir()) == ["raleigh.png", "union.png"]
@@ -440,11 +445,11 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     # The bracket's images to share: every view blank; no Projected ones without Projected odds. The
     # sitemap lists the whole-bracket image with the bracket page.
     images = sorted(p.name for p in (tmp_path / "bracket" / "2026").iterdir())
-    assert images == ["3a-all-blank.png", "3a-north-blank.png", "3a-south-blank.png"]
+    assert images == [f"3a-{v}-blank-{t}.png" for v in ("all", "north", "south") for t in ("dark", "light")]
     sitemap = (tmp_path / "sitemap.xml").read_text()
     assert (
         "<loc>https://mshsfootball.com/brackets/3a</loc><lastmod>2026-10-09</lastmod><image:image>"
-        "<image:loc>https://mshsfootball.com/static/bracket/2026/3a-all-blank.png</image:loc></image:image>"
+        "<image:loc>https://mshsfootball.com/static/bracket/2026/3a-all-blank-light.png</image:loc></image:image>"
     ) in sitemap
 
 
@@ -457,7 +462,9 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path):
         "/standings/3?season=2026": {"as_of_date": "2026-10-09", "regions": [{"region": 6, "teams": teams}]},
         "/seasons/2026/dates?class=3": {"dates": DATES},
         "/standings/3/6?season=2026": {"as_of_date": "2026-10-09", "headline": None, "teams": teams},
-        "/seasons/2025/dates?class=3": {"dates": [{"date": "2025-12-05", "kind": "games", "week": 15, "description": "Championship Game"}]},
+        "/seasons/2025/dates?class=3": {
+            "dates": [{"date": "2025-12-05", "kind": "games", "week": 15, "description": "Championship Game"}]
+        },
         # Its last game day was Friday, Dec 5: the bracket as of that week's Sunday, Dec 7.
         "/bracket/matchups?season=2025&class=3&date=2025-12-07": {"as_of_date": "2025-12-07", "games": GAMES},
     }
@@ -468,9 +475,7 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path):
 
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 1
     assert sorted(p.name for p in (tmp_path / "bracket" / "2025").iterdir()) == [
-        "3a-all-blank.png",
-        "3a-north-blank.png",
-        "3a-south-blank.png",
+        f"3a-{v}-blank-{t}.png" for v in ("all", "north", "south") for t in ("dark", "light")
     ]
     calls.clear()
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0

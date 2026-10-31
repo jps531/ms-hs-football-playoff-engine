@@ -27,7 +27,7 @@ outside the code.
   generated head tags.
 - **`sitemap.xml`** (front page, About page, every class, region and bracket
   page, with the snapshot date as `lastmod`), linked from `robots.txt`. Each
-  bracket page lists its whole-bracket image (`/static/bracket/{season}/{class}a-all-*.png`,
+  bracket page lists its whole-bracket image (`/static/bracket/{season}/{class}a-all-*-light.png`,
   Google's image extension) so it can show up in image search.
 - **Not indexed:** the API, its docs, `/moderate`, `/feedback` (an
   `X-Robots-Tag: noindex` header). `/api/` is deliberately *not* blocked in
