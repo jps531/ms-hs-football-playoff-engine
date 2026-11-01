@@ -160,6 +160,13 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
         to ``(G[lo..M) ∧ R) ∨ (X_b ∧ G[M..N) ∧ R)``.  Both ranges must share
         the same lower bound ``lo``; X result is irrelevant for the narrow range.
 
+    Rule 6 — Redundant opposite:
+        ``(X_a ∧ R) ∨ (X_b ∧ R ∧ S)`` rewrites b to ``R ∧ S``: wherever X_a
+        holds, the first atom already does, so b needn't say X_b.  (Lanier beats
+        Vicksburg, or Provine and Florence win and Vicksburg beats Lanier: the
+        last is redundant.)  X_a / X_b are opposite unconstrained winners of one
+        game, and no ``MarginCondition`` in either atom mentions it.
+
     Args:
         atoms: List of atoms, each atom being a list of ``GameResult`` /
                ``MarginCondition`` objects.
@@ -298,6 +305,17 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
                     return False
         return True
 
+    def _dominated(atoms: list[list]) -> set[int]:
+        """Indexes of atoms another atom subsumes. Of two that subsume each other (the same conditions,
+        perhaps in another order), only the later goes: dropping both would lose the outcome."""
+        n = len(atoms)
+        return {
+            j
+            for i in range(n)
+            for j in range(n)
+            if i != j and _subsumes(atoms[i], atoms[j]) and (i < j or not _subsumes(atoms[j], atoms[i]))
+        }
+
     def _try_rule3(a: list, b: list) -> list | None:
         """Rule 3 — Complementary lifting.
 
@@ -412,7 +430,7 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
 
     # Subsumption: remove any atom strictly subsumed by a simpler atom.
     # One pass is sufficient; subsumption only removes atoms, never adds them.
-    dominated = {j for i in range(len(atoms)) for j in range(len(atoms)) if i != j and _subsumes(atoms[i], atoms[j])}
+    dominated = _dominated(atoms)
     if dominated:
         atoms = [atom for k, atom in enumerate(atoms) if k not in dominated]
 
@@ -499,6 +517,27 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
 
         return None
 
+    def _try_rule6(a: list, b: list) -> list | None:
+        """Rule 6 — Redundant opposite: b without its X_b when a is X_a plus only conditions b has.
+
+        Correctness, for any conditions R (all in both) and S (b's others):
+          (X_a ∧ R) ∨ (X_b ∧ R ∧ S) = R ∧ (X_a ∨ (X_b ∧ S)) = R ∧ (X_a ∨ S)
+          = (X_a ∧ R) ∨ (R ∧ S)
+        since X_a and X_b are a game's two winners, unconstrained, and a game has one.
+        """
+        mentioned = {p for c in [*a, *b] if isinstance(c, MarginCondition) for p in (*c.add, *c.sub)}
+        for ca in a:
+            if not isinstance(ca, GameResult) or ca.min_margin != 1 or ca.max_margin is not None:
+                continue
+            if _pair(ca) in mentioned:
+                continue
+            opposite = GameResult(ca.loser, ca.winner, 1, None)
+            if opposite not in b:
+                continue
+            if all(c in b for c in a if c is not ca):
+                return [c for c in b if c != opposite]
+        return None
+
     # ---------------------------------------------------------------------------
     # Outer stability loop — repeats until no rule fires in a full pass.
     # Later rules can expose new opportunities for earlier ones.
@@ -536,9 +575,7 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
             atoms = new_atoms
 
         # Subsumption: remove atoms strictly subsumed by a simpler atom
-        dominated = {
-            j for i in range(len(atoms)) for j in range(len(atoms)) if i != j and _subsumes(atoms[i], atoms[j])
-        }
+        dominated = _dominated(atoms)
         if dominated:
             atoms = [atom for k, atom in enumerate(atoms) if k not in dominated]
             globally_changed = True
@@ -576,6 +613,23 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
                         globally_changed = True
                         break
                 if r4_changed:
+                    break
+
+        # Rule 6: redundant opposite — try all ordered pairs, until stable
+        r6_changed = True
+        while r6_changed:
+            r6_changed = False
+            for i in range(len(atoms)):
+                for j in range(len(atoms)):
+                    if i == j:
+                        continue
+                    new_b = _try_rule6(atoms[i], atoms[j])
+                    if new_b is not None:
+                        atoms = [new_b if k == j else atom for k, atom in enumerate(atoms)]
+                        r6_changed = True
+                        globally_changed = True
+                        break
+                if r6_changed:
                     break
 
     return atoms
@@ -1162,9 +1216,7 @@ def _pieces_with(points: set[tuple[int, ...]], k: int, limit: int, forms: list) 
     return pieces
 
 
-def _place_terms(
-    regions: dict, pairs: list, winners: list[tuple[str, str]], playoff_seeds: int
-) -> dict[str, tuple]:
+def _place_terms(regions: dict, pairs: list, winners: list[tuple[str, str]], playoff_seeds: int) -> dict[str, tuple]:
     """Each team's places in a tie too varied to list, stated exactly in margins where that's short.
 
     *regions* maps each outcome ``(seeding, open_groups)`` of one set of winners to the margin
@@ -1972,7 +2024,9 @@ def enumerate_division_scenarios(
     for masks in by_listing.values():
         for group in _valid_merge_groups(masks):
             winners = _common_game_winners(group, remaining)
-            entries.append((min(group), "multi", None, winners, (outcomes[min(group)], place_terms.get(min(group), ()))))
+            entries.append(
+                (min(group), "multi", None, winners, (outcomes[min(group)], place_terms.get(min(group), ())))
+            )
     entries.sort(key=lambda e: e[0])
 
     def scenario(num, sub, winners, atom, open_groups, seeding, alternatives=None, places=(), terms=()):
@@ -1985,7 +2039,9 @@ def enumerate_division_scenarios(
             "alternatives": alternatives,
             "open_groups": [(step, tuple(g)) for step, g in open_groups] or None,
             "open_places": {t: list(seeds) for t, seeds in places} or None,
-            "place_terms": {t: [(seed, [list(term) for term in ways]) for seed, ways in by_seed] for t, by_seed in terms}
+            "place_terms": {
+                t: [(seed, [list(term) for term in ways]) for seed, ways in by_seed] for t, by_seed in terms
+            }
             or None,
             "seeding": seeding,
         }
