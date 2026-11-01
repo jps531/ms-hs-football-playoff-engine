@@ -202,7 +202,7 @@ Each result identifies participants by school name, (region, seed) slot ref, or 
 A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Confirmed DB results are never overridden by simulated ones for the same matchup.
 
 **Bracket simulate** (`POST /bracket/simulate`): works in two modes:
-- *Playoff mode* (some or all seedings clinched): school names and slot refs both resolve to known teams. The returned `bracket_layout` merges confirmed DB results (marked `simulated: false`) with the hypothetical results in the request body (marked `simulated: true`), and propagates winners into downstream game participants.
+- *Playoff mode* (some or all seedings clinched): school names and slot refs both resolve to known teams. The returned `bracket_layout` merges confirmed DB results (marked `simulated: false`) with the hypothetical results in the request body (marked `simulated: true`), and propagates winners into downstream game participants. While only some seedings are clinched, `teams[]` still lists every slot a team can take (as `GET /bracket` does), and a result given by an open seed's slot ref counts as that slot's win, as in pre-clinching mode.
 - *Pre-clinching mode* (no seedings clinched yet): only slot refs are meaningful; school-name refs are silently skipped. `bracket_layout` game nodes will have `null` participants and results. Round-based (loser-less) results require seedings to be clinched and have no effect in pre-clinching mode.
 
 **Hosting simulate** (`POST /hosting/{clazz}/simulate`, `POST /hosting/{clazz}/{region}/simulate`): slot refs apply only in playoff mode (seedings clinched); they are silently skipped in regular-season mode where school names are required.
