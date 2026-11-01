@@ -1638,7 +1638,7 @@ const canShareFiles = () => {
 };
 
 function shareHtml() {
-  const { clazz, share, season, currentSeason } = bracketData;
+  const { clazz, share } = bracketData;
   const c = shareUi.choice;
   const group = (label, key, options) => `<div class="share-sheet__group" role="group" aria-label="${esc(label)}">
       <p class="share-sheet__label" aria-hidden="true">${esc(label)}</p>
@@ -1652,7 +1652,7 @@ function shareHtml() {
   const disabled = ready ? "" : " disabled";
   return `<div class="game-sheet__head">
       <div><h2 class="game-sheet__title" id="share-sheet-title" tabindex="-1" autofocus>Share this bracket</h2>
-        <p class="game-sheet__prov provenance">Class ${esc(String(clazz))}A · ${season === currentSeason ? "as of the latest update" : `${esc(String(season))} season, at its end`}</p></div>
+        <p class="game-sheet__prov provenance">${esc(shareWhen())}</p></div>
       <button type="button" class="game-sheet__close" data-share-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
     <div class="game-sheet__body share-sheet__body">
@@ -1667,6 +1667,18 @@ function shareHtml() {
       </div>
       <p class="share-sheet__status muted" role="status">${esc(shareUi.status)}</p>
     </div>`;
+}
+
+/**
+ * What the images show, under the sheet's title: "Class 3A · as of Oct 30", the date the page's
+ * controls give for the latest update (the images' own footer says the same); a past season's,
+ * "Class 6A · 2025 season · Final".
+ */
+function shareWhen() {
+  const { clazz, season, currentSeason, summary, results } = bracketData;
+  if (season !== currentSeason) return [`Class ${clazz}A`, `${season} season`, results.final?.winner ? "Final" : null].filter(Boolean).join(" · ");
+  const date = summary?.date?.replace(/^(Latest update|Updated) /, "");
+  return `Class ${clazz}A · ${date ? `as of ${date}` : "as of the latest update"}`;
 }
 
 /** Redraw the open share sheet (an option chosen, the image loaded), keeping focus on the same control. */

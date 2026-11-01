@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.7.1
+
+- **Clearer bracket images.** Their title now has the season: “2026 Class 3A Bracket”. Only the
+  image with Projected odds keeps a line under the title (saying what the odds are and how each open
+  spot is filled); the blank and finished ones no longer repeat what's plain or already in the footer.
+  When you share one, the sheet says “Class 3A · as of Oct 30”, or for a past season,
+  “Class 6A · 2025 season · Final”.
+
 ## 1.7.0
 
 - **Share a bracket as an image.** “Share this bracket”, under a bracket's controls, opens a choice of

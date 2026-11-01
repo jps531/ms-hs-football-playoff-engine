@@ -6,4 +6,4 @@ its entry to CHANGELOG.md. ``pyproject.toml`` and the footers of the four HTML p
 ``backend/tests/unit/version_test.py`` fails until they match.
 """
 
-VERSION = "1.7.0"
+VERSION = "1.7.1"
