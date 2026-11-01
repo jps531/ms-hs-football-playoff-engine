@@ -98,3 +98,41 @@ def test_every_slot_is_listed_and_adds_up_to_each_teams_own_odds(win_prob_fn):
             for rd in ROUNDS:
                 summed = sum(p * getattr(slots[(region, s)], f"{rd}_weighted") for s, p in seed_p.items() if p)
                 assert summed == pytest.approx(getattr(own[name], rd), abs=1e-9), (name, rd)
+
+
+def test_a_simulated_win_for_an_open_seed_counts_once_some_seeds_are_clinched():
+    """POST /bracket/simulate with some seeds clinched: a result given by an open seed's slot counts as that
+    slot's win (as before any seed is clinched), instead of being dropped with the slot."""
+    from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
+    from backend.helpers.api_helpers import build_slot_win_counts
+
+    first = next(
+        s for s in SLOTS_5A_7A_2025 if (s.home_region, s.home_seed) == (2, 1) or (s.away_region, s.away_seed) == (2, 1)
+    )
+    other = (
+        (first.away_region, first.away_seed)
+        if (first.home_region, first.home_seed) == (2, 1)
+        else (first.home_region, first.home_seed)
+    )
+    results = [
+        BracketGameResultRequest(
+            winner=ParticipantRef(region=2, seed=1), loser=ParticipantRef(region=other[0], seed=other[1])
+        )
+    ]
+    state = build_playoff_bracket_state(CLINCHED, {}, set(), results, {}, SLOTS_5A_7A_2025, 2025, 5)
+    entries = build_bracket_entries(
+        BY_REGION,
+        SLOTS_5A_7A_2025,
+        season=2025,
+        clazz=5,
+        win_prob_fn_weighted=equal_matchup_prob,
+        wins_by_team=state.wins_by_team,
+        all_region_odds=with_open_slots(state.all_region_odds, BY_REGION, CLINCHED),
+        cross_region_wins=state.cross_region_wins,
+        eliminated_hosting=state.eliminated_hosting_map,
+        wins_by_slot=build_slot_win_counts(results),
+        school_to_seed=state.school_to_seed,
+    )
+    slots = {(e.region, e.seed): e for e in entries}
+    assert slots[(2, 1)].quarterfinals == pytest.approx(1.0)  # 5A-7A: a first-round win is a quarterfinal
+    assert slots[(1, 1)].quarterfinals == pytest.approx(0.5)  # untouched

@@ -129,25 +129,10 @@ async def get_bracket(
         venue = await load_championship_venue(conn, season, class_)
         home_venues = await load_home_venues(conn) if state is not None else {}
 
-    # Projected odds for a slot not yet settled: each slot's rating is the expected rating of the teams
-    # that could take it, from their Projected seed odds, as the team pages' bracket odds and
-    # /bracket/matchups use. (The playoff state's own function knows only clinched teams, so it would
-    # give every open slot 50/50.)
-    has_projected = any(p > 0 for teams in odds_w.values() for by in teams.values() for p in by.values())
-    matchup_fn_w = (
-        make_matchup_prob_fn(elo_ratings, _as_standings_odds(odds_w), EloConfig())
-        if elo_ratings and has_projected
-        else None
-    )
+    matchup_fn_w = _projected_matchup_fn(elo_ratings, odds_w)
     if state is not None:
         # Before every region is settled, the open seeds stay in as slots (with_open_slots).
-        clinched = set(state.school_to_seed.values())
-        open_seeds = any(
-            (region, seed) not in clinched
-            for region, teams in by_region.items()
-            for seed in (1, 2, 3, 4)
-            if any(getattr(o, f"p{seed}") > 0 for o in teams.values())
-        )
+        open_seeds = _open_seeds(by_region, state.school_to_seed)
         entries = build_bracket_entries(
             by_region, slots,
             season=season, clazz=class_,
@@ -183,6 +168,30 @@ async def get_bracket(
         season=season, class_=class_,
         bracket_layout=bracket_layout,
         teams=entries,
+    )
+
+
+def _projected_matchup_fn(
+    elo_ratings: dict[str, float], odds_w: dict[int, dict[str, dict[int, float]]]
+) -> MatchupProbFn | None:
+    """The Projected win function for /bracket's slots: each (region, seed) is rated by the expected Elo
+    of the teams that could take it, from their Projected seed odds, as the team pages' bracket odds and
+    /bracket/matchups use. (The playoff state's own function knows only clinched teams, so it would give
+    every open slot 50/50.) None without ratings or Projected odds."""
+    has_projected = any(p > 0 for teams in odds_w.values() for by in teams.values() for p in by.values())
+    if not elo_ratings or not has_projected:
+        return None
+    return make_matchup_prob_fn(elo_ratings, _as_standings_odds(odds_w), EloConfig())
+
+
+def _open_seeds(by_region: dict[int, dict[str, StandingsOdds]], school_to_seed: dict[str, tuple[int, int]]) -> bool:
+    """Whether some seed a team can still take hasn't been clinched (the playoff state then lacks it)."""
+    clinched = set(school_to_seed.values())
+    return any(
+        (region, seed) not in clinched
+        for region, teams in by_region.items()
+        for seed in (1, 2, 3, 4)
+        if any(getattr(o, f"p{seed}") > 0 for o in teams.values())
     )
 
 
@@ -229,9 +238,7 @@ async def matchups_outlook(conn, season: int, class_: int, as_of: date) -> tuple
         slots, season, odds_t, pairs_for_regions(odds_t, standings_dates, stored_t), equal_matchup_prob, results
     )
     projected = None
-    has_projected = any(p > 0 for teams in odds_w.values() for by in teams.values() for p in by.values())
-    if elo_ratings and has_projected:
-        matchup_fn = make_matchup_prob_fn(elo_ratings, _as_standings_odds(odds_w), EloConfig())
+    if (matchup_fn := _projected_matchup_fn(elo_ratings, odds_w)) is not None:
         projected = bracket_outlook(
             slots, season, odds_w, pairs_for_regions(odds_w, standings_dates, stored_w), matchup_fn, results
         )
@@ -372,9 +379,12 @@ async def simulate_bracket(
     - Playoff mode (seedings clinched): school names and slot refs both resolve to known teams.
     - Pre-clinching mode (no seedings yet): only slot refs are meaningful; school-name refs
       are silently skipped.
+
+    Before every seed is clinched, the open ones stay in as slots (``with_open_slots``), and a result
+    given by slot for one of them counts as that slot's win, as in pre-clinching mode. The Projected
+    odds rate each slot by the teams that could take it (``_projected_matchup_fn``).
     """
     as_of = date or today()
-    matchup_fn_pre: MatchupProbFn | None = None
     async with get_conn() as conn:
         slots = await _load_format_slots(conn, season, class_)
         if not slots:
@@ -389,20 +399,28 @@ async def simulate_bracket(
                 status_code=404,
                 detail=f"No standings data for {class_}A season {season}",
             )
-        if state is None:
-            matchup_fn_pre = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
+        _, odds_w, _ = await load_region_seed_odds(conn, season, class_, as_of)
         venue = await load_championship_venue(conn, season, class_)
         home_venues = await load_home_venues(conn) if state is not None else {}
 
+    matchup_fn_w = _projected_matchup_fn(elo_ratings, odds_w)
     if state is not None:
+        open_seeds = _open_seeds(by_region, state.school_to_seed)
         entries = build_bracket_entries(
             by_region, slots,
             season=season, clazz=class_,
-            win_prob_fn_weighted=state.matchup_fn,
+            win_prob_fn_weighted=matchup_fn_w if open_seeds else state.matchup_fn,
             wins_by_team=state.wins_by_team,
-            all_region_odds=state.all_region_odds,
+            all_region_odds=(
+                with_open_slots(state.all_region_odds, by_region, state.school_to_seed)
+                if open_seeds
+                else state.all_region_odds
+            ),
             cross_region_wins=state.cross_region_wins,
             eliminated_hosting=state.eliminated_hosting_map,
+            # A result for an open seed's slot counts as that slot's win; clinched teams' wins are
+            # already in wins_by_team, which takes precedence.
+            wins_by_slot=build_slot_win_counts(body.results) if open_seeds else None,
             school_to_seed=state.school_to_seed,
         )
         entries = _apply_round_ceilings(entries, state.round_ceiling)
@@ -420,7 +438,7 @@ async def simulate_bracket(
         slot_wins = build_slot_win_counts(body.results)
         entries = build_bracket_entries(
             by_region, slots, season=season, clazz=class_,
-            win_prob_fn_weighted=matchup_fn_pre, wins_by_slot=slot_wins,
+            win_prob_fn_weighted=matchup_fn_w, wins_by_slot=slot_wins,
         )
         bracket_layout = build_bracket_layout(slots)
 
