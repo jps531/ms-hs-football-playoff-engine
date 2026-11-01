@@ -68,3 +68,12 @@ def test_two_identical_ways_in_another_order_keep_one():
     a = [G("Provine", "Cleveland Central"), G("Florence", "Holmes County Central")]
     out = _simplify_atom_list([a, list(reversed(a))])
     assert len(out) == 1 and set(out[0]) == set(a)
+
+
+def test_a_way_stating_a_tiebreaker_keeps_its_games():
+    """A tiebreaker presumes the games that make the tie, so the game stays with it (Region 4-4A: Gentry)."""
+    from backend.helpers.data_classes import TiebreakDecision
+
+    tie = TiebreakDecision(step=3, group=("Gentry", "Greenwood", "Yazoo City"), parts=(("Gentry", "Greenwood"), ("Yazoo City",)))
+    atoms = [[G("Gentry", "Yazoo City")], [G("Yazoo City", "Gentry"), G("Louisville", "Greenwood"), tie]]
+    assert _simplify_atom_list(atoms) == atoms

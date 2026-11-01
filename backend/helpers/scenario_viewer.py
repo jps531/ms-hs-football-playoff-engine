@@ -165,7 +165,9 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
         holds, the first atom already does, so b needn't say X_b.  (Lanier beats
         Vicksburg, or Provine and Florence win and Vicksburg beats Lanier: the
         last is redundant.)  X_a / X_b are opposite unconstrained winners of one
-        game, and no ``MarginCondition`` in either atom mentions it.
+        game, and no ``MarginCondition`` in either atom mentions it.  Atoms
+        stating a tiebreaker are left alone: a tiebreaker presumes the games
+        that make the tie.
 
     Args:
         atoms: List of atoms, each atom being a list of ``GameResult`` /
@@ -525,6 +527,10 @@ def _simplify_atom_list(atoms: list[list]) -> list[list]:
           = (X_a ∧ R) ∨ (R ∧ S)
         since X_a and X_b are a game's two winners, unconstrained, and a game has one.
         """
+        # A tiebreaker condition ("Point differential among A, B and C: ...") only has a meaning when
+        # the games make that tie, so a way that states one keeps its games as they are.
+        if not all(isinstance(c, (GameResult, MarginCondition)) for c in [*a, *b]):
+            return None
         mentioned = {p for c in [*a, *b] if isinstance(c, MarginCondition) for p in (*c.add, *c.sub)}
         for ca in a:
             if not isinstance(ca, GameResult) or ca.min_margin != 1 or ca.max_margin is not None:
