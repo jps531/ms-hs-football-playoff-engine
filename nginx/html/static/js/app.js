@@ -692,7 +692,11 @@ function markLineStarts() {
     for (const seg of line.children) {
       if (seg.classList.contains("seg")) {
         seg.classList.remove("is-line-start");
-        if (prev && seg.offsetTop > prev.offsetTop + prev.offsetHeight / 2) seg.classList.add("is-line-start");
+        if (prev && seg.offsetTop > prev.offsetTop + prev.offsetHeight / 2) {
+          seg.classList.add("is-line-start");
+          // Its hidden dot still takes room: pull the segment back over it so the line starts flush.
+          seg.style.setProperty("--sep-w", `${seg.querySelector(".sep")?.offsetWidth ?? 0}px`);
+        }
       }
       prev = seg;
     }
@@ -1300,9 +1304,11 @@ async function bracketView(ctx) {
   return `<div class="page">
     <header class="entry-head bracket-head">
       ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: pickedTeam(clazz) })], [`Class ${clazz}A Bracket`, null]])}
-      <h1 class="title">Class ${clazz}A Bracket</h1>
+      <div class="title-row">
+        <h1 class="title">Class ${clazz}A Bracket</h1>
+        ${bracketData.share ? `<button type="button" class="share-button" data-share-open aria-haspopup="dialog" aria-label="Share this bracket" title="Share this bracket">${SHARE_ICON}</button>` : ""}
+      </div>
       ${controls}
-      ${bracketData.share ? `<p class="share-line"><button type="button" class="share-button" data-share-open aria-haspopup="dialog">${SHARE_ICON}Share this bracket</button></p>` : ""}
       ${bracketData.results.final?.winner ? championBanner(season, clazz, bracketData.results.final, teams, bracketData.venue) : ""}
       ${focusNote}
     </header>

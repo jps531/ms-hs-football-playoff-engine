@@ -12,6 +12,10 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   spot is filled); the blank and finished ones no longer repeat what's plain or already in the footer.
   When you share one, the sheet says “Class 3A · as of Oct 30”, or for a past season,
   “Class 6A · 2025 season · Final”.
+- **A tidier bracket page.** The share button is now just its icon, at the right of the bracket's
+  title (screen readers still hear “Share this bracket”).
+- **Fixed:** when the season, week and odds controls wrap onto a second line (on phones), the
+  second line no longer starts indented.
 
 ## 1.7.0
 
