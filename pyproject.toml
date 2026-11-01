@@ -7,7 +7,7 @@ packages = ["backend"]
 
 [project]
 name = "ms-hs-football-playoff-engine"
-version = "1.7.0"
+version = "1.7.1"
 requires-python = ">=3.11"
 dependencies = [
     # The caps on prefect, griffe, anyio and pydantic are deliberate, for

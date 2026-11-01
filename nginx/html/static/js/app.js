@@ -692,7 +692,11 @@ function markLineStarts() {
     for (const seg of line.children) {
       if (seg.classList.contains("seg")) {
         seg.classList.remove("is-line-start");
-        if (prev && seg.offsetTop > prev.offsetTop + prev.offsetHeight / 2) seg.classList.add("is-line-start");
+        if (prev && seg.offsetTop > prev.offsetTop + prev.offsetHeight / 2) {
+          seg.classList.add("is-line-start");
+          // Its hidden dot still takes room: pull the segment back over it so the line starts flush.
+          seg.style.setProperty("--sep-w", `${seg.querySelector(".sep")?.offsetWidth ?? 0}px`);
+        }
       }
       prev = seg;
     }
@@ -1300,9 +1304,11 @@ async function bracketView(ctx) {
   return `<div class="page">
     <header class="entry-head bracket-head">
       ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: pickedTeam(clazz) })], [`Class ${clazz}A Bracket`, null]])}
-      <h1 class="title">Class ${clazz}A Bracket</h1>
+      <div class="title-row">
+        <h1 class="title">Class ${clazz}A Bracket</h1>
+        ${bracketData.share ? `<button type="button" class="share-button" data-share-open aria-haspopup="dialog" aria-label="Share this bracket" title="Share this bracket">${SHARE_ICON}</button>` : ""}
+      </div>
       ${controls}
-      ${bracketData.share ? `<p class="share-line"><button type="button" class="share-button" data-share-open aria-haspopup="dialog">${SHARE_ICON}Share this bracket</button></p>` : ""}
       ${bracketData.results.final?.winner ? championBanner(season, clazz, bracketData.results.final, teams, bracketData.venue) : ""}
       ${focusNote}
     </header>
@@ -1638,7 +1644,7 @@ const canShareFiles = () => {
 };
 
 function shareHtml() {
-  const { clazz, share, season, currentSeason } = bracketData;
+  const { clazz, share } = bracketData;
   const c = shareUi.choice;
   const group = (label, key, options) => `<div class="share-sheet__group" role="group" aria-label="${esc(label)}">
       <p class="share-sheet__label" aria-hidden="true">${esc(label)}</p>
@@ -1652,7 +1658,7 @@ function shareHtml() {
   const disabled = ready ? "" : " disabled";
   return `<div class="game-sheet__head">
       <div><h2 class="game-sheet__title" id="share-sheet-title" tabindex="-1" autofocus>Share this bracket</h2>
-        <p class="game-sheet__prov provenance">Class ${esc(String(clazz))}A · ${season === currentSeason ? "as of the latest update" : `${esc(String(season))} season, at its end`}</p></div>
+        <p class="game-sheet__prov provenance">${esc(shareWhen())}</p></div>
       <button type="button" class="game-sheet__close" data-share-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
     <div class="game-sheet__body share-sheet__body">
@@ -1667,6 +1673,18 @@ function shareHtml() {
       </div>
       <p class="share-sheet__status muted" role="status">${esc(shareUi.status)}</p>
     </div>`;
+}
+
+/**
+ * What the images show, under the sheet's title: "Class 3A · as of Oct 30", the date the page's
+ * controls give for the latest update (the images' own footer says the same); a past season's,
+ * "Class 6A · 2025 season · Final".
+ */
+function shareWhen() {
+  const { clazz, season, currentSeason, summary, results } = bracketData;
+  if (season !== currentSeason) return [`Class ${clazz}A`, `${season} season`, results.final?.winner ? "Final" : null].filter(Boolean).join(" · ");
+  const date = summary?.date?.replace(/^(Latest update|Updated) /, "");
+  return `Class ${clazz}A · ${date ? `as of ${date}` : "as of the latest update"}`;
 }
 
 /** Redraw the open share sheet (an option chosen, the image loaded), keeping focus on the same control. */

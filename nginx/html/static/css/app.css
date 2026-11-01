@@ -417,6 +417,9 @@ button { font: inherit; color: inherit; }
 /* A wrapped segment's dot (app.js markLineStarts). Hidden, not removed: taking it out of the line
    could let the segment fit back on the line above, where it needs the dot. */
 .provenance--controls .seg.is-line-start > .sep { visibility: hidden; }
+/* ...and the segment is drawn back over the dot's room (its width and the 6px gap after it), so a
+   wrapped line starts flush. A relative shift, which doesn't change where the line breaks. */
+.provenance--controls .seg.is-line-start { position: relative; left: calc(-1 * (var(--sep-w, 0px) + 6px)); }
 .ctl { display: inline-flex; align-items: center; gap: 4px; }
 .inline-select select {
   appearance: none;
@@ -1634,17 +1637,19 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 
 /* "Share this bracket", under the bracket's controls, and the sheet it opens: which image (half,
    odds, theme), a preview of it, and how to send it. */
-.share-line { margin-top: 12px; }
+/* The bracket's title, with the share button (an icon; its name is for screen readers) at the right. */
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.title-row .title { min-width: 0; }
 .share-button {
-  display: inline-flex; align-items: center; gap: 6px;
-  min-height: 40px; padding: 0 14px 0 12px;
-  border: 1px solid var(--border); border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 44px; height: 44px; padding: 0;
+  border: 1px solid var(--border); border-radius: 10px;
   background: none; color: var(--text-primary);
-  font: inherit; font-size: 14px; font-weight: 600;
   cursor: pointer;
 }
 .share-button:hover { background: var(--surface-raised); }
-.share-button svg, .share-sheet__primary svg { width: 18px; height: 18px; flex: none; }
+.share-button svg { width: 22px; height: 22px; }
+.share-sheet__primary svg { width: 18px; height: 18px; flex: none; }
 .share-sheet__body { display: grid; gap: 14px; }
 .share-sheet__group { display: grid; gap: 6px; }
 .share-sheet__label {

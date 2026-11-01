@@ -400,8 +400,10 @@ def _rows(game: dict, results: dict, seeds: dict, picks: dict, blank: bool) -> l
 
 
 def _header(draw, t: Theme, pad: int, title: str, subtitle: str) -> float:
-    """Title and subtitle; returns where the bracket may start."""
+    """Title and subtitle (none when it's ""); returns where the bracket may start."""
     draw.text((pad, pad + 70), title, font=_nippo(88), fill=t.text, anchor="ls")
+    if not subtitle:
+        return pad + 132
     draw.text((pad, pad + 128), subtitle, font=_inter(36, 500), fill=t.text_2, anchor="ls")
     return pad + 190
 
@@ -421,12 +423,11 @@ def _label(draw, t: Theme, name: str, x: float, width: float, base: float, font)
     _tracked(draw, (x + (width - _tracked_width(draw, text, font, 1.5)) / 2, base), text, font, t.text_2, 1.5)
 
 
-def _subtitle(final: bool, blank: bool, season: int) -> str:
-    """What the image shows."""
-    if final:
-        return f"{season} season · Final"
-    if blank:
-        return "Teams and results so far · Open first-round spots show the seed that goes there"
+def _subtitle(final: bool, blank: bool) -> str:
+    """What the image shows, where it needs saying: the Projected odds, which pick one team for each open
+    spot. A blank or finished bracket needs none (the footer has the season and "Final")."""
+    if final or blank:
+        return ""
     return "Projected odds · Each open spot shows one team that could be there, and their chance"
 
 
@@ -483,8 +484,8 @@ def render_bracket_image(
     pad = 72
     img = Image.new("RGB", size, t.bg)
     draw = ImageDraw.Draw(img)
-    title = f"Class {clazz}A Bracket" + ("" if view == "all" else f" · {HALF_NAMES.get(view, view)}")
-    top = _header(draw, t, pad, title, _subtitle(final, blank, season))
+    title = f"{season} Class {clazz}A Bracket" + ("" if view == "all" else f" · {HALF_NAMES.get(view, view)}")
+    top = _header(draw, t, pad, title, _subtitle(final, blank))
     bottom = _footer(draw, t, size, pad, stamp)
     labels_h = 44
     body_top, body_h = top + labels_h, bottom - top - labels_h

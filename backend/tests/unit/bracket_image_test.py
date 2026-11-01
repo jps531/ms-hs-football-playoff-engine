@@ -99,19 +99,15 @@ def test_both_themes_draw_with_helmets_in_each_teams_colors():
     assert any(px[:3] == (0xA4, 0xA3, 0xA4) for px in pale.getdata() if px[3] == 255)  # outlined in grey on light
 
 
-def test_the_subtitles_say_what_the_image_shows():
-    """Capitalized after the dot; "their chance"."""
+def test_only_the_projected_image_has_a_subtitle():
+    """It says what the odds are and how the open spots are filled; a blank or finished one needs none."""
     from backend.helpers.bracket_image import _subtitle
 
     assert (
-        _subtitle(False, False, 2026)
+        _subtitle(False, False)
         == "Projected odds · Each open spot shows one team that could be there, and their chance"
     )
-    assert (
-        _subtitle(False, True, 2026)
-        == "Teams and results so far · Open first-round spots show the seed that goes there"
-    )
-    assert _subtitle(True, True, 2025) == "2025 season · Final"
+    assert _subtitle(False, True) == "" and _subtitle(True, True) == ""
 
 
 def test_a_finished_bracket_draws_the_trophy_over_the_championship_game():
