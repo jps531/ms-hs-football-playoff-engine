@@ -2,7 +2,8 @@
 
 The steps that log a warning worth acting on (a school's AHSFHS page that couldn't be read, a
 score AHSFHS changed under an approved correction, a corrected or finished game no longer on
-AHSFHS, share images that failed) also ``note`` it here. Once the daily update has committed,
+AHSFHS, share images that failed) also ``note`` it here, and after the commit the update notes
+every past game still without a final score (``missing_scores``). Once the daily update has committed,
 it ``take``s the notes and, if there are any, emails them grouped by kind
 (``daily_update_pipeline``). A clean day sends nothing.
 
@@ -14,12 +15,19 @@ from __future__ import annotations
 import threading
 
 # The kinds, in the order the email lists them, each with its heading and what to do about it.
+MISSING_SCORES = "missing_scores"
 SKIPPED_SCHOOLS = "skipped_schools"
 CHANGED_UNDER_CORRECTION = "changed_under_correction"
 KEPT_OFF_SCHEDULE = "kept_off_schedule"
 SHARE_IMAGES = "share_images"
 
 KINDS = {
+    MISSING_SCORES: (
+        "Past games without a final score",
+        "AHSFHS has no final score for these yet. A region game without one still counts as unplayed in "
+        "the standings, odds and scenarios. Report or approve its score once you know it, or remove a "
+        "game that didn't happen.",
+    ),
     SKIPPED_SCHOOLS: (
         "AHSFHS pages that couldn't be read",
         "These schools' new scores aren't in today's numbers. If it keeps happening, check the pages.",
