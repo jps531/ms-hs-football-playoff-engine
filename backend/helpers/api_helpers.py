@@ -3584,6 +3584,31 @@ def build_bracket_entries_from_odds_map(
     return entries
 
 
+def with_open_slots(
+    all_region_odds: dict[int, dict[str, StandingsOdds]],
+    by_region: dict[int, dict[str, StandingsOdds]],
+    school_to_seed: dict[str, tuple[int, int]],
+) -> dict[int, dict[str, StandingsOdds]]:
+    """The playoff state's clinched teams, plus a placeholder for every seed no team has clinched yet.
+
+    The playoff state (``build_playoff_bracket_state``) holds only clinched seeds, so before every
+    region is settled a slot without one would drop out of ``build_bracket_entries`` altogether. Each
+    open seed that some team in *by_region* can still take gets a placeholder named for its slot
+    (``"R2S3"``), certain of that seed, as the bracket's slots are before any seed is clinched. A seed
+    no team can take (a region too small for it) stays out.
+    """
+    out = {region: dict(teams) for region, teams in all_region_odds.items()}
+    taken = set(school_to_seed.values())
+    for region, teams in by_region.items():
+        for seed in (1, 2, 3, 4):
+            if (region, seed) in taken or not any(getattr(o, f"p{seed}") > 0 for o in teams.values()):
+                continue
+            slot_id = f"R{region}S{seed}"
+            ones = [1.0 if s == seed else 0.0 for s in (1, 2, 3, 4)]
+            out.setdefault(region, {})[slot_id] = StandingsOdds(slot_id, *ones, 1.0, 1.0, True, False)
+    return out
+
+
 def _slot_odds_for_region(
     region_num: int,
     source_odds: dict[str, StandingsOdds] | None,

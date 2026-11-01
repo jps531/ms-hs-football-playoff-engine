@@ -41,6 +41,7 @@ from backend.helpers.api_helpers import (
     load_region_seed_pairs,
     load_remaining_game_dates,
     today,
+    with_open_slots,
 )
 from backend.helpers.bracket_home_odds import equal_matchup_prob
 from backend.helpers.bracket_matchups import bracket_outlook, merge_modes, pairs_for_regions, regions_needing_fallback
@@ -102,7 +103,10 @@ async def get_bracket(
     """Return bracket advancement odds for all seed slots in *class_* for *season*.
 
     Each entry represents one (region, seed) slot.  ``school`` is set only when
-    the team has clinched that seed position; otherwise it is null.
+    the team has clinched that seed position; otherwise it is null.  Every slot
+    a team can still take is listed, clinched or not (``with_open_slots``), and a
+    team's own odds are its seed odds times its slots', summed over the seeds:
+    the same figures as its ``bracket_odds`` in the region standings.
 
     Weighted fields use Elo-based win probabilities; ``null`` when no Elo ratings
     exist for the season.  ``hosting`` contains ``p_host_given_reach`` and
@@ -117,6 +121,7 @@ async def get_bracket(
         by_region = await _load_all_region_odds(conn, season, class_, as_of)
         if not by_region:
             raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
+        _, odds_w, _ = await load_region_seed_odds(conn, season, class_, as_of)
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
         state = await _load_and_build_playoff_bracket_state(
             conn, season, class_, as_of, [], elo_ratings, slots
@@ -124,13 +129,35 @@ async def get_bracket(
         venue = await load_championship_venue(conn, season, class_)
         home_venues = await load_home_venues(conn) if state is not None else {}
 
+    # Projected odds for a slot not yet settled: each slot's rating is the expected rating of the teams
+    # that could take it, from their Projected seed odds, as the team pages' bracket odds and
+    # /bracket/matchups use. (The playoff state's own function knows only clinched teams, so it would
+    # give every open slot 50/50.)
+    has_projected = any(p > 0 for teams in odds_w.values() for by in teams.values() for p in by.values())
+    matchup_fn_w = (
+        make_matchup_prob_fn(elo_ratings, _as_standings_odds(odds_w), EloConfig())
+        if elo_ratings and has_projected
+        else None
+    )
     if state is not None:
+        # Before every region is settled, the open seeds stay in as slots (with_open_slots).
+        clinched = set(state.school_to_seed.values())
+        open_seeds = any(
+            (region, seed) not in clinched
+            for region, teams in by_region.items()
+            for seed in (1, 2, 3, 4)
+            if any(getattr(o, f"p{seed}") > 0 for o in teams.values())
+        )
         entries = build_bracket_entries(
             by_region, slots,
             season=season, clazz=class_,
-            win_prob_fn_weighted=state.matchup_fn,
+            win_prob_fn_weighted=matchup_fn_w if open_seeds else state.matchup_fn,
             wins_by_team=state.wins_by_team,
-            all_region_odds=state.all_region_odds,
+            all_region_odds=(
+                with_open_slots(state.all_region_odds, by_region, state.school_to_seed)
+                if open_seeds
+                else state.all_region_odds
+            ),
             cross_region_wins=state.cross_region_wins,
             eliminated_hosting=state.eliminated_hosting_map,
             school_to_seed=state.school_to_seed,
@@ -145,11 +172,10 @@ async def get_bracket(
             home_venue_by_team=home_venues,
         )
     else:
-        matchup_fn = make_matchup_prob_fn(elo_ratings, by_region, EloConfig()) if elo_ratings else None
         entries = build_bracket_entries(
             by_region, slots,
             season=season, clazz=class_,
-            win_prob_fn_weighted=matchup_fn,
+            win_prob_fn_weighted=matchup_fn_w,
         )
         bracket_layout = build_bracket_layout(slots)
     bracket_layout.championship.venue = venue
