@@ -108,7 +108,7 @@ Pearl
 #2 seed if:
 1. Meridian beats Brandon AND Pearl beats Oak Grove
 2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by exactly 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+3. Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by exactly 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 9 or less (a margin over 12 counts as 12)
 5. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
 
@@ -144,16 +144,16 @@ Oak Grove
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
 
 #4 seed if:
-1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12)"""
 
 NORTHWEST_RANKIN_EXPECTED = """\
 Northwest Rankin
 
 #1 seed if:
-1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12) AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12) AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #2 seed if:
@@ -235,7 +235,7 @@ Pearl
 #2 seed if: (46.1%)
 1. Meridian beats Brandon AND Pearl beats Oak Grove
 2. Pearl beats Oak Grove AND Petal beats Northwest Rankin
-3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by exactly 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+3. Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by exactly 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 4. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 9 or less (a margin over 12 counts as 12)
 5. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
 
@@ -271,16 +271,16 @@ Oak Grove
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 1 more point than Northwest Rankin (a margin over 12 counts as 12)
 
 #4 seed if: (15.2%)
-1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12) AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12)
+2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 3. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal by 4 or more AND Pearl wins by at least 2 more points than Northwest Rankin (a margin over 12 counts as 12)"""
 
 NORTHWEST_RANKIN_WITH_ODDS_EXPECTED = """\
 Northwest Rankin
 
 #1 seed if: (22.1%)
-1. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
-2. Brandon beats Meridian AND Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12) AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+1. Pearl beats Oak Grove AND Northwest Rankin beats Petal AND Pearl's and Northwest Rankin's winning margins add up to 11 or more (a margin over 12 counts as 12) AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
+2. Meridian beats Brandon AND Pearl beats Oak Grove AND Northwest Rankin beats Petal
 3. Brandon beats Meridian AND Pearl beats Oak Grove by 6 or more AND Northwest Rankin beats Petal AND Pearl wins by no more than 2 more points than Northwest Rankin (a margin over 12 counts as 12)
 
 #2 seed if: (14.5%)
