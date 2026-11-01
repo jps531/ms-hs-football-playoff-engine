@@ -2063,9 +2063,7 @@ function sideHow(game, sideKey, team) {
 /**
  * A team's ways to a later-round game (bracket.js's `pathTo`) as a panel:
  * each seed that leads here, labeled, with its conditions and the playoff
- * games it has to win, one chip each; several seeds are alternatives
- * separated by OR (no "ONE OF" box: they're the whole answer, so "one of
- * them" goes without saying).
+ * games it has to win, one chip each; several seeds are a "ONE OF" box.
  */
 function pathHtml(ways, team) {
   const { teams } = bracketData;
@@ -2088,17 +2086,11 @@ function pathHtml(ways, team) {
   const before = open.length ? caveatNote(open[0].caveat, open.some((x) => x.cards)) : "";
   const after = open.length ? open[0].link : "";
   const iff = !open.length;
-  const body = shown.length === 1 ? `<div>${shown[0]}</div>` : alternatives(shown);
+  const body = shown.length === 1
+    ? `<div>${shown[0]}</div>`
+    : `<div class="oneof oneof--first" role="group" aria-label="One of"><span class="oneof__label" aria-hidden="true">ONE OF</span>`
+      + `<div class="conditions">${shown.map((x) => `<div class="how__way">${x}</div>`).join('<div class="or"><span>OR</span></div>')}</div></div>`;
   return { html: `${before}${body}${after}`, iff };
-}
-
-/**
- * Ways that are the whole of a "How?" panel (or of one host's section), as
- * alternatives separated by OR. No "ONE OF" box: with nothing else around
- * them, that any one of them will do goes without saying.
- */
-function alternatives(ways) {
-  return `<div class="conditions">${ways.map((x) => `<div class="how__way">${x}</div>`).join('<div class="or"><span>OR</span></div>')}</div>`;
 }
 
 /** A matchup's "How?" (`a` from side A, `b` from side B): both teams' paths at once, when both are known. */
@@ -2163,7 +2155,10 @@ function laterMatchupHow(game, a, b) {
         .sort((x, y) => x.depth - y.depth);
       return `${label}<div>${conditionsThen(allOf([parts[i][0].groups, parts[i][1].groups]), wins, teams)}</div>`;
     };
-    const block = (list) => (list.length === 1 ? `<div>${drawn(list[0])}</div>` : alternatives(list.map(drawn)));
+    const block = (list) => (list.length === 1
+      ? `<div>${drawn(list[0])}</div>`
+      : `<div class="oneof oneof--first" role="group" aria-label="One of"><span class="oneof__label" aria-hidden="true">ONE OF</span>`
+        + `<div class="conditions">${list.map((x) => `<div class="how__way">${drawn(x)}</div>`).join('<div class="or"><span>OR</span></div>')}</div></div>`);
     const hosts = [...new Set(possible.map(({ w }) => w.host))];
     if (hosts.length < 2) return { html: block(possible), iff: true };
     // Likelier host first.
