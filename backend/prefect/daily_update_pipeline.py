@@ -12,6 +12,9 @@ drawn after the commit, from what the site then serves.
 After the pull, AHSFHS's playoff games are checked against the bracket's
 settled games (``playoff_check``). Any disagreement stops the update (none
 of it is kept) and emails the owner.
+
+Once committed, every game whose date has passed without a final score is
+listed in the email of things to look at (``missing_scores``).
 """
 
 from datetime import date
@@ -21,6 +24,7 @@ from prefect.states import Completed, State
 
 from backend.helpers import attention
 from backend.helpers.database_helpers import shared_transaction
+from backend.helpers.missing_scores import note_missing_scores
 from backend.helpers.run_lock import holds_update_lock
 from backend.prefect.ahsfhs_schedule_pipeline import ahsfhs_schedule_data_flow
 from backend.prefect.failure_alerts import alert_on_failure
@@ -72,6 +76,12 @@ def daily_update_flow(season: int | None = None) -> State:
             )
             raise PlayoffBracketMismatch("; ".join(problems))
         region_scenarios_data_flow(season, share_assets=False)
+    # Past games still without a score, from what was committed. A failure here shouldn't fail the update.
+    try:
+        note_missing_scores(season or date.today().year)
+    except Exception as e:
+        get_run_logger().exception("Checking for missing scores failed; the daily update itself completed")
+        attention.note(attention.MISSING_SCORES, f"Checking for them failed: {type(e).__name__}: {e}")
     # Link previews, from the committed numbers. A failure here shouldn't fail the update.
     try:
         write_share_assets(season)

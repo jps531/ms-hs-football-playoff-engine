@@ -39,6 +39,7 @@ def _daily(monkeypatch, pull=None, recalc=None, problems=()):
         "region_scenarios_data_flow",
         recalc or (lambda season, share_assets: calls.append(("recalc", season, share_assets))),
     )
+    monkeypatch.setattr(daily, "note_missing_scores", lambda season: calls.append(("missing", season)) or 0)
     monkeypatch.setattr(daily, "write_share_assets", lambda season: calls.append(("images", season)))
     monkeypatch.setattr(daily, "check_playoff_games", lambda season: calls.append(("check", season)) or problems)
     monkeypatch.setattr(daily, "send_alert", lambda subject, text: calls.append(("alert", subject, text)))
@@ -56,7 +57,15 @@ def test_things_to_look_at_are_emailed_once_the_update_is_done(monkeypatch):
     calls = _daily(monkeypatch, pull=pull)
     attention.note(attention.SKIPPED_SCHOOLS, "left over from an earlier run")  # cleared at the start
     daily.daily_update_flow.fn(2026)
-    assert calls[:-1] == ["begin", ("pull", 2026), ("check", 2026), ("recalc", 2026, False), "commit", ("images", 2026)]
+    assert calls[:-1] == [
+        "begin",
+        ("pull", 2026),
+        ("check", 2026),
+        ("recalc", 2026, False),
+        "commit",
+        ("missing", 2026),
+        ("images", 2026),
+    ]
     _, subject, text = calls[-1]
     assert subject == "Daily update done, 1 thing to look at"
     assert "- Aberdeen" in text and "left over" not in text
@@ -64,6 +73,35 @@ def test_things_to_look_at_are_emailed_once_the_update_is_done(monkeypatch):
     calls = _daily(monkeypatch)
     daily.daily_update_flow.fn(2026)
     assert not any(isinstance(c, tuple) and c[0] == "alert" for c in calls)
+
+
+def test_past_games_without_a_score_are_among_the_things_to_look_at(monkeypatch):
+    """Checked after the commit; listed first in the email. A failed check is noted, not fatal."""
+    from backend.helpers import attention
+
+    calls = _daily(monkeypatch)
+
+    def missing(season):
+        attention.note(attention.MISSING_SCORES, "Fri, Sep 4: Christian Collegiate Academy vs Resurrection")
+        return 1
+
+    monkeypatch.setattr(daily, "note_missing_scores", missing)
+    daily.daily_update_flow.fn(2026)
+    _, subject, text = calls[-1]
+    assert subject == "Daily update done, 1 thing to look at"
+    assert "Past games without a final score (1)" in text
+    assert "- Fri, Sep 4: Christian Collegiate Academy vs Resurrection" in text
+
+    calls = _daily(monkeypatch)
+
+    def broken(season):
+        raise ConnectionError("db went away")
+
+    monkeypatch.setattr(daily, "note_missing_scores", broken)
+    monkeypatch.setattr(daily, "get_run_logger", lambda: logging.getLogger("test"))
+    daily.daily_update_flow.fn(2026)
+    assert ("images", 2026) in calls  # the rest of the update carried on
+    assert "Checking for them failed: ConnectionError: db went away" in calls[-1][2]
 
 
 def test_failed_share_images_are_among_the_things_to_look_at(monkeypatch):
@@ -131,7 +169,15 @@ def test_the_pull_and_the_recalculation_are_one_transaction_and_images_follow_th
     """The recalculation starts once the pull is done; the share images are drawn after the commit."""
     calls = _daily(monkeypatch)
     daily.daily_update_flow.fn(2026)
-    assert calls == ["begin", ("pull", 2026), ("check", 2026), ("recalc", 2026, False), "commit", ("images", 2026)]
+    assert calls == [
+        "begin",
+        ("pull", 2026),
+        ("check", 2026),
+        ("recalc", 2026, False),
+        "commit",
+        ("missing", 2026),
+        ("images", 2026),
+    ]
 
 
 @pytest.mark.parametrize("failing", ["pull", "recalc"])
@@ -146,7 +192,7 @@ def test_a_failure_anywhere_keeps_none_of_the_update(monkeypatch, failing):
     with pytest.raises(RuntimeError):
         daily.daily_update_flow.fn(2026)
     assert calls[0] == "begin" and calls[-1] == "rollback"
-    assert "commit" not in calls and ("images", 2026) not in calls
+    assert "commit" not in calls and ("images", 2026) not in calls and ("missing", 2026) not in calls
 
 
 def test_only_the_daily_update_is_scheduled_each_morning():
@@ -266,3 +312,50 @@ def test_a_playoff_game_that_disagrees_with_the_bracket_stops_the_update_and_ema
     assert f"- {problem}" in alert[2] and "still shows" in alert[2]
     assert calls[-1] == "rollback"
     assert not any(c[0] in ("recalc", "images") for c in calls if isinstance(c, tuple))
+
+
+def test_a_past_game_without_a_score_is_listed_once_with_whether_it_counts():
+    """Both schools' rows are one game; a region game says so (it's still unplayed in the standings)."""
+    from backend.helpers.missing_scores import missing_score_lines
+
+    rows = [
+        (date(2026, 9, 4), "Resurrection", "Christian Collegiate Academy", False, 1, 8),
+        (date(2026, 10, 23), "Stone", "Vancleave", True, 5, 4),
+        (date(2026, 10, 23), "Vancleave", "Stone", True, 5, 4),
+    ]
+    assert missing_score_lines(rows) == [
+        "Fri, Sep 4: Christian Collegiate Academy vs Resurrection",
+        "Fri, Oct 23: Stone vs Vancleave (Region 4-5A game)",
+    ]
+
+
+def test_missing_scores_are_the_seasons_games_before_today_in_mississippi(monkeypatch):
+    """The query asks for the season's games dated before today, Central time; each line is noted."""
+    from contextlib import contextmanager
+
+    import backend.helpers.missing_scores as ms
+    from backend.helpers import attention
+
+    asked = []
+
+    class Cursor:
+        def execute(self, sql, params):
+            asked.append(params)
+
+        def fetchall(self):
+            return [(date(2026, 10, 30), "Purvis", "Wayne County", True, 5, 4)]
+
+    class Conn:
+        @contextmanager
+        def cursor(self):
+            yield Cursor()
+
+    @contextmanager
+    def connection():
+        yield Conn()
+
+    monkeypatch.setattr(ms, "get_database_connection", connection)
+    attention.clear()
+    assert ms.note_missing_scores(2026, today=date(2026, 11, 1)) == 1
+    assert asked == [(2026, date(2026, 11, 1))]
+    assert attention.take() == {attention.MISSING_SCORES: ["Fri, Oct 30: Purvis vs Wayne County (Region 4-5A game)"]}
