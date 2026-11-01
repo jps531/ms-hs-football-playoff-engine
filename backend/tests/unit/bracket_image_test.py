@@ -146,3 +146,47 @@ def test_the_whole_bracket_names_the_venue_and_in_projected_odds_the_projected_c
     assert draw(False, None) != draw(False, None, BRACKET)  # the projected champion
     assert draw(True, None) == draw(True, None, BRACKET)  # not in the blank image
     assert draw(True, venue) != draw(True, None)
+
+
+def _final_with(occupants: list[tuple[str, float]]) -> dict:
+    """The championship game with these (team, Projected title chance) occupants on its first side."""
+    final = dict(next(g for g in BRACKET if g["id"] == "final"))
+    final["side_a"] = {
+        **final["side_a"],
+        "occupants": [
+            {"team": t, "p_reach": 0.5, "p_reach_weighted": 0.5, "is_locked": False, "p_champion_weighted": p}
+            for t, p in occupants
+        ],
+    }
+    return final
+
+
+def test_the_preview_names_the_two_likeliest_champions_and_never_picks_between_equals():
+    from backend.helpers.bracket_image import title_contenders
+
+    two = title_contenders(_final_with([("Winona", 0.26), ("Seminary", 0.42), ("Magee", 0.03)]), None)
+    assert two == [{"team": "Seminary", "p": 0.42}, {"team": "Winona", "p": 0.26}]
+    # A team level with the second is listed too; one level with the first doesn't push the second out.
+    tied = title_contenders(_final_with([("A", 0.4), ("B", 0.2), ("C", 0.2), ("D", 0.1)]), None)
+    assert [c["team"] for c in tied] == ["A", "B", "C"]
+    assert [c["team"] for c in title_contenders(_final_with([("A", 0.3), ("B", 0.3), ("C", 0.1)]), None)] == ["A", "B"]
+    # Once it's played, or without Projected odds, nobody.
+    assert title_contenders(_final_with([("A", 0.6)]), {"winner": "A"}) == []
+    assert title_contenders(_final_with([("A", None)]), None) == []
+    assert title_contenders(BRACKET[0], None) == []
+
+
+def test_the_link_preview_is_the_whole_bracket_at_preview_size():
+    """1200x630 (share_cards' card size), in Projected odds, blank, and once the final is played (the champion)."""
+    from backend.helpers.bracket_image import render_bracket_card_image
+    from backend.helpers.share_cards import HEIGHT, WIDTH
+
+    games = [_final_with([("Raleigh", 0.31)]) if g["id"] == "final" else g for g in BRACKET]
+    odds = render_bracket_card_image(3, 2026, games, {}, SEEDS, False, "2026 season · Projected")
+    blank = render_bracket_card_image(3, 2026, games, {}, SEEDS, True, "2026 season")
+    results = {g["id"]: {"winner": "Raleigh", "loser": "Mize", "winner_score": 1, "loser_score": 0} for g in BRACKET}
+    done = render_bracket_card_image(3, 2025, games, results, SEEDS, False, "2025 season · Final")
+    assert odds.size == blank.size == done.size == (WIDTH, HEIGHT)
+    assert odds.tobytes() != blank.tobytes()
+    gold = lambda img: sum(1 for px in img.getdata() if px == (0xD9, 0xA5, 0x20))  # noqa: E731
+    assert gold(done) > 0 and gold(odds) == 0  # the trophy, once there's a champion

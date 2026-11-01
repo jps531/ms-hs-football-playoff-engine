@@ -224,3 +224,27 @@ def test_visit_counts_go_out_through_this_site_and_carry_nothing_of_the_visitors
     analytics = (ROOT / "nginx" / "html" / "static" / "js" / "analytics.js").read_text()
     assert 'api_host: "/relay"' in analytics and 'cookieless_mode: "always"' in analytics
     assert 'import("./vendor/posthog-js.js")' in analytics
+
+
+def test_a_bracket_link_naming_a_season_gets_that_seasons_preview():
+    """$share_page, its patterns tried in order as nginx does: /brackets/3a?season=2025 gets
+    bracket-2025-3 (the pipeline's file for that season), a link without one the page's own."""
+    section = re.search(r"map \$request_uri \$share_page \{(.*?)\n    \}", NGINX, re.S).group(1)
+    rules = [
+        (re.compile(m.group(1).replace("(?<", "(?P<")), m.group(2))
+        for m in re.finditer(r'^\s*"~(.+?)"\s+"(.+?)";', section, re.M)
+    ]
+
+    def page(uri: str) -> str:
+        """The meta file key nginx picks for *uri*."""
+        for pattern, value in rules:
+            if match := pattern.search(uri):
+                return re.sub(r"\$\{(\w+)\}", lambda v: match.group(v.group(1)), value)
+        return "site"
+
+    assert page("/brackets/3a") == "bracket-3"
+    assert page("/brackets/3a?season=2025") == "bracket-2025-3"
+    assert page("/brackets/3a/?odds=tossup&season=2025&team=raleigh") == "bracket-2025-3"
+    assert page("/brackets/7a?team=raleigh") == "bracket-7"
+    assert page("/brackets/3a?xseason=2025") == "bracket-3"
+    assert page("/standings/3a/6?season=2025") == "3-6"

@@ -5,6 +5,13 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.8.0
+
+- **A bracket link shows the bracket.** Paste a link to a bracket page into a message or a post, and
+  its preview is now a picture of the whole bracket, titled with its season (“2026 Class 3A
+  Bracket”), with the two teams likeliest to win the state championship and their Projected chances, or once
+  it's played, the state champion. A link to an earlier season's bracket shows that season's bracket.
+
 ## 1.7.2
 
 - **Shorter “what has to happen” lists.** A list no longer repeats what an earlier way already
