@@ -90,17 +90,15 @@ Hattiesburg
 2. Terry beats Hattiesburg by 1–10 AND West Jones beats Jim Hill
 
 #2 seed if: (43.0%)
-1. Terry beats Hattiesburg AND Jim Hill beats West Jones
-2. George County beats Forest Hill AND Terry beats Hattiesburg by 11 or more
-3. Forest Hill beats George County AND Terry beats Hattiesburg by 11 or more AND West Jones beats Jim Hill"""
+1. Terry beats Hattiesburg by 11 or more
+2. Terry beats Hattiesburg AND Jim Hill beats West Jones"""
 
 TERRY_EXPECTED = """\
 Terry
 
 #1 seed if: (43.0%)
-1. Terry beats Hattiesburg AND Jim Hill beats West Jones
-2. George County beats Forest Hill AND Terry beats Hattiesburg by 11 or more
-3. Forest Hill beats George County AND Terry beats Hattiesburg by 11 or more AND West Jones beats Jim Hill
+1. Terry beats Hattiesburg by 11 or more
+2. Terry beats Hattiesburg AND Jim Hill beats West Jones
 
 #2 seed if: (2.8%)
 1. Terry beats Hattiesburg by 7–10 AND West Jones beats Jim Hill
@@ -117,10 +115,8 @@ West Jones
 2. Terry beats Hattiesburg by 1–6 AND West Jones beats Jim Hill
 
 #3 seed if: (45.9%)
-1. Terry beats Hattiesburg by 7–10
-2. Terry beats Hattiesburg AND Jim Hill beats West Jones
-3. George County beats Forest Hill AND Terry beats Hattiesburg by 11 or more
-4. Forest Hill beats George County AND Terry beats Hattiesburg by 11 or more AND West Jones beats Jim Hill"""
+1. Terry beats Hattiesburg by 7 or more
+2. Terry beats Hattiesburg AND Jim Hill beats West Jones"""
 
 FOREST_HILL_EXPECTED = """\
 Forest Hill
@@ -131,7 +127,7 @@ Forest Hill
 Eliminated if: (81.1%)
 1. George County beats Forest Hill
 2. Jim Hill beats West Jones
-3. Forest Hill beats George County by 1–8 AND West Jones beats Jim Hill"""
+3. Forest Hill beats George County by 1–8"""
 
 GEORGE_COUNTY_EXPECTED = """\
 George County
@@ -237,18 +233,18 @@ def test_atoms_hat_seed1_atom1():
 
 
 def test_atoms_hat_seed2_count():
-    """Hattiesburg"s #2 has 3 paths."""
-    assert len(_ATOMS["Hattiesburg"][2]) == 3
+    """Hattiesburg"s #2 has 2 paths."""
+    assert len(_ATOMS["Hattiesburg"][2]) == 2
 
 
 def test_atoms_hat_seed2_atom0():
-    """Hattiesburg #2 path 1: Terry beats Hattiesburg AND Jim Hill beats West Jones."""
-    assert [str(c) for c in _ATOMS["Hattiesburg"][2][0]] == ["Terry>Hattiesburg", "Jim Hill>West Jones"]
+    """Hattiesburg #2 path 1: Terry beats Hattiesburg by 11 or more (whoever wins the other games)."""
+    assert [str(c) for c in _ATOMS["Hattiesburg"][2][0]] == ["Terry>Hattiesburg by 11+"]
 
 
 def test_atoms_hat_seed2_atom1():
-    """Hattiesburg #2 path 2: George County beats Forest Hill AND Terry beats Hattiesburg by 11 or more."""
-    assert [str(c) for c in _ATOMS["Hattiesburg"][2][1]] == ["George County>Forest Hill", "Terry>Hattiesburg by 11+"]
+    """Hattiesburg #2 path 2: Terry beats Hattiesburg AND Jim Hill beats West Jones."""
+    assert [str(c) for c in _ATOMS["Hattiesburg"][2][1]] == ["Terry>Hattiesburg", "Jim Hill>West Jones"]
 
 
 # ---------------------------------------------------------------------------
@@ -257,13 +253,13 @@ def test_atoms_hat_seed2_atom1():
 
 
 def test_atoms_terry_seed1_count():
-    """Terry"s #1 has 3 paths."""
-    assert len(_ATOMS["Terry"][1]) == 3
+    """Terry"s #1 has 2 paths."""
+    assert len(_ATOMS["Terry"][1]) == 2
 
 
 def test_atoms_terry_seed1_atom1():
-    """Terry #1 path 1: Terry beats Hattiesburg AND Jim Hill beats West Jones."""
-    assert [str(c) for c in _ATOMS["Terry"][1][0]] == ["Terry>Hattiesburg", "Jim Hill>West Jones"]
+    """Terry #1 path 1: Terry beats Hattiesburg by 11 or more."""
+    assert [str(c) for c in _ATOMS["Terry"][1][0]] == ["Terry>Hattiesburg by 11+"]
 
 
 def test_atoms_terry_seed2_count():
@@ -336,13 +332,13 @@ def test_atoms_wj_seed2_atom1():
 
 
 def test_atoms_wj_seed3_count():
-    """West Jones"s #3 has 4 paths."""
-    assert len(_ATOMS["West Jones"][3]) == 4
+    """West Jones"s #3 has 2 paths."""
+    assert len(_ATOMS["West Jones"][3]) == 2
 
 
 def test_atoms_wj_seed3_atom1():
-    """West Jones #3 path 1: Terry beats Hattiesburg by 7–10."""
-    assert [str(c) for c in _ATOMS["West Jones"][3][0]] == ["Terry>Hattiesburg by 7–10"]
+    """West Jones #3 path 1: Terry beats Hattiesburg by 7 or more."""
+    assert [str(c) for c in _ATOMS["West Jones"][3][0]] == ["Terry>Hattiesburg by 7+"]
 
 
 def test_atoms_wj_seed3_atom1_only_hat_ter():
@@ -414,9 +410,10 @@ def test_atoms_fh_eliminated_atom1():
 
 
 def test_atoms_fh_eliminated_atom2():
-    """FH eliminated atom 2: FH beats GC by 1–8 AND West Jones beats JH."""
+    """FH eliminated atom 2: FH beats GC by 1–8 (West Jones beating Jim Hill goes without saying: atom 1
+    covers Jim Hill winning)."""
     atom = _ATOMS["Forest Hill"][5][2]
-    assert len(atom) == 2
+    assert len(atom) == 1
     gr_fh = next(g for g in atom if g.winner == "Forest Hill")
     assert gr_fh.loser == "George County"
     assert gr_fh.min_margin == 1

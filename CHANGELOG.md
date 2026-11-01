@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.7.2
+
+- **Shorter “what has to happen” lists.** A list no longer repeats what an earlier way already
+  covers: “Lanier beats Vicksburg, OR Provine and Florence win and Vicksburg beats Lanier” is now
+  “Lanier beats Vicksburg, OR Provine and Florence win” (when Lanier wins, the first way already
+  holds). The conditions mean exactly what they did. A team that's sure of a playoff spot is now
+  said to have clinched one.
+- **Fixed:** two identical ways in a list (the same conditions in another order) could cancel each
+  other out, leaving nothing. None of today's lists came out empty.
+- **Bracket “How?” panels:** when a team (or a matchup) could get to a game as more than one seed,
+  the seeds are listed one after another with OR between them, without a “ONE OF” box around them
+  all.
+
 ## 1.7.1
 
 - **Clearer bracket images.** Their title now has the season: “2026 Class 3A Bracket”. Only the
