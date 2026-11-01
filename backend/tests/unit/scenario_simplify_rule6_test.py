@@ -61,3 +61,10 @@ def test_simplifying_never_changes_which_results_satisfy_the_list():
         for winners in itertools.product(*games):
             outcome = {g: w for g, w in zip(games, winners)}
             assert holds(atoms, outcome) == holds(simplified, outcome), (atoms, simplified, outcome)
+
+
+def test_two_identical_ways_in_another_order_keep_one():
+    """Each covers the other; one must stay, or the list would say nothing can happen."""
+    a = [G("Provine", "Cleveland Central"), G("Florence", "Holmes County Central")]
+    out = _simplify_atom_list([a, list(reversed(a))])
+    assert len(out) == 1 and set(out[0]) == set(a)
