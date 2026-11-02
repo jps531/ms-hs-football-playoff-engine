@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw
 
-from backend.helpers.bracket_image import THEMES, Theme, helmet
+from backend.helpers.bracket_image import THEMES, Theme, helmet, trophy
 from backend.helpers.share_cards import (
     SITE_HOST,
     _inter,
@@ -291,6 +291,9 @@ def _ties(page: _Page, top: float, bottom: float, ties: list[dict]) -> bool:
 # ----------------------------------------------------------------- a finished region's playoffs
 
 
+CHAMPION_STEP = "Won the state championship"
+
+
 def _round_index(game: dict) -> int:
     """A bracket game's round, first round 0 (the championship game last)."""
     return 99 if game["id"] == "final" else int(game["id"].split("-")[1])
@@ -348,7 +351,7 @@ def region_playoffs(seeds: dict[str, int], games: list[dict], results: dict) -> 
                 if not won:
                     break
                 if g["id"] == "final":
-                    steps.append(("", "Won the state championship"))
+                    steps.append(("", CHAMPION_STEP))
                 continue
             side = next((k for k in ("side_a", "side_b") if locked_team(g[k]) == team), None)
             if side and not res:
@@ -379,11 +382,18 @@ def _playoffs(page: _Page, top: float, bottom: float, paths: list[dict]) -> bool
         d.text((PAD, mid), str(p["seed"]), font=_inter(36, 600), fill=t.text_2, anchor="lm")
         page.mark(p["team"], PAD + 70, mid, 56)
         d.text((PAD + 146, mid), p["team"], font=_inter(40, 600), fill=t.text, anchor="lm")
+        block_top = y
         y += 76
         for rnd, text in p["steps"] or [("", "Not yet set")]:
             y += 50
             d.text((PAD + 146, y), rnd, font=round_font, fill=t.text_2, anchor="ls")
             d.text((PAD + 146 + round_w, y), text, font=text_font, fill=t.text, anchor="ls")
+        if any(text == CHAMPION_STEP for _, text in p["steps"]):
+            # The state champion gets the trophy, at the right of its road.
+            cup = trophy(min(240, round(y - block_top - 16)))
+            page.img.paste(
+                cup, (round(SIZE[0] - PAD - cup.width - 40), round((block_top + y) / 2 - cup.height / 2 + 10)), cup
+            )
         y += 20
     return True
 
