@@ -59,3 +59,43 @@ export function bracketImageLabel(clazz, { view, version }) {
   const what = version === "odds" ? ", with Projected odds" : "";
   return `Class ${clazz}A Bracket${where}${what}`;
 }
+
+// ---------------------------------------------------------------- regions
+// A region's images (backend/helpers/region_image.py, written by the
+// share-assets step to /static/region/): each in either odds mode and theme.
+
+/** The images a region page offers. */
+export const REGION_IMAGES = [
+  { key: "overview", label: "Overview" },
+];
+
+export const REGION_MODES = [
+  { key: "projected", label: "Projected odds" },
+  { key: "tossup", label: "Toss-up odds" },
+];
+
+/** The odds modes a region's images come in: Projected only while there are Projected odds. */
+export function regionModes({ projectedAvailable }) {
+  return projectedAvailable ? ["projected", "tossup"] : ["tossup"];
+}
+
+/** The image to start from: the overview, in the page's odds mode and theme. */
+export function regionShareDefaults({ mode, modes, dark }) {
+  return { image: "overview", mode: modes.includes(mode) ? mode : modes[0], theme: dark ? "dark" : "light" };
+}
+
+/** Where the image is served: /static/region/2026/3a-6-overview-projected-dark.png. */
+export function regionImagePath(season, clazz, region, { image, mode, theme }) {
+  return `/static/region/${season}/${clazz}a-${region}-${image}-${mode}-${theme}.png`;
+}
+
+/** The file's name when shared or saved: "region-6-3a-overview-2026.png" ("…-tossup.png" in Toss-up odds). */
+export function regionImageName(season, clazz, region, { image, mode }) {
+  return `region-${region}-${clazz}a-${image}-${season}${mode === "tossup" ? "-tossup" : ""}.png`;
+}
+
+/** What the image shows, for its alt text and the share sheet: "Region 6-3A overview, with Projected odds". */
+export function regionImageLabel(clazz, region, { image, mode }) {
+  const what = REGION_IMAGES.find((i) => i.key === image)?.label.toLowerCase() ?? image;
+  return `Region ${region}-${clazz}A ${what}, with ${mode === "tossup" ? "Toss-up" : "Projected"} odds`;
+}

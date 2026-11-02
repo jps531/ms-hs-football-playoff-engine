@@ -263,6 +263,14 @@ served at `/static/bracket/`): each half square, the whole bracket wide;
 Projected odds, or blank (locked-in teams and results only); in the dark and
 light themes, with each team's helmet. Past seasons' final brackets are drawn
 once and kept.
+Each region gets an overview to share
+(`region/{season}/{class}a-{region}-overview-{projected|tossup}-{dark|light}.png`,
+served at `/static/region/`, 1080x1350 drawn at twice that): its standings with
+each seed's odds and the remaining games, or once its games are played, its
+playoff teams' road. Only images whose content changed since the last run are
+drawn again (`backend/helpers/image_jobs.py` keeps a fingerprint of each in
+`state/images.json` in the volume), two at a time; `SHARE_IMAGE_WORKERS` on the
+worker sets how many, at most the CPU count by default (2 on this server).
 nginx includes a page's content inside `<main>`, so search engines and
 browsers without JavaScript get the real race; the app replaces it on load.
 Links to an older week, season or odds mode skip it, since the latest snapshot

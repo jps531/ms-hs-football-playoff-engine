@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw
 
 from backend.helpers.bracket_image import THEMES, Theme, helmet, trophy
+from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.share_cards import (
     SITE_HOST,
     _inter,
@@ -324,6 +325,18 @@ def _hosts(game: dict, team: str, opponent: str) -> str | None:
     return None
 
 
+def region_seeds(payload: dict) -> dict[str, int]:
+    """A finished region's playoff teams and their seeds (each certain of its seed); {} while games remain."""
+    if payload.get("remaining_games"):
+        return {}
+    return {
+        t["school"]: k
+        for t in payload["teams"]
+        for k in (1, 2, 3, 4)
+        if (t["odds"].get(f"p{k}") or 0) >= 1 - CERTAIN_EPS
+    }
+
+
 def region_playoffs(seeds: dict[str, int], games: list[dict], results: dict) -> list[dict]:
     """Each of the region's playoff teams on its road: [{seed, team, steps: [(round, text)]}], seed order.
 
@@ -408,26 +421,19 @@ def render_region_overview(
     mode: str,
     theme: str = "dark",
     teams: dict | None = None,
-    bracket_games: list[dict] | None = None,
-    bracket_results: dict | None = None,
+    playoffs: list[dict] | None = None,
 ) -> list[Image.Image]:
     """The region at a glance: its headline, standings with the odds of each seed and the playoffs (in
     *mode*), and the remaining games; once every region game is played, its playoff teams' road
-    (from the class's *bracket_games* and *bracket_results*) and how its ties were broken, as far as
-    they fit. One page; what doesn't fit is pointed to on the region page."""
+    (*playoffs*, from ``region_playoffs``) and how its ties were broken, as far as they fit. One page;
+    what doesn't fit is pointed to on the region page."""
     page = _Page.new(theme, teams or {})
     top = _header(
         page, f"{season} Region {region}-{clazz}A", payload.get("headline") or "", [f"{MODE_LABELS[mode]} odds"]
     )
     bottom = _footer(page, stamp)
     rows = remaining_games(payload.get("remaining_games") or [], games)
-    seeds = {
-        t["school"]: k
-        for t in payload["teams"]
-        for k in (1, 2, 3, 4)
-        if not rows and (t["odds"].get(f"p{k}") or 0) >= 1 - 1e-9
-    }
-    paths = region_playoffs(seeds, bracket_games or [], bracket_results or {}) if seeds and bracket_games else []
+    paths = [] if rows else (playoffs or [])
     # The table's rows take the room the rest leaves, from 100px up to 150px each.
     rest_h = (100 + 84 * len(rows)) if rows else (96 + sum(96 + 50 * max(1, len(p["steps"])) for p in paths))
     spare = bottom - top - 52 - rest_h - 40

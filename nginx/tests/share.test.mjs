@@ -26,3 +26,27 @@ test("the image's address, file name and label", () => {
   assert.equal(bracketImageLabel(3, c), "Class 3A Bracket, North half, with Projected odds");
   assert.equal(bracketImageLabel(3, { view: "all", version: "blank" }), "Class 3A Bracket");
 });
+
+import {
+  regionModes, regionShareDefaults, regionImagePath, regionImageName, regionImageLabel,
+} from "../html/static/js/share.js";
+
+test("regionModes: Toss-up always, Projected only while there are Projected odds", () => {
+  assert.deepEqual(regionModes({ projectedAvailable: true }), ["projected", "tossup"]);
+  assert.deepEqual(regionModes({ projectedAvailable: false }), ["tossup"]);
+});
+
+test("regionShareDefaults: the overview, in the page's odds mode and theme", () => {
+  const both = ["projected", "tossup"];
+  assert.deepEqual(regionShareDefaults({ mode: "tossup", modes: both, dark: true }), { image: "overview", mode: "tossup", theme: "dark" });
+  assert.deepEqual(regionShareDefaults({ mode: "projected", modes: ["tossup"], dark: false }), { image: "overview", mode: "tossup", theme: "light" });
+});
+
+test("a region image's address, file name and label", () => {
+  const c = { image: "overview", mode: "projected", theme: "dark" };
+  assert.equal(regionImagePath(2026, 3, 6, c), "/static/region/2026/3a-6-overview-projected-dark.png");
+  assert.equal(regionImageName(2026, 3, 6, c), "region-6-3a-overview-2026.png");
+  assert.equal(regionImageName(2026, 3, 6, { ...c, mode: "tossup" }), "region-6-3a-overview-2026-tossup.png");
+  assert.equal(regionImageLabel(3, 6, c), "Region 6-3A overview, with Projected odds");
+  assert.equal(regionImageLabel(3, 6, { ...c, mode: "tossup" }), "Region 6-3A overview, with Toss-up odds");
+});

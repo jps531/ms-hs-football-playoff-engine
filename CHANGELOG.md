@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.9.0
+
+- **Share a region as an image.** A region page's new share button (at the right of its title) opens
+  a picture of the region to share: its standings with each team's odds of every seed and of the
+  playoffs, and its remaining games; once its games are all played, its playoff teams and how they've
+  fared (the state champion gets the trophy). In Projected or Toss-up odds, light or dark, sized for a
+  phone and for social feeds. Share it, download it, or copy its link, which always shows the latest
+  update. Like the bracket's, it's of the latest update, so the button shows only there.
+
 ## 1.8.0
 
 - **A bracket link shows the bracket.** Paste a link to a bracket page into a message or a post, and

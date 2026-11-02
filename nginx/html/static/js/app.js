@@ -17,6 +17,7 @@ import {
 import { matchTeams } from "./search.js";
 import {
   SHARE_VIEWS, SHARE_VERSIONS, SHARE_THEMES, shareVersions, shareDefaults, bracketImagePath, bracketImageName,
+  REGION_IMAGES, REGION_MODES, regionModes, regionShareDefaults, regionImagePath, regionImageName, regionImageLabel,
   bracketImageLabel,
 } from "./share.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -860,10 +861,19 @@ async function regionView(ctx) {
   const schedule = { results, remaining };
   const controls = controlsLine(ctx, shownWeeks, { asOf: data.as_of_date, mode, projectedAvailable });
   nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode);
+  // The images to share are drawn for this season's newest numbers only, so the Share button shows
+  // only where the page shows those.
+  const latest = !weeks.length || pickWeek(weeks, ctx.week) === weeks[weeks.length - 1];
+  regionShare = season === ctx.currentSeason && latest && data.teams.length
+    ? { season, clazz, region, asOf: data.as_of_date, modes: regionModes({ projectedAvailable }), mode, summary: controlsSummary }
+    : null;
   return `<div class="page">
     <header class="region-head">
       ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ region: null, team: pickedTeam(clazz) })], [`Region ${region}-${clazz}A`, null]])}
-      <h1 class="title">Region ${region}-${clazz}A</h1>
+      <div class="title-row">
+        <h1 class="title">Region ${region}-${clazz}A</h1>
+        ${regionShare ? shareButton("region") : ""}
+      </div>
       ${data.headline ? `<p class="headline">${esc(data.headline)}</p>` : ""}
       ${controls}
     </header>
@@ -1306,7 +1316,7 @@ async function bracketView(ctx) {
       ${breadcrumbs([["Home", "/"], [`Class ${clazz}A`, hrefWith({ page: "class", region: null, team: pickedTeam(clazz) })], [`Class ${clazz}A Bracket`, null]])}
       <div class="title-row">
         <h1 class="title">Class ${clazz}A Bracket</h1>
-        ${bracketData.share ? `<button type="button" class="share-button" data-share-open aria-haspopup="dialog" aria-label="Share this bracket" title="Share this bracket">${SHARE_ICON}</button>` : ""}
+        ${bracketData.share ? shareButton("bracket") : ""}
       </div>
       ${controls}
       ${bracketData.results.final?.winner ? championBanner(season, clazz, bracketData.results.final, teams, bracketData.venue) : ""}
@@ -1582,15 +1592,24 @@ function rerenderBracket() {
 }
 
 // ------------------------------------------------------------ share
-// "Share this bracket" opens a sheet to pick one of the images the server drew
-// (which half, Projected odds or blank, light or dark), see it, and send it:
-// the device's share sheet with the image attached where the browser can,
-// else a download, or the image's link copied.
+// "Share this bracket" and "Share this region" open a sheet to pick one of the
+// images the server drew (for a bracket: which half, Projected odds or blank;
+// for a region: which image, which odds; light or dark for both), see it, and
+// send it: the device's share sheet with the image attached where the browser
+// can, else a download, or the image's link copied. Each page describes its
+// images with a spec (bracketShareSpec, regionShareSpec); the sheet is one.
 
 const SHARE_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12.5V3"/><path d="M6.5 6.5 10 3l3.5 3.5"/><path d="M5 9.5H4.5A1.5 1.5 0 0 0 3 11v4.5A1.5 1.5 0 0 0 4.5 17h11a1.5 1.5 0 0 0 1.5-1.5V11a1.5 1.5 0 0 0-1.5-1.5H15"/></svg>';
 
 let shareSheet = null;
+let shareSpec = null; // what the open sheet shares (a page's spec)
 const shareUi = { choice: null, status: "", image: null }; // image: { path, blob } once loaded, or { path, failed }
+let regionShare = null; // the region page's images, when it offers them (set by regionView)
+
+/** The share button at the right of a page's title; *what* names it ("bracket", "region"). */
+function shareButton(what) {
+  return `<button type="button" class="share-button" data-share-open="${what}" aria-haspopup="dialog" aria-label="Share this ${what}" title="Share this ${what}">${SHARE_ICON}</button>`;
+}
 
 function shareDialog() {
   if (shareSheet) return shareSheet;
@@ -1603,9 +1622,64 @@ function shareDialog() {
   return shareSheet;
 }
 
-function openShare() {
-  const { mode, share } = bracketData;
-  shareUi.choice = shareDefaults({ half: bracketUi.half, mode, versions: share, dark: document.documentElement.classList.contains("dark") });
+/** The latest update's date, as the page's controls give it ("Oct 30"), or null. */
+function latestDate(summary) {
+  return summary?.date?.replace(/^(Latest update|Updated) /, "") ?? null;
+}
+
+/** The bracket's images: which half (or both), Projected odds or blank, light or dark. */
+function bracketShareSpec() {
+  const { mode, share, season, clazz, asOf, currentSeason, summary, results } = bracketData;
+  const latest = season === currentSeason;
+  return {
+    title: "Share this bracket",
+    // "Class 3A · as of Oct 30" (the images' own footer says the same); a past season's, "Class 6A · 2025 season · Final".
+    when: latest
+      ? `Class ${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`
+      : [`Class ${clazz}A`, `${season} season`, results.final?.winner ? "Final" : null].filter(Boolean).join(" · "),
+    groups: [
+      { label: "Show", key: "view", options: SHARE_VIEWS },
+      ...(share.length > 1 ? [{ label: "Odds", key: "version", options: SHARE_VERSIONS }] : []),
+      { label: "Theme", key: "theme", options: SHARE_THEMES },
+    ],
+    defaults: shareDefaults({ half: bracketUi.half, mode, versions: share, dark: document.documentElement.classList.contains("dark") }),
+    path: (c) => bracketImagePath(season, clazz, c),
+    version: asOf,
+    name: (c) => bracketImageName(season, clazz, c),
+    label: (c) => bracketImageLabel(clazz, c),
+    wide: (c) => c.view === "all",
+    page: `${location.origin}/brackets/${clazz}a${latest ? "" : `?season=${season}`}`,
+    latest,
+    track: (c, method) => track("bracket_image_shared", { class: clazz, season, view: c.view, version: c.version, theme: c.theme, method }),
+  };
+}
+
+/** The region's images: which image, Projected or Toss-up odds, light or dark. */
+function regionShareSpec() {
+  const { season, clazz, region, asOf, modes, mode, summary } = regionShare;
+  return {
+    title: "Share this region",
+    when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
+    groups: [
+      ...(REGION_IMAGES.length > 1 ? [{ label: "Image", key: "image", options: REGION_IMAGES }] : []),
+      ...(modes.length > 1 ? [{ label: "Odds", key: "mode", options: REGION_MODES }] : []),
+      { label: "Theme", key: "theme", options: SHARE_THEMES },
+    ],
+    defaults: regionShareDefaults({ mode, modes, dark: document.documentElement.classList.contains("dark") }),
+    path: (c) => regionImagePath(season, clazz, region, c),
+    version: asOf,
+    name: (c) => regionImageName(season, clazz, region, c),
+    label: (c) => regionImageLabel(clazz, region, c),
+    wide: () => false,
+    page: `${location.origin}/standings/${clazz}a/${region}`,
+    latest: true,
+    track: (c, method) => track("region_image_shared", { class: clazz, region, season, image: c.image, mode: c.mode, theme: c.theme, method }),
+  };
+}
+
+function openShare(spec) {
+  shareSpec = spec;
+  shareUi.choice = spec.defaults;
   shareUi.status = "";
   const s = shareDialog();
   s.innerHTML = shareHtml();
@@ -1615,8 +1689,8 @@ function openShare() {
 
 /** The chosen image's address, fresh for this update (the file at its address is replaced each update). */
 function shareSrc() {
-  const { season, clazz, asOf } = bracketData;
-  return `${bracketImagePath(season, clazz, shareUi.choice)}${asOf ? `?v=${encodeURIComponent(asOf)}` : ""}`;
+  const { path, version } = shareSpec;
+  return `${path(shareUi.choice)}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
 }
 
 /** Fetch the chosen image ahead of a tap on Share, which must hand it over at once to keep the tap's permission. */
@@ -1644,9 +1718,9 @@ const canShareFiles = () => {
 };
 
 function shareHtml() {
-  const { clazz, share } = bracketData;
+  const spec = shareSpec;
   const c = shareUi.choice;
-  const group = (label, key, options) => `<div class="share-sheet__group" role="group" aria-label="${esc(label)}">
+  const group = ({ label, key, options }) => `<div class="share-sheet__group" role="group" aria-label="${esc(label)}">
       <p class="share-sheet__label" aria-hidden="true">${esc(label)}</p>
       <div class="half-control">${options.map((o) => `<button type="button" class="half-control__item" data-share-opt="${key}:${o.key}" aria-pressed="${c[key] === o.key}">${esc(o.label)}</button>`).join("")}</div>
     </div>`;
@@ -1654,18 +1728,16 @@ function shareHtml() {
   const ready = Boolean(img?.blob);
   const preview = img?.failed
     ? '<p class="share-sheet__missing muted">This image isn’t available yet. It’s drawn after each update, so try again later.</p>'
-    : `<img class="share-sheet__preview" src="${esc(shareSrc())}" alt="${esc(bracketImageLabel(clazz, c))}">`;
+    : `<img class="share-sheet__preview" src="${esc(shareSrc())}" alt="${esc(spec.label(c))}">`;
   const disabled = ready ? "" : " disabled";
   return `<div class="game-sheet__head">
-      <div><h2 class="game-sheet__title" id="share-sheet-title" tabindex="-1" autofocus>Share this bracket</h2>
-        <p class="game-sheet__prov provenance">${esc(shareWhen())}</p></div>
+      <div><h2 class="game-sheet__title" id="share-sheet-title" tabindex="-1" autofocus>${esc(spec.title)}</h2>
+        <p class="game-sheet__prov provenance">${esc(spec.when)}</p></div>
       <button type="button" class="game-sheet__close" data-share-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
     <div class="game-sheet__body share-sheet__body">
-      ${group("Show", "view", SHARE_VIEWS)}
-      ${share.length > 1 ? group("Odds", "version", SHARE_VERSIONS) : ""}
-      ${group("Theme", "theme", SHARE_THEMES)}
-      <div class="share-sheet__frame${c.view === "all" ? " is-wide" : ""}">${preview}</div>
+      ${spec.groups.map(group).join("")}
+      <div class="share-sheet__frame${spec.wide(c) ? " is-wide" : ""}">${preview}</div>
       <div class="share-sheet__actions">
         ${canShareFiles() ? `<button type="button" class="share-sheet__primary" data-share-act="share"${disabled}>${SHARE_ICON}Share</button>` : ""}
         <button type="button" class="share-sheet__secondary" data-share-act="download"${disabled}>Download image</button>
@@ -1673,18 +1745,6 @@ function shareHtml() {
       </div>
       <p class="share-sheet__status muted" role="status">${esc(shareUi.status)}</p>
     </div>`;
-}
-
-/**
- * What the images show, under the sheet's title: "Class 3A · as of Oct 30", the date the page's
- * controls give for the latest update (the images' own footer says the same); a past season's,
- * "Class 6A · 2025 season · Final".
- */
-function shareWhen() {
-  const { clazz, season, currentSeason, summary, results } = bracketData;
-  if (season !== currentSeason) return [`Class ${clazz}A`, `${season} season`, results.final?.winner ? "Final" : null].filter(Boolean).join(" · ");
-  const date = summary?.date?.replace(/^(Latest update|Updated) /, "");
-  return `Class ${clazz}A · ${date ? `as of ${date}` : "as of the latest update"}`;
 }
 
 /** Redraw the open share sheet (an option chosen, the image loaded), keeping focus on the same control. */
@@ -1716,19 +1776,18 @@ function onShareClick(e) {
 }
 
 async function shareAction(how) {
-  const { season, clazz, currentSeason } = bracketData;
+  const spec = shareSpec;
   const c = shareUi.choice;
-  const name = bracketImageName(season, clazz, c);
-  const page = `${location.origin}/brackets/${clazz}a${season !== currentSeason ? `?season=${season}` : ""}`;
+  const name = spec.name(c);
   const done = (status) => {
-    track("bracket_image_shared", { class: clazz, season, view: c.view, version: c.version, theme: c.theme, method: how });
+    spec.track(c, how);
     shareUi.status = status;
     refreshShare();
   };
   if (how === "copy") {
     try {
-      await navigator.clipboard.writeText(`${location.origin}${bracketImagePath(season, clazz, c)}`);
-      done(season === currentSeason ? "Link copied. It always shows the latest update." : "Link copied.");
+      await navigator.clipboard.writeText(`${location.origin}${spec.path(c)}`);
+      done(spec.latest ? "Link copied. It always shows the latest update." : "Link copied.");
     } catch {
       shareUi.status = "Couldn’t copy the link here.";
       refreshShare();
@@ -1740,7 +1799,7 @@ async function shareAction(how) {
   if (how === "share") {
     const file = new File([blob], name, { type: "image/png" });
     try {
-      await navigator.share({ files: [file], title: bracketImageLabel(clazz, c), text: `${bracketImageLabel(clazz, c)}: ${page}` });
+      await navigator.share({ files: [file], title: spec.label(c), text: `${spec.label(c)}: ${spec.page}` });
       done("");
     } catch (err) {
       if (err?.name === "AbortError") return; // closed the share sheet
@@ -2248,9 +2307,15 @@ app.addEventListener("click", (e) => {
     openExplanation(i);
     return;
   }
-  if (e.target.closest("[data-share-open]")) {
-    track("bracket_share_opened", { class: bracketData?.clazz });
-    openShare();
+  const shareOpen = e.target.closest("[data-share-open]");
+  if (shareOpen) {
+    if (shareOpen.dataset.shareOpen === "region" && regionShare) {
+      track("region_share_opened", { class: regionShare.clazz, region: regionShare.region });
+      openShare(regionShareSpec());
+    } else if (bracketData?.share) {
+      track("bracket_share_opened", { class: bracketData.clazz });
+      openShare(bracketShareSpec());
+    }
     return;
   }
   const card = e.target.closest("[data-game-open]");
