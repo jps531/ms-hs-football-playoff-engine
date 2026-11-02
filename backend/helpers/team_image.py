@@ -13,20 +13,20 @@ from PIL import Image
 
 from backend.helpers.bracket_image import trophy
 from backend.helpers.region_image import (
-    CHAMPION_STEP,
     COL_GAP,
     COL_W,
     PAD,
     SIZE,
     _badges,
     _footer,
-    _header,
     _Page,
     _records,
     _rule,
+    _wrap,
 )
 from backend.helpers.share_cards import (
     _inter,
+    _nippo,
     display_order,
     fit,
     format_pct,
@@ -123,7 +123,7 @@ def _schedule(page: _Page, x: float, top: float, bottom: float, played: list[dic
     page.label(x, top + 30, "Schedule", 26)
     rows = [("played", g) for g in played] + [("next", g) for g in to_play]
     # Rows take the room there is, from 74px up to 100px each.
-    row_h = max(74.0, min(100.0, (bottom - top - 110) / max(1, len(rows))))
+    row_h = max(74.0, min(112.0, (bottom - top - 110) / max(1, len(rows))))
     y = top + 50
     fits = max(0, int((bottom - y - 60) // row_h))
     for kind, g in rows[:fits]:
@@ -173,49 +173,95 @@ def _schedule(page: _Page, x: float, top: float, bottom: float, played: list[dic
     return y
 
 
-def _path_table(page: _Page, x: float, top: float, rows: list[dict], mode: str) -> float:
-    """The playoff path table (as the region page's): round, reaches round, hosts if it gets there, hosts overall."""
+LADDER_H = 430  # the playoff section's boxes
+
+
+def _opponent_lines(page: _Page, x: float, base: float, width: float, joiner: str, opponent: str) -> float:
+    """ "vs" (or "to", "at"), the opponent's helmet and name at baseline *base*; a name too long for the
+    rest of the line goes on its own lines under it, wrapped (never cut short). Returns the last
+    baseline."""
     d, t = page.draw, page.t
-    right = x + COL_W
-    cols = (right - 480, right - 230, right)  # reaches (pill), hosts if there, hosts overall
-    page.label(x, top + 30, f"Playoff path · {MODE_LABELS[mode]} odds", 26)
-    head = top + 82
-    page.label(cols[0], head, "Reaches", 20, anchor="rs")
-    page.label(cols[1], head, "Hosts if there", 20, anchor="rs")
-    page.label(cols[2], head, "Hosts overall", 20, anchor="rs")
-    y = head + 16
-    row_h = 66
-    for r in rows:
-        _rule(page, y, x, right)
-        mid = y + row_h / 2
-        d.text((x, mid), r["round"], font=_inter(30, 600), fill=t.text, anchor="lm")
-        page.pill(cols[0], mid, r["reach"], 132, 50, 28)
+    font = _inter(32, 600)
+    d.text((x, base), joiner, font=_inter(30, 500), fill=t.text_2, anchor="ls")
+    jw = d.textlength(joiner, font=_inter(30, 500)) + 12
+    known = not opponent.startswith(("the ", "an "))
+    if known:
+        page.mark(opponent, x + jw, base - 12, 42)
+        jw += 54
+    if d.textlength(opponent, font=font) <= width - jw:
+        d.text((x + jw, base), opponent, font=font, fill=t.text, anchor="ls")
+        return base
+    small = _inter(28, 600)
+    lines = _wrap(d, opponent, small, width)
+    for k, line in enumerate(lines):
+        d.text((x, base + 40 * (k + 1)), line, font=small, fill=t.text, anchor="ls")
+    return base + 40 * len(lines)
+
+
+def _ladder(page: _Page, top: float, rounds: list[dict], road: list[dict]) -> float:
+    """The team's road through the bracket, one box per round, left to right like a bracket: a played
+    round's result, the next game's opponent and who hosts, and each round ahead with the chance of
+    reaching it and of hosting it; the trophy in the last box for a state champion. Returns its bottom."""
+    d, t = page.draw, page.t
+    page.label(PAD, top + 30, "Playoffs", 26)
+    by_round = {r["round"]: r for r in road}
+    lost = next((i for i, r in enumerate(rounds) if by_round.get(r["round"], {}).get("kind") == "lost"), None)
+    champion = by_round.get("Championship Game", {}).get("kind") == "won"
+    n, gap = len(rounds), 34
+    w = (SIZE[0] - 2 * PAD - gap * (n - 1)) / n
+    y0, h = top + 56, LADDER_H - 56
+    for i, r in enumerate(rounds):
+        x = PAD + i * (w + gap)
+        if i:
+            d.line((x - gap, y0 + h / 2, x, y0 + h / 2), fill=t.line, width=3)
+        played = by_round.get(r["round"])
+        after_loss = lost is not None and i > lost
+        d.rounded_rectangle((x, y0, x + w, y0 + h), radius=16, fill=t.card, outline=t.edge, width=2 if t.edge else 0)
+        cx, inner = x + 22, w - 44
+        name = "Champion" if r["round"] == "Champions" else r["round"]
+        page.label(cx, y0 + 44, fit(d, name.upper(), _inter(20, 600), inner), 20)
+        if after_loss:
+            d.text((cx, y0 + h / 2 + 10), "\u2014", font=_inter(48, 600), fill=t.text_2, anchor="lm")
+            continue
+        if r["round"] == "Champions" and champion:
+            cup = trophy(round(h - 96))
+            page.img.paste(cup, (round(x + (w - cup.width) / 2), round(y0 + 70)), cup)
+            continue
+        if played and played["kind"] in ("won", "lost"):
+            won = played["kind"] == "won"
+            letter = "W" if won else "L"
+            d.text((cx, y0 + 150), letter, font=_inter(60, 700), fill="#137252" if won else "#B91C1C", anchor="ls")
+            if played["score_for"] is not None and played["score_against"] is not None:
+                lw = d.textlength(letter, font=_inter(60, 700)) + 18
+                score = f"{played['score_for']}\u2013{played['score_against']}"
+                d.text(
+                    (cx + lw, y0 + 150),
+                    fit(d, score, _inter(56, 700), inner - lw),
+                    font=_inter(56, 700),
+                    fill=t.text,
+                    anchor="ls",
+                )
+            _opponent_lines(page, cx, y0 + 226, inner, "vs" if won else "to", played["opponent"])
+            continue
+        if played and played["kind"] == "next":
+            joiner = "at" if played["where"] == "away" else "vs"
+            d.text((cx, y0 + 124), "Next", font=_inter(32, 700), fill=t.text, anchor="ls")
+            below = _opponent_lines(page, cx, y0 + 196, inner, joiner, played["opponent"])
+            where = {"home": "At home", "away": "Away", "neutral": "Neutral site"}.get(played["where"], "")
+            if where:
+                d.text((cx, below + 48), where, font=_inter(28, 500), fill=t.text_2, anchor="ls")
+            continue
+        # A round ahead: the chance of reaching it, then of hosting it.
+        page.pill(x + w - 22, y0 + 122, r["reach"], inner, 84, 46)
         if r["neutral"]:
-            d.text((cols[1], mid), "Neutral", font=_inter(28, 500), fill=t.text_2, anchor="rm")
+            d.text((cx, y0 + 226), "Neutral site", font=_inter(28, 500), fill=t.text_2, anchor="ls")
         elif r["host_if_reach"] is not None:
-            d.text((cols[1], mid), format_pct(r["host_if_reach"]), font=_inter(28, 500), fill=t.text, anchor="rm")
-        if r["host_overall"] is not None:
-            d.text((cols[2], mid), format_pct(r["host_overall"]), font=_inter(28, 500), fill=t.text, anchor="rm")
-        y += row_h
-    _rule(page, y, x, right)
-    return y
-
-
-def _road(page: _Page, x: float, top: float, steps: list[tuple[str, str]]) -> float:
-    """The team's playoff games played (and its next one), with the trophy for a state champion."""
-    d, t = page.draw, page.t
-    page.label(x, top + 30, "Playoffs", 26)
-    y = top + 40
-    round_w = max((d.textlength(r, font=_inter(28, 600)) for r, _ in steps), default=0) + 28
-    for rnd, text in steps:
-        y += 52
-        d.text((x, y), rnd, font=_inter(28, 600), fill=t.text_2, anchor="ls")
-        d.text((x + round_w, y), text, font=_inter(32, 500), fill=t.text, anchor="ls")
-    if any(text == CHAMPION_STEP for _, text in steps):
-        # The trophy at the right, its foot on the last line, clear of the longer lines above.
-        cup = trophy(min(220, round(y - top - 40)))
-        page.img.paste(cup, (round(x + COL_W - cup.width - 10), round(y + 8 - cup.height)), cup)
-    return y + 24
+            page.label(cx, y0 + 210, "Hosts", 20)
+            for k, line in enumerate(
+                (f"{format_pct(r['host_if_reach'])} if there", f"{format_pct(r['host_overall'])} overall")
+            ):
+                d.text((cx, y0 + 254 + k * 42), line, font=_inter(28, 500), fill=t.text_2, anchor="ls")
+    return y0 + h
 
 
 def _strip(page: _Page, x: float, top: float, bottom: float, payload: dict, team: str, mode: str) -> float:
@@ -226,7 +272,7 @@ def _strip(page: _Page, x: float, top: float, bottom: float, payload: dict, team
     page.label(x, top + 30, "Region standings", 26)
     page.label(x + COL_W, top + 30, "Playoffs", 20, anchor="rs")
     y = top + 48
-    row_h = max(62.0, min(84.0, (bottom - y - 20) / max(1, len(ordered))))
+    row_h = max(62.0, min(104.0, (bottom - y - 20) / max(1, len(ordered))))
     for pos, row in zip(positions, ordered, strict=True):
         mid = y + row_h / 2
         if row["school"] == team:
@@ -247,6 +293,19 @@ def _strip(page: _Page, x: float, top: float, bottom: float, payload: dict, team
     return y
 
 
+def _title(page: _Page, school: str, sub: str, mode: str) -> float:
+    """The team's helmet beside its name, the season and records under it; returns where content starts."""
+    d, t = page.draw, page.t
+    size = 150
+    page.mark(school, PAD, PAD + 70, size)
+    x = PAD + size + 36
+    page.label(SIZE[0] - PAD, PAD + 40, f"{MODE_LABELS[mode]} odds", 26, anchor="rs")
+    font = _nippo(124)
+    d.text((x, PAD + 104), fit(d, school, font, SIZE[0] - PAD - 340 - x), font=font, fill=t.text, anchor="ls")
+    d.text((x, PAD + 168), sub, font=_inter(40, 500), fill=t.text_2, anchor="ls")
+    return PAD + 168
+
+
 def render_team_season(
     clazz: int,
     region: int,
@@ -258,42 +317,38 @@ def render_team_season(
     mode: str,
     theme: str = "dark",
     teams: dict | None = None,
-    road: list[tuple[str, str]] | None = None,
+    road: list[dict] | None = None,
 ) -> list[Image.Image]:
-    """The team's season: records and status, its odds of each seed and of the playoffs (in *mode*), its
-    games (played with scores, then to play), its playoff path, or once its region is finished its
-    playoff road (*road*: ``region_playoffs``' steps for it), and the region's standings."""
+    """The team's season: its helmet, records and status, its odds of each seed and of the playoffs (in
+    *mode*), its games (played with scores, then to play), its region's standings, and across the
+    bottom its road through the playoffs (*road*: ``region_image.playoff_road`` once its region is
+    finished: results and its next game; the rounds ahead with their chances)."""
     team = next(t for t in payload["teams"] if t["school"] == school)
     page = _Page.new(theme, teams or {})
     reg, ovr = _records(team)
     complete = not payload.get("remaining_games")
-    sub = f"{season} · Region {region}-{clazz}A · {ovr} overall, {reg} in region"
-    top = _header(page, school, sub, [f"{MODE_LABELS[mode]} odds"])
-    bx = PAD
+    top = _title(page, school, f"{season} · Region {region}-{clazz}A · {ovr} overall, {reg} in region", mode)
+    bx = PAD + 186
     for kind, label in _badges(team, clazz, complete):
-        bx += page.badge(bx, top - 10, kind, label, 26) + 12
-    if bx > PAD:
-        top += 40
+        bx += page.badge(bx, top + 44, kind, label, 26) + 12
+    top += 90
     bottom = _footer(page, stamp)
     top = _odds_row(page, top, team, mode)
+    ladder_top = bottom - LADDER_H - 20
     played, to_play = team_games(school, games)
-    left_bottom = _schedule(page, PAD, top + 20, bottom, played, to_play)
-    rx = PAD + COL_W + COL_GAP
-    y = top + 20
-    if road and any(not text.startswith("Next:") for _, text in road):
-        y = _road(page, rx, y, road)
+    _schedule(page, PAD, top + 20, ladder_top - 30, played, to_play)
+    _strip(page, PAD + COL_W + COL_GAP, top + 20, ladder_top - 30, payload, school, mode)
+    in_running = not (team.get("eliminated") and not team.get("clinched"))
+    rounds = playoff_rounds(team, mode, clazz) if in_running else []
+    if rounds:
+        _ladder(page, ladder_top, rounds, road or [])
     else:
-        if road:
-            y = _road(page, rx, y, road)
-        rows = [] if team.get("eliminated") and not team.get("clinched") else playoff_rounds(team, mode, clazz)
-        if rows:
-            y = _path_table(page, rx, y + 10, rows, mode)
-        elif team.get("eliminated"):
-            page.label(rx, y + 30, "Playoffs", 26)
-            page.draw.text(
-                (rx, y + 90), "Eliminated from the playoffs", font=_inter(32, 600), fill=page.t.text_2, anchor="ls"
-            )
-            y += 120
-    _strip(page, rx, y + 30, bottom, payload, school, mode)
-    del left_bottom
+        page.label(PAD, ladder_top + 30, "Playoffs", 26)
+        page.draw.text(
+            (PAD, ladder_top + 110),
+            "Eliminated from the playoffs",
+            font=_inter(40, 600),
+            fill=page.t.text_2,
+            anchor="ls",
+        )
     return [page.img]
