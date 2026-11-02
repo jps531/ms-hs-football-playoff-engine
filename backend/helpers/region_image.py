@@ -39,6 +39,7 @@ from backend.helpers.static_pages import (
     complete_scenario_cards,
     initials,
     insight_cards,
+    locked_team,
     margin_text,
     region_path,
     remaining_games,
@@ -287,6 +288,106 @@ def _ties(page: _Page, top: float, bottom: float, ties: list[dict]) -> bool:
     return True
 
 
+# ----------------------------------------------------------------- a finished region's playoffs
+
+
+def _round_index(game: dict) -> int:
+    """A bracket game's round, first round 0 (the championship game last)."""
+    return 99 if game["id"] == "final" else int(game["id"].split("-")[1])
+
+
+def _opponent(game: dict, side: str, results: dict, games: list[dict]) -> str:
+    """Who *side*'s team plays in *game*: the locked team, the region seed that goes there, or the
+    winner of the game that feeds it."""
+    other = game["side_b" if side == "side_a" else "side_a"]
+    team = locked_team(other)
+    if team:
+        return team
+    feeders = other.get("feeders") or []
+    if len(feeders) == 1:
+        return f"the Region {feeders[0]['region']} #{feeders[0]['seed']} seed"
+    return "an opponent not yet set"
+
+
+def _hosts(game: dict, team: str, opponent: str) -> str | None:
+    """ "home", "away" or "neutral" for *team* against a known *opponent*; None when it isn't certain."""
+    for m in game.get("matchups") or []:
+        if {m["team_a"], m["team_b"]} == {team, opponent}:
+            host_a = m.get("p_host_a")
+            if host_a is None:
+                return "neutral"
+            p = host_a if m["team_a"] == team else 1 - host_a
+            return "home" if p >= 1 else "away" if p <= 0 else None
+    return None
+
+
+def region_playoffs(seeds: dict[str, int], games: list[dict], results: dict) -> list[dict]:
+    """Each of the region's playoff teams on its road: [{seed, team, steps: [(round, text)]}], seed order.
+
+    A step is a played game ("Beat Holly Springs 49–8", "Lost to Noxubee County 33–34"), then the next
+    game while the team is still in ("vs Kossuth, at home", "at Hazlehurst", "vs the Region 5 #4 seed"),
+    or "Won the state championship". *seeds* maps the region's seeded teams to their seed; *games* are the
+    class's ``/bracket/matchups`` games, *results* the played ones (``static_pages.layout_results``).
+    """
+    ordered = sorted(games, key=lambda g: (_round_index(g), g["id"]))
+    out = []
+    for team, seed in sorted(seeds.items(), key=lambda kv: kv[1]):
+        steps: list[tuple[str, str]] = []
+        for g in ordered:
+            res = results.get(g["id"])
+            if res and team in (res["winner"], res["loser"]):
+                won = res["winner"] == team
+                other = res["loser"] if won else res["winner"]
+                score = ""
+                if res.get("winner_score") is not None and res.get("loser_score") is not None:
+                    a, b = (
+                        (res["winner_score"], res["loser_score"]) if won else (res["loser_score"], res["winner_score"])
+                    )
+                    score = f" {a}–{b}"
+                steps.append((g["round"], f"{'Beat' if won else 'Lost to'} {other}{score}"))
+                if not won:
+                    break
+                if g["id"] == "final":
+                    steps.append(("", "Won the state championship"))
+                continue
+            side = next((k for k in ("side_a", "side_b") if locked_team(g[k]) == team), None)
+            if side and not res:
+                opponent = _opponent(g, side, results, games)
+                where = _hosts(g, team, opponent)
+                text = f"at {opponent}" if where == "away" else f"vs {opponent}"
+                if where == "home":
+                    text += ", at home"
+                steps.append((g["round"], f"Next: {text}"))
+                break
+        out.append({"seed": seed, "team": team, "steps": steps})
+    return out
+
+
+def _playoffs(page: _Page, top: float, bottom: float, paths: list[dict]) -> bool:
+    """The region's playoff teams and their road, when it fits; False when it doesn't."""
+    d, t = page.draw, page.t
+    round_font, text_font = _inter(30, 600), _inter(34, 500)
+    round_w = max((d.textlength(r, font=round_font) for p in paths for r, _ in p["steps"]), default=0) + 36
+    need = 56 + sum(76 + 50 * max(1, len(p["steps"])) + 20 for p in paths)
+    if not paths or top + need > bottom:
+        return False
+    page.label(PAD, top + 30, "Playoffs", 26)
+    y = top + 56
+    for p in paths:
+        _rule(page, y)
+        mid = y + 40
+        d.text((PAD, mid), str(p["seed"]), font=_inter(36, 600), fill=t.text_2, anchor="lm")
+        page.mark(p["team"], PAD + 70, mid, 56)
+        d.text((PAD + 146, mid), p["team"], font=_inter(40, 600), fill=t.text, anchor="lm")
+        y += 76
+        for rnd, text in p["steps"] or [("", "Not yet set")]:
+            y += 50
+            d.text((PAD + 146, y), rnd, font=round_font, fill=t.text_2, anchor="ls")
+            d.text((PAD + 146 + round_w, y), text, font=text_font, fill=t.text, anchor="ls")
+        y += 20
+    return True
+
+
 def render_region_overview(
     clazz: int,
     region: int,
@@ -297,19 +398,29 @@ def render_region_overview(
     mode: str,
     theme: str = "dark",
     teams: dict | None = None,
+    bracket_games: list[dict] | None = None,
+    bracket_results: dict | None = None,
 ) -> list[Image.Image]:
     """The region at a glance: its headline, standings with the odds of each seed and the playoffs (in
-    *mode*), how a finished region's ties were broken, and the remaining games. One page; the
-    remaining games past what fits are counted, with where to see them."""
+    *mode*), and the remaining games; once every region game is played, its playoff teams' road
+    (from the class's *bracket_games* and *bracket_results*) and how its ties were broken, as far as
+    they fit. One page; what doesn't fit is pointed to on the region page."""
     page = _Page.new(theme, teams or {})
     top = _header(
         page, f"{season} Region {region}-{clazz}A", payload.get("headline") or "", [f"{MODE_LABELS[mode]} odds"]
     )
     bottom = _footer(page, stamp)
     rows = remaining_games(payload.get("remaining_games") or [], games)
-    # The table's rows take the room the games leave, from 100px up to 150px each.
-    games_h = (100 + 84 * len(rows)) if rows else 0
-    spare = bottom - top - 52 - games_h - 40
+    seeds = {
+        t["school"]: k
+        for t in payload["teams"]
+        for k in (1, 2, 3, 4)
+        if not rows and (t["odds"].get(f"p{k}") or 0) >= 1 - 1e-9
+    }
+    paths = region_playoffs(seeds, bracket_games or [], bracket_results or {}) if seeds and bracket_games else []
+    # The table's rows take the room the rest leaves, from 100px up to 150px each.
+    rest_h = (100 + 84 * len(rows)) if rows else (96 + sum(96 + 50 * max(1, len(p["steps"])) for p in paths))
+    spare = bottom - top - 52 - rest_h - 40
     row_h = max(100, min(150, spare / max(1, len(payload["teams"]))))
     y = _standings_table(page, top, clazz, payload, mode, row_h)
     if rows:
@@ -322,10 +433,18 @@ def render_region_overview(
                 fill=page.t.text_2,
                 anchor="ls",
             )
-    elif payload.get("tiebreaks") and not _ties(page, y + 40, bottom, payload["tiebreaks"]):
+        return [page.img]
+    notes = []
+    if paths and _playoffs(page, y + 40, bottom, paths):
+        y += 40 + 56 + sum(76 + 50 * max(1, len(p["steps"])) + 20 for p in paths)
+    elif paths:
+        notes.append("The playoff teams' road")
+    if payload.get("tiebreaks") and not _ties(page, y + 40, bottom - 60 * (len(notes) + 1), payload["tiebreaks"]):
+        notes.append("How the ties were broken")
+    for i, note in enumerate(notes):
         page.draw.text(
-            (PAD, y + 76),
-            f"How the ties were broken: {SITE_HOST}{region_path(clazz, region)}",
+            (PAD, bottom - 20 - 50 * (len(notes) - 1 - i)),
+            f"{note}: {SITE_HOST}{region_path(clazz, region)}",
             font=_inter(32, 500),
             fill=page.t.text_2,
             anchor="ls",
@@ -578,6 +697,7 @@ def render_region_scenarios(
     mode: str,
     theme: str = "dark",
     teams: dict | None = None,
+    max_pages: int = MAX_PAGES,
 ) -> list[Image.Image]:
     """The region's scenarios, page after page: every way the region can finish (with its chance in
     *mode*, and why tied teams are in their order when that fits), or, before there are full
@@ -655,8 +775,8 @@ def render_region_scenarios(
     pages = pack(explain)
 
     # Too many pages: stop at MAX_PAGES, and make room at the end of the last for where to see the rest.
-    shown_pages = pages[:MAX_PAGES]
-    more = sum(len(c) for p in pages[MAX_PAGES:] for c in p)
+    shown_pages = pages[:max_pages]
+    more = sum(len(c) for p in pages[max_pages:] for c in p)
     if more:
         last = shown_pages[-1]
         while max(sum(h + COL_GAP for _, _, h in col) for col in last) + 90 > room:
