@@ -28,6 +28,7 @@ from pathlib import Path
 # The renderers, as (module, function): the function takes a job's kwargs and returns its pages. A job
 # names its renderer this way (not the function itself) so a worker process can import it.
 REGION_OVERVIEW = ("backend.helpers.region_image", "render_region_overview")
+REGION_SCENARIOS = ("backend.helpers.region_image", "render_region_scenarios")
 
 # The code an image's look depends on; a change to any of it redraws every image.
 _CODE = (
@@ -113,11 +114,14 @@ def _workers() -> int:
     return max(1, min(2, os.cpu_count() or 1))
 
 
-def draw_images(out_dir: Path, jobs: list[ImageJob], prune: list[str] = ()) -> dict[str, int]:
+def draw_images(
+    out_dir: Path, jobs: list[ImageJob], prune: list[str] = (), files_out: dict[str, list[str]] | None = None
+) -> dict[str, int]:
     """Draw the *jobs* whose fingerprint changed (or whose files are missing), keep the rest, and remove
-    any other PNG in the *prune* folders (relative to *out_dir*): images no job makes any more.
+    any other PNG in the *prune* folders (relative to *out_dir*): images no job makes any more. A job
+    whose renderer returns no pages (nothing to show) makes no file.
 
-    Returns {"drawn", "kept", "removed"}.
+    Returns {"drawn", "kept", "removed"}; *files_out*, when given, gets each job's files (path -> pages).
     """
     manifest_path = out_dir / MANIFEST
     try:
@@ -130,7 +134,7 @@ def draw_images(out_dir: Path, jobs: list[ImageJob], prune: list[str] = ()) -> d
         fp = job_fingerprint(job, code)
         entry = manifest.get(job.path) or {}
         files = entry.get("files") or []
-        if entry.get("fp") == fp and files and all((out_dir / f).exists() for f in files):
+        if entry.get("fp") == fp and "files" in entry and all((out_dir / f).exists() for f in files):
             kept += 1
             files_for[job.path] = entry
             continue
@@ -150,6 +154,8 @@ def draw_images(out_dir: Path, jobs: list[ImageJob], prune: list[str] = ()) -> d
         for stale in old - set(files):  # fewer pages than last time
             (out_dir / stale).unlink(missing_ok=True)
         files_for[job.path] = {"fp": fp, "files": files}
+    if files_out is not None:
+        files_out.update({path: list(e["files"]) for path, e in files_for.items()})
     keep = {f for e in files_for.values() for f in e["files"]}
     removed = 0
     for folder in prune:

@@ -50,3 +50,29 @@ test("a region image's address, file name and label", () => {
   assert.equal(regionImageLabel(3, 6, c), "Region 6-3A overview, with Projected odds");
   assert.equal(regionImageLabel(3, 6, { ...c, mode: "tossup" }), "Region 6-3A overview, with Toss-up odds");
 });
+
+import { regionIndexPath, regionPages, regionImages } from "../html/static/js/share.js";
+
+test("a region's index: which images it has, and how many pages each", () => {
+  assert.equal(regionIndexPath(2026, 3, 6), "/static/region/2026/3a-6.json");
+  const index = {
+    overview: { "projected-dark": 1, "tossup-dark": 1 },
+    scenarios: { "projected-dark": 3, "tossup-dark": 0 },
+  };
+  const c = { image: "scenarios", mode: "projected", theme: "dark" };
+  assert.equal(regionPages(index, c), 3);
+  assert.equal(regionPages(index, { ...c, mode: "tossup" }), 0);
+  assert.deepEqual(regionImages(index, c).map((i) => i.key), ["overview", "scenarios"]);
+  assert.deepEqual(regionImages(index, { ...c, mode: "tossup" }).map((i) => i.key), ["overview"]);
+  // Without an index (not written yet): the overview alone.
+  assert.equal(regionPages(null, { ...c, image: "overview" }), 1);
+  assert.deepEqual(regionImages(null, c).map((i) => i.key), ["overview"]);
+});
+
+test("a page of several: its own address and file name", () => {
+  const c = { image: "scenarios", mode: "tossup", theme: "light" };
+  assert.equal(regionImagePath(2026, 6, 2, c, 2, 3), "/static/region/2026/6a-2-scenarios-tossup-light-2.png");
+  assert.equal(regionImagePath(2026, 6, 2, c, 1, 1), "/static/region/2026/6a-2-scenarios-tossup-light.png");
+  assert.equal(regionImageName(2026, 6, 2, c, 2, 3), "region-2-6a-scenarios-2026-tossup-2.png");
+  assert.equal(regionImageLabel(6, 2, c), "Region 2-6A scenarios, with Toss-up odds");
+});

@@ -267,7 +267,12 @@ Each region gets an overview to share
 (`region/{season}/{class}a-{region}-overview-{projected|tossup}-{dark|light}.png`,
 served at `/static/region/`, 1080x1350 drawn at twice that): its standings with
 each seed's odds and the remaining games, or once its games are played, its
-playoff teams' road. Only images whose content changed since the last run are
+playoff teams' road. While games remain it also gets its scenarios
+(`…-scenarios-{mode}-{theme}.png`, or `…-1.png`, `…-2.png` for several pages):
+every way the region can finish, or before full scenarios the results that
+settle a spot; a list that needs more than five pages stops at four and points
+to the region page. `region/{season}/{class}a-{region}.json` lists each image's
+pages, for the page's share sheet. Only images whose content changed since the last run are
 drawn again (`backend/helpers/image_jobs.py` keeps a fingerprint of each in
 `state/images.json` in the volume), two at a time; `SHARE_IMAGE_WORKERS` on the
 worker sets how many, at most the CPU count by default (2 on this server).

@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.10.0
+
+- **Share a region's scenarios.** The region page's share button now also offers its scenarios as
+  images: every way the region can finish, with each one's chance and, where there's room, why tied
+  teams finish in that order; or, before full scenarios, the results that settle a spot no matter
+  what else happens. A long list runs over several pages (shared or downloaded together); one that
+  would need more than five stops at four and says how many more are on the region page.
+
 ## 1.9.0
 
 - **Share a region as an image.** A region page's new share button (at the right of its title) opens

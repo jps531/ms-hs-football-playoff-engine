@@ -62,11 +62,13 @@ export function bracketImageLabel(clazz, { view, version }) {
 
 // ---------------------------------------------------------------- regions
 // A region's images (backend/helpers/region_image.py, written by the
-// share-assets step to /static/region/): each in either odds mode and theme.
+// share-assets step to /static/region/): each in either odds mode and theme,
+// some of several pages. The step also writes each region's index of them.
 
-/** The images a region page offers. */
+/** The images a region page offers, in order. */
 export const REGION_IMAGES = [
   { key: "overview", label: "Overview" },
+  { key: "scenarios", label: "Scenarios" },
 ];
 
 export const REGION_MODES = [
@@ -79,22 +81,42 @@ export function regionModes({ projectedAvailable }) {
   return projectedAvailable ? ["projected", "tossup"] : ["tossup"];
 }
 
+/** Where a region's index of its images is served: /static/region/2026/3a-6.json. */
+export function regionIndexPath(season, clazz, region) {
+  return `/static/region/${season}/${clazz}a-${region}.json`;
+}
+
+/**
+ * How many pages the chosen image has, from the region's index
+ * ({ overview: { "projected-dark": 1, … }, scenarios: { … } }); 0 when it has
+ * none (nothing to show). Without an index, the overview's one page.
+ */
+export function regionPages(index, { image, mode, theme }) {
+  if (!index) return image === "overview" ? 1 : 0;
+  return index[image]?.[`${mode}-${theme}`] ?? 0;
+}
+
+/** The images that have something to show in this odds mode and theme, in REGION_IMAGES order. */
+export function regionImages(index, { mode, theme }) {
+  return REGION_IMAGES.filter((i) => regionPages(index, { image: i.key, mode, theme }) > 0);
+}
+
 /** The image to start from: the overview, in the page's odds mode and theme. */
 export function regionShareDefaults({ mode, modes, dark }) {
   return { image: "overview", mode: modes.includes(mode) ? mode : modes[0], theme: dark ? "dark" : "light" };
 }
 
-/** Where the image is served: /static/region/2026/3a-6-overview-projected-dark.png. */
-export function regionImagePath(season, clazz, region, { image, mode, theme }) {
-  return `/static/region/${season}/${clazz}a-${region}-${image}-${mode}-${theme}.png`;
+/** Where a page is served: /static/region/2026/3a-6-overview-projected-dark.png; "…-2.png" for page 2 of several. */
+export function regionImagePath(season, clazz, region, { image, mode, theme }, page = 1, pages = 1) {
+  return `/static/region/${season}/${clazz}a-${region}-${image}-${mode}-${theme}${pages > 1 ? `-${page}` : ""}.png`;
 }
 
-/** The file's name when shared or saved: "region-6-3a-overview-2026.png" ("…-tossup.png" in Toss-up odds). */
-export function regionImageName(season, clazz, region, { image, mode }) {
-  return `region-${region}-${clazz}a-${image}-${season}${mode === "tossup" ? "-tossup" : ""}.png`;
+/** A page's file name when shared or saved: "region-6-3a-overview-2026.png", "…-scenarios-2026-tossup-2.png". */
+export function regionImageName(season, clazz, region, { image, mode }, page = 1, pages = 1) {
+  return `region-${region}-${clazz}a-${image}-${season}${mode === "tossup" ? "-tossup" : ""}${pages > 1 ? `-${page}` : ""}.png`;
 }
 
-/** What the image shows, for its alt text and the share sheet: "Region 6-3A overview, with Projected odds". */
+/** What the image shows, for its alt text and the share sheet: "Region 6-3A scenarios, with Projected odds". */
 export function regionImageLabel(clazz, region, { image, mode }) {
   const what = REGION_IMAGES.find((i) => i.key === image)?.label.toLowerCase() ?? image;
   return `Region ${region}-${clazz}A ${what}, with ${mode === "tossup" ? "Toss-up" : "Projected"} odds`;
