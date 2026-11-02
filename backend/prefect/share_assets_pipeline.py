@@ -25,6 +25,11 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
                               (that half, square) or "all" (both halves, wide); version "odds"
                               (Projected) or "blank" (locked-in teams and results only); theme
                               "dark" or "light". Past seasons get their final bracket ("blank") once.
+    region/{season}/{class}a-{region}-overview-{mode}-{theme}.png
+                              a region's overview to share (4:5): standings with each seed's odds and
+                              the remaining games, or a finished region's playoff road; mode
+                              "projected" (while there are Projected odds) or "tossup". Drawn only
+                              when its content changed (backend.helpers.image_jobs), several at a time
     sitemap.xml               the front page, About, and every region, class and bracket page
                               (a bracket page lists its whole-bracket image)
 
@@ -50,6 +55,8 @@ from prefect import flow, get_run_logger, task
 
 from backend.helpers.bracket_image import is_final, render_bracket_card_image, render_bracket_image
 from backend.helpers.engine_settings import CLASSES, FULL_MARGINS_MAX_LEFT
+from backend.helpers.image_jobs import REGION_OVERVIEW, ImageJob, draw_images
+from backend.helpers.region_image import region_playoffs, region_seeds
 from backend.helpers.share_cards import (
     SITE_DESCRIPTION,
     SITE_NAME,
@@ -152,9 +159,19 @@ def build_share_assets(
     """Render every region and class card, its meta tags and its static page content for *season*
     (default: the newest), plus the front page's content and the sitemap.
 
-    Returns counts of what was written: {"regions", "classes", "teams", "brackets", "bracket_teams"}.
+    Returns counts of what was written: {"regions", "classes", "teams", "brackets", "bracket_teams",
+    "past_brackets", "region_images" (drawn), "region_images_kept" (unchanged, so not drawn again)}.
     """
-    keys = ("regions", "classes", "teams", "brackets", "bracket_teams", "past_brackets")
+    keys = (
+        "regions",
+        "classes",
+        "teams",
+        "brackets",
+        "bracket_teams",
+        "past_brackets",
+        "region_images",
+        "region_images_kept",
+    )
     all_seasons = [s["season"] for s in fetch("/seasons") or []]
     if season is None:
         if not all_seasons:
@@ -180,6 +197,7 @@ def build_share_assets(
     class_standings: dict[int, dict] = {}
     class_dates: dict[int, list[dict]] = {}
     region_game_days: dict[tuple[int, int], list[date]] = {}
+    image_jobs: list[ImageJob] = []
     for clazz in CLASSES:
         standings = fetch(f"/standings/{clazz}?season={season}")
         if not standings or not standings.get("regions"):
@@ -259,6 +277,9 @@ def build_share_assets(
                 "mode": r_mode,
             }
             _write_text(out_dir / "body" / f"{name}.html", body)
+            image_jobs += _region_image_jobs(
+                clazz, region, season, payload, games, dates, r_as_of, today, teams, bracket
+            )
             sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
             written["teams"] += _write_team_assets(out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of)
@@ -322,7 +343,67 @@ def build_share_assets(
     written["past_brackets"] = _write_past_brackets(
         fetch, out_dir, [s for s in all_seasons if s < season], today, site_url
     )
+    # The region images, last: only those whose content changed are drawn, several at a time.
+    drawn = draw_images(out_dir, image_jobs, prune=[f"region/{season}"])
+    written["region_images"] = drawn["drawn"]
+    written["region_images_kept"] = drawn["kept"]
     return written
+
+
+# What each region image's file is called: /static/region/2026/3a-6-overview-projected-dark.png.
+REGION_THEMES = ("dark", "light")
+
+
+def region_image_path(season: int, clazz: int, region: int, kind: str, mode: str, theme: str) -> str:
+    """A region image's file, relative to the share folder."""
+    return f"region/{season}/{clazz}a-{region}-{kind}-{mode}-{theme}.png"
+
+
+def _region_image_jobs(
+    clazz: int,
+    region: int,
+    season: int,
+    payload: dict,
+    games: list[dict],
+    dates: list[dict],
+    as_of: date,
+    today: date,
+    teams: dict,
+    bracket: dict,
+) -> list[ImageJob]:
+    """The region's overview in each odds mode it has (Projected only while there are Projected odds)
+    and each theme. Each job carries only what its image shows, so its fingerprint changes only when
+    the image would: the snapshot and computation times aren't drawn, so they're left out."""
+    shown = {k: v for k, v in payload.items() if k not in ("computation_state", "as_of_date")}
+    region_teams = {t["school"]: teams.get(t["school"]) for t in payload["teams"]}
+    unplayed = [
+        g
+        for g in games
+        if g.get("is_region_game")
+        and not (g.get("final") and g.get("score_a") is not None and g.get("score_b") is not None)
+    ]
+    playoffs = region_playoffs(region_seeds(payload), bracket.get("games") or [], bracket.get("results") or {})
+    modes = ("projected", "tossup") if odds_mode(payload["teams"]) == "projected" else ("tossup",)
+    return [
+        ImageJob(
+            region_image_path(season, clazz, region, "overview", mode, theme),
+            REGION_OVERVIEW,
+            {
+                "clazz": clazz,
+                "region": region,
+                "season": season,
+                "payload": shown,
+                "games": unplayed,
+                "stamp": f"{season} season · {provenance(as_of, dates, mode, today)}",
+                "mode": mode,
+                "theme": theme,
+                "teams": region_teams,
+                "playoffs": playoffs,
+            },
+        )
+        for mode in modes
+        for theme in REGION_THEMES
+    ]
 
 
 def _week_starts(dates: list[dict]) -> list[tuple[date, int]]:
@@ -417,7 +498,7 @@ def _write_bracket_assets(
     regions = {t["school"]: r["region"] for r in standings["regions"] for t in r["teams"]}
     favorites = bracket_favorites(teams, mode)
     if not favorites:  # no bracket odds yet (e.g. before any region is computed)
-        return {"brackets": 0, "bracket_teams": 0, "image": None}
+        return {"brackets": 0, "bracket_teams": 0, "image": None, "games": [], "results": {}}
     name = f"bracket-{clazz}"
     page = f"{site_url}/brackets/{clazz}a"
     matchups = fetch(f"/bracket/matchups?season={season}&class={clazz}") or {}
@@ -503,7 +584,13 @@ def _write_bracket_assets(
         )
     _remove_others(out_dir / "meta" / name, ".html", current)
     _remove_others(out_dir / "og" / name, ".png", current)
-    return {"brackets": 1, "bracket_teams": len(current), "image": image}
+    return {
+        "brackets": 1,
+        "bracket_teams": len(current),
+        "image": image,
+        "games": games,
+        "results": layout_results(layout) if games else {},
+    }
 
 
 BRACKET_VIEWS = {"north": "N", "south": "S", "all": "all"}
