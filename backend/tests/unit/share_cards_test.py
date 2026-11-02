@@ -1,5 +1,6 @@
 """Share cards: text helpers match the site, cards render, and the pipeline writes every file."""
 
+import json
 from datetime import date
 
 from PIL import Image, ImageDraw
@@ -186,14 +187,21 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         "brackets": 0,
         "bracket_teams": 0,
         "past_brackets": 0,
-        "region_images": 8,  # each region's overview in each odds mode and theme
+        "region_images": 16,  # each region's overview and scenarios, in each odds mode and theme
         "region_images_kept": 0,
     }
     overview = tmp_path / "region" / "2026" / "3a-6-overview-projected-light.png"
     assert Image.open(overview).size == (2160, 2700)  # 1080x1350 (4:5) at 2x
-    assert sorted(p.name for p in (tmp_path / "region" / "2026").iterdir()) == [
+    # These regions have no games left, so their scenarios image has nothing to show: no file, and the
+    # index (for the page's share sheet) says so.
+    assert sorted(p.name for p in (tmp_path / "region" / "2026").glob("*.png")) == [
         f"3a-{r}-overview-{m}-{t}.png" for r in (6, 7) for m in ("projected", "tossup") for t in ("dark", "light")
     ]
+    variants = [f"{m}-{t}" for m in ("projected", "tossup") for t in ("dark", "light")]
+    assert json.loads((tmp_path / "region" / "2026" / "3a-6.json").read_text()) == {
+        "overview": dict.fromkeys(variants, 1),
+        "scenarios": dict.fromkeys(variants, 0),
+    }
     for name in ("site.png", "3.png", "3-6.png", "3-7.png"):
         assert Image.open(tmp_path / "og" / name).size == (WIDTH, HEIGHT)
     meta = (tmp_path / "meta" / "3-6.html").read_text()

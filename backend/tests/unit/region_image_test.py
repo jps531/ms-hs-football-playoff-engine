@@ -139,3 +139,124 @@ def test_a_finished_region_shows_its_playoff_road_and_its_champion_gets_the_trop
     plain = render_region_overview(3, 6, 2025, FINISHED, [], "2025 season · Final", "projected")[0]
     assert gold(with_cup) > 1000 and gold(without) == 0
     assert without.tobytes() != plain.tobytes()  # the road is drawn
+
+
+# ----------------------------------------------------------------- the scenarios image
+
+from itertools import permutations  # noqa: E402
+
+from backend.helpers.region_image import CAPPED_PAGES, SHOW_ALL_PAGES, render_region_scenarios  # noqa: E402
+
+SIX = ["Raleigh", "Seminary", "Magee", "Mize", "Taylorsville", "Bay Springs"]
+
+
+def _scenarios(n: int, ways: int = 1, explain: bool = False, step_words: int = 30) -> list[dict]:
+    """*n* distinct finishes (as the API gives them), each reached *ways* ways, maybe with an explanation."""
+    out = []
+    for i, order in enumerate(list(permutations(SIX))[:n]):
+        groups = [
+            [
+                {
+                    "type": "game_result",
+                    "winner": order[0],
+                    "loser": order[5],
+                    "min_margin": 1 + k,
+                    "max_margin": 2 + k,
+                },
+                {"type": "game_result", "winner": order[1], "loser": order[4], "min_margin": 1, "max_margin": None},
+            ]
+            for k in range(ways)
+        ]
+        why = [
+            {
+                "teams": [order[1], order[2]],
+                "places": [2, 3],
+                "steps": ["Head-to-head: " + "a long step " * step_words],
+                "when": None,
+            }
+        ]
+        out.append(
+            {
+                "scenario_num": i + 1,
+                "sub_label": "",
+                "title": "",
+                "game_winners": [],
+                "outcomes": {t: str(k + 1) for k, t in enumerate(order)},
+                "conditions": None,
+                "condition_groups": groups,
+                "open_groups": None,
+                "p": 1 / n,
+                "p_weighted": 1 / n,
+                "explanation": why if explain else None,
+            }
+        )
+    return out
+
+
+def _payload(scenarios=None, insights=None, left: int = 3) -> dict:
+    """A region's payload with *left* games to play."""
+    return {
+        "headline": "",
+        "teams": [_team(t, 0.5) for t in SIX],
+        "remaining_games": [{"team_a": "Raleigh", "team_b": "Mize"}] * left,
+        "scenarios": scenarios or [],
+        "key_insights": insights or [],
+    }
+
+
+def _pages(payload: dict, **kw) -> int:
+    """How many pages the scenarios image takes."""
+    return len(render_region_scenarios(3, 6, 2026, payload, "x", "projected", **kw))
+
+
+def test_no_scenarios_image_when_nothing_is_left_to_show():
+    assert _pages(_payload(_scenarios(3), left=0)) == 0  # every region game played
+    assert _pages(_payload(left=12)) == 0  # no full scenarios yet, and no result settles a spot
+
+
+def test_every_page_is_4_by_5_and_a_short_list_fits_on_one():
+    pages = render_region_scenarios(3, 6, 2026, _payload(_scenarios(2)), "x", "tossup", "light")
+    assert len(pages) == 1 and pages[0].size == SIZE
+
+
+def test_a_list_up_to_five_pages_is_shown_in_full_and_a_longer_one_stops_at_four():
+    """Never leaves out a sliver: a list one page past four is shown whole; past five, four pages and the rest
+    on the region page."""
+    needed = {}
+    for n in range(4, 80, 2):
+        needed.setdefault(_pages(_payload(_scenarios(n)), show_all=99, capped=99), n)
+        if max(needed) > SHOW_ALL_PAGES:
+            break
+    assert SHOW_ALL_PAGES in needed and max(needed) > SHOW_ALL_PAGES
+    assert _pages(_payload(_scenarios(needed[SHOW_ALL_PAGES]))) == SHOW_ALL_PAGES
+    assert _pages(_payload(_scenarios(needed[max(needed)]))) == CAPPED_PAGES
+
+
+def test_explanations_go_in_only_where_they_add_no_page():
+    """Against the same cards with every explanation left to the region page (one too long to ever fit):
+    the explanations that go in add no page, and some do go in."""
+    for n in (2, 8, 14):
+        pointers = _pages(_payload(_scenarios(n, explain=True, step_words=5000)))
+        assert _pages(_payload(_scenarios(n, explain=True))) == pointers
+    one = render_region_scenarios(3, 6, 2026, _payload(_scenarios(1, explain=True)), "x", "projected")[0]
+    pointer = render_region_scenarios(
+        3, 6, 2026, _payload(_scenarios(1, explain=True, step_words=5000)), "x", "projected"
+    )[0]
+    assert one.tobytes() != pointer.tobytes()  # a short list has room: the explanation is drawn
+
+
+def test_a_scenario_too_long_for_a_page_keeps_its_first_ways():
+    """Its first ways, whole, and how many more there are; nothing cut mid-way."""
+    assert _pages(_payload(_scenarios(1, ways=200))) == 1
+
+
+def test_before_full_scenarios_the_results_that_settle_a_spot():
+    insight = {
+        "insight_type": "clinch_seed",
+        "team": "Raleigh",
+        "seed": 1,
+        "conditions": [{"winner": "Raleigh", "loser": "Mize"}],
+        "rendered": "Raleigh clinches the region: Raleigh beats Mize",
+    }
+    pages = render_region_scenarios(3, 6, 2026, _payload(insights=[insight], left=9), "x", "projected", "dark")
+    assert len(pages) == 1 and pages[0].size == SIZE

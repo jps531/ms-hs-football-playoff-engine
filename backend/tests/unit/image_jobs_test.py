@@ -98,3 +98,13 @@ def test_a_broken_worker_pool_still_draws_every_image(tmp_path, monkeypatch):
     monkeypatch.setenv("SHARE_IMAGE_WORKERS", "2")
     assert draw_images(tmp_path, _jobs(a="red", b="blue"))["drawn"] == 2
     assert (tmp_path / "region/2026/a.png").exists() and (tmp_path / "region/2026/b.png").exists()
+
+
+def test_an_image_with_nothing_to_show_makes_no_file_and_says_which_files_each_made(tmp_path):
+    jobs = [*_jobs(a="red"), ImageJob("region/2026/none.png", SOLID, {"color": "red", "pages": 0})]
+    files: dict = {}
+    assert draw_images(tmp_path, jobs, prune=["region/2026"], files_out=files)["drawn"] == 2
+    assert files == {"region/2026/a.png": ["region/2026/a.png"], "region/2026/none.png": []}
+    assert sorted(p.name for p in (tmp_path / "region/2026").iterdir()) == ["a.png"]
+    # Unchanged, it's kept (not drawn again), like any other.
+    assert draw_images(tmp_path, jobs, prune=["region/2026"])["kept"] == 2

@@ -17,7 +17,8 @@ import {
 import { matchTeams } from "./search.js";
 import {
   SHARE_VIEWS, SHARE_VERSIONS, SHARE_THEMES, shareVersions, shareDefaults, bracketImagePath, bracketImageName,
-  REGION_IMAGES, REGION_MODES, regionModes, regionShareDefaults, regionImagePath, regionImageName, regionImageLabel,
+  REGION_MODES, regionModes, regionShareDefaults, regionImagePath, regionImageName, regionImageLabel,
+  regionIndexPath, regionPages, regionImages,
   bracketImageLabel,
 } from "./share.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -1603,7 +1604,7 @@ const SHARE_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stro
 
 let shareSheet = null;
 let shareSpec = null; // what the open sheet shares (a page's spec)
-const shareUi = { choice: null, status: "", image: null }; // image: { path, blob } once loaded, or { path, failed }
+const shareUi = { choice: null, page: 1, status: "", image: null }; // image: see loadShareImage
 let regionShare = null; // the region page's images, when it offers them (set by regionView)
 
 /** The share button at the right of a page's title; *what* names it ("bracket", "region"). */
@@ -1637,12 +1638,13 @@ function bracketShareSpec() {
     when: latest
       ? `Class ${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`
       : [`Class ${clazz}A`, `${season} season`, results.final?.winner ? "Final" : null].filter(Boolean).join(" · "),
-    groups: [
+    groups: () => [
       { label: "Show", key: "view", options: SHARE_VIEWS },
       ...(share.length > 1 ? [{ label: "Odds", key: "version", options: SHARE_VERSIONS }] : []),
       { label: "Theme", key: "theme", options: SHARE_THEMES },
     ],
     defaults: shareDefaults({ half: bracketUi.half, mode, versions: share, dark: document.documentElement.classList.contains("dark") }),
+    pages: () => 1,
     path: (c) => bracketImagePath(season, clazz, c),
     version: asOf,
     name: (c) => bracketImageName(season, clazz, c),
@@ -1654,21 +1656,38 @@ function bracketShareSpec() {
   };
 }
 
-/** The region's images: which image, Projected or Toss-up odds, light or dark. */
-function regionShareSpec() {
+/**
+ * The region's images: which image (the overview, its scenarios when it has them), Projected or
+ * Toss-up odds, light or dark. Its index (written with the images) says which there are and how
+ * many pages each has; without one, the overview alone.
+ */
+async function regionShareSpec() {
   const { season, clazz, region, asOf, modes, mode, summary } = regionShare;
+  let index = null;
+  try {
+    const res = await fetch(`${regionIndexPath(season, clazz, region)}${asOf ? `?v=${encodeURIComponent(asOf)}` : ""}`);
+    if (res.ok) index = await res.json();
+  } catch {
+    index = null;
+  }
   return {
     title: "Share this region",
     when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
-    groups: [
-      ...(REGION_IMAGES.length > 1 ? [{ label: "Image", key: "image", options: REGION_IMAGES }] : []),
-      ...(modes.length > 1 ? [{ label: "Odds", key: "mode", options: REGION_MODES }] : []),
-      { label: "Theme", key: "theme", options: SHARE_THEMES },
-    ],
+    groups: (c) => {
+      const images = regionImages(index, c);
+      return [
+        ...(images.length > 1 ? [{ label: "Image", key: "image", options: images }] : []),
+        ...(modes.length > 1 ? [{ label: "Odds", key: "mode", options: REGION_MODES }] : []),
+        { label: "Theme", key: "theme", options: SHARE_THEMES },
+      ];
+    },
     defaults: regionShareDefaults({ mode, modes, dark: document.documentElement.classList.contains("dark") }),
-    path: (c) => regionImagePath(season, clazz, region, c),
+    // An image a mode or theme doesn't have (none to show there) falls back to the overview.
+    fix: (c) => (regionPages(index, c) > 0 ? c : { ...c, image: "overview" }),
+    pages: (c) => Math.max(1, regionPages(index, c)),
+    path: (c, page, pages) => regionImagePath(season, clazz, region, c, page, pages),
     version: asOf,
-    name: (c) => regionImageName(season, clazz, region, c),
+    name: (c, page, pages) => regionImageName(season, clazz, region, c, page, pages),
     label: (c) => regionImageLabel(clazz, region, c),
     wide: () => false,
     page: `${location.origin}/standings/${clazz}a/${region}`,
@@ -1679,7 +1698,8 @@ function regionShareSpec() {
 
 function openShare(spec) {
   shareSpec = spec;
-  shareUi.choice = spec.defaults;
+  shareUi.choice = spec.fix ? spec.fix(spec.defaults) : spec.defaults;
+  shareUi.page = 1;
   shareUi.status = "";
   const s = shareDialog();
   s.innerHTML = shareHtml();
@@ -1687,26 +1707,35 @@ function openShare(spec) {
   loadShareImage();
 }
 
-/** The chosen image's address, fresh for this update (the file at its address is replaced each update). */
-function shareSrc() {
+/** How many pages the chosen image has. */
+const sharePages = () => shareSpec.pages(shareUi.choice);
+
+/** A page's address, fresh for this update (the file at its address is replaced each update). */
+function shareSrc(page = shareUi.page) {
   const { path, version } = shareSpec;
-  return `${path(shareUi.choice)}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
+  return `${path(shareUi.choice, page, sharePages())}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
 }
 
-/** Fetch the chosen image ahead of a tap on Share, which must hand it over at once to keep the tap's permission. */
+/**
+ * Fetch every page of the chosen image ahead of a tap on Share, which must hand them over at once to
+ * keep the tap's permission. shareUi.image: { key, blobs } once loaded, or { key, failed }.
+ */
 async function loadShareImage() {
-  const path = shareSrc();
-  if (shareUi.image?.path === path) return;
-  shareUi.image = { path };
+  const pages = sharePages();
+  const key = `${shareSrc(1)}|${pages}`;
+  if (shareUi.image?.key === key) return;
+  shareUi.image = { key };
   try {
-    const res = await fetch(path);
-    if (!res.ok) throw new Error(String(res.status));
-    const blob = await res.blob();
-    if (shareUi.image?.path === path) shareUi.image = { path, blob };
+    const blobs = await Promise.all(Array.from({ length: pages }, async (_, i) => {
+      const res = await fetch(shareSrc(i + 1));
+      if (!res.ok) throw new Error(String(res.status));
+      return res.blob();
+    }));
+    if (shareUi.image?.key === key) shareUi.image = { key, blobs };
   } catch {
-    if (shareUi.image?.path === path) shareUi.image = { path, failed: true };
+    if (shareUi.image?.key === key) shareUi.image = { key, failed: true };
   }
-  if (shareUi.image?.path === path) refreshShare();
+  if (shareUi.image?.key === key) refreshShare();
 }
 
 const canShareFiles = () => {
@@ -1720,15 +1749,24 @@ const canShareFiles = () => {
 function shareHtml() {
   const spec = shareSpec;
   const c = shareUi.choice;
+  const pages = sharePages();
   const group = ({ label, key, options }) => `<div class="share-sheet__group" role="group" aria-label="${esc(label)}">
       <p class="share-sheet__label" aria-hidden="true">${esc(label)}</p>
       <div class="half-control">${options.map((o) => `<button type="button" class="half-control__item" data-share-opt="${key}:${o.key}" aria-pressed="${c[key] === o.key}">${esc(o.label)}</button>`).join("")}</div>
     </div>`;
   const img = shareUi.image;
-  const ready = Boolean(img?.blob);
+  const ready = Boolean(img?.blobs);
+  const label = spec.label(c);
   const preview = img?.failed
     ? '<p class="share-sheet__missing muted">This image isn’t available yet. It’s drawn after each update, so try again later.</p>'
-    : `<img class="share-sheet__preview" src="${esc(shareSrc())}" alt="${esc(spec.label(c))}">`;
+    : `<img class="share-sheet__preview" src="${esc(shareSrc())}" alt="${esc(pages > 1 ? `${label}, page ${shareUi.page} of ${pages}` : label)}">`;
+  const pager = pages > 1
+    ? `<div class="share-sheet__pager">
+        <button type="button" class="share-sheet__secondary" data-share-page="prev"${shareUi.page === 1 ? " disabled" : ""} aria-label="Previous page">‹</button>
+        <span aria-live="polite">Page ${shareUi.page} of ${pages}</span>
+        <button type="button" class="share-sheet__secondary" data-share-page="next"${shareUi.page === pages ? " disabled" : ""} aria-label="Next page">›</button>
+      </div>`
+    : "";
   const disabled = ready ? "" : " disabled";
   return `<div class="game-sheet__head">
       <div><h2 class="game-sheet__title" id="share-sheet-title" tabindex="-1" autofocus>${esc(spec.title)}</h2>
@@ -1736,12 +1774,13 @@ function shareHtml() {
       <button type="button" class="game-sheet__close" data-share-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
     <div class="game-sheet__body share-sheet__body">
-      ${spec.groups.map(group).join("")}
+      ${spec.groups(c).map(group).join("")}
       <div class="share-sheet__frame${spec.wide(c) ? " is-wide" : ""}">${preview}</div>
+      ${pager}
       <div class="share-sheet__actions">
-        ${canShareFiles() ? `<button type="button" class="share-sheet__primary" data-share-act="share"${disabled}>${SHARE_ICON}Share</button>` : ""}
-        <button type="button" class="share-sheet__secondary" data-share-act="download"${disabled}>Download image</button>
-        <button type="button" class="share-sheet__secondary" data-share-act="copy"${img?.failed ? " disabled" : ""}>Copy image link</button>
+        ${canShareFiles() ? `<button type="button" class="share-sheet__primary" data-share-act="share"${disabled}>${SHARE_ICON}Share${pages > 1 ? ` ${pages} images` : ""}</button>` : ""}
+        <button type="button" class="share-sheet__secondary" data-share-act="download"${disabled}>${pages > 1 ? `Download ${pages} images` : "Download image"}</button>
+        <button type="button" class="share-sheet__secondary" data-share-act="copy"${img?.failed ? " disabled" : ""}>${pages > 1 ? "Copy this page’s link" : "Copy image link"}</button>
       </div>
       <p class="share-sheet__status muted" role="status">${esc(shareUi.status)}</p>
     </div>`;
@@ -1750,10 +1789,12 @@ function shareHtml() {
 /** Redraw the open share sheet (an option chosen, the image loaded), keeping focus on the same control. */
 function refreshShare() {
   if (!shareSheet?.open) return;
-  const focused = document.activeElement?.closest?.("[data-share-opt], [data-share-act]");
-  const key = focused?.dataset.shareOpt ?? focused?.dataset.shareAct;
+  const focused = document.activeElement?.closest?.("[data-share-opt], [data-share-act], [data-share-page]");
+  const key = focused?.dataset.shareOpt ?? focused?.dataset.shareAct ?? focused?.dataset.sharePage;
   shareSheet.innerHTML = shareHtml();
-  const again = key && shareSheet.querySelector(`[data-share-opt="${CSS.escape(key)}"], [data-share-act="${CSS.escape(key)}"]`);
+  const again = key && shareSheet.querySelector(
+    `[data-share-opt="${CSS.escape(key)}"], [data-share-act="${CSS.escape(key)}"], [data-share-page="${CSS.escape(key)}"]`,
+  );
   (again && !again.disabled ? again : shareSheet.querySelector(".game-sheet__title"))?.focus({ preventScroll: true });
 }
 
@@ -1765,10 +1806,19 @@ function onShareClick(e) {
   const opt = e.target.closest("[data-share-opt]");
   if (opt) {
     const [key, value] = opt.dataset.shareOpt.split(":");
-    shareUi.choice = { ...shareUi.choice, [key]: value };
+    const next = { ...shareUi.choice, [key]: value };
+    shareUi.choice = shareSpec.fix ? shareSpec.fix(next) : next;
+    shareUi.page = 1;
     shareUi.status = "";
     refreshShare();
     loadShareImage();
+    return;
+  }
+  const turn = e.target.closest("[data-share-page]");
+  if (turn && !turn.disabled) {
+    shareUi.page = Math.min(sharePages(), Math.max(1, shareUi.page + (turn.dataset.sharePage === "next" ? 1 : -1)));
+    shareUi.status = "";
+    refreshShare();
     return;
   }
   const act = e.target.closest("[data-share-act]");
@@ -1778,7 +1828,8 @@ function onShareClick(e) {
 async function shareAction(how) {
   const spec = shareSpec;
   const c = shareUi.choice;
-  const name = spec.name(c);
+  const pages = sharePages();
+  const names = Array.from({ length: pages }, (_, i) => spec.name(c, i + 1, pages));
   const done = (status) => {
     spec.track(c, how);
     shareUi.status = status;
@@ -1786,36 +1837,40 @@ async function shareAction(how) {
   };
   if (how === "copy") {
     try {
-      await navigator.clipboard.writeText(`${location.origin}${spec.path(c)}`);
-      done(spec.latest ? "Link copied. It always shows the latest update." : "Link copied.");
+      await navigator.clipboard.writeText(`${location.origin}${spec.path(c, shareUi.page, pages)}`);
+      const what = pages > 1 ? `Link to page ${shareUi.page} copied.` : "Link copied.";
+      done(spec.latest ? `${what} It always shows the latest update.` : what);
     } catch {
       shareUi.status = "Couldn’t copy the link here.";
       refreshShare();
     }
     return;
   }
-  const blob = shareUi.image?.blob;
-  if (!blob) return;
+  const blobs = shareUi.image?.blobs;
+  if (!blobs) return;
   if (how === "share") {
-    const file = new File([blob], name, { type: "image/png" });
+    const files = blobs.map((blob, i) => new File([blob], names[i], { type: "image/png" }));
     try {
-      await navigator.share({ files: [file], title: spec.label(c), text: `${spec.label(c)}: ${spec.page}` });
+      await navigator.share({ files, title: spec.label(c), text: `${spec.label(c)}: ${spec.page}` });
       done("");
     } catch (err) {
       if (err?.name === "AbortError") return; // closed the share sheet
-      shareUi.status = "Couldn’t open sharing here; download the image instead.";
+      shareUi.status = `Couldn’t open sharing here; download the ${pages > 1 ? "images" : "image"} instead.`;
       refreshShare();
     }
     return;
   }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  done("Downloaded.");
+  for (const [i, blob] of blobs.entries()) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = names[i];
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    if (i < blobs.length - 1) await new Promise((r) => setTimeout(r, 300)); // one at a time, so none is dropped
+  }
+  done(pages > 1 ? `Downloaded ${pages} images.` : "Downloaded.");
 }
 
 // ------------------------------------------------------------ game sheet
@@ -2311,7 +2366,7 @@ app.addEventListener("click", (e) => {
   if (shareOpen) {
     if (shareOpen.dataset.shareOpen === "region" && regionShare) {
       track("region_share_opened", { class: regionShare.clazz, region: regionShare.region });
-      openShare(regionShareSpec());
+      regionShareSpec().then(openShare);
     } else if (bracketData?.share) {
       track("bracket_share_opened", { class: bracketData.clazz });
       openShare(bracketShareSpec());

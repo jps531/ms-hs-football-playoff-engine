@@ -1683,3 +1683,6 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .share-sheet__secondary:hover { background: var(--surface-raised); }
 :is(.share-sheet__primary, .share-sheet__secondary):disabled { opacity: 0.5; cursor: default; }
 .share-sheet__status { min-height: 20px; font-size: 14px; line-height: 20px; }
+/* An image of several pages: which page the preview shows, and a step either way. */
+.share-sheet__pager { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 14px; }
+.share-sheet__pager .share-sheet__secondary { flex: none; min-width: 44px; padding: 0 12px; font-size: 20px; }

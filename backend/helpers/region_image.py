@@ -3,7 +3,7 @@
 Each is a 4:5 portrait page (1080x1350, drawn at twice that), in the site's two themes, with the
 odds in one mode (Projected or Toss-up). An image whose content runs past one page continues on
 more, "1 of 3", each page standing on its own (title, stamp, a short standings strip); past
-``MAX_PAGES`` it ends by pointing to the region page instead of running on.
+``SHOW_ALL_PAGES`` it stops at ``CAPPED_PAGES`` and points to the region page for the rest.
 
 Every sentence comes from the region page's own builders in ``static_pages`` (which mirror its
 JavaScript and are tested against it), so an image says what the page says. Like ``bracket_image``
@@ -50,7 +50,8 @@ from backend.helpers.static_pages import (
 
 SIZE = (2160, 2700)  # 1080x1350 at 2x
 PAD = 104
-MAX_PAGES = 4  # past this, the last page points to the region page
+SHOW_ALL_PAGES = 5  # a list that fits in this many pages is shown in full
+CAPPED_PAGES = 4  # a longer one stops here, and its last page points to the region page for the rest
 CLINCHED_BG = "#137252"  # --state-clinched (brand-700), both themes
 ELIMINATED_BG = "#B91C1C"  # --state-eliminated
 COINFLIP_BG = "#FBBF24"  # --state-coinflip
@@ -713,7 +714,8 @@ def render_region_scenarios(
     mode: str,
     theme: str = "dark",
     teams: dict | None = None,
-    max_pages: int = MAX_PAGES,
+    show_all: int = SHOW_ALL_PAGES,
+    capped: int = CAPPED_PAGES,
 ) -> list[Image.Image]:
     """The region's scenarios, page after page: every way the region can finish (with its chance in
     *mode*, and why tied teams are in their order when that fits), or, before there are full
@@ -732,9 +734,12 @@ def render_region_scenarios(
         kind = "insights"
         left = len(payload["remaining_games"])
         subtitle = "What has to happen"
-        intro = f"Full scenarios appear once five or fewer region games remain; {left} are left." + (
-            " Until then, these are results that settle a spot no matter what else happens." if cards else ""
+        intro = (
+            f"Full scenarios appear once five or fewer region games remain; {left} are left. "
+            "Until then, these are results that settle a spot no matter what else happens."
         )
+    if not cards:  # nothing to show (no insight settles a spot yet): no image
+        return []
 
     # Measuring draws nothing, so one scratch page serves every card.
     scratch = _Page.new(theme, teams)
@@ -790,9 +795,11 @@ def render_region_scenarios(
                 explain[i] = False
     pages = pack(explain)
 
-    # Too many pages: stop at MAX_PAGES, and make room at the end of the last for where to see the rest.
-    shown_pages = pages[:max_pages]
-    more = sum(len(c) for p in pages[max_pages:] for c in p)
+    # Up to *show_all* pages, all of them; more than that, the first *capped*, with room at the end of the
+    # last for where to see the rest (never a page short of the whole list: then it's shown in full).
+    limit = len(pages) if len(pages) <= show_all else capped
+    shown_pages = pages[:limit]
+    more = sum(len(c) for p in pages[limit:] for c in p)
     if more:
         last = shown_pages[-1]
         while max(sum(h + COL_GAP for _, _, h in col) for col in last) + 90 > room:

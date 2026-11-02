@@ -30,6 +30,11 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
                               the remaining games, or a finished region's playoff road; mode
                               "projected" (while there are Projected odds) or "tossup". Drawn only
                               when its content changed (backend.helpers.image_jobs), several at a time
+    region/{season}/{class}a-{region}-scenarios-{mode}-{theme}[-{page}].png
+                              its scenarios, while games remain: every way it can finish, or the
+                              results that settle a spot; several pages (-1, -2, …) when needed
+    region/{season}/{class}a-{region}.json
+                              which of those images it has and how many pages each, for the page
     sitemap.xml               the front page, About, and every region, class and bracket page
                               (a bracket page lists its whole-bracket image)
 
@@ -44,6 +49,7 @@ from the same API reads in the same run, so they describe the same snapshot.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from collections.abc import Callable
@@ -55,7 +61,7 @@ from prefect import flow, get_run_logger, task
 
 from backend.helpers.bracket_image import is_final, render_bracket_card_image, render_bracket_image
 from backend.helpers.engine_settings import CLASSES, FULL_MARGINS_MAX_LEFT
-from backend.helpers.image_jobs import REGION_OVERVIEW, ImageJob, draw_images
+from backend.helpers.image_jobs import REGION_OVERVIEW, REGION_SCENARIOS, ImageJob, draw_images
 from backend.helpers.region_image import region_playoffs, region_seeds
 from backend.helpers.share_cards import (
     SITE_DESCRIPTION,
@@ -343,10 +349,20 @@ def build_share_assets(
     written["past_brackets"] = _write_past_brackets(
         fetch, out_dir, [s for s in all_seasons if s < season], today, site_url
     )
-    # The region images, last: only those whose content changed are drawn, several at a time.
-    drawn = draw_images(out_dir, image_jobs, prune=[f"region/{season}"])
+    # The region images, last: only those whose content changed are drawn, several at a time. Then each
+    # region's index: which images it has and how many pages each, for the page's share sheet.
+    files: dict[str, list[str]] = {}
+    drawn = draw_images(out_dir, image_jobs, prune=[f"region/{season}"], files_out=files)
     written["region_images"] = drawn["drawn"]
     written["region_images_kept"] = drawn["kept"]
+    indexes: dict[str, dict] = {}
+    for job in image_jobs:
+        k = job.kwargs
+        index = indexes.setdefault(region_index_path(season, k["clazz"], k["region"]), {})
+        kind = "overview" if job.renderer == REGION_OVERVIEW else "scenarios"
+        index.setdefault(kind, {})[f"{k['mode']}-{k['theme']}"] = len(files.get(job.path) or [])
+    for path, index in indexes.items():
+        _write_text(out_dir / path, json.dumps(index, sort_keys=True))
     return written
 
 
@@ -355,8 +371,14 @@ REGION_THEMES = ("dark", "light")
 
 
 def region_image_path(season: int, clazz: int, region: int, kind: str, mode: str, theme: str) -> str:
-    """A region image's file, relative to the share folder."""
+    """A region image's file, relative to the share folder (an image of several pages: ``…-1.png``, ``…-2.png``)."""
     return f"region/{season}/{clazz}a-{region}-{kind}-{mode}-{theme}.png"
+
+
+def region_index_path(season: int, clazz: int, region: int) -> str:
+    """A region's image index: {"overview": {"projected-dark": 1, …}, "scenarios": {…}}, each image's pages
+    by odds mode and theme (0: none, nothing to show)."""
+    return f"region/{season}/{clazz}a-{region}.json"
 
 
 def _region_image_jobs(
@@ -371,8 +393,8 @@ def _region_image_jobs(
     teams: dict,
     bracket: dict,
 ) -> list[ImageJob]:
-    """The region's overview in each odds mode it has (Projected only while there are Projected odds)
-    and each theme. Each job carries only what its image shows, so its fingerprint changes only when
+    """The region's overview and scenarios in each odds mode it has (Projected only while there are
+    Projected odds) and each theme. Each job carries only what its image shows, so its fingerprint changes only when
     the image would: the snapshot and computation times aren't drawn, so they're left out."""
     shown = {k: v for k, v in payload.items() if k not in ("computation_state", "as_of_date")}
     region_teams = {t["school"]: teams.get(t["school"]) for t in payload["teams"]}
@@ -384,26 +406,30 @@ def _region_image_jobs(
     ]
     playoffs = region_playoffs(region_seeds(payload), bracket.get("games") or [], bracket.get("results") or {})
     modes = ("projected", "tossup") if odds_mode(payload["teams"]) == "projected" else ("tossup",)
-    return [
-        ImageJob(
-            region_image_path(season, clazz, region, "overview", mode, theme),
-            REGION_OVERVIEW,
-            {
+    jobs = []
+    for mode in modes:
+        for theme in REGION_THEMES:
+            common = {
                 "clazz": clazz,
                 "region": region,
                 "season": season,
                 "payload": shown,
-                "games": unplayed,
                 "stamp": f"{season} season · {provenance(as_of, dates, mode, today)}",
                 "mode": mode,
                 "theme": theme,
                 "teams": region_teams,
-                "playoffs": playoffs,
-            },
-        )
-        for mode in modes
-        for theme in REGION_THEMES
-    ]
+            }
+            jobs.append(
+                ImageJob(
+                    region_image_path(season, clazz, region, "overview", mode, theme),
+                    REGION_OVERVIEW,
+                    {**common, "games": unplayed, "playoffs": playoffs},
+                )
+            )
+            jobs.append(
+                ImageJob(region_image_path(season, clazz, region, "scenarios", mode, theme), REGION_SCENARIOS, common)
+            )
+    return jobs
 
 
 def _week_starts(dates: list[dict]) -> list[tuple[date, int]]:
