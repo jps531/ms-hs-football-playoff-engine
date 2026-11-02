@@ -372,8 +372,9 @@ def game_date(iso: str | None) -> str:
     return f"{d:%a}, {d:%b} {d.day}"
 
 
-def remaining_matchups(remaining: list[dict], games: list[dict] | None) -> list[str]:
-    """Each remaining region game as the page lists it: "Thu, Nov 6: Murrah at Germantown".
+def remaining_games(remaining: list[dict], games: list[dict] | None) -> list[dict]:
+    """Each remaining region game as the page lists it: {date, first, joiner, second}, e.g. ("Thu, Nov 6",
+    "Murrah", "at", "Germantown"); date "" when the schedule doesn't have one.
 
     Mirrors the region view: the schedule (``/games``) gives the date and, when it knows
     the site, home and away; otherwise the standings' own ``location_a`` does. Dated games
@@ -391,8 +392,18 @@ def remaining_matchups(remaining: list[dict], games: list[dict] | None) -> list[
         if not sides or (sides[1] != "at" and game.get("location_a")):
             sides = _orient(game["team_a"], game["team_b"], game.get("location_a"))
         when = (listed or {}).get("date")
-        out.append((when or "9999", i, f"{game_date(when)}: " if when else "", " ".join(sides)))
-    return [f"{prefix}{text}" for _, _, prefix, text in sorted(out)]
+        first, joiner, second = sides
+        out.append((when or "9999", i, {"date": game_date(when), "first": first, "joiner": joiner, "second": second}))
+    return [row for _, _, row in sorted(out, key=lambda x: (x[0], x[1]))]
+
+
+def remaining_matchups(remaining: list[dict], games: list[dict] | None) -> list[str]:
+    """Each remaining region game as the page lists it: "Thu, Nov 6: Murrah at Germantown"
+    (``remaining_games`` as text)."""
+    return [
+        f"{g['date'] + ': ' if g['date'] else ''}{g['first']} {g['joiner']} {g['second']}"
+        for g in remaining_games(remaining, games)
+    ]
 
 
 def _insight_title(insight: dict) -> str | None:
