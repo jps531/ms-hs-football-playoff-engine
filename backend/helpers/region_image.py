@@ -510,8 +510,9 @@ COL_W = (SIZE[0] - 2 * PAD - COL_GAP) / 2
 CARD_PAD = 36
 
 
-def _strip(page: _Page, top: float, payload: dict, mode: str) -> float:
-    """A short standings strip in two columns: position, team, region record, playoff odds."""
+def _strip(page: _Page, top: float, payload: dict, mode: str, team: str | None = None) -> float:
+    """A short standings strip in two columns: position, team, region record, playoff odds; *team*'s row
+    marked (no rule touches it)."""
     d, t = page.draw, page.t
     ordered = display_order(payload["teams"])
     positions = position_labels(standing_positions(ordered))
@@ -521,23 +522,30 @@ def _strip(page: _Page, top: float, payload: dict, mode: str) -> float:
     per_col = (len(ordered) + 1) // 2
     row_h = 70
     y0 = top + 48
-    for i, (pos, team) in enumerate(zip(positions, ordered, strict=True)):
+    marked = next((i for i, row in enumerate(ordered) if row["school"] == team), None)
+    for i, (pos, row) in enumerate(zip(positions, ordered, strict=True)):
         c, r = divmod(i, per_col)
         x = PAD + c * (COL_W + COL_GAP)
         mid = y0 + r * row_h + row_h / 2
-        _rule(page, mid - row_h / 2, x, x + COL_W)
-        out = team.get("eliminated")
+        if i == marked:
+            fill = t.card if t.edge is None else t.odds[1]  # the light theme's card is the page's own white
+            d.rounded_rectangle((x - 12, mid - row_h / 2 + 3, x + COL_W + 12, mid + row_h / 2 - 3), radius=10, fill=fill)
+        elif marked is None or not (i == marked + 1 and r):  # the row under the marked one has no rule on top
+            _rule(page, mid - row_h / 2, x, x + COL_W)
+        out = row.get("eliminated")
         d.text((x, mid), pos, font=_inter(30, 600), fill=t.text_2, anchor="lm")
-        page.mark(team["school"], x + 56, mid, 44)
-        reg, _ = _records(team)
+        page.mark(row["school"], x + 56, mid, 44)
+        reg, _ = _records(row)
         right = x + COL_W
         d.text((right - 150, mid), reg, font=_inter(32, 600), fill=t.text_2 if out else t.text, anchor="rm")
-        name = fit(d, team["school"], _inter(34, 600), right - 150 - 90 - (x + 112))
+        name = fit(d, row["school"], _inter(34, 600), right - 150 - 90 - (x + 112))
         d.text((x + 112, mid), name, font=_inter(34, 600), fill=t.text_2 if out else t.text, anchor="lm")
-        page.pill(right, mid, mode_odds(team, "p_playoffs", mode), 124, 50, 28)
+        page.pill(right, mid, mode_odds(row, "p_playoffs", mode), 124, 50, 28)
     bottom = y0 + per_col * row_h
-    _rule(page, bottom, PAD, PAD + COL_W)
-    _rule(page, bottom, PAD + COL_W + COL_GAP, SIZE[0] - PAD)
+    for c in (0, 1):
+        last = min(len(ordered), (c + 1) * per_col) - 1  # the column's last row
+        if last != marked:
+            _rule(page, bottom, PAD + c * (COL_W + COL_GAP), PAD + c * (COL_W + COL_GAP) + COL_W)
     return bottom
 
 
