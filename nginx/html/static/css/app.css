@@ -1238,6 +1238,9 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 .opp-list--matchups li + li { border-top: 1px solid var(--border); }
 .opp-list .team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .opp-list__host { grid-column: 1 / -1; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+/* Why a way's host hosts, under its conditions in a "How?"; why a played game's host hosted. */
+.bgame__why { margin-top: 10px; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.how__why { margin-top: 8px; font-size: 13px; line-height: 18px; color: var(--text-secondary); }
 
 /* The sheet's sections ruled off edge to edge (the sides, the matchups, then the rest), its
    teams and matchups by hairlines, and "Possible matchups" as a section header. */
