@@ -55,8 +55,8 @@ keep the two in step: a new event or property means a new line there.
 | `bracket_share_opened` | Opening “Share this bracket” | `class` |
 | `bracket_image_shared` | Sharing, downloading or copying the link to a bracket image | `class`, `season`, `view` (`north`/`south`/`all`), `version` (`odds`/`blank`), `theme`, `method` (`share`/`download`/`copy`) |
 | `region_share_opened` | Opening “Share this region” | `class`, `region` |
-| `team_share_opened` | Opening “Share Magee’s season” in a team's expanded row on a region page | `class`, `region`, `team` |
-| `team_image_shared` | Sharing, downloading or copying the link to a team's image | `class`, `region`, `season`, `team`, `image` (`season`), `mode` (`projected`/`tossup`), `theme`, `method` (`share`/`download`/`copy`) |
+| `team_share_opened` | Opening “Share Magee” in a team's expanded row on a region page | `class`, `region`, `team` |
+| `team_image_shared` | Sharing, downloading or copying the link to a team's image | `class`, `region`, `season`, `team`, `image` (`season`/`scenarios`), `mode` (`projected`/`tossup`), `theme`, `method` (`share`/`download`/`copy`) |
 | `region_image_shared` | Sharing, downloading or copying the link to a region image (an image of several pages: sharing or downloading all of them, or copying the link to the one shown) | `class`, `region`, `season`, `image` (`overview`/`scenarios`), `mode` (`projected`/`tossup`), `theme`, `method` (`share`/`download`/`copy`) |
 | `scenarios_opened` | Opening a folded scenario group | `section` (its heading) |
 | `scenario_explanation_opened` | Opening a scenario card's Explanation sheet | `place` (e.g. `Region 1-7A`), `scenario` (the card's label, e.g. `Scenario 3`) |

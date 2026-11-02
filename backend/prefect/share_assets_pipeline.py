@@ -36,6 +36,9 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
     region/{season}/{class}a-{region}-team-{slug}-season-{mode}-{theme}.png
                               each of its teams' season (backend.helpers.team_image): its games, odds
                               of each seed, the region's standings and its road through the playoffs
+    region/{season}/{class}a-{region}-team-{slug}-scenarios-{mode}-{theme}[-{page}].png
+                              while games remain, what has to happen for it: the region page's cards
+                              for it, each outcome with its chance and the results that give it
     region/{season}/{class}a-{region}.json
                               which of those images it has and how many pages each, for the page
     sitemap.xml               the front page, About, and every region, class and bracket page
@@ -64,7 +67,14 @@ from prefect import flow, get_run_logger, task
 
 from backend.helpers.bracket_image import is_final, render_bracket_card_image, render_bracket_image
 from backend.helpers.engine_settings import CLASSES, FULL_MARGINS_MAX_LEFT
-from backend.helpers.image_jobs import REGION_OVERVIEW, REGION_SCENARIOS, TEAM_SEASON, ImageJob, draw_images
+from backend.helpers.image_jobs import (
+    REGION_OVERVIEW,
+    REGION_SCENARIOS,
+    TEAM_SCENARIOS,
+    TEAM_SEASON,
+    ImageJob,
+    draw_images,
+)
 from backend.helpers.region_image import playoff_road, region_playoffs, region_seeds
 from backend.helpers.share_cards import (
     SITE_DESCRIPTION,
@@ -286,8 +296,14 @@ def build_share_assets(
                 "mode": r_mode,
             }
             _write_text(out_dir / "body" / f"{name}.html", body)
+            # Each team's "What has to happen" needs its paths, which only a region with games left has.
+            paths = (
+                fetch(f"/standings/{clazz}/{region}?season={season}&include_team_scenarios=true")
+                if payload.get("remaining_games")
+                else None
+            )
             image_jobs += _region_image_jobs(
-                clazz, region, season, payload, games, dates, r_as_of, today, teams, bracket
+                clazz, region, season, payload, games, dates, r_as_of, today, teams, bracket, paths
             )
             sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
@@ -392,8 +408,9 @@ def region_indexes(season: int, jobs: list[ImageJob], files: dict[str, list[str]
         index = indexes.setdefault(region_index_path(season, k["clazz"], k["region"]), {})
         pages = len(files.get(job.path) or [])
         variant = f"{k['mode']}-{k['theme']}"
-        if job.renderer == TEAM_SEASON:
-            index.setdefault("teams", {}).setdefault(k["school"], {}).setdefault("season", {})[variant] = pages
+        if job.renderer in (TEAM_SEASON, TEAM_SCENARIOS):
+            kind = "season" if job.renderer == TEAM_SEASON else "scenarios"
+            index.setdefault("teams", {}).setdefault(k["school"], {}).setdefault(kind, {})[variant] = pages
         else:
             index.setdefault("overview" if job.renderer == REGION_OVERVIEW else "scenarios", {})[variant] = pages
     return indexes
@@ -410,8 +427,10 @@ def _region_image_jobs(
     today: date,
     teams: dict,
     bracket: dict,
+    paths: dict | None = None,
 ) -> list[ImageJob]:
-    """The region's overview and scenarios, and each of its teams' season, in each odds mode it has
+    """The region's overview and scenarios, and each of its teams' season and (from *paths*, the region's
+    payload with each team's paths, while games remain) what has to happen for it, in each odds mode it has
     (Projected only while there are Projected odds) and each theme. Each job carries only what its image
     shows, so its fingerprint changes only when the image would: the snapshot and computation times
     aren't drawn, so they're left out."""
@@ -436,6 +455,7 @@ def _region_image_jobs(
         names = {*region_teams, *(g["team_a"] for g in mine), *(g["team_b"] for g in mine)}
         names |= {r["opponent"] for r in road or []}
         team_jobs.append((school, mine, road, {n: teams.get(n) for n in sorted(names)}))
+    outcomes = {t["school"]: _outcomes_payload(paths, t["school"]) for t in payload["teams"]} if paths else {}
     modes = ("projected", "tossup") if odds_mode(payload["teams"]) == "projected" else ("tossup",)
     jobs = []
     for mode in modes:
@@ -475,7 +495,47 @@ def _region_image_jobs(
                         },
                     )
                 )
+                if school in outcomes:
+                    names = {*region_teams, *_outcome_teams(outcomes[school])}
+                    jobs.append(
+                        ImageJob(
+                            team_image_path(season, clazz, region, school, "scenarios", mode, theme),
+                            TEAM_SCENARIOS,
+                            {
+                                **common,
+                                "payload": outcomes[school],
+                                "school": school,
+                                "teams": {n: teams.get(n) for n in sorted(names)},
+                            },
+                        )
+                    )
     return jobs
+
+
+def _outcomes_payload(paths: dict, school: str) -> dict:
+    """What a team's "What has to happen" image shows from the region's payload with paths: every team's
+    standings, but only this team's paths, and the results that settle a spot only before full
+    scenarios (as the page shows them). So the image changes only when the team's own cards would."""
+    teams = paths.get("teams") or []
+    full = bool(paths.get("scenarios_available")) and any(t.get("paths") for t in teams)
+    return {
+        "teams": [t if t["school"] == school else {k: v for k, v in t.items() if k != "paths"} for t in teams],
+        "remaining_games": paths.get("remaining_games") or [],
+        "scenarios_available": full,
+        "key_insights": [] if full else [i for i in paths.get("key_insights") or [] if i.get("team") == school],
+    }
+
+
+def _outcome_teams(payload: dict) -> set[str]:
+    """The teams a team's outcome cards name (for their helmets)."""
+    names = set()
+    for t in payload["teams"]:
+        for p in t.get("paths") or []:
+            for way in p.get("conditions") or []:
+                names |= {c[k] for c in way for k in ("school", "opponent") if c.get(k)}
+    for i in payload["key_insights"]:
+        names |= {c[k] for c in i.get("conditions") or [] for k in ("winner", "loser") if c.get(k)}
+    return names
 
 
 def _week_starts(dates: list[dict]) -> list[tuple[date, int]]:

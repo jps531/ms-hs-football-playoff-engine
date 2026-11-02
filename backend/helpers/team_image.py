@@ -13,18 +13,25 @@ from PIL import Image
 
 from backend.helpers.bracket_image import trophy
 from backend.helpers.region_image import (
+    CAPPED_PAGES,
+    CARD_PAD,
     COL_GAP,
     COL_W,
     PAD,
+    SHOW_ALL_PAGES,
     SIZE,
     _badges,
+    _boxed,
+    _conditions,
     _footer,
     _Page,
     _records,
     _rule,
     _wrap,
 )
+from backend.helpers.region_image import _strip as _region_strip
 from backend.helpers.share_cards import (
+    SITE_HOST,
     _inter,
     _nippo,
     display_order,
@@ -32,9 +39,10 @@ from backend.helpers.share_cards import (
     format_pct,
     mode_odds,
     position_labels,
+    slugify,
     standing_positions,
 )
-from backend.helpers.static_pages import MODE_LABELS, game_date
+from backend.helpers.static_pages import MODE_LABELS, game_date, insight_cards, outcome_cards, region_path
 
 ODDS_KEYS = (("p1", "1st"), ("p2", "2nd"), ("p3", "3rd"), ("p4", "4th"), ("p_playoffs", "Playoffs"))
 
@@ -360,3 +368,187 @@ def render_team_season(
             anchor="ls",
         )
     return [page.img]
+
+
+# ------------------------------------------------------------------ what has to happen
+
+def team_outcomes(payload: dict, school: str, mode: str) -> tuple[list[dict], str]:
+    """What the region page's "What has to happen" shows for the picked team: its cards in the page's
+    order (the region title, playoff spots, then seeding, each likeliest first; once full scenarios
+    exist), or before then the results that settle a spot for it, with the page's line saying why;
+    ([], "") when there's nothing to show."""
+    left = len(payload.get("remaining_games") or [])
+    if not left:
+        return [], ""
+    if payload.get("scenarios_available") and any(t.get("paths") for t in payload["teams"]):
+        groups = outcome_cards(payload["teams"], mode)
+        return [c for key in ("title", "playoffs", "seeding") for c in groups[key] if c["team"] == school], ""
+    cards = [c for c in insight_cards(payload.get("key_insights")) if c["team"] == school]
+    intro = (
+        f"Full scenarios appear once five or fewer region games remain; {left} are left. "
+        "Until then, these are results that settle a spot no matter what else happens."
+    )
+    return (cards, intro) if cards else ([], "")
+
+
+def _outcome_card(page: _Page, x: float, y: float, card: dict, draw: bool) -> float:
+    """One outcome: "Hatley wins the region IF", its chance, and the results, one way after another (OR).
+    Returns its height."""
+    d, t = page.draw, page.t
+    inner = COL_W - 2 * CARD_PAD
+    left = x + CARD_PAD
+    h = CARD_PAD + 8
+    pill_w = 136 if card.get("p") is not None and not card.get("continued") else 0
+    font = _inter(36, 700)
+    title = f"{card['title']} IF" + (" (continued)" if card.get("continued") else "")
+    lines = _wrap(d, title, font, inner - (pill_w + 20 if pill_w else 0))
+    if draw:
+        for i, line in enumerate(lines):
+            d.text((left, y + h + 34 + i * 48), line, font=font, fill=t.text, anchor="ls")
+        if pill_w:
+            page.pill(x + COL_W - CARD_PAD, y + h + 20, card["p"], pill_w, 56, 30)
+    h += 48 * len(lines) + 20
+    h += _conditions(page, left, y + h, inner, card["groups"], draw)
+    if card.get("more_ways"):
+        n = card["more_ways"]
+        if draw:
+            d.text(
+                (left, y + h + 34),
+                f"OR {n} more {'way' if n == 1 else 'ways'}: on the region page",
+                font=_inter(28, 600),
+                fill=t.text_2,
+                anchor="ls",
+            )
+        h += 50
+    if card.get("continues"):
+        if draw:
+            d.text((left, y + h + 34), "OR, continued in the next box", font=_inter(28, 600), fill=t.text_2, anchor="ls")
+        h += 50
+    return h + CARD_PAD
+
+
+def _split(page: _Page, card: dict, room: float) -> list[tuple[dict, float]]:
+    """A card as boxes that each fit *room*: the whole card when it fits; else its ways, in order and
+    whole, over as many boxes as they need, the first with the title and chance, each after it
+    "(continued)". Returns (box, height) pairs."""
+    h = _outcome_card(page, 0, 0, card, False)
+    if h <= room:
+        return [(card, h)]
+    boxes, rest, continued = [], list(card["groups"]), False
+    while rest:
+        n = 1
+        while n < len(rest):  # as many ways as fit, at least one
+            trial = {**card, "groups": rest[: n + 1], "continued": continued, "continues": n + 1 < len(rest)}
+            if _outcome_card(page, 0, 0, trial, False) > room:
+                break
+            n += 1
+        box = {**card, "groups": rest[:n], "continued": continued, "continues": n < len(rest)}
+        boxes.append((box, _outcome_card(page, 0, 0, box, False)))
+        rest, continued = rest[n:], True
+    return boxes
+
+
+def _rest_ways(boxes: list[tuple[dict, float]], box: dict) -> list:
+    """The ways of *box*'s outcome in the boxes after it (its continuations)."""
+    i = next(i for i, (b, _) in enumerate(boxes) if b is box)
+    out = []
+    for b, _ in boxes[i + 1 :]:
+        if not b.get("continued") or b["title"] != box["title"]:
+            break
+        out += b["groups"]
+    return out
+
+
+def _pack(cards: list[tuple[dict, float]], top: float, bottom: float) -> list[list[tuple[dict, float, float, float]]]:
+    """The cards in order onto pages of two columns, each into the shorter column it fits, else a new page.
+    A page is a list of (card, x, y, h)."""
+    pages: list[list] = [[]]
+    cols = [top, top]
+    for card, h in cards:
+        fits = [c for c in (0, 1) if cols[c] == top or cols[c] + h <= bottom]
+        if not fits:
+            pages.append([])
+            cols = [top, top]
+            fits = [0, 1]
+        c = min(fits, key=lambda c: cols[c])
+        pages[-1].append((card, PAD + c * (COL_W + COL_GAP), cols[c], h))
+        cols[c] += h + COL_GAP
+    return pages
+
+
+def render_team_scenarios(
+    clazz: int,
+    region: int,
+    season: int,
+    payload: dict,
+    school: str,
+    stamp: str,
+    mode: str,
+    theme: str = "dark",
+    teams: dict | None = None,
+    show_all: int = SHOW_ALL_PAGES,
+    capped: int = CAPPED_PAGES,
+) -> list[Image.Image]:
+    """What has to happen for the team, page after page: the region page's cards for it once it's picked
+    (each outcome with its chance in *mode* and the results that give it), under its helmet and name and
+    the region's standings with its row marked. [] when nothing is left to decide for it."""
+    cards, intro = team_outcomes(payload, school, mode)
+    if not cards:
+        return []
+    teams = teams or {}
+    team = next(t for t in payload["teams"] if t["school"] == school)
+    sub = f"{season} · Region {region}-{clazz}A · What has to happen"
+
+    def frame(page: _Page, n: int, total: int) -> tuple[float, float]:
+        """A page's title, standings and intro; returns where its cards go, top and bottom."""
+        top = _title(page, school, sub, mode)
+        if total > 1:
+            page.label(SIZE[0] - PAD, PAD + 84, f"{n} of {total}", 26, anchor="rs")
+        bx = PAD + 186
+        for kind, label in _badges(team, clazz, False):
+            bx += page.badge(bx, top + 44, kind, label, 26) + 12
+        top = _region_strip(page, top + 80, payload, mode, school)
+        for line in _wrap(page.draw, intro, _inter(32, 500), SIZE[0] - 2 * PAD) if intro else []:
+            top += 44
+            page.draw.text((PAD, top + 20), line, font=_inter(32, 500), fill=page.t.text_2, anchor="ls")
+        return top + (76 if intro else 36), _footer(page, stamp) - 20
+
+    scratch = _Page.new(theme, teams)
+    top, bottom = frame(scratch, 1, 2)
+    room = bottom - top
+    boxes = [box for card in cards for box in _split(scratch, card, room)]
+    pages = _pack(boxes, top, bottom)
+
+    # Up to *show_all* pages, all of them; more, the first *capped*, the last with room for where the rest is.
+    shown = pages if len(pages) <= show_all else [list(p) for p in pages[:capped]]
+    cut = len(shown) < len(pages)
+    if cut:
+        last = shown[-1]
+        while len(last) > 1 and max(y + h for _, _, y, h in last) + 90 > bottom:
+            last.pop(max(range(len(last)), key=lambda k: last[k][2]))
+        kept = {id(b) for p in shown for b, *_ in p}
+        # A box whose continuation didn't make it says where the rest of its ways are.
+        for p in shown:
+            for k, (b, x, y, h) in enumerate(p):
+                nxt = next((n for i, (n, _) in enumerate(boxes) if i and boxes[i - 1][0] is b), None)
+                if b.get("continues") and nxt is not None and id(nxt) not in kept:
+                    p[k] = ({**b, "continues": False, "more_ways": len(_rest_ways(boxes, b))}, x, y, h)
+        titles = {b["title"] for p in shown for b, *_ in p}
+        more = len({b["title"] for b, _ in boxes if b["title"] not in titles})
+    images = []
+    for n, items in enumerate(shown, start=1):
+        page = _Page.new(theme, teams)
+        frame(page, n, len(shown))
+        for card, x, y, h in items:
+            _boxed(page, x, y, h, lambda c=card, x=x, y=y: _outcome_card(page, x, y, c, True))
+        if n == len(shown) and cut:
+            rest = f"+{more} more {'outcome' if more == 1 else 'outcomes'}" if more else "The rest"
+            page.draw.text(
+                (PAD, bottom + 10),
+                f"{rest} at {SITE_HOST}{region_path(clazz, region)}?team={slugify(school)}",
+                font=_inter(34, 600),
+                fill=page.t.text,
+                anchor="ls",
+            )
+        images.append(page.img)
+    return images

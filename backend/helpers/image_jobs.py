@@ -30,6 +30,7 @@ from pathlib import Path
 REGION_OVERVIEW = ("backend.helpers.region_image", "render_region_overview")
 REGION_SCENARIOS = ("backend.helpers.region_image", "render_region_scenarios")
 TEAM_SEASON = ("backend.helpers.team_image", "render_team_season")
+TEAM_SCENARIOS = ("backend.helpers.team_image", "render_team_scenarios")
 
 # The code an image's look depends on; a change to any of it redraws every image.
 _CODE = (

@@ -18,7 +18,7 @@ import { matchTeams } from "./search.js";
 import {
   SHARE_VIEWS, SHARE_VERSIONS, SHARE_THEMES, shareVersions, shareDefaults, bracketImagePath, bracketImageName,
   REGION_MODES, regionModes, regionShareDefaults, regionImagePath, regionImageName, regionImageLabel,
-  regionIndexPath, regionPages, regionImages, teamPages, teamImagePath, teamImageName, teamImageLabel,
+  regionIndexPath, regionPages, regionImages, teamPages, teamImages, teamImagePath, teamImageName, teamImageLabel,
   bracketImageLabel,
 } from "./share.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -1613,9 +1613,9 @@ function shareButton(what) {
   return `<button type="button" class="share-button" data-share-open="${what}" aria-haspopup="dialog" aria-label="Share this ${what}" title="Share this ${what}">${SHARE_ICON}</button>`;
 }
 
-/** The share button in a team's expanded row, with its name: "Share Magee’s season". */
+/** The share button in a team's expanded row, with its name: "Share Magee". */
 function teamShareButton(school) {
-  return `<p class="detail__share"><button type="button" class="share-sheet__secondary" data-share-open="team" data-team="${esc(school)}" aria-haspopup="dialog">${SHARE_ICON}Share ${esc(school)}’s season</button></p>`;
+  return `<p class="detail__share"><button type="button" class="share-sheet__secondary" data-share-open="team" data-team="${esc(school)}" aria-haspopup="dialog">${SHARE_ICON}Share ${esc(school)}</button></p>`;
 }
 
 function shareDialog() {
@@ -1709,20 +1709,27 @@ async function regionIndex() {
 }
 
 /**
- * A team's images (its season: games, odds, standings, playoff road), in Projected or Toss-up odds,
- * light or dark, from its row on the region page.
+ * A team's images, from its row on the region page: its season (games, odds, standings, playoff
+ * road) and, while there's something left to decide for it, what has to happen; in Projected or
+ * Toss-up odds, light or dark. Its region's index says which there are and how many pages each has.
  */
 async function teamShareSpec(school) {
   const { season, clazz, region, asOf, modes, mode, summary } = regionShare;
   const index = await regionIndex();
   return {
-    title: `Share ${school}’s season`,
+    title: `Share ${school}`,
     when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
-    groups: () => [
-      ...(modes.length > 1 ? [{ label: "Odds", key: "mode", options: REGION_MODES }] : []),
-      { label: "Theme", key: "theme", options: SHARE_THEMES },
-    ],
+    groups: (c) => {
+      const images = teamImages(index, school, c);
+      return [
+        ...(images.length > 1 ? [{ label: "Image", key: "image", options: images }] : []),
+        ...(modes.length > 1 ? [{ label: "Odds", key: "mode", options: REGION_MODES }] : []),
+        { label: "Theme", key: "theme", options: SHARE_THEMES },
+      ];
+    },
     defaults: { ...regionShareDefaults({ mode, modes, dark: document.documentElement.classList.contains("dark") }), image: "season" },
+    // An image a mode or theme doesn't have (nothing to show there) falls back to the season.
+    fix: (c) => (teamPages(index, school, c) > 0 ? c : { ...c, image: "season" }),
     pages: (c) => Math.max(1, teamPages(index, school, c)),
     path: (c, page, pages) => teamImagePath(season, clazz, region, school, c, page, pages),
     version: asOf,

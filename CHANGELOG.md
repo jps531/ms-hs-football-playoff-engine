@@ -5,6 +5,16 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.12.0
+
+- **Share what has to happen for a team.** While a region still has games left, sharing a team from
+  its row on the region page also offers “What has to happen”: the outcomes the region page lists
+  for that team (winning the region, a playoff spot, each seed), each with its chance and the results
+  that give it, or before full scenarios, the results that settle a spot for it. A long list runs
+  over several pages; one that would need more than five stops at four and says how many more
+  outcomes are on the region page. The button in the team's row is now “Share Magee”, since it
+  offers more than the season.
+
 ## 1.11.0
 
 - **Share a team's season.** On a region page, a team's expanded row now has “Share Magee’s season”:

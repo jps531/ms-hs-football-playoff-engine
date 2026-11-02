@@ -129,7 +129,15 @@ export function regionImageLabel(clazz, region, { image, mode }) {
 // in the region's index under "teams": { "Magee": { season: { "projected-dark": 1, … } } }.
 
 /** The images a team's row offers, in order. */
-export const TEAM_IMAGES = [{ key: "season", label: "Season" }];
+export const TEAM_IMAGES = [
+  { key: "season", label: "Season" },
+  { key: "scenarios", label: "What has to happen" },
+];
+
+/** The team's images with something to show in this odds mode and theme, in TEAM_IMAGES order. */
+export function teamImages(index, school, { mode, theme }) {
+  return TEAM_IMAGES.filter((i) => teamPages(index, school, { image: i.key, mode, theme }) > 0);
+}
 
 /** How many pages the team's chosen image has, from its region's index; 0 when it has none. */
 export function teamPages(index, school, { image, mode, theme }) {
@@ -141,12 +149,16 @@ export function teamImagePath(season, clazz, region, school, { image, mode, them
   return `/static/region/${season}/${clazz}a-${region}-team-${slugify(school)}-${image}-${mode}-${theme}${pages > 1 ? `-${page}` : ""}.png`;
 }
 
-/** A page's file name when shared or saved: "magee-season-2026.png", "magee-season-2026-tossup.png". */
+/** A page's file name when shared or saved: "magee-season-2026.png", "magee-scenarios-2026-tossup-2.png". */
 export function teamImageName(season, school, { image, mode }, page = 1, pages = 1) {
   return `${slugify(school)}-${image}-${season}${mode === "tossup" ? "-tossup" : ""}${pages > 1 ? `-${page}` : ""}.png`;
 }
 
-/** What the image shows, for its alt text and the share sheet: "Magee’s 2026 season, with Projected odds". */
-export function teamImageLabel(season, school, { mode }) {
-  return `${school}’s ${season} season, with ${mode === "tossup" ? "Toss-up" : "Projected"} odds`;
+/**
+ * What the image shows, for its alt text and the share sheet: "Magee’s 2026 season, with Projected
+ * odds", "What has to happen for Magee, with Toss-up odds".
+ */
+export function teamImageLabel(season, school, { image = "season", mode }) {
+  const odds = `with ${mode === "tossup" ? "Toss-up" : "Projected"} odds`;
+  return image === "scenarios" ? `What has to happen for ${school}, ${odds}` : `${school}’s ${season} season, ${odds}`;
 }
