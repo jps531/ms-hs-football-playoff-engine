@@ -55,8 +55,10 @@ async def list_games(
 ) -> list[GameModel]:
     """Return games filtered by season, class, region, team, and/or date range.
 
-    Each game appears once (from team_a's perspective). When a ``team`` filter
-    is supplied, games are listed from that team's perspective.
+    Each game appears once (from team_a's perspective), a rematch (a playoff game between teams that met
+    in the regular season) as a game of its own. When a ``team`` filter is supplied, games are listed
+    from that team's perspective. A game's ``date`` is its own date, the same in both schools' rows (the
+    later of the two when the schools' schedules date it a day or so apart), and the date filters use it.
 
     The win probabilities (``pregame_prob``, ``live_prob``, ``prob_as_of``) are
     the owner's only: the site doesn't pick winners, so the public API doesn't
@@ -71,13 +73,13 @@ async def list_games(
         ("ss.class = %s", class_),
         ("ss.region = %s", region),
         ("g.school = %s", team),
-        ("g.date >= %s", date_from),
-        ("g.date <= %s", date_to),
+        ("g.game_date >= %s", date_from),
+        ("g.game_date <= %s", date_to),
     )
 
     where_clause = and_join_conditions(conditions)
     query = sql.SQL("""
-        SELECT g.school, g.opponent, g.date, g.points_for, g.points_against,
+        SELECT g.school, g.opponent, g.game_date, g.points_for, g.points_against,
                g.location, g.region_game, g.game_status, g.season,
                COALESCE(l.name, cvl.name), COALESCE(l.city, cvl.city),
                COALESCE(l.latitude, cvl.latitude), COALESCE(l.longitude, cvl.longitude),
@@ -91,7 +93,8 @@ async def list_games(
                g.game_quarter, g.game_clock, g.source,
                g.pregame_prob, g.pregame_prob_computed_at,
                g.ot_period_start_score_for, g.ot_period_start_score_against, g.ot_next_possession,
-               elo_school.elo, elo_opponent.elo
+               elo_school.elo, elo_opponent.elo,
+               g.game_id
         FROM games_effective g
         JOIN school_seasons ss ON g.school = ss.school AND g.season = ss.season
         LEFT JOIN locations l ON g.location_id = l.id
@@ -100,7 +103,7 @@ async def list_games(
         LEFT JOIN locations cvl ON cvl.id = cv.location_id
         LEFT JOIN helmet_designs hd_a ON hd_a.id = g.helmet_design_id
         LEFT JOIN games_effective g_opp
-          ON g_opp.school = g.opponent AND g_opp.date = g.date AND g_opp.season = g.season
+          ON g_opp.game_id = g.game_id AND g_opp.school = g.opponent
         LEFT JOIN helmet_designs hd_b ON hd_b.id = g_opp.helmet_design_id
         LEFT JOIN LATERAL (
           SELECT elo FROM team_ratings
@@ -115,7 +118,7 @@ async def list_games(
           ORDER BY as_of_date DESC LIMIT 1
         ) elo_opponent ON TRUE
         WHERE {}
-        ORDER BY g.date, g.school
+        ORDER BY g.game_date, g.school
     """).format(where_clause)
     async with get_conn() as conn:
         rows = [r async for r in await conn.execute(query, params)]

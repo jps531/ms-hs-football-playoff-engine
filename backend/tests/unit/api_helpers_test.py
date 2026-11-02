@@ -1199,6 +1199,7 @@ def _game_row(
     ot_next_possession: str | None = None,
     elo_school: float | None = None,
     elo_opponent: float | None = None,
+    game_id: int | None = None,
 ) -> tuple:
     """Build a raw /games join row tuple matching build_game_models' expected shape."""
     return (
@@ -1231,6 +1232,7 @@ def _game_row(
         ot_next_possession,
         elo_school,
         elo_opponent,
+        game_id,
     )
 
 
@@ -1432,6 +1434,22 @@ class TestBuildGameModels:
         ]
         result = build_game_models(rows, team_filter=None)
         assert len(result) == 1
+
+    def test_a_games_two_rows_share_its_id_and_a_rematch_is_a_game_of_its_own(self):
+        """A playoff rematch of a regular-season game is listed too (it was dropped when games were told
+        apart by their two teams alone), and each game carries its id."""
+        nov = date(2025, 11, 28)
+        rows = [
+            _game_row("Raleigh", "Seminary", pf=27, pa=21, game_id=7),
+            _game_row("Seminary", "Raleigh", pf=21, pa=27, game_id=7),
+            _game_row("Raleigh", "Seminary", game_date=nov, pf=27, pa=14, region_game=False, game_id=9),
+            _game_row("Seminary", "Raleigh", game_date=nov, pf=14, pa=27, region_game=False, game_id=9),
+        ]
+        result = build_game_models(rows, team_filter=None)
+        assert [(g.game_id, g.date, g.score_a, g.score_b) for g in result] == [
+            (7, _DATE, 27, 21),
+            (9, nov, 27, 14),
+        ]
 
     def test_canonical_order_swaps_when_school_after_opponent(self):
         """When the row's school sorts after its opponent, fields are swapped to canonical order."""

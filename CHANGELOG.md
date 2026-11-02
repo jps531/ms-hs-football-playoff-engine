@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.12.1
+
+- **Fixed: the games list left out a rematch.** A playoff game between two teams that had already met
+  in the regular season (29 of 2025's playoff games, the Raleigh–Seminary semifinal among them) was
+  missing from the site's list of games, which the region pages and the API use. The site's own
+  pages didn't show those games there (brackets and playoff roads come from the bracket), but the
+  API's list was incomplete. It now lists every game.
+- **One date for a game.** When the two schools' schedules date a game a day apart, the games list
+  now gives it the same date from either side: the later one, the date the standings count it on.
+  Before, it gave the earlier one, so a region page looked at as of the earlier day showed the
+  result while its standings didn't count it yet (Region 1-5A as of Oct 15, 2026 listed New Hope's
+  41–14 win over Columbus under Completed games, with New Hope still 1–0 in the region).
+
 ## 1.12.0
 
 - **Share what has to happen for a team.** While a region still has games left, sharing a team from
