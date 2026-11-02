@@ -1277,7 +1277,9 @@ class TestComputeEmbeddedGameProbs:
 
     def test_not_live_status_returns_live_prob_none(self):
         """A terminal/not-started status never produces a live_prob."""
-        _, live_prob, _ = compute_embedded_game_probs(_inputs(persisted_pregame_prob=0.5, status="final"))
+        _, live_prob, _ = compute_embedded_game_probs(
+            _inputs(persisted_pregame_prob=0.5, status="final")
+        )
         assert live_prob is None
 
     def test_regulation_live_prob_computed(self):

@@ -232,6 +232,7 @@ class School:
     primary_color: str = ""
     secondary_color: str = ""
 
+
     @classmethod
     def from_db_tuple(cls, row: Iterable):
         """Create a School object from a database row tuple or sequence.

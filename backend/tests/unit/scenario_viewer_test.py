@@ -240,30 +240,21 @@ def test_render_margin_condition_sum_eq():
     """op='==' with 2 addends renders as 'combined total exactly N'."""
     mc = MarginCondition(add=(_NWR_PET, _OG_PRL), sub=(), op="==", threshold=10)
     result = render_margin_condition(mc, _DUMMY_ATOM)
-    assert (
-        result
-        == "Northwest Rankin/Petal's and Oak Grove/Pearl's winning margins add up to exactly 10 (a margin over 12 counts as 12)"
-    )
+    assert result == "Northwest Rankin/Petal's and Oak Grove/Pearl's winning margins add up to exactly 10 (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_positive():
     """op='==' diff with positive t renders as 'A exceeds B by exactly N'."""
     mc = MarginCondition(add=(_NWR_PET,), sub=(_OG_PRL,), op="==", threshold=2)
     result = render_margin_condition(mc, _DUMMY_ATOM)
-    assert (
-        result
-        == "Northwest Rankin/Petal wins by exactly 2 more points than Oak Grove/Pearl (a margin over 12 counts as 12)"
-    )
+    assert result == "Northwest Rankin/Petal wins by exactly 2 more points than Oak Grove/Pearl (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_negative():
     """op='==' diff with negative t renders as 'B exceeds A by exactly N'."""
     mc = MarginCondition(add=(_NWR_PET,), sub=(_OG_PRL,), op="==", threshold=-3)
     result = render_margin_condition(mc, _DUMMY_ATOM)
-    assert (
-        result
-        == "Oak Grove/Pearl wins by exactly 3 more points than Northwest Rankin/Petal (a margin over 12 counts as 12)"
-    )
+    assert result == "Oak Grove/Pearl wins by exactly 3 more points than Northwest Rankin/Petal (a margin over 12 counts as 12)"
 
 
 def test_render_margin_condition_diff_eq_zero():

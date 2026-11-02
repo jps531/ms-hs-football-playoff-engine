@@ -1222,8 +1222,7 @@ class TestLeakeCounty2025:
         """South Delta (R6#2) has exactly 3 scenarios: 2 will-host, 1 will-not-host."""
         qf = self._result()[2]
         south_delta_scenarios = [
-            sc
-            for sc in list(qf.will_host) + list(qf.will_not_host)
+            sc for sc in list(qf.will_host) + list(qf.will_not_host)
             if any(c.region == 6 and c.seed == 2 for c in sc.conditions)
         ]
         assert len(south_delta_scenarios) == 3
@@ -1234,8 +1233,7 @@ class TestLeakeCounty2025:
         County's own disambiguator is attached."""
         qf = self._result()[2]
         sc = next(
-            sc
-            for sc in qf.will_host
+            sc for sc in qf.will_host
             if any(c.region == 6 and c.seed == 2 for c in sc.conditions)
             and any(c.team_name == "Bogue Chitto" for c in sc.conditions)
         )
@@ -1248,8 +1246,7 @@ class TestLeakeCounty2025:
         R2 path doesn't matter here, so only South Delta's own disambiguator is attached."""
         qf = self._result()[2]
         sc = next(
-            sc
-            for sc in qf.will_host
+            sc for sc in qf.will_host
             if any(c.region == 6 and c.seed == 2 for c in sc.conditions)
             and any(c.team_name == "West Lincoln" for c in sc.conditions)
         )
@@ -1900,11 +1897,7 @@ class TestEnumerateReachScenariosForTeam:
     def test_preclinch_prepends_seed_required_per_achievable_seed(self):
         """Each achievable seed's groups get a seed_required condition prepended."""
         groups = enumerate_reach_scenarios_for_team(
-            5,
-            None,
-            SLOTS_1A_4A_2025,
-            "Quarterfinals",
-            achievable_seeds=[1, 2],
+            5, None, SLOTS_1A_4A_2025, "Quarterfinals", achievable_seeds=[1, 2],
         )
         # 2 achievable seeds x 2 QF groups per seed = 4 total.
         assert len(groups) == 4
@@ -1916,11 +1909,7 @@ class TestEnumerateReachScenariosForTeam:
     def test_preclinch_merges_across_achievable_seeds(self):
         """Groups from every achievable seed appear in the merged result."""
         groups = enumerate_reach_scenarios_for_team(
-            5,
-            None,
-            SLOTS_1A_4A_2025,
-            "Second Round",
-            achievable_seeds=[1, 2, 3],
+            5, None, SLOTS_1A_4A_2025, "Second Round", achievable_seeds=[1, 2, 3],
         )
         seeds_seen = {group[0].seed for group in groups}
         assert seeds_seen == {1, 2, 3}
@@ -1928,11 +1917,7 @@ class TestEnumerateReachScenariosForTeam:
     def test_preclinch_first_round_still_just_seed_required(self):
         """Pre-clinch First Round has one group per achievable seed, each just seed_required."""
         groups = enumerate_reach_scenarios_for_team(
-            5,
-            None,
-            SLOTS_1A_4A_2025,
-            "First Round",
-            achievable_seeds=[1, 2],
+            5, None, SLOTS_1A_4A_2025, "First Round", achievable_seeds=[1, 2],
         )
         assert len(groups) == 2
         for group in groups:
@@ -1948,11 +1933,7 @@ class TestEnumerateReachScenariosForTeam:
         """An achievable seed that doesn't correspond to any slot in this region's
         half is skipped rather than raising, while valid seeds still contribute."""
         groups = enumerate_reach_scenarios_for_team(
-            5,
-            None,
-            SLOTS_1A_4A_2025,
-            "Quarterfinals",
-            achievable_seeds=[1, 99],
+            5, None, SLOTS_1A_4A_2025, "Quarterfinals", achievable_seeds=[1, 99],
         )
         seeds_seen = {group[0].seed for group in groups}
         assert seeds_seen == {1}

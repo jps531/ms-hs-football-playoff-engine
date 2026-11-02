@@ -58,7 +58,9 @@ _ATOMS = build_scenario_atoms(_TEAMS, _COMPLETED, _REMAINING)
 _SCENARIOS = enumerate_division_scenarios(_TEAMS, _COMPLETED, _REMAINING)
 
 _SR = determine_scenarios(_TEAMS, _COMPLETED, _REMAINING)
-_ODDS = determine_odds(_TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom)
+_ODDS = determine_odds(
+    _TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom
+)
 
 _DIV_DICT = division_scenarios_as_dict(_SCENARIOS)
 _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
@@ -357,18 +359,12 @@ def test_div_dict_scenario_keys():
 
 def test_div_dict_scenario1a_title():
     """Scenario 1a title: JC beats FC by 1–7 AND HAZ beats CS."""
-    assert (
-        _DIV_DICT["1a"]["title"]
-        == "Jefferson County beats Franklin County by 1\u20137 AND Hazlehurst beats Crystal Springs"
-    )
+    assert _DIV_DICT["1a"]["title"] == "Jefferson County beats Franklin County by 1\u20137 AND Hazlehurst beats Crystal Springs"
 
 
 def test_div_dict_scenario1b_title():
     """Scenario 1b title: JC beats FC by 8 or more AND HAZ beats CS."""
-    assert (
-        _DIV_DICT["1b"]["title"]
-        == "Jefferson County beats Franklin County by 8 or more AND Hazlehurst beats Crystal Springs"
-    )
+    assert _DIV_DICT["1b"]["title"] == "Jefferson County beats Franklin County by 8 or more AND Hazlehurst beats Crystal Springs"
 
 
 def test_div_dict_scenario2_title():

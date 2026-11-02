@@ -208,9 +208,7 @@ def find_ahsfhs_schedule_for_schools(schools: list[School], season: int) -> list
                 text or "", season=season, school_name=school.school, url=url, clazz=school.class_
             )
         except Exception:
-            logger.error(
-                "Failed to fetch/parse AHSFHS schedule for %r via %s; skipping", school.school, url, exc_info=True
-            )
+            logger.error("Failed to fetch/parse AHSFHS schedule for %r via %s; skipping", school.school, url, exc_info=True)
             failed_schools.append(school.school)
             continue
 
@@ -451,9 +449,7 @@ def insert_rows(game_records: Iterable[Game]) -> int:
             changed = cur.fetchall()
             cur.execute(_UPSERT_SQL)
             cur.execute(_DROP_INCOMING_SQL)
-            regrouped = [
-                c for season in sorted({r.season for r in game_records}) for c in reconcile_game_ids(cur, season)
-            ]
+            regrouped = [c for season in sorted({r.season for r in game_records}) for c in reconcile_game_ids(cur, season)]
         conn.commit()
 
     for school, old_date, new_date, opponent in moved:

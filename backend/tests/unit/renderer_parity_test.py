@@ -45,14 +45,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 # Two positions meeting in a playoff game: same region, cross-region with different seeds, and
 # equal seeds from lower/higher-numbered regions (the odd/even-year tiebreak).
-HOST_PAIRS = [
-    ((1, 1), (1, 3)),
-    ((1, 4), (1, 2)),
-    ((1, 2), (2, 3)),
-    ((3, 4), (2, 1)),
-    ((1, 2), (4, 2)),
-    ((5, 1), (2, 1)),
-]
+HOST_PAIRS = [((1, 1), (1, 3)), ((1, 4), (1, 2)), ((1, 2), (2, 3)), ((3, 4), (2, 1)), ((1, 2), (4, 2)), ((5, 1), (2, 1))]
 RUNNER = ROOT / "nginx" / "tests" / "parity" / "run.mjs"
 
 

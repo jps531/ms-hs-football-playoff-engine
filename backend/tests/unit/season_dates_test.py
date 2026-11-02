@@ -236,18 +236,9 @@ class TestContinuousWeekNumbering:
         assert entries[date(2025, 8, 27)].kind == "season_start"
 
         for i, d in enumerate(
-            [
-                date(2025, 8, 28),
-                date(2025, 9, 4),
-                date(2025, 9, 11),
-                date(2025, 9, 18),
-                date(2025, 9, 25),
-                date(2025, 10, 2),
-                date(2025, 10, 9),
-                date(2025, 10, 16),
-                date(2025, 10, 23),
-                date(2025, 10, 30),
-            ],
+            [date(2025, 8, 28), date(2025, 9, 4), date(2025, 9, 11), date(2025, 9, 18),
+             date(2025, 9, 25), date(2025, 10, 2), date(2025, 10, 9), date(2025, 10, 16),
+             date(2025, 10, 23), date(2025, 10, 30)],
             start=1,
         ):
             assert entries[d].week == i

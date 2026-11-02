@@ -381,11 +381,7 @@ async def upsert_school_season(school: str, season: int, body: UpsertSchoolSeaso
         _log.info("admin: copied identity from '%s' to '%s'", body.copy_identity_from, school)
     _log.info(
         "admin: upsert school_season school=%s season=%s class=%s region=%s is_active=%s",
-        school,
-        season,
-        body.class_,
-        body.region,
-        body.is_active,
+        school, season, body.class_, body.region, body.is_active,
     )
     return {
         "school": school,

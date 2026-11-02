@@ -69,13 +69,8 @@ async def list_ratings(
         rows = await conn.execute(query, params)
         return [
             TeamRatingModel(
-                school=r[0],
-                season=r[1],
-                elo=r[2],
-                rpi=r[3],
-                as_of_date=r[4],
-                games_played=r[5],
-                computed_at=r[6],
+                school=r[0], season=r[1], elo=r[2], rpi=r[3],
+                as_of_date=r[4], games_played=r[5], computed_at=r[6],
             )
             async for r in rows
         ]

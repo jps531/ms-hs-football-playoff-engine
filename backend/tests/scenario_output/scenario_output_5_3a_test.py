@@ -37,7 +37,11 @@ _ALL_GAMES = _FIXTURE["games"]
 
 _TEAMS = teams_from_games(_ALL_GAMES)  # alphabetical: Pisgah, Quitman, SE Lauderdale, St. Andrew's, Union
 _COMPLETED = get_completed_games(expand_results([g for g in _ALL_GAMES if g["date"] <= _CUTOFF]))
-_REMAINING = [RemainingGame(*sorted([g["winner"], g["loser"]])) for g in _ALL_GAMES if g["date"] > _CUTOFF]
+_REMAINING = [
+    RemainingGame(*sorted([g["winner"], g["loser"]]))
+    for g in _ALL_GAMES
+    if g["date"] > _CUTOFF
+]
 # Remaining: [RemainingGame('Pisgah', 'Union'), RemainingGame('Quitman', "St. Andrew's")]
 
 _ATOMS = build_scenario_atoms(_TEAMS, _COMPLETED, _REMAINING)
@@ -85,7 +89,9 @@ def test_atoms_all_unconditional():
     """Every atom is an empty-condition list — outcome is set regardless of final games."""
     for team, seed_map in _ATOMS.items():
         for seed, atoms in seed_map.items():
-            assert atoms == [[]], f"{team!r} seed {seed}: expected [[]] (unconditional), got {atoms!r}"
+            assert atoms == [[]], (
+                f"{team!r} seed {seed}: expected [[]] (unconditional), got {atoms!r}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -101,18 +107,7 @@ def test_scenario_count():
 def test_scenario_single_entry_shape():
     """The single scenario has all required keys."""
     sc = _SCENARIOS[0]
-    assert set(sc.keys()) == {
-        "scenario_num",
-        "sub_label",
-        "seeding",
-        "game_winners",
-        "conditions_atom",
-        "alternatives",
-        "open_groups",
-        "open_places",
-        "place_terms",
-        "explanation",
-    }
+    assert set(sc.keys()) == {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "alternatives", "open_groups", "open_places", "place_terms", "explanation"}
 
 
 def test_scenario_num_and_label():
@@ -150,15 +145,7 @@ def test_div_dict_single_key():
 def test_div_dict_entry_shape():
     """Entry has exactly the required keys."""
     entry = _DIV_DICT["1"]
-    assert set(entry.keys()) == {
-        "title",
-        "one_seed",
-        "two_seed",
-        "three_seed",
-        "four_seed",
-        "eliminated",
-        "open_groups",
-    }
+    assert set(entry.keys()) == {"title", "one_seed", "two_seed", "three_seed", "four_seed", "eliminated", "open_groups"}
 
 
 def test_div_dict_title_empty():
@@ -228,7 +215,9 @@ def test_team_dict_all_weighted_odds_none():
     """weighted_odds is None for all entries (no win-probability function supplied)."""
     for team, team_entry in _TEAM_DICT.items():
         for key, val in team_entry.items():
-            assert val["weighted_odds"] is None, f"{team!r} key {key!r}: expected weighted_odds=None"
+            assert val["weighted_odds"] is None, (
+                f"{team!r} key {key!r}: expected weighted_odds=None"
+            )
 
 
 def test_team_dict_unconditional_scenario_string():
@@ -236,7 +225,9 @@ def test_team_dict_unconditional_scenario_string():
     expected = {"Union": 1, "Quitman": 2, "Southeast Lauderdale": 3, "Pisgah": 4}
     for team, seed in expected.items():
         scenarios = _TEAM_DICT[team][seed]["scenarios"]
-        assert scenarios == [""], f"{team!r} seed {seed}: expected [''] (unconditional), got {scenarios!r}"
+        assert scenarios == [""], (
+            f"{team!r} seed {seed}: expected [''] (unconditional), got {scenarios!r}"
+        )
 
 
 def test_team_dict_st_andrews_elimination_odds():

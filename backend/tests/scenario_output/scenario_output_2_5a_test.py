@@ -60,7 +60,9 @@ _ATOMS = build_scenario_atoms(_TEAMS, _COMPLETED, _REMAINING)
 _SCENARIOS = enumerate_division_scenarios(_TEAMS, _COMPLETED, _REMAINING)
 
 _SR = determine_scenarios(_TEAMS, _COMPLETED, _REMAINING)
-_ODDS = determine_odds(_TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom)
+_ODDS = determine_odds(
+    _TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom
+)
 
 _DIV_DICT = division_scenarios_as_dict(_SCENARIOS)
 _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
@@ -525,12 +527,16 @@ def test_div_dict_scenario_keys():
 
 def test_div_dict_scenario1a_title():
     """Scenario 1a: HCC beats FLO AND VB beats Lanier by 1–8 (CC/PRO irrelevant)."""
-    assert _DIV_DICT["1a"]["title"] == ("Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20138")
+    assert _DIV_DICT["1a"]["title"] == (
+        "Holmes County Central beats Florence AND Vicksburg beats Lanier by 1\u20138"
+    )
 
 
 def test_div_dict_scenario1b_title():
     """Scenario 1b: HCC beats FLO AND VB beats Lanier by 9 or more (CC/PRO irrelevant)."""
-    assert _DIV_DICT["1b"]["title"] == ("Holmes County Central beats Florence AND Vicksburg beats Lanier by 9 or more")
+    assert _DIV_DICT["1b"]["title"] == (
+        "Holmes County Central beats Florence AND Vicksburg beats Lanier by 9 or more"
+    )
 
 
 def test_div_dict_scenario2_title():

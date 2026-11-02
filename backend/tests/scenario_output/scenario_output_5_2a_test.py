@@ -208,11 +208,7 @@ def test_atoms_sc_seed1_includes_margin_5_plus():
     atoms = _ATOMS["Scott Central"][1]
     # Find the atom that contains a margin-constrained SC GameResult
     margin_alt = next(
-        (
-            a
-            for a in atoms
-            if any(isinstance(gr, GameResult) and gr.winner == "Scott Central" and gr.min_margin == 5 for gr in a)
-        ),
+        (a for a in atoms if any(isinstance(gr, GameResult) and gr.winner == "Scott Central" and gr.min_margin == 5 for gr in a)),
         None,
     )
     assert margin_alt is not None, "No 5+ margin alternative found for SC seed 1"
@@ -250,18 +246,7 @@ def test_scenario_count():
 
 def test_scenario_shape():
     """Every scenario has the required keys."""
-    required = {
-        "scenario_num",
-        "sub_label",
-        "seeding",
-        "game_winners",
-        "conditions_atom",
-        "alternatives",
-        "open_groups",
-        "open_places",
-        "place_terms",
-        "explanation",
-    }
+    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "alternatives", "open_groups", "open_places", "place_terms", "explanation"}
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required
 
@@ -276,9 +261,13 @@ def test_scenario_sub_labels():
     """Only scenario 2 has sub-labels ('a' and 'b'); scenarios 1 and 3 have no sub-label."""
     for sc in _SCENARIOS:
         if sc["scenario_num"] == 2:
-            assert sc["sub_label"] in ("a", "b"), f"Scenario 2 unexpected sub_label: {sc['sub_label']!r}"
+            assert sc["sub_label"] in ("a", "b"), (
+                f"Scenario 2 unexpected sub_label: {sc['sub_label']!r}"
+            )
         else:
-            assert sc["sub_label"] == "", f"Scenario {sc['scenario_num']} should have no sub_label"
+            assert sc["sub_label"] == "", (
+                f"Scenario {sc['scenario_num']} should have no sub_label"
+            )
 
 
 def test_scenario_seedings_five_teams():
@@ -291,22 +280,26 @@ def test_scenario_seedings_five_teams():
 def test_newton_always_fourth():
     """Newton is always #4 (position index 3) in every scenario."""
     for sc in _SCENARIOS:
-        assert sc["seeding"][3] == "Newton", f"Scenario {sc['scenario_num']}{sc['sub_label']}: Newton not at #4"
+        assert sc["seeding"][3] == "Newton", (
+            f"Scenario {sc['scenario_num']}{sc['sub_label']}: Newton not at #4"
+        )
 
 
 def test_puckett_always_eliminated():
     """Puckett is always last (position index 4, eliminated) in every scenario."""
     for sc in _SCENARIOS:
-        assert sc["seeding"][4] == "Puckett", f"Scenario {sc['scenario_num']}{sc['sub_label']}: Puckett not eliminated"
+        assert sc["seeding"][4] == "Puckett", (
+            f"Scenario {sc['scenario_num']}{sc['sub_label']}: Puckett not eliminated"
+        )
 
 
 def test_scenario_seedings_cover_all_combos():
     """The four scenarios cover the three possible top-3 orderings (2a and 2b differ)."""
     seedings = {sc["seeding"] for sc in _SCENARIOS}
     expected = {
-        ("Lake", "Pelahatchie", "Scott Central", "Newton", "Puckett"),  # scenario 3
-        ("Lake", "Scott Central", "Pelahatchie", "Newton", "Puckett"),  # scenario 2a
-        ("Scott Central", "Lake", "Pelahatchie", "Newton", "Puckett"),  # scenarios 1 and 2b
+        ("Lake",          "Pelahatchie",   "Scott Central", "Newton", "Puckett"),  # scenario 3
+        ("Lake",          "Scott Central", "Pelahatchie",   "Newton", "Puckett"),  # scenario 2a
+        ("Scott Central", "Lake",          "Pelahatchie",   "Newton", "Puckett"),  # scenarios 1 and 2b
     }
     assert seedings == expected
 
@@ -330,14 +323,18 @@ def test_non_sub_scenarios_conditions_atom_none():
     """Scenarios 1 and 3 (no sub-labels) have conditions_atom=None."""
     for sc in _SCENARIOS:
         if sc["sub_label"] == "":
-            assert sc["conditions_atom"] is None, f"Scenario {sc['scenario_num']} unexpectedly has conditions_atom"
+            assert sc["conditions_atom"] is None, (
+                f"Scenario {sc['scenario_num']} unexpectedly has conditions_atom"
+            )
 
 
 def test_sub_scenarios_have_conditions_atom():
     """Scenarios 2a and 2b both have a non-None conditions_atom."""
     for sc in _SCENARIOS:
         if sc["scenario_num"] == 2:
-            assert sc["conditions_atom"] is not None, f"Scenario 2{sc['sub_label']} missing conditions_atom"
+            assert sc["conditions_atom"] is not None, (
+                f"Scenario 2{sc['sub_label']} missing conditions_atom"
+            )
 
 
 def test_scenario_2a_conditions_atom():
@@ -396,13 +393,17 @@ def test_div_dict_always_one_eliminated():
 def test_div_dict_puckett_always_eliminated():
     """Puckett is always the eliminated team."""
     for key, entry in _DIV_DICT.items():
-        assert entry["eliminated"] == ["Puckett"], f"key {key!r}: unexpected eliminated team {entry['eliminated']}"
+        assert entry["eliminated"] == ["Puckett"], (
+            f"key {key!r}: unexpected eliminated team {entry['eliminated']}"
+        )
 
 
 def test_div_dict_newton_always_four_seed():
     """Newton is always the four_seed."""
     for key, entry in _DIV_DICT.items():
-        assert entry["four_seed"] == "Newton", f"key {key!r}: Newton not at #4"
+        assert entry["four_seed"] == "Newton", (
+            f"key {key!r}: Newton not at #4"
+        )
 
 
 def test_div_dict_scenario1_title():
@@ -545,10 +546,10 @@ def test_team_dict_weighted_odds_none():
 @pytest.mark.parametrize(
     "team,expected",
     [
-        ("Lake", LAKE_EXPECTED),
-        ("Newton", NEWTON_EXPECTED),
-        ("Pelahatchie", PELAHATCHIE_EXPECTED),
-        ("Puckett", PUCKETT_EXPECTED),
+        ("Lake",          LAKE_EXPECTED),
+        ("Newton",        NEWTON_EXPECTED),
+        ("Pelahatchie",   PELAHATCHIE_EXPECTED),
+        ("Puckett",       PUCKETT_EXPECTED),
         ("Scott Central", SCOTT_CENTRAL_EXPECTED),
     ],
 )
@@ -589,8 +590,8 @@ def test_render_sc_contains_margin_text():
 @pytest.mark.parametrize(
     "team,seeds",
     [
-        ("Lake", [1, 2]),
-        ("Pelahatchie", [2, 3]),
+        ("Lake",          [1, 2]),
+        ("Pelahatchie",   [2, 3]),
         ("Scott Central", [1, 2, 3]),
     ],
 )

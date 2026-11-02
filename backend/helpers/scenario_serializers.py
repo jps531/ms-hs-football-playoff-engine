@@ -10,6 +10,7 @@ Round-trip guarantee:
     deserialize_complete_scenarios(serialize_complete_scenarios(cs)) == cs
 """
 
+
 from backend.helpers.data_classes import (
     GameResult,
     HomeGameCondition,

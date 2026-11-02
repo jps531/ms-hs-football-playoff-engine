@@ -201,12 +201,8 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         [f"3a-{r}-overview-{v}.png" for r in (6, 7) for v in variants]
         + [f"3a-{r}-team-{slugify(s)}-season-{v}.png" for r in (6, 7) for s in schools for v in variants]
     )
-    assert Image.open(
-        tmp_path / "region" / "2026" / f"3a-6-team-{slugify(schools[0])}-season-tossup-dark.png"
-    ).size == (
-        2160,
-        2700,
-    )
+    team = tmp_path / "region" / "2026" / f"3a-6-team-{slugify(schools[0])}-season-tossup-dark.png"
+    assert Image.open(team).size == (2160, 2700)
     assert json.loads((tmp_path / "region" / "2026" / "3a-6.json").read_text()) == {
         "overview": dict.fromkeys(variants, 1),
         "scenarios": dict.fromkeys(variants, 0),

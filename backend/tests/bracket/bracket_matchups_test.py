@@ -310,9 +310,7 @@ def test_merge_combines_modes_and_folds_long_tails_into_other():
         listed = g["matchups"]
         assert all(max(m["p_matchup"], m["p_matchup_weighted"]) >= 0.005 for m in listed)
         assert sum(m["p_matchup"] for m in listed) + g["other"]["p_matchup"] == pytest.approx(1.0, abs=1e-3)
-        assert sum(m["p_matchup_weighted"] for m in listed) + g["other"]["p_matchup_weighted"] == pytest.approx(
-            1.0, abs=1e-3
-        )
+        assert sum(m["p_matchup_weighted"] for m in listed) + g["other"]["p_matchup_weighted"] == pytest.approx(1.0, abs=1e-3)
     # The pairings folded into ``other`` are counted: possible (above 0) but under the floor in both modes.
     for t, w, g in zip(tossup, projected, games, strict=True):
         both = {

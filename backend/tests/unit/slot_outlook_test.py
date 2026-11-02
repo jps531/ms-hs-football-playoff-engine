@@ -32,15 +32,8 @@ def _odds(school: str, p1: float = 0.0, p2: float = 0.0, p3: float = 0.0, p4: fl
     """Build a StandingsOdds with arbitrary per-seed probabilities."""
     p = p1 + p2 + p3 + p4
     return StandingsOdds(
-        school=school,
-        p1=p1,
-        p2=p2,
-        p3=p3,
-        p4=p4,
-        p_playoffs=p,
-        final_playoffs=p,
-        clinched=p >= 0.999,
-        eliminated=p <= 0.0,
+        school=school, p1=p1, p2=p2, p3=p3, p4=p4,
+        p_playoffs=p, final_playoffs=p, clinched=p >= 0.999, eliminated=p <= 0.0,
     )
 
 
@@ -298,7 +291,9 @@ class TestBuildSlotOutlookTeamsLaterRounds:
         by_school = {t.school: t for t in teams}
         for region, school in ((1, "R1S1"), (2, "R2S4"), (3, "R3S2"), (4, "R4S3")):
             region_odds = by_region[region]
-            expected_reach = compute_bracket_advancement_odds(region, region_odds, SLOTS_1A_4A_2025)[school].semifinals
+            expected_reach = compute_bracket_advancement_odds(region, region_odds, SLOTS_1A_4A_2025)[
+                school
+            ].semifinals
             expected_host = compute_semifinal_home_odds(region, region_odds, SLOTS_1A_4A_2025, SEASON)[school]
             assert by_school[school].p_reach == pytest.approx(expected_reach)
             assert by_school[school].p_host_overall == pytest.approx(expected_host)
@@ -338,15 +333,8 @@ class TestBuildSlotOutlookTeamsLaterRounds:
         by the eliminated branch of compute_bracket_advancement_odds, and is
         excluded from the outlook despite passing the candidate-seed check."""
         stale = StandingsOdds(
-            school="Stale",
-            p1=1.0,
-            p2=0.0,
-            p3=0.0,
-            p4=0.0,
-            p_playoffs=1.0,
-            final_playoffs=1.0,
-            clinched=True,
-            eliminated=True,
+            school="Stale", p1=1.0, p2=0.0, p3=0.0, p4=0.0,
+            p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=True,
         )
         by_region = {
             1: {"Stale": stale},
@@ -408,14 +396,8 @@ class TestBuildSlotOutlookTeamsHostConditions:
         """A clinched home-seed team's host_conditions is a single empty AND-group (unconditional)."""
         by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
         teams = build_slot_outlook_teams(
-            1,
-            "first_round",
-            by_region,
-            SLOTS_5A_7A_2025,
-            SEASON,
-            seed_atoms_by_region={1: None, 2: None},
-            game_dates_by_region={},
-            team_lookup={},
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         alpha = next(t for t in teams if t.school == "Alpha")
@@ -425,14 +407,8 @@ class TestBuildSlotOutlookTeamsHostConditions:
         """A clinched away-seed team's host_conditions is an empty list (never hosts this round)."""
         by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
         teams = build_slot_outlook_teams(
-            1,
-            "first_round",
-            by_region,
-            SLOTS_5A_7A_2025,
-            SEASON,
-            seed_atoms_by_region={1: None, 2: None},
-            game_dates_by_region={},
-            team_lookup={},
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         beta = next(t for t in teams if t.school == "Beta")
@@ -449,14 +425,8 @@ class TestBuildSlotOutlookTeamsHostConditions:
             2: None,
         }
         teams = build_slot_outlook_teams(
-            1,
-            "first_round",
-            by_region,
-            SLOTS_5A_7A_2025,
-            SEASON,
-            seed_atoms_by_region=seed_atoms_by_region,
-            game_dates_by_region={},
-            team_lookup={},
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region=seed_atoms_by_region, game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         alpha = next(t for t in teams if t.school == "Alpha")
@@ -475,14 +445,8 @@ class TestBuildSlotOutlookTeamsHostConditions:
             2: {"Beta": _locked("Beta", 4)},
         }
         teams = build_slot_outlook_teams(
-            1,
-            "first_round",
-            by_region,
-            SLOTS_5A_7A_2025,
-            SEASON,
-            seed_atoms_by_region={1: None, 2: None},
-            game_dates_by_region={},
-            team_lookup={},
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         alpha = next(t for t in teams if t.school == "Alpha")
@@ -502,14 +466,9 @@ class TestBuildSlotOutlookTeamsHostConditions:
             4: {"R4S3": _locked("R4S3", 3)},
         }
         teams = build_slot_outlook_teams(
-            1,
-            "quarterfinals",
-            by_region,
-            SLOTS_1A_4A_2025,
-            SEASON,
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
             seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
-            game_dates_by_region={},
-            team_lookup={},
+            game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         r1s1 = next(t for t in teams if t.school == "R1S1")
@@ -537,14 +496,8 @@ class TestBuildSlotOutlookTeamsReachConditions:
         """Reaching First Round needs nothing beyond the seed itself -- a single empty AND-group."""
         by_region = {1: {"Alpha": _locked("Alpha", 1)}, 2: {"Beta": _locked("Beta", 4)}}
         teams = build_slot_outlook_teams(
-            1,
-            "first_round",
-            by_region,
-            SLOTS_5A_7A_2025,
-            SEASON,
-            seed_atoms_by_region={1: None, 2: None},
-            game_dates_by_region={},
-            team_lookup={},
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         for t in teams:
@@ -560,14 +513,9 @@ class TestBuildSlotOutlookTeamsReachConditions:
             4: {"R4S3": _locked("R4S3", 3)},
         }
         teams = build_slot_outlook_teams(
-            1,
-            "quarterfinals",
-            by_region,
-            SLOTS_1A_4A_2025,
-            SEASON,
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
             seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
-            game_dates_by_region={},
-            team_lookup={},
+            game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         r1s1 = next(t for t in teams if t.school == "R1S1")
@@ -587,14 +535,9 @@ class TestBuildSlotOutlookTeamsReachConditions:
             4: {"R4S3": _locked("R4S3", 3)},
         }
         teams = build_slot_outlook_teams(
-            1,
-            "quarterfinals",
-            by_region,
-            SLOTS_1A_4A_2025,
-            SEASON,
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
             seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
-            game_dates_by_region={},
-            team_lookup={},
+            game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         for t in teams:
@@ -611,14 +554,9 @@ class TestBuildSlotOutlookTeamsReachConditions:
             4: {"R4S3": _locked("R4S3", 3)},
         }
         teams = build_slot_outlook_teams(
-            1,
-            "quarterfinals",
-            by_region,
-            SLOTS_1A_4A_2025,
-            SEASON,
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
             seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
-            game_dates_by_region={},
-            team_lookup={},
+            game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         r1s1 = next(t for t in teams if t.school == "R1S1")
@@ -633,14 +571,8 @@ class TestBuildSlotOutlookTeamsReachConditions:
             2: {"Beta": _locked("Beta", 4)},
         }
         teams = build_slot_outlook_teams(
-            1,
-            "first_round",
-            by_region,
-            SLOTS_5A_7A_2025,
-            SEASON,
-            seed_atoms_by_region={1: None, 2: None},
-            game_dates_by_region={},
-            team_lookup={},
+            1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON,
+            seed_atoms_by_region={1: None, 2: None}, game_dates_by_region={}, team_lookup={},
         )
         assert teams is not None
         alpha = next(t for t in teams if t.school == "Alpha")

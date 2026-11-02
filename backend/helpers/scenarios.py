@@ -770,18 +770,18 @@ def compute_bracket_odds(
     for school, o in odds.items():
         p = o.p_playoffs
         # Wins still needed to reach each milestone; 0 means already there (→ 1.0).
-        r2_wins = max(0, 1 - rounds_completed)
-        qf_wins = max(0, (num_rounds - 3) - rounds_completed)
-        sf_wins = max(0, (num_rounds - 2) - rounds_completed)
-        fin_wins = max(0, (num_rounds - 1) - rounds_completed)
-        champ_wins = max(0, num_rounds - rounds_completed)
+        r2_wins   = max(0, 1              - rounds_completed)
+        qf_wins   = max(0, (num_rounds-3) - rounds_completed)
+        sf_wins   = max(0, (num_rounds-2) - rounds_completed)
+        fin_wins  = max(0, (num_rounds-1) - rounds_completed)
+        champ_wins = max(0, num_rounds    - rounds_completed)
         result[school] = BracketOdds(
             school=school,
-            second_round=p * (0.5**r2_wins) if num_rounds >= 5 else 0.0,
-            quarterfinals=p * (0.5**qf_wins),
-            semifinals=p * (0.5**sf_wins),
-            finals=p * (0.5**fin_wins),
-            champion=p * (0.5**champ_wins),
+            second_round=p * (0.5 ** r2_wins) if num_rounds >= 5 else 0.0,
+            quarterfinals=p * (0.5 ** qf_wins),
+            semifinals=p * (0.5 ** sf_wins),
+            finals=p * (0.5 ** fin_wins),
+            champion=p * (0.5 ** champ_wins),
         )
     return result
 

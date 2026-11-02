@@ -144,7 +144,8 @@ ACTIVE_SCHOOL_FILTER = (
     " AND active.season = region_standings.season AND active.is_active)"
 )
 ACTIVE_SCHOOL_JOIN_RS = (
-    " JOIN school_seasons active ON active.school = rs.school AND active.season = rs.season AND active.is_active"
+    " JOIN school_seasons active"
+    " ON active.school = rs.school AND active.season = rs.season AND active.is_active"
 )
 CLINCHED_THRESHOLD = 1 - CERTAIN_EPS
 """Minimum seeding probability that reads as a clinched seed: only a certainty reaches it, since odds that
@@ -886,7 +887,6 @@ def scenarios_to_entries(complete_scenarios: list[dict] | None) -> list[Scenario
     """Convert complete scenario dicts to ``ScenarioEntry`` response objects, or ``None`` if empty."""
     if not complete_scenarios:
         return None
-
     def described(atom: list) -> list[dict]:
         """The atom's conditions as dicts, each tiebreaker decision and margin comparison with its sentence."""
         out = []
@@ -1320,14 +1320,9 @@ def attach_hosting_scenarios(
             continue
 
         (
-            seed,
-            achievable_seeds,
-            p_reach,
-            p_host_given_reach,
-            p_host_overall,
-            p_reach_w,
-            p_host_given_reach_w,
-            p_host_overall_w,
+            seed, achievable_seeds,
+            p_reach, p_host_given_reach, p_host_overall,
+            p_reach_w, p_host_given_reach_w, p_host_overall_w,
         ) = resolve_hosting_scenario_inputs(odds, entry)
 
         home_scenarios = enumerate_home_game_scenarios(
@@ -2373,7 +2368,11 @@ async def load_region_fallback_snapshots(  # pragma: no cover
     async for school, region, *odds in rows:
         tossup.setdefault(region, {})[school] = {s: float(odds[s - 1] or 0.0) for s in (1, 2, 3, 4)}
         projected.setdefault(region, {})[school] = {s: float(odds[s + 3] or 0.0) for s in (1, 2, 3, 4)}
-    return {r: (found[r][0], tossup[r], projected.get(r, {}), found[r][1], found[r][2]) for r in keys if r in tossup}
+    return {
+        r: (found[r][0], tossup[r], projected.get(r, {}), found[r][1], found[r][2])
+        for r in keys
+        if r in tossup
+    }
 
 
 async def load_playoff_results(  # pragma: no cover

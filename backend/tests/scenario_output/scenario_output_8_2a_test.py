@@ -275,18 +275,7 @@ def test_scenario_count():
 
 def test_scenario_shape():
     """Every scenario has the required keys."""
-    required = {
-        "scenario_num",
-        "sub_label",
-        "seeding",
-        "game_winners",
-        "conditions_atom",
-        "alternatives",
-        "open_groups",
-        "open_places",
-        "place_terms",
-        "explanation",
-    }
+    required = {"scenario_num", "sub_label", "seeding", "game_winners", "conditions_atom", "alternatives", "open_groups", "open_places", "place_terms", "explanation"}
     for sc in _SCENARIOS:
         assert set(sc.keys()) == required
 
@@ -300,7 +289,9 @@ def test_scenario_nums_sequential():
 def test_scenario_no_sub_labels():
     """No scenario has a sub-label — no margin-sensitive tiebreaker splits."""
     for sc in _SCENARIOS:
-        assert sc["sub_label"] == "", f"scenario {sc['scenario_num']} has unexpected sub_label {sc['sub_label']!r}"
+        assert sc["sub_label"] == "", (
+            f"scenario {sc['scenario_num']} has unexpected sub_label {sc['sub_label']!r}"
+        )
 
 
 def test_scenario_seedings_five_teams():
@@ -309,17 +300,19 @@ def test_scenario_seedings_five_teams():
         assert len(sc["seeding"]) == 5, (
             f"scenario {sc['scenario_num']} seeding has {len(sc['seeding'])} teams, expected 5"
         )
-        assert set(sc["seeding"]) == set(_TEAMS), f"scenario {sc['scenario_num']} seeding missing teams"
+        assert set(sc["seeding"]) == set(_TEAMS), (
+            f"scenario {sc['scenario_num']} seeding missing teams"
+        )
 
 
 def test_scenario_seedings_cover_all_combos():
     """The four scenarios cover all four possible seeding combinations."""
     seedings = {sc["seeding"] for sc in _SCENARIOS}
     expected = {
-        ("East Marion", "North Forrest", "Collins", "Sacred Heart", "Perry Central"),
-        ("North Forrest", "Collins", "East Marion", "Sacred Heart", "Perry Central"),
-        ("East Marion", "North Forrest", "Collins", "Perry Central", "Sacred Heart"),
-        ("North Forrest", "Collins", "Perry Central", "East Marion", "Sacred Heart"),
+        ("East Marion",   "North Forrest", "Collins",       "Sacred Heart",   "Perry Central"),
+        ("North Forrest", "Collins",       "East Marion",   "Sacred Heart",   "Perry Central"),
+        ("East Marion",   "North Forrest", "Collins",       "Perry Central",  "Sacred Heart"),
+        ("North Forrest", "Collins",       "Perry Central", "East Marion",    "Sacred Heart"),
     }
     assert seedings == expected
 
@@ -384,7 +377,9 @@ def test_div_dict_titles_contain_and():
 def test_div_dict_always_one_eliminated():
     """Every scenario has exactly one eliminated team."""
     for key, entry in _DIV_DICT.items():
-        assert len(entry["eliminated"]) == 1, f"key {key!r} has {len(entry['eliminated'])} eliminated teams, expected 1"
+        assert len(entry["eliminated"]) == 1, (
+            f"key {key!r} has {len(entry['eliminated'])} eliminated teams, expected 1"
+        )
 
 
 def test_div_dict_pc_or_sh_always_eliminated():
@@ -416,7 +411,9 @@ def test_div_dict_nf_and_collins_swap_together():
     for key, entry in _DIV_DICT.items():
         nf_is_1 = entry["one_seed"] == "North Forrest"
         col_is_2 = entry["two_seed"] == "Collins"
-        assert nf_is_1 == col_is_2, f"key {key!r}: NF and Collins swapped unexpectedly"
+        assert nf_is_1 == col_is_2, (
+            f"key {key!r}: NF and Collins swapped unexpectedly"
+        )
 
 
 def test_div_dict_scenario1_title():
@@ -543,7 +540,9 @@ def test_team_dict_weighted_odds_none():
     """weighted_odds is None for all entries (no win-probability function supplied)."""
     for team, team_entry in _TEAM_DICT.items():
         for key, val in team_entry.items():
-            assert val["weighted_odds"] is None, f"{team!r} key {key!r}: expected weighted_odds=None"
+            assert val["weighted_odds"] is None, (
+                f"{team!r} key {key!r}: expected weighted_odds=None"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -554,11 +553,11 @@ def test_team_dict_weighted_odds_none():
 @pytest.mark.parametrize(
     "team,expected",
     [
-        ("Collins", COLLINS_EXPECTED),
-        ("East Marion", EAST_MARION_EXPECTED),
+        ("Collins",       COLLINS_EXPECTED),
+        ("East Marion",   EAST_MARION_EXPECTED),
         ("North Forrest", NORTH_FORREST_EXPECTED),
         ("Perry Central", PERRY_CENTRAL_EXPECTED),
-        ("Sacred Heart", SACRED_HEART_EXPECTED),
+        ("Sacred Heart",  SACRED_HEART_EXPECTED),
     ],
 )
 def test_render_team_scenarios_with_odds(team, expected):
@@ -570,18 +569,20 @@ def test_render_team_scenarios_with_odds(team, expected):
 @pytest.mark.parametrize(
     "team,seeds",
     [
-        ("Collins", [2, 3]),
-        ("East Marion", [1, 3, 4]),
+        ("Collins",       [2, 3]),
+        ("East Marion",   [1, 3, 4]),
         ("North Forrest", [1, 2]),
         ("Perry Central", [3, 4]),
-        ("Sacred Heart", [4]),
+        ("Sacred Heart",  [4]),
     ],
 )
 def test_render_team_scenarios_without_odds(team, seeds):
     """render_team_scenarios without odds produces '#N seed if:' blocks with no percentages."""
     result = render_team_scenarios(team, _ATOMS)
     for seed in seeds:
-        assert f"#{seed} seed if:" in result, f"{team!r}: expected '#{seed} seed if:' in output without odds"
+        assert f"#{seed} seed if:" in result, (
+            f"{team!r}: expected '#{seed} seed if:' in output without odds"
+        )
     assert "%" not in result, f"{team!r}: percentage should not appear when odds not supplied"
 
 

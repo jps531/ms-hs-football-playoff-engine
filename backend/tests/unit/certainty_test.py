@@ -30,7 +30,6 @@ def _honest(p):
 
 class TestHelpers:
     """keep_uncertain and settle: how chances are kept off, or snapped onto, 0 and 1."""
-
     def test_floor_is_far_outside_the_cutoff(self):
         """Every reader's cutoff sits well inside the floor, so a kept-uncertain chance never reads as certain."""
         assert CERTAIN_EPS < UNCERTAIN_FLOOR
@@ -58,7 +57,6 @@ class TestHelpers:
 
 class TestDetermineOdds:
     """determine_odds: 0% and 100% only for places the endings prove."""
-
     def test_tiny_real_chance_is_not_zero(self):
         """A seed some ending gives, with a share smaller than any rounding keeps, isn't 0%."""
         counts = ({"A": 1.0 - 1e-20, "B": 1e-20}, {"A": 1e-20, "B": 1.0 - 1e-20}, {}, {})
@@ -103,13 +101,10 @@ def _round_robin(teams):
 
 class TestDetermineScenarios:
     """determine_scenarios: what the endings prove, enumerated or sampled."""
-
     def test_four_team_region_everyone_clinched(self):
         """Four teams, four spots: every team is in whatever happens, in both modes."""
         teams = ["A", "B", "C", "D"]
-        r = determine_scenarios(
-            teams, [], _round_robin(teams), win_prob_fn=lambda a, b, d, loc: 0.9, ignore_margins=True
-        )
+        r = determine_scenarios(teams, [], _round_robin(teams), win_prob_fn=lambda a, b, d, loc: 0.9, ignore_margins=True)
         odds, odds_w = odds_from_results(teams, r)
         assert all(5 not in seen for seen in r.places_seen.values()) and not r.sampled
         for t in teams:
@@ -155,7 +150,6 @@ class TestDetermineScenarios:
 
 class TestResponseModels:
     """The response models settle chances computed on demand and pass stored ones through."""
-
     def test_bracket_odds_settle_on_demand_values(self):
         """Bracket odds snap float noise on 0 or 1 and keep a tiny real chance (in either mode) at the floor."""
         b = BracketAdvancementOdds(

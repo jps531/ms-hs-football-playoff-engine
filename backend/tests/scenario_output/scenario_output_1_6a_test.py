@@ -73,7 +73,9 @@ _ATOMS = build_scenario_atoms(_TEAMS, _COMPLETED, _REMAINING)
 _SCENARIOS = enumerate_division_scenarios(_TEAMS, _COMPLETED, _REMAINING)
 
 _SR = determine_scenarios(_TEAMS, _COMPLETED, _REMAINING)
-_ODDS = determine_odds(_TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom)
+_ODDS = determine_odds(
+    _TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom
+)
 
 _DIV_DICT = division_scenarios_as_dict(_SCENARIOS)
 _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
@@ -195,7 +197,9 @@ def test_lc_ob_game_absent_from_all_atoms():
             for atom in atoms:
                 for cond in atom:
                     if isinstance(cond, GameResult):
-                        assert {cond.winner, cond.loser} != lc_ob, f"{team} seed {seed} atom references LC/OB game"
+                        assert {cond.winner, cond.loser} != lc_ob, (
+                            f"{team} seed {seed} atom references LC/OB game"
+                        )
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +434,8 @@ def test_div_dict_scenario1b_seeds():
     assert s["two_seed"] == "Lake Cormorant"
     assert s["three_seed"] == "Center Hill"
     assert s["four_seed"] == "Grenada"
+
+
 
 
 def test_div_dict_sp_always_one():

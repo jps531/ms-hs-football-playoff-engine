@@ -53,7 +53,9 @@ _ATOMS = build_scenario_atoms(_TEAMS, _COMPLETED, _REMAINING)
 _SCENARIOS = enumerate_division_scenarios(_TEAMS, _COMPLETED, _REMAINING)
 
 _SR = determine_scenarios(_TEAMS, _COMPLETED, _REMAINING)
-_ODDS = determine_odds(_TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom)
+_ODDS = determine_odds(
+    _TEAMS, _SR.first_counts, _SR.second_counts, _SR.third_counts, _SR.fourth_counts, _SR.denom
+)
 
 _DIV_DICT = division_scenarios_as_dict(_SCENARIOS)
 _TEAM_DICT = team_scenarios_as_dict(_ATOMS, odds=_ODDS)
@@ -213,7 +215,9 @@ def test_atoms_mendenhall_raymond_game_absent():
                 for cond in atom:
                     if isinstance(cond, GameResult):
                         pair = {cond.winner, cond.loser}
-                        assert pair != men_ray_teams, f"{team} seed {seed} atom references Mendenhall/Raymond game"
+                        assert pair != men_ray_teams, (
+                            f"{team} seed {seed} atom references Mendenhall/Raymond game"
+                        )
 
 
 # ---------------------------------------------------------------------------

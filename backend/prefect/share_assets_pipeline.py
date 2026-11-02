@@ -411,9 +411,10 @@ def _region_image_jobs(
     teams: dict,
     bracket: dict,
 ) -> list[ImageJob]:
-    """The region's overview and scenarios, and each team's season, in each odds mode it has (Projected only while there are
-    Projected odds) and each theme. Each job carries only what its image shows, so its fingerprint changes only when
-    the image would: the snapshot and computation times aren't drawn, so they're left out."""
+    """The region's overview and scenarios, and each of its teams' season, in each odds mode it has
+    (Projected only while there are Projected odds) and each theme. Each job carries only what its image
+    shows, so its fingerprint changes only when the image would: the snapshot and computation times
+    aren't drawn, so they're left out."""
     shown = {k: v for k, v in payload.items() if k not in ("computation_state", "as_of_date")}
     region_teams = {t["school"]: teams.get(t["school"]) for t in payload["teams"]}
     unplayed = [

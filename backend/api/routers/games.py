@@ -132,9 +132,7 @@ async def pregame_win_probability(
     team_b: Annotated[str, Query()],
     season: SeasonQ,
     location: Annotated[str | None, Query()] = None,
-    date: Annotated[
-        date | None, Query(description="Use Elo ratings as of this date. Defaults to the latest available.")
-    ] = None,
+    date: Annotated[date | None, Query(description="Use Elo ratings as of this date. Defaults to the latest available.")] = None,
 ) -> PreGameWinProbResponse:
     """Return pre-game win probability using Elo ratings stored for *season*.
 
@@ -234,15 +232,9 @@ async def games_upsets(
         rows = await conn.execute(query, params)
         upsets = [
             UpsetModel(
-                school=school,
-                opponent=opponent,
-                date=game_date,
-                points_for=pf,
-                points_against=pa,
-                pregame_prob=prob,
-                class_=class_,
-                region=region,
-                region_game=region_game,
+                school=school, opponent=opponent, date=game_date,
+                points_for=pf, points_against=pa, pregame_prob=prob,
+                class_=class_, region=region, region_game=region_game,
             )
             async for school, opponent, game_date, pf, pa, prob, class_, region, region_game in rows
         ]

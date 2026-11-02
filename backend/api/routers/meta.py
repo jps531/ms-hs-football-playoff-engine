@@ -504,9 +504,7 @@ async def list_championships(
             ChampionshipVenueModel(
                 season=r[0],
                 class_=r[1],
-                location=LocationDetailModel(
-                    id=r[2], name=r[3], city=r[4], home_team=r[5], latitude=r[6], longitude=r[7]
-                ),
+                location=LocationDetailModel(id=r[2], name=r[3], city=r[4], home_team=r[5], latitude=r[6], longitude=r[7]),
                 has_games=r[8],
             )
             async for r in rows

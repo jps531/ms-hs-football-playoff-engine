@@ -47,7 +47,6 @@ def test_the_sources_are_still_asked_for_the_old_name():
 
 def test_other_schools_games_against_it_are_filed_under_the_new_name():
     """An opponent's schedule that still says Leake Central files the 2026 game under Leake."""
-
     def opponent(season: int) -> str:
         """The opponent's name on a parsed Neshoba Central game against Leake Central in *season*."""
         text = f"Opponent Score Fri., Oct. 2 vs. Leake Central 21 14 W {season} Season Totals"

@@ -49,7 +49,7 @@ _REGIONS_CYCLE_URLS: dict[int, str] = {
 _SEASON_OVERRIDES: dict[int, list[dict]] = {
     2025: [
         {"school": "Leake Central", "class": 4, "region": 5},
-        {"school": "Leake County", "class": 1, "region": 5},
+        {"school": "Leake County",  "class": 1, "region": 5},
     ],
 }
 
