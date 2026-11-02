@@ -399,10 +399,10 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
     *17 helmet_a fields, *17 helmet_b fields, round, kickoff, overtime, final,
     quarter, clock, source, pregame_prob, pregame_prob_computed_at,
     ot_period_start_score_for, ot_period_start_score_against, ot_next_possession,
-    elo_school, elo_opponent)``.
+    elo_school, elo_opponent, game_id)``.
 
-    When *team_filter* is ``None``, symmetric game pairs (school/opponent both
-    appearing as separate rows) are deduplicated to one entry, canonicalised so
+    When *team_filter* is ``None``, a game's two rows (one per school, sharing its
+    ``game_id``) are deduplicated to one entry, canonicalised so
     ``team_a`` is alphabetically first — swapping scores, location, and helmets
     to match.  When *team_filter* is set, every row is kept from that team's
     perspective with no deduplication or canonicalisation.
@@ -412,7 +412,7 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
     is canonicalised the raw row's probabilities are flipped via ``1 - p``
     rather than recomputed, since the underlying Elo model is symmetric.
     """
-    seen_pairs: set[frozenset] = set()
+    seen_games: set = set()
     games: list[GameModel] = []
     for (
         school,
@@ -441,7 +441,8 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
             ot_next_possession,
             elo_school,
             elo_opponent,
-        ) = rest[41:48]
+            game_id,
+        ) = rest[41:49]
 
         pregame_prob, live_prob, prob_as_of = compute_embedded_game_probs(
             EmbeddedProbInputs(
@@ -462,10 +463,12 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
         )
 
         if team_filter is None:
-            pair = frozenset([school, opponent])
-            if pair in seen_pairs:
+            # One entry per game: its two rows share a game_id. Not one per pair of teams, which drops a
+            # rematch (a playoff game between region opponents, say).
+            key = game_id if game_id is not None else (frozenset([school, opponent]), game_date)
+            if key in seen_games:
                 continue
-            seen_pairs.add(pair)
+            seen_games.add(key)
             if school > opponent:
                 school, opponent = opponent, school
                 pf, pa = pa, pf
@@ -478,6 +481,7 @@ def build_game_models(rows: list[tuple], team_filter: str | None) -> list[GameMo
         venue = VenueModel(name=v_name, city=v_city, latitude=v_lat, longitude=v_lon) if v_name else None
         games.append(
             GameModel(
+                game_id=game_id,
                 season=gseason,
                 date=game_date,
                 team_a=school,

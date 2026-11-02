@@ -217,7 +217,9 @@ A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Co
 | POST | `/probability/overtime` | **(owner)** MHSAA OT win probability. Body: `pregame_prob`, `ot_scored_margin` |
 | GET | `/upsets` | **(owner)** Finished games sorted by the winner's pregame win probability, ascending (biggest upsets first). Params: `season` (required), `date_from`/`date_to` (optional, independent bounds — without either, defaults to the week containing the most recent final game so newly-finalized upsets appear immediately), `limit` (default 10) |
 
-Each game includes `final` (bool), `round` (e.g. `"first_round"`, `"quarterfinals"` — `null` for regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
+Without `team`, each game is listed once, `team_a` the alphabetically first school. A game is told apart by its `game_id` (one id for both schools' rows), so a rematch, such as a playoff game between teams that met in the regular season, is a game of its own. With `team`, the team's games are listed from its side (`team_a` is the team). A game's `date` is the game's own date, the same from either side: when the two schools' schedules date it a day or so apart, the later of the two, as the standings count it. `date_from`/`date_to` filter by it.
+
+Each game includes `game_id`, `final` (bool), `round` (`"First Round"`, `"Second Round"`, `"Quarterfinals"`, `"Semifinals"`, `"Championship Game"`; `null` in the regular season), `kickoff_time`, `overtime` (0 for regulation), `game_quarter`, `game_clock`, and `source`.
 
 Each game also includes `helmet_a` / `helmet_b` — the full helmet design record (see `/helmets` below) worn by `team_a`/`team_b` in that game, or `null`. These are populated **only** from that team's explicit `helmet_design_id` assignment on the game (see `PUT /games/{school}/{date}/helmet` below) — never inferred from a school's primary or most-recent design. A `null` value means the frontend should apply the resolution order documented under "Primary helmet & display resolution order" to pick a fallback for display.
 
