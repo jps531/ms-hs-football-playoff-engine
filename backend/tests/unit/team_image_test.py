@@ -88,3 +88,142 @@ def test_the_road_stops_at_a_loss_and_a_champion_gets_the_trophy():
     assert len(set(right.getdata())) == 1
     final = [_won(r, "X") for r in ("First Round", "Second Round", "Quarterfinals", "Semifinals", "Championship Game")]
     assert sum(1 for px in draw(final).getdata() if px == GOLD) > 1000
+
+
+# ----------------------------------------------------------------- what has to happen
+
+from backend.helpers.region_image import CAPPED_PAGES, SHOW_ALL_PAGES  # noqa: E402
+from backend.helpers.team_image import _split, render_team_scenarios, team_outcomes  # noqa: E402
+from backend.prefect.share_assets_pipeline import _outcomes_payload  # noqa: E402
+from backend.tests.unit.static_pages_test import _cond, _odds, _seed  # noqa: E402
+
+SIX = ["Raleigh", "Seminary", "Magee", "Mize", "Taylorsville", "Bay Springs"]
+
+
+def _ways(n: int) -> list[list[dict]]:
+    """*n* ways, each two results."""
+    return [
+        [
+            {"type": "game_result", "school": SIX[k % 6], "opponent": SIX[(k + 1) % 6], "min_margin": 1 + k},
+            {"type": "game_result", "school": SIX[(k + 2) % 6], "opponent": SIX[(k + 3) % 6]},
+        ]
+        for k in range(n)
+    ]
+
+
+def _with_paths(seeds: dict[int, int], left: int = 3) -> dict:
+    """Raleigh with a path to each seed in *seeds* (seed: its number of ways); the others without paths."""
+    raleigh = {
+        **TEAMS[0],
+        "school": "Raleigh",
+        "odds": _odds(0.25, 0.25, 0.25, 0.25),
+        "paths": [_seed(s, _ways(n)) for s, n in seeds.items()],
+    }
+    others = [{**TEAMS[0], "school": s, "odds": _odds(0, 0, 0, 0), "paths": []} for s in SIX[1:]]
+    return {
+        "teams": [raleigh, *others],
+        "remaining_games": [{"team_a": "Raleigh", "team_b": "Mize"}] * left,
+        "scenarios_available": True,
+        "key_insights": [],
+    }
+
+
+def test_the_teams_cards_are_the_region_pages_in_its_order():
+    cards, intro = team_outcomes(_with_paths({2: 1, 1: 1, 3: 1}), "Raleigh", "tossup")
+    assert [c["title"] for c in cards] == [
+        "Raleigh wins the region",
+        "Raleigh finishes as the #2 seed",
+        "Raleigh finishes as the #3 seed",
+    ]
+    assert intro == ""
+    assert team_outcomes(_with_paths({1: 1}), "Seminary", "tossup") == ([], "")  # nothing left for it
+    assert team_outcomes(_with_paths({1: 1}, left=0), "Raleigh", "tossup") == ([], "")
+
+
+def test_no_image_when_nothing_is_left_to_decide_for_the_team():
+    assert render_team_scenarios(3, 6, 2026, _with_paths({1: 1}), "Seminary", "x", "tossup") == []
+    pages = render_team_scenarios(3, 6, 2026, _with_paths({1: 2, 2: 2}), "Raleigh", "x", "projected", "light")
+    assert len(pages) == 1 and pages[0].size == SIZE
+
+
+def test_before_full_scenarios_the_results_that_settle_a_spot():
+    payload = {
+        "teams": [{**TEAMS[0], "school": s, "odds": _odds(0.2, 0.2, 0.2, 0.2)} for s in SIX],
+        "remaining_games": [{"team_a": "Raleigh", "team_b": "Mize"}] * 8,
+        "scenarios_available": False,
+        "key_insights": [
+            {
+                "insight_type": "clinch_seed",
+                "team": "Raleigh",
+                "seed": 1,
+                "conditions": [{"winner": "Raleigh", "loser": "Mize"}],
+                "rendered": "Raleigh clinches the region: Raleigh beats Mize",
+            }
+        ],
+    }
+    cards, intro = team_outcomes(payload, "Raleigh", "tossup")
+    assert len(cards) == 1 and intro.startswith("Full scenarios appear once five or fewer region games remain; 8")
+    assert len(render_team_scenarios(3, 6, 2026, payload, "Raleigh", "x", "tossup")) == 1
+
+
+def test_a_card_too_tall_for_a_page_continues_in_the_next_box_with_every_way():
+    page = _Page.new("dark", {})
+    card = {"team": "Raleigh", "title": "Raleigh wins the region", "p": 0.5, "groups": _ways(60)}
+    boxes = _split(page, card, 1600)
+    assert len(boxes) > 1 and all(h <= 1600 for _, h in boxes)
+    assert [w for b, _ in boxes for w in b["groups"]] == card["groups"]  # every way, in order, once
+    assert [b.get("continued", False) for b, _ in boxes] == [False] + [True] * (len(boxes) - 1)
+    assert [b["continues"] for b, _ in boxes] == [True] * (len(boxes) - 1) + [False]
+
+
+def test_a_list_up_to_five_pages_is_shown_in_full_and_a_longer_one_stops_at_four():
+    needed = {}
+    for n in range(10, 400, 10):
+        payload = _with_paths({1: n, 2: n})
+        needed.setdefault(len(render_team_scenarios(3, 6, 2026, payload, "Raleigh", "x", "tossup", show_all=99)), n)
+        if max(needed) > SHOW_ALL_PAGES:
+            break
+    assert SHOW_ALL_PAGES in needed and max(needed) > SHOW_ALL_PAGES
+    full = _with_paths({1: needed[SHOW_ALL_PAGES], 2: needed[SHOW_ALL_PAGES]})
+    assert len(render_team_scenarios(3, 6, 2026, full, "Raleigh", "x", "tossup")) == SHOW_ALL_PAGES
+    long = _with_paths({1: needed[max(needed)], 2: needed[max(needed)]})
+    assert len(render_team_scenarios(3, 6, 2026, long, "Raleigh", "x", "tossup")) == CAPPED_PAGES
+
+
+def test_a_teams_job_carries_only_its_own_paths_and_insights():
+    paths = _with_paths({1: 1})
+    paths["teams"][1]["paths"] = [_seed(2, _cond("Seminary", "Mize"))]
+    mine = _outcomes_payload(paths, "Raleigh")
+    assert [bool(t.get("paths")) for t in mine["teams"]] == [True] + [False] * 5
+    assert mine["scenarios_available"] is True and mine["key_insights"] == []
+    assert team_outcomes(mine, "Raleigh", "tossup") == team_outcomes(paths, "Raleigh", "tossup")
+    # A team without paths of its own, once full scenarios exist, has nothing to show (as on the page).
+    none = {**paths, "teams": [{**t, "paths": []} if t["school"] == "Mize" else t for t in paths["teams"]]}
+    assert team_outcomes(_outcomes_payload(none, "Mize"), "Mize", "tossup") == ([], "")
+
+
+def test_the_pipeline_draws_each_teams_what_has_to_happen_and_indexes_it(tmp_path):
+    from datetime import date
+
+    from backend.helpers.image_jobs import TEAM_SCENARIOS, draw_images
+    from backend.prefect.share_assets_pipeline import _region_image_jobs, region_indexes
+
+    paths = _with_paths({1: 1, 2: 1})
+    payload = {k: v for k, v in paths.items() if k != "key_insights"}
+    payload["teams"] = [{k: v for k, v in t.items() if k != "paths"} for t in paths["teams"]]
+    jobs = _region_image_jobs(3, 6, 2026, payload, [], [], date(2026, 10, 9), date(2026, 10, 10), {}, {}, paths)
+    mine = [j for j in jobs if j.renderer == TEAM_SCENARIOS]
+    assert {j.kwargs["school"] for j in mine} == set(SIX)  # one job each (a team with nothing to show draws no file)
+    assert mine[0].path == "region/2026/3a-6-team-raleigh-scenarios-projected-dark.png"
+    files: dict[str, list[str]] = {}
+    draw_images(tmp_path, mine, files_out=files)
+    index = region_indexes(2026, mine, files)["region/2026/3a-6.json"]
+    variants = [f"{m}-{t}" for m in ("projected", "tossup") for t in ("dark", "light")]
+    assert index["teams"]["Raleigh"]["scenarios"] == dict.fromkeys(variants, 1)
+    assert index["teams"]["Seminary"]["scenarios"] == dict.fromkeys(variants, 0)
+    # Without paths (no games left), no such jobs.
+    assert not [
+        j
+        for j in _region_image_jobs(3, 6, 2026, payload, [], [], date(2026, 10, 9), date(2026, 10, 10), {}, {})
+        if j.renderer == TEAM_SCENARIOS
+    ]

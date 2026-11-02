@@ -91,3 +91,16 @@ test("a team's images: pages from its region's index, its file, name and label",
   assert.equal(teamImageName(2026, "D'Iberville", { ...c, mode: "tossup" }), "diberville-season-2026-tossup.png");
   assert.equal(teamImageLabel(2026, "Magee", { mode: "tossup" }), "Magee’s 2026 season, with Toss-up odds");
 });
+
+import { teamImages } from "../html/static/js/share.js";
+
+test("a team's what-has-to-happen image: offered where it has pages, with its own label", () => {
+  const index = { teams: { Magee: { season: { "projected-dark": 1 }, scenarios: { "projected-dark": 2, "projected-light": 0 } } } };
+  const dark = { mode: "projected", theme: "dark" };
+  assert.deepEqual(teamImages(index, "Magee", dark).map((i) => i.key), ["season", "scenarios"]);
+  assert.deepEqual(teamImages(index, "Magee", { ...dark, theme: "light" }).map((i) => i.key), []);
+  assert.equal(teamPages(index, "Magee", { ...dark, image: "scenarios" }), 2);
+  assert.equal(teamImagePath(2026, 3, 6, "Magee", { ...dark, image: "scenarios" }, 2, 2), "/static/region/2026/3a-6-team-magee-scenarios-projected-dark-2.png");
+  assert.equal(teamImageName(2026, "Magee", { image: "scenarios", mode: "tossup" }, 2, 2), "magee-scenarios-2026-tossup-2.png");
+  assert.equal(teamImageLabel(2026, "Magee", { image: "scenarios", mode: "projected" }), "What has to happen for Magee, with Projected odds");
+});
