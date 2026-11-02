@@ -8,12 +8,15 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
     og/{class}-{region}/{team}.png
                               team card (a region link with ?team=<slug>)
     og/{class}.png            class card
-    og/bracket-{class}.png    class bracket card (/brackets/{class}a)
+    og/bracket-{season}-{class}.png
+                              class bracket card (/brackets/{class}a, and ?season={season}): the
+                              whole bracket, with the two teams likeliest to win it all; past
+                              seasons get theirs (the final bracket) once
     og/bracket-{class}/{team}.png
                               a team's road through the bracket (?team=<slug>)
     og/site.png               fallback card for every other page
     meta/{class}-{region}.html, meta/{class}.html, meta/{class}-{region}/{team}.html,
-    meta/bracket-{class}.html, meta/bracket-{class}/{team}.html
+    meta/bracket-{class}.html, meta/bracket-{season}-{class}.html, meta/bracket-{class}/{team}.html
                               <title>, description, Open Graph / Twitter tags
     body/{class}-{region}.html, body/{class}.html, body/bracket-{class}.html, body/site.html
                               the page's content as static HTML (backend.helpers.static_pages)
@@ -27,7 +30,7 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
 
 nginx splices the matching ``meta/*.html`` into the app's ``index.html``
 <head> for /standings/{class}a/{region}[?team=<slug>], /standings/{class}a and
-/brackets/{class}a[?team=<slug>] (server-side include). A team without a file falls back to its region's tags,
+/brackets/{class}a[?season=<year>][&team=<slug>] (server-side include). A team without a file falls back to its region's tags,
 anything else to the generic tags in ``index.html``. It also splices the
 matching ``body/*.html`` into ``<main>``, so the page reads without
 JavaScript; the app replaces it on load. Cards, tags and content all come
@@ -45,7 +48,7 @@ from pathlib import Path
 import requests
 from prefect import flow, get_run_logger, task
 
-from backend.helpers.bracket_image import is_final, render_bracket_image
+from backend.helpers.bracket_image import is_final, render_bracket_card_image, render_bracket_image
 from backend.helpers.engine_settings import CLASSES, FULL_MARGINS_MAX_LEFT
 from backend.helpers.share_cards import (
     SITE_DESCRIPTION,
@@ -59,6 +62,7 @@ from backend.helpers.share_cards import (
     description,
     meta_tags,
     odds_mode,
+    past_bracket_description,
     provenance,
     region_title,
     render_bracket_card,
@@ -315,7 +319,9 @@ def build_share_assets(
     _write_text(out_dir / "body" / "site.html", landing_body(featured, teams, scenario_example, insight_example))
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
-    written["past_brackets"] = _write_past_brackets(fetch, out_dir, [s for s in all_seasons if s < season], today)
+    written["past_brackets"] = _write_past_brackets(
+        fetch, out_dir, [s for s in all_seasons if s < season], today, site_url
+    )
     return written
 
 
@@ -414,24 +420,42 @@ def _write_bracket_assets(
         return {"brackets": 0, "bracket_teams": 0, "image": None}
     name = f"bracket-{clazz}"
     page = f"{site_url}/brackets/{clazz}a"
-    _write_png(out_dir / "og" / f"{name}.png", render_bracket_card(clazz, favorites, regions, stamp, mode))
-    _write_text(
-        out_dir / "meta" / f"{name}.html",
-        meta_tags(
-            bracket_title(clazz),
-            description(bracket_description(clazz, favorites, mode)),
-            f"{site_url}/static/og/{name}.png?v={version}",
-            page,
-            json_ld(breadcrumb_ld(site_url, bracket_trail(clazz))),
-        ),
-    )
     matchups = fetch(f"/bracket/matchups?season={season}&class={clazz}") or {}
     games = matchups.get("games") or []
     venue = _venue(fetch, season, clazz)
+    layout = (fetch(f"/bracket?season={season}&class={clazz}") or {}).get("bracket_layout") if games else None
+    projected = any(o.get("p_reach_weighted") is not None for g in games for o in g["side_a"]["occupants"])
+    # The link preview: a picture of the whole bracket, named for its season, so a link to this season
+    # (?season=2026, or none) keeps showing this season's bracket after the next one starts. Without
+    # the bracket's games yet, the favorites' table.
+    card = f"bracket-{season}-{clazz}"
+    if games:
+        image_card = render_bracket_card_image(
+            clazz,
+            season,
+            games,
+            layout_results(layout),
+            locked_seeds(standings, games),
+            not projected,
+            (image_stamps or {}).get("odds" if projected else "blank", f"{season} season · {stamp}"),
+            teams_by_school or {},
+            venue,
+        )
+    else:
+        image_card = render_bracket_card(clazz, favorites, regions, stamp, mode)
+    _write_png(out_dir / "og" / f"{card}.png", image_card)
+    (out_dir / "og" / f"{name}.png").unlink(missing_ok=True)  # the card's name before it carried the season
+    desc = description(bracket_description(clazz, favorites, mode))
+    image_url = f"{site_url}/static/og/{card}.png?v={version}"
+    trail = json_ld(breadcrumb_ld(site_url, bracket_trail(clazz)))
+    _write_text(out_dir / "meta" / f"{name}.html", meta_tags(bracket_title(clazz), desc, image_url, page, trail))
+    # A link that names the season: its own address, so it still leads to this season's bracket later.
+    _write_text(
+        out_dir / "meta" / f"{card}.html",
+        meta_tags(bracket_title(clazz, season), desc, image_url, f"{page}?season={season}", trail),
+    )
     image = None
     if games:
-        layout = (fetch(f"/bracket?season={season}&class={clazz}") or {}).get("bracket_layout")
-        projected = any(o.get("p_reach_weighted") is not None for g in games for o in g["side_a"]["occupants"])
         ctx = {
             "mode": "projected" if projected else "tossup",
             "results": layout_results(layout),
@@ -526,9 +550,10 @@ def _write_bracket_images(
     return f"{site_url}/static/bracket/{season}/{clazz}a-all-{'odds' if projected else 'blank'}-light.png"
 
 
-def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today: date) -> int:
-    """Each past season's final bracket images (blank: results only), once: a season already drawn is
-    skipped. As of the end of the class's last week of games, as its bracket page shows it."""
+def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today: date, site_url: str) -> int:
+    """Each past season's final bracket images (blank: results only) and its link preview (a link to
+    /brackets/3a?season=2025), once: what's already drawn is skipped. As of the end of the class's last
+    week of games, as its bracket page shows it."""
     written = 0
     for season in seasons:
         teams: dict | None = None
@@ -538,7 +563,11 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
             paths = [
                 folder / f"{clazz}a-{view}-blank-{theme}.png" for view in BRACKET_VIEWS for theme in BRACKET_THEMES
             ]
-            if all(p.exists() for p in paths):
+            card = f"bracket-{season}-{clazz}"
+            card_paths = [out_dir / "og" / f"{card}.png", out_dir / "meta" / f"{card}.html"]
+            need_images = not all(p.exists() for p in paths)
+            need_card = not all(p.exists() for p in card_paths)
+            if not (need_images or need_card):
                 continue
             dates = (fetch(f"/seasons/{season}/dates?class={clazz}") or {}).get("dates", [])
             played = sorted(date.fromisoformat(str(d["date"])[:10]) for d in dates if d.get("kind") == "games")
@@ -562,14 +591,30 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
             venue = _venue(fetch, season, clazz)
             if teams is None:
                 teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
-            for view, half in BRACKET_VIEWS.items():
-                for theme in BRACKET_THEMES:
-                    _write_png(
-                        folder / f"{clazz}a-{view}-blank-{theme}.png",
-                        render_bracket_image(
-                            clazz, season, games, results, seeds, half, True, stamp, teams, theme, venue
-                        ),
-                    )
+            if need_images:
+                for view, half in BRACKET_VIEWS.items():
+                    for theme in BRACKET_THEMES:
+                        _write_png(
+                            folder / f"{clazz}a-{view}-blank-{theme}.png",
+                            render_bracket_image(
+                                clazz, season, games, results, seeds, half, True, stamp, teams, theme, venue
+                            ),
+                        )
+            if need_card:
+                _write_png(
+                    card_paths[0],
+                    render_bracket_card_image(clazz, season, games, results, seeds, True, stamp, teams, venue),
+                )
+                _write_text(
+                    card_paths[1],
+                    meta_tags(
+                        bracket_title(clazz, season),
+                        description(past_bracket_description(clazz, season, results)),
+                        f"{site_url}/static/og/{card}.png?v={end:%Y%m%d}",
+                        f"{site_url}/brackets/{clazz}a?season={season}",
+                        json_ld(breadcrumb_ld(site_url, bracket_trail(clazz))),
+                    ),
+                )
             written += 1
     return written
 

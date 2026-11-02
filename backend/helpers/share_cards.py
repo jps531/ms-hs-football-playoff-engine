@@ -704,9 +704,9 @@ def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str)
 # ---------------------------------------------------------------- brackets
 
 
-def bracket_title(clazz: int) -> str:
-    """The bracket page's title, as the app sets it."""
-    return f"Class {clazz}A playoff bracket — {SITE_NAME}"
+def bracket_title(clazz: int, season: int | None = None) -> str:
+    """The bracket page's title, as the app sets it; with *season*, for a link to that season's bracket."""
+    return f"{f'{season} ' if season else ''}Class {clazz}A playoff bracket — {SITE_NAME}"
 
 
 def _bracket_odds(team: dict, key: str, mode: str) -> float:
@@ -740,6 +740,14 @@ def bracket_description(clazz: int, favorites: list[dict], mode: str) -> str:
     if chasers:
         text += f", ahead of {' and '.join(chasers)}"
     return f"{text}."
+
+
+def past_bracket_description(clazz: int, season: int, results: dict) -> str:
+    """A past season's bracket link preview line: who won it, from the final's result."""
+    winner = (results.get("final") or {}).get("winner")
+    if winner:
+        return f"{winner} won the {season} Class {clazz}A state championship."
+    return f"The {season} Class {clazz}A playoff bracket."
 
 
 def _pick(obj: dict, key: str, mode: str) -> float | None:

@@ -479,7 +479,6 @@ def render_bracket_image(
     t = THEMES[theme]
     final = is_final(games, results)
     blank = blank or final
-    picks = {} if blank else picks_for(games, results)
     size = WIDE if view == "all" else SQUARE
     pad = 72
     img = Image.new("RGB", size, t.bg)
@@ -487,6 +486,30 @@ def render_bracket_image(
     title = f"{season} Class {clazz}A Bracket" + ("" if view == "all" else f" · {HALF_NAMES.get(view, view)}")
     top = _header(draw, t, pad, title, _subtitle(final, blank))
     bottom = _footer(draw, t, size, pad, stamp)
+    _body(img, t, pad, top, bottom, games, results, seeds, view, blank, teams, venue, projected_line=True)
+    return img
+
+
+def _body(
+    img: Image.Image,
+    t: Theme,
+    pad: int,
+    top: float,
+    bottom: float,
+    games: list[dict],
+    results: dict,
+    seeds: dict,
+    view: str,
+    blank: bool,
+    teams: dict | None,
+    venue: dict | None,
+    projected_line: bool,
+) -> None:
+    """The bracket itself between *top* and *bottom*: round labels, cards, connectors, and under the
+    championship game its venue and the champion (or, when *projected_line*, the projected one)."""
+    size = img.size
+    draw = ImageDraw.Draw(img)
+    picks = {} if blank else picks_for(games, results)
     labels_h = 44
     body_top, body_h = top + labels_h, bottom - top - labels_h
 
@@ -494,7 +517,7 @@ def render_bracket_image(
     rounds = {h: _half_rounds(games, h) for h in halves}
     depth = max((len(r) for r in rounds.values()), default=0)
     if not depth:
-        return img
+        return
     final_game = next((g for g in games if g["id"] == "final"), None) if view == "all" else None
     cols = depth * len(halves) + (1 if final_game else 0)
     gap = 56
@@ -560,6 +583,114 @@ def render_bracket_image(
             text = fit(draw, f"Champion: {champion}", font, card_w + gap)
             tw = draw.textlength(text, font=font)
             draw.text((x + (card_w - tw) / 2, base + 50), text, font=font, fill=t.text, anchor="ls")
-        elif not blank and (champ := projected_champion(final_game, None)):
+        elif projected_line and not blank and (champ := projected_champion(final_game, None)):
             _projected_champion(draw, t, champ, x, card_w + gap, base + 50, card_w)
-    return img
+
+
+# ------------------------------------------------------------- link preview
+
+# The link preview's shape (1200x630, share_cards.WIDTH/HEIGHT), drawn at three times that and scaled down.
+CARD = (3600, 1890)
+CARD_SCALE = 3
+
+
+def title_contenders(game: dict | None, result: dict | None, n: int = 2) -> list[dict]:
+    """The *n* teams likeliest to win the championship game in Projected odds, likeliest first, as
+    [{team, p}]: each final occupant's ``p_champion_weighted`` (the team pages' chance to win it all).
+    A team tied with the last one listed is listed too, so the list never picks between equals.
+    [] once the game is played or without Projected odds."""
+    if not game or game.get("id") != "final" or result:
+        return []
+    listed = sorted(
+        (
+            {"team": o["team"], "p": o["p_champion_weighted"]}
+            for k in ("side_a", "side_b")
+            for o in game[k]["occupants"]
+            if (o.get("p_champion_weighted") or 0) > 0
+        ),
+        key=lambda c: (-c["p"], c["team"]),
+    )
+    if len(listed) <= n:
+        return listed
+    cut = listed[n - 1]["p"]
+    return [c for c in listed if c["p"] >= cut]
+
+
+def _card_header(
+    draw, t: Theme, pad: int, title: str, subtitle: str, right: list[tuple[str, str]], label: str
+) -> float:
+    """The preview's title (and subtitle), with *label* over *right*'s rows (name, value) at the right;
+    returns where the bracket may start."""
+    width = CARD[0]
+    right_w = 0.0
+    if right:
+        name_font, value_font, label_font = _inter(64, 600), _inter(64, 500), _inter(34, 600)
+        _tracked(
+            draw, (width - pad - _tracked_width(draw, label, label_font, 2), pad + 30), label, label_font, t.text_2, 2
+        )
+        for i, (name, value) in enumerate(right):
+            base = pad + 110 + i * 78
+            value_text = f"  {value}" if value else ""
+            value_w = draw.textlength(value_text, font=value_font)
+            name = fit(draw, name, name_font, width * 0.36 - value_w)
+            name_w = draw.textlength(name, font=name_font)
+            draw.text((width - pad, base), value_text, font=value_font, fill=t.text_2, anchor="rs")
+            draw.text((width - pad - value_w, base), name, font=name_font, fill=t.text, anchor="rs")
+            right_w = max(right_w, name_w + value_w)
+    title_font = _nippo(132)
+    draw.text(
+        (pad, pad + 104),
+        fit(draw, title, title_font, width - 2 * pad - right_w - 80),
+        font=title_font,
+        fill=t.text,
+        anchor="ls",
+    )
+    if subtitle:
+        draw.text((pad, pad + 176), subtitle, font=_inter(50, 500), fill=t.text_2, anchor="ls")
+    return pad + 70 + max(176, 110 + 78 * (len(right) - 1) if right else 0)
+
+
+def _card_footer(draw, t: Theme, pad: int, stamp: str) -> float:
+    """The stamp and the site's address, sized to read in a link preview; returns where the bracket must end."""
+    width, height = CARD
+    base = height - pad + 6
+    _tracked(draw, (pad, base), stamp.upper(), _inter(40, 600), t.text_2, 3)
+    draw.text((width - pad, base), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="rs")
+    return height - pad - 84
+
+
+def render_bracket_card_image(
+    clazz: int,
+    season: int,
+    games: list[dict],
+    results: dict,
+    seeds: dict,
+    blank: bool,
+    stamp: str,
+    teams: dict | None = None,
+    venue: dict | None = None,
+) -> Image.Image:
+    """The bracket page's link preview (1200x630, dark): the whole bracket, as the image to share draws it,
+    under "2026 Class 3A Bracket" and, at the right, the two teams likeliest to win it all (Projected), or
+    once it's played, the champion. *blank* draws only what's settled (no Projected odds)."""
+    t = THEMES["dark"]
+    final = is_final(games, results)
+    blank = blank or final
+    pad = 72
+    img = Image.new("RGB", CARD, t.bg)
+    draw = ImageDraw.Draw(img)
+    final_game = next((g for g in games if g["id"] == "final"), None)
+    champion = (results.get("final") or {}).get("winner")
+    if champion:
+        right, label = [(champion, "")], "STATE CHAMPION"
+    elif blank:
+        right, label = [], ""
+    else:
+        right = [(c["team"], format_pct(c["p"])) for c in title_contenders(final_game, None)]
+        label = "LIKELIEST TO WIN IT ALL"
+    top = _card_header(
+        draw, t, pad, f"{season} Class {clazz}A Bracket", "" if blank else "Projected odds", right, label
+    )
+    bottom = _card_footer(draw, t, pad, stamp)
+    _body(img, t, pad, top, bottom, games, results, seeds, "all", blank, teams, venue, projected_line=False)
+    return img.resize((CARD[0] // CARD_SCALE, CARD[1] // CARD_SCALE), Image.LANCZOS)

@@ -434,6 +434,7 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     (tmp_path / "og" / "bracket-3" / "gone.png").write_bytes(b"old")
     (tmp_path / "bracket" / "2026").mkdir(parents=True)
     (tmp_path / "bracket" / "2026" / "3a-all-odds.png").write_bytes(b"named before themes")
+    (tmp_path / "og" / "bracket-3.png").write_bytes(b"named before it carried the season")
     written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
     assert (written["brackets"], written["bracket_teams"]) == (1, 2)
     assert sorted(p.name for p in (tmp_path / "og" / "bracket-3").iterdir()) == ["raleigh.png", "union.png"]
@@ -446,6 +447,15 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     assert '<p class="tfinal__venue">Davis Wade Stadium • Starkville</p>' in page  # where the final is played
     assert '"@type":"BreadcrumbList"' in (tmp_path / "meta" / "bracket-3.html").read_text()
     assert "Raleigh leads the Class 3A bracket" in (tmp_path / "meta" / "bracket-3.html").read_text()
+    # The link preview: a picture of the whole bracket, named for its season, under both names: the
+    # page's (/brackets/3a) and the season's (/brackets/3a?season=2026), which keeps its own address.
+    assert not (tmp_path / "og" / "bracket-3.png").exists()
+    assert Image.open(tmp_path / "og" / "bracket-2026-3.png").size == (WIDTH, HEIGHT)
+    card = "https://mshsfootball.com/static/og/bracket-2026-3.png?v=20261009"
+    assert card in (tmp_path / "meta" / "bracket-3.html").read_text()
+    season_meta = (tmp_path / "meta" / "bracket-2026-3.html").read_text()
+    assert card in season_meta and "<title>2026 Class 3A playoff bracket — " in season_meta
+    assert '<meta property="og:url" content="https://mshsfootball.com/brackets/3a?season=2026">' in season_meta
     # The bracket's images to share: every view blank; no Projected ones without Projected odds. The
     # sitemap lists the whole-bracket image with the bracket page.
     images = sorted(p.name for p in (tmp_path / "bracket" / "2026").iterdir())
@@ -481,6 +491,13 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path):
     assert sorted(p.name for p in (tmp_path / "bracket" / "2025").iterdir()) == [
         f"3a-{v}-blank-{t}.png" for v in ("all", "north", "south") for t in ("dark", "light")
     ]
+    # Its link preview, for /brackets/3a?season=2025.
+    assert Image.open(tmp_path / "og" / "bracket-2025-3.png").size == (WIDTH, HEIGHT)
+    meta = (tmp_path / "meta" / "bracket-2025-3.html").read_text()
+    assert "<title>2025 Class 3A playoff bracket — " in meta
+    assert "https://mshsfootball.com/static/og/bracket-2025-3.png?v=20251207" in meta
+    assert '<meta property="og:url" content="https://mshsfootball.com/brackets/3a?season=2025">' in meta
+    assert '<meta name="description" content="The 2025 Class 3A playoff bracket.">' in meta  # no final result here
     calls.clear()
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0
     assert not [c for c in calls if "season=2025" in c]  # already drawn: not fetched again
@@ -508,3 +525,14 @@ def test_team_road_names_a_host_only_when_hosting_is_certain():
     away = [{**GAMES[0], "matchups": [_mu("Raleigh", "Tylertown", 0.6, 0.0001), _mu("Magee", "Tylertown", 0.4, 1.0)]}]
     assert team_road(away, "Raleigh", "tossup")[0]["hosts"] == "split"
     assert team_road(GAMES, "Raleigh", "tossup")[0]["hosts"] == "team"  # p_host_a exactly 1
+
+
+def test_a_past_seasons_bracket_says_who_won_it():
+    from backend.helpers.share_cards import bracket_title, past_bracket_description
+
+    assert past_bracket_description(3, 2025, {"final": {"winner": "Raleigh"}}) == (
+        "Raleigh won the 2025 Class 3A state championship."
+    )
+    assert past_bracket_description(3, 2025, {}) == "The 2025 Class 3A playoff bracket."
+    assert bracket_title(3, 2025) == "2025 Class 3A playoff bracket — Mississippi High School Football"
+    assert bracket_title(3) == "Class 3A playoff bracket — Mississippi High School Football"
