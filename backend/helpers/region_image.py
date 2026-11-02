@@ -338,46 +338,80 @@ def region_seeds(payload: dict) -> dict[str, int]:
     }
 
 
-def region_playoffs(seeds: dict[str, int], games: list[dict], results: dict) -> list[dict]:
-    """Each of the region's playoff teams on its road: [{seed, team, steps: [(round, text)]}], seed order.
-
-    A step is a played game ("Beat Holly Springs 49–8", "Lost to Noxubee County 33–34"), then the next
-    game while the team is still in ("vs Kossuth, at home", "at Hazlehurst", "vs the Region 5 #4 seed"),
-    or "Won the state championship". *seeds* maps the region's seeded teams to their seed; *games* are the
-    class's ``/bracket/matchups`` games, *results* the played ones (``static_pages.layout_results``).
-    """
-    ordered = sorted(games, key=lambda g: (_round_index(g), g["id"]))
-    out = []
-    for team, seed in sorted(seeds.items(), key=lambda kv: kv[1]):
-        steps: list[tuple[str, str]] = []
-        for g in ordered:
-            res = results.get(g["id"])
-            if res and team in (res["winner"], res["loser"]):
-                won = res["winner"] == team
-                other = res["loser"] if won else res["winner"]
-                score = ""
-                if res.get("winner_score") is not None and res.get("loser_score") is not None:
-                    a, b = (
-                        (res["winner_score"], res["loser_score"]) if won else (res["loser_score"], res["winner_score"])
-                    )
-                    score = f" {a}–{b}"
-                steps.append((g["round"], f"{'Beat' if won else 'Lost to'} {other}{score}"))
-                if not won:
-                    break
-                if g["id"] == "final":
-                    steps.append(("", CHAMPION_STEP))
-                continue
-            side = next((k for k in ("side_a", "side_b") if locked_team(g[k]) == team), None)
-            if side and not res:
-                opponent = _opponent(g, side, results, games)
-                where = _hosts(g, team, opponent)
-                text = f"at {opponent}" if where == "away" else f"vs {opponent}"
-                if where == "home":
-                    text += ", at home"
-                steps.append((g["round"], f"Next: {text}"))
+def playoff_road(team: str, games: list[dict], results: dict) -> list[dict]:
+    """A team's playoff games, played then the next while it's still in: [{round, kind, opponent,
+    score_for, score_against, where}], kind "won", "lost" or "next"; *where* (for the next game) is
+    "home", "away" or "neutral" when it's certain who hosts, else None. A won "Championship Game" is
+    the title. *games* are the class's ``/bracket/matchups`` games, *results* the played ones
+    (``static_pages.layout_results``)."""
+    road = []
+    for g in sorted(games, key=lambda g: (_round_index(g), g["id"])):
+        res = results.get(g["id"])
+        if res and team in (res["winner"], res["loser"]):
+            won = res["winner"] == team
+            mine, theirs = (
+                (res.get("winner_score"), res.get("loser_score"))
+                if won
+                else (res.get("loser_score"), res.get("winner_score"))
+            )
+            road.append(
+                {
+                    "round": g["round"],
+                    "kind": "won" if won else "lost",
+                    "opponent": res["loser"] if won else res["winner"],
+                    "score_for": mine,
+                    "score_against": theirs,
+                    "where": None,
+                }
+            )
+            if not won:
                 break
-        out.append({"seed": seed, "team": team, "steps": steps})
-    return out
+            continue
+        side = next((k for k in ("side_a", "side_b") if locked_team(g[k]) == team), None)
+        if side and not res:
+            opponent = _opponent(g, side, results, games)
+            road.append(
+                {
+                    "round": g["round"],
+                    "kind": "next",
+                    "opponent": opponent,
+                    "score_for": None,
+                    "score_against": None,
+                    "where": _hosts(g, team, opponent),
+                }
+            )
+            break
+    return road
+
+
+def road_steps(road: list[dict]) -> list[tuple[str, str]]:
+    """A playoff road as lines: ("First Round", "Beat Holly Springs 49–8"), ("Quarterfinals", "Lost to
+    Noxubee County 33–34"), ("Second Round", "Next: at Hazlehurst" / "Next: vs Kossuth, at home" / "Next:
+    vs the Region 5 #4 seed"), and ("", "Won the state championship") after a won final."""
+    steps = []
+    for r in road:
+        if r["kind"] == "next":
+            text = f"at {r['opponent']}" if r["where"] == "away" else f"vs {r['opponent']}"
+            steps.append((r["round"], f"Next: {text}{', at home' if r['where'] == 'home' else ''}"))
+            continue
+        score = (
+            f" {r['score_for']}\u2013{r['score_against']}"
+            if r["score_for"] is not None and r["score_against"] is not None
+            else ""
+        )
+        steps.append((r["round"], f"{'Beat' if r['kind'] == 'won' else 'Lost to'} {r['opponent']}{score}"))
+        if r["kind"] == "won" and r["round"] == "Championship Game":
+            steps.append(("", CHAMPION_STEP))
+    return steps
+
+
+def region_playoffs(seeds: dict[str, int], games: list[dict], results: dict) -> list[dict]:
+    """Each of the region's playoff teams on its road: [{seed, team, steps: [(round, text)]}], seed order
+    (``playoff_road`` as ``road_steps``' lines). *seeds* maps the region's seeded teams to their seed."""
+    return [
+        {"seed": seed, "team": team, "steps": road_steps(playoff_road(team, games, results))}
+        for team, seed in sorted(seeds.items(), key=lambda kv: kv[1])
+    ]
 
 
 def _playoffs(page: _Page, top: float, bottom: float, paths: list[dict]) -> bool:

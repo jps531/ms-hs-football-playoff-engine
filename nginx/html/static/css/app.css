@@ -1649,7 +1649,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 }
 .share-button:hover { background: var(--surface-raised); }
 .share-button svg { width: 22px; height: 22px; }
-.share-sheet__primary svg { width: 18px; height: 18px; flex: none; }
+.share-sheet__primary svg, .detail__share svg { width: 18px; height: 18px; flex: none; }
+/* "Share Magee’s season", at the top of a team's expanded row. */
+.detail__share { margin-bottom: 16px; }
 .share-sheet__body { display: grid; gap: 14px; }
 .share-sheet__group { display: grid; gap: 6px; }
 .share-sheet__label {

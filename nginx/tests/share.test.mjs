@@ -76,3 +76,18 @@ test("a page of several: its own address and file name", () => {
   assert.equal(regionImageName(2026, 6, 2, c, 2, 3), "region-2-6a-scenarios-2026-tossup-2.png");
   assert.equal(regionImageLabel(6, 2, c), "Region 2-6A scenarios, with Toss-up odds");
 });
+
+import { teamPages, teamImagePath, teamImageName, teamImageLabel } from "../html/static/js/share.js";
+
+test("a team's images: pages from its region's index, its file, name and label", () => {
+  const index = { teams: { "D'Iberville": { season: { "projected-dark": 1, "tossup-dark": 1 } } } };
+  const c = { image: "season", mode: "projected", theme: "dark" };
+  assert.equal(teamPages(index, "D'Iberville", c), 1);
+  assert.equal(teamPages(index, "D'Iberville", { ...c, theme: "light" }), 0);
+  assert.equal(teamPages(index, "Magee", c), 0);
+  assert.equal(teamPages(null, "Magee", c), 0);
+  assert.equal(teamImagePath(2026, 7, 4, "D'Iberville", c), "/static/region/2026/7a-4-team-diberville-season-projected-dark.png");
+  assert.equal(teamImageName(2026, "D'Iberville", c), "diberville-season-2026.png");
+  assert.equal(teamImageName(2026, "D'Iberville", { ...c, mode: "tossup" }), "diberville-season-2026-tossup.png");
+  assert.equal(teamImageLabel(2026, "Magee", { mode: "tossup" }), "Magee’s 2026 season, with Toss-up odds");
+});

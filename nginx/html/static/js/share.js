@@ -1,3 +1,5 @@
+import { slugify } from "./routes.js";
+
 // Sharing a bracket as an image. The images themselves are drawn on the
 // server after each update (backend/helpers/bracket_image.py, written by the
 // share-assets step to /static/bracket/), so this only picks one and hands it
@@ -120,4 +122,31 @@ export function regionImageName(season, clazz, region, { image, mode }, page = 1
 export function regionImageLabel(clazz, region, { image, mode }) {
   const what = REGION_IMAGES.find((i) => i.key === image)?.label.toLowerCase() ?? image;
   return `Region ${region}-${clazz}A ${what}, with ${mode === "tossup" ? "Toss-up" : "Projected"} odds`;
+}
+
+// ---------------------------------------------------------------- teams
+// A team's images (backend/helpers/team_image.py), beside its region's, listed
+// in the region's index under "teams": { "Magee": { season: { "projected-dark": 1, … } } }.
+
+/** The images a team's row offers, in order. */
+export const TEAM_IMAGES = [{ key: "season", label: "Season" }];
+
+/** How many pages the team's chosen image has, from its region's index; 0 when it has none. */
+export function teamPages(index, school, { image, mode, theme }) {
+  return index?.teams?.[school]?.[image]?.[`${mode}-${theme}`] ?? 0;
+}
+
+/** Where a page is served: /static/region/2026/3a-6-team-magee-season-projected-dark.png. */
+export function teamImagePath(season, clazz, region, school, { image, mode, theme }, page = 1, pages = 1) {
+  return `/static/region/${season}/${clazz}a-${region}-team-${slugify(school)}-${image}-${mode}-${theme}${pages > 1 ? `-${page}` : ""}.png`;
+}
+
+/** A page's file name when shared or saved: "magee-season-2026.png", "magee-season-2026-tossup.png". */
+export function teamImageName(season, school, { image, mode }, page = 1, pages = 1) {
+  return `${slugify(school)}-${image}-${season}${mode === "tossup" ? "-tossup" : ""}${pages > 1 ? `-${page}` : ""}.png`;
+}
+
+/** What the image shows, for its alt text and the share sheet: "Magee’s 2026 season, with Projected odds". */
+export function teamImageLabel(season, school, { mode }) {
+  return `${school}’s ${season} season, with ${mode === "tossup" ? "Toss-up" : "Projected"} odds`;
 }

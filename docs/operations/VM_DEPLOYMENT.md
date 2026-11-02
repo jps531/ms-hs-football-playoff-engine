@@ -271,7 +271,10 @@ playoff teams' road. While games remain it also gets its scenarios
 (`…-scenarios-{mode}-{theme}.png`, or `…-1.png`, `…-2.png` for several pages):
 every way the region can finish, or before full scenarios the results that
 settle a spot; a list that needs more than five pages stops at four and points
-to the region page. `region/{season}/{class}a-{region}.json` lists each image's
+to the region page. Each of its teams gets its season
+(`…-team-{slug}-season-{mode}-{theme}.png`): its games, its odds of each seed,
+the region's standings and its road through the playoffs, shared from its row.
+`region/{season}/{class}a-{region}.json` lists each image's
 pages, for the page's share sheet. Only images whose content changed since the last run are
 drawn again (`backend/helpers/image_jobs.py` keeps a fingerprint of each in
 `state/images.json` in the volume), two at a time; `SHARE_IMAGE_WORKERS` on the

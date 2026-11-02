@@ -18,7 +18,7 @@ import { matchTeams } from "./search.js";
 import {
   SHARE_VIEWS, SHARE_VERSIONS, SHARE_THEMES, shareVersions, shareDefaults, bracketImagePath, bracketImageName,
   REGION_MODES, regionModes, regionShareDefaults, regionImagePath, regionImageName, regionImageLabel,
-  regionIndexPath, regionPages, regionImages,
+  regionIndexPath, regionPages, regionImages, teamPages, teamImagePath, teamImageName, teamImageLabel,
   bracketImageLabel,
 } from "./share.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
@@ -1019,7 +1019,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
         <p class="detail__link"><a href="${esc(hrefWith({ page: "bracket", region: null, team: t.school }))}">See ${esc(t.school)}’s path in the bracket</a></p>
       </section>`
     : "";
-  return `<div class="detail__panels">${record}${seeding}${pathPanel}</div>
+  return `${regionShare ? teamShareButton(t.school) : ""}<div class="detail__panels">${record}${seeding}${pathPanel}</div>
     <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Does something look wrong for ${esc(t.school)}? Let us know.</button></p>`;
 }
 
@@ -1606,10 +1606,16 @@ let shareSheet = null;
 let shareSpec = null; // what the open sheet shares (a page's spec)
 const shareUi = { choice: null, page: 1, status: "", image: null }; // image: see loadShareImage
 let regionShare = null; // the region page's images, when it offers them (set by regionView)
+let shareOpener = null; // the button that opened the sheet, for focus when it closes
 
 /** The share button at the right of a page's title; *what* names it ("bracket", "region"). */
 function shareButton(what) {
   return `<button type="button" class="share-button" data-share-open="${what}" aria-haspopup="dialog" aria-label="Share this ${what}" title="Share this ${what}">${SHARE_ICON}</button>`;
+}
+
+/** The share button in a team's expanded row, with its name: "Share Magee’s season". */
+function teamShareButton(school) {
+  return `<p class="detail__share"><button type="button" class="share-sheet__secondary" data-share-open="team" data-team="${esc(school)}" aria-haspopup="dialog">${SHARE_ICON}Share ${esc(school)}’s season</button></p>`;
 }
 
 function shareDialog() {
@@ -1619,7 +1625,8 @@ function shareDialog() {
   shareSheet.setAttribute("aria-labelledby", "share-sheet-title");
   document.body.append(shareSheet);
   shareSheet.addEventListener("click", onShareClick);
-  shareSheet.addEventListener("close", () => document.querySelector("[data-share-open]")?.focus({ preventScroll: true }));
+  // Back to the button that opened it (a page has several: the region's, a team's).
+  shareSheet.addEventListener("close", () => (shareOpener?.isConnected ? shareOpener : document.querySelector("[data-share-open]"))?.focus({ preventScroll: true }));
   return shareSheet;
 }
 
@@ -1663,13 +1670,7 @@ function bracketShareSpec() {
  */
 async function regionShareSpec() {
   const { season, clazz, region, asOf, modes, mode, summary } = regionShare;
-  let index = null;
-  try {
-    const res = await fetch(`${regionIndexPath(season, clazz, region)}${asOf ? `?v=${encodeURIComponent(asOf)}` : ""}`);
-    if (res.ok) index = await res.json();
-  } catch {
-    index = null;
-  }
+  const index = await regionIndex();
   return {
     title: "Share this region",
     when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
@@ -1693,6 +1694,44 @@ async function regionShareSpec() {
     page: `${location.origin}/standings/${clazz}a/${region}`,
     latest: true,
     track: (c, method) => track("region_image_shared", { class: clazz, region, season, image: c.image, mode: c.mode, theme: c.theme, method }),
+  };
+}
+
+/** The region's index of its images (see regionShareSpec), or null without one. */
+async function regionIndex() {
+  const { season, clazz, region, asOf } = regionShare;
+  try {
+    const res = await fetch(`${regionIndexPath(season, clazz, region)}${asOf ? `?v=${encodeURIComponent(asOf)}` : ""}`);
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A team's images (its season: games, odds, standings, playoff road), in Projected or Toss-up odds,
+ * light or dark, from its row on the region page.
+ */
+async function teamShareSpec(school) {
+  const { season, clazz, region, asOf, modes, mode, summary } = regionShare;
+  const index = await regionIndex();
+  return {
+    title: `Share ${school}’s season`,
+    when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
+    groups: () => [
+      ...(modes.length > 1 ? [{ label: "Odds", key: "mode", options: REGION_MODES }] : []),
+      { label: "Theme", key: "theme", options: SHARE_THEMES },
+    ],
+    defaults: { ...regionShareDefaults({ mode, modes, dark: document.documentElement.classList.contains("dark") }), image: "season" },
+    pages: (c) => Math.max(1, teamPages(index, school, c)),
+    path: (c, page, pages) => teamImagePath(season, clazz, region, school, c, page, pages),
+    version: asOf,
+    name: (c, page, pages) => teamImageName(season, school, c, page, pages),
+    label: (c) => teamImageLabel(season, school, c),
+    wide: () => false,
+    page: `${location.origin}/standings/${clazz}a/${region}?team=${slugify(school)}`,
+    latest: true,
+    track: (c, method) => track("team_image_shared", { class: clazz, region, season, team: school, image: c.image, mode: c.mode, theme: c.theme, method }),
   };
 }
 
@@ -2364,7 +2403,11 @@ app.addEventListener("click", (e) => {
   }
   const shareOpen = e.target.closest("[data-share-open]");
   if (shareOpen) {
-    if (shareOpen.dataset.shareOpen === "region" && regionShare) {
+    shareOpener = shareOpen;
+    if (shareOpen.dataset.shareOpen === "team" && regionShare) {
+      track("team_share_opened", { class: regionShare.clazz, region: regionShare.region, team: shareOpen.dataset.team });
+      teamShareSpec(shareOpen.dataset.team).then(openShare);
+    } else if (shareOpen.dataset.shareOpen === "region" && regionShare) {
       track("region_share_opened", { class: regionShare.clazz, region: regionShare.region });
       regionShareSpec().then(openShare);
     } else if (bracketData?.share) {
