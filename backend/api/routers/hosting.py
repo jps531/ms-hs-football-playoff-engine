@@ -65,13 +65,16 @@ def _to_school_only_results(results: list[BracketGameResultRequest]) -> list[Gam
 
 async def _load_region_odds(
     conn, season: int, clazz: int, region: int, as_of: date
-) -> tuple[
-    dict[str, StandingsOdds],
-    dict[str, tuple[float, float, float, float]],   # home_p_host_given_reach (r1, r2, qf, sf)
-    dict[str, tuple[float, float, float, float]],   # home_p_host_given_reach_w (r1, r2, qf, sf)
-    dict[str, tuple[float, float, float, float]],   # adv (r1=p_playoffs, r2, qf, sf)
-    dict[str, tuple[float, float, float, float]],   # adv_w
-] | None:
+) -> (
+    tuple[
+        dict[str, StandingsOdds],
+        dict[str, tuple[float, float, float, float]],  # home_p_host_given_reach (r1, r2, qf, sf)
+        dict[str, tuple[float, float, float, float]],  # home_p_host_given_reach_w (r1, r2, qf, sf)
+        dict[str, tuple[float, float, float, float]],  # adv (r1=p_playoffs, r2, qf, sf)
+        dict[str, tuple[float, float, float, float]],  # adv_w
+    ]
+    | None
+):
     """Load per-team seeding odds, home p_host_given_reach values, and bracket advancement from the most recent snapshot."""
     rows = await conn.execute(
         """
@@ -110,13 +113,16 @@ async def _load_region_odds(
 
 async def _load_all_regions_hosting_odds(
     conn, season: int, clazz: int, as_of: date
-) -> dict[int, tuple[
-    dict[str, StandingsOdds],
-    dict[str, tuple[float, float, float, float]],
-    dict[str, tuple[float, float, float, float]],
-    dict[str, tuple[float, float, float, float]],
-    dict[str, tuple[float, float, float, float]],
-]]:
+) -> dict[
+    int,
+    tuple[
+        dict[str, StandingsOdds],
+        dict[str, tuple[float, float, float, float]],
+        dict[str, tuple[float, float, float, float]],
+        dict[str, tuple[float, float, float, float]],
+        dict[str, tuple[float, float, float, float]],
+    ],
+]:
     """Return hosting odds for every region in *clazz*, keyed by region number."""
     rows = await conn.execute(
         """
@@ -185,7 +191,11 @@ async def get_class_hosting(
     for region in sorted(all_loaded):
         region_odds, home_p_host_given_reach, home_p_host_given_reach_w, stored_adv, stored_adv_w = all_loaded[region]
         entries = build_hosting_entries(
-            region_odds, slots, region, season, clazz,
+            region_odds,
+            slots,
+            region,
+            season,
+            clazz,
             stored=StoredHostingOdds(
                 given_reach=home_p_host_given_reach,
                 given_reach_weighted=home_p_host_given_reach_w,
@@ -229,7 +239,11 @@ async def get_hosting(
             seed_atoms, _ = await _compute_seed_atoms_if_pre_playoff(conn, season, clazz, region, as_of)
 
     entries = build_hosting_entries(
-        region_odds, slots, region, season, clazz,
+        region_odds,
+        slots,
+        region,
+        season,
+        clazz,
         stored=StoredHostingOdds(
             given_reach=home_p_host_given_reach,
             given_reach_weighted=home_p_host_given_reach_w,
@@ -346,18 +360,28 @@ async def simulate_class_hosting(
 
                 other_seeding = [(s, r2, p1, p2, p3, p4) for s, r2, p1, p2, p3, p4 in all_db_seeding if r2 != reg]
                 seeding_by_region = build_seeding_by_region(reg, odds_map, other_seeding)
-                matchup_fn_by_region[reg] = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
+                matchup_fn_by_region[reg] = (
+                    make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
+                )
 
                 if include_scenarios:
-                    scenario_completed, scenario_remaining = merge_applied_results(completed, reg_remaining, reg_new_results)
+                    scenario_completed, scenario_remaining = merge_applied_results(
+                        completed, reg_remaining, reg_new_results
+                    )
                     if has_displayable_scenarios(scenario_remaining):
-                        seed_atoms_by_region[reg] = build_scenario_atoms(reg_teams, scenario_completed, scenario_remaining)
+                        seed_atoms_by_region[reg] = build_scenario_atoms(
+                            reg_teams, scenario_completed, scenario_remaining
+                        )
 
     region_responses = []
     for reg in sorted(odds_by_region):
         reg_odds = odds_by_region[reg]
         entries = build_hosting_entries(
-            reg_odds, slots, reg, season, clazz,
+            reg_odds,
+            slots,
+            reg,
+            season,
+            clazz,
             wins_confirmed=wins_by_team,
             win_prob_fn_weighted=matchup_fn_by_region.get(reg),
             region_odds_weighted=reg_odds,
@@ -413,7 +437,9 @@ async def simulate_hosting(
                 conn, season, clazz, as_of, body.results, elo_ratings, slots
             )
             if state is None:
-                raise HTTPException(status_code=404, detail=f"No clinched seeds for {clazz}A region {region} season {season}")
+                raise HTTPException(
+                    status_code=404, detail=f"No clinched seeds for {clazz}A region {region} season {season}"
+                )
             all_region_odds = state.all_region_odds
             cross_region_wins = state.cross_region_wins
             wins_by_team = state.wins_by_team
@@ -431,7 +457,11 @@ async def simulate_hosting(
             matchup_fn_w = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
 
     entries = build_hosting_entries(
-        odds_map, slots, region, season, clazz,
+        odds_map,
+        slots,
+        region,
+        season,
+        clazz,
         wins_confirmed=wins_by_team,
         win_prob_fn_weighted=matchup_fn_w,
         region_odds_weighted=odds_map,
@@ -462,5 +492,7 @@ async def simulate_team_hosting(
     include_scenarios: IncludeScenariosQ = False,
 ) -> HostingResponse:
     """What-if hosting odds for a single *team*."""
-    response = await simulate_hosting(request, clazz, region, body, season=season, date=date, include_scenarios=include_scenarios)
+    response = await simulate_hosting(
+        request, clazz, region, body, season=season, date=date, include_scenarios=include_scenarios
+    )
     return filter_to_team_or_404(response, team, clazz, region)

@@ -36,6 +36,7 @@ class TiebreakStep:
     values: dict = field(default_factory=dict)
     outside: tuple[tuple[str, ...], ...] = ()
 
+
 # -------------------------
 # Step 5 accumulation + W/L/T
 # -------------------------

@@ -1910,7 +1910,9 @@ def landing_body(
     if featured:
         c, r = featured["clazz"], featured["card"]["region"]
         unsettled = (
-            ", one of the most unsettled races in the state as of the latest update" if featured["card"]["teams_alive"] > 0 else ""
+            ", one of the most unsettled races in the state as of the latest update"
+            if featured["card"]["teams_alive"] > 0
+            else ""
         )
         # The preview's first region is always the one shown; whether the next fits beside it depends on
         # the preview's width, so the sentence names only the first.
@@ -2022,7 +2024,9 @@ def sitemap_xml(site_url: str, pages: Iterable[tuple]) -> str:
     entries = []
     for path, modified, *rest in pages:
         lastmod = f"<lastmod>{modified.isoformat()}</lastmod>" if modified else ""
-        images = "".join(f"<image:image><image:loc>{xml_escape(u)}</image:loc></image:image>" for u in (rest[0] if rest else []))
+        images = "".join(
+            f"<image:image><image:loc>{xml_escape(u)}</image:loc></image:image>" for u in (rest[0] if rest else [])
+        )
         entries.append(f"<url><loc>{xml_escape(site + path)}</loc>{lastmod}{images}</url>")
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'

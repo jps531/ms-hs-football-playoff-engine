@@ -198,6 +198,15 @@ def _opponent_lines(page: _Page, x: float, base: float, width: float, joiner: st
     return base + 40 * len(lines)
 
 
+def score_size(d, letter: str, score: str, width: float) -> int:
+    """The largest size (56 down to 28) at which a playoff result's letter and score fit in *width*: a score is
+    never cut short."""
+    for size in range(56, 28, -2):
+        if d.textlength(letter, font=_inter(size + 4, 700)) + 14 + d.textlength(score, font=_inter(size, 700)) <= width:
+            return size
+    return 28
+
+
 def _ladder(page: _Page, top: float, rounds: list[dict], road: list[dict]) -> float:
     """The team's road through the bracket, one box per round, left to right like a bracket: a played
     round's result, the next game's opponent and who hosts, and each round ahead with the chance of
@@ -207,22 +216,21 @@ def _ladder(page: _Page, top: float, rounds: list[dict], road: list[dict]) -> fl
     by_round = {r["round"]: r for r in road}
     lost = next((i for i, r in enumerate(rounds) if by_round.get(r["round"], {}).get("kind") == "lost"), None)
     champion = by_round.get("Championship Game", {}).get("kind") == "won"
+    # Each box is as wide as with all the class's rounds shown; a road that ends in a loss stops there.
     n, gap = len(rounds), 34
     w = (SIZE[0] - 2 * PAD - gap * (n - 1)) / n
+    if lost is not None:
+        rounds = rounds[: lost + 1]
     y0, h = top + 56, LADDER_H - 56
     for i, r in enumerate(rounds):
         x = PAD + i * (w + gap)
         if i:
             d.line((x - gap, y0 + h / 2, x, y0 + h / 2), fill=t.line, width=3)
         played = by_round.get(r["round"])
-        after_loss = lost is not None and i > lost
         d.rounded_rectangle((x, y0, x + w, y0 + h), radius=16, fill=t.card, outline=t.edge, width=2 if t.edge else 0)
         cx, inner = x + 22, w - 44
         name = "Champion" if r["round"] == "Champions" else r["round"]
         page.label(cx, y0 + 44, fit(d, name.upper(), _inter(20, 600), inner), 20)
-        if after_loss:
-            d.text((cx, y0 + h / 2 + 10), "\u2014", font=_inter(48, 600), fill=t.text_2, anchor="lm")
-            continue
         if r["round"] == "Champions" and champion:
             cup = trophy(round(h - 96))
             page.img.paste(cup, (round(x + (w - cup.width) / 2), round(y0 + 70)), cup)
@@ -230,17 +238,15 @@ def _ladder(page: _Page, top: float, rounds: list[dict], road: list[dict]) -> fl
         if played and played["kind"] in ("won", "lost"):
             won = played["kind"] == "won"
             letter = "W" if won else "L"
-            d.text((cx, y0 + 150), letter, font=_inter(60, 700), fill="#137252" if won else "#B91C1C", anchor="ls")
+            colour = "#137252" if won else "#B91C1C"
             if played["score_for"] is not None and played["score_against"] is not None:
-                lw = d.textlength(letter, font=_inter(60, 700)) + 18
                 score = f"{played['score_for']}\u2013{played['score_against']}"
-                d.text(
-                    (cx + lw, y0 + 150),
-                    fit(d, score, _inter(56, 700), inner - lw),
-                    font=_inter(56, 700),
-                    fill=t.text,
-                    anchor="ls",
-                )
+                size = score_size(d, letter, score, inner)
+                lw = d.textlength(letter, font=_inter(size + 4, 700)) + 14
+                d.text((cx + lw, y0 + 150), score, font=_inter(size, 700), fill=t.text, anchor="ls")
+            else:
+                size = 56
+            d.text((cx, y0 + 150), letter, font=_inter(size + 4, 700), fill=colour, anchor="ls")
             _opponent_lines(page, cx, y0 + 226, inner, "vs" if won else "to", played["opponent"])
             continue
         if played and played["kind"] == "next":
@@ -273,13 +279,15 @@ def _strip(page: _Page, x: float, top: float, bottom: float, payload: dict, team
     page.label(x + COL_W, top + 30, "Playoffs", 20, anchor="rs")
     y = top + 48
     row_h = max(62.0, min(104.0, (bottom - y - 20) / max(1, len(ordered))))
+    after_team = False
     for pos, row in zip(positions, ordered, strict=True):
         mid = y + row_h / 2
         if row["school"] == team:
             fill = t.card if t.edge is None else t.odds[1]  # the light theme's card is the page's own white
             d.rounded_rectangle((x - 12, y + 3, x + COL_W + 12, y + row_h - 3), radius=10, fill=fill)
-        else:
+        elif not after_team:  # no rule touches the team's row, above or below
             _rule(page, y, x, x + COL_W)
+        after_team = row["school"] == team
         out = row.get("eliminated")
         d.text((x, mid), pos, font=_inter(28, 600), fill=t.text_2, anchor="lm")
         page.mark(row["school"], x + 54, mid, 40)

@@ -26,6 +26,7 @@ import pytest
 import backend.helpers.bracket_home_odds as odds
 import backend.helpers.share_cards as cards
 import backend.helpers.static_pages as sp
+import backend.helpers.team_image as team_image
 from backend.tests.unit.static_pages_test import (
     _REGION_6,
     _TIE,
@@ -44,7 +45,14 @@ ROOT = Path(__file__).resolve().parents[3]
 
 # Two positions meeting in a playoff game: same region, cross-region with different seeds, and
 # equal seeds from lower/higher-numbered regions (the odd/even-year tiebreak).
-HOST_PAIRS = [((1, 1), (1, 3)), ((1, 4), (1, 2)), ((1, 2), (2, 3)), ((3, 4), (2, 1)), ((1, 2), (4, 2)), ((5, 1), (2, 1))]
+HOST_PAIRS = [
+    ((1, 1), (1, 3)),
+    ((1, 4), (1, 2)),
+    ((1, 2), (2, 3)),
+    ((3, 4), (2, 1)),
+    ((1, 2), (4, 2)),
+    ((5, 1), (2, 1)),
+]
 RUNNER = ROOT / "nginx" / "tests" / "parity" / "run.mjs"
 
 
@@ -203,7 +211,36 @@ FINAL = {
 FINAL_TIED = {**FINAL, "side_b": {"feeders": [], "occupants": [_champ_occ("Raleigh", 0.25, 0.3)]}}
 
 # (name, Python's answer, the JavaScript call, how to compare: "data" or "words")
+# A team's road through the bracket: the team image's playoff_rounds against standings.js's playoffPath.
+PATH_TEAM = {
+    "school": "Raleigh",
+    "odds": {"p_playoffs": 0.9, "p_playoffs_weighted": 0.95},
+    "bracket_odds": {
+        k: v
+        for r, (a, b) in {
+            "second_round": (0.6, 0.7),
+            "quarterfinals": (0.4, 0.5),
+            "semifinals": (0.2, 0.3),
+            "finals": (0.1, 0.15),
+            "champion": (0.05, 0.08),
+        }.items()
+        for k, v in ((r, a), (f"{r}_weighted", b))
+    },
+    "home_game_odds": {
+        "first_round": 1.0,
+        "first_round_weighted": 1.0,
+        "second_round": 0.5,
+        "second_round_weighted": 0.6,
+        "quarterfinals": 0.25,
+        "quarterfinals_weighted": None,
+        "semifinals": None,
+        "semifinals_weighted": 0.1,
+    },
+}
+
 CASES = [
+    *[(f"playoffPath {t['school']} {m} {c}", team_image.playoff_rounds(t, m, c), _call("standings", "playoffPath", t, m, c), "data")
+      for t in (PATH_TEAM, {"school": "X", "odds": {}}) for m in ("tossup", "projected") for c in (3, 6)],
     ("completeScenarioCards", sp.complete_scenario_cards(SCENARIOS), _call("scenarios", "completeScenarioCards", SCENARIOS), "data"),
     ("outcomeCards tossup", sp.outcome_cards(OUTCOME_TEAMS, "tossup"), _call("scenarios", "outcomeCards", OUTCOME_TEAMS, "tossup"), "data"),
     ("outcomeCards projected", sp.outcome_cards(OUTCOME_TEAMS, "projected"), _call("scenarios", "outcomeCards", OUTCOME_TEAMS, "projected"), "data"),

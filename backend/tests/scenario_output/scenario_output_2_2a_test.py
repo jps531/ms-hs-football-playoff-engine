@@ -281,10 +281,7 @@ def test_atoms_east_union_seed4_bruce_low_margin_atom():
     """One EU seed-4 atom: Bruce wins by 1–2 AND WV wins."""
     atoms = _ATOMS["East Union"][4]
     low_atom = next(
-        (
-            a for a in atoms
-            if any(isinstance(c, GameResult) and c.winner == "Bruce" and c.max_margin == 3 for c in a)
-        ),
+        (a for a in atoms if any(isinstance(c, GameResult) and c.winner == "Bruce" and c.max_margin == 3 for c in a)),
         None,
     )
     assert low_atom is not None
@@ -297,10 +294,7 @@ def test_atoms_east_union_seed4_bruce_high_margin_atom():
     """One EU seed-4 atom: Bruce wins by 9+ AND WV wins."""
     atoms = _ATOMS["East Union"][4]
     high_atom = next(
-        (
-            a for a in atoms
-            if any(isinstance(c, GameResult) and c.winner == "Bruce" and c.min_margin == 9 for c in a)
-        ),
+        (a for a in atoms if any(isinstance(c, GameResult) and c.winner == "Bruce" and c.min_margin == 9 for c in a)),
         None,
     )
     assert high_atom is not None

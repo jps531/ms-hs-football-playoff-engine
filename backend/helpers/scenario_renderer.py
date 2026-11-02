@@ -102,7 +102,7 @@ def render_margin_condition(cond: MarginCondition, atom: list) -> str:
 
 
 def _points(n: int) -> str:
-    """"point" or "points"."""
+    """ "point" or "points"."""
     return "point" if n == 1 else "points"
 
 

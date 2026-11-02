@@ -1123,6 +1123,8 @@ class Reuse:
         if kind in self._PACKED:
             value = zlib.compress(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL), 6)
         self._last[(kind, clazz, region)] = (key, value)
+
+
 # R > FULL_MARGINS_MAX_LEFT and R ≤ ENUMERATE_MAX_LEFT: win/loss enumeration, no margin
 
 
@@ -1355,19 +1357,72 @@ def get_region_finish_scenarios(
 
     slots = fetch_all_format_slots.fn(clazz, season)
     second_round_home_overall = (
-        compute_second_round_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
-        if clazz <= 4 else {}
+        compute_second_round_home_odds(
+            region,
+            odds,
+            slots,
+            season,
+            rounds_completed=rounds_completed,
+            all_region_odds=all_region_odds,
+            round_snapshots=round_snapshots,
+        )
+        if clazz <= 4
+        else {}
     )
-    quarterfinals_home_overall = compute_quarterfinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
-    semifinals_home_overall = compute_semifinal_home_odds(region, odds, slots, season, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
+    quarterfinals_home_overall = compute_quarterfinal_home_odds(
+        region,
+        odds,
+        slots,
+        season,
+        rounds_completed=rounds_completed,
+        all_region_odds=all_region_odds,
+        round_snapshots=round_snapshots,
+    )
+    semifinals_home_overall = compute_semifinal_home_odds(
+        region,
+        odds,
+        slots,
+        season,
+        rounds_completed=rounds_completed,
+        all_region_odds=all_region_odds,
+        round_snapshots=round_snapshots,
+    )
 
     bracket_weighted = compute_bracket_advancement_odds(region, odds_weighted, slots, mp_fn, rounds_completed)
     second_round_home_overall_w = (
-        compute_second_round_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
-        if clazz <= 4 else {}
+        compute_second_round_home_odds(
+            region,
+            odds_weighted,
+            slots,
+            season,
+            mp_fn,
+            rounds_completed=rounds_completed,
+            all_region_odds=all_region_odds,
+            round_snapshots=round_snapshots,
+        )
+        if clazz <= 4
+        else {}
     )
-    quarterfinals_home_overall_w = compute_quarterfinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
-    semifinals_home_overall_w = compute_semifinal_home_odds(region, odds_weighted, slots, season, mp_fn, rounds_completed=rounds_completed, all_region_odds=all_region_odds, round_snapshots=round_snapshots)
+    quarterfinals_home_overall_w = compute_quarterfinal_home_odds(
+        region,
+        odds_weighted,
+        slots,
+        season,
+        mp_fn,
+        rounds_completed=rounds_completed,
+        all_region_odds=all_region_odds,
+        round_snapshots=round_snapshots,
+    )
+    semifinals_home_overall_w = compute_semifinal_home_odds(
+        region,
+        odds_weighted,
+        slots,
+        season,
+        mp_fn,
+        rounds_completed=rounds_completed,
+        all_region_odds=all_region_odds,
+        round_snapshots=round_snapshots,
+    )
 
     # Override bracket advancement for eliminated playoff teams with historical facts.
     # For each eliminated team, we know exactly which rounds they reached from round_snapshots:
@@ -1378,10 +1433,12 @@ def get_region_finish_scenarios(
         for school, o in odds.items():
             if not (o.eliminated and o.clinched):
                 continue
+
             def _reached(rc: int, _s: str = school) -> bool:
                 """Return True if the team had a positive playoff probability at the given round snapshot."""
                 od = round_snapshots.get(rc, {}).get(region, {}).get(_s)
                 return od is not None and od.p_playoffs > 0
+
             bracket[school] = BracketOdds(
                 school=school,
                 second_round=1.0 if num_rounds >= 5 and _reached(1) else 0.0,
@@ -1428,7 +1485,9 @@ def get_region_finish_scenarios(
     first_round_home_given_reach_w = {
         school: _safe_p_host_given_reach(
             m,
-            (1.0 if odds_weighted[school].clinched else odds_weighted[school].p_playoffs) if school in odds_weighted else 0.0,
+            (1.0 if odds_weighted[school].clinched else odds_weighted[school].p_playoffs)
+            if school in odds_weighted
+            else 0.0,
         )
         for school, m in first_round_home_overall_w.items()
     }
@@ -1949,7 +2008,9 @@ def refresh_scenario_explanations(season: int | None = None) -> dict[str, int]:
         ]
         new = refreshed_scenarios(stored, teams, completed, remaining)
         if new is None:
-            logger.warning("%dA Region %d on %s: rebuilt scenarios don't match the stored ones; left as is", c, r, as_of)
+            logger.warning(
+                "%dA Region %d on %s: rebuilt scenarios don't match the stored ones; left as is", c, r, as_of
+            )
             counts["mismatched"] += 1
             continue
         if new == stored:

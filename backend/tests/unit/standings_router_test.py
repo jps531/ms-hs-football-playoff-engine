@@ -214,8 +214,10 @@ def test_class_standings_report_when_their_rows_were_calculated():
 
     class _Conn:
         """Answers the class standings query with the test's rows."""
+
         async def execute(self, sql, params):
             """The test's rows, as an async stream."""
+
             async def gen():
                 """Yield each row."""
                 for r in rows:

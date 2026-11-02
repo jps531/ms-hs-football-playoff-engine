@@ -74,6 +74,8 @@ def test_a_way_stating_a_tiebreaker_keeps_its_games():
     """A tiebreaker presumes the games that make the tie, so the game stays with it (Region 4-4A: Gentry)."""
     from backend.helpers.data_classes import TiebreakDecision
 
-    tie = TiebreakDecision(step=3, group=("Gentry", "Greenwood", "Yazoo City"), parts=(("Gentry", "Greenwood"), ("Yazoo City",)))
+    tie = TiebreakDecision(
+        step=3, group=("Gentry", "Greenwood", "Yazoo City"), parts=(("Gentry", "Greenwood"), ("Yazoo City",))
+    )
     atoms = [[G("Gentry", "Yazoo City")], [G("Yazoo City", "Gentry"), G("Louisville", "Greenwood"), tie]]
     assert _simplify_atom_list(atoms) == atoms

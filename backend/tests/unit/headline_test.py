@@ -269,8 +269,7 @@ class TestTitleDecided:
         """With one spot open, a clinch reads as clinching "the last playoff spot"."""
         insights = [_insight("clinch_playoffs", "Madison Central", [("Madison Central", "Clinton")])]
         assert build_region_headline(self._teams(), insights, 3) == (
-            "Oxford has the region won, and Madison Central clinches the last playoff spot "
-            "with a win over Clinton."
+            "Oxford has the region won, and Madison Central clinches the last playoff spot with a win over Clinton."
         )
 
     def test_names_the_chasers_without_a_clean_clinch(self):
@@ -361,8 +360,7 @@ def _engine_headline(clazz: int, region: int, cutoff: str = "2025-10-31") -> str
 def test_engine_region_2_7a_last_spot():
     """2-7A: Oxford locked at #1; a Madison Central win over Clinton settles the last spot outright."""
     assert _engine_headline(7, 2) == (
-        "Oxford has the region won, and Madison Central clinches the last playoff spot "
-        "with a win over Clinton."
+        "Oxford has the region won, and Madison Central clinches the last playoff spot with a win over Clinton."
     )
 
 

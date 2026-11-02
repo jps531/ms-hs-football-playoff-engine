@@ -74,7 +74,8 @@ def _build_p_host_given_reach_by_team(entries: list[TeamBracketEntry]) -> dict[s
             "quarterfinals": e.hosting.quarterfinals.p_host_given_reach,
             "semifinals": e.hosting.semifinals.p_host_given_reach,
         }
-        for e in entries if e.school and e.hosting
+        for e in entries
+        if e.school and e.hosting
     }
 
 
@@ -123,9 +124,7 @@ async def get_bracket(
             raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
         _, odds_w, _ = await load_region_seed_odds(conn, season, class_, as_of)
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
-        state = await _load_and_build_playoff_bracket_state(
-            conn, season, class_, as_of, [], elo_ratings, slots
-        )
+        state = await _load_and_build_playoff_bracket_state(conn, season, class_, as_of, [], elo_ratings, slots)
         venue = await load_championship_venue(conn, season, class_)
         home_venues = await load_home_venues(conn) if state is not None else {}
 
@@ -134,8 +133,10 @@ async def get_bracket(
         # Before every region is settled, the open seeds stay in as slots (with_open_slots).
         open_seeds = _open_seeds(by_region, state.school_to_seed)
         entries = build_bracket_entries(
-            by_region, slots,
-            season=season, clazz=class_,
+            by_region,
+            slots,
+            season=season,
+            clazz=class_,
             win_prob_fn_weighted=matchup_fn_w if open_seeds else state.matchup_fn,
             wins_by_team=state.wins_by_team,
             all_region_odds=(
@@ -150,22 +151,27 @@ async def get_bracket(
         seed_to_school = _invert_school_to_seed(state.school_to_seed)
         p_host_given_reach_by_team = _build_p_host_given_reach_by_team(entries)
         bracket_layout = build_enriched_bracket_layout(
-            build_bracket_layout(slots), seed_to_school,
-            state.confirmed_game_results, simulated_results=[],
+            build_bracket_layout(slots),
+            seed_to_school,
+            state.confirmed_game_results,
+            simulated_results=[],
             p_host_given_reach_by_team=p_host_given_reach_by_team,
             game_venues=state.game_venues,
             home_venue_by_team=home_venues,
         )
     else:
         entries = build_bracket_entries(
-            by_region, slots,
-            season=season, clazz=class_,
+            by_region,
+            slots,
+            season=season,
+            clazz=class_,
             win_prob_fn_weighted=matchup_fn_w,
         )
         bracket_layout = build_bracket_layout(slots)
     bracket_layout.championship.venue = venue
     return BracketResponse(
-        season=season, class_=class_,
+        season=season,
+        class_=class_,
         bracket_layout=bracket_layout,
         teams=entries,
     )
@@ -309,9 +315,7 @@ async def get_bracket_slot(
         if not by_region:
             raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
-        state = await _load_and_build_playoff_bracket_state(
-            conn, season, class_, as_of, [], elo_ratings, slots
-        )
+        state = await _load_and_build_playoff_bracket_state(conn, season, class_, as_of, [], elo_ratings, slots)
 
         if include_conditions:
             group_slots = _resolve_slot_group(slot, round, slots)
@@ -342,7 +346,11 @@ async def get_bracket_slot(
         cross_region_wins = None
 
     teams = build_slot_outlook_teams(
-        slot, round, by_region, slots, season,
+        slot,
+        round,
+        by_region,
+        slots,
+        season,
         win_prob_fn_weighted=win_prob_fn_weighted,
         wins_confirmed=wins_confirmed,
         all_region_odds=all_region_odds,
@@ -357,7 +365,12 @@ async def get_bracket_slot(
             detail=f"No slot {slot} for {class_}A season {season}, or no {round} for this class",
         )
     return SlotOutlookResponse(
-        season=season, class_=class_, round=round, slot=slot, as_of_date=as_of, teams=teams,
+        season=season,
+        class_=class_,
+        round=round,
+        slot=slot,
+        as_of_date=as_of,
+        teams=teams,
     )
 
 
@@ -407,8 +420,10 @@ async def simulate_bracket(
     if state is not None:
         open_seeds = _open_seeds(by_region, state.school_to_seed)
         entries = build_bracket_entries(
-            by_region, slots,
-            season=season, clazz=class_,
+            by_region,
+            slots,
+            season=season,
+            clazz=class_,
             win_prob_fn_weighted=matchup_fn_w if open_seeds else state.matchup_fn,
             wins_by_team=state.wins_by_team,
             all_region_odds=(
@@ -428,8 +443,10 @@ async def simulate_bracket(
         simulated = build_simulated_bracket_results(body.results, seed_to_school)
         p_host_given_reach_by_team = _build_p_host_given_reach_by_team(entries)
         bracket_layout = build_enriched_bracket_layout(
-            build_bracket_layout(slots), seed_to_school,
-            state.confirmed_game_results, simulated,
+            build_bracket_layout(slots),
+            seed_to_school,
+            state.confirmed_game_results,
+            simulated,
             p_host_given_reach_by_team=p_host_given_reach_by_team,
             game_venues=state.game_venues,
             home_venue_by_team=home_venues,
@@ -437,14 +454,19 @@ async def simulate_bracket(
     else:
         slot_wins = build_slot_win_counts(body.results)
         entries = build_bracket_entries(
-            by_region, slots, season=season, clazz=class_,
-            win_prob_fn_weighted=matchup_fn_w, wins_by_slot=slot_wins,
+            by_region,
+            slots,
+            season=season,
+            clazz=class_,
+            win_prob_fn_weighted=matchup_fn_w,
+            wins_by_slot=slot_wins,
         )
         bracket_layout = build_bracket_layout(slots)
 
     bracket_layout.championship.venue = venue
     return BracketResponse(
-        season=season, class_=class_,
+        season=season,
+        class_=class_,
         bracket_layout=bracket_layout,
         teams=entries,
     )

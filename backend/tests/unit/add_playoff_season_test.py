@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-_spec = importlib.util.spec_from_file_location("add_playoff_season", ROOT / "backend" / "scripts" / "add_playoff_season.py")
+_spec = importlib.util.spec_from_file_location(
+    "add_playoff_season", ROOT / "backend" / "scripts" / "add_playoff_season.py"
+)
 script = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(script)
 
@@ -17,7 +19,10 @@ TEMPLATE = ROOT / "sql" / "seeds" / "playoff_format_template.yaml"
 def _one_class(**slot_changes) -> dict:
     """A one-class, one-slot config for 2099, with *slot_changes* applied to its slot."""
     slot = {"slot": 1, "home_region": 1, "home_seed": 1, "away_region": 2, "away_seed": 4, "north_south": "N"}
-    return {"season": 2099, "classes": [{"class": 5, "num_regions": 4, "num_rounds": 4, "slots": [{**slot, **slot_changes}]}]}
+    return {
+        "season": 2099,
+        "classes": [{"class": 5, "num_regions": 4, "num_rounds": 4, "slots": [{**slot, **slot_changes}]}],
+    }
 
 
 def test_the_template_is_a_valid_config():
@@ -64,6 +69,7 @@ class _Cursor:
 
 class _Connection:
     """Stands in for a database connection, sharing one record of rows seen across its cursors."""
+
     def __init__(self, seen: set):
         self.seen = seen
 

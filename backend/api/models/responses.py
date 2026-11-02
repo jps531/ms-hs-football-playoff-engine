@@ -387,7 +387,9 @@ class PathConditionModel(BaseModel):
     games: list[PathGameRefModel] | None = None  # populated for "margin_sum"
     op: str | None = None  # populated for "margin_sum"
     threshold: int | None = None  # populated for "margin_sum"
-    description: str | None = None  # human-readable text for margin_sum / coin_flip / pd_rank / bracket_advances / seed_required / bracket_win
+    description: str | None = (
+        None  # human-readable text for margin_sum / coin_flip / pd_rank / bracket_advances / seed_required / bracket_win
+    )
     region: int | None = None  # populated for "bracket_advances" / "seed_required" / "bracket_win"
     seed: int | None = None  # populated for "bracket_advances" / "seed_required" / "bracket_win"
     round_name: str | None = None  # populated for "bracket_advances" / "bracket_win"

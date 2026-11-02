@@ -420,7 +420,9 @@ class TestBracketPreview:
         assert card.index("Bay Springs") < card.index("BYE")
         assert re.findall(r'class="trow__gutter">([^<]*)<', card) == ["", ""]
         sheet = sp._sheet(game, BRACKET_CTX)
-        assert ">Bye<" in sheet and "bgame__vs" not in sheet and "Region 4 #4 Seed" not in sheet.split("bgame__detail")[0]
+        assert (
+            ">Bye<" in sheet and "bgame__vs" not in sheet and "Region 4 #4 Seed" not in sheet.split("bgame__detail")[0]
+        )
         assert "There is no Region 4 #4 Seed, so the Region 3 #1 Seed gets a bye." in sheet
         locked = {**game, "side_a": _side([(3, 1)], [("Bay Springs", 1.0, True)])}
         assert "There is no Region 4 #4 Seed, so Bay Springs gets a bye." in sp._sheet(locked, BRACKET_CTX)
@@ -791,7 +793,7 @@ def test_the_championship_game_card_says_where_its_played_and_the_projected_cham
     html = bracket_body(3, games, {**BRACKET_CTX, "venue": venue}, "x")
     note = html[html.index('<div class="tfinal">') :]
     assert note.startswith('<div class="tfinal"><p class="tfinal__venue">Davis Wade Stadium • Starkville</p>')
-    assert "Projected champion:</span> <span class=\"champ-line__team\"><strong>Raleigh</strong> · 31%</span>" in note
+    assert 'Projected champion:</span> <span class="champ-line__team"><strong>Raleigh</strong> · 31%</span>' in note
     tossup = bracket_body(3, games, {**BRACKET_CTX, "mode": "tossup", "venue": venue}, "x")
     assert "Projected champion" not in tossup and "Davis Wade Stadium • Starkville" in tossup
     banner = bracket_body(
@@ -1271,7 +1273,10 @@ def test_why_blocks_and_explanation_match_scenarios_js():
           "outcomes": {"A": "1", "B": "2"}, "explanation": explanation}  # fmt: skip
     [card] = complete_scenario_cards([sc])
     html = outcome_scenario_card(card, {})
-    assert '<details class="outcome__why"><summary><svg class="outcome__explain-icon"' in html and "</svg>Explanation</summary>" in html
+    assert (
+        '<details class="outcome__why"><summary><svg class="outcome__explain-icon"' in html
+        and "</svg>Explanation</summary>" in html
+    )
     assert "<li>s2 &amp; &lt;b&gt;</li>" in html and '<p class="why-tie__when">If Smithville beats Biggersville' in html
     [plain] = complete_scenario_cards([{**sc, "explanation": []}])
     assert "outcome__why" not in outcome_scenario_card(plain, {})

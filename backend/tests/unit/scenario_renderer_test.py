@@ -569,7 +569,10 @@ class TestRenderMarginCondition:
         cond = MarginCondition(add=(("A", "B"), ("C", "D")), sub=(("E", "F"),), op=">=", threshold=5)
         atom = self._atom(("A", "B"), ("C", "D"), ("E", "F"))
         result = render_margin_condition(cond, atom)
-        assert result == "A's winning margin + C's winning margin + \u2212E's winning margin >= 5 (a margin over 12 counts as 12)"
+        assert (
+            result
+            == "A's winning margin + C's winning margin + \u2212E's winning margin >= 5 (a margin over 12 counts as 12)"
+        )
 
 
 class TestRenderConditionUnknownType:

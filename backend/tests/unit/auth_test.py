@@ -214,6 +214,7 @@ class _FakeDB:
 
         class _Result:
             """A query's result: the one row it returns."""
+
             def __init__(self, row):
                 self._row = row
 
@@ -223,6 +224,7 @@ class _FakeDB:
 
         class _Conn:
             """Answers the users lookup from the stored row and an insert with a new base user."""
+
             async def execute(self, sql, params):
                 """Record the statement; a lookup returns the stored row, an insert the new one."""
                 db.statements.append((sql, params))
@@ -230,6 +232,7 @@ class _FakeDB:
 
         class _Ctx:
             """``async with get_conn() as conn``."""
+
             async def __aenter__(self):
                 return _Conn()
 

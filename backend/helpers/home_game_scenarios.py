@@ -487,7 +487,15 @@ def _enumerate_qf(
             for t_r2, t_cand in team_r2_options:
                 for o_r2, o_cand in opp_r2_options:
                     home_r, home_s = qf_home_team(
-                        region, seed, r1_home_team, t_r2, opp_r, opp_s, opp_r1_home, o_r2, season,
+                        region,
+                        seed,
+                        r1_home_team,
+                        t_r2,
+                        opp_r,
+                        opp_s,
+                        opp_r1_home,
+                        o_r2,
+                        season,
                     )
                     is_home = home_r == region and home_s == seed
                     explanation = _explain_qf(
@@ -514,10 +522,14 @@ def _enumerate_qf(
                 extra: list[HomeGameCondition] = []
                 if t_cand is not None and not drop_team and not drop_both:
                     t_region, t_seed = t_cand
-                    extra.append(_advances(_team_label(t_region, t_seed, team_lookup), t_region, t_seed, _ROUND_NAMES_1A_4A[1]))
+                    extra.append(
+                        _advances(_team_label(t_region, t_seed, team_lookup), t_region, t_seed, _ROUND_NAMES_1A_4A[1])
+                    )
                 if o_cand is not None and not drop_opp and not drop_both:
                     o_region, o_seed = o_cand
-                    extra.append(_advances(_team_label(o_region, o_seed, team_lookup), o_region, o_seed, _ROUND_NAMES_1A_4A[1]))
+                    extra.append(
+                        _advances(_team_label(o_region, o_seed, team_lookup), o_region, o_seed, _ROUND_NAMES_1A_4A[1])
+                    )
 
                 key = (tuple((c.region, c.seed) for c in extra), is_home)
                 if key in emitted:
@@ -879,17 +891,13 @@ def enumerate_reach_scenarios(
     if target_round != "First Round":
         is_home = (region, seed) == (team_slot.home_region, team_slot.home_seed)
         r1_opponent = (
-            (team_slot.away_region, team_slot.away_seed)
-            if is_home
-            else (team_slot.home_region, team_slot.home_seed)
+            (team_slot.away_region, team_slot.away_seed) if is_home else (team_slot.home_region, team_slot.home_seed)
         )
         prior_rounds.append(("First Round", [r1_opponent]))
 
     if is_1a_4a and target_round in ("Quarterfinals", "Semifinals"):
         adj = opponent_slots(slot_idx, round_offset=1, half_slots=half_slots)[0]
-        prior_rounds.append(
-            ("Second Round", [(adj.home_region, adj.home_seed), (adj.away_region, adj.away_seed)])
-        )
+        prior_rounds.append(("Second Round", [(adj.home_region, adj.home_seed), (adj.away_region, adj.away_seed)]))
 
     if target_round == "Semifinals":
         qf_round_offset = 2 if is_1a_4a else 1
@@ -912,7 +920,10 @@ def enumerate_reach_scenarios(
             [
                 *group,
                 HomeGameCondition(
-                    kind="wins_round", round_name=round_label, region=r, seed=s,
+                    kind="wins_round",
+                    round_name=round_label,
+                    region=r,
+                    seed=s,
                     team_name=_team_label(r, s, team_lookup),
                 ),
             ]
@@ -1251,9 +1262,7 @@ def enumerate_team_matchups(
         for (opp_r, opp_s, is_home), count in path_counts.items():
             p_given_reach = count / total if total > 0 else None
             p_given_reach_w = round_weighted.get((opp_r, opp_s, is_home))
-            p_overall = (
-                (p_given_reach * p_reach) if (p_given_reach is not None and p_reach is not None) else None
-            )
+            p_overall = (p_given_reach * p_reach) if (p_given_reach is not None and p_reach is not None) else None
             p_overall_w = (
                 (p_given_reach_w * p_reach_w) if (p_given_reach_w is not None and p_reach_w is not None) else None
             )

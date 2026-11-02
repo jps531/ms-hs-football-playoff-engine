@@ -529,9 +529,15 @@ def _p_host_qf_given_seed(
 
     if qf_offset >= 2:
         r2_opp_slot = _opponent_slots(team_slot_idx, 1, half_slots)[0]
-        p_team_h2 = _p_home_in_r2(team_seed, team_region, r2_opp_slot, season, win_prob_fn,
-                                    all_region_odds=all_region_odds,
-                                    cross_region_wins=cross_region_wins)
+        p_team_h2 = _p_home_in_r2(
+            team_seed,
+            team_region,
+            r2_opp_slot,
+            season,
+            win_prob_fn,
+            all_region_odds=all_region_odds,
+            cross_region_wins=cross_region_wins,
+        )
     else:
         p_team_h2 = 0.0
 
@@ -552,11 +558,19 @@ def _p_host_qf_given_seed(
             opp_h1 = 1 if opp_r1_home else 0
 
             if qf_offset >= 2:
-                p_opp_h2 = _p_home_in_r2(opp_seed, opp_region, opp_r2_partner, season, win_prob_fn,
-                                           all_region_odds=all_region_odds,
-                                           cross_region_wins=cross_region_wins)
+                p_opp_h2 = _p_home_in_r2(
+                    opp_seed,
+                    opp_region,
+                    opp_r2_partner,
+                    season,
+                    win_prob_fn,
+                    all_region_odds=all_region_odds,
+                    cross_region_wins=cross_region_wins,
+                )
                 skip = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
-                p_cand_reach = _p_team_reach(opp_region, opp_seed, opp_slot_idx, qf_offset, half_slots, win_prob_fn, skip_wins=skip)
+                p_cand_reach = _p_team_reach(
+                    opp_region, opp_seed, opp_slot_idx, qf_offset, half_slots, win_prob_fn, skip_wins=skip
+                )
             else:
                 p_opp_h2 = 0.0
                 skip = (cross_region_wins or {}).get((opp_region, opp_seed), 0)
@@ -612,10 +626,7 @@ def _alive_in_slots(
     alive: list[tuple[int, int]] = []
     for slot in opp_slots:
         for r, s in ((slot.home_region, slot.home_seed), (slot.away_region, slot.away_seed)):
-            if any(
-                getattr(o, f"p{s}", 0.0) > 0.5 and o.p_playoffs > 0
-                for o in all_region_odds.get(r, {}).values()
-            ):
+            if any(getattr(o, f"p{s}", 0.0) > 0.5 and o.p_playoffs > 0 for o in all_region_odds.get(r, {}).values()):
                 alive.append((r, s))
     return alive[0] if len(alive) == 1 else None
 
@@ -915,14 +926,18 @@ def compute_second_round_home_odds(
                 if opp is None and wins_confirmed is not None:
                     opp = _resolved_opp_in_slots(opp_slots_a, all_region_odds, wins_confirmed, 1)
                 if opp is not None:
-                    result[school] = 1.0 if r2_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
+                    result[school] = (
+                        1.0 if r2_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
+                    )
                     continue
 
         # Path B — eliminated teams that won R1 can have historical hosting computed via snapshots.
         if o.p_playoffs <= 0:
             if not (
                 seed is None
-                and o.clinched and o.eliminated and round_snapshots
+                and o.clinched
+                and o.eliminated
+                and round_snapshots
                 and _school_reached_rc(school, region, round_snapshots, 1)
             ):
                 result[school] = 0.0
@@ -939,7 +954,9 @@ def compute_second_round_home_odds(
             opp = _alive_in_slots(opp_slots_b, all_region_odds) if all_region_odds else None
             if opp is None and round_snapshots:
                 opp = _alive_in_snapshots(opp_slots_b, round_snapshots)
-            result[school] = 1.0 if opp and r2_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
+            result[school] = (
+                1.0 if opp and r2_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
+            )
             continue
 
         # Path C — probabilistic: team hasn't won R1 yet, or R2 opponent still unresolved.
@@ -1040,7 +1057,9 @@ def compute_quarterfinal_home_odds(
                 # For 5A-7A (qf_offset=1) there is no R2; r2_home is always False.
                 # For 1A-4A (qf_offset=2) derive r2_home from slot structure; if ambiguous
                 # (two R2 opponent candidates with different seeds), resolve via prior_round_odds.
-                r2h: bool | None = False if qf_offset == 1 else _r2_home_if_deterministic(region, seed, idx, half_slots, season)
+                r2h: bool | None = (
+                    False if qf_offset == 1 else _r2_home_if_deterministic(region, seed, idx, half_slots, season)
+                )
                 if r2h is None:
                     r2_opp_slots = [half_slots[i] for i in _opponent_slot_indices(idx, 1)]
                     actual_r2_opp = _alive_in_slots(r2_opp_slots, all_region_odds)
@@ -1060,24 +1079,41 @@ def compute_quarterfinal_home_odds(
                     opp_idx = _slot_index_for(opp[0], opp[1], half_slots)
                     if opp_idx is not None:
                         opp_r1h = _was_home_r1(opp[0], opp[1], half_slots[opp_idx])
-                        opp_r2h: bool | None = False if qf_offset == 1 else _r2_home_if_deterministic(opp[0], opp[1], opp_idx, half_slots, season)
+                        opp_r2h: bool | None = (
+                            False
+                            if qf_offset == 1
+                            else _r2_home_if_deterministic(opp[0], opp[1], opp_idx, half_slots, season)
+                        )
                         if opp_r2h is None:
                             opp_r2_opp_slots = [half_slots[i] for i in _opponent_slot_indices(opp_idx, 1)]
                             actual_opp_r2_opp = _alive_in_slots(opp_r2_opp_slots, all_region_odds)
                             if actual_opp_r2_opp is None and round_snapshots:
                                 actual_opp_r2_opp = _alive_in_snapshots(opp_r2_opp_slots, round_snapshots)
                             if actual_opp_r2_opp is None and wins_confirmed is not None:
-                                actual_opp_r2_opp = _resolved_opp_in_slots(opp_r2_opp_slots, all_region_odds, wins_confirmed, 1)
+                                actual_opp_r2_opp = _resolved_opp_in_slots(
+                                    opp_r2_opp_slots, all_region_odds, wins_confirmed, 1
+                                )
                             if actual_opp_r2_opp is not None:
-                                opp_r2h = r2_home_team(opp[0], opp[1], actual_opp_r2_opp[0], actual_opp_r2_opp[1], season) == opp
+                                opp_r2h = (
+                                    r2_home_team(opp[0], opp[1], actual_opp_r2_opp[0], actual_opp_r2_opp[1], season)
+                                    == opp
+                                )
                         if opp_r2h is not None:
                             host = qf_home_team(region, seed, r1h, r2h, opp[0], opp[1], opp_r1h, opp_r2h, season)
                             p_home += p_seed * (1.0 if host == (region, seed) else 0.0)
                             continue
             p_reach = _p_team_reach(region, seed, idx, qf_offset, half_slots, win_prob_fn, skip_wins=tw)
             p_qf_home = _p_host_qf_given_seed(
-                seed, region, idx, half_slots, qf_offset, odd_year, season, win_prob_fn,
-                all_region_odds=all_region_odds, cross_region_wins=cross_region_wins,
+                seed,
+                region,
+                idx,
+                half_slots,
+                qf_offset,
+                odd_year,
+                season,
+                win_prob_fn,
+                all_region_odds=all_region_odds,
+                cross_region_wins=cross_region_wins,
             )
             p_home += p_seed * p_reach * p_qf_home
         result[school] = p_home
@@ -1161,7 +1197,9 @@ def compute_semifinal_home_odds(
                 if opp is None and round_snapshots:
                     opp = _alive_in_snapshots(opp_slots_a, round_snapshots)
                 if opp is not None:
-                    result[school] = 1.0 if sf_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
+                    result[school] = (
+                        1.0 if sf_home_team(region, seed, opp[0], opp[1], season) == (region, seed) else 0.0
+                    )
                     continue
 
         if o.p_playoffs <= 0:
@@ -1248,10 +1286,14 @@ def compute_bracket_advancement_odds(
     # Build the other-half slot list and precompute each other-half team's
     # probability of winning their entire bracket half.
     my_ns = half_slots[0].north_south if half_slots else None
-    other_half_slots = sorted(
-        [s for s in slots if s.north_south != my_ns],
-        key=lambda s: s.slot,
-    ) if my_ns is not None else []
+    other_half_slots = (
+        sorted(
+            [s for s in slots if s.north_south != my_ns],
+            key=lambda s: s.slot,
+        )
+        if my_ns is not None
+        else []
+    )
 
     other_half_win_probs: dict[tuple[int, int], float] = {}
     for local_idx, opp_slot in enumerate(other_half_slots):

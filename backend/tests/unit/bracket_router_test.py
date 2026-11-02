@@ -91,8 +91,12 @@ class TestBuildPHostGivenReachByTeam:
 def _slot(slot: int, home_region: int, home_seed: int, away_region: int, away_seed: int) -> FormatSlot:
     """Build a minimal FormatSlot for testing _seeds_by_region_for_slot."""
     return FormatSlot(
-        slot=slot, home_region=home_region, home_seed=home_seed,
-        away_region=away_region, away_seed=away_seed, north_south="N",
+        slot=slot,
+        home_region=home_region,
+        home_seed=home_seed,
+        away_region=away_region,
+        away_seed=away_seed,
+        north_south="N",
     )
 
 

@@ -33,6 +33,9 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
     region/{season}/{class}a-{region}-scenarios-{mode}-{theme}[-{page}].png
                               its scenarios, while games remain: every way it can finish, or the
                               results that settle a spot; several pages (-1, -2, …) when needed
+    region/{season}/{class}a-{region}-team-{slug}-season-{mode}-{theme}.png
+                              each of its teams' season (backend.helpers.team_image): its games, odds
+                              of each seed, the region's standings and its road through the playoffs
     region/{season}/{class}a-{region}.json
                               which of those images it has and how many pages each, for the page
     sitemap.xml               the front page, About, and every region, class and bracket page
@@ -61,8 +64,8 @@ from prefect import flow, get_run_logger, task
 
 from backend.helpers.bracket_image import is_final, render_bracket_card_image, render_bracket_image
 from backend.helpers.engine_settings import CLASSES, FULL_MARGINS_MAX_LEFT
-from backend.helpers.image_jobs import REGION_OVERVIEW, REGION_SCENARIOS, ImageJob, draw_images
-from backend.helpers.region_image import region_playoffs, region_seeds
+from backend.helpers.image_jobs import REGION_OVERVIEW, REGION_SCENARIOS, TEAM_SEASON, ImageJob, draw_images
+from backend.helpers.region_image import playoff_road, region_playoffs, region_seeds
 from backend.helpers.share_cards import (
     SITE_DESCRIPTION,
     SITE_NAME,
@@ -355,12 +358,7 @@ def build_share_assets(
     drawn = draw_images(out_dir, image_jobs, prune=[f"region/{season}"], files_out=files)
     written["region_images"] = drawn["drawn"]
     written["region_images_kept"] = drawn["kept"]
-    indexes: dict[str, dict] = {}
-    for job in image_jobs:
-        k = job.kwargs
-        index = indexes.setdefault(region_index_path(season, k["clazz"], k["region"]), {})
-        kind = "overview" if job.renderer == REGION_OVERVIEW else "scenarios"
-        index.setdefault(kind, {})[f"{k['mode']}-{k['theme']}"] = len(files.get(job.path) or [])
+    indexes = region_indexes(season, image_jobs, files)
     for path, index in indexes.items():
         _write_text(out_dir / path, json.dumps(index, sort_keys=True))
     return written
@@ -375,10 +373,30 @@ def region_image_path(season: int, clazz: int, region: int, kind: str, mode: str
     return f"region/{season}/{clazz}a-{region}-{kind}-{mode}-{theme}.png"
 
 
+def team_image_path(season: int, clazz: int, region: int, school: str, kind: str, mode: str, theme: str) -> str:
+    """A team's image, beside its region's: ``region/2026/3a-6-team-magee-season-projected-dark.png``."""
+    return f"region/{season}/{clazz}a-{region}-team-{slugify(school)}-{kind}-{mode}-{theme}.png"
+
+
 def region_index_path(season: int, clazz: int, region: int) -> str:
-    """A region's image index: {"overview": {"projected-dark": 1, …}, "scenarios": {…}}, each image's pages
-    by odds mode and theme (0: none, nothing to show)."""
+    """A region's image index: {"overview": {"projected-dark": 1, …}, "scenarios": {…}, "teams": {"Magee":
+    {"season": {…}}}}, each image's pages by odds mode and theme (0: none, nothing to show)."""
     return f"region/{season}/{clazz}a-{region}.json"
+
+
+def region_indexes(season: int, jobs: list[ImageJob], files: dict[str, list[str]]) -> dict[str, dict]:
+    """Each region's index (by its path) from its image *jobs* and the *files* each job made."""
+    indexes: dict[str, dict] = {}
+    for job in jobs:
+        k = job.kwargs
+        index = indexes.setdefault(region_index_path(season, k["clazz"], k["region"]), {})
+        pages = len(files.get(job.path) or [])
+        variant = f"{k['mode']}-{k['theme']}"
+        if job.renderer == TEAM_SEASON:
+            index.setdefault("teams", {}).setdefault(k["school"], {}).setdefault("season", {})[variant] = pages
+        else:
+            index.setdefault("overview" if job.renderer == REGION_OVERVIEW else "scenarios", {})[variant] = pages
+    return indexes
 
 
 def _region_image_jobs(
@@ -393,7 +411,7 @@ def _region_image_jobs(
     teams: dict,
     bracket: dict,
 ) -> list[ImageJob]:
-    """The region's overview and scenarios in each odds mode it has (Projected only while there are
+    """The region's overview and scenarios, and each team's season, in each odds mode it has (Projected only while there are
     Projected odds) and each theme. Each job carries only what its image shows, so its fingerprint changes only when
     the image would: the snapshot and computation times aren't drawn, so they're left out."""
     shown = {k: v for k, v in payload.items() if k not in ("computation_state", "as_of_date")}
@@ -404,7 +422,19 @@ def _region_image_jobs(
         if g.get("is_region_game")
         and not (g.get("final") and g.get("score_a") is not None and g.get("score_b") is not None)
     ]
-    playoffs = region_playoffs(region_seeds(payload), bracket.get("games") or [], bracket.get("results") or {})
+    seeds = region_seeds(payload)
+    b_games, b_results = bracket.get("games") or [], bracket.get("results") or {}
+    playoffs = region_playoffs(seeds, b_games, b_results)
+    # A team's image shows the standings and its own games; its road once the region's seeds are set.
+    standings = {"teams": payload["teams"], "remaining_games": payload.get("remaining_games") or []}
+    team_jobs = []
+    for t in payload["teams"]:
+        school = t["school"]
+        mine = [g for g in games if school in (g["team_a"], g["team_b"])]
+        road = playoff_road(school, b_games, b_results) if school in seeds else None
+        names = {*region_teams, *(g["team_a"] for g in mine), *(g["team_b"] for g in mine)}
+        names |= {r["opponent"] for r in road or []}
+        team_jobs.append((school, mine, road, {n: teams.get(n) for n in sorted(names)}))
     modes = ("projected", "tossup") if odds_mode(payload["teams"]) == "projected" else ("tossup",)
     jobs = []
     for mode in modes:
@@ -429,6 +459,21 @@ def _region_image_jobs(
             jobs.append(
                 ImageJob(region_image_path(season, clazz, region, "scenarios", mode, theme), REGION_SCENARIOS, common)
             )
+            for school, mine, road, marks in team_jobs:
+                jobs.append(
+                    ImageJob(
+                        team_image_path(season, clazz, region, school, "season", mode, theme),
+                        TEAM_SEASON,
+                        {
+                            **common,
+                            "payload": standings,
+                            "school": school,
+                            "games": mine,
+                            "teams": marks,
+                            "road": road,
+                        },
+                    )
+                )
     return jobs
 
 

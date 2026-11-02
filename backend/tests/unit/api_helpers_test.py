@@ -1036,7 +1036,8 @@ class TestScenariosToEntries:
         [tie] = entry.explanation
         assert (tie.teams, tie.places, tie.steps) == (["Alpha", "Beta"], [1, 2], ["Head-to-head: Alpha beats Beta."])
         assert [[(g.winner, g.loser) for g in cube] for cube in tie.when] == [
-            [("Alpha", "Gamma")], [("Delta", "Beta"), ("Alpha", "Delta")]
+            [("Alpha", "Gamma")],
+            [("Delta", "Beta"), ("Alpha", "Delta")],
         ]
         assert scenarios_to_entries([{**base, "explanation": []}])[0].explanation == []
         assert scenarios_to_entries([base])[0].explanation is None
@@ -1050,7 +1051,9 @@ class TestScenariosToEntries:
         ]  # fmt: skip
         base = {"scenario_num": 1, "sub_label": "", "game_winners": [], "seeding": ["Alpha", "Beta"]}
         [entry] = scenarios_to_entries([{**base, "explanation": explanation}])
-        assert [[(g.winner, g.loser, g.min_margin, g.max_margin) for g in cube] for cube in entry.explanation[0].when] == [
+        assert [
+            [(g.winner, g.loser, g.min_margin, g.max_margin) for g in cube] for cube in entry.explanation[0].when
+        ] == [
             [("Alpha", "Gamma", 12, None), ("Delta", "Beta", 1, 12)],
             [("Alpha", "Delta", 1, None)],
         ]

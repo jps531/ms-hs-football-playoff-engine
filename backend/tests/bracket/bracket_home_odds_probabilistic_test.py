@@ -927,8 +927,12 @@ def test_r2_deterministic_seed1_hosts_regardless_of_opponent(
     """R1s1 hosts R2 exactly (1.0) regardless of which R1 opponent survived."""
     all_odds = _alive_odds(opp_region, opp_seed, opp_school)
     result = compute_second_round_home_odds(
-        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=1, all_region_odds=all_odds,
+        1,
+        {"R1s1": _locked("R1s1", 1)},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
+        all_region_odds=all_odds,
     )
     assert result["R1s1"] == pytest.approx(expected)
 
@@ -937,8 +941,12 @@ def test_r2_deterministic_seed2_away_when_seed1_opponent() -> None:
     """R1s2 is away in R2 (0.0) when their opponent is seed-1 R3s1."""
     all_odds = _alive_odds(3, 1, "R3s1")
     result = compute_second_round_home_odds(
-        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=1, all_region_odds=all_odds,
+        1,
+        {"R1s2": _locked("R1s2", 2)},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
+        all_region_odds=all_odds,
     )
     assert result["R1s2"] == pytest.approx(0.0)
 
@@ -947,8 +955,12 @@ def test_r2_deterministic_seed2_home_when_seed4_opponent() -> None:
     """R1s2 hosts R2 (1.0) when their opponent is seed-4 R4s4."""
     all_odds = _alive_odds(4, 4, "R4s4")
     result = compute_second_round_home_odds(
-        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=1, all_region_odds=all_odds,
+        1,
+        {"R1s2": _locked("R1s2", 2)},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
+        all_region_odds=all_odds,
     )
     assert result["R1s2"] == pytest.approx(1.0)
 
@@ -956,7 +968,11 @@ def test_r2_deterministic_seed2_home_when_seed4_opponent() -> None:
 def test_r2_deterministic_falls_through_without_all_region_odds() -> None:
     """Without all_region_odds, rounds_completed=1 falls through to probabilistic."""
     result = compute_second_round_home_odds(
-        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=1,
+        1,
+        {"R1s1": _locked("R1s1", 1)},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
     )
     # Probabilistic: p_r1=1.0, p_r2_home=1.0 (seed 1 always hosts) → overall = 1.0
     assert result["R1s1"] == pytest.approx(1.0)
@@ -964,12 +980,25 @@ def test_r2_deterministic_falls_through_without_all_region_odds() -> None:
 
 def test_r2_deterministic_eliminated_team_gets_zero() -> None:
     """Eliminated team (p_playoffs=0) returns 0.0 in deterministic path."""
-    elim = StandingsOdds(school="Elim", p1=0.0, p2=0.0, p3=0.0, p4=0.0,
-                         p_playoffs=0.0, final_playoffs=0.0, clinched=False, eliminated=True)
+    elim = StandingsOdds(
+        school="Elim",
+        p1=0.0,
+        p2=0.0,
+        p3=0.0,
+        p4=0.0,
+        p_playoffs=0.0,
+        final_playoffs=0.0,
+        clinched=False,
+        eliminated=True,
+    )
     all_odds = _alive_odds(3, 2, "R3s2")
     result = compute_second_round_home_odds(
-        1, {"Elim": elim}, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=1, all_region_odds=all_odds,
+        1,
+        {"Elim": elim},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
+        all_region_odds=all_odds,
     )
     assert result["Elim"] == pytest.approx(0.0)
 
@@ -993,11 +1022,23 @@ def test_r2_probabilistic_eliminated_r2_opp_excluded() -> None:
     R4s4 (eliminated). With all_region_odds provided, R4s4 is excluded from weights.
     Only R3s1 (seed 1) remains — always hosts vs R1s2 (seed 2) → overall = 0.0.
     """
-    elim_r4s4 = StandingsOdds(school="R4s4", p1=0.0, p2=0.0, p3=0.0, p4=1.0,
-                               p_playoffs=0.0, final_playoffs=0.0, clinched=True, eliminated=True)
+    elim_r4s4 = StandingsOdds(
+        school="R4s4",
+        p1=0.0,
+        p2=0.0,
+        p3=0.0,
+        p4=1.0,
+        p_playoffs=0.0,
+        final_playoffs=0.0,
+        clinched=True,
+        eliminated=True,
+    )
     all_odds = {3: {"R3s1": _locked("R3s1", 1)}, 4: {"R4s4": elim_r4s4}}
     result = compute_second_round_home_odds(
-        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_1A_4A_2025, ODD_SEASON,
+        1,
+        {"R1s2": _locked("R1s2", 2)},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
         all_region_odds=all_odds,
     )
     assert result["R1s2"] == pytest.approx(0.0)
@@ -1011,7 +1052,10 @@ def test_r2_probabilistic_without_all_region_odds_returns_nonzero() -> None:
     This confirms all_region_odds is what causes the change.
     """
     result = compute_second_round_home_odds(
-        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_1A_4A_2025, ODD_SEASON,
+        1,
+        {"R1s2": _locked("R1s2", 2)},
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
     )
     assert result["R1s2"] == pytest.approx(0.25, abs=1e-9)
 
@@ -1033,14 +1077,16 @@ def test_r2_probabilistic_without_all_region_odds_returns_nonzero() -> None:
     ],
     ids=["opp_R2s2", "opp_R1s3"],
 )
-def test_qf_deterministic_seed1_hosts_5a7a(
-    opp_region: int, opp_seed: int, opp_school: str, expected: float
-) -> None:
+def test_qf_deterministic_seed1_hosts_5a7a(opp_region: int, opp_seed: int, opp_school: str, expected: float) -> None:
     """R1s1 gets QF p_host_given_reach=1.0 via deterministic path for both possible QF opponents."""
     all_odds = _alive_odds(opp_region, opp_seed, opp_school)
     result = compute_quarterfinal_home_odds(
-        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
-        rounds_completed=1, all_region_odds=all_odds,
+        1,
+        {"R1s1": _locked("R1s1", 1)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
+        all_region_odds=all_odds,
     )
     assert result["R1s1"] == pytest.approx(expected)
 
@@ -1049,8 +1095,12 @@ def test_qf_deterministic_seed2_away_vs_seed1_5a7a() -> None:
     """R1s2 is away (0.0) in QF when facing better-seeded R2s1."""
     all_odds = _alive_odds(2, 1, "R2s1")
     result = compute_quarterfinal_home_odds(
-        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_5A_7A_2025, ODD_SEASON,
-        rounds_completed=1, all_region_odds=all_odds,
+        1,
+        {"R1s2": _locked("R1s2", 2)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
+        all_region_odds=all_odds,
     )
     assert result["R1s2"] == pytest.approx(0.0)
 
@@ -1062,7 +1112,11 @@ def test_qf_deterministic_falls_through_without_all_region_odds() -> None:
     under equal_matchup_prob → p_qf_home=0.5, p_reach=1.0 → overall=0.5.
     """
     result = compute_quarterfinal_home_odds(
-        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=1,
+        1,
+        {"R1s2": _locked("R1s2", 2)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
     )
     assert result["R1s2"] == pytest.approx(0.5)
 
@@ -1082,19 +1136,21 @@ def test_qf_deterministic_falls_through_without_all_region_odds() -> None:
 @pytest.mark.parametrize(
     "opp_region,opp_seed,opp_school,expected",
     [
-        (2, 1, "R2s1", 1.0),   # equal seed, odd year → R1 (lower) hosts
-        (1, 2, "R1s2", 1.0),   # same region, golden rule → seed 1 hosts
+        (2, 1, "R2s1", 1.0),  # equal seed, odd year → R1 (lower) hosts
+        (1, 2, "R1s2", 1.0),  # same region, golden rule → seed 1 hosts
     ],
     ids=["opp_R2s1_seed_tie", "opp_R1s2_golden_rule"],
 )
-def test_sf_deterministic_seed1_hosts_5a7a(
-    opp_region: int, opp_seed: int, opp_school: str, expected: float
-) -> None:
+def test_sf_deterministic_seed1_hosts_5a7a(opp_region: int, opp_seed: int, opp_school: str, expected: float) -> None:
     """R1s1 hosts SF (1.0) in the deterministic path against both possible opponents."""
     all_odds = _alive_odds(opp_region, opp_seed, opp_school)
     result = compute_semifinal_home_odds(
-        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
-        rounds_completed=2, all_region_odds=all_odds,
+        1,
+        {"R1s1": _locked("R1s1", 1)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
     )
     assert result["R1s1"] == pytest.approx(expected)
 
@@ -1103,8 +1159,12 @@ def test_sf_deterministic_seed1_r2_away_vs_r1s1() -> None:
     """R2s1 gets SF p_host_given_reach=0.0 vs R1s1 (equal seed, odd year → R1 region hosts)."""
     all_odds = _alive_odds(1, 1, "R1s1")
     result = compute_semifinal_home_odds(
-        2, {"R2s1": _locked("R2s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
-        rounds_completed=2, all_region_odds=all_odds,
+        2,
+        {"R2s1": _locked("R2s1", 1)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
     )
     assert result["R2s1"] == pytest.approx(0.0)
 
@@ -1118,8 +1178,12 @@ def test_sf_deterministic_falls_through_when_opponent_unresolved() -> None:
     zeroes out — this test pins that combined behavior as a regression guard.
     """
     result = compute_semifinal_home_odds(
-        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
-        rounds_completed=2, all_region_odds={},
+        1,
+        {"R1s1": _locked("R1s1", 1)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds={},
     )
     assert result["R1s1"] == pytest.approx(0.0)
 
@@ -1127,7 +1191,11 @@ def test_sf_deterministic_falls_through_when_opponent_unresolved() -> None:
 def test_sf_deterministic_falls_through_without_all_region_odds() -> None:
     """Without all_region_odds, falls through to probabilistic even when rounds_completed=2."""
     result = compute_semifinal_home_odds(
-        1, {"R1s2": _locked("R1s2", 2)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=2,
+        1,
+        {"R1s2": _locked("R1s2", 2)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
     )
     # Probabilistic: seed 2 hosts 3 of 4 possible SF opponents (not vs seed 1 same region)
     assert 0.0 < result["R1s2"] < 1.0
@@ -1140,10 +1208,12 @@ def test_sf_deterministic_sum_invariant_5a7a_north() -> None:
         1: {"R1s1": _locked("R1s1", 1)},
         2: {"R2s1": _locked("R2s1", 1)},
     }
-    r1 = compute_semifinal_home_odds(1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
-                                     rounds_completed=2, all_region_odds=all_odds)
-    r2 = compute_semifinal_home_odds(2, {"R2s1": _locked("R2s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
-                                     rounds_completed=2, all_region_odds=all_odds)
+    r1 = compute_semifinal_home_odds(
+        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=2, all_region_odds=all_odds
+    )
+    r2 = compute_semifinal_home_odds(
+        2, {"R2s1": _locked("R2s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON, rounds_completed=2, all_region_odds=all_odds
+    )
     assert r1["R1s1"] + r2["R2s1"] == pytest.approx(1.0)
 
 
@@ -1258,8 +1328,9 @@ def test_historical_seed_searches_older_snapshot_when_newest_lacks_team() -> Non
     """The newest round_snapshots entry doesn't have the team alive; the search
     continues to an older snapshot (line 845->843) and finds it there.
     """
-    not_alive = StandingsOdds(school="A", p1=0.0, p2=0.0, p3=0.0, p4=0.0,
-                              p_playoffs=0.0, final_playoffs=0.0, clinched=False, eliminated=True)
+    not_alive = StandingsOdds(
+        school="A", p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, final_playoffs=0.0, clinched=False, eliminated=True
+    )
     round_snapshots = {
         2: {1: {"A": not_alive}},
         1: {1: {"A": _locked("A", 2)}},
@@ -1270,8 +1341,9 @@ def test_historical_seed_searches_older_snapshot_when_newest_lacks_team() -> Non
 
 def test_historical_seed_returns_none_when_never_alive() -> None:
     """The team never appears alive in any snapshot — returns None (line 847)."""
-    not_alive = StandingsOdds(school="A", p1=0.0, p2=0.0, p3=0.0, p4=0.0,
-                              p_playoffs=0.0, final_playoffs=0.0, clinched=False, eliminated=True)
+    not_alive = StandingsOdds(
+        school="A", p1=0.0, p2=0.0, p3=0.0, p4=0.0, p_playoffs=0.0, final_playoffs=0.0, clinched=False, eliminated=True
+    )
     round_snapshots = {2: {1: {"A": not_alive}}, 1: {1: {"A": not_alive}}}
     assert _historical_seed("A", 1, round_snapshots) is None
 
@@ -1357,8 +1429,13 @@ def test_r2_deterministic_uses_resolved_opp_in_slots_fallback() -> None:
     """
     all_odds = {2: {"R2s2": _eliminated_locked("R2s2", 2)}}
     result = compute_second_round_home_odds(
-        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
-        rounds_completed=1, all_region_odds=all_odds, wins_confirmed={"R1s1": 1, "R2s2": 1},
+        1,
+        {"R1s1": _locked("R1s1", 1)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
+        all_region_odds=all_odds,
+        wins_confirmed={"R1s1": 1, "R2s2": 1},
     )
     # R1s1 (seed 1) vs R2s2 (seed 2): golden rule -> better seed (R1s1) hosts.
     assert result["R1s1"] == pytest.approx(1.0)
@@ -1373,8 +1450,13 @@ def test_qf_deterministic_uses_resolved_opp_in_slots_fallback_5a7a() -> None:
     """
     all_odds = {2: {"R2s2": _eliminated_locked("R2s2", 2)}}
     result = compute_quarterfinal_home_odds(
-        1, {"R1s1": _locked("R1s1", 1)}, SLOTS_5A_7A_2025, ODD_SEASON,
-        rounds_completed=1, all_region_odds=all_odds, wins_confirmed={"R1s1": 1, "R2s2": 1},
+        1,
+        {"R1s1": _locked("R1s1", 1)},
+        SLOTS_5A_7A_2025,
+        ODD_SEASON,
+        rounds_completed=1,
+        all_region_odds=all_odds,
+        wins_confirmed={"R1s1": 1, "R2s2": 1},
     )
     # R1s1 (seed 1) vs R2s2 (seed 2): golden rule -> better seed (R1s1) hosts.
     assert result["R1s1"] == pytest.approx(1.0)
@@ -1593,12 +1675,17 @@ def test_r2_snapshots_find_eliminated_opponent() -> None:
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2, all_region_odds=all_odds
     )
     result_with = compute_second_round_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
-        all_region_odds=all_odds, round_snapshots={1: r1_odds},
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
+        round_snapshots={1: r1_odds},
     )
 
     assert result_without["R1s1"] == pytest.approx(0.0)  # bug: no alive opponent found
-    assert result_with["R1s1"] == pytest.approx(1.0)     # fix: seed 1 hosted R2
+    assert result_with["R1s1"] == pytest.approx(1.0)  # fix: seed 1 hosted R2
 
 
 def test_qf_wins_confirmed_resolves_ambiguous_team_r2h() -> None:
@@ -1614,16 +1701,25 @@ def test_qf_wins_confirmed_resolves_ambiguous_team_r2h() -> None:
     region_odds = {"R1s2": _locked("R1s2", 2)}
 
     result_without = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
         all_region_odds={1: {"R1s2": _locked("R1s2", 2)}, 4: {"R4s1": _locked("R4s1", 1)}},
     )
     result_with = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
-        all_region_odds=all_odds, wins_confirmed={"R1s2": 2, "R4s4": 1},
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
+        wins_confirmed={"R1s2": 2, "R4s4": 1},
     )
 
     assert result_without["R1s2"] == pytest.approx(0.0)  # (4,1) is only alive QF opp; seed 1 hosts
-    assert result_with["R1s2"] == pytest.approx(0.0)      # resolved r2h=True; (4,1) still hosts QF
+    assert result_with["R1s2"] == pytest.approx(0.0)  # resolved r2h=True; (4,1) still hosts QF
 
 
 def test_qf_snapshots_resolve_ambiguous_team_r2h() -> None:
@@ -1643,12 +1739,17 @@ def test_qf_snapshots_resolve_ambiguous_team_r2h() -> None:
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2, all_region_odds=all_odds
     )
     result_with = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
-        all_region_odds=all_odds, round_snapshots={1: r1_odds},
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
+        round_snapshots={1: r1_odds},
     )
 
     assert result_without["R1s2"] == pytest.approx(0.0)  # (4,1) is only alive QF opp; seed 1 hosts
-    assert result_with["R1s2"] == pytest.approx(0.0)    # snapshots confirm r2h=True; (4,1) hosts QF
+    assert result_with["R1s2"] == pytest.approx(0.0)  # snapshots confirm r2h=True; (4,1) hosts QF
 
 
 def test_qf_wins_confirmed_resolves_ambiguous_opp_r2h() -> None:
@@ -1665,16 +1766,25 @@ def test_qf_wins_confirmed_resolves_ambiguous_opp_r2h() -> None:
     region_odds = {"R1s1": _locked("R1s1", 1)}
 
     result_without = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
         all_region_odds={1: {"R1s1": _locked("R1s1", 1)}, 4: {"R4s2": _locked("R4s2", 2)}},
     )
     result_with = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
-        all_region_odds=all_odds, wins_confirmed={"R1s1": 2, "R2s1": 1},
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
+        wins_confirmed={"R1s1": 2, "R2s1": 1},
     )
 
     assert result_without["R1s1"] == pytest.approx(1.0)  # R4s2 only alive QF opp; seed 1 hosts
-    assert result_with["R1s1"] == pytest.approx(0.0)      # resolved opp_r2h=False; opp hosts QF instead
+    assert result_with["R1s1"] == pytest.approx(0.0)  # resolved opp_r2h=False; opp hosts QF instead
 
 
 def test_qf_snapshots_resolve_ambiguous_opp_r2h() -> None:
@@ -1694,12 +1804,17 @@ def test_qf_snapshots_resolve_ambiguous_opp_r2h() -> None:
         1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2, all_region_odds=all_odds
     )
     result_with = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=2,
-        all_region_odds=all_odds, round_snapshots={1: r1_odds},
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
+        round_snapshots={1: r1_odds},
     )
 
     assert result_without["R1s1"] == pytest.approx(1.0)  # R4s2 only alive QF opp; seed 1 hosts
-    assert result_with["R1s1"] == pytest.approx(0.0)    # snapshots show R2s1 beat R4s2 in R2; R4s2 hosts QF
+    assert result_with["R1s1"] == pytest.approx(0.0)  # snapshots show R2s1 beat R4s2 in R2; R4s2 hosts QF
 
 
 def test_r2_snapshots_search_oldest_for_two_rounds_back() -> None:
@@ -1716,15 +1831,25 @@ def test_r2_snapshots_search_oldest_for_two_rounds_back() -> None:
     region_odds = {"R1s1": _locked("R1s1", 1)}
 
     result_only_r2 = compute_second_round_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=3,
-        all_region_odds=all_odds, round_snapshots={2: r2_odds},   # (3,2) not in r2 snapshot
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=3,
+        all_region_odds=all_odds,
+        round_snapshots={2: r2_odds},  # (3,2) not in r2 snapshot
     )
     result_full_history = compute_second_round_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=3,
-        all_region_odds=all_odds, round_snapshots={1: r1_odds, 2: r2_odds},
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=3,
+        all_region_odds=all_odds,
+        round_snapshots={1: r1_odds, 2: r2_odds},
     )
 
-    assert result_only_r2["R1s1"] == pytest.approx(0.0)      # r2 snapshot misses (3,2)
+    assert result_only_r2["R1s1"] == pytest.approx(0.0)  # r2 snapshot misses (3,2)
     assert result_full_history["R1s1"] == pytest.approx(1.0)  # r1 snapshot finds (3,2)
 
 
@@ -1738,20 +1863,30 @@ def test_qf_snapshots_resolve_opp_r2h_two_rounds_back() -> None:
     - round_snapshots[1] (post-R1) has (2,1) alive → opp_r2h=False → (4,2) hosts → 0.0.
     """
     all_odds = _multi_alive_odds({(1, 1): "R1s1"})
-    r2_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 2): "R4s2"})             # post-R2: (2,1) gone
+    r2_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 2): "R4s2"})  # post-R2: (2,1) gone
     r1_odds = _multi_alive_odds({(1, 1): "R1s1", (4, 2): "R4s2", (2, 1): "R2s1"})  # post-R1: (2,1) alive
     region_odds = {"R1s1": _locked("R1s1", 1)}
 
     result_only_r2 = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=3,
-        all_region_odds=all_odds, round_snapshots={2: r2_odds},
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=3,
+        all_region_odds=all_odds,
+        round_snapshots={2: r2_odds},
     )
     result_full_history = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON, rounds_completed=3,
-        all_region_odds=all_odds, round_snapshots={1: r1_odds, 2: r2_odds},
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=3,
+        all_region_odds=all_odds,
+        round_snapshots={1: r1_odds, 2: r2_odds},
     )
 
-    assert result_only_r2["R1s1"] == pytest.approx(0.0)       # no alive QF candidates in all_odds
+    assert result_only_r2["R1s1"] == pytest.approx(0.0)  # no alive QF candidates in all_odds
     assert result_full_history["R1s1"] == pytest.approx(0.0)  # (4,2) hosts QF
 
 
@@ -1764,7 +1899,10 @@ def _elim_clinched(school: str) -> StandingsOdds:
     """Return StandingsOdds for an eliminated playoff team (clinched but knocked out)."""
     return StandingsOdds(
         school=school,
-        p1=0.0, p2=0.0, p3=0.0, p4=0.0,
+        p1=0.0,
+        p2=0.0,
+        p3=0.0,
+        p4=0.0,
         p_playoffs=0.0,
         final_playoffs=0.0,
         clinched=True,
@@ -1785,17 +1923,25 @@ def test_r2_eliminated_team_that_won_r1_computes_hosting() -> None:
     r1_snap = _multi_alive_odds({(1, 1): "EliminatedS1"})
 
     result_without = compute_second_round_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=2, all_region_odds=all_odds,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
     )
     result_with = compute_second_round_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=2, all_region_odds=all_odds,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
         round_snapshots={1: r1_snap},
     )
 
-    assert result_without["EliminatedS1"] == pytest.approx(0.0)   # no snapshot → 0
-    assert result_with["EliminatedS1"] == pytest.approx(1.0)      # snapshot recovers seed 1 → hosted
+    assert result_without["EliminatedS1"] == pytest.approx(0.0)  # no snapshot → 0
+    assert result_with["EliminatedS1"] == pytest.approx(1.0)  # snapshot recovers seed 1 → hosted
 
 
 def test_r2_eliminated_team_alive_but_seed_ambiguous_in_snapshot_returns_zero() -> None:
@@ -1808,16 +1954,27 @@ def test_r2_eliminated_team_alive_but_seed_ambiguous_in_snapshot_returns_zero() 
         1: {
             1: {
                 "EliminatedS1": StandingsOdds(
-                    school="EliminatedS1", p1=0.4, p2=0.3, p3=0.3, p4=0.0,
-                    p_playoffs=1.0, final_playoffs=1.0, clinched=False, eliminated=False,
+                    school="EliminatedS1",
+                    p1=0.4,
+                    p2=0.3,
+                    p3=0.3,
+                    p4=0.0,
+                    p_playoffs=1.0,
+                    final_playoffs=1.0,
+                    clinched=False,
+                    eliminated=False,
                 )
             }
         }
     }
 
     result = compute_second_round_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=2, all_region_odds=all_odds,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
         round_snapshots=ambiguous_snap,
     )
 
@@ -1835,8 +1992,12 @@ def test_r2_eliminated_team_that_lost_r1_returns_zero() -> None:
     r1_snap_no_team = _multi_alive_odds({(3, 2): "R3s2"})  # EliminatedS1 absent
 
     result = compute_second_round_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=2, all_region_odds=all_odds,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
         round_snapshots={1: r1_snap_no_team},
     )
 
@@ -1858,8 +2019,12 @@ def test_r2_eliminated_team_and_eliminated_opponent_both_recovered_via_snapshots
     r1_snap = _multi_alive_odds({(1, 1): "EliminatedS1", (3, 2): "R3s2"})
 
     result_without_snapshot_opponent = compute_second_round_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=2, all_region_odds=all_odds,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=2,
+        all_region_odds=all_odds,
         round_snapshots={1: r1_snap},
     )
 
@@ -1879,17 +2044,25 @@ def test_qf_eliminated_team_that_won_r2_computes_hosting() -> None:
     r2_snap = _multi_alive_odds({(1, 1): "EliminatedS1", (2, 1): "R2s1"})
 
     result_without = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=3, all_region_odds=all_odds,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=3,
+        all_region_odds=all_odds,
     )
     result_with = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=3, all_region_odds=all_odds,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=3,
+        all_region_odds=all_odds,
         round_snapshots={2: r2_snap},
     )
 
-    assert result_without["EliminatedS1"] == pytest.approx(0.0)   # no snapshot → 0
-    assert result_with["EliminatedS1"] == pytest.approx(1.0)      # snapshot recovers seed 1 → hosted
+    assert result_without["EliminatedS1"] == pytest.approx(0.0)  # no snapshot → 0
+    assert result_with["EliminatedS1"] == pytest.approx(1.0)  # snapshot recovers seed 1 → hosted
 
 
 def test_qf_eliminated_team_that_never_reached_qf_returns_zero() -> None:
@@ -1903,8 +2076,12 @@ def test_qf_eliminated_team_that_never_reached_qf_returns_zero() -> None:
     r2_snap_no_team = _multi_alive_odds({(2, 1): "R2s1"})  # EliminatedS1 absent
 
     result = compute_quarterfinal_home_odds(
-        1, region_odds, SLOTS_1A_4A_2025, ODD_SEASON,
-        rounds_completed=3, all_region_odds=all_odds,
+        1,
+        region_odds,
+        SLOTS_1A_4A_2025,
+        ODD_SEASON,
+        rounds_completed=3,
+        all_region_odds=all_odds,
         round_snapshots={2: r2_snap_no_team},
     )
 

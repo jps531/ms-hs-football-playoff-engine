@@ -90,12 +90,16 @@ def _game(**probs) -> GameModel:
 @asynccontextmanager
 async def _no_db():
     """A connection whose queries return no rows."""
+
     class _Conn:
         """Answers every query with no rows."""
+
         async def execute(self, *_a, **_k):
             """No rows, whatever the query."""
+
             class _Rows:
                 """An empty async result."""
+
                 def __aiter__(self):
                     return self
 
@@ -107,7 +111,9 @@ async def _no_db():
     yield _Conn()
 
 
-@pytest.mark.parametrize(("viewer", "shown"), [(None, False), ({"role": "moderator"}, False), ({"role": "owner"}, True)])
+@pytest.mark.parametrize(
+    ("viewer", "shown"), [(None, False), ({"role": "moderator"}, False), ({"role": "owner"}, True)]
+)
 def test_games_win_probabilities_are_the_owners(viewer, shown):
     """``/games`` keeps its schedule and scores public but blanks the win probabilities for everyone but the owner."""
     game = _game(pregame_prob=0.7, live_prob=0.8, prob_as_of=None)

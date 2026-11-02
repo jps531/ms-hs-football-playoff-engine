@@ -819,7 +819,12 @@ def compute_embedded_game_probs(
                 live_prob = 1.0 - p_against
         else:
             live_prob = pregame_prob
-    elif score_for is not None and score_against is not None and game_quarter is not None and inputs.game_clock is not None:
+    elif (
+        score_for is not None
+        and score_against is not None
+        and game_quarter is not None
+        and inputs.game_clock is not None
+    ):
         seconds_remaining = game_seconds_remaining(game_quarter, inputs.game_clock)
         live_prob = compute_in_game_win_prob(pregame_prob, score_for - score_against, seconds_remaining, ig_cfg)
     else:

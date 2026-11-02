@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.11.0
+
+- **Share a team's season.** On a region page, a team's expanded row now has “Share Magee’s season”:
+  a picture of its season to share, with its games and scores, its chance of each seed and of the
+  playoffs, its region's standings with its row marked, and its road through the playoffs: each
+  round's chance of getting there and of hosting, and once it's playing, its results and next game
+  (the state champion gets the trophy). In Projected or Toss-up odds, light or dark. Like the
+  region's images, it's of the latest update.
+
 ## 1.10.0
 
 - **Share a region's scenarios.** The region page's share button now also offers its scenarios as
