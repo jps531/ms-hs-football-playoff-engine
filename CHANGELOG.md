@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.13.1
+
+- **Shorter hosting reasons in 5A–7A quarterfinals.** Where only the first round comes before a
+  quarterfinal, opponents from different regions have always hosted the same number of playoff games,
+  so "fewer home games hosts" never decides who hosts there. The reason now says just what does:
+  "Brookhaven hosted as the higher seed: Region 3 #1 over Region 4 #2", not "both had played 1 home
+  playoff game, so the higher seed hosts". It's worked out from each bracket, so it follows any change
+  to a class's format. 1A–4A quarterfinals, where a second round comes first, still give the count.
+
 ## 1.13.0
 
 - **Why a team hosts a playoff game.** A bracket game's sheet now says which of the MHSAA's home team
