@@ -354,3 +354,34 @@ test("hostReason says which rule decided it, with its numbers", () => {
   assert.equal(say("Quarterfinals", p(3, 1), p(4, 1), 2025, 2, 2), "X hosts; both will have played 2 home playoff games, both are #1 seeds, and in odd years the lower-numbered region hosts (Region 3 over Region 4).");
   assert.equal(say("Quarterfinals", p(2, 1), p(2, 2), 2025, 2, 0), "X hosts; when two teams from the same region meet, the higher seed hosts (#1 over #2).");
 });
+
+import { homeGamesCanDecide, homesBefore } from "../html/static/js/bracket.js";
+
+test("fewer home games is stated only where the bracket lets it decide a quarterfinal", () => {
+  const f = (region, seed) => ({ region, seed });
+  const side = (feeders, occ = []) => ({ feeders, occupants: occ });
+  const fr = (id, a, b, ta, tb) => ({ id, round: "First Round", half: "N", side_a: side([a], [occ(ta, 1, 1, true)]), side_b: side([b], [occ(tb, 1, 1, true)]) });
+  // No second round: the first round feeds the quarterfinal. A #1 or #2 seed hosted one game, a #3 or #4 none, and
+  // the quarterfinal pairs top seeds with top seeds across regions, so home games are always level there.
+  const r1 = [fr("N-0-0", f(1, 1), f(2, 4), "A", "B"), fr("N-0-1", f(2, 2), f(1, 3), "C", "D")];
+  const qf = { id: "N-1-0", round: "Quarterfinals", half: "N", side_a: side([f(1, 1), f(2, 4)], [occ("A", 1)]), side_b: side([f(2, 2), f(1, 3)], [occ("C", 1)]) };
+  const games = [...r1, qf];
+  assert.deepEqual([...homesBefore(games, f(1, 1), 2026)], [1]);
+  assert.deepEqual([...homesBefore(games, f(1, 3), 2026)], [0]);
+  assert.equal(homeGamesCanDecide(games, qf, 2026), false);
+  const [way] = matchupWays(games, {}, qf, "A", "C", "tossup", 2026);
+  assert.equal(hostReason(way.why, way.a.feeder, way.b.feeder, "A", "C", 2026), "A hosts as the higher seed: Region 1 #1 over Region 2 #2.");
+  // With a second round before it (the 1A-4A shape), a #3 seed can reach the quarterfinal having hosted 0 or 1 games
+  // and a #1 seed 2, so the rule can decide it, and a level count is worth saying.
+  const g2 = [
+    fr("N-0-0", f(1, 1), f(2, 4), "A", "B"), fr("N-0-1", f(2, 2), f(1, 3), "C", "D"),
+    fr("N-0-2", f(2, 1), f(1, 4), "E", "F"), fr("N-0-3", f(1, 2), f(2, 3), "G", "H"),
+  ];
+  const r2a = { id: "N-1-0", round: "Second Round", half: "N", side_a: side([f(1, 1), f(2, 4)]), side_b: side([f(2, 2), f(1, 3)]) };
+  const r2b = { id: "N-1-1", round: "Second Round", half: "N", side_a: side([f(2, 1), f(1, 4)]), side_b: side([f(1, 2), f(2, 3)]) };
+  const qf2 = { id: "N-2-0", round: "Quarterfinals", half: "N", side_a: side([...r2a.side_a.feeders, ...r2a.side_b.feeders]), side_b: side([...r2b.side_a.feeders, ...r2b.side_b.feeders]) };
+  const four = [...g2, r2a, r2b, qf2];
+  assert.deepEqual([...homesBefore(four, f(1, 3), 2026)].sort(), [0, 1]);
+  assert.equal(homeGamesCanDecide(four, qf2, 2026), true);
+  assert.equal(homeGamesCanDecide(four, r2a, 2026), false); // only a quarterfinal counts home games
+});

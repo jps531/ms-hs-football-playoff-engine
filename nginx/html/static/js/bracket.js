@@ -250,19 +250,21 @@ export function quarterfinalHost(x, homesX, y, homesY, season) {
 
 /**
  * Why one of two positions hosts a game: the MHSAA rule that decides it, as
- * data, { host: "x" | "y", rule, homesX, homesY, quarterfinal }. The same rules, in the same
+ * data, { host: "x" | "y", rule, homesX, homesY, homeGames }. The same rules, in the same
  * order, as secondRoundHost, quarterfinalHost and semifinalHost (a test holds
  * them to the same answer). `round` is the game's round; in the first round
  * the slot's home position (`x`) hosts. `homesX`/`homesY` are the playoff home
- * games each will have played before a quarterfinal. Rules:
+ * games each will have played before a quarterfinal; `homeGames` says whether
+ * those can ever differ in this game (homeGamesCanDecide), so whether that
+ * step is worth stating. Rules:
  *   "first_round"  the #1 and #2 seeds host the first round
  *   "same_region"  two teams of one region: the better seed
  *   "home_games"   quarterfinals: fewer playoff home games so far
  *   "seed"         the better seed (in a quarterfinal, home games level)
  *   "region_year"  equal seeds: odd years the lower region number, even years the higher
  */
-export function hostRule(round, x, y, season, homesX = 0, homesY = 0) {
-  const by = (rule, xHosts) => ({ host: xHosts ? "x" : "y", rule, homesX, homesY, quarterfinal: round === "Quarterfinals" });
+export function hostRule(round, x, y, season, homesX = 0, homesY = 0, homeGames = round === "Quarterfinals") {
+  const by = (rule, xHosts) => ({ host: xHosts ? "x" : "y", rule, homesX, homesY, homeGames: round === "Quarterfinals" && homeGames });
   if (round === "First Round") return by("first_round", true);
   if (x.region === y.region) return by("same_region", x.seed < y.seed);
   if (round === "Quarterfinals" && homesX !== homesY) return by("home_games", homesX < homesY);
@@ -297,15 +299,65 @@ export function hostReason(why, x, y, nameX, nameY, season, tense = "future") {
     case "home_games":
       return `${host} ${hosts}; it ${has} ${games_(homesHost)} to ${other}’s ${homesOther}, and the team with fewer hosts the quarterfinal.`;
     case "seed":
-      return level && why.quarterfinal
+      return level && why.homeGames
         ? `${host} ${hosts}; ${level}, so the higher seed hosts (${short(hostPos)} over ${short(otherPos)}).`
         : `${host} ${hosts} as the higher seed: ${short(hostPos)} over ${short(otherPos)}.`;
     default: {
       const odd = season % 2 === 1;
       const tie = `both are #${hostPos.seed} seeds, and in ${odd ? "odd" : "even"} years the ${odd ? "lower" : "higher"}-numbered region hosts (Region ${hostPos.region} over Region ${otherPos.region})`;
-      return `${host} ${hosts}; ${level && why.quarterfinal ? `${level}, ` : ""}${tie}.`;
+      return `${host} ${hosts}; ${level && why.homeGames ? `${level}, ` : ""}${tie}.`;
     }
   }
+}
+
+const at = (f) => `${f.region}:${f.seed}`;
+
+/** The first-round game and side a position starts on: { game, key, side }, or null. */
+function firstSideOf(games, f) {
+  for (const g of games) {
+    for (const [key, side] of [["a", g.side_a], ["b", g.side_b]]) {
+      if (side.feeders.length === 1 && at(side.feeders[0]) === at(f)) return { game: g, key, side };
+    }
+  }
+  return null;
+}
+
+/** True when a position hosts its first-round game: the slot's home position is side A. */
+const homeInFirstOf = (games, f) => firstSideOf(games, f)?.key === "a";
+
+/**
+ * The playoff home games a position can have played before a quarterfinal, by
+ * the bracket alone (whoever it meets on the way): its first-round game, then
+ * its second-round game, where the class has one, against each position that
+ * can meet it there. A Set of counts.
+ */
+export function homesBefore(games, f, season) {
+  const first = homeInFirstOf(games, f) ? 1 : 0;
+  const r2 = games.find((g) => g.round === "Second Round" && [g.side_a, g.side_b].some((sd) => sd.feeders.some((x) => at(x) === at(f))));
+  if (!r2) return new Set([first]);
+  const other = r2.side_a.feeders.some((x) => at(x) === at(f)) ? r2.side_b : r2.side_a;
+  return new Set(other.feeders.map((o) => first + (secondRoundHost(f, o, season) === "x" ? 1 : 0)));
+}
+
+/**
+ * Whether "fewer home games hosts" can ever pick this game's host: a
+ * quarterfinal that two teams from different regions can reach having played
+ * different numbers of home playoff games. It can't when every such pair has
+ * played the same number whoever they met (as when the only earlier round is
+ * one where the #1 and #2 seeds host and a quarterfinal pairs top seeds with
+ * top seeds), and then the rule isn't worth stating.
+ */
+export function homeGamesCanDecide(games, game, season) {
+  if (game.round !== "Quarterfinals") return false;
+  for (const x of game.side_a.feeders) {
+    for (const y of game.side_b.feeders) {
+      if (x.region === y.region) continue;
+      const hx = homesBefore(games, x, season);
+      const hy = homesBefore(games, y, season);
+      if ([...hx].some((a) => [...hy].some((b) => a !== b))) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -322,17 +374,9 @@ export function hostReason(why, x, y, nameX, nameY, season, tense = "future") {
  * different rules.
  */
 export function matchupWays(games, results, game, a, b, mode, season) {
-  const at = (f) => `${f.region}:${f.seed}`;
-  const firstSide = (f) => {
-    for (const g of games) {
-      for (const [key, side] of [["a", g.side_a], ["b", g.side_b]]) {
-        if (side.feeders.length === 1 && at(side.feeders[0]) === at(f)) return { game: g, key, side };
-      }
-    }
-    return null;
-  };
-  // A first-round side is the slot's home position on side A (bracket_matchups' feeders).
-  const homeInFirst = (f) => firstSide(f)?.key === "a";
+  const firstSide = (f) => firstSideOf(games, f);
+  const homeInFirst = (f) => homeInFirstOf(games, f);
+  const decides = homeGamesCanDecide(games, game, season);
   const positionOf = (team) => {
     for (const g of games) {
       for (const side of [g.side_a, g.side_b]) if (side.feeders.length === 1 && lockedTeam(side) === team) return side.feeders[0];
@@ -377,7 +421,7 @@ export function matchupWays(games, results, game, a, b, mode, season) {
         const why = hostRule(game.round, x, y, season);
         out.push({ a: wa, b: wb, host: side(why), why });
       } else if (!withQf) {
-        const why = hostRule("Quarterfinals", x, y, season, homeInFirst(x) ? 1 : 0, homeInFirst(y) ? 1 : 0);
+        const why = hostRule("Quarterfinals", x, y, season, homeInFirst(x) ? 1 : 0, homeInFirst(y) ? 1 : 0, decides);
         out.push({ a: wa, b: wb, host: side(why), why });
       } else {
         const fa = secondRoundFoes(x);
@@ -388,7 +432,7 @@ export function matchupWays(games, results, game, a, b, mode, season) {
         }
         const homes = (f, z) => (homeInFirst(f) ? 1 : 0) + (secondRoundHost(f, z.foe, season) === "x" ? 1 : 0);
         const combos = fa.flatMap((za) => fb.map((zb) => {
-          const why = hostRule("Quarterfinals", x, y, season, homes(x, za), homes(y, zb));
+          const why = hostRule("Quarterfinals", x, y, season, homes(x, za), homes(y, zb), decides);
           return { za, zb, host: side(why), why };
         }));
         // One reason for the way only when every opponent combination gives the same one.
