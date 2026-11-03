@@ -495,8 +495,11 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     ) in sitemap
 
 
-def test_past_seasons_get_their_final_bracket_images_once(tmp_path):
-    """A past season's bracket is drawn as of its last week of games, blank (results), and not again next run."""
+def test_past_seasons_get_their_final_bracket_images_once(tmp_path, monkeypatch):
+    """A past season's bracket is drawn as of its last week of games, blank (results), and not again next run
+    unless the drawing code has changed."""
+    import backend.prefect.share_assets_pipeline as pipeline
+
     teams = [_bracket_team("Raleigh", 0.4, 0.2, 0.12), _bracket_team("Union", 0.3, 0.1, 0.05)]
     calls: list[str] = []
     api = {
@@ -529,6 +532,10 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path):
     calls.clear()
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0
     assert not [c for c in calls if "season=2025" in c]  # already drawn: not fetched again
+    # Once the drawing code changes, it's drawn again (and then kept again).
+    monkeypatch.setattr(pipeline, "code_fingerprint", lambda: "new drawing code")
+    assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 1
+    assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0
 
 
 def test_titles_fall_back_to_inter_bold_without_the_nippo_file(tmp_path, monkeypatch, caplog):

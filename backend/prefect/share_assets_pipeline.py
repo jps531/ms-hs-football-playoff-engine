@@ -73,6 +73,7 @@ from backend.helpers.image_jobs import (
     TEAM_SCENARIOS,
     TEAM_SEASON,
     ImageJob,
+    code_fingerprint,
     draw_images,
 )
 from backend.helpers.region_image import playoff_road, region_playoffs, region_seeds
@@ -769,11 +770,21 @@ def _write_bracket_images(
     return f"{site_url}/static/bracket/{season}/{clazz}a-all-{'odds' if projected else 'blank'}-light.png"
 
 
+PAST_BRACKETS = Path("state") / "past_brackets.json"  # the drawing code each past bracket was drawn with
+
+
 def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today: date, site_url: str) -> int:
     """Each past season's final bracket images (blank: results only) and its link preview (a link to
-    /brackets/3a?season=2025), once: what's already drawn is skipped. As of the end of the class's last
-    week of games, as its bracket page shows it."""
+    /brackets/3a?season=2025), once: what's already drawn is skipped, until the drawing code changes
+    (``image_jobs.code_fingerprint``, kept per bracket in ``state/past_brackets.json``). As of the end
+    of the class's last week of games, as its bracket page shows it."""
     written = 0
+    code = code_fingerprint()
+    state_path = out_dir / PAST_BRACKETS
+    try:
+        drawn_with = json.loads(state_path.read_text())
+    except (OSError, ValueError):
+        drawn_with = {}
     for season in seasons:
         teams: dict | None = None
         for clazz in CLASSES:
@@ -784,8 +795,9 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
             ]
             card = f"bracket-{season}-{clazz}"
             card_paths = [out_dir / "og" / f"{card}.png", out_dir / "meta" / f"{card}.html"]
-            need_images = not all(p.exists() for p in paths)
-            need_card = not all(p.exists() for p in card_paths)
+            current = drawn_with.get(card) == code
+            need_images = not current or not all(p.exists() for p in paths)
+            need_card = not current or not all(p.exists() for p in card_paths)
             if not (need_images or need_card):
                 continue
             dates = (fetch(f"/seasons/{season}/dates?class={clazz}") or {}).get("dates", [])
@@ -835,6 +847,9 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
                     ),
                 )
             written += 1
+            drawn_with[card] = code
+    if written:
+        _write_text(state_path, json.dumps(drawn_with, sort_keys=True))
     return written
 
 
