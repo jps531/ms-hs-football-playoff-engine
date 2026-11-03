@@ -32,7 +32,7 @@ import {
 import {
   sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups as gameMatchups,
   teamInGame, opponentsFor, pathGames, bracketStructure, positionName, treeColumns, treeLayout, roundPicks, byeSide, pathTo,
-  matchupWays, championOdds, projectedChampion,
+  matchupWays, championOdds, projectedChampion, hostRule, hostReason,
 } from "./bracket.js";
 import {
   outcomeCards, insightCards, oddsFor, hasProjectedOdds, completeScenarioCards, seedNeeds, allOf, seedsTogether,
@@ -1996,6 +1996,7 @@ function sheetHtml(id) {
         ${bye ? "" : `<div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
         ${bracketSide(game, order[1], result, host)}`}
         ${host === "neutral" && !bye ? `<p class="bgame__site muted">${esc(siteName())}</p>` : ""}
+        ${playedReason(game, result)}
         ${shownChampion(game) ? championLine(shownChampion(game)) : ""}
       </div>
       ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
@@ -2107,6 +2108,40 @@ function hostText(team, opponent, hosts, pTeamHosts) {
 
 /** "at" when the opponent would host; "vs" otherwise (the picked team hosts, either could, or a neutral site). */
 const oppJoiner = (hosts) => (hosts === "opponent" ? "at" : "vs");
+
+/** A way's host reason (bracket.js's hostReason), or "": in the past tense once the game is played, the present once it's set. */
+function wayReason(game, w, a, b) {
+  if (!w.why) return "";
+  const state = gameState(game, bracketData.results[game.id]);
+  const tense = state === "played" ? "past" : state === "determined" ? "set" : "future";
+  return hostReason(w.why, w.a.feeder, w.b.feeder, a, b, bracketData.season, tense);
+}
+
+/** A played game's line saying why its host hosted ("Okolona hosted; …"), or "". */
+function playedReason(game, result) {
+  if (!result) return "";
+  const team = (side) => lockedTeam(side) ?? null;
+  const [a, b] = [team(game.side_a), team(game.side_b)];
+  const reason = a && b ? matchupReason(game, a, b) : "";
+  return reason ? `<p class="bgame__why">${esc(reason)}</p>` : "";
+}
+
+/**
+ * Why the host of a pairing (side A's `a`, side B's `b`) hosts, when the host is settled and every way
+ * here gives it by the same rule: one sentence, else "". The first round's host is the slot's home seed.
+ */
+function matchupReason(game, a, b) {
+  const { games, results, mode, season } = bracketData;
+  if (game.id === "final") return "";
+  if (game.round === "First Round") {
+    const [x, y] = [game.side_a.feeders[0], game.side_b.feeders[0]];
+    const tense = results[game.id] ? "past" : "future";
+    return x && y ? hostReason(hostRule("First Round", x, y, season), x, y, a, b, season, tense) : "";
+  }
+  const ways = matchupWays(games, results, game, a, b, mode, season);
+  const reasons = new Set(ways.map((w) => wayReason(game, w, a, b)));
+  return ways.length && reasons.size === 1 && !reasons.has("") ? [...reasons][0] : "";
+}
 
 // ------------------------------------------------- first-round "How?"
 // A first-round side is one region's seed, so what a team needs to be there
@@ -2321,7 +2356,8 @@ function laterMatchupHow(game, a, b) {
       const label = seeds.length ? `<p class="how__as">${seeds.join(" · ")}</p>` : "";
       const wins = [...w.a.wins.map((x) => ({ type: "playoff_win", school: a, ...x })), ...w.b.wins.map((x) => ({ type: "playoff_win", school: b, ...x }))]
         .sort((x, y) => x.depth - y.depth);
-      return `${label}<div>${conditionsThen(allOf([parts[i][0].groups, parts[i][1].groups]), wins, teams)}</div>`;
+      const why = wayReason(game, w, a, b);
+      return `${label}<div>${conditionsThen(allOf([parts[i][0].groups, parts[i][1].groups]), wins, teams)}</div>${why ? `<p class="how__why">${esc(why)}</p>` : ""}`;
     };
     const block = (list) => (list.length === 1 ? `<div>${drawn(list[0])}</div>` : alternatives(list.map(drawn)));
     const hosts = [...new Set(possible.map(({ w }) => w.host))];
@@ -2355,9 +2391,11 @@ function gameDetail(game) {
     return `<h3 class="bgame__heading">${esc(intro)}</h3>
       <p class="muted bgame__count">${esc(measure)}</p>
       <ol class="opp-list">${opp.map((o) => {
-        const note = hostText(focus, o.opponent, o.hosts, o.pTeamHosts);
         // Which side each is on, from the matchup itself: in a later round the picked team can be on either.
         const aFirst = (game.matchups ?? []).some((m) => m.team_a === focus && m.team_b === o.opponent);
+        const settled = o.hosts === "team" || o.hosts === "opponent";
+        const reason = settled ? (aFirst ? matchupReason(game, focus, o.opponent) : matchupReason(game, o.opponent, focus)) : "";
+        const note = hostText(focus, o.opponent, o.hosts, o.pTeamHosts) || reason;
         const how = aFirst || (here.sides[0] === "a" && !(game.matchups ?? []).some((m) => m.team_a === o.opponent && m.team_b === focus))
           ? matchupHow(game, focus, o.opponent) : matchupHow(game, o.opponent, focus);
         return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(o.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
@@ -2370,7 +2408,8 @@ function gameDetail(game) {
     const h = hosting(m.hostA);
     const [away, home] = h.host === "a" ? [m.b, m.a] : [m.a, m.b];
     const joiner = h.host === "a" || h.host === "b" ? "at" : "vs";
-    const note = hostText(m.a, m.b, h.host === "a" ? "team" : h.host === "b" ? "opponent" : h.host, h.p);
+    const note = hostText(m.a, m.b, h.host === "a" ? "team" : h.host === "b" ? "opponent" : h.host, h.p)
+      || (h.host === "a" || h.host === "b" ? matchupReason(game, m.a, m.b) : "");
     const how = matchupHow(game, m.a, m.b);
     return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(m.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
   });

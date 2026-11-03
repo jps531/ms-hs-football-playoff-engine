@@ -5,6 +5,16 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.13.0
+
+- **Why a team hosts a playoff game.** A bracket game's sheet now says which of the MHSAA's home team
+  rules picks its host: under each possible matchup whose host is settled ("Booneville hosts as the
+  higher seed: Region 1 #1 over Region 4 #2"), and under the score of a game already played
+  ("Okolona hosted; it had played 0 home playoff games to Biggersville’s 2, and the team with fewer
+  hosts the quarterfinal"). When who hosts depends on how the teams get there, each way in the
+  matchup's "How?" ends with its reason ("Noxubee County hosts; it will have played 1 home playoff
+  game to Thomas E. Edwards’s 2, …").
+
 ## 1.12.1
 
 - **Fixed: the games list left out a rematch.** A playoff game between two teams that had already met

@@ -318,3 +318,39 @@ test("championOdds and projectedChampion: the championship game's chance to win 
   assert.equal(projectedChampion(noProjected, null), null);
   assert.deepEqual(championOdds({ ...final, id: "N-3-0" }, "projected"), []);
 });
+
+import { hostRule, hostReason, secondRoundHost, quarterfinalHost, semifinalHost } from "../html/static/js/bracket.js";
+
+test("hostRule picks the same host as the round's hosting rule, every way they can differ", () => {
+  const positions = [];
+  for (let region = 1; region <= 4; region += 1) for (let seed = 1; seed <= 4; seed += 1) positions.push({ region, seed });
+  for (const season of [2025, 2026]) {
+    for (const x of positions) {
+      for (const y of positions) {
+        if (x.region === y.region && x.seed === y.seed) continue;
+        assert.equal(hostRule("Second Round", x, y, season).host, secondRoundHost(x, y, season));
+        assert.equal(hostRule("Semifinals", x, y, season).host, semifinalHost(x, y, season));
+        for (const hx of [0, 1, 2]) for (const hy of [0, 1, 2]) {
+          assert.equal(hostRule("Quarterfinals", x, y, season, hx, hy).host, quarterfinalHost(x, hx, y, hy, season));
+        }
+      }
+    }
+  }
+});
+
+test("hostReason says which rule decided it, with its numbers", () => {
+  const p = (region, seed) => ({ region, seed });
+  const say = (round, x, y, season, hx, hy, played) => hostReason(hostRule(round, x, y, season, hx, hy), x, y, "X", "Y", season, played);
+  assert.equal(say("First Round", p(1, 1), p(2, 4), 2025), "X hosts; in the first round, the #1 and #2 seeds host.");
+  assert.equal(say("Second Round", p(3, 2), p(1, 1), 2025), "Y hosts as the higher seed: Region 1 #1 over Region 3 #2.");
+  assert.equal(say("Semifinals", p(6, 4), p(6, 1), 2025), "Y hosts; when two teams from the same region meet, the higher seed hosts (#1 over #4).");
+  assert.equal(say("Semifinals", p(3, 1), p(4, 1), 2025), "X hosts; both are #1 seeds, and in odd years the lower-numbered region hosts (Region 3 over Region 4).");
+  assert.equal(say("Semifinals", p(3, 1), p(4, 1), 2026), "Y hosts; both are #1 seeds, and in even years the higher-numbered region hosts (Region 4 over Region 3).");
+  // Quarterfinals: fewer home games, then the higher seed, then the region and year; the count's tense by whether it's behind them.
+  assert.equal(say("Quarterfinals", p(3, 3), p(1, 1), 2025, 1, 2), "X hosts; it will have played 1 home playoff game to Y’s 2, and the team with fewer hosts the quarterfinal.");
+  assert.equal(say("Quarterfinals", p(3, 3), p(1, 1), 2025, 1, 2, "set"), "X hosts; it has played 1 home playoff game to Y’s 2, and the team with fewer hosts the quarterfinal.");
+  assert.equal(say("Quarterfinals", p(3, 3), p(1, 1), 2025, 1, 2, "past"), "X hosted; it had played 1 home playoff game to Y’s 2, and the team with fewer hosts the quarterfinal.");
+  assert.equal(say("Quarterfinals", p(3, 1), p(4, 2), 2025, 1, 1, "set"), "X hosts; both have played 1 home playoff game, so the higher seed hosts (Region 3 #1 over Region 4 #2).");
+  assert.equal(say("Quarterfinals", p(3, 1), p(4, 1), 2025, 2, 2), "X hosts; both will have played 2 home playoff games, both are #1 seeds, and in odd years the lower-numbered region hosts (Region 3 over Region 4).");
+  assert.equal(say("Quarterfinals", p(2, 1), p(2, 2), 2025, 2, 0), "X hosts; when two teams from the same region meet, the higher seed hosts (#1 over #2).");
+});

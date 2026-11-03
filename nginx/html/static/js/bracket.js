@@ -5,7 +5,8 @@
 // Inputs are the two API responses:
 //   /bracket            -> bracket_layout (results, scores, venues)
 //   /bracket/matchups   -> games[] (sides, occupants, matchups, hosting)
-// Hosting always comes from the API; nothing here applies MHSAA rules.
+// The hosting odds come from the API; the MHSAA rules here (secondRoundHost,
+// hostRule, …) only say which way of reaching a game gives which host, and why.
 
 import { isCertain, isImpossible } from "./format.js";
 
@@ -248,14 +249,77 @@ export function quarterfinalHost(x, homesX, y, homesY, season) {
 }
 
 /**
+ * Why one of two positions hosts a game: the MHSAA rule that decides it, as
+ * data, { host: "x" | "y", rule, homesX, homesY, quarterfinal }. The same rules, in the same
+ * order, as secondRoundHost, quarterfinalHost and semifinalHost (a test holds
+ * them to the same answer). `round` is the game's round; in the first round
+ * the slot's home position (`x`) hosts. `homesX`/`homesY` are the playoff home
+ * games each will have played before a quarterfinal. Rules:
+ *   "first_round"  the #1 and #2 seeds host the first round
+ *   "same_region"  two teams of one region: the better seed
+ *   "home_games"   quarterfinals: fewer playoff home games so far
+ *   "seed"         the better seed (in a quarterfinal, home games level)
+ *   "region_year"  equal seeds: odd years the lower region number, even years the higher
+ */
+export function hostRule(round, x, y, season, homesX = 0, homesY = 0) {
+  const by = (rule, xHosts) => ({ host: xHosts ? "x" : "y", rule, homesX, homesY, quarterfinal: round === "Quarterfinals" });
+  if (round === "First Round") return by("first_round", true);
+  if (x.region === y.region) return by("same_region", x.seed < y.seed);
+  if (round === "Quarterfinals" && homesX !== homesY) return by("home_games", homesX < homesY);
+  if (x.seed !== y.seed) return by("seed", x.seed < y.seed);
+  return by("region_year", season % 2 === 1 ? x.region < y.region : x.region > y.region);
+}
+
+const games_ = (n) => `${n} home playoff ${n === 1 ? "game" : "games"}`;
+const short = ({ region, seed }) => `Region ${region} #${seed}`;
+
+/**
+ * Why a team hosts, as a sentence: "Okolona hosts; it will have played 1 home
+ * playoff game to Biggersville's 2, and the team with fewer hosts the
+ * quarterfinal." `why` is hostRule's answer; `x`, `y` the two positions and
+ * `nameX`, `nameY` their teams (or how to say the position). `tense` is
+ * "future" (the game still to be reached: "will have played"), "set" (both
+ * teams there: "has played") or "past" (the game played: "Okolona hosted …
+ * had played").
+ */
+export function hostReason(why, x, y, nameX, nameY, season, tense = "future") {
+  const [host, other, hostPos, otherPos] = why.host === "x" ? [nameX, nameY, x, y] : [nameY, nameX, y, x];
+  const [homesHost, homesOther] = why.host === "x" ? [why.homesX, why.homesY] : [why.homesY, why.homesX];
+  const has = { future: "will have played", set: "has played", past: "had played" }[tense];
+  const have = { future: "will have played", set: "have played", past: "had played" }[tense];
+  const hosts = tense === "past" ? "hosted" : "hosts";
+  const level = why.homesX === why.homesY ? `both ${have} ${games_(why.homesX)}` : "";
+  switch (why.rule) {
+    case "first_round":
+      return `${host} ${hosts}; in the first round, the #1 and #2 seeds host.`;
+    case "same_region":
+      return `${host} ${hosts}; when two teams from the same region meet, the higher seed hosts (#${hostPos.seed} over #${otherPos.seed}).`;
+    case "home_games":
+      return `${host} ${hosts}; it ${has} ${games_(homesHost)} to ${other}’s ${homesOther}, and the team with fewer hosts the quarterfinal.`;
+    case "seed":
+      return level && why.quarterfinal
+        ? `${host} ${hosts}; ${level}, so the higher seed hosts (${short(hostPos)} over ${short(otherPos)}).`
+        : `${host} ${hosts} as the higher seed: ${short(hostPos)} over ${short(otherPos)}.`;
+    default: {
+      const odd = season % 2 === 1;
+      const tie = `both are #${hostPos.seed} seeds, and in ${odd ? "odd" : "even"} years the ${odd ? "lower" : "higher"}-numbered region hosts (Region ${hostPos.region} over Region ${otherPos.region})`;
+      return `${host} ${hosts}; ${level && why.quarterfinal ? `${level}, ` : ""}${tie}.`;
+    }
+  }
+}
+
+/**
  * A later-round matchup's ways, each with who hosts it: `a` on side A and
  * `b` on side B, every pairing of their ways here (pathTo), as
- * [{ a: way, b: way, host: "a" | "b" | null }] (null at the neutral
+ * [{ a: way, b: way, host: "a" | "b" | null, why }] (null at the neutral
  * championship, or when it can't be told). A way's wins are in order of
  * play; in a quarterfinal of a class with a second round the host also
  * turns on whom each team beat there, so when it does the pairing splits by
  * that opponent, named on the team's Second Round win: one team's when that
- * alone decides it, else both.
+ * alone decides it, else both. `why` is the rule that picks the host
+ * (hostRule), or null when there's none to state: the neutral championship,
+ * a host that can't be told, or opponents that give the same host by
+ * different rules.
  */
 export function matchupWays(games, results, game, a, b, mode, season) {
   const at = (f) => `${f.region}:${f.seed}`;
@@ -306,36 +370,49 @@ export function matchupWays(games, results, game, a, b, mode, season) {
     for (const wb of waysB) {
       const x = wa.feeder;
       const y = wb.feeder;
+      const side = (why) => (why.host === "x" ? "a" : "b");
       if (game.id === "final") {
-        out.push({ a: wa, b: wb, host: null });
-      } else if (game.round === "Second Round") {
-        out.push({ a: wa, b: wb, host: secondRoundHost(x, y, season) === "x" ? "a" : "b" });
-      } else if (game.round === "Semifinals") {
-        out.push({ a: wa, b: wb, host: semifinalHost(x, y, season) === "x" ? "a" : "b" });
+        out.push({ a: wa, b: wb, host: null, why: null });
+      } else if (game.round === "Second Round" || game.round === "Semifinals") {
+        const why = hostRule(game.round, x, y, season);
+        out.push({ a: wa, b: wb, host: side(why), why });
       } else if (!withQf) {
-        out.push({ a: wa, b: wb, host: quarterfinalHost(x, homeInFirst(x) ? 1 : 0, y, homeInFirst(y) ? 1 : 0, season) === "x" ? "a" : "b" });
+        const why = hostRule("Quarterfinals", x, y, season, homeInFirst(x) ? 1 : 0, homeInFirst(y) ? 1 : 0);
+        out.push({ a: wa, b: wb, host: side(why), why });
       } else {
         const fa = secondRoundFoes(x);
         const fb = secondRoundFoes(y);
         if (!fa || !fb) {
-          out.push({ a: wa, b: wb, host: null });
+          out.push({ a: wa, b: wb, host: null, why: null });
           continue;
         }
         const homes = (f, z) => (homeInFirst(f) ? 1 : 0) + (secondRoundHost(f, z.foe, season) === "x" ? 1 : 0);
-        const combos = fa.flatMap((za) => fb.map((zb) => ({ za, zb, host: quarterfinalHost(x, homes(x, za), y, homes(y, zb), season) === "x" ? "a" : "b" })));
+        const combos = fa.flatMap((za) => fb.map((zb) => {
+          const why = hostRule("Quarterfinals", x, y, season, homes(x, za), homes(y, zb));
+          return { za, zb, host: side(why), why };
+        }));
+        // One reason for the way only when every opponent combination gives the same one.
+        const same = (list) => list.every((c) => JSON.stringify(c.why) === JSON.stringify(list[0].why));
         if (combos.every((c) => c.host === combos[0].host)) {
-          out.push({ a: wa, b: wb, host: combos[0].host });
+          out.push({ a: wa, b: wb, host: combos[0].host, why: same(combos) ? combos[0].why : null });
           continue;
         }
         // An opponent decides it: name it on that Second Round win, and only the one(s) that matter.
         const named = (w, z) => (z.played ? w : { ...w, wins: w.wins.map((v) => (v.round === "Second Round" ? { ...v, ...name(z) } : v)) });
         const onlyBy = (key) => combos.every((c) => combos.every((d) => c[key] !== d[key] || c.host === d.host));
+        const whyOf = (list) => (same(list) ? list[0].why : null);
         if (onlyBy("za")) {
-          for (const za of fa) out.push({ a: named(wa, za), b: wb, host: combos.find((c) => c.za === za).host });
+          for (const za of fa) {
+            const mine = combos.filter((c) => c.za === za);
+            out.push({ a: named(wa, za), b: wb, host: mine[0].host, why: whyOf(mine) });
+          }
         } else if (onlyBy("zb")) {
-          for (const zb of fb) out.push({ a: wa, b: named(wb, zb), host: combos.find((c) => c.zb === zb).host });
+          for (const zb of fb) {
+            const mine = combos.filter((c) => c.zb === zb);
+            out.push({ a: wa, b: named(wb, zb), host: mine[0].host, why: whyOf(mine) });
+          }
         } else {
-          for (const c of combos) out.push({ a: named(wa, c.za), b: named(wb, c.zb), host: c.host });
+          for (const c of combos) out.push({ a: named(wa, c.za), b: named(wb, c.zb), host: c.host, why: c.why });
         }
       }
     }
