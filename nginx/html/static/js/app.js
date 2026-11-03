@@ -2117,7 +2117,7 @@ function wayReason(game, w, a, b) {
   return hostReason(w.why, w.a.feeder, w.b.feeder, a, b, bracketData.season, tense);
 }
 
-/** A played game's line saying why its host hosted ("Okolona hosted: …"), or "". */
+/** A played game's line saying why its host hosted ("Okolona hosted; …"), or "". */
 function playedReason(game, result) {
   if (!result) return "";
   const team = (side) => lockedTeam(side) ?? null;

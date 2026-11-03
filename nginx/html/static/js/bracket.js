@@ -274,7 +274,7 @@ const games_ = (n) => `${n} home playoff ${n === 1 ? "game" : "games"}`;
 const short = ({ region, seed }) => `Region ${region} #${seed}`;
 
 /**
- * Why a team hosts, as a sentence: "Okolona hosts: it will have played 1 home
+ * Why a team hosts, as a sentence: "Okolona hosts; it will have played 1 home
  * playoff game to Biggersville's 2, and the team with fewer hosts the
  * quarterfinal." `why` is hostRule's answer; `x`, `y` the two positions and
  * `nameX`, `nameY` their teams (or how to say the position). `tense` is
@@ -291,19 +291,19 @@ export function hostReason(why, x, y, nameX, nameY, season, tense = "future") {
   const level = why.homesX === why.homesY ? `both ${have} ${games_(why.homesX)}` : "";
   switch (why.rule) {
     case "first_round":
-      return `${host} ${hosts}: in the first round, the #1 and #2 seeds host.`;
+      return `${host} ${hosts}; in the first round, the #1 and #2 seeds host.`;
     case "same_region":
-      return `${host} ${hosts}: when two teams from the same region meet, the higher seed hosts (#${hostPos.seed} over #${otherPos.seed}).`;
+      return `${host} ${hosts}; when two teams from the same region meet, the higher seed hosts (#${hostPos.seed} over #${otherPos.seed}).`;
     case "home_games":
-      return `${host} ${hosts}: it ${has} ${games_(homesHost)} to ${other}’s ${homesOther}, and the team with fewer hosts the quarterfinal.`;
+      return `${host} ${hosts}; it ${has} ${games_(homesHost)} to ${other}’s ${homesOther}, and the team with fewer hosts the quarterfinal.`;
     case "seed":
       return level && why.quarterfinal
-        ? `${host} ${hosts}: ${level}, so the higher seed hosts (${short(hostPos)} over ${short(otherPos)}).`
+        ? `${host} ${hosts}; ${level}, so the higher seed hosts (${short(hostPos)} over ${short(otherPos)}).`
         : `${host} ${hosts} as the higher seed: ${short(hostPos)} over ${short(otherPos)}.`;
     default: {
       const odd = season % 2 === 1;
       const tie = `both are #${hostPos.seed} seeds, and in ${odd ? "odd" : "even"} years the ${odd ? "lower" : "higher"}-numbered region hosts (Region ${hostPos.region} over Region ${otherPos.region})`;
-      return `${host} ${hosts}: ${level && why.quarterfinal ? `${level}, ` : ""}${tie}.`;
+      return `${host} ${hosts}; ${level && why.quarterfinal ? `${level}, ` : ""}${tie}.`;
     }
   }
 }
