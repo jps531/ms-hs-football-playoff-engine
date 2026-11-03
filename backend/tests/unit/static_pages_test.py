@@ -409,6 +409,7 @@ class TestBracketPreview:
         assert results == {"N-0-0": {"winner": "Raleigh", "loser": "Mize", "winner_score": 35, "loser_score": 7}}
         html = bracket_preview_html(3, BRACKET, {**BRACKET_CTX, "results": results})
         assert "tgame--played" in html and ">35<" in html and "trow--result is-winner" in html
+        assert "Region 1 #1 Seed" in html  # the winner's seed, kept on the finished game
 
     def test_a_bye_reads_bye_with_no_opponent(self):
         """A seed a small region can't fill: the card says BYE with no "vs", and the sheet says why."""

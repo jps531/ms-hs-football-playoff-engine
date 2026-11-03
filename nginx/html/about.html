@@ -60,9 +60,37 @@
   <main id="content" class="page article">
     <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li aria-current="page">About</li></ol></nav>
     <h1 class="title">About</h1>
+    <nav class="toc" aria-labelledby="toc-title">
+      <h2 class="toc__title" id="toc-title">On this page</h2>
+      <ol class="toc__list">
+        <li><a href="#about-the-site">About the site</a></li>
+        <li><a href="#how-it-works">How it works</a>
+          <ol>
+            <li><a href="#tiebreakers">How the site applies MHSAA tiebreaker rules</a></li>
+            <li><a href="#scenarios">What the scenarios mean</a></li>
+            <li><a href="#odds">Projected and toss-up odds</a></li>
+            <li><a href="#elo">How the Elo ratings work</a></li>
+            <li><a href="#clinched">What “clinched” and “eliminated” mean</a></li>
+            <li><a href="#bracket">How the bracket works</a></li>
+          </ol></li>
+        <li><a href="#rules-not-ai">Rules, not AI</a></li>
+        <li><a href="#information">Information and Disclaimers</a>
+          <ol>
+            <li><a href="#scores">Where scores come from</a></li>
+            <li><a href="#updates">When it updates</a></li>
+            <li><a href="#what-we-dont-do">What we don’t do</a></li>
+            <li><a href="#limits">What the numbers can’t see</a></li>
+            <li><a href="#gambling">Gambling disclaimer</a></li>
+            <li><a href="#using-the-numbers">Using these numbers</a></li>
+            <li><a href="#measure">What visitor metrics we capture</a></li>
+          </ol></li>
+        <li><a href="#future">What’s next</a></li>
+        <li><a href="#author">About the author</a></li>
+      </ol>
+    </nav>
 
     <div class="prose">
-      <h2>About the site</h2>
+      <h2 id="about-the-site">About the site</h2>
       <p>
         This website was developed to answer the question that comes up every
         October in Mississippi high school football:
@@ -78,7 +106,7 @@
         teams are most likely to play at home.
       </p>
 
-      <h2>How it works</h2>
+      <h2 id="how-it-works">How it works</h2>
       <ul class="bullets">
         <li>When there are <strong>5 or fewer</strong> games remaining in a
           given region, our logic builds the final standings for each possible
@@ -153,7 +181,7 @@
         that can only be settled by a coin flip are marked with a coin.
       </p>
 
-      <h3>What the scenarios mean</h3>
+      <h3 id="scenarios">What the scenarios mean</h3>
       <p>
         Once five or fewer region games remain, each team’s possible outcomes
         are listed with <strong>exactly</strong> what has to happen. Conditions
@@ -173,7 +201,7 @@
         every possible winning margin.
       </p>
 
-      <h3>Projected and toss-up odds</h3>
+      <h3 id="odds">Projected and toss-up odds</h3>
       <p>
         Odds can be calculated two ways, and you can switch between them at
         the top of each page.
@@ -222,7 +250,7 @@
         opening its row in the standings.
       </p>
 
-      <h3>What “clinched” and “eliminated” mean</h3>
+      <h3 id="clinched">What “clinched” and “eliminated” mean</h3>
       <p>
         <strong>Clinched</strong> means a team makes the playoffs, or locks in
         a specific seed, in every possible outcome of the remaining games.
@@ -270,7 +298,7 @@
           higher-numbered region in even years. The state championship is played at a neutral site.</li>
       </ul>
 
-      <h2>Rules, not AI</h2>
+      <h2 id="rules-not-ai">Rules, not AI</h2>
       <p>
         The scenarios, headlines, and numbers on this website all come from
         rules-based logic and math applied to completed games, the MHSAA’s
@@ -293,9 +321,9 @@
         but they play no part in calculating the results.
       </p>
 
-      <h2>Information and Disclaimers</h2>
+      <h2 id="information">Information and Disclaimers</h2>
 
-      <h3>Where scores come from</h3>
+      <h3 id="scores">Where scores come from</h3>
       <p>
         Schedules and scores come from
         <a href="https://www.ahsfhs.org/mississippi/index.asp">AHSFHS</a>, the
@@ -308,7 +336,7 @@
         <a href="https://www.misshsaa.com/2024/11/19/2025-27-football-regions/">MHSAA</a>.
       </p>
 
-      <h3>When it updates</h3>
+      <h3 id="updates">When it updates</h3>
       <p>
         Every morning at 9:00 AM Central, the latest scores are pulled. As soon
         as that finishes, the standings, odds, scenarios, and playoff brackets
@@ -320,7 +348,7 @@
         cover, and the bottom of each page says when they were calculated.
       </p>
 
-      <h3>What we don’t do</h3>
+      <h3 id="what-we-dont-do">What we don’t do</h3>
       <p>
         We don’t publish point spreads, predicted scores, or betting lines,
         and we don’t pick winners.
@@ -332,7 +360,7 @@
         until the MHSAA announces them.</strong>
       </p>
 
-      <h3>What the numbers can’t see</h3>
+      <h3 id="limits">What the numbers can’t see</h3>
       <p>
         The odds know only the schedule, the scores, and the rules. They
         don’t account for:
@@ -358,7 +386,7 @@
         describes. <strong>It is very much not a guarantee.</strong>
       </p>
 
-      <h3>Gambling disclaimer</h3>
+      <h3 id="gambling">Gambling disclaimer</h3>
       <p>
         The odds on this site are statistical estimates for information and
         entertainment only. They’re meant to help fans understand how a
@@ -379,7 +407,7 @@
         <a href="https://www.sos.ms.gov/adminsearch/ACCode/00000682c.pdf">state law</a>.</strong>
       </p>
 
-      <h3>Using these numbers</h3>
+      <h3 id="using-the-numbers">Using these numbers</h3>
       <p>
         Using these numbers in a story? Please credit mshsfootball.com and
         link the region page!
@@ -474,7 +502,7 @@
           and scenarios in a form that’s easy to cite and reuse.</li>
       </ul>
 
-      <h2>About the author</h2>
+      <h2 id="author">About the author</h2>
       <div class="author">
         <img class="author__photo" src="/static/author.webp" width="96" height="96" alt="Paul Sullivan">
         <p>
@@ -519,7 +547,7 @@
     <p>Seeds aren’t official until the MHSAA announces them. Odds are estimates and are not for wagering.</p>
     <p>Scores from <a href="https://www.ahsfhs.org/mississippi/index.asp">AHSFHS</a>. Updated each morning at 9:00 Central.</p>
     <p>This website is not associated with the MHSAA or any of its member schools.</p>
-    <p>© 2025–2026 Paul Sullivan. All rights reserved. · <a href="https://github.com/jps531/ms-hs-football-playoff-engine/blob/main/CHANGELOG.md">Version 1.13.1</a></p>
+    <p>© 2025–2026 Paul Sullivan. All rights reserved. · <a href="https://github.com/jps531/ms-hs-football-playoff-engine/blob/main/CHANGELOG.md">Version 1.13.2</a></p>
   </footer>
 
   <!-- Phones: Home plus the same three destinations, as a tab bar along the bottom. -->

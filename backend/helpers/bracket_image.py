@@ -233,7 +233,7 @@ def picks_for(games: list[dict], results: dict) -> dict[str, str]:
 def slot(game: dict, key: str, results: dict, seeds: dict, picks: dict, blank: bool) -> dict:
     """What one side of a game shows: {"name", "sub", "pct", "score", "kind"}.
 
-    ``kind`` is "won" or "lost" (a played game, with its score), "locked" (a team sure to be there,
+    ``kind`` is "won" or "lost" (a played game, with its score and the team's seed), "locked" (a team sure to be there,
     with its seed), "bye", "pick" (Projected: a team that could be there, with its chance), "open"
     (blank: the seed that goes there in the first round, else nothing) or "empty" (no team can).
     """
@@ -244,7 +244,9 @@ def slot(game: dict, key: str, results: dict, seeds: dict, picks: dict, blank: b
         team = locked_team(side) or (result["winner"] if key == "a" else result["loser"])
         won = team == result["winner"]
         score = result.get("winner_score") if won else result.get("loser_score")
-        return {**view, "name": team or "", "score": score, "kind": "won" if won else "lost"}
+        seed = seeds.get(team)  # the seed it played as
+        sub = position_name(*seed) if seed else ""
+        return {**view, "name": team or "", "sub": sub, "score": score, "kind": "won" if won else "lost"}
     locked = locked_team(side)
     if locked:
         seed = seeds.get(locked)

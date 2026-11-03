@@ -1475,7 +1475,9 @@ function treeRow(game, sideKey, result, gutter) {
     const team = lockedTeam(side) ?? (sideKey === "a" ? result.winner : result.loser);
     const won = team === result.winner;
     const score = won ? result.winnerScore : result.loserScore;
-    return row(` trow--result${won ? " is-winner" : ""}`, team, team, "", score != null ? esc(score) : "");
+    // The seed it played as, still worth knowing once the game's played.
+    const seed = seedLabel(team);
+    return row(` trow--result${won ? " is-winner" : ""}`, team, team, seed ? esc(seed) : "", score != null ? esc(score) : "");
   }
   const locked = lockedTeam(side);
   if (locked) {
@@ -2073,7 +2075,8 @@ function bracketSide(game, sideKey, result, host) {
     const team = lockedTeam(side) ?? (sideKey === "a" ? result.winner : result.loser);
     const won = team === result.winner;
     const score = won ? result.winnerScore : result.loserScore;
-    return `<div class="bteam bteam--result${won ? " is-winner" : ""}">${pickTeam(team)}${score != null ? `<span class="bteam__score">${esc(score)}</span>` : ""}</div>`;
+    const seed = seedLabel(team);
+    return `<div class="bteam bteam--result${won ? " is-winner" : ""}">${pickTeam(team)}${score != null ? `<span class="bteam__score">${esc(score)}</span>` : ""}${seed ? `<span class="bteam__fact">${esc(seed)}</span>` : ""}</div>`;
   }
   const locked = lockedTeam(side);
   if (locked) {

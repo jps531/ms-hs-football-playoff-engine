@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.13.2
+
+- **A finished game keeps its seeds.** On a bracket, a played game still shows each team's region and
+  seed under its name ("Region 2 #2 Seed"), on the bracket, in the game's sheet, and in the bracket
+  images to share. Before, the seed went away once the game was played. Past seasons' bracket images
+  are drawn again once to pick this up, and from now on whenever the way they're drawn changes.
+- **The About page has a table of contents**, "On this page", linking to each section.
+
 ## 1.13.1
 
 - **Shorter hosting reasons in 5A–7A quarterfinals.** Where only the first round comes before a

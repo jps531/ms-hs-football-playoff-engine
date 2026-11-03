@@ -44,6 +44,8 @@ def test_a_spot_shows_its_result_its_locked_team_or_one_team_that_could_be_there
     lost = slot(BRACKET[0], "b", results, SEEDS, picks, blank=True)
     assert (won["name"], won["score"], won["kind"]) == ("Raleigh", 35, "won")
     assert (lost["name"], lost["score"], lost["kind"]) == ("Mize", 7, "lost")
+    # A played game keeps each team's seed under its name; a team without one known goes without.
+    assert won["sub"] == "Region 1 #1 Seed" and lost["sub"] == ""
 
 
 def test_a_bracket_is_final_once_every_game_is_played():

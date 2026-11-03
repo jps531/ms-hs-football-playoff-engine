@@ -914,6 +914,21 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .article ul.bullets li + li { margin-top: 6px; }
 .article ul.bullets + p { margin-top: 16px; }
 .article h2[id], .article h3[id] { scroll-margin-top: 80px; }
+/* The About page's "On this page": every section, its subsections under it. */
+.toc {
+  margin-top: 20px; padding: 16px 20px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface-raised);
+}
+.article .toc__title {
+  margin: 0; font-size: 13px; line-height: 18px;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);
+}
+.toc__list, .toc__list ol { list-style: none; margin: 0; padding: 0; }
+.toc__list { margin-top: 8px; display: grid; gap: 6px; font-size: 15px; line-height: 22px; }
+.toc__list ol { margin-top: 4px; padding-left: 16px; display: grid; gap: 4px; font-size: 14px; line-height: 20px; }
+.toc a { color: var(--text-primary); }
+.toc a:hover { color: var(--link); }
 .author { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
 .author > p { margin: 0; }
 .author + p { margin-top: 16px; }
@@ -1196,11 +1211,11 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
   color: var(--text-secondary);
 }
 .bside__label .bteam__home { margin-left: 8px; }
-/* A locked team: name and Home tag, then its seed on a line of its own. */
-.bteam--locked { flex-wrap: wrap; row-gap: 0; }
-.bteam--locked .bteam__name { flex: 1 1 0; }
+/* A locked team (name and Home tag) or a played game's team (name and score), then its seed on a line of its own. */
+.bteam--locked, .bteam--result { flex-wrap: wrap; row-gap: 0; }
+.bteam--locked .bteam__name, .bteam--result .bteam__name { flex: 1 1 0; }
 .bteam--locked .bteam__home { order: 1; }
-.bteam--locked .bteam__fact { order: 2; flex-basis: 100%; padding-left: 30px; margin-top: -6px; }
+.bteam--locked .bteam__fact, .bteam--result .bteam__fact { order: 2; flex-basis: 100%; padding-left: 30px; margin-top: -6px; }
 .bteam__score { flex: none; font-variant-numeric: tabular-nums; font-weight: 500; }
 .bteam--result.is-winner .team-name, .bteam--result.is-winner .bteam__score { font-weight: 700; }
 .bteam--result:not(.is-winner) .team-name { color: var(--text-secondary); }

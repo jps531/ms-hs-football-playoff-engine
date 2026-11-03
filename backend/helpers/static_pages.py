@@ -1437,7 +1437,7 @@ def _tree_line(gutter: str, team: str | None, name: str, teams: dict, sub: str, 
 
 
 def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: dict) -> str:
-    """One side of a compact card: the result, the locked team, or the round's pick for it (see
+    """One side of a compact card: the result (with the team's seed), the locked team, or the round's pick for it (see
     ``round_picks``; else its likeliest team) with its odds."""
     side = game[f"side_{side_key}"]
     teams = ctx["teams"]
@@ -1446,7 +1446,9 @@ def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: 
         won = team == result["winner"]
         score = result["winner_score"] if won else result["loser_score"]
         cls = " trow--result is-winner" if won else " trow--result"
-        return _tree_line(gutter, team, team or "", teams, "", _e(score) if score is not None else "", cls)
+        seed = ctx["seeds"].get(team)  # the seed it played as, still worth knowing once the game's played
+        sub = _e(position_name(*seed)) if seed else ""
+        return _tree_line(gutter, team, team or "", teams, sub, _e(score) if score is not None else "", cls)
     locked = locked_team(side)
     if locked:
         seed = ctx["seeds"].get(locked)
