@@ -87,9 +87,16 @@ _RESOLVED_HELMET_JOIN: LiteralString = """
 
 @router.get("/seasons")
 async def list_seasons() -> list[SeasonModel]:
-    """Return all seasons that have at least one school enrolled."""
+    """Return the seasons with a schedule: schools enrolled and at least one game, newest first.
+
+    The site takes the first as the current season, so a season whose regions are loaded ahead of time
+    (MHSAA publishes them a year early) stays out of the list until its games are in.
+    """
     async with get_conn() as conn:
-        rows = await conn.execute("SELECT DISTINCT season FROM school_seasons ORDER BY season DESC")
+        rows = await conn.execute(
+            "SELECT DISTINCT ss.season FROM school_seasons ss"
+            " WHERE EXISTS (SELECT 1 FROM games g WHERE g.season = ss.season) ORDER BY ss.season DESC"
+        )
         return [SeasonModel(season=r[0]) async for r in rows]
 
 

@@ -1,195 +1,121 @@
-"""Prefect tasks and flow for scraping region/class assignments from the MHSAA website.
+"""Prefect flow that loads a season's region assignments from its cycle file.
 
-Fetches the MHSAA football regions article for the given season, parses each
-class section for school-to-region mappings, and writes each school's class
-and region for the season to ``school_seasons`` (adding any new school to
-``schools``) via INSERT ... ON CONFLICT.
+Each MHSAA cycle (two seasons) has a checked-in file in ``backend/data/regions/`` (see
+``helpers.region_files``), drafted from MHSAA's article with ``python -m backend.tools.draft_regions``
+and checked by a person. This flow reads the season's schools from it and checks them against the
+database before writing anything: every name a school the site knows (or a rename or successor
+starting this season), every region big enough, and every school from last season accounted for. A
+problem stops the flow with every problem listed, so nothing is half-loaded.
+
+It then writes each school's class and region to ``school_seasons`` (adding a new school to
+``schools``). A successor (``SCHOOL_SUCCESSORS``) takes its old school's campus, location and home
+field, when it has none of its own yet. Rows already in the database for the season that the file
+doesn't have stop the flow too (deactivate or fix them first); ``is_active`` is never changed.
 """
 
-import re
-from collections.abc import Iterable
+from __future__ import annotations
+
 from datetime import date
 
 from prefect import flow, get_run_logger, task
 from psycopg2.extras import execute_values
 
-from backend.helpers.data_classes import School
-from backend.helpers.data_helpers import SPACE_RE, clean_school_name, school_name_for_season
+from backend.helpers.data_helpers import SCHOOL_SUCCESSORS
 from backend.helpers.database_helpers import get_database_connection
-from backend.helpers.web_helpers import fetch_article_text
-
-# -------------------------
-# Config
-# -------------------------
-
-CLASS_HDR = re.compile(r"\bClass\s+([1-7])A\b", re.IGNORECASE)
-
-# MHSAA publishes one classification article per 2-year cycle. Keys are the
-# odd year that starts each cycle; add a new entry when MHSAA publishes the
-# next cycle's article.
-_REGIONS_CYCLE_URLS: dict[int, str] = {
-    2019: "https://www.misshsaa.com/2018/10/31/2019-21-football-regions/",
-    2021: "https://www.misshsaa.com/2020/10/29/2021-23-football-regions/",
-    2023: "https://www.misshsaa.com/2022/11/03/2023-25-football-regions/",
-    2025: "https://www.misshsaa.com/2024/11/19/2025-27-football-regions/",
-}
-
-# Per-season overrides applied AFTER scraping the MHSAA page.
-# Necessary when MHSAA retroactively edits a cycle page after a consolidation
-# or closure, making the live page incorrect for the earlier year of the cycle.
-#
-# Each entry replaces the scraped value for that school in that season (or adds
-# the school if it was removed from the page entirely).  Use this sparingly —
-# only for cases where the source page itself is now wrong.
-#
-# 2025 — Leake County (1A-5) closed after 2025; Leake Central (4A-5) absorbed
-# it and moved to 5A-2 for 2026.  MHSAA updated the 2025-27 cycle page to
-# reflect the post-consolidation state, so the live page now omits Leake County
-# and shows Leake Central in 5A-2.  These overrides restore the true 2025 state.
-_SEASON_OVERRIDES: dict[int, list[dict]] = {
-    2025: [
-        {"school": "Leake Central", "class": 4, "region": 5},
-        {"school": "Leake County",  "class": 1, "region": 5},
-    ],
-}
+from backend.helpers.region_files import assignments_for_season, cycle_path, problems
 
 
-# -------------------------
-# Prefect tasks & flow
-# -------------------------
+def check_season(
+    season: int, known: set[str], prior: set[str], active: set[str]
+) -> tuple[dict[str, tuple[int, int]], list[str]]:
+    """*season*'s assignments from its file and what's wrong with them, given the database's schools
+    (*known*), last season's active ones (*prior*, empty when there's none) and this season's active
+    ones already loaded (*active*)."""
+    assigned = assignments_for_season(season)
+    issues = problems(assigned, season, known, prior or None)
+    for school in sorted(active - set(assigned)):
+        issues.append(
+            f"{school} is active in the database for {season} but not in its file. Add it to the file, "
+            f"or deactivate it (PATCH /api/v1/admin/school-seasons/{school}/{season})."
+        )
+    return assigned, issues
 
 
-def _find_class_sections(text: str) -> list[tuple[int, int, int]]:
-    """Find each 'Class {N}A' header and return (class_num, start, end)."""
-    matches = list(CLASS_HDR.finditer(text))
-    sections: list[tuple[int, int, int]] = []
-    for i, m in enumerate(matches):
-        cls = int(m.group(1))
-        start = m.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        sections.append((cls, start, end))
-    return sections
+@task(task_run_name="Read the database's schools")
+def read_schools(season: int) -> tuple[set[str], set[str], set[str]]:  # pragma: no cover - the database
+    """Every school, last season's active schools, and this season's active schools already loaded."""
+    with get_database_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT school FROM schools")
+        known = {r[0] for r in cur.fetchall()}
+        cur.execute(
+            "SELECT school, season FROM school_seasons WHERE season IN (%s, %s) AND is_active", (season - 1, season)
+        )
+        rows = cur.fetchall()
+    return known, {s for s, y in rows if y == season - 1}, {s for s, y in rows if y == season}
 
 
-def _parse_section(text: str, cls: int) -> list[tuple[str, int, int]]:
-    """
-    Parse a single Class section into (school, class, region) tuples.
-    Each line looks like: 'SCHOOL NAME {class} {region}'.
-    """
-    rows: list[tuple[str, int, int]] = []
-    s = SPACE_RE.sub(" ", text.replace("\n", " ")).strip()
-    pattern = re.compile(rf"(.+?)\s{cls}\s([1-8])(?=\s|$)")
-    pos = 0
-    while True:
-        m = pattern.search(s, pos)
-        if not m:
-            break
-        raw_name = m.group(1).strip()
-        region = int(m.group(2))
-
-        # Remove trailing junk
-        for tail in ("School Name", "School", "Class", "Region"):
-            if raw_name.endswith(tail):
-                raw_name = raw_name[: -len(tail)].rstrip()
-
-        school = clean_school_name(raw_name)
-        if school:
-            rows.append((school, cls, region))
-
-        pos = m.end()
-    return rows
-
-
-def parse_regions_from_text(text: str) -> list[dict]:
-    """Parse all class sections into dictionaries."""
-    out: list[dict] = []
-    for cls, start, end in _find_class_sections(text):
-        section = text[start:end]
-        for school, class_num, region in _parse_section(section, cls):
-            out.append(
-                {
-                    "school": school,
-                    "class": class_num,
-                    "region": region,
-                }
-            )
-    return out
-
-
-@task(task_run_name="Insert Regions Data")
-def insert_rows(rows: Iterable[School]) -> int:
-    """
-    Insert the given rows into the database.
-    Upserts into schools (static identity) then school_seasons (class/region).
-    Returns the number of rows inserted.
-    """
-    rows_data = list(rows)
-    if not rows_data:
-        return 0
-
-    schools_sql = """
-        INSERT INTO schools (school)
-        VALUES %s
-        ON CONFLICT (school) DO NOTHING
-    """
-    seasons_sql = """
-        INSERT INTO school_seasons (school, season, class, region)
-        VALUES %s
-        ON CONFLICT (school, season) DO UPDATE SET
-            class  = COALESCE(EXCLUDED.class,  school_seasons.class),
-            region = COALESCE(EXCLUDED.region, school_seasons.region)
-            -- is_active is never overwritten by the pipeline; set manually via UPDATE
-    """
-    schools_data = [(r.school,) for r in rows_data]
-    seasons_data = [(r.school, r.season, r.class_, r.region) for r in rows_data]
-
+@task(task_run_name="Write the season's regions")
+def write_season(season: int, assigned: dict[str, tuple[int, int]]) -> int:  # pragma: no cover - the database
+    """Add new schools, give each successor its old school's campus, and upsert every school's class and
+    region for *season*, in one transaction. Returns the number of schools written."""
     with get_database_connection() as conn:
         with conn.cursor() as cur:
-            execute_values(cur, schools_sql, schools_data, template="(%s)")
-            execute_values(cur, seasons_sql, seasons_data, template="(%s,%s,%s,%s)")
+            execute_values(
+                cur, "INSERT INTO schools (school) VALUES %s ON CONFLICT (school) DO NOTHING", [(s,) for s in assigned]
+            )
+            for old, new, first in SCHOOL_SUCCESSORS:
+                if first != season or new not in assigned:
+                    continue
+                cur.execute(
+                    """
+                    UPDATE schools n SET city = o.city, zip = o.zip, latitude = o.latitude, longitude = o.longitude
+                    FROM schools o
+                    WHERE n.school = %s AND o.school = %s AND n.latitude IS NULL AND n.longitude IS NULL
+                    """,
+                    (new, old),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO locations (name, city, home_team, latitude, longitude)
+                    SELECT name, city, %s, latitude, longitude FROM locations
+                    WHERE home_team = %s AND NOT EXISTS (SELECT 1 FROM locations WHERE home_team = %s)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (new, old, new),
+                )
+            execute_values(
+                cur,
+                """
+                INSERT INTO school_seasons (school, season, class, region) VALUES %s
+                ON CONFLICT (school, season) DO UPDATE SET class = EXCLUDED.class, region = EXCLUDED.region
+                """,
+                [(s, season, c, r) for s, (c, r) in assigned.items()],
+                template="(%s,%s,%s,%s)",
+            )
         conn.commit()
-    return len(rows_data)
-
-
-@task(retries=2, retry_delay_seconds=10, task_run_name="Scrape Regions Data")
-def scrape_task(url: str, season: int) -> list[School]:
-    """
-    Task to scrape the regions data from the given URL.
-    """
-    logger = get_run_logger()
-    logger.info("Fetching and parsing rendered text from %s", url)
-    text = fetch_article_text(url)
-    # The MHSAA page can lag a school's new name (SCHOOL_RENAMES); file it under the site's name for the season.
-    rows = {}
-    for r in parse_regions_from_text(text):
-        name = school_name_for_season(r["school"], season)
-        rows[name] = School(school=name, class_=r["class"], region=r["region"], season=season)
-
-    for override in _SEASON_OVERRIDES.get(season, []):
-        school = override["school"]
-        rows[school] = School(school=school, class_=override["class"], region=override["region"], season=season)
-        logger.info("Applied season override: %s → %dA Region %d", school, override["class"], override["region"])
-
-    logger.info("Parsed %d schools (after overrides)", len(rows))
-    return list(rows.values())
+    return len(assigned)
 
 
 @flow(name="Regions Data Flow")
 def regions_data_flow(season: int | None = None) -> int:
-    """
-    Flow to scrape and insert regions data.
-    """
+    """Load *season*'s regions (default: this year) from its cycle's file, if every check passes."""
     if season is None:
         season = date.today().year
     logger = get_run_logger()
-    cycle_start = season if season % 2 == 1 else season - 1
-    regions_source_url = _REGIONS_CYCLE_URLS.get(cycle_start)
-    if regions_source_url is None:
+    path = cycle_path(season)
+    if not path.exists():
         raise ValueError(
-            f"No regions URL configured for the {cycle_start}–{cycle_start + 1} cycle "
-            f"(season {season}). Add it to _REGIONS_CYCLE_URLS in regions_data_pipeline.py."
+            f"No region file for the {season} season ({path.name} in backend/data/regions/). Draft it with "
+            f"`python -m backend.tools.draft_regions --season {season}`, check it, and commit it."
         )
-    rows = scrape_task(regions_source_url, season)
-    inserted = insert_rows(rows)
-    logger.info("Inserted %d new rows into schools", inserted)
-    return inserted
+    known, prior, active = read_schools(season)
+    assigned, issues = check_season(season, known, prior, active)
+    if issues:
+        for issue in issues:
+            logger.error(issue)
+        raise ValueError(
+            f"{path.name} isn't ready for {season}: {len(issues)} problems (listed above). Nothing was written."
+        )
+    written = write_season(season, assigned)
+    logger.info("Wrote %d schools' %d regions from %s", written, season, path.name)
+    return written

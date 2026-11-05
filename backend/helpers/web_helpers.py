@@ -13,8 +13,6 @@ import requests
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
-from backend.helpers.data_helpers import SPACE_RE
-
 # -------------------------
 # Constants
 # -------------------------
@@ -27,35 +25,6 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 # -------------------------
 # Helpers
 # -------------------------
-
-
-def fetch_article_text(url: str) -> str:
-    """
-    Use Playwright headless Chromium to retrieve the browser-rendered text
-    of the main article body. This captures actual on-screen spacing.
-    """
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-        page = browser.new_page(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/126.0.0.0 Safari/537.36"
-            )
-        )
-        page.goto(url, wait_until="networkidle")
-        # try to focus on the main WordPress article content
-        loc = page.locator("article .entry-content, .entry-content, article")
-        if loc.count() == 0:
-            text = page.inner_text("body")
-        else:
-            text = loc.first.inner_text()
-        browser.close()
-
-    # normalize whitespace
-    lines = [SPACE_RE.sub(" ", ln).strip() for ln in text.splitlines()]
-    text = "\n".join(ln for ln in lines if ln)
-    return text
 
 
 def _ratio(a: str, b: str) -> float:

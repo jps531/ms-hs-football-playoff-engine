@@ -12,7 +12,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/seasons` | List all seasons that have enrolled teams |
+| GET | `/seasons` | The seasons with a schedule (enrolled teams and at least one game), newest first. The site shows the first as the current season, so regions loaded ahead of a season don't change it until that season's games are in. |
 | GET | `/seasons/{season}/structure` | All classes and regions with team counts for a season |
 | GET | `/seasons/{season}/dates` | Notable game dates for a timeline scrubber (round, week, game count); optional `class` filter. Params: `season`, `class` |
 | GET | `/teams` | List teams; `season` required, optional `class` and `region` filters. Each team includes `helmet_url` — the full image URL of its resolved helmet for that season (same resolution order as `/teams/{team}/helmets/resolved`, right-side view preferred, else left), or `null` |
@@ -285,7 +285,7 @@ A new season's playoff bracket format (`playoff_formats` and `playoff_format_slo
 | Method | Path | Description |
 |--------|------|-------------|
 | PATCH | `/school-seasons/{school}/{season}` | Toggle `is_active` for a school in a season (pipeline never writes this column). Body: `{ "is_active": false }` |
-| PUT | `/school-seasons/{school}/{season}` | Create or overwrite a `school_seasons` row with explicit `class`, `region`, and `is_active` (upsert — safe to re-run). Creates the parent `schools` row if it doesn't exist. Use for mid-cycle changes the Regions pipeline can't handle: consolidations, closures, new schools. Requires moderator+. Body: `{ "class": 5, "region": 2, "is_active": true, "copy_identity_from": "Old School Name" }` — `copy_identity_from` is optional; when supplied, copies mascot, colors, city, zip, latitude, and longitude from that school into the new school's base columns immediately, before the MHSAA identity and NCES pipelines have run. 404s if the source school does not exist. See [SEASON_SETUP.md](../operations/SEASON_SETUP.md) for a worked consolidation example. |
+| PUT | `/school-seasons/{school}/{season}` | Create or overwrite a `school_seasons` row with explicit `class`, `region`, and `is_active` (upsert — safe to re-run). Creates the parent `schools` row if it doesn't exist. A quick fix until the season's region file (`backend/data/regions/`) has the change: the next regions load writes the file's class and region over it. Requires moderator+. Body: `{ "class": 5, "region": 2, "is_active": true, "copy_identity_from": "Old School Name" }` — `copy_identity_from` is optional; when supplied, copies mascot, colors, city, zip, latitude, and longitude from that school into the new school's base columns immediately, before the MHSAA identity and NCES pipelines have run. 404s if the source school does not exist. See [SEASON_SETUP.md](../operations/SEASON_SETUP.md) for a worked consolidation example. |
 
 **Locations CRUD** — the pipeline never writes this table; venues are otherwise seeded by SQL only.
 

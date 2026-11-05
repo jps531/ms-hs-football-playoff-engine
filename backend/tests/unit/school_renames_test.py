@@ -8,14 +8,15 @@ from pathlib import Path
 import pytest
 
 import backend.prefect.ahsfhs_schedule_pipeline as schedule
-import backend.prefect.regions_data_pipeline as regions
 from backend.helpers.data_helpers import (
     SCHOOL_RENAMES,
+    SCHOOL_SUCCESSORS,
     school_name_for_season,
     source_name_for_season,
     update_school_name_for_ahsfhs_search,
     with_predecessor_ratings,
 )
+from backend.helpers.region_files import assignments_for_season
 from backend.helpers.share_cards import slugify
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -24,8 +25,7 @@ ROOT = Path(__file__).resolve().parents[3]
 @pytest.fixture(autouse=True)
 def _stub_run_logger(monkeypatch: pytest.MonkeyPatch) -> None:
     """The pipeline tasks log through Prefect's run logger, which needs a live run; a plain logger stands in."""
-    for module in (schedule, regions):
-        monkeypatch.setattr(module, "get_run_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(schedule, "get_run_logger", lambda: logging.getLogger("test"))
 
 
 def test_the_new_name_starts_in_its_first_season_and_history_keeps_the_old():
@@ -59,22 +59,10 @@ def test_other_schools_games_against_it_are_filed_under_the_new_name():
     assert opponent(2025) == "Leake Central"
 
 
-def test_the_region_page_files_it_under_the_new_name(monkeypatch: pytest.MonkeyPatch):
-    """The 2025-27 MHSAA page lists "Leake Central" in 5A-2; for 2026 that's Leake."""
-    monkeypatch.setattr(regions, "fetch_article_text", lambda url: "page")
-    monkeypatch.setattr(
-        regions,
-        "parse_regions_from_text",
-        lambda text: [
-            {"school": "Leake Central", "class": 5, "region": 2},
-            {"school": "Neshoba Central", "class": 5, "region": 2},
-        ],
-    )
-    rows = regions.scrape_task.fn("http://x", 2026)
-    assert sorted(r.school for r in rows) == ["Leake", "Neshoba Central"]
-    # 2025's own override still puts Leake Central and Leake County where they were.
-    rows_2025 = {r.school: (r.class_, r.region) for r in regions.scrape_task.fn("http://x", 2025)}
-    assert rows_2025["Leake Central"] == (4, 5) and rows_2025["Leake County"] == (1, 5)
+def test_the_region_file_has_it_under_the_new_name():
+    """The 2025-27 file has Leake Central (4A-5) for 2025 and Leake (5A-2) for 2026."""
+    assert assignments_for_season(2025)["Leake Central"] == (4, 5)
+    assert assignments_for_season(2026)["Leake"] == (5, 2)
 
 
 def test_elo_carries_over_from_the_old_name_in_the_first_season_only():
@@ -92,4 +80,14 @@ def test_old_team_links_are_mapped_for_every_rename():
     """routes.js FORMER_SLUGS sends an old ?team= slug to the new name; it must cover every rename."""
     routes = (ROOT / "nginx" / "html" / "static" / "js" / "routes.js").read_text()
     slugs = dict(re.findall(r'"([a-z0-9-]+)": "([^"]+)"', re.search(r"FORMER_SLUGS = \{([^}]*)\}", routes).group(1)))
-    assert slugs == {slugify(old): new for old, new, _ in SCHOOL_RENAMES}
+    assert slugs == {slugify(old): new for old, new, _ in [*SCHOOL_RENAMES, *SCHOOL_SUCCESSORS]}
+
+
+def test_a_successor_starts_from_its_old_schools_rating_but_keeps_its_own_name_in_the_sources():
+    """North Tippah (Falkner and Walnut, on Walnut's campus) starts 2027 from Walnut's rating; unlike a
+    rename, AHSFHS is asked for North Tippah, and Walnut's name stays Walnut."""
+    carried = with_predecessor_ratings({"Walnut": 1100.0, "Falkner": 950.0}, 2027)
+    assert carried["North Tippah"] == 1100.0
+    assert "North Tippah" not in with_predecessor_ratings({"Walnut": 1100.0}, 2026)
+    assert source_name_for_season("North Tippah", 2027) == "North Tippah"
+    assert school_name_for_season("Walnut", 2027) == "Walnut"

@@ -27,49 +27,79 @@ After the championship games are ingested by the AHSFHS pipeline, assign the ven
 
 This upserts `championship_venues` (the source of truth, usable even before that season's Championship Game rows exist) and mirrors the venue onto any existing Championship Game rows in `games`. Use `GET /api/v1/admin/championship-venue?season=YYYY` to review current assignments.
 
-## School consolidations, closures, and mid-cycle changes
+## Regions (every two years)
 
-MHSAA publishes classification assignments on a 2-year cycle. The Regions pipeline reads the same article for both years in a cycle, so consolidations and closures that happen mid-cycle require manual steps after the pipeline runs.
-
-**Step 1 — Deactivate closed/merged schools for the new season**
-
-After running the Regions pipeline for the new season, suppress each closed or merged school:
+MHSAA assigns classes and regions on a two-year cycle and publishes the next cycle's regions in the
+fall, about a year ahead. The site's regions come from one checked-in file per cycle,
+`backend/data/regions/{first}-{last}.csv` (`2027-29.csv` for 2027 and 2028), one school a line:
 
 ```
-PATCH /api/v1/admin/school-seasons/{old_school}/{season}
-{"is_active": false}
+school,class,region,seasons
+North Tippah,3,2,
+Leake Central,4,5,2025
 ```
 
-Their `schools` rows and all historical game data are preserved; they stop appearing in the new season's standings and scenarios.
+`school` is the site's name for the school. `seasons` is blank for both seasons of the cycle, or
+names the one season a line holds for (a mid-cycle move, closure or rename).
 
-**Step 2 — Create the new school's season entry**
+**For a new cycle:**
 
-```
-PUT /api/v1/admin/school-seasons/{new_school}/{season}
-{"class": N, "region": N, "is_active": true}
-```
+1. Draft the file from MHSAA's article, in the worker container (it has the browser):
+   ```
+   docker compose --env-file .env.local --profile local-db exec prefect-worker \
+     python -m backend.tools.draft_regions --season 2029 --url https://www.misshsaa.com/… > 2029-31.csv
+   ```
+   (Locally: `uv run python -m backend.tools.draft_regions --season 2029 --url … > backend/data/regions/2029-31.csv`.)
+   It reads the article's tables, and those of a page embedded in it, in either layout MHSAA has
+   used. Add the article to `ARTICLES` in `backend/tools/draft_regions.py` to skip `--url`. What it
+   can't place it prints as `CHECK:` lines: a name the site doesn't know (fix the spelling to the
+   site's name, or add MHSAA's spelling to `MHSAA_NAMES`), or a school from last season that isn't
+   there (a closure, rename or consolidation; see below).
+2. Check the file, commit it, deploy.
+3. Run `regions-data-pipeline` (Custom Run) for each season of the cycle. It checks the season
+   against the database before writing anything and stops, listing every problem, if a name isn't a
+   school the site knows, a region has fewer than three schools, a class's regions aren't numbered
+   from 1, or a school from the season before has no place.
 
-This creates the `schools` row if it doesn't exist yet (safe to run before AHSFHS schedules publish), then upserts the `school_seasons` row with the correct class and region assignment.
+Loading a cycle early is safe: the site's current season is the newest one with games (`/seasons`),
+so the loaded season stays out of sight until its schedule is in.
 
-**Step 3 — Set identity data for the new school**
+## Consolidations, closures, and renames
 
-The MHSAA school identity and NCES location pipelines won't have data for a brand-new consolidated school until MHSAA updates their directory. Set known fields immediately via admin overrides:
+Record these in `backend/helpers/data_helpers.py`, next to the region file:
+
+- **A school closed** (or stopped playing): `SCHOOL_CLOSURES`, with its last season and why.
+- **A new school carries on an old one** (a consolidation on one school's campus): `SCHOOL_SUCCESSORS`,
+  (old school, new school, first season). The new school starts from the old one's Elo rating, and
+  the regions load gives it the old school's campus (city, ZIP, coordinates) and home field when it
+  has none of its own. Add the old team link to `FORMER_SLUGS` in `nginx/html/static/js/routes.js`.
+  The schedule sources are asked for the new name.
+- **A school goes by a new name while the sources still use the old one**: `SCHOOL_RENAMES`. The
+  pipelines file everything under the new name and still ask the sources for the old one; see
+  Leake below. Add it to `FORMER_SLUGS` too.
+
+Then list the school under its new name in the region file. A school MHSAA moved mid-cycle gets a
+line for each season (`seasons` 2025 on one, 2026 on the other).
+
+**Identity data for a new school.** The MHSAA directory and NCES pipelines won't have a brand-new
+school until those sources do. Set what's known with admin overrides (a successor already has its
+old school's location):
 
 ```
 PUT /api/v1/admin/schools/{school}/overrides   {"field": "mascot",           "value": "..."}
 PUT /api/v1/admin/schools/{school}/overrides   {"field": "primary_color",    "value": "..."}
 PUT /api/v1/admin/schools/{school}/overrides   {"field": "secondary_color",  "value": "..."}
-PUT /api/v1/admin/schools/{school}/overrides   {"field": "latitude",         "value": "..."}
-PUT /api/v1/admin/schools/{school}/overrides   {"field": "longitude",        "value": "..."}
 ```
 
-Valid override fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude`. (`city` is populated only by the NCES pipeline and will be NULL until that pipeline runs for the new school.)
+Valid override fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude`. Overrides always win over pipeline values; clear one with `DELETE /api/v1/admin/schools/{school}/overrides/{field}`.
 
-Once MHSAA publishes the school's directory entry and the pipelines can fetch the data naturally, clear overrides with `DELETE /api/v1/admin/schools/{school}/overrides/{field}` — or leave them in place, as overrides always win over pipeline values.
+## 2027: North Tippah (3A Region 2)
 
-**Elo ratings for consolidated schools**
-
-Consolidated schools start the season at the class prior (no manual seeding needed). If the merged program is significantly stronger or weaker than a fresh entrant to their new class, you can seed a starting rating by inserting a synthetic `team_ratings` row for the prior season — the carryover calculation (`50% class prior + 50% prior season Elo`) will use it on the next pipeline run.
+Falkner (1A Region 2) and Walnut (2A Region 1) consolidate into North Tippah (3A Region 2) for 2027,
+on Walnut's campus. `SCHOOL_SUCCESSORS` has Walnut → North Tippah from 2027: North Tippah starts from
+Walnut's final 2026 Elo rating and takes Walnut's location and home field when the 2027 regions load.
+`SCHOOL_CLOSURES` has Falkner's last season, 2026. Old `?team=walnut` links open North Tippah on
+2027 pages. Its mascot and colors aren't set yet; until they are, it shows the default helmet and colors.
 
 ---
 
