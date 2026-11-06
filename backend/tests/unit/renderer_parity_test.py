@@ -245,6 +245,10 @@ REGIONS = {
     ],
 }  # fmt: skip
 REGIONS_PLAYED = {**REGIONS, "season": 2025, "seasons": [2025], "standings_season": 2025, "prior_season": None}
+REGIONS_TEAMS = {  # helmets: one in its colors, one image; the rest get initials
+    "Greenwood": {"color_variants": {"primary": {"raw": "#800000"}}, "secondary_color_hex": "#FFFFFF"},
+    "Leake": {"helmet_url": "https://res.cloudinary.com/x/leake.png"},
+}
 
 CASES = [
     *[(f"playoffPath {t['school']} {m} {c}", team_image.playoff_rounds(t, m, c), _call("standings", "playoffPath", t, m, c), "data")
@@ -319,14 +323,14 @@ CASES = [
        _call("bracket", "quarterfinalHost", {"region": x[0], "seed": x[1]}, hx, {"region": y[0], "seed": y[1]}, hy, season), "data")
       for x, y in HOST_PAIRS for hx in (0, 1, 2) for hy in (0, 1, 2) for season in (2025, 2026)],
     *[(f"regionsHeader {c}", rp.regions_header(c, REGIONS), _call("regions", "regionsHeader", c, REGIONS), "html") for c in (3, 5)],
-    *[(f"regionsLists {c} {p['season']} {cur}", rp.regions_lists(c, p, cur), _call("regions", "regionsLists", c, p, cur), "html")
+    *[(f"regionsLists {c} {p['season']} {cur}", rp.regions_lists(c, p, cur, REGIONS_TEAMS),
+       _call("regions", "regionsLists", c, p, cur, REGIONS_TEAMS), "html")
       for c in (3, 5) for p in (REGIONS, REGIONS_PLAYED) for cur in (2025, 2026)],
     *[(f"teamNote {s['slug']}", rp.team_note(s, 2026), _call("regions", "teamNote", s, 2026), "data") for s in REGIONS["schools"]],
     ("teamNote no season before", rp.team_note(REGIONS["schools"][0], None), _call("regions", "teamNote", REGIONS["schools"][0], None), "data"),
     *[(f"standingsHref {a}", rp.standings_href(5, 2, *a), _call("regions", "standingsHref", 5, 2, *a), "data")
       for a in ((None, 2026), (2026, 2026), (2025, 2026))],
     *[(f"seasonsLabel {s}", rp.seasons_label(s), _call("regions", "seasonsLabel", s), "data") for s in ([2027, 2028], [2026])],
-    ("regions MAP_NOTE", rp.MAP_NOTE, _call("regions", "mapNote"), "data"),
 ]  # fmt: skip
 
 

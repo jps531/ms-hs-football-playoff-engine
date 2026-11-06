@@ -1643,6 +1643,11 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   display: block; padding: 10px 16px; border-top: 1px solid var(--border);
   font-size: 14px; font-weight: 600; color: var(--link);
 }
+/* A class's region map: the image to share, in the page's theme, its top two thirds. */
+.landing-preview--regions .landing-preview__frame { height: 320px; padding: 0; }
+.landing-regions__map { display: block; width: 100%; height: auto; }
+.landing-regions__map--dark, .dark .landing-regions__map--light { display: none; }
+.dark .landing-regions__map--dark { display: block; }
 /* The bracket page in miniature: drawn at a fixed 1200px and scaled to fit, smaller on phones. */
 .landing-preview--bracket { --bp-s: 0.45; }
 @media (max-width: 640px) { .landing-preview--bracket { --bp-s: 0.25; } }
@@ -1726,11 +1731,14 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 /* ------------------------------------------------------------- regions (regions.js) */
 .regions-sub { margin: 6px 0 0; color: var(--text-secondary); }
 .regions-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 16px; }
-.regions-find input {
-  font: inherit; min-height: 44px; min-width: min(280px, 100%); padding: 8px 12px;
-  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-page); color: var(--text-primary);
+/* The header's search box, in the page (team-search, above): left-aligned, its list under it. */
+.team-search.team-search--page { position: relative; margin-left: 0; flex: 1 1 16rem; max-width: 22rem; justify-content: flex-start; }
+.team-search--page .team-results { left: 0; right: auto; top: calc(100% + 6px); }
+@media (max-width: 40em) {
+  .team-search.team-search--page { position: relative; }
+  .team-search--page .team-results { left: 0; right: 0; width: auto; top: calc(100% + 6px); }
 }
-.regions-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.regions-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 28px; align-items: start; }
 @media (max-width: 760px) { .regions-layout { grid-template-columns: 1fr; } }
 .regions-map { margin: 0; position: sticky; top: 72px; }
 @media (max-width: 760px) { .regions-map { position: static; } }
@@ -1738,6 +1746,8 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .regions-map__frame {
   position: relative; aspect-ratio: 3324 / 5355; max-height: calc(100vh - 140px); margin-inline: auto;
   border: 1px solid var(--border); border-radius: 12px; overflow: hidden; touch-action: none; background: var(--surface-page);
+  /* A map to drag and pinch, not text: nothing in it gets selected or called out on a long press. */
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
 }
 .regions-map__svg { display: block; width: 100%; height: 100%; cursor: grab; user-select: none; }
 .regions-map__svg:active { cursor: grabbing; }
@@ -1754,7 +1764,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .map-dot text { fill: #FFFFFF; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .map-dot.is-dim { opacity: 0.25; }
 .map-dot.is-picked circle { stroke: var(--text-primary); stroke-width: 4; }
-.regions-map__zoom { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 6px; }
+.regions-map__zoom { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 6px; }
 .regions-map__zoom button {
   width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface-page); color: var(--text-primary); font-size: 20px; cursor: pointer;
@@ -1764,17 +1774,19 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   padding: 4px 8px; border-radius: 6px; background: var(--text-primary); color: var(--surface-page); font-size: 13px; font-weight: 600;
 }
 .regions-map__picked { min-height: 1.4em; margin-top: 10px; color: var(--text-secondary); }
-.regions-list__region + .regions-list__region { margin-top: 20px; }
-.regions-list__name { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 1.15rem; }
-.regions-list ul { margin: 0; padding: 0 0 0 38px; list-style: none; }
-.regions-list li { padding: 3px 0; }
-.regions-list li a[aria-current] { font-weight: 700; }
-.regions-list__was { color: var(--text-secondary); font-size: 0.9em; }
+/* Regions side by side, as many across as fit (two beside the map on a laptop). */
+.regions-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 22px 24px; align-content: start; }
+.regions-list__name { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; }
+.regions-list ul { margin: 0; padding: 0; list-style: none; }
+.regions-list li { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; padding: 3px 0; }
+.regions-list li a { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; }
+.regions-list li a[aria-current] .regions-list__team { font-weight: 700; }
+/* Where it was the season before: its own line, under the name (past the helmet). */
+.regions-list__was { flex-basis: 100%; padding-left: 32px; margin-top: -4px; color: var(--text-secondary); font-size: 13px; line-height: 18px; }
 .region-chip {
   display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none;
   border-radius: 50%; color: #FFFFFF; font-size: 14px; font-weight: 700;
 }
-.regions-note { margin-top: 24px; color: var(--text-secondary); font-size: 0.9rem; }
 .map-region--1 { fill: var(--region-1); stroke: var(--region-1); } .map-dot--1 circle, .region-chip--1 { fill: var(--region-1); background: var(--region-1); }
 .map-region--2 { fill: var(--region-2); stroke: var(--region-2); } .map-dot--2 circle, .region-chip--2 { fill: var(--region-2); background: var(--region-2); }
 .map-region--3 { fill: var(--region-3); stroke: var(--region-3); } .map-dot--3 circle, .region-chip--3 { fill: var(--region-3); background: var(--region-3); }

@@ -34,6 +34,7 @@ TEAM_SCENARIOS = ("backend.helpers.team_image", "render_team_scenarios")
 CLASS_REGIONS = ("backend.helpers.region_map_image", "render_class_regions")
 TEAM_REGION = ("backend.helpers.region_map_image", "render_team_region")
 TEAM_REGIONS_COMPARED = ("backend.helpers.region_map_image", "render_team_regions_compared")
+CLASS_REGIONS_COMPARED = ("backend.helpers.region_map_image", "render_class_regions_compared")
 CLASS_REGIONS_CARD = ("backend.helpers.region_map_image", "render_class_regions_card")
 TEAM_REGION_CARD = ("backend.helpers.region_map_image", "render_team_region_card")
 

@@ -371,11 +371,22 @@ def build_share_assets(
         if insight_pick
         else None
     )
-    _write_text(out_dir / "body" / "site.html", landing_body(featured, teams, scenario_example, insight_example))
     # The Regions pages: their data, their content and previews, and their images to share.
     region_counts, region_pages = write_regions(fetch, out_dir, site_url, today, all_seasons, _write_text)
     written.update(region_counts)
     sitemap += region_pages
+    # The front page shows a class's region map (the featured class's, else 5A's), once there are regions.
+    try:
+        regions_season = json.loads((out_dir / "regions" / "index.json").read_text())["default"]
+    except (OSError, ValueError, KeyError):
+        regions_season = None
+    regions_example = (
+        {"clazz": featured["clazz"] if featured else 5, "season": regions_season} if regions_season else None
+    )
+    _write_text(
+        out_dir / "body" / "site.html",
+        landing_body(featured, teams, scenario_example, insight_example, regions_example),
+    )
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     written["past_brackets"] = _write_past_brackets(

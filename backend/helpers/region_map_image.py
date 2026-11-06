@@ -16,12 +16,13 @@ point, from ``region_map``), Pillow images out. The map, the projection and the 
 
 from __future__ import annotations
 
+import math
+
 from PIL import Image, ImageDraw
 
 from backend.helpers import region_map
 from backend.helpers.bracket_image import THEMES, Theme, helmet
 from backend.helpers.data_helpers import SCHOOL_SUCCESSORS
-from backend.helpers.region_files import cycle_start
 from backend.helpers.share_cards import SITE_HOST, _inter, _nippo, _tracked, fit
 from backend.helpers.static_pages import initials, team_colors
 
@@ -167,10 +168,9 @@ class _Page:
         font = _inter(round(size * 0.4), 600)
         self.d.text((x + size / 2, mid), initials(school), font=font, fill=self.t.text_2, anchor="mm")
 
-    def footer(self, stamp: str) -> None:
-        """The stamp and the site's address along the bottom."""
+    def footer(self) -> None:
+        """The site's address along the bottom."""
         base = self.size[1] - PAD + 8
-        _tracked(self.d, (PAD, base), stamp.upper(), _inter(28, 600), self.t.text_2, 2)
         self.d.text((self.size[0] - PAD, base), SITE_HOST, font=_inter(44, 600), fill=self.t.text, anchor="rs")
 
     def label(self, x: float, base: float, text: str, anchor: str = "ls") -> None:
@@ -234,43 +234,52 @@ class _Page:
         self._labels(frame, spots, dots, labels, label_size)
 
     def _labels(self, frame: _Frame, spots, dots, labels, size: int) -> None:
-        """Each label beside its dot, at the first of eight spots around it that's clear of the other
-        dots and labels (to the right if none is)."""
+        """Each label beside its dot, at the spot around it that overlaps the other labels and dots least:
+        16 directions, near first, then further out (with a hairline back to its dot). The most crowded
+        dots are labeled first, so they get the best spots."""
         font = _inter(size, 600)
         placed: list[tuple[float, float, float, float]] = []
-        for text, i in labels:
+
+        def crowd(i: int) -> int:
+            """How many other dots are near dot *i*."""
+            px, py = spots[i]
+            return sum(1 for j, (qx, qy) in enumerate(spots) if j != i and (qx - px) ** 2 + (qy - py) ** 2 < 160**2)
+
+        def overlap(a, b) -> float:
+            """The area two boxes share."""
+            return max(0.0, min(a[2], b[2]) - max(a[0], b[0])) * max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+
+        for text, i in sorted(labels, key=lambda lab: -crowd(lab[1])):
             px, py = spots[i]
             r = dots[i][4]
-            w, h, g = self.d.textlength(text, font=font), size + 6, r + 14
-            options = [
-                (px + g, py - h / 2),
-                (px - g - w, py - h / 2),
-                (px - w / 2, py - g - h),
-                (px - w / 2, py + g),
-                (px + g * 0.7, py - g - h * 0.6),
-                (px + g * 0.7, py + g * 0.6 - h * 0.4),
-                (px - g * 0.7 - w, py - g - h * 0.6),
-                (px - g * 0.7 - w, py + g * 0.6 - h * 0.4),
-            ]
-
-            def clear(x: float, y: float) -> bool:
-                """Is a label at (x, y) inside the map and clear of the dots and labels drawn so far?"""
-                box = (x - 6, y - 4, x + w + 6, y + h + 4)
-                if box[0] < frame.x0 - 10 or box[2] > frame.x1 + 40:
-                    return False
-                if any(box[0] < b[2] and b[0] < box[2] and box[1] < b[3] and b[1] < box[3] for b in placed):
-                    return False
-                for (qx, qy), dot in zip(spots, dots, strict=True):
-                    cx, cy = min(max(qx, box[0]), box[2]), min(max(qy, box[1]), box[3])
-                    if (cx - qx) ** 2 + (cy - qy) ** 2 < (dot[4] + 4) ** 2:
-                        return False
-                return True
-
-            x, y = next((o for o in options if clear(*o)), options[0])
-            placed.append((x - 6, y - 4, x + w + 6, y + h + 4))
-            self.d.text(
-                (x, y + h / 2), text, font=font, fill=self.t.text, anchor="lm", stroke_width=6, stroke_fill=self.t.bg
-            )
+            w, h = self.d.textlength(text, font=font), size + 6
+            best = None
+            for ring, reach in enumerate((r + 14, r + 44, r + 84, r + 134)):
+                for k in range(16):
+                    a = 2 * math.pi * k / 16
+                    cx, cy = px + math.cos(a) * (reach + w / 2), py + math.sin(a) * (reach + h / 2)
+                    box = (cx - w / 2 - 6, cy - h / 2 - 4, cx + w / 2 + 6, cy + h / 2 + 4)
+                    cost = sum(overlap(box, b) for b in placed) * 4
+                    for (qx, qy), dot in zip(spots, dots, strict=True):
+                        q = dot[4] + 4
+                        cost += overlap(box, (qx - q, qy - q, qx + q, qy + q)) * 3
+                    cost += max(0, frame.x0 - 10 - box[0]) * h * 10 + max(0, box[2] - frame.x1 - 40) * h * 10
+                    cost += ring * 400 + (0 if abs(math.cos(a)) > 0.7 else 60)  # near, and beside, first
+                    if best is None or cost < best[0]:
+                        best = (cost, box, ring, cx, cy)
+                    if cost == 0:
+                        break
+                if best and best[0] < 400 * (ring + 1):
+                    break
+            _, box, ring, cx, cy = best
+            placed.append(box)
+            if ring:  # pushed out: a hairline from the dot's edge to the label
+                dx, dy = cx - px, cy - py
+                d = math.hypot(dx, dy) or 1
+                ex = min(max(px, box[0]), box[2])
+                ey = min(max(py, box[1]), box[3])
+                self.d.line((px + dx / d * r, py + dy / d * r, ex, ey), fill=self.t.text_2, width=2)
+            self.d.text((cx, cy), text, font=font, fill=self.t.text, anchor="mm", stroke_width=6, stroke_fill=self.t.bg)
 
 
 def _absent(school: str, first: int, short: bool = False) -> str:
@@ -320,7 +329,6 @@ def _region_map(page: _Page, frame: _Frame, rows: list[dict], school: str, label
 def render_class_regions(clazz: int, seasons: list[int], schools: list[dict], theme: str) -> list[Image.Image]:
     """Class *clazz*'s regions in the cycle that starts in *first*: the map and the schools by region.
     *schools* is the cycle's every school ({school, class, region, x, y})."""
-    first = seasons[0]
     rows = _class_rows(schools, clazz)
     if not rows:
         return []
@@ -366,7 +374,7 @@ def render_class_regions(clazz: int, seasons: list[int], schools: list[dict], th
                 d.text((LIST_X + 80, y), fit(d, name, font, width), font=font, fill=t.text, anchor="ls")
                 y += 66
             y += 34
-    page.footer(f"MHSAA {cycle_name(first)} regions")
+    page.footer()
     return [page.img]
 
 
@@ -405,8 +413,9 @@ def render_team_region(
     kept = [s for s in mates if s["school"] in old]
     y = top + 30
 
-    def block(title: str, rows: list[dict], y: float) -> float:
-        """A titled list of schools, each with its helmet and where it was; returns where the next goes."""
+    def block(title: str, rows: list[dict], y: float, notes: bool) -> float:
+        """A titled list of schools, each with its helmet and (with *notes*) where it was; returns where
+        the next goes."""
         page.label(LIST_X, y, title)
         y += 70
         for s in rows:
@@ -418,17 +427,17 @@ def render_team_region(
                 fill=t.text,
                 anchor="ls",
             )
-            if prior:
+            if notes:
                 was = prior_by.get(s["school"])
                 note = f"{place(was)} in {first - 1}" if was else _absent(s["school"], first)
                 d.text((LIST_X + 88, y + 50), note, font=_inter(32, 500), fill=t.text_2, anchor="ls")
-            y += 130 if prior else 96
+            y += 130 if notes else 96
         return y + 30
 
     if new:
-        y = block("New Region Members" if prior else "Region Members", new, y)
+        y = block("New Region Members" if prior else "Region Members", new, y, bool(prior))
     if kept:
-        y = block("Still in the Region", kept, y)
+        y = block("Still in the Region", kept, y, False)  # same region then: nothing to say
     moved = before and (before["class"], before["region"]) != (me["class"], me["region"])
     former = (
         [s for s in _members(prior, before, school) if s["school"] not in {m["school"] for m in mates}] if moved else []
@@ -452,7 +461,7 @@ def render_team_region(
             y += 58
             if y > bottom:
                 break
-    page.footer(f"MHSAA {cycle_name(first)} regions")
+    page.footer()
     return [page.img]
 
 
@@ -522,7 +531,85 @@ def render_team_regions_compared(
             y += 50
             if y > SIZE[1] - PAD - 110:
                 break
-    page.footer(f"MHSAA {cycle_name(cycle_start(first - 1))} and {cycle_name(first)} regions")
+    page.footer()
+    return [page.img]
+
+
+def render_class_regions_compared(
+    clazz: int, seasons: list[int], schools: list[dict], prior: list[dict], theme: str
+) -> list[Image.Image]:
+    """Class *clazz*'s regions the season before the cycle that starts in *seasons[0]* (*prior*) beside
+    its regions in it (*schools*), each map with its dots numbered by region, and under them the schools
+    that left the class (and where they went) and those new to it (and where they came from). *schools*
+    and *prior* hold the class's rows plus the other season's rows of the schools that moved."""
+    first = seasons[0]
+    now = _class_rows(schools, clazz)
+    then = _class_rows(prior, clazz)
+    if not now or not then:
+        return []
+    now_by = {s["school"]: s for s in schools}
+    then_by = {s["school"]: s for s in prior}
+    page = _Page(theme, {})
+    d, t = page.d, page.t
+    d.text((PAD, PAD + 104), f"{clazz}A Football Regions", font=_nippo(124), fill=t.text, anchor="ls")
+    d.text(
+        (PAD, PAD + 184), f"{first - 1} vs. {seasons_words(seasons)}", font=_inter(46, 600), fill=t.text_2, anchor="ls"
+    )
+    gap = 60
+    w = (SIZE[0] - 2 * PAD - gap) / 2
+    top = PAD + 260
+    bx0, by0, bx1, by1 = region_map.state().bounds
+    bottom = top + 140 + w * (by1 - by0) / (bx1 - bx0)
+    names_now = {s["school"] for s in now}
+    names_then = {s["school"] for s in then}
+    left = sorted(names_then - names_now, key=str.lower)
+    joined = sorted(names_now - names_then, key=str.lower)
+
+    def now_note(name: str) -> str:
+        """Where a school that left the class is now."""
+        row = now_by.get(name)
+        return f"Now {short_place(row)}" if row else f"Not on the {cycle_name(first)} list"
+
+    def from_note(name: str) -> str:
+        """Where a school new to the class was the season before."""
+        row = then_by.get(name)
+        return f"From {short_place(row)}" if row else _absent(name, first, short=True)
+
+    panels = (
+        (PAD, then, str(first - 1), f"Left {clazz}A", [(n, now_note(n)) for n in left]),
+        (PAD + w + gap, now, seasons_words(seasons), f"New to {clazz}A", [(n, from_note(n)) for n in joined]),
+    )
+    for x0, rows, when, title, moved in panels:
+        d.text((x0, top + 50), when, font=_nippo(60), fill=t.text, anchor="ls")
+        count = len({s["region"] for s in rows})
+        d.text(
+            (x0, top + 100), f"{len(rows)} schools in {count} regions", font=_inter(36, 500), fill=t.text_2, anchor="ls"
+        )
+        on_map = [s for s in rows if s["x"] is not None]
+        shapes = region_map.region_shapes(on_map)
+        page.map(
+            _Frame((x0, top + 140, x0 + w, bottom)),
+            [(shapes[g], region_color(theme, g)) for g in sorted(shapes)],
+            [(s["x"], s["y"], region_color(theme, s["region"]), str(s["region"]), 17) for s in on_map],
+        )
+        d = page.d
+        y = bottom + 70
+        page.label(x0, y, title)
+        y += 58
+        room = int((SIZE[1] - PAD - 110 - y) // 50)
+        shown = moved if len(moved) <= room else moved[: room - 1]
+        for name, where in shown:
+            room_for_name = w - d.textlength(where, font=_inter(30, 500)) - 30
+            d.text(
+                (x0, y), fit(d, name, _inter(36, 600), room_for_name), font=_inter(36, 600), fill=t.text, anchor="ls"
+            )
+            d.text((x0 + w, y), where, font=_inter(30, 500), fill=t.text_2, anchor="rs")
+            y += 50
+        if len(shown) < len(moved):
+            d.text((x0, y), f"and {len(moved) - len(shown)} more", font=_inter(32, 500), fill=t.text_2, anchor="ls")
+        elif not moved:
+            d.text((x0, y), "None", font=_inter(32, 500), fill=t.text_2, anchor="ls")
+    page.footer()
     return [page.img]
 
 

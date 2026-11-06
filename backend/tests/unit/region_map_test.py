@@ -223,3 +223,23 @@ def test_region_colors_are_the_pages():
     for theme, block in (("light", css.split("--region-1:", 1)[1]), ("dark", css.split("--region-1:", 2)[2])):
         found = re.findall(r"--region-(\d):\s*(#[0-9A-Fa-f]{6})", "--region-1:" + block)[:8]
         assert [c.upper() for _, c in found] == list(ri.REGION_COLORS[theme]), theme
+
+
+def test_a_classs_two_seasons_side_by_side():
+    """The class's regions the season before and now, and who left and joined; none without a season before."""
+    drawn = []
+    original = ri.ImageDraw.ImageDraw.text
+
+    def text(self, xy, words, *args, **kwargs):
+        """Keep what's written."""
+        drawn.append(words)
+        return original(self, xy, words, *args, **kwargs)
+
+    ri.ImageDraw.ImageDraw.text = text
+    try:
+        pages = ri.render_class_regions_compared(5, [2027, 2028], S27, S26, "light")
+    finally:
+        ri.ImageDraw.ImageDraw.text = original
+    assert len(pages) == 1 and pages[0].size == ri.SIZE
+    assert {"Greenwood", "From 4-4A", "Greenville", "From 2-6A"} <= set(drawn)  # (labels go letter by letter)
+    assert ri.render_class_regions_compared(5, [2027, 2028], S27, [], "light") == []
