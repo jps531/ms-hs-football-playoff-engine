@@ -49,7 +49,7 @@ Run on their own after a fix, or with a Custom Run for another season.
 
 | Deployment | When to run it |
 |---|---|
-| `regions-data-pipeline` | Pre-season, and when MHSAA reclassifies (every two years): writes each school's class and region for the season to `school_seasons`, adding new schools to `schools`. |
+| `regions-data-pipeline` | When a new cycle's region file is committed (every two years), for each season of it: checks the season's schools from `backend/data/regions/` against the database, then writes each school's class and region to `school_seasons`, adding new schools to `schools` (a successor takes its old school's location). Stops without writing anything if a check fails. See [SEASON_SETUP.md](SEASON_SETUP.md#regions-every-two-years). |
 | `nces-school-pipeline` | Pre-season, and when schools move: city, ZIP, latitude and longitude for public schools from the NCES EDGE API, then the private-school location seed. Fields with an override are left alone. |
 | `misshsaa-school-pipeline` | Pre-season, and when schools rebrand: mascot and colors from the MHSAA school directory. |
 | `backfill-historical-snapshots` | Once per season after importing a full season's games, again after re-importing them, and after any change that bumps `MODEL_VERSION` (so past weeks use the current model). Recomputes every game date's snapshot, runs `playoff-bracket-update` for the playoff dates, and deletes the season's regular-season rows dated between game dates, which would otherwise shadow them. Each snapshot uses only the games played by its date (`get_standings_for_region` applies the date to every aggregate; a game's date is its `game_date`, the same for both schools, see [SCHEMA.md](../architecture/SCHEMA.md)), so past weeks show the records and odds as they stood then. A region whose teams, games and win chances are what they were on its last date reuses that date's odds rather than working them out again, and its scenarios, team paths and insights carry over while its games stay the same (with five or fewer left, while the win chances do too); its bracket and hosting odds, which turn on the whole class, are always worked out. With six to fifteen games left, a date where only the win chances changed re-weights the region's last standings instead of working each outcome out again (the same counts, in a tenth of the time with fifteen left). The run's log says how many region-dates reused each. See [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md#deploying-updates). |
@@ -61,7 +61,7 @@ Run on their own after a fix, or with a Custom Run for another season.
 
 Run these in order; each needs the previous step's data in the database.
 
-1. `regions-data-pipeline`: each school's class and region for the season (`school_seasons`). A Quick Run is the current year; use a Custom Run for another season.
+1. `regions-data-pipeline`: each school's class and region for the season (`school_seasons`), from its cycle's file. A Quick Run is the current year; use a Custom Run for another season.
 2. `nces-school-pipeline`: city, ZIP, latitude and longitude for public schools from the NCES EDGE API, then the private-school location seed.
 3. `misshsaa-school-pipeline`: mascot and colors from the MHSAA school directory.
 4. `ahsfhs-schedule-data-pipeline`: the season's `games` rows from each school's AHSFHS schedule.

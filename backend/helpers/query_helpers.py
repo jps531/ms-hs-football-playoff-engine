@@ -86,9 +86,9 @@ async def upsert_school_season(  # pragma: no cover
     """Create or overwrite a school_seasons row with explicit class, region, and is_active.
 
     Creates the parent schools row if it does not already exist. Overwrites
-    class and region on conflict, so this is safe to re-run. Use for mid-cycle
-    changes the Regions pipeline cannot handle: consolidations, closures, new
-    schools.
+    class and region on conflict, so this is safe to re-run. A quick fix until
+    the season's region file (backend/data/regions/) has the change: the next
+    regions load writes the file's class and region over it.
 
     When *copy_identity_from* is supplied, copies mascot, colors, city, zip,
     latitude, and longitude from that school into *school*'s base columns

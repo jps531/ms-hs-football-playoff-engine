@@ -338,6 +338,24 @@ SCHOOL_RENAMES: list[tuple[str, str, int]] = [
     ("Leake Central", "Leake", 2026),
 ]
 
+# A new school that carries on an old one, under its own name in the sources too: (old school, new
+# school, first season of the new one). The new school starts from the old one's Elo rating and,
+# when the regions are loaded, takes its campus (location and home field) if it has none of its own.
+# Unlike a rename, the sources are asked for the new name. FORMER_SLUGS maps the old team links.
+SCHOOL_SUCCESSORS: list[tuple[str, str, int]] = [
+    # Falkner (1A-2) and Walnut (2A-1) consolidated into North Tippah (3A-2) for 2027, on Walnut's campus.
+    ("Walnut", "North Tippah", 2027),
+]
+
+# Schools that stopped playing, for good or for now: (school, last season played, why). The regions
+# loader requires every school from the season before to be in the new season, renamed, continued, or
+# here. A school that comes back just gets a line in its season's region file again.
+SCHOOL_STOPPED_PLAYING: list[tuple[str, int, str]] = [
+    ("Leake County", 2025, "Consolidated into Leake (on Leake Central's campus) for 2026."),
+    ("Thrasher", 2025, "Program suspended indefinitely after 2025 (not enough players); not on MHSAA's 2027-29 list."),
+    ("Falkner", 2026, "Consolidated into North Tippah (on Walnut's campus) for 2027."),
+]
+
 
 def school_name_for_season(name: str, season: int) -> str:
     """The site's name for a school the sources call *name*, in *season* ("Leake Central" in 2026 is "Leake")."""
@@ -356,13 +374,15 @@ def source_name_for_season(name: str, season: int) -> str:
 
 
 def with_predecessor_ratings(prior: dict[str, float], season: int) -> dict[str, float]:
-    """Last season's final ratings, with each school renamed for *season* carrying its old name's rating.
+    """Last season's final ratings, with each school renamed or continued for *season* carrying its old
+    name's rating.
 
-    A renamed school has no rating under its new name the season it changes; without this it would
-    start from its class's baseline instead of from where the same program finished.
+    A renamed school, or one that carries on another (SCHOOL_SUCCESSORS), has no rating under its new
+    name the season it starts; without this it would start from its class's baseline instead of from
+    where the same program finished.
     """
     out = dict(prior)
-    for old, new, first in SCHOOL_RENAMES:
+    for old, new, first in [*SCHOOL_RENAMES, *SCHOOL_SUCCESSORS]:
         if first == season and new not in out and old in out:
             out[new] = out[old]
     return out

@@ -221,8 +221,8 @@ class PatchSchoolSeasonRequest(BaseModel):
 class UpsertSchoolSeasonRequest(BaseModel):
     """Create or overwrite a school_seasons row with explicit class, region, and is_active.
 
-    Use for mid-cycle changes the Regions pipeline cannot handle automatically:
-    school consolidations, closures, or new schools.
+    A quick fix until the season's region file (backend/data/regions/) has the change:
+    the next regions load writes the file's class and region over it.
 
     ``copy_identity_from`` — if provided, copies mascot, colors, city, zip, latitude, and
     longitude from that school into the new school's base columns immediately, so identity

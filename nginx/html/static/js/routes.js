@@ -12,10 +12,11 @@ export const CLASSES = [1, 2, 3, 4, 5, 6, 7];
 
 /**
  * Team links from before a school's new name (backend/helpers/data_helpers.py
- * SCHOOL_RENAMES): an old ?team= slug finds the school by its new name in a
- * season where the old name isn't there ("leake-central" in 2026 is Leake).
+ * SCHOOL_RENAMES and SCHOOL_SUCCESSORS): an old ?team= slug finds the school by
+ * its new name in a season where the old name isn't there ("leake-central" in
+ * 2026 is Leake, "walnut" in 2027 is North Tippah).
  */
-export const FORMER_SLUGS = { "leake-central": "Leake" };
+export const FORMER_SLUGS = { "leake-central": "Leake", "walnut": "North Tippah" };
 
 /** "St. Martin" -> "st-martin", "D'Iberville" -> "diberville". */
 export function slugify(name) {
