@@ -102,12 +102,12 @@ Walnut's final 2026 Elo rating and takes Walnut's location and home field when t
 `SCHOOL_STOPPED_PLAYING` has Falkner's last season, 2026. Old `?team=walnut` links open North Tippah on
 2027 pages. Its mascot and colors aren't set yet; until they are, it shows the default helmet and colors.
 
-## Thrasher (no 2026 team)
+## Thrasher (suspended)
 
-Thrasher (1A Region 1 in 2025) fielded no team in 2026 for lack of players, so `2025-27.csv` lists it
-for 2025 only, and `SCHOOL_STOPPED_PLAYING` has its last season as 2025. It's expected back in 2027,
-but MHSAA's 2027-29 list doesn't place it. If MHSAA adds it, add its line to `2027-29.csv` (with
-`seasons` 2027 or 2028 if it's only one of them) and load the season again.
+Thrasher (1A Region 1 in 2025) suspended its program indefinitely after 2025 for lack of players.
+`2025-27.csv` lists it for 2025 only, `SCHOOL_STOPPED_PLAYING` has its last season as 2025, and
+MHSAA's 2027-29 list doesn't include it. If it comes back, add its line to that cycle's region file
+(with `seasons` set if it's only one season of the cycle) and load the season again.
 
 ---
 

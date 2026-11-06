@@ -352,7 +352,7 @@ SCHOOL_SUCCESSORS: list[tuple[str, str, int]] = [
 # here. A school that comes back just gets a line in its season's region file again.
 SCHOOL_STOPPED_PLAYING: list[tuple[str, int, str]] = [
     ("Leake County", 2025, "Consolidated into Leake (on Leake Central's campus) for 2026."),
-    ("Thrasher", 2025, "No 2026 team (not enough players); expected back in 2027 but not on MHSAA's 2027-29 list."),
+    ("Thrasher", 2025, "Program suspended indefinitely after 2025 (not enough players); not on MHSAA's 2027-29 list."),
     ("Falkner", 2026, "Consolidated into North Tippah (on Walnut's campus) for 2027."),
 ]
 
