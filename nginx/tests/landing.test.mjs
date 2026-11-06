@@ -20,7 +20,7 @@ test("the fallback front page has every class's standings, bracket and regions",
   const { classGrid, LANDING_FALLBACK } = await import("../html/static/js/landing.js");
   const grid = classGrid();
   assert.equal((grid.match(/class="landing-classes__item"/g) ?? []).length, 21);
-  assert.ok(grid.includes('href="/regions/5a">5A<span class="visually-hidden"> regions</span>'));
+  assert.ok(grid.includes('href="/regions/5a">5A<span class="visually-hidden"> region maps</span>'));
   assert.ok(grid.includes('href="/brackets/7a">7A<span class="visually-hidden"> brackets</span>'));
   assert.ok(LANDING_FALLBACK.includes(grid));
 });

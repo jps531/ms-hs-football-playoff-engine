@@ -21,7 +21,7 @@ from backend.helpers.data_helpers import SCHOOL_SUCCESSORS, school_name_for_seas
 from backend.helpers.region_files import cycle_start
 from backend.helpers.region_map_image import REGION_COLORS, cycle_name, place, seasons_line, short_place
 from backend.helpers.share_cards import slugify
-from backend.helpers.static_pages import _e, breadcrumb_nav, class_trail, region_path
+from backend.helpers.static_pages import _e, _mark, breadcrumb_nav, class_trail, region_path
 
 Trail = list[tuple[str, str]]
 
@@ -168,11 +168,15 @@ def season_payload(option: dict, rows: list[dict], prior: list[dict] | None, pla
 
 
 def team_note(school: dict, prior_season: int | None) -> str:
-    """Where a school was the season before, for its line in the list: "4-4A in 2026", "New school"."""
+    """Where a school was the season before, for its line in the list: "4-4A in 2026", "New school";
+    nothing when it was in the same region then."""
     if prior_season is None:
         return ""
-    if school.get("before"):
-        return f"{short_place(school['before'])} in {prior_season}"
+    was = school.get("before")
+    if was and (was["class"], was["region"]) == (school["class"], school["region"]):
+        return ""
+    if was:
+        return f"{short_place(was)} in {prior_season}"
     if school.get("successor_of"):
         return "New school"
     return f"Not in a region in {prior_season}"
@@ -187,16 +191,17 @@ def standings_href(clazz: int, region: int, standings_season: int | None, curren
     return path if standings_season == current_season else f"{path}?season={standings_season}"
 
 
-def regions_header(clazz: int, payload: dict) -> str:
-    """The page's heading: breadcrumbs, title, and which seasons and cycle it shows (``regionsHeader``)."""
+def regions_header(clazz: int, payload: dict, share: str = "") -> str:
+    """The page's heading: breadcrumbs, the title (with *share* beside it) and its seasons
+    (``regionsHeader``)."""
     return (
         f"{breadcrumb_nav(regions_trail(clazz))}"
-        f'<h1 class="title">{_e(regions_title(clazz))}</h1>'
-        f'<p class="regions-sub">{_e(seasons_label(payload["seasons"]))} · MHSAA {_e(payload["cycle"])} regions</p>'
+        f'<div class="title-row"><h1 class="title">{_e(regions_title(clazz))}</h1>{share}</div>'
+        f'<p class="regions-sub">{_e(seasons_label(payload["seasons"]))}</p>'
     )
 
 
-def regions_lists(clazz: int, payload: dict, current_season: int | None) -> str:
+def regions_lists(clazz: int, payload: dict, current_season: int | None, teams: dict | None = None) -> str:
     """The class's schools by region (``regionsLists``), each region's heading linking to its standings
     when it has some."""
     schools = [s for s in payload["schools"] if s["class"] == clazz]
@@ -209,7 +214,8 @@ def regions_lists(clazz: int, payload: dict, current_season: int | None) -> str:
             note = team_note(s, payload.get("prior_season"))
             items.append(
                 f'<li><a href="{_e(regions_path(clazz))}?team={_e(s["slug"])}" data-team="{_e(s["slug"])}">'
-                f"{_e(s['school'])}</a>"
+                f'{_mark(s["school"], (teams or {}).get(s["school"]))}'
+                f'<span class="regions-list__team">{_e(s["school"])}</span></a>'
                 + (f' <span class="regions-list__was">{_e(note)}</span>' if note else "")
                 + "</li>"
             )
@@ -221,7 +227,9 @@ def regions_lists(clazz: int, payload: dict, current_season: int | None) -> str:
     return "".join(out)
 
 
-def regions_body(clazz: int, payload: dict, current_season: int | None, image_url: str | None) -> str:
+def regions_body(
+    clazz: int, payload: dict, current_season: int | None, image_url: str | None, teams: dict | None = None
+) -> str:
     """The Regions page for *clazz* as plain HTML: ``regionsPage``'s, with an image of the map in
     place of the map the app draws."""
     figure = (
@@ -233,16 +241,8 @@ def regions_body(clazz: int, payload: dict, current_season: int | None, image_ur
     return (
         f'<div class="page static-page regions-page"><header class="entry-head">{regions_header(clazz, payload)}</header>'
         f'<div class="regions-layout"><figure class="regions-map">{figure}</figure>'
-        f'<div class="regions-list">{regions_lists(clazz, payload, current_season)}</div></div>'
-        f'<p class="regions-note">{_e(MAP_NOTE)}</p></div>\n'
+        f'<div class="regions-list">{regions_lists(clazz, payload, current_season, teams)}</div></div></div>\n'
     )
-
-
-MAP_NOTE = (
-    "Each dot is a school, at the location the site has for it (for a public school, the federal NCES geocode "
-    "of its address). The shaded shapes are drawn around each region’s schools; MHSAA doesn’t draw region "
-    "boundaries. County lines: U.S. Census Bureau."
-)
 
 
 def regions_description(clazz: int, payload: dict) -> str:

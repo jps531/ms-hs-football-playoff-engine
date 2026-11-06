@@ -1,4 +1,4 @@
-import { breadcrumbs } from "./components.js";
+import { breadcrumbs, teamMark } from "./components.js";
 import { escapeHtml as esc } from "./format.js";
 
 // The Regions page (/regions/5a): a class's schools on a map of Mississippi, each a dot numbered by
@@ -13,14 +13,7 @@ import { escapeHtml as esc } from "./format.js";
 
 export const REGIONS_DATA = "/static/regions";
 
-export const MAP_NOTE = "Each dot is a school, at the location the site has for it (for a public school, the federal NCES geocode "
-  + "of its address). The shaded shapes are drawn around each region’s schools; MHSAA doesn’t draw region "
-  + "boundaries. County lines: U.S. Census Bureau.";
 
-/** The note under the map (a function, so the parity test can ask for it). */
-export function mapNote() {
-  return MAP_NOTE;
-}
 
 /** "/regions/5a". */
 export function regionsPath(clazz) {
@@ -47,10 +40,15 @@ export function shortPlace(p) {
   return p ? `${p.region}-${p.class}A` : "";
 }
 
-/** Where a school was the season before, for its line in the list: "4-4A in 2026", "New school". */
+/**
+ * Where a school was the season before, for its line in the list: "4-4A in 2026", "New school";
+ * nothing when it was in the same region then.
+ */
 export function teamNote(school, priorSeason) {
   if (priorSeason == null) return "";
-  if (school.before) return `${shortPlace(school.before)} in ${priorSeason}`;
+  const was = school.before;
+  if (was && was.class === school.class && was.region === school.region) return "";
+  if (was) return `${shortPlace(was)} in ${priorSeason}`;
   if (school.successor_of) return "New school";
   return `Not in a region in ${priorSeason}`;
 }
@@ -80,10 +78,10 @@ export function regionsTrail(clazz) {
   return [["Home", "/"], [`Class ${clazz}A`, `/standings/${clazz}a`], [regionsTitle(clazz), regionsPath(clazz)]];
 }
 
-/** The page's heading: breadcrumbs, title, and which seasons and cycle it shows. */
-export function regionsHeader(clazz, payload) {
-  return `${breadcrumbs(regionsTrail(clazz))}<h1 class="title">${esc(regionsTitle(clazz))}</h1>`
-    + `<p class="regions-sub">${esc(seasonsLabel(payload.seasons))} · MHSAA ${esc(payload.cycle)} regions</p>`;
+/** The page's heading: breadcrumbs, the title (with *share*, its share button, beside it), and its seasons. */
+export function regionsHeader(clazz, payload, share = "") {
+  return `${breadcrumbs(regionsTrail(clazz))}<div class="title-row"><h1 class="title">${esc(regionsTitle(clazz))}</h1>${share}</div>`
+    + `<p class="regions-sub">${esc(seasonsLabel(payload.seasons))}</p>`;
 }
 
 /** Schools by name, letter case aside, as Python's sorted(key=str.lower) puts them. */
@@ -92,8 +90,11 @@ const byName = (a, b) => {
   return x < y ? -1 : x > y ? 1 : 0;
 };
 
-/** The class's schools by region, each region's heading linking to its standings when it has some. */
-export function regionsLists(clazz, payload, currentSeason) {
+/**
+ * The class's schools by region, each with its helmet (*teams*: the season's /teams by school), each
+ * region's heading linking to its standings when it has some.
+ */
+export function regionsLists(clazz, payload, currentSeason, teams = {}) {
   const schools = payload.schools.filter((s) => s.class === clazz);
   const regions = [...new Set(schools.map((s) => s.region))].sort((a, b) => a - b);
   return regions.map((g) => {
@@ -103,7 +104,8 @@ export function regionsLists(clazz, payload, currentSeason) {
       .sort((a, b) => byName(a.school, b.school))
       .map((s) => {
         const note = teamNote(s, payload.prior_season);
-        return `<li><a href="${esc(regionsPath(clazz))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">${esc(s.school)}</a>`
+        return `<li><a href="${esc(regionsPath(clazz))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
+          + `${teamMark(s.school, teams[s.school])}<span class="regions-list__team">${esc(s.school)}</span></a>`
           + (note ? ` <span class="regions-list__was">${esc(note)}</span>` : "")
           + "</li>";
       });
@@ -132,8 +134,8 @@ export function mapSvg(base, payload, clazz) {
 }
 
 /** The whole page: heading and controls, the map (with its zoom buttons and tooltip), the lists. */
-export function regionsPage(clazz, base, payload, currentSeason, { controls = "", share = "" } = {}) {
-  return `<div class="page regions-page"><header class="entry-head">${regionsHeader(clazz, payload)}${share}${controls}</header>`
+export function regionsPage(clazz, base, payload, currentSeason, { controls = "", share = "", teams = {} } = {}) {
+  return `<div class="page regions-page"><header class="entry-head">${regionsHeader(clazz, payload, share)}${controls}</header>`
     + `<div class="regions-layout"><figure class="regions-map"><div class="regions-map__frame" data-map>`
     + mapSvg(base, payload, clazz)
     + `<div class="regions-map__zoom"><button type="button" data-zoom="in" aria-label="Zoom in">+</button>`
@@ -141,8 +143,7 @@ export function regionsPage(clazz, base, payload, currentSeason, { controls = ""
     + `<button type="button" data-zoom="reset" aria-label="Show the whole state">⤢</button></div>`
     + `<div class="regions-map__hover" aria-hidden="true" hidden></div></div>`
     + `<figcaption class="regions-map__picked" aria-live="polite"></figcaption></figure>`
-    + `<div class="regions-list">${regionsLists(clazz, payload, currentSeason)}</div></div>`
-    + `<p class="regions-note">${esc(MAP_NOTE)}</p></div>`;
+    + `<div class="regions-list">${regionsLists(clazz, payload, currentSeason, teams)}</div></div></div>`;
 }
 
 /** The box (in map units) that shows a region whole, with room around it, in the map's shape. */

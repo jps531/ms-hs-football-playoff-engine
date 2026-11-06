@@ -49,10 +49,6 @@ const STORE = { clazz: "mshsf.class", odds: "mshsf.odds" };
 const app = document.getElementById("app");
 const scrubberHost = document.getElementById("scrubber");
 const teamSearch = document.getElementById("team-search");
-const resultsPopup = document.getElementById("team-results-popup");
-const resultsList = document.getElementById("team-results");
-const resultsEmpty = resultsPopup?.querySelector(".team-results__empty");
-const searchStatus = document.getElementById("team-search-status");
 const contextBar = document.getElementById("context-bar");
 
 // --------------------------------------------------------------- data
@@ -543,110 +539,128 @@ scrubberHost.addEventListener("click", (e) => {
 // --------------------------------------------------------- team search
 // A combobox: typing lists matching teams under the field (best first, the
 // top one highlighted), arrow keys move the highlight, and Enter or a tap
-// opens that team's region. Nothing navigates until the reader commits.
+// picks the highlighted team. Nothing happens until the reader commits. The
+// header's search opens a team's region; the Regions page's (the same box,
+// regionsFinder) picks the team on the map.
 
 let teamSearchSeason = null;
 let teamIndex = {};
-let matches = [];
-let active = -1;
+
+/** "Region 6-3A", the place a search result shows. */
+const resultPlace = (t) => `Region ${t.region}-${t.class_}A`;
+
+/**
+ * Make a search box work: *form* holds the input, the results popup (its list
+ * and empty note) and a status line for screen readers; *teams()* is what can
+ * be found (objects with school, class_ and region); *onPick(team)* commits.
+ */
+function teamCombobox(form, teams, onPick) {
+  const input = form?.querySelector("input[role=combobox]");
+  if (!input) return null;
+  const popup = form.querySelector(".team-results");
+  const list = popup.querySelector("[role=listbox]");
+  const empty = popup.querySelector(".team-results__empty");
+  const status = form.querySelector("[role=status]");
+  const prefix = `${list.id}-opt`;
+  let matches = [];
+  let active = -1;
+
+  const open = (on) => {
+    popup.hidden = !on;
+    input.setAttribute("aria-expanded", String(on && matches.length > 0));
+    if (!on) input.removeAttribute("aria-activedescendant");
+  };
+  const setActive = (i) => {
+    active = i;
+    list.querySelectorAll("[role=option]").forEach((el, k) => el.setAttribute("aria-selected", String(k === i)));
+    const el = i >= 0 ? document.getElementById(`${prefix}-${i}`) : null;
+    if (el) {
+      input.setAttribute("aria-activedescendant", el.id);
+      el.scrollIntoView({ block: "nearest" });
+    } else {
+      input.removeAttribute("aria-activedescendant");
+    }
+  };
+  const update = () => {
+    const query = input.value.trim();
+    if (!query) {
+      matches = [];
+      status.textContent = "";
+      open(false);
+      return;
+    }
+    const all = teams();
+    const loaded = all.length > 0;
+    matches = matchTeams(all, query);
+    list.innerHTML = matches.map((t, i) => `<li id="${prefix}-${i}" role="option" aria-selected="false" data-index="${i}">
+      ${teamMark(t.school, t)}<span class="team-results__name">${esc(t.school)}</span>
+      <span class="team-results__meta">${esc(resultPlace(t))}</span>
+    </li>`).join("");
+    empty.hidden = matches.length > 0;
+    empty.textContent = loaded ? `No team matches “${query}”.` : "Loading teams…";
+    status.textContent = !loaded ? ""
+      : matches.length ? `${matches.length} ${matches.length === 1 ? "team" : "teams"} found. Press Enter to pick ${matches[0].school}.`
+        : "No teams found.";
+    open(true);
+    setActive(matches.length ? 0 : -1);
+  };
+  const pick = (team) => {
+    matches = [];
+    open(false);
+    input.blur();
+    onPick(team, input);
+  };
+
+  input.addEventListener("input", update);
+  input.addEventListener("focus", () => { if (input.value.trim()) update(); });
+  input.addEventListener("blur", () => open(false));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (popup.hidden) update();
+      if (!matches.length) return;
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setActive((active + step + matches.length) % matches.length);
+    } else if (e.key === "Escape" && !popup.hidden) {
+      e.preventDefault();
+      open(false);
+    }
+  });
+  // Enter (or the keyboard's Search key) commits the highlighted team.
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!input.value.trim()) return;
+    if (popup.hidden) update();
+    const team = matches[active] ?? matches[0];
+    if (team) pick(team);
+  });
+  // Pressing a result mustn't blur the field first (that would close the list
+  // before the tap lands); the click then picks the team.
+  list.addEventListener("pointerdown", (e) => e.preventDefault());
+  list.addEventListener("click", (e) => {
+    const option = e.target.closest("[role=option]");
+    if (option) pick(matches[Number(option.dataset.index)]);
+  });
+  list.addEventListener("pointermove", (e) => {
+    const option = e.target.closest("[role=option]");
+    if (option && Number(option.dataset.index) !== active) setActive(Number(option.dataset.index));
+  });
+  return { update, input };
+}
+
+const headerSearch = teamCombobox(teamSearch?.closest("form"), () => Object.values(teamIndex), (team, input) => {
+  input.value = "";
+  scrollToFocus = true;
+  track("team_search_used", { team: team.school });
+  navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school }), { scroll: true });
+});
 
 async function loadTeamSearch(season) {
   if (!teamSearch || teamSearchSeason === season) return;
   teamSearchSeason = season;
   teamIndex = await teamsBySchool(season);
-  if (document.activeElement === teamSearch && teamSearch.value.trim()) updateResults();
+  if (document.activeElement === teamSearch && teamSearch.value.trim()) headerSearch?.update();
 }
-
-function openResults(open) {
-  resultsPopup.hidden = !open;
-  teamSearch.setAttribute("aria-expanded", String(open && matches.length > 0));
-  if (!open) teamSearch.removeAttribute("aria-activedescendant");
-}
-
-function setActive(i) {
-  active = i;
-  resultsList.querySelectorAll("[role=option]").forEach((el, k) => el.setAttribute("aria-selected", String(k === i)));
-  const el = i >= 0 ? document.getElementById(`team-opt-${i}`) : null;
-  if (el) {
-    teamSearch.setAttribute("aria-activedescendant", el.id);
-    el.scrollIntoView({ block: "nearest" });
-  } else {
-    teamSearch.removeAttribute("aria-activedescendant");
-  }
-}
-
-function updateResults() {
-  const query = teamSearch.value.trim();
-  if (!query) {
-    matches = [];
-    searchStatus.textContent = "";
-    openResults(false);
-    return;
-  }
-  const loaded = Object.keys(teamIndex).length > 0;
-  matches = matchTeams(Object.values(teamIndex), query);
-  resultsList.innerHTML = matches.map((t, i) => `<li id="team-opt-${i}" role="option" aria-selected="false" data-index="${i}">
-      ${teamMark(t.school, t)}<span class="team-results__name">${esc(t.school)}</span>
-      <span class="team-results__meta">${t.class_}A · Region ${t.region}</span>
-    </li>`).join("");
-  resultsEmpty.hidden = matches.length > 0;
-  resultsEmpty.textContent = loaded ? `No team matches “${query}”.` : "Loading teams…";
-  searchStatus.textContent = !loaded ? ""
-    : matches.length ? `${matches.length} ${matches.length === 1 ? "team" : "teams"} found. Press Enter to open ${matches[0].school}.`
-      : "No teams found.";
-  openResults(true);
-  setActive(matches.length ? 0 : -1);
-}
-
-function goToTeam(team) {
-  teamSearch.value = "";
-  matches = [];
-  openResults(false);
-  teamSearch.blur();
-  scrollToFocus = true;
-  track("team_search_used", { team: team.school });
-  navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school }), { scroll: true });
-}
-
-teamSearch?.addEventListener("input", updateResults);
-teamSearch?.addEventListener("focus", () => { if (teamSearch.value.trim()) updateResults(); });
-teamSearch?.addEventListener("blur", () => openResults(false));
-
-teamSearch?.addEventListener("keydown", (e) => {
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-    if (resultsPopup.hidden) updateResults();
-    if (!matches.length) return;
-    e.preventDefault();
-    const step = e.key === "ArrowDown" ? 1 : -1;
-    setActive((active + step + matches.length) % matches.length);
-  } else if (e.key === "Escape") {
-    if (!resultsPopup.hidden) {
-      e.preventDefault();
-      openResults(false);
-    }
-  }
-});
-
-// Enter (or the keyboard's Search key) commits the highlighted team.
-teamSearch?.closest("form")?.addEventListener("submit", (e) => {
-  e.preventDefault();
-  if (!teamSearch.value.trim()) return;
-  if (resultsPopup.hidden) updateResults();
-  const team = matches[active] ?? matches[0];
-  if (team) goToTeam(team);
-});
-
-// Pressing a result mustn't blur the field first (that would close the list
-// before the tap lands); the click then opens the team.
-resultsList?.addEventListener("pointerdown", (e) => e.preventDefault());
-resultsList?.addEventListener("click", (e) => {
-  const option = e.target.closest("[role=option]");
-  if (option) goToTeam(matches[Number(option.dataset.index)]);
-});
-resultsList?.addEventListener("pointermove", (e) => {
-  const option = e.target.closest("[role=option]");
-  if (option && Number(option.dataset.index) !== active) setActive(Number(option.dataset.index));
-});
 
 // ---------------------------------------------------- provenance controls
 // The page's provenance line doubles as its controls: which season, through
@@ -744,8 +758,6 @@ app.addEventListener("change", (e) => {
     navigate(hrefWith({ odds: value }), { replace: true });
   } else if (control.dataset.control === "regions-season") {
     navigate(hrefWith({ season: Number(value) }), { replace: true });
-  } else if (control.dataset.control === "regions-team") {
-    findRegionsTeam(value);
   }
 });
 
@@ -2523,8 +2535,14 @@ async function renderRegions(token) {
   try {
     const index = await regionsFile("index.json");
     regionsDefault = index.default;
+    // The header's search opens a team's standings: this season's teams, as on every other page.
+    if (index.current_season) loadTeamSearch(index.current_season);
     const option = pickOption(index, route.season);
-    const [base, payload] = await Promise.all([regionsFile("map.json"), regionsFile(`${option.season}.json`)]);
+    const [base, payload, teams] = await Promise.all([
+      regionsFile("map.json"),
+      regionsFile(`${option.season}.json`),
+      teamsBySchool(option.season).catch(() => ({})), // helmets; the page draws without them
+    ]);
     if (token !== renderToken) return;
     route.season = option.season === index.default ? null : option.season;
     const mine = payload.schools.filter((s) => s.class === route.clazz);
@@ -2535,12 +2553,23 @@ async function renderRegions(token) {
     const seasons = index.options.length > 1
       ? select("regions-season", "Seasons", index.options.map((o) => ({ value: o.season, label: o.label })), option.season)
       : "";
-    const finder = `<label class="regions-find"><span class="visually-hidden">Find a team</span>`
-      + `<input type="search" list="regions-teams" data-control="regions-team" placeholder="Find a team on the map" autocomplete="off" value="${esc(picked?.school ?? "")}">`
-      + `<datalist id="regions-teams">${[...payload.schools].sort((a, b) => (a.school < b.school ? -1 : 1)).map((s) => `<option value="${esc(s.school)}">${esc(regionPlace(s))}</option>`).join("")}</datalist></label>`;
+    // The header's search box, here for the map: the same field, list and keys.
+    const finder = `<form class="team-search team-search--page" role="search" data-regions-find>`
+      + `<label for="regions-team" class="visually-hidden">Find a team on the map</label>`
+      + `<input id="regions-team" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="regions-team-results"`
+      + ` placeholder="Find a team on the map" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="search">`
+      + `<div class="team-results" hidden><ul id="regions-team-results" role="listbox" aria-label="Teams"></ul><p class="team-results__empty" hidden></p></div>`
+      + `<p class="visually-hidden" role="status"></p></form>`;
     app.innerHTML = regionsPage(route.clazz, base, payload, index.current_season, {
       controls: `<div class="regions-controls">${seasons}${finder}</div>`,
       share: shareButton("map"),
+      teams,
+    });
+    const findable = payload.schools.map((s) => ({ ...teams[s.school], ...s, class_: s.class }));
+    teamCombobox(app.querySelector("[data-regions-find]"), () => findable, (team, input) => {
+      input.value = "";
+      track("team_search_used", { team: team.school, from: "regions" });
+      findRegionsTeam(team.school);
     });
     regionsState.map = wireRegionsMap(app, base, payload, route.clazz, {
       picked: picked?.slug ?? null,
@@ -2548,8 +2577,6 @@ async function renderRegions(token) {
         const school = mine.find((s) => s.slug === slug) ?? null;
         regionsState.picked = school;
         route.teamName = school?.school ?? null;
-        const input = app.querySelector('[data-control="regions-team"]');
-        if (input) input.value = school?.school ?? "";
         if (school) track("team_picked", { from: "regions", team: school.school });
         history.replaceState(null, "", hrefWith({ team: route.teamName }));
         syncNav();
@@ -2589,16 +2616,35 @@ function findRegionsTeam(name) {
 function regionsShareSpec() {
   const { clazz, season, option, payload, picked } = regionsState;
   const newest = season === regionsDefault;
+  const prior = payload.prior_season;
   const kinds = [
     { key: "class", label: `Class ${clazz}A` },
+    ...(newest && prior ? [{ key: "class-compare", label: `${clazz}A, ${prior} vs. ${season}` }] : []),
     ...(picked && newest ? [{ key: "team", label: picked.school }] : []),
-    ...(picked && newest && picked.before && payload.prior_season ? [{ key: "compare", label: `${payload.prior_season} vs. ${season}` }] : []),
+    ...(picked && newest && picked.before && prior ? [{ key: "compare", label: `${picked.school}, ${prior} vs. ${season}` }] : []),
   ];
-  const file = (c) => (c.image === "class" || !picked ? `${clazz}a-${c.theme}` : `${c.image}/${picked.slug}-${c.theme}`);
-  const what = (c) => (c.image === "class" || !picked ? `class-${clazz}a-regions` : `${picked.slug}-regions${c.image === "compare" ? "-compared" : ""}`);
+  // Where each is: regions/2027/5a-light.png, compare/5a-light.png, team/greenwood-light.png, compare/greenwood-light.png.
+  const file = (c) => ({
+    class: `${clazz}a-${c.theme}`,
+    "class-compare": `compare/${clazz}a-${c.theme}`,
+    team: `team/${picked?.slug}-${c.theme}`,
+    compare: `compare/${picked?.slug}-${c.theme}`,
+  })[c.image];
+  const what = (c) => ({
+    class: `class-${clazz}a-regions`,
+    "class-compare": `class-${clazz}a-regions-${prior}-vs-${season}`,
+    team: `${picked?.slug}-regions`,
+    compare: `${picked?.slug}-regions-${prior}-vs-${season}`,
+  })[c.image];
+  const label = (c) => ({
+    class: `Class ${clazz}A regions, ${option.label}`,
+    "class-compare": `Class ${clazz}A regions, ${prior} vs. ${option.label}`,
+    team: `${picked?.school}: ${regionPlace(picked)}`,
+    compare: `${picked?.school}: ${prior} region vs. ${season} region`,
+  })[c.image];
   return {
     title: picked && newest ? `Share ${picked.school}’s region` : `Share Class ${clazz}A’s regions`,
-    when: `MHSAA ${payload.cycle} regions · ${option.label}`,
+    when: `${option.label} ${option.seasons.length > 1 ? "seasons" : "season"}`,
     groups: () => [
       ...(kinds.length > 1 ? [{ label: "Image", key: "image", options: kinds }] : []),
       { label: "Theme", key: "theme", options: SHARE_THEMES },
@@ -2608,8 +2654,7 @@ function regionsShareSpec() {
     path: (c) => `/static/regions/${season}/${file(c)}.png`,
     version: null,
     name: (c) => `${what(c)}-${season}.png`,
-    label: (c) => (c.image === "class" || !picked ? `Class ${clazz}A regions, ${option.label}`
-      : c.image === "compare" ? `${picked.school}: ${payload.prior_season} region vs. ${season} region` : `${picked.school}: ${regionPlace(picked)}`),
+    label,
     wide: () => false,
     page: `${location.origin}/regions/${clazz}a${picked ? `?team=${picked.slug}` : ""}`,
     latest: true,

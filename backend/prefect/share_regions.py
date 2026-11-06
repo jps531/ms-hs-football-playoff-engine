@@ -29,6 +29,7 @@ from backend.helpers.engine_settings import CLASSES
 from backend.helpers.image_jobs import (
     CLASS_REGIONS,
     CLASS_REGIONS_CARD,
+    CLASS_REGIONS_COMPARED,
     TEAM_REGION,
     TEAM_REGION_CARD,
     TEAM_REGIONS_COMPARED,
@@ -105,6 +106,21 @@ def image_jobs(option: dict, rows: list[dict], prior: list[dict], teams: list[di
                 f"og/regions-{clazz}.png", CLASS_REGIONS_CARD, {"clazz": clazz, "seasons": seasons, "schools": mine}
             )
         )
+        then = [s for s in prior if s["class"] == clazz]
+        if then:
+            # The two seasons' class, plus the other season's rows of the schools that moved in or out.
+            names_now, names_then = {s["school"] for s in mine}, {s["school"] for s in then}
+            moved_now = [s for s in rows if s["school"] in names_then - names_now]
+            moved_then = [s for s in prior if s["school"] in names_now - names_then]
+            kwargs = {"clazz": clazz, "seasons": seasons, "schools": mine + moved_now, "prior": then + moved_then}
+            for theme in THEMES:
+                jobs.append(
+                    ImageJob(
+                        f"regions/{season}/compare/{clazz}a-{theme}.png",
+                        CLASS_REGIONS_COMPARED,
+                        {**kwargs, "theme": theme},
+                    )
+                )
     prior_by = {r["school"]: r for r in prior}
     for r in rows:
         slug = slugify(r["school"])
@@ -170,6 +186,7 @@ def write_regions(
     # The season before, under each school's name this season (a renamed school is the same school).
     prior = [{**r, "school": school_name_for_season(r["school"], season)} for r in seasons.get(season - 1) or []]
     teams = fetch(f"/teams?season={season}") or []
+    by_school = {t["school"]: t for t in teams}
     jobs = image_jobs(newest, rows, prior, teams)
     drawn = draw_images(
         out_dir,
@@ -189,7 +206,7 @@ def write_regions(
         image = f"{site_url}/static/regions/{season}/{clazz}a-light.png"
         write(
             out_dir / "body" / f"regions-{clazz}.html",
-            regions_body(clazz, payload, current, f"/static/regions/{season}/{clazz}a-light.png{version}"),
+            regions_body(clazz, payload, current, f"/static/regions/{season}/{clazz}a-light.png{version}", by_school),
         )
         write(
             out_dir / "meta" / f"regions-{clazz}.html",

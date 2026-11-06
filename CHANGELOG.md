@@ -5,6 +5,24 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.15.0
+
+- **A class's regions, then and now.** A new image to share puts a class's 2026 regions beside its
+  2027 regions, with the schools that left the class ("Now 3-4A") and those new to it ("From 4-4A").
+- **Region maps on the front page.** A "Region maps" section shows a class's map and links to its
+  Regions page, and the class buttons under the helmet have a Region Maps row.
+- **The Regions page's lists** show each team's helmet, run two regions across on wider screens, and say where a team
+  was the season before only when it was in a different region.
+- **The map's search box** works like the one at the top of the page, with the same list of matches.
+  The search at the top of the page now works on the Regions page too; before, it stayed on
+  "Loading teams…" there. Its matches now name the region as "Region 6-3A".
+- On the Regions page, the share button is beside the title, the zoom buttons are at the top left, where
+  they cover less of the state, and dragging the map no longer selects it. The note on how the map is drawn moved to the
+  About page ("How the region maps work").
+- In the region images, team names no longer overlap on the map (a crowded one sits a little away,
+  with a line to its dot), "Still in the Region" no longer repeats the region, and the
+  "MHSAA 2027–29 regions" line at the bottom is gone.
+
 ## 1.14.0
 
 - **Regions, on a map.** A new Regions tab (`/regions/5a`) shows each class's schools on a map of

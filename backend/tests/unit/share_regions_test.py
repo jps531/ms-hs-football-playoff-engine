@@ -86,7 +86,8 @@ def test_the_page_without_javascript_and_its_previews(written):
     out, _, sitemap, _ = written
     body = (out / "body" / "regions-5.html").read_text()
     assert '<a href="/standings/5a">Class 5A</a>' in body and "Class 5A Regions" in body
-    assert "2027 and 2028 seasons · MHSAA 2027–29 regions" in body
+    assert '<p class="regions-sub">2027 and 2028 seasons</p>' in body
+    assert "Region 2-5A in 2026" not in body and ">Leake</span></a></li>" in body  # Leake stayed: no note
     assert "4-4A in 2026" in body and ">Region 2</h2>" in body  # no standings yet: the heading isn't a link
     meta = (out / "meta" / "regions-5.html").read_text()
     assert "https://example.com/static/og/regions-5.png?v=20261106" in meta
@@ -105,6 +106,8 @@ def test_the_images(written):
     assert {"regions/2027/team/greenwood-dark.png", "regions/2027/compare/greenwood-dark.png"} <= paths
     assert "regions/2027/team/north-tippah-light.png" in paths
     assert "regions/2027/compare/north-tippah-light.png" not in paths
+    # The class's two seasons side by side: 5A had schools in 2026 too.
+    assert {"regions/2027/compare/5a-light.png", "regions/2027/compare/5a-dark.png"} <= paths
     job = next(j for j in jobs if j.path == "regions/2027/team/greenwood-light.png")
     # Its class, and Yazoo City (its region-mate in 2026, in 4A now) so its image says where Yazoo City went.
     assert {s["school"] for s in job.kwargs["schools"]} == {"Greenwood", "Leake", "Natchez", "Lost", "Yazoo City"}

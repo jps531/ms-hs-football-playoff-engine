@@ -14,7 +14,7 @@ export function classGrid() {
     + `<ul class="landing-classes__list" aria-labelledby="classes-${key}">`
     + CLASSES.map((c) => `<li><a class="landing-classes__item" href="${path(c)}">${c}A<span class="visually-hidden"> ${label.toLowerCase()}</span></a></li>`).join("")
     + "</ul></div>";
-  return `<nav class="landing-classes" aria-label="Classes">${row("standings", "Standings", (c) => `/standings/${c}a`)}${row("brackets", "Brackets", (c) => `/brackets/${c}a`)}${row("regions", "Regions", (c) => `/regions/${c}a`)}</nav>`;
+  return `<nav class="landing-classes" aria-label="Classes">${row("standings", "Standings", (c) => `/standings/${c}a`)}${row("brackets", "Brackets", (c) => `/brackets/${c}a`)}${row("regions", "Region Maps", (c) => `/regions/${c}a`)}</nav>`;
 }
 
 /** What "/" shows when the pipeline's page isn't there (a fresh install, or it failed to load). */

@@ -1791,6 +1791,25 @@ def _bracket_preview(featured: dict) -> str:
     )
 
 
+def _regions_preview(example: dict | None) -> str:
+    """A class's map of its regions (the image to share, light or dark with the page), as one link to its
+    Regions page; nothing until there are regions. *example* is {"clazz", "season"}."""
+    if not example:
+        return ""
+    clazz, season = example["clazz"], example["season"]
+    images = "".join(
+        f'<img class="landing-regions__map landing-regions__map--{theme}" src="/static/regions/{season}/{clazz}a-{theme}.png" '
+        f'width="1080" height="1350" loading="lazy" alt="">'
+        for theme in ("light", "dark")
+    )
+    return (
+        f'<a class="landing-preview landing-preview--regions" href="/regions/{clazz}a" '
+        f'aria-label="Open the Class {clazz}A region map">'
+        f'<span class="landing-preview__frame" aria-hidden="true">{images}</span>'
+        f'<span class="landing-preview__label">Open the {clazz}A region map</span></a>'
+    )
+
+
 # Paragraphs of trusted markup (emphasis), like PRINCIPLES_HTML below.
 ABOUT_THE_SITE_HTML = (
     "This website was developed to answer the question that comes up every October in Mississippi high school "
@@ -1855,7 +1874,7 @@ def class_grid() -> str:
     return (
         '<nav class="landing-classes" aria-label="Classes">'
         f"{row('standings', 'Standings', class_path)}{row('brackets', 'Brackets', bracket_path)}"
-        f"{row('regions', 'Regions', lambda c: f'/regions/{c}a')}</nav>"
+        f"{row('regions', 'Region Maps', lambda c: f'/regions/{c}a')}</nav>"
     )
 
 
@@ -1884,6 +1903,7 @@ def landing_body(
     teams: dict[str, dict],
     scenario_example: dict | None = None,
     insight_example: dict | None = None,
+    regions_example: dict | None = None,
 ) -> str:
     """The front page: who we are and how it works on the left, a tour of the site on the right, with the
     most open race (``featured``) as the live example throughout.
@@ -2009,6 +2029,18 @@ def landing_body(
             "Bracket page",
             "<p>View each class’s playoff bracket, filled in with who is likely to land in each spot. Pick a game to "
             "see every team that could play there, how likely each matchup is, and who would host.</p>" + bracket_extra,
+        )
+        + (
+            _section(
+                "regions",
+                "Region maps",
+                "<p>View each class’s regions on a map of Mississippi, with each school at its location and where "
+                "it played the season before. Pick a team to see its region, and share images of a class’s "
+                "regions, a team’s new region, or either one beside the season before.</p>"
+                + _regions_preview(regions_example),
+            )
+            if regions_example
+            else ""
         )
         + "</div>"
     )
