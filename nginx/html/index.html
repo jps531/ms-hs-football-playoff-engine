@@ -73,13 +73,15 @@
     </header>
   </div>
 
+  <!-- The class picker, pinned under the header on every class page (app.js renderScrubber), filled in
+       by nginx's include. Once the page title scrolls away the bar also says what's on screen (the
+       context, app.js showContext); on phones it then folds to that line and a button for the picker. -->
   <div class="scrubber-bar"<!--# if expr="$show_class_picker = no" --> hidden<!--# endif -->>
-    <!-- The class picker as the app draws it (app.js renderScrubber), filled in by nginx's include. -->
-    <div class="scrubber-bar__inner" id="scrubber"><nav class="scrubber" aria-label="Classification"><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/1a" data-class="1"<!--# if expr="$page_class = 1" --> aria-current="page"<!--# endif -->>1A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/2a" data-class="2"<!--# if expr="$page_class = 2" --> aria-current="page"<!--# endif -->>2A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/3a" data-class="3"<!--# if expr="$page_class = 3" --> aria-current="page"<!--# endif -->>3A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/4a" data-class="4"<!--# if expr="$page_class = 4" --> aria-current="page"<!--# endif -->>4A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/5a" data-class="5"<!--# if expr="$page_class = 5" --> aria-current="page"<!--# endif -->>5A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/6a" data-class="6"<!--# if expr="$page_class = 6" --> aria-current="page"<!--# endif -->>6A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/7a" data-class="7"<!--# if expr="$page_class = 7" --> aria-current="page"<!--# endif -->>7A</a></nav></div>
-  </div>
-
-  <div class="context-bar" id="context-bar" aria-hidden="true">
-    <p class="context-bar__inner provenance"></p>
+    <div class="scrubber-bar__inner">
+      <div class="scrubber-bar__classes" id="scrubber"><nav class="scrubber" aria-label="Classification"><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/1a" data-class="1"<!--# if expr="$page_class = 1" --> aria-current="page"<!--# endif -->>1A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/2a" data-class="2"<!--# if expr="$page_class = 2" --> aria-current="page"<!--# endif -->>2A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/3a" data-class="3"<!--# if expr="$page_class = 3" --> aria-current="page"<!--# endif -->>3A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/4a" data-class="4"<!--# if expr="$page_class = 4" --> aria-current="page"<!--# endif -->>4A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/5a" data-class="5"<!--# if expr="$page_class = 5" --> aria-current="page"<!--# endif -->>5A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/6a" data-class="6"<!--# if expr="$page_class = 6" --> aria-current="page"<!--# endif -->>6A</a><a class="scrubber__item" href="/<!--# echo var="class_link_base" -->/7a" data-class="7"<!--# if expr="$page_class = 7" --> aria-current="page"<!--# endif -->>7A</a></nav></div>
+      <div class="context-bar" id="context-bar" aria-hidden="true"><p class="context-bar__inner provenance"></p></div>
+      <button type="button" class="scrubber-bar__toggle" aria-controls="scrubber" aria-expanded="false"><span class="visually-hidden">Change class: </span><span data-current-class><!--# if expr="$page_class" --><!--# echo var="page_class" -->A<!--# endif --></span><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg></button>
+    </div>
   </div>
 
   <!-- What changed after a control is used (app.js announce), for screen readers. -->
@@ -99,7 +101,7 @@
     <p>Seeds aren’t official until the MHSAA announces them. Odds are estimates and are not for wagering.</p>
     <p>Scores from <a href="https://www.ahsfhs.org/mississippi/index.asp">AHSFHS</a>. Updated each morning at 9:00 Central.<span data-computed-at></span></p>
     <p>This website is not associated with the MHSAA or any of its member schools.</p>
-    <p>© 2025–2026 Paul Sullivan. All rights reserved. · <a href="https://github.com/jps531/ms-hs-football-playoff-engine/blob/main/CHANGELOG.md">Version 1.15.0</a></p>
+    <p>© 2025–2026 Paul Sullivan. All rights reserved. · <a href="https://github.com/jps531/ms-hs-football-playoff-engine/blob/main/CHANGELOG.md">Version 1.16.0</a></p>
   </footer>
 
   <!-- Phones: Home plus the same four destinations, as a tab bar along the bottom. -->

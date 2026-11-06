@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, wireRegionsMap, place as regionPlace } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -50,6 +50,8 @@ const app = document.getElementById("app");
 const scrubberHost = document.getElementById("scrubber");
 const teamSearch = document.getElementById("team-search");
 const contextBar = document.getElementById("context-bar");
+const scrubberBar = document.querySelector(".scrubber-bar");
+const classToggle = scrubberBar?.querySelector(".scrubber-bar__toggle");
 
 // --------------------------------------------------------------- data
 
@@ -416,10 +418,11 @@ async function render() {
 }
 
 // ---------------------------------------------------------- context bar
-// Once the page title scrolls under the header, a slim bar takes its place
-// saying what's on screen (region, week, date, odds mode), so a screenshot
+// Once the page title scrolls under the header, the class picker's pinned bar
+// also says what's on screen (region, week, date, odds mode), so a screenshot
 // from anywhere down the page still carries its context. It repeats the
-// visible title and controls, so it's hidden from screen readers.
+// visible title and controls, so it's hidden from screen readers. On a phone
+// the bar then folds to that line and a button that opens the picker.
 
 let nextContext = null; // set by the view being rendered
 let nextComputedAt = null; // when the shown numbers were calculated: { from, to }, set by the view
@@ -446,19 +449,44 @@ function showComputedAt(span) {
 
 function showContext(html) {
   headObserver?.disconnect();
-  contextBar.classList.remove("is-shown");
+  setScrolled(false);
   contextBar.querySelector(".context-bar__inner").innerHTML = html ?? "";
-  // The bar takes over as soon as the page title is out of view, not once
-  // the whole heading block (headline and controls) has gone.
+  // The context shows as soon as the page title is out of view (under the
+  // header and the picker's bar), not once the whole heading block has gone.
   const head = html && app.querySelector(".region-head .title, .entry-head .title");
   if (!head) return;
   const headerH = document.querySelector(".site-header-bar").getBoundingClientRect().height;
+  const pinned = headerH + (scrubberBar && !scrubberBar.hidden ? scrubberBar.getBoundingClientRect().height : 0);
   headObserver = new IntersectionObserver(([entry]) => {
-    const above = !entry.isIntersecting && entry.boundingClientRect.top < headerH;
-    contextBar.classList.toggle("is-shown", above);
-  }, { rootMargin: `-${Math.round(headerH)}px 0px 0px 0px` });
+    setScrolled(!entry.isIntersecting && entry.boundingClientRect.top < pinned);
+  }, { rootMargin: `-${Math.round(pinned)}px 0px 0px 0px` });
   headObserver.observe(head);
 }
+
+/** The picker's bar with the context on (title scrolled away) or off; folding closes the phone's picker. */
+function setScrolled(on) {
+  if (!scrubberBar) return;
+  scrubberBar.classList.toggle("is-scrolled", on);
+  if (!on) setClassesOpen(false);
+}
+
+/** On a phone, once scrolled: the picker opened under the context line, or closed. */
+function setClassesOpen(open) {
+  scrubberBar?.classList.toggle("is-open", open);
+  classToggle?.setAttribute("aria-expanded", String(open));
+}
+
+classToggle?.addEventListener("click", () => {
+  const open = classToggle.getAttribute("aria-expanded") !== "true";
+  setClassesOpen(open);
+  if (open) scrubberHost.querySelector('[aria-current="page"]')?.focus({ preventScroll: true });
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && scrubberBar?.classList.contains("is-open")) {
+    setClassesOpen(false);
+    classToggle?.focus();
+  }
+});
 
 const SITE = "Mississippi High School Football";
 
@@ -477,8 +505,11 @@ function notice(text) {
 
 function renderScrubber(clazz) {
   // The front page has no class of its own, and its own grid of links instead.
-  scrubberHost.parentElement.hidden = route.page === "landing";
+  scrubberBar.hidden = route.page === "landing";
   scrubberHost.innerHTML = classScrubber(CLASSES, clazz, classHref);
+  const current = scrubberBar.querySelector("[data-current-class]");
+  if (current) current.textContent = clazz ? `${clazz}A` : "";
+  setClassesOpen(false);
   syncNav();
   // Keep the selected class in view sideways; never scroll the page itself.
   const strip = scrubberHost.querySelector(".scrubber");
@@ -2583,6 +2614,7 @@ async function renderRegions(token) {
       },
     });
     renderScrubber(route.clazz);
+    showContext(contextHtml(regionsTitle(route.clazz), { week: seasonsLabel(option.seasons) }, null));
     history.replaceState(null, "", hrefWith({}));
   } catch {
     if (token !== renderToken) return;
