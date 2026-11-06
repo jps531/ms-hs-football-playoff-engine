@@ -163,9 +163,18 @@ def test_only_real_pages_get_the_app_and_everything_else_404s():
     """Page routes are validated in nginx; other addresses get the 404 page, not the API's JSON or a 200 shell."""
     route = re.search(r"location ~ (\S+) \{\n\s+root /usr/share/nginx/html;\n\s+ssi on;", NGINX).group(1)
     pattern = re.compile(route.strip("^$").join("^$"))
-    for path in ("/standings/3a", "/standings/3a/", "/standings/3a/6", "/brackets/7a"):
+    for path in ("/standings/3a", "/standings/3a/", "/standings/3a/6", "/brackets/7a", "/regions/5a", "/regions/5a/"):
         assert pattern.match(path), path
-    for path in ("/standings/9a", "/standings/3a/12", "/standings/3a/6/x", "/brackets/8a", "/brackets/7a/1"):
+    bad = (
+        "/standings/9a",
+        "/standings/3a/12",
+        "/standings/3a/6/x",
+        "/brackets/8a",
+        "/brackets/7a/1",
+        "/regions/8a",
+        "/regions/5a/2",
+    )
+    for path in bad:
         assert not pattern.match(path), path
     assert "error_page 404 /404.html;" in NGINX
     assert "location ^~ /standings/" not in NGINX  # ^~ would stop the route regex from ever matching
@@ -188,11 +197,13 @@ def test_www_redirects_to_the_bare_domain():
 
 
 def test_the_main_nav_is_in_the_page_from_the_start():
-    """Standings and Bracket point at the page's class, and the current section is marked, before the app loads."""
+    """Standings, Bracket and Regions point at the page's class, and the current section is marked, before the
+    app loads."""
     shell = (ROOT / "nginx" / "html" / "index.html").read_text()
     for cls in ("site-nav__item", "tab-bar__item"):
-        assert f'<a class="{cls}" href="/brackets/<!--# if expr="$page_class" -->' in shell
-        assert '<!--# if expr="$nav_section = bracket" --> aria-current="page"' in shell
+        for base, section in (("brackets", "bracket"), ("regions", "regions")):
+            assert f'<a class="{cls}" href="/{base}/<!--# if expr="$page_class" -->' in shell
+            assert f'<!--# if expr="$nav_section = {section}" --> aria-current="page"' in shell
     assert "map $request_uri $nav_section" in NGINX
 
 
@@ -248,3 +259,29 @@ def test_a_bracket_link_naming_a_season_gets_that_seasons_preview():
     assert page("/brackets/7a?team=raleigh") == "bracket-7"
     assert page("/brackets/3a?xseason=2025") == "bracket-3"
     assert page("/standings/3a/6?season=2025") == "3-6"
+
+
+def test_a_regions_page_gets_its_own_preview_and_content():
+    """/regions/5a gets regions-5's preview and content, and a team's link the team's preview; a link to an
+    older season's regions gets the generic preview and no pre-rendered content (it would be the newest)."""
+    maps = {}
+    for name in ("share_page", "share_body"):
+        block = re.search(rf"map \$request_uri \${name} \{{(.*?)\n    \}}", NGINX, re.S).group(1)
+        maps[name] = [
+            (re.compile(m.group(1).replace("(?<", "(?P<")), m.group(2))
+            for m in re.finditer(r'"~([^"]+)"\s+"([^"]+)";', block)
+        ]
+
+    def look(name, uri):
+        for pattern, value in maps[name]:
+            m = pattern.search(uri)
+            if m:
+                return re.sub(r"\$\{(\w+)\}", lambda g: m.group(g.group(1)), value)
+        return "site" if name == "share_page" else "none"
+
+    assert look("share_page", "/regions/5a") == "regions-5"
+    assert look("share_page", "/regions/5a?team=greenwood") == "regions-5"
+    assert look("share_page", "/regions/5a?season=2025") == "none"
+    assert look("share_body", "/regions/7a") == "regions-7"
+    assert look("share_body", "/regions/7a?season=2025") == "none"
+    assert "location ^~ /static/regions/" in NGINX

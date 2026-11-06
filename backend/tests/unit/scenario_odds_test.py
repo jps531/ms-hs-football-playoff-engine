@@ -67,7 +67,7 @@ def test_scenarios_without_odds_carry_none():
 
 
 def test_a_finish_reached_two_ways_shares_its_chance():
-    """7A-2 with two left: Clinton beating Madison Central and Starkville beating Oxford, or Clinton
+    """2-7A with two left: Clinton beating Madison Central and Starkville beating Oxford, or Clinton
     winning by 8 or more, reach the same standings. Both scenarios carry that finish's whole chance."""
     teams, completed, remaining = _cut(REGION_RESULTS_2025[(7, 2)]["games"], 2)
     scenarios = enumerate_division_scenarios(teams, completed, remaining, scenario_odds=True)
@@ -90,7 +90,7 @@ def test_odds_are_stored_and_served():
 
 
 def test_odds_count_every_margin_a_tied_team_plays():
-    """2A-4 (2025) with four left: a tied team's games against the rest of the region decide step 4,
+    """4-2A (2025) with four left: a tied team's games against the rest of the region decide step 4,
     with no game left among the tied teams themselves. The odds used to work through margins only
     when such a game remained, putting East Webster at 58.1% for #1; every result and margin gives
     61.2%, as the finishes do. (60.3% before steps 2 and 4 stopped at the first outside team that

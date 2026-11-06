@@ -190,7 +190,7 @@ def test_seven_point_shortcut_never_claims_a_certainty_margins_break(key):
     """Past five games left every game is scored at 7 points, so a tie on point differential is left
     open: every place a team can take with all margins worked through is still open to it, and a team
     the full enumeration doesn't call clinched or eliminated isn't called that either. (Without the
-    widening, 2025's 6A Region 3 had Forest Hill eliminated at three games left when it wasn't.)"""
+    widening, 2025's Region 3-6A had Forest Hill eliminated at three games left when it wasn't.)"""
     teams, completed, remaining = _cut(REGION_RESULTS_2025[key]["games"], 3)
     full = determine_scenarios(teams, completed, remaining)
     fast = determine_scenarios(teams, completed, remaining, ignore_margins=True)

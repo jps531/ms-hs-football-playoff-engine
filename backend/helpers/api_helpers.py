@@ -799,7 +799,7 @@ def filter_to_team_or_404(response: _TeamsResponse, team: str, clazz: int, regio
     """
     response.teams = [t for t in response.teams if t.school == team]  # type: ignore[attr-defined]
     if not response.teams:  # type: ignore[attr-defined]
-        raise HTTPException(status_code=404, detail=f"Team '{team}' not found in {clazz}A Region {region}")
+        raise HTTPException(status_code=404, detail=f"Team '{team}' not found in Region {region}-{clazz}A")
     return response
 
 
@@ -3011,7 +3011,7 @@ async def recompute_scenarios_from_games(  # pragma: no cover
     """
     teams = await load_active_region_teams(conn, season, clazz, region)
     if not teams:
-        raise HTTPException(status_code=404, detail=f"No teams found for {clazz}A Region {region} season {season}")
+        raise HTTPException(status_code=404, detail=f"No teams found for Region {region}-{clazz}A, season {season}")
 
     completed = await load_completed_region_games(conn, season, as_of, teams)
     remaining = compute_remaining_games(teams, completed)

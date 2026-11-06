@@ -15,12 +15,12 @@ outside the code.
   variants (`?week=`, `?odds=`, `?season=`) point at the plain path;
   `www.mshsfootball.com` and `http://` redirect to `https://mshsfootball.com`.
 - **Real 404s.** Only real page routes get the app (`/standings/{1-7}a`,
-  `/standings/{1-7}a/{region}`, `/brackets/{1-7}a`); anything else gets
+  `/standings/{1-7}a/{region}`, `/brackets/{1-7}a`, `/regions/{1-7}a`); anything else gets
   `nginx/html/404.html` with a 404 status. A well-formed address for something
   that doesn't exist (a region a class doesn't have) is caught by the app,
   which tells search engines `noindex`.
 - **Links between pages.** Breadcrumbs (Home › Class 3A › Region 6-3A) on
-  class, region, bracket and About pages, and the 1A–7A class picker in
+  class, region, bracket, Regions and About pages, and the 1A–7A class picker in
   every page's HTML.
 - **Structured data.** `BreadcrumbList` on each of those pages and `WebSite`
   (the site's name for search results) on the front page, as JSON-LD in the
@@ -28,7 +28,8 @@ outside the code.
 - **`sitemap.xml`** (front page, About page, every class, region and bracket
   page, with the snapshot date as `lastmod`), linked from `robots.txt`. Each
   bracket page lists its whole-bracket image (`/static/bracket/{season}/{class}a-all-*-light.png`,
-  Google's image extension) so it can show up in image search.
+  Google's image extension) so it can show up in image search, and each Regions page its map
+  (`/static/regions/{season}/{class}a-light.png`).
 - **Not indexed:** the API, its docs, `/moderate`, `/feedback` (an
   `X-Robots-Tag: noindex` header). `/api/` is deliberately *not* blocked in
   `robots.txt`: Google runs the app when it renders a page, and the app needs

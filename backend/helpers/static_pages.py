@@ -1837,7 +1837,7 @@ NOT_AFFILIATED = "This website is not associated with the MHSAA or any of its me
 
 
 def class_grid() -> str:
-    """The front page's way in: every class's standings and bracket, a button each (landing.js's
+    """The front page's way in: every class's standings, bracket and regions, a button each (landing.js's
     ``classGrid`` writes the same). Hidden words make each link say what it opens."""
 
     def row(key: str, label: str, path) -> str:
@@ -1854,7 +1854,8 @@ def class_grid() -> str:
 
     return (
         '<nav class="landing-classes" aria-label="Classes">'
-        f"{row('standings', 'Standings', class_path)}{row('brackets', 'Brackets', bracket_path)}</nav>"
+        f"{row('standings', 'Standings', class_path)}{row('brackets', 'Brackets', bracket_path)}"
+        f"{row('regions', 'Regions', lambda c: f'/regions/{c}a')}</nav>"
     )
 
 

@@ -25,7 +25,7 @@ def test_a_season_reads_its_cycles_file():
 
 
 def test_a_line_for_one_season_holds_only_then():
-    """The 2025-27 file has Leake Central (4A-5) and Leake County (1A-5) for 2025, and Leake (5A-2) for 2026."""
+    """The 2025-27 file has Leake Central (5-4A) and Leake County (5-1A) for 2025, and Leake (2-5A) for 2026."""
     s25, s26 = assignments_for_season(2025), assignments_for_season(2026)
     assert s25["Leake Central"] == (4, 5) and s25["Leake County"] == (1, 5) and "Leake" not in s25
     assert s26["Leake"] == (5, 2) and "Leake Central" not in s26 and "Leake County" not in s26

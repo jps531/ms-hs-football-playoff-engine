@@ -60,9 +60,13 @@ names the one season a line holds for (a mid-cycle move, a season without a team
    against the database before writing anything and stops, listing every problem, if a name isn't a
    school the site knows, a region has fewer than three schools, a class's regions aren't numbered
    from 1, or a school from the season before has no place.
+4. Run `share-assets` (or wait for the next daily update). The Regions page (`/regions/{class}a`)
+   then opens on the new cycle, with its maps and images to share; the cycles before stay in its
+   season picker. A school with no coordinates, or coordinates outside Mississippi, is listed but
+   gets no dot (the run's log names it); fix its location with the admin overrides.
 
 Loading a cycle early is safe: the site's current season is the newest one with games (`/seasons`),
-so the loaded season stays out of sight until its schedule is in.
+so the loaded season stays out of sight until its schedule is in. Only the Regions page shows it.
 
 ## Consolidations, schools that stop playing, and renames
 
@@ -94,9 +98,9 @@ PUT /api/v1/admin/schools/{school}/overrides   {"field": "secondary_color",  "va
 
 Valid override fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude`. Overrides always win over pipeline values; clear one with `DELETE /api/v1/admin/schools/{school}/overrides/{field}`.
 
-## 2027: North Tippah (3A Region 2)
+## 2027: North Tippah (Region 2-3A)
 
-Falkner (1A Region 2) and Walnut (2A Region 1) consolidate into North Tippah (3A Region 2) for 2027,
+Falkner (Region 2-1A) and Walnut (Region 1-2A) consolidate into North Tippah (Region 2-3A) for 2027,
 on Walnut's campus. `SCHOOL_SUCCESSORS` has Walnut → North Tippah from 2027: North Tippah starts from
 Walnut's final 2026 Elo rating and takes Walnut's location and home field when the 2027 regions load.
 `SCHOOL_STOPPED_PLAYING` has Falkner's last season, 2026. Old `?team=walnut` links open North Tippah on
@@ -104,7 +108,7 @@ Walnut's final 2026 Elo rating and takes Walnut's location and home field when t
 
 ## Thrasher (suspended)
 
-Thrasher (1A Region 1 in 2025) suspended its program indefinitely after 2025 for lack of players.
+Thrasher (Region 1-1A in 2025) suspended its program indefinitely after 2025 for lack of players.
 `2025-27.csv` lists it for 2025 only, `SCHOOL_STOPPED_PLAYING` has its last season as 2025, and
 MHSAA's 2027-29 list doesn't include it. If it comes back, add its line to that cycle's region file
 (with `seasons` set if it's only one season of the cycle) and load the season again.
@@ -149,9 +153,9 @@ Or run `backfill-historical-snapshots` for 2025, which does both and also redoes
 
 ---
 
-## 2026: Leake (5A Region 2)
+## 2026: Leake (Region 2-5A)
 
-Leake County (1A Region 5) and Leake Central (4A Region 5) merged to form Leake (5A Region 2),
+Leake County (Region 5-1A) and Leake Central (Region 5-4A) merged to form Leake (Region 2-5A),
 on Leake Central's campus and under its identity. AHSFHS and the MHSAA 2025–27 region page still
 call it "Leake Central", so the site records the new name itself:
 

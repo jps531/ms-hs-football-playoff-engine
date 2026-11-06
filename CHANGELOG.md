@@ -5,6 +5,21 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.14.0
+
+- **Regions, on a map.** A new Regions tab (`/regions/5a`) shows each class's schools on a map of
+  Mississippi, each a dot numbered by its region, with a shaded shape around each region's schools and
+  the schools listed by region. It opens on the 2027–29 regions MHSAA released in November; a picker
+  shows the 2025 and 2026 regions too. Zoom in for the county names. Pick a team (on the map, in the
+  list, or by typing its name) to highlight its region and see where it was the season before ("Moved
+  up from Region 4-4A"). The county lines are the Census Bureau's, and a public school's dot is at the
+  federal (NCES) geocode of its address. MHSAA doesn't draw region boundaries, so the shapes are only
+  drawn around each region's schools, and two regions' shapes never overlap.
+- **Region maps to share.** From the Regions page: a class's map, a team's new region with its New
+  Region Members, and a team's 2026 region beside its 2027 region, each in light or dark. Links to a
+  Regions page or a team on it preview with its map.
+- The front page, the 404 page and every page's menu link the Regions pages.
+
 ## 1.13.2
 
 - **A finished game keeps its seeds.** On a bracket, a played game still shows each team's region and

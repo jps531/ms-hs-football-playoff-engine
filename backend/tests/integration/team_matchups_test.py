@@ -647,7 +647,7 @@ class TestTextRenderer:
 
 
 class TestTaylorsville2025:
-    """Full ground-truth snapshot for Taylorsville (1A Region 8 #1) in 2025.
+    """Full ground-truth snapshot for Taylorsville (Region 8-1A #1) in 2025.
 
     Odds supplied match the existing taylorsville_home_scenarios_2025.md
     odds table (equal win probability):

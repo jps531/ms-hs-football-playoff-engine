@@ -219,7 +219,7 @@ async def get_hosting(
     async with get_conn() as conn:
         loaded = await _load_region_odds(conn, season, clazz, region, as_of)
         if loaded is None:
-            raise HTTPException(status_code=404, detail=f"No data for {clazz}A Region {region} season {season}")
+            raise HTTPException(status_code=404, detail=f"No data for Region {region}-{clazz}A, season {season}")
         region_odds, home_p_host_given_reach, home_p_host_given_reach_w, stored_adv, stored_adv_w = loaded
         slots = await _load_format_slots(conn, season, clazz)
         if not slots:

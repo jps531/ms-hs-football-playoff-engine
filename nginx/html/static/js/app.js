@@ -24,6 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, wireRegionsMap, place as regionPlace } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -163,10 +164,11 @@ function hrefWith(changes) {
   if (!("page" in changes)) {
     if (route.page === "landing" && !moving) page = "landing";
     else if (route.page === "bracket" && !next.region) page = "bracket";
+    else if (route.page === "regions" && !next.region) page = "regions";
     else page = next.region ? "region" : "class";
   }
   const teamName = "team" in changes ? changes.team : route.teamName;
-  return buildPath({ ...next, page, team: teamName ? slugify(teamName) : null }, { currentSeason });
+  return buildPath({ ...next, page, team: teamName ? slugify(teamName) : null }, { currentSeason, regionsSeason: regionsDefault });
 }
 
 /** Go to another page (push) or change how this one is shown (replace). */
@@ -358,6 +360,10 @@ async function render() {
     mountTurnstile(app.querySelector("[data-fb-form]"), API);
     return;
   }
+  if (route.page === "regions") {
+    await renderRegions(token);
+    return;
+  }
   app.setAttribute("aria-busy", "true");
   try {
     const all = await seasons();
@@ -463,6 +469,7 @@ const SITE = "Mississippi High School Football";
 function pageTitle(clazz, region, page) {
   if (page === "landing") return "Mississippi High School Football Playoff Races"; // as index.html's own <title>
   if (page === "bracket") return `Class ${clazz}A playoff bracket — ${SITE}`;
+  if (page === "regions") return `${regionsTitle(clazz)} — ${SITE}`;
   return region ? `Region ${region}-${clazz}A playoff race — ${SITE}` : `Class ${clazz}A playoff races — ${SITE}`;
 }
 
@@ -493,23 +500,30 @@ function renderScrubber(clazz) {
 function syncNav() {
   const onBracket = route.page === "bracket";
   const onStandings = ["class", "region"].includes(route.page); // not the front page: it's neither
+  const onRegions = route.page === "regions";
   const known = route.page !== "notfound";
+  // The Regions page's season is a regions season (2027 before it's played), so it isn't carried to
+  // Standings or the Bracket, nor theirs to it: each opens on its own newest.
+  const away = onRegions ? { season: null, week: null } : {};
+  const team = route.teamName ?? pickedTeam(route.clazz);
   const targets = {
-    standings: known ? hrefWith({ page: route.region ? "region" : "class", team: route.teamName ?? pickedTeam(route.clazz) }) : "/standings/1a",
-    bracket: known ? hrefWith({ page: "bracket", region: null, team: route.teamName ?? pickedTeam(route.clazz) }) : "/brackets/1a",
+    standings: known ? hrefWith({ page: route.region ? "region" : "class", team, ...away }) : "/standings/1a",
+    bracket: known ? hrefWith({ page: "bracket", region: null, team, ...away }) : "/brackets/1a",
+    regions: known ? hrefWith({ page: "regions", region: null, season: null, week: null, odds: null, team }) : "/regions/1a",
   };
   for (const a of document.querySelectorAll("[data-nav]")) {
     const key = a.dataset.nav;
     if (key in targets) a.setAttribute("href", targets[key]);
-    const current = known && (key === "bracket" ? onBracket : key === "standings" ? onStandings : key === "home" && route.page === "landing");
+    const current = known && (key === "bracket" ? onBracket : key === "standings" ? onStandings
+      : key === "regions" ? onRegions : key === "home" && route.page === "landing");
     if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
 }
 
-// Standings and Bracket links render in place, like any in-app link.
+// Standings, Bracket and Regions links render in place, like any in-app link.
 document.addEventListener("click", (e) => {
-  const link = e.target.closest('[data-nav="standings"], [data-nav="bracket"]');
+  const link = e.target.closest('[data-nav="standings"], [data-nav="bracket"], [data-nav="regions"]');
   if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
   navigate(link.getAttribute("href"), { scroll: true });
@@ -728,6 +742,10 @@ app.addEventListener("change", (e) => {
   } else if (control.dataset.control === "odds") {
     store(STORE.odds, value);
     navigate(hrefWith({ odds: value }), { replace: true });
+  } else if (control.dataset.control === "regions-season") {
+    navigate(hrefWith({ season: Number(value) }), { replace: true });
+  } else if (control.dataset.control === "regions-team") {
+    findRegionsTeam(value);
   }
 });
 
@@ -1041,7 +1059,7 @@ app.addEventListener("click", (e) => {
   if (!toggle) {
     // In-app links render in place: a page link adds history, a link that
     // only changes how this page is shown (data-replace) doesn't.
-    const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/?'], a[href='/']");
+    const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/regions/'], a[href^='/?'], a[href='/']");
     if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
       e.preventDefault();
       if (link.hasAttribute("data-unpick")) setPick(route.clazz, null);
@@ -2456,6 +2474,9 @@ app.addEventListener("click", (e) => {
     if (shareOpen.dataset.shareOpen === "team" && regionShare) {
       track("team_share_opened", { class: regionShare.clazz, region: regionShare.region, team: shareOpen.dataset.team });
       teamShareSpec(shareOpen.dataset.team).then(openShare);
+    } else if (shareOpen.dataset.shareOpen === "map" && regionsState) {
+      track("regions_share_opened", { class: regionsState.clazz, team: regionsState.picked?.school ?? null });
+      openShare(regionsShareSpec());
     } else if (shareOpen.dataset.shareOpen === "region" && regionShare) {
       track("region_share_opened", { class: regionShare.clazz, region: regionShare.region });
       regionShareSpec().then(openShare);
@@ -2486,6 +2507,116 @@ app.addEventListener("click", (e) => {
   }
 });
 
+// ------------------------------------------------------------- regions
+// A class's regions on a map (regions.js). Its data are files the share-assets step writes, not the
+// API, and its season is a regions season: the newest regions loaded (2027, before 2027 is played)
+// unless the address names another.
+
+let regionsDefault = null; // the newest regions' season: the Regions page's season when none is named
+let regionsState = null; // { clazz, season, option, payload, picked: school or null, map }
+
+async function renderRegions(token) {
+  document.body.classList.remove("is-wide");
+  sheet?.close();
+  showContext(null);
+  app.setAttribute("aria-busy", "true");
+  try {
+    const index = await regionsFile("index.json");
+    regionsDefault = index.default;
+    const option = pickOption(index, route.season);
+    const [base, payload] = await Promise.all([regionsFile("map.json"), regionsFile(`${option.season}.json`)]);
+    if (token !== renderToken) return;
+    route.season = option.season === index.default ? null : option.season;
+    const mine = payload.schools.filter((s) => s.class === route.clazz);
+    const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+    const picked = mine.find((s) => s.slug === wanted) ?? null;
+    route.teamName = picked?.school ?? null;
+    regionsState = { clazz: route.clazz, season: option.season, option, payload, picked };
+    const seasons = index.options.length > 1
+      ? select("regions-season", "Seasons", index.options.map((o) => ({ value: o.season, label: o.label })), option.season)
+      : "";
+    const finder = `<label class="regions-find"><span class="visually-hidden">Find a team</span>`
+      + `<input type="search" list="regions-teams" data-control="regions-team" placeholder="Find a team on the map" autocomplete="off" value="${esc(picked?.school ?? "")}">`
+      + `<datalist id="regions-teams">${[...payload.schools].sort((a, b) => (a.school < b.school ? -1 : 1)).map((s) => `<option value="${esc(s.school)}">${esc(regionPlace(s))}</option>`).join("")}</datalist></label>`;
+    app.innerHTML = regionsPage(route.clazz, base, payload, index.current_season, {
+      controls: `<div class="regions-controls">${seasons}${finder}</div>`,
+      share: shareButton("map"),
+    });
+    regionsState.map = wireRegionsMap(app, base, payload, route.clazz, {
+      picked: picked?.slug ?? null,
+      onPick: (slug) => {
+        const school = mine.find((s) => s.slug === slug) ?? null;
+        regionsState.picked = school;
+        route.teamName = school?.school ?? null;
+        const input = app.querySelector('[data-control="regions-team"]');
+        if (input) input.value = school?.school ?? "";
+        if (school) track("team_picked", { from: "regions", team: school.school });
+        history.replaceState(null, "", hrefWith({ team: route.teamName }));
+        syncNav();
+      },
+    });
+    renderScrubber(route.clazz);
+    history.replaceState(null, "", hrefWith({}));
+  } catch {
+    if (token !== renderToken) return;
+    setNoindex(true);
+    app.innerHTML = notice("The regions couldn’t load right now. Please try again in a moment.");
+  } finally {
+    if (token === renderToken) app.removeAttribute("aria-busy");
+  }
+  document.title = pageTitle(route.clazz, null, "regions");
+}
+
+/** The team typed into the map's search: picked here, or its class's map opened with it picked. */
+function findRegionsTeam(name) {
+  const school = regionsState?.payload.schools.find((s) => s.school.toLowerCase() === name.trim().toLowerCase());
+  if (!school) return;
+  if (school.class === regionsState.clazz) {
+    regionsState.map?.pick(school.slug);
+    route.teamName = school.school;
+    regionsState.picked = school;
+    history.replaceState(null, "", hrefWith({ team: school.school }));
+    syncNav();
+  } else {
+    navigate(hrefWith({ clazz: school.class, team: school.school }), { scroll: false });
+  }
+}
+
+/**
+ * The Regions page's images: the class's map, or (with a team picked) its region and its two
+ * regions compared, light or dark. Drawn for the newest regions only.
+ */
+function regionsShareSpec() {
+  const { clazz, season, option, payload, picked } = regionsState;
+  const newest = season === regionsDefault;
+  const kinds = [
+    { key: "class", label: `Class ${clazz}A` },
+    ...(picked && newest ? [{ key: "team", label: picked.school }] : []),
+    ...(picked && newest && picked.before && payload.prior_season ? [{ key: "compare", label: `${payload.prior_season} vs. ${season}` }] : []),
+  ];
+  const file = (c) => (c.image === "class" || !picked ? `${clazz}a-${c.theme}` : `${c.image}/${picked.slug}-${c.theme}`);
+  const what = (c) => (c.image === "class" || !picked ? `class-${clazz}a-regions` : `${picked.slug}-regions${c.image === "compare" ? "-compared" : ""}`);
+  return {
+    title: picked && newest ? `Share ${picked.school}’s region` : `Share Class ${clazz}A’s regions`,
+    when: `MHSAA ${payload.cycle} regions · ${option.label}`,
+    groups: () => [
+      ...(kinds.length > 1 ? [{ label: "Image", key: "image", options: kinds }] : []),
+      { label: "Theme", key: "theme", options: SHARE_THEMES },
+    ],
+    defaults: { image: picked && newest ? "team" : "class", theme: document.documentElement.classList.contains("dark") ? "dark" : "light" },
+    pages: () => 1,
+    path: (c) => `/static/regions/${season}/${file(c)}.png`,
+    version: null,
+    name: (c) => `${what(c)}-${season}.png`,
+    label: (c) => (c.image === "class" || !picked ? `Class ${clazz}A regions, ${option.label}`
+      : c.image === "compare" ? `${picked.school}: ${payload.prior_season} region vs. ${season} region` : `${picked.school}: ${regionPlace(picked)}`),
+    wide: () => false,
+    page: `${location.origin}/regions/${clazz}a${picked ? `?team=${picked.slug}` : ""}`,
+    latest: true,
+    track: (c, method) => track("regions_image_shared", { class: clazz, season, team: picked?.school ?? null, image: c.image, theme: c.theme, method }),
+  };
+}
+
 // ------------------------------------------------------------- feedback
 // One form for every kind of report, in a sheet over the page it's about
 // (or on its own at /feedback). A score correction for a specific game goes
@@ -2503,6 +2634,7 @@ function feedbackContext({ team = null, about = null } = {}) {
   if (route.page === "region") parts.push(`Region ${route.region}-${route.clazz}A`);
   else if (route.page === "class") parts.push(`Class ${route.clazz}A`);
   else if (route.page === "bracket") parts.push(`Class ${route.clazz}A Bracket`);
+  else if (route.page === "regions") parts.push(regionsTitle(route.clazz));
   if (about) parts.push(about);
   if (team) parts.push(team);
   return parts.join(" · ") || null;

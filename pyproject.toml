@@ -7,7 +7,7 @@ packages = ["backend"]
 
 [project]
 name = "ms-hs-football-playoff-engine"
-version = "1.13.2"
+version = "1.14.0"
 requires-python = ">=3.11"
 dependencies = [
     # The caps on prefect, griffe, anyio and pydantic are deliberate, for
@@ -34,6 +34,8 @@ dependencies = [
     "coloraide>=3.3",
     "pillow>=12.3.0",
     "pyyaml>=6.0",  # backend/scripts/add_playoff_season.py reads the season's bracket config
+    "pyproj>=3.7",  # region maps: Census county lines and schools into Mississippi TM (region_map.py)
+    "shapely>=2.0",  # region maps: each region's shape (region_map.py)
 ]
 
 [dependency-groups]

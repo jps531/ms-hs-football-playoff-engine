@@ -675,7 +675,7 @@ class TestRenderTeamHomeScenarios:
         assert "Team advances" not in text
 
     def test_7a_region1_seed1_2025_text_snapshot(self):
-        """Smoke-test for 7A Region 1 #1 seed with resolved names."""
+        """Smoke-test for Region 1-7A #1 seed with resolved names."""
         lookup = _team_lookup_for_class(7)
         team = lookup[(1, 1)]
         scens = self._scenarios_for(1, 1, SLOTS_5A_7A_2025, lookup)
@@ -801,14 +801,14 @@ class TestSpotChecks2025:
     """Targeted checks for specific known 2025 outcomes."""
 
     def test_7a_r1_region1_seed1_always_hosts(self):
-        """7A Region 1 #1 seed is always home in R1 (slot 1 home team)."""
+        """Region 1-7A #1 seed is always home in R1 (slot 1 home team)."""
         result = enumerate_home_game_scenarios(1, 1, SLOTS_5A_7A_2025, SEASON)
         r1 = result[0]
         assert len(r1.will_host) == 1
         assert len(r1.will_not_host) == 0
 
     def test_7a_r1_region2_seed4_never_hosts(self):
-        """7A Region 2 #4 seed is always away in R1 (slot 1 away team)."""
+        """Region 2-7A #4 seed is always away in R1 (slot 1 away team)."""
         result = enumerate_home_game_scenarios(2, 4, SLOTS_5A_7A_2025, SEASON)
         r1 = result[0]
         assert len(r1.will_host) == 0
@@ -871,12 +871,12 @@ class TestSpotChecks2025:
 
 
 # ---------------------------------------------------------------------------
-# 12. Taylorsville 2025 ground truth (1A Region 8 #1 seed)
+# 12. Taylorsville 2025 ground truth (Region 8-1A #1 seed)
 # ---------------------------------------------------------------------------
 
 
 class TestTaylorsville2025:
-    """Exact expected home-game scenarios for Taylorsville, 1A Region 8 #1 seed, 2025.
+    """Exact expected home-game scenarios for Taylorsville, Region 8-1A #1 seed, 2025.
 
     Ground truth comes from the 2025 1A playoff bracket.  The Semifinals game
     was ``(6, 1, 8, 1)`` — Simmons (Region 6 #1) hosted Taylorsville — so
@@ -1123,7 +1123,7 @@ class TestTaylorsville2025:
 
 
 # ---------------------------------------------------------------------------
-# 12b. Leake County 2025 ground truth (1A Region 5 #2 seed) -- regression
+# 12b. Leake County 2025 ground truth (Region 5-1A #2 seed) -- regression
 #      fixture for the QF contradiction bug (target team's own R2 ambiguity
 #      wasn't disambiguated). Leake County's own adjacent R1 game (Bogue
 #      Chitto vs Richton) is genuinely ambiguous, unlike Taylorsville's
@@ -1133,7 +1133,7 @@ class TestTaylorsville2025:
 
 
 class TestLeakeCounty2025:
-    """Exact expected QF home-game scenarios for Leake County, 1A Region 5 #2 seed, 2025.
+    """Exact expected QF home-game scenarios for Leake County, Region 5-1A #2 seed, 2025.
 
     Cross-checked against Taylorsville's own (already correct) conditions:
     Taylorsville hosts Leake County when "Richton advances to Second Round";

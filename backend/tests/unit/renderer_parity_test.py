@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 import backend.helpers.bracket_home_odds as odds
+import backend.helpers.region_pages as rp
 import backend.helpers.share_cards as cards
 import backend.helpers.static_pages as sp
 import backend.helpers.team_image as team_image
@@ -231,6 +232,20 @@ PATH_TEAM = {
     },
 }
 
+# A Regions page's season (regions.js / region_pages.py): a school that moved up, one that stayed,
+# a new school on an old one's campus, one not in a region the season before, and an apostrophe.
+REGIONS = {
+    "season": 2027, "seasons": [2027, 2028], "label": "2027 and 2028", "cycle": "2027–29",
+    "prior_season": 2026, "standings_season": None, "regions": {},
+    "schools": [
+        {"school": "Greenwood", "slug": "greenwood", "class": 5, "region": 2, "before": {"class": 4, "region": 4}, "successor_of": None},
+        {"school": "Leake", "slug": "leake", "class": 5, "region": 2, "before": {"class": 5, "region": 2}, "successor_of": None},
+        {"school": "St. Andrew’s", "slug": "st-andrews", "class": 5, "region": 1, "before": None, "successor_of": None},
+        {"school": "North Tippah", "slug": "north-tippah", "class": 3, "region": 2, "before": None, "successor_of": "Walnut"},
+    ],
+}  # fmt: skip
+REGIONS_PLAYED = {**REGIONS, "season": 2025, "seasons": [2025], "standings_season": 2025, "prior_season": None}
+
 CASES = [
     *[(f"playoffPath {t['school']} {m} {c}", team_image.playoff_rounds(t, m, c), _call("standings", "playoffPath", t, m, c), "data")
       for t in (PATH_TEAM, {"school": "X", "odds": {}}) for m in ("tossup", "projected") for c in (3, 6)],
@@ -303,6 +318,15 @@ CASES = [
        "x" if odds.qf_home_team(x[0], x[1], hx >= 1, hx >= 2, y[0], y[1], hy >= 1, hy >= 2, season) == x else "y",
        _call("bracket", "quarterfinalHost", {"region": x[0], "seed": x[1]}, hx, {"region": y[0], "seed": y[1]}, hy, season), "data")
       for x, y in HOST_PAIRS for hx in (0, 1, 2) for hy in (0, 1, 2) for season in (2025, 2026)],
+    *[(f"regionsHeader {c}", rp.regions_header(c, REGIONS), _call("regions", "regionsHeader", c, REGIONS), "html") for c in (3, 5)],
+    *[(f"regionsLists {c} {p['season']} {cur}", rp.regions_lists(c, p, cur), _call("regions", "regionsLists", c, p, cur), "html")
+      for c in (3, 5) for p in (REGIONS, REGIONS_PLAYED) for cur in (2025, 2026)],
+    *[(f"teamNote {s['slug']}", rp.team_note(s, 2026), _call("regions", "teamNote", s, 2026), "data") for s in REGIONS["schools"]],
+    ("teamNote no season before", rp.team_note(REGIONS["schools"][0], None), _call("regions", "teamNote", REGIONS["schools"][0], None), "data"),
+    *[(f"standingsHref {a}", rp.standings_href(5, 2, *a), _call("regions", "standingsHref", 5, 2, *a), "data")
+      for a in ((None, 2026), (2026, 2026), (2025, 2026))],
+    *[(f"seasonsLabel {s}", rp.seasons_label(s), _call("regions", "seasonsLabel", s), "data") for s in ([2027, 2028], [2026])],
+    ("regions MAP_NOTE", rp.MAP_NOTE, _call("regions", "mapNote"), "data"),
 ]  # fmt: skip
 
 

@@ -65,6 +65,14 @@
   --state-coinflip: #FBBF24;
   --state-live: var(--brand-700);
 
+  --region-1: #2A78D6;  /* region colors: region_map_image.REGION_COLORS, the same order */
+  --region-2: #EB6834;
+  --region-3: #1BAF7A;
+  --region-4: #EDA100;
+  --region-5: #E87BA4;
+  --region-6: #008300;
+  --region-7: #6250D6;
+  --region-8: #E34948;
   --odds-1: var(--neutral-50);
   --odds-2: var(--brand-100);
   --odds-3: var(--brand-200);
@@ -97,6 +105,14 @@
   --accent-identity: var(--brand-500);
   --state-live: var(--brand-500);
 
+  --region-1: #3987E5;
+  --region-2: #D95926;
+  --region-3: #199E70;
+  --region-4: #C98500;
+  --region-5: #D55181;
+  --region-6: #008300;
+  --region-7: #9085E9;
+  --region-8: #E66767;
   --odds-1: var(--neutral-800);
   --odds-2: var(--brand-950);
   --odds-3: var(--brand-900);
@@ -1339,7 +1355,7 @@ dialog.game-sheet .bteam:has(> .scenario__if) .bteam__name { flex: 0 1 auto; }
 
 .tab-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 12;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--surface-page);
   border-top: 1px solid var(--border);
@@ -1706,3 +1722,64 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 /* An image of several pages: which page the preview shows, and a step either way. */
 .share-sheet__pager { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 14px; }
 .share-sheet__pager .share-sheet__secondary { flex: none; min-width: 44px; padding: 0 12px; font-size: 20px; }
+
+/* ------------------------------------------------------------- regions (regions.js) */
+.regions-sub { margin: 6px 0 0; color: var(--text-secondary); }
+.regions-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 16px; }
+.regions-find input {
+  font: inherit; min-height: 44px; min-width: min(280px, 100%); padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-page); color: var(--text-primary);
+}
+.regions-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 760px) { .regions-layout { grid-template-columns: 1fr; } }
+.regions-map { margin: 0; position: sticky; top: 72px; }
+@media (max-width: 760px) { .regions-map { position: static; } }
+.regions-map__image { display: block; width: 100%; height: auto; }
+.regions-map__frame {
+  position: relative; aspect-ratio: 3324 / 5355; max-height: calc(100vh - 140px); margin-inline: auto;
+  border: 1px solid var(--border); border-radius: 12px; overflow: hidden; touch-action: none; background: var(--surface-page);
+}
+.regions-map__svg { display: block; width: 100%; height: 100%; cursor: grab; user-select: none; }
+.regions-map__svg:active { cursor: grabbing; }
+.map-land { fill: color-mix(in srgb, var(--text-primary) 5%, var(--surface-page)); }
+.map-county { fill: none; stroke: color-mix(in srgb, var(--text-primary) 20%, var(--surface-page)); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.map-state { fill: none; stroke: color-mix(in srgb, var(--text-primary) 60%, var(--surface-page)); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.map-county-names { display: none; }
+.regions-map__svg.is-zoomed .map-county-names { display: inline; }
+.map-county-name { fill: var(--text-secondary); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.map-region { fill-opacity: 0.22; stroke-opacity: 0.75; stroke-width: 1.5; vector-effect: non-scaling-stroke; fill-rule: evenodd; transition: fill-opacity 0.15s, stroke-opacity 0.15s; }
+.map-region.is-dim { fill-opacity: 0.05; stroke-opacity: 0.2; }
+.map-dot { cursor: pointer; transition: opacity 0.15s; }
+.map-dot circle { stroke: var(--surface-page); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.map-dot text { fill: #FFFFFF; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.map-dot.is-dim { opacity: 0.25; }
+.map-dot.is-picked circle { stroke: var(--text-primary); stroke-width: 4; }
+.regions-map__zoom { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 6px; }
+.regions-map__zoom button {
+  width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-page); color: var(--text-primary); font-size: 20px; cursor: pointer;
+}
+.regions-map__hover {
+  position: absolute; pointer-events: none; transform: translate(-50%, calc(-100% - 16px)); white-space: nowrap;
+  padding: 4px 8px; border-radius: 6px; background: var(--text-primary); color: var(--surface-page); font-size: 13px; font-weight: 600;
+}
+.regions-map__picked { min-height: 1.4em; margin-top: 10px; color: var(--text-secondary); }
+.regions-list__region + .regions-list__region { margin-top: 20px; }
+.regions-list__name { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 1.15rem; }
+.regions-list ul { margin: 0; padding: 0 0 0 38px; list-style: none; }
+.regions-list li { padding: 3px 0; }
+.regions-list li a[aria-current] { font-weight: 700; }
+.regions-list__was { color: var(--text-secondary); font-size: 0.9em; }
+.region-chip {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none;
+  border-radius: 50%; color: #FFFFFF; font-size: 14px; font-weight: 700;
+}
+.regions-note { margin-top: 24px; color: var(--text-secondary); font-size: 0.9rem; }
+.map-region--1 { fill: var(--region-1); stroke: var(--region-1); } .map-dot--1 circle, .region-chip--1 { fill: var(--region-1); background: var(--region-1); }
+.map-region--2 { fill: var(--region-2); stroke: var(--region-2); } .map-dot--2 circle, .region-chip--2 { fill: var(--region-2); background: var(--region-2); }
+.map-region--3 { fill: var(--region-3); stroke: var(--region-3); } .map-dot--3 circle, .region-chip--3 { fill: var(--region-3); background: var(--region-3); }
+.map-region--4 { fill: var(--region-4); stroke: var(--region-4); } .map-dot--4 circle, .region-chip--4 { fill: var(--region-4); background: var(--region-4); }
+.map-region--5 { fill: var(--region-5); stroke: var(--region-5); } .map-dot--5 circle, .region-chip--5 { fill: var(--region-5); background: var(--region-5); }
+.map-region--6 { fill: var(--region-6); stroke: var(--region-6); } .map-dot--6 circle, .region-chip--6 { fill: var(--region-6); background: var(--region-6); }
+.map-region--7 { fill: var(--region-7); stroke: var(--region-7); } .map-dot--7 circle, .region-chip--7 { fill: var(--region-7); background: var(--region-7); }
+.map-region--8 { fill: var(--region-8); stroke: var(--region-8); } .map-dot--8 circle, .region-chip--8 { fill: var(--region-8); background: var(--region-8); }
