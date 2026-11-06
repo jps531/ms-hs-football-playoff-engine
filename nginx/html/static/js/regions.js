@@ -37,17 +37,17 @@ export function seasonsLabel(seasons) {
   return `${seasons.join(" and ")} ${seasons.length > 1 ? "seasons" : "season"}`;
 }
 
-/** "5A Region 2". */
+/** "Region 2-5A" (the site's {region}-{class}A). */
 export function place(p) {
-  return p ? `${p.class}A Region ${p.region}` : "";
+  return p ? `Region ${p.region}-${p.class}A` : "";
 }
 
-/** "5A-2". */
+/** "2-5A". */
 export function shortPlace(p) {
-  return p ? `${p.class}A-${p.region}` : "";
+  return p ? `${p.region}-${p.class}A` : "";
 }
 
-/** Where a school was the season before, for its line in the list: "4A-4 in 2026", "New school". */
+/** Where a school was the season before, for its line in the list: "4-4A in 2026", "New school". */
 export function teamNote(school, priorSeason) {
   if (priorSeason == null) return "";
   if (school.before) return `${shortPlace(school.before)} in ${priorSeason}`;
@@ -55,7 +55,7 @@ export function teamNote(school, priorSeason) {
   return `Not in a region in ${priorSeason}`;
 }
 
-/** A team's line under the map once it's picked: "5A Region 2 · Moved up from 4A Region 4 (2026)". */
+/** A team's line under the map once it's picked: "Region 2-5A · Moved up from Region 4-4A (2026)". */
 export function teamChange(school, priorSeason) {
   if (priorSeason == null) return "";
   const was = school.before;

@@ -161,10 +161,10 @@ def test_how_a_teams_place_changed():
     """Up or down a class, a new region, the same one, or a new school on an old one's campus."""
     by26 = {s["school"]: s for s in S26}
     by27 = {s["school"]: s for s in S27}
-    assert ri.change_line(by27["Greenwood"], by26["Greenwood"], 2026) == "Moved up from 4A Region 4"
-    assert ri.change_line(by27["Greenville"], by26["Greenville"], 2026) == "Moved down from 6A Region 2"
-    assert ri.change_line(by27["Vicksburg"], by26["Vicksburg"], 2026) == "Moved from 5A Region 2"
-    assert ri.change_line(by27["Leake"], by26["Leake"], 2026) == "Also 5A Region 2 in 2026"
+    assert ri.change_line(by27["Greenwood"], by26["Greenwood"], 2026) == "Moved up from Region 4-4A"
+    assert ri.change_line(by27["Greenville"], by26["Greenville"], 2026) == "Moved down from Region 2-6A"
+    assert ri.change_line(by27["Vicksburg"], by26["Vicksburg"], 2026) == "Moved from Region 2-5A"
+    assert ri.change_line(by27["Leake"], by26["Leake"], 2026) == "Also Region 2-5A in 2026"
     assert ri.change_line(by27["North Tippah"], None, 2026) == "New school in 2027, on Walnut’s campus"
     assert ri._absent("North Tippah", 2027) == "New school in 2027"
     assert ri._absent("Somewhere", 2027) == "Not in a region in 2026"

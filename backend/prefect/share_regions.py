@@ -114,11 +114,15 @@ def image_jobs(option: dict, rows: list[dict], prior: list[dict], teams: list[di
         mates = {s["school"] for s in mine if s["region"] == r["region"]}
         # The season before, cut to what the images show: the team's class then, and its mates' rows.
         shown_prior = then + [s for s in prior if s["school"] in mates and s not in then]
-        names = mates | {s["school"] for s in then if before and s["region"] == before["region"]}
+        former = {s["school"] for s in then if before and s["region"] == before["region"]}
+        names = mates | former
+        # This season, cut likewise: the team's class, and where its former region-mates are now (in
+        # any class), so "Former Region Members" says where each went rather than that it's gone.
+        shown = mine + [s for s in rows if s["school"] in former and s["class"] != r["class"]]
         kwargs = {
             "school": r["school"],
             "seasons": seasons,
-            "schools": mine,
+            "schools": shown,
             "prior": shown_prior,
             "teams": _colors(teams, names),
         }

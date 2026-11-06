@@ -168,7 +168,7 @@ def season_payload(option: dict, rows: list[dict], prior: list[dict] | None, pla
 
 
 def team_note(school: dict, prior_season: int | None) -> str:
-    """Where a school was the season before, for its line in the list: "4A-4 in 2026", "New school"."""
+    """Where a school was the season before, for its line in the list: "4-4A in 2026", "New school"."""
     if prior_season is None:
         return ""
     if school.get("before"):
@@ -256,7 +256,7 @@ def regions_description(clazz: int, payload: dict) -> str:
 
 
 def team_regions_description(school: dict, payload: dict) -> str:
-    """A team's link preview: "Greenwood: 5A Region 2 in 2027 and 2028." and the change."""
+    """A team's link preview: "Greenwood: Region 2-5A in 2027 and 2028." and the change."""
     text = f"{school['school']}: {place(school)} in {' and '.join(str(s) for s in payload['seasons'])}."
     if school.get("before") and payload.get("prior_season"):
         text += f" {place(school['before'])} in {payload['prior_season']}."

@@ -892,7 +892,7 @@ class TestFilterToTeamOr404:
         response = _FakeTeamsResponse(teams=[])
         with pytest.raises(HTTPException) as exc_info:
             filter_to_team_or_404(response, "Alpha", clazz=3, region=7)
-        assert "3A Region 7" in exc_info.value.detail
+        assert "Region 7-3A" in exc_info.value.detail
 
 
 # ---------------------------------------------------------------------------

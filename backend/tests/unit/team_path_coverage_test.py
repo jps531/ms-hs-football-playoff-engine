@@ -10,7 +10,7 @@ The odds agree with the paths: a place has odds above zero exactly when it
 has a path.
 
 Regions come from the 2025 season, cut to their last 1-2 region games
-(exhaustive) and 3 (sampled), plus 3A Region 6 in 2026 with four left.
+(exhaustive) and 3 (sampled), plus Region 6-3A in 2026 with four left.
 """
 
 import pytest
@@ -78,7 +78,7 @@ def _odds_and_paths_agree(teams, completed, remaining):
 
 @pytest.mark.parametrize(("clazz", "region", "left"), [c for c in _cases() if c.values[2] < 3])
 def test_odds_and_paths_agree_2025(clazz, region, left):
-    """A place only fewest points allowed can give still has odds above zero (e.g. 2A-1's
+    """A place only fewest points allowed can give still has odds above zero (e.g. 1-2A's
     Ashland at #2), and no place with odds lacks a path. Mismatches: {team: (odds, paths)}."""
     teams, completed, remaining = _cut(REGION_RESULTS_2025[(clazz, region)]["games"], left)
     assert _odds_and_paths_agree(teams, completed, remaining) == {}

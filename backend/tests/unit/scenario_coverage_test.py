@@ -7,7 +7,7 @@ coverage" tests only ask whether the seeding appears somewhere in the list,
 which a scenario with the wrong conditions still passes.
 
 Regions come from the 2025 season, cut to their last 1-3 region games
-(exhaustively checked), plus 3A Region 6 in 2026 with four left (sampled),
+(exhaustively checked), plus Region 6-3A in 2026 with four left (sampled),
 the region where "Raleigh beats JDC by 12+, Seminary beats Magee, Raleigh
 beats Seminary" had no scenario.
 """
@@ -52,7 +52,7 @@ def test_scenarios_cover_every_outcome_2025(clazz, region, left):
     assert report.ok, report.summary(remaining)
 
 
-# 3A Region 6 on Oct 17, 2026, with four region games left: the case that turned this up.
+# Region 6-3A on Oct 17, 2026, with four region games left: the case that turned this up.
 # "Raleigh beats Jefferson Davis County by 12+, Seminary beats Magee, Raleigh beats Seminary" had no scenario.
 _R36_PLAYED = [
     ("Magee", "Jefferson Davis County", 22, 6, "2026-10-02"),

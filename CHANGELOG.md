@@ -12,7 +12,7 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   the schools listed by region. It opens on the 2027–29 regions MHSAA released in November; a picker
   shows the 2025 and 2026 regions too. Zoom in for the county names. Pick a team (on the map, in the
   list, or by typing its name) to highlight its region and see where it was the season before ("Moved
-  up from 4A Region 4"). The county lines are the Census Bureau's, and a public school's dot is at the
+  up from Region 4-4A"). The county lines are the Census Bureau's, and a public school's dot is at the
   federal (NCES) geocode of its address. MHSAA doesn't draw region boundaries, so the shapes are only
   drawn around each region's schools, and two regions' shapes never overlap.
 - **Region maps to share.** From the Regions page: a class's map, a team's new region with its New

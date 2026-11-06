@@ -26,6 +26,7 @@ S27 = [
     _team("Leake", 5, 2, 32.7726, -89.5370),
     _team("Natchez", 5, 1, 31.5604, -91.4032),
     _team("North Tippah", 3, 2, 34.9487, -88.9054),
+    _team("Yazoo City", 4, 3, 32.8551, -90.4056),
     _team("Lost", 5, 1, 35.1495, -90.0490),  # coordinates in Memphis: listed, but no dot
 ]
 TEAMS = {2026: S26, 2027: S27, 2028: S27}
@@ -86,7 +87,7 @@ def test_the_page_without_javascript_and_its_previews(written):
     body = (out / "body" / "regions-5.html").read_text()
     assert '<a href="/standings/5a">Class 5A</a>' in body and "Class 5A Regions" in body
     assert "2027 and 2028 seasons · MHSAA 2027–29 regions" in body
-    assert "4A-4 in 2026" in body and ">Region 2</h2>" in body  # no standings yet: the heading isn't a link
+    assert "4-4A in 2026" in body and ">Region 2</h2>" in body  # no standings yet: the heading isn't a link
     meta = (out / "meta" / "regions-5.html").read_text()
     assert "https://example.com/static/og/regions-5.png?v=20261106" in meta
     assert (
@@ -105,7 +106,30 @@ def test_the_images(written):
     assert "regions/2027/team/north-tippah-light.png" in paths
     assert "regions/2027/compare/north-tippah-light.png" not in paths
     job = next(j for j in jobs if j.path == "regions/2027/team/greenwood-light.png")
-    assert {s["school"] for s in job.kwargs["schools"]} == {"Greenwood", "Leake", "Natchez", "Lost"}
+    # Its class, and Yazoo City (its region-mate in 2026, in 4A now) so its image says where Yazoo City went.
+    assert {s["school"] for s in job.kwargs["schools"]} == {"Greenwood", "Leake", "Natchez", "Lost", "Yazoo City"}
+
+
+def test_a_former_region_mate_in_another_class_is_shown_where_it_went(written):
+    """Greenwood's image lists Yazoo City (Region 4-4A with it in 2026) as now in Region 3-4A, not as gone."""
+    from backend.helpers import region_map_image as ri
+
+    *_, jobs = written
+    job = next(j for j in jobs if j.path == "regions/2027/team/greenwood-light.png")
+    drawn = []
+    original = ri.ImageDraw.ImageDraw.text
+
+    def text(self, xy, words, *args, **kwargs):
+        """Keep what's written."""
+        drawn.append(words)
+        return original(self, xy, words, *args, **kwargs)
+
+    ri.ImageDraw.ImageDraw.text = text
+    try:
+        ri.render_team_region(**job.kwargs)
+    finally:
+        ri.ImageDraw.ImageDraw.text = original
+    assert "3-4A" in drawn and not any("Not on the" in w for w in drawn)
 
 
 def test_seasons_with_different_regions_stay_apart():

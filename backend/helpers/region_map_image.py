@@ -62,17 +62,17 @@ def seasons_line(seasons: list[int]) -> str:
 
 
 def place(school: dict | None) -> str:
-    """ "5A Region 2" for a school's row."""
-    return f"{school['class']}A Region {school['region']}" if school else ""
+    """ "Region 2-5A" for a school's row (the site's {region}-{class}A)."""
+    return f"Region {school['region']}-{school['class']}A" if school else ""
 
 
 def short_place(school: dict | None) -> str:
-    """ "5A-2" for a school's row."""
-    return f"{school['class']}A-{school['region']}" if school else ""
+    """ "2-5A" for a school's row."""
+    return f"{school['region']}-{school['class']}A" if school else ""
 
 
 def change_line(now: dict, before: dict | None, prior_season: int) -> str:
-    """How a team's place changed from *prior_season* (its row then, or None): "Moved up from 4A Region 4"."""
+    """How a team's place changed from *prior_season* (its row then, or None): "Moved up from Region 4-4A"."""
     if before is None:
         old = next(
             (o for o, new, start in SCHOOL_SUCCESSORS if new == now["school"] and start == prior_season + 1), None
@@ -175,7 +175,7 @@ class _Page:
 
     def label(self, x: float, base: float, text: str, anchor: str = "ls") -> None:
         """A small letter-spaced heading ("NEW REGION MEMBERS")."""
-        _tracked(self.d, (x, base), text.upper(), _inter(30, 700), self.t.text_2, 2, anchor=anchor)
+        _tracked(self.d, (x, base), text.upper(), _nippo(34), self.t.text_2, 2, anchor=anchor)
 
     def map(
         self,
@@ -392,7 +392,7 @@ def render_team_region(
         fill=t.text,
         anchor="ls",
     )
-    d.text((PAD, PAD + 196), f"{place(me)} in {seasons_words(seasons)}", font=_inter(46, 600), fill=t.text, anchor="ls")
+    d.text((PAD, PAD + 196), f"{place(me)} in {seasons_words(seasons)}", font=_nippo(52), fill=t.text, anchor="ls")
     if prior:
         d.text((PAD, PAD + 256), change_line(me, before, first - 1), font=_inter(40, 500), fill=t.text_2, anchor="ls")
     top, bottom = PAD + 330, SIZE[1] - PAD - 110

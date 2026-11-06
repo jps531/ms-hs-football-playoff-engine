@@ -60,7 +60,7 @@ def test_other_schools_games_against_it_are_filed_under_the_new_name():
 
 
 def test_the_region_file_has_it_under_the_new_name():
-    """The 2025-27 file has Leake Central (4A-5) for 2025 and Leake (5A-2) for 2026."""
+    """The 2025-27 file has Leake Central (5-4A) for 2025 and Leake (2-5A) for 2026."""
     assert assignments_for_season(2025)["Leake Central"] == (4, 5)
     assert assignments_for_season(2026)["Leake"] == (5, 2)
 

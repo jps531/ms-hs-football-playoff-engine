@@ -333,7 +333,7 @@ def get_school_name_from_ahsfhs(s: str) -> str:
 # happened. The old school is also the new one's predecessor for Elo carryover.
 # nginx/html/static/js/routes.js FORMER_SLUGS mirrors this for old team links.
 SCHOOL_RENAMES: list[tuple[str, str, int]] = [
-    # Leake County (1A-5) and Leake Central (4A-5) consolidated into Leake (5A-2) for 2026,
+    # Leake County (5-1A) and Leake Central (5-4A) consolidated into Leake (2-5A) for 2026,
     # on Leake Central's campus and under its identity.
     ("Leake Central", "Leake", 2026),
 ]
@@ -343,7 +343,7 @@ SCHOOL_RENAMES: list[tuple[str, str, int]] = [
 # when the regions are loaded, takes its campus (location and home field) if it has none of its own.
 # Unlike a rename, the sources are asked for the new name. FORMER_SLUGS maps the old team links.
 SCHOOL_SUCCESSORS: list[tuple[str, str, int]] = [
-    # Falkner (1A-2) and Walnut (2A-1) consolidated into North Tippah (3A-2) for 2027, on Walnut's campus.
+    # Falkner (2-1A) and Walnut (1-2A) consolidated into North Tippah (2-3A) for 2027, on Walnut's campus.
     ("Walnut", "North Tippah", 2027),
 ]
 
