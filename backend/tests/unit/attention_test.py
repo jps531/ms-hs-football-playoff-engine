@@ -43,3 +43,10 @@ def test_the_email_lists_each_kind_with_what_to_do():
     assert "Scores AHSFHS changed under an approved correction (1)\nThe correction still shows." in text
     assert text.index("AHSFHS pages") < text.index("Scores AHSFHS changed")
     assert attention.render({attention.SHARE_IMAGES: ["x"]}, 2026)[0] == "Daily update done, 1 thing to look at"
+
+
+def test_the_email_ends_with_how_long_each_step_took():
+    """The daily update's step times close the email, when it passes them."""
+    _, text = attention.render({attention.SHARE_IMAGES: ["x"]}, 2026, "Pulling scores 12m 03s · total 20m 00s")
+    assert text.endswith("\n\nHow long each step took: Pulling scores 12m 03s · total 20m 00s\n")
+    assert "How long" not in attention.render({attention.SHARE_IMAGES: ["x"]}, 2026)[1]

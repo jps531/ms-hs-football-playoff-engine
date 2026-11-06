@@ -10,10 +10,13 @@ pregame win probability to ``games.pregame_prob``.
 
 import bisect
 import json
+import os
 import pickle
+import tempfile
 import zlib
 from dataclasses import dataclass as _dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import TypeVar
 
 from prefect import flow, get_run_logger, task
@@ -64,6 +67,7 @@ from backend.helpers.scenarios import (
     determine_scenarios,
     odds_from_results,
 )
+from backend.helpers.step_times import StepTimes
 from backend.helpers.win_probability import (
     EloConfig,
     compute_elo_ratings,
@@ -1096,6 +1100,10 @@ class Reuse:
     rather than worked out again (``determine_scenarios``' ``resolved``). Only the last date's results
     are kept for each region: most dates repeat the one before, and keeping every date would hold
     far more in memory.
+
+    The daily update keeps them from one day to the next (``save``, ``load``): on a day with no new
+    scores and no change in the ratings, every region's results are yesterday's. They're kept with a
+    hash of the code that works them out (``engine_fingerprint``), so new code never reuses them.
     """
 
     def __init__(self) -> None:
@@ -1123,6 +1131,54 @@ class Reuse:
         if kind in self._PACKED:
             value = zlib.compress(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL), 6)
         self._last[(kind, clazz, region)] = (key, value)
+
+    def save(self, path: Path, code: str) -> None:
+        """Keep every region's last results in *path*, with *code* (``engine_fingerprint``), atomically."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                pickle.dump({"code": code, "last": self._last}, f, protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+
+    @classmethod
+    def load(cls, path: Path, code: str) -> "Reuse":
+        """The results ``save``d in *path* if worked out by the same *code*; otherwise none."""
+        reuse = cls()
+        try:
+            with path.open("rb") as f:
+                kept = pickle.load(f)  # noqa: S301 (written only by this flow, on the worker's own volume)
+        except (OSError, EOFError, pickle.UnpicklingError, AttributeError, ImportError, ValueError):
+            return reuse
+        if isinstance(kept, dict) and kept.get("code") == code:
+            reuse._last = kept["last"]
+        return reuse
+
+
+def reuse_path() -> Path | None:
+    """Where the daily update keeps its ``Reuse`` between runs: ``state/region_reuse.pkl`` in the worker's
+    share folder (``SHARE_OUTPUT_DIR``, which nginx doesn't serve ``state/`` from), or None (not kept)
+    when that isn't set."""
+    share = os.environ.get("SHARE_OUTPUT_DIR")
+    return Path(share) / "state" / "region_reuse.pkl" if share else None
+
+
+def engine_fingerprint() -> str:
+    """A hash of the code the region results are worked out with: this module and every ``backend``
+    module it imports, in turn."""
+    import hashlib
+    import importlib.util
+
+    from backend.helpers.image_jobs import code_modules
+
+    h = hashlib.sha256()
+    for name in code_modules("backend.prefect.region_scenarios_pipeline"):
+        h.update(name.encode())
+        h.update(Path(importlib.util.find_spec(name).origin).read_bytes())
+    return h.hexdigest()
 # R > FULL_MARGINS_MAX_LEFT and R ≤ ENUMERATE_MAX_LEFT: win/loss enumeration, no margin
 
 
@@ -1609,6 +1665,7 @@ def region_scenarios_data_flow(
         region,
     )
 
+    times = StepTimes()
     # Compute Elo ratings once at flow level from all season games.
     # Ratings and RPI are written to team_ratings before region tasks run,
     # guaranteeing that region_standings and team_ratings reflect the same computation.
@@ -1665,9 +1722,16 @@ def region_scenarios_data_flow(
     # Phase 1: enumerate seeding odds for every region.
     # All regions must finish before we can build the per-class matchup fn.
     # -----------------------------------------------------------------------
+    times.lap("Ratings")
+    # Yesterday's results for each region, reused where nothing they're worked out from has changed.
+    kept_at, code = reuse_path(), engine_fingerprint()
+    reuse = Reuse.load(kept_at, code) if kept_at else Reuse()
     seeding: dict[tuple[int, int], RegionSeedingData] = {}
     for c, r in targets:
-        seeding[(c, r)] = get_region_seeding_odds(c, r, season, q_elo_ratings, q_elo_snapshots, elo_cfg)
+        seeding[(c, r)] = get_region_seeding_odds(
+            c, r, season, q_elo_ratings, q_elo_snapshots, elo_cfg, reuse=quote(reuse)
+        )
+    times.lap("Seeding odds")
 
     # -----------------------------------------------------------------------
     # Build one MatchupProbFn per class using all-region weighted seeding odds.
@@ -1684,12 +1748,28 @@ def region_scenarios_data_flow(
     scenario_dicts: dict = {}
     for c, r in targets:
         scenario_dicts.setdefault(c, {})[r] = get_region_finish_scenarios(
-            c, r, season, quote(seeding[(c, r)]), matchup_fns[c]
+            c, r, season, quote(seeding[(c, r)]), matchup_fns[c], reuse=quote(reuse)
         )
+    times.lap("Bracket odds and scenarios")
+    logger.info(
+        "Reused odds for %d regions (worked out %d, %d of those re-weighted from the last run's standings); "
+        "reused scenarios for %d (worked out %d)",
+        reuse.reused["odds"],
+        reuse.worked_out["odds"],
+        reuse.reused["standings"],
+        reuse.reused["scenarios"],
+        reuse.worked_out["scenarios"],
+    )
+    if kept_at:
+        try:
+            reuse.save(kept_at, code)
+        except OSError:
+            logger.exception("Keeping the region results for the next run failed; the update itself is unaffected")
 
     # Last, so playoff-aware rows are what's left for every playoff date.
     if skipped:
         run_playoff_bracket_update(season)
+        times.lap("Playoff update")
 
     # Link previews: redraw every region and class card from what the site now
     # serves. A failure here shouldn't fail the data update itself.
@@ -1698,6 +1778,8 @@ def region_scenarios_data_flow(
             write_share_assets(season)
         except Exception:
             logger.exception("Share assets failed; the region update itself completed")
+        times.lap("Share images")
+    logger.info("Region update steps: %s", times.line())
     return scenario_dicts
 
 

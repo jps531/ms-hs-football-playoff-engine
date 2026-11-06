@@ -29,8 +29,8 @@ from functools import cache
 from multiprocessing import get_context
 from pathlib import Path
 
-# The renderers, as (module, function): the function takes a job's kwargs and returns its pages. A job
-# names its renderer this way (not the function itself) so a worker process can import it.
+# The renderers, as (module, function): the function takes a job's kwargs and returns its pages (or one
+# image). A job names its renderer this way (not the function itself) so a worker process can import it.
 REGION_OVERVIEW = ("backend.helpers.region_image", "render_region_overview")
 REGION_SCENARIOS = ("backend.helpers.region_image", "render_region_scenarios")
 TEAM_SEASON = ("backend.helpers.team_image", "render_team_season")
@@ -41,6 +41,15 @@ TEAM_REGIONS_COMPARED = ("backend.helpers.region_map_image", "render_team_region
 CLASS_REGIONS_COMPARED = ("backend.helpers.region_map_image", "render_class_regions_compared")
 CLASS_REGIONS_CARD = ("backend.helpers.region_map_image", "render_class_regions_card")
 TEAM_REGION_CARD = ("backend.helpers.region_map_image", "render_team_region_card")
+# The link previews and the bracket images, each one picture (the renderer returns an image, not a list).
+SITE_CARD = ("backend.helpers.share_cards", "render_site_card")
+CLASS_CARD = ("backend.helpers.share_cards", "render_class_card")
+REGION_CARD = ("backend.helpers.share_cards", "render_region_card")
+TEAM_CARD = ("backend.helpers.share_cards", "render_team_card")
+BRACKET_CARD = ("backend.helpers.share_cards", "render_bracket_card")
+TEAM_BRACKET_CARD = ("backend.helpers.share_cards", "render_team_bracket_card")
+BRACKET_IMAGE = ("backend.helpers.bracket_image", "render_bracket_image")
+BRACKET_CARD_IMAGE = ("backend.helpers.bracket_image", "render_bracket_card_image")
 
 MANIFEST = Path("state") / "images.json"
 _log = logging.getLogger(__name__)
@@ -142,6 +151,8 @@ def _draw(args: tuple[str, str, tuple[str, str], dict]) -> list[str]:
     """Draw one job (in a worker process) and write its pages; returns the files written, relative."""
     out_dir, path, (module, name), kwargs = args
     pages = getattr(importlib.import_module(module), name)(**kwargs)
+    if not isinstance(pages, list):  # a renderer that draws one picture
+        pages = [pages]
     files = page_paths(path, len(pages))
     for rel, image in zip(files, pages, strict=True):
         _write_png_atomic(Path(out_dir) / rel, image)

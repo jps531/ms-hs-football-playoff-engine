@@ -43,6 +43,7 @@ def _daily(monkeypatch, pull=None, recalc=None, problems=()):
     monkeypatch.setattr(daily, "write_share_assets", lambda season: calls.append(("images", season)))
     monkeypatch.setattr(daily, "check_playoff_games", lambda season: calls.append(("check", season)) or problems)
     monkeypatch.setattr(daily, "send_alert", lambda subject, text: calls.append(("alert", subject, text)))
+    monkeypatch.setattr(daily, "get_run_logger", lambda: logging.getLogger("test"))
     return calls
 
 
@@ -69,6 +70,13 @@ def test_things_to_look_at_are_emailed_once_the_update_is_done(monkeypatch):
     _, subject, text = calls[-1]
     assert subject == "Daily update done, 1 thing to look at"
     assert "- Aberdeen" in text and "left over" not in text
+    # It ends with how long each step took.
+    steps = text.rsplit("How long each step took: ", 1)[1]
+    assert re.fullmatch(
+        r"Pulling scores \S+ · Checking the playoff games \S+ · Working out the regions \S+ · "
+        r"Listing missing scores \S+ · Drawing share images \S+ · total \S+\n",
+        steps.replace("under 1s", "0s"),
+    )
 
     calls = _daily(monkeypatch)
     daily.daily_update_flow.fn(2026)

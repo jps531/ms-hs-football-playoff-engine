@@ -187,6 +187,9 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         "brackets": 0,
         "bracket_teams": 0,
         "past_brackets": 0,
+        # the link previews: the site's, the class's, the 2 regions' and the 8 teams'
+        "cards": 12,
+        "cards_kept": 0,
         # each region's overview and scenarios, and each of its 4 teams' season, in each odds mode and theme
         "region_images": 48,
         "region_images_kept": 0,
@@ -223,6 +226,9 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
     assert "Region 7-3A standings" in (tmp_path / "meta" / "3-7.html").read_text()
     assert "/standings/3a" in (tmp_path / "meta" / "3.html").read_text()
     assert not list(tmp_path.rglob(".*"))  # no temp files left behind
+    # Run again with nothing changed: every card and image is kept, none drawn again.
+    again = build_share_assets(api.get, tmp_path, "https://mshsfootball.com/", date(2026, 10, 14))
+    assert (again["cards"], again["cards_kept"], again["region_images"]) == (0, 12, 0)
 
 
 def test_card_order_and_tied_positions_match_the_standings_table():
