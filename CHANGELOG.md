@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.16.0
+
+- **The class buttons stay in reach.** On Standings, Bracket and Regions pages the 1A–7A buttons are
+  pinned under the header as you scroll, so you can switch classes from anywhere on the page. Once
+  the page's title scrolls away, the same bar also says what's on screen ("Region 2-5A · Week 11 ·
+  Nov 5 · Projected"). On phones the bar folds to that line and a "5A" button that opens the classes.
+- The Regions page now shows that line too ("Class 5A Regions · 2027 and 2028 seasons").
+
 ## 1.15.0
 
 - **A class's regions, then and now.** A new image to share puts a class's 2026 regions beside its

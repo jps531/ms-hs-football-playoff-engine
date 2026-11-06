@@ -189,9 +189,10 @@ button { font: inherit; color: inherit; }
   .site-header, .page, .site-footer, .scrubber-bar__inner { padding-inline: 32px; }
 }
 
-/* The header (name, team search, theme) stays pinned at every width; the
-   class scrubber scrolls away under it, and the context bar takes over
-   once the page title is out of view. */
+/* The header (name, team search, theme) stays pinned at every width, and the
+   class picker stays pinned under it (below), so another class is always one
+   tap away; once the page title is out of view the picker's bar also says
+   what's on screen. */
 .site-header-bar { position: sticky; top: 0; z-index: 11; background: var(--surface-page); }
 .site-header {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -255,7 +256,7 @@ button { font: inherit; color: inherit; }
   .site-header-bar { position: static; }
   .site-header { flex-wrap: wrap; height: auto; padding-block: 8px; row-gap: 8px; }
   .team-search { order: 3; flex-basis: 100%; max-width: none; }
-  .context-bar { top: 0; }
+  .scrubber-bar { top: 0; }
 }
 
 /* Light / System / Dark: a segmented control matching the class scrubber.
@@ -297,36 +298,30 @@ button { font: inherit; color: inherit; }
 
 /* ---------------------------------------------------------- class scrubber */
 
+/* The class picker's bar: pinned under the header. Once the page title scrolls away (.is-scrolled,
+   app.js showContext) it also carries what's on screen, so a screenshot from anywhere down the page
+   keeps its context. On a phone it then folds to that line and a button showing the class, which
+   opens the picker (.is-open); its two states are the same height, so folding never moves the page. */
 .scrubber-bar {
+  position: sticky; top: var(--header-h); z-index: 10;
   background: var(--surface-page);
   border-bottom: 1px solid var(--border);
 }
-
-/* What's on screen, pinned under the header once the title scrolls away.
-   Fixed rather than sticky so showing it never shifts the page. */
-.context-bar {
-  position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 10;
-  background: var(--surface-page);
-  border-block: 1px solid var(--border);
-  visibility: hidden; opacity: 0; transform: translateY(-6px);
-  transition: opacity 120ms ease-out, transform 120ms ease-out, visibility 0s linear 120ms;
+.scrubber-bar__inner {
+  display: flex; align-items: center; gap: 4px 16px;
+  min-height: 66px; padding-block: 8px;
 }
-.context-bar.is-shown {
-  visibility: visible; opacity: 1; transform: none;
-  transition: opacity 120ms ease-out, transform 120ms ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .context-bar, .context-bar.is-shown { transition: none; transform: none; }
-}
+.scrubber-bar__classes { flex: none; min-width: 0; max-width: 100%; }
+.scrubber-bar__classes .scrubber { min-width: 0; }
+.context-bar { display: none; flex: 1 1 auto; min-width: 0; }
+.scrubber-bar.is-scrolled .context-bar { display: block; animation: context-in 120ms ease-out; }
+@keyframes context-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .scrubber-bar.is-scrolled .context-bar { animation: none; } }
 .context-bar__inner {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
-  margin-inline: auto; max-width: 68rem;
-  padding: 8px 16px;
+  margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-size: 13px; line-height: 18px;
 }
-@media (min-width: 48em) {
-  .context-bar__inner { padding-inline: 32px; }
-}
+.context-bar__inner > * + * { margin-left: 6px; }
 .context-bar__title {
   font-family: var(--font-display); font-weight: 700;
   font-variant-numeric: normal; /* tnum would space out the hyphen in "2-7A" */
@@ -334,11 +329,23 @@ button { font: inherit; color: inherit; }
   color: var(--text-primary);
 }
 .context-bar .sep { color: var(--text-secondary); }
-.scrubber-bar__inner {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px;
-  padding-block: 8px;
+.scrubber-bar__toggle { display: none; }
+/* Phones: once scrolled, the context and a button showing the class; the button opens the picker. */
+@media (max-width: 47.99em) {
+  .scrubber-bar.is-scrolled:not(.is-open) .scrubber-bar__classes { display: none; }
+  .scrubber-bar.is-scrolled .scrubber-bar__toggle {
+    display: inline-flex; align-items: center; gap: 4px; flex: none;
+    min-width: 64px; min-height: 44px; padding: 0 10px 0 14px;
+    border: 0; border-radius: 10px;
+    background: var(--scrubber-selected-bg); color: var(--scrubber-selected-text);
+    font: inherit; font-weight: 600; font-size: 15px; cursor: pointer;
+  }
+  .scrubber-bar__toggle svg { width: 16px; height: 16px; transition: transform 120ms ease-out; }
+  .scrubber-bar__toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .scrubber-bar__toggle:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+  .scrubber-bar.is-scrolled.is-open .scrubber-bar__inner { flex-wrap: wrap; }
+  .scrubber-bar.is-scrolled.is-open .scrubber-bar__classes { order: 3; flex-basis: 100%; }
 }
-.scrubber-bar__inner .scrubber { min-width: 0; }
 
 /* The front page has no class of its own, so no class picker (it has its own way in). */
 .scrubber-bar[hidden] { display: none; }
