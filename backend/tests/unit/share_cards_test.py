@@ -190,6 +190,10 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         # each region's overview and scenarios, and each of its 4 teams' season, in each odds mode and theme
         "region_images": 48,
         "region_images_kept": 0,
+        # no season's schools in /teams here, so no Regions pages (share_regions_test.py has those)
+        "region_maps": 0,
+        "region_map_images": 0,
+        "region_map_images_kept": 0,
     }
     overview = tmp_path / "region" / "2026" / "3a-6-overview-projected-light.png"
     assert Image.open(overview).size == (2160, 2700)  # 1080x1350 (4:5) at 2x
@@ -531,7 +535,8 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path, monkeypatch)
     assert '<meta name="description" content="The 2025 Class 3A playoff bracket.">' in meta  # no final result here
     calls.clear()
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0
-    assert not [c for c in calls if "season=2025" in c]  # already drawn: not fetched again
+    # Already drawn: not fetched again (the Regions pages still read each season's schools, for its regions).
+    assert not [c for c in calls if "season=2025" in c and not c.startswith("/teams?")]
     # Once the drawing code changes, it's drawn again (and then kept again).
     monkeypatch.setattr(pipeline, "code_fingerprint", lambda: "new drawing code")
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 1

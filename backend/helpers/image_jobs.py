@@ -31,11 +31,18 @@ REGION_OVERVIEW = ("backend.helpers.region_image", "render_region_overview")
 REGION_SCENARIOS = ("backend.helpers.region_image", "render_region_scenarios")
 TEAM_SEASON = ("backend.helpers.team_image", "render_team_season")
 TEAM_SCENARIOS = ("backend.helpers.team_image", "render_team_scenarios")
+CLASS_REGIONS = ("backend.helpers.region_map_image", "render_class_regions")
+TEAM_REGION = ("backend.helpers.region_map_image", "render_team_region")
+TEAM_REGIONS_COMPARED = ("backend.helpers.region_map_image", "render_team_regions_compared")
+CLASS_REGIONS_CARD = ("backend.helpers.region_map_image", "render_class_regions_card")
+TEAM_REGION_CARD = ("backend.helpers.region_map_image", "render_team_region_card")
 
 # The code an image's look depends on; a change to any of it redraws every image.
 _CODE = (
     "backend.helpers.region_image",
     "backend.helpers.team_image",
+    "backend.helpers.region_map_image",
+    "backend.helpers.region_map",
     "backend.helpers.bracket_image",
     "backend.helpers.share_cards",
     "backend.helpers.static_pages",
@@ -56,12 +63,14 @@ class ImageJob:
 
 
 def code_fingerprint() -> str:
-    """A hash of the drawing code and the fonts it draws with."""
+    """A hash of the drawing code, the fonts it draws with, and the county lines."""
+    from backend.helpers.region_map import COUNTIES_PATH
     from backend.helpers.share_cards import FONT_DIR
 
     h = hashlib.sha256()
     for module in _CODE:
         h.update(Path(importlib.util.find_spec(module).origin).read_bytes())
+    h.update(COUNTIES_PATH.read_bytes())  # the map the region images draw
     for font in sorted(FONT_DIR.glob("*")):
         if font.suffix.lower() in {".otf", ".ttf", ".woff2"}:
             h.update(font.name.encode())

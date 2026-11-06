@@ -56,6 +56,7 @@ def counties() -> dict[str, BaseGeometry]:
     tf = _from_nad83()
 
     def to_grid(coords: np.ndarray) -> np.ndarray:
+        """Longitude/latitude pairs to state-grid meters."""
         x, y = tf.transform(coords[:, 0], coords[:, 1])
         return np.column_stack([x, y])
 
@@ -154,7 +155,7 @@ def region_shapes(schools: list[dict], tangled: list | None = None) -> dict[int,
 # ----------------------------------------------------------------- the Regions page's data
 
 
-def _svg_point(x: float, y: float) -> tuple[float, float]:
+def svg_point(x: float, y: float) -> tuple[float, float]:
     """State-grid meters to the page's SVG units: from the state's top-left corner, y down."""
     x0, _, _, y1 = state().bounds
     return (x - x0) / SVG_UNIT, (y1 - y) / SVG_UNIT
@@ -167,7 +168,7 @@ def svg_path(geom: BaseGeometry) -> str:
         if poly.is_empty or poly.geom_type != "Polygon":
             continue
         for ring in [poly.exterior, *poly.interiors]:
-            pts = [_svg_point(x, y) for x, y in ring.coords]
+            pts = [svg_point(x, y) for x, y in ring.coords]
             out.append("M" + "L".join(f"{x:.1f},{y:.1f}" for x, y in pts) + "Z")
     return "".join(out)
 
@@ -184,7 +185,7 @@ def base_map() -> dict:
             {
                 "name": name,
                 "d": svg_path(g),
-                "label": [round(v, 1) for v in _svg_point(*g.representative_point().coords[0])],
+                "label": [round(v, 1) for v in svg_point(*g.representative_point().coords[0])],
             }
             for name, g in sorted(counties().items())
         ],

@@ -131,6 +131,7 @@ def test_the_pages_map_data():
 
 
 def _row(school, clazz, region, lat, lon):
+    """A school's row at a latitude and longitude, projected."""
     x, y = rm.project(lat, lon)
     return {"school": school, "class": clazz, "region": region, "x": x, "y": y}
 
@@ -171,7 +172,7 @@ def test_how_a_teams_place_changed():
 
 def test_cycle_words():
     """The cycle and its seasons, as the images name them."""
-    assert (ri.cycle_name(2027), ri.cycle_name(2099), ri.seasons_line(2027)) == (
+    assert (ri.cycle_name(2027), ri.cycle_name(2099), ri.seasons_line([2027, 2028])) == (
         "2027–29",
         "2099–01",
         "2027 and 2028 seasons",
@@ -183,19 +184,34 @@ def test_each_image_draws_a_page(theme):
     """The class map, the team's region and the comparison each draw one 1080x1350 page at 2x."""
     teams = {"Greenwood": {"color_variants": {"primary": {"raw": "#800000"}}, "secondary_color_hex": "#FFFFFF"}}
     pages = [
-        ri.render_class_regions(5, 2027, S27, theme),
-        ri.render_team_region("Greenwood", 2027, S27, S26, teams, theme),
-        ri.render_team_region("North Tippah", 2027, S27, S26, teams, theme),
-        ri.render_team_regions_compared("Greenwood", 2027, S27, S26, teams, theme),
+        ri.render_class_regions(5, [2027, 2028], S27, theme),
+        ri.render_team_region("Greenwood", [2027, 2028], S27, S26, teams, theme),
+        ri.render_team_region("North Tippah", [2027, 2028], S27, S26, teams, theme),
+        ri.render_team_regions_compared("Greenwood", [2027, 2028], S27, S26, teams, theme),
     ]
     assert all(len(p) == 1 and p[0].size == ri.SIZE for p in pages)
 
 
+def test_the_link_previews_are_the_sites_size():
+    """The class's and the team's previews are 1200x630, like the site's other link previews."""
+    assert [p.size for p in ri.render_class_regions_card(5, [2027, 2028], S27)] == [(1200, 630)]
+    assert [p.size for p in ri.render_team_region_card("Greenwood", [2027, 2028], S27, S26, {})] == [(1200, 630)]
+    assert ri.render_class_regions_card(7, [2027, 2028], S27) == []
+
+
+def test_a_school_with_no_place_on_the_map_is_still_listed():
+    """No coordinates: no dot, but the images still draw (and the class still has its other dots)."""
+    unplaced = [*S27, {"school": "Nowhere", "class": 5, "region": 2, "x": None, "y": None}]
+    assert ri.render_class_regions(5, [2027], unplaced, "light")
+    assert ri.render_team_region("Nowhere", [2027], unplaced, S26, {}, "light")
+    assert ri.render_team_region_card("Nowhere", [2027], unplaced, S26, {}) == []
+
+
 def test_nothing_to_draw_draws_nothing():
     """No schools in the class, a team not in the cycle, or no region the season before: no image."""
-    assert ri.render_class_regions(7, 2027, S27, "light") == []
-    assert ri.render_team_region("Nobody", 2027, S27, S26, {}, "light") == []
-    assert ri.render_team_regions_compared("North Tippah", 2027, S27, S26, {}, "light") == []
+    assert ri.render_class_regions(7, [2027, 2028], S27, "light") == []
+    assert ri.render_team_region("Nobody", [2027, 2028], S27, S26, {}, "light") == []
+    assert ri.render_team_regions_compared("North Tippah", [2027, 2028], S27, S26, {}, "light") == []
 
 
 def test_region_colors_are_the_pages():

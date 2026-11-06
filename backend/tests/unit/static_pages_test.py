@@ -810,12 +810,13 @@ def test_the_championship_game_card_says_where_its_played_and_the_projected_cham
     assert "Projected champion" not in banner
 
 
-def test_front_page_has_every_classs_standings_and_bracket_under_the_helmet():
-    """Two rows of seven buttons, each saying what it opens; the same markup as landing.js's classGrid."""
+def test_front_page_has_every_classs_standings_bracket_and_regions_under_the_helmet():
+    """Three rows of seven buttons, each saying what it opens; the same markup as landing.js's classGrid."""
     from backend.helpers.static_pages import class_grid
 
     grid = class_grid()
-    assert grid.count('class="landing-classes__item"') == 14
+    assert grid.count('class="landing-classes__item"') == 21
+    assert '<a class="landing-classes__item" href="/regions/5a">5A<span class="visually-hidden"> regions</span></a>' in grid
     assert (
         '<a class="landing-classes__item" href="/standings/3a">3A<span class="visually-hidden"> standings</span></a>'
         in grid

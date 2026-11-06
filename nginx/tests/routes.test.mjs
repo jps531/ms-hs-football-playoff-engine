@@ -68,3 +68,13 @@ test("the feedback page: /feedback, with no view state in its URL", () => {
   assert.equal(parseLocation("/feedback/x", "").page, "notfound");
   assert.equal(buildPath({ ...parseLocation("/feedback", "?odds=tossup"), season: 2025 }, { currentSeason: 2026 }), "/feedback");
 });
+
+test("regions pages: /regions/{class}, its season left out when it's the page's own default", () => {
+  const r = parseLocation("/regions/5a", "?team=greenwood");
+  assert.deepEqual([r.page, r.clazz, r.team], ["regions", 5, "greenwood"]);
+  for (const bad of ["/regions/8a", "/regions/5a/2", "/regions"]) assert.equal(parseLocation(bad, "").page, "notfound", bad);
+  const opts = { currentSeason: 2026, regionsSeason: 2027 };
+  assert.equal(buildPath({ ...r, season: 2027 }, opts), "/regions/5a?team=greenwood");
+  // 2026 is the current season, but not the Regions page's default: it stays in the address.
+  assert.equal(buildPath({ ...r, season: 2026, team: null }, opts), "/regions/5a?season=2026");
+});

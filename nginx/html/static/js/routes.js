@@ -3,6 +3,7 @@
 //   /standings/3a              every region in a class
 //   /standings/3a/6            one region (Region 6-3A)
 //   /brackets/3a               a class's playoff bracket
+//   /regions/3a                a class's regions on a map
 //   ?season=2025&week=9&odds=tossup&team=st-martin
 // Defaults are left out of the URL (current season, latest week, Projected,
 // no team), so a link to "now" is just the path. No DOM, so it runs under
@@ -37,7 +38,7 @@ const classFromSlug = (v) => {
 /**
  * Read a location into a route:
  * { page, clazz, region, season, week, odds, team, legacy }.
- * page is "landing", "class", "region", "bracket", "feedback", or "notfound". team is the raw
+ * page is "landing", "class", "region", "bracket", "regions", "feedback", or "notfound". team is the raw
  * `team` value (a slug, or a school name in an old link). legacy is true for
  * an old query-string link (?class=3&region=6) the app should rewrite.
  */
@@ -77,15 +78,20 @@ export function parseLocation(pathname, search) {
     const clazz = classFromSlug(parts[1]);
     return clazz ? { ...route, page: "bracket", clazz } : route;
   }
+  if (parts[0] === "regions" && parts.length === 2) {
+    const clazz = classFromSlug(parts[1]);
+    return clazz ? { ...route, page: "regions", clazz } : route;
+  }
   return route;
 }
 
 /**
  * The canonical URL for a route. `team` here is a slug. The season is left
- * out when it's the current one, the week when it's the latest (null), and
- * the odds mode when it's Projected.
+ * out when it's the current one (on the Regions page, when it's the page's
+ * own default, regionsSeason: the newest regions), the week when it's the
+ * latest (null), and the odds mode when it's Projected.
  */
-export function buildPath(route, { currentSeason = null } = {}) {
+export function buildPath(route, { currentSeason = null, regionsSeason = null } = {}) {
   let path = "/";
   if (route.page === "feedback") return "/feedback";
   if (route.page === "class" || route.page === "region") {
@@ -93,9 +99,12 @@ export function buildPath(route, { currentSeason = null } = {}) {
     if (route.page === "region") path += `/${route.region}`;
   } else if (route.page === "bracket") {
     path = `/brackets/${route.clazz}a`;
+  } else if (route.page === "regions") {
+    path = `/regions/${route.clazz}a`;
   }
   const q = new URLSearchParams();
-  if (route.season && route.season !== currentSeason) q.set("season", route.season);
+  const defaultSeason = route.page === "regions" ? regionsSeason : currentSeason;
+  if (route.season && route.season !== defaultSeason) q.set("season", route.season);
   if (route.week) q.set("week", route.week);
   if (route.odds && route.odds !== "projected") q.set("odds", route.odds);
   if (route.team) q.set("team", route.team);

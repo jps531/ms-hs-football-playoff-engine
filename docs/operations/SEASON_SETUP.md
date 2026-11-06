@@ -60,9 +60,13 @@ names the one season a line holds for (a mid-cycle move, a season without a team
    against the database before writing anything and stops, listing every problem, if a name isn't a
    school the site knows, a region has fewer than three schools, a class's regions aren't numbered
    from 1, or a school from the season before has no place.
+4. Run `share-assets` (or wait for the next daily update). The Regions page (`/regions/{class}a`)
+   then opens on the new cycle, with its maps and images to share; the cycles before stay in its
+   season picker. A school with no coordinates, or coordinates outside Mississippi, is listed but
+   gets no dot (the run's log names it); fix its location with the admin overrides.
 
 Loading a cycle early is safe: the site's current season is the newest one with games (`/seasons`),
-so the loaded season stays out of sight until its schedule is in.
+so the loaded season stays out of sight until its schedule is in. Only the Regions page shows it.
 
 ## Consolidations, schools that stop playing, and renames
 

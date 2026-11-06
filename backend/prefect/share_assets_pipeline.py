@@ -41,12 +41,15 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
                               for it, each outcome with its chance and the results that give it
     region/{season}/{class}a-{region}.json
                               which of those images it has and how many pages each, for the page
-    sitemap.xml               the front page, About, and every region, class and bracket page
-                              (a bracket page lists its whole-bracket image)
+    regions/…, body/regions-{class}.html, meta/regions-{class}[/{slug}].html, og/regions-…
+                              the Regions pages: their data, content, previews and images to share
+                              (backend.prefect.share_regions)
+    sitemap.xml               the front page, About, and every region, class, bracket and Regions
+                              page (a bracket page lists its whole-bracket image, a Regions page its map)
 
 nginx splices the matching ``meta/*.html`` into the app's ``index.html``
 <head> for /standings/{class}a/{region}[?team=<slug>], /standings/{class}a and
-/brackets/{class}a[?season=<year>][&team=<slug>] (server-side include). A team without a file falls back to its region's tags,
+/brackets/{class}a[?season=<year>][&team=<slug>], /regions/{class}a[?team=<slug>] (server-side include). A team without a file falls back to its region's tags,
 anything else to the generic tags in ``index.html``. It also splices the
 matching ``body/*.html`` into ``<main>``, so the page reads without
 JavaScript; the app replaces it on load. Cards, tags and content all come
@@ -127,6 +130,7 @@ from backend.helpers.static_pages import (
     sitemap_xml,
     website_ld,
 )
+from backend.prefect.share_regions import write_regions
 
 API_URL = os.environ.get("SHARE_API_URL", "http://api:8000/api/v1")
 OUTPUT_DIR = os.environ.get("SHARE_OUTPUT_DIR", "/opt/share")
@@ -180,7 +184,8 @@ def build_share_assets(
     (default: the newest), plus the front page's content and the sitemap.
 
     Returns counts of what was written: {"regions", "classes", "teams", "brackets", "bracket_teams",
-    "past_brackets", "region_images" (drawn), "region_images_kept" (unchanged, so not drawn again)}.
+    "past_brackets", "region_images" (drawn), "region_images_kept" (unchanged, so not drawn again), and
+    the Regions pages' "region_maps", "region_map_images" and "region_map_images_kept" (share_regions)}.
     """
     keys = (
         "regions",
@@ -191,6 +196,9 @@ def build_share_assets(
         "past_brackets",
         "region_images",
         "region_images_kept",
+        "region_maps",
+        "region_map_images",
+        "region_map_images_kept",
     )
     all_seasons = [s["season"] for s in fetch("/seasons") or []]
     if season is None:
@@ -364,6 +372,10 @@ def build_share_assets(
         else None
     )
     _write_text(out_dir / "body" / "site.html", landing_body(featured, teams, scenario_example, insight_example))
+    # The Regions pages: their data, their content and previews, and their images to share.
+    region_counts, region_pages = write_regions(fetch, out_dir, site_url, today, all_seasons, _write_text)
+    written.update(region_counts)
+    sitemap += region_pages
     if written["regions"]:
         _write_text(out_dir / "sitemap.xml", sitemap_xml(site_url, sitemap))
     written["past_brackets"] = _write_past_brackets(

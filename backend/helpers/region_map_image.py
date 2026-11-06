@@ -51,9 +51,14 @@ def cycle_name(first: int) -> str:
     return f"{first}–{(first + 2) % 100:02d}"
 
 
-def seasons_line(first: int) -> str:
-    """ "2027 and 2028 seasons"."""
-    return f"{first} and {first + 1} seasons"
+def seasons_words(seasons: list[int]) -> str:
+    """ "2027 and 2028", or "2026"."""
+    return " and ".join(str(s) for s in seasons)
+
+
+def seasons_line(seasons: list[int]) -> str:
+    """ "2027 and 2028 seasons", or "2026 season"."""
+    return seasons_words(seasons) + (" seasons" if len(seasons) > 1 else " season")
 
 
 def place(school: dict | None) -> str:
@@ -109,6 +114,7 @@ class _Frame:
         return self.ox + (x - self.bx0) * self.s, self.oy + (self.by1 - y) * self.s
 
     def ring(self, coords) -> list[tuple[float, float]]:
+        """A ring of state-grid points, as pixels."""
         return [self(x, y) for x, y, *_ in coords]
 
 
@@ -142,10 +148,11 @@ def _spread(points: list[list[float]], radii: list[float], gap: float = 6, round
 class _Page:
     """One page being drawn."""
 
-    def __init__(self, theme: str, teams: dict):
+    def __init__(self, theme: str, teams: dict, size: tuple[int, int] = SIZE):
         self.theme = theme
         self.t: Theme = THEMES[theme]
-        self.img = Image.new("RGB", SIZE, self.t.bg)
+        self.size = size
+        self.img = Image.new("RGB", size, self.t.bg)
         self.d = ImageDraw.Draw(self.img)
         self.teams = teams
 
@@ -162,9 +169,9 @@ class _Page:
 
     def footer(self, stamp: str) -> None:
         """The stamp and the site's address along the bottom."""
-        base = SIZE[1] - PAD + 8
+        base = self.size[1] - PAD + 8
         _tracked(self.d, (PAD, base), stamp.upper(), _inter(28, 600), self.t.text_2, 2)
-        self.d.text((SIZE[0] - PAD, base), SITE_HOST, font=_inter(44, 600), fill=self.t.text, anchor="rs")
+        self.d.text((self.size[0] - PAD, base), SITE_HOST, font=_inter(44, 600), fill=self.t.text, anchor="rs")
 
     def label(self, x: float, base: float, text: str, anchor: str = "ls") -> None:
         """A small letter-spaced heading ("NEW REGION MEMBERS")."""
@@ -186,15 +193,15 @@ class _Page:
         land = _blend(t.bg, t.text, 0.05)
         for poly in _polygons(region_map.state()):
             self.d.polygon(frame.ring(poly.exterior.coords), fill=land)
-        over = Image.new("RGBA", SIZE, (0, 0, 0, 0))
+        over = Image.new("RGBA", self.size, (0, 0, 0, 0))
         for geom, color in fills:
             for poly in _polygons(geom):
-                mask = Image.new("L", SIZE, 0)
+                mask = Image.new("L", self.size, 0)
                 md = ImageDraw.Draw(mask)
                 md.polygon(frame.ring(poly.exterior.coords), fill=0x38)
                 for hole in poly.interiors:
                     md.polygon(frame.ring(hole.coords), fill=0)
-                layer = Image.new("RGBA", SIZE, color)
+                layer = Image.new("RGBA", self.size, color)
                 layer.putalpha(mask)
                 over = Image.alpha_composite(over, layer)
                 od = ImageDraw.Draw(over)
@@ -247,6 +254,7 @@ class _Page:
             ]
 
             def clear(x: float, y: float) -> bool:
+                """Is a label at (x, y) inside the map and clear of the dots and labels drawn so far?"""
                 box = (x - 6, y - 4, x + w + 6, y + h + 4)
                 if box[0] < frame.x0 - 10 or box[2] > frame.x1 + 40:
                     return False
@@ -290,6 +298,7 @@ def _region_map(page: _Page, frame: _Frame, rows: list[dict], school: str, label
     """*school*'s region in its class (*rows*): its shape, its schools labeled and the team ringed, the
     class's other schools in gray."""
     me = next(s for s in rows if s["school"] == school)
+    rows = [s for s in rows if s["x"] is not None]  # a school with no place on the map gets no dot
     color = region_color(page.theme, me["region"])
     group = sorted((s for s in rows if s["region"] == me["region"]), key=lambda s: s["school"].lower())
     others = [s for s in rows if s["region"] != me["region"]]
@@ -297,33 +306,36 @@ def _region_map(page: _Page, frame: _Frame, rows: list[dict], school: str, label
     dots = [(s["x"], s["y"], muted, "", small) for s in others] + [(s["x"], s["y"], color, "", big) for s in group]
     first = len(others)
     shapes = region_map.region_shapes(rows)
+    names = [s["school"] for s in group]
     page.map(
         frame,
-        [(shapes[me["region"]], color)],
+        [(shapes[me["region"]], color)] if me["region"] in shapes else [],
         dots,
-        [(s["school"], first + k) for k, s in enumerate(group)],
-        first + [s["school"] for s in group].index(school),
-        label_size,
+        [(s["school"], first + k) for k, s in enumerate(group)] if label_size else [],
+        first + names.index(school) if school in names else None,
+        label_size or 34,
     )
 
 
-def render_class_regions(clazz: int, first: int, schools: list[dict], theme: str) -> list[Image.Image]:
+def render_class_regions(clazz: int, seasons: list[int], schools: list[dict], theme: str) -> list[Image.Image]:
     """Class *clazz*'s regions in the cycle that starts in *first*: the map and the schools by region.
     *schools* is the cycle's every school ({school, class, region, x, y})."""
+    first = seasons[0]
     rows = _class_rows(schools, clazz)
     if not rows:
         return []
     page = _Page(theme, {})
     d, t = page.d, page.t
     d.text((PAD, PAD + 104), f"{clazz}A Football Regions", font=_nippo(124), fill=t.text, anchor="ls")
-    d.text((PAD, PAD + 176), seasons_line(first), font=_inter(42, 500), fill=t.text_2, anchor="ls")
+    d.text((PAD, PAD + 176), seasons_line(seasons), font=_inter(42, 500), fill=t.text_2, anchor="ls")
     regions = sorted({s["region"] for s in rows})
     top, bottom = PAD + 250, SIZE[1] - PAD - 110
-    shapes = region_map.region_shapes(rows)
+    on_map = [s for s in rows if s["x"] is not None]  # a school with no place on the map is only listed
+    shapes = region_map.region_shapes(on_map)
     page.map(
         _Frame((PAD - 20, top, MAP_RIGHT, bottom)),
-        [(shapes[g], region_color(theme, g)) for g in regions],
-        [(s["x"], s["y"], region_color(theme, s["region"]), str(s["region"]), 26) for s in rows],
+        [(shapes[g], region_color(theme, g)) for g in sorted(shapes)],
+        [(s["x"], s["y"], region_color(theme, s["region"]), str(s["region"]), 26) for s in on_map],
     )
     d = page.d
     y, width = top + 10, SIZE[0] - PAD - LIST_X - 80
@@ -359,11 +371,12 @@ def render_class_regions(clazz: int, first: int, schools: list[dict], theme: str
 
 
 def render_team_region(
-    school: str, first: int, schools: list[dict], prior: list[dict], teams: dict, theme: str
+    school: str, seasons: list[int], schools: list[dict], prior: list[dict], teams: dict, theme: str
 ) -> list[Image.Image]:
     """*school*'s region in the cycle that starts in *first* (*schools*), against the season before
     (*prior*: that season's schools, empty when there's none): the map, its New Region Members and those
     Still in the Region, and its Former Region Members when its region changed."""
+    first = seasons[0]
     me = next((s for s in schools if s["school"] == school), None)
     if me is None:
         return []
@@ -379,7 +392,7 @@ def render_team_region(
         fill=t.text,
         anchor="ls",
     )
-    d.text((PAD, PAD + 196), f"{place(me)} in {first} and {first + 1}", font=_inter(46, 600), fill=t.text, anchor="ls")
+    d.text((PAD, PAD + 196), f"{place(me)} in {seasons_words(seasons)}", font=_inter(46, 600), fill=t.text, anchor="ls")
     if prior:
         d.text((PAD, PAD + 256), change_line(me, before, first - 1), font=_inter(40, 500), fill=t.text_2, anchor="ls")
     top, bottom = PAD + 330, SIZE[1] - PAD - 110
@@ -393,6 +406,7 @@ def render_team_region(
     y = top + 30
 
     def block(title: str, rows: list[dict], y: float) -> float:
+        """A titled list of schools, each with its helmet and where it was; returns where the next goes."""
         page.label(LIST_X, y, title)
         y += 70
         for s in rows:
@@ -443,10 +457,11 @@ def render_team_region(
 
 
 def render_team_regions_compared(
-    school: str, first: int, schools: list[dict], prior: list[dict], teams: dict, theme: str
+    school: str, seasons: list[int], schools: list[dict], prior: list[dict], teams: dict, theme: str
 ) -> list[Image.Image]:
     """*school*'s region in the season before the cycle (*prior*) and in the cycle that starts in *first*
     (*schools*), side by side; nothing when it had no region the season before."""
+    first = seasons[0]
     now = next((s for s in schools if s["school"] == school), None)
     before = next((s for s in prior if s["school"] == school), None)
     if now is None or before is None:
@@ -474,7 +489,7 @@ def render_team_regions_compared(
             now,
             schools,
             prior,
-            f"{first} and {first + 1}",
+            seasons_words(seasons),
             f"IN {first - 1}",
             f"Not in a region in {first - 1}",
         ),
@@ -509,3 +524,96 @@ def render_team_regions_compared(
                 break
     page.footer(f"MHSAA {cycle_name(cycle_start(first - 1))} and {cycle_name(first)} regions")
     return [page.img]
+
+
+# ----------------------------------------------------------------- link previews
+
+CARD = (2400, 1260)  # the site's 1200x630 link preview, drawn at 2x and scaled down
+CARD_PAD = 128
+
+
+def _card_map(page: _Page) -> _Frame:
+    """The preview's map box, on the right."""
+    return _Frame((CARD[0] - CARD_PAD - 760, 70, CARD[0] - CARD_PAD + 20, CARD[1] - 70))
+
+
+def _card(page: _Page) -> list[Image.Image]:
+    """The preview at its published size (as a one-page image, like the other renderers)."""
+    return [page.img.resize((CARD[0] // 2, CARD[1] // 2), Image.LANCZOS)]
+
+
+def _card_lines(page: _Page, x: float, y: float, text: str, size: int, width: float, lines: int) -> float:
+    """*text* wrapped into at most *lines* lines at *y*; returns where the next line goes."""
+    font, out, line = _inter(size, 500), [], ""
+    for word in text.split():
+        trial = f"{line} {word}" if line else word
+        if line and page.d.textlength(trial, font=font) > width:
+            out.append(line)
+            line = word
+        else:
+            line = trial
+    out.append(line)
+    for text_line in out[:lines]:
+        page.d.text((x, y), fit(page.d, text_line, font, width), font=font, fill=page.t.text_2, anchor="ls")
+        y += size * 1.45
+    return y
+
+
+def render_class_regions_card(clazz: int, seasons: list[int], schools: list[dict]) -> list[Image.Image]:
+    """Class *clazz*'s Regions page preview: the title, its seasons, and the map with every region."""
+    rows = [s for s in _class_rows(schools, clazz) if s["x"] is not None]
+    if not rows:
+        return []
+    page = _Page("dark", {}, CARD)
+    d, t = page.d, page.t
+    d.text((CARD_PAD, CARD_PAD + 120), f"Class {clazz}A", font=_nippo(152), fill=t.text, anchor="ls")
+    d.text((CARD_PAD, CARD_PAD + 270), "Football Regions", font=_nippo(152), fill=t.text, anchor="ls")
+    d.text((CARD_PAD, CARD_PAD + 380), seasons_line(seasons), font=_inter(60, 600), fill=t.text_2, anchor="ls")
+    regions = sorted({s["region"] for s in rows})
+    x, y = CARD_PAD, CARD_PAD + 500
+    for g in regions:
+        d.ellipse((x, y, x + 72, y + 72), fill=region_color("dark", g))
+        d.text((x + 36, y + 37), str(g), font=_inter(44, 700), fill="#FFFFFF", anchor="mm")
+        x += 96
+    shapes = region_map.region_shapes(rows)
+    page.map(
+        _card_map(page),
+        [(shapes[g], region_color("dark", g)) for g in regions],
+        [(s["x"], s["y"], region_color("dark", s["region"]), "", 14) for s in rows],
+    )
+    page.d.text((CARD_PAD, CARD[1] - CARD_PAD + 16), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="ls")
+    return _card(page)
+
+
+def render_team_region_card(
+    school: str, seasons: list[int], schools: list[dict], prior: list[dict], teams: dict
+) -> list[Image.Image]:
+    """A team's Regions page preview: its name, its region, how it changed, and the map."""
+    first = seasons[0]
+    me = next((s for s in schools if s["school"] == school), None)
+    if me is None or me["x"] is None:
+        return []  # no place on the map
+    before = next((s for s in prior if s["school"] == school), None)
+    page = _Page("dark", teams, CARD)
+    d, t = page.d, page.t
+    page.mark(school, CARD_PAD, CARD_PAD + 70, 150)
+    width = CARD[0] - 2 * CARD_PAD - 900
+    d.text((CARD_PAD, CARD_PAD + 300), fit(d, school, _nippo(132), width), font=_nippo(132), fill=t.text, anchor="ls")
+    d.text(
+        (CARD_PAD, CARD_PAD + 410),
+        f"{place(me)} in {seasons_words(seasons)}",
+        font=_inter(60, 600),
+        fill=t.text,
+        anchor="ls",
+    )
+    y = CARD_PAD + 500
+    if prior:
+        y = _card_lines(page, CARD_PAD, y, change_line(me, before, first - 1), 50, width, 2)
+    old = {s["school"] for s in _members(prior, before, school)} if before else set()
+    new = [s["school"] for s in _members(schools, me, school) if s["school"] not in old]
+    if new and prior:
+        _card_lines(page, CARD_PAD, y + 20, "New Region Members: " + ", ".join(new), 44, width, 3)
+    rows = [s for s in _class_rows(schools, me["class"]) if s["x"] is not None]
+    _region_map(page, _card_map(page), rows, school, 0, 16, 8)
+    page.d.text((CARD_PAD, CARD[1] - CARD_PAD + 16), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="ls")
+    return _card(page)

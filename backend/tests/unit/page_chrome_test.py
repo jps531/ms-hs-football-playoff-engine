@@ -74,13 +74,14 @@ def test_the_header_s_home_link_and_theme_switch_match_the_app_shell(page):
 
 @pytest.mark.parametrize("page", PAGES)
 def test_the_main_nav_and_tab_bar_name_the_same_destinations(page):
-    """Standings, Bracket and About in the header; Home and the same three in the phone tab bar."""
+    """Standings, Bracket, Regions and About in the header; Home and the same four in the phone tab bar."""
     nav = _block(page, r'<nav class="site-nav".*?</nav>')
     assert re.findall(r'data-nav="(\w+)"[^>]*>([^<]+)</a>', nav) == [
         ("standings", "Standings"),
         ("bracket", "Bracket"),
+        ("regions", "Regions"),
         ("method", "About"),
     ]
     tabs = _block(page, r'<nav class="tab-bar".*?</nav>')
-    assert re.findall(r'data-nav="(\w+)"', tabs) == ["home", "standings", "bracket", "method"]
-    assert re.findall(r"<span>([^<]+)</span></a>", tabs) == ["Home", "Standings", "Bracket", "About"]
+    assert re.findall(r'data-nav="(\w+)"', tabs) == ["home", "standings", "bracket", "regions", "method"]
+    assert re.findall(r"<span>([^<]+)</span></a>", tabs) == ["Home", "Standings", "Bracket", "Regions", "About"]

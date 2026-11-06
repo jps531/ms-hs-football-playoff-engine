@@ -8,13 +8,13 @@ import { CLASSES } from "./routes.js";
 
 export const FRONT_PAGE_URL = "/share/front.html";
 
-/** Every class's standings and bracket, a button each (static_pages.py's class_grid writes the same). */
+/** Every class's standings, bracket and regions, a button each (static_pages.py's class_grid writes the same). */
 export function classGrid() {
   const row = (key, label, path) => `<div class="landing-classes__row"><p class="landing-classes__label" id="classes-${key}">${label}</p>`
     + `<ul class="landing-classes__list" aria-labelledby="classes-${key}">`
     + CLASSES.map((c) => `<li><a class="landing-classes__item" href="${path(c)}">${c}A<span class="visually-hidden"> ${label.toLowerCase()}</span></a></li>`).join("")
     + "</ul></div>";
-  return `<nav class="landing-classes" aria-label="Classes">${row("standings", "Standings", (c) => `/standings/${c}a`)}${row("brackets", "Brackets", (c) => `/brackets/${c}a`)}</nav>`;
+  return `<nav class="landing-classes" aria-label="Classes">${row("standings", "Standings", (c) => `/standings/${c}a`)}${row("brackets", "Brackets", (c) => `/brackets/${c}a`)}${row("regions", "Regions", (c) => `/regions/${c}a`)}</nav>`;
 }
 
 /** What "/" shows when the pipeline's page isn't there (a fresh install, or it failed to load). */
