@@ -347,11 +347,12 @@ SCHOOL_SUCCESSORS: list[tuple[str, str, int]] = [
     ("Walnut", "North Tippah", 2027),
 ]
 
-# Schools that stopped playing: (school, last season, why). The regions loader requires every school
-# from the season before to be in the new season, renamed, continued, or here.
-SCHOOL_CLOSURES: list[tuple[str, int, str]] = [
+# Schools that stopped playing, for good or for now: (school, last season played, why). The regions
+# loader requires every school from the season before to be in the new season, renamed, continued, or
+# here. A school that comes back just gets a line in its season's region file again.
+SCHOOL_STOPPED_PLAYING: list[tuple[str, int, str]] = [
     ("Leake County", 2025, "Consolidated into Leake (on Leake Central's campus) for 2026."),
-    ("Thrasher", 2025, "Played no 2026 season (on the 2025-27 list, inactive in 2026); not on the 2027-29 list."),
+    ("Thrasher", 2025, "No 2026 team (not enough players); expected back in 2027 but not on MHSAA's 2027-29 list."),
     ("Falkner", 2026, "Consolidated into North Tippah (on Walnut's campus) for 2027."),
 ]
 

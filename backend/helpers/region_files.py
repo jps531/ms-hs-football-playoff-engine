@@ -13,7 +13,7 @@ or names the one season a line holds for (a school that moved, closed or was ren
 ``assignments_for_season`` gives a season's schools; ``problems`` checks them before anything is
 loaded: every name a school the site knows or one the changes in ``data_helpers`` add, no school
 twice, every class's regions numbered from 1 with enough teams to play, and every school from the
-season before accounted for (still here, renamed, continued by another, or closed).
+season before accounted for (still here, renamed, continued by another, or stopped playing).
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from backend.helpers.data_helpers import (
-    SCHOOL_CLOSURES,
     SCHOOL_RENAMES,
+    SCHOOL_STOPPED_PLAYING,
     SCHOOL_SUCCESSORS,
     school_name_for_season,
 )
@@ -91,12 +91,12 @@ def new_names(season: int) -> set[str]:
 
 def accounted_for(school: str, season: int, assigned: dict) -> bool:
     """True when last season's *school* is here in *season*: under its own or its new name, continued
-    by another school, or closed after last season."""
+    by another school, or stopped playing after last season."""
     if school_name_for_season(school, season) in assigned:
         return True
     if any(old == school and first == season and new in assigned for old, new, first in SCHOOL_SUCCESSORS):
         return True
-    return any(name == school and last == season - 1 for name, last, _ in SCHOOL_CLOSURES)
+    return any(name == school and last == season - 1 for name, last, _ in SCHOOL_STOPPED_PLAYING)
 
 
 def problems(assigned: dict[str, tuple[int, int]], season: int, known: set[str], prior: set[str] | None) -> list[str]:
@@ -128,6 +128,6 @@ def problems(assigned: dict[str, tuple[int, int]], season: int, known: set[str],
         if not accounted_for(school, season, assigned):
             out.append(
                 f"{school} played in {season - 1} but isn't in {season}'s file. Add it, or record its "
-                f"closure (SCHOOL_CLOSURES), rename (SCHOOL_RENAMES) or successor (SCHOOL_SUCCESSORS)."
+                f"stop (SCHOOL_STOPPED_PLAYING), rename (SCHOOL_RENAMES) or successor (SCHOOL_SUCCESSORS)."
             )
     return out

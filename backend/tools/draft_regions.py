@@ -4,10 +4,10 @@
 
 It's a first draft for a person to check, not the source of truth: MHSAA's page has changed format
 from one cycle to the next (a table in the article for 2025-27, a table on a page embedded in it for
-2027-29), and it can't know a school's new name, a consolidation or a closure. What it can't place it
+2027-29), and it can't know a school's new name, a consolidation or a school that stopped playing. What it can't place it
 says on stderr, with the same checks the loader runs (``region_files.problems``): a name the site
 doesn't know, a school from last season with no place, a region too small. Fix those in the file or
-in ``data_helpers`` (SCHOOL_RENAMES, SCHOOL_SUCCESSORS, SCHOOL_CLOSURES), then load the season with
+in ``data_helpers`` (SCHOOL_RENAMES, SCHOOL_SUCCESSORS, SCHOOL_STOPPED_PLAYING), then load the season with
 ``regions-data-pipeline``.
 
 Any HTML table of schools reads: rows of school, class and region under "Class 7A", or of school and

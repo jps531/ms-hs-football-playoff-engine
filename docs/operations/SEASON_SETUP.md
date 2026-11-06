@@ -40,7 +40,7 @@ Leake Central,4,5,2025
 ```
 
 `school` is the site's name for the school. `seasons` is blank for both seasons of the cycle, or
-names the one season a line holds for (a mid-cycle move, closure or rename).
+names the one season a line holds for (a mid-cycle move, a season without a team, or a rename).
 
 **For a new cycle:**
 
@@ -54,7 +54,7 @@ names the one season a line holds for (a mid-cycle move, closure or rename).
    used. Add the article to `ARTICLES` in `backend/tools/draft_regions.py` to skip `--url`. What it
    can't place it prints as `CHECK:` lines: a name the site doesn't know (fix the spelling to the
    site's name, or add MHSAA's spelling to `MHSAA_NAMES`), or a school from last season that isn't
-   there (a closure, rename or consolidation; see below).
+   there (it stopped playing, was renamed or consolidated; see below).
 2. Check the file, commit it, deploy.
 3. Run `regions-data-pipeline` (Custom Run) for each season of the cycle. It checks the season
    against the database before writing anything and stops, listing every problem, if a name isn't a
@@ -64,11 +64,12 @@ names the one season a line holds for (a mid-cycle move, closure or rename).
 Loading a cycle early is safe: the site's current season is the newest one with games (`/seasons`),
 so the loaded season stays out of sight until its schedule is in.
 
-## Consolidations, closures, and renames
+## Consolidations, schools that stop playing, and renames
 
 Record these in `backend/helpers/data_helpers.py`, next to the region file:
 
-- **A school closed** (or stopped playing): `SCHOOL_CLOSURES`, with its last season and why.
+- **A school stopped playing** (closed, or fielded no team): `SCHOOL_STOPPED_PLAYING`, with its last
+  season played and why. A school that comes back just gets a line in its season's region file again.
 - **A new school carries on an old one** (a consolidation on one school's campus): `SCHOOL_SUCCESSORS`,
   (old school, new school, first season). The new school starts from the old one's Elo rating, and
   the regions load gives it the old school's campus (city, ZIP, coordinates) and home field when it
@@ -98,8 +99,15 @@ Valid override fields: `display_name`, `mascot`, `primary_color`, `secondary_col
 Falkner (1A Region 2) and Walnut (2A Region 1) consolidate into North Tippah (3A Region 2) for 2027,
 on Walnut's campus. `SCHOOL_SUCCESSORS` has Walnut → North Tippah from 2027: North Tippah starts from
 Walnut's final 2026 Elo rating and takes Walnut's location and home field when the 2027 regions load.
-`SCHOOL_CLOSURES` has Falkner's last season, 2026. Old `?team=walnut` links open North Tippah on
+`SCHOOL_STOPPED_PLAYING` has Falkner's last season, 2026. Old `?team=walnut` links open North Tippah on
 2027 pages. Its mascot and colors aren't set yet; until they are, it shows the default helmet and colors.
+
+## Thrasher (no 2026 team)
+
+Thrasher (1A Region 1 in 2025) fielded no team in 2026 for lack of players, so `2025-27.csv` lists it
+for 2025 only, and `SCHOOL_STOPPED_PLAYING` has its last season as 2025. It's expected back in 2027,
+but MHSAA's 2027-29 list doesn't place it. If MHSAA adds it, add its line to `2027-29.csv` (with
+`seasons` 2027 or 2028 if it's only one of them) and load the season again.
 
 ---
 
