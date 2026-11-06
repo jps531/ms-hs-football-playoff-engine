@@ -21,10 +21,9 @@ import math
 from PIL import Image, ImageDraw
 
 from backend.helpers import region_map
-from backend.helpers.bracket_image import THEMES, Theme, helmet
 from backend.helpers.data_helpers import SCHOOL_SUCCESSORS
+from backend.helpers.marks import THEMES, Theme, helmet, initials, team_colors
 from backend.helpers.share_cards import SITE_HOST, _inter, _nippo, _tracked, fit
-from backend.helpers.static_pages import initials, team_colors
 
 SIZE = (2160, 2700)  # 1080x1350 at 2x
 PAD = 104

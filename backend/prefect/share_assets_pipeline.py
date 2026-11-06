@@ -802,7 +802,7 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
     (``image_jobs.code_fingerprint``, kept per bracket in ``state/past_brackets.json``). As of the end
     of the class's last week of games, as its bracket page shows it."""
     written = 0
-    code = code_fingerprint()
+    code = code_fingerprint("backend.helpers.bracket_image")
     state_path = out_dir / PAST_BRACKETS
     try:
         drawn_with = json.loads(state_path.read_text())

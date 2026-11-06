@@ -42,7 +42,7 @@ def test_an_unchanged_image_is_kept_and_a_changed_one_redrawn(tmp_path):
 
 def test_a_change_to_the_drawing_code_redraws_everything(tmp_path, monkeypatch):
     draw_images(tmp_path, _jobs(a="red", b="blue"))
-    monkeypatch.setattr(image_jobs, "code_fingerprint", lambda: "different code")
+    monkeypatch.setattr(image_jobs, "code_fingerprint", lambda module: "different code")
     assert draw_images(tmp_path, _jobs(a="red", b="blue"))["drawn"] == 2
 
 
@@ -108,3 +108,17 @@ def test_an_image_with_nothing_to_show_makes_no_file_and_says_which_files_each_m
     assert sorted(p.name for p in (tmp_path / "region/2026").iterdir()) == ["a.png"]
     # Unchanged, it's kept (not drawn again), like any other.
     assert draw_images(tmp_path, jobs, prune=["region/2026"])["kept"] == 2
+
+
+def test_each_renderer_answers_only_to_the_code_it_draws_with():
+    """The region maps don't draw with the pages' wording or the bracket's code, and the standings images
+    don't draw with the maps', so a change to one redraws only its own images."""
+    from backend.helpers.image_jobs import CLASS_REGIONS, REGION_OVERVIEW, code_fingerprint, code_modules
+
+    maps = set(code_modules(CLASS_REGIONS[0]))
+    region = set(code_modules(REGION_OVERVIEW[0]))
+    assert {"backend.helpers.region_map", "backend.helpers.marks", "backend.helpers.share_cards"} <= maps
+    assert not maps & {"backend.helpers.static_pages", "backend.helpers.bracket_image", "backend.helpers.region_image"}
+    assert {"backend.helpers.static_pages", "backend.helpers.bracket_image"} <= region
+    assert "backend.helpers.region_map" not in region
+    assert code_fingerprint(CLASS_REGIONS[0]) != code_fingerprint(REGION_OVERVIEW[0])

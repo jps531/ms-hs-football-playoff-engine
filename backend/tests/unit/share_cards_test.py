@@ -538,7 +538,7 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path, monkeypatch)
     # Already drawn: not fetched again (the Regions pages still read each season's schools, for its regions).
     assert not [c for c in calls if "season=2025" in c and not c.startswith("/teams?")]
     # Once the drawing code changes, it's drawn again (and then kept again).
-    monkeypatch.setattr(pipeline, "code_fingerprint", lambda: "new drawing code")
+    monkeypatch.setattr(pipeline, "code_fingerprint", lambda module: "new drawing code")
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 1
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0
 

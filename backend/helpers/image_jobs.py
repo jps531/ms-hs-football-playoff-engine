@@ -2,8 +2,10 @@
 
 A job is one image: the renderer to call, its arguments (plain data: the API's payloads, the stamp,
 the theme) and where its file goes. Each job's fingerprint is a hash of those arguments and of the
-drawing code itself (the renderer modules and the fonts), so an image is redrawn when what it shows
-or how it's drawn changes, and kept otherwise. The fingerprints are kept in ``state/images.json``
+code that draws it (its renderer's module and every project module that imports in turn, and the
+fonts), so an image is redrawn when what it shows or how it's drawn changes, and kept otherwise. A
+change to the page wording (``static_pages``) redraws the images that draw its sentences, not the
+region maps; a change to the maps redraws only the maps. The fingerprints are kept in ``state/images.json``
 under the share folder (which nginx doesn't serve).
 
 The jobs left to draw run in separate processes (``SHARE_IMAGE_WORKERS``, default the CPU count, at
@@ -12,6 +14,7 @@ most 2), each drawing one image at a time, at full quality: the same renderer, t
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib
 import importlib.util
@@ -22,6 +25,7 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
+from functools import cache
 from multiprocessing import get_context
 from pathlib import Path
 
@@ -38,17 +42,6 @@ CLASS_REGIONS_COMPARED = ("backend.helpers.region_map_image", "render_class_regi
 CLASS_REGIONS_CARD = ("backend.helpers.region_map_image", "render_class_regions_card")
 TEAM_REGION_CARD = ("backend.helpers.region_map_image", "render_team_region_card")
 
-# The code an image's look depends on; a change to any of it redraws every image.
-_CODE = (
-    "backend.helpers.region_image",
-    "backend.helpers.team_image",
-    "backend.helpers.region_map_image",
-    "backend.helpers.region_map",
-    "backend.helpers.bracket_image",
-    "backend.helpers.share_cards",
-    "backend.helpers.static_pages",
-    "backend.helpers.image_jobs",
-)
 MANIFEST = Path("state") / "images.json"
 _log = logging.getLogger(__name__)
 
@@ -63,15 +56,51 @@ class ImageJob:
     kwargs: dict = field(hash=False)
 
 
-def code_fingerprint() -> str:
-    """A hash of the drawing code, the fonts it draws with, and the county lines."""
+@cache
+def code_modules(module: str) -> tuple[str, ...]:
+    """The project's modules *module* draws with: itself and every ``backend`` module it imports,
+    directly or through another (read from their source, so nothing is imported)."""
+    seen: set[str] = set()
+
+    def visit(name: str) -> None:
+        """Add *name* and what it imports, if it's a module not seen yet."""
+        if name in seen:
+            return
+        try:
+            spec = importlib.util.find_spec(name)
+        except (ImportError, ValueError):
+            spec = None
+        if spec is None or not spec.origin or not spec.origin.endswith(".py"):
+            return  # a name imported from a module (``from backend.x import y``), not a module itself
+        seen.add(name)
+        for node in ast.walk(ast.parse(Path(spec.origin).read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("backend"):
+                visit(node.module)
+                for alias in node.names:
+                    visit(f"{node.module}.{alias.name}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("backend"):
+                        visit(alias.name)
+
+    visit(module)
+    return tuple(sorted(seen))
+
+
+@cache
+def code_fingerprint(module: str) -> str:
+    """A hash of the code an image drawn by *module* depends on (``code_modules``, and this module), the
+    fonts it draws with, and the county lines when it draws the map. A change to any of them redraws
+    that renderer's images, and only those."""
     from backend.helpers.region_map import COUNTIES_PATH
     from backend.helpers.share_cards import FONT_DIR
 
     h = hashlib.sha256()
-    for module in _CODE:
-        h.update(Path(importlib.util.find_spec(module).origin).read_bytes())
-    h.update(COUNTIES_PATH.read_bytes())  # the map the region images draw
+    for name in sorted({*code_modules(module), __name__}):
+        h.update(name.encode())
+        h.update(Path(importlib.util.find_spec(name).origin).read_bytes())
+    if "backend.helpers.region_map" in code_modules(module):
+        h.update(COUNTIES_PATH.read_bytes())  # the map the region maps draw
     for font in sorted(FONT_DIR.glob("*")):
         if font.suffix.lower() in {".otf", ".ttf", ".woff2"}:
             h.update(font.name.encode())
@@ -141,10 +170,9 @@ def draw_images(
         manifest = json.loads(manifest_path.read_text())
     except (OSError, ValueError):
         manifest = {}
-    code = code_fingerprint()
     todo, kept, files_for = [], 0, {}
     for job in jobs:
-        fp = job_fingerprint(job, code)
+        fp = job_fingerprint(job, code_fingerprint(job.renderer[0]))
         entry = manifest.get(job.path) or {}
         files = entry.get("files") or []
         if entry.get("fp") == fp and "files" in entry and all((out_dir / f).exists() for f in files):
