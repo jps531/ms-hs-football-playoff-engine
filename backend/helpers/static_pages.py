@@ -25,6 +25,7 @@ from xml.sax.saxutils import escape as xml_escape
 from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.color_contrast import contrast_ratio
 from backend.helpers.engine_settings import CLASSES, PLAYOFF_SEEDS
+from backend.helpers.marks import _HEX, DROPPED_WORDS, initials, team_colors  # noqa: F401 (re-exported)
 from backend.helpers.share_cards import (
     display_order,
     format_pct,
@@ -63,7 +64,6 @@ def _odds_head(key: str, extra: str = "") -> str:
 
 INSIGHT_ORDER = {"clinch_seed": 0, "clinch_playoffs": 1, "eliminated_if": 2}
 MODE_NAMES = {"projected": "projected", "tossup": "toss-up"}
-DROPPED_WORDS = {"county", "high", "school", "academy"}  # as format.js's initials()
 
 
 def _e(text: object) -> str:
@@ -144,14 +144,6 @@ def website_ld(site_url: str, name: str) -> dict:
     return {"@context": "https://schema.org", "@type": "WebSite", "name": name, "url": f"{site_url}/"}
 
 
-def initials(name: str) -> str:
-    """Fallback initials, as the app makes them: first letters of up to two significant words."""
-    words = [w for w in re.split(r"[\s\-/]+", name) if w]
-    significant = [w for w in words if w.lower() not in DROPPED_WORDS]
-    return "".join(w[0].upper() for w in (significant or words)[:2])
-
-
-_HEX = re.compile(r"^#?[0-9a-fA-F]{6}$")
 # A seed is locked when it's certain (backend.helpers.certainty; mirrors app.js).
 _LOCKED = 1 - CERTAIN_EPS
 
@@ -184,18 +176,6 @@ BULB_ICON = (
     'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5h4M6.5 14h3"/>'
     '<path d="M6 11.5c0-1.6-2.5-2.8-2.5-5.5a4.5 4.5 0 0 1 9 0c0 2.7-2.5 3.9-2.5 5.5"/></svg>'
 )
-
-
-def team_colors(team: dict | None) -> tuple[str, str] | None:
-    """(shell, stripe) for a team's generic helmet, as format.js's ``teamRawColors``; None without a primary."""
-    variants = (team or {}).get("color_variants") or {}
-    shell = (variants.get("primary") or {}).get("raw")
-    if not shell or not _HEX.match(shell):
-        return None
-    secondary = ((variants.get("secondary") or [{}])[0] or {}).get("raw") or str(
-        (team or {}).get("secondary_color_hex") or ""
-    ).split(",")[0].strip()
-    return shell.upper(), (secondary.upper() if _HEX.match(secondary or "") else "#FFFFFF")
 
 
 def generic_helmet(shell: str, stripe: str, size: int = 24) -> str:
