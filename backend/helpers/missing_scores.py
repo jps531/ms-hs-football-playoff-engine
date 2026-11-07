@@ -5,6 +5,10 @@ counting as still to play, so the standings, odds and scenarios are off until it
 daily update has committed, it lists every game of the season dated before today (in Mississippi)
 that isn't final, so the owner can report or approve the score, or remove a game that didn't happen.
 A game marked canceled isn't listed; a forfeit is final, so it isn't either.
+
+A game whose two schools' pages both have it final but with different scores counts as unplayed too
+(``games_effective.scores_disagree``: neither score is trusted). Those are listed on their own, with
+both scores, so the owner can approve the right one.
 """
 
 from __future__ import annotations
@@ -22,7 +26,17 @@ _SQL = """
     FROM games_effective g
     JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
     WHERE g.season = %s AND g.date < %s AND g.final IS NOT TRUE
-      AND COALESCE(g.game_status, '') <> 'canceled'
+      AND COALESCE(g.game_status, '') <> 'canceled' AND NOT g.scores_disagree
+    ORDER BY g.date, g.school
+"""
+
+# Each school's own page's score (the base row), for the games whose two pages disagree.
+_DISAGREE_SQL = """
+    SELECT g.date, g.school, g.opponent, raw.points_for, raw.points_against, g.region_game, ss.class, ss.region
+    FROM games_effective g
+    JOIN games raw ON raw.school = g.school AND raw.date = g.date
+    JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+    WHERE g.season = %s AND g.scores_disagree
     ORDER BY g.date, g.school
 """
 
@@ -45,14 +59,37 @@ def missing_score_lines(rows: list[tuple]) -> list[str]:
     return lines
 
 
+def disagreeing_score_lines(rows: list[tuple]) -> list[str]:
+    """One line per game from ``_DISAGREE_SQL``'s rows (one per school), with each page's score:
+    "Fri, Oct 2: Pearl 21, Brandon 14 on Pearl's page; Brandon 17, Pearl 21 on Brandon's (Region 3-7A game)"."""
+    games: dict[tuple, list[tuple]] = {}
+    for row in rows:
+        games.setdefault((row[0], frozenset((row[1], row[2]))), []).append(row)
+    lines = []
+    for (day, _), sides in games.items():
+        sides.sort(key=lambda r: r[1])
+        pages = "; ".join(
+            f"{school} {pf}, {opponent} {pa} on {school}'s page" for _, school, opponent, pf, pa, *_ in sides
+        )
+        region_game, clazz, region = sides[0][5:8]
+        what = f" (Region {region}-{clazz}A game)" if region_game else ""
+        lines.append(f"{day:%a, %b} {day.day}: {pages}{what}")
+    return lines
+
+
 def note_missing_scores(season: int, today: date | None = None) -> int:
     """Note each game of *season* dated before *today* (default: today in Mississippi) that has no final
-    score; returns how many."""
+    score, and each game whose two schools' pages disagree on the score; returns how many in all."""
     today = today or datetime.now(CENTRAL).date()
     with get_database_connection() as conn, conn.cursor() as cur:
         cur.execute(_SQL, (season, today))
         rows = cur.fetchall()
+        cur.execute(_DISAGREE_SQL, (season,))
+        disagreeing = cur.fetchall()
     lines = missing_score_lines(rows)
     for line in lines:
         attention.note(attention.MISSING_SCORES, line)
-    return len(lines)
+    differ = disagreeing_score_lines(disagreeing)
+    for line in differ:
+        attention.note(attention.SCORES_DISAGREE, line)
+    return len(lines) + len(differ)

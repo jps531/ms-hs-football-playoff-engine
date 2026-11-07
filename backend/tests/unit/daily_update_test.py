@@ -349,8 +349,14 @@ def test_missing_scores_are_the_seasons_games_before_today_in_mississippi(monkey
     class Cursor:
         def execute(self, sql, params):
             asked.append(params)
+            self.disagree = "raw.points_for" in sql
 
         def fetchall(self):
+            if self.disagree:
+                return [
+                    (date(2026, 10, 2), "Brandon", "Pearl", 17, 21, True, 7, 3),
+                    (date(2026, 10, 2), "Pearl", "Brandon", 21, 14, True, 7, 3),
+                ]
             return [(date(2026, 10, 30), "Purvis", "Wayne County", True, 5, 4)]
 
     class Conn:
@@ -364,6 +370,25 @@ def test_missing_scores_are_the_seasons_games_before_today_in_mississippi(monkey
 
     monkeypatch.setattr(ms, "get_database_connection", connection)
     attention.clear()
-    assert ms.note_missing_scores(2026, today=date(2026, 11, 1)) == 1
-    assert asked == [(2026, date(2026, 11, 1))]
-    assert attention.take() == {attention.MISSING_SCORES: ["Fri, Oct 30: Purvis vs Wayne County (Region 4-5A game)"]}
+    assert ms.note_missing_scores(2026, today=date(2026, 11, 1)) == 2
+    assert asked == [(2026, date(2026, 11, 1)), (2026,)]
+    assert attention.take() == {
+        attention.MISSING_SCORES: ["Fri, Oct 30: Purvis vs Wayne County (Region 4-5A game)"],
+        attention.SCORES_DISAGREE: [
+            "Fri, Oct 2: Brandon 17, Pearl 21 on Brandon's page; Pearl 21, Brandon 14 on Pearl's page "
+            "(Region 3-7A game)"
+        ],
+    }
+
+
+def test_a_game_whose_pages_disagree_is_listed_on_its_own_with_both_scores():
+    """Kept out of the missing scores (the view flags it); listed once, each page's score with its school."""
+    from backend.helpers import missing_scores as ms
+
+    assert "AND NOT g.scores_disagree" in ms._SQL
+    rows = [(date(2026, 9, 4), "Resurrection", "Christian Collegiate Academy", 35, 7, False, 1, 8)]
+    rows.append((date(2026, 9, 4), "Christian Collegiate Academy", "Resurrection", 6, 35, False, 1, 8))
+    assert ms.disagreeing_score_lines(rows) == [
+        "Fri, Sep 4: Christian Collegiate Academy 6, Resurrection 35 on Christian Collegiate Academy's page; "
+        "Resurrection 35, Christian Collegiate Academy 7 on Resurrection's page"
+    ]

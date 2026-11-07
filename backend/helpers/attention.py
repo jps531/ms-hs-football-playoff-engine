@@ -16,6 +16,7 @@ import threading
 
 # The kinds, in the order the email lists them, each with its heading and what to do about it.
 MISSING_SCORES = "missing_scores"
+SCORES_DISAGREE = "scores_disagree"
 SKIPPED_SCHOOLS = "skipped_schools"
 CHANGED_UNDER_CORRECTION = "changed_under_correction"
 KEPT_OFF_SCHEDULE = "kept_off_schedule"
@@ -27,6 +28,12 @@ KINDS = {
         "AHSFHS has no final score for these yet. A region game without one still counts as unplayed in "
         "the standings, odds and scenarios. Report or approve its score once you know it, or remove a "
         "game that didn't happen.",
+    ),
+    SCORES_DISAGREE: (
+        "Games the two schools' AHSFHS pages score differently",
+        "Neither score counts until they match: the game counts as unplayed in the standings, odds and "
+        "scenarios, and shows no score. Approve the right score as a correction, or wait for AHSFHS to fix "
+        "the page that's wrong.",
     ),
     SKIPPED_SCHOOLS: (
         "AHSFHS pages that couldn't be read",

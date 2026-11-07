@@ -9,12 +9,12 @@ ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = (ROOT / "sql/migrations/2026_10_game_date.sql").read_text()
 
 # The newest migration that re-creates the view (file names don't sort by date).
-VIEW_MIGRATION = (ROOT / "sql/migrations/2026_10_final_override.sql").read_text()
+VIEW_MIGRATION = (ROOT / "sql/migrations/2026_11_one_score_per_game.sql").read_text()
 
 
 def _view(sql: str) -> str:
     """The ``games_effective`` view's definition in *sql*."""
-    match = re.search(r"CREATE OR REPLACE VIEW games_effective AS.*?FROM games;", sql, re.S)
+    match = re.search(r"CREATE OR REPLACE VIEW games_effective AS.*?\) pick;", sql, re.S)
     assert match, "no games_effective view"
     return match.group(0)
 
@@ -38,6 +38,26 @@ def test_game_date_is_the_latest_date_of_the_games_rows():
     """Both schools' rows share a game_id (paired within a few days, so a playoff rematch is its own game)."""
     view = _view(VIEW_MIGRATION)
     assert "(SELECT MAX(o.date) FROM games o WHERE o.game_id = games.game_id) AS game_date" in view
+
+
+def test_a_game_has_one_score_in_both_schools_rows():
+    """A row not yet final takes the other school's final score; two final rows that disagree read as
+    not final with no score; a correction on either row wins. (The cases are checked against Postgres
+    in the PR; these keep the rules in the view.)"""
+    view = _view(VIEW_MIGRATION)
+    assert "WHERE o.game_id = games.game_id AND o.school = games.opponent" in view
+    assert "WHEN own.corrected THEN 'own'" in view
+    assert "WHEN other.corrected AND other.final IS TRUE THEN 'borrow'" in view
+    assert "WHEN own.final IS NOT TRUE AND other.final IS TRUE AND other.result IS NOT NULL THEN 'borrow'" in view
+    assert "CASE pick.mode WHEN 'disagree' THEN FALSE WHEN 'borrow' THEN TRUE ELSE own.final END AS final" in view
+    assert (
+        "CASE pick.mode WHEN 'disagree' THEN NULL WHEN 'borrow' THEN other.points_against ELSE own.points_for END"
+        in view
+    )
+    # The view's columns keep their order (CREATE OR REPLACE VIEW only adds columns at the end).
+    assert view.rstrip().split("pick.mode = 'borrow' AS score_from_opponent,")[1].split("FROM games")[0].strip() == (
+        "pick.mode = 'disagree' AS scores_disagree"
+    )
 
 
 def test_the_standings_cutoff_goes_by_game_date():
