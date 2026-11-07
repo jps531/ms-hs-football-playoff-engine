@@ -116,6 +116,21 @@ class TestDailyFlow:
         assert sorted((c, r) for c, r, _ in _written(flow_env.events)) == ALL_REGIONS
         assert ("playoff_update", 2025) not in flow_env.events
 
+    def test_each_region_gets_the_last_runs_results_and_they_are_kept_for_the_next(
+        self, flow_env, monkeypatch, tmp_path
+    ):
+        """The region results from the last run are offered to every region, then kept for the next run."""
+        monkeypatch.setenv("SHARE_OUTPUT_DIR", str(tmp_path))
+        kept = pipeline.Reuse()
+        kept.put("odds", 5, 1, ("yesterday",), "odds")
+        kept.save(tmp_path / "state" / "region_reuse.pkl", pipeline.engine_fingerprint())
+        pipeline.region_scenarios_data_flow.fn(season=2025)
+        offered = {id(call.kwargs["reuse"].unquote()) for call in pipeline.get_region_seeding_odds.call_args_list}
+        assert len(offered) == 1  # one Reuse, shared by every region
+        reuse = pipeline.get_region_seeding_odds.call_args_list[0].kwargs["reuse"].unquote()
+        assert reuse.get("odds", 5, 1, ("yesterday",)) == "odds"
+        assert (tmp_path / "state" / "region_reuse.pkl").exists()
+
     def test_classes_in_the_playoffs_are_left_to_the_playoff_update(self, flow_env):
         """1A-4A in the playoffs: only 5A-7A are written, then the playoff update runs last."""
         flow_env.set_playoff_starts({c: date(2025, 11, 7) for c in (1, 2, 3, 4)})
@@ -253,3 +268,27 @@ def test_class_regions_come_from_the_seasons_schools(monkeypatch):
     sql, params = cur.execute.call_args.args
     assert "FROM school_seasons WHERE season = %s AND is_active" in sql
     assert params == (2026, [1, 2, 3, 4, 5, 6, 7])
+
+
+def test_the_playoff_update_starts_elo_from_last_seasons_ratings(monkeypatch):
+    """The playoff update's Elo starts from last season's ratings (and predecessors'), like the region flow's."""
+    from backend.prefect import playoff_pipeline as playoff
+
+    seen = {}
+
+    def elo(games, schools, cfg, prior_ratings=None):
+        """Record the prior ratings the flow passes."""
+        seen["prior"] = prior_ratings
+        return {}, {}, []
+
+    monkeypatch.setattr(playoff, "get_run_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(playoff, "fetch_all_season_games", lambda season: [])
+    monkeypatch.setattr(playoff, "fetch_all_season_schools", lambda season: [])
+    monkeypatch.setattr(
+        playoff, "fetch_prior_season_elo", lambda season: {"Greenwood": 1612.0} if season == 2025 else {}
+    )
+    monkeypatch.setattr(playoff, "with_predecessor_ratings", lambda prior, season: {**prior, "Successor": 1500.0})
+    monkeypatch.setattr(playoff, "compute_elo_ratings", elo)
+    monkeypatch.setattr(playoff, "fetch_class_regions", lambda season: {})
+    playoff.playoff_bracket_update.fn.__wrapped__(2026)
+    assert seen["prior"] == {"Greenwood": 1612.0, "Successor": 1500.0}

@@ -68,11 +68,19 @@ from pathlib import Path
 import requests
 from prefect import flow, get_run_logger, task
 
-from backend.helpers.bracket_image import is_final, render_bracket_card_image, render_bracket_image
+from backend.helpers.bracket_image import is_final
 from backend.helpers.engine_settings import CLASSES, FULL_MARGINS_MAX_LEFT
 from backend.helpers.image_jobs import (
+    BRACKET_CARD,
+    BRACKET_CARD_IMAGE,
+    BRACKET_IMAGE,
+    CLASS_CARD,
+    REGION_CARD,
     REGION_OVERVIEW,
     REGION_SCENARIOS,
+    SITE_CARD,
+    TEAM_BRACKET_CARD,
+    TEAM_CARD,
     TEAM_SCENARIOS,
     TEAM_SEASON,
     ImageJob,
@@ -95,12 +103,6 @@ from backend.helpers.share_cards import (
     past_bracket_description,
     provenance,
     region_title,
-    render_bracket_card,
-    render_class_card,
-    render_region_card,
-    render_site_card,
-    render_team_bracket_card,
-    render_team_card,
     slugify,
     team_bracket_description,
     team_bracket_title,
@@ -168,11 +170,6 @@ def _write_text(path: Path, text: str) -> None:
     _write_atomic(path, lambda p: p.write_text(text, encoding="utf-8"))
 
 
-def _write_png(path: Path, image) -> None:
-    """Write a Pillow image as an optimized PNG atomically."""
-    _write_atomic(path, lambda p: image.save(p, "PNG", optimize=True))
-
-
 def build_share_assets(
     fetch: Fetch,
     out_dir: Path,
@@ -184,7 +181,8 @@ def build_share_assets(
     (default: the newest), plus the front page's content and the sitemap.
 
     Returns counts of what was written: {"regions", "classes", "teams", "brackets", "bracket_teams",
-    "past_brackets", "region_images" (drawn), "region_images_kept" (unchanged, so not drawn again), and
+    "past_brackets", "cards" and "region_images" (the link previews and bracket images, and the region
+    images, drawn), "cards_kept" and "region_images_kept" (unchanged, so not drawn again), and
     the Regions pages' "region_maps", "region_map_images" and "region_map_images_kept" (share_regions)}.
     """
     keys = (
@@ -194,6 +192,8 @@ def build_share_assets(
         "brackets",
         "bracket_teams",
         "past_brackets",
+        "cards",
+        "cards_kept",
         "region_images",
         "region_images_kept",
         "region_maps",
@@ -206,7 +206,9 @@ def build_share_assets(
             return dict.fromkeys(keys, 0)
         season = all_seasons[0]
     site_url = site_url.rstrip("/")
-    _write_png(out_dir / "og" / "site.png", render_site_card())
+    # The link previews and bracket images, drawn at the end with the region images: only the ones whose
+    # content changed, several at a time (image_jobs).
+    card_jobs: list[ImageJob] = [ImageJob("og/site.png", SITE_CARD, {})]
     # The front page's head: its canonical address and the site's name for search results.
     _write_text(
         out_dir / "meta" / "site.html",
@@ -239,7 +241,11 @@ def build_share_assets(
         stamp = provenance(as_of, dates, mode, today)
         version = f"{as_of:%Y%m%d}"
 
-        _write_png(out_dir / "og" / f"{clazz}.png", render_class_card(clazz, standings, stamp, mode))
+        card_jobs.append(
+            ImageJob(
+                f"og/{clazz}.png", CLASS_CARD, {"clazz": clazz, "payload": standings, "stamp": stamp, "mode": mode}
+            )
+        )
         _write_text(
             out_dir / "meta" / f"{clazz}.html",
             meta_tags(
@@ -260,7 +266,7 @@ def build_share_assets(
             "blank": f"{season} season · {provenance(as_of, dates, None, today)}",
         }
         bracket = _write_bracket_assets(
-            out_dir, site_url, clazz, season, standings, stamp, mode, version, fetch, teams, image_stamps
+            out_dir, site_url, clazz, season, standings, stamp, mode, version, fetch, card_jobs, teams, image_stamps
         )
         written["brackets"] += bracket["brackets"]
         written["bracket_teams"] += bracket["bracket_teams"]
@@ -275,7 +281,13 @@ def build_share_assets(
             r_as_of = date.fromisoformat(payload["as_of_date"]) if payload.get("as_of_date") else as_of
             r_stamp = provenance(r_as_of, dates, r_mode, today)
             name = f"{clazz}-{region}"
-            _write_png(out_dir / "og" / f"{name}.png", render_region_card(clazz, region, payload, r_stamp, r_mode))
+            card_jobs.append(
+                ImageJob(
+                    f"og/{name}.png",
+                    REGION_CARD,
+                    {"clazz": clazz, "region": region, "payload": payload, "stamp": r_stamp, "mode": r_mode},
+                )
+            )
             headline = payload.get("headline") or (
                 f"Region {region}-{clazz}A standings, playoff odds, and what every team needs to happen next."
             )
@@ -316,7 +328,9 @@ def build_share_assets(
             )
             sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
-            written["teams"] += _write_team_assets(out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of)
+            written["teams"] += _write_team_assets(
+                out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of, card_jobs
+            )
     # The front page, with the most open race as its live example. The app shows this same file at "/".
     summary = fetch(f"/standings/summary?season={season}")
     featured = pick_featured(summary) if summary else None
@@ -392,8 +406,12 @@ def build_share_assets(
     written["past_brackets"] = _write_past_brackets(
         fetch, out_dir, [s for s in all_seasons if s < season], today, site_url
     )
-    # The region images, last: only those whose content changed are drawn, several at a time. Then each
-    # region's index: which images it has and how many pages each, for the page's share sheet.
+    # The images, last: only those whose content changed are drawn, several at a time. First the link
+    # previews and bracket images, then the region images and each region's index: which images it has
+    # and how many pages each, for the page's share sheet.
+    cards = draw_images(out_dir, card_jobs)
+    written["cards"] = cards["drawn"]
+    written["cards_kept"] = cards["kept"]
     files: dict[str, list[str]] = {}
     drawn = draw_images(out_dir, image_jobs, prune=[f"region/{season}"], files_out=files)
     written["region_images"] = drawn["drawn"]
@@ -642,11 +660,13 @@ def _write_bracket_assets(
     mode: str,
     version: str,
     fetch: Fetch,
+    jobs: list[ImageJob],
     teams_by_school: dict | None = None,
     image_stamps: dict[str, str] | None = None,
 ) -> dict:
     """The class bracket card, its page content, its images to share, and each playoff team's road card;
     removes ones for teams no longer in it. *image_stamps* label the images ("odds": Projected, "blank").
+    The images are added to *jobs*, to be drawn with the others.
 
     Returns {"brackets", "bracket_teams", "image"}: counts, and the whole-bracket image's URL (or None).
     """
@@ -667,20 +687,28 @@ def _write_bracket_assets(
     # the bracket's games yet, the favorites' table.
     card = f"bracket-{season}-{clazz}"
     if games:
-        image_card = render_bracket_card_image(
-            clazz,
-            season,
-            games,
-            layout_results(layout),
-            locked_seeds(standings, games),
-            not projected,
-            (image_stamps or {}).get("odds" if projected else "blank", f"{season} season · {stamp}"),
-            teams_by_school or {},
-            venue,
+        image_card = ImageJob(
+            f"og/{card}.png",
+            BRACKET_CARD_IMAGE,
+            {
+                "clazz": clazz,
+                "season": season,
+                "games": games,
+                "results": layout_results(layout),
+                "seeds": locked_seeds(standings, games),
+                "blank": not projected,
+                "stamp": (image_stamps or {}).get("odds" if projected else "blank", f"{season} season · {stamp}"),
+                "teams": teams_by_school or {},
+                "venue": venue,
+            },
         )
     else:
-        image_card = render_bracket_card(clazz, favorites, regions, stamp, mode)
-    _write_png(out_dir / "og" / f"{card}.png", image_card)
+        image_card = ImageJob(
+            f"og/{card}.png",
+            BRACKET_CARD,
+            {"clazz": clazz, "favorites": favorites, "regions": regions, "stamp": stamp, "mode": mode},
+        )
+    jobs.append(image_card)
     (out_dir / "og" / f"{name}.png").unlink(missing_ok=True)  # the card's name before it carried the season
     desc = description(bracket_description(clazz, favorites, mode))
     image_url = f"{site_url}/static/og/{card}.png?v={version}"
@@ -706,6 +734,7 @@ def _write_bracket_assets(
             _write_text(out_dir / "body" / f"{name}.html", page_body)
         image = _write_bracket_images(
             out_dir,
+            jobs,
             site_url,
             clazz,
             season,
@@ -724,9 +753,20 @@ def _write_bracket_assets(
         if not road or not slug:
             continue
         current.add(slug)
-        _write_png(
-            out_dir / "og" / name / f"{slug}.png",
-            render_team_bracket_card(clazz, regions.get(team["school"]), team, road, stamp, mode, venue),
+        jobs.append(
+            ImageJob(
+                f"og/{name}/{slug}.png",
+                TEAM_BRACKET_CARD,
+                {
+                    "clazz": clazz,
+                    "region": regions.get(team["school"]),
+                    "team": team,
+                    "road": road,
+                    "stamp": stamp,
+                    "mode": mode,
+                    "venue": venue,
+                },
+            )
         )
         champion = (team.get("bracket_odds") or {}).get("champion_weighted" if mode == "projected" else "champion")
         _write_text(
@@ -762,6 +802,7 @@ def _drop_unthemed(folder: Path, clazz: int) -> None:
 
 def _write_bracket_images(
     out_dir: Path,
+    jobs: list[ImageJob],
     site_url: str,
     clazz: int,
     season: int,
@@ -773,8 +814,8 @@ def _write_bracket_images(
     teams: dict,
     venue: dict | None = None,
 ) -> str:
-    """The bracket's images to share, every view in both themes; the Projected ones only when there are
-    Projected odds (a stale one is removed). Returns the light whole-bracket image's URL (for the
+    """The bracket's images to share, every view in both themes, added to *jobs*; the Projected ones only
+    when there are Projected odds (a stale one is removed). Returns the light whole-bracket image's URL (for the
     sitemap), Projected when there is one."""
     folder = out_dir / "bracket" / str(season)
     _drop_unthemed(folder, clazz)
@@ -785,12 +826,57 @@ def _write_bracket_images(
                 if version == "odds" and not projected:
                     path.unlink(missing_ok=True)
                     continue
-                stamp = stamps.get(version, f"{season} season")
-                image = render_bracket_image(
-                    clazz, season, games, results, seeds, half, version == "blank", stamp, teams, theme, venue
+                jobs.append(
+                    _bracket_image_job(
+                        f"bracket/{season}/{path.name}",
+                        clazz,
+                        season,
+                        games,
+                        results,
+                        seeds,
+                        half,
+                        version == "blank",
+                        stamps.get(version, f"{season} season"),
+                        teams,
+                        theme,
+                        venue,
+                    )
                 )
-                _write_png(path, image)
     return f"{site_url}/static/bracket/{season}/{clazz}a-all-{'odds' if projected else 'blank'}-light.png"
+
+
+def _bracket_image_job(
+    path: str,
+    clazz: int,
+    season: int,
+    games: list[dict],
+    results: dict,
+    seeds: dict,
+    view: str,
+    blank: bool,
+    stamp: str,
+    teams: dict,
+    theme: str,
+    venue: dict | None,
+) -> ImageJob:
+    """One bracket image to share (``bracket_image.render_bracket_image``), as a job."""
+    return ImageJob(
+        path,
+        BRACKET_IMAGE,
+        {
+            "clazz": clazz,
+            "season": season,
+            "games": games,
+            "results": results,
+            "seeds": seeds,
+            "view": view,
+            "blank": blank,
+            "stamp": stamp,
+            "teams": teams,
+            "theme": theme,
+            "venue": venue,
+        },
+    )
 
 
 PAST_BRACKETS = Path("state") / "past_brackets.json"  # the drawing code each past bracket was drawn with
@@ -800,8 +886,10 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
     """Each past season's final bracket images (blank: results only) and its link preview (a link to
     /brackets/3a?season=2025), once: what's already drawn is skipped, until the drawing code changes
     (``image_jobs.code_fingerprint``, kept per bracket in ``state/past_brackets.json``). As of the end
-    of the class's last week of games, as its bracket page shows it."""
+    of the class's last week of games, as its bracket page shows it. The images are drawn together,
+    several at a time (``image_jobs.draw_images``)."""
     written = 0
+    jobs: list[ImageJob] = []
     code = code_fingerprint("backend.helpers.bracket_image")
     state_path = out_dir / PAST_BRACKETS
     try:
@@ -848,16 +936,39 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
             if need_images:
                 for view, half in BRACKET_VIEWS.items():
                     for theme in BRACKET_THEMES:
-                        _write_png(
-                            folder / f"{clazz}a-{view}-blank-{theme}.png",
-                            render_bracket_image(
-                                clazz, season, games, results, seeds, half, True, stamp, teams, theme, venue
-                            ),
+                        jobs.append(
+                            _bracket_image_job(
+                                f"bracket/{season}/{clazz}a-{view}-blank-{theme}.png",
+                                clazz,
+                                season,
+                                games,
+                                results,
+                                seeds,
+                                half,
+                                True,
+                                stamp,
+                                teams,
+                                theme,
+                                venue,
+                            )
                         )
             if need_card:
-                _write_png(
-                    card_paths[0],
-                    render_bracket_card_image(clazz, season, games, results, seeds, True, stamp, teams, venue),
+                jobs.append(
+                    ImageJob(
+                        f"og/{card}.png",
+                        BRACKET_CARD_IMAGE,
+                        {
+                            "clazz": clazz,
+                            "season": season,
+                            "games": games,
+                            "results": results,
+                            "seeds": seeds,
+                            "blank": True,
+                            "stamp": stamp,
+                            "teams": teams,
+                            "venue": venue,
+                        },
+                    )
                 )
                 _write_text(
                     card_paths[1],
@@ -872,6 +983,7 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
             written += 1
             drawn_with[card] = code
     if written:
+        draw_images(out_dir, jobs)  # before the state says they're drawn
         _write_text(state_path, json.dumps(drawn_with, sort_keys=True))
     return written
 
@@ -884,9 +996,18 @@ def _remove_others(folder: Path, suffix: str, keep: set[str]) -> None:
 
 
 def _write_team_assets(
-    out_dir: Path, site_url: str, clazz: int, region: int, payload: dict, stamp: str, mode: str, as_of: date
+    out_dir: Path,
+    site_url: str,
+    clazz: int,
+    region: int,
+    payload: dict,
+    stamp: str,
+    mode: str,
+    as_of: date,
+    jobs: list[ImageJob],
 ) -> int:
-    """Each team's card and meta file for one region; removes ones for teams no longer in it."""
+    """Each team's card (added to *jobs*) and meta file for one region; removes ones for teams no longer
+    in it."""
     name = f"{clazz}-{region}"
     meta_dir = out_dir / "meta" / name
     og_dir = out_dir / "og" / name
@@ -896,7 +1017,13 @@ def _write_team_assets(
         if not slug:
             continue
         current.add(slug)
-        _write_png(og_dir / f"{slug}.png", render_team_card(clazz, region, team, stamp, mode))
+        jobs.append(
+            ImageJob(
+                f"og/{name}/{slug}.png",
+                TEAM_CARD,
+                {"clazz": clazz, "region": region, "team": team, "stamp": stamp, "mode": mode},
+            )
+        )
         _write_text(
             meta_dir / f"{slug}.html",
             meta_tags(

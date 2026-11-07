@@ -279,9 +279,10 @@ and while games remain, what has to happen for it
 region page's cards for it, each outcome with its chance and the results that
 give it.
 `region/{season}/{class}a-{region}.json` lists each image's
-pages, for the page's share sheet. Only images whose content changed since the last run are
-drawn again (`backend/helpers/image_jobs.py` keeps a fingerprint of each in
-`state/images.json` in the volume), two at a time; `SHARE_IMAGE_WORKERS` on the
+pages, for the page's share sheet. Only images whose content, or the code that draws them, changed
+since the last run are drawn again, the link previews and bracket images included
+(`backend/helpers/image_jobs.py` keeps a fingerprint of each in `state/images.json` in the volume),
+two at a time; `SHARE_IMAGE_WORKERS` on the
 worker sets how many, at most the CPU count by default (2 on this server).
 nginx includes a page's content inside `<main>`, so search engines and
 browsers without JavaScript get the real race; the app replaces it on load.

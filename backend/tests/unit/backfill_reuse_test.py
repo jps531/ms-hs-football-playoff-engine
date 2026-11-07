@@ -99,11 +99,47 @@ def test_odds_are_worked_out_again_when_the_games_change(seeding_env):
     assert seeding_env.calls.call_count == 2
 
 
-def test_the_daily_update_never_reuses(seeding_env):
-    """Without a Reuse (the daily update), every call works the odds out."""
+def test_without_a_reuse_every_call_works_the_odds_out(seeding_env):
+    """Without a Reuse, every call works the odds out."""
     _odds(None, RATINGS)
     _odds(None, RATINGS)
     assert seeding_env.calls.call_count == 2
+
+
+def test_kept_results_come_back_only_for_the_same_code(tmp_path):
+    """The daily update keeps each region's results for the next run, unless the code that works them
+    out has changed since; a missing or unreadable file reuses nothing."""
+    path = tmp_path / "state" / "region_reuse.pkl"
+    reuse = Reuse()
+    reuse.put("odds", 1, 5, ("k",), "odds")
+    reuse.put("scenarios", 1, 5, ("k",), ["scenario"])
+    reuse.save(path, "code v1")
+    kept = Reuse.load(path, "code v1")
+    assert (kept.get("odds", 1, 5, ("k",)), kept.get("scenarios", 1, 5, ("k",))) == ("odds", ["scenario"])
+    assert Reuse.load(path, "code v2").get("odds", 1, 5, ("k",)) is None
+    assert Reuse.load(tmp_path / "missing.pkl", "code v1").get("odds", 1, 5, ("k",)) is None
+    path.write_bytes(b"not a pickle")
+    assert Reuse.load(path, "code v1").get("odds", 1, 5, ("k",)) is None
+    assert [p.name for p in path.parent.iterdir()] == ["region_reuse.pkl"]  # no temp file left
+
+
+def test_the_results_are_kept_in_the_workers_share_folder(monkeypatch, tmp_path):
+    """Kept in the share folder's state/ (which nginx doesn't serve), and not kept without one."""
+    monkeypatch.delenv("SHARE_OUTPUT_DIR", raising=False)
+    assert pipeline.reuse_path() is None
+    monkeypatch.setenv("SHARE_OUTPUT_DIR", str(tmp_path))
+    assert pipeline.reuse_path() == tmp_path / "state" / "region_reuse.pkl"
+
+
+def test_the_engine_fingerprint_covers_the_engine():
+    """The hash covers the modules the results are worked out with, so a change to any of them is new code."""
+    from backend.helpers.image_jobs import code_modules
+
+    modules = code_modules("backend.prefect.region_scenarios_pipeline")
+    assert {"backend.helpers.scenarios", "backend.helpers.tiebreakers", "backend.helpers.win_probability"} <= set(
+        modules
+    )
+    assert len(pipeline.engine_fingerprint()) == 64
 
 
 @pytest.fixture

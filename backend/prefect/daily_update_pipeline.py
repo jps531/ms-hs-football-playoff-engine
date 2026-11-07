@@ -15,6 +15,8 @@ of it is kept) and emails the owner.
 
 Once committed, every game whose date has passed without a final score is
 listed in the email of things to look at (``missing_scores``).
+
+How long each step took is logged at the end, and is at the bottom of that email when there is one.
 """
 
 from datetime import date
@@ -26,6 +28,7 @@ from backend.helpers import attention
 from backend.helpers.database_helpers import shared_transaction
 from backend.helpers.missing_scores import note_missing_scores
 from backend.helpers.run_lock import holds_update_lock
+from backend.helpers.step_times import StepTimes
 from backend.prefect.ahsfhs_schedule_pipeline import ahsfhs_schedule_data_flow
 from backend.prefect.failure_alerts import alert_on_failure
 from backend.prefect.playoff_pipeline import PlayoffBracketMismatch, check_playoff_games
@@ -66,28 +69,35 @@ def daily_update_flow(season: int | None = None) -> State:
     of the update was kept.
     """
     attention.clear()
+    times = StepTimes()
     with shared_transaction():
-        ahsfhs_schedule_data_flow(season)
-        problems = check_playoff_games(season or date.today().year)
+        with times.step("Pulling scores"):
+            ahsfhs_schedule_data_flow(season)
+        with times.step("Checking the playoff games"):
+            problems = check_playoff_games(season or date.today().year)
         if problems:
             send_alert(
                 f"Daily update stopped: {len(problems)} AHSFHS playoff game(s) disagree with the bracket",
                 PLAYOFF_ALERT.format(problems="\n".join(f"- {p}" for p in problems)),
             )
             raise PlayoffBracketMismatch("; ".join(problems))
-        region_scenarios_data_flow(season, share_assets=False)
+        with times.step("Working out the regions"):
+            region_scenarios_data_flow(season, share_assets=False)
     # Past games still without a score, from what was committed. A failure here shouldn't fail the update.
     try:
-        note_missing_scores(season or date.today().year)
+        with times.step("Listing missing scores"):
+            note_missing_scores(season or date.today().year)
     except Exception as e:
         get_run_logger().exception("Checking for missing scores failed; the daily update itself completed")
         attention.note(attention.MISSING_SCORES, f"Checking for them failed: {type(e).__name__}: {e}")
     # Link previews, from the committed numbers. A failure here shouldn't fail the update.
     try:
-        write_share_assets(season)
+        with times.step("Drawing share images"):
+            write_share_assets(season)
     except Exception as e:
         get_run_logger().exception("Share assets failed; the daily update itself completed")
         attention.note(attention.SHARE_IMAGES, f"Drawing them failed: {type(e).__name__}: {e}")
+    get_run_logger().info("Daily update steps: %s", times.line())
     if notes := attention.take():
-        send_alert(*attention.render(notes, season or date.today().year))
+        send_alert(*attention.render(notes, season or date.today().year, times.line()))
     return Completed(message="Committed")

@@ -23,6 +23,7 @@ from backend.helpers.data_classes import (
     Game,
     StandingsOdds,
 )
+from backend.helpers.data_helpers import with_predecessor_ratings
 from backend.helpers.database_helpers import get_database_connection
 from backend.helpers.playoff_check import PlayoffRow, contradictions, round_order, settled_games
 from backend.helpers.run_lock import holds_update_lock
@@ -37,6 +38,7 @@ from backend.prefect.region_scenarios_pipeline import (
     fetch_class_regions,
     fetch_completed_pairs,
     fetch_num_rounds,
+    fetch_prior_season_elo,
     fetch_region_teams,
     get_region_finish_scenarios,
 )
@@ -371,7 +373,11 @@ def playoff_bracket_update(season: int | None = None) -> None:
     all_games = fetch_all_season_games(season)
     all_schools = fetch_all_season_schools(season)
     elo_cfg = EloConfig()
-    elo_ratings, _, elo_snapshots = compute_elo_ratings(all_games, all_schools, elo_cfg)
+    # Start from last season's ratings, as the region flow does, so the playoff odds use the same Elo.
+    prior_elo = with_predecessor_ratings(fetch_prior_season_elo(season - 1), season)
+    elo_ratings, _, elo_snapshots = compute_elo_ratings(
+        all_games, all_schools, elo_cfg, prior_ratings=prior_elo or None
+    )
     snapshot_dates = [snap[0] for snap in elo_snapshots]
 
     class_regions = fetch_class_regions(season)

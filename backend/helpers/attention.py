@@ -76,12 +76,15 @@ def take() -> dict[str, list[str]]:
     return by_kind
 
 
-def render(by_kind: dict[str, list[str]], season: int) -> tuple[str, str]:
-    """The email for *by_kind* (from ``take``): (subject, text)."""
+def render(by_kind: dict[str, list[str]], season: int, times: str | None = None) -> tuple[str, str]:
+    """The email for *by_kind* (from ``take``): (subject, text), ending with how long each step took
+    (*times*, ``StepTimes.line``) when given."""
     count = sum(len(texts) for texts in by_kind.values())
     subject = f"Daily update done, {count} thing{'s' if count != 1 else ''} to look at"
     parts = [f"The {season} daily update finished and the site shows its numbers. A few things need a look:"]
     for kind, texts in by_kind.items():
         heading, advice = KINDS[kind]
         parts.append(f"{heading} ({len(texts)})\n{advice}\n" + "\n".join(f"- {t}" for t in texts))
+    if times:
+        parts.append(f"How long each step took: {times}")
     return subject, "\n\n".join(parts) + "\n"

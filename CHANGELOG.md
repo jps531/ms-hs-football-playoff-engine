@@ -5,6 +5,17 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.16.1
+
+- **Playoff odds use the same team ratings as the rest of the season.** Once a class's playoffs
+  start, its odds of reaching each round and of hosting are worked out again after each round. That
+  work started every team at its class's starting rating, ignoring how it finished last season,
+  while the odds before the playoffs carried last season's ratings over. Now both do.
+- Behind the scenes, the morning update does less work: a region whose games and ratings haven't
+  changed since the last update keeps its odds and scenarios instead of working them out again, and
+  a link preview or bracket image is drawn again only when what it shows, or how it's drawn, has
+  changed.
+
 ## 1.16.0
 
 - **The class buttons stay in reach.** On Standings, Bracket and Regions pages the 1A–7A buttons are
