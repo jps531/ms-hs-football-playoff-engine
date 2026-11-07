@@ -14,7 +14,8 @@ settled games (``playoff_check``). Any disagreement stops the update (none
 of it is kept) and emails the owner.
 
 Once committed, every game whose date has passed without a final score is
-listed in the email of things to look at (``missing_scores``).
+listed in the email of things to look at (``missing_scores``), and so is every
+past game only one school's page lists (``schedule_conflicts``).
 
 How long each step took is logged at the end, and is at the bottom of that email when there is one.
 """
@@ -28,6 +29,7 @@ from backend.helpers import attention
 from backend.helpers.database_helpers import shared_transaction
 from backend.helpers.missing_scores import note_missing_scores
 from backend.helpers.run_lock import holds_update_lock
+from backend.helpers.schedule_conflicts import note_schedule_conflicts
 from backend.helpers.step_times import StepTimes
 from backend.prefect.ahsfhs_schedule_pipeline import ahsfhs_schedule_data_flow
 from backend.prefect.failure_alerts import alert_on_failure
@@ -90,6 +92,13 @@ def daily_update_flow(season: int | None = None) -> State:
     except Exception as e:
         get_run_logger().exception("Checking for missing scores failed; the daily update itself completed")
         attention.note(attention.MISSING_SCORES, f"Checking for them failed: {type(e).__name__}: {e}")
+    # Past games only one school's page lists (a wrong opponent, or a game not played). Not fatal either.
+    try:
+        with times.step("Checking schedules"):
+            note_schedule_conflicts(season or date.today().year)
+    except Exception as e:
+        get_run_logger().exception("Checking the schedules failed; the daily update itself completed")
+        attention.note(attention.SCHEDULES_DISAGREE, f"Checking them failed: {type(e).__name__}: {e}")
     # Link previews, from the committed numbers. A failure here shouldn't fail the update.
     try:
         with times.step("Drawing share images"):

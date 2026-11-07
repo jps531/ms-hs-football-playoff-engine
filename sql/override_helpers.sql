@@ -51,6 +51,41 @@ RETURNS VOID AS $$
 $$ LANGUAGE sql;
 
 
+-- A game's opponent, corrected: when a school's AHSFHS page names the wrong
+-- opponent. The row gets the corrected opponent, overrides.ahsfhs_opponent
+-- keeps the one AHSFHS listed (the first time; a second correction keeps the
+-- original), and the row joins the opponent's row of the same game (its
+-- game_id), when the opponent has one within three days. The schedule pipeline
+-- keeps the corrected opponent on every later pull (apply_opponent_corrections).
+CREATE OR REPLACE FUNCTION set_game_opponent(p_school TEXT, p_date DATE, p_opponent TEXT)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE games
+  SET overrides = CASE WHEN overrides ? 'ahsfhs_opponent' THEN overrides
+                       ELSE overrides || jsonb_build_object('ahsfhs_opponent', opponent) END,
+      opponent = p_opponent
+  WHERE school = p_school AND date = p_date;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '% has no game on %', p_school, p_date;
+  END IF;
+  UPDATE games g
+  SET game_id = o.game_id
+  FROM games o
+  WHERE g.school = p_school AND g.date = p_date
+    AND o.school = p_opponent AND o.opponent = p_school AND o.season = g.season
+    AND o.date BETWEEN g.date - 3 AND g.date + 3 AND o.game_id <> g.game_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Undo it: the row goes back to the opponent AHSFHS listed. Its game_id is
+-- put back in line by the next schedule pull of its season.
+CREATE OR REPLACE FUNCTION clear_game_opponent(p_school TEXT, p_date DATE)
+RETURNS VOID AS $$
+  UPDATE games
+  SET opponent = overrides->>'ahsfhs_opponent', overrides = overrides - 'ahsfhs_opponent'
+  WHERE school = p_school AND date = p_date AND overrides ? 'ahsfhs_opponent';
+$$ LANGUAGE sql;
+
 -- CONVENIENCE: view all active overrides across all tables
 
 CREATE OR REPLACE FUNCTION list_overrides()

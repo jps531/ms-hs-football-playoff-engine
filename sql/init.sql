@@ -267,16 +267,20 @@ FROM locations;
 -- but their scores disagree, neither is trusted: both read as not final, with
 -- no score (scores_disagree), and the daily update's email lists the game. A
 -- correction (an override of final, result or the points) wins: on the row
--- itself, and failing that on the other school's row.
+-- itself, and failing that on the other school's row. A canceled game
+-- (game_status 'canceled', from AHSFHS or an override) is never final and has
+-- no score, whatever its row says.
 CREATE OR REPLACE VIEW games_effective AS
 SELECT
   games.school, games.date, games.season, games.opponent,
   CASE pick.mode
     WHEN 'disagree' THEN NULL
+    WHEN 'canceled' THEN NULL
     WHEN 'borrow' THEN CASE other.result WHEN 'W' THEN 'L' WHEN 'L' THEN 'W' ELSE other.result END
     ELSE own.result
   END AS result,
-  CASE pick.mode WHEN 'disagree' THEN FALSE WHEN 'borrow' THEN TRUE ELSE own.final END AS final,
+  CASE pick.mode WHEN 'disagree' THEN FALSE WHEN 'canceled' THEN FALSE WHEN 'borrow' THEN TRUE ELSE own.final END
+    AS final,
   CASE pick.mode WHEN 'borrow' THEN other.overtime ELSE own.overtime END AS overtime,
   CASE pick.mode WHEN 'disagree' THEN NULL WHEN 'borrow' THEN other.game_status ELSE own.game_status END
     AS game_status,
@@ -287,10 +291,10 @@ SELECT
   games.helmet_design_id,
   COALESCE(games.overrides->>'location',                games.location)       AS location,
   COALESCE((games.overrides->>'location_id')::int,      games.location_id)    AS location_id,
-  CASE pick.mode WHEN 'disagree' THEN NULL WHEN 'borrow' THEN other.points_against ELSE own.points_for END
-    AS points_for,
-  CASE pick.mode WHEN 'disagree' THEN NULL WHEN 'borrow' THEN other.points_for ELSE own.points_against END
-    AS points_against,
+  CASE WHEN pick.mode IN ('disagree', 'canceled') THEN NULL
+       WHEN pick.mode = 'borrow' THEN other.points_against ELSE own.points_for END AS points_for,
+  CASE WHEN pick.mode IN ('disagree', 'canceled') THEN NULL
+       WHEN pick.mode = 'borrow' THEN other.points_for ELSE own.points_against END AS points_against,
   COALESCE(
     (games.overrides->>'region_game')::boolean,
     COALESCE(games.overrides->>'round', games.round) IS NULL AND EXISTS (
@@ -320,7 +324,8 @@ FROM games
 -- This row as its school's page (and any correction) has it.
 CROSS JOIN LATERAL (
   SELECT
-    COALESCE((games.overrides->>'final')::boolean,      games.final)          AS final,
+    COALESCE((games.overrides->>'final')::boolean,      games.final)
+      AND COALESCE(games.overrides->>'game_status', games.game_status, '') <> 'canceled' AS final,
     COALESCE(games.overrides->>'result',                games.result)         AS result,
     COALESCE((games.overrides->>'points_for')::int,     games.points_for)     AS points_for,
     COALESCE((games.overrides->>'points_against')::int, games.points_against) AS points_against,
@@ -331,7 +336,8 @@ CROSS JOIN LATERAL (
 -- The other school's row of the same game, the same way (none for an out-of-state opponent).
 LEFT JOIN LATERAL (
   SELECT
-    COALESCE((o.overrides->>'final')::boolean,      o.final)          AS final,
+    COALESCE((o.overrides->>'final')::boolean,      o.final)
+      AND COALESCE(o.overrides->>'game_status', o.game_status, '') <> 'canceled' AS final,
     COALESCE(o.overrides->>'result',                o.result)         AS result,
     COALESCE((o.overrides->>'points_for')::int,     o.points_for)     AS points_for,
     COALESCE((o.overrides->>'points_against')::int, o.points_against) AS points_against,
@@ -343,6 +349,7 @@ LEFT JOIN LATERAL (
 ) other ON TRUE
 CROSS JOIN LATERAL (
   SELECT CASE
+    WHEN own.game_status = 'canceled' THEN 'canceled'
     WHEN own.corrected THEN 'own'
     WHEN other.corrected AND other.final IS TRUE THEN 'borrow'
     WHEN own.final IS TRUE AND other.final IS TRUE AND (

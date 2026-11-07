@@ -40,6 +40,7 @@ def _daily(monkeypatch, pull=None, recalc=None, problems=()):
         recalc or (lambda season, share_assets: calls.append(("recalc", season, share_assets))),
     )
     monkeypatch.setattr(daily, "note_missing_scores", lambda season: calls.append(("missing", season)) or 0)
+    monkeypatch.setattr(daily, "note_schedule_conflicts", lambda season: calls.append(("schedules", season)) or 0)
     monkeypatch.setattr(daily, "write_share_assets", lambda season: calls.append(("images", season)))
     monkeypatch.setattr(daily, "check_playoff_games", lambda season: calls.append(("check", season)) or problems)
     monkeypatch.setattr(daily, "send_alert", lambda subject, text: calls.append(("alert", subject, text)))
@@ -65,6 +66,7 @@ def test_things_to_look_at_are_emailed_once_the_update_is_done(monkeypatch):
         ("recalc", 2026, False),
         "commit",
         ("missing", 2026),
+        ("schedules", 2026),
         ("images", 2026),
     ]
     _, subject, text = calls[-1]
@@ -74,7 +76,7 @@ def test_things_to_look_at_are_emailed_once_the_update_is_done(monkeypatch):
     steps = text.rsplit("How long each step took: ", 1)[1]
     assert re.fullmatch(
         r"Pulling scores \S+ · Checking the playoff games \S+ · Working out the regions \S+ · "
-        r"Listing missing scores \S+ · Drawing share images \S+ · total \S+\n",
+        r"Listing missing scores \S+ · Checking schedules \S+ · Drawing share images \S+ · total \S+\n",
         steps.replace("under 1s", "0s"),
     )
 
@@ -184,6 +186,7 @@ def test_the_pull_and_the_recalculation_are_one_transaction_and_images_follow_th
         ("recalc", 2026, False),
         "commit",
         ("missing", 2026),
+        ("schedules", 2026),
         ("images", 2026),
     ]
 

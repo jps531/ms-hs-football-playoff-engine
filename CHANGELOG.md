@@ -5,6 +5,17 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.16.3
+
+- **Two games show their real opponent.** Amanda Elzy's Aug 28, 2026 game was against Charleston,
+  and Bay Springs' Sep 12, 2025 game against Forest Hill; each school's AHSFHS page named another
+  team. The team ratings had counted each as a second game, against a team that played someone else
+  that night. The 2026 numbers are worked out again with the game counted once; the 2025 season's
+  stored numbers are left as they were.
+- **A canceled game has no score.** West Tallahatchie vs Ashland on Sep 25, 2026 wasn't played, though
+  West Tallahatchie's page listed a 1–0 win. It now shows as canceled and counts for neither team.
+  A canceled region game also no longer counts as a game left to play in the odds.
+
 ## 1.16.2
 
 - **A game's score shows for both teams once either team's page has it.** Scores come from
