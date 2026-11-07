@@ -390,6 +390,54 @@ def test_no_corrections_leave_the_scrape_alone(monkeypatch: pytest.MonkeyPatch) 
     assert pipeline.apply_date_corrections.fn(games, 2026) == games
 
 
+def test_a_corrected_opponent_stays_corrected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AHSFHS still lists Amanda Elzy vs Leflore County on 08-28; the correction says Charleston."""
+    from datetime import date as _date
+
+    cur, _ = _mock_db(monkeypatch, deleted=[], kept=[])
+    cur.fetchall.side_effect = [[("Amanda Elzy", _date(2026, 8, 28), "Charleston", "Leflore County")]]
+    games = [
+        _listed("Amanda Elzy", "Leflore County", "2026-08-28"),
+        _listed("Amanda Elzy", "Leflore County", "2026-10-02"),
+        _listed("Leflore County", "Shaw", "2026-08-28"),
+    ]
+
+    out = pipeline.apply_opponent_corrections.fn(games, 2026)
+
+    assert [(g.school, g.opponent, g.date.isoformat()) for g in out] == [
+        ("Amanda Elzy", "Charleston", "2026-08-28"),  # the corrected game: its corrected opponent
+        ("Amanda Elzy", "Leflore County", "2026-10-02"),  # a real game against them weeks later: untouched
+        ("Leflore County", "Shaw", "2026-08-28"),  # another school: untouched
+    ]
+    cur.execute.assert_called_once()
+    assert "overrides ? 'ahsfhs_opponent'" in cur.execute.call_args.args[0]
+
+
+def test_a_page_that_now_names_the_corrected_opponent_is_left_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Once AHSFHS fixes the page, the scraped game already has the corrected opponent."""
+    from datetime import date as _date
+
+    cur, _ = _mock_db(monkeypatch, deleted=[], kept=[])
+    cur.fetchall.side_effect = [[("Amanda Elzy", _date(2026, 8, 28), "Charleston", "Leflore County")]]
+    games = [_listed("Amanda Elzy", "Charleston", "2026-08-28")]
+    assert pipeline.apply_opponent_corrections.fn(games, 2026) == games
+
+
+def test_the_pull_corrects_opponents_after_dates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The flow corrects dates, then opponents, before writing anything."""
+    from unittest.mock import MagicMock
+
+    order = []
+    for name in ("get_existing_schools", "find_ahsfhs_schedule_for_schools"):
+        monkeypatch.setattr(pipeline, name, MagicMock(return_value=[]))
+    for name in ("apply_date_corrections", "apply_opponent_corrections"):
+        monkeypatch.setattr(pipeline, name, lambda games, season, name=name: order.append(name) or games)
+    monkeypatch.setattr(pipeline, "insert_rows", lambda games: order.append("insert_rows") or 0)
+    monkeypatch.setattr(pipeline, "remove_unlisted_games", lambda games, season: order.append("remove") or 0)
+    pipeline.ahsfhs_schedule_data_flow.fn.__wrapped__(2026)
+    assert order == ["apply_date_corrections", "apply_opponent_corrections", "insert_rows", "remove"]
+
+
 def test_things_to_look_at_are_noted_for_the_daily_email(monkeypatch: pytest.MonkeyPatch) -> None:
     """A changed score under a correction and a kept off-schedule game also go in the daily update's email."""
     from datetime import date as _date

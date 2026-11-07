@@ -629,13 +629,13 @@ def fetch_remaining_pairs(teams: list[str], season: int, cutoff_date: date | Non
     Args:
         cutoff_date: When provided, treats games played after cutoff_date as
                      remaining (historical reconstruction mode). Without it,
-                     fetches games currently marked final=FALSE.
+                     fetches games currently marked final=FALSE, except canceled ones.
     """
     if cutoff_date is not None:
         date_filter = "game_date > %s AND region_game=TRUE"
         params: tuple = (season, cutoff_date, teams, teams)
     else:
-        date_filter = "final=FALSE AND region_game=TRUE"
+        date_filter = "final=FALSE AND region_game=TRUE AND game_status IS DISTINCT FROM 'canceled'"
         params = (season, teams, teams)
 
     base_query = (

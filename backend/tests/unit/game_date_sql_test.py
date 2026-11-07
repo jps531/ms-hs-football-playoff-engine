@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = (ROOT / "sql/migrations/2026_10_game_date.sql").read_text()
 
 # The newest migration that re-creates the view (file names don't sort by date).
-VIEW_MIGRATION = (ROOT / "sql/migrations/2026_11_one_score_per_game.sql").read_text()
+VIEW_MIGRATION = (ROOT / "sql/migrations/2026_11_opponent_corrections.sql").read_text()
 
 
 def _view(sql: str) -> str:
@@ -49,15 +49,34 @@ def test_a_game_has_one_score_in_both_schools_rows():
     assert "WHEN own.corrected THEN 'own'" in view
     assert "WHEN other.corrected AND other.final IS TRUE THEN 'borrow'" in view
     assert "WHEN own.final IS NOT TRUE AND other.final IS TRUE AND other.result IS NOT NULL THEN 'borrow'" in view
-    assert "CASE pick.mode WHEN 'disagree' THEN FALSE WHEN 'borrow' THEN TRUE ELSE own.final END AS final" in view
-    assert (
-        "CASE pick.mode WHEN 'disagree' THEN NULL WHEN 'borrow' THEN other.points_against ELSE own.points_for END"
-        in view
-    )
+    assert "CASE pick.mode WHEN 'disagree' THEN FALSE WHEN 'canceled' THEN FALSE WHEN 'borrow' THEN TRUE" in view
+    assert "WHEN pick.mode = 'borrow' THEN other.points_against ELSE own.points_for END AS points_for" in view
     # The view's columns keep their order (CREATE OR REPLACE VIEW only adds columns at the end).
     assert view.rstrip().split("pick.mode = 'borrow' AS score_from_opponent,")[1].split("FROM games")[0].strip() == (
         "pick.mode = 'disagree' AS scores_disagree"
     )
+
+
+def test_a_canceled_game_is_never_final_and_has_no_score():
+    """First in the order, and neither row's final counts while it's canceled (so nothing is borrowed)."""
+    view = _view(VIEW_MIGRATION)
+    assert view.index("WHEN own.game_status = 'canceled' THEN 'canceled'") < view.index("WHEN own.corrected THEN")
+    assert "CASE WHEN pick.mode IN ('disagree', 'canceled') THEN NULL" in view
+    assert view.count("game_status, '') <> 'canceled' AS final") == 2
+
+
+def _functions(sql: str) -> dict[str, str]:
+    """The opponent-correction functions in *sql*, by name."""
+    return {
+        m.group(1): m.group(0)
+        for m in re.finditer(r"CREATE OR REPLACE FUNCTION (\w+_game_opponent)\(.*?\$\$ LANGUAGE \w+;", sql, re.S)
+    }
+
+
+def test_the_migration_creates_the_opponent_functions_override_helpers_does():
+    helpers = _functions((ROOT / "sql/override_helpers.sql").read_text())
+    assert set(helpers) == {"set_game_opponent", "clear_game_opponent"}
+    assert _functions(VIEW_MIGRATION) == helpers
 
 
 def test_the_standings_cutoff_goes_by_game_date():

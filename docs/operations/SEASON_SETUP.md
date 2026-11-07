@@ -151,6 +151,31 @@ After applying the correction, re-run both pipelines:
 
 Or run `backfill-historical-snapshots` for 2025, which does both and also redoes the past weeks.
 
+### Wrong opponents and canceled games
+
+A school's AHSFHS page sometimes names the wrong opponent, or lists a game that wasn't played. The
+daily update's email lists each past game only one school's page has ("Games only one school's AHSFHS
+page lists"), with what the opponent's page has that week. To fix one, in a script under
+`sql/corrections/`:
+
+- **Wrong opponent:** `SELECT set_game_opponent('Amanda Elzy', '2026-08-28', 'Charleston');` The row gets
+  the corrected opponent and joins the opponent's row of the game; `overrides.ahsfhs_opponent` keeps
+  the one AHSFHS listed, and the schedule pipeline keeps the corrected opponent on every later pull.
+  `clear_game_opponent(school, date)` undoes it.
+- **Not played:** `SELECT set_game_override('West Tallahatchie', '2026-09-25', 'game_status', 'canceled');`
+  A canceled game is never final and has no score.
+
+Then queue a recompute of the season from the game's date (`recompute_requests`, as
+`sql/corrections/schedule_conflicts_2026_11.sql` does), so the ratings and odds drop the game that
+didn't happen.
+
+### November 2026 (`sql/corrections/schedule_conflicts_2026_11.sql`)
+
+Amanda Elzy's Aug 28, 2026 game was against Charleston (its page says Leflore County); Bay Springs'
+Sep 12, 2025 game was against Forest Hill (its page says Jim Hill); West Tallahatchie vs Ashland on
+Sep 25, 2026 wasn't played (marked canceled). Needs `sql/migrations/2026_11_opponent_corrections.sql`
+first.
+
 ---
 
 ## 2026: Leake (Region 2-5A)
