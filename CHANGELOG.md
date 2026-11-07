@@ -5,6 +5,17 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.16.2
+
+- **A game's score shows for both teams once either team's page has it.** Scores come from
+  each school's own page on AHSFHS, and the two pages don't always update together. Until now, a
+  game final on one school's page still counted as unplayed for the other school: no score on its
+  schedule and missing from its record, and for a region game, counted for one team but not the
+  other in the region's standings. Now both teams get the score.
+- When the two schools' pages both have a game final but with different scores, neither score
+  counts until they match or a correction is approved: the game shows no score and counts as
+  unplayed, rather than counting differently for each team.
+
 ## 1.16.1
 
 - **Playoff odds use the same team ratings as the rest of the season.** Once a class's playoffs

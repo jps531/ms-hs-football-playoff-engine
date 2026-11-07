@@ -47,6 +47,14 @@ that asks which games had been played by a date (`get_standings_for_region`'s cu
 snapshots, Elo and RPI, the playoff results as of a date) goes by `game_date`; a school's schedule
 still shows its own row's `date`.
 
+A game has one score in both schools' rows of `games_effective`. The two schools' AHSFHS pages don't
+always update together, so when one row is final and the other isn't yet, the other row reads the
+final one's score, mirrored (`score_from_opponent`). When both rows are final but their scores
+disagree, neither is trusted: both read as not final, with no score (`scores_disagree`), until the
+pages match or a correction is approved, and the daily update's email lists the game with both scores.
+A correction (an override of `final`, `result` or the points) wins: on the row itself, and failing that
+on the other school's row.
+
 ## Diagram
 
 ```mermaid

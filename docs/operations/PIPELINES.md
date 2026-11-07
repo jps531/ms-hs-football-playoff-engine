@@ -28,7 +28,8 @@ These go to `ALERT_TO`, or `DIGEST_TO` when that's empty, through the digest's S
 - **A failed run** of `daily-update`, `recompute-after-corrections` or `playoff-bracket-update` (`backend/prefect/failure_alerts.py`): which one, the error, and what the site shows meanwhile. Each sends at most one such email every 6 hours, so a recompute failing every 5 minutes sends one. Only a run started on its own emails: the playoff update inside the daily update fails the daily update, which emails once. A run killed outright (out of memory, a restart) sends nothing.
 - **The daily update stopped itself** over a playoff game that disagrees with the bracket (above): the list of games, instead of the failure email.
 - **The daily update finished, with things to look at** (`backend/helpers/attention.py`): one email, sent after the commit, listing by kind
-  - games of the season dated before today (in Mississippi) that still have no final score, each once, a region game marked as one since it still counts as unplayed (`backend/helpers/missing_scores.py`; a canceled game isn't listed, and a forfeit is final);
+  - games of the season dated before today (in Mississippi) that still have no final score, each once, a region game marked as one since it still counts as unplayed (`backend/helpers/missing_scores.py`; a canceled game isn't listed, and a forfeit is final). A game with a final score on one school's page counts as final for both (see [SCHEMA.md](../architecture/SCHEMA.md)), so it isn't listed;
+  - games the two schools' pages both have final with different scores, with each page's score: neither counts until they match or a correction is approved;
   - schools whose AHSFHS page couldn't be read (their new scores aren't in);
   - scores AHSFHS changed under an approved correction (the correction still shows);
   - finished or corrected games no longer on AHSFHS, kept;
