@@ -225,3 +225,41 @@ def draw_images(
         json.dump(manifest, f, indent=0, sort_keys=True)
     os.replace(tmp, manifest_path)
     return {"drawn": len(todo), "kept": kept, "removed": removed}
+
+
+def sweep(out_dir: Path, folders: list[str], keep: set[str]) -> int:
+    """Remove every PNG under the *folders* (relative to *out_dir*, searched all the way down) that isn't in
+    *keep*, the files this run made or kept, and the folders that leaves empty; drop the manifest's entries
+    for what's gone. So images nothing makes any more (a season the site no longer has, a region that went
+    away in a realignment, a team that moved) don't pile up. Returns how many files were removed."""
+    removed = 0
+    for folder in folders:
+        root = out_dir / folder
+        if not root.is_dir():
+            continue
+        for png in sorted(root.rglob("*.png")):
+            if str(png.relative_to(out_dir)) not in keep:
+                png.unlink()
+                removed += 1
+        for sub in sorted((p for p in root.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+            if not any(sub.iterdir()):
+                sub.rmdir()
+    manifest_path = out_dir / MANIFEST
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, ValueError):
+        return removed
+    # An entry goes with its files; one that made none (nothing to show, as a region's scenarios once its
+    # games are played) stays, so its job isn't drawn again for nothing.
+    swept = tuple(f.rstrip("/") + "/" for f in folders)
+    kept = {
+        path: entry
+        for path, entry in manifest.items()
+        if not path.startswith(swept) or not entry.get("files") or any(f in keep for f in entry["files"])
+    }
+    if kept != manifest:
+        fd, tmp = tempfile.mkstemp(dir=manifest_path.parent, suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            json.dump(kept, f, indent=0, sort_keys=True)
+        os.replace(tmp, manifest_path)
+    return removed

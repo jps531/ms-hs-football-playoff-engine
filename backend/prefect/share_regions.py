@@ -5,14 +5,18 @@ For every season whose regions are loaded (each cycle file's seasons with school
 - ``regions/map.json``, ``regions/index.json`` and ``regions/{season}.json``: the page's data
   (``region_pages``), served at /static/regions/;
 
+- the images to share (``region_map_image``), for every choice the page offers, so its Share button
+  always has them: ``regions/{season}/{c}a-{theme}.png``, the class's two seasons side by side
+  ``regions/{season}/compare/{c}a-{theme}.png`` (when there's a season before), each team's
+  ``regions/{season}/team/{slug}-{theme}.png`` and its two regions compared
+  ``regions/{season}/compare/{slug}-{theme}.png``. Like the region images, only those whose content
+  changed are drawn (``image_jobs``), and a choice the page no longer offers loses its folder;
+
 and for the newest choice (the page's default):
 
 - ``body/regions-{c}.html`` and ``meta/regions-{c}.html`` (+ ``meta/regions-{c}/{slug}.html`` for a
-  team's link): the page without JavaScript, and its link preview;
-- the images to share (``region_map_image``): ``regions/{season}/{c}a-{theme}.png``, each team's
-  ``regions/{season}/team/{slug}-{theme}.png`` and ``regions/{season}/compare/{slug}-{theme}.png``, and
-  the previews ``og/regions-{c}.png`` and ``og/regions-{c}/{slug}.png``. Like the region images, only
-  those whose content changed are drawn (``image_jobs``).
+  team's link): the page without JavaScript, and its link preview, with the previews
+  ``og/regions-{c}.png`` and ``og/regions-{c}/{slug}.png``.
 """
 
 from __future__ import annotations
@@ -84,9 +88,11 @@ def _colors(teams: list[dict], names: set[str]) -> dict[str, dict]:
     }
 
 
-def image_jobs(option: dict, rows: list[dict], prior: list[dict], teams: list[dict]) -> list[ImageJob]:
-    """The newest choice's images: each class's map, each team's region and its two regions compared
-    (light and dark), and the link previews."""
+def image_jobs(
+    option: dict, rows: list[dict], prior: list[dict], teams: list[dict], previews: bool = True
+) -> list[ImageJob]:
+    """A choice's images: each class's map, each team's region and its two regions compared (light and
+    dark), and with *previews* (the newest choice's) the link previews."""
     season, seasons = option["season"], option["seasons"]
     jobs: list[ImageJob] = []
     for clazz in CLASSES:
@@ -101,11 +107,14 @@ def image_jobs(option: dict, rows: list[dict], prior: list[dict], teams: list[di
                     {"clazz": clazz, "seasons": seasons, "schools": mine, "theme": theme},
                 )
             )
-        jobs.append(
-            ImageJob(
-                f"og/regions-{clazz}.png", CLASS_REGIONS_CARD, {"clazz": clazz, "seasons": seasons, "schools": mine}
+        if previews:
+            jobs.append(
+                ImageJob(
+                    f"og/regions-{clazz}.png",
+                    CLASS_REGIONS_CARD,
+                    {"clazz": clazz, "seasons": seasons, "schools": mine},
+                )
             )
-        )
         then = [s for s in prior if s["class"] == clazz]
         if then:
             # The two seasons' class, plus the other season's rows of the schools that moved in or out.
@@ -152,15 +161,23 @@ def image_jobs(option: dict, rows: list[dict], prior: list[dict], teams: list[di
                         {**kwargs, "theme": theme},
                     )
                 )
-        jobs.append(ImageJob(f"og/regions-{r['class']}/{slug}.png", TEAM_REGION_CARD, kwargs))
+        if previews:
+            jobs.append(ImageJob(f"og/regions-{r['class']}/{slug}.png", TEAM_REGION_CARD, kwargs))
     return jobs
 
 
 def write_regions(
-    fetch: Fetch, out_dir: Path, site_url: str, today: date, played: list[int], write: Writer
+    fetch: Fetch,
+    out_dir: Path,
+    site_url: str,
+    today: date,
+    played: list[int],
+    write: Writer,
+    drawn_files: set[str] | None = None,
 ) -> tuple[dict[str, int], list[tuple[str, date | None, list[str]]]]:
     """Write the Regions pages' files; returns counts ({"region_maps", "region_map_images",
-    "region_map_images_kept"}) and the pages for the sitemap."""
+    "region_map_images_kept"}) and the pages for the sitemap. *drawn_files*, when given, gets every
+    image file the step keeps (relative to *out_dir*), for ``image_jobs.sweep``."""
     counts = {"region_maps": 0, "region_map_images": 0, "region_map_images_kept": 0}
     seasons = loaded_seasons(fetch)
     if not seasons:
@@ -180,21 +197,27 @@ def write_regions(
         write(out_dir / "regions" / f"{season}.json", json.dumps(payloads[season], separators=(",", ":")))
         counts["region_maps"] += 1
 
+    # Every choice's images, so the page's Share button has them whichever regions it shows; the
+    # link previews are the newest choice's.
     newest = options[0]
-    season = newest["season"]
-    rows = seasons[season]
-    # The season before, under each school's name this season (a renamed school is the same school).
-    prior = [{**r, "school": school_name_for_season(r["school"], season)} for r in seasons.get(season - 1) or []]
-    teams = fetch(f"/teams?season={season}") or []
-    by_school = {t["school"]: t for t in teams}
-    jobs = image_jobs(newest, rows, prior, teams)
-    drawn = draw_images(
-        out_dir,
-        jobs,
-        prune=[f"regions/{season}", f"regions/{season}/team", f"regions/{season}/compare"]
-        + [f"og/regions-{c}" for c in CLASSES],
-    )
+    jobs: list[ImageJob] = []
+    prune = [f"og/regions-{c}" for c in CLASSES]
+    by_school: dict[str, dict] = {}
+    for option in options:
+        season = option["season"]
+        # The season before, under each school's name this season (a renamed school is the same school).
+        prior = [{**r, "school": school_name_for_season(r["school"], season)} for r in seasons.get(season - 1) or []]
+        teams = fetch(f"/teams?season={season}") or []
+        if option is newest:
+            by_school = {t["school"]: t for t in teams}
+        jobs += image_jobs(option, seasons[season], prior, teams, previews=option is newest)
+        prune += [f"regions/{season}", f"regions/{season}/team", f"regions/{season}/compare"]
+    files: dict[str, list[str]] = {}
+    drawn = draw_images(out_dir, jobs, prune=prune, files_out=files)
     counts["region_map_images"], counts["region_map_images_kept"] = drawn["drawn"], drawn["kept"]
+    if drawn_files is not None:
+        drawn_files.update(f for pages in files.values() for f in pages)
+    season = newest["season"]
 
     payload = payloads[season]
     sitemap = []

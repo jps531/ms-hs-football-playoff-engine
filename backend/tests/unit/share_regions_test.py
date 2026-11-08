@@ -113,6 +113,17 @@ def test_the_images(written):
     assert {s["school"] for s in job.kwargs["schools"]} == {"Greenwood", "Leake", "Natchez", "Lost", "Yazoo City"}
 
 
+def test_every_choice_has_its_images_and_only_the_newest_its_previews(written):
+    """The page's Share button has images whichever regions it shows: 2026's too (with no season before it
+    here, so nothing compared). The link previews are the newest choice's."""
+    *_, jobs = written
+    paths = {j.path for j in jobs}
+    assert {"regions/2026/4a-light.png", "regions/2026/team/greenwood-dark.png"} <= paths
+    assert not any(p.startswith("regions/2026/compare/") for p in paths)
+    assert all(not p.startswith("og/") or "2026" not in str(j.kwargs.get("seasons")) for j in jobs for p in [j.path])
+    assert sum(p.startswith("og/regions-4") for p in paths) == 2  # 2027's Yazoo City: its class and its own
+
+
 def test_a_former_region_mate_in_another_class_is_shown_where_it_went(written):
     """Greenwood's image lists Yazoo City (Region 4-4A with it in 2026) as now in Region 3-4A, not as gone."""
     from backend.helpers import region_map_image as ri
