@@ -1,0 +1,72 @@
+# A GitHub release for each version of the site (backend/version.py), tagged vX.Y.Z, with its CHANGELOG.md
+# entry as its notes (scripts/release.py).
+#
+# - After CI passes on a push to main: the version main now states, if it has no release yet. A PR that
+#   bumps the version is released once it merges and its CI is green; one that doesn't bump it releases
+#   nothing.
+# - Run by hand (Actions → Release → Run workflow): every version main has had that has no release yet,
+#   oldest first, each tagged at the main commit where it first appeared.
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write  # to create tags and releases
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Only CI that passed on a push to main in this repository: never a pull request's run (a fork's
+    # branch can be called main too).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0  # the history, to find where each version first appeared
+          persist-credentials: false
+      - name: Release the version main states
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          version=$(python3 scripts/release.py version)
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version is already released"
+            exit 0
+          fi
+          python3 scripts/release.py notes "$version" > notes.md
+          gh release create "v$version" --target "$SHA" --title "v$version" --notes-file notes.md --latest
+      - name: Release every version that has none yet
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          current=$(python3 scripts/release.py version)
+          python3 scripts/release.py history | while read -r version sha; do
+            if gh release view "v$version" >/dev/null 2>&1 </dev/null; then
+              continue
+            fi
+            # A tag that exists without a release (v1.0.0, v1.0.2) gets its release on that tag.
+            python3 scripts/release.py notes "$version" > notes.md || echo "See CHANGELOG.md." > notes.md
+            latest=$([ "$version" = "$current" ] && echo true || echo false)
+            gh release create "v$version" --target "$sha" --title "v$version" --notes-file notes.md --latest="$latest" </dev/null
+            echo "Released v$version at $sha"
+          done
