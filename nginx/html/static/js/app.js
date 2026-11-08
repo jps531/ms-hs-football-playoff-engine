@@ -927,7 +927,7 @@ async function regionView(ctx) {
   // season as it finished), so the Share button shows only where the page shows those.
   const latest = !weeks.length || pickWeek(weeks, ctx.week) === weeks[weeks.length - 1];
   regionShare = latest && data.teams.length
-    ? { season, current: season === ctx.currentSeason, clazz, region, asOf: data.as_of_date, modes: regionModes({ projectedAvailable }), mode, summary: controlsSummary }
+    ? { season, current: season === ctx.currentSeason, clazz, region, asOf: data.as_of_date, modes: regionModes({ projectedAvailable, finished: season < ctx.currentSeason }), mode, summary: controlsSummary }
     : null;
   return `<div class="page">
     <header class="region-head">

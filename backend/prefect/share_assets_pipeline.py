@@ -464,7 +464,7 @@ def _past_region_jobs(fetch: Fetch, season: int, today: date) -> list[ImageJob]:
             region_games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
             as_of = date.fromisoformat(payload["as_of_date"])
             jobs += _region_image_jobs(
-                clazz, region, season, payload, region_games, dates, as_of, today, teams, bracket
+                clazz, region, season, payload, region_games, dates, as_of, today, teams, bracket, finished=True
             )
     return jobs
 
@@ -536,12 +536,15 @@ def _region_image_jobs(
     teams: dict,
     bracket: dict,
     paths: dict | None = None,
+    finished: bool = False,
 ) -> list[ImageJob]:
     """The region's overview and scenarios, and each of its teams' season and (from *paths*, the region's
     payload with each team's paths, while games remain) what has to happen for it, in each odds mode it has
-    (Projected only while there are Projected odds) and each theme. Each job carries only what its image
-    shows, so its fingerprint changes only when the image would: the snapshot and computation times
-    aren't drawn, so they're left out."""
+    (Projected only while there are Projected odds) and each theme. A *finished* season's two modes show the
+    same numbers, so its images are drawn in one (Projected where it has Projected odds), as its page's
+    share sheet offers them (share.js regionModes). Each job carries only what its image shows, so its
+    fingerprint changes only when the image would: the snapshot and computation times aren't drawn, so
+    they're left out."""
     shown = {k: v for k, v in payload.items() if k not in ("computation_state", "as_of_date")}
     region_teams = {t["school"]: teams.get(t["school"]) for t in payload["teams"]}
     unplayed = [
@@ -564,7 +567,8 @@ def _region_image_jobs(
         names |= {r["opponent"] for r in road or []}
         team_jobs.append((school, mine, road, {n: teams.get(n) for n in sorted(names)}))
     outcomes = {t["school"]: _outcomes_payload(paths, t["school"]) for t in payload["teams"]} if paths else {}
-    modes = ("projected", "tossup") if odds_mode(payload["teams"]) == "projected" else ("tossup",)
+    mode = odds_mode(payload["teams"])
+    modes = (mode,) if finished else ("projected", "tossup") if mode == "projected" else ("tossup",)
     jobs = []
     for mode in modes:
         for theme in REGION_THEMES:

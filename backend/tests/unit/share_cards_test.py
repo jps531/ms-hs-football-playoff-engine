@@ -564,12 +564,17 @@ def test_a_past_season_gets_its_final_region_and_team_images(tmp_path):
         "/standings/3/6?season=2025": final,
     }
     written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
-    assert written["past_region_images"] == 24  # the overview and scenarios, and 4 teams' seasons; 4 variants each
+    # The overview and scenarios, and 4 teams' seasons, in light and dark: one odds mode, since a finished
+    # season's two show the same numbers (Projected, as these teams have Projected odds).
+    assert written["past_region_images"] == 12
     folder = tmp_path / "region" / "2025"
     assert (folder / "3a-6-overview-projected-light.png").exists()
-    assert (folder / f"3a-6-team-{slugify(TEAMS[0]['school'])}-season-tossup-dark.png").exists()
+    assert (folder / f"3a-6-team-{slugify(TEAMS[0]['school'])}-season-projected-dark.png").exists()
+    assert not list(folder.glob("*-tossup-*.png"))
     index = json.loads((folder / "3a-6.json").read_text())
-    assert index["overview"]["projected-light"] == 1 and index["scenarios"]["projected-light"] == 0
+    assert (
+        index["overview"] == {"projected-dark": 1, "projected-light": 1} and index["scenarios"]["projected-light"] == 0
+    )
     again = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
     assert (again["region_images"], again["images_removed"]) == (0, 0)
 

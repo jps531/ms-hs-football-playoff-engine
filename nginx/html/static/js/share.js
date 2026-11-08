@@ -79,7 +79,10 @@ export const REGION_MODES = [
 ];
 
 /** The odds modes a region's images come in: Projected only while there are Projected odds. */
-export function regionModes({ projectedAvailable }) {
+export function regionModes({ projectedAvailable, finished = false }) {
+  // A finished season's two modes show the same numbers, so its images are drawn in one: Projected
+  // where it has Projected odds (share_assets_pipeline._region_image_jobs).
+  if (finished) return [projectedAvailable ? "projected" : "tossup"];
   return projectedAvailable ? ["projected", "tossup"] : ["tossup"];
 }
 

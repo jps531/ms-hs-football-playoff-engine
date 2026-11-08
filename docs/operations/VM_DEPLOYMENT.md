@@ -287,7 +287,8 @@ worker sets how many, at most the CPU count by default (2 on this server).
 
 Images to share exist for each season's latest numbers, and the pages show a Share button only
 there: this season's latest update, and each past season as it finished (its brackets, and its
-region and team images as its region pages show it at the end). Every season the Regions page
+region and team images as its region pages show it at the end, in one odds mode: a finished season's
+Projected and Toss-up show the same numbers). Every season the Regions page
 offers has its images. An older week has none, and no Share button. At the end of each run, any image
 nothing makes any more (a season the site no longer has, a region gone in a realignment, a team's
 card from a region it left) is removed from `og/`, `region/`, `bracket/` and `regions/`
