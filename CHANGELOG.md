@@ -5,6 +5,16 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.16.4
+
+- **The Regions page's visit counts.** The site now also counts the first time someone moves or
+  zooms a region map on a page, opens a region's standings from the region maps, and whether a team
+  was picked on the map or in the lists. The About page's "What visitor metrics we capture" lists
+  these, and now also the sharing that was already counted: opening a share sheet, and sharing,
+  downloading or copying the link to an image.
+- Picking a team in the Regions page's lists no longer reloads the page or adds a step to the back
+  button; it picks the team in place, as picking its dot on the map does.
+
 ## 1.16.3
 
 - **Two games show their real opponent.** Amanda Elzy's Aug 28, 2026 game was against Charleston,

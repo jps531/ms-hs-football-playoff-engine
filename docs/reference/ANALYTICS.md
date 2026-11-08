@@ -48,8 +48,9 @@ keep the two in step: a new event or property means a new line there.
 | `$pageview` | Every page, including in-app navigation | PostHog's defaults: URL, title, referrer, campaign tags, browser, OS, device, screen and window size, language, time zone |
 | `odds_changed` | Projected/Toss-up switch | `value` |
 | `week_changed`, `season_changed` | The week or season picker | `value` |
-| `team_picked` | Selecting a team in the standings or the bracket sheet | `from` (`standings`/`bracket`), `team` |
-| `team_search_used` | Choosing a team from the search box | `team` |
+| `regions-season_changed` | The Regions page's season picker (which cycle's regions) | `value` |
+| `team_picked` | Selecting a team in the standings, the bracket sheet, or on the Regions page (a dot on the map or a name in the lists) | `from` (`standings`/`bracket`/`regions`), `team`; on the Regions page also `via` (`map`/`list`) |
+| `team_search_used` | Choosing a team from the search box, or from the Regions page's own "Find a team on the map" | `team`; `from` (`regions`) for the map's |
 | `bracket_game_opened` | Opening a game's sheet | `class`, `round`, `game` |
 | `bracket_half_changed` | The North/South/Both control | `half` |
 | `bracket_share_opened` | Opening “Share this bracket” | `class` |
@@ -58,6 +59,10 @@ keep the two in step: a new event or property means a new line there.
 | `team_share_opened` | Opening “Share Magee” in a team's expanded row on a region page | `class`, `region`, `team` |
 | `team_image_shared` | Sharing, downloading or copying the link to a team's image | `class`, `region`, `season`, `team`, `image` (`season`/`scenarios`), `mode` (`projected`/`tossup`), `theme`, `method` (`share`/`download`/`copy`) |
 | `region_image_shared` | Sharing, downloading or copying the link to a region image (an image of several pages: sharing or downloading all of them, or copying the link to the one shown) | `class`, `region`, `season`, `image` (`overview`/`scenarios`), `mode` (`projected`/`tossup`), `theme`, `method` (`share`/`download`/`copy`) |
+| `regions_share_opened` | Opening “Share” on the Regions page | `class`, `team` (the team picked, or none) |
+| `regions_image_shared` | Sharing, downloading or copying the link to a Regions page image | `class`, `season`, `team` (or none), `image` (`class`/`class-compare`/`team`/`compare`), `theme`, `method` (`share`/`download`/`copy`) |
+| `regions_map_moved` | The first time the reader moves the region map on a page (later moves aren't counted) | `class`, `how` (`wheel`/`pinch`/`drag`/`buttons`) |
+| `regions_region_opened` | Following a region's heading on the Regions page to its standings | `class`, `region`, `season` (the map's) |
 | `scenarios_opened` | Opening a folded scenario group | `section` (its heading) |
 | `scenario_explanation_opened` | Opening a scenario card's Explanation sheet | `place` (e.g. `Region 1-7A`), `scenario` (the card's label, e.g. `Scenario 3`) |
 | `home_link_clicked` | Following a link on the front page | `to` (the link's path), `section` (the front-page section it's in: its heading id without `landing-`, or `classes` for the class buttons) |
@@ -89,7 +94,10 @@ text.
 `scripts/posthog_dashboard.py` builds a PostHog dashboard named "Site activity" from these
 events: bar charts of the most viewed classes, regions and brackets (from page addresses), the
 most picked teams, the front-page links followed, the scenario groups opened, and the bracket
-games opened. Each panel shows the last 30 days, and the dashboard's date picker changes them.
+games opened; and for the Regions page, its views by day, the most viewed region maps, what people
+do there (moving the map, picking or finding a team, opening a region's standings, changing the
+season, sharing), the teams looked up there, the regions opened from it, and the images shared.
+Each panel shows the last 30 days, and the dashboard's date picker changes them.
 The numbers are views and clicks, not people: opening the same page twice counts twice.
 
 1. In PostHog, **Settings → User → Personal API keys**, create a key with the
@@ -103,8 +111,10 @@ The numbers are views and clicks, not people: opening the same page twice counts
 
    (or pass `POSTHOG_DASHBOARD_URL` instead of `POSTHOG_PROJECT_ID`). It prints the
    dashboard's link; put that in `.env.local` as `POSTHOG_ACTIVITY_URL` and recreate the
-   API, and the owner sees an **Activity** link beside **Analytics** on `/moderate`. Run it once; if the dashboard exists it changes nothing, so delete the
-   dashboard in PostHog first to rebuild it after the script changes.
+   API, and the owner sees an **Activity** link beside **Analytics** on `/moderate`. Run it again
+   whenever the script's panels change: it adds the panels the dashboard lacks and updates the ones
+   it has, matched by name, and keeps the dashboard's link. It never removes a panel, so one added
+   in PostHog by hand stays (as does one the script no longer lists; delete that in PostHog).
 3. Delete the key afterwards if you won't run the script again.
 
 The About page doesn't load `analytics.js`, so views of it aren't counted; a click
