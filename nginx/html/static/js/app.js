@@ -923,11 +923,11 @@ async function regionView(ctx) {
   const schedule = { results, remaining };
   const controls = controlsLine(ctx, shownWeeks, { asOf: data.as_of_date, mode, projectedAvailable });
   nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode);
-  // The images to share are drawn for this season's newest numbers only, so the Share button shows
-  // only where the page shows those.
+  // The images to share are drawn for each season's latest numbers (this season's latest update, a past
+  // season as it finished), so the Share button shows only where the page shows those.
   const latest = !weeks.length || pickWeek(weeks, ctx.week) === weeks[weeks.length - 1];
-  regionShare = season === ctx.currentSeason && latest && data.teams.length
-    ? { season, clazz, region, asOf: data.as_of_date, modes: regionModes({ projectedAvailable }), mode, summary: controlsSummary }
+  regionShare = latest && data.teams.length
+    ? { season, current: season === ctx.currentSeason, clazz, region, asOf: data.as_of_date, modes: regionModes({ projectedAvailable, finished: season < ctx.currentSeason }), mode, summary: controlsSummary }
     : null;
   return `<div class="page">
     <header class="region-head">
@@ -1734,7 +1734,7 @@ function bracketShareSpec() {
  * many pages each has; without one, the overview alone.
  */
 async function regionShareSpec() {
-  const { season, clazz, region, asOf, modes, mode, summary } = regionShare;
+  const { season, current, clazz, region, asOf, modes, mode, summary } = regionShare;
   const index = await regionIndex();
   return {
     title: "Share this region",
@@ -1756,7 +1756,7 @@ async function regionShareSpec() {
     name: (c, page, pages) => regionImageName(season, clazz, region, c, page, pages),
     label: (c) => regionImageLabel(clazz, region, c),
     wide: () => false,
-    page: `${location.origin}/standings/${clazz}a/${region}`,
+    page: `${location.origin}/standings/${clazz}a/${region}${current ? "" : `?season=${season}`}`,
     latest: true,
     track: (c, method) => track("region_image_shared", { class: clazz, region, season, image: c.image, mode: c.mode, theme: c.theme, method }),
   };
@@ -1779,7 +1779,7 @@ async function regionIndex() {
  * Toss-up odds, light or dark. Its region's index says which there are and how many pages each has.
  */
 async function teamShareSpec(school) {
-  const { season, clazz, region, asOf, modes, mode, summary } = regionShare;
+  const { season, current, clazz, region, asOf, modes, mode, summary } = regionShare;
   const index = await regionIndex();
   return {
     title: `Share ${school}`,
@@ -1801,7 +1801,7 @@ async function teamShareSpec(school) {
     name: (c, page, pages) => teamImageName(season, school, c, page, pages),
     label: (c) => teamImageLabel(season, school, c),
     wide: () => false,
-    page: `${location.origin}/standings/${clazz}a/${region}?team=${slugify(school)}`,
+    page: `${location.origin}/standings/${clazz}a/${region}?${current ? "" : `season=${season}&`}team=${slugify(school)}`,
     latest: true,
     track: (c, method) => track("team_image_shared", { class: clazz, region, season, team: school, image: c.image, mode: c.mode, theme: c.theme, method }),
   };
@@ -2652,17 +2652,16 @@ function findRegionsTeam(name) {
 
 /**
  * The Regions page's images: the class's map, or (with a team picked) its region and its two
- * regions compared, light or dark. Drawn for the newest regions only.
+ * regions compared, light or dark. Drawn for every season the page offers.
  */
 function regionsShareSpec() {
   const { clazz, season, option, payload, picked } = regionsState;
-  const newest = season === regionsDefault;
   const prior = payload.prior_season;
   const kinds = [
     { key: "class", label: `Class ${clazz}A` },
-    ...(newest && prior ? [{ key: "class-compare", label: `${clazz}A, ${prior} vs. ${season}` }] : []),
-    ...(picked && newest ? [{ key: "team", label: picked.school }] : []),
-    ...(picked && newest && picked.before && prior ? [{ key: "compare", label: `${picked.school}, ${prior} vs. ${season}` }] : []),
+    ...(prior ? [{ key: "class-compare", label: `${clazz}A, ${prior} vs. ${season}` }] : []),
+    ...(picked ? [{ key: "team", label: picked.school }] : []),
+    ...(picked && picked.before && prior ? [{ key: "compare", label: `${picked.school}, ${prior} vs. ${season}` }] : []),
   ];
   // Where each is: regions/2027/5a-light.png, compare/5a-light.png, team/greenwood-light.png, compare/greenwood-light.png.
   const file = (c) => ({
@@ -2684,20 +2683,25 @@ function regionsShareSpec() {
     compare: `${picked?.school}: ${prior} region vs. ${season} region`,
   })[c.image];
   return {
-    title: picked && newest ? `Share ${picked.school}’s region` : `Share Class ${clazz}A’s regions`,
+    title: picked ? `Share ${picked.school}’s region` : `Share Class ${clazz}A’s regions`,
     when: `${option.label} ${option.seasons.length > 1 ? "seasons" : "season"}`,
     groups: () => [
       ...(kinds.length > 1 ? [{ label: "Image", key: "image", options: kinds }] : []),
       { label: "Theme", key: "theme", options: SHARE_THEMES },
     ],
-    defaults: { image: picked && newest ? "team" : "class", theme: document.documentElement.classList.contains("dark") ? "dark" : "light" },
+    defaults: { image: picked ? "team" : "class", theme: document.documentElement.classList.contains("dark") ? "dark" : "light" },
     pages: () => 1,
     path: (c) => `/static/regions/${season}/${file(c)}.png`,
     version: null,
     name: (c) => `${what(c)}-${season}.png`,
     label,
     wide: () => false,
-    page: `${location.origin}/regions/${clazz}a${picked ? `?team=${picked.slug}` : ""}`,
+    page: `${location.origin}/regions/${clazz}a${(() => {
+      const q = new URLSearchParams();
+      if (season !== regionsDefault) q.set("season", season);
+      if (picked) q.set("team", picked.slug);
+      return q.toString() ? `?${q}` : ""; // (not q.size: older Safari doesn't have it)
+    })()}`,
     latest: true,
     track: (c, method) => track("regions_image_shared", { class: clazz, season, team: picked?.school ?? null, image: c.image, theme: c.theme, method }),
   };

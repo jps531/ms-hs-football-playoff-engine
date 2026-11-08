@@ -86,6 +86,7 @@ from backend.helpers.image_jobs import (
     ImageJob,
     code_fingerprint,
     draw_images,
+    sweep,
 )
 from backend.helpers.region_image import playoff_road, region_playoffs, region_seeds
 from backend.helpers.share_cards import (
@@ -181,9 +182,11 @@ def build_share_assets(
     (default: the newest), plus the front page's content and the sitemap.
 
     Returns counts of what was written: {"regions", "classes", "teams", "brackets", "bracket_teams",
-    "past_brackets", "cards" and "region_images" (the link previews and bracket images, and the region
-    images, drawn), "cards_kept" and "region_images_kept" (unchanged, so not drawn again), and
-    the Regions pages' "region_maps", "region_map_images" and "region_map_images_kept" (share_regions)}.
+    "past_brackets", "past_region_images" (past seasons' final region images, drawn or kept), "cards"
+    and "region_images" (the link previews and bracket images, and the region images, drawn),
+    "cards_kept" and "region_images_kept" (unchanged, so not drawn again), the Regions pages'
+    "region_maps", "region_map_images" and "region_map_images_kept" (share_regions), and
+    "images_removed" (images nothing makes any more, swept away)}.
     """
     keys = (
         "regions",
@@ -192,6 +195,7 @@ def build_share_assets(
         "brackets",
         "bracket_teams",
         "past_brackets",
+        "past_region_images",
         "cards",
         "cards_kept",
         "region_images",
@@ -199,6 +203,7 @@ def build_share_assets(
         "region_maps",
         "region_map_images",
         "region_map_images_kept",
+        "images_removed",
     )
     all_seasons = [s["season"] for s in fetch("/seasons") or []]
     if season is None:
@@ -386,7 +391,10 @@ def build_share_assets(
         else None
     )
     # The Regions pages: their data, their content and previews, and their images to share.
-    region_counts, region_pages = write_regions(fetch, out_dir, site_url, today, all_seasons, _write_text)
+    regions_files: set[str] = set()
+    region_counts, region_pages = write_regions(
+        fetch, out_dir, site_url, today, all_seasons, _write_text, drawn_files=regions_files
+    )
     written.update(region_counts)
     sitemap += region_pages
     # The front page shows a class's region map (the featured class's, else 5A's), once there are regions.
@@ -406,20 +414,78 @@ def build_share_assets(
     written["past_brackets"] = _write_past_brackets(
         fetch, out_dir, [s for s in all_seasons if s < season], today, site_url
     )
+    # The region and team images of each past season as it finished: like the bracket, every season's
+    # latest numbers have their images, so its region page's Share button has them.
+    past_region_jobs = {s: _past_region_jobs(fetch, s, today) for s in all_seasons if s < season}
+    written["past_region_images"] = sum(len(jobs) for jobs in past_region_jobs.values())
     # The images, last: only those whose content changed are drawn, several at a time. First the link
     # previews and bracket images, then the region images and each region's index: which images it has
     # and how many pages each, for the page's share sheet.
-    cards = draw_images(out_dir, card_jobs)
+    files: dict[str, list[str]] = {}
+    cards = draw_images(out_dir, card_jobs, files_out=files)
     written["cards"] = cards["drawn"]
     written["cards_kept"] = cards["kept"]
-    files: dict[str, list[str]] = {}
-    drawn = draw_images(out_dir, image_jobs, prune=[f"region/{season}"], files_out=files)
+    by_season = {season: image_jobs, **past_region_jobs}
+    drawn = draw_images(
+        out_dir,
+        [j for jobs in by_season.values() for j in jobs],
+        prune=[f"region/{s}" for s in by_season],
+        files_out=files,
+    )
     written["region_images"] = drawn["drawn"]
     written["region_images_kept"] = drawn["kept"]
-    indexes = region_indexes(season, image_jobs, files)
-    for path, index in indexes.items():
-        _write_text(out_dir / path, json.dumps(index, sort_keys=True))
+    for s, jobs in by_season.items():
+        for path, index in region_indexes(s, jobs, files).items():
+            _write_text(out_dir / path, json.dumps(index, sort_keys=True))
+    # Then every image nothing makes any more goes: a season the site no longer has, a region gone in a
+    # realignment, a team that moved. The past brackets, drawn once, are kept as their record says.
+    keep = {f for pages in files.values() for f in pages} | regions_files | _past_bracket_files(out_dir, all_seasons)
+    written["images_removed"] = sweep(out_dir, ["og", "region", "bracket", "regions"], keep)
     return written
+
+
+def _past_region_jobs(fetch: Fetch, season: int, today: date) -> list[ImageJob]:
+    """A past season's region and team images, as its region pages show it at the end: each region's
+    latest standings (the playoffs included), its games, and its teams' roads through the bracket."""
+    teams = {t["school"]: t for t in fetch(f"/teams?season={season}") or []}
+    jobs: list[ImageJob] = []
+    for clazz in CLASSES:
+        standings = fetch(f"/standings/{clazz}?season={season}")
+        if not standings or not standings.get("regions"):
+            continue
+        dates = (fetch(f"/seasons/{season}/dates?class={clazz}") or {}).get("dates", [])
+        games = (fetch(f"/bracket/matchups?season={season}&class={clazz}") or {}).get("games") or []
+        layout = (fetch(f"/bracket?season={season}&class={clazz}") or {}).get("bracket_layout") if games else None
+        bracket = {"games": games, "results": layout_results(layout) if games else {}}
+        for region in sorted(r["region"] for r in standings["regions"]):
+            payload = fetch(f"/standings/{clazz}/{region}?season={season}")
+            if not payload or not payload.get("teams") or not payload.get("as_of_date"):
+                continue
+            region_games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
+            as_of = date.fromisoformat(payload["as_of_date"])
+            jobs += _region_image_jobs(
+                clazz, region, season, payload, region_games, dates, as_of, today, teams, bracket, finished=True
+            )
+    return jobs
+
+
+def _past_bracket_files(out_dir: Path, seasons: list[int]) -> set[str]:
+    """The past brackets' images and link previews (``_write_past_brackets``), from its record of which
+    are drawn: kept by the sweep though they're not drawn again each run. Only seasons the site has."""
+    try:
+        drawn = json.loads((out_dir / PAST_BRACKETS).read_text())
+    except (OSError, ValueError):
+        return set()
+    files = set()
+    for card in drawn:
+        _, season, clazz = card.split("-")
+        if int(season) not in seasons:
+            continue
+        files.add(f"og/{card}.png")
+        files |= {
+            f"bracket/{season}/{clazz}a-{view}-blank-{theme}.png" for view in BRACKET_VIEWS for theme in BRACKET_THEMES
+        }
+    return files
 
 
 # What each region image's file is called: /static/region/2026/3a-6-overview-projected-dark.png.
@@ -470,12 +536,15 @@ def _region_image_jobs(
     teams: dict,
     bracket: dict,
     paths: dict | None = None,
+    finished: bool = False,
 ) -> list[ImageJob]:
     """The region's overview and scenarios, and each of its teams' season and (from *paths*, the region's
     payload with each team's paths, while games remain) what has to happen for it, in each odds mode it has
-    (Projected only while there are Projected odds) and each theme. Each job carries only what its image
-    shows, so its fingerprint changes only when the image would: the snapshot and computation times
-    aren't drawn, so they're left out."""
+    (Projected only while there are Projected odds) and each theme. A *finished* season's two modes show the
+    same numbers, so its images are drawn in one (Projected where it has Projected odds), as its page's
+    share sheet offers them (share.js regionModes). Each job carries only what its image shows, so its
+    fingerprint changes only when the image would: the snapshot and computation times aren't drawn, so
+    they're left out."""
     shown = {k: v for k, v in payload.items() if k not in ("computation_state", "as_of_date")}
     region_teams = {t["school"]: teams.get(t["school"]) for t in payload["teams"]}
     unplayed = [
@@ -498,7 +567,8 @@ def _region_image_jobs(
         names |= {r["opponent"] for r in road or []}
         team_jobs.append((school, mine, road, {n: teams.get(n) for n in sorted(names)}))
     outcomes = {t["school"]: _outcomes_payload(paths, t["school"]) for t in payload["teams"]} if paths else {}
-    modes = ("projected", "tossup") if odds_mode(payload["teams"]) == "projected" else ("tossup",)
+    mode = odds_mode(payload["teams"])
+    modes = (mode,) if finished else ("projected", "tossup") if mode == "projected" else ("tossup",)
     jobs = []
     for mode in modes:
         for theme in REGION_THEMES:

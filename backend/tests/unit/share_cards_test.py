@@ -187,6 +187,8 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         "brackets": 0,
         "bracket_teams": 0,
         "past_brackets": 0,
+        "past_region_images": 0,  # no past season here
+        "images_removed": 0,
         # the link previews: the site's, the class's, the 2 regions' and the 8 teams'
         "cards": 12,
         "cards_kept": 0,
@@ -541,12 +543,72 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path, monkeypatch)
     assert '<meta name="description" content="The 2025 Class 3A playoff bracket.">' in meta  # no final result here
     calls.clear()
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0
-    # Already drawn: not fetched again (the Regions pages still read each season's schools, for its regions).
-    assert not [c for c in calls if "season=2025" in c and not c.startswith("/teams?")]
+    # Already drawn: its bracket isn't fetched again (as of a date). The season's region pages still are,
+    # for their images (_past_region_jobs), drawn only when they change.
+    assert not [c for c in calls if "season=2025" in c and "&date=" in c]
+    assert len(list((tmp_path / "bracket" / "2025").iterdir())) == 6  # not drawn this run, and not swept
     # Once the drawing code changes, it's drawn again (and then kept again).
     monkeypatch.setattr(pipeline, "code_fingerprint", lambda module: "new drawing code")
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 1
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 0
+
+
+def test_a_past_season_gets_its_final_region_and_team_images(tmp_path):
+    """Each past season's region pages, as they finished, have their images and index, like this season's
+    latest; a second run draws none of them again."""
+    final = {"as_of_date": "2025-12-07", "headline": None, "teams": TEAMS}
+    api = {
+        "/seasons": [{"season": 2026}, {"season": 2025}],
+        "/standings/3?season=2025": {"as_of_date": "2025-12-07", "regions": [{"region": 6, "teams": TEAMS}]},
+        "/seasons/2025/dates?class=3": {"dates": DATES},
+        "/standings/3/6?season=2025": final,
+    }
+    written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
+    # The overview and scenarios, and 4 teams' seasons, in light and dark: one odds mode, since a finished
+    # season's two show the same numbers (Projected, as these teams have Projected odds).
+    assert written["past_region_images"] == 12
+    folder = tmp_path / "region" / "2025"
+    assert (folder / "3a-6-overview-projected-light.png").exists()
+    assert (folder / f"3a-6-team-{slugify(TEAMS[0]['school'])}-season-projected-dark.png").exists()
+    assert not list(folder.glob("*-tossup-*.png"))
+    index = json.loads((folder / "3a-6.json").read_text())
+    assert (
+        index["overview"] == {"projected-dark": 1, "projected-light": 1} and index["scenarios"]["projected-light"] == 0
+    )
+    again = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
+    assert (again["region_images"], again["images_removed"]) == (0, 0)
+
+
+def test_images_nothing_makes_any_more_are_swept(tmp_path):
+    """A season the site no longer has, a region gone in a realignment, a team's card from a region it left:
+    removed, with their manifest entries; this run's images and the past brackets' stay."""
+    from backend.helpers.image_jobs import MANIFEST
+
+    api = {
+        "/seasons": [{"season": 2026}],
+        "/standings/3?season=2026": {"as_of_date": "2026-10-09", "regions": [{"region": 6, "teams": TEAMS}]},
+        "/seasons/2026/dates?class=3": {"dates": DATES},
+        "/standings/3/6?season=2026": {"as_of_date": "2026-10-09", "headline": None, "teams": TEAMS},
+    }
+    build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
+    stale = [
+        "region/2024/3a-6-overview-tossup-light.png",
+        "og/3-9.png",
+        "og/3-9/raleigh.png",
+        "bracket/2023/3a-all-blank-light.png",
+    ]
+    for rel in stale:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(b"png")
+    manifest = json.loads((tmp_path / MANIFEST).read_text())
+    manifest["og/3-9.png"] = {"fp": "x", "files": ["og/3-9.png"]}
+    (tmp_path / MANIFEST).write_text(json.dumps(manifest))
+    written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
+    assert written["images_removed"] == 4
+    assert not any((tmp_path / rel).exists() for rel in stale)
+    assert not (tmp_path / "region" / "2024").exists() and not (tmp_path / "og" / "3-9").exists()
+    assert "og/3-9.png" not in json.loads((tmp_path / MANIFEST).read_text())
+    assert (tmp_path / "og" / "3-6.png").exists() and (tmp_path / "region" / "2026" / "3a-6.json").exists()
 
 
 def test_titles_fall_back_to_inter_bold_without_the_nippo_file(tmp_path, monkeypatch, caplog):

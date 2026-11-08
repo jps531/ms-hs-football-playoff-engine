@@ -5,6 +5,16 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.0
+
+- **Share images for every season.** A past season's region pages now have images to share, as the
+  season finished: each region's standings and playoff results, and each team's season, like the
+  past seasons' brackets already did. The Regions page's older seasons (2026, 2025) now have their
+  maps to share too; before, their Share button opened a sheet with a broken image. The rule is the
+  same everywhere: there's a Share button on a season's latest update, and its images match the page.
+- Images the site no longer uses (a season it no longer has, a region gone in a realignment) are now
+  removed after each update, so they don't build up.
+
 ## 1.16.4
 
 - **The Regions page's visit counts.** The site now also counts the first time someone moves or

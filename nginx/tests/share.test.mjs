@@ -34,6 +34,9 @@ import {
 test("regionModes: Toss-up always, Projected only while there are Projected odds", () => {
   assert.deepEqual(regionModes({ projectedAvailable: true }), ["projected", "tossup"]);
   assert.deepEqual(regionModes({ projectedAvailable: false }), ["tossup"]);
+  // A finished season: one mode, its two showing the same numbers (Projected where it has Projected odds).
+  assert.deepEqual(regionModes({ projectedAvailable: true, finished: true }), ["projected"]);
+  assert.deepEqual(regionModes({ projectedAvailable: false, finished: true }), ["tossup"]);
 });
 
 test("regionShareDefaults: the overview, in the page's odds mode and theme", () => {
