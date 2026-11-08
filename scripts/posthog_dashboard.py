@@ -1,8 +1,8 @@
-"""Create the "Site activity" dashboard in PostHog from the events docs/reference/ANALYTICS.md lists.
+"""Create or update the "Site activity" dashboard in PostHog from the events docs/reference/ANALYTICS.md lists.
 
-Each panel is a bar chart of the last 30 days (the dashboard's date picker changes it), one bar per
-class, region, team, link or game, biggest first. The counts are views and clicks, not people: one
-person opening the same page twice counts twice.
+Each panel shows the last 30 days (the dashboard's date picker changes it): bar charts with one bar per
+class, region, team, link or game, biggest first, and a line of the Regions page's views by day. The
+counts are views and clicks, not people: one person opening the same page twice counts twice.
 
 Run it once, wherever Python 3 is, with a personal API key (never the project's phc_ key):
 
@@ -10,8 +10,11 @@ Run it once, wherever Python 3 is, with a personal API key (never the project's 
 
 The key needs the dashboard:write and insight:write scopes (PostHog: Settings → User → Personal API
 keys). The project ID is read from POSTHOG_DASHBOARD_URL (.env.local's
-https://us.posthog.com/project/<id>/web) or POSTHOG_PROJECT_ID. Nothing is changed if a dashboard
-with this name already exists; delete it in PostHog first to rebuild it.
+https://us.posthog.com/project/<id>/web) or POSTHOG_PROJECT_ID.
+
+Run it again after the panels below change: it creates the dashboard if there's none, adds the panels
+it doesn't have, and updates the ones it has (matched by name). It never removes a panel, so one you
+added in PostHog, or one this script no longer lists, stays.
 """
 
 import json
@@ -36,6 +39,13 @@ REGION_OF_PATH = (
     "concat('Region ', extract(properties.$pathname, '^/standings/[1-7]a/([0-9]+)'), '-', "
     "extract(properties.$pathname, '^/standings/([1-7])a'), 'A')"
 )
+# The Regions page (/regions/5a): its class, from the path.
+REGIONS_PATH = r"^/regions/[1-7]a"
+CLASS_OF_REGIONS_PATH = "concat(extract(properties.$pathname, '^/regions/([1-7])a'), 'A')"
+FROM_REGIONS = "properties.from = 'regions'"
+# regions_region_opened: "Region 2-5A".
+REGION_OPENED = "concat('Region ', toString(properties.region), '-', toString(properties.class), 'A')"
+
 # bracket_game_opened's game is the bracket's game id: "final", or "<N|S>-<round>-<index from the top>".
 GAME_LABEL = (
     "concat(toString(properties.class), 'A ', properties.round, "
@@ -52,8 +62,23 @@ def events(event: str, name: str, where: str | None = None) -> dict:
     return node
 
 
-def bars(name: str, description: str, series: list[dict], breakdown: str, breakdown_type: str = "hogql") -> dict:
-    """An insight: *series* counted over the last 30 days, one bar per *breakdown* value, biggest first."""
+def bars(name: str, description: str, series: list[dict], breakdown: str | None, breakdown_type: str = "hogql") -> dict:
+    """An insight: *series* counted over the last 30 days, one bar per *breakdown* value, biggest first
+    (without a breakdown, one bar per series)."""
+    source = {
+        "kind": "TrendsQuery",
+        "series": series,
+        "dateRange": {"date_from": "-30d"},
+        "interval": "day",
+        "trendsFilter": {"display": "ActionsBarValue"},
+    }
+    if breakdown:
+        source["breakdownFilter"] = {"breakdown": breakdown, "breakdown_type": breakdown_type, "breakdown_limit": 25}
+    return {"name": name, "description": description, "query": {"kind": "InsightVizNode", "source": source}}
+
+
+def daily(name: str, description: str, series: list[dict]) -> dict:
+    """An insight: *series* counted each day over the last 30 days, as lines."""
     return {
         "name": name,
         "description": description,
@@ -64,8 +89,7 @@ def bars(name: str, description: str, series: list[dict], breakdown: str, breakd
                 "series": series,
                 "dateRange": {"date_from": "-30d"},
                 "interval": "day",
-                "breakdownFilter": {"breakdown": breakdown, "breakdown_type": breakdown_type, "breakdown_limit": 25},
-                "trendsFilter": {"display": "ActionsBarValue"},
+                "trendsFilter": {"display": "ActionsLineGraph"},
             },
         },
     }
@@ -116,6 +140,55 @@ INSIGHTS = [
         [events("bracket_game_opened", "Opened")],
         GAME_LABEL,
     ),
+    # The Regions page (the region maps).
+    daily(
+        "Regions page views by day",
+        "Views of the Regions pages (/regions/1a … /regions/7a), each day.",
+        [events("$pageview", "Page views", f"match(properties.$pathname, '{REGIONS_PATH}')")],
+    ),
+    bars(
+        "Most viewed region maps",
+        "Regions page views, by class.",
+        [events("$pageview", "Page views", f"match(properties.$pathname, '{REGIONS_PATH}')")],
+        CLASS_OF_REGIONS_PATH,
+    ),
+    bars(
+        "What people do on the Regions page",
+        "Moving the map (counted once a page), picking a team on the map or in the lists, finding one, "
+        "opening a region's standings, changing the season, and sharing.",
+        [
+            events("regions_map_moved", "Moved the map"),
+            events("team_picked", "Picked a team on the map", f"{FROM_REGIONS} AND properties.via = 'map'"),
+            events("team_picked", "Picked a team in the lists", f"{FROM_REGIONS} AND properties.via = 'list'"),
+            events("team_search_used", "Found a team", FROM_REGIONS),
+            events("regions_region_opened", "Opened a region's standings"),
+            events("regions-season_changed", "Changed the season"),
+            events("regions_share_opened", "Opened Share"),
+            events("regions_image_shared", "Shared an image"),
+        ],
+        None,
+    ),
+    bars(
+        "Teams looked up on the Regions page",
+        "Teams picked on the map or in the lists, or found with the map's search.",
+        [events("team_picked", "Picked", FROM_REGIONS), events("team_search_used", "Searched", FROM_REGIONS)],
+        "team",
+        "event",
+    ),
+    bars(
+        "Regions opened from the Regions page",
+        "Region headings followed to their standings, by region.",
+        [events("regions_region_opened", "Opened")],
+        REGION_OPENED,
+    ),
+    bars(
+        "Region map images shared",
+        "Regions page images shared, downloaded or linked, by image: the class's map (class), its two "
+        "seasons side by side (class-compare), a team's region (team), or a team's two regions (compare).",
+        [events("regions_image_shared", "Shared")],
+        "image",
+        "event",
+    ),
 ]
 
 
@@ -144,22 +217,39 @@ def call(method: str, path: str, key: str, body: dict | None = None) -> dict:
         sys.exit(f"{method} {path}: HTTP {e.code}: {e.read().decode(errors='replace')[:500]}")
 
 
+def sync(base: str, key: str) -> int:
+    """Create the dashboard if it's missing, add the panels it lacks and update the ones it has (by
+    name). Returns the dashboard's id."""
+    existing = call("GET", f"{base}/dashboards/?limit=200", key).get("results", [])
+    found = next((d for d in existing if d.get("name") == DASHBOARD and not d.get("deleted")), None)
+    if found is None:
+        dashboard = call("POST", f"{base}/dashboards/", key, {"name": DASHBOARD, "description": DESCRIPTION})
+        print(f"  created the {DASHBOARD} dashboard")
+        on_it: dict[str, int] = {}
+    else:
+        dashboard = call("GET", f"{base}/dashboards/{found['id']}/", key)
+        on_it = {
+            tile["insight"]["name"]: tile["insight"]["id"]
+            for tile in dashboard.get("tiles", [])
+            if tile.get("insight") and not tile["insight"].get("deleted") and tile["insight"].get("name")
+        }
+    for insight in INSIGHTS:
+        if insight["name"] in on_it:
+            call("PATCH", f"{base}/insights/{on_it[insight['name']]}/", key, insight)
+            print(f"  updated {insight['name']}")
+        else:
+            call("POST", f"{base}/insights/", key, {**insight, "dashboards": [dashboard["id"]]})
+            print(f"  added {insight['name']}")
+    return dashboard["id"]
+
+
 def main() -> None:
-    """Create the dashboard and its insights, unless the dashboard is already there."""
+    """Create or update the dashboard and its insights."""
     key = os.environ.get("POSTHOG_PERSONAL_API_KEY")
     if not key:
         sys.exit("Set POSTHOG_PERSONAL_API_KEY (a personal API key with dashboard:write and insight:write).")
-    base = f"/api/projects/{project_id()}"
-
-    existing = call("GET", f"{base}/dashboards/?limit=200", key).get("results", [])
-    if any(d.get("name") == DASHBOARD and not d.get("deleted") for d in existing):
-        sys.exit(f'A dashboard named "{DASHBOARD}" already exists; delete it in PostHog to rebuild it.')
-
-    dashboard = call("POST", f"{base}/dashboards/", key, {"name": DASHBOARD, "description": DESCRIPTION})
-    for insight in INSIGHTS:
-        call("POST", f"{base}/insights/", key, {**insight, "dashboards": [dashboard["id"]]})
-        print(f"  added {insight['name']}")
-    print(f"{HOST}/project/{project_id()}/dashboard/{dashboard['id']}")
+    dashboard_id = sync(f"/api/projects/{project_id()}", key)
+    print(f"{HOST}/project/{project_id()}/dashboard/{dashboard_id}")
 
 
 if __name__ == "__main__":

@@ -164,7 +164,7 @@ export function regionView(box, base, pad = 0.3) {
  * team picked (from the map, the list or the page's link) highlighted with its region and zoomed
  * to. onPick(slug or null) tells the page, to keep the address in step.
  */
-export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPick = () => {} } = {}) {
+export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPick = () => {}, onMove = () => {} } = {}) {
   const frame = root.querySelector("[data-map]");
   const svg = frame?.querySelector("svg");
   if (!svg) return null;
@@ -197,6 +197,13 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
     return [view.x + ((clientX - box.left) / box.width) * view.w, view.y + ((clientY - box.top) / box.height) * view.h];
   };
   const middle = () => [view.x + view.w / 2, view.y + view.h / 2];
+  // The first time the reader moves the map, and how ("wheel", "pinch", "drag", "buttons"): once a page.
+  let moved = false;
+  const used = (how) => {
+    if (moved) return;
+    moved = true;
+    onMove(how);
+  };
 
   const pick = (slug, { zoom = true } = {}) => {
     const school = slug ? bySlug.get(slug) : null;
@@ -226,6 +233,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
     e.preventDefault();
     const [x, y] = toMap(e.clientX, e.clientY);
     zoomAt(e.deltaY < 0 ? 1.25 : 0.8, x, y);
+    used("wheel");
   }, { passive: false });
   const pointers = new Map();
   let spread = null;
@@ -254,6 +262,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
       if (Math.abs(dx) + Math.abs(dy) > 2) {
         dragged = true;
         svg.setPointerCapture?.(e.pointerId);
+        used("drag");
       }
       view = { ...view, x: view.x - (dx / box.width) * view.w, y: view.y - (dy / box.height) * view.h };
       apply();
@@ -263,6 +272,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
       const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
       if (spread) zoomAt(d / spread, ...toMap((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2));
       spread = d;
+      used("pinch");
     }
   });
   for (const type of ["pointerup", "pointercancel", "pointerleave"]) {
@@ -276,7 +286,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
     if (dragged) return;
     const dot = e.target.closest(".map-dot");
     const school = pick(dot ? dot.dataset.team : null, { zoom: Boolean(dot) });
-    onPick(school?.slug ?? null);
+    onPick(school?.slug ?? null, "map");
   });
   frame.querySelector(".regions-map__zoom")?.addEventListener("click", (e) => {
     const b = e.target.closest("[data-zoom]");
@@ -285,13 +295,14 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
       view = { ...whole };
       apply();
     } else zoomAt(b.dataset.zoom === "in" ? 1.6 : 1 / 1.6, ...middle());
+    used("buttons");
   });
   root.querySelector(".regions-list")?.addEventListener("click", (e) => {
     const a = e.target.closest("a[data-team]");
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
     e.preventDefault();
     pick(a.dataset.team);
-    onPick(a.dataset.team);
+    onPick(a.dataset.team, "list");
     frame.scrollIntoView?.({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   });
   addEventListener("resize", apply);

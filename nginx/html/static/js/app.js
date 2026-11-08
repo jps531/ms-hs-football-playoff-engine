@@ -1101,9 +1101,11 @@ app.addEventListener("click", (e) => {
   const toggle = e.target.closest(".row-toggle");
   if (!toggle) {
     // In-app links render in place: a page link adds history, a link that
-    // only changes how this page is shown (data-replace) doesn't.
+    // only changes how this page is shown (data-replace) doesn't. A click a
+    // handler closer to the link already took (the Regions page's lists pick
+    // the team in place) is left to it.
     const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/regions/'], a[href^='/?'], a[href='/']");
-    if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
+    if (link && !e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
       e.preventDefault();
       if (link.hasAttribute("data-unpick")) setPick(route.clazz, null);
       navigate(link.getAttribute("href"), {
@@ -2511,6 +2513,12 @@ app.addEventListener("click", (e) => {
     openExplanation(i);
     return;
   }
+  // A region's heading on the Regions page, to its standings.
+  const regionLink = e.target.closest(".regions-list__name a");
+  if (regionLink && regionsState) {
+    const region = Number(regionLink.getAttribute("href").match(/\/standings\/[1-7]a\/(\d+)/)?.[1]) || null;
+    track("regions_region_opened", { class: regionsState.clazz, region, season: regionsState.season });
+  }
   const shareOpen = e.target.closest("[data-share-open]");
   if (shareOpen) {
     shareOpener = shareOpen;
@@ -2604,14 +2612,15 @@ async function renderRegions(token) {
     });
     regionsState.map = wireRegionsMap(app, base, payload, route.clazz, {
       picked: picked?.slug ?? null,
-      onPick: (slug) => {
+      onPick: (slug, via) => {
         const school = mine.find((s) => s.slug === slug) ?? null;
         regionsState.picked = school;
         route.teamName = school?.school ?? null;
-        if (school) track("team_picked", { from: "regions", team: school.school });
+        if (school) track("team_picked", { from: "regions", via, team: school.school });
         history.replaceState(null, "", hrefWith({ team: route.teamName }));
         syncNav();
       },
+      onMove: (how) => track("regions_map_moved", { class: route.clazz, how }),
     });
     renderScrubber(route.clazz);
     showContext(contextHtml(regionsTitle(route.clazz), { week: seasonsLabel(option.seasons) }, null));
