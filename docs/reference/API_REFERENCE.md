@@ -6,7 +6,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 
 **Rate limits**: simulate endpoints (Standings, Hosting, Bracket) and most Submissions endpoints are IP-rate-limited via `slowapi` and return `429` when exceeded. Limits are noted per-row below.
 
-**Contents:** [Meta](#meta) · [Standings](#standings--standings) · [Rankings](#rankings--rankings) · [Hosting](#hosting--hosting) · [Bracket](#bracket--bracket) · [Games](#games--games) · [Ratings](#ratings--ratings) · [Insights](#insights--insights) · [Admin](#admin--admin) · [Images](#images--images) · [Auth](#auth--auth) · [Users](#users--users) · [Submissions](#submissions--submissions) · [Moderation](#moderation--moderation)
+**Contents:** [Meta](#meta) · [Standings](#standings--standings) · [Rankings](#rankings--rankings) · [Hosting](#hosting--hosting) · [Bracket](#bracket--bracket) · [Games](#games--games) · [Ratings](#ratings--ratings) · [Insights](#insights--insights) · [Admin](#admin--admin) · [Images](#images--images) · [Auth](#auth--auth) · [Users](#users--users) · [Submissions](#submissions--submissions) · [Feature flags](#feature-flags--feature-flags) · [Moderation](#moderation--moderation)
 
 ## Meta
 
@@ -25,7 +25,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | GET | `/helmets` | Browse helmets across all teams; filters: `team`, `color`, `finish`, `tag`, `sort` (`created_at` for newest-added first; default order is `school`, `year_first_worn`) |
 | GET | `/helmets/{id}` | Single helmet design with full metadata, images, `stats`, and `games_worn` — see below |
 | GET | `/championships` | Championship venue history (back to 1992) for the almanac page. Optional `season`, `class` filters |
-| GET | `/client-config` | The public settings the site's pages need: Turnstile's site key, the moderation page's Auth0 app, the Swagger UI path when this server serves it, the PostHog project key, and the PostHog dashboard links shown to the owner on `/moderate`. Nothing secret; a value is `null` when that feature isn't set up |
+| GET | `/client-config` | The public settings the site's pages need: Turnstile's site key, the moderation page's Auth0 app, the Swagger UI path when this server serves it, the PostHog project key, the PostHog dashboard links shown to the owner on `/moderate`, and `features`: the feature flags on for this viewer (those on for everyone, plus, with the owner's session cookie, those on for the owner only). Nothing secret; a value is `null` when that feature isn't set up. Sent with `Cache-Control: no-store`, since the owner's browser gets more flags |
 
 **`GET /helmets` / `GET /helmets/{id}`** — every design (list items and the detail record) carries `created_at` and a `stats` object: `{appearances, games_tracked, wins, losses, ties, games_played}`. `appearances`/`games_tracked` are the same count — games with an explicit `helmet_design_id` assignment for this design (a design that's merely inferred as a team's primary is never counted, per the integrity rule below). `wins`/`losses`/`ties` are counted among those assigned games that have a result. `games_played` is the school's total **final** games across the seasons this design spans (see `helmet_covers_season` below), so the UI can render e.g. "6–1 in 7 tracked games (of 11 played)". `GET /helmets/{id}` additionally returns `games_worn: [{school, date, opponent, points_for, points_against, result, round}]` for every explicitly-assigned game, oldest first. 404 if the id doesn't exist.
 
@@ -379,6 +379,15 @@ The site's feedback form endpoints (`/scores`, `/playoff-scores`, `/dates`, `/fe
 | POST | `/scores` | optional Bearer | Submit a game's final score, or a correction to it. Body: `school`, `date`, `points_for`, `points_against`. Both the school and the game row must already exist; the game needn't have a score yet. The submission records the game's `game_id`. Auto-applied on approval via `set_game_override` to both schools' rows (score, result, and `final`). 404 if school or game not found; 422 if the game's date is after today in Mississippi. Rate limited: 5/minute and 30/day per IP, and refused (503) past 300 pending reports in an hour. |
 | POST | `/helmet-assignments` | Bearer (any user) | Submit or confirm which helmet a school wore in a game — the crowd-sourced input to the helmet `stats` (see `GET /helmets`). Body: `school`, `date`, `helmet_design_id`. 404 if the school, game, or design doesn't exist, or the design belongs to a different school. Auto-applied on approval the same way as `PUT /admin/games/{school}/{date}/helmet`. If the game's helmet is already set to the submitted design, no submission is queued — responds `200` with `{ "already_confirmed": true, ... }` instead of `201`. Rate limited: 10/minute. |
 | POST | `/feedback` | optional Bearer | Submit general feedback (no school required). Body: `subject`, `message`. No DB action is taken on approval. Rate limited: 5/minute and 30/day per IP, and refused (503) past 300 pending reports in an hour. |
+
+## Feature flags — `/feature-flags`
+
+Requires a valid `Authorization: Bearer <token>` header with the `owner` role. Flags are declared in `backend/helpers/feature_flags.py` ([CONTRIBUTING.md](../../CONTRIBUTING.md#feature-flags)).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/feature-flags` | Every declared flag: `name`, `description`, `state` (`off`, `owner` or `on`; `off` if never set) and `updated_at` (`null` if never set). |
+| PUT | `/feature-flags/{name}` | Set a flag. Body: `{ "state": "off" \| "owner" \| "on" }`. Returns the flag. 404 if no flag of that name is declared. |
 
 ## Moderation — `/moderation`
 

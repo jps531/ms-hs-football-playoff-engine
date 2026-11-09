@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from datetime import date as date_type
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -1322,6 +1322,18 @@ class ClientConfig(BaseModel):
     posthog_key: str | None = None
     posthog_dashboard_url: str | None = None
     posthog_activity_url: str | None = None
+    # The feature flags on for this viewer (backend/helpers/feature_flags.py): those on for everyone, and for the
+    # owner's browser, those on for the owner only too.
+    features: list[str] = []
+
+
+class FeatureFlagModel(BaseModel):
+    """A feature flag as /moderate shows it: what it switches, and who sees it (off, owner or on)."""
+
+    name: str
+    description: str
+    state: Literal["off", "owner", "on"]
+    updated_at: datetime | None = None
 
 
 class ColorVariantsPreview(BaseModel):

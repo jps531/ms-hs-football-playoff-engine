@@ -259,6 +259,14 @@ async def _current_role(db_id: int) -> str | None:
     return row[0]
 
 
+async def cookie_is_owner(request: Request) -> bool:
+    """Whether *request* carries the owner's session cookie, with the role re-checked against the users table
+    (as for Prefect). No cookie, a bad or expired one, or anyone else's is False."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    claims = _decode_session_token(token) if token else None
+    return claims is not None and await _current_role(claims.get("db_id")) == "owner"
+
+
 async def get_owner_via_cookie_or_bearer(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_optional_bearer)],
