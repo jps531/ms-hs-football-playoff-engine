@@ -179,7 +179,70 @@ echo | openssl s_client -connect mshsfootball.com:443 -servername mshsfootball.c
 
 All the Auth0 setup, production's included (the `/moderate` page's application and promoting moderators), is in [AUTH0_SETUP.md](AUTH0_SETUP.md). The server uses the same tenant, `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` as local development.
 
-## Deploying updates
+## Automatic deploys
+
+Each commit of `main` deploys once CI passes on it and you approve it
+(`.github/workflows/deploy.yml`):
+
+1. **images** builds the API and worker images from the commit and pushes them to the GitHub container
+   registry, tagged with the commit (`ghcr.io/jps531/ms-hs-football-playoff-engine-api:<sha>`, `-worker`).
+2. **deploy** waits in the `production` environment for your approval (Actions → the run → Review
+   deployments → Approve, or from the GitHub app). Then it connects over SSH with a key whose only
+   command is `scripts/deploy_ssh.sh`, which runs `scripts/deploy.sh <sha>` and nothing else.
+3. **`scripts/deploy.sh`** on the server, from the repository's root:
+   - deploys only a commit on `origin/main`, and one deploy at a time;
+   - waits, up to an hour, for running pipelines to finish (a Prefect flow run, or the update lock):
+     the worker runs flows in-process, so a restart would kill the daily update;
+   - pulls the commit's images, checks the commit out (nginx's config and pages, the SQL, the scripts
+     come from the checkout), runs `scripts/migrate.py`, starts the services, and recreates nginx if
+     `nginx/nginx.conf` changed;
+   - checks the site (the API through nginx, the front page, every service running) for up to two
+     minutes; if it isn't healthy, it goes back to the previous commit and images and the run fails.
+     Migrations aren't undone: they only ever add, and each is safe to run again.
+
+The checkout is left on the deployed commit (a detached `HEAD`); `.deployed-image-tag` says which.
+To deploy a commit again, or an earlier commit of `main` deployed this way, run the workflow by hand
+(Actions → Deploy → Run workflow) with its sha, or run `scripts/deploy.sh <sha>` on the server. A step a
+PR's description asks for (running `share-assets`, a backfill) is still done by hand after its deploy.
+
+### Setting it up (once)
+
+1. **On the server,** with this in `main`: `git checkout main && git pull`, then
+   `docker compose --env-file .env.local --profile local-db up --build -d` once, so the images built here
+   are tagged `local` (the first automatic deploy's rollback target), and `scripts/migrate.py`.
+2. **A deploy key,** made on your own computer (no passphrase: Actions uses it unattended):
+
+   ```
+   ssh-keygen -t ed25519 -N "" -C github-deploy -f mshsfootball-deploy
+   ```
+
+   On the server, add a line to `~/.ssh/authorized_keys` that gives it only the deploy, with
+   `mshsfootball-deploy.pub`'s contents after `restrict`:
+
+   ```
+   command="/home/ubuntu/ms-hs-football-playoff-engine/scripts/deploy_ssh.sh",restrict ssh-ed25519 AAAA... github-deploy
+   ```
+
+   (`restrict` turns off forwarding, a terminal and the rest; the `command` runs whatever the client
+   asked for.)
+3. **The server's host key,** so Actions knows it's talking to the server: run
+   `ssh-keyscan -t ed25519 <static IP>` on your computer, and check its fingerprint
+   (`ssh-keygen -lf <(ssh-keyscan -t ed25519 <static IP> 2>/dev/null)`) against the server's own
+   (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, run there).
+4. **The `production` environment** in GitHub (Settings → Environments → New environment):
+   - **Required reviewers:** you. **Deployment branches and tags:** selected branches, `main`.
+   - **Environment secrets:** `DEPLOY_SSH_KEY` (all of `mshsfootball-deploy`, the private key),
+     `DEPLOY_KNOWN_HOSTS` (the `ssh-keyscan` line), `DEPLOY_TARGET` (`ubuntu@<static IP>`).
+   - Then delete `mshsfootball-deploy` from your computer, or keep it somewhere safe.
+5. **The images public,** so the server pulls them without a login: after the first run of the
+   workflow, open each of `ms-hs-football-playoff-engine-api` and `-worker` under your GitHub profile's
+   Packages, then Package settings → Change visibility → Public. (The repository is public, so they hold
+   nothing that isn't already.)
+6. **Try it:** Actions → Deploy → Run workflow, approve it, and watch the deploy step's log.
+
+## Deploying updates by hand
+
+Automatic deploys do all of this; it's here for a server without them, or to see what they do.
 
 Note where you are, pull, and see what came in:
 
