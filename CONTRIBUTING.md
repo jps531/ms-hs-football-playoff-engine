@@ -91,8 +91,25 @@ in how the numbers are worked out, PATCH for a fix. It is not `MODEL_VERSION`
 (`region_scenarios_pipeline.py`), which marks snapshots computed by a different odds model.
 
 A PR that changes what readers get bumps it, with its CHANGELOG.md entry, in that same PR; a PR that
-changes only docs, tests or tooling doesn't. After it merges, tag the merge commit `vX.Y.Z` (a GitHub
-release with the CHANGELOG entry as its notes).
+changes only docs, tests or tooling doesn't. Once it merges and CI passes on main, the Release workflow
+(`.github/workflows/release.yml`, `scripts/release.py`) tags the merge commit `vX.Y.Z` and publishes a
+GitHub release with the CHANGELOG entry as its notes; a merge that doesn't bump the version releases
+nothing. Running the workflow by hand (Actions → Release → Run workflow) releases every version main has
+had that has no release yet, each at the commit where it first appeared.
+
+## Branches
+
+Trunk-based: `main` is what's live, and every change reaches it through a pull request from a
+short-lived branch, merged once CI passes. `main`'s protection (Settings → Rules → Rulesets, targeting
+the default branch):
+
+- **Require a pull request before merging** (with 0 required approvals: GitHub doesn't let an author
+  approve their own PR, so for one maintainer the checks are the gate).
+- **Require status checks to pass**, with the branch up to date: `tests` and `images` (CI).
+- **Block force pushes** and **restrict deletions**.
+- **Allowed merge method: squash**, so `main` reads as one commit per pull request.
+
+The Release workflow pushes only tags, which the rules above don't cover, so it needs no bypass.
 
 ## Don't
 
