@@ -131,6 +131,11 @@ def test_images_are_pinned_by_digest():
     images = re.findall(r"^\s*image: (\S+)", COMPOSE, re.M)
     assert images
     for image in images:
+        # Ours (the API and the worker) are built from the pinned Dockerfiles below, tagged with the commit
+        # they're built from (.github/workflows/deploy.yml).
+        if image.startswith("ghcr.io/jps531/ms-hs-football-playoff-engine-"):
+            assert image.endswith(":${IMAGE_TAG:-local}"), image
+            continue
         assert DIGEST.search(image), image
     for dockerfile in ("Dockerfile.api", "Dockerfile.prefect"):
         for line in re.findall(r"^FROM (\S+)", (ROOT / dockerfile).read_text(), re.M):

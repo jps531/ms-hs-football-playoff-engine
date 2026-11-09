@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Apply the database migrations (sql/migrations/) that haven't been applied, in order, and record each.
 
     scripts/migrate.py            # apply what's pending

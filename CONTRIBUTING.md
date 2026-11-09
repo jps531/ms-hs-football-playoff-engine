@@ -30,9 +30,9 @@ an API field or a doc that says something untrue is a bug, whatever its size:
   node --test nginx/tests/*.test.mjs
   ```
 
-- **Say what a deploy needs** in the description when it needs more than a pull and
-  a rebuild: a migration, a new setting, a backfill, a file installed by hand.
-  [VM_DEPLOYMENT.md](docs/operations/VM_DEPLOYMENT.md#deploying-updates) is the checklist.
+- **Say what a deploy needs** in the description when it needs more than the automatic deploy
+  does (images, migrations, restarts: [VM_DEPLOYMENT.md](docs/operations/VM_DEPLOYMENT.md#automatic-deploys)):
+  a new setting in `.env.local`, a backfill, a `share-assets` run, a file installed by hand.
 - Commit messages say why, not only what.
 
 ## Tools

@@ -67,3 +67,4 @@ scripts/*.csv
 # public repository. Installed on the server by hand; see backend/assets/fonts/README.md.
 backend/assets/fonts/[Nn]ippo*
 nginx/html/static/fonts/[Nn]ippo*
+.deployed-image-tag

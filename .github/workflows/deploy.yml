@@ -1,0 +1,99 @@
+# Deploy each commit of main to the server once CI passes on it, after the owner approves.
+#
+# 1. images: build the API and worker images from the commit and push them to the GitHub container
+#    registry, tagged with the commit (ghcr.io/jps531/ms-hs-football-playoff-engine-{api,worker}:<sha>).
+# 2. deploy: in the "production" environment, which waits for the owner's approval and holds the SSH
+#    secrets, run scripts/deploy.sh on the server for that commit. The key can do nothing else: on the
+#    server its forced command is scripts/deploy_ssh.sh. deploy.sh waits for running pipelines, pulls the
+#    images, migrates, restarts, checks the site, and rolls back if it isn't healthy.
+#
+# Run by hand (Actions → Deploy → Run workflow) to deploy main's newest commit, or a given commit of main,
+# again. Setup: docs/operations/VM_DEPLOYMENT.md, "Automatic deploys".
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit of main to deploy (40 characters); empty for main's newest"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    # CI that passed on a push to main in this repository (never a pull request's run), or a run by hand.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write  # to push the images
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - name: The commit to deploy
+        id: sha
+        env:
+          WANTED: ${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          if [[ ! $WANTED =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Not a 40-character commit sha: $WANTED" >&2
+            exit 1
+          fi
+          echo "sha=$WANTED" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+          persist-credentials: false
+      - name: Build and push the images
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          for image in api worker; do
+            dockerfile=$([ "$image" = api ] && echo Dockerfile.api || echo Dockerfile.prefect)
+            tag="ghcr.io/jps531/ms-hs-football-playoff-engine-$image:$SHA"
+            docker build --file "$dockerfile" --tag "$tag" \
+              --label "org.opencontainers.image.source=$SOURCE" --label "org.opencontainers.image.revision=$SHA" .
+            docker push --quiet "$tag"
+          done
+
+  deploy:
+    needs: images
+    runs-on: ubuntu-24.04
+    # deploy.sh waits up to an hour for a running pipeline (the daily update), then deploys.
+    timeout-minutes: 90
+    environment:
+      name: production
+      url: https://mshsfootball.com
+    # One deploy at a time; a newer commit waiting replaces an older one still waiting.
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    steps:
+      - name: Deploy on the server
+        env:
+          SHA: ${{ needs.images.outputs.sha }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          TARGET: ${{ secrets.DEPLOY_TARGET }}  # user@host
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=60 \
+            "$TARGET" "$SHA"
