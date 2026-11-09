@@ -1,8 +1,13 @@
 """scripts/deploy.sh and scripts/deploy_ssh.sh, run for real against a scratch server checkout, with docker and
 curl replaced by recorders: what a deploy does in order, that a failed check rolls back, and what it refuses."""
 
+import datetime
+import http.server
+import json
 import shutil
 import subprocess
+import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -11,11 +16,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 DOCKER = r"""#!/usr/bin/env bash
-# Record each call with the IMAGE_TAG it saw; answer the pipeline checks and `ps -a`.
+# Record each call with the IMAGE_TAG it saw; answer the pipeline checks (Prefect's: a line for each run it
+# waits on; the update lock's: how many hold it) and `ps -a`.
 echo "IMAGE_TAG=${IMAGE_TAG:-} $*" >> "$CALLS"
 case "$*" in
-  *"exec -T prefect-worker"*) echo "${RUNNING_FLOWS:-0}" ;;
-  *"exec -T db"*) echo "0" ;;
+  *"exec -T prefect-worker"*) printf '%s' "${PREFECT_BUSY:-}" ;;
+  *"exec -T db"*) echo "${LOCK_HOLDERS:-0}" ;;
   *"ps -a"*) printf 'api running\nnginx running\n' ;;
 esac
 """
@@ -144,10 +150,69 @@ def test_a_commit_not_on_main_is_never_deployed(server):
     assert server.head() == server.shas["first"] and not [c for c in server.calls() if " up " in c]
 
 
-def test_it_waits_for_running_pipelines_and_gives_up_after_the_limit(server):
-    code, out = server.deploy(server.shas["second"], RUNNING_FLOWS="1")
-    assert code == 1 and "Pipelines still running" in out
+RUN = "flow run daily-update (running since 2026-11-09 11:00 UTC, 0b5e)"
+
+
+@pytest.mark.parametrize(
+    "busy, named",
+    [
+        ({"PREFECT_BUSY": RUN}, RUN),
+        ({"LOCK_HOLDERS": "1"}, "the update lock"),
+    ],
+)
+def test_it_waits_for_running_pipelines_and_gives_up_after_the_limit_naming_them(server, busy, named):
+    code, out = server.deploy(server.shas["second"], **busy)
+    assert code == 1 and "Still waiting after 0 minutes, on:" in out and f"  {named}" in out
     assert server.head() == server.shas["first"] and not [c for c in server.calls() if " pull " in c]
+
+
+def _prefect_check():
+    """busy()'s Prefect check, the Python it runs in the worker's container."""
+    text = (ROOT / "scripts" / "deploy.sh").read_text()
+    return text.split("prefect-worker python -c '", 1)[1].split("' 2>/dev/null", 1)[0]
+
+
+def test_the_prefect_check_names_each_run_and_skips_a_cancel_left_over_for_hours():
+    """Against a stand-in Prefect API: a run running, one pending and one just cancelling are named; one
+    "Cancelling" since yesterday (a cancel a restart cut short) isn't."""
+    now = datetime.datetime.now(datetime.UTC)
+
+    def run(name, state, ago):
+        stamp = (now - ago).isoformat().replace("+00:00", "Z")
+        return {"id": f"id-{name}", "name": name, "state_type": state, "state": {"timestamp": stamp}}
+
+    runs = [
+        run("daily", "RUNNING", datetime.timedelta(hours=30)),
+        run("waiting", "PENDING", datetime.timedelta(minutes=1)),
+        run("stopping", "CANCELLING", datetime.timedelta(minutes=5)),
+        run("leftover", "CANCELLING", datetime.timedelta(days=1)),
+    ]
+    asked = []
+
+    class Prefect(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            asked.append((self.path, json.loads(self.rfile.read(int(self.headers["Content-Length"])))))
+            body = json.dumps(runs).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), Prefect)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        check = _prefect_check().replace("http://prefect-server:4200", f"http://127.0.0.1:{httpd.server_port}")
+        out = subprocess.run([sys.executable, "-c", check], capture_output=True, text=True, check=True).stdout
+    finally:
+        httpd.shutdown()
+    names = [line.split()[2] for line in out.splitlines()]
+    assert names == ["daily", "waiting", "stopping"]
+    assert "flow run daily (running since " in out and ", id-daily)" in out
+    assert asked[0][0] == "/api/flow_runs/filter"
+    assert asked[0][1]["flow_runs"]["state"]["type"]["any_"] == ["RUNNING", "PENDING", "CANCELLING"]
 
 
 @pytest.mark.parametrize("sent", ["", "main", "abc123", "rm -rf /", "0" * 39, "g" * 40])
@@ -178,6 +243,17 @@ def test_the_workflow_deploys_main_after_ci_and_waits_for_approval():
     assert images["permissions"] == {"contents": "read", "packages": "write"}
     assert deploy["environment"]["name"] == "production" and deploy["needs"] == "images"
     assert "StrictHostKeyChecking=yes" in deploy["steps"][0]["run"]
+
+
+def test_the_deploy_step_names_the_secrets_it_is_missing(tmp_path):
+    """Secrets left empty (as when they're added as variables instead) stop the step before it touches ssh."""
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "deploy.yml").read_text())
+    step = workflow["jobs"]["deploy"]["steps"][0]
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "SHA": "a" * 40, "KEY": "k", "KNOWN_HOSTS": "", "TARGET": ""}
+    done = subprocess.run(["bash", "-e", "-c", step["run"]], env=env, capture_output=True, text=True, check=False)
+    assert done.returncode == 1
+    assert "Missing: DEPLOY_KNOWN_HOSTS DEPLOY_TARGET." in done.stderr and "not variables" in done.stderr
+    assert "DEPLOY_SSH_KEY" not in done.stderr and not (tmp_path / ".ssh").exists()
 
 
 def test_a_commit_that_rewrites_the_deploy_script_still_deploys_cleanly(server):
