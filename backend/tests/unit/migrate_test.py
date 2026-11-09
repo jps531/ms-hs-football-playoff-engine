@@ -93,3 +93,24 @@ def test_misnamed_or_clashing_migrations_stop_before_anything_runs(tmp_path, nam
     db = FakeDb(applied=list(migrate.BASELINE))
     assert migrate.main([], psql=db, folder=_folder(tmp_path, *names)) == 1
     assert db.ran == [] and message in capsys.readouterr().err
+
+
+def test_it_runs_as_a_program_the_way_the_server_and_deploy_sh_call_it():
+    """`scripts/migrate.py` on its own (not `python3 scripts/migrate.py`): it needs its #! line and the
+    executable bit, or the shell runs it as a shell script."""
+    import os
+    import subprocess
+
+    script = ROOT / "scripts" / "migrate.py"
+    assert os.access(script, os.X_OK)
+    done = subprocess.run([str(script), "--help"], capture_output=True, text=True, check=False)
+    assert done.returncode == 0 and "--dry-run" in done.stdout, done.stderr
+
+
+def test_every_executable_script_names_its_interpreter():
+    """A script with the executable bit starts with #!, so running it directly runs the right program."""
+    import os
+
+    for script in sorted((ROOT / "scripts").iterdir()):
+        if script.is_file() and os.access(script, os.X_OK):
+            assert script.read_text().startswith("#!"), script.name
