@@ -77,7 +77,7 @@ leading `.*`: `-e ".*/(prefect|tests)/.*"` checks only the API and helpers.
 | A feedback form limit (`feedback.js`) | The API's field limit in `backend/api/models/requests.py`, and the other way round. |
 | An analytics event or property | [ANALYTICS.md](docs/reference/ANALYTICS.md)'s table and the About page's description (`nginx/html/about.html#measure`). |
 | An endpoint, a parameter or a response field | [API_REFERENCE.md](docs/reference/API_REFERENCE.md). |
-| The database schema | `sql/init.sql` (new databases), a migration in `sql/migrations/` (existing ones), and [SCHEMA.md](docs/architecture/SCHEMA.md). A migration starts with a header saying how to apply it and is safe to run more than once. |
+| The database schema | `sql/init.sql` (new databases), a migration in `sql/migrations/` (existing ones), and [SCHEMA.md](docs/architecture/SCHEMA.md). A migration is named `NNNN_name.sql`, the next number after the last (`0001_add_thing.sql`, `0002_...`), starts with a header saying what it does, and is safe to run more than once: `scripts/migrate.py` applies each once, in number order, on the server, and a new database gets it from `init.sql` and then runs it too. |
 | Anything that changes the odds themselves (Elo, home-field advantage, tiebreakers, simulation counts, bracket or hosting rules) | Bump `MODEL_VERSION` in `backend/prefect/region_scenarios_pipeline.py`, and say in the PR that past seasons need `backfill-historical-snapshots` ([CALIBRATION_DATA.md](docs/architecture/CALIBRATION_DATA.md)). |
 | A setting read from the environment | `.env.example`, the service's `environment:` in `docker-compose.yml`, and the doc for the feature. |
 | A Prefect deployment or its schedule | [PIPELINES.md](docs/operations/PIPELINES.md). |

@@ -192,18 +192,18 @@ git diff --stat $PREV HEAD
 
 Then work down this list, skipping what the pull didn't touch:
 
-1. **New database migrations.** List them with
-   `git diff --name-only --diff-filter=A $PREV HEAD -- sql/migrations`, and apply
-   each before rebuilding (oldest name first), as the database owner:
+1. **New database migrations.** From the repository's root:
 
    ```
-   docker compose --env-file .env.local --profile local-db exec -T db \
-     psql -v ON_ERROR_STOP=1 -U postgres -d mshsfootball < sql/migrations/<file>.sql
+   scripts/migrate.py --dry-run   # what's pending
+   scripts/migrate.py             # apply it
    ```
 
-   (`-U` is your `POSTGRES_USER`.) Every migration is written to be safe to run
-   more than once, so if you aren't sure one was applied, apply it again.
-   `sql/init.sql` already includes them all, so a new database needs none.
+   It applies each migration in `sql/migrations` that `schema_migrations` doesn't record yet, in
+   order, as the database owner (psql in the `db` container), records it, and stops at the first that
+   fails (fix it and run it again; a migration is safe to run more than once). The first run records
+   the migrations from before it existed as applied without running them: they were applied by hand
+   here, and `sql/init.sql` already includes them, so a new database needs none of them.
 2. **New settings.** If `.env.example` changed (`git diff $PREV HEAD -- .env.example`),
    add anything new to `.env.local`.
 3. **Rebuild and restart:**
