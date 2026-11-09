@@ -81,6 +81,16 @@ def test_the_workflow_releases_only_after_ci_passes_on_main():
     assert "github.event.workflow_run.event == 'push'" in condition
     assert "github.event.workflow_run.head_repository.full_name == github.repository" in condition
     assert workflow["permissions"] == {"contents": "write"}
+    assert "workflow_dispatch" not in on  # the backfill runs locally (scripts/backfill_releases.sh)
+
+
+def test_the_backfill_script_parses_and_skips_a_tag_on_the_wrong_commit():
+    """It's valid bash, reads main's history, and won't release a version whose tag is elsewhere."""
+    script = ROOT / "scripts" / "backfill_releases.sh"
+    assert subprocess.run(["bash", "-n", str(script)], check=False).returncode == 0
+    text = script.read_text()
+    assert "python3 scripts/release.py history main" in text
+    assert '[ "$tagged" != "$sha" ]' in text and "continue" in text
 
 
 def test_a_push_that_doesnt_change_the_version_releases_nothing(capsys):
