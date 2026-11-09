@@ -256,6 +256,50 @@ def test_the_deploy_step_names_the_secrets_it_is_missing(tmp_path):
     assert "DEPLOY_SSH_KEY" not in done.stderr and not (tmp_path / ".ssh").exists()
 
 
+def _push_images(tmp_path, failures):
+    """Run the images job's build-and-push step with a stand-in docker whose first *failures* pushes are
+    refused, and sleep that doesn't wait; (exit code, stderr, docker's calls)."""
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "deploy.yml").read_text())
+    step = next(s for s in workflow["jobs"]["images"]["steps"] if s.get("name") == "Build and push the images")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls, refusals = tmp_path / "docker.log", tmp_path / "refusals"
+    refusals.write_text(str(failures))
+    (bin_dir / "docker").write_text(
+        f"""#!/usr/bin/env bash
+echo "$1 ${{@: -1}}" >> "{calls}"
+if [ "$1" = push ]; then
+  left=$(cat "{refusals}")
+  if [ "$left" -gt 0 ]; then echo $((left - 1)) > "{refusals}"; echo "denied: permission_denied: write_package" >&2; exit 1; fi
+fi
+"""
+    )
+    (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n")
+    for name in ("docker", "sleep"):
+        (bin_dir / name).chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "SHA": "a" * 40, "TOKEN": "t", "ACTOR": "a", "SOURCE": "s"}
+    done = subprocess.run(["bash", "-e", "-c", step["run"]], env=env, capture_output=True, text=True, check=False)
+    pushes = [line for line in calls.read_text().splitlines() if line.startswith("push ")]
+    return done.returncode, done.stderr, pushes
+
+
+def test_a_refused_image_push_is_tried_again(tmp_path):
+    code, err, pushes = _push_images(tmp_path, failures=2)
+    assert code == 0, err
+    api = "push ghcr.io/jps531/ms-hs-football-playoff-engine-api:" + "a" * 40
+    worker = "push ghcr.io/jps531/ms-hs-football-playoff-engine-worker:" + "a" * 40
+    assert pushes == [api, api, api, worker]
+    assert (
+        "(attempt 1 of 3); trying again in 15 seconds" in err and "(attempt 2 of 3); trying again in 30 seconds" in err
+    )
+
+
+def test_an_image_push_refused_three_times_fails_the_job(tmp_path):
+    code, err, pushes = _push_images(tmp_path, failures=3)
+    assert code == 1 and len(pushes) == 3  # the worker image isn't tried
+    assert "failed 3 times" in err
+
+
 def test_a_commit_that_rewrites_the_deploy_script_still_deploys_cleanly(server):
     """The running script checks out a commit that changes it (here, 200 lines added at its top), and the
     run carries on as it started."""
