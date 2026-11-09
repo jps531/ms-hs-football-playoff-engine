@@ -81,3 +81,14 @@ def test_the_workflow_releases_only_after_ci_passes_on_main():
     assert "github.event.workflow_run.event == 'push'" in condition
     assert "github.event.workflow_run.head_repository.full_name == github.repository" in condition
     assert workflow["permissions"] == {"contents": "write"}
+
+
+def test_a_push_that_doesnt_change_the_version_releases_nothing(capsys):
+    """The workflow compares the version at the pushed commit with its parent's, and stops when they match;
+    version-at prints the version a commit stated (nothing for a commit that can't be read)."""
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert 'python3 scripts/release.py version-at "$SHA~1"' in workflow
+    assert release.main(["version-at", "HEAD"]) == 0
+    assert capsys.readouterr().out.strip() == release.version_in((ROOT / "backend" / "version.py").read_text())
+    assert release.main(["version-at", "no-such-ref"]) == 0
+    assert capsys.readouterr().out.strip() == ""

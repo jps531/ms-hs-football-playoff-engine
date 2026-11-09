@@ -1,9 +1,9 @@
 # A GitHub release for each version of the site (backend/version.py), tagged vX.Y.Z, with its CHANGELOG.md
 # entry as its notes (scripts/release.py).
 #
-# - After CI passes on a push to main: the version main now states, if it has no release yet. A PR that
-#   bumps the version is released once it merges and its CI is green; one that doesn't bump it releases
-#   nothing.
+# - After CI passes on a push to main that changed the version: that version, tagged at that commit. A PR
+#   that bumps the version is released once it merges and its CI is green; one that doesn't bump it
+#   releases nothing (so a later push never tags an older version on the wrong commit).
 # - Run by hand (Actions → Release → Run workflow): every version main has had that has no release yet,
 #   oldest first, each tagged at the main commit where it first appeared.
 name: Release
@@ -47,6 +47,10 @@ jobs:
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           version=$(python3 scripts/release.py version)
+          if [ "$(python3 scripts/release.py version-at "$SHA~1")" = "$version" ]; then
+            echo "This push didn't change the version ($version); nothing to release"
+            exit 0
+          fi
           if gh release view "v$version" >/dev/null 2>&1; then
             echo "v$version is already released"
             exit 0
