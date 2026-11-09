@@ -292,7 +292,7 @@ export function flagsHtml(flags) {
     : '<p class="muted">No feature flags right now. One is declared in <code>backend/helpers/feature_flags.py</code> (CONTRIBUTING.md, “Feature flags”).</p>';
   return `<details class="mod-flags">
       <summary>Feature flags <span class="muted" data-flags-summary>· ${esc(flagsSummary(flags))}</span></summary>
-      <p class="prose muted">Parts of the site that ship switched off. A change shows the next time a page loads. “Only me” shows it in the browsers where you’ve opened this page, signed in, in the last day; nobody else sees it.</p>
+      <p class="prose muted">Parts of the site that ship switched off. A change shows the next time a page loads. “Only me” shows it in the browsers where you’ve opened this page, signed in, in the last day; nobody else sees it. “Everyone” is for a short trial before the PR that releases it (CONTRIBUTING.md, “Feature flags”).</p>
       ${body}
     </details>`;
 }

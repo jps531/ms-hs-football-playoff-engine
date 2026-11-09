@@ -101,10 +101,13 @@ workflow files differ from `main`'s).
 
 ## Feature flags
 
-A change to the pages can ship switched off, then be switched on from `/moderate` without a deploy:
-first for you alone, then for everyone, and back off at once if something's wrong. Every visitor sees the
-same thing; nothing is stored in a browser to choose who sees what, so there are no percentage rollouts
-or A/B tests.
+A change to the pages can ship switched off, be tried on the live site by you alone, and then be
+released to everyone. Every visitor sees the same thing; nothing is stored in a browser to choose who
+sees what, so there are no percentage rollouts or A/B tests.
+
+The version and the CHANGELOG say what readers get, so they change when a flagged change is released,
+not when its code ships switched off. A release is a PR, not the toggle: that way the change, the
+footer's version and the CHANGELOG entry reach readers in the same deploy.
 
 1. **Declare it** in `FLAGS` in `backend/helpers/feature_flags.py`: a name (`lowercase_words`) and what
    it switches on, in words you'll recognize on `/moderate`.
@@ -112,14 +115,19 @@ or A/B tests.
    Keep the old way working while it's off: that's what everyone sees. The check waits for the client
    config the page already loads, so draw the old way, or nothing, until it answers rather than drawing
    one and swapping.
-3. **Merge and deploy.** With the flag off, readers see no change, so the PR needs no version bump.
-4. **Turn it on** under Feature flags on `/moderate`: **Only me** shows it in the browsers where you've
-   opened `/moderate`, signed in, in the last day (the owner's session cookie), and **Everyone** shows it
-   to all. A page picks the change up the next time it loads.
-5. **Remove the flag** once it's on for good, in a PR that deletes the check, the old way and the
-   `FLAGS` entry together, and bumps the version with the CHANGELOG entry for the change (it's then
-   part of the site for everyone). Keep that PR soon after switching it on, so the version and the
-   CHANGELOG catch up with what readers see.
+3. **Ship it off.** Merge and deploy. Readers see no change, so the PR doesn't bump the version.
+4. **Try it on yourself:** under Feature flags on `/moderate`, choose **Only me**. It shows in the
+   browsers where you've opened `/moderate`, signed in, in the last day (the owner's session cookie), and
+   nowhere else. A page picks a change up the next time it loads; **Off** puts it back.
+5. **Release it** with a go-live PR that deletes the check, the old way and the `FLAGS` entry together,
+   and bumps the version with the CHANGELOG entry for the change. Once that deploys, it's part of the
+   site for everyone. To take it back after that, revert the PR, or deploy the previous commit again
+   (Actions → Deploy → Run workflow).
+
+**Everyone** turns a flag on for all readers without a deploy, ahead of its go-live PR: for a short
+trial with an instant off switch (a busy game night, say). Readers then see a change the version and the
+CHANGELOG don't mention yet, so keep it short: merge the go-live PR within a day or so, or turn it back
+off.
 
 `feature_flags_test.py` fails if a page checks a flag that isn't declared (a typo would be off forever)
 or a declared flag is checked nowhere (a toggle that does nothing). The server-rendered parts of a page
