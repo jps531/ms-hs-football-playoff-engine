@@ -94,8 +94,10 @@ A PR that changes what readers get bumps it, with its CHANGELOG.md entry, in tha
 changes only docs, tests or tooling doesn't. Once it merges and CI passes on main, the Release workflow
 (`.github/workflows/release.yml`, `scripts/release.py`) tags the merge commit `vX.Y.Z` and publishes a
 GitHub release with the CHANGELOG entry as its notes; a merge that doesn't bump the version releases
-nothing. Running the workflow by hand (Actions → Release → Run workflow) releases every version main has
-had that has no release yet, each at the commit where it first appeared.
+nothing. Older versions without a release are released with `scripts/backfill_releases.sh`, run once
+from a checkout of `main` with the GitHub CLI signed in as you: each at the commit where it first
+appeared. It can't run in Actions, whose token isn't allowed to create a tag on an old commit (one whose
+workflow files differ from `main`'s).
 
 ## Branches
 
