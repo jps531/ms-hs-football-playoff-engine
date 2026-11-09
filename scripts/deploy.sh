@@ -43,27 +43,48 @@ if ! git merge-base --is-ancestor "$sha" origin/main; then
 fi
 
 # Wait for the pipelines: no flow run running or about to (Prefect), and the update lock (run_lock.py's
-# advisory lock, 2026_10_30) free.
+# advisory lock, 2026_10_30) free. A run left "Cancelling" for over an hour is a leftover (a cancel that
+# a restart cut short; a real one ends in seconds), so it doesn't hold a deploy up. busy() prints what
+# it's waiting on, one line each, and nothing when there's nothing.
 busy() {
-  local runs locks
-  runs=$("${compose[@]}" exec -T prefect-worker python -c '
-import json, urllib.request
-body = json.dumps({"flow_runs": {"state": {"type": {"any_": ["RUNNING", "PENDING", "CANCELLING"]}}}}).encode()
-req = urllib.request.Request("http://prefect-server:4200/api/flow_runs/count", data=body,
+  "${compose[@]}" exec -T prefect-worker python -c '
+import datetime, json, urllib.request
+body = json.dumps({"flow_runs": {"state": {"type": {"any_": ["RUNNING", "PENDING", "CANCELLING"]}}}, "limit": 50}).encode()
+req = urllib.request.Request("http://prefect-server:4200/api/flow_runs/filter", data=body,
                              headers={"Content-Type": "application/json"})
-print(json.load(urllib.request.urlopen(req, timeout=10)))' 2>/dev/null || echo 0)
+now = datetime.datetime.now(datetime.timezone.utc)
+for run in json.load(urllib.request.urlopen(req, timeout=10)):
+    state = run["state_type"]
+    since = (run.get("state") or {}).get("timestamp") or run.get("start_time") or ""
+    if state == "CANCELLING" and since:
+        entered = datetime.datetime.fromisoformat(since.replace("Z", "+00:00"))
+        if now - entered > datetime.timedelta(hours=1):
+            continue
+    when = since[:16].replace("T", " ") + " UTC" if since else "unknown"
+    print("flow run %s (%s since %s, %s)" % (run["name"], state.lower(), when, run["id"]))
+' 2>/dev/null || true
+  local locks
   locks=$("${compose[@]}" exec -T db sh -c \
     'psql -X -q -A -t -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM pg_locks WHERE locktype = '"'"'advisory'"'"' AND classid = 0 AND objid = 20261030 AND granted"' \
     2>/dev/null || echo 0)
-  [[ ${runs//[[:space:]]/} != 0 || ${locks//[[:space:]]/} != 0 ]]
+  if [[ ${locks//[[:space:]]/} != 0 ]]; then
+    echo "the update lock (a daily update, recompute or other update holds it)"
+  fi
 }
 waited=0
-while busy; do
+reported=""
+while waiting=$(busy) && [[ -n $waiting ]]; do
   if (( waited >= ${DEPLOY_WAIT_MINUTES:-60} )); then
-    echo "Pipelines still running after ${waited} minutes; not deploying. Try again once they finish." >&2
+    echo "Still waiting after ${waited} minutes, on:" >&2
+    echo "$waiting" | sed 's/^/  /' >&2
+    echo "Not deploying. Run it again once that's done (or, for a run that's stuck, mark it Crashed in Prefect)." >&2
     exit 1
   fi
-  (( waited == 0 )) && log "A pipeline is running; waiting for it to finish"
+  if [[ $waiting != "$reported" ]]; then
+    log "Waiting for:"
+    echo "$waiting" | sed 's/^/  /'
+    reported=$waiting
+  fi
   sleep 60
   waited=$((waited + 1))
 done

@@ -191,8 +191,12 @@ Each commit of `main` deploys once CI passes on it and you approve it
    command is `scripts/deploy_ssh.sh`, which runs `scripts/deploy.sh <sha>` and nothing else.
 3. **`scripts/deploy.sh`** on the server, from the repository's root:
    - deploys only a commit on `origin/main`, and one deploy at a time;
-   - waits, up to an hour, for running pipelines to finish (a Prefect flow run, or the update lock):
-     the worker runs flows in-process, so a restart would kill the daily update;
+   - waits, up to an hour, for running pipelines to finish (a Prefect flow run running, pending or
+     cancelling, or the update lock): the worker runs flows in-process, so a restart would kill the daily
+     update. The log names each run it waits on (name, state, since when, id). A run that has been
+     "Cancelling" for over an hour is a leftover (a cancel a restart cut short; a real one ends in
+     seconds) and doesn't hold a deploy up; a run "Running" or "Pending" does, however old. For one
+     that's stuck, mark it Crashed in Prefect, then run the deploy again;
    - pulls the commit's images, checks the commit out (nginx's config and pages, the SQL, the scripts
      come from the checkout), runs `scripts/migrate.py`, starts the services, and recreates nginx if
      `nginx/nginx.conf` changed;
@@ -225,14 +229,23 @@ PR's description asks for (running `share-assets`, a backfill) is still done by 
 
    (`restrict` turns off forwarding, a terminal and the rest; the `command` runs whatever the client
    asked for.)
-3. **The server's host key,** so Actions knows it's talking to the server: run
-   `ssh-keyscan -t ed25519 <static IP>` on your computer, and check its fingerprint
-   (`ssh-keygen -lf <(ssh-keyscan -t ed25519 <static IP> 2>/dev/null)`) against the server's own
-   (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, run there).
+3. **The server's host key,** so Actions knows it's talking to the server. On your computer:
+
+   ```
+   ssh-keyscan -t ed25519 <static IP> 2>/dev/null
+   ```
+
+   prints one line, `<static IP> ssh-ed25519 AAAA...`: that whole line is `DEPLOY_KNOWN_HOSTS` below.
+   (Not the `SHA256:...` fingerprint: that's only for checking.) Check it's the server's: the fingerprint
+   of that line (`ssh-keygen -lf <(ssh-keyscan -t ed25519 <static IP> 2>/dev/null)`) should match the
+   server's own (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, run there).
 4. **The `production` environment** in GitHub (Settings → Environments → New environment):
    - **Required reviewers:** you. **Deployment branches and tags:** selected branches, `main`.
-   - **Environment secrets:** `DEPLOY_SSH_KEY` (all of `mshsfootball-deploy`, the private key),
-     `DEPLOY_KNOWN_HOSTS` (the `ssh-keyscan` line), `DEPLOY_TARGET` (`ubuntu@<static IP>`).
+   - **Environment secrets** (Add environment secret; not Environment variables, which aren't
+     hidden in logs, public for this repository, and which the workflow doesn't read): `DEPLOY_SSH_KEY` (all of `mshsfootball-deploy`, the
+     private key, from `-----BEGIN` to `END ... KEY-----`), `DEPLOY_KNOWN_HOSTS` (the `ssh-keyscan`
+     line from step 3), `DEPLOY_TARGET` (`ubuntu@<static IP>`). If one is missing, the deploy step
+     stops and names it.
    - Then delete `mshsfootball-deploy` from your computer, or keep it somewhere safe.
 5. **The images public,** so the server pulls them without a login: after the first run of the
    workflow, open each of `ms-hs-football-playoff-engine-api` and `-worker` under your GitHub profile's

@@ -91,6 +91,15 @@ jobs:
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           TARGET: ${{ secrets.DEPLOY_TARGET }}  # user@host
         run: |
+          missing=""
+          [ -n "$KEY" ] || missing="$missing DEPLOY_SSH_KEY"
+          [ -n "$KNOWN_HOSTS" ] || missing="$missing DEPLOY_KNOWN_HOSTS"
+          [ -n "$TARGET" ] || missing="$missing DEPLOY_TARGET"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing:$missing. Add each under Settings → Environments → production →" \
+              "Environment secrets (secrets, not variables). Setup: docs/operations/VM_DEPLOYMENT.md." >&2
+            exit 1
+          fi
           install -m 700 -d ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
