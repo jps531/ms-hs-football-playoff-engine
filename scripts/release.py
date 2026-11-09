@@ -2,6 +2,7 @@
 the commit on main where each version first appeared. Used by .github/workflows/release.yml.
 
     python3 scripts/release.py version            # the version in backend/version.py, e.g. 1.17.0
+    python3 scripts/release.py version-at REF     # the version backend/version.py stated at a commit
     python3 scripts/release.py notes 1.17.0       # that version's CHANGELOG.md entry, without its heading
     python3 scripts/release.py history            # "1.0.0 <sha>" per version, oldest first, from main
 
@@ -57,6 +58,11 @@ def main(argv: list[str]) -> int:
             print(f"No VERSION in {VERSION_FILE}", file=sys.stderr)
             return 1
         print(version)
+    elif argv[:1] == ["version-at"] and len(argv) == 2:
+        shown = subprocess.run(
+            ["git", "show", f"{argv[1]}:{VERSION_FILE}"], cwd=ROOT, capture_output=True, text=True, check=False
+        )
+        print(version_in(shown.stdout) or "")
     elif argv[:1] == ["notes"] and len(argv) == 2:
         text = notes((ROOT / "CHANGELOG.md").read_text(), argv[1])
         if text is None:
