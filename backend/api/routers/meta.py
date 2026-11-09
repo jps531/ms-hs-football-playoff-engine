@@ -3,7 +3,7 @@
 import os
 from typing import Annotated, Any, Literal, LiteralString
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from psycopg import sql
 
 from backend.api.db import get_conn
@@ -23,6 +23,7 @@ from backend.api.models.responses import (
     TeamLogoModel,
     TeamModel,
 )
+from backend.api.routers.flags import features_for
 from backend.api.turnstile import turnstile_site_key
 from backend.helpers.api_helpers import (
     HELMET_DESIGNS_SELECT,
@@ -519,14 +520,17 @@ async def list_championships(
 
 
 @router.get("/client-config")
-async def get_client_config(request: Request) -> ClientConfig:
+async def get_client_config(request: Request, response: Response) -> ClientConfig:
     """Return the public keys the site's pages need: Turnstile's site key, the moderation page's Auth0 app,
-    the Swagger UI path when this environment serves it, the PostHog project visit counts go to, and the PostHog
-    dashboards linked for the owner on /moderate.
+    the Swagger UI path when this environment serves it, the PostHog project visit counts go to, the PostHog
+    dashboards linked for the owner on /moderate, and the feature flags on for this viewer.
 
-    Nothing here is secret; a value is null when that feature isn't set up on this server.
+    Nothing here is secret; a value is null when that feature isn't set up on this server. The flags differ
+    for the owner's browser, so the answer is never stored by a browser or cache.
     """
+    response.headers["Cache-Control"] = "no-store"
     return ClientConfig(
+        features=await features_for(request),
         api_docs_url=request.app.docs_url,
         turnstile_site_key=turnstile_site_key(),
         auth0_domain=os.getenv("AUTH0_DOMAIN") or None,

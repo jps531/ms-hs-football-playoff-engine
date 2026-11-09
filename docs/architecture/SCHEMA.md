@@ -24,6 +24,7 @@ What each table holds, then the entity-relationship diagram. Column-level detail
 | `recompute_requests` | One row per season with approved score or date corrections not yet worked into the snapshots: the earliest date they change (`from_date`) and when the last one was approved (`requested_at`). Written on approval, read and cleared by the `recompute-after-corrections` flow. |
 | `submissions` | User-submitted corrections and new assets (logos, helmet designs, colors, GPS coordinates, scores, feedback). Rows enter the queue with `status='pending'` and are approved or rejected by a moderator via the moderation API. Approved submissions are auto-applied to the live tables (except helmet submissions, which require manual mockup creation). Has an optional `user_id` FK for linking submissions to registered users. |
 | `users` | Registered user accounts with role (`user`/`moderator`/`owner`), profile fields (display name, phone, hometown), and a favorite team FK. Identity is managed by Auth0; `auth0_id` stores the Auth0 `sub` claim. Rows are lazy-provisioned on first authenticated request. |
+| `feature_flags` | Each feature flag's state (`off`/`owner`/`on`), set by the owner on `/moderate`, with when and by whom (`updated_by`). Only flags declared in `backend/helpers/feature_flags.py` count: a declared flag with no row is off, and a row for a flag no longer declared is ignored. |
 | `user_followed_teams` | Many-to-many join between users and the schools they follow. |
 | `user_attended_games` | Many-to-many join between users and games they marked as attended. References the composite PK `(school, date)` on `games`, and follows a game the schedule pipeline moves to a new date (`ON UPDATE CASCADE`). |
 
@@ -309,6 +310,12 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
     }
+    feature_flags {
+        text name PK
+        text state
+        timestamptz updated_at
+        int updated_by FK
+    }
     user_followed_teams {
         int user_id PK,FK
         text school PK,FK
@@ -332,6 +339,7 @@ erDiagram
     users ||--o{ submissions : "submitted by"
     users ||--o{ user_followed_teams : "follows"
     users ||--o{ user_attended_games : "attended"
+    users ||--o{ feature_flags : "last set"
     games ||--o{ user_attended_games : "attended by"
     school_seasons ||--o{ games : "plays"
     school_seasons ||--o{ region_standings : "has odds in"

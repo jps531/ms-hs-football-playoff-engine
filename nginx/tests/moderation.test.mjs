@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  canApprove, canReject, decisionLabels, payloadValue, feedbackAbout, itemHtml, pageLink, relativeTime, scoreChange, typeFilters, typeLabel,
+  canApprove, canReject, decisionLabels, payloadValue, feedbackAbout, flagHtml, flagsHtml, flagsSummary, itemHtml, pageLink, relativeTime,
+  scoreChange, typeFilters, typeLabel,
 } from "../html/static/js/moderation.js";
 import {
   authorizeUrl, base64url, challengeFor, completeSignIn, explainAuthError, logoutUrl, saveToken, storedToken, tokenRequest,
@@ -193,4 +194,32 @@ test("a playoff score for a game not on the schedule says approving adds it, and
   assert.match(html, /Union at Raleigh · /);
   assert.match(html, /Not on the schedule yet\. Approving adds this Quarterfinals game at Raleigh on this date\./);
   assert.match(html, /<th scope="col">Raleigh<\/th>/);
+});
+
+const FLAGS = [
+  { name: "dark_map", description: "The dark region map", state: "on", updated_at: null },
+  { name: "new_bracket", description: "The <new> bracket", state: "owner", updated_at: null },
+  { name: "old_thing", description: "Something", state: "off", updated_at: null },
+];
+
+test("flags: the summary says how many are on, and for whom", () => {
+  assert.equal(flagsSummary(FLAGS), "1 on for everyone, 1 for you only");
+  assert.equal(flagsSummary([FLAGS[2]]), "all off");
+  assert.equal(flagsSummary([]), "none yet");
+});
+
+test("flags: each has Off, Only me and Everyone, with its state chosen", () => {
+  const html = flagHtml(FLAGS[1]);
+  assert.match(html, /data-flag="new_bracket"/);
+  assert.match(html, /The &lt;new&gt; bracket/);
+  const chips = [...html.matchAll(/name="flag-new_bracket" value="(\w+)"( checked)?><span>([^<]+)</g)].map((m) => [m[1], m[3], Boolean(m[2])]);
+  assert.deepEqual(chips, [["off", "Off", false], ["owner", "Only me", true], ["on", "Everyone", false]]);
+});
+
+test("flags: the section is collapsed, explains who sees what, and says where flags come from when there are none", () => {
+  const html = flagsHtml(FLAGS);
+  assert.match(html, /^<details class="mod-flags">/);
+  assert.equal((html.match(/data-flag=/g) ?? []).length, 3);
+  assert.match(html, /Only me/);
+  assert.match(flagsHtml([]), /backend\/helpers\/feature_flags\.py/);
 });

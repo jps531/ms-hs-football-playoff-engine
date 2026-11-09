@@ -3,16 +3,20 @@
 import asyncio
 from types import SimpleNamespace
 
+from fastapi import Response
+
 from backend.api.routers import meta
+from backend.helpers import feature_flags
 
 
 def _request(docs_url="/docs"):
     """A stand-in request whose app serves Swagger UI at *docs_url* (None: not served)."""
-    return SimpleNamespace(app=SimpleNamespace(docs_url=docs_url))
+    return SimpleNamespace(app=SimpleNamespace(docs_url=docs_url), cookies={})
 
 
 def test_reports_configured_keys(monkeypatch):
     """Every key set: all of them come back."""
+    monkeypatch.setattr(feature_flags, "FLAGS", {})  # no flags declared: no database to ask
     monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret")
     monkeypatch.setenv("TURNSTILE_SITE_KEY", "site")
     monkeypatch.setenv("AUTH0_DOMAIN", "x.us.auth0.com")
@@ -21,7 +25,9 @@ def test_reports_configured_keys(monkeypatch):
     monkeypatch.setenv("POSTHOG_PROJECT_KEY", "phc_test")
     monkeypatch.setenv("POSTHOG_DASHBOARD_URL", "https://us.posthog.com/project/1/web")
     monkeypatch.setenv("POSTHOG_ACTIVITY_URL", "https://us.posthog.com/project/1/dashboard/2")
-    config = asyncio.run(meta.get_client_config(_request()))
+    response = Response()
+    config = asyncio.run(meta.get_client_config(_request(), response))
+    assert response.headers["Cache-Control"] == "no-store"  # the owner's browser gets more flags
     assert config.model_dump() == {
         "api_docs_url": "/docs",
         "turnstile_site_key": "site",
@@ -31,18 +37,20 @@ def test_reports_configured_keys(monkeypatch):
         "posthog_key": "phc_test",
         "posthog_dashboard_url": "https://us.posthog.com/project/1/web",
         "posthog_activity_url": "https://us.posthog.com/project/1/dashboard/2",
+        "features": [],  # feature_flags_test.py covers these
     }
 
 
 def test_unconfigured_features_are_null(monkeypatch):
     """No Turnstile secret or SPA client: those come back null, and the secret never does."""
+    monkeypatch.setattr(feature_flags, "FLAGS", {})
     monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
     monkeypatch.setenv("TURNSTILE_SITE_KEY", "site")
     monkeypatch.delenv("AUTH0_SPA_CLIENT_ID", raising=False)
     monkeypatch.delenv("POSTHOG_PROJECT_KEY", raising=False)
     monkeypatch.delenv("POSTHOG_DASHBOARD_URL", raising=False)
     monkeypatch.delenv("POSTHOG_ACTIVITY_URL", raising=False)
-    config = asyncio.run(meta.get_client_config(_request(None)))
+    config = asyncio.run(meta.get_client_config(_request(None), Response()))
     assert config.turnstile_site_key is None
     assert config.api_docs_url is None
     assert config.auth0_client_id is None

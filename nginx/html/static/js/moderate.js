@@ -4,7 +4,7 @@
 import { clientConfig } from "./config.js";
 import { completeSignIn, forgetToken, logoutUrl, signIn, storedToken } from "./auth.js";
 import { escapeHtml as esc } from "./format.js";
-import { STATUSES, itemHtml, typeFilters } from "./moderation.js";
+import { STATUSES, flagsHtml, flagsSummary, itemHtml, typeFilters } from "./moderation.js";
 
 const API = "/api/v1";
 const PAGE_SIZE = 50;
@@ -22,7 +22,7 @@ const store = (() => {
   }
 })();
 
-const state = { cfg: null, token: null, status: "pending", type: "", items: [], counts: {}, more: false };
+const state = { cfg: null, token: null, status: "pending", type: "", items: [], counts: {}, more: false, flags: [] };
 
 class SignedOut extends Error {}
 
@@ -96,6 +96,7 @@ function shell() {
       ${docs}
       <button type="button" class="mod-button" data-signout>Sign out</button>
     </div>
+    <div data-flags-slot></div>
     <div class="mod-filters">
       <fieldset class="mod-filter">
         <legend>Status</legend>
@@ -177,6 +178,45 @@ async function load({ append = false } = {}) {
   }
 }
 
+/** The owner's feature flags: list them in their section (left empty if they don't load). */
+async function loadFlags() {
+  const res = await api("/feature-flags");
+  if (!res.ok) return;
+  state.flags = await res.json();
+  const slot = root.querySelector("[data-flags-slot]");
+  if (slot) slot.innerHTML = flagsHtml(state.flags);
+}
+
+/** Set a flag to the state its chips now show; on failure, put the chips back and say why. */
+async function setFlag(input) {
+  const box = input.closest("[data-flag]");
+  const name = box.dataset.flag;
+  const status = box.querySelector(".fb-status");
+  const flag = state.flags.find((f) => f.name === name);
+  const inputs = box.querySelectorAll("input");
+  inputs.forEach((i) => (i.disabled = true));
+  status.classList.remove("is-error");
+  status.textContent = "Saving…";
+  try {
+    const res = await api(`/feature-flags/${encodeURIComponent(name)}`, { method: "PUT", body: { state: input.value } });
+    if (!res.ok) {
+      const detail = (await res.json().catch(() => null))?.detail;
+      throw new Error(typeof detail === "string" && detail ? detail : `That didn’t save (HTTP ${res.status}).`);
+    }
+    Object.assign(flag, await res.json());
+    status.textContent = "Saved. Pages show it the next time they load.";
+  } catch (err) {
+    if (err instanceof SignedOut) return showSignedOut(err.message);
+    box.querySelector(`input[value="${flag.state}"]`).checked = true;
+    status.classList.add("is-error");
+    status.textContent = err.message || "That didn’t save.";
+  } finally {
+    inputs.forEach((i) => (i.disabled = false));
+    const summary = root.querySelector("[data-flags-summary]");
+    if (summary) summary.textContent = `· ${flagsSummary(state.flags)}`;
+  }
+}
+
 async function decide(form, decision) {
   const id = Number(form.dataset.decide);
   const status = form.querySelector(".fb-status");
@@ -227,6 +267,10 @@ root.addEventListener("click", (e) => {
 });
 
 root.addEventListener("change", (e) => {
+  if (e.target.closest("[data-flag]")) {
+    setFlag(e.target);
+    return;
+  }
   if (e.target.name === "status") state.status = e.target.value;
   else if (e.target.name === "type") state.type = e.target.value;
   else return;
@@ -271,13 +315,15 @@ async function boot() {
   shell();
   await load();
   // Prefect is the owner's alone (the API refuses anyone else), so only the
-  // owner sees its link (and the analytics dashboard's), and only the owner
-  // needs the first-party cookie that lets the link open without a Bearer header.
+  // owner sees its link (and the analytics dashboard's) and the feature flags,
+  // and only the owner gets the first-party cookie that lets the link open
+  // without a Bearer header (and lets the site's pages show flags on for "Only me").
   api("/users/me")
     .then((res) => (res.ok ? res.json() : null))
     .then((me) => {
       if (me?.role !== "owner") return;
       for (const link of root.querySelectorAll("[data-owner-only]")) link.removeAttribute("hidden");
+      loadFlags().catch(() => {});
       return api("/auth/session", { method: "POST" });
     })
     .catch(() => {});

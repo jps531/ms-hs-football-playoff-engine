@@ -254,3 +254,45 @@ export function typeFilters(counts, chosen) {
       .map((t) => ({ value: t, label: typeName(t), count: counts?.[t] ?? 0 })),
   ];
 }
+
+// ------------------------------------------------------------ feature flags (the owner's)
+
+export const FLAG_STATES = [
+  { value: "off", label: "Off" },
+  { value: "owner", label: "Only me" },
+  { value: "on", label: "Everyone" },
+];
+
+/** The flags section's summary line: how many are on, and for whom. */
+export function flagsSummary(flags) {
+  const everyone = flags.filter((f) => f.state === "on").length;
+  const owner = flags.filter((f) => f.state === "owner").length;
+  const parts = [];
+  if (everyone) parts.push(`${everyone} on for everyone`);
+  if (owner) parts.push(`${owner} for you only`);
+  if (!parts.length) parts.push(flags.length ? "all off" : "none yet");
+  return parts.join(", ");
+}
+
+/** One flag: its name, what it switches, and who sees it (Off, Only me, Everyone). */
+export function flagHtml(flag) {
+  const chips = FLAG_STATES.map((s) => `<label class="fb-cat"><input type="radio" name="flag-${esc(flag.name)}" value="${s.value}"${s.value === flag.state ? " checked" : ""}><span>${s.label}</span></label>`).join("");
+  return `<fieldset class="mod-flag" data-flag="${esc(flag.name)}">
+      <legend><code>${esc(flag.name)}</code></legend>
+      <p class="mod-flag__about">${esc(flag.description)}</p>
+      <div class="fb-cats">${chips}</div>
+      <p class="fb-status" aria-live="polite"></p>
+    </fieldset>`;
+}
+
+/** The owner's feature flags section (collapsed): each declared flag and who sees it. */
+export function flagsHtml(flags) {
+  const body = flags.length
+    ? flags.map(flagHtml).join("")
+    : '<p class="muted">No feature flags right now. One is declared in <code>backend/helpers/feature_flags.py</code> (CONTRIBUTING.md, “Feature flags”).</p>';
+  return `<details class="mod-flags">
+      <summary>Feature flags <span class="muted" data-flags-summary>· ${esc(flagsSummary(flags))}</span></summary>
+      <p class="prose muted">Parts of the site that ship switched off. A change shows the next time a page loads. “Only me” shows it in the browsers where you’ve opened this page, signed in, in the last day; nobody else sees it. “Everyone” is for a short trial before the PR that releases it (CONTRIBUTING.md, “Feature flags”).</p>
+      ${body}
+    </details>`;
+}

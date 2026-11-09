@@ -453,6 +453,12 @@ class ModerationDecisionRequest(BaseModel):
     notes: str | None = None
 
 
+class SetFeatureFlagRequest(BaseModel):
+    """Body for setting a feature flag: off (nobody), owner (only the owner), or on (everyone)."""
+
+    state: Literal["off", "owner", "on"]
+
+
 # ---------------------------------------------------------------------------
 # Auth / Users
 # ---------------------------------------------------------------------------

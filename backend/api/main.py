@@ -24,6 +24,7 @@ from backend.api.routers import (
     admin,
     auth_router,
     bracket,
+    flags,
     games,
     hosting,
     images,
@@ -102,3 +103,4 @@ app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(submissions.router)
 app.include_router(moderation.router)
+app.include_router(flags.router)
