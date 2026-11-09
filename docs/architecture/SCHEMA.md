@@ -56,6 +56,9 @@ A correction (an override of `final`, `result` or the points) wins: on the row i
 on the other school's row. A canceled game (`game_status` `canceled`, from AHSFHS or an override) is
 never final and has no score.
 
+`schema_migrations` records which `sql/migrations` files have been applied (`scripts/migrate.py`): its
+`baseline` rows are the migrations applied by hand before it existed, recorded without being run.
+
 A row whose opponent was corrected (`set_game_opponent`, `sql/override_helpers.sql`) has the corrected
 opponent in `opponent` and the one AHSFHS listed in `overrides.ahsfhs_opponent`; the schedule pipeline
 keeps the corrected opponent.
