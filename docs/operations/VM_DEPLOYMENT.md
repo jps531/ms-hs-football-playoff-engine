@@ -181,13 +181,13 @@ All the Auth0 setup, production's included (the `/moderate` page's application a
 
 ## Automatic deploys
 
-Each commit of `main` deploys once CI passes on it and you approve it
-(`.github/workflows/deploy.yml`):
+Each commit of `main` deploys once CI passes on it (`.github/workflows/deploy.yml`), with nothing to
+click:
 
 1. **images** builds the API and worker images from the commit and pushes them to the GitHub container
    registry, tagged with the commit (`ghcr.io/jps531/ms-hs-football-playoff-engine-api:<sha>`, `-worker`).
-2. **deploy** waits in the `production` environment for your approval (Actions → the run → Review
-   deployments → Approve, or from the GitHub app). Then it connects over SSH with a key whose only
+2. **deploy** runs in the `production` environment, which holds the SSH secrets and gives them only to
+   `main`. It connects over SSH with a key whose only
    command is `scripts/deploy_ssh.sh`, which runs `scripts/deploy.sh <sha>` and nothing else.
 3. **`scripts/deploy.sh`** on the server, from the repository's root:
    - deploys only a commit on `origin/main`, and one deploy at a time;
@@ -240,7 +240,9 @@ PR's description asks for (running `share-assets`, a backfill) is still done by 
    of that line (`ssh-keygen -lf <(ssh-keyscan -t ed25519 <static IP> 2>/dev/null)`) should match the
    server's own (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, run there).
 4. **The `production` environment** in GitHub (Settings → Environments → New environment):
-   - **Required reviewers:** you. **Deployment branches and tags:** selected branches, `main`.
+   - **Deployment branches and tags:** selected branches, `main` (so only `main` gets the secrets).
+   - **Required reviewers:** none, so each merge deploys on its own. To approve each deploy first
+     instead, add yourself; the deploy job then waits (Actions → the run → Review deployments).
    - **Environment secrets** (Add environment secret; not Environment variables, which aren't
      hidden in logs, public for this repository, and which the workflow doesn't read): `DEPLOY_SSH_KEY` (all of `mshsfootball-deploy`, the
      private key, from `-----BEGIN` to `END ... KEY-----`), `DEPLOY_KNOWN_HOSTS` (the `ssh-keyscan`
@@ -251,7 +253,7 @@ PR's description asks for (running `share-assets`, a backfill) is still done by 
    workflow, open each of `ms-hs-football-playoff-engine-api` and `-worker` under your GitHub profile's
    Packages, then Package settings → Change visibility → Public. (The repository is public, so they hold
    nothing that isn't already.)
-6. **Try it:** Actions → Deploy → Run workflow, approve it, and watch the deploy step's log.
+6. **Try it:** Actions → Deploy → Run workflow, and watch the deploy step's log.
 
 ## Deploying updates by hand
 

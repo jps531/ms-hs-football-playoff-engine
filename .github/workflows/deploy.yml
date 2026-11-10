@@ -1,9 +1,9 @@
-# Deploy each commit of main to the server once CI passes on it, after the owner approves.
+# Deploy each commit of main to the server once CI passes on it.
 #
 # 1. images: build the API and worker images from the commit and push them to the GitHub container
 #    registry, tagged with the commit (ghcr.io/jps531/ms-hs-football-playoff-engine-{api,worker}:<sha>).
-# 2. deploy: in the "production" environment, which waits for the owner's approval and holds the SSH
-#    secrets, run scripts/deploy.sh on the server for that commit. The key can do nothing else: on the
+# 2. deploy: in the "production" environment, which holds the SSH secrets (for main only), run
+#    scripts/deploy.sh on the server for that commit. The key can do nothing else: on the
 #    server its forced command is scripts/deploy_ssh.sh. deploy.sh waits for running pipelines, pulls the
 #    images, migrates, restarts, checks the site, and rolls back if it isn't healthy.
 #
