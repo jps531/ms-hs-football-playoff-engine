@@ -229,7 +229,7 @@ def test_the_deploy_key_deploys_a_sha(server):
     assert server.head() == sha
 
 
-def test_the_workflow_deploys_main_after_ci_and_waits_for_approval():
+def test_the_workflow_deploys_main_after_ci_in_the_production_environment():
     """Only after CI passes on a push to main in this repository; the deploy job is in the protected
     production environment; images are pushed with packages: write on that job only."""
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "deploy.yml").read_text())
