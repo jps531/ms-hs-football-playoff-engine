@@ -68,7 +68,17 @@ jobs:
             tag="ghcr.io/jps531/ms-hs-football-playoff-engine-$image:$SHA"
             docker build --file "$dockerfile" --tag "$tag" \
               --label "org.opencontainers.image.source=$SOURCE" --label "org.opencontainers.image.revision=$SHA" .
-            docker push --quiet "$tag"
+            # The registry has refused a push once that went through on a re-run ("permission_denied:
+            # write_package"), so a failed push is tried twice more before the job fails.
+            for attempt in 1 2 3; do
+              docker push --quiet "$tag" && break
+              if [ "$attempt" = 3 ]; then
+                echo "::error::Pushing $tag failed 3 times." >&2
+                exit 1
+              fi
+              echo "Pushing $tag failed (attempt $attempt of 3); trying again in $((attempt * 15)) seconds." >&2
+              sleep $((attempt * 15))
+            done
           done
 
   deploy:
