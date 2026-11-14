@@ -5,6 +5,13 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.1
+
+- **A score after a first-round bye shows on the bracket.** In 1A, Region 1 has three teams, so the
+  Region 3 #1 seed, Calhoun City, had a bye in the first round. The bracket didn't carry Calhoun
+  City past the bye, so its second-round game against French Camp showed no score: Calhoun City won
+  46–28. It now shows, with Calhoun City through to the quarterfinals.
+
 ## 1.17.0
 
 - **Share images for every season.** A past season's region pages now have images to share, as the

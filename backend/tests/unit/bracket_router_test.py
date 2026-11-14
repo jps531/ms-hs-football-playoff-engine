@@ -5,8 +5,9 @@ from backend.api.routers.bracket import (
     _build_p_host_given_reach_by_team,
     _invert_school_to_seed,
     _seeds_by_region_for_slot,
+    bye_positions,
 )
-from backend.helpers.data_classes import FormatSlot
+from backend.helpers.data_classes import FormatSlot, StandingsOdds
 
 
 class TestInvertSchoolToSeed:
@@ -113,3 +114,39 @@ class TestSeedsByRegionForSlot:
         ]
         result = _seeds_by_region_for_slot(group, "second_round")
         assert result == {1: {1, 2, 3, 4}}
+
+
+class TestByePositions:
+    """bye_positions: a first-round seed no team in its region can take, while the region has teams."""
+
+    @staticmethod
+    def _odds(school, p1=0.0, p2=0.0, p3=0.0, p4=0.0):
+        """A team's seed odds."""
+        p = p1 + p2 + p3 + p4
+        return StandingsOdds(school, p1, p2, p3, p4, p, p, p >= 1.0, p <= 0.0)
+
+    _SLOTS = [FormatSlot(1, 3, 1, 1, 4, "N"), FormatSlot(2, 1, 1, 3, 4, "N")]
+
+    def test_a_three_team_region_has_no_fourth_seed(self):
+        """1A Region 1 in 2026: three teams, so Region 3's #1 seed has a bye."""
+        by_region = {
+            1: {
+                "Tupelo Christian": self._odds("T", p1=1),
+                "Smithville": self._odds("S", p2=1),
+                "Biggersville": self._odds("B", p3=1),
+            },
+            3: {f"T{k}": self._odds(f"T{k}", **{f"p{k}": 1.0}) for k in (1, 2, 3, 4)},
+        }
+        assert bye_positions(by_region, self._SLOTS) == {(1, 4)}
+
+    def test_a_seed_still_open_is_not_a_bye(self):
+        """A seed two teams could still take isn't a bye, and a region without standings has none."""
+        by_region = {
+            1: {
+                "A": self._odds("A", p1=0.5, p4=0.5),
+                "B": self._odds("B", p1=0.5, p4=0.5),
+                "C": self._odds("C", p2=1),
+                "D": self._odds("D", p3=1),
+            }
+        }
+        assert bye_positions(by_region, self._SLOTS) == set()
