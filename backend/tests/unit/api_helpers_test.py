@@ -3615,6 +3615,34 @@ class TestBuildEnrichedBracketLayout:
         """Base (unenriched) bracket layout for the 5A-7A format used by these tests."""
         return build_bracket_layout(SLOTS_5A_7A_2025)
 
+    def _with_bye(self):
+        """Region 2 is too small for a #4 seed: R1S1's first-round game is a bye."""
+        s2s = {k: v for k, v in self._S2S.items() if k != (2, 4)}
+        confirmed = [("R2S2", "R1S3", 21, 7), ("R1S1", "R2S2", 46, 28)]
+        return build_enriched_bracket_layout(self._layout(), s2s, confirmed, [], byes={(2, 4)})
+
+    def test_a_bye_sends_its_team_through_with_no_result(self):
+        """The bye game has no result, and its team plays the next round."""
+        layout = self._with_bye()
+        bye_game, next_game = layout.halves["N"][0][0], layout.halves["N"][1][0]
+        assert bye_game.result is None and bye_game.participant_b.school is None
+        assert next_game.participant_a.school == "R1S1" and next_game.participant_b.school == "R2S2"
+
+    def test_the_next_round_after_a_bye_shows_its_result(self):
+        """The game after the bye has its score, and its winner goes on (here into the semifinal)."""
+        layout = self._with_bye()
+        next_game = layout.halves["N"][1][0]
+        assert next_game.result is not None
+        assert (next_game.result.winner.school, next_game.result.winner_score) == ("R1S1", 46)
+        assert (next_game.result.loser.school, next_game.result.loser_score) == ("R2S2", 28)
+        assert layout.halves["N"][2][0].participant_a.school == "R1S1"
+
+    def test_a_seed_not_clinched_yet_is_not_a_bye(self):
+        """Without byes, a game whose team isn't known yet sends nobody on (the old behaviour)."""
+        s2s = {k: v for k, v in self._S2S.items() if k != (2, 4)}
+        layout = build_enriched_bracket_layout(self._layout(), s2s, [], [])
+        assert layout.halves["N"][1][0].participant_a is None
+
     def test_r1_participants_populated_when_seed_to_school_provided(self):
         """R1 game nodes have participant_a and participant_b with school names."""
         layout = build_enriched_bracket_layout(self._layout(), self._S2S, [], [])

@@ -155,6 +155,7 @@ async def get_bracket(
             p_host_given_reach_by_team=p_host_given_reach_by_team,
             game_venues=state.game_venues,
             home_venue_by_team=home_venues,
+            byes=bye_positions(by_region, slots),
         )
     else:
         entries = build_bracket_entries(
@@ -182,6 +183,18 @@ def _projected_matchup_fn(
     if not elo_ratings or not has_projected:
         return None
     return make_matchup_prob_fn(elo_ratings, _as_standings_odds(odds_w), EloConfig())
+
+
+def bye_positions(by_region: dict[int, dict[str, StandingsOdds]], slots: list[FormatSlot]) -> set[tuple[int, int]]:
+    """The first-round (region, seed) positions that are byes: a seed no team in its region can take while
+    the region has teams (it has fewer teams than playoff seeds). The same rule as /bracket/matchups'
+    ``bye``; a region without standings has no byes."""
+    positions = {(s.home_region, s.home_seed) for s in slots} | {(s.away_region, s.away_seed) for s in slots}
+    return {
+        (region, seed)
+        for region, seed in positions
+        if (teams := by_region.get(region)) and not any(getattr(o, f"p{seed}", 0) > 0 for o in teams.values())
+    }
 
 
 def _open_seeds(by_region: dict[int, dict[str, StandingsOdds]], school_to_seed: dict[str, tuple[int, int]]) -> bool:
@@ -433,6 +446,7 @@ async def simulate_bracket(
             p_host_given_reach_by_team=p_host_given_reach_by_team,
             game_venues=state.game_venues,
             home_venue_by_team=home_venues,
+            byes=bye_positions(by_region, slots),
         )
     else:
         slot_wins = build_slot_win_counts(body.results)

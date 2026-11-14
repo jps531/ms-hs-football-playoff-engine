@@ -3264,6 +3264,7 @@ def build_enriched_bracket_layout(
     p_host_given_reach_by_team: dict[str, dict[str, float | None]] | None = None,
     game_venues: dict[frozenset, VenueModel] | None = None,
     home_venue_by_team: dict[str, VenueModel] | None = None,
+    byes: set[tuple[int, int]] | None = None,
 ) -> BracketLayout:
     """Enrich a ``BracketLayout`` with per-game participants and results.
 
@@ -3280,6 +3281,10 @@ def build_enriched_bracket_layout(
     ``seed_to_school``; later-round participants are the winners of the
     ``feeds_from`` games in the previous round.  When ``seed_to_school`` is
     ``None`` (pre-playoff, no clinched seeds), all participants are ``None``.
+
+    *byes* are the (region, seed) positions no team can take because the region is too small for them
+    (``bye_positions``). A first-round game against one has no result, and its other team goes through
+    to the next round, so that round's game, and its result, have both teams.
 
     The championship node is similarly enriched from the two Semifinal winners.
     """
@@ -3397,6 +3402,13 @@ def build_enriched_bracket_layout(
                 winner_p: BracketParticipant | None = None
                 if result is not None:
                     winner_p = result.winner
+                elif game.slot is not None and byes and p_a is not None and p_b is not None:
+                    # A bye: the side whose seed doesn't exist sends nobody, and the other team goes through.
+                    a_bye, b_bye = (p_a.region, p_a.seed) in byes, (p_b.region, p_b.seed) in byes
+                    if b_bye and not a_bye and p_a.school:
+                        winner_p = p_a
+                    elif a_bye and not b_bye and p_b.school:
+                        winner_p = p_b
 
                 if game.slot is not None:  # R1: participant_a is always the format home
                     home_team: BracketParticipant | None = p_a
