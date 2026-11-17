@@ -322,6 +322,7 @@ button { font: inherit; color: inherit; }
   font-size: 13px; line-height: 18px;
 }
 .context-bar__inner > * + * { margin-left: 6px; }
+.context-bar__inner .seg > .sep { margin-right: 6px; }
 .context-bar__title {
   font-family: var(--font-display); font-weight: 700;
   font-variant-numeric: normal; /* tnum would space out the hyphen in "2-7A" */
@@ -339,12 +340,29 @@ button { font: inherit; color: inherit; }
     border: 0; border-radius: 10px;
     background: var(--scrubber-selected-bg); color: var(--scrubber-selected-text);
     font: inherit; font-weight: 600; font-size: 15px; cursor: pointer;
+    /* As tall as the bar's row (66px less its padding), so the row is the same height open or closed
+       and opening the picker doesn't move the button. */
+    margin-block: 3px;
   }
   .scrubber-bar__toggle svg { width: 16px; height: 16px; transition: transform 120ms ease-out; }
   .scrubber-bar__toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
   .scrubber-bar__toggle:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
   .scrubber-bar.is-scrolled.is-open .scrubber-bar__inner { flex-wrap: wrap; }
   .scrubber-bar.is-scrolled.is-open .scrubber-bar__classes { order: 3; flex-basis: 100%; }
+  /* The context takes the room beside the button, never more, so opening the picker leaves both on
+     their row and puts the classes under them. */
+  .context-bar { flex: 1 1 0; }
+  /* Up to two lines, broken between items (each .seg with its dot), never inside one: the bar's
+     44px button already makes it taller than two lines, so wrapping doesn't move the page. */
+  .context-bar__inner {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px;
+    white-space: normal; line-height: 20px; max-height: 40px;
+  }
+  .context-bar__inner > * + * { margin-left: 0; }
+  .context-bar__inner .seg { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+  .context-bar__inner .seg > .sep { margin-right: 0; }
+  .context-bar__inner .seg.is-line-start > .sep { visibility: hidden; }
+  .context-bar__inner .seg:is(.is-line-start, .is-shifted) { position: relative; left: calc(-1 * (var(--sep-w, 0px) + 6px)); }
 }
 
 /* The front page has no class of its own, so no class picker (it has its own way in). */
@@ -440,9 +458,10 @@ button { font: inherit; color: inherit; }
 /* A wrapped segment's dot (app.js markLineStarts). Hidden, not removed: taking it out of the line
    could let the segment fit back on the line above, where it needs the dot. */
 .provenance--controls .seg.is-line-start > .sep { visibility: hidden; }
-/* ...and the segment is drawn back over the dot's room (its width and the 6px gap after it), so a
-   wrapped line starts flush. A relative shift, which doesn't change where the line breaks. */
-.provenance--controls .seg.is-line-start { position: relative; left: calc(-1 * (var(--sep-w, 0px) + 6px)); }
+/* ...and the segment, with the rest of its line (.is-shifted), is drawn back over the dot's room (its
+   width and the 6px gap after it), so a wrapped line starts flush. A relative shift, which doesn't
+   change where the line breaks. */
+.provenance--controls .seg:is(.is-line-start, .is-shifted) { position: relative; left: calc(-1 * (var(--sep-w, 0px) + 6px)); }
 .ctl { display: inline-flex; align-items: center; gap: 4px; }
 .inline-select select {
   appearance: none;
