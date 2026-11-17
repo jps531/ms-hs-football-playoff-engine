@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.2
+
+- **The bar under the header fits on a phone.** Once you scroll down a page, the bar under the
+  header says what's on screen, such as "Class 2A · Second Round · Nov 13 · Projected". On a phone it
+  was cut off to one line, which could hide which odds the page shows. It now takes a second line
+  when it needs one, without the bar getting any taller.
+- Opening the class picker from that bar no longer moves its button to the other side of the
+  screen: the button stays where it is, and the classes open under it.
+
 ## 1.17.1
 
 - **A score after a first-round bye shows on the bracket.** In 1A, Region 1 has three teams, so the

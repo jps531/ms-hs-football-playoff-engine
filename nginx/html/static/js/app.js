@@ -428,13 +428,19 @@ let nextContext = null; // set by the view being rendered
 let nextComputedAt = null; // when the shown numbers were calculated: { from, to }, set by the view
 let headObserver = null;
 
-function contextHtml(title, summary, mode) {
+/**
+ * The context's words: the title, then the week, the date and the odds mode, dot-separated. For the
+ * bar (*bar*), each dot travels with the item after it (a .seg), so on a phone the line can wrap
+ * between items, never inside one, and hide the dot that starts a line (markLineStarts).
+ */
+function contextHtml(title, summary, mode, { bar = false } = {}) {
   const sep = '<span class="sep" aria-hidden="true">·</span>';
   const parts = [`<span class="context-bar__title">${esc(title)}</span>`];
   if (summary?.week) parts.push(`<span>${esc(summary.week)}</span>`);
   if (summary?.date) parts.push(`<span>${esc(summary.date)}</span>`);
   if (mode) parts.push(modeLabel(mode));
-  return parts.join(sep);
+  if (!bar) return parts.join(sep);
+  return parts.map((part, i) => (i === 0 ? part : `<span class="seg">${sep}${part}</span>`)).join("");
 }
 
 // The footer says when the numbers on screen were calculated: the real time
@@ -468,6 +474,8 @@ function setScrolled(on) {
   if (!scrubberBar) return;
   scrubberBar.classList.toggle("is-scrolled", on);
   if (!on) setClassesOpen(false);
+  // The context is only laid out while it shows, so where its line wraps is measured now.
+  else markLineStarts();
 }
 
 /** On a phone, once scrolled: the picker opened under the context line, or closed. */
@@ -746,17 +754,23 @@ function controlsLine(ctx, weeks, { asOf, mode, projectedAvailable }) {
   return `<p class="provenance provenance--controls">${segs.join("")}</p>${help}`;
 }
 
-/** Hide the separator of each controls-line segment that wrapped onto a new line. */
+/** Hide the separator of each segment that wrapped onto a new line (the controls line, the context bar). */
 function markLineStarts() {
-  for (const line of document.querySelectorAll(".provenance--controls")) {
+  for (const line of document.querySelectorAll(".provenance--controls, .context-bar__inner")) {
     let prev = null;
+    let shift = null; // the width of the dot hidden at the start of this line, if one was
     for (const seg of line.children) {
       if (seg.classList.contains("seg")) {
-        seg.classList.remove("is-line-start");
+        seg.classList.remove("is-line-start", "is-shifted");
         if (prev && seg.offsetTop > prev.offsetTop + prev.offsetHeight / 2) {
           seg.classList.add("is-line-start");
-          // Its hidden dot still takes room: pull the segment back over it so the line starts flush.
-          seg.style.setProperty("--sep-w", `${seg.querySelector(".sep")?.offsetWidth ?? 0}px`);
+          // Its hidden dot still takes room: pull the segment back over it so the line starts flush...
+          shift = `${seg.querySelector(".sep")?.offsetWidth ?? 0}px`;
+          seg.style.setProperty("--sep-w", shift);
+        } else if (shift) {
+          // ...and the rest of its line with it, so no gap opens after it.
+          seg.classList.add("is-shifted");
+          seg.style.setProperty("--sep-w", shift);
         }
       }
       prev = seg;
@@ -844,7 +858,7 @@ async function classView(ctx) {
     <h1 class="title">Class ${clazz}A</h1>
     ${controlsLine(ctx, shownWeeks, { asOf: data.as_of_date, mode, projectedAvailable })}
   </div>`;
-  nextContext = contextHtml(`Class ${clazz}A`, controlsSummary, mode);
+  nextContext = contextHtml(`Class ${clazz}A`, controlsSummary, mode, { bar: true });
   nextComputedAt = data.computed_from ? { from: data.computed_from, to: data.computed_to } : null;
   if (!data.regions.length) return head + notice("No standings have been published for this class yet.");
 
@@ -922,7 +936,7 @@ async function regionView(ctx) {
   });
   const schedule = { results, remaining };
   const controls = controlsLine(ctx, shownWeeks, { asOf: data.as_of_date, mode, projectedAvailable });
-  nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode);
+  nextContext = contextHtml(`Region ${region}-${clazz}A`, controlsSummary, mode, { bar: true });
   // The images to share are drawn for each season's latest numbers (this season's latest update, a past
   // season as it finished), so the Share button shows only where the page shows those.
   const latest = !weeks.length || pickWeek(weeks, ctx.week) === weeks[weeks.length - 1];
@@ -1369,7 +1383,7 @@ async function bracketView(ctx) {
 
   const controls = controlsLine(ctx, shownWeeks, { asOf: matchupRes.as_of_date, mode, projectedAvailable });
   bracketData.summary = controlsSummary; // for the game sheet's provenance line
-  nextContext = contextHtml(`Class ${clazz}A Bracket`, controlsSummary, mode);
+  nextContext = contextHtml(`Class ${clazz}A Bracket`, controlsSummary, mode, { bar: true });
   // The bracket's odds are worked out from these same region rows.
   nextComputedAt = standings?.computed_from ? { from: standings.computed_from, to: standings.computed_to } : null;
   const focusNote = ctx.team
@@ -2623,7 +2637,7 @@ async function renderRegions(token) {
       onMove: (how) => track("regions_map_moved", { class: route.clazz, how }),
     });
     renderScrubber(route.clazz);
-    showContext(contextHtml(regionsTitle(route.clazz), { week: seasonsLabel(option.seasons) }, null));
+    showContext(contextHtml(regionsTitle(route.clazz), { week: seasonsLabel(option.seasons) }, null, { bar: true }));
     history.replaceState(null, "", hrefWith({}));
   } catch {
     if (token !== renderToken) return;
