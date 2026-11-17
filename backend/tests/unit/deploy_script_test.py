@@ -23,6 +23,7 @@ case "$*" in
   *"exec -T prefect-worker"*) printf '%s' "${PREFECT_BUSY:-}" ;;
   *"exec -T db"*) echo "${LOCK_HOLDERS:-0}" ;;
   *"ps -a"*) printf 'api running\nnginx running\n' ;;
+  *"image ls"*) printf '%s' "${IMAGES:-}" ;;
 esac
 """
 CURL = r"""#!/usr/bin/env bash
@@ -132,6 +133,32 @@ def test_a_deploy_pulls_migrates_restarts_and_records_the_commit(server):
     assert steps[2] == f"IMAGE_TAG={sha} compose --env-file .env.local --profile local-db up -d --no-build"
     assert "--force-recreate nginx" in steps[3]  # nginx.conf changed between the two commits
     assert f"Deployed {sha[:7]}" in out
+
+
+def test_old_images_are_removed_before_the_pull_keeping_the_running_pair(server):
+    """Of our images, only the running pair (the rollback target) and this deploy's stay; others' images
+    aren't touched. Then the layers nothing uses are pruned, all before the new images are pulled."""
+    first, second = server.shas["first"], server.shas["second"]
+    repo = "ghcr.io/jps531/ms-hs-football-playoff-engine"
+    images = "\n".join(
+        [f"{repo}-{kind}:{tag}" for kind in ("api", "worker") for tag in ("old1", "local", first, second)]
+        + ["postgres:16", "nginx:1.27", "ghcr.io/someone-else/app:old1"]
+    )
+    code, out = server.deploy(second, IMAGES=images)
+    assert code == 0, out
+    calls = server.calls()
+    removed = next(c for c in calls if " image rm " in c).split(" image rm ")[1].split()
+    assert sorted(removed) == sorted(f"{repo}-{kind}:{tag}" for kind in ("api", "worker") for tag in ("old1", "local"))
+    order = [i for i, c in enumerate(calls) if " image rm " in c or " image prune -f" in c or " pull " in c]
+    assert [calls[i].split()[1:3] for i in order] == [["image", "rm"], ["image", "prune"], ["compose", "--env-file"]]
+    assert "Removing old images:" in out
+
+
+def test_nothing_of_ours_to_remove_still_prunes_unused_layers(server):
+    code, out = server.deploy(server.shas["second"])
+    assert code == 0, out
+    assert not [c for c in server.calls() if " image rm " in c]
+    assert [c for c in server.calls() if " image prune -f" in c]
 
 
 def test_a_failed_check_rolls_back_to_the_previous_commit_and_images(server):

@@ -109,7 +109,24 @@ healthy() {
   return 1
 }
 
+# Room for the new images: of our own (an API and a worker image per deploy, about 2 GB a pair), keep only
+# the running pair, which a failed deploy rolls back to, and this deploy's if it's already here. Without
+# this every deploy's pair stays until the disk fills. Then the layers nothing uses any more.
+prune_images() {
+  local old
+  old=$(docker image ls --format '{{.Repository}}:{{.Tag}}' |
+    grep -E '^ghcr\.io/jps531/ms-hs-football-playoff-engine-(api|worker):' |
+    grep -v -e ":${previous_tag}\$" -e ":${sha}\$" || true)
+  if [[ -n $old ]]; then
+    log "Removing old images:"
+    echo "$old" | sed 's/^/  /'
+    echo "$old" | xargs docker image rm >/dev/null || true
+  fi
+  docker image prune -f >/dev/null || true
+}
+
 log "Deploying ${sha:0:7} (was ${previous_sha:0:7}, images ${previous_tag:0:7})"
+prune_images
 IMAGE_TAG=$sha "${compose[@]}" pull --quiet api prefect-worker
 git checkout --quiet --detach "$sha"
 log "Migrating"
