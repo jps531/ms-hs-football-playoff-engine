@@ -428,8 +428,13 @@ game that disagrees with the bracket, and when a daily update that succeeded has
 at (unreadable AHSFHS pages, scores changed under a correction, games kept though no longer on
 AHSFHS, failed share images). See PIPELINES.md, "Emails to the owner".
 
-The `submission-digest` deployment runs at 7:00 America/Chicago and emails
-`DIGEST_TO` a reminder whenever anything is waiting for a decision (pending, or a
+The `submission-digest` deployment runs at 10:00 America/Chicago, after the daily
+update: if the update is still running then, it waits for it to finish. First it
+closes the score and date reports the site already agrees with: a report whose
+game now has that final score (from AHSFHS through the daily update, or from an
+approved correction), or is already on that date. Each is marked rejected, with a
+note saying which, so it shows under Rejected on `/moderate`. Then it emails
+`DIGEST_TO` a reminder whenever anything is still waiting for a decision (pending, or a
 logo accepted but still needing its asset): what came in since yesterday first,
 then everything older that's still open, with how long it has waited, and a link
 to `/moderate`. Once the queue is clear it stops sending. Configure SMTP for the Prefect worker:

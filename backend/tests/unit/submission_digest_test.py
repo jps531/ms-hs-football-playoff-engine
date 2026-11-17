@@ -2,7 +2,7 @@
 (backend.prefect.submission_digest_pipeline)."""
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -273,6 +273,37 @@ class TestSending:
 class TestFlow:
     """The flow sends a reminder whenever anything is waiting."""
 
+    @pytest.fixture(autouse=True)
+    def _no_database(self, monkeypatch):
+        """No update lock or report closing to do: a database isn't there."""
+        from contextlib import nullcontext
+
+        monkeypatch.setattr(pipeline, "exclusive_run", lambda: nullcontext(True))
+        monkeypatch.setattr(pipeline, "close_reports_the_site_has", lambda: [])
+        monkeypatch.setattr(pipeline, "forget_old_contact_emails", lambda: 0)
+
+    def test_reports_are_closed_after_any_running_update_and_before_the_email(self, smtp_env, monkeypatch):
+        """The lock is taken (waiting for a running update), reports are closed under it, then the rest is sent."""
+        from contextlib import contextmanager
+
+        order = []
+
+        @contextmanager
+        def lock():
+            """The update lock: taken, then let go."""
+            order.append("lock")
+            yield True
+            order.append("unlock")
+
+        monkeypatch.setattr(pipeline, "exclusive_run", lock)
+        monkeypatch.setattr(pipeline, "close_reports_the_site_has", lambda: order.append("close") or [])
+        monkeypatch.setattr(
+            pipeline, "load_waiting_submissions", lambda hours: order.append("load") or ([_score()], NOW)
+        )
+        monkeypatch.setattr(pipeline, "send_digest", lambda d: order.append("send"))
+        assert pipeline.submission_digest_flow.fn() == 1
+        assert order == ["lock", "close", "unlock", "load", "send"]
+
     def test_nothing_waiting_sends_nothing(self, smtp_env, monkeypatch):
         """An empty queue: no email."""
         monkeypatch.setattr(pipeline, "load_waiting_submissions", lambda hours: ([], NOW))
@@ -342,3 +373,74 @@ def test_old_contact_emails_are_forgotten(monkeypatch):
     assert "payload - 'email'" in seen["sql"]
     assert "status IN ('approved', 'rejected')" in seen["sql"]
     assert seen["params"] == (pipeline.EMAIL_RETENTION_DAYS,)
+
+
+class TestClosingReports:
+    """Score and date reports the site already agrees with are closed, with a note that says why."""
+
+    def test_a_score_the_daily_update_pulled_in(self):
+        row = (7, "score", "Calhoun City", "French Camp", 46, 28, date(2026, 11, 13), False)
+        assert pipeline.closing_note(row) == (
+            "Closed automatically: the daily update pulled in this score from AHSFHS (Calhoun City 46, French Camp 28)."
+        )
+
+    def test_a_score_an_approved_correction_already_gave(self):
+        row = (8, "score", "Calhoun City", "French Camp", 46, 28, date(2026, 11, 13), True)
+        assert pipeline.closing_note(row) == (
+            "Closed automatically: an approved correction already gives this game this score "
+            "(Calhoun City 46, French Camp 28)."
+        )
+
+    def test_a_date_the_site_already_has(self):
+        row = (9, "date", "Oxford", "Tupelo", None, None, date(2026, 10, 9), False)
+        assert pipeline.closing_note(row) == (
+            "Closed automatically: the site already has Oxford's game against Tupelo on Oct 9."
+        )
+
+    def test_each_is_rejected_unless_decided_meanwhile(self, monkeypatch):
+        """Each matching report is rejected with its note; one a moderator decided in the meantime isn't counted."""
+        from contextlib import contextmanager
+
+        rows = [
+            (7, "score", "Calhoun City", "French Camp", 46, 28, date(2026, 11, 13), False),
+            (9, "date", "Oxford", "Tupelo", None, None, date(2026, 10, 9), False),
+        ]
+        updates = []
+
+        class Cur:
+            """Answers the SELECT with *rows*; the UPDATE of report 9 finds it already decided."""
+
+            rowcount = 0
+
+            def execute(self, sql, params=None):
+                """Record an UPDATE."""
+                if sql.lstrip().startswith("UPDATE"):
+                    updates.append((" ".join(sql.split()), params))
+                    self.rowcount = 0 if params[1] == 9 else 1
+
+            def fetchall(self):
+                """The matching reports."""
+                return rows
+
+        class Conn:
+            """A connection whose cursor is Cur."""
+
+            @contextmanager
+            def cursor(self):
+                """Yield the cursor."""
+                yield Cur()
+
+        @contextmanager
+        def connect():
+            """Yield the fake connection."""
+            yield Conn()
+
+        monkeypatch.setattr(pipeline, "get_database_connection", connect)
+        monkeypatch.setattr(pipeline, "get_run_logger", lambda: logging.getLogger("test"))
+        closed = pipeline.close_reports_the_site_has.fn()
+        assert [c[0] for c in closed] == [7]
+        assert len(updates) == 2
+        sql, params = updates[0]
+        assert "SET status = 'rejected', reviewed_at = NOW(), moderator_notes = %s" in sql
+        assert "WHERE id = %s AND status = 'pending'" in sql
+        assert params == (pipeline.closing_note(rows[0]), 7)
