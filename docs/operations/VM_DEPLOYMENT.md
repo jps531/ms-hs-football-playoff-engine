@@ -197,6 +197,9 @@ click:
      "Cancelling" for over an hour is a leftover (a cancel a restart cut short; a real one ends in
      seconds) and doesn't hold a deploy up; a run "Running" or "Pending" does, however old. For one
      that's stuck, mark it Crashed in Prefect, then run the deploy again;
+   - removes the API and worker images of earlier deploys, keeping the running pair
+     it would roll back to, and the layers nothing uses; without that, every deploy's images stay until
+     the disk fills;
    - pulls the commit's images, checks the commit out (nginx's config and pages, the SQL, the scripts
      come from the checkout), runs `scripts/migrate.py`, starts the services, and recreates nginx if
      `nginx/nginx.conf` changed;
