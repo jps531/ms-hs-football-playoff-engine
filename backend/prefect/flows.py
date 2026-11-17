@@ -24,6 +24,8 @@ from backend.prefect.submission_digest_pipeline import submission_digest_flow
 _SCHEDULE_TIMEZONE = "America/Chicago"
 # The daily update's start (the pages say "each morning at 9:00 Central"; copy_settings_test checks them).
 DAILY_UPDATE_HOUR = 9
+# The moderators' email: after the daily update (submission_digest_pipeline waits for it if it's running).
+DIGEST_HOUR = 10
 
 
 async def main():
@@ -63,9 +65,11 @@ async def main():
         # Also runs at the end of the daily region update; this is for a manual redraw.
         await share_assets_flow.to_deployment("share-assets"),
         # Emails the moderators each morning while anything is waiting; an empty queue sends nothing.
+        # An hour after the daily update starts, and if it's still running, once it's done: so the
+        # reports its scores already settle are closed first, rather than emailed.
         await submission_digest_flow.to_deployment(
             "submission-digest",
-            schedule=CronSchedule(cron="0 7 * * *", timezone=_SCHEDULE_TIMEZONE),
+            schedule=CronSchedule(cron=f"0 {DIGEST_HOUR} * * *", timezone=_SCHEDULE_TIMEZONE),
         ),
     )
 
