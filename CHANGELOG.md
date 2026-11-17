@@ -5,6 +5,13 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.3
+
+- **The 2027 and 2028 regions include the MHSAA's approved appeals.** On the Regions page:
+  - 4A: Choctaw Central moves from Region 3 to Region 5, and Columbia from Region 6 to Region 7.
+  - 3A: Jefferson Davis County moves from Region 7 to Region 8.
+  - 2A: Wesson moves from Region 6 to Region 7, and Aberdeen from Region 4 to Region 1.
+
 ## 1.17.2
 
 - **The bar under the header fits on a phone.** Once you scroll down a page, the bar under the
