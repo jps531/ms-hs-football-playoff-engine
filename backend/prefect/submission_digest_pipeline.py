@@ -1,6 +1,9 @@
 """Daily moderation reminder: email what is still waiting for a decision.
 
-Runs each morning (see ``flows.py``). While anything is waiting for a decision
+Runs each morning after the daily update (see ``flows.py``): if the update is still running, it waits
+for it, so the scores it pulls are in first. Then it closes the score and date reports the site already
+agrees with (``close_reports_the_site_has``), as rejected with a note saying why. While anything is
+still waiting for a decision
 (pending, or a logo accepted but still needing its asset) it emails
 ``DIGEST_TO`` a reminder built by ``backend.helpers.submission_digest``: what
 came in over the last day first, then everything older that's still open.
@@ -37,6 +40,7 @@ from prefect import flow, get_run_logger, task
 from prefect.exceptions import MissingContextError
 
 from backend.helpers.database_helpers import get_database_connection
+from backend.helpers.run_lock import exclusive_run
 from backend.helpers.submission_digest import DigestEmail, DigestItem, build_digest
 
 SITE_URL = os.environ.get("SITE_URL", "https://mshsfootball.com")
@@ -91,6 +95,67 @@ def load_waiting_submissions(hours: int) -> tuple[list[DigestItem], datetime]:
             cur.execute("SELECT NOW()")
             return [], cur.fetchone()[0]
     return [row_to_item(r) for r in rows], rows[0][12]
+
+
+# Every pending score or date report whose game the site already has as reported: the same final score
+# (from the reporting school's side), or the game already on the reported new date. `corrected` says the
+# score is from an approved correction (either school's row) rather than AHSFHS. A playoff score report
+# made before its game had a row finds it by season, opponent and round.
+_ALREADY_ON_SITE_SQL = """
+    SELECT s.id, s.type::text, s.school, g.opponent, g.points_for, g.points_against, g.date,
+           (g.overrides ?| ARRAY['final', 'result', 'points_for', 'points_against']) OR g.score_from_opponent
+    FROM submissions s
+    JOIN games_effective g
+      ON g.school = s.school
+     AND CASE WHEN s.payload ? 'game_id' THEN g.game_id = (s.payload->>'game_id')::bigint
+              WHEN s.payload ? 'playoff' THEN g.season = (s.payload->'playoff'->>'season')::int
+                                          AND g.opponent = s.payload->'playoff'->>'opponent'
+                                          AND g.round = s.payload->'playoff'->>'round'
+              ELSE g.date = (s.payload->>'date')::date END
+    WHERE s.status = 'pending'
+      AND (   (s.type = 'score' AND g.final
+               AND g.points_for = (s.payload->>'points_for')::int
+               AND g.points_against = (s.payload->>'points_against')::int)
+           OR (s.type = 'date' AND g.date = (s.payload->>'new_date')::date))
+    ORDER BY s.id
+"""
+
+
+def closing_note(row: tuple) -> str:
+    """The moderator's note for a report the site already agrees with (an _ALREADY_ON_SITE_SQL row)."""
+    _, stype, school, opponent, points_for, points_against, game_date, corrected = row
+    if stype == "date":
+        return f"Closed automatically: the site already has {school}'s game against {opponent} on {game_date:%b %-d}."
+    score = f"{school} {points_for}, {opponent} {points_against}"
+    if corrected:
+        return f"Closed automatically: an approved correction already gives this game this score ({score})."
+    return f"Closed automatically: the daily update pulled in this score from AHSFHS ({score})."
+
+
+@task(task_run_name="Close reports the site already has")
+def close_reports_the_site_has() -> list[tuple[int, str]]:
+    """Reject each pending score or date report the site already agrees with, noting why; returns
+    (id, note) for each. A report decided in the meantime is left as it is."""
+    closed: list[tuple[int, str]] = []
+    with get_database_connection() as conn, conn.cursor() as cur:
+        cur.execute(_ALREADY_ON_SITE_SQL)
+        for row in cur.fetchall():
+            note = closing_note(row)
+            cur.execute(
+                """
+                UPDATE submissions
+                   SET status = 'rejected', reviewed_at = NOW(), moderator_notes = %s, updated_at = NOW()
+                 WHERE id = %s AND status = 'pending'
+                """,
+                (note, row[0]),
+            )
+            if cur.rowcount:
+                closed.append((row[0], note))
+    logger = get_run_logger()
+    for submission_id, note in closed:
+        logger.info("Submission %d: %s", submission_id, note)
+    logger.info("Closed %d report(s) the site already has", len(closed))
+    return closed
 
 
 def smtp_settings(recipients_from: tuple[str, ...] = ("DIGEST_TO",)) -> dict | None:
@@ -188,6 +253,10 @@ def submission_digest_flow(hours: int = 24) -> int:
     """
     logger = get_run_logger()
     forget_old_contact_emails()
+    # After any update that's running (the daily update commits its scores only when it's done), and
+    # holding off the next one while it looks, so the scores it compares against are the site's.
+    with exclusive_run():
+        close_reports_the_site_has()
     items, now = load_waiting_submissions(hours)
     if not items:
         logger.info("Nothing is waiting for a decision; nothing to send.")
