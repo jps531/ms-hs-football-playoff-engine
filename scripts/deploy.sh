@@ -109,7 +109,7 @@ healthy() {
   return 1
 }
 
-# Room for the new images: of our own (an API and a worker image per deploy, about 2 GB a pair), keep only
+# Room for the new images: of our own (an API and a worker image per deploy), keep only
 # the running pair, which a failed deploy rolls back to, and this deploy's if it's already here. Without
 # this every deploy's pair stays until the disk fills. Then the layers nothing uses any more.
 prune_images() {
