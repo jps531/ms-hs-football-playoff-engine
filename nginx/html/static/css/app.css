@@ -669,8 +669,9 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .row-toggle__chev { transition: none; }
 }
-/* Expanded row: Record, Seeding odds, and Playoff path panels side by side,
-   wrapping to a stack on narrow screens. */
+/* Expanded row (app.js rowDetail): the team at a glance (Record, Elo rating, its share button) over a
+   rule, then Region games, Seeding odds and Playoff path side by side, wrapping to a stack on narrow
+   screens. */
 .standings tr.detail td { text-align: left; padding: 12px 6px 24px 2.6em; }
 .detail__panels {
   display: grid; gap: 24px 40px;
@@ -679,9 +680,22 @@ button { font: inherit; color: inherit; }
   align-items: start;
 }
 .detail__title { font-family: var(--font-display); font-weight: 700; font-size: 17px; line-height: 22px; }
-.detail__sub { margin-top: 16px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--text-secondary); }
-.detail__records { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 14px; color: var(--text-secondary); }
-.detail__records strong { color: var(--text-primary); font-weight: 600; font-size: 16px; margin-right: 2px; }
+.detail__top {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px 48px;
+  margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.detail__stat { min-width: 0; }
+.detail__stat .detail__note { margin-top: 4px; font-size: 13px; line-height: 18px; max-width: 22rem; }
+.detail__figures {
+  display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px;
+  font-size: 14px; color: var(--text-secondary); font-variant-numeric: tabular-nums;
+}
+.detail__figures strong { color: var(--text-primary); font-weight: 600; font-size: 16px; margin-right: 2px; }
+/* The second list of games (Remaining, under Completed) starts a little apart from the first. */
+.detail__panel--games .sched + .detail__title { margin-top: 20px; }
+/* Every odds chip in the panels one width, wide enough for "100%" and "<1%", so a column of them
+   lines up whatever they hold. */
+.detail__odds .odds, .path .odds { min-width: 0; width: 4.4em; }
 .detail__note { margin-top: 10px; font-size: 14px; line-height: 20px; color: var(--text-secondary); max-width: 34rem; }
 .detail__odds { display: grid; gap: 6px; margin: 8px 0 0; font-size: 14px; }
 .detail__odds div { display: grid; grid-template-columns: 7.4em auto; align-items: center; }
@@ -700,6 +714,8 @@ button { font: inherit; color: inherit; }
 .path { margin-top: 8px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .path th, .path td { padding: 4px 14px 4px 0; text-align: right; border: 0; }
 .path th[scope="row"], .path thead th:first-child { text-align: left; font-weight: 400; }
+/* A round's name on one line ("Championship Game"), so every row is the same height. */
+.path th[scope="row"] { white-space: nowrap; }
 .path thead th { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
 .standings tr.detail .path td, .standings tr.detail .path th { padding: 4px 14px 4px 0; }
 .standings tr.detail .path thead th { text-align: left; }
@@ -1704,11 +1720,6 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 }
 .landing-links a { margin-right: 10px; }
 
-/* The team's Elo rating under its seeding odds (the expanded row). */
-.detail__elo { margin-top: 12px; font-size: 15px; font-variant-numeric: tabular-nums; }
-.detail__elo-label { color: var(--text-secondary); }
-.detail__elo + .detail__note { margin-top: 4px; font-size: 13px; line-height: 18px; }
-
 /* "Share this bracket", under the bracket's controls, and the sheet it opens: which image (half,
    odds, theme), a preview of it, and how to send it. */
 /* The bracket's title, with the share button (an icon; its name is for screen readers) at the right. */
@@ -1724,10 +1735,17 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .share-button:hover { background: var(--surface-raised); }
 .share-button svg { width: 22px; height: 22px; }
 .share-sheet__primary svg, .detail__share svg { width: 18px; height: 18px; flex: none; }
-/* "Share Magee", at the top of a team's expanded row. */
-.detail__share { margin-bottom: 16px; }
+/* "Share Magee", at the right of the team's at-a-glance row; on phones, under it at the left. */
+.detail__share { margin-left: auto; }
+@media (max-width: 47.99em) { .detail__share { margin-left: 0; } }
 .share-sheet__body { display: grid; gap: 14px; }
 .share-sheet__group { display: grid; gap: 6px; }
+/* On a region page, which to share: the region or one of its teams. */
+.share-sheet__select {
+  justify-self: start; max-width: 100%; min-height: 44px; padding: 0 12px;
+  font: inherit; font-size: 15px; color: var(--text-primary);
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 10px;
+}
 .share-sheet__label {
   font-size: 12px; line-height: 16px; font-weight: 600;
   letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary);
