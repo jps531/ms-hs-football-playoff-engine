@@ -5,6 +5,17 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.4
+
+- **A team's expanded row on a region page reads in order.** At the top: its record and Elo rating,
+  with its share button. Below, from left to right: its region games (completed, then remaining),
+  its seeding odds, and its playoff path. Every heading is in the site's heading type.
+- Its odds are all the same width, so a "100%" no longer sticks out past the others, and a playoff
+  round's name stays on one line, so the rows of the playoff path are evenly spaced.
+- The playoff path's middle column is now "Hosts, if they get there".
+- **"Share this region" can share a team too.** Its first choice is the region or any of its teams,
+  the same images as a team's own share button.
+
 ## 1.17.3
 
 - **The 2027 and 2028 regions include the MHSAA's approved appeals.** On the Regions page:

@@ -941,7 +941,7 @@ async function regionView(ctx) {
   // season as it finished), so the Share button shows only where the page shows those.
   const latest = !weeks.length || pickWeek(weeks, ctx.week) === weeks[weeks.length - 1];
   regionShare = latest && data.teams.length
-    ? { season, current: season === ctx.currentSeason, clazz, region, asOf: data.as_of_date, modes: regionModes({ projectedAvailable, finished: season < ctx.currentSeason }), mode, summary: controlsSummary }
+    ? { season, current: season === ctx.currentSeason, clazz, region, asOf: data.as_of_date, modes: regionModes({ projectedAvailable, finished: season < ctx.currentSeason }), mode, summary: controlsSummary, teams: data.teams.map((t) => t.school) }
     : null;
   return `<div class="page">
     <header class="region-head">
@@ -1028,17 +1028,22 @@ function standingsTable(data, teams, mode, focus, clazz, games) {
  * the model legible). Ratings are numbers, not positions, so it's never called
  * a ranking. Nothing for a team without one.
  */
-function eloLine(elo) {
+function eloStat(elo) {
   if (elo == null) return "";
-  return `<p class="detail__elo"><span class="detail__elo-label">Elo rating</span> <strong>${Math.round(elo)}</strong></p>
-    <p class="detail__note muted">The rating behind Projected odds, built from game results.
-      <a href="/about#elo">How the ratings work</a></p>`;
+  return `<section class="detail__stat" aria-label="Elo rating">
+      <h2 class="detail__title">Elo rating</h2>
+      <p class="detail__figures"><strong>${Math.round(elo)}</strong></p>
+      <p class="detail__note muted">The rating behind Projected odds, built from game results.
+        <a href="/about#elo">How the ratings work</a></p>
+    </section>`;
 }
 
 /**
- * Expanded row, three panels side by side (stacked on phones): the team's
- * record and region schedule, its seeding odds, and its road through the
- * bracket.
+ * Expanded row, read top to bottom and left to right, past to future:
+ *   the team at a glance (record, Elo rating) with its share button;
+ *   then its region games, its seeding odds, and its road through the
+ *   bracket, side by side (stacked on phones);
+ *   then the report link.
  */
 function rowDetail(t, mode, clazz, complete, teams, games) {
   const r = t.record;
@@ -1047,7 +1052,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
 
   const opponent = (g) => `<span class="sched__joiner">${esc(g.joiner)}</span>${teamLabel(g.opponent, teams)}`;
   const schedList = (title, rows) => (rows.length
-    ? `<h3 class="detail__sub">${title}</h3><ul class="sched">${rows.join("")}</ul>`
+    ? `<h2 class="detail__title">${title}</h2><ul class="sched">${rows.join("")}</ul>`
     : "");
   const playedRows = completed.map((g) => `<li>${opponent(g)}`
     + `<span class="sched__result">${esc(`${g.scoreFor}–${g.scoreAgainst}`)} <span class="sched__wl sched__wl--${g.result}">${g.result}</span></span></li>`);
@@ -1055,21 +1060,27 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
   const coinFlip = complete && t.coin_flip_needed
     ? '<p class="detail__note">A coin flip is needed to settle a tie involving this team.</p>'
     : "";
-  const record = `<section class="detail__panel" aria-label="Record">
+
+  const record = `<section class="detail__stat" aria-label="Record">
       <h2 class="detail__title">Record</h2>
-      <p class="detail__records">
+      <p class="detail__figures">
         <span><strong>${esc(recordText(r.region_wins, r.region_losses, r.region_ties))}</strong> Region</span>
         <span><strong>${esc(recordText(r.wins, r.losses, r.ties))}</strong> Overall</span>
       </p>
       ${coinFlip}
-      ${schedList("Completed region games", playedRows)}
-      ${schedList("Remaining region games", upcomingRows)}
     </section>`;
+  const top = `<div class="detail__top">${record}${eloStat(t.elo)}${regionShare ? teamShareButton(t.school) : ""}</div>`;
+
+  const gamesPanel = playedRows.length || upcomingRows.length
+    ? `<section class="detail__panel detail__panel--games" aria-label="Region games">
+        ${schedList("Completed region games", playedRows)}
+        ${schedList("Remaining region games", upcomingRows)}
+      </section>`
+    : "";
 
   const seeding = `<section class="detail__panel" aria-label="Seeding odds">
       <h2 class="detail__title">Seeding odds</h2>
       <dl class="detail__odds">${ODDS_COLUMNS.map((c) => `<div><dt>${c.seed}</dt><dd>${oddsCell(o[c.key])}</dd></div>`).join("")}</dl>
-      ${eloLine(t.elo)}
     </section>`;
 
   // Teams that made the playoffs keep their path after elimination: it
@@ -1080,7 +1091,7 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
         <h2 class="detail__title">Playoff path</h2>
         <table class="path">
           <caption class="visually-hidden">${esc(t.school)}’s chance of reaching and hosting each playoff round</caption>
-          <thead><tr><th scope="col">Round</th><th scope="col">Reaches round</th><th scope="col">Hosts, if it gets there</th><th scope="col">Hosts, overall</th></tr></thead>
+          <thead><tr><th scope="col">Round</th><th scope="col">Reaches round</th><th scope="col">Hosts, if they get there</th><th scope="col">Hosts, overall</th></tr></thead>
           <tbody>${path.map((p) => `<tr>
             <th scope="row">${esc(p.round)}</th>
             <td>${oddsCell(p.reach)}</td>
@@ -1088,13 +1099,13 @@ function rowDetail(t, mode, clazz, complete, teams, games) {
             <td>${p.hostOverall == null ? "" : esc(formatPct(p.hostOverall))}</td>
           </tr>`).join("")}</tbody>
         </table>
-        <p class="detail__note muted"><strong>Reaches round</strong> is the chance of playing in that round at all.
-          <strong>Hosts, if it gets there</strong> is the chance the team hosts, if it reaches that round.
-          <strong>Hosts, overall</strong> is the chance the team both reaches that round and hosts it.</p>
+        <p class="detail__note muted"><strong>Reaches round</strong> is the chance they play in that round at all.
+          <strong>Hosts, if they get there</strong> is the chance they host that round, if they reach it.
+          <strong>Hosts, overall</strong> is the chance they both reach that round and host it.</p>
         <p class="detail__link"><a href="${esc(hrefWith({ page: "bracket", region: null, team: t.school }))}">See ${esc(t.school)}’s path in the bracket</a></p>
       </section>`
     : "";
-  return `${regionShare ? teamShareButton(t.school) : ""}<div class="detail__panels">${record}${seeding}${pathPanel}</div>
+  return `${top}<div class="detail__panels">${gamesPanel}${seeding}${pathPanel}</div>
     <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-team="${esc(t.school)}">Does something look wrong for ${esc(t.school)}? Let us know.</button></p>`;
 }
 
@@ -1704,6 +1715,7 @@ function shareDialog() {
   shareSheet.setAttribute("aria-labelledby", "share-sheet-title");
   document.body.append(shareSheet);
   shareSheet.addEventListener("click", onShareClick);
+  shareSheet.addEventListener("change", onShareSubject);
   // Back to the button that opened it (a page has several: the region's, a team's).
   shareSheet.addEventListener("close", () => (shareOpener?.isConnected ? shareOpener : document.querySelector("[data-share-open]"))?.focus({ preventScroll: true }));
   return shareSheet;
@@ -1742,6 +1754,12 @@ function bracketShareSpec() {
   };
 }
 
+/** What the region page's share sheet can share, for its first control: the region, or one of its teams. */
+function shareSubjects() {
+  const { clazz, region, teams } = regionShare;
+  return [{ key: "", label: `Region ${region}-${clazz}A` }, ...teams.map((school) => ({ key: school, label: school }))];
+}
+
 /**
  * The region's images: which image (the overview, its scenarios when it has them), Projected or
  * Toss-up odds, light or dark. Its index (written with the images) says which there are and how
@@ -1752,6 +1770,8 @@ async function regionShareSpec() {
   const index = await regionIndex();
   return {
     title: "Share this region",
+    subjects: shareSubjects(),
+    subject: "",
     when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
     groups: (c) => {
       const images = regionImages(index, c);
@@ -1797,6 +1817,8 @@ async function teamShareSpec(school) {
   const index = await regionIndex();
   return {
     title: `Share ${school}`,
+    subjects: shareSubjects(),
+    subject: school,
     when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
     groups: (c) => {
       const images = teamImages(index, school, c);
@@ -1821,9 +1843,11 @@ async function teamShareSpec(school) {
   };
 }
 
-function openShare(spec) {
+/** Open the share sheet on *spec*; *carry* keeps choices from the sheet it replaces (its odds and theme). */
+function openShare(spec, carry = {}) {
   shareSpec = spec;
-  shareUi.choice = spec.fix ? spec.fix(spec.defaults) : spec.defaults;
+  const choice = { ...spec.defaults, ...carry };
+  shareUi.choice = spec.fix ? spec.fix(choice) : choice;
   shareUi.page = 1;
   shareUi.status = "";
   const s = shareDialog();
@@ -1871,6 +1895,15 @@ const canShareFiles = () => {
   }
 };
 
+/** The share sheet's first control on a region page: share the region, or one of its teams. */
+function subjectControl(spec) {
+  const options = spec.subjects.map((o) => `<option value="${esc(o.key)}"${o.key === spec.subject ? " selected" : ""}>${esc(o.label)}</option>`);
+  return `<div class="share-sheet__group">
+      <label class="share-sheet__label" for="share-subject">Share</label>
+      <select class="share-sheet__select" id="share-subject" data-share-subject>${options.join("")}</select>
+    </div>`;
+}
+
 function shareHtml() {
   const spec = shareSpec;
   const c = shareUi.choice;
@@ -1899,6 +1932,7 @@ function shareHtml() {
       <button type="button" class="game-sheet__close" data-share-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
     <div class="game-sheet__body share-sheet__body">
+      ${spec.subjects ? subjectControl(spec) : ""}
       ${spec.groups(c).map(group).join("")}
       <div class="share-sheet__frame${spec.wide(c) ? " is-wide" : ""}">${preview}</div>
       ${pager}
@@ -1921,6 +1955,19 @@ function refreshShare() {
     `[data-share-opt="${CSS.escape(key)}"], [data-share-act="${CSS.escape(key)}"], [data-share-page="${CSS.escape(key)}"]`,
   );
   (again && !again.disabled ? again : shareSheet.querySelector(".game-sheet__title"))?.focus({ preventScroll: true });
+}
+
+/** The region page's sheet switched between the region and one of its teams: the same sheet, for that. */
+async function onShareSubject(e) {
+  const select = e.target.closest("[data-share-subject]");
+  if (!select || !regionShare) return;
+  const school = select.value;
+  const { mode, theme } = shareUi.choice;
+  const { clazz, region } = regionShare;
+  if (school) track("team_share_opened", { class: clazz, region, team: school });
+  else track("region_share_opened", { class: clazz, region });
+  openShare(school ? await teamShareSpec(school) : await regionShareSpec(), { mode, theme });
+  shareSheet.querySelector("[data-share-subject]")?.focus({ preventScroll: true });
 }
 
 function onShareClick(e) {
