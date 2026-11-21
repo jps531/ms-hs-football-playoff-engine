@@ -1742,9 +1742,14 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .share-sheet__group { display: grid; gap: 6px; }
 /* On a region page, which to share: the region or one of its teams. */
 .share-sheet__select {
-  justify-self: start; max-width: 100%; min-height: 44px; padding: 0 12px;
+  appearance: none;
+  justify-self: start; max-width: 100%; min-height: 44px; padding: 0 40px 0 14px;
   font: inherit; font-size: 15px; color: var(--text-primary);
-  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 10px;
+  border: 1px solid var(--border); border-radius: 10px;
+  /* Its own arrow (the controls line's), with room on both sides of it. */
+  background: var(--surface-raised)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237B7A7B' stroke-width='1.5'/%3E%3C/svg%3E")
+    no-repeat right 16px center / 10px 6px;
 }
 .share-sheet__label {
   font-size: 12px; line-height: 16px; font-weight: 600;
