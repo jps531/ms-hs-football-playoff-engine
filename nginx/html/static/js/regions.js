@@ -214,6 +214,18 @@ export function regionView(box, base, pad = 0.3) {
   return { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h };
 }
 
+/**
+ * *view* moved, if need be, so the map can't be dragged away from Mississippi: the view's middle stays
+ * over the state's box (so some of the state is always in view, at any zoom). Returns {x, y}.
+ */
+export function keepInView(view, base) {
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  return {
+    x: clamp(view.x + view.w / 2, 0, base.width) - view.w / 2,
+    y: clamp(view.y + view.h / 2, 0, base.height) - view.h / 2,
+  };
+}
+
 /** Where the tooltip goes (its top-left, in pixels in the frame) for a dot at (x, y) of radius r:
  * centered above the dot, or below it when there's no room above, and kept inside the frame. */
 export function hoverSpot(x, y, r, tip, frame, gap = 6) {
@@ -256,6 +268,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
       else view.h = view.w / a;
       view = { x: cx - view.w / 2, y: cy - view.h / 2, w: view.w, h: view.h };
     }
+    view = { ...view, ...keepInView(view, base) };
     svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
     const zoom = whole.w / view.w;
     const px = view.w / (svg.getBoundingClientRect().width || 600);
@@ -454,7 +467,20 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     pick(a.dataset.team);
     onPick(a.dataset.team, "caption");
   });
+  // How much height the site's bars take (the header, which wraps to two lines on a narrow phone, the
+  // class picker's bar and the phone's tab bar): the CSS sizes the map to fit with its buttons in the
+  // rest (--map-bars). They don't change as a phone's address bar comes and goes.
+  const measureBars = () => {
+    const height = (sel) => {
+      const el = document.querySelector(sel);
+      return el && !el.hidden && getComputedStyle(el).display !== "none" ? el.getBoundingClientRect().height : 0;
+    };
+    const bars = height(".site-header-bar") + height(".scrubber-bar") + height(".tab-bar");
+    figure?.style.setProperty("--map-bars", `${Math.round(bars)}px`);
+  };
+  measureBars();
   addEventListener("resize", () => {
+    measureBars();
     if (figure?.classList.contains("is-full")) fitUnderBars();
     apply();
   });

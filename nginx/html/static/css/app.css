@@ -1807,18 +1807,27 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media (max-width: 760px) { .regions-note--lists { display: block; } }
 .regions-map__image { display: block; width: 100%; height: auto; }
 /* The whole map in one view: on a computer, as tall as the screen leaves room for once the map is
-   pinned under the header, with its buttons and a picked team's details under it (about 220px); on a phone, as wide as the screen or as tall as it leaves room for, whichever is smaller. */
+   pinned under the header, with its buttons and a picked team's details under it (about 220px); on a
+   phone, as wide as the screen or as tall as the room the site's bars leave (--map-bars, measured by
+   regions.js: the header, the class bar and the tab bar) for it and its buttons, whichever is smaller.
+   Measured against the small viewport height (svh), which doesn't change as a phone's address bar
+   comes and goes on scroll, so neither does the map (dvh did). */
 .regions-map__frame {
+  --map-room: 390px;
   position: relative; aspect-ratio: 3324 / 5355;
-  width: clamp(280px, calc((100vh - 390px) * 3324 / 5355), 600px);
-  width: clamp(280px, calc((100dvh - 390px) * 3324 / 5355), 600px);
+  width: clamp(280px, calc((100vh - var(--map-room)) * 3324 / 5355), 600px);
+  width: clamp(280px, calc((100svh - var(--map-room)) * 3324 / 5355), 600px);
   border: 1px solid var(--border); border-radius: 12px; overflow: hidden; touch-action: none; background: var(--surface-page);
   /* A map to drag and pinch, not text: nothing in it gets selected or called out on a long press. */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
 }
 @media (max-width: 760px) {
-  .regions-map__frame { margin-inline: auto; width: min(100%, calc((100vh - 200px) * 3324 / 5355)); width: min(100%, calc((100dvh - 200px) * 3324 / 5355)); }
-  .regions-map__tools { max-width: min(100%, calc((100dvh - 200px) * 3324 / 5355)); margin-inline: auto; }
+  .regions-map__frame, .regions-map__tools {
+    --map-room: calc(var(--map-bars, 192px) + 72px); /* the buttons (48px) and a little room above and below */
+    margin-inline: auto;
+    width: min(100%, calc((100vh - var(--map-room)) * 3324 / 5355));
+    width: min(100%, calc((100svh - var(--map-room)) * 3324 / 5355));
+  }
 }
 .regions-map__svg { display: block; width: 100%; height: 100%; cursor: grab; user-select: none; }
 .regions-map__svg:active { cursor: grabbing; }
@@ -1860,7 +1869,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   background: var(--surface-page);
 }
 .regions-map.is-full .regions-map__frame { flex: 1 1 auto; min-height: 0; width: 100%; aspect-ratio: auto; }
-.regions-map.is-full .regions-map__tools { max-width: none; margin-inline: 0; }
+.regions-map.is-full .regions-map__tools { width: auto; max-width: none; margin-inline: 0; }
 /* No full screen on a phone: between the header, the class bar and the tab bar it would show the state
    no bigger than the page already does (the state is taller than it is wide, and the bars take height). */
 @media (max-width: 600px) { .regions-map__tools .regions-map__full { display: none; } }

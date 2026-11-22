@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hoverSpot, pickedHtml, regionsLists, regionView, wholeView } from "../html/static/js/regions.js";
+import { hoverSpot, keepInView, pickedHtml, regionsLists, regionView, wholeView } from "../html/static/js/regions.js";
 
 const BASE = { width: 3324, height: 5355 };
 const TIP = { w: 100, h: 24 };
@@ -53,4 +53,15 @@ test("a region's name isn't a link; its standings, when it has some, are a link 
   assert.doesNotMatch(played, /<h2[^>]*>(?:(?!<\/h2>)[^])*<a /);
   assert.match(played, /<a class="regions-list__standings" href="\/standings\/4a\/8"><span class="visually-hidden">Region 8 <\/span>2026 standings/);
   assert.doesNotMatch(regionsLists(4, { ...PAYLOAD, standings_season: null }, 2026), /regions-list__standings/);
+});
+
+test("the map can't be dragged away from the state: the view's middle stays over it", () => {
+  const view = { x: 0, y: 0, w: 400, h: 600 };
+  assert.deepEqual(keepInView({ ...view, x: 100, y: 200 }, BASE), { x: 100, y: 200 }); // over the state: left as is
+  assert.deepEqual(keepInView({ ...view, x: -5000, y: -9000 }, BASE), { x: -200, y: -300 }); // dragged off: back to its corner
+  assert.deepEqual(keepInView({ ...view, x: 9000, y: 9000 }, BASE), { x: BASE.width - 200, y: BASE.height - 300 });
+  // The whole view (wider than the state) stays where it is.
+  const whole = wholeView(BASE);
+  const kept = keepInView(whole, BASE);
+  assert.ok(Math.abs(kept.x - whole.x) < 1e-9 && Math.abs(kept.y - whole.y) < 1e-9);
 });

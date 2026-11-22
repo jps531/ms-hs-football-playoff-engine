@@ -12,6 +12,10 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   under them.
 - **Full screen is no longer offered on a phone**, where it showed the state no bigger than the page
   already does. On a tablet, it still stops above the tab bar along the bottom.
+- **On a phone, the map and its buttons fit between the header and the tab bar**, so the buttons no
+  longer hide under the tab bar, and the map no longer changes size as you scroll (as the address bar
+  comes and goes).
+- **The map can't be dragged away from Mississippi**: it stops while part of the state is still in view.
 
 ## 1.17.6
 
