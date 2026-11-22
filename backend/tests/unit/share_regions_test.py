@@ -92,9 +92,9 @@ def test_the_page_without_javascript_and_its_previews(written):
     meta = (out / "meta" / "regions-5.html").read_text()
     assert "https://example.com/static/og/regions-5.png?v=20261106" in meta
     assert (
-        "https://example.com/regions/5a?team=greenwood" in (out / "meta" / "regions-5" / "greenwood.html").read_text()
+        "https://example.com/maps/regions/5a?team=greenwood" in (out / "meta" / "regions-5" / "greenwood.html").read_text()
     )
-    assert ("/regions/5a", None, ["https://example.com/static/regions/2027/5a-light.png"]) in sitemap
+    assert ("/maps/regions/5a", None, ["https://example.com/static/regions/2027/5a-light.png"]) in sitemap
 
 
 def test_the_images(written):

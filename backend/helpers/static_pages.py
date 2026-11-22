@@ -1783,7 +1783,7 @@ def _regions_preview(example: dict | None) -> str:
         for theme in ("light", "dark")
     )
     return (
-        f'<a class="landing-preview landing-preview--regions" href="/regions/{clazz}a" '
+        f'<a class="landing-preview landing-preview--regions" href="/maps/regions/{clazz}a" '
         f'aria-label="Open the Class {clazz}A region map">'
         f'<span class="landing-preview__frame" aria-hidden="true">{images}</span>'
         f'<span class="landing-preview__label">Open the {clazz}A region map</span></a>'
@@ -1854,7 +1854,7 @@ def class_grid() -> str:
     return (
         '<nav class="landing-classes" aria-label="Classes">'
         f"{row('standings', 'Standings', class_path)}{row('brackets', 'Brackets', bracket_path)}"
-        f"{row('regions', 'Region Maps', lambda c: f'/regions/{c}a')}</nav>"
+        f"{row('regions', 'Region Maps', lambda c: f'/maps/regions/{c}a')}</nav>"
     )
 
 

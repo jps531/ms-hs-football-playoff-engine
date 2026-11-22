@@ -816,7 +816,7 @@ def test_front_page_has_every_classs_standings_bracket_and_regions_under_the_hel
 
     grid = class_grid()
     assert grid.count('class="landing-classes__item"') == 21
-    assert '<a class="landing-classes__item" href="/regions/5a">5A<span class="visually-hidden"> region maps</span></a>' in grid
+    assert '<a class="landing-classes__item" href="/maps/regions/5a">5A<span class="visually-hidden"> region maps</span></a>' in grid
     assert (
         '<a class="landing-classes__item" href="/standings/3a">3A<span class="visually-hidden"> standings</span></a>'
         in grid
@@ -1330,6 +1330,6 @@ def test_the_front_page_shows_a_region_map_once_there_are_regions():
     """A "Region maps" section with the class's map (light and dark) linking to its Regions page."""
     body = landing_body(None, {}, regions_example={"clazz": 5, "season": 2027})
     assert ">Region maps</h2>" in body
-    assert 'href="/regions/5a"' in body
+    assert 'href="/maps/regions/5a"' in body
     assert "/static/regions/2027/5a-light.png" in body and "/static/regions/2027/5a-dark.png" in body
     assert "Region maps" not in landing_body(None, {})

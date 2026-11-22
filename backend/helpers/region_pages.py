@@ -1,4 +1,4 @@
-"""The Regions page (/regions/5a): its data, and its content without JavaScript.
+"""The Regions page (/maps/regions/5a), in the Maps section: its data, and its content without JavaScript.
 
 The share-assets pipeline writes, under the share folder (served at /static/regions/):
 
@@ -27,8 +27,8 @@ Trail = list[tuple[str, str]]
 
 
 def regions_path(clazz: int) -> str:
-    """ "/regions/5a"."""
-    return f"/regions/{clazz}a"
+    """ "/maps/regions/5a"."""
+    return f"/maps/regions/{clazz}a"
 
 
 def regions_trail(clazz: int) -> Trail:

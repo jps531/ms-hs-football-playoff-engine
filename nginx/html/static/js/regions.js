@@ -1,7 +1,7 @@
 import { breadcrumbs, teamMark } from "./components.js";
 import { escapeHtml as esc } from "./format.js";
 
-// The Regions page (/regions/5a): a class's schools on a map of Mississippi, each a dot numbered by
+// The Regions page (/maps/regions/5a), in the Maps section: a class's schools on a map of Mississippi, each a dot numbered by
 // its region, every region's shape, and the schools listed by region. The data is written by the
 // share-assets step (backend/prefect/share_regions.py) to /static/regions/: map.json (the state and
 // its counties, projected to Mississippi Transverse Mercator, in 100 m units), index.json (the
@@ -17,9 +17,9 @@ export const REGIONS_DATA = "/static/regions";
 // both ways, so the view keeps the state's shape): region shapes reach past the state line.
 const MARGIN = 0.04;
 
-/** "/regions/5a". */
+/** "/maps/regions/5a". */
 export function regionsPath(clazz) {
-  return `/regions/${clazz}a`;
+  return `/maps/regions/${clazz}a`;
 }
 
 /** "Class 5A Regions". */

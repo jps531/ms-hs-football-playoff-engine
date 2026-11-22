@@ -49,7 +49,7 @@ writes into ``SHARE_OUTPUT_DIR`` (a volume nginx serves):
 
 nginx splices the matching ``meta/*.html`` into the app's ``index.html``
 <head> for /standings/{class}a/{region}[?team=<slug>], /standings/{class}a and
-/brackets/{class}a[?season=<year>][&team=<slug>], /regions/{class}a[?team=<slug>] (server-side include). A team without a file falls back to its region's tags,
+/brackets/{class}a[?season=<year>][&team=<slug>], /maps/regions/{class}a[?team=<slug>] (server-side include). A team without a file falls back to its region's tags,
 anything else to the generic tags in ``index.html``. It also splices the
 matching ``body/*.html`` into ``<main>``, so the page reads without
 JavaScript; the app replaces it on load. Cards, tags and content all come
