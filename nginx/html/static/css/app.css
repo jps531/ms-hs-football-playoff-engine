@@ -1849,14 +1849,18 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .regions-map__zoom button:last-child { border-radius: 0 8px 8px 0; }
 .regions-map__full { border-radius: 8px; white-space: nowrap; }
 .regions-map__tools button:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-page)); }
-/* Full screen: the map, its line and the picked team over the whole page (and the page kept still). */
+/* Full screen: the map, its buttons and the picked team over the page, between the site's header and the
+   class picker's bar, and on a phone the tab bar (--map-full-top and -bottom, set by regions.js), which
+   stay; the page behind is kept still.
+   Under the bars' layer, so the header's search suggestions still open over the map. */
 .is-map-full { overflow: hidden; }
 .regions-map.is-full {
-  position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column;
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  position: fixed; inset: var(--map-full-top, 0px) 0 var(--map-full-bottom, 0px) 0; z-index: 9; display: flex; flex-direction: column;
+  padding: 12px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
   background: var(--surface-page);
 }
 .regions-map.is-full .regions-map__frame { flex: 1 1 auto; min-height: 0; width: 100%; aspect-ratio: auto; }
+.regions-map.is-full .regions-map__tools { max-width: none; margin-inline: 0; }
 .regions-map.is-full .regions-map__picked { flex: none; max-height: 35vh; overflow-y: auto; }
 .regions-map__hover {
   position: absolute; pointer-events: none; white-space: nowrap;

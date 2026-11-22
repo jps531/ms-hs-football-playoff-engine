@@ -5,6 +5,12 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.7
+
+- **The Regions page's full screen keeps the site's header and the class picker's bar**, which says
+  what's on screen (such as "Class 1A Regions · 2027 and 2028 seasons"); on a phone the tab bar
+  along the bottom stays too. The map fills the space between them.
+
 ## 1.17.6
 
 - **The Regions page's map fits in one view.** Once you scroll down to it, the whole state, the map's

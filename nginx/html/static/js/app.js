@@ -2684,6 +2684,11 @@ async function renderRegions(token) {
         syncNav();
       },
       onMove: (how) => track("regions_map_moved", { class: route.clazz, how }),
+      // Full screen keeps the header and the picker's bar, the bar saying what's on screen.
+      onFull: (on) => {
+        if (on) regionsState.scrolledBeforeFull = scrubberBar?.classList.contains("is-scrolled") ?? false;
+        setScrolled(on || regionsState.scrolledBeforeFull);
+      },
     });
     renderScrubber(route.clazz);
     showContext(contextHtml(regionsTitle(route.clazz), { week: seasonsLabel(option.seasons) }, null, { bar: true }));

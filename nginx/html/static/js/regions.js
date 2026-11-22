@@ -228,7 +228,7 @@ export function hoverSpot(x, y, r, tip, frame, gap = 6) {
  * team picked (from the map, the list, the team under the map or the page's link) highlighted with
  * its region and zoomed to. onPick(slug or null) tells the page, to keep the address in step.
  */
-export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {} } = {}) {
+export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {}, onFull = () => {} } = {}) {
   const frame = root.querySelector("[data-map]");
   const svg = frame?.querySelector("svg");
   if (!svg) return null;
@@ -400,16 +400,30 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     } else zoomAt(b.dataset.zoom === "in" ? 1.6 : 1 / 1.6, ...middle());
     used("buttons");
   });
-  // Full screen: the map (with its line and the picked team) over the whole page, until the button,
-  // Escape or the page changes. Coming back, the map shows what it did before, unless it was moved.
+  // Full screen: the map (with its buttons and the picked team) over the page between the site's header
+  // and the class picker's bar, and on a phone the tab bar, which stay (onFull(on) tells the page, to show what's on screen in the
+  // bar), until the button, Escape or the page changes. Coming back, the map shows what it did before,
+  // unless it was moved.
+  const fitUnderBars = () => {
+    const bars = [...document.querySelectorAll(".site-header-bar, .scrubber-bar:not([hidden])")];
+    const top = Math.max(0, ...bars.map((b) => b.getBoundingClientRect().bottom));
+    // On a phone the tab bar along the bottom stays too: the map ends above it.
+    const tabs = document.querySelector(".tab-bar");
+    const shown = tabs && getComputedStyle(tabs).display !== "none" ? tabs.getBoundingClientRect() : null;
+    const bottom = shown && shown.height ? Math.max(0, innerHeight - shown.top) : 0;
+    figure.style.setProperty("--map-full-top", `${Math.round(top)}px`);
+    figure.style.setProperty("--map-full-bottom", `${Math.round(bottom)}px`);
+  };
   const fullButton = figure?.querySelector("[data-full]");
   let before = null;
   const full = (on) => {
     if (!figure || on === figure.classList.contains("is-full")) return;
     if (on) before = { ...view };
     const kept = !on && before && moves === movesAtFull ? before : null;
+    onFull(on);
     figure.classList.toggle("is-full", on);
     document.documentElement.classList.toggle("is-map-full", on);
+    if (on) fitUnderBars();
     fullButton.setAttribute("aria-pressed", String(on));
     fullButton.innerHTML = `${on ? MAP_ICONS.leave : MAP_ICONS.full}<span>${on ? "Exit full screen" : "Full screen"}</span>`;
     if (on) movesAtFull = moves;
@@ -440,7 +454,10 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     pick(a.dataset.team);
     onPick(a.dataset.team, "caption");
   });
-  addEventListener("resize", apply);
+  addEventListener("resize", () => {
+    if (figure?.classList.contains("is-full")) fitUnderBars();
+    apply();
+  });
   apply();
   if (picked) pick(picked, { reveal: false }); // the page's link: the page opens at its top
   return { pick };
