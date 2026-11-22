@@ -40,7 +40,7 @@ test("a picked team's details: its name and region, where it is, and its region'
   assert.match(html, /Bay St\. Louis, Hancock County · Also Region 8-4A in 2026/);
   const others = [...html.matchAll(/data-team="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(others, ["greene-county", "moss-point"]); // not Bay, Region 1 or another class's Region 8
-  assert.match(html, /href="\/regions\/4a\?team=moss-point"/);
+  assert.match(html, /href="\/maps\/regions\/4a\?team=moss-point"/);
 });
 
 test("a team alone in its region lists no others", () => {

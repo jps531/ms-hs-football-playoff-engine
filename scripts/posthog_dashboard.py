@@ -39,9 +39,9 @@ REGION_OF_PATH = (
     "concat('Region ', extract(properties.$pathname, '^/standings/[1-7]a/([0-9]+)'), '-', "
     "extract(properties.$pathname, '^/standings/([1-7])a'), 'A')"
 )
-# The Regions page (/regions/5a): its class, from the path.
-REGIONS_PATH = r"^/regions/[1-7]a"
-CLASS_OF_REGIONS_PATH = "concat(extract(properties.$pathname, '^/regions/([1-7])a'), 'A')"
+# The Regions page (/maps/regions/5a; /regions/5a before Maps): its class, from the path.
+REGIONS_PATH = r"^/(?:maps/)?regions/[1-7]a"
+CLASS_OF_REGIONS_PATH = "concat(extract(properties.$pathname, '^/(?:maps/)?regions/([1-7])a'), 'A')"
 FROM_REGIONS = "properties.from = 'regions'"
 # regions_region_opened: "Region 2-5A".
 REGION_OPENED = "concat('Region ', toString(properties.region), '-', toString(properties.class), 'A')"
@@ -143,7 +143,7 @@ INSIGHTS = [
     # The Regions page (the region maps).
     daily(
         "Regions page views by day",
-        "Views of the Regions pages (/regions/1a … /regions/7a), each day.",
+        "Views of the Regions pages (/maps/regions/1a … /maps/regions/7a), each day.",
         [events("$pageview", "Page views", f"match(properties.$pathname, '{REGIONS_PATH}')")],
     ),
     bars(

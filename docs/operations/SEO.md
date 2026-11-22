@@ -15,7 +15,7 @@ outside the code.
   variants (`?week=`, `?odds=`, `?season=`) point at the plain path;
   `www.mshsfootball.com` and `http://` redirect to `https://mshsfootball.com`.
 - **Real 404s.** Only real page routes get the app (`/standings/{1-7}a`,
-  `/standings/{1-7}a/{region}`, `/brackets/{1-7}a`, `/regions/{1-7}a`); anything else gets
+  `/standings/{1-7}a/{region}`, `/brackets/{1-7}a`, `/maps/regions/{1-7}a`); anything else gets
   `nginx/html/404.html` with a 404 status. A well-formed address for something
   that doesn't exist (a region a class doesn't have) is caught by the app,
   which tells search engines `noindex`.

@@ -5,6 +5,12 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.18.0
+
+- **Regions is now Maps.** The nav's "Regions" is now "Maps", the home of the site's maps, starting
+  with the region maps, now at `/maps/regions/5a`. Links to the old addresses (`/regions/5a`, with
+  any team or season in them) still work: they go to the new one.
+
 ## 1.17.7
 
 - **The Regions page's full screen keeps the site's header and the class picker's bar**, which says

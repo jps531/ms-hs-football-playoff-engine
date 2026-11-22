@@ -545,19 +545,19 @@ function syncNav() {
   const targets = {
     standings: known ? hrefWith({ page: route.region ? "region" : "class", team, ...away }) : "/standings/1a",
     bracket: known ? hrefWith({ page: "bracket", region: null, team, ...away }) : "/brackets/1a",
-    regions: known ? hrefWith({ page: "regions", region: null, season: null, week: null, odds: null, team }) : "/regions/1a",
+    maps: known ? hrefWith({ page: "regions", region: null, season: null, week: null, odds: null, team }) : "/maps/regions/1a",
   };
   for (const a of document.querySelectorAll("[data-nav]")) {
     const key = a.dataset.nav;
     if (key in targets) a.setAttribute("href", targets[key]);
     const current = known && (key === "bracket" ? onBracket : key === "standings" ? onStandings
-      : key === "regions" ? onRegions : key === "home" && route.page === "landing");
+      : key === "maps" ? onRegions : key === "home" && route.page === "landing");
     if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
 }
 
-// Standings, Bracket and Regions links render in place, like any in-app link.
+// Standings, Bracket and Maps links render in place, like any in-app link.
 document.addEventListener("click", (e) => {
   const link = e.target.closest('[data-nav="standings"], [data-nav="bracket"], [data-nav="regions"]');
   if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -1130,7 +1130,7 @@ app.addEventListener("click", (e) => {
     // only changes how this page is shown (data-replace) doesn't. A click a
     // handler closer to the link already took (the Regions page's lists pick
     // the team in place) is left to it.
-    const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/regions/'], a[href^='/?'], a[href='/']");
+    const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/maps/regions/'], a[href^='/?'], a[href='/']");
     if (link && !e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
       e.preventDefault();
       if (link.hasAttribute("data-unpick")) setPick(route.clazz, null);
@@ -2764,7 +2764,7 @@ function regionsShareSpec() {
     name: (c) => `${what(c)}-${season}.png`,
     label,
     wide: () => false,
-    page: `${location.origin}/regions/${clazz}a${(() => {
+    page: `${location.origin}/maps/regions/${clazz}a${(() => {
       const q = new URLSearchParams();
       if (season !== regionsDefault) q.set("season", season);
       if (picked) q.set("team", picked.slug);
