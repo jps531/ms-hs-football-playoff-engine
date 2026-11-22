@@ -26,6 +26,11 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
 - Picking another team in the same region no longer zooms the map again.
 - A team's name, when you point at its dot, stays inside the map, and shows under the dot near the top.
 
+## 1.17.5
+
+- **Aberdeen stays in 2A Region 4 in 2027 and 2028.** Its appeal to move to Region 1 was rescinded,
+  so the Regions page no longer shows it moving.
+
 ## 1.17.4
 
 - **A team's expanded row on a region page reads in order.** At the top: its record and Elo rating,
