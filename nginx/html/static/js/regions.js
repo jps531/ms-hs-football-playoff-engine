@@ -640,11 +640,15 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     figure?.style.setProperty("--map-bars", `${Math.round(bars)}px`);
   };
   measureBars();
-  addEventListener("resize", () => {
+  // Until the map leaves the page (another page, class or season draws a new one): then it lets go, so
+  // maps already gone don't redraw on every resize.
+  const onResize = () => {
+    if (!svg.isConnected) return removeEventListener("resize", onResize);
     measureBars();
     if (figure?.classList.contains("is-full")) fitUnderBars();
     apply();
-  });
+  };
+  addEventListener("resize", onResize);
   apply();
   if (picked) pick(picked, { reveal: false }); // the page's link: the page opens at its top
   return { pick };
