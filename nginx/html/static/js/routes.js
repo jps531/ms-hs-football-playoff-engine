@@ -4,6 +4,7 @@
 //   /standings/3a/6            one region (Region 6-3A)
 //   /brackets/3a               a class's playoff bracket
 //   /maps/regions/3a           a class's regions on a map (/regions/3a, its first address, too)
+//   /maps/regions/3a/compare   two of them side by side (?vs=2026&vsclass=4a: the second map's)
 //   ?season=2025&week=9&odds=tossup&team=st-martin
 // Defaults are left out of the URL (current season, latest week, Projected,
 // no team), so a link to "now" is just the path. No DOM, so it runs under
@@ -54,6 +55,9 @@ export function parseLocation(pathname, search) {
     odds: odds === "projected" || odds === "tossup" ? odds : null,
     team: q.get("team") || null,
     legacy: false,
+    view: "map", // a map page's view: "map", or "compare"
+    vs: positiveInt(q.get("vs")), // compare: the second map's season (null: the one before the first's)
+    vsClass: classFromSlug(q.get("vsclass")), // compare: the second map's class (null: the first's)
   };
   const parts = pathname.replace(/\/+$/, "").split("/").filter(Boolean);
 
@@ -80,10 +84,12 @@ export function parseLocation(pathname, search) {
   }
   // The Maps section's regions (/maps/regions/3a), and their first address (/regions/3a), which
   // nginx redirects; the app writes the new one back to the address bar.
-  const isRegions = (parts[0] === "maps" && parts[1] === "regions" && parts.length === 3)
-    || (parts[0] === "regions" && parts.length === 2);
-  if (isRegions) {
-    const clazz = classFromSlug(parts[parts.length - 1]);
+  if (parts[0] === "maps" && parts[1] === "regions" && (parts.length === 3 || (parts.length === 4 && parts[3] === "compare"))) {
+    const clazz = classFromSlug(parts[2]);
+    return clazz ? { ...route, page: "regions", clazz, view: parts[3] ?? "map" } : route;
+  }
+  if (parts[0] === "regions" && parts.length === 2) {
+    const clazz = classFromSlug(parts[1]);
     return clazz ? { ...route, page: "regions", clazz } : route;
   }
   return route;
@@ -104,13 +110,17 @@ export function buildPath(route, { currentSeason = null, regionsSeason = null } 
   } else if (route.page === "bracket") {
     path = `/brackets/${route.clazz}a`;
   } else if (route.page === "regions") {
-    path = `/maps/regions/${route.clazz}a`;
+    path = `/maps/regions/${route.clazz}a${route.view === "compare" ? "/compare" : ""}`;
   }
   const q = new URLSearchParams();
   const defaultSeason = route.page === "regions" ? regionsSeason : currentSeason;
   if (route.season && route.season !== defaultSeason) q.set("season", route.season);
   if (route.week) q.set("week", route.week);
   if (route.odds && route.odds !== "projected") q.set("odds", route.odds);
+  if (route.page === "regions" && route.view === "compare") {
+    if (route.vs) q.set("vs", route.vs);
+    if (route.vsClass && route.vsClass !== route.clazz) q.set("vsclass", `${route.vsClass}a`);
+  }
   if (route.team) q.set("team", route.team);
   const query = q.toString();
   return query ? `${path}?${query}` : path;

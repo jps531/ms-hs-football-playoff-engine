@@ -1016,7 +1016,7 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   cursor: pointer;
 }
 .half-control__item:hover { color: var(--text-primary); }
-.half-control__item[aria-pressed="true"] {
+.half-control__item[aria-pressed="true"], .half-control__item[aria-current="page"] {
   background: var(--scrubber-selected-bg);
   color: var(--scrubber-selected-text);
 }
@@ -1740,8 +1740,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media (max-width: 47.99em) { .detail__share { margin-left: 0; } }
 .share-sheet__body { display: grid; gap: 14px; }
 .share-sheet__group { display: grid; gap: 6px; }
-/* On a region page, which to share: the region or one of its teams. */
-.share-sheet__select {
+/* On a region page, which to share: the region or one of its teams. Also any boxed dropdown (.select-box:
+   a map's season and class on the Maps' Compare view). */
+.share-sheet__select, .select-box {
   appearance: none;
   justify-self: start; max-width: 100%; min-height: 44px; padding: 0 40px 0 14px;
   font: inherit; font-size: 15px; color: var(--text-primary);
@@ -1891,6 +1892,48 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   color: var(--text-primary); text-decoration: none;
 }
 .picked__others a:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-page)); }
+
+/* ------------------------------------------------------------- a map page's views (regions.js mapsViews) */
+/* Season and Compare: every map page has them, under its title, in the bracket's half switch's style
+   (.half-control); here they're links. */
+.maps-views { margin: 16px 0 0; }
+.maps-views__item { display: inline-flex; align-items: center; text-decoration: none; }
+
+/* ------------------------------------------------------------- compare (regions.js comparePage) */
+/* Two maps side by side, each with its season and class over it; on a phone, one over the other. */
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 32px; align-items: start; }
+@media (max-width: 760px) { .compare { grid-template-columns: minmax(0, 1fr); } }
+.compare .regions-map { position: static; }
+.compare { scroll-margin-top: calc(var(--header-h) + 83px); } /* scrolled to: clear of the header and the class bar */
+.compare__pickers { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
+/* Both maps whole in one view on a computer: as tall as the screen leaves room for (the bars, the
+   pickers and the buttons). On a phone the Map view's own sizing applies. */
+@media (min-width: 761px) {
+  .compare .regions-map__frame, .compare .regions-map__tools, .compare .regions-map__picked {
+    margin-inline: auto;
+    width: min(100%, calc((100vh - 300px) * 3324 / 5355));
+    width: min(100%, calc((100svh - 300px) * 3324 / 5355));
+  }
+}
+.compare-changes { margin-top: 32px; }
+.compare-changes__title { margin: 0 0 12px; font-family: var(--font-display); font-size: 1.4rem; }
+.compare-changes__groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 20px 32px; align-items: start; }
+.compare-changes__group h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 6px; font-family: var(--font-display); font-size: 1.1rem; }
+.compare-changes__group summary { cursor: pointer; list-style-position: inside; }
+.compare-changes__group summary h3 { display: inline-flex; }
+.compare-changes__count {
+  display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px;
+  background: var(--surface-raised); color: var(--text-secondary); font-family: var(--font-text); font-size: 13px; font-weight: 700;
+}
+.compare-changes ul { margin: 0; padding: 0; list-style: none; }
+.compare-changes__row {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; column-gap: 10px;
+  min-height: 40px; margin-inline: -8px; padding: 4px 8px; border-radius: 8px; color: var(--text-primary); text-decoration: none;
+}
+.compare-changes__row:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-page)); }
+.compare-changes__row[aria-current] { background: color-mix(in srgb, var(--accent-identity) 14%, var(--surface-page)); box-shadow: inset 3px 0 0 var(--accent-identity); }
+.compare-changes__row[aria-current] .compare-changes__team { font-weight: 700; }
+.compare-changes__detail { grid-column: 2; color: var(--text-secondary); font-size: 13px; line-height: 18px; }
 /* Regions side by side, as many across as fit (two beside the map on a laptop). */
 .regions-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 22px 24px; align-content: start; }
 /* Each region: its name, and its standings when it has some, over its teams. A team is a row that

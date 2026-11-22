@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -804,6 +804,15 @@ app.addEventListener("change", (e) => {
     navigate(hrefWith({ odds: value }), { replace: true });
   } else if (control.dataset.control === "regions-season") {
     navigate(hrefWith({ season: Number(value) }), { replace: true });
+  } else if (control.dataset.control === "compare-season" || control.dataset.control === "compare-class") {
+    // One map changes; the other keeps what it shows (its season and class written out, so they don't
+    // follow the first map's).
+    const keep = { vs: regionsState?.compare?.vs ?? null, vsClass: regionsState?.compare?.vsClass ?? null };
+    const first = control.dataset.side === "a";
+    const change = control.dataset.control === "compare-season"
+      ? (first ? { season: Number(value) } : { vs: Number(value) })
+      : (first ? { clazz: Number(value), region: null } : { vsClass: Number(value) });
+    navigate(hrefWith({ ...keep, ...change }), { replace: true });
   }
 });
 
@@ -2638,6 +2647,10 @@ async function renderRegions(token) {
     regionsDefault = index.default;
     // The header's search opens a team's standings: this season's teams, as on every other page.
     if (index.current_season) loadTeamSearch(index.current_season);
+    if (route.view === "compare") {
+      await renderCompare(token, index);
+      return;
+    }
     const option = pickOption(index, route.season);
     const [base, payload, teams] = await Promise.all([
       regionsFile("map.json"),
@@ -2654,17 +2667,12 @@ async function renderRegions(token) {
     const seasons = index.options.length > 1
       ? select("regions-season", "Seasons", index.options.map((o) => ({ value: o.season, label: o.label })), option.season)
       : "";
-    // The header's search box, here for the map: the same field, list and keys.
-    const finder = `<form class="team-search team-search--page" role="search" data-regions-find>`
-      + `<label for="regions-team" class="visually-hidden">Find a team on the map</label>`
-      + `<input id="regions-team" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="regions-team-results"`
-      + ` placeholder="Find a team on the map" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="search">`
-      + `<div class="team-results" hidden><ul id="regions-team-results" role="listbox" aria-label="Teams"></ul><p class="team-results__empty" hidden></p></div>`
-      + `<p class="visually-hidden" role="status"></p></form>`;
+    const finder = regionsFinder("Find a team on the map");
     app.innerHTML = regionsPage(route.clazz, base, payload, index.current_season, {
       controls: `<div class="regions-controls">${seasons}${finder}</div>`,
       share: shareButton("map"),
       teams,
+      views: mapsViews("map", mapsViewHrefs()),
     });
     const findable = payload.schools.map((s) => ({ ...teams[s.school], ...s, class_: s.class }));
     teamCombobox(app.querySelector("[data-regions-find]"), () => findable, (team, input) => {
@@ -2700,6 +2708,122 @@ async function renderRegions(token) {
   } finally {
     if (token === renderToken) app.removeAttribute("aria-busy");
   }
+  document.title = pageTitle(route.clazz, null, "regions");
+}
+
+/** The header's search box, here for the map (or maps): the same field, list and keys. */
+function regionsFinder(placeholder) {
+  return `<form class="team-search team-search--page" role="search" data-regions-find>`
+    + `<label for="regions-team" class="visually-hidden">${esc(placeholder)}</label>`
+    + `<input id="regions-team" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="regions-team-results"`
+    + ` placeholder="${esc(placeholder)}" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="search">`
+    + `<div class="team-results" hidden><ul id="regions-team-results" role="listbox" aria-label="Teams"></ul><p class="team-results__empty" hidden></p></div>`
+    + `<p class="visually-hidden" role="status"></p></form>`;
+}
+
+/** Each view's address (Map, Compare), keeping the class, the first map's season and the picked team. */
+function mapsViewHrefs() {
+  return { map: hrefWith({ view: "map", vs: null, vsClass: null }), compare: hrefWith({ view: "compare" }) };
+}
+
+/**
+ * The Compare view: two maps side by side, each with its own season and class (the first: the page's
+ * class and season; the second: ?vs= and ?vsclass=, by default the same class in the regions before),
+ * a team picked on either shown on both, and what changed between them under them.
+ */
+async function renderCompare(token, index) {
+  const first = pickOption(index, route.season);
+  const at = index.options.indexOf(first);
+  const before = index.options[at + 1] ?? index.options[at - 1] ?? first; // the regions before, or else after
+  const second = route.vs ? index.options.find((o) => o.seasons.includes(route.vs)) ?? before : before;
+  const secondClass = route.vsClass ?? route.clazz;
+  const [base, pa, pb, ta, tb] = await Promise.all([
+    regionsFile("map.json"),
+    regionsFile(`${first.season}.json`),
+    regionsFile(`${second.season}.json`),
+    teamsBySchool(first.season).catch(() => ({})),
+    teamsBySchool(second.season).catch(() => ({})),
+  ]);
+  if (token !== renderToken) return;
+  route.season = first.season === index.default ? null : first.season;
+  route.vs = second === before ? null : second.season;
+  route.vsClass = secondClass === route.clazz ? null : secondClass;
+  const teams = { ...tb, ...ta };
+  const sides = [
+    { key: "a", option: first, payload: pa, clazz: route.clazz },
+    { key: "b", option: second, payload: pb, clazz: secondClass },
+  ];
+  // The team asked for (?team=, a slug): in either season, any class.
+  const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+  const found = wanted && sides.map((s) => ({ s, row: s.payload.schools.find((r) => r.slug === wanted) })).find((x) => x.row);
+  regionsState = {
+    clazz: route.clazz, season: first.season, option: first, payload: pa,
+    picked: found?.s === sides[0] && found.row.class === route.clazz ? found.row : null,
+  };
+  app.innerHTML = comparePage(route.clazz, base, sides[0], sides[1], index, {
+    controls: `<div class="regions-controls">${regionsFinder("Find a team on the maps")}</div>`,
+    share: shareButton("map"),
+    teams,
+    views: mapsViews("compare", mapsViewHrefs()),
+  });
+
+  // The picked team, by its name in a season: shown on each map it's on, and where it is on the other.
+  let picked = null; // { name, season }
+  const rowIn = (side, p) => side.payload.schools.find((r) => r.school === nameIn(p.name, p.season, side.option.season)) ?? null;
+  const pickBoth = (p, via) => {
+    picked = p;
+    for (const side of sides) {
+      const row = p && rowIn(side, p);
+      side.map?.pick(row && row.class === side.clazz ? row.slug : p ? "-" : null, { reveal: false });
+    }
+    for (const a of app.querySelectorAll(".compare-changes [data-school]")) {
+      if (p && nameIn(a.dataset.school, Number(a.dataset.season), p.season) === p.name) a.setAttribute("aria-current", "true");
+      else a.removeAttribute("aria-current");
+    }
+    route.teamName = p?.name ?? null;
+    if (p && via) track("team_picked", { from: "compare", via, team: p.name });
+    history.replaceState(null, "", hrefWith({ team: route.teamName }));
+    syncNav();
+  };
+  for (const side of sides) {
+    side.map = wireRegionsMap(app.querySelector(`[data-side="${side.key}"]`), base, side.payload, side.clazz, {
+      teams,
+      elsewhere: () => notOnMapHtml(picked.name, rowIn(side, picked), side.option.label),
+      onPick: (slug, via) => {
+        const row = slug && side.payload.schools.find((r) => r.slug === slug);
+        pickBoth(row ? { name: row.school, season: side.option.season } : null, via);
+      },
+      onMove: (how) => track("regions_map_moved", { class: side.clazz, how, view: "compare" }),
+    });
+  }
+  app.querySelector(".compare-changes")?.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-school]");
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    pickBoth({ name: a.dataset.school, season: Number(a.dataset.season) }, "changes");
+    app.querySelector(".compare")?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+  const findable = [];
+  const names = new Set();
+  for (const side of sides) {
+    for (const r of side.payload.schools) {
+      if (names.has(r.school)) continue;
+      names.add(r.school);
+      findable.push({ ...teams[r.school], ...r, class_: r.class, season: side.option.season });
+    }
+  }
+  teamCombobox(app.querySelector("[data-regions-find]"), () => findable, (team, input) => {
+    input.value = "";
+    track("team_search_used", { team: team.school, from: "compare" });
+    const row = findable.find((r) => r.school === team.school);
+    if (row) pickBoth({ name: row.school, season: row.season }, "search");
+  });
+  if (found) pickBoth({ name: found.row.school, season: found.s.option.season }, null);
+  regionsState.compare = { vs: second.season, vsClass: secondClass };
+  renderScrubber(route.clazz);
+  const [older, newer] = second.season < first.season ? [sides[1], sides[0]] : sides;
+  showContext(contextHtml(regionsTitle(route.clazz), { week: `${older.option.label} ${older.clazz}A vs. ${newer.option.label} ${newer.clazz}A` }, null, { bar: true }));
+  history.replaceState(null, "", hrefWith({}));
   document.title = pageTitle(route.clazz, null, "regions");
 }
 
