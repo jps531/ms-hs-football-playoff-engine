@@ -333,6 +333,7 @@ let renderToken = 0;
 let scrollToFocus = false;
 async function render() {
   const token = ++renderToken;
+  document.documentElement.classList.remove("is-map-full"); // a Regions map left in full screen
   nextComputedAt = null;
   showComputedAt(null);
   route = readRoute();

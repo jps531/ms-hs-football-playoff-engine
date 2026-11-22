@@ -201,17 +201,6 @@ def regions_header(clazz: int, payload: dict, share: str = "") -> str:
     )
 
 
-def regions_list_note(payload: dict) -> str:
-    """The line over the region lists while their headings link to standings (``regionsListNote``);
-    nothing while they don't (no games in those regions yet)."""
-    if payload.get("standings_season") is None:
-        return ""
-    return (
-        '<p class="focus-note muted regions-note">'
-        f"Pick a region’s name to see its {_e(str(payload['standings_season']))} standings.</p>"
-    )
-
-
 def regions_lists(clazz: int, payload: dict, current_season: int | None, teams: dict | None = None) -> str:
     """The class's schools by region (``regionsLists``), each region's heading linking to its standings
     when it has some."""
@@ -219,21 +208,27 @@ def regions_lists(clazz: int, payload: dict, current_season: int | None, teams: 
     out = []
     for g in sorted({s["region"] for s in schools}):
         href = standings_href(clazz, g, payload.get("standings_season"), current_season)
-        heading = f'<a href="{_e(href)}">Region {g}</a>' if href else f"Region {g}"
+        standings = (
+            f'<a class="regions-list__standings" href="{_e(href)}"><span class="visually-hidden">Region {g} </span>'
+            f'{_e(str(payload["standings_season"]))} standings<span aria-hidden="true"> ›</span></a>'
+            if href
+            else ""
+        )
         items = []
         for s in sorted((s for s in schools if s["region"] == g), key=lambda s: s["school"].lower()):
             note = team_note(s, payload.get("prior_season"))
             items.append(
-                f'<li><a href="{_e(regions_path(clazz))}?team={_e(s["slug"])}" data-team="{_e(s["slug"])}">'
+                f'<li><a class="regions-list__row" href="{_e(regions_path(clazz))}?team={_e(s["slug"])}" '
+                f'data-team="{_e(s["slug"])}">'
                 f'{_mark(s["school"], (teams or {}).get(s["school"]))}'
-                f'<span class="regions-list__team">{_e(s["school"])}</span></a>'
-                + (f' <span class="regions-list__was">{_e(note)}</span>' if note else "")
-                + "</li>"
+                f'<span class="regions-list__team">{_e(s["school"])}</span>'
+                + (f'<span class="regions-list__was">{_e(note)}</span>' if note else "")
+                + "</a></li>"
             )
         out.append(
-            '<section class="regions-list__region"><h2 class="regions-list__name">'
-            f'<span class="region-chip region-chip--{g}" aria-hidden="true">{g}</span>{heading}</h2>'
-            f"<ul>{''.join(items)}</ul></section>"
+            f'<section class="regions-list__region regions-list__region--{g}"><div class="regions-list__head">'
+            f'<h2 class="regions-list__name"><span class="region-chip region-chip--{g}" aria-hidden="true">{g}</span>'
+            f"Region {g}</h2>{standings}</div><ul>{''.join(items)}</ul></section>"
         )
     return "".join(out)
 
@@ -250,11 +245,10 @@ def regions_body(
         else ""
     )
     return (
-        f'<div class="page static-page regions-page"><div class="regions-layout">'
-        f'<header class="entry-head">{regions_header(clazz, payload)}</header>'
-        f'<figure class="regions-map">{figure}</figure>'
-        f'<div class="regions-side">{regions_list_note(payload)}'
-        f'<div class="regions-list">{regions_lists(clazz, payload, current_season, teams)}</div></div></div></div>\n'
+        f'<div class="page static-page regions-page"><header class="entry-head">{regions_header(clazz, payload)}</header>'
+        f'<div class="regions-layout"><figure class="regions-map">{figure}</figure>'
+        f'<div class="regions-side"><div class="regions-list">{regions_lists(clazz, payload, current_season, teams)}</div>'
+        "</div></div></div>\n"
     )
 
 

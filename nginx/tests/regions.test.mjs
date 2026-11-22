@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hoverSpot, pickedHtml, regionView, wholeView } from "../html/static/js/regions.js";
+import { hoverSpot, pickedHtml, regionsLists, regionView, wholeView } from "../html/static/js/regions.js";
 
 const BASE = { width: 3324, height: 5355 };
 const TIP = { w: 100, h: 24 };
@@ -45,4 +45,12 @@ test("a picked team's details: its name and region, where it is, and its region'
 
 test("a team alone in its region lists no others", () => {
   assert.doesNotMatch(pickedHtml(PAYLOAD.schools[3], PAYLOAD), /picked__others/);
+});
+
+test("a region's name isn't a link; its standings, when it has some, are a link of their own", () => {
+  const played = regionsLists(4, { ...PAYLOAD, standings_season: 2026 }, 2026);
+  assert.match(played, /<h2 class="regions-list__name">[^]*?Region 8<\/h2>/);
+  assert.doesNotMatch(played, /<h2[^>]*>(?:(?!<\/h2>)[^])*<a /);
+  assert.match(played, /<a class="regions-list__standings" href="\/standings\/4a\/8"><span class="visually-hidden">Region 8 <\/span>2026 standings/);
+  assert.doesNotMatch(regionsLists(4, { ...PAYLOAD, standings_season: null }, 2026), /regions-list__standings/);
 });
