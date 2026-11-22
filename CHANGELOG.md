@@ -8,8 +8,10 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
 ## 1.17.7
 
 - **The Regions page's full screen keeps the site's header and the class picker's bar**, which says
-  what's on screen (such as "Class 1A Regions · 2027 and 2028 seasons"); on a phone the tab bar
-  along the bottom stays too. The map fills the space between them.
+  what's on screen (such as "Class 1A Regions · 2027 and 2028 seasons"). The map fills the space
+  under them.
+- **Full screen is no longer offered on a phone**, where it showed the state no bigger than the page
+  already does. On a tablet, it still stops above the tab bar along the bottom.
 
 ## 1.17.6
 

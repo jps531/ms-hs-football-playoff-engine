@@ -1861,6 +1861,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 }
 .regions-map.is-full .regions-map__frame { flex: 1 1 auto; min-height: 0; width: 100%; aspect-ratio: auto; }
 .regions-map.is-full .regions-map__tools { max-width: none; margin-inline: 0; }
+/* No full screen on a phone: between the header, the class bar and the tab bar it would show the state
+   no bigger than the page already does (the state is taller than it is wide, and the bars take height). */
+@media (max-width: 600px) { .regions-map__tools .regions-map__full { display: none; } }
 .regions-map.is-full .regions-map__picked { flex: none; max-height: 35vh; overflow-y: auto; }
 .regions-map__hover {
   position: absolute; pointer-events: none; white-space: nowrap;
