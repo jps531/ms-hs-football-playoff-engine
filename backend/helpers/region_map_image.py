@@ -206,12 +206,16 @@ class _Page:
                 od = ImageDraw.Draw(over)
                 for ring in [poly.exterior, *poly.interiors]:
                     od.line(frame.ring(ring.coords), fill=color + "C0", width=3, joint="curve")
-        self.img.paste(Image.alpha_composite(self.img.convert("RGBA"), over).convert("RGB"))
-        self.d = ImageDraw.Draw(self.img)
-        county_line = _blend(t.bg, t.text, 0.22)
+        # County lines in the text color, see-through, so they show the same over the land and over every
+        # region's color (as on the page: .map-county).
+        lines = Image.new("RGBA", self.size, (0, 0, 0, 0))
+        ld = ImageDraw.Draw(lines)
         for geom in region_map.counties().values():
             for poly in _polygons(geom):
-                self.d.line(frame.ring(poly.exterior.coords), fill=county_line, width=2, joint="curve")
+                ld.line(frame.ring(poly.exterior.coords), fill=t.text + "40", width=2, joint="curve")
+        over = Image.alpha_composite(over, lines)
+        self.img.paste(Image.alpha_composite(self.img.convert("RGBA"), over).convert("RGB"))
+        self.d = ImageDraw.Draw(self.img)
         for poly in _polygons(region_map.state()):
             self.d.line(frame.ring(poly.exterior.coords), fill=_blend(t.bg, t.text, 0.6), width=5, joint="curve")
 

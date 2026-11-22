@@ -13,7 +13,9 @@ import { escapeHtml as esc } from "./format.js";
 
 export const REGIONS_DATA = "/static/regions";
 
-
+// Room around the state in the map's whole view, as a share of its width and height (the same share
+// both ways, so the view keeps the state's shape): region shapes reach past the state line.
+const MARGIN = 0.04;
 
 /** "/regions/5a". */
 export function regionsPath(clazz) {
@@ -91,27 +93,31 @@ const byName = (a, b) => {
 };
 
 /**
- * The class's schools by region, each with its helmet (*teams*: the season's /teams by school), each
- * region's heading linking to its standings when it has some.
+ * The class's schools by region, each a row with its helmet (*teams*: the season's /teams by school)
+ * that picks it on the map, and where it was the season before when that differs. A region with
+ * standings has a link to them beside its name ("2026 standings"); the name itself isn't a link.
  */
 export function regionsLists(clazz, payload, currentSeason, teams = {}) {
   const schools = payload.schools.filter((s) => s.class === clazz);
   const regions = [...new Set(schools.map((s) => s.region))].sort((a, b) => a - b);
   return regions.map((g) => {
     const href = standingsHref(clazz, g, payload.standings_season, currentSeason);
-    const heading = href ? `<a href="${esc(href)}">Region ${g}</a>` : `Region ${g}`;
+    const standings = href
+      ? `<a class="regions-list__standings" href="${esc(href)}"><span class="visually-hidden">Region ${g} </span>`
+        + `${esc(payload.standings_season)} standings<span aria-hidden="true"> ›</span></a>`
+      : "";
     const items = schools.filter((s) => s.region === g)
       .sort((a, b) => byName(a.school, b.school))
       .map((s) => {
         const note = teamNote(s, payload.prior_season);
-        return `<li><a href="${esc(regionsPath(clazz))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
-          + `${teamMark(s.school, teams[s.school])}<span class="regions-list__team">${esc(s.school)}</span></a>`
-          + (note ? ` <span class="regions-list__was">${esc(note)}</span>` : "")
-          + "</li>";
+        return `<li><a class="regions-list__row" href="${esc(regionsPath(clazz))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
+          + `${teamMark(s.school, teams[s.school])}<span class="regions-list__team">${esc(s.school)}</span>`
+          + (note ? `<span class="regions-list__was">${esc(note)}</span>` : "")
+          + "</a></li>";
       });
-    return `<section class="regions-list__region"><h2 class="regions-list__name">`
-      + `<span class="region-chip region-chip--${g}" aria-hidden="true">${g}</span>${heading}</h2>`
-      + `<ul>${items.join("")}</ul></section>`;
+    return `<section class="regions-list__region regions-list__region--${g}"><div class="regions-list__head">`
+      + `<h2 class="regions-list__name"><span class="region-chip region-chip--${g}" aria-hidden="true">${g}</span>Region ${g}</h2>`
+      + `${standings}</div><ul>${items.join("")}</ul></section>`;
   }).join("");
 }
 
@@ -126,24 +132,72 @@ export function mapSvg(base, payload, clazz) {
   const dots = payload.schools.filter((s) => s.class === clazz && s.x != null)
     .map((s) => `<g class="map-dot map-dot--${s.region}" data-team="${esc(s.slug)}" data-region="${s.region}" tabindex="-1">`
       + `<circle cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${s.region}</text></g>`).join("");
-  return `<svg class="regions-map__svg" viewBox="0 0 ${base.width} ${base.height}" role="img" `
+  const v = wholeView(base);
+  return `<svg class="regions-map__svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" role="img" `
     + `aria-label="Map of Mississippi with each Class ${clazz}A school as a dot numbered by its region">`
     + `<path class="map-land" d="${base.state}"/><g class="map-regions">${shapes}</g>`
     + `<g class="map-counties">${counties}</g><g class="map-county-names">${names}</g>`
     + `<path class="map-state" d="${base.state}"/><g class="map-dots">${dots}</g></svg>`;
 }
 
-/** The whole page: heading and controls, the map (with its zoom buttons and tooltip), the lists. */
+/** The whole page: heading and controls, the map (with its zoom buttons and tooltip), the lists. On a
+ * computer the map is beside the heading and the lists; on a phone, between them. */
 export function regionsPage(clazz, base, payload, currentSeason, { controls = "", share = "", teams = {} } = {}) {
-  return `<div class="page regions-page"><header class="entry-head">${regionsHeader(clazz, payload, share)}${controls}</header>`
-    + `<div class="regions-layout"><figure class="regions-map"><div class="regions-map__frame" data-map>`
-    + mapSvg(base, payload, clazz)
-    + `<div class="regions-map__zoom"><button type="button" data-zoom="in" aria-label="Zoom in">+</button>`
-    + `<button type="button" data-zoom="out" aria-label="Zoom out">−</button>`
-    + `<button type="button" data-zoom="reset" aria-label="Show the whole state">⤢</button></div>`
+  const button = (attr, label, icon) => `<button type="button" ${attr} aria-label="${label}" title="${label}">${icon}</button>`;
+  return `<div class="page regions-page"><header class="entry-head">${regionsHeader(clazz, payload, share)}${controls}`
+    + `<p class="focus-note muted regions-note">Pick a team on the map or in the lists to see where it is and highlight its region.</p></header>`
+    + `<div class="regions-layout"><figure class="regions-map">`
+    + `<div class="regions-map__frame" data-map>${mapSvg(base, payload, clazz)}`
     + `<div class="regions-map__hover" aria-hidden="true" hidden></div></div>`
-    + `<figcaption class="regions-map__picked" aria-live="polite"></figcaption></figure>`
-    + `<div class="regions-list">${regionsLists(clazz, payload, currentSeason, teams)}</div></div></div>`;
+    + `<div class="regions-map__tools"><div class="regions-map__zoom" role="group" aria-label="Zoom">`
+    + `${button('data-zoom="in"', "Zoom in", MAP_ICONS.in)}${button('data-zoom="out"', "Zoom out", MAP_ICONS.out)}`
+    + `${button('data-zoom="reset"', "Show the whole state", MAP_ICONS.reset)}</div>`
+    + `<button type="button" class="regions-map__full" data-full aria-pressed="false">${MAP_ICONS.full}<span>Full screen</span></button></div>`
+    + `<p class="visually-hidden" aria-live="polite" data-picked-status></p>`
+    + `<figcaption class="regions-map__picked" hidden></figcaption></figure>`
+    + `<div class="regions-side"><p class="focus-note muted regions-note regions-note--lists">Pick a team to see it on the map.</p>`
+    + `<div class="regions-list">${regionsLists(clazz, payload, currentSeason, teams)}</div></div></div></div>`;
+}
+
+// The map's buttons, under it so they never cover a school: zoom in and out and back to the whole state
+// (a "reset" arrow), and apart from them, full screen, with its name (the corners, pointing in once
+// it's on, and "Exit full screen").
+const icon = (d) => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" `
+  + `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const MAP_ICONS = {
+  in: icon('<path d="M12 5v14M5 12h14"/>'),
+  out: icon('<path d="M5 12h14"/>'),
+  reset: icon('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 3.5v4h4"/>'),
+  full: icon('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
+  leave: icon('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>'),
+};
+
+/** The map's whole view (in map units): the state, with room around it. */
+export function wholeView(base) {
+  const [mx, my] = [base.width * MARGIN, base.height * MARGIN];
+  return { x: -mx, y: -my, w: base.width + 2 * mx, h: base.height + 2 * my };
+}
+
+/**
+ * What's under the map once a team is picked: its helmet, name and region, where it is and where it
+ * was the season before, and the region's other schools (each picks that school).
+ */
+export function pickedHtml(school, payload, teams = {}) {
+  const others = payload.schools
+    .filter((s) => s.class === school.class && s.region === school.region && s.slug !== school.slug)
+    .sort((a, b) => byName(a.school, b.school));
+  const facts = [school.county ? `${school.city}, ${school.county} County` : "", teamChange(school, payload.prior_season)].filter(Boolean);
+  return `<div class="picked__head">${teamMark(school.school, teams[school.school], { size: 32 })}`
+    + `<span class="picked__name">${esc(school.school)}</span>`
+    + `<span class="picked__region"><span class="region-chip region-chip--${school.region}" aria-hidden="true">${school.region}</span>`
+    + `<strong>${esc(place(school))}</strong></span></div>`
+    + (facts.length ? `<p class="picked__facts">${esc(facts.join(" · "))}</p>` : "")
+    + (others.length
+      ? `<p class="picked__others"><span class="picked__label">Other schools in ${esc(place(school))}:</span> `
+        + others.map((s) => `<a href="${esc(regionsPath(school.class))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
+          + `${teamMark(s.school, teams[s.school], { size: 20 })}<span>${esc(s.school)}</span></a>`).join("")
+        + "</p>"
+      : "");
 }
 
 /** The box (in map units) that shows a region whole, with room around it, in the map's shape. */
@@ -151,32 +205,59 @@ export function regionView(box, base, pad = 0.3) {
   const [x0, y0, x1, y1] = box;
   let w = (x1 - x0) * (1 + 2 * pad);
   let h = (y1 - y0) * (1 + 2 * pad);
-  const shape = base.width / base.height;
+  const whole = wholeView(base);
+  const shape = whole.w / whole.h;
   if (w / h > shape) h = w / shape;
   else w = h * shape;
-  w = Math.min(w, base.width);
-  h = Math.min(h, base.height);
+  w = Math.min(w, whole.w);
+  h = Math.min(h, whole.h);
   return { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h };
+}
+
+/** Where the tooltip goes (its top-left, in pixels in the frame) for a dot at (x, y) of radius r:
+ * centered above the dot, or below it when there's no room above, and kept inside the frame. */
+export function hoverSpot(x, y, r, tip, frame, gap = 6) {
+  const edge = 4;
+  const left = Math.min(Math.max(x - tip.w / 2, edge), Math.max(edge, frame.w - tip.w - edge));
+  const above = y - r - gap - tip.h;
+  return { left, top: above >= edge ? above : Math.min(y + r + gap, frame.h - tip.h - edge) };
 }
 
 /**
  * Make the map on the page work: zoom (wheel, pinch, buttons), pan (drag), a name on hover, and a
- * team picked (from the map, the list or the page's link) highlighted with its region and zoomed
- * to. onPick(slug or null) tells the page, to keep the address in step.
+ * team picked (from the map, the list, the team under the map or the page's link) highlighted with
+ * its region and zoomed to. onPick(slug or null) tells the page, to keep the address in step.
  */
-export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPick = () => {}, onMove = () => {} } = {}) {
+export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {} } = {}) {
   const frame = root.querySelector("[data-map]");
   const svg = frame?.querySelector("svg");
   if (!svg) return null;
+  const figure = frame.closest(".regions-map");
   const hover = frame.querySelector(".regions-map__hover");
   const caption = root.querySelector(".regions-map__picked");
-  const whole = { x: 0, y: 0, w: base.width, h: base.height };
+  const status = root.querySelector("[data-picked-status]");
+  const whole = wholeView(base);
   let view = { ...whole };
+  let current = null;
   const bySlug = new Map(payload.schools.filter((s) => s.class === clazz).map((s) => [s.slug, s]));
 
+  // The view always has the frame's shape (it's the state's shape, except in full screen): widened or
+  // heightened about its middle when it doesn't.
+  const aspect = () => {
+    const box = svg.getBoundingClientRect();
+    return box.width && box.height ? box.width / box.height : whole.w / whole.h;
+  };
+  const widest = () => Math.max(whole.w, whole.h * aspect());
   const apply = () => {
+    const a = aspect();
+    if (Math.abs(view.w / view.h - a) > 1e-3) {
+      const [cx, cy] = [view.x + view.w / 2, view.y + view.h / 2];
+      if (view.w / view.h < a) view.w = view.h * a;
+      else view.h = view.w / a;
+      view = { x: cx - view.w / 2, y: cy - view.h / 2, w: view.w, h: view.h };
+    }
     svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
-    const zoom = base.width / view.w;
+    const zoom = whole.w / view.w;
     const px = view.w / (svg.getBoundingClientRect().width || 600);
     const r = 11 * px; // dots keep their size on screen at any zoom
     for (const g of svg.querySelectorAll(".map-dot")) {
@@ -187,9 +268,10 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
     for (const t of svg.querySelectorAll(".map-county-name")) t.setAttribute("font-size", 40 / Math.max(1, zoom / 2.2));
   };
   const zoomAt = (factor, cx, cy) => {
-    const w = Math.min(base.width, Math.max(base.width / 40, view.w / factor));
+    const w = Math.min(widest(), Math.max(whole.w / 40, view.w / factor));
     const k = w / view.w;
     view = { x: cx - (cx - view.x) * k, y: cy - (cy - view.y) * k, w, h: view.h * k };
+    moves += 1;
     apply();
   };
   const toMap = (clientX, clientY) => {
@@ -199,13 +281,23 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
   const middle = () => [view.x + view.w / 2, view.y + view.h / 2];
   // The first time the reader moves the map, and how ("wheel", "pinch", "drag", "buttons"): once a page.
   let moved = false;
+  let moves = 0; // every time the view changes, for full screen to know whether the map was moved
   const used = (how) => {
     if (moved) return;
     moved = true;
     onMove(how);
   };
 
-  const pick = (slug, { zoom = true } = {}) => {
+  const motion = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+  // On a computer the map sticks under the header once the page scrolls a little: a team picked
+  // before then could have its details below the fold, so the page scrolls just enough to show them.
+  const show = (el) => {
+    if (getComputedStyle(el.closest(".regions-map")).position !== "sticky") return;
+    const below = el.getBoundingClientRect().bottom - innerHeight + 12;
+    if (below > 0) scrollBy({ top: below, behavior: motion() });
+  };
+
+  const pick = (slug, { zoom = true, reveal = true } = {}) => {
     const school = slug ? bySlug.get(slug) : null;
     for (const g of svg.querySelectorAll(".map-dot")) {
       g.classList.toggle("is-picked", Boolean(school) && g.dataset.team === school.slug);
@@ -217,13 +309,19 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
       else a.removeAttribute("aria-current");
     }
     if (caption) {
-      caption.textContent = school
-        ? [`${school.school}: ${place(school)}`, teamChange(school, payload.prior_season), school.county ? `${school.city}, ${school.county} County` : ""].filter(Boolean).join(" · ")
-        : "";
+      caption.innerHTML = school ? pickedHtml(school, payload, teams) : "";
+      caption.hidden = !school;
+      if (school && reveal) show(caption);
     }
+    if (status) status.textContent = school ? `${school.school}: ${place(school)}` : "";
+    // Another team in the region already shown, its dot in view: the map stays where it is.
+    const stay = school && current && current.region === school.region && school.x != null
+      && school.x >= view.x && school.x <= view.x + view.w && school.y >= view.y && school.y <= view.y + view.h;
+    current = school;
     const box = school && payload.regions[String(clazz)]?.[String(school.region)]?.box;
-    if (zoom) {
+    if (zoom && !stay) {
       view = box ? regionView(box, base) : { ...whole };
+      moves += 1;
       apply();
     }
     return school;
@@ -247,10 +345,13 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
     const school = dot && bySlug.get(dot.dataset.team);
     if (school && e.pointerType === "mouse") {
       const box = frame.getBoundingClientRect();
+      const d = dot.firstChild.getBoundingClientRect();
       hover.textContent = school.school;
-      hover.style.left = `${e.clientX - box.left}px`;
-      hover.style.top = `${e.clientY - box.top}px`;
       hover.hidden = false;
+      const spot = hoverSpot(d.left + d.width / 2 - box.left, d.top + d.height / 2 - box.top, d.width / 2,
+        { w: hover.offsetWidth, h: hover.offsetHeight }, { w: box.width, h: box.height });
+      hover.style.left = `${spot.left}px`;
+      hover.style.top = `${spot.top}px`;
     } else hover.hidden = true;
     if (!pointers.has(e.pointerId)) return;
     const before = pointers.get(e.pointerId);
@@ -265,6 +366,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
         used("drag");
       }
       view = { ...view, x: view.x - (dx / box.width) * view.w, y: view.y - (dy / box.height) * view.h };
+      moves += 1;
       apply();
     } else if (pointers.size === 2) {
       dragged = true;
@@ -288,26 +390,59 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, onPi
     const school = pick(dot ? dot.dataset.team : null, { zoom: Boolean(dot) });
     onPick(school?.slug ?? null, "map");
   });
-  frame.querySelector(".regions-map__zoom")?.addEventListener("click", (e) => {
+  figure?.querySelector(".regions-map__zoom")?.addEventListener("click", (e) => {
     const b = e.target.closest("[data-zoom]");
     if (!b) return;
     if (b.dataset.zoom === "reset") {
       view = { ...whole };
+      moves += 1;
       apply();
     } else zoomAt(b.dataset.zoom === "in" ? 1.6 : 1 / 1.6, ...middle());
     used("buttons");
   });
+  // Full screen: the map (with its line and the picked team) over the whole page, until the button,
+  // Escape or the page changes. Coming back, the map shows what it did before, unless it was moved.
+  const fullButton = figure?.querySelector("[data-full]");
+  let before = null;
+  const full = (on) => {
+    if (!figure || on === figure.classList.contains("is-full")) return;
+    if (on) before = { ...view };
+    const kept = !on && before && moves === movesAtFull ? before : null;
+    figure.classList.toggle("is-full", on);
+    document.documentElement.classList.toggle("is-map-full", on);
+    fullButton.setAttribute("aria-pressed", String(on));
+    fullButton.innerHTML = `${on ? MAP_ICONS.leave : MAP_ICONS.full}<span>${on ? "Exit full screen" : "Full screen"}</span>`;
+    if (on) movesAtFull = moves;
+    if (kept) view = kept;
+    else if (!on) view = { x: view.x + (view.w - Math.min(view.w, view.h * aspect())) / 2, y: view.y, w: Math.min(view.w, view.h * aspect()), h: view.h };
+    apply();
+  };
+  let movesAtFull = null;
+  fullButton?.addEventListener("click", () => full(!figure.classList.contains("is-full")));
+  const onKey = (e) => {
+    if (!figure.isConnected) return removeEventListener("keydown", onKey);
+    if (e.key === "Escape" && figure.classList.contains("is-full")) full(false);
+  };
+  addEventListener("keydown", onKey);
+
   root.querySelector(".regions-list")?.addEventListener("click", (e) => {
     const a = e.target.closest("a[data-team]");
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
     e.preventDefault();
     pick(a.dataset.team);
     onPick(a.dataset.team, "list");
-    frame.scrollIntoView?.({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    frame.scrollIntoView?.({ block: "nearest", behavior: motion() });
+  });
+  caption?.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-team]");
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    pick(a.dataset.team);
+    onPick(a.dataset.team, "caption");
   });
   addEventListener("resize", apply);
   apply();
-  if (picked) pick(picked);
+  if (picked) pick(picked, { reveal: false }); // the page's link: the page opens at its top
   return { pick };
 }
 

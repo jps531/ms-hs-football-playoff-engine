@@ -333,6 +333,7 @@ let renderToken = 0;
 let scrollToFocus = false;
 async function render() {
   const token = ++renderToken;
+  document.documentElement.classList.remove("is-map-full"); // a Regions map left in full screen
   nextComputedAt = null;
   showComputedAt(null);
   route = readRoute();
@@ -2673,6 +2674,7 @@ async function renderRegions(token) {
     });
     regionsState.map = wireRegionsMap(app, base, payload, route.clazz, {
       picked: picked?.slug ?? null,
+      teams,
       onPick: (slug, via) => {
         const school = mine.find((s) => s.slug === slug) ?? null;
         regionsState.picked = school;

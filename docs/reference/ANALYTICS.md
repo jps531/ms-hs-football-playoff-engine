@@ -49,7 +49,7 @@ keep the two in step: a new event or property means a new line there.
 | `odds_changed` | Projected/Toss-up switch | `value` |
 | `week_changed`, `season_changed` | The week or season picker | `value` |
 | `regions-season_changed` | The Regions page's season picker (which cycle's regions) | `value` |
-| `team_picked` | Selecting a team in the standings, the bracket sheet, or on the Regions page (a dot on the map or a name in the lists) | `from` (`standings`/`bracket`/`regions`), `team`; on the Regions page also `via` (`map`/`list`) |
+| `team_picked` | Selecting a team in the standings, the bracket sheet, or on the Regions page (a dot on the map, a name in the lists, or one of the region's other schools under the map) | `from` (`standings`/`bracket`/`regions`), `team`; on the Regions page also `via` (`map`/`list`/`caption`) |
 | `team_search_used` | Choosing a team from the search box, or from the Regions page's own "Find a team on the map" | `team`; `from` (`regions`) for the map's |
 | `bracket_game_opened` | Opening a game's sheet | `class`, `round`, `game` |
 | `bracket_half_changed` | The North/South/Both control | `half` |

@@ -5,6 +5,27 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.6
+
+- **The Regions page's map fits in one view.** Once you scroll down to it, the whole state, the map's
+  buttons and a picked team's details all show at once, and the map stays in view as you scroll the
+  lists. On a phone it's as big as the screen allows.
+- **Full screen.** The map's new "Full screen" button shows it over the whole page, with the picked
+  team under it; "Exit full screen" or Escape brings the page back. The buttons are now under the
+  map, so they never cover a school, and "Show the whole state" is a reset arrow.
+- **The lists read as teams, not links.** A team is a row you pick to see it on the map; the one you
+  picked is tinted in its region's color. A region with standings has its own "2026 standings" link
+  beside its name, so it's clear which goes where.
+- **The map has room around the state**, and a region's shape is no longer cut off at the state
+  line or the coast, so a school on the coast or the state line sits inside its region's shape like
+  every other school. The share images draw the same shapes.
+- **County lines show over every region's color**, in light and dark mode, on the page and in the
+  share images.
+- **A picked team's details are easier to read**: its helmet, name and region, where it is, and the
+  region's other schools, each of which you can pick in turn.
+- Picking another team in the same region no longer zooms the map again.
+- A team's name, when you point at its dot, stays inside the map, and shows under the dot near the top.
+
 ## 1.17.5
 
 - **Aberdeen stays in 2A Region 4 in 2027 and 2028.** Its appeal to move to Region 1 was rescinded,
