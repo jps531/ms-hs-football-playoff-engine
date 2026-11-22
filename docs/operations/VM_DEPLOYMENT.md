@@ -200,7 +200,9 @@ click:
    - removes the API and worker images of earlier deploys, keeping the running pair
      it would roll back to, and the layers nothing uses; without that, every deploy's images stay until
      the disk fills;
-   - pulls the commit's images, checks the commit out (nginx's config and pages, the SQL, the scripts
+   - pulls the commit's images, trying twice more (15 seconds later, then 30) if the registry cuts the
+     download off; after three failures it stops there, with nothing changed and the site as it was;
+   - checks the commit out (nginx's config and pages, the SQL, the scripts
      come from the checkout), runs `scripts/migrate.py`, starts the services, and recreates nginx if
      `nginx/nginx.conf` changed;
    - checks the site (the API through nginx, the front page, every service running) for up to two

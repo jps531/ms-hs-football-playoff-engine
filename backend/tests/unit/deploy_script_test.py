@@ -19,6 +19,15 @@ DOCKER = r"""#!/usr/bin/env bash
 # Record each call with the IMAGE_TAG it saw; answer the pipeline checks (Prefect's: a line for each run it
 # waits on; the update lock's: how many hold it) and `ps -a`.
 echo "IMAGE_TAG=${IMAGE_TAG:-} $*" >> "$CALLS"
+# A pull fails its first PULL_FAILS times, as the registry cutting a download off.
+if [[ "$*" == *" pull "* ]]; then
+  n=$(cat "$CALLS.pulls" 2>/dev/null || echo 0)
+  echo $((n + 1)) > "$CALLS.pulls"
+  if [ "$n" -lt "${PULL_FAILS:-0}" ]; then
+    echo "failed to copy: read tcp: connection reset by peer" >&2
+    exit 1
+  fi
+fi
 case "$*" in
   *"exec -T prefect-worker"*) printf '%s' "${PREFECT_BUSY:-}" ;;
   *"exec -T db"*) echo "${LOCK_HOLDERS:-0}" ;;
@@ -94,6 +103,7 @@ def server(tmp_path):
         "DEPLOY_HEALTH_TRIES": "2",
         "DEPLOY_HEALTH_PAUSE": "0",
         "DEPLOY_WAIT_MINUTES": "0",
+        "DEPLOY_PULL_PAUSE": "0",
     }
 
     def deploy(sha, script="deploy.sh", **extra):
@@ -133,6 +143,27 @@ def test_a_deploy_pulls_migrates_restarts_and_records_the_commit(server):
     assert steps[2] == f"IMAGE_TAG={sha} compose --env-file .env.local --profile local-db up -d --no-build"
     assert "--force-recreate nginx" in steps[3]  # nginx.conf changed between the two commits
     assert f"Deployed {sha[:7]}" in out
+
+
+def test_a_pull_the_registry_cuts_off_is_tried_again(server):
+    """A download cut off twice (as on 2026-11-22) still deploys, on the third try."""
+    code, out = server.deploy(server.shas["second"], PULL_FAILS="2")
+    assert code == 0, out
+    assert out.count("Pulling the images failed (attempt") == 2
+    assert server.head() == server.shas["second"] and server.tag() == server.shas["second"]
+    assert len([c for c in server.calls() if " pull " in c]) == 3
+
+
+def test_a_pull_failing_three_times_changes_nothing(server):
+    """Three failed pulls stop the deploy before the checkout, the migrations or a restart: the running
+    commit and images stay."""
+    code, out = server.deploy(server.shas["second"], PULL_FAILS="3")
+    assert code == 1
+    assert "Pulling the images failed 3 times" in out and "is still running" in out
+    assert server.head() == server.shas["first"] and server.tag() == server.shas["first"]
+    calls = server.calls()
+    assert len([c for c in calls if " pull " in c]) == 3
+    assert not [c for c in calls if c.startswith("migrate") or " up -d" in c]
 
 
 def test_old_images_are_removed_before_the_pull_keeping_the_running_pair(server):

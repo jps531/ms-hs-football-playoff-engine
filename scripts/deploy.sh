@@ -125,9 +125,27 @@ prune_images() {
   docker image prune -f >/dev/null || true
 }
 
+# This deploy's images, from the GitHub container registry. A download it cuts off ("connection reset by
+# peer", as on 2026-11-22) is tried twice more, DEPLOY_PULL_PAUSE (default 15) seconds later and then twice
+# that; nothing has changed yet, so three failures leave the running site as it was.
+pull_images() {
+  local attempt pause
+  for attempt in 1 2 3; do
+    if IMAGE_TAG=$sha "${compose[@]}" pull --quiet api prefect-worker; then
+      return 0
+    fi
+    [[ $attempt == 3 ]] && break
+    pause=$((attempt * ${DEPLOY_PULL_PAUSE:-15}))
+    log "Pulling the images failed (attempt $attempt of 3); trying again in $pause seconds"
+    sleep "$pause"
+  done
+  log "Pulling the images failed 3 times; ${sha:0:7} was not deployed, and ${previous_sha:0:7} is still running"
+  return 1
+}
+
 log "Deploying ${sha:0:7} (was ${previous_sha:0:7}, images ${previous_tag:0:7})"
 prune_images
-IMAGE_TAG=$sha "${compose[@]}" pull --quiet api prefect-worker
+pull_images || exit 1
 git checkout --quiet --detach "$sha"
 log "Migrating"
 scripts/migrate.py
