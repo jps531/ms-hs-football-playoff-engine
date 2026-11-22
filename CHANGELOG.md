@@ -5,6 +5,11 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.5
+
+- **Aberdeen stays in 2A Region 4 in 2027 and 2028.** Its appeal to move to Region 1 was rescinded,
+  so the Regions page no longer shows it moving.
+
 ## 1.17.4
 
 - **A team's expanded row on a region page reads in order.** At the top: its record and Elo rating,
