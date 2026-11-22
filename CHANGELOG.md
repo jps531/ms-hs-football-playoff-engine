@@ -7,7 +7,7 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
 
 ## 1.19.0
 
-- **Compare two region maps side by side.** Every map page now has two views, Map and Compare. Compare
+- **Compare two region maps side by side.** Every map page now has two views, Season and Compare. Compare
   shows two maps, each with its own season and class (at first, the same class's regions before
   these), and pick a team on either one to see where it is on both. Under them, what changed: the
   schools that moved into and out of the class (and which way), the ones that changed region, and

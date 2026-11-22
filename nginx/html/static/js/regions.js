@@ -158,13 +158,14 @@ export function mapFigure(base, payload, clazz, { full = true } = {}) {
 }
 
 /**
- * The views every map page has, as links: Map (one map) and Compare (two side by side). *view* is the
- * one shown; *hrefs* is each one's address ({ map, compare }), keeping the season and picked team.
+ * The views every map page has, as links in the bracket's half switch's style (.half-control): Season
+ * (one season's map; the "map" view) and Compare (two side by side). *view* is the one shown; *hrefs* is
+ * each one's address ({ map, compare }), keeping the season and picked team.
  */
 export function mapsViews(view, hrefs) {
-  const views = [["map", "Map"], ["compare", "Compare"]];
-  return `<nav class="maps-views" aria-label="View">`
-    + views.map(([key, label]) => `<a class="maps-views__item" href="${esc(hrefs[key])}"${key === view ? ' aria-current="page"' : ""}>${label}</a>`).join("")
+  const views = [["map", "Season"], ["compare", "Compare"]];
+  return `<nav class="half-control maps-views" aria-label="View">`
+    + views.map(([key, label]) => `<a class="half-control__item maps-views__item" href="${esc(hrefs[key])}"${key === view ? ' aria-current="page"' : ""}>${label}</a>`).join("")
     + "</nav>";
 }
 
@@ -293,8 +294,8 @@ export function compareSide(side, base, option, payload, clazz, index, name) {
   const classes = [1, 2, 3, 4, 5, 6, 7].map((c) => `<option value="${c}"${c === clazz ? " selected" : ""}>${c}A</option>`).join("");
   return `<section class="compare__side" data-side="${side}" aria-label="${name}">`
     + `<div class="compare__pickers">`
-    + `<label class="inline-select"><span class="visually-hidden">${name}: seasons</span><select data-control="compare-season" data-side="${side}">${seasons}</select></label>`
-    + `<label class="inline-select"><span class="visually-hidden">${name}: class</span><select data-control="compare-class" data-side="${side}">${classes}</select></label>`
+    + `<label><span class="visually-hidden">${name}: seasons</span><select class="select-box" data-control="compare-season" data-side="${side}">${seasons}</select></label>`
+    + `<label><span class="visually-hidden">${name}: class</span><select class="select-box" data-control="compare-class" data-side="${side}">${classes}</select></label>`
     + `</div>${mapFigure(base, payload, clazz, { full: false })}</section>`;
 }
 

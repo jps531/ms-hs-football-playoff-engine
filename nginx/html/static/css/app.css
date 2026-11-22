@@ -1016,7 +1016,7 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   cursor: pointer;
 }
 .half-control__item:hover { color: var(--text-primary); }
-.half-control__item[aria-pressed="true"] {
+.half-control__item[aria-pressed="true"], .half-control__item[aria-current="page"] {
   background: var(--scrubber-selected-bg);
   color: var(--scrubber-selected-text);
 }
@@ -1740,8 +1740,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media (max-width: 47.99em) { .detail__share { margin-left: 0; } }
 .share-sheet__body { display: grid; gap: 14px; }
 .share-sheet__group { display: grid; gap: 6px; }
-/* On a region page, which to share: the region or one of its teams. */
-.share-sheet__select {
+/* On a region page, which to share: the region or one of its teams. Also any boxed dropdown (.select-box:
+   a map's season and class on the Maps' Compare view). */
+.share-sheet__select, .select-box {
   appearance: none;
   justify-self: start; max-width: 100%; min-height: 44px; padding: 0 40px 0 14px;
   font: inherit; font-size: 15px; color: var(--text-primary);
@@ -1893,17 +1894,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .picked__others a:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-page)); }
 
 /* ------------------------------------------------------------- a map page's views (regions.js mapsViews) */
-/* Map and Compare: every map page has them, as a two-part switch under its title. */
-.maps-views {
-  display: inline-flex; margin-top: 16px; padding: 3px; gap: 2px;
-  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised);
-}
-.maps-views__item {
-  display: inline-flex; align-items: center; min-height: 38px; padding: 0 16px; border-radius: 7px;
-  color: var(--text-secondary); font-weight: 600; font-size: 15px; text-decoration: none;
-}
-.maps-views__item:hover { color: var(--text-primary); }
-.maps-views__item[aria-current] { background: var(--surface-page); color: var(--text-primary); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+/* Season and Compare: every map page has them, under its title, in the bracket's half switch's style
+   (.half-control); here they're links. */
+.maps-views { margin: 16px 0 0; }
+.maps-views__item { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* ------------------------------------------------------------- compare (regions.js comparePage) */
 /* Two maps side by side, each with its season and class over it; on a phone, one over the other. */
@@ -1911,7 +1905,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media (max-width: 760px) { .compare { grid-template-columns: minmax(0, 1fr); } }
 .compare .regions-map { position: static; }
 .compare { scroll-margin-top: calc(var(--header-h) + 83px); } /* scrolled to: clear of the header and the class bar */
-.compare__pickers { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center; margin-bottom: 8px; font-weight: 600; }
+.compare__pickers { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
 /* Both maps whole in one view on a computer: as tall as the screen leaves room for (the bars, the
    pickers and the buttons). On a phone the Map view's own sizing applies. */
 @media (min-width: 761px) {

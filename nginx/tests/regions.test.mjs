@@ -124,7 +124,7 @@ test("what changed, as it reads: which way a school moved, and where a closed on
 
 test("the views every map page has, the one shown marked", () => {
   const html = mapsViews("compare", { map: "/maps/regions/4a?team=bay", compare: "/maps/regions/4a/compare?team=bay" });
-  assert.match(html, /href="\/maps\/regions\/4a\?team=bay">Map<\/a>/);
+  assert.match(html, /href="\/maps\/regions\/4a\?team=bay">Season<\/a>/);
   assert.match(html, /href="\/maps\/regions\/4a\/compare\?team=bay" aria-current="page">Compare<\/a>/);
 });
 
