@@ -214,6 +214,18 @@ export function regionView(box, base, pad = 0.3) {
   return { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h };
 }
 
+/**
+ * *view* moved, if need be, so the map can't be dragged away from Mississippi: the view's middle stays
+ * over the state's box (so some of the state is always in view, at any zoom). Returns {x, y}.
+ */
+export function keepInView(view, base) {
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  return {
+    x: clamp(view.x + view.w / 2, 0, base.width) - view.w / 2,
+    y: clamp(view.y + view.h / 2, 0, base.height) - view.h / 2,
+  };
+}
+
 /** Where the tooltip goes (its top-left, in pixels in the frame) for a dot at (x, y) of radius r:
  * centered above the dot, or below it when there's no room above, and kept inside the frame. */
 export function hoverSpot(x, y, r, tip, frame, gap = 6) {
@@ -228,7 +240,7 @@ export function hoverSpot(x, y, r, tip, frame, gap = 6) {
  * team picked (from the map, the list, the team under the map or the page's link) highlighted with
  * its region and zoomed to. onPick(slug or null) tells the page, to keep the address in step.
  */
-export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {} } = {}) {
+export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {}, onFull = () => {} } = {}) {
   const frame = root.querySelector("[data-map]");
   const svg = frame?.querySelector("svg");
   if (!svg) return null;
@@ -256,6 +268,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
       else view.h = view.w / a;
       view = { x: cx - view.w / 2, y: cy - view.h / 2, w: view.w, h: view.h };
     }
+    view = { ...view, ...keepInView(view, base) };
     svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
     const zoom = whole.w / view.w;
     const px = view.w / (svg.getBoundingClientRect().width || 600);
@@ -400,16 +413,30 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     } else zoomAt(b.dataset.zoom === "in" ? 1.6 : 1 / 1.6, ...middle());
     used("buttons");
   });
-  // Full screen: the map (with its line and the picked team) over the whole page, until the button,
-  // Escape or the page changes. Coming back, the map shows what it did before, unless it was moved.
+  // Full screen: the map (with its buttons and the picked team) over the page between the site's header
+  // and the class picker's bar, and on a phone the tab bar, which stay (onFull(on) tells the page, to show what's on screen in the
+  // bar), until the button, Escape or the page changes. Coming back, the map shows what it did before,
+  // unless it was moved.
+  const fitUnderBars = () => {
+    const bars = [...document.querySelectorAll(".site-header-bar, .scrubber-bar:not([hidden])")];
+    const top = Math.max(0, ...bars.map((b) => b.getBoundingClientRect().bottom));
+    // On a phone the tab bar along the bottom stays too: the map ends above it.
+    const tabs = document.querySelector(".tab-bar");
+    const shown = tabs && getComputedStyle(tabs).display !== "none" ? tabs.getBoundingClientRect() : null;
+    const bottom = shown && shown.height ? Math.max(0, innerHeight - shown.top) : 0;
+    figure.style.setProperty("--map-full-top", `${Math.round(top)}px`);
+    figure.style.setProperty("--map-full-bottom", `${Math.round(bottom)}px`);
+  };
   const fullButton = figure?.querySelector("[data-full]");
   let before = null;
   const full = (on) => {
     if (!figure || on === figure.classList.contains("is-full")) return;
     if (on) before = { ...view };
     const kept = !on && before && moves === movesAtFull ? before : null;
+    onFull(on);
     figure.classList.toggle("is-full", on);
     document.documentElement.classList.toggle("is-map-full", on);
+    if (on) fitUnderBars();
     fullButton.setAttribute("aria-pressed", String(on));
     fullButton.innerHTML = `${on ? MAP_ICONS.leave : MAP_ICONS.full}<span>${on ? "Exit full screen" : "Full screen"}</span>`;
     if (on) movesAtFull = moves;
@@ -440,7 +467,23 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     pick(a.dataset.team);
     onPick(a.dataset.team, "caption");
   });
-  addEventListener("resize", apply);
+  // How much height the site's bars take (the header, which wraps to two lines on a narrow phone, the
+  // class picker's bar and the phone's tab bar): the CSS sizes the map to fit with its buttons in the
+  // rest (--map-bars). They don't change as a phone's address bar comes and goes.
+  const measureBars = () => {
+    const height = (sel) => {
+      const el = document.querySelector(sel);
+      return el && !el.hidden && getComputedStyle(el).display !== "none" ? el.getBoundingClientRect().height : 0;
+    };
+    const bars = height(".site-header-bar") + height(".scrubber-bar") + height(".tab-bar");
+    figure?.style.setProperty("--map-bars", `${Math.round(bars)}px`);
+  };
+  measureBars();
+  addEventListener("resize", () => {
+    measureBars();
+    if (figure?.classList.contains("is-full")) fitUnderBars();
+    apply();
+  });
   apply();
   if (picked) pick(picked, { reveal: false }); // the page's link: the page opens at its top
   return { pick };

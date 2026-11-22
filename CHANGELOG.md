@@ -5,6 +5,18 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.7
+
+- **The Regions page's full screen keeps the site's header and the class picker's bar**, which says
+  what's on screen (such as "Class 1A Regions · 2027 and 2028 seasons"). The map fills the space
+  under them.
+- **Full screen is no longer offered on a phone**, where it showed the state no bigger than the page
+  already does. On a tablet, it still stops above the tab bar along the bottom.
+- **On a phone, the map and its buttons fit between the header and the tab bar**, so the buttons no
+  longer hide under the tab bar, and the map no longer changes size as you scroll (as the address bar
+  comes and goes).
+- **The map can't be dragged away from Mississippi**: it stops while part of the state is still in view.
+
 ## 1.17.6
 
 - **The Regions page's map fits in one view.** Once you scroll down to it, the whole state, the map's
