@@ -1796,21 +1796,43 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   .team-search.team-search--page { position: relative; }
   .team-search--page .team-results { left: 0; right: 0; width: auto; top: calc(100% + 6px); }
 }
-.regions-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 28px; align-items: start; }
-@media (max-width: 760px) { .regions-layout { grid-template-columns: 1fr; } }
-.regions-map { margin: 0; position: sticky; top: 72px; }
-@media (max-width: 760px) { .regions-map { position: static; } }
+/* On a computer: the heading and the lists, and beside them the map (its column as wide as the map),
+   from the top of the page so it can be tall. On a phone: the heading, the map, the lists. */
+.regions-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) min-content; grid-template-rows: auto 1fr;
+  grid-template-areas: "head map" "side map"; gap: 20px 40px; align-items: start;
+}
+.regions-layout > .entry-head { grid-area: head; }
+.regions-layout > .regions-map { grid-area: map; margin-top: 28px; } /* level with the crumbs */
+.regions-layout > .regions-side { grid-area: side; }
+@media (max-width: 760px) {
+  .regions-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "map" "side"; }
+}
+/* Pinned under the header and the class picker's bar (.scrubber-bar: 66px and its border). */
+.regions-map { margin: 0; position: sticky; top: calc(var(--header-h) + 67px + 16px); }
+@media (max-width: 760px) { .regions-map { position: static; } .regions-layout > .regions-map { margin-top: 0; } }
+.regions-note { margin: 0 0 8px; }
 .regions-map__image { display: block; width: 100%; height: auto; }
+/* The whole state on screen at once: on a computer, as tall as the screen leaves room for once the map
+   is pinned under the header, with the line above it and a picked team's details under it (about
+   170px); on a phone, as wide as the screen or as tall as it leaves room for, whichever is smaller. */
 .regions-map__frame {
-  position: relative; aspect-ratio: 3324 / 5355; max-height: calc(100vh - 140px); margin-inline: auto;
+  position: relative; aspect-ratio: 3324 / 5355;
+  width: clamp(280px, calc((100vh - 350px) * 3324 / 5355), 600px);
+  width: clamp(280px, calc((100dvh - 350px) * 3324 / 5355), 600px);
   border: 1px solid var(--border); border-radius: 12px; overflow: hidden; touch-action: none; background: var(--surface-page);
   /* A map to drag and pinch, not text: nothing in it gets selected or called out on a long press. */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
 }
+@media (max-width: 760px) {
+  .regions-map__frame { margin-inline: auto; width: min(100%, calc((100vh - 160px) * 3324 / 5355)); width: min(100%, calc((100dvh - 160px) * 3324 / 5355)); }
+}
 .regions-map__svg { display: block; width: 100%; height: 100%; cursor: grab; user-select: none; }
 .regions-map__svg:active { cursor: grabbing; }
 .map-land { fill: color-mix(in srgb, var(--text-primary) 5%, var(--surface-page)); }
-.map-county { fill: none; stroke: color-mix(in srgb, var(--text-primary) 20%, var(--surface-page)); stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* The text color, see-through: the lines show the same over the land and over every region's color
+   (an opaque gray all but vanished over the darker ones). */
+.map-county { fill: none; stroke: var(--text-primary); stroke-opacity: 0.25; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .map-state { fill: none; stroke: color-mix(in srgb, var(--text-primary) 60%, var(--surface-page)); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .map-county-names { display: none; }
 .regions-map__svg.is-zoomed .map-county-names { display: inline; }
@@ -1828,10 +1850,18 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   background: var(--surface-page); color: var(--text-primary); font-size: 20px; cursor: pointer;
 }
 .regions-map__hover {
-  position: absolute; pointer-events: none; transform: translate(-50%, calc(-100% - 16px)); white-space: nowrap;
+  position: absolute; pointer-events: none; white-space: nowrap;
   padding: 4px 8px; border-radius: 6px; background: var(--text-primary); color: var(--surface-page); font-size: 13px; font-weight: 600;
 }
-.regions-map__picked { min-height: 1.4em; margin-top: 10px; color: var(--text-secondary); }
+.regions-map__picked { margin-top: 10px; }
+.picked__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.picked__name { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; line-height: 1.2; }
+.picked__region { display: inline-flex; align-items: center; gap: 6px; }
+.picked__region .region-chip { width: 22px; height: 22px; font-size: 12px; }
+.picked__facts { margin: 4px 0 0; color: var(--text-secondary); font-size: 14px; }
+.picked__others { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 6px 0 0; font-size: 14px; }
+.picked__label { color: var(--text-secondary); }
+.picked__others a { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; }
 /* Regions side by side, as many across as fit (two beside the map on a laptop). */
 .regions-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 22px 24px; align-content: start; }
 .regions-list__name { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; }

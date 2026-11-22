@@ -11,7 +11,8 @@ schools' convex hull, padded by ``PAD_KM``; where two regions' shapes would touc
 straight line, the one with the widest gap between the two regions' schools, leaving ``GAP_KM``
 between them. Cutting a convex shape with straight lines keeps it convex, so every side is straight
 and no school is ever inside another region's shape. Should no straight line separate two regions'
-schools, that pair is split by nearest school instead (``region_shapes`` reports it).
+schools, that pair is split by nearest school instead (``region_shapes`` reports it). A shape isn't
+cut to the state's outline: it may reach past the state line or the coast.
 """
 
 from __future__ import annotations
@@ -118,8 +119,10 @@ def _half_plane(nx: float, ny: float, c: float) -> Polygon:
 
 
 def region_shapes(schools: list[dict], tangled: list | None = None) -> dict[int, BaseGeometry]:
-    """Each region's shape for one class's *schools* ({x, y, region}), inside the state. Pairs of
-    regions no straight line separates are appended to *tangled* (and split by nearest school)."""
+    """Each region's shape for one class's *schools* ({x, y, region}): the outline around its schools,
+    padded by ``PAD_KM``. A shape isn't cut to the state, so a school on the coast or the state line sits
+    inside its region's shape like every other school. Pairs of regions no straight line separates are
+    appended to *tangled* (and split by nearest school)."""
     groups: dict[int, list[tuple[float, float]]] = {}
     for s in schools:
         groups.setdefault(s["region"], []).append((s["x"], s["y"]))
@@ -149,7 +152,7 @@ def region_shapes(schools: list[dict], tangled: list | None = None) -> dict[int,
             shapes[h] = shapes[h].difference(unary_union(near[g]).buffer(GAP_KM * 500))
         if tangled is not None:
             tangled.extend(knotted)
-    return {g: s.intersection(state()) for g, s in shapes.items()}
+    return shapes
 
 
 # ----------------------------------------------------------------- the Regions page's data

@@ -101,6 +101,17 @@ def test_shapes_have_straight_sides():
         assert shape.area / shape.convex_hull.area > 0.995
 
 
+def test_a_shape_isnt_cut_to_the_state():
+    """A region on the coast keeps its whole padded shape around its schools, past the shoreline, so
+    each school sits inside its shape like any other."""
+    # Bay St. Louis and Biloxi; Hattiesburg
+    coast = _schools({1: [(30.3083, -89.3300), (30.3960, -88.8853)], 2: [(31.3271, -89.2903)]})
+    shapes = rm.region_shapes(coast)
+    assert shapes[1].difference(rm.state()).area > 0
+    for s in coast:
+        assert shapes[s["region"]].contains(Point(s["x"], s["y"]).buffer(rm.PAD_KM * 1000 * 0.9))
+
+
 def test_the_widest_line_between_two_sets():
     """Two clusters 10 km apart along x: the line is x = 5 km, with a 10 km gap; interleaved sets have none."""
     nx, ny, c, gap = rm.separator([(0, 0), (0, 1000)], [(10_000, 0), (10_000, 1000)])

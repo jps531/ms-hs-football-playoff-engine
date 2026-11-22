@@ -5,6 +5,24 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.17.5
+
+- **The whole map fits on screen.** On a computer the Regions page's map now sits beside the
+  heading and the lists, sized so the whole state shows when the page loads, and it stays in view as
+  you scroll the lists. On a phone it's as big as the screen allows, between the heading and the lists.
+- **The map has room around the state**, and a region's shape is no longer cut off at the state
+  line or the coast, so a school on the coast or the state line sits inside its region's shape like
+  every other school. The share images draw the same shapes.
+- **County lines show over every region's color**, in light and dark mode, on the page and in the
+  share images.
+- **A picked team's details are easier to read**: its helmet, name and region, where it is, and the
+  region's other schools, each of which you can pick in turn.
+- Picking another team in the same region no longer zooms the map again.
+- A team's name, when you point at its dot, stays inside the map, and shows under the dot near the top.
+- Short lines say what to do: "Pick a team to see where it is and highlight its region." over the
+  map, and "Pick a region's name to see its 2026 standings." over the lists, while the regions have
+  standings.
+
 ## 1.17.4
 
 - **A team's expanded row on a region page reads in order.** At the top: its record and Elo rating,

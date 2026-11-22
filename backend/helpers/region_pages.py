@@ -201,6 +201,17 @@ def regions_header(clazz: int, payload: dict, share: str = "") -> str:
     )
 
 
+def regions_list_note(payload: dict) -> str:
+    """The line over the region lists while their headings link to standings (``regionsListNote``);
+    nothing while they don't (no games in those regions yet)."""
+    if payload.get("standings_season") is None:
+        return ""
+    return (
+        '<p class="focus-note muted regions-note">'
+        f"Pick a region’s name to see its {_e(str(payload['standings_season']))} standings.</p>"
+    )
+
+
 def regions_lists(clazz: int, payload: dict, current_season: int | None, teams: dict | None = None) -> str:
     """The class's schools by region (``regionsLists``), each region's heading linking to its standings
     when it has some."""
@@ -239,9 +250,11 @@ def regions_body(
         else ""
     )
     return (
-        f'<div class="page static-page regions-page"><header class="entry-head">{regions_header(clazz, payload)}</header>'
-        f'<div class="regions-layout"><figure class="regions-map">{figure}</figure>'
-        f'<div class="regions-list">{regions_lists(clazz, payload, current_season, teams)}</div></div></div>\n'
+        f'<div class="page static-page regions-page"><div class="regions-layout">'
+        f'<header class="entry-head">{regions_header(clazz, payload)}</header>'
+        f'<figure class="regions-map">{figure}</figure>'
+        f'<div class="regions-side">{regions_list_note(payload)}'
+        f'<div class="regions-list">{regions_lists(clazz, payload, current_season, teams)}</div></div></div></div>\n'
     )
 
 

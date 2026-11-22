@@ -2673,6 +2673,7 @@ async function renderRegions(token) {
     });
     regionsState.map = wireRegionsMap(app, base, payload, route.clazz, {
       picked: picked?.slug ?? null,
+      teams,
       onPick: (slug, via) => {
         const school = mine.find((s) => s.slug === slug) ?? null;
         regionsState.picked = school;

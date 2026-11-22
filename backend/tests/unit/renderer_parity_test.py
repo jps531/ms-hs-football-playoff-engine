@@ -326,6 +326,8 @@ CASES = [
     *[(f"regionsLists {c} {p['season']} {cur}", rp.regions_lists(c, p, cur, REGIONS_TEAMS),
        _call("regions", "regionsLists", c, p, cur, REGIONS_TEAMS), "html")
       for c in (3, 5) for p in (REGIONS, REGIONS_PLAYED) for cur in (2025, 2026)],
+    *[(f"regionsListNote {p['season']}", rp.regions_list_note(p), _call("regions", "regionsListNote", p), "html")
+      for p in (REGIONS, REGIONS_PLAYED)],
     *[(f"teamNote {s['slug']}", rp.team_note(s, 2026), _call("regions", "teamNote", s, 2026), "data") for s in REGIONS["schools"]],
     ("teamNote no season before", rp.team_note(REGIONS["schools"][0], None), _call("regions", "teamNote", REGIONS["schools"][0], None), "data"),
     *[(f"standingsHref {a}", rp.standings_href(5, 2, *a), _call("regions", "standingsHref", 5, 2, *a), "data")
