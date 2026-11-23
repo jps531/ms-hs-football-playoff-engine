@@ -17,6 +17,13 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   it, each in its own region (North Tippah's 2025 and 2026: Walnut and Falkner).
 - On a phone, the Timeline page could be dragged sideways past its edge. It stays put now.
 
+## 1.23.1
+
+- **Share images' titles use the site's title font (Nippo).** Since 1.17.0, deploys run images built
+  from the public repository, which can't include the font, so the images' titles fell back to Inter
+  Bold. The images now read the font installed on the server, and the first update after this one
+  draws them all again with it.
+
 ## 1.23.0
 
 - **The Timeline holds any number of seasons.** Each map keeps a readable width, the row scrolls

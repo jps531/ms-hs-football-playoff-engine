@@ -110,6 +110,10 @@ services:
       POSTGRES_PASSWORD: "${PIPELINE_DB_PASSWORD:-${POSTGRES_PASSWORD}}"
     volumes:
       - share-assets:/opt/share
+      # The share images' fonts from the checkout, over the image's copy: Nippo (the titles' font) is
+      # installed on the server by hand and kept out of the repository, so the image CI builds never
+      # has it (backend/assets/fonts/README.md). Without the file, titles fall back to Inter Bold.
+      - ./backend/assets/fonts:/opt/prefect/flows/pipelines/backend/assets/fonts:ro
     networks:
       - mshsfootball
     depends_on:
