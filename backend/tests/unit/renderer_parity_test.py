@@ -250,6 +250,21 @@ REGIONS_TEAMS = {  # helmets: one in its colors, one image; the rest get initial
     "Leake": {"helmet_url": "https://res.cloudinary.com/x/leake.png"},
 }
 
+# A Counties page's season (regions.js / region_pages.py): one county's schools in three classes, two of
+# them in regions numbered 3 (6A and 2A: different colors), one with no town and an apostrophe; and a
+# school in another county.
+COUNTY = {
+    "season": 2027, "seasons": [2027, 2028], "label": "2027 and 2028", "regions": {},
+    "schools": [
+        {"school": "Terry", "slug": "terry", "class": 6, "region": 3, "county": "Hinds", "city": "Terry"},
+        {"school": "Jim Hill", "slug": "jim-hill", "class": 6, "region": 3, "county": "Hinds", "city": "Jackson"},
+        {"school": "St. Andrew’s", "slug": "st-andrews", "class": 2, "region": 3, "county": "Hinds", "city": ""},
+        {"school": "Raymond", "slug": "raymond", "class": 4, "region": 6, "county": "Hinds", "city": "Raymond"},
+        {"school": "Pearl", "slug": "pearl", "class": 6, "region": 3, "county": "Rankin", "city": "Pearl"},
+    ],
+}  # fmt: skip
+COUNTY_TEAMS = {"Terry": {"helmet_url": "https://res.cloudinary.com/x/terry.png"}}
+
 CASES = [
     *[(f"playoffPath {t['school']} {m} {c}", team_image.playoff_rounds(t, m, c), _call("standings", "playoffPath", t, m, c), "data")
       for t in (PATH_TEAM, {"school": "X", "odds": {}}) for m in ("tossup", "projected") for c in (3, 6)],
@@ -331,6 +346,13 @@ CASES = [
     *[(f"standingsHref {a}", rp.standings_href(5, 2, *a), _call("regions", "standingsHref", 5, 2, *a), "data")
       for a in ((None, 2026), (2026, 2026), (2025, 2026))],
     *[(f"seasonsLabel {s}", rp.seasons_label(s), _call("regions", "seasonsLabel", s), "data") for s in ([2027, 2028], [2026])],
+    *[(f"countyHeader {c}", rp.county_header(c, COUNTY), _call("regions", "countyHeader", c, COUNTY), "html") for c in ("Hinds", "Issaquena")],
+    *[(f"countyLists {c}", rp.county_lists(c, COUNTY, COUNTY_TEAMS), _call("regions", "countyLists", c, COUNTY, COUNTY_TEAMS), "html")
+      for c in ("Hinds", "Rankin", "Issaquena")],
+    ("countyPlaces", [{**p, "clazz": p["clazz"]} for p in rp.county_places(COUNTY["schools"][:4])],
+     _call("regions", "countyPlaces", COUNTY["schools"][:4]), "data"),
+    *[(f"countiesPath {c}", rp.counties_path(c), _call("regions", "countiesPath", c), "data") for c in ("Jefferson Davis", "DeSoto", None)],
+    *[(f"countyCount {n}", rp.county_count(COUNTY["schools"][:n]), _call("regions", "countyCount", COUNTY["schools"][:n]), "data") for n in (0, 1, 2, 4)],
 ]  # fmt: skip
 
 

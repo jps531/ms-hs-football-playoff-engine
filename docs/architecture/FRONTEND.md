@@ -15,6 +15,7 @@ There is no build step: what's in `nginx/html/` is what's served.
 | `/` | `index.html` | The front page: written by the pipeline (`landing_body` in `backend/helpers/static_pages.py`) and fetched as `/share/front.html`; `landing.js` holds the fallback for when it isn't there. |
 | `/standings/{class}a`, `/standings/{class}a/{region}`, `/brackets/{class}a` | `index.html` | `static/js/app.js`, from the `/api/v1` endpoints, reading the path and query (`routes.js`). |
 | `/maps/regions/{class}a` (Season), `…/compare`, `…/timeline` | `index.html` | `app.js` with `regions.js`, from the files the share-assets step writes to `/static/regions/` (the map of the state and counties, and each season's schools and region shapes), not the API. The old `/regions/{class}a` redirects here. |
+| `/maps/counties`, `/maps/counties/{county}` | `index.html` | `app.js` with `regions.js`, from the same files: every county, shaded by its MHSAA schools, to pick one; a county's schools with their classes and regions (the county a school is in is its campus's). nginx serves the 82 counties' addresses only. |
 | `/feedback` | `index.html` | `app.js`, with `feedback.js` and `turnstile.js`. |
 | `/about` | `about.html` | Plain HTML. `/methodology`, its old address, redirects there. |
 | `/moderate` | `moderate.html` | `moderate.js` (with `auth.js` and `moderation.js`), after an Auth0 sign-in. |

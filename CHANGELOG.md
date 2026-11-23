@@ -5,6 +5,18 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.25.0
+
+- **Counties, a new kind of map.** Pick "Counties" beside the classes (on a phone, the Regions |
+  Counties switch above them) to see every county shaded by how many MHSAA schools it has. Pick one,
+  on the map, in the list or by name, to see its schools whatever their classes, each with its
+  region: the county outlined, each school's region in its own color (two regions with the same
+  number in different classes never share one), and the regions' other schools as smaller dots.
+  A school's county is the one its campus is in.
+- Only MHSAA schools are counted or shown, and the pages say so: schools in other associations,
+  such as MAIS, aren't included.
+- The Counties pages read without JavaScript too, and are in the sitemap.
+
 ## 1.24.0
 
 - **Share on Compare and on the Timeline shares what you're looking at.** Before, both offered the

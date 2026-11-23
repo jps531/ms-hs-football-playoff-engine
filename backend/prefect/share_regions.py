@@ -17,6 +17,10 @@ For every season whose regions are loaded (each cycle file's seasons with school
 
 and for the newest choice (the page's default):
 
+- ``body/counties.html``, ``meta/counties.html`` and each county's ``body/counties-{slug}.html`` and
+  ``meta/counties-{slug}.html``: the Counties pages without JavaScript, and their link previews (the
+  site's card);
+
 - ``body/regions-{c}.html`` and ``meta/regions-{c}.html`` (+ ``meta/regions-{c}/{slug}.html`` for a
   team's link): the page without JavaScript, and its link preview, with the previews
   ``og/regions-{c}.png`` and ``og/regions-{c}/{slug}.png``.
@@ -47,6 +51,12 @@ from backend.helpers.image_jobs import (
 )
 from backend.helpers.region_files import REGIONS_DIR
 from backend.helpers.region_pages import (
+    counties_body,
+    counties_path,
+    counties_trail,
+    county_body,
+    county_description,
+    county_title,
     regions_body,
     regions_description,
     regions_path,
@@ -55,6 +65,7 @@ from backend.helpers.region_pages import (
     school_rows,
     season_options,
     season_payload,
+    seasons_label,
     team_regions_description,
 )
 from backend.helpers.share_cards import description, meta_tags, slugify
@@ -320,4 +331,38 @@ def write_regions(
             if path.stem not in keep:
                 path.unlink(missing_ok=True)
         sitemap.append((regions_path(clazz), None, [image]))
+
+    # The Counties pages (the newest regions): every county, and each county's schools. Their link
+    # previews are the site's card for now.
+    names = sorted(region_map.counties(), key=str.lower)
+    card = f"{site_url}/static/og/site.png?v={today:%Y%m%d}"
+    write(out_dir / "body" / "counties.html", counties_body(names, payload))
+    write(
+        out_dir / "meta" / "counties.html",
+        meta_tags(
+            "Counties",
+            description(
+                f"Every Mississippi county's MHSAA football schools for the {seasons_label(payload['seasons'])}, "
+                "with each school's class and region, on a map."
+            ),
+            card,
+            f"{site_url}{counties_path()}",
+            json_ld(breadcrumb_ld(site_url, counties_trail())),
+        ),
+    )
+    sitemap.append((counties_path(), None, []))
+    for county in names:
+        slug = counties_path(county).rsplit("/", 1)[1]
+        write(out_dir / "body" / f"counties-{slug}.html", county_body(county, payload, by_school))
+        write(
+            out_dir / "meta" / f"counties-{slug}.html",
+            meta_tags(
+                county_title(county),
+                description(county_description(county, payload)),
+                card,
+                f"{site_url}{counties_path(county)}",
+                json_ld(breadcrumb_ld(site_url, counties_trail(county))),
+            ),
+        )
+        sitemap.append((counties_path(county), None, []))
     return counts, sitemap

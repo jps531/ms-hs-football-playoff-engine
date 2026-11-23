@@ -6,6 +6,8 @@
 //   /maps/regions/3a           a class's regions on a map (/regions/3a, its first address, too)
 //   /maps/regions/3a/compare   two of them side by side (?vs=2026&vsclass=4a: the second map's)
 //   /maps/regions/3a/timeline  every season's, in order (?team=: following one school)
+//   /maps/counties             every county, to pick one
+//   /maps/counties/hinds       one county's schools, their classes and regions
 //   ?season=2025&week=9&odds=tossup&team=st-martin
 // Defaults are left out of the URL (current season, latest week, Projected,
 // no team), so a link to "now" is just the path. No DOM, so it runs under
@@ -40,7 +42,8 @@ const classFromSlug = (v) => {
 /**
  * Read a location into a route:
  * { page, clazz, region, season, week, odds, team, legacy }.
- * page is "landing", "class", "region", "bracket", "regions", "feedback", or "notfound". team is the raw
+ * page is "landing", "class", "region", "bracket", "regions", "counties", "feedback", or "notfound"
+ * (on "counties", county is the county's slug, or null for the statewide picker). team is the raw
  * `team` value (a slug, or a school name in an old link). legacy is true for
  * an old query-string link (?class=3&region=6) the app should rewrite.
  */
@@ -59,6 +62,7 @@ export function parseLocation(pathname, search) {
     view: "map", // a map page's view: "map", "compare" or "timeline"
     vs: positiveInt(q.get("vs")), // compare: the second map's season (null: the one before the first's)
     vsClass: classFromSlug(q.get("vsclass")), // compare: the second map's class (null: the first's)
+    county: null, // the Counties pages: the county's slug (null: the statewide picker)
   };
   const parts = pathname.replace(/\/+$/, "").split("/").filter(Boolean);
 
@@ -89,6 +93,12 @@ export function parseLocation(pathname, search) {
     const clazz = classFromSlug(parts[2]);
     return clazz ? { ...route, page: "regions", clazz, view: parts[3] ?? "map" } : route;
   }
+  // The Counties pages: /maps/counties (pick one) and /maps/counties/hinds. Whether a slug is one of
+  // the state's counties is the page's to say (it has the map); nginx serves only those.
+  if (parts[0] === "maps" && parts[1] === "counties" && parts.length <= 3) {
+    if (parts.length === 3 && !/^[a-z]+(?:-[a-z]+)*$/.test(parts[2])) return route;
+    return { ...route, page: "counties", county: parts[2] ?? null };
+  }
   if (parts[0] === "regions" && parts.length === 2) {
     const clazz = classFromSlug(parts[1]);
     return clazz ? { ...route, page: "regions", clazz } : route;
@@ -112,9 +122,12 @@ export function buildPath(route, { currentSeason = null, regionsSeason = null } 
     path = `/brackets/${route.clazz}a`;
   } else if (route.page === "regions") {
     path = `/maps/regions/${route.clazz}a${route.view === "compare" || route.view === "timeline" ? `/${route.view}` : ""}`;
+  } else if (route.page === "counties") {
+    path = route.county ? `/maps/counties/${route.county}` : "/maps/counties";
   }
   const q = new URLSearchParams();
-  const defaultSeason = route.page === "regions" ? regionsSeason : currentSeason;
+  const maps = route.page === "regions" || route.page === "counties";
+  const defaultSeason = maps ? regionsSeason : currentSeason;
   const everySeason = route.page === "regions" && route.view === "timeline"; // the timeline shows them all
   if (route.season && route.season !== defaultSeason && !everySeason) q.set("season", route.season);
   if (route.week) q.set("week", route.week);
