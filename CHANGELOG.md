@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.22.0
+
+- **Zoom in on a map and the schools are named.** Each name sits beside its dot where it covers no
+  other dot or name, the picked team's region first; the other regions' names are dimmed. Names with
+  no room are left out until you zoom in further.
+- **Pointing at a dot shows more**: the school's helmet, name and mascot, its region and town, edged
+  in its color.
+
 ## 1.21.0
 
 - **On the Maps, a picked team is followed everywhere.** Pick a team, on a map or with the search, and

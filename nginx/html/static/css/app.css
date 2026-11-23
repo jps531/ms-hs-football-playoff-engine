@@ -1875,10 +1875,31 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
    no bigger than the page already does (the state is taller than it is wide, and the bars take height). */
 @media (max-width: 600px) { .regions-map__tools .regions-map__full { display: none; } }
 .regions-map.is-full .regions-map__picked { flex: none; max-height: 35vh; overflow-y: auto; }
-.regions-map__hover {
-  position: absolute; pointer-events: none; white-space: nowrap;
-  padding: 4px 8px; border-radius: 6px; background: var(--text-primary); color: var(--surface-page); font-size: 13px; font-weight: 600;
+/* A dot's tooltip (regions.js hoverHtml): helmet, name and mascot over the region and town, edged in
+   the team's color. */
+.regions-map__hover { position: absolute; z-index: 2; pointer-events: none; white-space: nowrap; }
+.map-tip {
+  display: grid; gap: 4px; padding: 8px 12px 8px 10px; border-radius: 8px;
+  background: var(--surface-card); color: var(--text-primary); border: 1px solid var(--border);
+  border-left: 4px solid var(--team-ui-light, var(--border)); box-shadow: 0 6px 18px rgb(0 0 0 / 0.16); font-size: 13px;
 }
+.dark .map-tip { border-left-color: var(--team-ui-dark, var(--border)); box-shadow: 0 6px 18px rgb(0 0 0 / 0.5); }
+.map-tip__head { display: flex; align-items: center; gap: 8px; }
+.map-tip__names { display: grid; line-height: 1.2; }
+.map-tip__name { font-family: var(--font-display); font-size: 15px; }
+.map-tip__mascot { color: var(--text-secondary); font-size: 12px; }
+.map-tip__place { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+.map-tip__place .region-chip { width: 18px; height: 18px; font-size: 11px; }
+/* The schools' names on a zoomed-in map, beside their dots, with a halo of the page's color to read
+   over county lines and region fills. */
+.map-labels { display: none; }
+.regions-map__svg.is-named .map-labels { display: inline; }
+.map-label {
+  fill: var(--text-primary); font-weight: 600; dominant-baseline: central; pointer-events: none;
+  stroke: var(--surface-page); stroke-linejoin: round; paint-order: stroke;
+}
+.map-label[hidden] { display: none; }
+.map-label.is-dim { opacity: 0.35; }
 .regions-map__picked { margin-top: 10px; }
 .picked__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .picked__name { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; line-height: 1.2; }
