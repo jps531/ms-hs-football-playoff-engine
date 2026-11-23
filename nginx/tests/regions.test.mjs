@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compareChanges, compareChangesHtml, hoverSpot, keepInView, mapsViews, nameIn, notOnMapHtml, pickedHtml, regionsLists, regionView, wholeView } from "../html/static/js/regions.js";
+import { compareChanges, compareChangesHtml, hoverSpot, keepInView, mapsViews, nameIn, notOnMapHtml, pickedHtml, regionsLists, regionView, timelinePathHtml, timelineSeasons, timelineSpan, wholeView } from "../html/static/js/regions.js";
 
 const BASE = { width: 3324, height: 5355 };
 const TIP = { w: 100, h: 24 };
@@ -123,12 +123,33 @@ test("what changed, as it reads: which way a school moved, and where a closed on
 });
 
 test("the views every map page has, the one shown marked", () => {
-  const html = mapsViews("compare", { map: "/maps/regions/4a?team=bay", compare: "/maps/regions/4a/compare?team=bay" });
+  const html = mapsViews("compare", {
+    map: "/maps/regions/4a?team=bay", compare: "/maps/regions/4a/compare?team=bay", timeline: "/maps/regions/4a/timeline?team=bay",
+  });
   assert.match(html, /href="\/maps\/regions\/4a\?team=bay">Season<\/a>/);
   assert.match(html, /href="\/maps\/regions\/4a\/compare\?team=bay" aria-current="page">Compare<\/a>/);
+  assert.match(html, /href="\/maps\/regions\/4a\/timeline\?team=bay">Timeline<\/a>/);
 });
 
 test("a team picked on one map says where it is when it isn't on the other", () => {
   assert.match(notOnMapHtml("Corinth", { class: 3, region: 1 }, "2027 and 2028"), /Corinth<\/strong> isn’t on this map: Region 1-3A in 2027 and 2028\./);
   assert.match(notOnMapHtml("Walnut", null, "2027 and 2028"), /not in a region in 2027 and 2028/);
+});
+
+test("the timeline: every season, oldest first, each in the class a followed team was in then", () => {
+  const options = [{ season: 2027, seasons: [2027, 2028], label: "2027 and 2028" }, { season: 2025, seasons: [2025], label: "2025" }]; // newest first, as index.json
+  const payloads = [NEW.payload, OLD.payload];
+  // No team: every map is the page's class.
+  assert.deepEqual(timelineSeasons(options, payloads, 4).map((s) => [s.option.season, s.clazz, s.row]), [[2025, 4, null], [2027, 4, null]]);
+  assert.equal(timelineSpan(timelineSeasons(options, payloads, 4)), "2025 to 2028 seasons");
+  assert.equal(timelineSpan(timelineSeasons(options.slice(1), payloads.slice(1), 4)), "2025 season");
+  // Corinth: 4A in 2025, 3A in 2027 and 2028.
+  const corinth = timelineSeasons(options, payloads, 4, { name: "Corinth", season: 2027 });
+  assert.deepEqual(corinth.map((s) => [s.option.season, s.clazz, s.row.region]), [[2025, 4, 1], [2027, 3, 1]]);
+  // Leake, found under its 2025 name; North Tippah, a new school, not in a region in 2025 (the page's class then).
+  assert.equal(timelineSeasons(options, payloads, 4, { name: "Leake", season: 2027 })[0].row.school, "Leake Central");
+  const tippah = timelineSeasons(options, payloads, 4, { name: "North Tippah", season: 2027 });
+  assert.deepEqual(tippah.map((s) => [s.clazz, s.row?.region ?? null]), [[4, null], [3, 2]]);
+  assert.match(timelinePathHtml("North Tippah", tippah), /<strong>North Tippah<\/strong>: <span class="timeline-path__step">not in a region in 2025<\/span>.*Region 2-3A in 2027 and 2028/);
+  assert.match(timelinePathHtml("Corinth", corinth), /Region 1-4A in 2025<\/span><span class="timeline-path__arrow" aria-hidden="true"> → <\/span><span class="visually-hidden">, then <\/span><span class="timeline-path__step">Region 1-3A in 2027 and 2028/);
 });

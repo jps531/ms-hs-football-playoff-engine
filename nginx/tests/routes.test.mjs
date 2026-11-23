@@ -87,7 +87,11 @@ test("regions pages: /maps/regions/{class}, its season left out when it's the pa
   assert.equal(buildPath(c, opts), "/maps/regions/5a/compare?vs=2025&vsclass=4a&team=greenwood");
   assert.equal(buildPath({ ...c, vs: null, vsClass: 5, team: null }, opts), "/maps/regions/5a/compare");
   assert.equal(parseLocation("/maps/regions/5a", "").view, "map");
-  assert.equal(parseLocation("/maps/regions/5a/timeline", "").page, "notfound");
+  // Timeline: every season, so no ?season= (nor Compare's fields) in its address; a team followed.
+  const t = parseLocation("/maps/regions/5a/timeline", "?team=greenwood");
+  assert.deepEqual([t.page, t.clazz, t.view, t.team], ["regions", 5, "timeline", "greenwood"]);
+  assert.equal(buildPath({ ...t, season: 2025, vs: 2026, vsClass: 4 }, opts), "/maps/regions/5a/timeline?team=greenwood");
+  assert.equal(parseLocation("/maps/regions/5a/history", "").page, "notfound");
   // Compare's fields stay off other pages' addresses.
   assert.equal(buildPath({ ...c, page: "class", region: null, team: null }, opts), "/standings/5a");
 });
