@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.20.0
+
+- **A Timeline of a class's regions.** Every map page has a third view, Timeline: a map for each season
+  of regions, oldest first (2025, 2026, and 2027 and 2028 so far). Pick a team on any map, or with
+  "Follow a team", to follow it through every season: each map shows its class and region that season,
+  and its region's other schools, so you can see who it has shared a region with over the years. On a
+  phone, swipe from one season to the next.
+
 ## 1.19.0
 
 - **Compare two region maps side by side.** Every map page now has two views, Season and Compare. Compare

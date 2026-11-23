@@ -5,6 +5,7 @@
 //   /brackets/3a               a class's playoff bracket
 //   /maps/regions/3a           a class's regions on a map (/regions/3a, its first address, too)
 //   /maps/regions/3a/compare   two of them side by side (?vs=2026&vsclass=4a: the second map's)
+//   /maps/regions/3a/timeline  every season's, in order (?team=: following one school)
 //   ?season=2025&week=9&odds=tossup&team=st-martin
 // Defaults are left out of the URL (current season, latest week, Projected,
 // no team), so a link to "now" is just the path. No DOM, so it runs under
@@ -55,7 +56,7 @@ export function parseLocation(pathname, search) {
     odds: odds === "projected" || odds === "tossup" ? odds : null,
     team: q.get("team") || null,
     legacy: false,
-    view: "map", // a map page's view: "map", or "compare"
+    view: "map", // a map page's view: "map", "compare" or "timeline"
     vs: positiveInt(q.get("vs")), // compare: the second map's season (null: the one before the first's)
     vsClass: classFromSlug(q.get("vsclass")), // compare: the second map's class (null: the first's)
   };
@@ -84,7 +85,7 @@ export function parseLocation(pathname, search) {
   }
   // The Maps section's regions (/maps/regions/3a), and their first address (/regions/3a), which
   // nginx redirects; the app writes the new one back to the address bar.
-  if (parts[0] === "maps" && parts[1] === "regions" && (parts.length === 3 || (parts.length === 4 && parts[3] === "compare"))) {
+  if (parts[0] === "maps" && parts[1] === "regions" && (parts.length === 3 || (parts.length === 4 && ["compare", "timeline"].includes(parts[3])))) {
     const clazz = classFromSlug(parts[2]);
     return clazz ? { ...route, page: "regions", clazz, view: parts[3] ?? "map" } : route;
   }
@@ -110,11 +111,12 @@ export function buildPath(route, { currentSeason = null, regionsSeason = null } 
   } else if (route.page === "bracket") {
     path = `/brackets/${route.clazz}a`;
   } else if (route.page === "regions") {
-    path = `/maps/regions/${route.clazz}a${route.view === "compare" ? "/compare" : ""}`;
+    path = `/maps/regions/${route.clazz}a${route.view === "compare" || route.view === "timeline" ? `/${route.view}` : ""}`;
   }
   const q = new URLSearchParams();
   const defaultSeason = route.page === "regions" ? regionsSeason : currentSeason;
-  if (route.season && route.season !== defaultSeason) q.set("season", route.season);
+  const everySeason = route.page === "regions" && route.view === "timeline"; // the timeline shows them all
+  if (route.season && route.season !== defaultSeason && !everySeason) q.set("season", route.season);
   if (route.week) q.set("week", route.week);
   if (route.odds && route.odds !== "projected") q.set("odds", route.odds);
   if (route.page === "regions" && route.view === "compare") {

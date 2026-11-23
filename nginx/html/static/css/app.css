@@ -1915,6 +1915,30 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
     width: min(100%, calc((100svh - 300px) * 3324 / 5355));
   }
 }
+/* ------------------------------------------------------------- timeline (regions.js timelinePage) */
+/* A map for each season, oldest first, side by side; on a phone, a row to swipe through (the next map
+   peeking in at the edge, so it's clear there's more). */
+.timeline { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+.timeline .regions-map { position: static; }
+.timeline__label { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 0 0 8px; font-family: var(--font-display); font-size: 1.15rem; }
+.timeline__class { color: var(--text-secondary); font-size: 0.95rem; }
+@media (min-width: 761px) {
+  .timeline .regions-map__frame, .timeline .regions-map__tools, .timeline .regions-map__picked {
+    margin-inline: auto;
+    width: min(100%, calc((100vh - 330px) * 3324 / 5355));
+    width: min(100%, calc((100svh - 330px) * 3324 / 5355));
+  }
+}
+@media (max-width: 760px) {
+  .timeline {
+    grid-auto-columns: 85%; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+    margin-inline: -16px; padding: 0 16px 8px; scroll-padding-inline: 16px;
+  }
+  .timeline__season { scroll-snap-align: start; }
+}
+.timeline-path { margin: 0 0 20px; font-size: 15px; line-height: 1.6; }
+.timeline-path__arrow { color: var(--text-secondary); }
+
 .compare-changes { margin-top: 32px; }
 .compare-changes__title { margin: 0 0 12px; font-family: var(--font-display); font-size: 1.4rem; }
 .compare-changes__groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 20px 32px; align-items: start; }

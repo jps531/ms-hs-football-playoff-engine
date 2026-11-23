@@ -159,11 +159,12 @@ export function mapFigure(base, payload, clazz, { full = true } = {}) {
 
 /**
  * The views every map page has, as links in the bracket's half switch's style (.half-control): Season
- * (one season's map; the "map" view) and Compare (two side by side). *view* is the one shown; *hrefs* is
- * each one's address ({ map, compare }), keeping the season and picked team.
+ * (one season's map; the "map" view), Compare (two side by side) and Timeline (every season's, in
+ * order). *view* is the one shown; *hrefs* is each one's address ({ map, compare, timeline }), keeping
+ * the season and picked team.
  */
 export function mapsViews(view, hrefs) {
-  const views = [["map", "Season"], ["compare", "Compare"]];
+  const views = [["map", "Season"], ["compare", "Compare"], ["timeline", "Timeline"]];
   return `<nav class="half-control maps-views" aria-label="View">`
     + views.map(([key, label]) => `<a class="half-control__item maps-views__item" href="${esc(hrefs[key])}"${key === view ? ' aria-current="page"' : ""}>${label}</a>`).join("")
     + "</nav>";
@@ -283,6 +284,58 @@ export function compareChangesHtml(changes, teams = {}) {
 export function notOnMapHtml(name, school, label) {
   return `<p class="picked__facts"><strong>${esc(name)}</strong> isn’t on this map: `
     + `${esc(school ? `${placeIn(school, label)}` : `not in a region in ${label}`)}.</p>`;
+}
+
+// ------------------------------------------------------------- timeline
+
+/**
+ * The timeline's maps, oldest first: one for each of *options* (the seasons of regions, any order) with
+ * its data (*payloads*, in the same order). Each shows *clazz*, or, following a team (*follow*: { name,
+ * season }, its name in a season), the class the team was in that season. Each is { option, payload,
+ * clazz, row }: row is the team's line that season (null: not in a region then, or no team followed).
+ */
+export function timelineSeasons(options, payloads, clazz, follow = null) {
+  return options.map((option, i) => ({ option, payload: payloads[i] }))
+    .sort((a, b) => a.option.season - b.option.season)
+    .map(({ option, payload }) => {
+      const name = follow && nameIn(follow.name, follow.season, option.season);
+      const row = name ? payload.schools.find((r) => r.school === name) ?? null : null;
+      return { option, payload, clazz: row ? row.class : clazz, row };
+    });
+}
+
+/** The seasons the timeline covers: "2025 to 2028 seasons" (or "2026 season", just one). */
+export function timelineSpan(seasons) {
+  const from = seasons[0]?.option.season;
+  const to = seasons[seasons.length - 1]?.option.seasons?.at(-1) ?? seasons[seasons.length - 1]?.option.season;
+  if (from == null) return "";
+  return from === to ? `${from} season` : `${from} to ${to} seasons`;
+}
+
+/** The followed team's way through the seasons: "Purvis: Region 4-5A in 2025 → … → Region 7-4A in 2027 and 2028". */
+export function timelinePathHtml(name, seasons) {
+  const steps = seasons.map((s) => `<span class="timeline-path__step">${esc(placeIn(s.row, s.option.label))}</span>`);
+  return `<p class="timeline-path"><strong>${esc(name)}</strong>: ${steps.join('<span class="timeline-path__arrow" aria-hidden="true"> → </span><span class="visually-hidden">, then </span>')}</p>`;
+}
+
+/**
+ * The Timeline view: the page's heading, its views and controls, a map for each season of regions in
+ * order (each zoomed to the followed team's region, if one is), and the team's way through them.
+ * *seasons* is timelineSeasons'; *follow* is the followed team's name, or null.
+ */
+export function timelinePage(clazz, base, seasons, { controls = "", share = "", views = "", follow = null } = {}) {
+  const span = timelineSpan(seasons);
+  const note = follow
+    ? `Each map shows ${esc(follow)}’s class that season. Pick another team to follow it, or an empty spot on a map to stop.`
+    : "Pick a team on any map to follow it through every season: each map shows its class and region that season.";
+  return `<div class="page regions-page regions-page--timeline"><header class="entry-head">`
+    + `${breadcrumbs(regionsTrail(clazz))}<div class="title-row"><h1 class="title">${esc(regionsTitle(clazz))}</h1>${share}</div>`
+    + `<p class="regions-sub">${esc(span)}</p>`
+    + `${views}${controls}<p class="focus-note muted regions-note">${note}</p></header>`
+    + (follow ? timelinePathHtml(follow, seasons) : "")
+    + `<div class="timeline">${seasons.map((s, i) => `<section class="timeline__season" data-season="${s.option.season}" data-index="${i}">`
+      + `<h2 class="timeline__label">${esc(s.option.label)} <span class="timeline__class">${s.clazz}A</span></h2>`
+      + `${mapFigure(base, s.payload, s.clazz, { full: false })}</section>`).join("")}</div></div>`;
 }
 
 /**

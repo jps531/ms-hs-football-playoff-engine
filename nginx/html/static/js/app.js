@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -2651,6 +2651,10 @@ async function renderRegions(token) {
       await renderCompare(token, index);
       return;
     }
+    if (route.view === "timeline") {
+      await renderTimeline(token, index);
+      return;
+    }
     const option = pickOption(index, route.season);
     const [base, payload, teams] = await Promise.all([
       regionsFile("map.json"),
@@ -2721,9 +2725,86 @@ function regionsFinder(placeholder) {
     + `<p class="visually-hidden" role="status"></p></form>`;
 }
 
-/** Each view's address (Map, Compare), keeping the class, the first map's season and the picked team. */
+/** Each view's address (Season, Compare, Timeline), keeping the class, the season and the picked team. */
 function mapsViewHrefs() {
-  return { map: hrefWith({ view: "map", vs: null, vsClass: null }), compare: hrefWith({ view: "compare" }) };
+  return {
+    map: hrefWith({ view: "map", vs: null, vsClass: null }),
+    compare: hrefWith({ view: "compare" }),
+    timeline: hrefWith({ view: "timeline", vs: null, vsClass: null }),
+  };
+}
+
+/**
+ * The Timeline view: a map for each season of regions, oldest first, all of the page's class; or,
+ * following a team (?team=), each of the class it was in that season, zoomed to its region. Picking a
+ * team on any map follows it (the page is drawn again: its maps' classes can change); an empty spot
+ * stops following.
+ */
+async function renderTimeline(token, index) {
+  const options = index.options;
+  const [base, ...payloads] = await Promise.all([regionsFile("map.json"), ...options.map((o) => regionsFile(`${o.season}.json`))]);
+  const helmets = await Promise.all(options.map((o) => teamsBySchool(o.season).catch(() => ({}))));
+  if (token !== renderToken) return;
+  const teams = Object.assign({}, ...[...helmets].reverse()); // the newest season's helmet wins
+  // The team asked for (?team=, a slug): its name in the newest season that has it.
+  const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+  let follow = null;
+  for (const [i, o] of options.entries()) { // index.options run newest first
+    const row = wanted && payloads[i].schools.find((r) => r.slug === wanted);
+    if (row) {
+      follow = { name: row.school, season: o.season };
+      break;
+    }
+  }
+  const seasons = timelineSeasons(options, payloads, route.clazz, follow);
+  route.season = null;
+  route.teamName = follow?.name ?? null;
+  const newest = seasons[seasons.length - 1];
+  regionsState = {
+    clazz: route.clazz, season: newest.option.season, option: newest.option, payload: newest.payload,
+    picked: newest.row && newest.row.class === route.clazz ? newest.row : null,
+  };
+  app.innerHTML = timelinePage(route.clazz, base, seasons, {
+    controls: `<div class="regions-controls">${regionsFinder("Follow a team")}</div>`,
+    share: shareButton("map"),
+    views: mapsViews("timeline", mapsViewHrefs()),
+    follow: follow?.name ?? null,
+  });
+  const followTeam = (name, via) => {
+    if (name && via) track("team_picked", { from: "timeline", via, team: name });
+    navigate(hrefWith({ team: name }), { replace: true, scroll: false });
+  };
+  for (const [i, side] of seasons.entries()) {
+    const map = wireRegionsMap(app.querySelector(`.timeline__season[data-index="${i}"]`), base, side.payload, side.clazz, {
+      teams,
+      elsewhere: () => notOnMapHtml(follow.name, null, side.option.label),
+      onPick: (slug, via) => {
+        const row = slug && side.payload.schools.find((r) => r.slug === slug);
+        if ((row?.school ?? null) !== (follow?.name ?? null)) followTeam(row?.school ?? null, via);
+      },
+      onMove: (how) => track("regions_map_moved", { class: side.clazz, how, view: "timeline" }),
+    });
+    // Each map shows the followed team where it was that season (or says it wasn't in a region).
+    if (follow) map?.pick(side.row ? side.row.slug : "-", { reveal: false });
+  }
+  const findable = [];
+  const names = new Set();
+  for (const [i, o] of options.entries()) {
+    for (const r of payloads[i].schools) {
+      if (names.has(r.school)) continue;
+      names.add(r.school);
+      findable.push({ ...teams[r.school], ...r, class_: r.class, season: o.season });
+    }
+  }
+  teamCombobox(app.querySelector("[data-regions-find]"), () => findable, (team, input) => {
+    input.value = "";
+    track("team_search_used", { team: team.school, from: "timeline" });
+    followTeam(team.school, "search");
+  });
+  renderScrubber(route.clazz);
+  showContext(contextHtml(regionsTitle(route.clazz), { week: timelineSpan(seasons) }, null, { bar: true }));
+  history.replaceState(null, "", hrefWith({}));
+  document.title = pageTitle(route.clazz, null, "regions");
 }
 
 /**
