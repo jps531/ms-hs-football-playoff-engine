@@ -82,6 +82,11 @@ Record these in `backend/helpers/data_helpers.py`, next to the region file:
 - **A school goes by a new name while the sources still use the old one**: `SCHOOL_RENAMES`. The
   pipelines file everything under the new name and still ask the sources for the old one; see
   Leake below. Add it to `FORMER_SLUGS` too.
+- **Schools merged into one** (on top of the rename or successor above, and the others' lines in
+  `SCHOOL_STOPPED_PLAYING`): `SCHOOL_CONSOLIDATIONS`, (new school, first season, [the schools merged,
+  the one whose campus it carries first]), and the same line in `SCHOOL_CONSOLIDATIONS` in
+  `nginx/html/static/js/regions.js`. The Maps' Timeline follows the new school back through them.
+  `school_renames_test.py` checks the lists agree.
 
 Then list the school under its new name in the region file. A school MHSAA moved mid-cycle gets a
 line for each season (`seasons` 2025 on one, 2026 on the other).

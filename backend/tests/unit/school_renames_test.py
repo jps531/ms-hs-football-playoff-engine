@@ -9,7 +9,9 @@ import pytest
 
 import backend.prefect.ahsfhs_schedule_pipeline as schedule
 from backend.helpers.data_helpers import (
+    SCHOOL_CONSOLIDATIONS,
     SCHOOL_RENAMES,
+    SCHOOL_STOPPED_PLAYING,
     SCHOOL_SUCCESSORS,
     school_name_for_season,
     source_name_for_season,
@@ -81,6 +83,33 @@ def test_old_team_links_are_mapped_for_every_rename():
     routes = (ROOT / "nginx" / "html" / "static" / "js" / "routes.js").read_text()
     slugs = dict(re.findall(r'"([a-z0-9-]+)": "([^"]+)"', re.search(r"FORMER_SLUGS = \{([^}]*)\}", routes).group(1)))
     assert slugs == {slugify(old): new for old, new, _ in [*SCHOOL_RENAMES, *SCHOOL_SUCCESSORS]}
+
+
+def test_every_consolidation_matches_the_renames_successors_and_closures():
+    """A consolidation's first school is the new one's rename or predecessor; every other one stopped
+    playing the season before, its note naming the new school; and every closure into another school is a
+    consolidation listed here."""
+    carried = {(old, new, first) for old, new, first in [*SCHOOL_RENAMES, *SCHOOL_SUCCESSORS]}
+    stopped = {school: (last, why) for school, last, why in SCHOOL_STOPPED_PLAYING}
+    for new, first, merged in SCHOOL_CONSOLIDATIONS:
+        assert (merged[0], new, first) in carried, new
+        for school in merged[1:]:
+            last, why = stopped[school]
+            assert last == first - 1 and f"Consolidated into {new}" in why, school
+    merged_away = {school for _, _, merged in SCHOOL_CONSOLIDATIONS for school in merged[1:]}
+    assert {s for s, (_, why) in stopped.items() if why.startswith("Consolidated into")} == merged_away
+
+
+def test_the_maps_timeline_knows_every_consolidation():
+    """regions.js SCHOOL_CONSOLIDATIONS lets the timeline follow a school back through the ones merged
+    into it; it must be data_helpers' list."""
+    regions = (ROOT / "nginx" / "html" / "static" / "js" / "regions.js").read_text()
+    block = re.search(r"SCHOOL_CONSOLIDATIONS = \[(.*?)\];\n", regions, re.S).group(1)
+    found = [
+        (new, int(first), re.findall(r'"([^"]+)"', members))
+        for new, first, members in re.findall(r'\["([^"]+)", (\d{4}), \[([^\]]*)\]\]', block)
+    ]
+    assert found == [(new, first, list(merged)) for new, first, merged in SCHOOL_CONSOLIDATIONS]
 
 
 def test_the_maps_compare_knows_every_rename():

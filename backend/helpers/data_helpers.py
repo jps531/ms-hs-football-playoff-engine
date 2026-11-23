@@ -357,6 +357,17 @@ SCHOOL_STOPPED_PLAYING: list[tuple[str, int, str]] = [
 ]
 
 
+# Schools that merged into one: (the new school, its first season, the schools merged into it, the one
+# whose campus and identity it carries first). The first is the new school's own name in
+# SCHOOL_RENAMES or its predecessor in SCHOOL_SUCCESSORS; the rest stopped playing the season before
+# (SCHOOL_STOPPED_PLAYING). The Maps' timeline shows them all for the seasons before (regions.js
+# SCHOOL_CONSOLIDATIONS mirrors this; school_renames_test.py keeps them consistent).
+SCHOOL_CONSOLIDATIONS: list[tuple[str, int, list[str]]] = [
+    ("Leake", 2026, ["Leake Central", "Leake County"]),
+    ("North Tippah", 2027, ["Walnut", "Falkner"]),
+]
+
+
 def school_name_for_season(name: str, season: int) -> str:
     """The site's name for a school the sources call *name*, in *season* ("Leake Central" in 2026 is "Leake")."""
     for old, new, first in SCHOOL_RENAMES:

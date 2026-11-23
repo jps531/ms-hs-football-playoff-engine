@@ -5,6 +5,18 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.23.0
+
+- **The Timeline holds any number of seasons.** Each map keeps a readable width, the row scrolls
+  sideways when there are more than fit, and it opens at the newest.
+- **Following a team on the Timeline shows its seasons in a table** under the maps: its region each
+  season and the region's other schools.
+- **A consolidated school's history goes back through the schools merged into it.** Follow North
+  Tippah and 2025 and 2026 show Walnut and Falkner, each with its region; follow Leake and 2025 shows
+  Leake Central and Leake County.
+- On Compare, the class picker at the top sets both maps' class (a map's own picker still sets just
+  that map's).
+
 ## 1.22.0
 
 - **Zoom in on a map and the schools are named.** A name sits right beside its dot only where that

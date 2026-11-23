@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compareChanges, compareChangesHtml, hoverHtml, hoverSpot, keepInView, mapsViews, nameIn, notOnMapHtml, pickedHtml, placeLabels, regionView, regionsLists, timelinePathHtml, timelineSeasons, timelineSpan, wholeView } from "../html/static/js/regions.js";
+import { compareChanges, compareChangesHtml, hoverHtml, hoverSpot, keepInView, mapsViews, nameIn, notOnMapHtml, pickedHtml, placeLabels, regionView, regionsLists, namesIn, timelineSeasons, timelineTable, timelineSpan, wholeView } from "../html/static/js/regions.js";
 
 const BASE = { width: 3324, height: 5355 };
 const TIP = { w: 100, h: 24 };
@@ -146,12 +146,28 @@ test("the timeline: every season, oldest first, each in the class a followed tea
   // Corinth: 4A in 2025, 3A in 2027 and 2028.
   const corinth = timelineSeasons(options, payloads, 4, { name: "Corinth", season: 2027 });
   assert.deepEqual(corinth.map((s) => [s.option.season, s.clazz, s.row.region]), [[2025, 4, 1], [2027, 3, 1]]);
-  // Leake, found under its 2025 name; North Tippah, a new school, not in a region in 2025 (the page's class then).
+  // Leake, as Leake Central in 2025 (and Leake County, merged into it).
   assert.equal(timelineSeasons(options, payloads, 4, { name: "Leake", season: 2027 })[0].row.school, "Leake Central");
+  // North Tippah, before 2027: Walnut (its campus) and Falkner, the map in Walnut's class.
   const tippah = timelineSeasons(options, payloads, 4, { name: "North Tippah", season: 2027 });
-  assert.deepEqual(tippah.map((s) => [s.clazz, s.row?.region ?? null]), [[4, null], [3, 2]]);
-  assert.match(timelinePathHtml("North Tippah", tippah), /<strong>North Tippah<\/strong>: <span class="timeline-path__step">not in a region in 2025<\/span>.*Region 2-3A in 2027 and 2028/);
-  assert.match(timelinePathHtml("Corinth", corinth), /Region 1-4A in 2025<\/span><span class="timeline-path__arrow" aria-hidden="true"> → <\/span><span class="visually-hidden">, then <\/span><span class="timeline-path__step">Region 1-3A in 2027 and 2028/);
+  assert.deepEqual(tippah.map((s) => [s.clazz, s.rows.map((r) => r.school)]), [[4, ["Walnut"]], [3, ["North Tippah"]]]);
+  const table = timelineTable("North Tippah", tippah);
+  assert.match(table, /<th scope="row">2025<\/th><td><span class="timeline-table__place">Walnut: <span class="region-chip region-chip--2"[^>]*>2<\/span>Region 2-4A<\/span><\/td>/);
+  // Each school merged into it gets its own line, under one season.
+  const both = timelineTable("North Tippah", [{ ...tippah[0], rows: [tippah[0].rows[0], { school: "Falkner", slug: "falkner", class: 3, region: 5 }] }]);
+  assert.match(both, /<th scope="row" rowspan="2">2025<\/th><td>[^]*Walnut: [^]*<\/tr><tr><td>[^]*Falkner: [^]*Region 5-3A/);
+  assert.match(table, /<th scope="row">2027 and 2028<\/th><td><span class="timeline-table__place"><span class="region-chip region-chip--2"[^>]*>2<\/span>Region 2-3A/);
+  // The region's other schools that season, not the team itself.
+  assert.match(timelineTable("Corinth", corinth), /2025<\/th>.*?timeline-table__mates"><\/span><\/td>/s);
+});
+
+test("a consolidated school's earlier names, and a merged school's later one", () => {
+  assert.deepEqual(namesIn("North Tippah", 2027, 2026), ["Walnut", "Falkner"]);
+  assert.deepEqual(namesIn("Leake", 2027, 2025), ["Leake Central", "Leake County"]);
+  assert.deepEqual(namesIn("Falkner", 2026, 2027), ["North Tippah"]);
+  assert.deepEqual(namesIn("Leake County", 2025, 2026), ["Leake"]);
+  assert.deepEqual(namesIn("North Tippah", 2027, 2028), ["North Tippah"]);
+  assert.deepEqual(namesIn("Bay", 2026, 2027), ["Bay"]);
 });
 
 test("schools' names go beside their dots where they overlap nothing, the first in line getting first pick", () => {
