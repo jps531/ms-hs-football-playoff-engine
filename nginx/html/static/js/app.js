@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -163,6 +163,7 @@ function hrefWith(changes) {
     if (route.page === "landing" && !moving) page = "landing";
     else if (route.page === "bracket" && !next.region) page = "bracket";
     else if (route.page === "regions" && !next.region) page = "regions";
+    else if (route.page === "counties" && !("clazz" in changes)) page = "counties";
     else page = next.region ? "region" : "class";
   }
   const teamName = "team" in changes ? changes.team : route.teamName;
@@ -353,8 +354,8 @@ async function render() {
   const saved = Number(stored(STORE.clazz, (v) => CLASSES.includes(Number(v))));
   route.clazz ??= CLASSES.includes(saved) ? saved : CLASSES[0];
   store(STORE.clazz, route.clazz);
-  // The front page has no class (and no class picker); every other page marks its class.
-  renderScrubber(route.page === "landing" ? null : route.clazz);
+  // The front page has no class (and no class picker), nor a Counties page; every other page marks its class.
+  renderScrubber(route.page === "landing" || route.page === "counties" ? null : route.clazz);
   if (route.page === "feedback") {
     document.body.classList.remove("is-wide");
     showContext(null);
@@ -365,6 +366,10 @@ async function render() {
   }
   if (route.page === "regions") {
     await renderRegions(token);
+    return;
+  }
+  if (route.page === "counties") {
+    await renderCounties(token);
     return;
   }
   app.setAttribute("aria-busy", "true");
@@ -507,6 +512,7 @@ function pageTitle(clazz, region, page) {
   if (page === "landing") return "Mississippi High School Football Playoff Races"; // as index.html's own <title>
   if (page === "bracket") return `Class ${clazz}A playoff bracket — ${SITE}`;
   if (page === "regions") return `${regionsTitle(clazz)} — ${SITE}`;
+  if (page === "counties") return `${route.countyName ? countyTitle(route.countyName) : "Counties"} — ${SITE}`;
   return region ? `Region ${region}-${clazz}A playoff race — ${SITE}` : `Class ${clazz}A playoff races — ${SITE}`;
 }
 
@@ -519,9 +525,10 @@ function notice(text) {
 function renderScrubber(clazz) {
   // The front page has no class of its own, and its own grid of links instead.
   scrubberBar.hidden = route.page === "landing";
-  scrubberHost.innerHTML = classScrubber(CLASSES, clazz, classHref);
+  scrubberHost.innerHTML = mapsKinds(classScrubber(CLASSES, clazz, classHref));
+  scrubberBar.classList.toggle("is-counties", route.page === "counties");
   const current = scrubberBar.querySelector("[data-current-class]");
-  if (current) current.textContent = clazz ? `${clazz}A` : "";
+  if (current) current.textContent = route.page === "counties" ? "Counties" : clazz ? `${clazz}A` : "";
   setClassesOpen(false);
   syncNav();
   // Keep the selected class in view sideways; never scroll the page itself.
@@ -533,6 +540,23 @@ function renderScrubber(clazz) {
 }
 
 /**
+ * On Maps pages, the kinds of map beside the classes (index.html draws the same from the start): on a
+ * computer, "Counties" after 7A in the class picker; on a phone, where the classes fill the bar, a
+ * Regions | Counties switch above them (and on a Counties page, only the switch).
+ */
+function mapsKinds(classes) {
+  const onCounties = route.page === "counties";
+  if (route.page !== "regions" && !onCounties) return classes;
+  const current = (on) => (on ? ' aria-current="page"' : "");
+  const counties = esc(hrefWith({ page: "counties", county: null, team: null, view: "map", vs: null, vsClass: null })); // every county, to pick one
+  const regions = esc(onCounties ? hrefWith({ page: "regions", clazz: route.clazz, county: null, team: null, view: "map" }) : hrefWith({}));
+  const item = `<span class="scrubber__sep" aria-hidden="true"></span><a class="scrubber__item scrubber__kind" href="${counties}" data-kind="counties"${current(onCounties)}>Counties</a>`;
+  const toggle = `<nav class="maps-kinds" aria-label="Kind of map"><a class="maps-kinds__item" href="${regions}" data-kind="regions"${current(!onCounties)}>Regions</a>`
+    + `<a class="maps-kinds__item" href="${counties}" data-kind="counties"${current(onCounties)}>Counties</a></nav>`;
+  return toggle + classes.replace(/<\/nav>$/, `${item}</nav>`);
+}
+
+/**
  * Main nav (header links and the phone tab bar): Standings and Bracket are
  * the two views of the current class, and switching keeps the class,
  * season, week, odds mode, and the class's picked team.
@@ -540,7 +564,7 @@ function renderScrubber(clazz) {
 function syncNav() {
   const onBracket = route.page === "bracket";
   const onStandings = ["class", "region"].includes(route.page); // not the front page: it's neither
-  const onRegions = route.page === "regions";
+  const onRegions = route.page === "regions" || route.page === "counties";
   const known = route.page !== "notfound";
   // The Regions page's season is a regions season (2027 before it's played), so it isn't carried to
   // Standings or the Bracket, nor theirs to it: each opens on its own newest.
@@ -549,7 +573,9 @@ function syncNav() {
   const targets = {
     standings: known ? hrefWith({ page: route.region ? "region" : "class", team, ...away }) : "/standings/1a",
     bracket: known ? hrefWith({ page: "bracket", region: null, team, ...away }) : "/brackets/1a",
-    maps: known ? hrefWith({ page: "regions", region: null, season: null, week: null, odds: null, team }) : "/maps/regions/1a",
+    // In the Maps section already, Maps keeps the kind of map (a Counties page stays one).
+    maps: !known ? "/maps/regions/1a" : route.page === "counties" ? hrefWith({ team: null })
+      : hrefWith({ page: "regions", region: null, season: null, week: null, odds: null, team }),
   };
   for (const a of document.querySelectorAll("[data-nav]")) {
     const key = a.dataset.nav;
@@ -575,6 +601,8 @@ document.addEventListener("click", (e) => {
 // otherwise it stops following. The class picker is the whole page's: on Compare it sets both maps'
 // class (a map's own picker sets only that map's), keeping their seasons.
 const classHref = (clazz) => {
+  // From a Counties page, a class opens its regions (the season kept, no team followed).
+  if (route.page === "counties") return hrefWith({ page: "regions", clazz, region: null, county: null, team: null, view: "map" });
   if (route.page !== "regions" || !regionsState) return hrefWith({ clazz, region: null, team: pickedTeam(clazz) });
   const team = regionsState.teamClasses?.has(clazz) ? route.teamName : null;
   const compare = route.view === "compare" && regionsState.compare ? { vs: regionsState.compare.vs, vsClass: null } : {};
@@ -582,7 +610,7 @@ const classHref = (clazz) => {
 };
 
 scrubberHost.addEventListener("click", (e) => {
-  const item = e.target.closest("[data-class]");
+  const item = e.target.closest("[data-class], [data-kind]");
   if (!item || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
   navigate(item.getAttribute("href"), { scroll: true });
@@ -606,7 +634,7 @@ const resultPlace = (t) => `Region ${t.region}-${t.class_}A`;
  * and empty note) and a status line for screen readers; *teams()* is what can
  * be found (objects with school, class_ and region); *onPick(team)* commits.
  */
-function teamCombobox(form, teams, onPick) {
+function teamCombobox(form, teams, onPick, { one = "team", many = "teams", meta = (t) => resultPlace(t), mark = (t) => teamMark(t.school, t) } = {}) {
   const input = form?.querySelector("input[role=combobox]");
   if (!input) return null;
   const popup = form.querySelector(".team-results");
@@ -645,14 +673,14 @@ function teamCombobox(form, teams, onPick) {
     const loaded = all.length > 0;
     matches = matchTeams(all, query);
     list.innerHTML = matches.map((t, i) => `<li id="${prefix}-${i}" role="option" aria-selected="false" data-index="${i}">
-      ${teamMark(t.school, t)}<span class="team-results__name">${esc(t.school)}</span>
-      <span class="team-results__meta">${esc(resultPlace(t))}</span>
+      ${mark(t)}<span class="team-results__name">${esc(t.school)}</span>
+      <span class="team-results__meta">${esc(meta(t))}</span>
     </li>`).join("");
     empty.hidden = matches.length > 0;
-    empty.textContent = loaded ? `No team matches “${query}”.` : "Loading teams…";
+    empty.textContent = loaded ? `No ${one} matches “${query}”.` : `Loading ${many}…`;
     status.textContent = !loaded ? ""
-      : matches.length ? `${matches.length} ${matches.length === 1 ? "team" : "teams"} found. Press Enter to pick ${matches[0].school}.`
-        : "No teams found.";
+      : matches.length ? `${matches.length} ${matches.length === 1 ? one : many} found. Press Enter to pick ${matches[0].school}.`
+        : `No ${many} found.`;
     open(true);
     setActive(matches.length ? 0 : -1);
   };
@@ -2757,6 +2785,127 @@ async function renderRegions(token) {
     if (token === renderToken) app.removeAttribute("aria-busy");
   }
   document.title = pageTitle(route.clazz, null, "regions");
+}
+
+/**
+ * The Counties pages: /maps/counties, every county shaded by its MHSAA schools, to pick one; and
+ * /maps/counties/{county}, its schools (each with its class and region) on the map and by class. One
+ * season of regions at a time (?season=), as on the Regions pages; ?team= picks one of its schools.
+ */
+async function renderCounties(token) {
+  document.body.classList.remove("is-wide");
+  sheet?.close();
+  showContext(null);
+  app.setAttribute("aria-busy", "true");
+  regionsState = null;
+  route.countyName = null;
+  try {
+    const index = await regionsFile("index.json");
+    regionsDefault = index.default;
+    if (index.current_season) loadTeamSearch(index.current_season);
+    const option = pickOption(index, route.season);
+    const [base, payload, teams] = await Promise.all([
+      regionsFile("map.json"),
+      regionsFile(`${option.season}.json`),
+      teamsBySchool(option.season).catch(() => ({})),
+    ]);
+    if (token !== renderToken) return;
+    route.season = option.season === index.default ? null : option.season;
+    const seasons = index.options.length > 1
+      ? select("regions-season", "Seasons", index.options.map((o) => ({ value: o.season, label: o.label })), option.season)
+      : "";
+    const counties = [...base.counties].map((c) => c.name);
+    const county = route.county ? counties.find((name) => countiesPath(name) === countiesPath(route.county)) ?? null : null;
+    if (route.county && !county) {
+      setNoindex(true);
+      renderScrubber(null);
+      app.innerHTML = notice("There’s no Mississippi county at this address. Pick one on the Counties map.");
+      document.title = `Page not found — ${SITE}`;
+      return;
+    }
+    route.countyName = county;
+    const counts = countyCounts(base, payload);
+    const findable = counties.map((name) => ({ school: countyTitle(name), county: name, count: counts[name] ?? 0 }));
+    const finder = countyFinder();
+    const goTo = (name, via) => {
+      track("county_opened", { county: name, via });
+      navigate(hrefWith({ page: "counties", county: countiesPath(name).split("/").pop(), team: null }), { scroll: true });
+    };
+    if (!county) {
+      app.innerHTML = countiesPage(base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>` });
+      wireCountiesMap(app, counts, goTo);
+    } else {
+      app.innerHTML = countyPage(county, base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, teams });
+      const layer = countyLayer(payload, county);
+      const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+      const picked = wanted ? layer.schools.find((s) => s.slug === wanted) ?? null : null;
+      route.teamName = picked?.school ?? null;
+      if (layer.schools.length) {
+        wireRegionsMap(app, base, payload, null, {
+          layer,
+          home: countyHome(base, county),
+          href: countiesPath(county),
+          picked: picked?.slug ?? null,
+          teams,
+          onPick: (slug, via) => {
+            const school = layer.schools.find((s) => s.slug === slug) ?? null;
+            route.teamName = school?.school ?? null;
+            if (school) track("team_picked", { from: "county", via, team: school.school });
+            history.replaceState(null, "", hrefWith({ team: route.teamName }));
+          },
+          onMove: (how) => track("regions_map_moved", { class: null, how, view: "county" }),
+          onFull: (on) => setScrolled(on),
+        });
+      }
+    }
+    teamCombobox(app.querySelector("[data-regions-find]"), () => findable, (item, input) => {
+      input.value = "";
+      goTo(item.county, "search");
+    }, { one: "county", many: "counties", meta: (item) => schoolsCount(item.count), mark: () => "" });
+    renderScrubber(null);
+    showContext(contextHtml(county ? countyTitle(county) : "Counties", { week: seasonsLabel(option.seasons) }, null, { bar: true }));
+    history.replaceState(null, "", hrefWith({}));
+  } catch {
+    if (token !== renderToken) return;
+    setNoindex(true);
+    app.innerHTML = notice("The counties couldn’t load right now. Please try again in a moment.");
+  } finally {
+    if (token === renderToken) app.removeAttribute("aria-busy");
+  }
+  document.title = pageTitle(null, null, "counties");
+}
+
+/** The Counties page's search box: the team search's field and list, for a county. */
+function countyFinder() {
+  return regionsFinder("Find a county").replace('aria-label="Teams"', 'aria-label="Counties"');
+}
+
+/** The statewide map: a county's name and count on hover, and a click (or its list link) opens it. */
+function wireCountiesMap(root, counts, goTo) {
+  const frame = root.querySelector(".counties-map__frame");
+  const hover = frame?.querySelector(".regions-map__hover");
+  if (!frame) return;
+  frame.addEventListener("pointermove", (e) => {
+    const a = e.target.closest?.("[data-county]");
+    if (!a || e.pointerType !== "mouse") {
+      hover.hidden = true;
+      return;
+    }
+    const name = a.dataset.county;
+    hover.innerHTML = `<span class="map-tip"><strong class="map-tip__name">${esc(countyTitle(name))}</strong><span>${esc(schoolsCount(counts[name] ?? 0))}</span></span>`;
+    hover.hidden = false;
+    const box = frame.getBoundingClientRect();
+    const spot = hoverSpot(e.clientX - box.left, e.clientY - box.top, 8, { w: hover.offsetWidth, h: hover.offsetHeight }, { w: box.width, h: box.height });
+    hover.style.left = `${spot.left}px`;
+    hover.style.top = `${spot.top}px`;
+  });
+  frame.addEventListener("pointerleave", () => { hover.hidden = true; });
+  root.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-county]");
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    goTo(a.dataset.county, a.closest("svg") ? "map" : "list");
+  });
 }
 
 // Maps follow one team at a time (?team=), across their views and classes: each map shows the class

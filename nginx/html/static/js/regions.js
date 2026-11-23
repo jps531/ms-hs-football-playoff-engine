@@ -1,5 +1,6 @@
 import { breadcrumbs, teamColorStyle, teamMark } from "./components.js";
 import { escapeHtml as esc } from "./format.js";
+import { slugify } from "./routes.js";
 
 // The Regions page (/maps/regions/5a), in the Maps section: a class's schools on a map of Mississippi, each a dot numbered by
 // its region, every region's shape, and the schools listed by region. The data is written by the
@@ -123,36 +124,58 @@ export function regionsLists(clazz, payload, currentSeason, teams = {}) {
 
 // ------------------------------------------------------------- the map
 
+/**
+ * What a map shows (a class's regions, or a county's schools and theirs): its schools; each one's
+ * group (the dots and shape picked together: a region), color (1-8, the region colors) and the text on
+ * its dot; each group's shape and box; and the SVG's description. *away*: schools drawn smaller and
+ * faded, there only to show their region (a county's schools' region-mates elsewhere).
+ */
+export function classLayer(payload, clazz) {
+  return {
+    schools: payload.schools.filter((s) => s.class === clazz),
+    group: (s) => String(s.region),
+    color: (s) => s.region,
+    mark: (s) => String(s.region),
+    away: () => false,
+    shapes: Object.entries(payload.regions[String(clazz)] ?? {}).map(([g, r]) => ({ group: g, color: Number(g), d: r.d, box: r.box })),
+    county: null,
+    label: `Map of Mississippi with each Class ${clazz}A school as a dot numbered by its region`,
+  };
+}
+
 /** The SVG: land, the region shapes, county lines and names, the state's outline, then the dots. */
-export function mapSvg(base, payload, clazz) {
+export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz)) {
+  const focus = layer.county ? base.counties.find((c) => c.name === layer.county) : null;
   const counties = base.counties.map((c) => `<path class="map-county" d="${c.d}"/>`).join("");
   const names = base.counties.map((c) => `<text class="map-county-name" x="${c.label[0]}" y="${c.label[1]}">${esc(c.name)}</text>`).join("");
-  const shapes = Object.entries(payload.regions[String(clazz)] ?? {})
-    .map(([g, r]) => `<path class="map-region map-region--${g}" data-region="${g}" d="${r.d}"/>`).join("");
-  const dots = payload.schools.filter((s) => s.class === clazz && s.x != null)
-    .map((s) => `<g class="map-dot map-dot--${s.region}" data-team="${esc(s.slug)}" data-region="${s.region}" tabindex="-1">`
-      + `<circle cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${s.region}</text></g>`).join("");
+  const shapes = layer.shapes
+    .map((r) => `<path class="map-region map-region--${r.color}" data-group="${esc(r.group)}" d="${r.d}"/>`).join("");
+  const placed = layer.schools.filter((s) => s.x != null);
+  const dots = placed
+    .map((s) => `<g class="map-dot map-dot--${layer.color(s)}${layer.away(s) ? " is-away" : ""}" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" tabindex="-1">`
+      + `<circle cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${esc(layer.mark(s))}</text></g>`).join("");
   // Each school's name, shown beside its dot once the map is zoomed in far enough (wireRegionsMap
   // places them, and hides those with no room).
-  const labels = payload.schools.filter((s) => s.class === clazz && s.x != null)
-    .map((s) => `<line class="map-leader" data-team="${esc(s.slug)}" data-region="${s.region}" hidden/>`
-      + `<text class="map-label" data-team="${esc(s.slug)}" data-region="${s.region}" x="${s.x}" y="${s.y}">${esc(s.school)}</text>`).join("");
+  const labels = placed
+    .map((s) => `<line class="map-leader" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" hidden/>`
+      + `<text class="map-label" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" x="${s.x}" y="${s.y}">${esc(s.school)}</text>`).join("");
   const v = wholeView(base);
   return `<svg class="regions-map__svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" role="img" `
-    + `aria-label="Map of Mississippi with each Class ${clazz}A school as a dot numbered by its region">`
+    + `aria-label="${esc(layer.label)}">`
     + `<path class="map-land" d="${base.state}"/><g class="map-regions">${shapes}</g>`
     + `<g class="map-counties">${counties}</g><g class="map-county-names">${names}</g>`
-    + `<path class="map-state" d="${base.state}"/><g class="map-labels" aria-hidden="true">${labels}</g><g class="map-dots">${dots}</g></svg>`;
+    + `<path class="map-state" d="${base.state}"/>${focus ? `<path class="map-county-focus" d="${focus.d}"/>` : ""}`
+    + `<g class="map-labels" aria-hidden="true">${labels}</g><g class="map-dots">${dots}</g></svg>`;
 }
 
 /**
  * One map with its buttons, under it, and the picked team's details: the map (with its zoom buttons,
  * tooltip and, with *full*, full screen) for the Map view and each side of Compare.
  */
-export function mapFigure(base, payload, clazz, { full = true } = {}) {
+export function mapFigure(base, payload, clazz, { full = true, layer = classLayer(payload, clazz) } = {}) {
   const button = (attr, label, icon) => `<button type="button" ${attr} aria-label="${label}" title="${label}">${icon}</button>`;
   return `<figure class="regions-map">`
-    + `<div class="regions-map__frame" data-map>${mapSvg(base, payload, clazz)}`
+    + `<div class="regions-map__frame" data-map>${mapSvg(base, payload, clazz, layer)}`
     + `<div class="regions-map__hover" aria-hidden="true" hidden></div></div>`
     + `<div class="regions-map__tools"><div class="regions-map__zoom" role="group" aria-label="Zoom">`
     + `${button('data-zoom="in"', "Zoom in", MAP_ICONS.in)}${button('data-zoom="out"', "Zoom out", MAP_ICONS.out)}`
@@ -443,19 +466,19 @@ export function wholeView(base) {
  * What's under the map once a team is picked: its helmet, name and region, where it is and where it
  * was the season before, and the region's other schools (each picks that school).
  */
-export function pickedHtml(school, payload, teams = {}) {
+export function pickedHtml(school, payload, teams = {}, color = school.region, href = regionsPath(school.class)) {
   const others = payload.schools
     .filter((s) => s.class === school.class && s.region === school.region && s.slug !== school.slug)
     .sort((a, b) => byName(a.school, b.school));
   const facts = [school.county ? `${school.city}, ${school.county} County` : "", teamChange(school, payload.prior_season)].filter(Boolean);
   return `<div class="picked__head">${teamMark(school.school, teams[school.school], { size: 32 })}`
     + `<span class="picked__name">${esc(school.school)}</span>`
-    + `<span class="picked__region"><span class="region-chip region-chip--${school.region}" aria-hidden="true">${school.region}</span>`
+    + `<span class="picked__region"><span class="region-chip region-chip--${color}" aria-hidden="true">${school.region}</span>`
     + `<strong>${esc(place(school))}</strong></span></div>`
     + (facts.length ? `<p class="picked__facts">${esc(facts.join(" · "))}</p>` : "")
     + (others.length
       ? `<p class="picked__others"><span class="picked__label">Other schools in ${esc(place(school))}:</span> `
-        + others.map((s) => `<a href="${esc(regionsPath(school.class))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
+        + others.map((s) => `<a href="${esc(href)}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
           + `${teamMark(s.school, teams[s.school], { size: 20 })}<span>${esc(s.school)}</span></a>`).join("")
         + "</p>"
       : "");
@@ -568,13 +591,13 @@ export function placeLabels(points, r, size, bounds = null) {
  * A dot's tooltip: the school's helmet, name and mascot over its region and town, and the seasons the
  * map is of (*seasons*: [2027, 2028]), edged in its color (*team*: its /teams entry, or nothing).
  */
-export function hoverHtml(school, team, seasons = []) {
+export function hoverHtml(school, team, seasons = [], color = school.region) {
   const where = [school.city, school.county ? `${school.county} County` : ""].filter(Boolean).join(", ");
   return `<span class="map-tip"${teamColorStyle(team)}>`
     + `<span class="map-tip__head">${teamMark(school.school, team, { size: 28 })}`
     + `<span class="map-tip__names"><strong class="map-tip__name">${esc(school.school)}</strong>`
     + (team?.mascot ? `<span class="map-tip__mascot">${esc(team.mascot)}</span>` : "")
-    + `</span></span><span class="map-tip__place"><span class="region-chip region-chip--${school.region}" aria-hidden="true">${school.region}</span>`
+    + `</span></span><span class="map-tip__place"><span class="region-chip region-chip--${color}" aria-hidden="true">${school.region}</span>`
     + `<span>${esc(place(school))}${where ? ` · ${esc(where)}` : ""}</span></span>`
     + (seasons.length ? `<span class="map-tip__when">${esc(seasonsLabel(seasons))}</span>` : "")
     + "</span>";
@@ -594,7 +617,7 @@ export function hoverSpot(x, y, r, tip, frame, gap = 6) {
  * team picked (from the map, the list, the team under the map or the page's link) highlighted with
  * its region and zoomed to. onPick(slug or null) tells the page, to keep the address in step.
  */
-export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {}, onFull = () => {}, elsewhere = null } = {}) {
+export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {}, onFull = () => {}, elsewhere = null, layer = classLayer(payload, clazz), home = null, href = undefined } = {}) {
   const frame = root.querySelector("[data-map]");
   const svg = frame?.querySelector("svg");
   if (!svg) return null;
@@ -603,9 +626,14 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   const caption = root.querySelector(".regions-map__picked");
   const status = root.querySelector("[data-picked-status]");
   const whole = wholeView(base);
-  let view = { ...whole };
+  // Where the map starts, and goes back to when a team is unpicked: the whole state, or *home*, a box
+  // to fit with room around it (a county). The reset button always shows the whole state.
+  const start = () => (home ? regionView(home, base, 0.45) : { ...whole });
+  let view = start();
   let current = null;
-  const bySlug = new Map(payload.schools.filter((s) => s.class === clazz).map((s) => [s.slug, s]));
+  const bySlug = new Map(layer.schools.map((s) => [s.slug, s]));
+  const groupOf = (s) => layer.group(s);
+  const boxes = new Map(layer.shapes.map((r) => [r.group, r.box]));
 
   // The view always has the frame's shape (it's the state's shape, except in full screen): widened or
   // heightened about its middle when it doesn't.
@@ -628,7 +656,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const px = view.w / (svg.getBoundingClientRect().width || 600);
     const r = 11 * px; // dots keep their size on screen at any zoom
     for (const g of svg.querySelectorAll(".map-dot")) {
-      g.firstChild.setAttribute("r", r);
+      g.firstChild.setAttribute("r", g.classList.contains("is-away") ? r * 0.6 : r); // region-mates elsewhere: smaller
       g.lastChild.setAttribute("font-size", r * 1.2);
     }
     svg.classList.toggle("is-zoomed", zoom >= 2.2); // county names once there's room for them
@@ -643,7 +671,8 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   const leaders = new Map([...svg.querySelectorAll(".map-leader")].map((l) => [l.dataset.team, l]));
   const labelDots = (r, size) => {
     const inView = (s) => s.x >= view.x && s.x <= view.x + view.w && s.y >= view.y && s.y <= view.y + view.h;
-    const first = (s) => (s.slug === current?.slug ? 0 : current && s.region === current.region ? 1 : 2);
+    // (On a county's map, its own schools before their region-mates elsewhere.)
+    const first = (s) => (s.slug === current?.slug ? 0 : current && groupOf(s) === groupOf(current) ? 1 : layer.away(s) ? 3 : 2);
     const points = [...bySlug.values()].filter((s) => s.x != null && inView(s))
       .sort((a, b) => first(a) - first(b) || byName(a.school, b.school))
       .map((s) => ({ slug: s.slug, x: s.x, y: s.y, name: s.school }));
@@ -697,28 +726,28 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const school = slug ? bySlug.get(slug) : null;
     for (const g of svg.querySelectorAll(".map-dot")) {
       g.classList.toggle("is-picked", Boolean(school) && g.dataset.team === school.slug);
-      g.classList.toggle("is-dim", Boolean(school) && Number(g.dataset.region) !== school.region);
+      g.classList.toggle("is-dim", Boolean(school) && g.dataset.group !== groupOf(school));
     }
-    for (const p of svg.querySelectorAll(".map-region, .map-label, .map-leader")) p.classList.toggle("is-dim", Boolean(school) && Number(p.dataset.region) !== school.region);
+    for (const p of svg.querySelectorAll(".map-region, .map-label, .map-leader")) p.classList.toggle("is-dim", Boolean(school) && p.dataset.group !== groupOf(school));
     for (const a of root.querySelectorAll(".regions-list [data-team]")) {
       if (school && a.dataset.team === school.slug) a.setAttribute("aria-current", "true");
       else a.removeAttribute("aria-current");
     }
     if (caption) {
       // A team not on this map (Compare: picked on the other one) says where it is instead.
-      const html = school ? pickedHtml(school, payload, teams) : slug && elsewhere ? elsewhere(slug) : "";
+      const html = school ? pickedHtml(school, payload, teams, layer.color(school), href) : slug && elsewhere ? elsewhere(slug) : "";
       caption.innerHTML = html;
       caption.hidden = !html;
       if (school && reveal) show(caption);
     }
     if (status) status.textContent = school ? `${school.school}: ${place(school)}` : "";
     // Another team in the region already shown, its dot in view: the map stays where it is.
-    const stay = school && current && current.region === school.region && school.x != null
+    const stay = school && current && groupOf(current) === groupOf(school) && school.x != null
       && school.x >= view.x && school.x <= view.x + view.w && school.y >= view.y && school.y <= view.y + view.h;
     current = school;
-    const box = school && payload.regions[String(clazz)]?.[String(school.region)]?.box;
+    const box = school && boxes.get(groupOf(school));
     if (zoom && !stay) {
-      view = box ? regionView(box, base) : { ...whole };
+      view = box ? regionView(box, base) : start();
       moves += 1;
     }
     apply(); // the names, too: the picked team's first
@@ -744,7 +773,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     if (school && e.pointerType === "mouse") {
       const box = frame.getBoundingClientRect();
       const d = dot.firstChild.getBoundingClientRect();
-      hover.innerHTML = hoverHtml(school, teams[school.school], payload.seasons ?? []);
+      hover.innerHTML = hoverHtml(school, teams[school.school], payload.seasons ?? [], layer.color(school));
       hover.hidden = false;
       const spot = hoverSpot(d.left + d.width / 2 - box.left, d.top + d.height / 2 - box.top, d.width / 2,
         { w: hover.offsetWidth, h: hover.offsetHeight }, { w: box.width, h: box.height });
@@ -876,6 +905,211 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   apply();
   if (picked) pick(picked, { reveal: false }); // the page's link: the page opens at its top
   return { pick, full: (on) => full(on) };
+}
+
+// ------------------------------------------------------------- counties
+// The Counties pages (/maps/counties/hinds): one county's MHSAA schools, whatever their classes, each
+// with its region; and /maps/counties, every county to pick one. A school's county is the county its
+// campus is in (backend/helpers/region_map.py county_of), in each season's data.
+
+export const MHSAA_NOTE = "Only schools in the MHSAA (Mississippi High School Activities Association) are shown.";
+
+/** "/maps/counties/jefferson-davis" (or "/maps/counties", every county). */
+export function countiesPath(county = null) {
+  return county ? `/maps/counties/${slugify(county)}` : "/maps/counties";
+}
+
+/** "Hinds County". */
+export function countyTitle(county) {
+  return `${county} County`;
+}
+
+/** Home › Counties › Hinds County (or Home › Counties). */
+export function countiesTrail(county = null) {
+  const trail = [["Home", "/"], ["Counties", countiesPath()]];
+  return county ? [...trail, [countyTitle(county), countiesPath(county)]] : trail;
+}
+
+/**
+ * The places (a region in a class) a county's *schools* are in, highest class first, each with a color
+ * (1-8): its region's own, unless another of the county's places already has it (two regions with the
+ * same number in different classes), then the first one not in use. [{ key, clazz, region, color }].
+ */
+export function countyPlaces(schools) {
+  const seen = new Map();
+  for (const s of [...schools].sort((a, b) => b.class - a.class || a.region - b.region)) {
+    const key = `${s.class}-${s.region}`;
+    if (!seen.has(key)) seen.set(key, { key, clazz: s.class, region: s.region });
+  }
+  const used = new Set();
+  for (const p of seen.values()) {
+    const own = ((p.region - 1) % 8) + 1;
+    p.color = !used.has(own) ? own : [1, 2, 3, 4, 5, 6, 7, 8].find((c) => !used.has(c)) ?? own;
+    used.add(p.color);
+  }
+  return [...seen.values()];
+}
+
+/** A county's map: its schools, and their regions (shapes, and the region-mates elsewhere, faded). */
+export function countyLayer(payload, county) {
+  const mine = payload.schools.filter((s) => s.county === county);
+  const places = new Map(countyPlaces(mine).map((p) => [p.key, p]));
+  const key = (s) => `${s.class}-${s.region}`;
+  return {
+    schools: payload.schools.filter((s) => places.has(key(s))),
+    group: key,
+    color: (s) => places.get(key(s))?.color ?? s.region,
+    mark: (s) => String(s.region),
+    away: (s) => s.county !== county,
+    shapes: [...places.values()].map((p) => {
+      const r = payload.regions[String(p.clazz)]?.[String(p.region)];
+      return r && { group: p.key, color: p.color, d: r.d, box: r.box };
+    }).filter(Boolean),
+    county,
+    label: `Map of Mississippi with ${countyTitle(county)}'s MHSAA schools as dots and each one's region`,
+  };
+}
+
+/** The box (in map units) around an SVG path of absolute points ("M0,1L2,3…Z"). */
+export function pathBox(d) {
+  const nums = String(d).match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+  const xs = nums.filter((_, i) => i % 2 === 0);
+  const ys = nums.filter((_, i) => i % 2 === 1);
+  return xs.length ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] : null;
+}
+
+/**
+ * A county's mark, as a team's helmet is its: its outline (map.json's simpler *icon*, else its full
+ * outline), *size* pixels square, filled in its *shade* (countShade) or, without one, the site's color.
+ */
+export function countyMark(base, county, { size = 24, shade = null } = {}) {
+  const c = base.counties.find((x) => x.name === county);
+  if (!c) return "";
+  const d = c.icon ?? c.d;
+  const [x0, y0, x1, y1] = pathBox(d);
+  const pad = Math.max(x1 - x0, y1 - y0) * 0.06;
+  const box = [x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad].map((v) => Math.round(v * 10) / 10);
+  const fill = shade == null ? "county-mark--site" : `county-shade--${shade}`;
+  return `<svg class="mark county-mark ${fill}" viewBox="${box.join(" ")}" width="${size}" height="${size}" aria-hidden="true"><path d="${d}"/></svg>`;
+}
+
+/**
+ * Where a county's map starts: the county, with room around it for its schools' names (its regions run
+ * on past the edges; "Show the whole state" shows them whole). Null for a county the map doesn't have.
+ */
+export function countyHome(base, county) {
+  const c = base.counties.find((x) => x.name === county);
+  return c ? pathBox(c.d) : null;
+}
+
+/** "9 MHSAA schools", "1 MHSAA school", "No MHSAA schools". */
+export function schoolsCount(n) {
+  return n ? `${n} MHSAA ${n === 1 ? "school" : "schools"}` : "No MHSAA schools";
+}
+
+/** "9 MHSAA schools in 4 classes", "1 MHSAA school", "No MHSAA schools". */
+export function countyCount(schools) {
+  const classes = new Set(schools.map((s) => s.class)).size;
+  return `${schoolsCount(schools.length)}${classes > 1 ? ` in ${classes} classes` : ""}`;
+}
+
+/** The county's schools by class, highest first: each a row that picks it, with its region and town. */
+export function countyLists(county, payload, teams = {}) {
+  const mine = payload.schools.filter((s) => s.county === county);
+  const colors = new Map(countyPlaces(mine).map((p) => [p.key, p.color]));
+  const classes = [...new Set(mine.map((s) => s.class))].sort((a, b) => b - a);
+  return classes.map((c) => {
+    const rows = mine.filter((s) => s.class === c)
+      .sort((a, b) => a.region - b.region || byName(a.school, b.school))
+      .map((s) => `<li><a class="regions-list__row" href="${esc(countiesPath(county))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
+        + `${teamMark(s.school, teams[s.school])}<span class="regions-list__team">${esc(s.school)}</span>`
+        + `<span class="regions-list__was"><span class="region-chip region-chip--${colors.get(`${s.class}-${s.region}`)}" aria-hidden="true">${s.region}</span>`
+        + `${esc(place(s))}${s.city ? ` · ${esc(s.city)}` : ""}</span></a></li>`);
+    return `<section class="regions-list__region county-list__class"><div class="regions-list__head">`
+      + `<h2 class="regions-list__name">Class ${c}A</h2>`
+      + `<a class="regions-list__standings" href="${esc(regionsPath(c))}">Class ${c}A regions<span aria-hidden="true"> ›</span></a></div>`
+      + `<ul>${rows.join("")}</ul></section>`;
+  }).join("");
+}
+
+/** The county page's heading: breadcrumbs, the title (with the county's mark), how many schools and the
+ * seasons, and whose. */
+export function countyHeader(county, payload, base, share = "") {
+  const mine = payload.schools.filter((s) => s.county === county);
+  return `${breadcrumbs(countiesTrail(county))}<div class="title-row"><h1 class="title county-title">`
+    + `${countyMark(base, county, { size: 44 })}<span>${esc(countyTitle(county))}</span></h1>${share}</div>`
+    + `<p class="regions-sub">${esc(countyCount(mine))}, ${esc(seasonsLabel(payload.seasons))}</p>`
+    + `<p class="county-note muted">${esc(MHSAA_NOTE)}</p>`;
+}
+
+/** The county page: heading and controls, its map and its schools by class (or why there are none). */
+export function countyPage(county, base, payload, { controls = "", share = "", teams = {}, views = "" } = {}) {
+  const mine = payload.schools.filter((s) => s.county === county);
+  const head = `<header class="entry-head">${countyHeader(county, payload, base, share)}${views}${controls}`;
+  if (!mine.length) {
+    return `<div class="page regions-page county-page">${head}</header>`
+      + `<p class="notice">No MHSAA school is in ${esc(countyTitle(county))} in the ${esc(seasonsLabel(payload.seasons))}. `
+      + `<a href="${esc(countiesPath())}">Pick another county</a>.</p></div>`;
+  }
+  const layer = countyLayer(payload, county);
+  return `<div class="page regions-page county-page">${head}`
+    + `<p class="focus-note muted regions-note">Each school's dot is in its region's color, numbered by its region; its region's other schools are the smaller dots. Pick one to see its region.</p></header>`
+    + `<div class="regions-layout">${mapFigure(base, payload, null, { layer })}`
+    + `<div class="regions-side"><div class="regions-list county-list">${countyLists(county, payload, teams)}</div></div></div></div>`;
+}
+
+/** How many of the season's schools each county has, by county name (every county, 0 for none). */
+export function countyCounts(base, payload) {
+  const counts = Object.fromEntries(base.counties.map((c) => [c.name, 0]));
+  for (const s of payload.schools) if (s.county in counts) counts[s.county] += 1;
+  return counts;
+}
+
+/** A count's shade on the statewide map: 0 (none), 1, 2, 3 (3 or 4), 4 (5 or more). */
+export function countShade(n) {
+  return n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : n <= 4 ? 3 : 4;
+}
+
+const SHADES = [["None", 0], ["1", 1], ["2", 2], ["3–4", 3], ["5 or more", 4]];
+
+/** The statewide map: every county a link, shaded by how many MHSAA schools it has. */
+export function countiesMapSvg(base, counts) {
+  const v = wholeView(base);
+  const shapes = base.counties.map((c) => {
+    const n = counts[c.name] ?? 0;
+    return `<a class="county-pick" href="${esc(countiesPath(c.name))}" data-county="${esc(c.name)}" aria-label="${esc(countyTitle(c.name))}: ${esc(schoolsCount(n))}">`
+      + `<path class="county-pick__shape county-shade--${countShade(n)}" d="${c.d}"/></a>`;
+  }).join("");
+  const names = base.counties.map((c) => `<text class="county-pick__name" x="${c.label[0]}" y="${c.label[1]}">${esc(c.name)}</text>`).join("");
+  return `<svg class="counties-map__svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" role="group" aria-label="Mississippi's counties, each shaded by how many MHSAA schools it has">`
+    + `<g class="county-picks">${shapes}</g><path class="map-state" d="${base.state}"/><g class="county-pick__names" aria-hidden="true">${names}</g></svg>`;
+}
+
+/** The statewide page: heading and controls, the map with its key, and every county as a list. */
+export function countiesPage(base, payload, { controls = "" } = {}) {
+  const counts = countyCounts(base, payload);
+  const key = SHADES.map(([label, shade]) => `<li><span class="county-shade-key county-shade--${shade}" aria-hidden="true"></span>${esc(label)}</li>`).join("");
+  const list = countiesList(base, counts);
+  return `<div class="page regions-page counties-page"><header class="entry-head">${breadcrumbs(countiesTrail())}`
+    + `<div class="title-row"><h1 class="title">Counties</h1></div>`
+    + `<p class="regions-sub">Each county's MHSAA schools, ${esc(seasonsLabel(payload.seasons))}</p>`
+    + `<p class="county-note muted">${esc(MHSAA_NOTE)}</p>${controls}`
+    + `<p class="focus-note muted regions-note">Pick a county on the map or in the list to see its schools, their classes and their regions.</p></header>`
+    + `<div class="regions-layout"><figure class="regions-map counties-map"><div class="regions-map__frame counties-map__frame">${countiesMapSvg(base, counts)}`
+    + `<div class="regions-map__hover" aria-hidden="true" hidden></div></div>`
+    + `<figcaption class="counties-map__key"><span>MHSAA schools in the county:</span><ul>${key}</ul></figcaption></figure>`
+    + `<div class="regions-side"><h2 class="counties-list__title">Every county</h2>${list}</div></div></div>`;
+}
+
+/** Every county, by name: a row each with its mark (in its shade on the map) and its MHSAA schools. */
+export function countiesList(base, counts) {
+  const rows = [...base.counties].sort((a, b) => byName(a.name, b.name)).map((c) => {
+    const n = counts[c.name] ?? 0;
+    return `<li><a class="regions-list__row county-row${n ? "" : " is-empty"}" href="${esc(countiesPath(c.name))}" data-county="${esc(c.name)}">`
+      + `${countyMark(base, c.name, { size: 28, shade: countShade(n) })}<span class="regions-list__team">${esc(c.name)}</span>`
+      + `<span class="regions-list__was">${esc(schoolsCount(n))}</span></a></li>`;
+  });
+  return `<ul class="counties-list">${rows.join("")}</ul>`;
 }
 
 // ------------------------------------------------------------- data

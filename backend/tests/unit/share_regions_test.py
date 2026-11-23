@@ -187,3 +187,25 @@ def test_a_renamed_schools_old_name_has_no_timeline_of_its_own():
     assert paths == {"regions/timeline/team/leake-light.png", "regions/timeline/team/leake-dark.png"}
     leake = next(j for j in jobs if j.path == "regions/timeline/team/leake-light.png").kwargs
     assert [[r["school"] for r in c["rows"]] for c in leake["cycles"]] == [["Leake Central"], ["Leake"]]
+
+
+def test_the_counties_pages(written):
+    """Every county gets a page without JavaScript and its link preview (the site's card), the statewide
+    page too, and all go in the sitemap; a county with no school says so."""
+    out, _, sitemap, _ = written
+    body = (out / "body" / "counties-leflore.html").read_text()
+    assert "Leflore County" in body and "Greenwood" in body and "Region 2-5A" in body
+    assert "Class 5A regions" in body and "MHSAA" in body
+    meta = (out / "meta" / "counties-leflore.html").read_text()
+    assert "<title>Leflore County</title>" in meta
+    assert "https://example.com/static/og/site.png?v=20261106" in meta
+    assert "https://example.com/maps/counties/leflore" in meta
+    assert "No MHSAA school is in Issaquena County" in (out / "body" / "counties-issaquena.html").read_text()
+    picker = (out / "body" / "counties.html").read_text()
+    assert picker.count('data-county="') == 82
+    assert 'href="/maps/counties/jefferson-davis" data-county="Jefferson Davis"><svg class="mark county-mark county-shade--0"' in picker
+    assert '<span class="regions-list__team">Leflore</span><span class="regions-list__was">1 MHSAA school</span>' in picker
+    assert '<h1 class="title county-title"><svg class="mark county-mark county-mark--site"' in body
+    paths = [p for p, *_ in sitemap]
+    assert "/maps/counties" in paths and "/maps/counties/pearl-river" in paths
+    assert sum(p.startswith("/maps/counties/") for p in paths) == 82

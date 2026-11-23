@@ -16,6 +16,9 @@ of a cycle do, unless a school moved mid-cycle): "2027 and 2028".
 
 from __future__ import annotations
 
+import math
+import re
+
 from backend.helpers import region_map
 from backend.helpers.data_helpers import SCHOOL_SUCCESSORS, school_name_for_season
 from backend.helpers.region_files import cycle_start
@@ -268,3 +271,186 @@ def team_regions_description(school: dict, payload: dict) -> str:
     if school.get("before") and payload.get("prior_season"):
         text += f" {place(school['before'])} in {payload['prior_season']}."
     return text
+
+
+# ----------------------------------------------------------------- the Counties pages
+# /maps/counties/hinds: one county's MHSAA schools, whatever their classes, each with its region; and
+# /maps/counties, every county to pick one. A school's county is its campus's (region_map.county_of),
+# in each season's rows. Twins of regions.js's county functions (renderer_parity_test.py).
+
+MHSAA_NOTE = "Only schools in the MHSAA (Mississippi High School Activities Association) are shown."
+
+
+def counties_path(county: str | None = None) -> str:
+    """ "/maps/counties/jefferson-davis" (or "/maps/counties", every county)."""
+    return f"/maps/counties/{slugify(county)}" if county else "/maps/counties"
+
+
+def county_title(county: str) -> str:
+    """ "Hinds County"."""
+    return f"{county} County"
+
+
+def counties_trail(county: str | None = None) -> Trail:
+    """Home › Counties › Hinds County (or Home › Counties)."""
+    trail = [("Home", "/"), ("Counties", counties_path())]
+    return [*trail, (county_title(county), counties_path(county))] if county else trail
+
+
+def county_places(schools: list[dict]) -> list[dict]:
+    """The places (a region in a class) a county's *schools* are in, highest class first, each with a color
+    (1-8): its region's own, unless another of the county's places has it already, then the first one not
+    in use (``countyPlaces``)."""
+    seen: dict[str, dict] = {}
+    for s in sorted(schools, key=lambda s: (-s["class"], s["region"])):
+        key = f"{s['class']}-{s['region']}"
+        seen.setdefault(key, {"key": key, "clazz": s["class"], "region": s["region"]})
+    used: set[int] = set()
+    for p in seen.values():
+        own = (p["region"] - 1) % 8 + 1
+        p["color"] = own if own not in used else next((c for c in range(1, 9) if c not in used), own)
+        used.add(p["color"])
+    return list(seen.values())
+
+
+def schools_count(n: int) -> str:
+    """ "9 MHSAA schools", "1 MHSAA school", "No MHSAA schools"."""
+    return f"{n} MHSAA {'school' if n == 1 else 'schools'}" if n else "No MHSAA schools"
+
+
+def county_count(schools: list[dict]) -> str:
+    """ "9 MHSAA schools in 4 classes" (``countyCount``)."""
+    classes = len({s["class"] for s in schools})
+    return schools_count(len(schools)) + (f" in {classes} classes" if classes > 1 else "")
+
+
+def county_lists(county: str, payload: dict, teams: dict | None = None) -> str:
+    """The county's schools by class, highest first, each with its region and town (``countyLists``)."""
+    mine = [s for s in payload["schools"] if s["county"] == county]
+    colors = {p["key"]: p["color"] for p in county_places(mine)}
+    out = []
+    for c in sorted({s["class"] for s in mine}, reverse=True):
+        rows = []
+        for s in sorted((s for s in mine if s["class"] == c), key=lambda s: (s["region"], s["school"].lower())):
+            town = f" · {_e(s['city'])}" if s.get("city") else ""
+            color = colors[f"{c}-{s['region']}"]
+            rows.append(
+                f'<li><a class="regions-list__row" href="{_e(counties_path(county))}?team={_e(s["slug"])}" '
+                f'data-team="{_e(s["slug"])}">'
+                f"{_mark(s['school'], (teams or {}).get(s['school']))}"
+                f'<span class="regions-list__team">{_e(s["school"])}</span>'
+                f'<span class="regions-list__was"><span class="region-chip region-chip--{color}" '
+                f'aria-hidden="true">{s["region"]}</span>{_e(place(s))}{town}</span></a></li>'
+            )
+        out.append(
+            '<section class="regions-list__region county-list__class"><div class="regions-list__head">'
+            f'<h2 class="regions-list__name">Class {c}A</h2>'
+            f'<a class="regions-list__standings" href="{_e(regions_path(c))}">Class {c}A regions'
+            '<span aria-hidden="true"> ›</span></a></div>'
+            f"<ul>{''.join(rows)}</ul></section>"
+        )
+    return "".join(out)
+
+
+def _js_number(v: float) -> str:
+    """*v* rounded to a tenth (halves up) and written as JavaScript writes a number ("12", "12.3")."""
+    r = math.floor(v * 10 + 0.5) / 10
+    return str(int(r)) if r == int(r) else str(r)
+
+
+def path_box(d: str) -> list[float] | None:
+    """The box around an SVG path of absolute points (``pathBox``)."""
+    nums = [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", d)]
+    xs, ys = nums[0::2], nums[1::2]
+    return [min(xs), min(ys), max(xs), max(ys)] if xs else None
+
+
+def county_mark(base: dict, county: str, size: int = 24, shade: int | None = None) -> str:
+    """A county's mark, its outline as a team's helmet is its (``countyMark``)."""
+    c = next((x for x in base["counties"] if x["name"] == county), None)
+    if c is None:
+        return ""
+    d = c.get("icon") or c["d"]
+    x0, y0, x1, y1 = path_box(d)
+    pad = max(x1 - x0, y1 - y0) * 0.06
+    box = " ".join(_js_number(v) for v in (x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad))
+    fill = "county-mark--site" if shade is None else f"county-shade--{shade}"
+    return (
+        f'<svg class="mark county-mark {fill}" viewBox="{box}" width="{size}" height="{size}" aria-hidden="true">'
+        f'<path d="{d}"/></svg>'
+    )
+
+
+def count_shade(n: int) -> int:
+    """A count's shade on the statewide map (``countShade``)."""
+    return 0 if n == 0 else 1 if n == 1 else 2 if n == 2 else 3 if n <= 4 else 4
+
+
+def counties_list(base: dict, counts: dict[str, int]) -> str:
+    """Every county by name, a row each with its mark and its MHSAA schools (``countiesList``)."""
+    rows = []
+    for c in sorted(base["counties"], key=lambda c: c["name"].lower()):
+        n = counts.get(c["name"], 0)
+        rows.append(
+            f'<li><a class="regions-list__row county-row{"" if n else " is-empty"}" '
+            f'href="{_e(counties_path(c["name"]))}" data-county="{_e(c["name"])}">'
+            f"{county_mark(base, c['name'], 28, count_shade(n))}"
+            f'<span class="regions-list__team">{_e(c["name"])}</span>'
+            f'<span class="regions-list__was">{_e(schools_count(n))}</span></a></li>'
+        )
+    return f'<ul class="counties-list">{"".join(rows)}</ul>'
+
+
+def county_header(county: str, payload: dict, base: dict, share: str = "") -> str:
+    """The county page's heading (``countyHeader``)."""
+    mine = [s for s in payload["schools"] if s["county"] == county]
+    return (
+        f"{breadcrumb_nav(counties_trail(county))}"
+        f'<div class="title-row"><h1 class="title county-title">'
+        f"{county_mark(base, county, 44)}<span>{_e(county_title(county))}</span></h1>{share}</div>"
+        f'<p class="regions-sub">{_e(county_count(mine))}, {_e(seasons_label(payload["seasons"]))}</p>'
+        f'<p class="county-note muted">{_e(MHSAA_NOTE)}</p>'
+    )
+
+
+def county_body(county: str, payload: dict, base: dict, teams: dict | None = None) -> str:
+    """A county's page as plain HTML: its heading and its schools by class (the app adds the map)."""
+    mine = [s for s in payload["schools"] if s["county"] == county]
+    lists = (
+        f'<div class="regions-list county-list">{county_lists(county, payload, teams)}</div>'
+        if mine
+        else f'<p class="notice">No MHSAA school is in {_e(county_title(county))} in the '
+        f'{_e(seasons_label(payload["seasons"]))}. <a href="{counties_path()}">Pick another county</a>.</p>'
+    )
+    return (
+        f'<div class="page static-page regions-page county-page"><header class="entry-head">'
+        f"{county_header(county, payload, base)}</header>{lists}</div>\n"
+    )
+
+
+def county_description(county: str, payload: dict) -> str:
+    """A county page's description for search results and link previews."""
+    mine = [s for s in payload["schools"] if s["county"] == county]
+    seasons = " and ".join(str(s) for s in payload["seasons"])
+    if not mine:
+        return f"{county_title(county)}, Mississippi has no MHSAA football school in {seasons}."
+    places = ", ".join(
+        f"{s['school']} ({short_place(s)})" for s in sorted(mine, key=lambda s: (-s["class"], s["school"].lower()))
+    )
+    return f"{county_title(county)}, Mississippi's MHSAA football schools in {seasons} and their regions: {places}."
+
+
+def counties_body(base: dict, payload: dict) -> str:
+    """The statewide page as plain HTML: its heading and every county with its MHSAA schools' count."""
+    counts = {c["name"]: 0 for c in base["counties"]}
+    for s in payload["schools"]:
+        if s["county"] in counts:
+            counts[s["county"]] += 1
+    return (
+        '<div class="page static-page regions-page counties-page"><header class="entry-head">'
+        f"{breadcrumb_nav(counties_trail())}"
+        '<div class="title-row"><h1 class="title">Counties</h1></div>'
+        f'<p class="regions-sub">Each county\'s MHSAA schools, {_e(seasons_label(payload["seasons"]))}</p>'
+        f'<p class="county-note muted">{_e(MHSAA_NOTE)}</p></header>'
+        f'<h2 class="counties-list__title">Every county</h2>{counties_list(base, counts)}</div>\n'
+    )

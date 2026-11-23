@@ -251,7 +251,10 @@ def test_the_front_page_marks_home_and_has_no_class_picker():
     picker = re.search(r"map \$request_uri \$show_class_picker \{(.*?)\}", NGINX, re.S).group(1)
     assert '"no"' in picker
     shell = (ROOT / "nginx" / "html" / "index.html").read_text()
-    assert '<div class="scrubber-bar"<!--# if expr="$show_class_picker = no" --> hidden<!--# endif -->>' in shell
+    assert (
+        '<div class="scrubber-bar<!--# if expr="$maps_kind = counties" --> is-counties<!--# endif -->"'
+        '<!--# if expr="$show_class_picker = no" --> hidden<!--# endif -->>'
+    ) in shell
 
 
 def test_visit_counts_go_out_through_this_site_and_carry_nothing_of_the_visitors():
@@ -321,3 +324,51 @@ def test_a_regions_page_gets_its_own_preview_and_content():
     assert look("share_body", "/maps/regions/7a") == "regions-7"
     assert look("share_body", "/maps/regions/7a?season=2025") == "none"
     assert "location ^~ /static/regions/" in NGINX
+
+
+def test_the_counties_pages_are_the_states_82_counties():
+    """/maps/counties and /maps/counties/{county} are served for each of the 82 counties the map draws
+    (slugged as the app does), and nothing else under it."""
+    from backend.helpers import region_map
+    from backend.helpers.share_cards import slugify
+
+    route = re.search(r"location ~ (\^/maps/counties\S+) \{\n\s+root /usr/share/nginx/html;\n\s+ssi on;", NGINX).group(1)
+    pattern = re.compile(route)
+    slugs = sorted(slugify(name) for name in region_map.counties())
+    assert len(slugs) == 82
+    assert re.search(r"\(\?:([a-z|-]+)\)", route).group(1).split("|") == slugs
+    for path in ("/maps/counties", "/maps/counties/", "/maps/counties/hinds", "/maps/counties/jefferson-davis/"):
+        assert pattern.match(path), path
+    for path in ("/maps/counties/nowhere", "/maps/counties/Hinds", "/maps/counties/hinds/compare", "/maps/countiesx"):
+        assert not pattern.match(path), path
+
+
+def test_a_counties_page_gets_its_own_preview_content_and_header_bar():
+    """A county's page gets its preview and content (another season's: none); its header bar marks Counties,
+    and its classes open their regions."""
+    maps = {}
+    for name in ("share_page", "share_body", "class_link_base", "maps_kind"):
+        block = re.search(rf"map \$request_uri \${name} \{{(.*?)\n    \}}", NGINX, re.S).group(1)
+        maps[name] = [
+            (re.compile(m.group(1).replace("(?<", "(?P<")), m.group(2))
+            for m in re.finditer(r'"~([^"]+)"\s+"([^"]+)";', block)
+        ]
+
+    def look(name, uri):
+        for pattern, value in maps[name]:
+            m = pattern.search(uri)
+            if m:
+                return re.sub(r"\$\{(\w+)\}", lambda g: m.group(g.group(1)), value)
+        return None
+
+    assert look("share_page", "/maps/counties") == "counties"
+    assert look("share_page", "/maps/counties/jefferson-davis?team=prentiss") == "counties-jefferson-davis"
+    assert look("share_page", "/maps/counties/hinds?season=2026") == "none"
+    assert look("share_body", "/maps/counties/hinds") == "counties-hinds"
+    assert look("share_body", "/maps/counties/hinds?season=2026") == "none"
+    assert look("class_link_base", "/maps/counties/hinds") == "maps/regions"
+    assert look("maps_kind", "/maps/counties/hinds") == "counties"
+    assert look("maps_kind", "/maps/regions/4a") == "regions"
+    assert look("maps_kind", "/standings/4a") is None
+    page = (ROOT / "nginx" / "html" / "index.html").read_text()
+    assert page.count('<!--# if expr="$maps_kind = counties" -->') == 4  # the bar's class, switch, item, button

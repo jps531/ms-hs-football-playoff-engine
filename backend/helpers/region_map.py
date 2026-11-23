@@ -176,9 +176,14 @@ def svg_path(geom: BaseGeometry) -> str:
     return "".join(out)
 
 
+# How far (state-grid meters) a county's outline may stray when drawn small, as its mark on the Counties
+# pages (a few dozen pixels across): its shape, at a tenth of the full outline's size.
+ICON_TOLERANCE = 600
+
+
 def base_map() -> dict:
     """The page's map without schools: its size, the state outline, and each county with a spot for
-    its name. It doesn't change from season to season."""
+    its name and a simpler outline for its mark (``icon``). It doesn't change from season to season."""
     x0, y0, x1, y1 = state().bounds
     return {
         "width": round((x1 - x0) / SVG_UNIT, 1),
@@ -189,6 +194,7 @@ def base_map() -> dict:
                 "name": name,
                 "d": svg_path(g),
                 "label": [round(v, 1) for v in svg_point(*g.representative_point().coords[0])],
+                "icon": svg_path(g.simplify(ICON_TOLERANCE, preserve_topology=True)),
             }
             for name, g in sorted(counties().items())
         ],

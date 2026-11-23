@@ -396,6 +396,29 @@ button { font: inherit; color: inherit; }
   color: var(--scrubber-selected-text);
 }
 .scrubber__item:focus-visible { outline-offset: -2px; }
+/* Maps: the kinds of map beside the classes (app.js mapsKinds). On a computer, "Counties" after 7A, set
+   off by a rule; on a phone, where the classes fill the bar, a Regions | Counties switch above them, and
+   on a Counties page only the switch. */
+.scrubber__sep { flex: none; width: 1px; margin: 8px 4px; background: var(--border); }
+.maps-kinds { display: none; }
+@media (max-width: 47.99em) {
+  .scrubber__sep, .scrubber__kind { display: none; }
+  .scrubber-bar__classes:has(.maps-kinds) { display: grid; gap: 6px; width: 100%; }
+  .maps-kinds {
+    display: flex; gap: 2px; padding: 3px;
+    background: var(--surface-raised); border-radius: 10px;
+  }
+  .maps-kinds__item {
+    flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 44px; border-radius: 7px;
+    text-decoration: none; color: var(--text-secondary); font-weight: 600; font-size: 15px;
+  }
+  .maps-kinds__item[aria-current="page"] { background: var(--scrubber-selected-bg); color: var(--scrubber-selected-text); }
+  .maps-kinds__item:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+  .scrubber-bar.is-counties .scrubber-bar__classes .scrubber { display: none; }
+  .scrubber-bar__classes:has(.maps-kinds) .scrubber { display: flex; }
+  .scrubber-bar__classes:has(.maps-kinds) .scrubber__item { flex: 1 1 0; min-width: 0; padding: 0 4px; }
+}
 
 /* -------------------------------------------------------------- typography */
 
@@ -2036,3 +2059,48 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .map-region--6 { fill: var(--region-6); stroke: var(--region-6); } .regions-list__region--6 { --region: var(--region-6); } .map-dot--6 circle, .region-chip--6 { fill: var(--region-6); background: var(--region-6); }
 .map-region--7 { fill: var(--region-7); stroke: var(--region-7); } .regions-list__region--7 { --region: var(--region-7); } .map-dot--7 circle, .region-chip--7 { fill: var(--region-7); background: var(--region-7); }
 .map-region--8 { fill: var(--region-8); stroke: var(--region-8); } .regions-list__region--8 { --region: var(--region-8); } .map-dot--8 circle, .region-chip--8 { fill: var(--region-8); background: var(--region-8); }
+
+/* ------------------------------------------------------------- counties (regions.js countyPage, countiesPage) */
+.county-note { margin: 4px 0 0; font-size: 13px; line-height: 18px; }
+/* The county itself, over the county lines: its outline in the text color. */
+.map-county-focus { fill: none; stroke: var(--text-primary); stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+/* A county's schools' region-mates in other counties: smaller, unnumbered, faded. */
+.map-dot.is-away { opacity: 0.65; }
+.map-dot.is-away text { display: none; }
+.map-dot.is-away.is-dim { opacity: 0.2; }
+.county-list__class .regions-list__name { font-size: 1.1rem; }
+.county-list .regions-list__was { display: inline-flex; align-items: center; gap: 6px; }
+.county-list .region-chip { width: 18px; height: 18px; font-size: 11px; }
+/* The statewide map: each county shaded by how many MHSAA schools it has (none to 5 or more). */
+.counties-map__frame { position: relative; }
+.counties-map__svg { display: block; width: 100%; height: auto; }
+.county-pick__shape { stroke: var(--surface-page); stroke-width: 1; vector-effect: non-scaling-stroke; cursor: pointer; transition: fill 0.12s; }
+.county-shade--0 { fill: color-mix(in srgb, var(--text-primary) 5%, var(--surface-page)); }
+.county-shade--1 { fill: color-mix(in srgb, var(--scrubber-selected-bg) 22%, var(--surface-page)); }
+.county-shade--2 { fill: color-mix(in srgb, var(--scrubber-selected-bg) 42%, var(--surface-page)); }
+.county-shade--3 { fill: color-mix(in srgb, var(--scrubber-selected-bg) 66%, var(--surface-page)); }
+.county-shade--4 { fill: var(--scrubber-selected-bg); }
+.county-pick:hover .county-pick__shape, .county-pick:focus-visible .county-pick__shape { stroke: var(--text-primary); stroke-width: 2.5; }
+.county-pick:focus-visible { outline: none; }
+.county-pick__name { display: none; }
+.counties-map__key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
+.counties-map__key ul { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; list-style: none; }
+.counties-map__key li { display: inline-flex; align-items: center; gap: 6px; }
+.county-shade-key { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+.county-shade-key.county-shade--0 { background: color-mix(in srgb, var(--text-primary) 5%, var(--surface-page)); }
+.county-shade-key.county-shade--1 { background: color-mix(in srgb, var(--scrubber-selected-bg) 22%, var(--surface-page)); }
+.county-shade-key.county-shade--2 { background: color-mix(in srgb, var(--scrubber-selected-bg) 42%, var(--surface-page)); }
+.county-shade-key.county-shade--3 { background: color-mix(in srgb, var(--scrubber-selected-bg) 66%, var(--surface-page)); }
+.county-shade-key.county-shade--4 { background: var(--scrubber-selected-bg); }
+.counties-list__title { margin: 0 0 8px; font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; }
+/* Every county as a row, as the Regions lists' teams are: its mark, its name, and its MHSAA schools. */
+.counties-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: 2px 16px; margin: 0; padding: 0; list-style: none; }
+.county-row { grid-template-columns: 30px minmax(0, 1fr); }
+.county-row .county-mark { grid-row: span 2; width: 30px; height: 30px; }
+.county-row.is-empty .regions-list__team { color: var(--text-secondary); }
+/* A county's mark, as a team's helmet is its: its outline, filled in its shade on the statewide map, or
+   in the site's color by its name. */
+.county-mark path { stroke: color-mix(in srgb, var(--text-primary) 45%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.county-mark--site { fill: var(--scrubber-selected-bg); }
+.county-title { display: flex; align-items: center; gap: 12px; }
+.county-title .county-mark { width: 44px; height: 44px; }

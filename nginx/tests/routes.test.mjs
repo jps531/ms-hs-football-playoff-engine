@@ -95,3 +95,17 @@ test("regions pages: /maps/regions/{class}, its season left out when it's the pa
   // Compare's fields stay off other pages' addresses.
   assert.equal(buildPath({ ...c, page: "class", region: null, team: null }, opts), "/standings/5a");
 });
+
+test("counties pages: /maps/counties (pick one) and /maps/counties/{county}, season and team kept", () => {
+  const picker = parseLocation("/maps/counties", "");
+  assert.deepEqual([picker.page, picker.county], ["counties", null]);
+  const r = parseLocation("/maps/counties/jefferson-davis", "?season=2026&team=prentiss");
+  assert.deepEqual([r.page, r.county, r.season, r.team], ["counties", "jefferson-davis", 2026, "prentiss"]);
+  for (const bad of ["/maps/counties/hinds/compare", "/maps/counties/Hinds", "/maps/counties/de--soto", "/maps/counties/5a1"]) {
+    assert.equal(parseLocation(bad, "").page, "notfound", bad);
+  }
+  const opts = { currentSeason: 2026, regionsSeason: 2027 };
+  assert.equal(buildPath({ ...r, season: 2027, team: null }, opts), "/maps/counties/jefferson-davis");
+  assert.equal(buildPath(r, opts), "/maps/counties/jefferson-davis?season=2026&team=prentiss");
+  assert.equal(buildPath({ ...picker, season: 2025 }, opts), "/maps/counties?season=2025");
+});
