@@ -259,7 +259,9 @@ def render_county(county: str, seasons: list[int], schools: list[dict], theme: s
     # heading sits with its own schools (more room above it than under it).
     head, before = 64, 44
     row = min(104, (bottom - top - 30 - (head + before) * len(classes)) / len(mine))
-    y = top + 30
+    # The list centered on the map's height (its last row's town line ends about 0.9 of a row down).
+    tall = head * len(classes) + before * (len(classes) - 1) + row * (len(mine) - 1) + min(row, 104) * 0.9
+    y = max(top + 30, top + (bottom - top - tall) / 2)
     width = SIZE[0] - PAD - LIST_X
     for i, c in enumerate(classes):
         y += before if i else 0

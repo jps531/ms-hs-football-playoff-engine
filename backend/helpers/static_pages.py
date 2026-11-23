@@ -1771,23 +1771,102 @@ def _bracket_preview(featured: dict) -> str:
     )
 
 
+def _map_preview(href: str, image: str, label: str, spoken: str, kind: str = "", size=(1080, 1350)) -> str:
+    """One of the Maps pages' images to share (*image*: its path without "-light.png", light or dark with
+    the page, *size* its size at 1x), as one link to the page (*href*) under the words *label*. A
+    county's ("county") shows its header, then its middle (where the county and its list are), as two
+    pieces of the one image."""
+    images = "".join(
+        f'<img class="landing-regions__map landing-regions__map--{theme}" src="{image}-{theme}.png" '
+        f'width="{size[0]}" height="{size[1]}" loading="lazy" alt="">'
+        for theme in ("light", "dark")
+    )
+    if kind == "county":
+        images = f'<span class="landing-preview__head">{images}</span><span class="landing-preview__middle">{images}</span>'
+    return (
+        f'<a class="landing-preview landing-preview--regions{f" landing-preview--{kind}" if kind else ""}" href="{href}" '
+        f'aria-label="{_e(spoken)}">'
+        f'<span class="landing-preview__frame" aria-hidden="true">{images}</span>'
+        f'<span class="landing-preview__label">{_e(label)}</span></a>'
+    )
+
+
 def _regions_preview(example: dict | None) -> str:
     """A class's map of its regions (the image to share, light or dark with the page), as one link to its
     Regions page; nothing until there are regions. *example* is {"clazz", "season"}."""
     if not example:
         return ""
     clazz, season = example["clazz"], example["season"]
-    images = "".join(
-        f'<img class="landing-regions__map landing-regions__map--{theme}" src="/static/regions/{season}/{clazz}a-{theme}.png" '
-        f'width="1080" height="1350" loading="lazy" alt="">'
-        for theme in ("light", "dark")
+    return _map_preview(
+        f"/maps/regions/{clazz}a",
+        f"/static/regions/{season}/{clazz}a",
+        f"Open the {clazz}A region map",
+        f"Open the Class {clazz}A region map",
     )
-    return (
-        f'<a class="landing-preview landing-preview--regions" href="/maps/regions/{clazz}a" '
-        f'aria-label="Open the Class {clazz}A region map">'
-        f'<span class="landing-preview__frame" aria-hidden="true">{images}</span>'
-        f'<span class="landing-preview__label">Open the {clazz}A region map</span></a>'
-    )
+
+
+def _maps_views(example: dict) -> str:
+    """The Maps section's other views, each with its image when the pipeline drew it: Compare (the
+    class's regions beside the season before's: *example*'s "compare"), Timeline (every season's:
+    "timeline", the image's size) and Counties (a county's: "county", its name)."""
+    clazz, season = example["clazz"], example["season"]
+    parts = []
+    if example.get("compare"):
+        parts.append(
+            _section(
+                "maps-compare",
+                "Compare",
+                "<p>Put two seasons’ regions side by side, for any class in each, and see what changed: the "
+                "schools that moved into or out of the class, and those that changed region. Pick a team to "
+                "see it on both maps.</p>"
+                + _map_preview(
+                    f"/maps/regions/{clazz}a/compare",
+                    f"/static/regions/{season}/compare/{clazz}a",
+                    f"Compare {clazz}A’s regions",
+                    f"Compare Class {clazz}A’s regions with the season before",
+                ),
+                level="h3",
+            )
+        )
+    if example.get("timeline"):
+        width, height = example["timeline"]
+        parts.append(
+            _section(
+                "maps-timeline",
+                "Timeline",
+                "<p>See every season of a class’s regions in a row, oldest first, or follow one team through "
+                "each region it has played in.</p>"
+                + _map_preview(
+                    f"/maps/regions/{clazz}a/timeline",
+                    f"/static/regions/timeline/{clazz}a",
+                    f"Open the {clazz}A timeline",
+                    f"Open the Class {clazz}A regions timeline",
+                    "timeline",
+                    (width // 2, height // 2),
+                ),
+                level="h3",
+            )
+        )
+    if example.get("county"):
+        county = example["county"]
+        slug = slugify(county)
+        parts.append(
+            _section(
+                "maps-counties",
+                "Counties",
+                "<p>Pick a county to see its MHSAA schools, each marked with its region and class, and how "
+                "they changed from season to season.</p>"
+                + _map_preview(
+                    f"/maps/counties/{slug}",
+                    f"/static/regions/{season}/county/{slug}",
+                    f"Open {county} County",
+                    f"Open {county} County’s MHSAA schools",
+                    "county",
+                ),
+                level="h3",
+            )
+        )
+    return "".join(parts)
 
 
 # Paragraphs of trusted markup (emphasis), like PRINCIPLES_HTML below.
@@ -2014,11 +2093,12 @@ def landing_body(
         + (
             _section(
                 "regions",
-                "Region maps",
+                "Maps",
                 "<p>View each class’s regions on a map of Mississippi, with each school at its location and where "
                 "it played the season before. Pick a team to see its region, and share images of a class’s "
                 "regions, a team’s new region, or either one beside the season before.</p>"
-                + _regions_preview(regions_example),
+                + _regions_preview(regions_example)
+                + _maps_views(regions_example),
             )
             if regions_example
             else ""
