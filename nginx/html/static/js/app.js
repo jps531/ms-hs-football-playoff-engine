@@ -572,12 +572,12 @@ document.addEventListener("click", (e) => {
 // Another class keeps the season and week (pickWeek: the same calendar week, or its nearest earlier
 // one), and shows the team picked in it, if any.
 // On Maps, choosing a class yourself keeps the followed team only if it's in that class on a map shown;
-// otherwise it stops following, and on Compare the second map keeps the class it shows.
+// otherwise it stops following. The class picker is the whole page's: on Compare it sets both maps'
+// class (a map's own picker sets only that map's), keeping their seasons.
 const classHref = (clazz) => {
   if (route.page !== "regions" || !regionsState) return hrefWith({ clazz, region: null, team: pickedTeam(clazz) });
   const team = regionsState.teamClasses?.has(clazz) ? route.teamName : null;
-  const compare = route.view === "compare" && regionsState.compare
-    ? { vs: regionsState.compare.vs, vsClass: team ? null : regionsState.compare.sides[1].clazz } : {};
+  const compare = route.view === "compare" && regionsState.compare ? { vs: regionsState.compare.vs, vsClass: null } : {};
   return hrefWith({ clazz, region: null, team, ...compare });
 };
 
@@ -2832,6 +2832,7 @@ async function renderTimeline(token, index) {
     share: shareButton("map"),
     views: mapsViews("timeline", mapsViewHrefs()),
     follow: follow?.name ?? null,
+    teams,
   });
   const followTeam = (name, via) => {
     if (name && via) track("team_picked", { from: "timeline", via, team: name });
@@ -2864,6 +2865,9 @@ async function renderTimeline(token, index) {
     track("team_search_used", { team: team.school, from: "timeline" });
     followTeam(team.school, "search");
   });
+  // More seasons than fit: the row opens at the newest.
+  const row = app.querySelector(".timeline");
+  if (row) row.scrollLeft = row.scrollWidth;
   renderScrubber(route.clazz);
   showContext(contextHtml(regionsTitle(route.clazz), { week: timelineSpan(seasons) }, null, { bar: true }));
   history.replaceState(null, "", hrefWith({}));

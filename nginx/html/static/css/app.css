@@ -1940,9 +1940,14 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   }
 }
 /* ------------------------------------------------------------- timeline (regions.js timelinePage) */
-/* A map for each season, oldest first, side by side; on a phone, a row to swipe through (the next map
-   peeking in at the edge, so it's clear there's more). */
-.timeline { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+/* A map for each season, oldest first, in a row: as many as fit side by side, each at least 300px wide;
+   more scroll sideways (the app opens it at the newest). On a phone, a row to swipe through (the next
+   map peeking in at the edge, so it's clear there's more). */
+.timeline {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(300px, 1fr); gap: 24px; align-items: start;
+  overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; padding-bottom: 8px;
+}
+.timeline__season { scroll-snap-align: end; }
 .timeline .regions-map { position: static; }
 .timeline__label { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 0 0 8px; font-family: var(--font-display); font-size: 1.15rem; }
 .timeline__class { color: var(--text-secondary); font-size: 0.95rem; }
@@ -1955,13 +1960,25 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 760px) {
   .timeline {
-    grid-auto-columns: 85%; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+    grid-auto-columns: 85%; scroll-snap-type: x mandatory;
     margin-inline: -16px; padding: 0 16px 8px; scroll-padding-inline: 16px;
   }
   .timeline__season { scroll-snap-align: start; }
 }
-.timeline-path { margin: 0 0 20px; font-size: 15px; line-height: 1.6; }
-.timeline-path__arrow { color: var(--text-secondary); }
+/* A followed team's seasons (regions.js timelineTable): its class and region each season, and who
+   shared the region. */
+.timeline-table__title { margin: 28px 0 8px; font-family: var(--font-display); font-size: 1.3rem; }
+.timeline-table__wrap { overflow-x: auto; }
+.timeline-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.timeline-table th, .timeline-table td { padding: 8px 12px 8px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+.timeline-table thead th { color: var(--text-secondary); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.timeline-table tbody th { white-space: nowrap; font-weight: 700; }
+.timeline-table__place { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.timeline-table__place .region-chip { width: 20px; height: 20px; font-size: 11px; }
+.timeline-table__mates { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.timeline-table tr:has(+ tr > td:first-child) td { border-bottom-style: dashed; } /* a consolidation's schools, one season */
+.timeline-table__mate { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+
 
 .compare-changes { margin-top: 32px; }
 .compare-changes__title { margin: 0 0 12px; font-family: var(--font-display); font-size: 1.4rem; }

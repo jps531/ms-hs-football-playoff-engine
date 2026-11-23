@@ -191,6 +191,28 @@ export function regionsPage(clazz, base, payload, currentSeason, { controls = ""
 // (backend/helpers/data_helpers.py SCHOOL_RENAMES; school_renames_test.py keeps the two the same).
 export const SCHOOL_RENAMES = [["Leake Central", "Leake", 2026]];
 
+// Schools merged into one: the new school, its first season, and the schools merged into it, the one
+// whose campus it carries first (data_helpers.py SCHOOL_CONSOLIDATIONS; school_renames_test.py keeps
+// the two the same).
+export const SCHOOL_CONSOLIDATIONS = [
+  ["Leake", 2026, ["Leake Central", "Leake County"]],
+  ["North Tippah", 2027, ["Walnut", "Falkner"]],
+];
+
+/**
+ * The school *name* (in *season*) was or became in *other*, as every name it had there: the schools
+ * merged into it, for a season before a consolidation (North Tippah in 2026: Walnut and Falkner); the
+ * school it merged into, for a season after (Falkner in 2027: North Tippah); else its one name then.
+ */
+export function namesIn(name, season, other) {
+  for (const [merged, first, members] of SCHOOL_CONSOLIDATIONS) {
+    const then = nameIn(name, season, first);
+    if (season >= first && then === merged && other < first) return [...members];
+    if (season < first && members.includes(name) && other >= first) return [merged];
+  }
+  return [nameIn(name, season, other)];
+}
+
 /** *name* (a school's name in *season*) as the school is called in *other*, a season before or after. */
 export function nameIn(name, season, other) {
   let out = name;
@@ -303,9 +325,11 @@ export function timelineSeasons(options, payloads, clazz, follow = null) {
   return options.map((option, i) => ({ option, payload: payloads[i] }))
     .sort((a, b) => a.option.season - b.option.season)
     .map(({ option, payload }) => {
-      const name = follow && nameIn(follow.name, follow.season, option.season);
-      const row = name ? payload.schools.find((r) => r.school === name) ?? null : null;
-      return { option, payload, clazz: row ? row.class : clazz, row };
+      // Every school it was that season: more than one before a consolidation, the campus's first.
+      const names = follow ? namesIn(follow.name, follow.season, option.season) : [];
+      const rows = names.map((n) => payload.schools.find((r) => r.school === n)).filter(Boolean);
+      const row = rows[0] ?? null;
+      return { option, payload, clazz: row ? row.class : clazz, row, rows };
     });
 }
 
@@ -317,10 +341,29 @@ export function timelineSpan(seasons) {
   return from === to ? `${from} season` : `${from} to ${to} seasons`;
 }
 
-/** The followed team's way through the seasons: "Purvis: Region 4-5A in 2025 → … → Region 7-4A in 2027 and 2028". */
-export function timelinePathHtml(name, seasons) {
-  const steps = seasons.map((s) => `<span class="timeline-path__step">${esc(placeIn(s.row, s.option.label))}</span>`);
-  return `<p class="timeline-path"><strong>${esc(name)}</strong>: ${steps.join('<span class="timeline-path__arrow" aria-hidden="true"> → </span><span class="visually-hidden">, then </span>')}</p>`;
+/**
+ * The followed team's seasons, as a table: each season's class and region, and the region's other
+ * schools. A season before a consolidation lists each school merged into it; a season it wasn't in a
+ * region says so.
+ */
+export function timelineTable(name, seasons, teams = {}) {
+  const others = (s, row) => s.payload.schools
+    .filter((r) => r.class === row.class && r.region === row.region && !s.rows.includes(r))
+    .sort((a, b) => byName(a.school, b.school));
+  const mates = (s, row) => others(s, row).map((r) => `<span class="timeline-table__mate">${teamMark(r.school, teams[r.school], { size: 18 })}${esc(r.school)}</span>`).join("");
+  const where = (row, named) => `<span class="timeline-table__place">${named ? `${esc(row.school)}: ` : ""}`
+    + `<span class="region-chip region-chip--${row.region}" aria-hidden="true">${row.region}</span>${esc(place(row))}</span>`;
+  // A season before a consolidation has a line for each school merged into it, the season spanning them.
+  const body = seasons.map((s) => {
+    const season = (n) => `<th scope="row"${n > 1 ? ` rowspan="${n}"` : ""}>${esc(s.option.label)}</th>`;
+    if (!s.rows.length) return `<tr>${season(1)}<td><span class="muted">Not in a region</span></td><td></td></tr>`;
+    const named = s.rows.length > 1 || s.rows[0].school !== name;
+    return s.rows.map((row, i) => `<tr>${i === 0 ? season(s.rows.length) : ""}<td>${where(row, named)}</td>`
+      + `<td><span class="timeline-table__mates">${mates(s, row)}</span></td></tr>`).join("");
+  }).join("");
+  return `<div class="timeline-table__wrap"><table class="timeline-table">`
+    + `<thead><tr><th scope="col">Season</th><th scope="col">Region</th><th scope="col">The region's other schools</th></tr></thead>`
+    + `<tbody>${body}</tbody></table></div>`;
 }
 
 /**
@@ -328,7 +371,7 @@ export function timelinePathHtml(name, seasons) {
  * order (each zoomed to the followed team's region, if one is), and the team's way through them.
  * *seasons* is timelineSeasons'; *follow* is the followed team's name, or null.
  */
-export function timelinePage(clazz, base, seasons, { controls = "", share = "", views = "", follow = null } = {}) {
+export function timelinePage(clazz, base, seasons, { controls = "", share = "", views = "", follow = null, teams = {} } = {}) {
   const span = timelineSpan(seasons);
   const note = follow
     ? `Each map shows ${esc(follow)}’s class that season. Pick another team to follow it, or an empty spot on a map to stop.`
@@ -337,10 +380,11 @@ export function timelinePage(clazz, base, seasons, { controls = "", share = "", 
     + `${breadcrumbs(regionsTrail(clazz))}<div class="title-row"><h1 class="title">${esc(regionsTitle(clazz))}</h1>${share}</div>`
     + `<p class="regions-sub">${esc(span)}</p>`
     + `${views}${controls}<p class="focus-note muted regions-note">${note}</p></header>`
-    + (follow ? timelinePathHtml(follow, seasons) : "")
     + `<div class="timeline">${seasons.map((s, i) => `<section class="timeline__season" data-season="${s.option.season}" data-index="${i}">`
       + `<h2 class="timeline__label">${esc(s.option.label)} <span class="timeline__class">${s.clazz}A</span></h2>`
-      + `${mapFigure(base, s.payload, s.clazz, { full: false })}</section>`).join("")}</div></div>`;
+      + `${mapFigure(base, s.payload, s.clazz, { full: false })}</section>`).join("")}</div>`
+    + (follow ? `<h2 class="timeline-table__title">${esc(follow)}, season by season</h2>${timelineTable(follow, seasons, teams)}` : "")
+    + "</div>";
 }
 
 /**
