@@ -1956,7 +1956,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media (max-width: 760px) { .compare { grid-template-columns: minmax(0, 1fr); } }
 .compare .regions-map { position: static; }
 .compare { scroll-margin-top: calc(var(--header-h) + 83px); } /* scrolled to: clear of the header and the class bar */
-.compare__pickers { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
+.compare__pickers { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: center; margin-bottom: 10px; }
 /* Both maps whole in one view on a computer: as tall as the screen leaves room for (the bars, the
    pickers and the buttons). On a phone the Map view's own sizing applies. */
 @media (min-width: 761px) {
@@ -2100,7 +2100,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .county-shade--2 { fill: color-mix(in srgb, var(--scrubber-selected-bg) 42%, var(--surface-page)); }
 .county-shade--3 { fill: color-mix(in srgb, var(--scrubber-selected-bg) 66%, var(--surface-page)); }
 .county-shade--4 { fill: var(--scrubber-selected-bg); }
-.county-pick:hover .county-pick__shape, .county-pick:focus-visible .county-pick__shape { stroke: var(--text-primary); stroke-width: 2.5; }
+.county-pick__ring { fill: none; stroke: var(--text-primary); stroke-width: 2.5; vector-effect: non-scaling-stroke; pointer-events: none; }
 .county-pick:focus-visible { outline: none; }
 .county-pick__name { display: none; }
 .counties-map__key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
