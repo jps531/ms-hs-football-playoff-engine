@@ -12,6 +12,9 @@ For every season whose regions are loaded (each cycle file's seasons with school
   ``regions/{season}/compare/{slug}-{theme}.png``. Like the region images, only those whose content
   changed are drawn (``image_jobs``), and a choice the page no longer offers loses its folder;
 
+- the Counties pages' images (``county_jobs``): each county's, against the season before, every season
+  of it, and every county shaded, with their link previews;
+
 - the Timeline view's images (``timeline_jobs``), every season of regions on one image: each class's
   ``regions/timeline/{c}a-{theme}.png`` and each school's ``regions/timeline/team/{slug}-{theme}.png``;
 
@@ -42,6 +45,12 @@ from backend.helpers.image_jobs import (
     CLASS_REGIONS_CARD,
     CLASS_REGIONS_COMPARED,
     CLASS_TIMELINE,
+    COUNTIES,
+    COUNTIES_CARD,
+    COUNTY,
+    COUNTY_CARD,
+    COUNTY_COMPARED,
+    COUNTY_TIMELINE,
     TEAM_REGION,
     TEAM_REGION_CARD,
     TEAM_REGIONS_COMPARED,
@@ -236,6 +245,78 @@ def timeline_jobs(options: list[dict], seasons: dict[int, list[dict]], teams: di
     return jobs
 
 
+def _county_rows(rows: list[dict], county: str) -> list[dict]:
+    """What a county's images need of a season: every school in the classes its schools are in (each
+    class's region shapes are drawn from all its schools, as on the page)."""
+    classes = {r["class"] for r in rows if r.get("county") == county}
+    return [r for r in rows if r["class"] in classes]
+
+
+def county_jobs(options: list[dict], seasons: dict[int, list[dict]]) -> list[ImageJob]:
+    """The Counties pages' images, light and dark: for every choice of regions, each county's
+    (``regions/{season}/county/{slug}``), the county against the season before when there is one
+    (``…/county-compare/{slug}``) and every county shaded (``regions/{season}/counties``); each county's
+    every season (``regions/timeline/county/{slug}``); and, for the newest choice, the link previews
+    (``og/counties/{slug}.png``, ``og/counties.png``). A county with no school that season has none."""
+    names = sorted(region_map.counties(), key=str.lower)
+    ordered = sorted(options, key=lambda o: o["season"])
+    by_season = {s: o for o in ordered for s in o["seasons"]}
+    newest = ordered[-1]
+    jobs: list[ImageJob] = []
+    for option in ordered:
+        season, rows = option["season"], seasons[option["season"]]
+        counts = {n: 0 for n in names}
+        for r in rows:
+            if r.get("county") in counts:
+                counts[r["county"]] += 1
+        for theme in THEMES:
+            jobs.append(
+                ImageJob(
+                    f"regions/{season}/counties-{theme}.png",
+                    COUNTIES,
+                    {"seasons": option["seasons"], "counts": counts, "theme": theme},
+                )
+            )
+        if option is newest:
+            jobs.append(ImageJob("og/counties.png", COUNTIES_CARD, {"seasons": option["seasons"], "counts": counts}))
+        before = by_season.get(season - 1)
+        for county in names:
+            slug = slugify(county)
+            mine = _county_rows(rows, county)
+            if mine:
+                kwargs = {"county": county, "seasons": option["seasons"], "schools": mine}
+                for theme in THEMES:
+                    jobs.append(
+                        ImageJob(f"regions/{season}/county/{slug}-{theme}.png", COUNTY, {**kwargs, "theme": theme})
+                    )
+                if option is newest:
+                    jobs.append(ImageJob(f"og/counties/{slug}.png", COUNTY_CARD, kwargs))
+            then = _county_rows(seasons[before["season"]], county) if before else []
+            if before and (mine or then):
+                older = {"label": before["label"], "seasons": before["seasons"], "schools": then}
+                newer = {"label": option["label"], "seasons": option["seasons"], "schools": mine}
+                for theme in THEMES:
+                    jobs.append(
+                        ImageJob(
+                            f"regions/{season}/county-compare/{slug}-{theme}.png",
+                            COUNTY_COMPARED,
+                            {"county": county, "older": older, "newer": newer, "theme": theme},
+                        )
+                    )
+    for county in names:
+        cycles = [{"seasons": o["seasons"], "schools": _county_rows(seasons[o["season"]], county)} for o in ordered]
+        if any(c["schools"] for c in cycles):
+            for theme in THEMES:
+                jobs.append(
+                    ImageJob(
+                        f"regions/timeline/county/{slugify(county)}-{theme}.png",
+                        COUNTY_TIMELINE,
+                        {"county": county, "cycles": cycles, "theme": theme},
+                    )
+                )
+    return jobs
+
+
 def write_regions(
     fetch: Fetch,
     out_dir: Path,
@@ -285,6 +366,9 @@ def write_regions(
         prune += [f"regions/{season}", f"regions/{season}/team", f"regions/{season}/compare"]
     jobs += timeline_jobs(options, seasons, teams_by_season)
     prune += ["regions/timeline", "regions/timeline/team"]
+    jobs += county_jobs(options, seasons)
+    prune += ["regions/timeline/county", "og/counties"]
+    prune += [f"regions/{o['season']}/{kind}" for o in options for kind in ("county", "county-compare")]
     files: dict[str, list[str]] = {}
     drawn = draw_images(out_dir, jobs, prune=prune, files_out=files)
     counts["region_map_images"], counts["region_map_images_kept"] = drawn["drawn"], drawn["kept"]
@@ -332,11 +416,12 @@ def write_regions(
                 path.unlink(missing_ok=True)
         sitemap.append((regions_path(clazz), None, [image]))
 
-    # The Counties pages (the newest regions): every county, and each county's schools. Their link
-    # previews are the site's card for now.
+    # The Counties pages (the newest regions): every county, and each county's schools, each with its
+    # link preview (county_jobs draws them).
     base = region_map.base_map()
     names = sorted((c["name"] for c in base["counties"]), key=str.lower)
-    card = f"{site_url}/static/og/site.png?v={today:%Y%m%d}"
+    version = f"?v={today:%Y%m%d}"
+    card = f"{site_url}/static/og/site.png{version}"
     write(out_dir / "body" / "counties.html", counties_body(base, payload))
     write(
         out_dir / "meta" / "counties.html",
@@ -346,12 +431,13 @@ def write_regions(
                 f"Every Mississippi county's MHSAA football schools for the {seasons_label(payload['seasons'])}, "
                 "with each school's class and region, on a map."
             ),
-            card,
+            f"{site_url}/static/og/counties.png{version}",
             f"{site_url}{counties_path()}",
             json_ld(breadcrumb_ld(site_url, counties_trail())),
         ),
     )
     sitemap.append((counties_path(), None, []))
+    has = {c: any(s["county"] == c for s in payload["schools"]) for c in names}
     for county in names:
         slug = counties_path(county).rsplit("/", 1)[1]
         write(out_dir / "body" / f"counties-{slug}.html", county_body(county, payload, base, by_school))
@@ -360,7 +446,8 @@ def write_regions(
             meta_tags(
                 county_title(county),
                 description(county_description(county, payload)),
-                card,
+                # Its own preview, or the site's for a county with no school (it has no image).
+                f"{site_url}/static/og/counties/{slug}.png{version}" if has[county] else card,
                 f"{site_url}{counties_path(county)}",
                 json_ld(breadcrumb_ld(site_url, counties_trail(county))),
             ),

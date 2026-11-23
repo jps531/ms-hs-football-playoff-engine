@@ -20,7 +20,7 @@ import math
 import re
 
 from backend.helpers import region_map
-from backend.helpers.data_helpers import SCHOOL_SUCCESSORS, school_name_for_season
+from backend.helpers.data_helpers import SCHOOL_SUCCESSORS, names_in, school_name_for_season
 from backend.helpers.region_files import cycle_start
 from backend.helpers.region_map_image import REGION_COLORS, cycle_name, place, seasons_line, short_place
 from backend.helpers.share_cards import slugify
@@ -297,6 +297,10 @@ def counties_trail(county: str | None = None) -> Trail:
     return [*trail, (county_title(county), counties_path(county))] if county else trail
 
 
+# The colors a county's place takes when its own is taken, least like the others first (regions.js).
+PLACE_FALLBACK = (1, 3, 7, 4, 5, 6, 2, 8)
+
+
 def county_places(schools: list[dict]) -> list[dict]:
     """The places (a region in a class) a county's *schools* are in, highest class first, each with a color
     (1-8): its region's own, unless another of the county's places has it already, then the first one not
@@ -308,7 +312,7 @@ def county_places(schools: list[dict]) -> list[dict]:
     used: set[int] = set()
     for p in seen.values():
         own = (p["region"] - 1) % 8 + 1
-        p["color"] = own if own not in used else next((c for c in range(1, 9) if c not in used), own)
+        p["color"] = own if own not in used else next((c for c in PLACE_FALLBACK if c not in used), own)
         used.add(p["color"])
     return list(seen.values())
 
@@ -454,3 +458,62 @@ def counties_body(base: dict, payload: dict) -> str:
         f'<p class="county-note muted">{_e(MHSAA_NOTE)}</p></header>'
         f'<h2 class="counties-list__title">Every county</h2>{counties_list(base, counts)}</div>\n'
     )
+
+
+def county_changes(a: dict, b: dict, county: str) -> dict | None:
+    """What changed in a county between two seasons (``countyChanges``): *a* and *b* are {label, season,
+    schools} (or, as the app's, {label, season, payload: {schools}}), in either order. {"older", "newer", "groups": {"in", "out", "moved", "same"}}, each row
+    {school, slug, season, older, newer, note}; None for the same season."""
+    if a["season"] == b["season"]:
+        return None
+    older, newer = (a, b) if a["season"] < b["season"] else (b, a)
+
+    def rows(side: dict) -> list[dict]:
+        return side["schools"] if "schools" in side else side["payload"]["schools"]
+
+    then_all = {s["school"]: s for s in rows(older)}
+    now_all = {s["school"]: s for s in rows(newer)}
+    groups: dict[str, list[dict]] = {"in": [], "out": [], "moved": [], "same": []}
+    seen: set[str] = set()
+
+    def at(s: dict) -> dict:
+        return {"class": s["class"], "region": s["region"]}
+
+    for s in (x for x in rows(newer) if x["county"] == county):
+        was = [then_all[n] for n in names_in(s["school"], newer["season"], older["season"]) if n in then_all]
+        seen.update(w["school"] for w in was)
+        row = {
+            "school": s["school"],
+            "slug": s.get("slug") or slugify(s["school"]),
+            "season": newer["season"],
+            "older": None,
+            "newer": at(s),
+            "note": None,
+        }
+        if len(was) == 1:
+            row["older"] = at(was[0])
+            same = (was[0]["class"], was[0]["region"]) == (s["class"], s["region"])
+            groups["same" if same else "moved"].append(row)
+        else:
+            if len(was) > 1:
+                row["note"] = "Formed from " + " and ".join(f"{w['school']} ({short_place(w)})" for w in was)
+            elif s.get("successor_of"):
+                row["note"] = f"New school, on {s['successor_of']}’s campus"
+            else:
+                row["note"] = f"Not in a region in {older['label']}"
+            groups["in"].append(row)
+    for s in (x for x in rows(older) if x["county"] == county and x["school"] not in seen):
+        now = next((now_all[n] for n in names_in(s["school"], older["season"], newer["season"]) if n in now_all), None)
+        groups["out"].append(
+            {
+                "school": s["school"],
+                "slug": s.get("slug") or slugify(s["school"]),
+                "season": older["season"],
+                "older": at(s),
+                "newer": None,
+                "note": f"Now part of {now['school']}" if now else f"Not in a region in {newer['label']}",
+            }
+        )
+    for rows in groups.values():
+        rows.sort(key=lambda r: r["school"].lower())
+    return {"older": older, "newer": newer, "groups": groups}

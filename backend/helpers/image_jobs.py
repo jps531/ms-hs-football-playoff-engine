@@ -43,6 +43,12 @@ CLASS_REGIONS_CARD = ("backend.helpers.region_map_image", "render_class_regions_
 TEAM_REGION_CARD = ("backend.helpers.region_map_image", "render_team_region_card")
 CLASS_TIMELINE = ("backend.helpers.region_timeline_image", "render_class_timeline")
 TEAM_TIMELINE = ("backend.helpers.region_timeline_image", "render_team_timeline")
+COUNTY = ("backend.helpers.region_county_image", "render_county")
+COUNTY_COMPARED = ("backend.helpers.region_county_image", "render_county_compared")
+COUNTY_TIMELINE = ("backend.helpers.region_county_image", "render_county_timeline")
+COUNTIES = ("backend.helpers.region_county_image", "render_counties")
+COUNTY_CARD = ("backend.helpers.region_county_image", "render_county_card")
+COUNTIES_CARD = ("backend.helpers.region_county_image", "render_counties_card")
 # The link previews and the bracket images, each one picture (the renderer returns an image, not a list).
 SITE_CARD = ("backend.helpers.share_cards", "render_site_card")
 CLASS_CARD = ("backend.helpers.share_cards", "render_class_card")

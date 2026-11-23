@@ -190,15 +190,16 @@ def test_a_renamed_schools_old_name_has_no_timeline_of_its_own():
 
 
 def test_the_counties_pages(written):
-    """Every county gets a page without JavaScript and its link preview (the site's card), the statewide
-    page too, and all go in the sitemap; a county with no school says so."""
+    """Every county gets a page without JavaScript and its link preview (its own, or the site's card for
+    one with no school), the statewide page too, and all go in the sitemap; a county with no school says
+    so."""
     out, _, sitemap, _ = written
     body = (out / "body" / "counties-leflore.html").read_text()
     assert "Leflore County" in body and "Greenwood" in body and "Region 2-5A" in body
     assert "Class 5A regions" in body and "MHSAA" in body
     meta = (out / "meta" / "counties-leflore.html").read_text()
     assert "<title>Leflore County</title>" in meta
-    assert "https://example.com/static/og/site.png?v=20261106" in meta
+    assert "https://example.com/static/og/counties/leflore.png?v=20261106" in meta
     assert "https://example.com/maps/counties/leflore" in meta
     assert "No MHSAA school is in Issaquena County" in (out / "body" / "counties-issaquena.html").read_text()
     picker = (out / "body" / "counties.html").read_text()
@@ -209,3 +210,28 @@ def test_the_counties_pages(written):
     paths = [p for p, *_ in sitemap]
     assert "/maps/counties" in paths and "/maps/counties/pearl-river" in paths
     assert sum(p.startswith("/maps/counties/") for p in paths) == 82
+
+    assert "https://example.com/static/og/site.png?v=20261106" in (out / "meta" / "counties-issaquena.html").read_text()
+    assert "https://example.com/static/og/counties.png?v=20261106" in (out / "meta" / "counties.html").read_text()
+
+
+def test_the_counties_images(written):
+    """Each county with a school, each season: its image (light and dark), and against the season before
+    when there's one; its every season; every county shaded; the newest's previews. None for a county
+    with no school."""
+    *_, jobs = written
+    by_path = {j.path: j for j in jobs}
+    assert {"regions/2027/county/leflore-light.png", "regions/2027/county/leflore-dark.png"} <= set(by_path)
+    assert "regions/2026/county/leflore-dark.png" in by_path
+    assert "regions/2027/county/issaquena-light.png" not in by_path
+    assert "regions/2027/county-compare/leflore-light.png" in by_path
+    assert not any(p.startswith("regions/2026/county-compare/") for p in by_path)  # no season before 2026 here
+    assert {"regions/2027/counties-light.png", "regions/2026/counties-dark.png", "og/counties.png"} <= set(by_path)
+    assert "og/counties/leflore.png" in by_path and "og/counties/issaquena.png" not in by_path
+    tl = by_path["regions/timeline/county/tippah-light.png"].kwargs
+    assert [c["seasons"] for c in tl["cycles"]] == [[2026], [2027, 2028]]
+    # A county's image gets every school in its schools' classes (each class's shapes come from all of them).
+    county = by_path["regions/2027/county/leflore-light.png"].kwargs
+    assert {r["school"] for r in county["schools"]} == {"Greenwood", "Leake", "Natchez", "Lost"}
+    counts = by_path["regions/2027/counties-light.png"].kwargs["counts"]
+    assert len(counts) == 82 and counts["Leflore"] == 1 and counts["Issaquena"] == 0

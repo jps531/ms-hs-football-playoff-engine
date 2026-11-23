@@ -101,9 +101,10 @@ def _blend(a: str, b: str, t: float) -> str:
 class _Frame:
     """State-grid meters to pixels in a box: north up, one scale for x and y, centered."""
 
-    def __init__(self, box: tuple[float, float, float, float]):
+    def __init__(self, box: tuple[float, float, float, float], bounds: tuple[float, float, float, float] | None = None):
+        """*bounds*: the state-grid box to fit (default: the whole state)."""
         x0, y0, x1, y1 = box
-        bx0, by0, bx1, by1 = region_map.state().bounds
+        bx0, by0, bx1, by1 = bounds or region_map.state().bounds
         self.s = min((x1 - x0) / (bx1 - bx0), (y1 - y0) / (by1 - by0))
         w, h = (bx1 - bx0) * self.s, (by1 - by0) * self.s
         self.w, self.h = w, h
@@ -190,11 +191,13 @@ class _Page:
         focus: int | set[int] | None = None,
         label_size: int = 34,
         line: int = 3,
+        outlines: list[tuple[object, str, int]] = (),
     ) -> None:
         """The state, its counties and the region shapes (*fills*: [(geometry, color)]), then the *dots*
         ([(x, y, color, text, radius)] in state-grid meters), then *labels* ([(text, dot index)]). A dot
         pushed off its spot to stay readable gets a hairline back to a small mark at the true spot. *line* is
-        the regions' edge width (the counties' a pixel less, the state's two more), thinner on small maps."""
+        the regions' edge width (the counties' a pixel less, the state's two more), thinner on small maps;
+        *outlines* ([(geometry, color, width)]) are drawn over the state's outline, under the dots."""
         t = self.t
         land = _blend(t.bg, t.text, 0.05)
         for poly in _polygons(region_map.state()):
@@ -241,6 +244,9 @@ class _Page:
         self.d = ImageDraw.Draw(self.img)
         for poly in _polygons(region_map.state()):
             self.d.line(frame.ring(poly.exterior.coords), fill=_blend(t.bg, t.text, 0.6), width=line + 2, joint="curve")
+        for geom, color, width in outlines:  # (a county's border, over the regions and under the dots)
+            for poly in _polygons(geom):
+                self.d.line(frame.ring(poly.exterior.coords), fill=color, width=width, joint="curve")
 
         true = [frame(x, y) for x, y, *_ in dots]
         spots = [list(p) for p in true]

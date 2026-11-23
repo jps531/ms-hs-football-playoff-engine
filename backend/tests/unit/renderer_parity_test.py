@@ -274,6 +274,28 @@ COUNTY_BASE = {
     ],
 }  # fmt: skip
 
+# Two seasons of two counties for countyChanges: a merger with a rename (Leake), a merger into a successor
+# (North Tippah), a move, and a school gone.
+CHANGES_A = {"label": "2026", "season": 2026, "schools": [
+    {"school": "Leake Central", "slug": "leake-central", "class": 4, "region": 5, "county": "Leake"},
+    {"school": "Leake County", "slug": "leake-county", "class": 1, "region": 5, "county": "Leake"},
+    {"school": "Walnut", "slug": "walnut", "class": 2, "region": 1, "county": "Tippah"},
+    {"school": "Falkner", "slug": "falkner", "class": 1, "region": 2, "county": "Tippah"},
+    {"school": "Ripley", "slug": "ripley", "class": 4, "region": 3, "county": "Tippah"},
+    {"school": "Gone", "slug": "gone", "class": 1, "region": 2, "county": "Tippah"},
+]}  # fmt: skip
+CHANGES_B = {"label": "2027 and 2028", "season": 2027, "schools": [
+    {"school": "Leake", "slug": "leake", "class": 5, "region": 2, "county": "Leake"},
+    {"school": "North Tippah", "slug": "north-tippah", "class": 3, "region": 2, "county": "Tippah", "successor_of": "Walnut"},
+    {"school": "Ripley", "slug": "ripley", "class": 3, "region": 1, "county": "Tippah"},
+]}  # fmt: skip
+
+
+def _js_side(x: dict) -> dict:
+    """The same season as countyChanges in regions.js takes it ({label, season, payload})."""
+    return {"label": x["label"], "season": x["season"], "payload": {"schools": x["schools"]}}
+
+
 CASES = [
     *[(f"playoffPath {t['school']} {m} {c}", team_image.playoff_rounds(t, m, c), _call("standings", "playoffPath", t, m, c), "data")
       for t in (PATH_TEAM, {"school": "X", "odds": {}}) for m in ("tossup", "projected") for c in (3, 6)],
@@ -359,6 +381,9 @@ CASES = [
       for c in ("Hinds", "Issaquena", "Nowhere")],
     *[(f"countyMark {c} {a}", rp.county_mark(COUNTY_BASE, c, *a), _call("regions", "countyMark", COUNTY_BASE, c, {"size": a[0], "shade": a[1]}), "html")
       for c in ("Hinds", "Rankin", "Nowhere") for a in ((24, None), (28, 0), (44, 4))],
+    *[(f"countyChanges {c} {x['season']} {y['season']}", rp.county_changes(_js_side(x), _js_side(y), c),
+       _call("regions", "countyChanges", _js_side(x), _js_side(y), c), "data")
+      for c in ("Leake", "Tippah") for x, y in ((CHANGES_A, CHANGES_B), (CHANGES_B, CHANGES_A), (CHANGES_A, CHANGES_A))],
     ("countiesList", rp.counties_list(COUNTY_BASE, {"Hinds": 4, "Rankin": 1}),
      _call("regions", "countiesList", COUNTY_BASE, {"Hinds": 4, "Rankin": 1}), "html"),
     *[(f"countyLists {c}", rp.county_lists(c, COUNTY, COUNTY_TEAMS), _call("regions", "countyLists", c, COUNTY, COUNTY_TEAMS), "html")

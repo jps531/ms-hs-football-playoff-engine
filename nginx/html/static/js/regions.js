@@ -930,10 +930,15 @@ export function countiesTrail(county = null) {
   return county ? [...trail, [countyTitle(county), countiesPath(county)]] : trail;
 }
 
+// The colors a county's place takes when its own is taken, in order: the ones least like the others
+// first (blue, green, purple), so two places never end up red and orange (8 and 2) side by side.
+const PLACE_FALLBACK = [1, 3, 7, 4, 5, 6, 2, 8];
+
 /**
  * The places (a region in a class) a county's *schools* are in, highest class first, each with a color
  * (1-8): its region's own, unless another of the county's places already has it (two regions with the
- * same number in different classes), then the first one not in use. [{ key, clazz, region, color }].
+ * same number in different classes), then the first of PLACE_FALLBACK not in use. [{ key, clazz, region,
+ * color }].
  */
 export function countyPlaces(schools) {
   const seen = new Map();
@@ -944,7 +949,7 @@ export function countyPlaces(schools) {
   const used = new Set();
   for (const p of seen.values()) {
     const own = ((p.region - 1) % 8) + 1;
-    p.color = !used.has(own) ? own : [1, 2, 3, 4, 5, 6, 7, 8].find((c) => !used.has(c)) ?? own;
+    p.color = !used.has(own) ? own : PLACE_FALLBACK.find((c) => !used.has(c)) ?? own;
     used.add(p.color);
   }
   return [...seen.values()];
@@ -1086,12 +1091,12 @@ export function countiesMapSvg(base, counts) {
 }
 
 /** The statewide page: heading and controls, the map with its key, and every county as a list. */
-export function countiesPage(base, payload, { controls = "" } = {}) {
+export function countiesPage(base, payload, { controls = "", share = "" } = {}) {
   const counts = countyCounts(base, payload);
   const key = SHADES.map(([label, shade]) => `<li><span class="county-shade-key county-shade--${shade}" aria-hidden="true"></span>${esc(label)}</li>`).join("");
   const list = countiesList(base, counts);
   return `<div class="page regions-page counties-page"><header class="entry-head">${breadcrumbs(countiesTrail())}`
-    + `<div class="title-row"><h1 class="title">Counties</h1></div>`
+    + `<div class="title-row"><h1 class="title">Counties</h1>${share}</div>`
     + `<p class="regions-sub">Each county's MHSAA schools, ${esc(seasonsLabel(payload.seasons))}</p>`
     + `<p class="county-note muted">${esc(MHSAA_NOTE)}</p>${controls}`
     + `<p class="focus-note muted regions-note">Pick a county on the map or in the list to see its schools, their classes and their regions.</p></header>`
