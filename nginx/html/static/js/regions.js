@@ -1276,7 +1276,11 @@ export function countiesMapSvg(base, counts) {
   }).join("");
   const names = base.counties.map((c) => `<text class="county-pick__name" x="${c.label[0]}" y="${c.label[1]}">${esc(c.name)}</text>`).join("");
   return `<svg class="counties-map__svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" role="group" aria-label="Mississippi's counties, each shaded by how many MHSAA schools it has">`
-    + `<g class="county-picks">${shapes}</g><path class="map-state" d="${base.state}"/><g class="county-pick__names" aria-hidden="true">${names}</g></svg>`;
+    + `<g class="county-picks">${shapes}</g><path class="map-state" d="${base.state}"/>`
+    // The county pointed at (or focused), outlined over its neighbors (an SVG draws in order: a county's
+    // own outline would be under those drawn after it).
+    + `<path class="county-pick__ring" d="" aria-hidden="true"/>`
+    + `<g class="county-pick__names" aria-hidden="true">${names}</g></svg>`;
 }
 
 /** The statewide page: heading and controls, the map with its key, and every county as a list. */

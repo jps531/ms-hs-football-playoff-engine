@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -190,6 +190,12 @@ async function navigate(url, { scroll = false, replace = false } = {}) {
 // the same control (its replacement) and the change is announced; after
 // moving to another page, focus goes to the new page's heading.
 
+// How the reader last used the page: a tap or a click, or keys. A dropdown changed by tap or click isn't
+// focused again after the render: on phones, focusing a dropdown opens it again.
+let byPointer = false;
+document.addEventListener("pointerdown", () => { byPointer = true; }, true);
+document.addEventListener("keydown", () => { byPointer = false; }, true);
+
 /** A selector that finds an element's replacement after a re-render, or null. */
 function focusKey(el) {
   if (!el || el === document.body || !el.isConnected) return null;
@@ -215,7 +221,8 @@ function settleFocus(key) {
   if (active && active !== document.body && active !== app && app.contains(active)) return;
   const same = key && document.querySelector(key);
   if (same) {
-    same.focus({ preventScroll: true });
+    // (Tapped or clicked: nothing is focused, and the page stays where it is.)
+    if (!(same.tagName === "SELECT" && byPointer)) same.focus({ preventScroll: true });
     if (key.startsWith("[data-control")) announce(contextText());
     return;
   }
@@ -634,7 +641,13 @@ const resultPlace = (t) => `Region ${t.region}-${t.class_}A`;
  * and empty note) and a status line for screen readers; *teams()* is what can
  * be found (objects with school, class_ and region); *onPick(team)* commits.
  */
-function teamCombobox(form, teams, onPick, { one = "team", many = "teams", meta = (t) => resultPlace(t), mark = (t) => teamMark(t.school, t) } = {}) {
+function teamCombobox(form, teams, onPick, options = {}) {
+  // What it finds and how a result reads; *options* can be a function, for a box that finds different
+  // things at different times (the header's, while a map is in full screen).
+  const words = () => ({
+    one: "team", many: "teams", meta: (t) => resultPlace(t), mark: (t) => teamMark(t.school, t),
+    ...(typeof options === "function" ? options() : options),
+  });
   const input = form?.querySelector("input[role=combobox]");
   if (!input) return null;
   const popup = form.querySelector(".team-results");
@@ -671,6 +684,7 @@ function teamCombobox(form, teams, onPick, { one = "team", many = "teams", meta 
     }
     const all = teams();
     const loaded = all.length > 0;
+    const { one, many, meta, mark } = words();
     matches = matchTeams(all, query);
     list.innerHTML = matches.map((t, i) => `<li id="${prefix}-${i}" role="option" aria-selected="false" data-index="${i}">
       ${mark(t)}<span class="team-results__name">${esc(t.school)}</span>
@@ -728,26 +742,29 @@ function teamCombobox(form, teams, onPick, { one = "team", many = "teams", meta 
   return { update, input };
 }
 
-// While a Season map is in full screen, the header's search is the map's: its season's teams, picked on
-// the map (headerMapSearch). Otherwise it opens a team's standings.
-let mapSearch = null; // { teams(), pick(team) } or null
+// While a map is in full screen, the header's search is the page's (headerMapSearch): a Season map's
+// teams, picked on the map, or on a county's page, the counties. Otherwise it opens a team's standings.
+let mapSearch = null; // { teams(), pick(team), words?, options? } or null
 const headerSearch = teamCombobox(teamSearch?.closest("form"), () => (mapSearch ? mapSearch.teams() : Object.values(teamIndex)), (team, input) => {
   input.value = "";
   if (mapSearch) {
-    track("team_search_used", { team: team.school, from: "regions" });
+    if (!mapSearch.options) track("team_search_used", { team: team.school, from: "regions" });
     mapSearch.pick(team);
     return;
   }
   scrollToFocus = true;
   track("team_search_used", { team: team.school });
   navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school }), { scroll: true });
-});
+}, () => mapSearch?.options ?? {});
 
-/** The header's search as the map's (*search*: { teams(), pick(team) }), or back to its own (null). */
+/**
+ * The header's search as the page's (*search*: { teams(), pick(team) }, and for things other than teams,
+ * *words* (its placeholder) and *options* (teamCombobox's)), or back to its own (null).
+ */
 function headerMapSearch(search) {
   mapSearch = search;
   if (!teamSearch) return;
-  const words = search ? "Find a team on the map" : "Find a team";
+  const words = search ? search.words ?? "Find a team on the map" : "Find a team";
   teamSearch.placeholder = words;
   const label = teamSearch.closest("form")?.querySelector(`label[for="${teamSearch.id}"]`);
   if (label) label.textContent = words;
@@ -2835,6 +2852,11 @@ async function renderCounties(token) {
     const counts = countyCounts(base, payload);
     const findable = counties.map((name) => ({ school: countyTitle(name), county: name, count: counts[name] ?? 0 }));
     const finder = countyFinder();
+    // A county in the results: its shape, shaded as on the map by its count of schools, as a team's helmet.
+    const countySearch = {
+      one: "county", many: "counties", meta: (item) => schoolsCount(item.count),
+      mark: (item) => countyMark(base, item.county, { size: 24, shade: countShade(item.count) }),
+    };
     const goTo = (name, via) => {
       track("county_opened", { county: name, via });
       navigate(hrefWith({ page: "counties", county: countiesPath(name).split("/").pop(), team: null }), { scroll: true });
@@ -2877,7 +2899,11 @@ async function renderCounties(token) {
           },
           onMove: (how) => track("regions_map_moved", { class: null, how, view: "county" }),
           otherCounty: (name) => countyJumpHtml(base, name, county, counts[name] ?? 0),
-          onFull: (on) => setScrolled(on),
+          // Full screen hides the page's search, so the header's finds the counties instead.
+          onFull: (on) => {
+            setScrolled(on);
+            headerMapSearch(on ? { teams: () => findable, pick: (item) => goTo(item.county, "search"), words: "Find a county", options: countySearch } : null);
+          },
         });
       }
     }
@@ -2894,7 +2920,7 @@ async function renderCounties(token) {
     teamCombobox(app.querySelector("[data-regions-find]"), () => findable, (item, input) => {
       input.value = "";
       goTo(item.county, "search");
-    }, { one: "county", many: "counties", meta: (item) => schoolsCount(item.count), mark: () => "" });
+    }, countySearch);
     if (token !== renderToken) return;
     renderScrubber(null);
     const when = route.view === "compare" && county ? countyCompareLine : route.view === "timeline" && county ? countyTimelineLine : seasonsLabel(option.seasons);
@@ -3037,7 +3063,6 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
   ]);
   if (token !== renderToken) return;
   route.season = null;
-  route.team = null;
   const teams = Object.assign({}, ...helmets); // the newest season's helmet wins
   const seasons = options.map((option, i) => ({ option, payload: payloads[i] }));
   countyTimelineLine = timelineSpan(seasons);
@@ -3048,21 +3073,42 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
     kinds: [{ key: "county-timeline", label: countyTitle(county), file: `timeline/county/${slug}`, name: `${slug}-county-timeline`, alt: `${countyTitle(county)}’s MHSAA schools, ${countyTimelineLine}` }],
   } : null;
   app.innerHTML = countyTimelinePage(county, base, seasons, { controls: `<div class="regions-controls">${finder}${timelineSteps()}</div>`, views, teams, share: has ? shareButton("map") : "" });
+  // A school picked on one map is picked on every map it's on (by its name that season), and the others
+  // say where it was, as Compare's two maps do.
+  const rowIn = (side, p) => namesIn(p.name, p.season, side.option.season)
+    .map((n) => side.payload.schools.find((r) => r.school === n)).find(Boolean) ?? null;
+  let picked = null;
+  const pickAll = (p, via) => {
+    picked = p;
+    for (const side of seasons) {
+      const row = p && rowIn(side, p);
+      const onMap = row && side.layer?.schools.some((r) => r.slug === row.slug);
+      side.map?.pick(onMap ? row.slug : p ? "-" : null, { reveal: false });
+    }
+    route.teamName = p?.name ?? null;
+    if (p && via) track("team_picked", { from: "county-timeline", via, team: p.name });
+    history.replaceState(null, "", hrefWith({ team: route.teamName }));
+  };
   for (const [i, side] of seasons.entries()) {
     if (!side.payload.schools.some((r) => r.county === county)) continue;
-    const layer = countyLayer(side.payload, county);
-    wireRegionsMap(app.querySelector(`.timeline__season[data-index="${i}"]`), base, side.payload, null, {
-      layer,
+    side.layer = countyLayer(side.payload, county);
+    side.map = wireRegionsMap(app.querySelector(`.timeline__season[data-index="${i}"]`), base, side.payload, null, {
+      layer: side.layer,
       home: countyHome(base, county),
       href: countiesPath(county),
       teams,
+      elsewhere: () => notOnMapHtml(picked.name, rowIn(side, picked), side.option.label),
       onPick: (slug, via) => {
-        const row = slug && layer.schools.find((r) => r.slug === slug);
-        if (row && via) track("team_picked", { from: "county-timeline", via, team: row.school });
+        const row = slug && side.layer.schools.find((r) => r.slug === slug);
+        pickAll(row ? { name: row.school, season: side.option.season } : null, via);
       },
       onMove: (how) => track("regions_map_moved", { class: null, how, view: "county-timeline" }),
     });
   }
+  // ?team=: a school by its slug in any season, the newest first.
+  const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+  const found = wanted && [...seasons].reverse().map((side) => [side, side.payload.schools.find((r) => r.slug === wanted)]).find(([, r]) => r);
+  if (found) pickAll({ name: found[1].school, season: found[0].option.season }, null);
   wireTimelineSteps(app);
 }
 
@@ -3098,7 +3144,7 @@ function wireTimelineSteps(root) {
 
 /** The Counties page's search box: the team search's field and list, for a county. */
 function countyFinder() {
-  return regionsFinder("Find a county").replace('aria-label="Teams"', 'aria-label="Counties"');
+  return regionsFinder("Find a county on the map").replace('aria-label="Teams"', 'aria-label="Counties"');
 }
 
 /** The statewide map: a county's name and count on hover, and a click (or its list link) opens it. */
@@ -3121,6 +3167,13 @@ function wireCountiesMap(root, counts, goTo) {
     hover.style.top = `${spot.top}px`;
   });
   frame.addEventListener("pointerleave", () => { hover.hidden = true; });
+  // The county pointed at or focused, outlined on top of its neighbors.
+  const ring = frame.querySelector(".county-pick__ring");
+  const outline = (a) => ring?.setAttribute("d", a?.querySelector("path")?.getAttribute("d") ?? "");
+  frame.addEventListener("pointerover", (e) => outline(e.target.closest?.("[data-county]")));
+  frame.addEventListener("pointerleave", () => outline(null));
+  frame.addEventListener("focusin", (e) => outline(e.target.closest?.("[data-county]")));
+  frame.addEventListener("focusout", () => outline(null));
   root.addEventListener("click", (e) => {
     const a = e.target.closest("a[data-county]");
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;

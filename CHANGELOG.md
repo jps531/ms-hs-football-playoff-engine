@@ -9,10 +9,24 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
 
 - **Open another county from a county's map.** Tap a county around it, off the schools, to see its
   outline, its count of schools and a button to open it (the tap alone doesn't leave the page). Under
-  the map, the county's neighbors are listed with their
-  outlines, to open with one tap.
+  the map, the county's neighbors are listed with their outlines, to open with one tap.
 - **The Timeline's Older and Newer buttons** step through the seasons a season at a time when they
   don't all fit on screen, beside its search box (on a phone, under it).
+
+## 1.28.0
+
+- The front page's links to the maps now read **Maps**, as the menu does.
+- On the Counties map, the county you point at or tab to is outlined whole, on top of its neighbors;
+  before, the counties drawn after it covered part of its edge. Its search box reads "Find a county on
+  the map", and each county it finds shows the county's outline, shaded as on the map.
+- In full screen, a county's map turns the header's search into a county search (on a Regions map it
+  already finds the map's teams).
+- A school picked on one of a county's Timeline maps is picked on every season's map, and those it
+  isn't on say where it was, as Compare's two maps do. A link to a county's Timeline can name a school
+  (?team=), as one to its Compare can.
+- On a county's Compare, each map's count of schools lines up with its season picker.
+- Picking from a dropdown on a Compare page (or anywhere the page redraws) by tap or click no longer
+  leaves the dropdown focused; on phones, that opened it again. With the keyboard, focus stays on it.
 
 ## 1.27.0
 
