@@ -12,6 +12,9 @@ For every season whose regions are loaded (each cycle file's seasons with school
   ``regions/{season}/compare/{slug}-{theme}.png``. Like the region images, only those whose content
   changed are drawn (``image_jobs``), and a choice the page no longer offers loses its folder;
 
+- the Timeline view's images (``timeline_jobs``), every season of regions on one image: each class's
+  ``regions/timeline/{c}a-{theme}.png`` and each school's ``regions/timeline/team/{slug}-{theme}.png``;
+
 and for the newest choice (the page's default):
 
 - ``body/regions-{c}.html`` and ``meta/regions-{c}.html`` (+ ``meta/regions-{c}/{slug}.html`` for a
@@ -28,15 +31,17 @@ from datetime import date
 from pathlib import Path
 
 from backend.helpers import region_map
-from backend.helpers.data_helpers import school_name_for_season
+from backend.helpers.data_helpers import SCHOOL_RENAMES, names_in, school_name_for_season
 from backend.helpers.engine_settings import CLASSES
 from backend.helpers.image_jobs import (
     CLASS_REGIONS,
     CLASS_REGIONS_CARD,
     CLASS_REGIONS_COMPARED,
+    CLASS_TIMELINE,
     TEAM_REGION,
     TEAM_REGION_CARD,
     TEAM_REGIONS_COMPARED,
+    TEAM_TIMELINE,
     ImageJob,
     draw_images,
 )
@@ -166,6 +171,60 @@ def image_jobs(
     return jobs
 
 
+def timeline_jobs(options: list[dict], seasons: dict[int, list[dict]], teams: dict[int, list[dict]]) -> list[ImageJob]:
+    """The Timeline view's images: each class's regions over every season (*options*, the page's choices,
+    with each choice's rows in *seasons* and its ``/teams`` in *teams*), and each school's, light and
+    dark. A school is drawn under its name in the newest season it played (as the page follows it), and
+    a renamed school's old name not at all (its links go to the new name's); before a consolidation, a
+    season shows every school merged into it (``names_in``)."""
+    ordered = sorted(options, key=lambda o: o["season"])
+    jobs: list[ImageJob] = []
+    for clazz in CLASSES:
+        cycles = [
+            {"seasons": o["seasons"], "schools": [r for r in seasons[o["season"]] if r["class"] == clazz]}
+            for o in ordered
+        ]
+        if not any(c["schools"] for c in cycles):
+            continue
+        for theme in THEMES:
+            jobs.append(
+                ImageJob(
+                    f"regions/timeline/{clazz}a-{theme}.png",
+                    CLASS_TIMELINE,
+                    {"clazz": clazz, "cycles": cycles, "theme": theme},
+                )
+            )
+    newest: dict[str, int] = {}
+    for o in ordered:
+        for r in seasons[o["season"]]:
+            newest[r["school"]] = o["season"]
+    renamed = {old for old, _, _ in SCHOOL_RENAMES}
+    for name, season in sorted(newest.items()):
+        if name in renamed:
+            continue
+        cycles = []
+        for o in ordered:
+            rows = seasons[o["season"]]
+            by_name = {r["school"]: r for r in rows}
+            mine = [by_name[n] for n in names_in(name, season, o["season"]) if n in by_name]
+            places = {(r["class"], r["region"]) for r in mine}
+            cycles.append(
+                {
+                    "seasons": o["seasons"],
+                    "rows": mine,
+                    "schools": [r for r in rows if (r["class"], r["region"]) in places],
+                }
+            )
+        kwargs = {"school": name, "cycles": cycles, "teams": _colors(teams.get(season) or [], {name})}
+        for theme in THEMES:
+            jobs.append(
+                ImageJob(
+                    f"regions/timeline/team/{slugify(name)}-{theme}.png", TEAM_TIMELINE, {**kwargs, "theme": theme}
+                )
+            )
+    return jobs
+
+
 def write_regions(
     fetch: Fetch,
     out_dir: Path,
@@ -203,15 +262,18 @@ def write_regions(
     jobs: list[ImageJob] = []
     prune = [f"og/regions-{c}" for c in CLASSES]
     by_school: dict[str, dict] = {}
+    teams_by_season: dict[int, list[dict]] = {}
     for option in options:
         season = option["season"]
         # The season before, under each school's name this season (a renamed school is the same school).
         prior = [{**r, "school": school_name_for_season(r["school"], season)} for r in seasons.get(season - 1) or []]
-        teams = fetch(f"/teams?season={season}") or []
+        teams = teams_by_season[season] = fetch(f"/teams?season={season}") or []
         if option is newest:
             by_school = {t["school"]: t for t in teams}
         jobs += image_jobs(option, seasons[season], prior, teams, previews=option is newest)
         prune += [f"regions/{season}", f"regions/{season}/team", f"regions/{season}/compare"]
+    jobs += timeline_jobs(options, seasons, teams_by_season)
+    prune += ["regions/timeline", "regions/timeline/team"]
     files: dict[str, list[str]] = {}
     drawn = draw_images(out_dir, jobs, prune=prune, files_out=files)
     counts["region_map_images"], counts["region_map_images_kept"] = drawn["drawn"], drawn["kept"]

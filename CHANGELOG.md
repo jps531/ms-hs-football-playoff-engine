@@ -5,6 +5,18 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.24.0
+
+- **Share on Compare and on the Timeline shares what you're looking at.** Before, both offered the
+  Season view's images. When Compare's maps are back-to-back seasons, it offers them side by side: the
+  class's (when both maps show one class) and a followed team's (when it was in a region both
+  seasons). It always offers each map's own image too, shared with the page's link.
+- **The Timeline has images to share**: a class's regions over every season, or a followed team's,
+  all on one image, with a small map for each season. However many seasons there are, it's one image;
+  more seasons make it taller. A school's seasons before a consolidation show each school merged into
+  it, each in its own region (North Tippah's 2025 and 2026: Walnut and Falkner).
+- On a phone, the Timeline page could be dragged sideways past its edge. It stays put now.
+
 ## 1.23.0
 
 - **The Timeline holds any number of seasons.** Each map keeps a readable width, the row scrolls

@@ -368,6 +368,31 @@ SCHOOL_CONSOLIDATIONS: list[tuple[str, int, list[str]]] = [
 ]
 
 
+def name_in(name: str, season: int, other: int) -> str:
+    """*name* (a school's site name in *season*) as the school is called in *other*, a season before or
+    after: a renamed school's other name (regions.js nameIn)."""
+    out = name
+    for old, new, first in SCHOOL_RENAMES:
+        if other >= first and season < first and out == old:
+            out = new
+        elif other < first and season >= first and out == new:
+            out = old
+    return out
+
+
+def names_in(name: str, season: int, other: int) -> list[str]:
+    """Every name the school *name* (in *season*) had in *other*: the schools merged into it, for a season
+    before a consolidation (North Tippah in 2026: Walnut and Falkner); the school it merged into, for a
+    season after (Falkner in 2027: North Tippah); else its one name then (regions.js namesIn)."""
+    for merged, first, members in SCHOOL_CONSOLIDATIONS:
+        then = name_in(name, season, first)
+        if season >= first and then == merged and other < first:
+            return list(members)
+        if season < first and name in members and other >= first:
+            return [merged]
+    return [name_in(name, season, other)]
+
+
 def school_name_for_season(name: str, season: int) -> str:
     """The site's name for a school the sources call *name*, in *season* ("Leake Central" in 2026 is "Leake")."""
     for old, new, first in SCHOOL_RENAMES:

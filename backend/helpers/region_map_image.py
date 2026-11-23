@@ -106,9 +106,14 @@ class _Frame:
         bx0, by0, bx1, by1 = region_map.state().bounds
         self.s = min((x1 - x0) / (bx1 - bx0), (y1 - y0) / (by1 - by0))
         w, h = (bx1 - bx0) * self.s, (by1 - by0) * self.s
+        self.w, self.h = w, h
         self.ox, self.oy = x0 + (x1 - x0 - w) / 2, y0 + (y1 - y0 - h) / 2
         self.bx0, self.by1 = bx0, by1
         self.x0, self.x1 = x0, x1
+
+    def box(self) -> tuple[float, float, float, float]:
+        """The state's box, in pixels."""
+        return self.ox, self.oy, self.ox + self.w, self.oy + self.h
 
     def __call__(self, x: float, y: float) -> tuple[float, float]:
         return self.ox + (x - self.bx0) * self.s, self.oy + (self.by1 - y) * self.s
@@ -182,54 +187,77 @@ class _Page:
         fills: list[tuple[object, str]],
         dots: list[tuple[float, float, str, str, float]],
         labels: list[tuple[str, int]] = (),
-        focus: int | None = None,
+        focus: int | set[int] | None = None,
         label_size: int = 34,
+        line: int = 3,
     ) -> None:
         """The state, its counties and the region shapes (*fills*: [(geometry, color)]), then the *dots*
         ([(x, y, color, text, radius)] in state-grid meters), then *labels* ([(text, dot index)]). A dot
-        pushed off its spot to stay readable gets a hairline back to a small mark at the true spot."""
+        pushed off its spot to stay readable gets a hairline back to a small mark at the true spot. *line* is
+        the regions' edge width (the counties' a pixel less, the state's two more), thinner on small maps."""
         t = self.t
         land = _blend(t.bg, t.text, 0.05)
         for poly in _polygons(region_map.state()):
             self.d.polygon(frame.ring(poly.exterior.coords), fill=land)
-        over = Image.new("RGBA", self.size, (0, 0, 0, 0))
+        # The see-through layers are drawn in the box of what they hold (the state, and the region shapes,
+        # which can reach a little past it), so a page of many small maps doesn't blend whole pages for each.
+        sx0, sy0, sx1, sy1 = frame.box()
+        for geom, _ in fills:
+            if not geom.is_empty:
+                gx0, gy0, gx1, gy1 = geom.bounds
+                (ax, ay), (bx, by) = frame(gx0, gy1), frame(gx1, gy0)
+                sx0, sy0, sx1, sy1 = min(sx0, ax), min(sy0, ay), max(sx1, bx), max(sy1, by)
+        box = (max(0, math.floor(sx0) - 8), max(0, math.floor(sy0) - 8))
+        box += (min(self.size[0], math.ceil(sx1) + 8), min(self.size[1], math.ceil(sy1) + 8))
+        size = (box[2] - box[0], box[3] - box[1])
+
+        def ring(coords) -> list[tuple[float, float]]:
+            return [(x - box[0], y - box[1]) for x, y in frame.ring(coords)]
+
+        over = Image.new("RGBA", size, (0, 0, 0, 0))
         for geom, color in fills:
             for poly in _polygons(geom):
-                mask = Image.new("L", self.size, 0)
+                mask = Image.new("L", size, 0)
                 md = ImageDraw.Draw(mask)
-                md.polygon(frame.ring(poly.exterior.coords), fill=0x38)
+                md.polygon(ring(poly.exterior.coords), fill=0x38)
                 for hole in poly.interiors:
-                    md.polygon(frame.ring(hole.coords), fill=0)
-                layer = Image.new("RGBA", self.size, color)
+                    md.polygon(ring(hole.coords), fill=0)
+                layer = Image.new("RGBA", size, color)
                 layer.putalpha(mask)
                 over = Image.alpha_composite(over, layer)
                 od = ImageDraw.Draw(over)
-                for ring in [poly.exterior, *poly.interiors]:
-                    od.line(frame.ring(ring.coords), fill=color + "C0", width=3, joint="curve")
+                for edge in [poly.exterior, *poly.interiors]:
+                    od.line(ring(edge.coords), fill=color + "C0", width=line, joint="curve")
         # County lines in the text color, see-through, so they show the same over the land and over every
         # region's color (as on the page: .map-county).
-        lines = Image.new("RGBA", self.size, (0, 0, 0, 0))
+        lines = Image.new("RGBA", size, (0, 0, 0, 0))
         ld = ImageDraw.Draw(lines)
         for geom in region_map.counties().values():
             for poly in _polygons(geom):
-                ld.line(frame.ring(poly.exterior.coords), fill=t.text + "40", width=2, joint="curve")
+                ld.line(ring(poly.exterior.coords), fill=t.text + "40", width=max(1, line - 1), joint="curve")
         over = Image.alpha_composite(over, lines)
-        self.img.paste(Image.alpha_composite(self.img.convert("RGBA"), over).convert("RGB"))
+        under = self.img.crop(box).convert("RGBA")
+        self.img.paste(Image.alpha_composite(under, over).convert("RGB"), box[:2])
         self.d = ImageDraw.Draw(self.img)
         for poly in _polygons(region_map.state()):
-            self.d.line(frame.ring(poly.exterior.coords), fill=_blend(t.bg, t.text, 0.6), width=5, joint="curve")
+            self.d.line(frame.ring(poly.exterior.coords), fill=_blend(t.bg, t.text, 0.6), width=line + 2, joint="curve")
 
         true = [frame(x, y) for x, y, *_ in dots]
         spots = [list(p) for p in true]
-        _spread(spots, [r for *_, r in dots])
-        for (px, py), (tx, ty) in zip(spots, true, strict=True):
-            if abs(px - tx) + abs(py - ty) > 4:
-                self.d.line((tx, ty, px, py), fill=t.text_2, width=2)
-                self.d.ellipse((tx - 5, ty - 5, tx + 5, ty + 5), fill=t.text)
+        # Tiny dots (a page of many small maps) are pushed apart less, and a moved one's hairline and mark
+        # are as fine as the dot.
+        tiny = bool(dots) and max(r for *_, r in dots) < 8
+        _spread(spots, [r for *_, r in dots], gap=1 if tiny else 6)
+        for (px, py), (tx, ty), dot in zip(spots, true, dots, strict=True):
+            if abs(px - tx) + abs(py - ty) > (dot[4] if tiny else 4):
+                m = 2 if tiny else 5
+                self.d.line((tx, ty, px, py), fill=t.text_2, width=1 if tiny else 2)
+                self.d.ellipse((tx - m, ty - m, tx + m, ty + m), fill=t.text)
+        focused = set(focus) if isinstance(focus, (set, list, tuple)) else {focus}
         for i, ((px, py), (_, _, color, text, r)) in enumerate(zip(spots, dots, strict=True)):
-            ring = 6 if focus == i else 3
+            ring = (6 if i in focused else 3) if r >= 8 else (3 if i in focused else 1)  # thinner on tiny dots
             self.d.ellipse(
-                (px - r - ring, py - r - ring, px + r + ring, py + r + ring), fill=t.text if focus == i else t.bg
+                (px - r - ring, py - r - ring, px + r + ring, py + r + ring), fill=t.text if i in focused else t.bg
             )
             self.d.ellipse((px - r, py - r, px + r, py + r), fill=color)
             if text:

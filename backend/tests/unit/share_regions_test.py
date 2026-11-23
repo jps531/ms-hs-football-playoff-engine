@@ -153,3 +153,37 @@ def test_seasons_with_different_regions_stay_apart():
     assert [o["seasons"] for o in season_options({2025: a, 2026: b})] == [[2026], [2025]]
     assert [o["seasons"] for o in season_options({2025: a, 2026: a})] == [[2025, 2026]]
     assert [o["seasons"] for o in season_options({2026: a, 2027: a})] == [[2027], [2026]]  # different cycles
+
+
+def test_the_timeline_images(written):
+    """Each class's regions over every season, and each school's under its newest name: North Tippah's
+    2026 is Walnut's (merged into it), a renamed school's old name has none of its own."""
+    *_, jobs = written
+    by_path = {j.path: j for j in jobs}
+    assert {"regions/timeline/5a-light.png", "regions/timeline/5a-dark.png", "regions/timeline/2a-light.png"} <= set(
+        by_path
+    )
+    assert "regions/timeline/7a-light.png" not in by_path
+    tippah = by_path["regions/timeline/team/north-tippah-light.png"].kwargs
+    assert [c["seasons"] for c in tippah["cycles"]] == [[2026], [2027, 2028]]
+    assert [[r["school"] for r in c["rows"]] for c in tippah["cycles"]] == [["Walnut"], ["North Tippah"]]
+    # Walnut's own: itself, then the school it merged into.
+    walnut = by_path["regions/timeline/team/walnut-light.png"].kwargs
+    assert [[r["school"] for r in c["rows"]] for c in walnut["cycles"]] == [["Walnut"], ["North Tippah"]]
+    # Each season holds only the team's regions' schools.
+    greenwood = by_path["regions/timeline/team/greenwood-dark.png"].kwargs
+    assert {s["school"] for s in greenwood["cycles"][0]["schools"]} == {"Greenwood", "Yazoo City"}
+    assert {s["school"] for s in greenwood["cycles"][1]["schools"]} == {"Greenwood", "Leake"}
+
+
+def test_a_renamed_schools_old_name_has_no_timeline_of_its_own():
+    """Leake Central became Leake in 2026: one timeline, Leake's (old links go there)."""
+    seasons = {
+        2025: [{"school": "Leake Central", "class": 4, "region": 5, "x": 0, "y": 0}],
+        2026: [{"school": "Leake", "class": 5, "region": 2, "x": 0, "y": 0}],
+    }
+    jobs = sr.timeline_jobs(season_options(seasons), seasons, {})
+    paths = {j.path for j in jobs if "/team/" in j.path}
+    assert paths == {"regions/timeline/team/leake-light.png", "regions/timeline/team/leake-dark.png"}
+    leake = next(j for j in jobs if j.path == "regions/timeline/team/leake-light.png").kwargs
+    assert [[r["school"] for r in c["rows"]] for c in leake["cycles"]] == [["Leake Central"], ["Leake"]]
