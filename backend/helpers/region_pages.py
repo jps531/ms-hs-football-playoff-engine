@@ -317,6 +317,38 @@ def county_places(schools: list[dict]) -> list[dict]:
     return list(seen.values())
 
 
+# Each class's hue on a county's map (regions.js CLASS_HUE: the region colors' slots).
+CLASS_HUE = {7: 1, 6: 3, 5: 2, 4: 7, 3: 4, 2: 5, 1: 8}
+
+
+def county_shades(schools: list[dict]) -> dict[str, dict]:
+    """Each of a county's places' shade (``countyShades``): its class's hue, lighter for its lower-numbered
+    regions there and darker for its higher. {key: {tone, fill (a CSS color), ink}}."""
+    out: dict[str, dict] = {}
+    places = county_places(schools)
+    for c in dict.fromkeys(p["clazz"] for p in places):
+        group = sorted((p for p in places if p["clazz"] == c), key=lambda p: p["region"])
+        for i, p in enumerate(group):
+            tone = 0.5 if len(group) == 1 else i / (len(group) - 1)
+            hue = f"var(--region-{CLASS_HUE[c]})"
+            if tone < 0.5:
+                fill = f"color-mix(in srgb, {hue} {math.floor(55 + 90 * tone + 0.5)}%, #fff)"
+            elif tone > 0.5:
+                fill = f"color-mix(in srgb, {hue} {math.floor(100 - 60 * (tone - 0.5) + 0.5)}%, #000)"
+            else:
+                fill = hue
+            out[p["key"]] = {"tone": tone, "fill": fill, "ink": "#1B1B1B" if tone < 0.34 else "#FFFFFF"}
+    return out
+
+
+def county_pill(school: dict, shade: dict) -> str:
+    """A school's place as a pill in its shade, "3-6A" (``countyPill``)."""
+    return (
+        f'<span class="county-pill" style="background:{shade["fill"]};color:{shade["ink"]}" aria-hidden="true">'
+        f"{school['region']}-{school['class']}A</span>"
+    )
+
+
 def schools_count(n: int) -> str:
     """ "9 MHSAA schools", "1 MHSAA school", "No MHSAA schools"."""
     return f"{n} MHSAA {'school' if n == 1 else 'schools'}" if n else "No MHSAA schools"
@@ -331,20 +363,20 @@ def county_count(schools: list[dict]) -> str:
 def county_lists(county: str, payload: dict, teams: dict | None = None) -> str:
     """The county's schools by class, highest first, each with its region and town (``countyLists``)."""
     mine = [s for s in payload["schools"] if s["county"] == county]
-    colors = {p["key"]: p["color"] for p in county_places(mine)}
+    shades = county_shades(mine)
     out = []
     for c in sorted({s["class"] for s in mine}, reverse=True):
         rows = []
         for s in sorted((s for s in mine if s["class"] == c), key=lambda s: (s["region"], s["school"].lower())):
-            town = f" · {_e(s['city'])}" if s.get("city") else ""
-            color = colors[f"{c}-{s['region']}"]
+            town = _e(s["city"]) if s.get("city") else ""
+            pill = county_pill(s, shades[f"{c}-{s['region']}"])
             rows.append(
                 f'<li><a class="regions-list__row" href="{_e(counties_path(county))}?team={_e(s["slug"])}" '
                 f'data-team="{_e(s["slug"])}">'
                 f"{_mark(s['school'], (teams or {}).get(s['school']))}"
                 f'<span class="regions-list__team">{_e(s["school"])}</span>'
-                f'<span class="regions-list__was"><span class="region-chip region-chip--{color}" '
-                f'aria-hidden="true">{s["region"]}</span>{_e(place(s))}{town}</span></a></li>'
+                f'<span class="regions-list__was">{pill}'
+                f'<span class="visually-hidden">{_e(place(s))}</span>{town}</span></a></li>'
             )
         out.append(
             '<section class="regions-list__region county-list__class"><div class="regions-list__head">'

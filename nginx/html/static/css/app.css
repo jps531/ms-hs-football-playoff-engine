@@ -2070,7 +2070,23 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .map-dot.is-away.is-dim { opacity: 0.2; }
 .county-list__class .regions-list__name { font-size: 1.1rem; }
 .county-list .regions-list__was { display: inline-flex; align-items: center; gap: 6px; }
-.county-list .region-chip { width: 18px; height: 18px; font-size: 11px; }
+/* A school's place in a county ("3-6A"): its class's hue, shaded by region (regions.js countyShades). */
+.county-pill {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  height: 18px; padding: 0 6px; border-radius: 9px;
+  font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap;
+}
+.picked__region .county-pill { height: 22px; padding: 0 8px; border-radius: 11px; font-size: 12px; }
+/* The county's map: its schools' pills (each with a line back to its spot when spread apart), always
+   named; the region shapes light, a picked school's in full. */
+.map-dot--pill rect { stroke: var(--surface-page); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.map-dot--pill text { font-weight: 700; }
+.map-dot--pill.is-picked rect { stroke: var(--text-primary); stroke-width: 3; }
+.map-pin-line { stroke: var(--text-secondary); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.map-pin { fill: var(--text-primary); }
+.map-pins > g.is-dim { opacity: 0.25; }
+.county-page .map-region { fill-opacity: 0.1; stroke-opacity: 0.45; }
+.county-page .regions-map__svg.has-pick .map-region:not(.is-dim) { fill-opacity: 0.26; stroke-opacity: 0.9; }
 /* The statewide map: each county shaded by how many MHSAA schools it has (none to 5 or more). */
 .counties-map__frame { position: relative; }
 .counties-map__svg { display: block; width: 100%; height: auto; }

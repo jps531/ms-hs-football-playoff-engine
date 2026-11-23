@@ -259,5 +259,5 @@ test("a county's timeline table: a row a school, a merger said on both ends", ()
   assert.equal((html.match(/<tr><th scope="row">/g) ?? []).length, 5); // Falkner, Gone, North Tippah, Ripley, Walnut
   assert.match(html, /Walnut<\/span><span class="timeline-table__note muted">Part of North Tippah from 2027/);
   assert.match(html, /North Tippah<\/span><span class="timeline-table__note muted">From Walnut and Falkner, 2027/);
-  assert.match(html, /aria-hidden="true">1<\/span>1-3A/);
+  assert.match(html, /class="county-pill"[^>]*>1-3A<\/span><span class="visually-hidden">Region 1-3A<\/span>/);
 });
