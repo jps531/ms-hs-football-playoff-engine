@@ -151,21 +151,27 @@ export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz))
   const shapes = layer.shapes
     .map((r) => `<path class="map-region map-region--${r.color}" data-group="${esc(r.group)}"${r.fill ? ` style="fill:${r.fill};stroke:${r.fill}"` : ""} d="${r.d}"/>`).join("");
   const placed = layer.schools.filter((s) => s.x != null);
-  // A pill (a county's map) has a line back to its school's spot, shown when it's moved off it.
-  const dots = placed
-    .map((s) => (layer.pill
+  // On a county's map, its schools are pills ("3-6A"), each with a line back to its spot for when it's
+  // moved off it; their regions' schools elsewhere, small dots under them, with no name or line.
+  const mate = (s) => Boolean(layer.pill) && layer.away(s);
+  const pilled = placed.filter((s) => !mate(s));
+  const dots = [...placed.filter(mate), ...pilled]
+    .map((s) => (mate(s)
+      ? `<g class="map-dot map-dot--mate" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" tabindex="-1">`
+        + `<circle cx="${s.x}" cy="${s.y}" r="10" style="fill:${layer.shade(s).fill}"/></g>`
+      : layer.pill
       ? `<g class="map-dot map-dot--pill" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" data-x="${s.x}" data-y="${s.y}" tabindex="-1">`
         + `<rect style="fill:${layer.shade(s).fill}"/><text x="${s.x}" y="${s.y}" style="fill:${layer.shade(s).ink}">${esc(layer.mark(s))}</text></g>`
       : `<g class="map-dot map-dot--${layer.color(s)}${layer.away(s) ? " is-away" : ""}" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" tabindex="-1">`
         + `<circle cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${esc(layer.mark(s))}</text></g>`)).join("");
   // A pill moved off its school's spot has a line back to it, under every pill.
   const pins = layer.pill
-    ? `<g class="map-pins" aria-hidden="true">${placed.map((s) => `<g data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" style="display:none">`
+    ? `<g class="map-pins" aria-hidden="true">${pilled.map((s) => `<g data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" style="display:none">`
       + `<line class="map-pin-line" x1="${s.x}" y1="${s.y}"/><circle class="map-pin" cx="${s.x}" cy="${s.y}"/></g>`).join("")}</g>`
     : "";
   // Each school's name, shown beside its dot once the map is zoomed in far enough (wireRegionsMap
   // places them, and hides those with no room).
-  const labels = placed
+  const labels = pilled
     .map((s) => `<line class="map-leader" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" hidden/>`
       + `<text class="map-label" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" x="${s.x}" y="${s.y}">${esc(s.school)}</text>`).join("");
   const v = wholeView(base);
@@ -545,13 +551,15 @@ export const LABEL_ZOOM_PICKED = 1.1;
  * view: { x0, y0, x1, y1 }). Right beside the dot first (right, left, above, below), where its own dot
  * must be plainly the nearest, so it can't be read as a neighbor's; else a little farther out, with a
  * line from the dot (*line*: [x1, y1, x2, y2]) that passes no other dot. A name with no such spot is
- * left out. Returns { slug: { x, y, anchor, line } }.
+ * left out. A point can have its own radius (*r*), and one with no name is only in the way of others'.
+ * Returns { slug: { x, y, anchor, line } }.
  */
 export function placeLabels(points, r, size, bounds = null) {
   const width = (name) => name.length * size * 0.56; // Inter, about; a little room to spare
   const gap = r * 0.4;
   const far = r * 2.2; // how far out the farther spots are, past the dot's edge
-  const boxes = points.map((p) => ({ x0: p.x - r, y0: p.y - r, x1: p.x + r, y1: p.y + r })); // the dots
+  const rOf = (p) => p.r ?? r;
+  const boxes = points.map((p) => ({ x0: p.x - rOf(p), y0: p.y - rOf(p), x1: p.x + rOf(p), y1: p.y + rOf(p) })); // the dots
   const outside = (b) => bounds != null && (b.x0 < bounds.x0 || b.x1 > bounds.x1 || b.y0 < bounds.y0 || b.y1 > bounds.y1);
   const overlaps = (b) => outside(b) || boxes.some((o) => b.x0 < o.x1 && o.x0 < b.x1 && b.y0 < o.y1 && o.y0 < b.y1);
   // From a dot's middle to the nearest point of a name's box.
@@ -563,10 +571,11 @@ export function placeLabels(points, r, size, bounds = null) {
     if (q === p) return true;
     const [dx, dy] = [x2 - x1, y2 - y1];
     const t = Math.max(0, Math.min(1, ((q.x - x1) * dx + (q.y - y1) * dy) / (dx * dx + dy * dy)));
-    return Math.hypot(q.x - (x1 + t * dx), q.y - (y1 + t * dy)) > r * 1.2;
+    return Math.hypot(q.x - (x1 + t * dx), q.y - (y1 + t * dy)) > rOf(q) * 1.2;
   });
   const placed = {};
   for (const p of points) {
+    if (!p.name) continue;
     const w = width(p.name);
     const h = size;
     // { x, y, anchor } is where the text goes; box is what it covers; edge, where a line from the dot meets it.
@@ -676,8 +685,11 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const zoom = whole.w / view.w;
     const px = view.w / (svg.getBoundingClientRect().width || 600);
     const r = 11 * px; // dots keep their size on screen at any zoom
-    if (layer.pill) placePills(r, px);
-    else {
+    if (layer.pill) {
+      placePills(r, px);
+      mateR = r * 0.5;
+      for (const g of svg.querySelectorAll(".map-dot--mate")) g.firstChild.setAttribute("r", mateR);
+    } else {
       for (const g of svg.querySelectorAll(".map-dot")) {
         g.firstChild.setAttribute("r", g.classList.contains("is-away") ? r * 0.6 : r); // region-mates elsewhere: smaller
         g.lastChild.setAttribute("font-size", r * 1.2);
@@ -694,6 +706,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   // thin line back to the spot it left (as the share images do). Their names go beside where they end up.
   const pillAt = new Map(); // slug -> [x, y] in map units
   let pillReach = 0;
+  let mateR = 0; // a county's map: its regions' schools elsewhere, a dot this big
   const placePills = (r, px) => {
     const fs = r * 0.95;
     const h = r * 1.9;
@@ -769,11 +782,23 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   const leaders = new Map([...svg.querySelectorAll(".map-leader")].map((l) => [l.dataset.team, l]));
   const labelDots = (r, size) => {
     const inView = (s) => s.x >= view.x && s.x <= view.x + view.w && s.y >= view.y && s.y <= view.y + view.h;
-    // (On a county's map, its own schools before their region-mates elsewhere.)
+    // (On a county's map, its own schools before their region-mates elsewhere, which have no name; with
+    // a school picked, only its group is named, around its own marks: the others are dimmed behind.)
     const first = (s) => (s.slug === current?.slug ? 0 : current && groupOf(s) === groupOf(current) ? 1 : layer.away(s) ? 3 : 2);
-    const points = [...bySlug.values()].filter((s) => s.x != null && inView(s))
+    const shown = (s) => !(layer.pill && current && groupOf(s) !== groupOf(current));
+    const points = [...bySlug.values()].filter((s) => s.x != null && inView(s) && shown(s))
       .sort((a, b) => first(a) - first(b) || byName(a.school, b.school))
-      .map((s) => ({ slug: s.slug, x: pillAt.get(s.slug)?.[0] ?? s.x, y: pillAt.get(s.slug)?.[1] ?? s.y, name: s.school }));
+      .map((s) => ({
+        slug: s.slug, x: pillAt.get(s.slug)?.[0] ?? s.x, y: pillAt.get(s.slug)?.[1] ?? s.y,
+        ...(layer.pill && layer.away(s) ? { name: "", r: mateR } : { name: s.school }),
+      }));
+    // Picked on a county's map: the names over the dimmed marks.
+    const top = layer.pill && current;
+    const names = svg.querySelector(".map-labels");
+    if (names && top !== (names.nextElementSibling == null)) {
+      if (top) svg.append(names);
+      else svg.insertBefore(names, svg.querySelector(".map-pins") ?? svg.querySelector(".map-dots"));
+    }
     const spots = placeLabels(points, r, size, { x0: view.x, y0: view.y, x1: view.x + view.w, y1: view.y + view.h });
     for (const [slug, t] of labels) {
       const spot = spots[slug];
@@ -1116,8 +1141,12 @@ export function countyLayer(payload, county) {
   const mine = payload.schools.filter((s) => s.county === county);
   const shades = countyShades(mine);
   const key = (s) => `${s.class}-${s.region}`;
+  // Their regions' other schools, elsewhere: small dots, unnamed (a tooltip names one), to show where the
+  // region reaches.
+  const places = new Set(mine.map(key));
+  const mates = payload.schools.filter((s) => s.county !== county && places.has(key(s)));
   return {
-    schools: mine,
+    schools: [...mine, ...mates],
     group: key,
     color: () => 0,
     shade: (s) => shades.get(key(s)),
@@ -1126,7 +1155,7 @@ export function countyLayer(payload, county) {
     pill: true,
     named: true,
     spread: true,
-    away: () => false,
+    away: (s) => s.county !== county,
     shapes: countyPlaces(mine).map((p) => {
       const r = payload.regions[String(p.clazz)]?.[String(p.region)];
       return r && { group: p.key, color: 0, fill: shades.get(p.key).fill, d: r.d, box: r.box };

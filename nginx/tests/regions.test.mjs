@@ -262,6 +262,31 @@ test("a county's timeline table: a row a school, a merger said on both ends", ()
   assert.match(html, /class="county-pill"[^>]*>1-3A<\/span><span class="visually-hidden">Region 1-3A<\/span>/);
 });
 
+test("a county's map: its schools, then their regions' schools elsewhere, small and unnamed", () => {
+  const row = (school, county, clazz, region, x) => ({ school, slug: school.toLowerCase(), county, class: clazz, region, x, y: 10 });
+  const payload = {
+    schools: [row("Brandon", "Rankin", 7, 3, 10), row("Clinton", "Hinds", 7, 3, 50), row("Oxford", "Lafayette", 7, 1, 90)],
+    regions: { 7: { 3: { d: "M0 0Z", box: [0, 0, 1, 1] } } },
+  };
+  const layer = regions.countyLayer(payload, "Rankin");
+  assert.deepEqual(layer.schools.map((s) => s.school), ["Brandon", "Clinton"]); // not Oxford: another region
+  assert.equal(layer.away(layer.schools[1]), true);
+  const svg = regions.mapSvg({ width: 100, height: 100, state: "M0 0Z", counties: [] }, payload, null, layer);
+  assert.match(svg, /<g class="map-dot map-dot--mate" data-team="clinton"[^>]*><circle cx="50" cy="10"/);
+  assert.match(svg, /<g class="map-dot map-dot--pill" data-team="brandon"/);
+  assert.doesNotMatch(svg, /class="map-label" data-team="clinton"/);
+  assert.ok(svg.indexOf('data-team="clinton"') < svg.indexOf('class="map-dot map-dot--pill"')); // under the pills
+});
+
+test("a point with no name only keeps names off it, at its own size", () => {
+  const spots = placeLabels([
+    { slug: "a", x: 0, y: 0, name: "Alpha" },
+    { slug: "b", x: 3.5, y: 0, name: "", r: 0.5 },
+  ], 1, 1);
+  assert.ok(spots.a && !spots.b);
+  assert.notEqual(spots.a.anchor, "start"); // not right beside: the unnamed dot is there
+});
+
 test("a county's nearby counties: each a link with its mark and its count of schools; none without map.json's neighbors", () => {
   const box = "M0 0L10 0L10 10L0 10Z";
   const base = { counties: [

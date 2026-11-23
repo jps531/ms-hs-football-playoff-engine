@@ -2127,6 +2127,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .map-dot--pill rect { stroke: var(--surface-page); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .map-dot--pill text { font-weight: 700; }
 .map-dot--pill.is-picked rect { stroke: var(--text-primary); stroke-width: 3; }
+/* A county's regions' schools elsewhere (regions.js countyLayer's mates): small dots in their region's
+   shade, unnamed, under the county's own marks. */
+.map-dot--mate circle { stroke: var(--surface-page); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .map-pin-line { stroke: var(--text-secondary); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .map-pin { fill: var(--text-primary); }
 .map-pins > g.is-dim { opacity: 0.25; }

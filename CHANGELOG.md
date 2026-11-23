@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.31.0
+
+- **A county's map shows its regions' other schools**, those outside the county, as small dots in their
+  region's shade, without names (point at one, or pick it, to see which school it is), so it's clear
+  how far each region reaches.
+- **Picking a school on a county's map names its region's schools only**, over the other regions'
+  dimmed marks, so they stay named at any zoom; before, the other schools' names could crowd them out.
+
 ## 1.30.0
 
 - **The front page's Maps section** (once "Region maps") shows each view of the maps: a class's map as
