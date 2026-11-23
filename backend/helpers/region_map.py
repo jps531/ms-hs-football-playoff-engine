@@ -29,6 +29,7 @@ from shapely import voronoi_polygons
 from shapely.geometry import MultiPoint, Point, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
+from shapely.strtree import STRtree
 
 COUNTIES_PATH = Path(__file__).resolve().parents[1] / "data" / "geo" / "mississippi_counties.geojson"
 CRS = "EPSG:3814"  # NAD83 / Mississippi TM
@@ -181,9 +182,30 @@ def svg_path(geom: BaseGeometry) -> str:
 ICON_TOLERANCE = 600
 
 
+# Two counties are neighbors when they share a stretch of border at least this long (in meters), not just
+# a corner.
+NEIGHBOR_BORDER = 1000
+
+
+@cache
+def neighbors() -> dict[str, list[str]]:
+    """Each county's neighbors (sharing a border, not just a corner), by name, in alphabetical order."""
+    shapes = counties()
+    names = sorted(shapes)
+    grown = {n: shapes[n].buffer(100) for n in names}  # widened 100 m: two that meet then overlap along the border
+    tree = STRtree([grown[n] for n in names])
+    out = {}
+    for n in names:
+        near = (names[i] for i in tree.query(grown[n]) if names[i] != n)
+        # The overlap of the two widened outlines is a strip 200 meters wide along their shared border.
+        out[n] = sorted(m for m in near if grown[n].intersection(grown[m]).area / 200 >= NEIGHBOR_BORDER)
+    return out
+
+
 def base_map() -> dict:
     """The page's map without schools: its size, the state outline, and each county with a spot for
-    its name and a simpler outline for its mark (``icon``). It doesn't change from season to season."""
+    its name, a simpler outline for its mark (``icon``) and its neighbors. It doesn't change from
+    season to season."""
     x0, y0, x1, y1 = state().bounds
     return {
         "width": round((x1 - x0) / SVG_UNIT, 1),
@@ -195,6 +217,7 @@ def base_map() -> dict:
                 "d": svg_path(g),
                 "label": [round(v, 1) for v in svg_point(*g.representative_point().coords[0])],
                 "icon": svg_path(g.simplify(ICON_TOLERANCE, preserve_topology=True)),
+                "neighbors": neighbors()[name],
             }
             for name, g in sorted(counties().items())
         ],

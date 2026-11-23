@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.29.0
+
+- **Open another county from a county's map.** Tap a county around it, off the schools, to see its
+  outline, its count of schools and a button to open it (the tap alone doesn't leave the page). Under
+  the map, the county's neighbors are listed with their
+  outlines, to open with one tap.
+- **The Timeline's Older and Newer buttons** step through the seasons a season at a time when they
+  don't all fit on screen, beside its search box (on a phone, under it).
+
 ## 1.27.0
 
 - **Share on the Counties pages.** A county's page shares its map and schools by class, and the county
