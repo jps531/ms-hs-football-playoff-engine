@@ -912,8 +912,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
 // with its region; and /maps/counties, every county to pick one. A school's county is the county its
 // campus is in (backend/helpers/region_map.py county_of), in each season's data.
 
-export const MHSAA_NOTE = "Only schools in the MHSAA (Mississippi High School Activities Association) are shown. "
-  + "Schools in other associations, such as MAIS, aren't.";
+export const MHSAA_NOTE = "Only schools in the MHSAA (Mississippi High School Activities Association) are shown.";
 
 /** "/maps/counties/jefferson-davis" (or "/maps/counties", every county). */
 export function countiesPath(county = null) {

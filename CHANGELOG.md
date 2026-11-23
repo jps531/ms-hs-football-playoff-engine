@@ -15,8 +15,7 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   A school's county is the one its campus is in.
 - Each county has its outline as its mark, as a team has its helmet: beside its name on its page,
   and in the list of every county, shaded as on the map.
-- Only MHSAA schools are counted or shown, and the pages say so: schools in other associations,
-  such as MAIS, aren't included.
+- Only MHSAA schools are counted or shown, and the pages say so.
 - The Counties pages read without JavaScript too, and are in the sitemap.
 
 ## 1.24.0

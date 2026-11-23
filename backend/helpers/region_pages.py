@@ -278,10 +278,7 @@ def team_regions_description(school: dict, payload: dict) -> str:
 # /maps/counties, every county to pick one. A school's county is its campus's (region_map.county_of),
 # in each season's rows. Twins of regions.js's county functions (renderer_parity_test.py).
 
-MHSAA_NOTE = (
-    "Only schools in the MHSAA (Mississippi High School Activities Association) are shown. "
-    "Schools in other associations, such as MAIS, aren't."
-)
+MHSAA_NOTE = "Only schools in the MHSAA (Mississippi High School Activities Association) are shown."
 
 
 def counties_path(county: str | None = None) -> str:
