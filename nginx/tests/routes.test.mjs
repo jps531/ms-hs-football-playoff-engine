@@ -101,11 +101,24 @@ test("counties pages: /maps/counties (pick one) and /maps/counties/{county}, sea
   assert.deepEqual([picker.page, picker.county], ["counties", null]);
   const r = parseLocation("/maps/counties/jefferson-davis", "?season=2026&team=prentiss");
   assert.deepEqual([r.page, r.county, r.season, r.team], ["counties", "jefferson-davis", 2026, "prentiss"]);
-  for (const bad of ["/maps/counties/hinds/compare", "/maps/counties/Hinds", "/maps/counties/de--soto", "/maps/counties/5a1"]) {
+  for (const bad of ["/maps/counties/hinds/history", "/maps/counties/Hinds", "/maps/counties/de--soto", "/maps/counties/5a1", "/maps/counties/hinds/compare/x"]) {
     assert.equal(parseLocation(bad, "").page, "notfound", bad);
   }
   const opts = { currentSeason: 2026, regionsSeason: 2027 };
   assert.equal(buildPath({ ...r, season: 2027, team: null }, opts), "/maps/counties/jefferson-davis");
   assert.equal(buildPath(r, opts), "/maps/counties/jefferson-davis?season=2026&team=prentiss");
   assert.equal(buildPath({ ...picker, season: 2025 }, opts), "/maps/counties?season=2025");
+});
+
+test("a county's Compare and Timeline: the second map's season on Compare, no season on Timeline", () => {
+  const c = parseLocation("/maps/counties/hinds/compare", "?vs=2025&vsclass=4a&team=raymond");
+  assert.deepEqual([c.page, c.county, c.view, c.vs, c.vsClass, c.team], ["counties", "hinds", "compare", 2025, null, "raymond"]);
+  const opts = { currentSeason: 2026, regionsSeason: 2027 };
+  assert.equal(buildPath({ ...c, vsClass: 4 }, opts), "/maps/counties/hinds/compare?vs=2025&team=raymond");
+  const t = parseLocation("/maps/counties/hinds/timeline", "?season=2025");
+  assert.deepEqual([t.view, t.season], ["timeline", 2025]);
+  assert.equal(buildPath({ ...t, vs: 2026 }, opts), "/maps/counties/hinds/timeline");
+  // The statewide map has no views.
+  assert.equal(parseLocation("/maps/counties/compare", "").county, "compare");
+  assert.equal(buildPath({ ...parseLocation("/maps/counties", ""), view: "compare" }, opts), "/maps/counties");
 });

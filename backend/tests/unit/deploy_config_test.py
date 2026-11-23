@@ -337,9 +337,11 @@ def test_the_counties_pages_are_the_states_82_counties():
     slugs = sorted(slugify(name) for name in region_map.counties())
     assert len(slugs) == 82
     assert re.search(r"\(\?:([a-z|-]+)\)", route).group(1).split("|") == slugs
-    for path in ("/maps/counties", "/maps/counties/", "/maps/counties/hinds", "/maps/counties/jefferson-davis/"):
+    good = ("/maps/counties", "/maps/counties/", "/maps/counties/hinds", "/maps/counties/jefferson-davis/")
+    for path in (*good, "/maps/counties/hinds/compare", "/maps/counties/pearl-river/timeline/"):
         assert pattern.match(path), path
-    for path in ("/maps/counties/nowhere", "/maps/counties/Hinds", "/maps/counties/hinds/compare", "/maps/countiesx"):
+    bad = ("/maps/counties/nowhere", "/maps/counties/Hinds", "/maps/counties/hinds/history", "/maps/counties/compare")
+    for path in (*bad, "/maps/countiesx", "/maps/counties/nowhere/compare"):
         assert not pattern.match(path), path
 
 
@@ -364,6 +366,9 @@ def test_a_counties_page_gets_its_own_preview_content_and_header_bar():
     assert look("share_page", "/maps/counties") == "counties"
     assert look("share_page", "/maps/counties/jefferson-davis?team=prentiss") == "counties-jefferson-davis"
     assert look("share_page", "/maps/counties/hinds?season=2026") == "none"
+    assert look("share_page", "/maps/counties/hinds/compare?vs=2025") == "none"
+    assert look("share_page", "/maps/counties/hinds/timeline") == "none"
+    assert look("share_body", "/maps/counties/hinds/timeline") is None  # no pre-rendered content
     assert look("share_body", "/maps/counties/hinds") == "counties-hinds"
     assert look("share_body", "/maps/counties/hinds?season=2026") == "none"
     assert look("class_link_base", "/maps/counties/hinds") == "maps/regions"

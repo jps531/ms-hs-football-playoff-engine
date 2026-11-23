@@ -2104,3 +2104,4 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .county-mark--site { fill: var(--scrubber-selected-bg); }
 .county-title { display: flex; align-items: center; gap: 12px; }
 .county-title .county-mark { width: 44px; height: 44px; }
+.timeline-table__note { display: block; font-size: 12px; font-weight: 400; line-height: 16px; }

@@ -8,6 +8,8 @@
 //   /maps/regions/3a/timeline  every season's, in order (?team=: following one school)
 //   /maps/counties             every county, to pick one
 //   /maps/counties/hinds       one county's schools, their classes and regions
+//   /maps/counties/hinds/compare   two seasons of them side by side (?vs=2026: the second map's)
+//   /maps/counties/hinds/timeline  every season's, in order
 //   ?season=2025&week=9&odds=tossup&team=st-martin
 // Defaults are left out of the URL (current season, latest week, Projected,
 // no team), so a link to "now" is just the path. No DOM, so it runs under
@@ -95,9 +97,9 @@ export function parseLocation(pathname, search) {
   }
   // The Counties pages: /maps/counties (pick one) and /maps/counties/hinds. Whether a slug is one of
   // the state's counties is the page's to say (it has the map); nginx serves only those.
-  if (parts[0] === "maps" && parts[1] === "counties" && parts.length <= 3) {
-    if (parts.length === 3 && !/^[a-z]+(?:-[a-z]+)*$/.test(parts[2])) return route;
-    return { ...route, page: "counties", county: parts[2] ?? null };
+  if (parts[0] === "maps" && parts[1] === "counties" && (parts.length <= 3 || (parts.length === 4 && ["compare", "timeline"].includes(parts[3])))) {
+    if (parts.length >= 3 && !/^[a-z]+(?:-[a-z]+)*$/.test(parts[2])) return route;
+    return { ...route, page: "counties", county: parts[2] ?? null, view: parts[3] ?? "map", vsClass: null };
   }
   if (parts[0] === "regions" && parts.length === 2) {
     const clazz = classFromSlug(parts[1]);
@@ -124,17 +126,18 @@ export function buildPath(route, { currentSeason = null, regionsSeason = null } 
     path = `/maps/regions/${route.clazz}a${route.view === "compare" || route.view === "timeline" ? `/${route.view}` : ""}`;
   } else if (route.page === "counties") {
     path = route.county ? `/maps/counties/${route.county}` : "/maps/counties";
+    if (route.county && (route.view === "compare" || route.view === "timeline")) path += `/${route.view}`;
   }
   const q = new URLSearchParams();
   const maps = route.page === "regions" || route.page === "counties";
   const defaultSeason = maps ? regionsSeason : currentSeason;
-  const everySeason = route.page === "regions" && route.view === "timeline"; // the timeline shows them all
+  const everySeason = maps && route.view === "timeline"; // the timeline shows them all
   if (route.season && route.season !== defaultSeason && !everySeason) q.set("season", route.season);
   if (route.week) q.set("week", route.week);
   if (route.odds && route.odds !== "projected") q.set("odds", route.odds);
-  if (route.page === "regions" && route.view === "compare") {
+  if (maps && route.view === "compare") {
     if (route.vs) q.set("vs", route.vs);
-    if (route.vsClass && route.vsClass !== route.clazz) q.set("vsclass", `${route.vsClass}a`);
+    if (route.page === "regions" && route.vsClass && route.vsClass !== route.clazz) q.set("vsclass", `${route.vsClass}a`);
   }
   if (route.team) q.set("team", route.team);
   const query = q.toString();
