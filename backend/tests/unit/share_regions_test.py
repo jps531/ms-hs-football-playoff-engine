@@ -203,7 +203,9 @@ def test_the_counties_pages(written):
     assert "No MHSAA school is in Issaquena County" in (out / "body" / "counties-issaquena.html").read_text()
     picker = (out / "body" / "counties.html").read_text()
     assert picker.count('data-county="') == 82
-    assert '<a href="/maps/counties/jefferson-davis" data-county="Jefferson Davis">Jefferson Davis</a>' in picker
+    assert 'href="/maps/counties/jefferson-davis" data-county="Jefferson Davis"><svg class="mark county-mark county-shade--0"' in picker
+    assert '<span class="regions-list__team">Leflore</span><span class="regions-list__was">1 MHSAA school</span>' in picker
+    assert '<h1 class="title county-title"><svg class="mark county-mark county-mark--site"' in body
     paths = [p for p, *_ in sitemap]
     assert "/maps/counties" in paths and "/maps/counties/pearl-river" in paths
     assert sum(p.startswith("/maps/counties/") for p in paths) == 82

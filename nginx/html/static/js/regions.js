@@ -980,6 +980,21 @@ export function pathBox(d) {
 }
 
 /**
+ * A county's mark, as a team's helmet is its: its outline (map.json's simpler *icon*, else its full
+ * outline), *size* pixels square, filled in its *shade* (countShade) or, without one, the site's color.
+ */
+export function countyMark(base, county, { size = 24, shade = null } = {}) {
+  const c = base.counties.find((x) => x.name === county);
+  if (!c) return "";
+  const d = c.icon ?? c.d;
+  const [x0, y0, x1, y1] = pathBox(d);
+  const pad = Math.max(x1 - x0, y1 - y0) * 0.06;
+  const box = [x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad].map((v) => Math.round(v * 10) / 10);
+  const fill = shade == null ? "county-mark--site" : `county-shade--${shade}`;
+  return `<svg class="mark county-mark ${fill}" viewBox="${box.join(" ")}" width="${size}" height="${size}" aria-hidden="true"><path d="${d}"/></svg>`;
+}
+
+/**
  * Where a county's map starts: the county, with room around it for its schools' names (its regions run
  * on past the edges; "Show the whole state" shows them whole). Null for a county the map doesn't have.
  */
@@ -1018,10 +1033,12 @@ export function countyLists(county, payload, teams = {}) {
   }).join("");
 }
 
-/** The county page's heading: breadcrumbs, the title, how many schools and the seasons, and whose. */
-export function countyHeader(county, payload, share = "") {
+/** The county page's heading: breadcrumbs, the title (with the county's mark), how many schools and the
+ * seasons, and whose. */
+export function countyHeader(county, payload, base, share = "") {
   const mine = payload.schools.filter((s) => s.county === county);
-  return `${breadcrumbs(countiesTrail(county))}<div class="title-row"><h1 class="title">${esc(countyTitle(county))}</h1>${share}</div>`
+  return `${breadcrumbs(countiesTrail(county))}<div class="title-row"><h1 class="title county-title">`
+    + `${countyMark(base, county, { size: 44 })}<span>${esc(countyTitle(county))}</span></h1>${share}</div>`
     + `<p class="regions-sub">${esc(countyCount(mine))}, ${esc(seasonsLabel(payload.seasons))}</p>`
     + `<p class="county-note muted">${esc(MHSAA_NOTE)}</p>`;
 }
@@ -1029,7 +1046,7 @@ export function countyHeader(county, payload, share = "") {
 /** The county page: heading and controls, its map and its schools by class (or why there are none). */
 export function countyPage(county, base, payload, { controls = "", share = "", teams = {}, views = "" } = {}) {
   const mine = payload.schools.filter((s) => s.county === county);
-  const head = `<header class="entry-head">${countyHeader(county, payload, share)}${views}${controls}`;
+  const head = `<header class="entry-head">${countyHeader(county, payload, base, share)}${views}${controls}`;
   if (!mine.length) {
     return `<div class="page regions-page county-page">${head}</header>`
       + `<p class="notice">No MHSAA school is in ${esc(countyTitle(county))} in the ${esc(seasonsLabel(payload.seasons))}. `
@@ -1073,8 +1090,7 @@ export function countiesMapSvg(base, counts) {
 export function countiesPage(base, payload, { controls = "" } = {}) {
   const counts = countyCounts(base, payload);
   const key = SHADES.map(([label, shade]) => `<li><span class="county-shade-key county-shade--${shade}" aria-hidden="true"></span>${esc(label)}</li>`).join("");
-  const list = [...base.counties].sort((a, b) => byName(a.name, b.name))
-    .map((c) => `<li><a href="${esc(countiesPath(c.name))}" data-county="${esc(c.name)}">${esc(c.name)}</a> <span class="muted">${counts[c.name] ?? 0}</span></li>`).join("");
+  const list = countiesList(base, counts);
   return `<div class="page regions-page counties-page"><header class="entry-head">${breadcrumbs(countiesTrail())}`
     + `<div class="title-row"><h1 class="title">Counties</h1></div>`
     + `<p class="regions-sub">Each county's MHSAA schools, ${esc(seasonsLabel(payload.seasons))}</p>`
@@ -1083,7 +1099,18 @@ export function countiesPage(base, payload, { controls = "" } = {}) {
     + `<div class="regions-layout"><figure class="regions-map counties-map"><div class="regions-map__frame counties-map__frame">${countiesMapSvg(base, counts)}`
     + `<div class="regions-map__hover" aria-hidden="true" hidden></div></div>`
     + `<figcaption class="counties-map__key"><span>MHSAA schools in the county:</span><ul>${key}</ul></figcaption></figure>`
-    + `<div class="regions-side"><h2 class="counties-list__title">Every county <span class="muted">(MHSAA schools)</span></h2><ul class="counties-list">${list}</ul></div></div></div>`;
+    + `<div class="regions-side"><h2 class="counties-list__title">Every county</h2>${list}</div></div></div>`;
+}
+
+/** Every county, by name: a row each with its mark (in its shade on the map) and its MHSAA schools. */
+export function countiesList(base, counts) {
+  const rows = [...base.counties].sort((a, b) => byName(a.name, b.name)).map((c) => {
+    const n = counts[c.name] ?? 0;
+    return `<li><a class="regions-list__row county-row${n ? "" : " is-empty"}" href="${esc(countiesPath(c.name))}" data-county="${esc(c.name)}">`
+      + `${countyMark(base, c.name, { size: 28, shade: countShade(n) })}<span class="regions-list__team">${esc(c.name)}</span>`
+      + `<span class="regions-list__was">${esc(schoolsCount(n))}</span></a></li>`;
+  });
+  return `<ul class="counties-list">${rows.join("")}</ul>`;
 }
 
 // ------------------------------------------------------------- data

@@ -16,6 +16,9 @@ of a cycle do, unless a school moved mid-cycle): "2027 and 2028".
 
 from __future__ import annotations
 
+import math
+import re
+
 from backend.helpers import region_map
 from backend.helpers.data_helpers import SCHOOL_SUCCESSORS, school_name_for_season
 from backend.helpers.region_files import cycle_start
@@ -352,18 +355,68 @@ def county_lists(county: str, payload: dict, teams: dict | None = None) -> str:
     return "".join(out)
 
 
-def county_header(county: str, payload: dict, share: str = "") -> str:
+def _js_number(v: float) -> str:
+    """*v* rounded to a tenth (halves up) and written as JavaScript writes a number ("12", "12.3")."""
+    r = math.floor(v * 10 + 0.5) / 10
+    return str(int(r)) if r == int(r) else str(r)
+
+
+def path_box(d: str) -> list[float] | None:
+    """The box around an SVG path of absolute points (``pathBox``)."""
+    nums = [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", d)]
+    xs, ys = nums[0::2], nums[1::2]
+    return [min(xs), min(ys), max(xs), max(ys)] if xs else None
+
+
+def county_mark(base: dict, county: str, size: int = 24, shade: int | None = None) -> str:
+    """A county's mark, its outline as a team's helmet is its (``countyMark``)."""
+    c = next((x for x in base["counties"] if x["name"] == county), None)
+    if c is None:
+        return ""
+    d = c.get("icon") or c["d"]
+    x0, y0, x1, y1 = path_box(d)
+    pad = max(x1 - x0, y1 - y0) * 0.06
+    box = " ".join(_js_number(v) for v in (x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad))
+    fill = "county-mark--site" if shade is None else f"county-shade--{shade}"
+    return (
+        f'<svg class="mark county-mark {fill}" viewBox="{box}" width="{size}" height="{size}" aria-hidden="true">'
+        f'<path d="{d}"/></svg>'
+    )
+
+
+def count_shade(n: int) -> int:
+    """A count's shade on the statewide map (``countShade``)."""
+    return 0 if n == 0 else 1 if n == 1 else 2 if n == 2 else 3 if n <= 4 else 4
+
+
+def counties_list(base: dict, counts: dict[str, int]) -> str:
+    """Every county by name, a row each with its mark and its MHSAA schools (``countiesList``)."""
+    rows = []
+    for c in sorted(base["counties"], key=lambda c: c["name"].lower()):
+        n = counts.get(c["name"], 0)
+        rows.append(
+            f'<li><a class="regions-list__row county-row{"" if n else " is-empty"}" '
+            f'href="{_e(counties_path(c["name"]))}" data-county="{_e(c["name"])}">'
+            f"{county_mark(base, c['name'], 28, count_shade(n))}"
+            f'<span class="regions-list__team">{_e(c["name"])}</span>'
+            f'<span class="regions-list__was">{_e(schools_count(n))}</span></a></li>'
+        )
+    return f'<ul class="counties-list">{"".join(rows)}</ul>'
+
+
+def county_header(county: str, payload: dict, base: dict, share: str = "") -> str:
     """The county page's heading (``countyHeader``)."""
     mine = [s for s in payload["schools"] if s["county"] == county]
     return (
         f"{breadcrumb_nav(counties_trail(county))}"
-        f'<div class="title-row"><h1 class="title">{_e(county_title(county))}</h1>{share}</div>'
+        f'<div class="title-row"><h1 class="title county-title">'
+        f"{county_mark(base, county, 44)}<span>{_e(county_title(county))}</span></h1>{share}</div>"
         f'<p class="regions-sub">{_e(county_count(mine))}, {_e(seasons_label(payload["seasons"]))}</p>'
         f'<p class="county-note muted">{_e(MHSAA_NOTE)}</p>'
     )
 
 
-def county_body(county: str, payload: dict, teams: dict | None = None) -> str:
+def county_body(county: str, payload: dict, base: dict, teams: dict | None = None) -> str:
     """A county's page as plain HTML: its heading and its schools by class (the app adds the map)."""
     mine = [s for s in payload["schools"] if s["county"] == county]
     lists = (
@@ -374,7 +427,7 @@ def county_body(county: str, payload: dict, teams: dict | None = None) -> str:
     )
     return (
         f'<div class="page static-page regions-page county-page"><header class="entry-head">'
-        f"{county_header(county, payload)}</header>{lists}</div>\n"
+        f"{county_header(county, payload, base)}</header>{lists}</div>\n"
     )
 
 
@@ -390,22 +443,17 @@ def county_description(county: str, payload: dict) -> str:
     return f"{county_title(county)}, Mississippi's MHSAA football schools in {seasons} and their regions: {places}."
 
 
-def counties_body(counties: list[str], payload: dict) -> str:
+def counties_body(base: dict, payload: dict) -> str:
     """The statewide page as plain HTML: its heading and every county with its MHSAA schools' count."""
-    counts = {c: 0 for c in counties}
+    counts = {c["name"]: 0 for c in base["counties"]}
     for s in payload["schools"]:
         if s["county"] in counts:
             counts[s["county"]] += 1
-    items = "".join(
-        f'<li><a href="{counties_path(c)}" data-county="{_e(c)}">{_e(c)}</a> <span class="muted">{counts[c]}</span></li>'
-        for c in sorted(counties, key=str.lower)
-    )
     return (
         '<div class="page static-page regions-page counties-page"><header class="entry-head">'
         f"{breadcrumb_nav(counties_trail())}"
         '<div class="title-row"><h1 class="title">Counties</h1></div>'
         f'<p class="regions-sub">Each county\'s MHSAA schools, {_e(seasons_label(payload["seasons"]))}</p>'
         f'<p class="county-note muted">{_e(MHSAA_NOTE)}</p></header>'
-        '<h2 class="counties-list__title">Every county <span class="muted">(MHSAA schools)</span></h2>'
-        f'<ul class="counties-list">{items}</ul></div>\n'
+        f'<h2 class="counties-list__title">Every county</h2>{counties_list(base, counts)}</div>\n'
     )

@@ -2092,6 +2092,15 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .county-shade-key.county-shade--2 { background: color-mix(in srgb, var(--scrubber-selected-bg) 42%, var(--surface-page)); }
 .county-shade-key.county-shade--3 { background: color-mix(in srgb, var(--scrubber-selected-bg) 66%, var(--surface-page)); }
 .county-shade-key.county-shade--4 { background: var(--scrubber-selected-bg); }
-.counties-list__title { margin: 0 0 8px; font-size: 1.1rem; }
-.counties-list { columns: 3 9rem; column-gap: 16px; margin: 0; padding: 0; list-style: none; font-size: 15px; line-height: 28px; }
-.counties-list li { break-inside: avoid; }
+.counties-list__title { margin: 0 0 8px; font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; }
+/* Every county as a row, as the Regions lists' teams are: its mark, its name, and its MHSAA schools. */
+.counties-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: 2px 16px; margin: 0; padding: 0; list-style: none; }
+.county-row { grid-template-columns: 30px minmax(0, 1fr); }
+.county-row .county-mark { grid-row: span 2; width: 30px; height: 30px; }
+.county-row.is-empty .regions-list__team { color: var(--text-secondary); }
+/* A county's mark, as a team's helmet is its: its outline, filled in its shade on the statewide map, or
+   in the site's color by its name. */
+.county-mark path { stroke: color-mix(in srgb, var(--text-primary) 45%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.county-mark--site { fill: var(--scrubber-selected-bg); }
+.county-title { display: flex; align-items: center; gap: 12px; }
+.county-title .county-mark { width: 44px; height: 44px; }

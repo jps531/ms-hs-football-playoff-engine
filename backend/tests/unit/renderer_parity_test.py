@@ -264,6 +264,15 @@ COUNTY = {
     ],
 }  # fmt: skip
 COUNTY_TEAMS = {"Terry": {"helmet_url": "https://res.cloudinary.com/x/terry.png"}}
+# Their map: Hinds with a simpler outline for its mark (one with a half to round), Rankin with only its own.
+COUNTY_BASE = {
+    "width": 100, "height": 100, "state": "M0,0L100,0L100,100Z",
+    "counties": [
+        {"name": "Hinds", "d": "M10,10L40,10.5L40,45L10,40Z", "icon": "M10.25,10L40,10L40,45.35L10,40Z", "label": [25, 25]},
+        {"name": "Rankin", "d": "M50,10L90,10L90,30L50,30Z", "label": [70, 20]},
+        {"name": "Issaquena", "d": "M0,50L5,50L5,60Z", "label": [2, 55]},
+    ],
+}  # fmt: skip
 
 CASES = [
     *[(f"playoffPath {t['school']} {m} {c}", team_image.playoff_rounds(t, m, c), _call("standings", "playoffPath", t, m, c), "data")
@@ -346,7 +355,12 @@ CASES = [
     *[(f"standingsHref {a}", rp.standings_href(5, 2, *a), _call("regions", "standingsHref", 5, 2, *a), "data")
       for a in ((None, 2026), (2026, 2026), (2025, 2026))],
     *[(f"seasonsLabel {s}", rp.seasons_label(s), _call("regions", "seasonsLabel", s), "data") for s in ([2027, 2028], [2026])],
-    *[(f"countyHeader {c}", rp.county_header(c, COUNTY), _call("regions", "countyHeader", c, COUNTY), "html") for c in ("Hinds", "Issaquena")],
+    *[(f"countyHeader {c}", rp.county_header(c, COUNTY, COUNTY_BASE), _call("regions", "countyHeader", c, COUNTY, COUNTY_BASE), "html")
+      for c in ("Hinds", "Issaquena", "Nowhere")],
+    *[(f"countyMark {c} {a}", rp.county_mark(COUNTY_BASE, c, *a), _call("regions", "countyMark", COUNTY_BASE, c, {"size": a[0], "shade": a[1]}), "html")
+      for c in ("Hinds", "Rankin", "Nowhere") for a in ((24, None), (28, 0), (44, 4))],
+    ("countiesList", rp.counties_list(COUNTY_BASE, {"Hinds": 4, "Rankin": 1}),
+     _call("regions", "countiesList", COUNTY_BASE, {"Hinds": 4, "Rankin": 1}), "html"),
     *[(f"countyLists {c}", rp.county_lists(c, COUNTY, COUNTY_TEAMS), _call("regions", "countyLists", c, COUNTY, COUNTY_TEAMS), "html")
       for c in ("Hinds", "Rankin", "Issaquena")],
     ("countyPlaces", [{**p, "clazz": p["clazz"]} for p in rp.county_places(COUNTY["schools"][:4])],

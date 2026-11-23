@@ -13,6 +13,8 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   region: the county outlined, each school's region in its own color (two regions with the same
   number in different classes never share one), and the regions' other schools as smaller dots.
   A school's county is the one its campus is in.
+- Each county has its outline as its mark, as a team has its helmet: beside its name on its page,
+  and in the list of every county, shaded as on the map.
 - Only MHSAA schools are counted or shown, and the pages say so: schools in other associations,
   such as MAIS, aren't included.
 - The Counties pages read without JavaScript too, and are in the sitemap.

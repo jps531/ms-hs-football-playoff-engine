@@ -334,9 +334,10 @@ def write_regions(
 
     # The Counties pages (the newest regions): every county, and each county's schools. Their link
     # previews are the site's card for now.
-    names = sorted(region_map.counties(), key=str.lower)
+    base = region_map.base_map()
+    names = sorted((c["name"] for c in base["counties"]), key=str.lower)
     card = f"{site_url}/static/og/site.png?v={today:%Y%m%d}"
-    write(out_dir / "body" / "counties.html", counties_body(names, payload))
+    write(out_dir / "body" / "counties.html", counties_body(base, payload))
     write(
         out_dir / "meta" / "counties.html",
         meta_tags(
@@ -353,7 +354,7 @@ def write_regions(
     sitemap.append((counties_path(), None, []))
     for county in names:
         slug = counties_path(county).rsplit("/", 1)[1]
-        write(out_dir / "body" / f"counties-{slug}.html", county_body(county, payload, by_school))
+        write(out_dir / "body" / f"counties-{slug}.html", county_body(county, payload, base, by_school))
         write(
             out_dir / "meta" / f"counties-{slug}.html",
             meta_tags(
