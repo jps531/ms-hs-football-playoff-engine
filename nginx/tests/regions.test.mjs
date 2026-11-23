@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compareChanges, compareChangesHtml, hoverHtml, hoverSpot, keepInView, mapsViews, nameIn, notOnMapHtml, pickedHtml, placeLabels, regionView, regionsLists, namesIn, timelineSeasons, timelineTable, timelineSpan, wholeView } from "../html/static/js/regions.js";
+import * as regions from "../html/static/js/regions.js";
 
 const BASE = { width: 3324, height: 5355 };
 const TIP = { w: 100, h: 24 };
@@ -218,4 +219,45 @@ test("a dot's tooltip: helmet, name, mascot, region and town, edged in the team'
   const bare = hoverHtml(school, undefined);
   assert.doesNotMatch(bare, /mascot|--team-ui/);
   assert.match(bare, /Region 7-4A/);
+});
+
+// ------------------------------------------------------------- a county's Compare and Timeline
+
+const sch = (school, county, clazz, region, extra = {}) => ({ school, slug: school.toLowerCase().replace(/[^a-z]+/g, "-"), county, class: clazz, region, ...extra });
+const LEAKE_2025 = { label: "2025", season: 2025, payload: { schools: [
+  sch("Leake Central", "Leake", 4, 5), sch("Leake County", "Leake", 1, 5), sch("Raymond", "Hinds", 4, 6),
+] } };
+const LEAKE_2026 = { label: "2026", season: 2026, payload: { schools: [sch("Leake", "Leake", 5, 2), sch("Raymond", "Hinds", 4, 6)] } };
+const TIPPAH_2026 = { label: "2026", season: 2026, payload: { schools: [
+  sch("Walnut", "Tippah", 2, 1), sch("Falkner", "Tippah", 1, 2), sch("Ripley", "Tippah", 4, 3), sch("Gone", "Tippah", 1, 2),
+] } };
+const TIPPAH_2027 = { label: "2027 and 2028", season: 2027, payload: { schools: [
+  sch("North Tippah", "Tippah", 3, 2, { successor_of: "Walnut" }), sch("Ripley", "Tippah", 3, 1),
+] } };
+
+test("a county's changes: a merger names the schools it was formed from, in either order of the maps", () => {
+  const c = regions.countyChanges(LEAKE_2026, LEAKE_2025, "Leake");
+  assert.equal(c.older.season, 2025);
+  assert.deepEqual(c.groups.in.map((r) => [r.school, r.note]), [["Leake", "Formed from Leake Central (5-4A) and Leake County (5-1A)"]]);
+  assert.deepEqual([c.groups.out.length, c.groups.moved.length, c.groups.same.length], [0, 0, 0]);
+  assert.equal(regions.countyChanges(LEAKE_2025, LEAKE_2025, "Leake"), null);
+});
+
+test("a county's changes: moved, gone, and a school only in one season", () => {
+  const c = regions.countyChanges(TIPPAH_2026, TIPPAH_2027, "Tippah");
+  assert.deepEqual(c.groups.moved.map((r) => [r.school, r.older, r.newer]), [["Ripley", { class: 4, region: 3 }, { class: 3, region: 1 }]]);
+  assert.deepEqual(c.groups.out.map((r) => [r.school, r.note]), [["Gone", "Not in a region in 2027 and 2028"]]);
+  assert.match(c.groups.in[0].note, /^Formed from Walnut \(1-2A\) and Falkner \(2-1A\)$/);
+  const html = regions.countyChangesHtml(c, "Tippah");
+  assert.match(html, /What changed in Tippah County from 2026 to 2027 and 2028/);
+  assert.match(html, /Region 3-4A → Region 1-3A/);
+});
+
+test("a county's timeline table: a row a school, a merger said on both ends", () => {
+  const seasons = [{ option: { season: 2026, label: "2026" }, payload: TIPPAH_2026.payload }, { option: { season: 2027, label: "2027 and 2028" }, payload: TIPPAH_2027.payload }];
+  const html = regions.countyTimelineTable("Tippah", seasons);
+  assert.equal((html.match(/<tr><th scope="row">/g) ?? []).length, 5); // Falkner, Gone, North Tippah, Ripley, Walnut
+  assert.match(html, /Walnut<\/span><span class="timeline-table__note muted">Part of North Tippah from 2027/);
+  assert.match(html, /North Tippah<\/span><span class="timeline-table__note muted">From Walnut and Falkner, 2027/);
+  assert.match(html, /aria-hidden="true">1<\/span>1-3A/);
 });

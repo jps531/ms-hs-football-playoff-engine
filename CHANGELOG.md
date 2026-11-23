@@ -5,6 +5,17 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.26.0
+
+- **A county's Compare and Timeline**, as the Regions pages have. Compare shows the county in two
+  seasons side by side (each with its own season) and what changed: its schools that changed class
+  or region, those new to it, and those gone. A merged school says what it was formed from (Leake in
+  2026: Leake Central and Leake County). Pick a school on either map, or in the list, to see it on
+  both.
+- The Timeline shows the county's map every season, oldest first, and a table of its schools season
+  by season, each season's region in that map's colors. A merger is said on both ends ("Part of
+  North Tippah from 2027"; "From Walnut and Falkner, 2027").
+
 ## 1.25.0
 
 - **Counties, a new kind of map.** Pick "Counties" beside the classes (on a phone, the Regions |

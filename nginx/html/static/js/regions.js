@@ -1112,6 +1112,163 @@ export function countiesList(base, counts) {
   return `<ul class="counties-list">${rows.join("")}</ul>`;
 }
 
+// ------------------------------------------------------------- a county's Compare and Timeline
+
+/** A county page's heading for its Compare and Timeline: breadcrumbs, the title with its mark, *line*. */
+export function countyViewHeader(county, base, line, share = "") {
+  return `${breadcrumbs(countiesTrail(county))}<div class="title-row"><h1 class="title county-title">`
+    + `${countyMark(base, county, { size: 44 })}<span>${esc(countyTitle(county))}</span></h1>${share}</div>`
+    + `<p class="regions-sub">${esc(line)}</p><p class="county-note muted">${esc(MHSAA_NOTE)}</p>`;
+}
+
+/**
+ * What changed in a county between two seasons: *a* and *b* are { label, season, payload }, in either
+ * order. Each of the county's schools in either season, in groups: in the newer season only (new, or
+ * formed from schools merged into it), in the older only (gone, or now part of another), changed class
+ * or region, and the same. A renamed school is the same school (Leake Central, then Leake). Each row is
+ * { school, slug, season, older, newer, note }: its name and season to pick it by, and its places then
+ * ({class, region}, or null). Null when both are the same season.
+ */
+export function countyChanges(a, b, county) {
+  if (a.season === b.season) return null;
+  const [older, newer] = a.season < b.season ? [a, b] : [b, a];
+  const thenAll = new Map(older.payload.schools.map((s) => [s.school, s]));
+  const nowAll = new Map(newer.payload.schools.map((s) => [s.school, s]));
+  const groups = { in: [], out: [], moved: [], same: [] };
+  const seen = new Set();
+  const at = (s) => ({ class: s.class, region: s.region });
+  for (const s of newer.payload.schools.filter((x) => x.county === county)) {
+    const was = namesIn(s.school, newer.season, older.season).map((n) => thenAll.get(n)).filter(Boolean);
+    was.forEach((w) => seen.add(w.school));
+    const row = { school: s.school, slug: s.slug, season: newer.season, older: null, newer: at(s), note: null };
+    if (was.length === 1) {
+      row.older = at(was[0]);
+      (was[0].class === s.class && was[0].region === s.region ? groups.same : groups.moved).push(row);
+    } else {
+      row.note = was.length > 1 ? `Formed from ${was.map((w) => `${w.school} (${shortPlace(w)})`).join(" and ")}`
+        : s.successor_of ? `New school, on ${s.successor_of}’s campus` : `Not in a region in ${older.label}`;
+      groups.in.push(row);
+    }
+  }
+  for (const s of older.payload.schools.filter((x) => x.county === county && !seen.has(x.school))) {
+    const now = namesIn(s.school, older.season, newer.season).map((n) => nowAll.get(n)).find(Boolean);
+    groups.out.push({ school: s.school, slug: s.slug, season: older.season, older: at(s), newer: null,
+      note: now ? `Now part of ${now.school}` : `Not in a region in ${newer.label}` });
+  }
+  for (const list of Object.values(groups)) list.sort((x, y) => byName(x.school, y.school));
+  return { older, newer, groups };
+}
+
+/** The list under a county's two maps: what changed between them, each school picking it on both maps. */
+export function countyChangesHtml(changes, county, teams = {}) {
+  if (!changes) return `<p class="focus-note muted">Both maps show the same season, so nothing changed between them.</p>`;
+  const { older, newer, groups } = changes;
+  const detail = {
+    in: (r) => `${place(r.newer)} · ${r.note}`,
+    out: (r) => `${place(r.older)} in ${older.label} · ${r.note}`,
+    moved: (r) => `${place(r.older)} → ${place(r.newer)}`,
+    same: (r) => place(r.newer),
+  };
+  const titles = { in: `In ${newer.label} only`, out: `In ${older.label} only`, moved: "Changed class or region", same: "Same class and region" };
+  const row = (key) => (r) => `<li><a class="compare-changes__row" href="?team=${esc(r.slug)}" data-team="${esc(r.slug)}" data-school="${esc(r.school)}" data-season="${esc(r.season)}">`
+    + `${teamMark(r.school, teams[r.school])}<span class="compare-changes__team">${esc(r.school)}</span>`
+    + `<span class="compare-changes__detail">${esc(detail[key](r))}</span></a></li>`;
+  const group = (key) => {
+    const list = groups[key];
+    if (!list.length) return "";
+    const body = `<ul>${list.map(row(key)).join("")}</ul>`;
+    const head = `${esc(titles[key])} <span class="compare-changes__count">${list.length}</span>`;
+    return key === "same"
+      ? `<details class="compare-changes__group"><summary><h3>${head}</h3></summary>${body}</details>`
+      : `<section class="compare-changes__group"><h3>${head}</h3>${body}</section>`;
+  };
+  const counts = ["in", "out", "moved"].reduce((n, k) => n + groups[k].length, 0);
+  return `<h2 class="compare-changes__title">What changed in ${esc(countyTitle(county))} from ${esc(older.label)} to ${esc(newer.label)}</h2>`
+    + (counts ? "" : `<p class="focus-note muted">Nothing changed: every school is in the same class and region in both.</p>`)
+    + `<div class="compare-changes__groups">${["in", "out", "moved", "same"].map(group).join("")}</div>`;
+}
+
+/** One side of a county's Compare: its season picker over its map (*side* "a" or "b"). */
+export function countyCompareSide(side, base, option, payload, county, index, name) {
+  const seasons = index.options.map((o) => `<option value="${esc(o.season)}"${o.season === option.season ? " selected" : ""}>${esc(o.label)}</option>`).join("");
+  const mine = payload.schools.filter((s) => s.county === county);
+  const map = mine.length
+    ? mapFigure(base, payload, null, { full: false, layer: countyLayer(payload, county) })
+    : `<p class="notice">No MHSAA school was in ${esc(countyTitle(county))} in ${esc(option.label)}.</p>`;
+  return `<section class="compare__side" data-side="${side}" aria-label="${name}">`
+    + `<div class="compare__pickers"><label><span class="visually-hidden">${name}: seasons</span>`
+    + `<select class="select-box" data-control="compare-season" data-side="${side}">${seasons}</select></label>`
+    + `<span class="compare__count muted">${esc(schoolsCount(mine.length))}</span></div>${map}</section>`;
+}
+
+/** A county's Compare: two seasons of its map side by side, the older first, and what changed. */
+export function countyComparePage(county, base, a, b, index, { controls = "", share = "", teams = {}, views = "" } = {}) {
+  const changes = countyChanges(
+    { label: a.option.label, season: a.option.season, payload: a.payload },
+    { label: b.option.label, season: b.option.season, payload: b.payload },
+    county,
+  );
+  const [first, second] = b.option.season < a.option.season ? [{ ...b, key: "b" }, { ...a, key: "a" }] : [{ ...a, key: "a" }, { ...b, key: "b" }];
+  return `<div class="page regions-page regions-page--compare county-page"><header class="entry-head">`
+    + countyViewHeader(county, base, `${first.option.label} vs. ${second.option.label}`, share)
+    + `${views}${controls}<p class="focus-note muted regions-note">Pick a school on either map, or in the list under them, to see where it is on both.</p></header>`
+    + `<div class="compare">${[first, second].map((x, i) => countyCompareSide(x.key, base, x.option, x.payload, county, index, `Map ${i + 1}`)).join("")}</div>`
+    + `<section class="compare-changes" aria-label="What changed">${countyChangesHtml(changes, county, teams)}</section></div>`;
+}
+
+/**
+ * The county's schools, season by season: a row for each school (by its newest name; a school merged
+ * into another keeps its own row), a column for each season (*seasons*: [{ option, payload }], oldest
+ * first), each cell its region then, in that season's map's color, or a dash.
+ */
+export function countyTimelineTable(county, seasons, teams = {}) {
+  const newest = seasons[seasons.length - 1]?.option.season;
+  const names = [];
+  for (const s of seasons) {
+    for (const r of s.payload.schools) {
+      if (r.county !== county) continue;
+      const name = nameIn(r.school, s.option.season, newest);
+      if (!names.includes(name)) names.push(name);
+    }
+  }
+  names.sort(byName);
+  const colors = seasons.map((s) => new Map(countyPlaces(s.payload.schools.filter((r) => r.county === county)).map((p) => [p.key, p.color])));
+  const head = `<tr><th scope="col">School</th>${seasons.map((s) => `<th scope="col">${esc(s.option.label)}</th>`).join("")}</tr>`;
+  const body = names.map((name) => {
+    const cells = seasons.map((s, i) => {
+      const r = s.payload.schools.find((x) => x.county === county && x.school === nameIn(name, newest, s.option.season));
+      return r
+        ? `<td><span class="timeline-table__place"><span class="region-chip region-chip--${colors[i].get(`${r.class}-${r.region}`)}" aria-hidden="true">${r.region}</span>${esc(shortPlace(r))}</span></td>`
+        : `<td><span class="muted" aria-label="Not on the list">—</span></td>`;
+    }).join("");
+    // A merger, said where the rows end and begin: "Part of North Tippah from 2027", "From Walnut and Falkner".
+    const merged = SCHOOL_CONSOLIDATIONS.find(([, , members]) => members.includes(nameIn(name, newest, 0)) || members.includes(name));
+    const formed = SCHOOL_CONSOLIDATIONS.find(([school]) => school === name);
+    const note = formed ? `From ${formed[2].join(" and ")}, ${formed[1]}`
+      : merged && merged[0] !== name ? `Part of ${merged[0]} from ${merged[1]}` : "";
+    return `<tr><th scope="row"><span class="timeline-table__mate">${teamMark(name, teams[name], { size: 18 })}${esc(name)}</span>`
+      + `${note ? `<span class="timeline-table__note muted">${esc(note)}</span>` : ""}</th>${cells}</tr>`;
+  }).join("");
+  return `<div class="timeline-table__wrap"><table class="timeline-table county-timeline-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+/** A county's Timeline: its map each season, oldest first, and its schools season by season. */
+export function countyTimelinePage(county, base, seasons, { controls = "", share = "", views = "", teams = {} } = {}) {
+  const span = timelineSpan(seasons);
+  return `<div class="page regions-page regions-page--timeline county-page"><header class="entry-head">`
+    + countyViewHeader(county, base, span, share)
+    + `${views}${controls}<p class="focus-note muted regions-note">Each map is ${esc(countyTitle(county))} that season: its schools in their regions' colors. Pick a school to see its region.</p></header>`
+    + `<div class="timeline">${seasons.map((s, i) => {
+      const n = s.payload.schools.filter((r) => r.county === county).length;
+      const map = n ? mapFigure(base, s.payload, null, { full: false, layer: countyLayer(s.payload, county) })
+        : `<p class="notice">No MHSAA school in ${esc(s.option.label)}.</p>`;
+      return `<section class="timeline__season" data-season="${s.option.season}" data-index="${i}">`
+        + `<h2 class="timeline__label">${esc(s.option.label)} <span class="timeline__class">${esc(schoolsCount(n))}</span></h2>${map}</section>`;
+    }).join("")}</div>`
+    + `<h2 class="timeline-table__title">${esc(countyTitle(county))}, season by season</h2>${countyTimelineTable(county, seasons, teams)}`
+    + "</div>";
+}
+
 // ------------------------------------------------------------- data
 
 const cache = new Map();

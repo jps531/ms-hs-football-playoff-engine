@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyComparePage, countyTimelinePage, namesIn } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -862,6 +862,10 @@ app.addEventListener("change", (e) => {
     navigate(hrefWith({ odds: value }), { replace: true });
   } else if (control.dataset.control === "regions-season") {
     navigate(hrefWith({ season: Number(value) }), { replace: true });
+  } else if (control.dataset.control === "compare-season" && route.page === "counties") {
+    // A county's Compare: one map's season changes; the other keeps its own (written out).
+    const first = control.dataset.side === "a";
+    navigate(hrefWith(first ? { season: Number(value), vs: countyCompareVs } : { vs: Number(value) }), { replace: true });
   } else if (control.dataset.control === "compare-season" || control.dataset.control === "compare-class") {
     // One map changes; the other keeps what it shows (its season and class written out, so they don't
     // follow the first map's).
@@ -2831,11 +2835,16 @@ async function renderCounties(token) {
       track("county_opened", { county: name, via });
       navigate(hrefWith({ page: "counties", county: countiesPath(name).split("/").pop(), team: null }), { scroll: true });
     };
-    if (!county) {
+    const views = county ? mapsViews(route.view, mapsViewHrefs()) : "";
+    if (county && route.view === "compare") {
+      await renderCountyCompare(token, index, base, county, { finder, views });
+    } else if (county && route.view === "timeline") {
+      await renderCountyTimeline(token, index, base, county, { finder, views });
+    } else if (!county) {
       app.innerHTML = countiesPage(base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>` });
       wireCountiesMap(app, counts, goTo);
     } else {
-      app.innerHTML = countyPage(county, base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, teams });
+      app.innerHTML = countyPage(county, base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, teams, views });
       const layer = countyLayer(payload, county);
       const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
       const picked = wanted ? layer.schools.find((s) => s.slug === wanted) ?? null : null;
@@ -2862,8 +2871,10 @@ async function renderCounties(token) {
       input.value = "";
       goTo(item.county, "search");
     }, { one: "county", many: "counties", meta: (item) => schoolsCount(item.count), mark: () => "" });
+    if (token !== renderToken) return;
     renderScrubber(null);
-    showContext(contextHtml(county ? countyTitle(county) : "Counties", { week: seasonsLabel(option.seasons) }, null, { bar: true }));
+    const when = route.view === "compare" && county ? countyCompareLine : route.view === "timeline" && county ? countyTimelineLine : seasonsLabel(option.seasons);
+    showContext(contextHtml(county ? countyTitle(county) : "Counties", { week: when }, null, { bar: true }));
     history.replaceState(null, "", hrefWith({}));
   } catch {
     if (token !== renderToken) return;
@@ -2873,6 +2884,126 @@ async function renderCounties(token) {
     if (token === renderToken) app.removeAttribute("aria-busy");
   }
   document.title = pageTitle(null, null, "counties");
+}
+
+// A county's Compare: the second map's season (?vs=, or by default the regions before the first's), and
+// what the bar says each view shows.
+let countyCompareVs = null;
+let countyCompareLine = "";
+let countyTimelineLine = "";
+
+/**
+ * A county's Compare: the county in two seasons side by side (the first: the page's season; the second:
+ * ?vs=, by default the regions before), and what changed. A school picked on either map, or in the list,
+ * is shown on both (or where it was, when it isn't on one).
+ */
+async function renderCountyCompare(token, index, base, county, { finder, views }) {
+  const first = pickOption(index, route.season);
+  const at = index.options.indexOf(first);
+  const before = index.options[at + 1] ?? index.options[at - 1] ?? first;
+  const second = route.vs ? index.options.find((o) => o.seasons.includes(route.vs)) ?? before : before;
+  const [pa, pb, ta, tb] = await Promise.all([
+    regionsFile(`${first.season}.json`),
+    regionsFile(`${second.season}.json`),
+    teamsBySchool(first.season).catch(() => ({})),
+    teamsBySchool(second.season).catch(() => ({})),
+  ]);
+  if (token !== renderToken) return;
+  route.season = first.season === index.default ? null : first.season;
+  route.vs = second === before ? null : second.season;
+  countyCompareVs = second.season;
+  const teams = { ...tb, ...ta };
+  const sides = [{ key: "a", option: first, payload: pa }, { key: "b", option: second, payload: pb }];
+  const [older, newer] = second.season < first.season ? [second, first] : [first, second];
+  countyCompareLine = `${older.label} vs. ${newer.label}`;
+  app.innerHTML = countyComparePage(county, base, sides[0], sides[1], index, {
+    controls: `<div class="regions-controls">${finder}</div>`, teams, views,
+  });
+  // A school by its name in a season: picked on each map it's on, where it is said on the other.
+  const rowIn = (side, p) => namesIn(p.name, p.season, side.option.season)
+    .map((n) => side.payload.schools.find((r) => r.school === n)).find(Boolean) ?? null;
+  let picked = null;
+  const pickBoth = (p, via) => {
+    picked = p;
+    for (const side of sides) {
+      const row = p && rowIn(side, p);
+      const onMap = row && side.layer?.schools.some((r) => r.slug === row.slug);
+      side.map?.pick(onMap ? row.slug : p ? "-" : null, { reveal: false });
+    }
+    for (const a of app.querySelectorAll(".compare-changes [data-school]")) {
+      const mine = p && namesIn(a.dataset.school, Number(a.dataset.season), p.season).includes(p.name);
+      if (mine) a.setAttribute("aria-current", "true");
+      else a.removeAttribute("aria-current");
+    }
+    route.teamName = p?.name ?? null;
+    if (p && via) track("team_picked", { from: "county-compare", via, team: p.name });
+    history.replaceState(null, "", hrefWith({ team: route.teamName, vs: countyCompareVs }));
+  };
+  for (const side of sides) {
+    if (!side.payload.schools.some((r) => r.county === county)) continue;
+    side.layer = countyLayer(side.payload, county);
+    side.map = wireRegionsMap(app.querySelector(`[data-side="${side.key}"]`), base, side.payload, null, {
+      layer: side.layer,
+      home: countyHome(base, county),
+      href: countiesPath(county),
+      teams,
+      elsewhere: () => notOnMapHtml(picked.name, rowIn(side, picked), side.option.label),
+      onPick: (slug, via) => {
+        const row = slug && side.layer.schools.find((r) => r.slug === slug);
+        pickBoth(row ? { name: row.school, season: side.option.season } : null, via);
+      },
+      onMove: (how) => track("regions_map_moved", { class: null, how, view: "county-compare" }),
+    });
+  }
+  app.querySelector(".compare-changes")?.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-school]");
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    pickBoth({ name: a.dataset.school, season: Number(a.dataset.season) }, "changes");
+    app.querySelector(".compare")?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+  // ?team=: a school by its slug in either season.
+  const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+  for (const side of sides) {
+    const row = wanted && side.payload.schools.find((r) => r.slug === wanted);
+    if (row) {
+      pickBoth({ name: row.school, season: side.option.season }, null);
+      break;
+    }
+  }
+}
+
+/** A county's Timeline: its map every season, oldest first, and its schools season by season. */
+async function renderCountyTimeline(token, index, base, county, { finder, views }) {
+  const options = [...index.options].sort((a, b) => a.season - b.season);
+  const [payloads, helmets] = await Promise.all([
+    Promise.all(options.map((o) => regionsFile(`${o.season}.json`))),
+    Promise.all(options.map((o) => teamsBySchool(o.season).catch(() => ({})))),
+  ]);
+  if (token !== renderToken) return;
+  route.season = null;
+  route.team = null;
+  const teams = Object.assign({}, ...helmets); // the newest season's helmet wins
+  const seasons = options.map((option, i) => ({ option, payload: payloads[i] }));
+  countyTimelineLine = timelineSpan(seasons);
+  app.innerHTML = countyTimelinePage(county, base, seasons, { controls: `<div class="regions-controls">${finder}</div>`, views, teams });
+  for (const [i, side] of seasons.entries()) {
+    if (!side.payload.schools.some((r) => r.county === county)) continue;
+    const layer = countyLayer(side.payload, county);
+    wireRegionsMap(app.querySelector(`.timeline__season[data-index="${i}"]`), base, side.payload, null, {
+      layer,
+      home: countyHome(base, county),
+      href: countiesPath(county),
+      teams,
+      onPick: (slug, via) => {
+        const row = slug && layer.schools.find((r) => r.slug === slug);
+        if (row && via) track("team_picked", { from: "county-timeline", via, team: row.school });
+      },
+      onMove: (how) => track("regions_map_moved", { class: null, how, view: "county-timeline" }),
+    });
+  }
+  const row = app.querySelector(".timeline");
+  if (row) row.scrollLeft = row.scrollWidth;
 }
 
 /** The Counties page's search box: the team search's field and list, for a county. */
