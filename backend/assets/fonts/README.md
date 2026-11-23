@@ -17,8 +17,10 @@ installed by hand, unmodified, wherever the site runs:
 1. Download Nippo from <https://www.fontshare.com/fonts/nippo> and unzip it.
 2. Copy, from the download, as they come:
    - the Bold OpenType file to `backend/assets/fonts/Nippo-Bold.otf` (the share
-     cards; the worker image copies it in when it's built, so do this before
-     `docker compose … up --build`);
+     cards and images; the worker reads this folder from the checkout, mounted
+     read-only by `docker-compose.yml`, since the images CI builds can't hold
+     the font. The next deploy, or `docker compose up -d prefect-worker`, picks
+     it up, and the next share-assets run redraws every image with it);
    - the Bold WOFF2 webfont to `nginx/html/static/fonts/Nippo-Bold.woff2` (the
      site; nginx serves that folder directly, so no restart is needed).
 
