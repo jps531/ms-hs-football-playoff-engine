@@ -1720,6 +1720,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 /* A class's region map: the image to share, in the page's theme, its top two thirds. */
 .landing-preview--regions .landing-preview__frame { height: 320px; padding: 0; }
 .landing-regions__map { display: block; width: 100%; height: auto; }
+/* The Maps section's other views: the Timeline's image, often shorter than the frame, whole up to the
+   frame's height; a county's cropped to its middle, where the county and its list are. */
+.landing-preview--timeline .landing-preview__frame { height: auto; max-height: 320px; }
+.landing-preview--county .landing-regions__map { height: 100%; object-fit: cover; object-position: 50% 50%; }
 .landing-regions__map--dark, .dark .landing-regions__map--light { display: none; }
 .dark .landing-regions__map--dark { display: block; }
 /* The bracket page in miniature: drawn at a fixed 1200px and scaled to fit, smaller on phones. */

@@ -133,7 +133,7 @@ from backend.helpers.static_pages import (
     sitemap_xml,
     website_ld,
 )
-from backend.prefect.share_regions import write_regions
+from backend.prefect.share_regions import maps_example, write_regions
 
 API_URL = os.environ.get("SHARE_API_URL", "http://api:8000/api/v1")
 OUTPUT_DIR = os.environ.get("SHARE_OUTPUT_DIR", "/opt/share")
@@ -397,13 +397,16 @@ def build_share_assets(
     )
     written.update(region_counts)
     sitemap += region_pages
-    # The front page shows a class's region map (the featured class's, else 5A's), once there are regions.
+    # The front page shows a class's region map (the featured class's, else 5A's), once there are regions,
+    # and the Maps pages' other views (maps_example).
     try:
         regions_season = json.loads((out_dir / "regions" / "index.json").read_text())["default"]
     except (OSError, ValueError, KeyError):
         regions_season = None
     regions_example = (
-        {"clazz": featured["clazz"] if featured else 5, "season": regions_season} if regions_season else None
+        maps_example(out_dir, featured["clazz"] if featured else 5, regions_season, regions_files)
+        if regions_season
+        else None
     )
     _write_text(
         out_dir / "body" / "site.html",

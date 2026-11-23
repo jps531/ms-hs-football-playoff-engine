@@ -5,6 +5,14 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.30.0
+
+- **The front page's Maps section** (once "Region maps") shows each view of the maps: a class's map as
+  before, then Compare (its regions beside the season before's), Timeline (every season's) and Counties
+  (the county with the most MHSAA schools), each with its image to share and a link to it.
+- A county's image to share centers its list of schools beside its map, rather than starting it at the
+  top.
+
 ## 1.27.0
 
 - **Share on the Counties pages.** A county's page shares its map and schools by class, and the county

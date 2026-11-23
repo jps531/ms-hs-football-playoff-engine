@@ -33,9 +33,12 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
+
+from PIL import Image
 
 from backend.helpers import region_map
 from backend.helpers.data_helpers import SCHOOL_RENAMES, names_in, school_name_for_season
@@ -315,6 +318,30 @@ def county_jobs(options: list[dict], seasons: dict[int, list[dict]]) -> list[Ima
                     )
                 )
     return jobs
+
+
+def maps_example(out_dir: Path, clazz: int, season: int, drawn: set[str]) -> dict:
+    """What the front page's Maps section shows (static_pages.landing_body's *regions_example*): class
+    *clazz*'s map in *season* (the regions shown first), and those of the other views' images the step
+    drew (*drawn*, write_regions' *drawn_files*): the class beside the season before ("compare"), every
+    season's ("timeline", its size, read from the file) and the county with the most MHSAA schools that
+    season, the first by name among those tied ("county")."""
+    example: dict = {"clazz": clazz, "season": season}
+    if f"regions/{season}/compare/{clazz}a-light.png" in drawn:
+        example["compare"] = True
+    timeline = f"regions/timeline/{clazz}a-light.png"
+    if timeline in drawn:
+        with Image.open(out_dir / timeline) as img:
+            example["timeline"] = img.size
+    try:
+        rows = json.loads((out_dir / "regions" / f"{season}.json").read_text())["schools"]
+    except (OSError, ValueError, KeyError):
+        rows = []
+    counts = Counter(r["county"] for r in rows if r.get("county"))
+    drawn_counties = [c for c in counts if f"regions/{season}/county/{slugify(c)}-light.png" in drawn]
+    if drawn_counties:
+        example["county"] = min(drawn_counties, key=lambda c: (-counts[c], c))
+    return example
 
 
 def write_regions(
