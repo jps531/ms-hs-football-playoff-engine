@@ -5,6 +5,21 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.27.0
+
+- **Share on the Counties pages.** A county's page shares its map and schools by class, and the county
+  against the regions before; its Compare shares the two seasons together when they're back to back,
+  and each map's own; its Timeline, every season on one image. The statewide page shares every
+  county shaded by its MHSAA schools. Each image has the county's outline as its mark.
+- Links to the Counties pages show their own previews: the county's map, or every county shaded.
+- **A county's map puts class first.** Each of its schools is marked with its region and class (3-6A),
+  in its class's color (7A blue, 6A green, 5A orange, 4A purple, 3A yellow, 2A pink, 1A red), lighter
+  or darker for its different regions. Every school in the county is named; schools elsewhere in its
+  regions are no longer drawn (the regions' shapes still are, lighter, a picked school's in full).
+  Marks that would overlap are spread apart, a line back to each school's spot, until you zoom in;
+  picking a school keeps the map on the county. The list and the season-by-season table show the
+  same marks.
+
 ## 1.26.0
 
 - **A county's Compare and Timeline**, as the Regions pages have. Compare shows the county in two

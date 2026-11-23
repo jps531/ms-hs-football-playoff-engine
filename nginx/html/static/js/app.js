@@ -2661,6 +2661,9 @@ app.addEventListener("click", (e) => {
     if (shareOpen.dataset.shareOpen === "team" && regionShare) {
       track("team_share_opened", { class: regionShare.clazz, region: regionShare.region, team: shareOpen.dataset.team });
       teamShareSpec(shareOpen.dataset.team).then(openShare);
+    } else if (shareOpen.dataset.shareOpen === "map" && route.page === "counties" && countyShare) {
+      track("regions_share_opened", { class: null, team: null, view: countyShare.view, county: route.countyName ?? null });
+      openShare(mapsShareSpec({ ...countyShare, page: `${location.origin}${location.pathname}${location.search}` }));
     } else if (shareOpen.dataset.shareOpen === "map" && regionsState) {
       const view = route.view === "compare" || route.view === "timeline" ? route.view : null;
       track("regions_share_opened", { class: regionsState.clazz, team: route.teamName ?? regionsState.picked?.school ?? null, ...(view ? { view } : {}) });
@@ -2802,6 +2805,7 @@ async function renderCounties(token) {
   showContext(null);
   app.setAttribute("aria-busy", "true");
   regionsState = null;
+  countyShare = null;
   route.countyName = null;
   try {
     const index = await regionsFile("index.json");
@@ -2841,10 +2845,19 @@ async function renderCounties(token) {
     } else if (county && route.view === "timeline") {
       await renderCountyTimeline(token, index, base, county, { finder, views });
     } else if (!county) {
-      app.innerHTML = countiesPage(base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>` });
+      countyShare = {
+        title: "Share the counties map", when: seasonsLabel(option.seasons), view: "counties", season: option.season,
+        kinds: [{ key: "counties", label: "Every county", file: `${option.season}/counties`, name: `mhsaa-schools-by-county-${option.season}`, alt: `MHSAA schools by county, ${option.label}` }],
+      };
+      app.innerHTML = countiesPage(base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, share: shareButton("map") });
       wireCountiesMap(app, counts, goTo);
     } else {
-      app.innerHTML = countyPage(county, base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, teams, views });
+      const has = payload.schools.some((r) => r.county === county);
+      countyShare = has ? {
+        title: `Share ${countyTitle(county)}`, when: seasonsLabel(option.seasons), view: "county", season: option.season,
+        kinds: [countyKind(county, option), countyCompareKind(county, index, option)].filter(Boolean),
+      } : null;
+      app.innerHTML = countyPage(county, base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, teams, views, share: has ? shareButton("map") : "" });
       const layer = countyLayer(payload, county);
       const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
       const picked = wanted ? layer.schools.find((s) => s.slug === wanted) ?? null : null;
@@ -2886,6 +2899,31 @@ async function renderCounties(token) {
   document.title = pageTitle(null, null, "counties");
 }
 
+// The Counties page's share sheet: its images ({ title, when, kinds, initial, view, season }, as
+// mapsShareSpec takes them), set by the view that's on screen; null while it has none (a county with no
+// school).
+let countyShare = null;
+
+/** A county's own image for a season of regions: { key, label, file, name, alt }. */
+function countyKind(county, option, key = "county") {
+  const slug = countiesPath(county).split("/").pop();
+  return {
+    key, label: `${countyTitle(county)}, ${option.label}`, file: `${option.season}/county/${slug}`,
+    name: `${slug}-county-${option.season}`, alt: `${countyTitle(county)}’s MHSAA schools and their regions, ${option.label}`,
+  };
+}
+
+/** A county against the regions before (drawn for every season that has some): its image, or null. */
+function countyCompareKind(county, index, newer) {
+  const before = index.options.find((o) => o.seasons.includes(newer.season - 1));
+  if (!before) return null;
+  const slug = countiesPath(county).split("/").pop();
+  return {
+    key: "county-compare", label: `${before.label} vs. ${newer.label}`, file: `${newer.season}/county-compare/${slug}`,
+    name: `${slug}-county-${before.season}-vs-${newer.season}`, alt: `${countyTitle(county)}: ${before.label} vs. ${newer.label}`,
+  };
+}
+
 // A county's Compare: the second map's season (?vs=, or by default the regions before the first's), and
 // what the bar says each view shows.
 let countyCompareVs = null;
@@ -2916,8 +2954,14 @@ async function renderCountyCompare(token, index, base, county, { finder, views }
   const sides = [{ key: "a", option: first, payload: pa }, { key: "b", option: second, payload: pb }];
   const [older, newer] = second.season < first.season ? [second, first] : [first, second];
   countyCompareLine = `${older.label} vs. ${newer.label}`;
+  // The two drawn together when they're back to back; each map's own (where the county had a school).
+  const together = older !== newer && older.seasons.includes(newer.season - 1) ? countyCompareKind(county, index, newer) : null;
+  const own = sides.filter((x) => x.payload.schools.some((r) => r.county === county))
+    .map((x) => countyKind(county, x.option, `county-${x.key}`));
+  const kinds = [together, ...own].filter(Boolean).filter((k, i, all) => all.findIndex((o) => o.file === k.file) === i);
+  countyShare = kinds.length ? { title: `Share ${countyTitle(county)}`, when: countyCompareLine, view: "county-compare", season: newer.season, kinds } : null;
   app.innerHTML = countyComparePage(county, base, sides[0], sides[1], index, {
-    controls: `<div class="regions-controls">${finder}</div>`, teams, views,
+    controls: `<div class="regions-controls">${finder}</div>`, teams, views, share: kinds.length ? shareButton("map") : "",
   });
   // A school by its name in a season: picked on each map it's on, where it is said on the other.
   const rowIn = (side, p) => namesIn(p.name, p.season, side.option.season)
@@ -2986,7 +3030,13 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
   const teams = Object.assign({}, ...helmets); // the newest season's helmet wins
   const seasons = options.map((option, i) => ({ option, payload: payloads[i] }));
   countyTimelineLine = timelineSpan(seasons);
-  app.innerHTML = countyTimelinePage(county, base, seasons, { controls: `<div class="regions-controls">${finder}</div>`, views, teams });
+  const slug = countiesPath(county).split("/").pop();
+  const has = seasons.some((x) => x.payload.schools.some((r) => r.county === county));
+  countyShare = has ? {
+    title: `Share ${countyTitle(county)}’s timeline`, when: countyTimelineLine, view: "county-timeline", season: null,
+    kinds: [{ key: "county-timeline", label: countyTitle(county), file: `timeline/county/${slug}`, name: `${slug}-county-timeline`, alt: `${countyTitle(county)}’s MHSAA schools, ${countyTimelineLine}` }],
+  } : null;
+  app.innerHTML = countyTimelinePage(county, base, seasons, { controls: `<div class="regions-controls">${finder}</div>`, views, teams, share: has ? shareButton("map") : "" });
   for (const [i, side] of seasons.entries()) {
     if (!side.payload.schools.some((r) => r.county === county)) continue;
     const layer = countyLayer(side.payload, county);
@@ -3371,7 +3421,8 @@ function mapsShareSpec({ title, when, kinds, initial, page, view, season }) {
     page,
     latest: true,
     track: (c, method) => track("regions_image_shared", {
-      class: regionsState.clazz, season, team: route.teamName ?? null, image: c.image, theme: c.theme, method, view,
+      class: regionsState?.clazz ?? null, season, team: route.teamName ?? null, image: c.image, theme: c.theme, method, view,
+      ...(route.page === "counties" ? { county: route.countyName ?? null } : {}),
     }),
   };
 }

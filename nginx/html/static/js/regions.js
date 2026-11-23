@@ -149,11 +149,20 @@ export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz))
   const counties = base.counties.map((c) => `<path class="map-county" d="${c.d}"/>`).join("");
   const names = base.counties.map((c) => `<text class="map-county-name" x="${c.label[0]}" y="${c.label[1]}">${esc(c.name)}</text>`).join("");
   const shapes = layer.shapes
-    .map((r) => `<path class="map-region map-region--${r.color}" data-group="${esc(r.group)}" d="${r.d}"/>`).join("");
+    .map((r) => `<path class="map-region map-region--${r.color}" data-group="${esc(r.group)}"${r.fill ? ` style="fill:${r.fill};stroke:${r.fill}"` : ""} d="${r.d}"/>`).join("");
   const placed = layer.schools.filter((s) => s.x != null);
+  // A pill (a county's map) has a line back to its school's spot, shown when it's moved off it.
   const dots = placed
-    .map((s) => `<g class="map-dot map-dot--${layer.color(s)}${layer.away(s) ? " is-away" : ""}" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" tabindex="-1">`
-      + `<circle cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${esc(layer.mark(s))}</text></g>`).join("");
+    .map((s) => (layer.pill
+      ? `<g class="map-dot map-dot--pill" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" data-x="${s.x}" data-y="${s.y}" tabindex="-1">`
+        + `<rect style="fill:${layer.shade(s).fill}"/><text x="${s.x}" y="${s.y}" style="fill:${layer.shade(s).ink}">${esc(layer.mark(s))}</text></g>`
+      : `<g class="map-dot map-dot--${layer.color(s)}${layer.away(s) ? " is-away" : ""}" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" tabindex="-1">`
+        + `<circle cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${esc(layer.mark(s))}</text></g>`)).join("");
+  // A pill moved off its school's spot has a line back to it, under every pill.
+  const pins = layer.pill
+    ? `<g class="map-pins" aria-hidden="true">${placed.map((s) => `<g data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" style="display:none">`
+      + `<line class="map-pin-line" x1="${s.x}" y1="${s.y}"/><circle class="map-pin" cx="${s.x}" cy="${s.y}"/></g>`).join("")}</g>`
+    : "";
   // Each school's name, shown beside its dot once the map is zoomed in far enough (wireRegionsMap
   // places them, and hides those with no room).
   const labels = placed
@@ -165,7 +174,7 @@ export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz))
     + `<path class="map-land" d="${base.state}"/><g class="map-regions">${shapes}</g>`
     + `<g class="map-counties">${counties}</g><g class="map-county-names">${names}</g>`
     + `<path class="map-state" d="${base.state}"/>${focus ? `<path class="map-county-focus" d="${focus.d}"/>` : ""}`
-    + `<g class="map-labels" aria-hidden="true">${labels}</g><g class="map-dots">${dots}</g></svg>`;
+    + `<g class="map-labels" aria-hidden="true">${labels}</g>${pins}<g class="map-dots">${dots}</g></svg>`;
 }
 
 /**
@@ -466,14 +475,14 @@ export function wholeView(base) {
  * What's under the map once a team is picked: its helmet, name and region, where it is and where it
  * was the season before, and the region's other schools (each picks that school).
  */
-export function pickedHtml(school, payload, teams = {}, color = school.region, href = regionsPath(school.class)) {
+export function pickedHtml(school, payload, teams = {}, color = school.region, href = regionsPath(school.class), chip = null) {
   const others = payload.schools
     .filter((s) => s.class === school.class && s.region === school.region && s.slug !== school.slug)
     .sort((a, b) => byName(a.school, b.school));
   const facts = [school.county ? `${school.city}, ${school.county} County` : "", teamChange(school, payload.prior_season)].filter(Boolean);
   return `<div class="picked__head">${teamMark(school.school, teams[school.school], { size: 32 })}`
     + `<span class="picked__name">${esc(school.school)}</span>`
-    + `<span class="picked__region"><span class="region-chip region-chip--${color}" aria-hidden="true">${school.region}</span>`
+    + `<span class="picked__region">${chip ?? `<span class="region-chip region-chip--${color}" aria-hidden="true">${school.region}</span>`}`
     + `<strong>${esc(place(school))}</strong></span></div>`
     + (facts.length ? `<p class="picked__facts">${esc(facts.join(" · "))}</p>` : "")
     + (others.length
@@ -591,13 +600,13 @@ export function placeLabels(points, r, size, bounds = null) {
  * A dot's tooltip: the school's helmet, name and mascot over its region and town, and the seasons the
  * map is of (*seasons*: [2027, 2028]), edged in its color (*team*: its /teams entry, or nothing).
  */
-export function hoverHtml(school, team, seasons = [], color = school.region) {
+export function hoverHtml(school, team, seasons = [], color = school.region, chip = null) {
   const where = [school.city, school.county ? `${school.county} County` : ""].filter(Boolean).join(", ");
   return `<span class="map-tip"${teamColorStyle(team)}>`
     + `<span class="map-tip__head">${teamMark(school.school, team, { size: 28 })}`
     + `<span class="map-tip__names"><strong class="map-tip__name">${esc(school.school)}</strong>`
     + (team?.mascot ? `<span class="map-tip__mascot">${esc(team.mascot)}</span>` : "")
-    + `</span></span><span class="map-tip__place"><span class="region-chip region-chip--${color}" aria-hidden="true">${school.region}</span>`
+    + `</span></span><span class="map-tip__place">${chip ?? `<span class="region-chip region-chip--${color}" aria-hidden="true">${school.region}</span>`}`
     + `<span>${esc(place(school))}${where ? ` · ${esc(where)}` : ""}</span></span>`
     + (seasons.length ? `<span class="map-tip__when">${esc(seasonsLabel(seasons))}</span>` : "")
     + "</span>";
@@ -655,15 +664,92 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const zoom = whole.w / view.w;
     const px = view.w / (svg.getBoundingClientRect().width || 600);
     const r = 11 * px; // dots keep their size on screen at any zoom
-    for (const g of svg.querySelectorAll(".map-dot")) {
-      g.firstChild.setAttribute("r", g.classList.contains("is-away") ? r * 0.6 : r); // region-mates elsewhere: smaller
-      g.lastChild.setAttribute("font-size", r * 1.2);
+    if (layer.pill) placePills(r, px);
+    else {
+      for (const g of svg.querySelectorAll(".map-dot")) {
+        g.firstChild.setAttribute("r", g.classList.contains("is-away") ? r * 0.6 : r); // region-mates elsewhere: smaller
+        g.lastChild.setAttribute("font-size", r * 1.2);
+      }
     }
     svg.classList.toggle("is-zoomed", zoom >= 2.2); // county names once there's room for them
     for (const t of svg.querySelectorAll(".map-county-name")) t.setAttribute("font-size", 40 / Math.max(1, zoom / 2.2));
-    const named = zoom >= LABEL_ZOOM || (current != null && zoom >= LABEL_ZOOM_PICKED);
+    const named = Boolean(layer.named) || zoom >= LABEL_ZOOM || (current != null && zoom >= LABEL_ZOOM_PICKED);
     svg.classList.toggle("is-named", named);
-    if (named) labelDots(r, 12 * px);
+    if (named) labelDots(layer.pill ? pillReach : r, 12 * px);
+  };
+  // A county's pills ("3-6A"), a fixed size on screen: each about its school's spot, or, with *spread*,
+  // pushed apart until none overlaps another (but never more than three pills' height from its spot), a
+  // thin line back to the spot it left (as the share images do). Their names go beside where they end up.
+  const pillAt = new Map(); // slug -> [x, y] in map units
+  let pillReach = 0;
+  const placePills = (r, px) => {
+    const fs = r * 0.95;
+    const h = r * 1.9;
+    const pills = [...svg.querySelectorAll(".map-dot--pill")].map((g) => {
+      const w = fs * (0.62 * g.lastChild.textContent.length + 0.9);
+      const x = Number(g.dataset.x);
+      const y = Number(g.dataset.y);
+      return { g, w, x, y, at: [x, y], fixed: g.dataset.team === current?.slug }; // the picked one stays put
+    });
+    pillReach = Math.max(r, ...pills.map((p) => p.w / 2));
+    if (layer.spread) {
+      const gap = 5 * px;
+      for (let round = 0; round < 80; round += 1) {
+        let moved = false;
+        for (let i = 0; i < pills.length; i += 1) {
+          for (let j = i + 1; j < pills.length; j += 1) {
+            const a = pills[i];
+            const b = pills[j];
+            const dx = b.at[0] - a.at[0];
+            const dy = b.at[1] - a.at[1];
+            const ox = (a.w + b.w) / 2 + gap - Math.abs(dx);
+            const oy = h + gap - Math.abs(dy);
+            if (ox <= 0 || oy <= 0) continue;
+            moved = true;
+            // Apart along the way that takes less, as the two already lean (ties: up and down).
+            // (A picked pill doesn't move: the other takes the whole step.)
+            const [sa, sb] = a.fixed ? [0, 1] : b.fixed ? [1, 0] : [0.5, 0.5];
+            if (oy <= ox) {
+              const k = (dy || (j - i)) > 0 ? 1 : -1;
+              a.at[1] -= k * oy * sa;
+              b.at[1] += k * oy * sb;
+            } else {
+              const k = dx > 0 ? 1 : -1;
+              a.at[0] -= k * ox * sa;
+              b.at[0] += k * ox * sb;
+            }
+          }
+        }
+        // None strays far from its school (zoomed out, a crowd overlaps instead: zooming in parts it).
+        const most = h * 3;
+        for (const q of pills) {
+          const dx = q.at[0] - q.x;
+          const dy = q.at[1] - q.y;
+          const d = Math.hypot(dx, dy);
+          if (d > most) q.at = [q.x + (dx / d) * most, q.y + (dy / d) * most];
+        }
+        if (!moved) break;
+      }
+    }
+    const pinsBy = new Map([...svg.querySelectorAll(".map-pins > g")].map((g) => [g.dataset.team, g]));
+    for (const p of pills) {
+      const [cx, cy] = p.at;
+      pillAt.set(p.g.dataset.team, p.at);
+      const [rect, text] = p.g.children;
+      const pinG = pinsBy.get(p.g.dataset.team);
+      const [line, pin] = pinG.children;
+      Object.entries({ x: cx - p.w / 2, y: cy - h / 2, width: p.w, height: h, rx: h / 2 }).forEach(([k, v]) => rect.setAttribute(k, v));
+      text.setAttribute("x", cx);
+      text.setAttribute("y", cy);
+      text.setAttribute("font-size", fs);
+      const off = Math.hypot(cx - p.x, cy - p.y) > h * 0.6;
+      pinG.style.display = off ? "" : "none"; // (SVG has no hidden attribute)
+      if (off) {
+        line.setAttribute("x2", cx);
+        line.setAttribute("y2", cy);
+        pin.setAttribute("r", r * 0.28);
+      }
+    }
   };
   // The schools' names, placed so none overlaps a dot or another name: the picked team's first, then
   // its region's, then the rest in view.
@@ -675,7 +761,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const first = (s) => (s.slug === current?.slug ? 0 : current && groupOf(s) === groupOf(current) ? 1 : layer.away(s) ? 3 : 2);
     const points = [...bySlug.values()].filter((s) => s.x != null && inView(s))
       .sort((a, b) => first(a) - first(b) || byName(a.school, b.school))
-      .map((s) => ({ slug: s.slug, x: s.x, y: s.y, name: s.school }));
+      .map((s) => ({ slug: s.slug, x: pillAt.get(s.slug)?.[0] ?? s.x, y: pillAt.get(s.slug)?.[1] ?? s.y, name: s.school }));
     const spots = placeLabels(points, r, size, { x0: view.x, y0: view.y, x1: view.x + view.w, y1: view.y + view.h });
     for (const [slug, t] of labels) {
       const spot = spots[slug];
@@ -728,14 +814,15 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
       g.classList.toggle("is-picked", Boolean(school) && g.dataset.team === school.slug);
       g.classList.toggle("is-dim", Boolean(school) && g.dataset.group !== groupOf(school));
     }
-    for (const p of svg.querySelectorAll(".map-region, .map-label, .map-leader")) p.classList.toggle("is-dim", Boolean(school) && p.dataset.group !== groupOf(school));
+    for (const p of svg.querySelectorAll(".map-region, .map-label, .map-leader, .map-pins > g")) p.classList.toggle("is-dim", Boolean(school) && p.dataset.group !== groupOf(school));
+    svg.classList.toggle("has-pick", Boolean(school));
     for (const a of root.querySelectorAll(".regions-list [data-team]")) {
       if (school && a.dataset.team === school.slug) a.setAttribute("aria-current", "true");
       else a.removeAttribute("aria-current");
     }
     if (caption) {
       // A team not on this map (Compare: picked on the other one) says where it is instead.
-      const html = school ? pickedHtml(school, payload, teams, layer.color(school), href) : slug && elsewhere ? elsewhere(slug) : "";
+      const html = school ? pickedHtml(school, payload, teams, layer.color(school), href, layer.chip?.(school)) : slug && elsewhere ? elsewhere(slug) : "";
       caption.innerHTML = html;
       caption.hidden = !html;
       if (school && reveal) show(caption);
@@ -746,7 +833,8 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
       && school.x >= view.x && school.x <= view.x + view.w && school.y >= view.y && school.y <= view.y + view.h;
     current = school;
     const box = school && boxes.get(groupOf(school));
-    if (zoom && !stay) {
+    // (A county's map stays on the county: its picked school's region is lit, running off its edges.)
+    if (zoom && !stay && !layer.pill) {
       view = box ? regionView(box, base) : start();
       moves += 1;
     }
@@ -772,8 +860,8 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const school = dot && bySlug.get(dot.dataset.team);
     if (school && e.pointerType === "mouse") {
       const box = frame.getBoundingClientRect();
-      const d = dot.firstChild.getBoundingClientRect();
-      hover.innerHTML = hoverHtml(school, teams[school.school], payload.seasons ?? [], layer.color(school));
+      const d = (dot.querySelector("rect") ?? dot.firstChild).getBoundingClientRect(); // (a pill's shape, not its pin line)
+      hover.innerHTML = hoverHtml(school, teams[school.school], payload.seasons ?? [], layer.color(school), layer.chip?.(school));
       hover.hidden = false;
       const spot = hoverSpot(d.left + d.width / 2 - box.left, d.top + d.height / 2 - box.top, d.width / 2,
         { w: hover.offsetWidth, h: hover.offsetHeight }, { w: box.width, h: box.height });
@@ -930,10 +1018,15 @@ export function countiesTrail(county = null) {
   return county ? [...trail, [countyTitle(county), countiesPath(county)]] : trail;
 }
 
+// The colors a county's place takes when its own is taken, in order: the ones least like the others
+// first (blue, green, purple), so two places never end up red and orange (8 and 2) side by side.
+const PLACE_FALLBACK = [1, 3, 7, 4, 5, 6, 2, 8];
+
 /**
  * The places (a region in a class) a county's *schools* are in, highest class first, each with a color
  * (1-8): its region's own, unless another of the county's places already has it (two regions with the
- * same number in different classes), then the first one not in use. [{ key, clazz, region, color }].
+ * same number in different classes), then the first of PLACE_FALLBACK not in use. [{ key, clazz, region,
+ * color }].
  */
 export function countyPlaces(schools) {
   const seen = new Map();
@@ -944,29 +1037,72 @@ export function countyPlaces(schools) {
   const used = new Set();
   for (const p of seen.values()) {
     const own = ((p.region - 1) % 8) + 1;
-    p.color = !used.has(own) ? own : [1, 2, 3, 4, 5, 6, 7, 8].find((c) => !used.has(c)) ?? own;
+    p.color = !used.has(own) ? own : PLACE_FALLBACK.find((c) => !used.has(c)) ?? own;
     used.add(p.color);
   }
   return [...seen.values()];
 }
 
-/** A county's map: its schools, and their regions (shapes, and the region-mates elsewhere, faded). */
+// Each class's hue on a county's map (the region colors' slots: 7A blue, 6A green, 5A orange, 4A purple,
+// 3A yellow, 2A pink, 1A red). A county's regions in one class are shades of it.
+export const CLASS_HUE = { 7: 1, 6: 3, 5: 2, 4: 7, 3: 4, 2: 5, 1: 8 };
+
+/**
+ * The shade of each of a county's places (a region in a class: "6-3"): its class's hue, lighter for its
+ * lower-numbered regions there and darker for its higher (one region: the hue itself). { key -> { tone
+ * (0 lightest .. 1 darkest, 0.5 the hue), fill (a CSS color, the theme's), ink (its text's color) } }.
+ */
+export function countyShades(schools) {
+  const out = new Map();
+  const places = countyPlaces(schools);
+  for (const c of new Set(places.map((p) => p.clazz))) {
+    const list = places.filter((p) => p.clazz === c).sort((a, b) => a.region - b.region);
+    list.forEach((p, i) => {
+      const tone = list.length === 1 ? 0.5 : i / (list.length - 1);
+      const hue = `var(--region-${CLASS_HUE[c]})`;
+      const fill = tone < 0.5 ? `color-mix(in srgb, ${hue} ${Math.round(55 + 90 * tone)}%, #fff)`
+        : tone > 0.5 ? `color-mix(in srgb, ${hue} ${Math.round(100 - 60 * (tone - 0.5))}%, #000)` : hue;
+      out.set(p.key, { tone, fill, ink: tone < 0.34 ? "#1B1B1B" : "#FFFFFF" });
+    });
+  }
+  return out;
+}
+
+/** countyShades as a plain object (for the parity test against region_pages.county_shades). */
+export function countyShadesObject(schools) {
+  return Object.fromEntries(countyShades(schools));
+}
+
+/** A school's place as a pill in its shade: "3-6A". */
+export function countyPill(school, shade) {
+  return `<span class="county-pill" style="background:${shade.fill};color:${shade.ink}" aria-hidden="true">${school.region}-${school.class}A</span>`;
+}
+
+/**
+ * A county's map: its own schools only, each a pill ("3-6A") in its place's shade (countyShades), always
+ * named, and their regions' shapes (the schools elsewhere in them aren't drawn).
+ */
 export function countyLayer(payload, county) {
   const mine = payload.schools.filter((s) => s.county === county);
-  const places = new Map(countyPlaces(mine).map((p) => [p.key, p]));
+  const shades = countyShades(mine);
   const key = (s) => `${s.class}-${s.region}`;
   return {
-    schools: payload.schools.filter((s) => places.has(key(s))),
+    schools: mine,
     group: key,
-    color: (s) => places.get(key(s))?.color ?? s.region,
-    mark: (s) => String(s.region),
-    away: (s) => s.county !== county,
-    shapes: [...places.values()].map((p) => {
+    color: () => 0,
+    shade: (s) => shades.get(key(s)),
+    mark: (s) => `${s.region}-${s.class}A`,
+    chip: (s) => countyPill(s, shades.get(key(s))),
+    pill: true,
+    named: true,
+    spread: true,
+    away: () => false,
+    shapes: countyPlaces(mine).map((p) => {
       const r = payload.regions[String(p.clazz)]?.[String(p.region)];
-      return r && { group: p.key, color: p.color, d: r.d, box: r.box };
+      return r && { group: p.key, color: 0, fill: shades.get(p.key).fill, d: r.d, box: r.box };
     }).filter(Boolean),
     county,
-    label: `Map of Mississippi with ${countyTitle(county)}'s MHSAA schools as dots and each one's region`,
+    label: `Map of Mississippi with ${countyTitle(county)}'s MHSAA schools, each marked with its region and class`,
   };
 }
 
@@ -1016,15 +1152,15 @@ export function countyCount(schools) {
 /** The county's schools by class, highest first: each a row that picks it, with its region and town. */
 export function countyLists(county, payload, teams = {}) {
   const mine = payload.schools.filter((s) => s.county === county);
-  const colors = new Map(countyPlaces(mine).map((p) => [p.key, p.color]));
+  const shades = countyShades(mine);
   const classes = [...new Set(mine.map((s) => s.class))].sort((a, b) => b - a);
   return classes.map((c) => {
     const rows = mine.filter((s) => s.class === c)
       .sort((a, b) => a.region - b.region || byName(a.school, b.school))
       .map((s) => `<li><a class="regions-list__row" href="${esc(countiesPath(county))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
         + `${teamMark(s.school, teams[s.school])}<span class="regions-list__team">${esc(s.school)}</span>`
-        + `<span class="regions-list__was"><span class="region-chip region-chip--${colors.get(`${s.class}-${s.region}`)}" aria-hidden="true">${s.region}</span>`
-        + `${esc(place(s))}${s.city ? ` · ${esc(s.city)}` : ""}</span></a></li>`);
+        + `<span class="regions-list__was">${countyPill(s, shades.get(`${s.class}-${s.region}`))}`
+        + `<span class="visually-hidden">${esc(place(s))}</span>${s.city ? esc(s.city) : ""}</span></a></li>`);
     return `<section class="regions-list__region county-list__class"><div class="regions-list__head">`
       + `<h2 class="regions-list__name">Class ${c}A</h2>`
       + `<a class="regions-list__standings" href="${esc(regionsPath(c))}">Class ${c}A regions<span aria-hidden="true"> ›</span></a></div>`
@@ -1053,7 +1189,7 @@ export function countyPage(county, base, payload, { controls = "", share = "", t
   }
   const layer = countyLayer(payload, county);
   return `<div class="page regions-page county-page">${head}`
-    + `<p class="focus-note muted regions-note">Each school's dot is in its region's color, numbered by its region; its region's other schools are the smaller dots. Pick one to see its region.</p></header>`
+    + `<p class="focus-note muted regions-note">Each school is marked with its region and class (3-6A), in its class's color: lighter and darker for its regions. Pick one to see its region.</p></header>`
     + `<div class="regions-layout">${mapFigure(base, payload, null, { layer })}`
     + `<div class="regions-side"><div class="regions-list county-list">${countyLists(county, payload, teams)}</div></div></div></div>`;
 }
@@ -1086,12 +1222,12 @@ export function countiesMapSvg(base, counts) {
 }
 
 /** The statewide page: heading and controls, the map with its key, and every county as a list. */
-export function countiesPage(base, payload, { controls = "" } = {}) {
+export function countiesPage(base, payload, { controls = "", share = "" } = {}) {
   const counts = countyCounts(base, payload);
   const key = SHADES.map(([label, shade]) => `<li><span class="county-shade-key county-shade--${shade}" aria-hidden="true"></span>${esc(label)}</li>`).join("");
   const list = countiesList(base, counts);
   return `<div class="page regions-page counties-page"><header class="entry-head">${breadcrumbs(countiesTrail())}`
-    + `<div class="title-row"><h1 class="title">Counties</h1></div>`
+    + `<div class="title-row"><h1 class="title">Counties</h1>${share}</div>`
     + `<p class="regions-sub">Each county's MHSAA schools, ${esc(seasonsLabel(payload.seasons))}</p>`
     + `<p class="county-note muted">${esc(MHSAA_NOTE)}</p>${controls}`
     + `<p class="focus-note muted regions-note">Pick a county on the map or in the list to see its schools, their classes and their regions.</p></header>`
@@ -1232,13 +1368,13 @@ export function countyTimelineTable(county, seasons, teams = {}) {
     }
   }
   names.sort(byName);
-  const colors = seasons.map((s) => new Map(countyPlaces(s.payload.schools.filter((r) => r.county === county)).map((p) => [p.key, p.color])));
+  const shades = seasons.map((s) => countyShades(s.payload.schools.filter((r) => r.county === county)));
   const head = `<tr><th scope="col">School</th>${seasons.map((s) => `<th scope="col">${esc(s.option.label)}</th>`).join("")}</tr>`;
   const body = names.map((name) => {
     const cells = seasons.map((s, i) => {
       const r = s.payload.schools.find((x) => x.county === county && x.school === nameIn(name, newest, s.option.season));
       return r
-        ? `<td><span class="timeline-table__place"><span class="region-chip region-chip--${colors[i].get(`${r.class}-${r.region}`)}" aria-hidden="true">${r.region}</span>${esc(shortPlace(r))}</span></td>`
+        ? `<td><span class="timeline-table__place">${countyPill(r, shades[i].get(`${r.class}-${r.region}`))}<span class="visually-hidden">${esc(place(r))}</span></span></td>`
         : `<td><span class="muted" aria-label="Not on the list">—</span></td>`;
     }).join("");
     // A merger, said where the rows end and begin: "Part of North Tippah from 2027", "From Walnut and Falkner".
@@ -1257,7 +1393,7 @@ export function countyTimelinePage(county, base, seasons, { controls = "", share
   const span = timelineSpan(seasons);
   return `<div class="page regions-page regions-page--timeline county-page"><header class="entry-head">`
     + countyViewHeader(county, base, span, share)
-    + `${views}${controls}<p class="focus-note muted regions-note">Each map is ${esc(countyTitle(county))} that season: its schools in their regions' colors. Pick a school to see its region.</p></header>`
+    + `${views}${controls}<p class="focus-note muted regions-note">Each map is ${esc(countyTitle(county))} that season: each school marked with its region and class, in its class's color. Pick a school to see its region.</p></header>`
     + `<div class="timeline">${seasons.map((s, i) => {
       const n = s.payload.schools.filter((r) => r.county === county).length;
       const map = n ? mapFigure(base, s.payload, null, { full: false, layer: countyLayer(s.payload, county) })

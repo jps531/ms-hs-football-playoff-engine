@@ -21,7 +21,8 @@ import math
 from PIL import Image, ImageDraw
 
 from backend.helpers import region_map
-from backend.helpers.region_map_image import PAD, REGION_COLORS, _Frame, _Page, place, region_color
+from backend.helpers.region_map_image import PAD, _Frame, _Page, place, region_color
+from backend.helpers.region_pages import PLACE_FALLBACK
 from backend.helpers.share_cards import _inter, _nippo, fit
 
 WIDTH = 2160  # 1080 wide at 2x, like the other share images; the height follows the rows
@@ -226,8 +227,7 @@ def render_team_timeline(school: str, cycles: list[dict], teams: dict, theme: st
 def _place_colors(theme: str, rows: list[dict]) -> dict[tuple[int, int], str]:
     """Each of a season's places (class, region) its region's color, but two different places (schools
     merged later, in regions with the same number in different classes) never the same: the second
-    takes the next color not in use."""
-    palette = REGION_COLORS[theme]
+    takes the first of the Counties pages' fallback colors not in use (region_pages.PLACE_FALLBACK)."""
     out: dict[tuple[int, int], str] = {}
     for r in rows:
         key = (r["class"], r["region"])
@@ -235,7 +235,9 @@ def _place_colors(theme: str, rows: list[dict]) -> dict[tuple[int, int], str]:
             continue
         color = region_color(theme, r["region"])
         if color in out.values():
-            color = next((c for c in palette if c not in out.values()), color)
+            color = next(
+                (region_color(theme, c) for c in PLACE_FALLBACK if region_color(theme, c) not in out.values()), color
+            )
         out[key] = color
     return out
 
