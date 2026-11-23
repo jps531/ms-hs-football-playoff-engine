@@ -19,6 +19,18 @@ def test_the_map_is_mississippis_82_counties():
     assert rm.source().startswith("U.S. Census Bureau, 2023")
 
 
+def test_each_countys_neighbors():
+    """The counties sharing a border with each: Rankin's five, Harrison's three on the coast; every
+    county has some, and neighbors go both ways. The map's data carries them."""
+    near = rm.neighbors()
+    assert near["Rankin"] == ["Hinds", "Madison", "Scott", "Simpson", "Smith"]
+    assert near["Harrison"] == ["Hancock", "Jackson", "Stone"]
+    assert all(near[n] for n in rm.counties())
+    assert all(n in near[m] for n, ms in near.items() for m in ms)
+    rankin = next(c for c in rm.base_map()["counties"] if c["name"] == "Rankin")
+    assert rankin["neighbors"] == near["Rankin"]
+
+
 @pytest.mark.parametrize(
     ("lat", "lon", "county"),
     [

@@ -1981,6 +1981,21 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 /* Each season holds its absolutely placed parts (the screen readers' status line): placed against the
    page, past the row's scroll they'd widen the page sideways once the seasons outrun the row. */
 .timeline__season { position: relative; scroll-snap-align: end; }
+/* Older and Newer (regions.js timelineSteps), at the end of the controls' row, in the zoom buttons' style;
+   on a phone, on a line of their own under the search. */
+.timeline-steps { display: inline-flex; margin-left: auto; }
+.timeline-steps[hidden] { display: none; }
+.timeline-steps button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 40px; padding: 0 12px; margin-left: -1px;
+  border: 1px solid var(--border); background: var(--surface-page); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.timeline-steps button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+.timeline-steps button:last-child { border-radius: 0 8px 8px 0; }
+.timeline-steps button:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-page)); }
+.timeline-steps button[aria-disabled="true"] { color: var(--text-secondary); opacity: 0.5; cursor: default; }
+.timeline-steps button[aria-disabled="true"]:hover { background: var(--surface-page); }
+.timeline-steps svg { width: 18px; height: 18px; }
+@media (max-width: 600px) { .timeline-steps { margin-left: 0; } }
 .timeline .regions-map { position: static; }
 .timeline__label { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 0 0 8px; font-family: var(--font-display); font-size: 1.15rem; }
 .timeline__class { color: var(--text-secondary); font-size: 0.95rem; }
@@ -2072,6 +2087,28 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .county-note { margin: 4px 0 0; font-size: 13px; line-height: 18px; }
 /* The county itself, over the county lines: its outline in the text color. */
 .map-county-focus { fill: none; stroke: var(--text-primary); stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+/* Another county tapped on a county's map (regions.js wireRegionsMap's otherCounty), in the site's
+   color so it isn't taken for the page's own county. */
+.map-county-other { fill: color-mix(in srgb, var(--scrubber-selected-bg) 22%, transparent); stroke: var(--scrubber-selected-bg); stroke-width: 2.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.map-county-other[d=""] { display: none; }
+/* Its panel under the map: the county, and a button to its page. */
+.county-jump { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.county-jump__open {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 0 10px 0 14px; border-radius: 8px;
+  background: var(--scrubber-selected-bg); color: var(--scrubber-selected-text); font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.county-jump__open svg { width: 18px; height: 18px; }
+/* The counties next to this one (regions.js countyNearby), under the map. */
+.county-nearby { margin-top: 18px; }
+.county-nearby__label { margin: 0 0 8px; color: var(--text-secondary); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.county-nearby__list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.county-nearby__list a {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px 0 8px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-page);
+  color: var(--text-primary); font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.county-nearby__list a:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-page)); }
+.regions-map.is-full .county-nearby { display: none; }
 /* A county's schools' region-mates in other counties: smaller, unnumbered, faded. */
 .map-dot.is-away { opacity: 0.65; }
 .map-dot.is-away text { display: none; }
