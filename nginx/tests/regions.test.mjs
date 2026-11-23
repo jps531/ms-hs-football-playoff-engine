@@ -180,6 +180,9 @@ test("a dot's tooltip: helmet, name, mascot, region and town, edged in the team'
   assert.match(html, /<strong class="map-tip__name">Purvis<\/strong><span class="map-tip__mascot">Tornadoes<\/span>/);
   assert.match(html, /region-chip--7[^>]*>7<\/span><span>Region 7-4A · Purvis, Lamar County<\/span>/);
   assert.match(html, /--team-ui-light:#6B2D8B/);
+  // The seasons the map is of, for context.
+  assert.match(hoverHtml(school, team, [2027, 2028]), /<span class="map-tip__when">2027 and 2028 seasons<\/span>/);
+  assert.doesNotMatch(html, /map-tip__when/);
   // No /teams entry: still the name and region, initials for a helmet, no mascot or color.
   const bare = hoverHtml(school, undefined);
   assert.doesNotMatch(bare, /mascot|--team-ui/);

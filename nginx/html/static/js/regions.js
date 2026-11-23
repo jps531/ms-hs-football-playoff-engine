@@ -485,17 +485,19 @@ export function placeLabels(points, r, size, bounds = null) {
 }
 
 /**
- * A dot's tooltip: the school's helmet, name and mascot over its region and town, edged in its color
- * (*team*: its /teams entry, or nothing).
+ * A dot's tooltip: the school's helmet, name and mascot over its region and town, and the seasons the
+ * map is of (*seasons*: [2027, 2028]), edged in its color (*team*: its /teams entry, or nothing).
  */
-export function hoverHtml(school, team) {
+export function hoverHtml(school, team, seasons = []) {
   const where = [school.city, school.county ? `${school.county} County` : ""].filter(Boolean).join(", ");
   return `<span class="map-tip"${teamColorStyle(team)}>`
     + `<span class="map-tip__head">${teamMark(school.school, team, { size: 28 })}`
     + `<span class="map-tip__names"><strong class="map-tip__name">${esc(school.school)}</strong>`
     + (team?.mascot ? `<span class="map-tip__mascot">${esc(team.mascot)}</span>` : "")
     + `</span></span><span class="map-tip__place"><span class="region-chip region-chip--${school.region}" aria-hidden="true">${school.region}</span>`
-    + `<span>${esc(place(school))}${where ? ` · ${esc(where)}` : ""}</span></span></span>`;
+    + `<span>${esc(place(school))}${where ? ` · ${esc(where)}` : ""}</span></span>`
+    + (seasons.length ? `<span class="map-tip__when">${esc(seasonsLabel(seasons))}</span>` : "")
+    + "</span>";
 }
 
 /** Where the tooltip goes (its top-left, in pixels in the frame) for a dot at (x, y) of radius r:
@@ -657,7 +659,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     if (school && e.pointerType === "mouse") {
       const box = frame.getBoundingClientRect();
       const d = dot.firstChild.getBoundingClientRect();
-      hover.innerHTML = hoverHtml(school, teams[school.school]);
+      hover.innerHTML = hoverHtml(school, teams[school.school], payload.seasons ?? []);
       hover.hidden = false;
       const spot = hoverSpot(d.left + d.width / 2 - box.left, d.top + d.height / 2 - box.top, d.width / 2,
         { w: hover.offsetWidth, h: hover.offsetHeight }, { w: box.width, h: box.height });

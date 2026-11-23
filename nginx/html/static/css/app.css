@@ -1890,6 +1890,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .map-tip__mascot { color: var(--text-secondary); font-size: 12px; }
 .map-tip__place { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
 .map-tip__place .region-chip { width: 18px; height: 18px; font-size: 11px; }
+.map-tip__when { color: var(--text-secondary); font-size: 12px; }
 /* The schools' names on a zoomed-in map, beside their dots, with a halo of the page's color to read
    over county lines and region fills. */
 .map-labels { display: none; }
@@ -2001,9 +2002,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .regions-list__row[aria-current] .regions-list__team { font-weight: 700; }
 /* Where it was the season before: its own line, under the name (past the helmet). */
 .regions-list__was { grid-column: 2; color: var(--text-secondary); font-size: 13px; line-height: 18px; }
+/* line-height 1: the page's 24px line would be taller than a small chip and push its number down. */
 .region-chip {
   display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none;
-  border-radius: 50%; color: #FFFFFF; font-size: 14px; font-weight: 700;
+  border-radius: 50%; color: #FFFFFF; font-size: 14px; font-weight: 700; line-height: 1;
 }
 .map-region--1 { fill: var(--region-1); stroke: var(--region-1); } .regions-list__region--1 { --region: var(--region-1); } .map-dot--1 circle, .region-chip--1 { fill: var(--region-1); background: var(--region-1); }
 .map-region--2 { fill: var(--region-2); stroke: var(--region-2); } .regions-list__region--2 { --region: var(--region-2); } .map-dot--2 circle, .region-chip--2 { fill: var(--region-2); background: var(--region-2); }
