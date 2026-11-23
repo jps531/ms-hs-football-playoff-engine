@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.21.0
+
+- **On the Maps, a picked team is followed everywhere.** Pick a team, on a map or with the search, and
+  each map shows the class it was in that season: the Season view switches to it, both of Compare's
+  maps follow it, and so does every map of the Timeline. It stays picked as you move between Season,
+  Compare and Timeline. A map of a season it wasn't in a region says so.
+- Choosing a class yourself (the class picker, or a Compare map's class) keeps the team only if it's
+  in that class there; otherwise it shows the class you chose, and the other map stays as it was.
+  An empty spot on a map stops following.
+- **Full screen stays on when you change the class or season**, and while it's on, the search at the
+  top finds teams on the map.
+- On Compare, changing the second map's season or class no longer jumps to the first map's.
+
 ## 1.20.0
 
 - **A Timeline of a class's regions.** Every map page has a third view, Timeline: a map for each season

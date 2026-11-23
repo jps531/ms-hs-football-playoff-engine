@@ -704,7 +704,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   addEventListener("resize", onResize);
   apply();
   if (picked) pick(picked, { reveal: false }); // the page's link: the page opens at its top
-  return { pick };
+  return { pick, full: (on) => full(on) };
 }
 
 // ------------------------------------------------------------- data
