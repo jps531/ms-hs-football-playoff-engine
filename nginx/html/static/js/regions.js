@@ -412,9 +412,9 @@ export function timelinePage(clazz, base, seasons, { controls = "", share = "", 
     + `${breadcrumbs(regionsTrail(clazz))}<div class="title-row"><h1 class="title">${esc(regionsTitle(clazz))}</h1>${share}</div>`
     + `<p class="regions-sub">${esc(span)}</p>`
     + `${views}${controls}<p class="focus-note muted regions-note">${note}</p></header>`
-    + `<div class="timeline">${seasons.map((s, i) => `<section class="timeline__season" data-season="${s.option.season}" data-index="${i}">`
+    + timelineRow(seasons.map((s, i) => `<section class="timeline__season" data-season="${s.option.season}" data-index="${i}">`
       + `<h2 class="timeline__label">${esc(s.option.label)} <span class="timeline__class">${s.clazz}A</span></h2>`
-      + `${mapFigure(base, s.payload, s.clazz, { full: false })}</section>`).join("")}</div>`
+      + `${mapFigure(base, s.payload, s.clazz, { full: false })}</section>`))
     + (follow ? `<h2 class="timeline-table__title">${esc(follow)}, season by season</h2>${timelineTable(follow, seasons, teams)}` : "")
     + "</div>";
 }
@@ -463,7 +463,19 @@ const MAP_ICONS = {
   reset: icon('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 3.5v4h4"/>'),
   full: icon('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   leave: icon('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>'),
+  back: icon('<path d="M14.5 6 8.5 12l6 6"/>'),
+  next: icon('<path d="M9.5 6l6 6-6 6"/>'),
 };
+
+/**
+ * The Timeline's row of seasons (*seasons*: each season's markup), with a button at each end to step
+ * through them when they don't all fit (the app shows the buttons: timelineSteps).
+ */
+export function timelineRow(seasons) {
+  const step = (dir, label) => `<button type="button" class="timeline__step timeline__step--${dir}" data-step="${dir === "back" ? -1 : 1}" hidden>`
+    + `${MAP_ICONS[dir]}<span class="visually-hidden">${label}</span></button>`;
+  return `<div class="timeline-row">${step("back", "Older seasons")}<div class="timeline">${seasons.join("")}</div>${step("next", "Newer seasons")}</div>`;
+}
 
 /** The map's whole view (in map units): the state, with room around it. */
 export function wholeView(base) {
@@ -1218,7 +1230,11 @@ export function countiesMapSvg(base, counts) {
   }).join("");
   const names = base.counties.map((c) => `<text class="county-pick__name" x="${c.label[0]}" y="${c.label[1]}">${esc(c.name)}</text>`).join("");
   return `<svg class="counties-map__svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" role="group" aria-label="Mississippi's counties, each shaded by how many MHSAA schools it has">`
-    + `<g class="county-picks">${shapes}</g><path class="map-state" d="${base.state}"/><g class="county-pick__names" aria-hidden="true">${names}</g></svg>`;
+    + `<g class="county-picks">${shapes}</g><path class="map-state" d="${base.state}"/>`
+    // The county pointed at (or focused), outlined over its neighbors (an SVG draws in order: a county's
+    // own outline would be under those drawn after it).
+    + `<path class="county-pick__ring" d="" aria-hidden="true"/>`
+    + `<g class="county-pick__names" aria-hidden="true">${names}</g></svg>`;
 }
 
 /** The statewide page: heading and controls, the map with its key, and every county as a list. */
@@ -1394,13 +1410,13 @@ export function countyTimelinePage(county, base, seasons, { controls = "", share
   return `<div class="page regions-page regions-page--timeline county-page"><header class="entry-head">`
     + countyViewHeader(county, base, span, share)
     + `${views}${controls}<p class="focus-note muted regions-note">Each map is ${esc(countyTitle(county))} that season: each school marked with its region and class, in its class's color. Pick a school to see its region.</p></header>`
-    + `<div class="timeline">${seasons.map((s, i) => {
+    + timelineRow(seasons.map((s, i) => {
       const n = s.payload.schools.filter((r) => r.county === county).length;
       const map = n ? mapFigure(base, s.payload, null, { full: false, layer: countyLayer(s.payload, county) })
         : `<p class="notice">No MHSAA school in ${esc(s.option.label)}.</p>`;
       return `<section class="timeline__season" data-season="${s.option.season}" data-index="${i}">`
         + `<h2 class="timeline__label">${esc(s.option.label)} <span class="timeline__class">${esc(schoolsCount(n))}</span></h2>${map}</section>`;
-    }).join("")}</div>`
+    }))
     + `<h2 class="timeline-table__title">${esc(countyTitle(county))}, season by season</h2>${countyTimelineTable(county, seasons, teams)}`
     + "</div>";
 }

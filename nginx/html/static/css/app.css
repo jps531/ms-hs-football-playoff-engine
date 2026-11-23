@@ -1952,7 +1952,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media (max-width: 760px) { .compare { grid-template-columns: minmax(0, 1fr); } }
 .compare .regions-map { position: static; }
 .compare { scroll-margin-top: calc(var(--header-h) + 83px); } /* scrolled to: clear of the header and the class bar */
-.compare__pickers { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
+.compare__pickers { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: center; margin-bottom: 10px; }
 /* Both maps whole in one view on a computer: as tall as the screen leaves room for (the bars, the
    pickers and the buttons). On a phone the Map view's own sizing applies. */
 @media (min-width: 761px) {
@@ -1973,6 +1973,20 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 /* Each season holds its absolutely placed parts (the screen readers' status line): placed against the
    page, past the row's scroll they'd widen the page sideways once the seasons outrun the row. */
 .timeline__season { position: relative; scroll-snap-align: end; }
+/* The buttons to step through the seasons (app.js timelineSteps), at the row's ends level with the
+   seasons' names, clear of the maps. */
+.timeline-row { position: relative; }
+.timeline__step {
+  position: absolute; top: -4px; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 50%;
+  background: var(--surface-page); color: var(--text-primary); cursor: pointer; box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.timeline__step[hidden] { display: none; }
+.timeline__label { flex-wrap: wrap; padding-inline: 44px; } /* clear of the buttons; a long one wraps */
+.timeline__step--back { left: 0; }
+.timeline__step--next { right: 0; }
+.timeline__step:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-page)); }
+.timeline__step[aria-disabled="true"] { opacity: 0.35; cursor: default; box-shadow: none; }
 .timeline .regions-map { position: static; }
 .timeline__label { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 0 0 8px; font-family: var(--font-display); font-size: 1.15rem; }
 .timeline__class { color: var(--text-secondary); font-size: 0.95rem; }
@@ -2096,7 +2110,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .county-shade--2 { fill: color-mix(in srgb, var(--scrubber-selected-bg) 42%, var(--surface-page)); }
 .county-shade--3 { fill: color-mix(in srgb, var(--scrubber-selected-bg) 66%, var(--surface-page)); }
 .county-shade--4 { fill: var(--scrubber-selected-bg); }
-.county-pick:hover .county-pick__shape, .county-pick:focus-visible .county-pick__shape { stroke: var(--text-primary); stroke-width: 2.5; }
+.county-pick__ring { fill: none; stroke: var(--text-primary); stroke-width: 2.5; vector-effect: non-scaling-stroke; pointer-events: none; }
 .county-pick:focus-visible { outline: none; }
 .county-pick__name { display: none; }
 .counties-map__key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }

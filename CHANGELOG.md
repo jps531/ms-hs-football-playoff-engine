@@ -5,6 +5,23 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.28.0
+
+- The front page's links to the maps now read **Maps**, as the menu does.
+- On the Counties map, the county you point at or tab to is outlined whole, on top of its neighbors;
+  before, the counties drawn after it covered part of its edge. Its search box reads "Find a county on
+  the map", and each county it finds shows the county's outline, shaded as on the map.
+- In full screen, a county's map turns the header's search into a county search (on a Regions map it
+  already finds the map's teams).
+- **The Timeline's seasons have buttons to step through them** when they don't all fit on screen, at
+  each end of the row, on phones and computers.
+- A school picked on one of a county's Timeline maps is picked on every season's map, and those it
+  isn't on say where it was, as Compare's two maps do. A link to a county's Timeline can name a school
+  (?team=), as one to its Compare can.
+- On a county's Compare, each map's count of schools lines up with its season picker.
+- Picking from a dropdown on a Compare page (or anywhere the page redraws) by tap or click no longer
+  leaves the dropdown focused; on phones, that opened it again. With the keyboard, focus stays on it.
+
 ## 1.27.0
 
 - **Share on the Counties pages.** A county's page shares its map and schools by class, and the county
