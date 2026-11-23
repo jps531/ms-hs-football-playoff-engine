@@ -157,20 +157,35 @@ test("the timeline: every season, oldest first, each in the class a followed tea
 test("schools' names go beside their dots where they overlap nothing, the first in line getting first pick", () => {
   const r = 10;
   const size = 10;
-  // Two dots side by side: the first's name takes the right; the second, crowded on its left by the
-  // first's name... takes its own right.
-  const spots = placeLabels([{ slug: "a", x: 0, y: 0, name: "Bay" }, { slug: "b", x: 100, y: 0, name: "Moss Point" }], r, size);
-  assert.deepEqual(spots.a, { x: 14, y: 0, anchor: "start" });
-  assert.deepEqual(spots.b, { x: 114, y: 0, anchor: "start" });
-  // A dot just right of another: the first's name can't go right (the dot is there), so it goes left.
-  const near = placeLabels([{ slug: "a", x: 0, y: 0, name: "Bay" }, { slug: "b", x: 30, y: 0, name: "Pass Christian" }], r, size);
-  assert.equal(near.a.anchor, "end");
-  // Boxed in on all four sides: no name rather than one over a dot.
-  const ring = [[0, 0], [25, 0], [-25, 0], [0, 25], [0, -25]].map(([x, y], i) => ({ slug: `s${i}`, x, y, name: "Long School Name" }));
-  assert.equal(placeLabels(ring, r, size).s0, undefined);
+  // Two dots well apart: each name right beside its own dot, no line.
+  const spots = placeLabels([{ slug: "a", x: 0, y: 0, name: "Bay" }, { slug: "b", x: 200, y: 0, name: "Moss Point" }], r, size);
+  assert.deepEqual(spots.a, { x: 14, y: 0, anchor: "start", line: null });
+  assert.deepEqual(spots.b, { x: 214, y: 0, anchor: "start", line: null });
   // At the map's right edge, the name goes left rather than off the map.
   const edge = placeLabels([{ slug: "a", x: 90, y: 50, name: "Greene County" }], r, size, { x0: 0, y0: 0, x1: 100, y1: 100 });
   assert.equal(edge.a.anchor, "end");
+  // Boxed in on every side: no name rather than one over a dot.
+  const ring = [[0, 0], [25, 0], [-25, 0], [0, 25], [0, -25], [25, 25], [-25, -25], [25, -25], [-25, 25]]
+    .map(([x, y], i) => ({ slug: `s${i}`, x, y, name: "Long School Name" }));
+  assert.equal(placeLabels(ring, r, size).s0, undefined);
+});
+
+test("a name never sits nearer a neighbor's dot than its own (Purvis and Columbia)", () => {
+  const r = 10;
+  const size = 10;
+  // Columbia just up and left of Purvis: Purvis's name can't go left (toward Columbia) or above it.
+  const points = [{ slug: "purvis", x: 60, y: 30, name: "Purvis" }, { slug: "columbia", x: 20, y: 10, name: "Columbia" }];
+  const spots = placeLabels(points, r, size);
+  for (const [slug, own] of [["purvis", points[0]], ["columbia", points[1]]]) {
+    const spot = spots[slug];
+    const other = points.find((p) => p !== own);
+    const w = own.name.length * size * 0.56;
+    const x0 = spot.anchor === "start" ? spot.x : spot.anchor === "end" ? spot.x - w : spot.x - w / 2;
+    const box = { x0, x1: x0 + w, y0: spot.y - size / 2, y1: spot.y + size / 2 };
+    const reach = (q) => Math.hypot(Math.max(box.x0 - q.x, 0, q.x - box.x1), Math.max(box.y0 - q.y, 0, q.y - box.y1));
+    assert.ok(reach(other) > reach(own) + r * 2, `${slug}'s name is plainly its own dot's`);
+  }
+  assert.equal(spots.purvis.anchor, "start"); // right of Purvis, away from Columbia
 });
 
 test("a dot's tooltip: helmet, name, mascot, region and town, edged in the team's color", () => {

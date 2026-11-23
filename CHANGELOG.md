@@ -7,9 +7,10 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
 
 ## 1.22.0
 
-- **Zoom in on a map and the schools are named.** Each name sits beside its dot where it covers no
-  other dot or name, the picked team's region first; the other regions' names are dimmed. Names with
-  no room are left out until you zoom in further.
+- **Zoom in on a map and the schools are named.** A name sits right beside its dot only where that
+  dot is plainly the nearest one, so it can't be taken for a neighbor's; otherwise it sits a little
+  farther out with a line to its dot. Names cover no dot or other name, the picked team's region gets
+  first pick, and the other regions' names are dimmed. Names with no room wait until you zoom in.
 - **Pointing at a dot shows more**: the school's helmet, name and mascot, its region and town, and the
   seasons the map is of, edged in its color.
 - A region's number sits in the middle of its small circle again (under the map and in the tooltip, it

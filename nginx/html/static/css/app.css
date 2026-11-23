@@ -1899,8 +1899,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   fill: var(--text-primary); font-weight: 600; dominant-baseline: central; pointer-events: none;
   stroke: var(--surface-page); stroke-linejoin: round; paint-order: stroke;
 }
-.map-label[hidden] { display: none; }
-.map-label.is-dim { opacity: 0.35; }
+.map-label[hidden], .map-leader[hidden] { display: none; }
+.map-label.is-dim, .map-leader.is-dim { opacity: 0.35; }
+/* A name placed a little away from its dot: a hairline back to the dot. */
+.map-leader { stroke: var(--text-primary); stroke-opacity: 0.6; stroke-width: 1.5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .regions-map__picked { margin-top: 10px; }
 .picked__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .picked__name { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; line-height: 1.2; }
