@@ -261,8 +261,3 @@ test("a county's timeline table: a row a school, a merger said on both ends", ()
   assert.match(html, /North Tippah<\/span><span class="timeline-table__note muted">From Walnut and Falkner, 2027/);
   assert.match(html, /class="county-pill"[^>]*>1-3A<\/span><span class="visually-hidden">Region 1-3A<\/span>/);
 });
-
-test("the timeline's row has a button at each end to step through the seasons, hidden until they don't all fit", () => {
-  const html = regions.timelineRow(["<section>2025</section>", "<section>2026</section>"]);
-  assert.match(html, /^<div class="timeline-row"><button[^>]*data-step="-1" hidden>.*Older seasons.*<div class="timeline"><section>2025<\/section><section>2026<\/section><\/div><button[^>]*data-step="1" hidden>.*Newer seasons/);
-});

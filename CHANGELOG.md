@@ -13,8 +13,6 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   the map", and each county it finds shows the county's outline, shaded as on the map.
 - In full screen, a county's map turns the header's search into a county search (on a Regions map it
   already finds the map's teams).
-- **The Timeline's seasons have buttons to step through them** when they don't all fit on screen, at
-  each end of the row, on phones and computers.
 - A school picked on one of a county's Timeline maps is picked on every season's map, and those it
   isn't on say where it was, as Compare's two maps do. A link to a county's Timeline can name a school
   (?team=), as one to its Compare can.

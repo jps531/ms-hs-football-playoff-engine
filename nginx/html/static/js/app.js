@@ -3098,38 +3098,8 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
   const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
   const found = wanted && [...seasons].reverse().map((side) => [side, side.payload.schools.find((r) => r.slug === wanted)]).find(([, r]) => r);
   if (found) pickAll({ name: found[1].school, season: found[0].option.season }, null);
-  timelineSteps(app);
-}
-
-/**
- * The Timeline's row of seasons: opened at the newest, and when they don't all fit, its buttons at each
- * end step a season at a time (one at an end it has reached is dimmed and does nothing).
- */
-function timelineSteps(root) {
-  const row = root.querySelector(".timeline");
-  if (!row) return;
-  row.scrollLeft = row.scrollWidth;
-  const steps = [...root.querySelectorAll(".timeline__step")];
-  const update = () => {
-    const more = row.scrollWidth - row.clientWidth > 1;
-    for (const b of steps) {
-      b.hidden = !more;
-      const end = Number(b.dataset.step) < 0 ? row.scrollLeft <= 1 : row.scrollLeft + row.clientWidth >= row.scrollWidth - 1;
-      b.setAttribute("aria-disabled", String(end));
-    }
-  };
-  for (const b of steps) {
-    b.addEventListener("click", () => {
-      if (b.getAttribute("aria-disabled") === "true") return;
-      const season = row.querySelector(".timeline__season");
-      const by = (season?.offsetWidth ?? row.clientWidth) + (parseFloat(getComputedStyle(row).columnGap) || 0);
-      const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-      row.scrollBy({ left: Number(b.dataset.step) * by, behavior: smooth ? "smooth" : "auto" });
-    });
-  }
-  row.addEventListener("scroll", update, { passive: true });
-  new ResizeObserver(update).observe(row);
-  update();
+  const row = app.querySelector(".timeline");
+  if (row) row.scrollLeft = row.scrollWidth;
 }
 
 /** The Counties page's search box: the team search's field and list, for a county. */
@@ -3280,7 +3250,9 @@ async function renderTimeline(token, index) {
     track("team_search_used", { team: team.school, from: "timeline" });
     followTeam(team.school, "search");
   });
-  timelineSteps(app); // more seasons than fit: the row opens at the newest
+  // More seasons than fit: the row opens at the newest.
+  const row = app.querySelector(".timeline");
+  if (row) row.scrollLeft = row.scrollWidth;
   renderScrubber(route.clazz);
   showContext(contextHtml(regionsTitle(route.clazz), { week: timelineSpan(seasons) }, null, { bar: true }));
   history.replaceState(null, "", hrefWith({}));
