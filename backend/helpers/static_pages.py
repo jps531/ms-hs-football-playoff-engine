@@ -1839,11 +1839,12 @@ def class_grid() -> str:
     """The front page's way in: every class's standings, bracket and regions, a button each (landing.js's
     ``classGrid`` writes the same). Hidden words make each link say what it opens."""
 
-    def row(key: str, label: str, path) -> str:
-        """One row of class buttons, each linking to *path* for its class, under the heading *label*."""
+    def row(key: str, label: str, path, spoken: str | None = None) -> str:
+        """One row of class buttons, each linking to *path* for its class, under the heading *label*
+        (*spoken*: what each is to a screen reader after its class, "5A region maps")."""
         items = "".join(
             f'<li><a class="landing-classes__item" href="{path(c)}">{c}A'
-            f'<span class="visually-hidden"> {label.lower()}</span></a></li>'
+            f'<span class="visually-hidden"> {spoken or label.lower()}</span></a></li>'
             for c in CLASSES
         )
         return (
@@ -1854,7 +1855,7 @@ def class_grid() -> str:
     return (
         '<nav class="landing-classes" aria-label="Classes">'
         f"{row('standings', 'Standings', class_path)}{row('brackets', 'Brackets', bracket_path)}"
-        f"{row('regions', 'Region Maps', lambda c: f'/maps/regions/{c}a')}</nav>"
+        f"{row('regions', 'Maps', lambda c: f'/maps/regions/{c}a', 'region maps')}</nav>"
     )
 
 
