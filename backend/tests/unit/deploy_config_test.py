@@ -116,6 +116,19 @@ def test_the_worker_has_a_memory_limit():
     assert re.search(r"^\s*memswap_limit: 2g$", worker, re.M)
 
 
+def test_the_worker_draws_with_the_servers_fonts():
+    """The share images' titles need Nippo, which is installed on the server and never in the image CI
+    builds: the worker mounts the checkout's font folder, read-only, where the code looks for it."""
+    from backend.helpers.share_cards import FONT_DIR
+
+    worker = _service("prefect-worker")
+    inside = "/opt/prefect/flows/pipelines/" + str(FONT_DIR.relative_to(ROOT))
+    assert f"- ./backend/assets/fonts:{inside}:ro" in worker
+    assert re.search(
+        r"^COPY backend/ /opt/prefect/flows/pipelines/backend/$", (ROOT / "Dockerfile.prefect").read_text(), re.M
+    )
+
+
 def test_app_roles_cannot_alter_the_schema():
     """The API and pipeline roles get row access only; fresh databases create them too."""
     roles = (ROOT / "sql" / "app_roles.sql").read_text()
