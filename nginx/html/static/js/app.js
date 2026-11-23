@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyComparePage, countyTimelinePage, namesIn } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -2898,6 +2898,7 @@ async function renderCounties(token) {
             history.replaceState(null, "", hrefWith({ team: route.teamName }));
           },
           onMove: (how) => track("regions_map_moved", { class: null, how, view: "county" }),
+          otherCounty: (name) => countyJumpHtml(base, name, county, counts[name] ?? 0),
           // Full screen hides the page's search, so the header's finds the counties instead.
           onFull: (on) => {
             setScrolled(on);
@@ -2905,6 +2906,16 @@ async function renderCounties(token) {
           },
         });
       }
+    }
+    // Another county from this one's page: its link under the map (one tapped on the map), or a nearby
+    // county's.
+    if (county) {
+      app.querySelector(".county-page")?.addEventListener("click", (e) => {
+        const a = e.target.closest(".county-jump__open, .county-nearby a");
+        if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        goTo(a.dataset.county, a.closest(".county-nearby") ? "nearby" : "map");
+      });
     }
     teamCombobox(app.querySelector("[data-regions-find]"), () => findable, (item, input) => {
       input.value = "";
@@ -3061,7 +3072,7 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
     title: `Share ${countyTitle(county)}’s timeline`, when: countyTimelineLine, view: "county-timeline", season: null,
     kinds: [{ key: "county-timeline", label: countyTitle(county), file: `timeline/county/${slug}`, name: `${slug}-county-timeline`, alt: `${countyTitle(county)}’s MHSAA schools, ${countyTimelineLine}` }],
   } : null;
-  app.innerHTML = countyTimelinePage(county, base, seasons, { controls: `<div class="regions-controls">${finder}</div>`, views, teams, share: has ? shareButton("map") : "" });
+  app.innerHTML = countyTimelinePage(county, base, seasons, { controls: `<div class="regions-controls">${finder}${timelineSteps()}</div>`, views, teams, share: has ? shareButton("map") : "" });
   // A school picked on one map is picked on every map it's on (by its name that season), and the others
   // say where it was, as Compare's two maps do.
   const rowIn = (side, p) => namesIn(p.name, p.season, side.option.season)
@@ -3098,8 +3109,37 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
   const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
   const found = wanted && [...seasons].reverse().map((side) => [side, side.payload.schools.find((r) => r.slug === wanted)]).find(([, r]) => r);
   if (found) pickAll({ name: found[1].school, season: found[0].option.season }, null);
-  const row = app.querySelector(".timeline");
-  if (row) row.scrollLeft = row.scrollWidth;
+  wireTimelineSteps(app);
+}
+
+/**
+ * The Timeline's row of seasons: opened at the newest, and when they don't all fit, its Older and Newer
+ * buttons step a season at a time (one at the end the row has reached is dimmed and does nothing).
+ */
+function wireTimelineSteps(root) {
+  const row = root.querySelector(".timeline");
+  const group = root.querySelector(".timeline-steps");
+  if (!row) return;
+  row.scrollLeft = row.scrollWidth;
+  if (!group) return;
+  const buttons = [...group.querySelectorAll("[data-step]")];
+  const update = () => {
+    group.hidden = row.scrollWidth - row.clientWidth <= 1;
+    for (const b of buttons) {
+      const end = Number(b.dataset.step) < 0 ? row.scrollLeft <= 1 : row.scrollLeft + row.clientWidth >= row.scrollWidth - 1;
+      b.setAttribute("aria-disabled", String(end));
+    }
+  };
+  group.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-step]");
+    if (!b || b.getAttribute("aria-disabled") === "true") return;
+    const season = row.querySelector(".timeline__season");
+    const by = (season?.offsetWidth ?? row.clientWidth) + (parseFloat(getComputedStyle(row).columnGap) || 0);
+    row.scrollBy({ left: Number(b.dataset.step) * by, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+  row.addEventListener("scroll", update, { passive: true });
+  new ResizeObserver(update).observe(row);
+  update();
 }
 
 /** The Counties page's search box: the team search's field and list, for a county. */
@@ -3213,7 +3253,7 @@ async function renderTimeline(token, index) {
     timeline: { follow, span: timelineSpan(seasons) },
   };
   app.innerHTML = timelinePage(route.clazz, base, seasons, {
-    controls: `<div class="regions-controls">${regionsFinder("Follow a team")}</div>`,
+    controls: `<div class="regions-controls">${regionsFinder("Follow a team")}${timelineSteps()}</div>`,
     share: shareButton("map"),
     views: mapsViews("timeline", mapsViewHrefs()),
     follow: follow?.name ?? null,
@@ -3250,9 +3290,7 @@ async function renderTimeline(token, index) {
     track("team_search_used", { team: team.school, from: "timeline" });
     followTeam(team.school, "search");
   });
-  // More seasons than fit: the row opens at the newest.
-  const row = app.querySelector(".timeline");
-  if (row) row.scrollLeft = row.scrollWidth;
+  wireTimelineSteps(app); // more seasons than fit: the row opens at the newest
   renderScrubber(route.clazz);
   showContext(contextHtml(regionsTitle(route.clazz), { week: timelineSpan(seasons) }, null, { bar: true }));
   history.replaceState(null, "", hrefWith({}));

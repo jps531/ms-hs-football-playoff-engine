@@ -286,3 +286,26 @@ test("a point with no name only keeps names off it, at its own size", () => {
   assert.ok(spots.a && !spots.b);
   assert.notEqual(spots.a.anchor, "start"); // not right beside: the unnamed dot is there
 });
+
+test("a county's nearby counties: each a link with its mark and its count of schools; none without map.json's neighbors", () => {
+  const box = "M0 0L10 0L10 10L0 10Z";
+  const base = { counties: [
+    { name: "Rankin", d: box, neighbors: ["Hinds", "Madison"] },
+    { name: "Hinds", d: box, neighbors: ["Rankin"] },
+    { name: "Madison", d: box, neighbors: ["Rankin"] },
+    { name: "Yazoo", d: box },
+  ] };
+  const payload = { schools: [{ county: "Hinds" }, { county: "Hinds" }, { county: "Madison" }] };
+  const html = regions.countyNearby(base, "Rankin", payload);
+  assert.match(html, /href="\/maps\/counties\/hinds" data-county="Hinds" aria-label="Hinds County: 2 MHSAA schools">.*county-mark.*<span>Hinds<\/span>/);
+  assert.match(html, /aria-label="Madison County: 1 MHSAA school"/);
+  assert.equal(regions.countyNearby(base, "Yazoo", payload), "");
+  // Another county tapped on the map: next to this one or not, and a link to it.
+  assert.match(regions.countyJumpHtml(base, "Madison", "Rankin", 1), /Madison County<\/span>.*1 MHSAA school · next to Rankin County.*href="\/maps\/counties\/madison"[^>]*>Open Madison County/);
+  assert.doesNotMatch(regions.countyJumpHtml(base, "Yazoo", "Rankin", 0), /next to/);
+});
+
+test("the Timeline's Older and Newer buttons, hidden until the seasons don't all fit", () => {
+  const html = regions.timelineSteps();
+  assert.match(html, /^<div class="timeline-steps" role="group" aria-label="Seasons" hidden><button type="button" data-step="-1">.*Older<\/button><button type="button" data-step="1">Newer.*<\/button><\/div>$/);
+});

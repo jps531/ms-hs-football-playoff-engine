@@ -146,7 +146,7 @@ export function classLayer(payload, clazz) {
 /** The SVG: land, the region shapes, county lines and names, the state's outline, then the dots. */
 export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz)) {
   const focus = layer.county ? base.counties.find((c) => c.name === layer.county) : null;
-  const counties = base.counties.map((c) => `<path class="map-county" d="${c.d}"/>`).join("");
+  const counties = base.counties.map((c) => `<path class="map-county" data-county="${esc(c.name)}" d="${c.d}"/>`).join("");
   const names = base.counties.map((c) => `<text class="map-county-name" x="${c.label[0]}" y="${c.label[1]}">${esc(c.name)}</text>`).join("");
   const shapes = layer.shapes
     .map((r) => `<path class="map-region map-region--${r.color}" data-group="${esc(r.group)}"${r.fill ? ` style="fill:${r.fill};stroke:${r.fill}"` : ""} d="${r.d}"/>`).join("");
@@ -179,7 +179,7 @@ export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz))
     + `aria-label="${esc(layer.label)}">`
     + `<path class="map-land" d="${base.state}"/><g class="map-regions">${shapes}</g>`
     + `<g class="map-counties">${counties}</g><g class="map-county-names">${names}</g>`
-    + `<path class="map-state" d="${base.state}"/>${focus ? `<path class="map-county-focus" d="${focus.d}"/>` : ""}`
+    + `<path class="map-state" d="${base.state}"/>${focus ? `<path class="map-county-focus" d="${focus.d}"/><path class="map-county-other" d=""/>` : ""}`
     + `<g class="map-labels" aria-hidden="true">${labels}</g>${pins}<g class="map-dots">${dots}</g></svg>`;
 }
 
@@ -187,7 +187,7 @@ export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz))
  * One map with its buttons, under it, and the picked team's details: the map (with its zoom buttons,
  * tooltip and, with *full*, full screen) for the Map view and each side of Compare.
  */
-export function mapFigure(base, payload, clazz, { full = true, layer = classLayer(payload, clazz) } = {}) {
+export function mapFigure(base, payload, clazz, { full = true, layer = classLayer(payload, clazz), after = "" } = {}) {
   const button = (attr, label, icon) => `<button type="button" ${attr} aria-label="${label}" title="${label}">${icon}</button>`;
   return `<figure class="regions-map">`
     + `<div class="regions-map__frame" data-map>${mapSvg(base, payload, clazz, layer)}`
@@ -197,7 +197,17 @@ export function mapFigure(base, payload, clazz, { full = true, layer = classLaye
     + `${button('data-zoom="reset"', "Show the whole state", MAP_ICONS.reset)}</div>`
     + (full ? `<button type="button" class="regions-map__full" data-full aria-pressed="false">${MAP_ICONS.full}<span>Full screen</span></button>` : "")
     + `</div><p class="visually-hidden" aria-live="polite" data-picked-status></p>`
-    + `<figcaption class="regions-map__picked" hidden></figcaption></figure>`;
+    + `<figcaption class="regions-map__picked" hidden></figcaption>${after}</figure>`;
+}
+
+/**
+ * The Timeline's buttons to step through its seasons, a season at a time, in the zoom buttons' style:
+ * hidden until the seasons don't all fit (the app shows them and dims the one at an end it has reached).
+ */
+export function timelineSteps() {
+  const button = (step, label, icon) => `<button type="button" data-step="${step}">${icon}${label}</button>`;
+  return `<div class="timeline-steps" role="group" aria-label="Seasons" hidden>`
+    + `${button(-1, "Older", MAP_ICONS.back)}${button(1, `Newer${MAP_ICONS.next}`, "")}</div>`;
 }
 
 /**
@@ -469,6 +479,8 @@ const MAP_ICONS = {
   reset: icon('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 3.5v4h4"/>'),
   full: icon('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   leave: icon('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>'),
+  back: icon('<path d="M14.5 6 8.5 12l6 6"/>'),
+  next: icon('<path d="M9.5 6l6 6-6 6"/>'),
 };
 
 /** The map's whole view (in map units): the state, with room around it. */
@@ -635,7 +647,7 @@ export function hoverSpot(x, y, r, tip, frame, gap = 6) {
  * team picked (from the map, the list, the team under the map or the page's link) highlighted with
  * its region and zoomed to. onPick(slug or null) tells the page, to keep the address in step.
  */
-export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {}, onFull = () => {}, elsewhere = null, layer = classLayer(payload, clazz), home = null, href = undefined } = {}) {
+export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {}, onFull = () => {}, elsewhere = null, layer = classLayer(payload, clazz), home = null, href = undefined, otherCounty = null } = {}) {
   const frame = root.querySelector("[data-map]");
   const svg = frame?.querySelector("svg");
   if (!svg) return null;
@@ -814,6 +826,8 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const box = svg.getBoundingClientRect();
     return [view.x + ((clientX - box.left) / box.width) * view.w, view.y + ((clientY - box.top) / box.height) * view.h];
   };
+  // The county under a spot on the map (map units), as its outline's path, or null.
+  const countyAt = (x, y) => [...svg.querySelectorAll(".map-county")].find((c) => c.isPointInFill?.(new DOMPoint(x, y))) ?? null;
   const middle = () => [view.x + view.w / 2, view.y + view.h / 2];
   // The first time the reader moves the map, and how ("wheel", "pinch", "drag", "buttons"): once a page.
   let moved = false;
@@ -835,6 +849,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
 
   const pick = (slug, { zoom = true, reveal = true } = {}) => {
     const school = slug ? bySlug.get(slug) : null;
+    svg.querySelector(".map-county-other")?.setAttribute("d", "");
     for (const g of svg.querySelectorAll(".map-dot")) {
       g.classList.toggle("is-picked", Boolean(school) && g.dataset.team === school.slug);
       g.classList.toggle("is-dim", Boolean(school) && g.dataset.group !== groupOf(school));
@@ -927,6 +942,21 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   svg.addEventListener("click", (e) => {
     if (dragged) return;
     const dot = e.target.closest(".map-dot");
+    // A county's map: a tap on another county, off the schools, shows that county and a link to it
+    // (*otherCounty*: its name to the panel's markup); it doesn't leave the page.
+    const other = !dot && otherCounty ? countyAt(...toMap(e.clientX, e.clientY)) : null;
+    if (other && other.dataset.county !== layer.county) {
+      pick(null, { zoom: false });
+      onPick(null, "map");
+      svg.querySelector(".map-county-other")?.setAttribute("d", other.getAttribute("d"));
+      if (caption) {
+        caption.innerHTML = otherCounty(other.dataset.county);
+        caption.hidden = false;
+        show(caption);
+      }
+      if (status) status.textContent = other.dataset.county + " County";
+      return;
+    }
     const school = pick(dot ? dot.dataset.team : null, { zoom: Boolean(dot) });
     onPick(school?.slug ?? null, "map");
   });
@@ -1214,13 +1244,41 @@ export function countyPage(county, base, payload, { controls = "", share = "", t
   if (!mine.length) {
     return `<div class="page regions-page county-page">${head}</header>`
       + `<p class="notice">No MHSAA school is in ${esc(countyTitle(county))} in the ${esc(seasonsLabel(payload.seasons))}. `
-      + `<a href="${esc(countiesPath())}">Pick another county</a>.</p></div>`;
+      + `<a href="${esc(countiesPath())}">Pick another county</a>.</p>${countyNearby(base, county, payload)}</div>`;
   }
   const layer = countyLayer(payload, county);
   return `<div class="page regions-page county-page">${head}`
     + `<p class="focus-note muted regions-note">Each school is marked with its region and class (3-6A), in its class's color: lighter and darker for its regions. Pick one to see its region.</p></header>`
-    + `<div class="regions-layout">${mapFigure(base, payload, null, { layer })}`
+    + `<div class="regions-layout">${mapFigure(base, payload, null, { layer, after: countyNearby(base, county, payload) })}`
     + `<div class="regions-side"><div class="regions-list county-list">${countyLists(county, payload, teams)}</div></div></div></div>`;
+}
+
+/**
+ * The counties next to *county* (map.json's *neighbors*), each a link with its mark shaded by its count
+ * of schools, as on the statewide map. Nothing when map.json has no neighbors (one written before it
+ * had them).
+ */
+export function countyNearby(base, county, payload) {
+  const near = base.counties.find((c) => c.name === county)?.neighbors ?? [];
+  if (!near.length) return "";
+  const counts = countyCounts(base, payload);
+  return `<nav class="county-nearby" aria-labelledby="county-nearby">`
+    + `<p class="county-nearby__label" id="county-nearby">Nearby counties</p><ul class="county-nearby__list">`
+    + near.map((n) => `<li><a href="${esc(countiesPath(n))}" data-county="${esc(n)}" aria-label="${esc(countyTitle(n))}: ${esc(schoolsCount(counts[n] ?? 0))}">`
+      + `${countyMark(base, n, { size: 24, shade: countShade(counts[n] ?? 0) })}<span>${esc(n)}</span></a></li>`).join("")
+    + "</ul></nav>";
+}
+
+/**
+ * Another county tapped on a county's map: its mark and name, its count of schools (and that it's next
+ * to *county*, when it is), and a link to its page.
+ */
+export function countyJumpHtml(base, name, county, count) {
+  const next = base.counties.find((c) => c.name === county)?.neighbors?.includes(name);
+  return `<div class="county-jump"><div><div class="picked__head">${countyMark(base, name, { size: 28, shade: countShade(count) })}`
+    + `<span class="picked__name">${esc(countyTitle(name))}</span></div>`
+    + `<p class="picked__facts">${esc(schoolsCount(count))}${next ? ` · next to ${esc(countyTitle(county))}` : ""}</p></div>`
+    + `<a class="county-jump__open" href="${esc(countiesPath(name))}" data-county="${esc(name)}">Open ${esc(countyTitle(name))}${MAP_ICONS.next}</a></div>`;
 }
 
 /** How many of the season's schools each county has, by county name (every county, 0 for none). */
