@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compareChanges, compareChangesHtml, hoverSpot, keepInView, mapsViews, nameIn, notOnMapHtml, pickedHtml, regionsLists, regionView, timelinePathHtml, timelineSeasons, timelineSpan, wholeView } from "../html/static/js/regions.js";
+import { compareChanges, compareChangesHtml, hoverHtml, hoverSpot, keepInView, mapsViews, nameIn, notOnMapHtml, pickedHtml, placeLabels, regionView, regionsLists, timelinePathHtml, timelineSeasons, timelineSpan, wholeView } from "../html/static/js/regions.js";
 
 const BASE = { width: 3324, height: 5355 };
 const TIP = { w: 100, h: 24 };
@@ -152,4 +152,54 @@ test("the timeline: every season, oldest first, each in the class a followed tea
   assert.deepEqual(tippah.map((s) => [s.clazz, s.row?.region ?? null]), [[4, null], [3, 2]]);
   assert.match(timelinePathHtml("North Tippah", tippah), /<strong>North Tippah<\/strong>: <span class="timeline-path__step">not in a region in 2025<\/span>.*Region 2-3A in 2027 and 2028/);
   assert.match(timelinePathHtml("Corinth", corinth), /Region 1-4A in 2025<\/span><span class="timeline-path__arrow" aria-hidden="true"> → <\/span><span class="visually-hidden">, then <\/span><span class="timeline-path__step">Region 1-3A in 2027 and 2028/);
+});
+
+test("schools' names go beside their dots where they overlap nothing, the first in line getting first pick", () => {
+  const r = 10;
+  const size = 10;
+  // Two dots well apart: each name right beside its own dot, no line.
+  const spots = placeLabels([{ slug: "a", x: 0, y: 0, name: "Bay" }, { slug: "b", x: 200, y: 0, name: "Moss Point" }], r, size);
+  assert.deepEqual(spots.a, { x: 14, y: 0, anchor: "start", line: null });
+  assert.deepEqual(spots.b, { x: 214, y: 0, anchor: "start", line: null });
+  // At the map's right edge, the name goes left rather than off the map.
+  const edge = placeLabels([{ slug: "a", x: 90, y: 50, name: "Greene County" }], r, size, { x0: 0, y0: 0, x1: 100, y1: 100 });
+  assert.equal(edge.a.anchor, "end");
+  // Boxed in on every side: no name rather than one over a dot.
+  const ring = [[0, 0], [25, 0], [-25, 0], [0, 25], [0, -25], [25, 25], [-25, -25], [25, -25], [-25, 25]]
+    .map(([x, y], i) => ({ slug: `s${i}`, x, y, name: "Long School Name" }));
+  assert.equal(placeLabels(ring, r, size).s0, undefined);
+});
+
+test("a name never sits nearer a neighbor's dot than its own (Purvis and Columbia)", () => {
+  const r = 10;
+  const size = 10;
+  // Columbia just up and left of Purvis: Purvis's name can't go left (toward Columbia) or above it.
+  const points = [{ slug: "purvis", x: 60, y: 30, name: "Purvis" }, { slug: "columbia", x: 20, y: 10, name: "Columbia" }];
+  const spots = placeLabels(points, r, size);
+  for (const [slug, own] of [["purvis", points[0]], ["columbia", points[1]]]) {
+    const spot = spots[slug];
+    const other = points.find((p) => p !== own);
+    const w = own.name.length * size * 0.56;
+    const x0 = spot.anchor === "start" ? spot.x : spot.anchor === "end" ? spot.x - w : spot.x - w / 2;
+    const box = { x0, x1: x0 + w, y0: spot.y - size / 2, y1: spot.y + size / 2 };
+    const reach = (q) => Math.hypot(Math.max(box.x0 - q.x, 0, q.x - box.x1), Math.max(box.y0 - q.y, 0, q.y - box.y1));
+    assert.ok(reach(other) > reach(own) + r * 2, `${slug}'s name is plainly its own dot's`);
+  }
+  assert.equal(spots.purvis.anchor, "start"); // right of Purvis, away from Columbia
+});
+
+test("a dot's tooltip: helmet, name, mascot, region and town, edged in the team's color", () => {
+  const school = { school: "Purvis", slug: "purvis", class: 4, region: 7, city: "Purvis", county: "Lamar" };
+  const team = { mascot: "Tornadoes", color_variants: { primary: { raw: "#6B2D8B", light: { ui: "#6B2D8B" }, dark: { ui: "#9356B6" } } } };
+  const html = hoverHtml(school, team);
+  assert.match(html, /<strong class="map-tip__name">Purvis<\/strong><span class="map-tip__mascot">Tornadoes<\/span>/);
+  assert.match(html, /region-chip--7[^>]*>7<\/span><span>Region 7-4A · Purvis, Lamar County<\/span>/);
+  assert.match(html, /--team-ui-light:#6B2D8B/);
+  // The seasons the map is of, for context.
+  assert.match(hoverHtml(school, team, [2027, 2028]), /<span class="map-tip__when">2027 and 2028 seasons<\/span>/);
+  assert.doesNotMatch(html, /map-tip__when/);
+  // No /teams entry: still the name and region, initials for a helmet, no mascot or color.
+  const bare = hoverHtml(school, undefined);
+  assert.doesNotMatch(bare, /mascot|--team-ui/);
+  assert.match(bare, /Region 7-4A/);
 });

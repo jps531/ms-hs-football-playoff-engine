@@ -1,4 +1,4 @@
-import { breadcrumbs, teamMark } from "./components.js";
+import { breadcrumbs, teamColorStyle, teamMark } from "./components.js";
 import { escapeHtml as esc } from "./format.js";
 
 // The Regions page (/maps/regions/5a), in the Maps section: a class's schools on a map of Mississippi, each a dot numbered by
@@ -132,12 +132,17 @@ export function mapSvg(base, payload, clazz) {
   const dots = payload.schools.filter((s) => s.class === clazz && s.x != null)
     .map((s) => `<g class="map-dot map-dot--${s.region}" data-team="${esc(s.slug)}" data-region="${s.region}" tabindex="-1">`
       + `<circle cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${s.region}</text></g>`).join("");
+  // Each school's name, shown beside its dot once the map is zoomed in far enough (wireRegionsMap
+  // places them, and hides those with no room).
+  const labels = payload.schools.filter((s) => s.class === clazz && s.x != null)
+    .map((s) => `<line class="map-leader" data-team="${esc(s.slug)}" data-region="${s.region}" hidden/>`
+      + `<text class="map-label" data-team="${esc(s.slug)}" data-region="${s.region}" x="${s.x}" y="${s.y}">${esc(s.school)}</text>`).join("");
   const v = wholeView(base);
   return `<svg class="regions-map__svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" role="img" `
     + `aria-label="Map of Mississippi with each Class ${clazz}A school as a dot numbered by its region">`
     + `<path class="map-land" d="${base.state}"/><g class="map-regions">${shapes}</g>`
     + `<g class="map-counties">${counties}</g><g class="map-county-names">${names}</g>`
-    + `<path class="map-state" d="${base.state}"/><g class="map-dots">${dots}</g></svg>`;
+    + `<path class="map-state" d="${base.state}"/><g class="map-labels" aria-hidden="true">${labels}</g><g class="map-dots">${dots}</g></svg>`;
 }
 
 /**
@@ -438,6 +443,99 @@ export function keepInView(view, base) {
   };
 }
 
+/**
+ * When the map shows the schools' names: zoomed in this far, or zoomed in at all past the whole state
+ * with a team picked (its region's names come first). Names with no room are left out either way.
+ */
+export const LABEL_ZOOM = 1.5;
+export const LABEL_ZOOM_PICKED = 1.1;
+
+/**
+ * Where each school's name goes, in map units: *points* are { slug, x, y, name } (in the order they
+ * get first pick: the picked team, its region, then the rest), *r* a dot's radius and *size* the
+ * text's size. A spot must overlap no dot and no name already placed and stay inside *bounds* (the
+ * view: { x0, y0, x1, y1 }). Right beside the dot first (right, left, above, below), where its own dot
+ * must be plainly the nearest, so it can't be read as a neighbor's; else a little farther out, with a
+ * line from the dot (*line*: [x1, y1, x2, y2]) that passes no other dot. A name with no such spot is
+ * left out. Returns { slug: { x, y, anchor, line } }.
+ */
+export function placeLabels(points, r, size, bounds = null) {
+  const width = (name) => name.length * size * 0.56; // Inter, about; a little room to spare
+  const gap = r * 0.4;
+  const far = r * 2.2; // how far out the farther spots are, past the dot's edge
+  const boxes = points.map((p) => ({ x0: p.x - r, y0: p.y - r, x1: p.x + r, y1: p.y + r })); // the dots
+  const outside = (b) => bounds != null && (b.x0 < bounds.x0 || b.x1 > bounds.x1 || b.y0 < bounds.y0 || b.y1 > bounds.y1);
+  const overlaps = (b) => outside(b) || boxes.some((o) => b.x0 < o.x1 && o.x0 < b.x1 && b.y0 < o.y1 && o.y0 < b.y1);
+  // From a dot's middle to the nearest point of a name's box.
+  const reach = (q, b) => Math.hypot(Math.max(b.x0 - q.x, 0, q.x - b.x1), Math.max(b.y0 - q.y, 0, q.y - b.y1));
+  // Its own dot is the nearest to it, by at least a dot's radius.
+  const owned = (p, b) => points.every((q) => q === p || reach(q, b) > reach(p, b) + r);
+  // A line from (x1, y1) to (x2, y2) keeps clear of every dot but p's.
+  const clear = (p, [x1, y1, x2, y2]) => points.every((q) => {
+    if (q === p) return true;
+    const [dx, dy] = [x2 - x1, y2 - y1];
+    const t = Math.max(0, Math.min(1, ((q.x - x1) * dx + (q.y - y1) * dy) / (dx * dx + dy * dy)));
+    return Math.hypot(q.x - (x1 + t * dx), q.y - (y1 + t * dy)) > r * 1.2;
+  });
+  const placed = {};
+  for (const p of points) {
+    const w = width(p.name);
+    const h = size;
+    // { x, y, anchor } is where the text goes; box is what it covers; edge, where a line from the dot meets it.
+    const beside = r + gap;
+    const out = r + far;
+    const spot = (x, y, anchor, edge = null) => {
+      const x0 = anchor === "start" ? x : anchor === "end" ? x - w : x - w / 2;
+      return { x, y, anchor, box: { x0, x1: x0 + w, y0: y - h / 2, y1: y + h / 2 }, edge };
+    };
+    const diag = out * 0.75;
+    const spots = [
+      spot(p.x + beside, p.y, "start"),
+      spot(p.x - beside, p.y, "end"),
+      spot(p.x, p.y - beside - h / 2, "middle"),
+      spot(p.x, p.y + beside + h / 2, "middle"),
+      spot(p.x + diag, p.y - diag, "start", [p.x + diag, p.y - diag]),
+      spot(p.x + diag, p.y + diag, "start", [p.x + diag, p.y + diag]),
+      spot(p.x - diag, p.y - diag, "end", [p.x - diag, p.y - diag]),
+      spot(p.x - diag, p.y + diag, "end", [p.x - diag, p.y + diag]),
+      spot(p.x + out, p.y, "start", [p.x + out, p.y]),
+      spot(p.x - out, p.y, "end", [p.x - out, p.y]),
+    ];
+    for (const s of spots) {
+      if (overlaps(s.box)) continue;
+      let line = null;
+      if (s.edge) {
+        // From the dot's edge toward where the name starts, stopping a little short of it.
+        const [ex, ey] = s.edge;
+        const d = Math.hypot(ex - p.x, ey - p.y);
+        const [ux, uy] = [(ex - p.x) / d, (ey - p.y) / d];
+        line = [p.x + ux * r, p.y + uy * r, ex - ux * gap, ey - uy * gap];
+        if (!clear(p, line)) continue;
+      } else if (!owned(p, s.box)) continue;
+      boxes.push(s.box);
+      placed[p.slug] = { x: s.x, y: s.y, anchor: s.anchor, line };
+      break;
+    }
+  }
+  return placed;
+}
+
+/**
+ * A dot's tooltip: the school's helmet, name and mascot over its region and town, and the seasons the
+ * map is of (*seasons*: [2027, 2028]), edged in its color (*team*: its /teams entry, or nothing).
+ */
+export function hoverHtml(school, team, seasons = []) {
+  const where = [school.city, school.county ? `${school.county} County` : ""].filter(Boolean).join(", ");
+  return `<span class="map-tip"${teamColorStyle(team)}>`
+    + `<span class="map-tip__head">${teamMark(school.school, team, { size: 28 })}`
+    + `<span class="map-tip__names"><strong class="map-tip__name">${esc(school.school)}</strong>`
+    + (team?.mascot ? `<span class="map-tip__mascot">${esc(team.mascot)}</span>` : "")
+    + `</span></span><span class="map-tip__place"><span class="region-chip region-chip--${school.region}" aria-hidden="true">${school.region}</span>`
+    + `<span>${esc(place(school))}${where ? ` · ${esc(where)}` : ""}</span></span>`
+    + (seasons.length ? `<span class="map-tip__when">${esc(seasonsLabel(seasons))}</span>` : "")
+    + "</span>";
+}
+
 /** Where the tooltip goes (its top-left, in pixels in the frame) for a dot at (x, y) of radius r:
  * centered above the dot, or below it when there's no room above, and kept inside the frame. */
 export function hoverSpot(x, y, r, tip, frame, gap = 6) {
@@ -491,6 +589,35 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     }
     svg.classList.toggle("is-zoomed", zoom >= 2.2); // county names once there's room for them
     for (const t of svg.querySelectorAll(".map-county-name")) t.setAttribute("font-size", 40 / Math.max(1, zoom / 2.2));
+    const named = zoom >= LABEL_ZOOM || (current != null && zoom >= LABEL_ZOOM_PICKED);
+    svg.classList.toggle("is-named", named);
+    if (named) labelDots(r, 12 * px);
+  };
+  // The schools' names, placed so none overlaps a dot or another name: the picked team's first, then
+  // its region's, then the rest in view.
+  const labels = new Map([...svg.querySelectorAll(".map-label")].map((t) => [t.dataset.team, t]));
+  const leaders = new Map([...svg.querySelectorAll(".map-leader")].map((l) => [l.dataset.team, l]));
+  const labelDots = (r, size) => {
+    const inView = (s) => s.x >= view.x && s.x <= view.x + view.w && s.y >= view.y && s.y <= view.y + view.h;
+    const first = (s) => (s.slug === current?.slug ? 0 : current && s.region === current.region ? 1 : 2);
+    const points = [...bySlug.values()].filter((s) => s.x != null && inView(s))
+      .sort((a, b) => first(a) - first(b) || byName(a.school, b.school))
+      .map((s) => ({ slug: s.slug, x: s.x, y: s.y, name: s.school }));
+    const spots = placeLabels(points, r, size, { x0: view.x, y0: view.y, x1: view.x + view.w, y1: view.y + view.h });
+    for (const [slug, t] of labels) {
+      const spot = spots[slug];
+      t.toggleAttribute("hidden", !spot);
+      if (!spot) continue;
+      t.setAttribute("x", spot.x);
+      t.setAttribute("y", spot.y);
+      t.setAttribute("text-anchor", spot.anchor);
+      t.setAttribute("font-size", size);
+      t.style.strokeWidth = `${size * 0.28}px`;
+      const line = leaders.get(slug);
+      line?.toggleAttribute("hidden", !spot.line);
+      if (line && spot.line) ["x1", "y1", "x2", "y2"].forEach((k, i) => line.setAttribute(k, spot.line[i]));
+    }
+    for (const [slug, l] of leaders) if (!spots[slug]) l.setAttribute("hidden", "");
   };
   const zoomAt = (factor, cx, cy) => {
     const w = Math.min(widest(), Math.max(whole.w / 40, view.w / factor));
@@ -528,7 +655,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
       g.classList.toggle("is-picked", Boolean(school) && g.dataset.team === school.slug);
       g.classList.toggle("is-dim", Boolean(school) && Number(g.dataset.region) !== school.region);
     }
-    for (const p of svg.querySelectorAll(".map-region")) p.classList.toggle("is-dim", Boolean(school) && Number(p.dataset.region) !== school.region);
+    for (const p of svg.querySelectorAll(".map-region, .map-label, .map-leader")) p.classList.toggle("is-dim", Boolean(school) && Number(p.dataset.region) !== school.region);
     for (const a of root.querySelectorAll(".regions-list [data-team]")) {
       if (school && a.dataset.team === school.slug) a.setAttribute("aria-current", "true");
       else a.removeAttribute("aria-current");
@@ -549,8 +676,8 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     if (zoom && !stay) {
       view = box ? regionView(box, base) : { ...whole };
       moves += 1;
-      apply();
     }
+    apply(); // the names, too: the picked team's first
     return school;
   };
 
@@ -573,7 +700,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     if (school && e.pointerType === "mouse") {
       const box = frame.getBoundingClientRect();
       const d = dot.firstChild.getBoundingClientRect();
-      hover.textContent = school.school;
+      hover.innerHTML = hoverHtml(school, teams[school.school], payload.seasons ?? []);
       hover.hidden = false;
       const spot = hoverSpot(d.left + d.width / 2 - box.left, d.top + d.height / 2 - box.top, d.width / 2,
         { w: hover.offsetWidth, h: hover.offsetHeight }, { w: box.width, h: box.height });
