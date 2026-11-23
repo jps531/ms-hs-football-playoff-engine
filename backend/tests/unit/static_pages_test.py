@@ -1327,9 +1327,29 @@ class TestReadability:
 
 
 def test_the_front_page_shows_a_region_map_once_there_are_regions():
-    """A "Region maps" section with the class's map (light and dark) linking to its Regions page."""
+    """A "Maps" section with the class's map (light and dark) linking to its Regions page; without the
+    other views' images, nothing more."""
     body = landing_body(None, {}, regions_example={"clazz": 5, "season": 2027})
-    assert ">Region maps</h2>" in body
+    assert ">Maps</h2>" in body
     assert 'href="/maps/regions/5a"' in body
     assert "/static/regions/2027/5a-light.png" in body and "/static/regions/2027/5a-dark.png" in body
-    assert "Region maps" not in landing_body(None, {})
+    assert "Compare" not in body and "Timeline" not in body and "Counties" not in body
+    assert ">Maps</h2>" not in landing_body(None, {})
+
+
+def test_the_front_pages_maps_section_shows_each_view():
+    """Compare, Timeline and Counties, each a subsection with its image (light and dark) linking to the
+    view; the timeline's image at its own size."""
+    example = {"clazz": 5, "season": 2027, "compare": True, "timeline": (2160, 1670), "county": "Jefferson Davis"}
+    body = landing_body(None, {}, regions_example=example)
+    assert ">Compare</h3>" in body and ">Timeline</h3>" in body and ">Counties</h3>" in body
+    assert 'href="/maps/regions/5a/compare"' in body and "/static/regions/2027/compare/5a-dark.png" in body
+    assert 'href="/maps/regions/5a/timeline"' in body
+    assert 'src="/static/regions/timeline/5a-light.png" width="1080" height="835"' in body
+    assert 'href="/maps/counties/jefferson-davis"' in body
+    assert "/static/regions/2027/county/jefferson-davis-light.png" in body
+    assert ">Open Jefferson Davis County</span>" in body
+    # The county's image as its header over its middle: two pieces of the one image.
+    county = body[body.index('href="/maps/counties/jefferson-davis"') :]
+    assert county.index('class="landing-preview__head"') < county.index('class="landing-preview__middle"')
+    assert county.count("/static/regions/2027/county/jefferson-davis-light.png") == 2

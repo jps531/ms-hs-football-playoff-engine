@@ -5,6 +5,7 @@ import json
 from datetime import date
 
 import pytest
+from PIL import Image
 
 import backend.prefect.share_regions as sr
 from backend.helpers.region_pages import season_options
@@ -235,3 +236,22 @@ def test_the_counties_images(written):
     assert {r["school"] for r in county["schools"]} == {"Greenwood", "Leake", "Natchez", "Lost"}
     counts = by_path["regions/2027/counties-light.png"].kwargs["counts"]
     assert len(counts) == 82 and counts["Leflore"] == 1 and counts["Issaquena"] == 0
+
+
+def test_the_front_pages_maps_example(written):
+    """The front page's Maps section: the class's map, and the other views' images the step drew, the
+    county with the most schools first (by name among ties), the timeline's size read from its file."""
+    out, *_ = written
+    (out / "regions" / "timeline").mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (2160, 1670)).save(out / "regions" / "timeline" / "5a-light.png")
+    drawn = {
+        "regions/2027/compare/5a-light.png",
+        "regions/timeline/5a-light.png",
+        "regions/2027/county/leflore-light.png",
+        "regions/2027/county/tippah-light.png",
+        "regions/2027/county/leake-light.png",
+    }
+    example = sr.maps_example(out, 5, 2027, drawn)
+    assert example == {"clazz": 5, "season": 2027, "compare": True, "timeline": (2160, 1670), "county": "Leake"}
+    # Only what was drawn: no compare, timeline or county image, no section for it.
+    assert sr.maps_example(out, 3, 2027, set()) == {"clazz": 3, "season": 2027}
