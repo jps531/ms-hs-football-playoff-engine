@@ -49,8 +49,9 @@ keep the two in step: a new event or property means a new line there.
 | `odds_changed` | Projected/Toss-up switch | `value` |
 | `week_changed`, `season_changed` | The week or season picker | `value` |
 | `regions-season_changed` | The Regions page's season picker (which cycle's regions) | `value` |
-| `team_picked` | Selecting a team in the standings, the bracket sheet, or on the Regions page (a dot on the map, a name in the lists, or one of the region's other schools under the map) | `from` (`standings`/`bracket`/`regions`), `team`; on the Regions page also `via` (`map`/`list`/`caption`) |
-| `team_search_used` | Choosing a team from the search box, or from the Regions page's own "Find a team on the map" | `team`; `from` (`regions`) for the map's |
+| `compare-season_changed`, `compare-class_changed` | A map's season or class picker on the Regions page's Compare view | `value` |
+| `team_picked` | Selecting a team in the standings, the bracket sheet, or on the Regions page (a dot on the map, a name in the lists, or one of the region's other schools under the map), or on its Compare view (a dot on either map, a school in what changed, or the search) | `from` (`standings`/`bracket`/`regions`/`compare`), `team`; on the Regions page and Compare also `via` (`map`/`list`/`caption`; on Compare `map`/`changes`/`search`) |
+| `team_search_used` | Choosing a team from the search box, or from the Regions page's own "Find a team on the map" (or Compare's "Find a team on the maps") | `team`; `from` (`regions`/`compare`) for the map's |
 | `bracket_game_opened` | Opening a game's sheet | `class`, `round`, `game` |
 | `bracket_half_changed` | The North/South/Both control | `half` |
 | `bracket_share_opened` | Opening “Share this bracket” | `class` |
@@ -61,7 +62,7 @@ keep the two in step: a new event or property means a new line there.
 | `region_image_shared` | Sharing, downloading or copying the link to a region image (an image of several pages: sharing or downloading all of them, or copying the link to the one shown) | `class`, `region`, `season`, `image` (`overview`/`scenarios`), `mode` (`projected`/`tossup`), `theme`, `method` (`share`/`download`/`copy`) |
 | `regions_share_opened` | Opening “Share” on the Regions page | `class`, `team` (the team picked, or none) |
 | `regions_image_shared` | Sharing, downloading or copying the link to a Regions page image | `class`, `season`, `team` (or none), `image` (`class`/`class-compare`/`team`/`compare`), `theme`, `method` (`share`/`download`/`copy`) |
-| `regions_map_moved` | The first time the reader moves the region map on a page (later moves aren't counted) | `class`, `how` (`wheel`/`pinch`/`drag`/`buttons`) |
+| `regions_map_moved` | The first time the reader moves a region map on a page (later moves aren't counted; on Compare, once for each map) | `class`, `how` (`wheel`/`pinch`/`drag`/`buttons`); `view` (`compare`) on Compare |
 | `regions_region_opened` | Following a region's heading on the Regions page to its standings | `class`, `region`, `season` (the map's) |
 | `scenarios_opened` | Opening a folded scenario group | `section` (its heading) |
 | `scenario_explanation_opened` | Opening a scenario card's Explanation sheet | `place` (e.g. `Region 1-7A`), `scenario` (the card's label, e.g. `Scenario 3`) |

@@ -140,23 +140,182 @@ export function mapSvg(base, payload, clazz) {
     + `<path class="map-state" d="${base.state}"/><g class="map-dots">${dots}</g></svg>`;
 }
 
-/** The whole page: heading and controls, the map (with its zoom buttons and tooltip), the lists. On a
- * computer the map is beside the heading and the lists; on a phone, between them. */
-export function regionsPage(clazz, base, payload, currentSeason, { controls = "", share = "", teams = {} } = {}) {
+/**
+ * One map with its buttons, under it, and the picked team's details: the map (with its zoom buttons,
+ * tooltip and, with *full*, full screen) for the Map view and each side of Compare.
+ */
+export function mapFigure(base, payload, clazz, { full = true } = {}) {
   const button = (attr, label, icon) => `<button type="button" ${attr} aria-label="${label}" title="${label}">${icon}</button>`;
-  return `<div class="page regions-page"><header class="entry-head">${regionsHeader(clazz, payload, share)}${controls}`
-    + `<p class="focus-note muted regions-note">Pick a team on the map or in the lists to see where it is and highlight its region.</p></header>`
-    + `<div class="regions-layout"><figure class="regions-map">`
+  return `<figure class="regions-map">`
     + `<div class="regions-map__frame" data-map>${mapSvg(base, payload, clazz)}`
     + `<div class="regions-map__hover" aria-hidden="true" hidden></div></div>`
     + `<div class="regions-map__tools"><div class="regions-map__zoom" role="group" aria-label="Zoom">`
     + `${button('data-zoom="in"', "Zoom in", MAP_ICONS.in)}${button('data-zoom="out"', "Zoom out", MAP_ICONS.out)}`
     + `${button('data-zoom="reset"', "Show the whole state", MAP_ICONS.reset)}</div>`
-    + `<button type="button" class="regions-map__full" data-full aria-pressed="false">${MAP_ICONS.full}<span>Full screen</span></button></div>`
-    + `<p class="visually-hidden" aria-live="polite" data-picked-status></p>`
-    + `<figcaption class="regions-map__picked" hidden></figcaption></figure>`
+    + (full ? `<button type="button" class="regions-map__full" data-full aria-pressed="false">${MAP_ICONS.full}<span>Full screen</span></button>` : "")
+    + `</div><p class="visually-hidden" aria-live="polite" data-picked-status></p>`
+    + `<figcaption class="regions-map__picked" hidden></figcaption></figure>`;
+}
+
+/**
+ * The views every map page has, as links in the bracket's half switch's style (.half-control): Season
+ * (one season's map; the "map" view) and Compare (two side by side). *view* is the one shown; *hrefs* is
+ * each one's address ({ map, compare }), keeping the season and picked team.
+ */
+export function mapsViews(view, hrefs) {
+  const views = [["map", "Season"], ["compare", "Compare"]];
+  return `<nav class="half-control maps-views" aria-label="View">`
+    + views.map(([key, label]) => `<a class="half-control__item maps-views__item" href="${esc(hrefs[key])}"${key === view ? ' aria-current="page"' : ""}>${label}</a>`).join("")
+    + "</nav>";
+}
+
+/** The whole page: heading and controls, the map (with its zoom buttons and tooltip), the lists. On a
+ * computer the map is beside the heading and the lists; on a phone, between them. */
+export function regionsPage(clazz, base, payload, currentSeason, { controls = "", share = "", teams = {}, views = "" } = {}) {
+  return `<div class="page regions-page"><header class="entry-head">${regionsHeader(clazz, payload, share)}${views}${controls}`
+    + `<p class="focus-note muted regions-note">Pick a team on the map or in the lists to see where it is and highlight its region.</p></header>`
+    + `<div class="regions-layout">${mapFigure(base, payload, clazz)}`
     + `<div class="regions-side"><p class="focus-note muted regions-note regions-note--lists">Pick a team to see it on the map.</p>`
     + `<div class="regions-list">${regionsLists(clazz, payload, currentSeason, teams)}</div></div></div></div>`;
+}
+
+// ------------------------------------------------------------- compare
+
+// A school renamed: its old name, its new one, and the first season under the new one
+// (backend/helpers/data_helpers.py SCHOOL_RENAMES; school_renames_test.py keeps the two the same).
+export const SCHOOL_RENAMES = [["Leake Central", "Leake", 2026]];
+
+/** *name* (a school's name in *season*) as the school is called in *other*, a season before or after. */
+export function nameIn(name, season, other) {
+  let out = name;
+  for (const [old, now, first] of SCHOOL_RENAMES) {
+    if (other >= first && season < first && out === old) out = now;
+    else if (other < first && season >= first && out === now) out = old;
+  }
+  return out;
+}
+
+/** "Region 2-4A in 2026", or "not in a region in 2026". */
+const placeIn = (p, label) => (p ? `${place(p)} in ${label}` : `not in a region in ${label}`);
+
+/**
+ * What changed between two maps: *a* and *b* are { label, season, clazz, payload } (a season's data, and
+ * the class its map shows), in either order; the older is the one before. Every school on either map,
+ * with where it is in each season, in groups: moved in (on the newer map, not the older one), moved out,
+ * changed region (on both, in another region), and same region. Each school is
+ * { school, slug, season, class, region, older, newer }: its name and place in *season* (the newer one,
+ * or the older for a school gone since), and older and newer, its {class, region} then (or null).
+ * Null when both maps show the same season: nothing changed between them.
+ */
+export function compareChanges(a, b) {
+  if (a.season === b.season) return null;
+  const [older, newer] = a.season < b.season ? [a, b] : [b, a];
+  const at = (side) => new Map(side.payload.schools.map((s) => [s.school, s]));
+  const then = at(older);
+  const now = at(newer);
+  const groups = { in: [], out: [], moved: [], same: [] };
+  const seen = new Set();
+  for (const s of newer.payload.schools) {
+    const was = then.get(nameIn(s.school, newer.season, older.season)) ?? null;
+    const onNewer = s.class === newer.clazz;
+    const onOlder = was?.class === older.clazz;
+    if (!onNewer && !onOlder) continue;
+    if (was) seen.add(was.school);
+    const row = { school: s.school, slug: s.slug, season: newer.season, class: s.class, region: s.region, successorOf: s.successor_of ?? null,
+      older: was && { class: was.class, region: was.region }, newer: { class: s.class, region: s.region } };
+    if (onNewer && !onOlder) groups.in.push(row);
+    else if (!onNewer) groups.out.push(row);
+    else (was.region === s.region ? groups.same : groups.moved).push(row);
+  }
+  for (const s of older.payload.schools) {
+    if (s.class !== older.clazz || seen.has(s.school)) continue;
+    const successor = newer.payload.schools.find((n) => n.successor_of === s.school) ?? null;
+    groups.out.push({ school: s.school, slug: s.slug, season: older.season, class: s.class, region: s.region,
+      older: { class: s.class, region: s.region }, newer: null, successor: successor?.school ?? null });
+  }
+  for (const list of Object.values(groups)) list.sort((x, y) => byName(x.school, y.school));
+  return { older, newer, groups };
+}
+
+/** The list under the two maps: what changed between them, each school picking it on both maps. */
+export function compareChangesHtml(changes, teams = {}) {
+  if (!changes) return `<p class="focus-note muted">Both maps show the same season, so nothing changed between them.</p>`;
+  const { older, newer, groups } = changes;
+  const map = (side) => `${side.label} ${side.clazz}A`;
+  const sameClass = older.clazz === newer.clazz;
+  // "Moved up from", "Moved down to": a move between classes says which way; one within a class doesn't.
+  const way = (from, to) => (from.class === to.class ? "Moved" : to.class > from.class ? "Moved up" : "Moved down");
+  const detail = {
+    in: (r) => (r.older ? `${way(r.older, r.newer)} from ${placeIn(r.older, older.label)}`
+      : r.successorOf ? `New school, on ${r.successorOf}’s campus` : `Not in a region in ${older.label}`),
+    out: (r) => (r.newer ? `${way(r.older, r.newer)} to ${placeIn(r.newer, newer.label)}`
+      : r.successor ? `Now part of ${r.successor}` : `Not in a region in ${newer.label}`),
+    moved: (r) => `${place(r.older)} → ${place(r.newer)}`,
+    same: (r) => place(r.newer),
+  };
+  const titles = sameClass
+    ? { in: `Moved into ${newer.clazz}A`, out: `Moved out of ${older.clazz}A`, moved: "Changed region", same: "Same region" }
+    : { in: `On the ${map(newer)} map only`, out: `On the ${map(older)} map only`, moved: "On both, in another region", same: "On both, in the same region" };
+  const row = (key) => (r) => `<li><a class="compare-changes__row" href="?team=${esc(r.slug)}" data-team="${esc(r.slug)}" data-school="${esc(r.school)}" data-season="${esc(r.season)}">`
+    + `${teamMark(r.school, teams[r.school])}<span class="compare-changes__team">${esc(r.school)}</span>`
+    + `<span class="compare-changes__detail">${esc(detail[key](r))}</span></a></li>`;
+  const group = (key) => {
+    const list = groups[key];
+    if (!list.length) return "";
+    const body = `<ul>${list.map(row(key)).join("")}</ul>`;
+    const head = `${esc(titles[key])} <span class="compare-changes__count">${list.length}</span>`;
+    // The schools that stayed put are the least news: folded away.
+    return key === "same"
+      ? `<details class="compare-changes__group"><summary><h3>${head}</h3></summary>${body}</details>`
+      : `<section class="compare-changes__group"><h3>${head}</h3>${body}</section>`;
+  };
+  const counts = ["in", "out", "moved"].reduce((n, k) => n + groups[k].length, 0);
+  return `<h2 class="compare-changes__title">What changed from ${esc(map(older))} to ${esc(map(newer))}</h2>`
+    + (counts ? "" : `<p class="focus-note muted">No school moved: every one is in the same region on both maps.</p>`)
+    + `<div class="compare-changes__groups">${["in", "out", "moved", "same"].map(group).join("")}</div>`;
+}
+
+/**
+ * Where the team picked on one map is on the other, when it isn't on it: "Bay isn't on this map: in
+ * Region 8-4A in 2027 and 2028." *school* is its row in this map's season (or null: no school by that
+ * name then).
+ */
+export function notOnMapHtml(name, school, label) {
+  return `<p class="picked__facts"><strong>${esc(name)}</strong> isn’t on this map: `
+    + `${esc(school ? `${placeIn(school, label)}` : `not in a region in ${label}`)}.</p>`;
+}
+
+/**
+ * One side of Compare: its season and class pickers over its map. *side* is "a" (the page's class and
+ * season) or "b" (?vs=, ?vsclass=); *name* says which it is on screen ("Map 1").
+ */
+export function compareSide(side, base, option, payload, clazz, index, name) {
+  const seasons = index.options.map((o) => `<option value="${esc(o.season)}"${o.season === option.season ? " selected" : ""}>${esc(o.label)}</option>`).join("");
+  const classes = [1, 2, 3, 4, 5, 6, 7].map((c) => `<option value="${c}"${c === clazz ? " selected" : ""}>${c}A</option>`).join("");
+  return `<section class="compare__side" data-side="${side}" aria-label="${name}">`
+    + `<div class="compare__pickers">`
+    + `<label><span class="visually-hidden">${name}: seasons</span><select class="select-box" data-control="compare-season" data-side="${side}">${seasons}</select></label>`
+    + `<label><span class="visually-hidden">${name}: class</span><select class="select-box" data-control="compare-class" data-side="${side}">${classes}</select></label>`
+    + `</div>${mapFigure(base, payload, clazz, { full: false })}</section>`;
+}
+
+/**
+ * The Compare view: the page's heading, its views and controls, two maps side by side (each with its
+ * own season and class), and what changed between them. *a* and *b* are { option, payload, clazz }.
+ */
+export function comparePage(clazz, base, a, b, index, { controls = "", share = "", teams = {}, views = "" } = {}) {
+  const changes = compareChanges(
+    { label: a.option.label, season: a.option.season, clazz: a.clazz, payload: a.payload },
+    { label: b.option.label, season: b.option.season, clazz: b.clazz, payload: b.payload },
+  );
+  // In time order, the older map first (on the left, or on top on a phone), whichever is the page's.
+  const [first, second] = b.option.season < a.option.season ? [{ ...b, key: "b" }, { ...a, key: "a" }] : [{ ...a, key: "a" }, { ...b, key: "b" }];
+  return `<div class="page regions-page regions-page--compare"><header class="entry-head">`
+    + `${breadcrumbs(regionsTrail(clazz))}<div class="title-row"><h1 class="title">${esc(regionsTitle(clazz))}</h1>${share}</div>`
+    + `<p class="regions-sub">${esc(`${first.option.label} ${first.clazz}A vs. ${second.option.label} ${second.clazz}A`)}</p>`
+    + `${views}${controls}<p class="focus-note muted regions-note">Pick a team on either map, or in the list under them, to see where it is on both.</p></header>`
+    + `<div class="compare">${[first, second].map((x, i) => compareSide(x.key, base, x.option, x.payload, x.clazz, index, `Map ${i + 1}`)).join("")}</div>`
+    + `<section class="compare-changes" aria-label="What changed">${compareChangesHtml(changes, teams)}</section></div>`;
 }
 
 // The map's buttons, under it so they never cover a school: zoom in and out and back to the whole state
@@ -240,7 +399,7 @@ export function hoverSpot(x, y, r, tip, frame, gap = 6) {
  * team picked (from the map, the list, the team under the map or the page's link) highlighted with
  * its region and zoomed to. onPick(slug or null) tells the page, to keep the address in step.
  */
-export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {}, onFull = () => {} } = {}) {
+export function wireRegionsMap(root, base, payload, clazz, { picked = null, teams = {}, onPick = () => {}, onMove = () => {}, onFull = () => {}, elsewhere = null } = {}) {
   const frame = root.querySelector("[data-map]");
   const svg = frame?.querySelector("svg");
   if (!svg) return null;
@@ -322,8 +481,10 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
       else a.removeAttribute("aria-current");
     }
     if (caption) {
-      caption.innerHTML = school ? pickedHtml(school, payload, teams) : "";
-      caption.hidden = !school;
+      // A team not on this map (Compare: picked on the other one) says where it is instead.
+      const html = school ? pickedHtml(school, payload, teams) : slug && elsewhere ? elsewhere(slug) : "";
+      caption.innerHTML = html;
+      caption.hidden = !html;
       if (school && reveal) show(caption);
     }
     if (status) status.textContent = school ? `${school.school}: ${place(school)}` : "";
@@ -479,11 +640,15 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     figure?.style.setProperty("--map-bars", `${Math.round(bars)}px`);
   };
   measureBars();
-  addEventListener("resize", () => {
+  // Until the map leaves the page (another page, class or season draws a new one): then it lets go, so
+  // maps already gone don't redraw on every resize.
+  const onResize = () => {
+    if (!svg.isConnected) return removeEventListener("resize", onResize);
     measureBars();
     if (figure?.classList.contains("is-full")) fitUnderBars();
     apply();
-  });
+  };
+  addEventListener("resize", onResize);
   apply();
   if (picked) pick(picked, { reveal: false }); // the page's link: the page opens at its top
   return { pick };

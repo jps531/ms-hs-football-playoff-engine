@@ -81,4 +81,13 @@ test("regions pages: /maps/regions/{class}, its season left out when it's the pa
   assert.equal(buildPath({ ...r, season: 2027 }, opts), "/maps/regions/5a?team=greenwood");
   // 2026 is the current season, but not the Regions page's default: it stays in the address.
   assert.equal(buildPath({ ...r, season: 2026, team: null }, opts), "/maps/regions/5a?season=2026");
+  // Compare: the second map's season and class, its class only when it isn't the first's.
+  const c = parseLocation("/maps/regions/5a/compare", "?vs=2025&vsclass=4a&team=greenwood");
+  assert.deepEqual([c.page, c.clazz, c.view, c.vs, c.vsClass], ["regions", 5, "compare", 2025, 4]);
+  assert.equal(buildPath(c, opts), "/maps/regions/5a/compare?vs=2025&vsclass=4a&team=greenwood");
+  assert.equal(buildPath({ ...c, vs: null, vsClass: 5, team: null }, opts), "/maps/regions/5a/compare");
+  assert.equal(parseLocation("/maps/regions/5a", "").view, "map");
+  assert.equal(parseLocation("/maps/regions/5a/timeline", "").page, "notfound");
+  // Compare's fields stay off other pages' addresses.
+  assert.equal(buildPath({ ...c, page: "class", region: null, team: null }, opts), "/standings/5a");
 });

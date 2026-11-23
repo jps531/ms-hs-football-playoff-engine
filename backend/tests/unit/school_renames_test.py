@@ -83,6 +83,15 @@ def test_old_team_links_are_mapped_for_every_rename():
     assert slugs == {slugify(old): new for old, new, _ in [*SCHOOL_RENAMES, *SCHOOL_SUCCESSORS]}
 
 
+def test_the_maps_compare_knows_every_rename():
+    """regions.js SCHOOL_RENAMES finds a renamed school across seasons on the Compare view; it must be
+    data_helpers' list."""
+    regions = (ROOT / "nginx" / "html" / "static" / "js" / "regions.js").read_text()
+    block = re.search(r"SCHOOL_RENAMES = \[(.*?)\];", regions, re.S).group(1)
+    found = [(old, new, int(first)) for old, new, first in re.findall(r'\["([^"]+)", "([^"]+)", (\d{4})\]', block)]
+    assert found == [tuple(r) for r in SCHOOL_RENAMES]
+
+
 def test_a_successor_starts_from_its_old_schools_rating_but_keeps_its_own_name_in_the_sources():
     """North Tippah (Falkner and Walnut, on Walnut's campus) starts 2027 from Walnut's rating; unlike a
     rename, AHSFHS is asked for North Tippah, and Walnut's name stays Walnut."""

@@ -168,7 +168,7 @@ def test_only_real_pages_get_the_app_and_everything_else_404s():
     """Page routes are validated in nginx; other addresses get the 404 page, not the API's JSON or a 200 shell."""
     route = re.search(r"location ~ (\S+) \{\n\s+root /usr/share/nginx/html;\n\s+ssi on;", NGINX).group(1)
     pattern = re.compile(route.strip("^$").join("^$"))
-    for path in ("/standings/3a", "/standings/3a/", "/standings/3a/6", "/brackets/7a", "/maps/regions/5a", "/maps/regions/5a/"):
+    for path in ("/standings/3a", "/standings/3a/", "/standings/3a/6", "/brackets/7a", "/maps/regions/5a", "/maps/regions/5a/", "/maps/regions/5a/compare"):
         assert pattern.match(path), path
     bad = (
         "/standings/9a",
@@ -178,6 +178,7 @@ def test_only_real_pages_get_the_app_and_everything_else_404s():
         "/brackets/7a/1",
         "/maps/regions/8a",
         "/maps/regions/5a/2",
+        "/maps/regions/5a/timeline",
         "/regions/5a",  # its first address: redirected (below), not served
     )
     for path in bad:
@@ -302,6 +303,7 @@ def test_a_regions_page_gets_its_own_preview_and_content():
     assert look("share_page", "/maps/regions/5a") == "regions-5"
     assert look("share_page", "/maps/regions/5a?team=greenwood") == "regions-5"
     assert look("share_page", "/maps/regions/5a?season=2025") == "none"
+    assert look("share_page", "/maps/regions/5a/compare?vs=2025") == "none"  # two maps: the generic tags
     assert look("share_body", "/maps/regions/7a") == "regions-7"
     assert look("share_body", "/maps/regions/7a?season=2025") == "none"
     assert "location ^~ /static/regions/" in NGINX
