@@ -129,3 +129,18 @@ def test_a_successor_starts_from_its_old_schools_rating_but_keeps_its_own_name_i
     assert "North Tippah" not in with_predecessor_ratings({"Walnut": 1100.0}, 2026)
     assert source_name_for_season("North Tippah", 2027) == "North Tippah"
     assert school_name_for_season("Walnut", 2027) == "Walnut"
+
+
+def test_a_schools_names_in_another_season():
+    """names_in follows a school across a rename and a consolidation, either way (regions.js namesIn)."""
+    from backend.helpers.data_helpers import name_in, names_in
+
+    assert name_in("Leake Central", 2025, 2026) == "Leake"
+    assert name_in("Leake", 2026, 2025) == "Leake Central"
+    assert name_in("Leake", 2027, 2026) == "Leake"
+    assert names_in("Leake", 2026, 2025) == ["Leake Central", "Leake County"]
+    assert names_in("North Tippah", 2027, 2026) == ["Walnut", "Falkner"]
+    assert names_in("Falkner", 2026, 2027) == ["North Tippah"]
+    assert names_in("Walnut", 2026, 2028) == ["North Tippah"]
+    assert names_in("Walnut", 2026, 2025) == ["Walnut"]
+    assert names_in("Greenwood", 2027, 1990) == ["Greenwood"]

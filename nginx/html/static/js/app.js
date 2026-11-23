@@ -2630,8 +2630,9 @@ app.addEventListener("click", (e) => {
       track("team_share_opened", { class: regionShare.clazz, region: regionShare.region, team: shareOpen.dataset.team });
       teamShareSpec(shareOpen.dataset.team).then(openShare);
     } else if (shareOpen.dataset.shareOpen === "map" && regionsState) {
-      track("regions_share_opened", { class: regionsState.clazz, team: regionsState.picked?.school ?? null });
-      openShare(regionsShareSpec());
+      const view = route.view === "compare" || route.view === "timeline" ? route.view : null;
+      track("regions_share_opened", { class: regionsState.clazz, team: route.teamName ?? regionsState.picked?.school ?? null, ...(view ? { view } : {}) });
+      openShare(view === "compare" ? compareShareSpec() : view === "timeline" ? timelineShareSpec() : regionsShareSpec());
     } else if (shareOpen.dataset.shareOpen === "region" && regionShare) {
       track("region_share_opened", { class: regionShare.clazz, region: regionShare.region });
       regionShareSpec().then(openShare);
@@ -2814,7 +2815,7 @@ async function renderTimeline(token, index) {
   for (const [i, o] of options.entries()) { // index.options run newest first
     const row = wanted && payloads[i].schools.find((r) => r.slug === wanted);
     if (row) {
-      follow = { name: row.school, season: o.season };
+      follow = { name: row.school, season: o.season, slug: row.slug };
       break;
     }
   }
@@ -2826,6 +2827,7 @@ async function renderTimeline(token, index) {
     clazz: route.clazz, season: newest.option.season, option: newest.option, payload: newest.payload,
     picked: newest.row && newest.row.class === route.clazz ? newest.row : null,
     teamClasses: new Set(seasons.map((x) => x.row?.class).filter(Boolean)),
+    timeline: { follow, span: timelineSpan(seasons) },
   };
   app.innerHTML = timelinePage(route.clazz, base, seasons, {
     controls: `<div class="regions-controls">${regionsFinder("Follow a team")}</div>`,
@@ -2983,7 +2985,7 @@ async function renderCompare(token, index) {
     const row = findable.find((r) => r.school === team.school);
     if (row) pickBoth({ name: row.school, season: row.season }, "search");
   });
-  regionsState.compare = { vs: second.season, vsClass: secondClass, sides: sides.map((x) => ({ season: x.option.season, clazz: x.clazz })), rows: [rowA ?? null, rowB ?? null] };
+  regionsState.compare = { vs: second.season, vsClass: secondClass, sides: sides.map((x) => ({ season: x.option.season, option: x.option, clazz: x.clazz })), rows: [rowA ?? null, rowB ?? null] };
   if (follow) pickBoth(follow, null);
   renderScrubber(route.clazz);
   const [older, newer] = second.season < first.season ? [sides[1], sides[0]] : sides;
@@ -3063,6 +3065,116 @@ function regionsShareSpec() {
     latest: true,
     track: (c, method) => track("regions_image_shared", { class: clazz, season, team: picked?.school ?? null, image: c.image, theme: c.theme, method }),
   };
+}
+
+/**
+ * A Maps view's share sheet, from its images (*kinds*: [{ key, label, file, name, alt }], *file* under
+ * /static/regions/ without "-{theme}.png", *name* the download's name without ".png", *alt* the image's
+ * description), the first one shown unless *initial* says otherwise. *page* is the view's address.
+ */
+function mapsShareSpec({ title, when, kinds, initial, page, view, season }) {
+  const kind = (c) => kinds.find((k) => k.key === c.image) ?? kinds[0];
+  return {
+    title,
+    when,
+    groups: () => [
+      ...(kinds.length > 1 ? [{ label: "Image", key: "image", options: kinds.map(({ key, label }) => ({ key, label })) }] : []),
+      { label: "Theme", key: "theme", options: SHARE_THEMES },
+    ],
+    defaults: { image: initial ?? kinds[0].key, theme: document.documentElement.classList.contains("dark") ? "dark" : "light" },
+    pages: () => 1,
+    path: (c) => `/static/regions/${kind(c).file}-${c.theme}.png`,
+    version: null,
+    name: (c) => `${kind(c).name}.png`,
+    label: (c) => kind(c).alt,
+    wide: () => false,
+    page,
+    latest: true,
+    track: (c, method) => track("regions_image_shared", {
+      class: regionsState.clazz, season, team: route.teamName ?? null, image: c.image, theme: c.theme, method, view,
+    }),
+  };
+}
+
+/**
+ * The Compare view's images: the two maps compared, when they're back to back (the class's, if both
+ * show one class; the followed team's, if it was in a region in both), and each map's own (its class,
+ * and the followed team's region on it). Any other pair isn't drawn together: each map's image goes
+ * with the page's link.
+ */
+function compareShareSpec() {
+  const { sides, rows } = regionsState.compare;
+  const [older, newer] = sides[0].season < sides[1].season ? [sides[0], sides[1]] : [sides[1], sides[0]];
+  const newerRow = rows[sides.indexOf(newer)];
+  const prior = newer.season - 1;
+  const backToBack = older !== newer && older.option.seasons.includes(prior);
+  const kinds = [];
+  if (backToBack && newerRow?.before) {
+    kinds.push({
+      key: "compare", label: `${newerRow.school}, ${prior} vs. ${newer.option.label}`,
+      file: `${newer.season}/compare/${newerRow.slug}`, name: `${newerRow.slug}-regions-${prior}-vs-${newer.season}`,
+      alt: `${newerRow.school}: ${prior} region vs. ${newer.season} region`,
+    });
+  }
+  if (backToBack && older.clazz === newer.clazz) {
+    kinds.push({
+      key: "class-compare", label: `${newer.clazz}A, ${prior} vs. ${newer.option.label}`,
+      file: `${newer.season}/compare/${newer.clazz}a`, name: `class-${newer.clazz}a-regions-${prior}-vs-${newer.season}`,
+      alt: `Class ${newer.clazz}A regions, ${prior} vs. ${newer.option.label}`,
+    });
+  }
+  for (const [i, side] of sides.entries()) {
+    const key = i === 0 ? "a" : "b";
+    const row = rows[i];
+    if (row && row.class === side.clazz) {
+      kinds.push({
+        key: `team-${key}`, label: `${row.school}, ${side.option.label}`,
+        file: `${side.season}/team/${row.slug}`, name: `${row.slug}-regions-${side.season}`,
+        alt: `${row.school}: ${regionPlace(row)}, ${side.option.label}`,
+      });
+    }
+    kinds.push({
+      key: `class-${key}`, label: `${side.clazz}A, ${side.option.label}`,
+      file: `${side.season}/${side.clazz}a`, name: `class-${side.clazz}a-regions-${side.season}`,
+      alt: `Class ${side.clazz}A regions, ${side.option.label}`,
+    });
+  }
+  const unique = kinds.filter((k, i) => kinds.findIndex((o) => o.file === k.file) === i);
+  const team = route.teamName ? unique.find((k) => ["compare", "team-a", "team-b"].includes(k.key)) : null;
+  return mapsShareSpec({
+    title: "Share this comparison",
+    when: `${older.option.label} vs. ${newer.option.label}`,
+    kinds: unique,
+    initial: team?.key ?? null,
+    page: `${location.origin}${location.pathname}${location.search}`,
+    view: "compare",
+    season: newer.season,
+  });
+}
+
+/** The Timeline view's images: the page's class over every season, and the followed team's. */
+function timelineShareSpec() {
+  const { clazz } = regionsState;
+  const { follow, span } = regionsState.timeline;
+  const kinds = [];
+  if (follow) {
+    kinds.push({
+      key: "team-timeline", label: follow.name, file: `timeline/team/${follow.slug}`,
+      name: `${follow.slug}-regions-timeline`, alt: `${follow.name}’s regions, ${span}`,
+    });
+  }
+  kinds.push({
+    key: "class-timeline", label: `Class ${clazz}A`, file: `timeline/${clazz}a`,
+    name: `class-${clazz}a-regions-timeline`, alt: `Class ${clazz}A regions, ${span}`,
+  });
+  return mapsShareSpec({
+    title: follow ? `Share ${follow.name}’s timeline` : `Share Class ${clazz}A’s timeline`,
+    when: span,
+    kinds,
+    page: `${location.origin}${location.pathname}${location.search}`,
+    view: "timeline",
+    season: null,
+  });
 }
 
 // ------------------------------------------------------------- feedback

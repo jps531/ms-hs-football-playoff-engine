@@ -1947,7 +1947,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   display: grid; grid-auto-flow: column; grid-auto-columns: minmax(300px, 1fr); gap: 24px; align-items: start;
   overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; padding-bottom: 8px;
 }
-.timeline__season { scroll-snap-align: end; }
+/* Each season holds its absolutely placed parts (the screen readers' status line): placed against the
+   page, past the row's scroll they'd widen the page sideways once the seasons outrun the row. */
+.timeline__season { position: relative; scroll-snap-align: end; }
 .timeline .regions-map { position: static; }
 .timeline__label { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 0 0 8px; font-family: var(--font-display); font-size: 1.15rem; }
 .timeline__class { color: var(--text-secondary); font-size: 0.95rem; }
