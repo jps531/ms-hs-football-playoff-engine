@@ -1773,12 +1773,16 @@ def _bracket_preview(featured: dict) -> str:
 
 def _map_preview(href: str, image: str, label: str, spoken: str, kind: str = "", size=(1080, 1350)) -> str:
     """One of the Maps pages' images to share (*image*: its path without "-light.png", light or dark with
-    the page, *size* its size at 1x), as one link to the page (*href*) under the words *label*."""
+    the page, *size* its size at 1x), as one link to the page (*href*) under the words *label*. A
+    county's ("county") shows its header, then its middle (where the county and its list are), as two
+    pieces of the one image."""
     images = "".join(
         f'<img class="landing-regions__map landing-regions__map--{theme}" src="{image}-{theme}.png" '
         f'width="{size[0]}" height="{size[1]}" loading="lazy" alt="">'
         for theme in ("light", "dark")
     )
+    if kind == "county":
+        images = f'<span class="landing-preview__head">{images}</span><span class="landing-preview__middle">{images}</span>'
     return (
         f'<a class="landing-preview landing-preview--regions{f" landing-preview--{kind}" if kind else ""}" href="{href}" '
         f'aria-label="{_e(spoken)}">'

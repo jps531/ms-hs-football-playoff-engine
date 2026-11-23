@@ -1349,3 +1349,7 @@ def test_the_front_pages_maps_section_shows_each_view():
     assert 'href="/maps/counties/jefferson-davis"' in body
     assert "/static/regions/2027/county/jefferson-davis-light.png" in body
     assert ">Open Jefferson Davis County</span>" in body
+    # The county's image as its header over its middle: two pieces of the one image.
+    county = body[body.index('href="/maps/counties/jefferson-davis"') :]
+    assert county.index('class="landing-preview__head"') < county.index('class="landing-preview__middle"')
+    assert county.count("/static/regions/2027/county/jefferson-davis-light.png") == 2
