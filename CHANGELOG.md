@@ -12,8 +12,13 @@ MINOR for a new feature or a change in how the numbers are worked out, PATCH for
   and each map's own; its Timeline, every season on one image. The statewide page shares every
   county shaded by its MHSAA schools. Each image has the county's outline as its mark.
 - Links to the Counties pages show their own previews: the county's map, or every county shaded.
-- When two of a county's regions share a number, the second now takes a color clearly unlike the
-  first (Harrison's 8-4A and 8-3A were red and orange; now red and green).
+- **A county's map puts class first.** Each of its schools is marked with its region and class (3-6A),
+  in its class's color (7A blue, 6A green, 5A orange, 4A purple, 3A yellow, 2A pink, 1A red), lighter
+  or darker for its different regions. Every school in the county is named; schools elsewhere in its
+  regions are no longer drawn (the regions' shapes still are, lighter, a picked school's in full).
+  Marks that would overlap are spread apart, a line back to each school's spot, until you zoom in;
+  picking a school keeps the map on the county. The list and the season-by-season table show the
+  same marks.
 
 ## 1.26.0
 

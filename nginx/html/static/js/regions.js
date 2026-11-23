@@ -1068,6 +1068,11 @@ export function countyShades(schools) {
   return out;
 }
 
+/** countyShades as a plain object (for the parity test against region_pages.county_shades). */
+export function countyShadesObject(schools) {
+  return Object.fromEntries(countyShades(schools));
+}
+
 /** A school's place as a pill in its shade: "3-6A". */
 export function countyPill(school, shade) {
   return `<span class="county-pill" style="background:${shade.fill};color:${shade.ink}" aria-hidden="true">${school.region}-${school.class}A</span>`;
@@ -1184,7 +1189,7 @@ export function countyPage(county, base, payload, { controls = "", share = "", t
   }
   const layer = countyLayer(payload, county);
   return `<div class="page regions-page county-page">${head}`
-    + `<p class="focus-note muted regions-note">Each school's dot is in its region's color, numbered by its region; its region's other schools are the smaller dots. Pick one to see its region.</p></header>`
+    + `<p class="focus-note muted regions-note">Each school is marked with its region and class (3-6A), in its class's color: lighter and darker for its regions. Pick one to see its region.</p></header>`
     + `<div class="regions-layout">${mapFigure(base, payload, null, { layer })}`
     + `<div class="regions-side"><div class="regions-list county-list">${countyLists(county, payload, teams)}</div></div></div></div>`;
 }
@@ -1388,7 +1393,7 @@ export function countyTimelinePage(county, base, seasons, { controls = "", share
   const span = timelineSpan(seasons);
   return `<div class="page regions-page regions-page--timeline county-page"><header class="entry-head">`
     + countyViewHeader(county, base, span, share)
-    + `${views}${controls}<p class="focus-note muted regions-note">Each map is ${esc(countyTitle(county))} that season: its schools in their regions' colors. Pick a school to see its region.</p></header>`
+    + `${views}${controls}<p class="focus-note muted regions-note">Each map is ${esc(countyTitle(county))} that season: each school marked with its region and class, in its class's color. Pick a school to see its region.</p></header>`
     + `<div class="timeline">${seasons.map((s, i) => {
       const n = s.payload.schools.filter((r) => r.county === county).length;
       const map = n ? mapFigure(base, s.payload, null, { full: false, layer: countyLayer(s.payload, county) })

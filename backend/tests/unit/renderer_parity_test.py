@@ -388,6 +388,8 @@ CASES = [
      _call("regions", "countiesList", COUNTY_BASE, {"Hinds": 4, "Rankin": 1}), "html"),
     *[(f"countyLists {c}", rp.county_lists(c, COUNTY, COUNTY_TEAMS), _call("regions", "countyLists", c, COUNTY, COUNTY_TEAMS), "html")
       for c in ("Hinds", "Rankin", "Issaquena")],
+    *[(f"countyShades {n}", dict(rp.county_shades(COUNTY["schools"][:n])), _call("regions", "countyShadesObject", COUNTY["schools"][:n]), "data")
+      for n in (1, 2, 4, 5)],
     ("countyPlaces", [{**p, "clazz": p["clazz"]} for p in rp.county_places(COUNTY["schools"][:4])],
      _call("regions", "countyPlaces", COUNTY["schools"][:4]), "data"),
     *[(f"countiesPath {c}", rp.counties_path(c), _call("regions", "countiesPath", c), "data") for c in ("Jefferson Davis", "DeSoto", None)],

@@ -192,12 +192,14 @@ class _Page:
         label_size: int = 34,
         line: int = 3,
         outlines: list[tuple[object, str, int]] = (),
+        fill_alpha: int = 0x38,
     ) -> None:
         """The state, its counties and the region shapes (*fills*: [(geometry, color)]), then the *dots*
         ([(x, y, color, text, radius)] in state-grid meters), then *labels* ([(text, dot index)]). A dot
         pushed off its spot to stay readable gets a hairline back to a small mark at the true spot. *line* is
         the regions' edge width (the counties' a pixel less, the state's two more), thinner on small maps;
-        *outlines* ([(geometry, color, width)]) are drawn over the state's outline, under the dots."""
+        *outlines* ([(geometry, color, width)]) are drawn over the state's outline, under the dots; the
+        region shapes are filled at *fill_alpha* (0-255)."""
         t = self.t
         land = _blend(t.bg, t.text, 0.05)
         for poly in _polygons(region_map.state()):
@@ -222,7 +224,7 @@ class _Page:
             for poly in _polygons(geom):
                 mask = Image.new("L", size, 0)
                 md = ImageDraw.Draw(mask)
-                md.polygon(ring(poly.exterior.coords), fill=0x38)
+                md.polygon(ring(poly.exterior.coords), fill=fill_alpha)
                 for hole in poly.interiors:
                     md.polygon(ring(hole.coords), fill=0)
                 layer = Image.new("RGBA", size, color)

@@ -19,6 +19,8 @@ mix the site's green into the page, as app.css's .county-shade--N. Pure, like th
 
 from __future__ import annotations
 
+import math
+
 from PIL import Image, ImageDraw
 
 from backend.helpers import region_map
@@ -39,10 +41,11 @@ from backend.helpers.region_map_image import (
     seasons_line,
 )
 from backend.helpers.region_pages import (
+    CLASS_HUE,
     count_shade,
     county_changes,
     county_count,
-    county_places,
+    county_shades,
     county_title,
     schools_count,
 )
@@ -102,20 +105,65 @@ def draw_county_mark(page: _Page, county: str, x: float, mid: float, size: int, 
     page.img.paste(small, (round(x), round(mid - size / 2)), small)
 
 
-def _place_colors(theme: str, mine: list[dict]) -> dict[str, str]:
-    """Each of the county's places ("6-3") its color in *theme*."""
-    return {p["key"]: region_color(theme, p["color"]) for p in county_places(mine)}
+def place_shades(theme: str, mine: list[dict]) -> dict[str, tuple[str, str]]:
+    """Each of the county's places' ("6-3") pill color and text color in *theme*: its class's hue, lighter
+    or darker by region, mixed as the page mixes them (``region_pages.county_shades``)."""
+    out = {}
+    for key, shade in county_shades(mine).items():
+        clazz = int(key.split("-")[0])
+        hue = region_color(theme, CLASS_HUE[clazz])
+        tone = shade["tone"]
+        if tone < 0.5:
+            color = _blend("#FFFFFF", hue, math.floor(55 + 90 * tone + 0.5) / 100)
+        elif tone > 0.5:
+            color = _blend("#000000", hue, math.floor(100 - 60 * (tone - 0.5) + 0.5) / 100)
+        else:
+            color = hue
+        out[key] = (color, shade["ink"])
+    return out
+
+
+def _spread_pills(pills: list[dict], h: float, gap: float) -> None:
+    """Push overlapping pills ({x, y, w, at}) apart, in place, as the page does: along the way that takes
+    less, never more than three pills' height from their spots."""
+    for _ in range(80):
+        moved = False
+        for i in range(len(pills)):
+            for j in range(i + 1, len(pills)):
+                a, b = pills[i], pills[j]
+                dx, dy = b["at"][0] - a["at"][0], b["at"][1] - a["at"][1]
+                ox = (a["w"] + b["w"]) / 2 + gap - abs(dx)
+                oy = h + gap - abs(dy)
+                if ox <= 0 or oy <= 0:
+                    continue
+                moved = True
+                if oy <= ox:
+                    k = 1 if (dy or (j - i)) > 0 else -1
+                    a["at"][1] -= k * oy / 2
+                    b["at"][1] += k * oy / 2
+                else:
+                    k = 1 if dx > 0 else -1
+                    a["at"][0] -= k * ox / 2
+                    b["at"][0] += k * ox / 2
+        for q in pills:
+            dx, dy = q["at"][0] - q["x"], q["at"][1] - q["y"]
+            d = math.hypot(dx, dy)
+            if d > h * 3:
+                q["at"] = [q["x"] + dx / d * h * 3, q["y"] + dy / d * h * 3]
+        if not moved:
+            return
 
 
 def county_map(
-    theme: str, county: str, schools: list[dict], size: tuple[int, int], label_size: int, big: float, small: float
+    theme: str, county: str, schools: list[dict], size: tuple[int, int], label_size: int, pill_size: int
 ) -> Image.Image:
-    """The county's map, *size* pixels: zoomed to it, its schools' regions (their shapes from *schools*,
-    every school in those classes), their schools as dots (the county's numbered and named, the others
-    smaller), and the county outlined."""
+    """The county's map, *size* pixels, zoomed to it: its schools' regions, light (their shapes from
+    *schools*, every school in those classes), the county outlined, and each of its schools a pill
+    ("3-6A", *pill_size* px type) in its place's shade, pushed apart where they'd overlap (a line back to
+    each one's spot), and named (*label_size*; 0, no names). Schools elsewhere aren't drawn."""
     page = _Page(theme, {}, size)
     mine = [s for s in schools if s.get("county") == county]
-    colors = _place_colors(theme, mine)
+    shades = place_shades(theme, mine)
 
     def key(s: dict) -> str:
         return f"{s['class']}-{s['region']}"
@@ -124,26 +172,56 @@ def county_map(
     for c in sorted({s["class"] for s in mine}, reverse=True):
         shapes = region_map.region_shapes([s for s in schools if s["class"] == c and s["x"] is not None])
         for g, shape in shapes.items():
-            if f"{c}-{g}" in colors:
-                fills.append((shape, colors[f"{c}-{g}"]))
-    shown = [s for s in schools if key(s) in colors and s["x"] is not None]
-    away = [s for s in shown if s.get("county") != county]
-    own = sorted((s for s in shown if s.get("county") == county), key=lambda s: s["school"].lower())
-    dots = [(s["x"], s["y"], colors[key(s)], "", small) for s in away]
-    dots += [(s["x"], s["y"], colors[key(s)], str(s["region"]), big) for s in own]
-    labels = [(s["school"], len(away) + i) for i, s in enumerate(own)] if label_size else []
+            if f"{c}-{g}" in shades:
+                fills.append((shape, shades[f"{c}-{g}"][0]))
     frame = _Frame((0, 0, *size), bounds=county_bounds(county, size[0] / size[1]))
     line = 3 if size[0] >= 600 else 2
     page.map(
         frame,
         fills,
-        dots,
-        labels,
-        label_size=label_size or 34,
+        [],
+        [],
         line=line,
+        fill_alpha=0x1E,
         outlines=[(region_map.counties()[county], page.t.text, line * 2)],
     )
+    d, t = page.d, page.t
+    own = sorted((s for s in mine if s["x"] is not None), key=lambda s: s["school"].lower())
+    font = _inter(pill_size, 700)
+    h = pill_size * 1.7
+    pills = []
+    for s in own:
+        x, y = frame(s["x"], s["y"])
+        text = f"{s['region']}-{s['class']}A"
+        pills.append({"s": s, "text": text, "x": x, "y": y, "w": d.textlength(text, font=font) + h * 0.8, "at": [x, y]})
+    _spread_pills(pills, h, max(3, pill_size * 0.2))
+    for q in pills:  # the lines back to the spots, under every pill
+        if math.hypot(q["at"][0] - q["x"], q["at"][1] - q["y"]) > h * 0.6:
+            d.line((q["x"], q["y"], *q["at"]), fill=t.text_2, width=max(2, round(pill_size / 12)))
+            m = max(3, pill_size * 0.16)
+            d.ellipse((q["x"] - m, q["y"] - m, q["x"] + m, q["y"] + m), fill=t.text)
+    for q in pills:
+        fill, ink = shades[key(q["s"])]
+        cx, cy = q["at"]
+        d.rounded_rectangle(
+            (cx - q["w"] / 2, cy - h / 2, cx + q["w"] / 2, cy + h / 2), radius=h / 2, fill=fill, outline=t.bg, width=3
+        )
+        d.text((cx, cy + 1), q["text"], font=font, fill=ink, anchor="mm")
+    if label_size:
+        spots = [list(q["at"]) for q in pills]
+        dots = [(0, 0, "", "", max(q["w"], h) / 2) for q in pills]
+        page._labels(frame, spots, dots, [(q["s"]["school"], i) for i, q in enumerate(pills)], label_size)
     return page.img
+
+
+def _pill(page: _Page, x: float, mid: float, text: str, colors: tuple[str, str], size: int = 30) -> float:
+    """A place as a pill ("3-6A") at *x*, *mid* its middle; returns its right edge."""
+    font = _inter(size, 700)
+    h = size * 1.6
+    w = page.d.textlength(text, font=font) + h * 0.7
+    page.d.rounded_rectangle((x, mid - h / 2, x + w, mid + h / 2), radius=h / 2, fill=colors[0])
+    page.d.text((x + w / 2, mid + 1), text, font=font, fill=colors[1], anchor="mm")
+    return x + w
 
 
 def _header(page: _Page, county: str, line: str) -> None:
@@ -161,12 +239,6 @@ def _header(page: _Page, county: str, line: str) -> None:
     d.text((PAD, PAD + 196), line, font=_inter(42, 500), fill=t.text_2, anchor="ls")
 
 
-def _chip(page: _Page, x: float, mid: float, color: str, number: int, size: int = 46) -> None:
-    """A region's number in its color, as the page's region chips."""
-    page.d.ellipse((x, mid - size / 2, x + size, mid + size / 2), fill=color)
-    page.d.text((x + size / 2, mid + 1), str(number), font=_inter(round(size * 0.55), 700), fill="#FFFFFF", anchor="mm")
-
-
 def render_county(county: str, seasons: list[int], schools: list[dict], theme: str) -> list[Image.Image]:
     """*county*'s MHSAA schools in *seasons* (*schools*: every school in the classes its schools are in,
     each {school, class, region, county, x, y}): its mark and name, its map and its schools by class.
@@ -178,32 +250,29 @@ def render_county(county: str, seasons: list[int], schools: list[dict], theme: s
     _header(page, county, f"{county_count(mine)}, {seasons_line(seasons)}")
     top, bottom = PAD + 290, SIZE[1] - PAD - 110
     box = (PAD - 20, top, MAP_RIGHT, bottom)
-    page.img.paste(county_map(theme, county, schools, (box[2] - box[0], box[3] - box[1]), 32, 22, 11), box[:2])
+    page.img.paste(county_map(theme, county, schools, (box[2] - box[0], box[3] - box[1]), 32, 26), box[:2])
     page.d = ImageDraw.Draw(page.img)
     d, t = page.d, page.t
-    colors = _place_colors(theme, mine)
+    shades = place_shades(theme, mine)
     classes = sorted({s["class"] for s in mine}, reverse=True)
-    # Room for every class's heading and every school's two lines; tighter rows when it's a crowd.
-    row = min(104, (bottom - top - 30 - 90 * len(classes)) / len(mine))
+    # Room for every class's heading and every school's two lines; tighter rows when it's a crowd. A
+    # heading sits with its own schools (more room above it than under it).
+    head, before = 64, 44
+    row = min(104, (bottom - top - 30 - (head + before) * len(classes)) / len(mine))
     y = top + 30
-    width = SIZE[0] - PAD - LIST_X - 64
-    for c in classes:
+    width = SIZE[0] - PAD - LIST_X
+    for i, c in enumerate(classes):
+        y += before if i else 0
         page.label(LIST_X, y + 34, f"Class {c}A")
-        y += 90
+        y += head
         for s in sorted((s for s in mine if s["class"] == c), key=lambda s: (s["region"], s["school"].lower())):
-            _chip(page, LIST_X, y + row * 0.32, colors[f"{c}-{s['region']}"], s["region"])
             name = fit(d, s["school"], _inter(40, 600), width)
-            d.text((LIST_X + 64, y + row * 0.32 + 14), name, font=_inter(40, 600), fill=t.text, anchor="ls")
-            where = f"{place(s)}" + (f" · {s['city']}" if s.get("city") else "")
-            d.text(
-                (LIST_X + 64, y + row * 0.32 + 56),
-                fit(d, where, _inter(32, 500), width),
-                font=_inter(32, 500),
-                fill=t.text_2,
-                anchor="ls",
-            )
+            d.text((LIST_X, y + row * 0.32 + 14), name, font=_inter(40, 600), fill=t.text, anchor="ls")
+            right = _pill(page, LIST_X, y + row * 0.32 + 44, f"{s['region']}-{c}A", shades[f"{c}-{s['region']}"], 26)
+            if s.get("city"):
+                town = fit(d, s["city"], _inter(32, 500), width - (right - LIST_X) - 16)
+                d.text((right + 16, y + row * 0.32 + 56), town, font=_inter(32, 500), fill=t.text_2, anchor="ls")
             y += row
-        y += 10
     page.footer()
     return [page.img]
 
@@ -233,7 +302,7 @@ def render_county_compared(county: str, older: dict, newer: dict, theme: str) ->
         d.text((x0, top + 50), side["label"], font=_nippo(60), fill=t.text, anchor="ls")
         d.text((x0, top + 100), schools_count(len(rows)), font=_inter(36, 500), fill=t.text_2, anchor="ls")
         if rows:
-            page.img.paste(county_map(theme, county, side["schools"], (w, map_h), 28, 17, 9), (x0, top + 130))
+            page.img.paste(county_map(theme, county, side["schools"], (w, map_h), 28, 22), (x0, top + 130))
         else:
             d.text((x0, top + 200), "No MHSAA school", font=_inter(36, 500), fill=t.text_2, anchor="ls")
     page.d = ImageDraw.Draw(page.img)
@@ -320,8 +389,8 @@ def render_county_timeline(county: str, cycles: list[dict], theme: str) -> list[
         mine = [s for s in cycle["schools"] if s.get("county") == county]
         size = (round(width), round(map_h))
         if mine:
-            r = max(6.0, width / 34)
-            page.img.paste(county_map(theme, county, cycle["schools"], size, 0, r, r * 0.55), (round(x), round(y)))
+            pill = max(14, round(width / 22))
+            page.img.paste(county_map(theme, county, cycle["schools"], size, 0, pill), (round(x), round(y)))
         else:
             ImageDraw.Draw(page.img).rectangle((x, y, x + width, y + map_h), outline=t.rule, width=2)
         dd = ImageDraw.Draw(page.img)
@@ -405,7 +474,7 @@ def render_county_card(county: str, seasons: list[int], schools: list[dict]) -> 
     d.text((CARD_PAD, CARD_PAD + 440), county_count(mine), font=_inter(58, 600), fill=t.text, anchor="ls")
     d.text((CARD_PAD, CARD_PAD + 520), seasons_line(seasons), font=_inter(50, 500), fill=t.text_2, anchor="ls")
     box = (CARD[0] - CARD_PAD - 760, 70, CARD[0] - CARD_PAD + 20, CARD[1] - 70)
-    page.img.paste(county_map("dark", county, schools, (box[2] - box[0], box[3] - box[1]), 34, 22, 11), box[:2])
+    page.img.paste(county_map("dark", county, schools, (box[2] - box[0], box[3] - box[1]), 32, 26), box[:2])
     page.d = ImageDraw.Draw(page.img)
     page.d.text((CARD_PAD, CARD[1] - CARD_PAD + 16), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="ls")
     return _card(page)
