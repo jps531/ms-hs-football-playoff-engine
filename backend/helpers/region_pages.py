@@ -321,30 +321,87 @@ def county_places(schools: list[dict]) -> list[dict]:
 CLASS_HUE = {7: 1, 6: 3, 5: 2, 4: 7, 3: 4, 2: 5, 1: 8}
 
 
+# A pill's text: dark or white, whichever reads better on its color; the color is taken darker (or
+# lighter) until it reads at INK_CONTRAST (WCAG AA for its small type).
+INK_DARK, INK_LIGHT, INK_CONTRAST = "#1B1B1B", "#FFFFFF", 4.5
+
+
+def _mix(a: str, b: str, t: float) -> str:
+    """Color *a* mixed toward *b* by *t* (0..1), in sRGB as CSS color-mix does, rounded half up."""
+    pa = [int(a[i : i + 2], 16) for i in (1, 3, 5)]
+    pb = [int(b[i : i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{math.floor(x + (y - x) * t + 0.5):02X}" for x, y in zip(pa, pb, strict=True))
+
+
+def _luminance(color: str) -> float:
+    """A color's relative luminance (WCAG)."""
+
+    def channel(v: int) -> float:
+        c = v / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(int(color[i : i + 2], 16)) for i in (1, 3, 5))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(a: str, b: str) -> float:
+    """Two colors' contrast ratio (WCAG), 1 to 21."""
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def shade_in(theme: str, clazz: int, tone: float) -> dict:
+    """A place's pill in *theme*: {fill, ink}. Its class's hue (the theme's), mixed with white (lower tones)
+    or black (higher), then darkened or lightened in steps until its ink reads at INK_CONTRAST."""
+    hue = REGION_COLORS[theme][CLASS_HUE[clazz] - 1]
+    if tone < 0.5:
+        base = _mix("#FFFFFF", hue, math.floor(55 + 90 * tone + 0.5) / 100)
+    elif tone > 0.5:
+        base = _mix("#000000", hue, math.floor(100 - 60 * (tone - 0.5) + 0.5) / 100)
+    else:
+        base = hue
+    ink = INK_DARK if contrast(base, INK_DARK) >= contrast(base, INK_LIGHT) else INK_LIGHT
+    toward = "#FFFFFF" if ink == INK_DARK else "#000000"
+    fill = base
+    for step in range(1, 26):
+        if contrast(fill, ink) >= INK_CONTRAST:
+            break
+        fill = _mix(base, toward, step * 0.04)
+    return {"fill": fill, "ink": ink}
+
+
 def county_shades(schools: list[dict]) -> dict[str, dict]:
     """Each of a county's places' shade (``countyShades``): its class's hue, lighter for its lower-numbered
-    regions there and darker for its higher. {key: {tone, fill (a CSS color), ink}}."""
+    regions there and darker for its higher, each theme's (shade_in). {key: {tone, light: {fill, ink},
+    dark: {fill, ink}, fill, ink}}: *fill* and *ink* as CSS colors that follow the page's theme
+    (light-dark())."""
     out: dict[str, dict] = {}
     places = county_places(schools)
     for c in dict.fromkeys(p["clazz"] for p in places):
         group = sorted((p for p in places if p["clazz"] == c), key=lambda p: p["region"])
         for i, p in enumerate(group):
             tone = 0.5 if len(group) == 1 else i / (len(group) - 1)
-            hue = f"var(--region-{CLASS_HUE[c]})"
-            if tone < 0.5:
-                fill = f"color-mix(in srgb, {hue} {math.floor(55 + 90 * tone + 0.5)}%, #fff)"
-            elif tone > 0.5:
-                fill = f"color-mix(in srgb, {hue} {math.floor(100 - 60 * (tone - 0.5) + 0.5)}%, #000)"
-            else:
-                fill = hue
-            out[p["key"]] = {"tone": tone, "fill": fill, "ink": "#1B1B1B" if tone < 0.34 else "#FFFFFF"}
+            light, dark = shade_in("light", c, tone), shade_in("dark", c, tone)
+            out[p["key"]] = {
+                "tone": tone,
+                "light": light,
+                "dark": dark,
+                "fill": f"light-dark({light['fill']}, {dark['fill']})",
+                "ink": f"light-dark({light['ink']}, {dark['ink']})",
+            }
     return out
+
+
+def paint(prop: str, shade: dict, key: str) -> str:
+    """CSS for *prop* in a shade's *key* ("fill" or "ink"): the light theme's, then the theme-following one
+    (a browser without light-dark() keeps the first)."""
+    return f"{prop}:{shade['light'][key]};{prop}:{shade[key]}"
 
 
 def county_pill(school: dict, shade: dict) -> str:
     """A school's place as a pill in its shade, "3-6A" (``countyPill``)."""
     return (
-        f'<span class="county-pill" style="background:{shade["fill"]};color:{shade["ink"]}" aria-hidden="true">'
+        f'<span class="county-pill" style="{paint("background", shade, "fill")};{paint("color", shade, "ink")}" aria-hidden="true">'
         f"{school['region']}-{school['class']}A</span>"
     )
 

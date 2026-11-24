@@ -37,11 +37,9 @@ from backend.helpers.region_map_image import (
     _Page,
     _polygons,
     place,
-    region_color,
     seasons_line,
 )
 from backend.helpers.region_pages import (
-    CLASS_HUE,
     count_shade,
     county_changes,
     county_count,
@@ -108,19 +106,7 @@ def draw_county_mark(page: _Page, county: str, x: float, mid: float, size: int, 
 def place_shades(theme: str, mine: list[dict]) -> dict[str, tuple[str, str]]:
     """Each of the county's places' ("6-3") pill color and text color in *theme*: its class's hue, lighter
     or darker by region, mixed as the page mixes them (``region_pages.county_shades``)."""
-    out = {}
-    for key, shade in county_shades(mine).items():
-        clazz = int(key.split("-")[0])
-        hue = region_color(theme, CLASS_HUE[clazz])
-        tone = shade["tone"]
-        if tone < 0.5:
-            color = _blend("#FFFFFF", hue, math.floor(55 + 90 * tone + 0.5) / 100)
-        elif tone > 0.5:
-            color = _blend("#000000", hue, math.floor(100 - 60 * (tone - 0.5) + 0.5) / 100)
-        else:
-            color = hue
-        out[key] = (color, shade["ink"])
-    return out
+    return {key: (shade[theme]["fill"], shade[theme]["ink"]) for key, shade in county_shades(mine).items()}
 
 
 def _spread_pills(pills: list[dict], h: float, gap: float) -> None:

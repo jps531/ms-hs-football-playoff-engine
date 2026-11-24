@@ -309,3 +309,20 @@ test("the Timeline's Older and Newer buttons, hidden until the seasons don't all
   const html = regions.timelineSteps();
   assert.match(html, /^<div class="timeline-steps" role="group" aria-label="Seasons" hidden><button type="button" data-step="-1">.*Older<\/button><button type="button" data-step="1">Newer.*<\/button><\/div>$/);
 });
+
+test("county pills read at WCAG AA in both themes: their colors are app.css's, their ink whichever reads better", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../html/static/css/app.css", import.meta.url), "utf8");
+  const found = [...css.matchAll(/--region-(\d): (#[0-9A-F]{6})/gi)].map((m) => m[2].toUpperCase());
+  assert.deepEqual(found, [...regions.REGION_COLORS.light, ...regions.REGION_COLORS.dark]);
+  for (const theme of ["light", "dark"]) {
+    for (const clazz of [1, 2, 3, 4, 5, 6, 7]) {
+      for (const tone of [0, 0.25, 1 / 3, 0.5, 2 / 3, 0.75, 1]) {
+        const { fill, ink } = regions.shadeIn(theme, clazz, tone);
+        assert.ok(regions.contrast(fill, ink) >= 4.5, `${theme} ${clazz}A ${tone}: ${fill} on ${ink}`);
+      }
+    }
+  }
+  const pill = regions.countyPill({ region: 3, class: 7 }, regions.countyShades([{ region: 3, class: 7 }]).get("7-3"));
+  assert.match(pill, /style="background:#[0-9A-F]{6};background:light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\);color:#[0-9A-F]{6};color:light-dark\(/);
+});
