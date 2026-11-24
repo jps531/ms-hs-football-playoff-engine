@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.35.0
+
+The bracket:
+
+- **On a phone, the bracket opens at the round to come:** the earliest round with a game not yet
+  played (its scores not yet in), as of the week chosen. With a team picked, it opens at that team's
+  next game, or its last one if it's out. Before the playoffs, and once the championship is played,
+  it opens at the first round as before.
+- **Each team's record**, overall and in its region ("11–2 (3–1)"), as of the week chosen: the overall
+  record counts its playoff games, the region record doesn't. A game's sheet always shows it; the
+  bracket's cards show it when every one fits (on a phone), and none when any would be cut off.
+- In dark mode, the "AND" and "AND ONE OF" labels on a game's sheet match the sheet behind them.
+
 ## 1.34.2
 
 Bracket fixes:
