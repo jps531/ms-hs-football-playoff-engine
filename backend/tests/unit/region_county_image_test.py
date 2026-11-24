@@ -103,3 +103,17 @@ def test_every_pill_reads_at_wcag_aa(theme):
     mine = [{"school": "A", "class": 7, "region": 3}, {"school": "B", "class": 7, "region": 4}]
     page = rp.county_shades(mine)
     assert rc.place_shades(theme, mine) == {k: (v[theme]["fill"], v[theme]["ink"]) for k, v in page.items()}
+
+
+def test_the_most_lists_every_county_tied_with_the_last_one_shown():
+    """Twelve wanted, but a fifth county with 5 schools is as many as the twelfth, so it's listed too."""
+    counts = {"Hinds": 9, "Rankin": 9, "DeSoto": 8, "Harrison": 8, "Jackson": 8, "Forrest": 6, "Lee": 6}
+    counts |= {"Madison": 6, "Lauderdale": 5, "Lincoln": 5, "Monroe": 5, "Scott": 5, "Washington": 5}
+    counts |= {"Alcorn": 4, "Issaquena": 0}
+    most = rc.most_counties(counts, room=30)
+    assert len(most) == 13
+    assert most[-1] == ("Washington", 5)
+    # With room for only twelve, the tie at 5 is left off whole, not cut through.
+    assert [n for _, n in rc.most_counties(counts, room=12)] == [9, 9, 8, 8, 8, 6, 6, 6]
+    # A county with none is never one of "the most".
+    assert rc.most_counties({"A": 1, "B": 0}) == [("A", 1)]

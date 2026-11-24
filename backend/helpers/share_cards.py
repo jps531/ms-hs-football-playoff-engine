@@ -174,12 +174,13 @@ def description(text: str, limit: int = DESCRIPTION_LIMIT) -> str:
     return f"{cut}…"
 
 
-def meta_tags(title: str, desc: str, image_url: str, page_url: str, extra: str = "") -> str:
+def meta_tags(title: str, desc: str, image_url: str, page_url: str, extra: str = "", *, image_alt: str) -> str:
     """The page's <title>, description, Open Graph and Twitter tags, ready to splice into <head>.
 
-    *extra* is appended as is: the page's structured data (``static_pages.json_ld`` blocks).
+    *image_alt* says what the card image shows, for anyone who can't see it. *extra* is appended as
+    is: the page's structured data (``static_pages.json_ld`` blocks).
     """
-    t, d, img, url = (html.escape(v, quote=True) for v in (title, desc, image_url, page_url))
+    t, d, img, url, alt = (html.escape(v, quote=True) for v in (title, desc, image_url, page_url, image_alt))
     return "\n".join(
         [
             f"<title>{t}</title>",
@@ -192,12 +193,58 @@ def meta_tags(title: str, desc: str, image_url: str, page_url: str, extra: str =
             f'<meta property="og:image" content="{img}">',
             f'<meta property="og:image:width" content="{WIDTH}">',
             f'<meta property="og:image:height" content="{HEIGHT}">',
+            f'<meta property="og:image:alt" content="{alt}">',
             '<meta name="twitter:card" content="summary_large_image">',
+            f'<meta name="twitter:image:alt" content="{alt}">',
             f'<link rel="canonical" href="{url}">',
             *([extra] if extra else []),
             "",
         ]
     )
+
+
+# What each card shows, as its image's alt text (``meta_tags``' *image_alt*).
+
+SITE_CARD_ALT = f"{SITE_NAME}: {SITE_DESCRIPTION}"
+
+
+def class_card_alt(clazz: int) -> str:
+    """The class card (``render_class_card``)."""
+    return (
+        f"Class {clazz}A: the team on top in each region race, with its region record and its chance to win the region."
+    )
+
+
+def region_card_alt(clazz: int, region: int) -> str:
+    """The region card (``render_region_card``)."""
+    return (
+        f"Region {region}-{clazz}A standings, with the teams' region records and their chances of finishing "
+        "first through fourth and of making the playoffs."
+    )
+
+
+def team_card_alt(team: dict, clazz: int, region: int, mode: str) -> str:
+    """A team's card on its region page (``render_team_card``): the round chances only when it shows them."""
+    rounds = ", and its chance of reaching each playoff round" if playoff_path(team, mode, clazz) else ""
+    return (
+        f"{team['school']}, Region {region}-{clazz}A: its records and its chances of each seed and of making "
+        f"the playoffs{rounds}."
+    )
+
+
+def bracket_card_alt(clazz: int, season: int, picture: bool) -> str:
+    """A bracket page's card: the whole bracket in miniature (*picture*), or its favorites' table."""
+    if picture:
+        return f"The {season} Class {clazz}A playoff bracket."
+    return (
+        f"The Class {clazz}A bracket's favorites and their chances of reaching the semifinals and the "
+        "championship game, and of winning it."
+    )
+
+
+def team_bracket_card_alt(team: str, clazz: int) -> str:
+    """A team's card on the bracket page (``render_team_bracket_card``)."""
+    return f"{team}'s road through the Class {clazz}A playoff bracket, round by round."
 
 
 # ----------------------------------------------------------------- drawing
@@ -756,16 +803,30 @@ def _pick(obj: dict, key: str, mode: str) -> float | None:
     return w if mode == "projected" and w is not None else obj.get(key)
 
 
-def team_road(games: list[dict], team: str, mode: str) -> list[dict]:
-    """A team's road through the bracket, one entry per round it can still reach.
+def team_road(games: list[dict], team: str, mode: str, results: dict | None = None) -> list[dict]:
+    """A team's road through the bracket, one entry per round it played or can still reach.
 
     From the bracket matchups payload (``/bracket/matchups``), as the bracket
     page computes it: for each round, the chance the team plays in it (from
     either side of any game), its likeliest opponent there with the chance of
     that exact game and of facing them if the team gets there, and who'd host:
     ``{round, reach, opponent, p_matchup, p_if_there, hosts, p_team_hosts}``
-    where hosts is "team", "opponent", "split" or "neutral".
+    where hosts is "team", "opponent", "split" or "neutral", and ``set`` when that game is sure to be
+    the one (both its teams in it, not yet played). A round the team has played (in
+    *results*, played games by id: ``static_pages.layout_results``) has ``played``: ``{won, opponent,
+    score_for, score_against}`` (the scores None when not on record) in place of the odds.
     """
+    played_in: dict[str, dict] = {}
+    for g in games:
+        r = (results or {}).get(g["id"])
+        if r and team in (r["winner"], r["loser"]):
+            won = r["winner"] == team
+            played_in[g["round"]] = {
+                "won": won,
+                "opponent": r["loser"] if won else r["winner"],
+                "score_for": r["winner_score"] if won else r["loser_score"],
+                "score_against": r["loser_score"] if won else r["winner_score"],
+            }
     by_round: dict[str, dict] = {}
     order: list[str] = []
     for g in games:
@@ -793,6 +854,22 @@ def team_road(games: list[dict], team: str, mode: str) -> list[dict]:
     road = []
     for name in order:
         entry = by_round[name]
+        if name in played_in:
+            road.append(
+                {
+                    "round": name,
+                    "reach": 1.0,
+                    "opponent": played_in[name]["opponent"],
+                    "p_matchup": None,
+                    "p_if_there": None,
+                    "hosts": None,
+                    "p_team_hosts": None,
+                    "played": played_in[name],
+                }
+            )
+            if not played_in[name]["won"]:
+                break  # out: no round after a loss
+            continue
         reach = min(1.0, entry["reach"])
         if reach <= _EPS:
             continue
@@ -804,6 +881,8 @@ def team_road(games: list[dict], team: str, mode: str) -> list[dict]:
             "p_if_there": None,
             "hosts": None,
             "p_team_hosts": None,
+            "played": None,
+            "set": False,
         }
         if entry["opponents"]:
             opponent, row = max(entry["opponents"].items(), key=lambda kv: (kv[1]["p"], kv[0]))
@@ -819,6 +898,8 @@ def team_road(games: list[dict], team: str, mode: str) -> list[dict]:
             step.update(
                 opponent=opponent, p_matchup=row["p"], p_if_there=row["p"] / reach, hosts=hosts, p_team_hosts=p_hosts
             )
+            # Both teams in it and not yet played: the game is set, not likely.
+            step["set"] = reach >= 1 - _EPS and row["p"] >= 1 - _EPS
         road.append(step)
     return road
 
@@ -828,24 +909,64 @@ def team_bracket_title(team: str, clazz: int) -> str:
     return f"{team}’s path in the Class {clazz}A bracket — {SITE_NAME}"
 
 
+def _result_text(step: dict) -> str:
+    """A round played, in a line of them: "W 49–0 vs Amory", "L 26–35 to Kosciusko" (the score, opponent
+    left out when not on record)."""
+    played = step["played"]
+    parts = ["W" if played["won"] else "L"]
+    if played["score_for"] is not None and played["score_against"] is not None:
+        parts.append(f"{played['score_for']}–{played['score_against']}")
+    if played["opponent"]:
+        parts.append(f"{'vs' if played['won'] else 'to'} {played['opponent']}")
+    return " ".join(parts)
+
+
 def team_bracket_description(team: str, road: list[dict], champion: float | None, mode: str) -> str:
     """ "Raleigh's likeliest opponents (Projected): First Round vs Tylertown, Second Round at Hazlehurst, …;
-    4% to win…"."""
+    4% to win…", after the rounds it's played: "Raleigh beat Tylertown 28–14 in the First Round; …"."""
+    results = []
+    out = False
+    for step in road:
+        played = step.get("played")
+        if not played:
+            continue
+        out = out or not played["won"]
+        score = (
+            f" {played['score_for']}–{played['score_against']}"
+            if played["score_for"] is not None and played["score_against"] is not None
+            else ""
+        )
+        if played["opponent"]:
+            results.append(
+                f"{'beat' if played['won'] else 'lost to'} {played['opponent']}{score} in the {step['round']}"
+            )
+        else:
+            results.append(f"{'won' if played['won'] else 'lost'}{score} in the {step['round']}")
+    nxt = None
     stops = []
     for step in road:
-        if step["round"] == "Championship Game" or not step["opponent"]:
+        if step.get("played") or not step["opponent"]:
             continue
         joiner = "at" if step["hosts"] == "opponent" else "vs"
-        stops.append(f"{step['round']} {joiner} {step['opponent']}")
+        if step.get("set"):
+            nxt = f"next game: {step['round']} {joiner} {step['opponent']}"
+        elif step["round"] != "Championship Game":
+            stops.append(f"{step['round']} {joiner} {step['opponent']}")
     label = "Projected" if mode == "projected" else "Toss-up"
-    text = (
-        f"{team}’s likeliest opponents ({label}): {', '.join(stops[:3])}"
-        if stops
-        else f"{team}’s road through the bracket ({label})"
-    )
-    if champion is not None:
-        text += f"; {format_pct(champion)} to win the state championship"
-    return f"{text}."
+    parts = []
+    if results:
+        listed = results[0] if len(results) == 1 else f"{', '.join(results[:-1])} and {results[-1]}"
+        parts.append(f"{team} {listed}")
+    if nxt:
+        parts.append(nxt if results else f"{team}’s {nxt}")
+    if stops:
+        opponents = "likeliest opponent" + ("s" if len(stops) > 1 else "")
+        parts.append(f"{opponents if results or nxt else f'{team}’s {opponents}'} ({label}): {', '.join(stops[:3])}")
+    elif not results and not nxt:
+        parts.append(f"{team}’s road through the bracket ({label})")
+    if champion is not None and not out:
+        parts.append(f"{format_pct(champion)} to win the state championship")
+    return f"{'; '.join(parts)}."
 
 
 def render_bracket_card(
@@ -890,9 +1011,10 @@ def render_bracket_card(
 def render_team_bracket_card(
     clazz: int, region: int | None, team: dict, road: list[dict], stamp: str, mode: str, venue: dict | None = None
 ) -> Image.Image:
-    """A team's road through the bracket: each round's chance, likeliest opponent, and who'd host, or for
-    the championship game where it's played (*venue*, the API's ``/championships`` location, when it's
-    on record)."""
+    """A team's road through the bracket: each round played, its result; each round to come, its chance,
+    likeliest opponent with the chance it's them if the team gets there, and who'd host, or for the
+    championship game where it's played (*venue*, the API's ``/championships`` location, when it's on
+    record)."""
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
     draw = ImageDraw.Draw(img)
     kicker = f"CLASS {clazz}A BRACKET" + (f" · REGION {region}-{clazz}A" if region else "")
@@ -904,7 +1026,7 @@ def render_team_bracket_card(
     status = team_status(team, clazz)
     champion = _bracket_odds(team, "champion", mode) if team.get("bracket_odds") else None
     parts = [(status[1], CLINCHED if status[0] != "eliminated" else TEXT_2)] if status else []
-    if champion is not None and not (status and status[0] == "champion"):
+    if champion is not None and not (status and status[0] in ("champion", "eliminated")):
         parts.append((f"{format_pct(champion)} to win the state championship", TEXT))
     x, y = PAD, PAD + 126
     line_font = _inter(28, 600)
@@ -921,10 +1043,25 @@ def render_team_bracket_card(
     pill_w = 110
     reach_right = PAD + 272 + pill_w  # room for "Championship Game"
     opp_x = reach_right + 36
-    _tracked(draw, (reach_right, top), "CHANCE TO PLAY", small, TEXT_2, 1.6, anchor="rs")
-    _tracked(draw, (opp_x, top), "LIKELIEST OPPONENT", small, TEXT_2, 1.6)
-    _tracked(draw, (right, top), "IF THEY GET THERE", small, TEXT_2, 1.6, anchor="rs")
-    steps = road[:5]
+    # Rounds played show their result; rounds to come, odds. With both, the results go on a line of their
+    # own above the table, so each of its columns holds one kind of number.
+    played = [step for step in road if step.get("played")]
+    future = [step for step in road if not step.get("played")]
+    to_come = bool(future)
+    if played and future:
+        line = " · ".join(_result_text(step) for step in played)
+        draw.text(
+            (PAD, top - 4),
+            fit(draw, line, _inter(22, 500), right - PAD),
+            font=_inter(22, 500),
+            fill=TEXT_2,
+            anchor="ls",
+        )
+        top += 44
+    steps = (future or played)[:5]
+    _tracked(draw, (reach_right, top), "CHANCE TO PLAY" if to_come else "RESULT", small, TEXT_2, 1.6, anchor="rs")
+    _tracked(draw, (opp_x, top), "LIKELIEST OPPONENT" if to_come else "OPPONENT", small, TEXT_2, 1.6)
+    _tracked(draw, (right, top), "CHANCE IT’S THEM" if to_come else "SCORE", small, TEXT_2, 1.6, anchor="rs")
     row_h = min(68, (_TABLE_BOTTOM - (top + 14)) / max(1, len(steps)))
     pill_h = min(44, row_h - 16)
     y = top + 14
@@ -932,7 +1069,40 @@ def render_team_bracket_card(
         draw.line((PAD, y, right, y), fill=RULE, width=1)
         middle = y + row_h / 2
         draw.text((PAD, middle), step["round"], font=_inter(25, 600), fill=TEXT, anchor="lm")
-        _odds_pill(draw, reach_right, middle, step["reach"], pill_w, pill_h, 26)
+        if played := step.get("played"):
+            won = played["won"]
+            draw.text(
+                (reach_right - 12, middle),
+                "W" if won else "L",
+                font=_inter(30, 700),
+                fill=CLINCHED if won else TEXT_2,
+                anchor="rm",
+            )
+            opponent = played["opponent"]
+            if opponent:
+                lead = "Beat" if won else "Lost to"
+                lead_font = _inter(21, 500)
+                draw.text((opp_x, middle), lead, font=lead_font, fill=TEXT_2, anchor="lm")
+                name_x = opp_x + draw.textlength(lead, font=lead_font) + 10
+                opp_font = _inter(26, 600)
+                draw.text(
+                    (name_x, middle),
+                    fit(draw, opponent, opp_font, right - pill_w - 32 - name_x),
+                    font=opp_font,
+                    fill=TEXT,
+                    anchor="lm",
+                )
+            else:
+                draw.text((opp_x, middle), "Won" if won else "Lost", font=_inter(26, 600), fill=TEXT, anchor="lm")
+            if played["score_for"] is not None and played["score_against"] is not None:
+                score = f"{played['score_for']}–{played['score_against']}"
+                draw.text((right - 12, middle), score, font=_inter(26, 600), fill=TEXT, anchor="rm")
+            y += row_h
+            continue
+        if step.get("set"):
+            draw.text((reach_right - 12, middle), "Next", font=_inter(26, 700), fill=TEXT, anchor="rm")
+        else:
+            _odds_pill(draw, reach_right, middle, step["reach"], pill_w, pill_h, 26)
         if step["opponent"]:
             joiner = "at" if step["hosts"] == "opponent" else "vs"
             where = {
@@ -954,7 +1124,8 @@ def render_team_bracket_card(
             opp_name = fit(draw, step["opponent"], opp_font, right - pill_w - 32 - name_x)
             draw.text((name_x, middle - 12), opp_name, font=opp_font, fill=TEXT, anchor="lm")
             draw.text((opp_x, middle + 17), where, font=_inter(19, 500), fill=TEXT_2, anchor="lm")
-            _odds_pill(draw, right, middle, step["p_if_there"], pill_w, pill_h, 26)
+            if not step.get("set"):
+                _odds_pill(draw, right, middle, step["p_if_there"], pill_w, pill_h, 26)
         else:
             # Every pairing here is under the API's 0.5% listing floor.
             draw.text((opp_x, middle - 12), "Many possible opponents", font=_inter(24, 600), fill=TEXT_2, anchor="lm")

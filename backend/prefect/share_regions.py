@@ -80,7 +80,7 @@ from backend.helpers.region_pages import (
     seasons_label,
     team_regions_description,
 )
-from backend.helpers.share_cards import description, meta_tags, slugify
+from backend.helpers.share_cards import SITE_CARD_ALT, description, meta_tags, slugify
 from backend.helpers.static_pages import breadcrumb_ld, json_ld
 
 THEMES = ("light", "dark")
@@ -423,6 +423,7 @@ def write_regions(
                 f"{site_url}/static/og/regions-{clazz}.png{version}",
                 page_url,
                 json_ld(breadcrumb_ld(site_url, regions_trail(clazz))),
+                image_alt=f"A map of Mississippi showing Class {clazz}A's regions for the {seasons_label(payload['seasons'])}.",
             ),
         )
         team_dir = out_dir / "meta" / f"regions-{clazz}"
@@ -436,6 +437,10 @@ def write_regions(
                     description(team_regions_description(school, payload)),
                     f"{site_url}/static/og/regions-{clazz}/{school['slug']}.png{version}",
                     f"{page_url}?team={school['slug']}",
+                    image_alt=(
+                        f"{school['school']}: its region for the {seasons_label(payload['seasons'])}, "
+                        "on a map of Mississippi."
+                    ),
                 ),
             )
         for path in team_dir.glob("*.html"):
@@ -461,6 +466,10 @@ def write_regions(
             f"{site_url}/static/og/counties.png{version}",
             f"{site_url}{counties_path()}",
             json_ld(breadcrumb_ld(site_url, counties_trail())),
+            image_alt=(
+                "A map of Mississippi's counties, each shaded by how many MHSAA schools it has, for the "
+                f"{seasons_label(payload['seasons'])}."
+            ),
         ),
     )
     sitemap.append((counties_path(), None, []))
@@ -477,6 +486,12 @@ def write_regions(
                 f"{site_url}/static/og/counties/{slug}.png{version}" if has[county] else card,
                 f"{site_url}{counties_path(county)}",
                 json_ld(breadcrumb_ld(site_url, counties_trail(county))),
+                image_alt=(
+                    f"A map of {county_title(county)}'s MHSAA schools for the {seasons_label(payload['seasons'])}, "
+                    "each labeled with its region and class."
+                    if has[county]
+                    else SITE_CARD_ALT
+                ),
             ),
         )
         sitemap.append((counties_path(county), None, []))

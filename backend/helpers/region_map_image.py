@@ -373,7 +373,7 @@ def render_class_regions(clazz: int, seasons: list[int], schools: list[dict], th
         return []
     page = _Page(theme, {})
     d, t = page.d, page.t
-    d.text((PAD, PAD + 104), f"{clazz}A Football Regions", font=_nippo(124), fill=t.text, anchor="ls")
+    d.text((PAD, PAD + 104), f"Class {clazz}A Football Regions", font=_nippo(124), fill=t.text, anchor="ls")
     d.text((PAD, PAD + 176), seasons_line(seasons), font=_inter(42, 500), fill=t.text_2, anchor="ls")
     regions = sorted({s["region"] for s in rows})
     top, bottom = PAD + 250, SIZE[1] - PAD - 110
@@ -590,7 +590,7 @@ def render_class_regions_compared(
     then_by = {s["school"]: s for s in prior}
     page = _Page(theme, {})
     d, t = page.d, page.t
-    d.text((PAD, PAD + 104), f"{clazz}A Football Regions", font=_nippo(124), fill=t.text, anchor="ls")
+    d.text((PAD, PAD + 104), f"Class {clazz}A Football Regions", font=_nippo(124), fill=t.text, anchor="ls")
     d.text(
         (PAD, PAD + 184), f"{first - 1} vs. {seasons_words(seasons)}", font=_inter(46, 600), fill=t.text_2, anchor="ls"
     )

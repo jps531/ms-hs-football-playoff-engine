@@ -5,6 +5,21 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.36.1
+
+Share images:
+
+- **A team's bracket card tells the rounds it's played as results** ("W 47–14", "Lost to
+  Kosciusko"), not as odds, and a game whose two teams are set as its next game. With rounds still
+  to come, its last column is now "Chance it's them": the chance that team is the opponent, if it
+  gets there. A team that's out no longer shows a 0% chance to win the state championship. Its
+  link's description tells the same.
+- The "MHSAA Schools by County" image lists every county tied with the last one in "The most", so
+  none with as many schools as one listed is left out.
+- The region map images are titled "Class 4A Football Regions", as their link previews are.
+- Every link preview's image has alt text, saying what it shows.
+- The site's icon is square, and there's one for a phone's home screen.
+
 ## 1.36.0
 
 The About page:
