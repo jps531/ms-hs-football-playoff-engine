@@ -219,7 +219,7 @@ export function timelineSteps() {
 export function mapsViews(view, hrefs) {
   const views = [["map", "Season"], ["compare", "Compare"], ["timeline", "Timeline"]];
   return `<nav class="half-control maps-views" aria-label="View">`
-    + views.map(([key, label]) => `<a class="half-control__item maps-views__item" href="${esc(hrefs[key])}"${key === view ? ' aria-current="page"' : ""}>${label}</a>`).join("")
+    + views.map(([key, label]) => `<a class="half-control__item maps-views__item" href="${esc(hrefs[key])}" data-view="${key}"${key === view ? ' aria-current="page"' : ""}>${label}</a>`).join("")
     + "</nav>";
 }
 
