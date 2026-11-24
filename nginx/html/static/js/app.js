@@ -409,9 +409,14 @@ async function render() {
     if (html !== null) app.innerHTML = html;
     document.body.classList.toggle("is-wide", route.page === "bracket");
     if (route.page === "bracket") {
-      const tree = app.querySelector(".tree");
-      if (tree) tree.scrollLeft = strip;
+      const strip0 = app.querySelector(".tree");
+      if (strip0) strip0.scrollLeft = strip;
       wireBracket();
+      // On a phone, a bracket newly opened (another class, season, week or team) opens at the round to
+      // come (openingColumn); one drawn again for anything else stays where it was.
+      const opened = `${bracketData.season}:${bracketData.clazz}:${bracketData.date}:${bracketData.focus}`;
+      if (opened !== bracketOpened && tree?.narrow) tree.strip.scrollLeft = openingColumn() * tree.step;
+      bracketOpened = opened;
     } else {
       sheet?.close();
     }
@@ -1468,10 +1473,13 @@ async function bracketView(ctx) {
   const projectedAvailable = games.some((g) => g.side_a.occupants.some((o) => o.p_reach_weighted != null));
   const mode = projectedAvailable ? oddsMode(ctx) : "tossup";
 
-  // A locked team's seed, for its "Region 3 #1 Seed" label.
+  // A locked team's seed, for its "Region 3 #1 Seed" label; each team's record as of the snapshot (its
+  // playoff games in the overall record, not the region's).
   const seeds = {};
+  const records = {};
   for (const r of standings?.regions ?? []) {
     for (const t of r.teams) {
+      if (t.record) records[t.school] = t.record;
       // Certain, not merely likely.
       const s = [1, 2, 3, 4].find((k) => isCertain(t.odds?.[`p${k}`]));
       if (s) seeds[t.school] = { region: r.region, seed: s };
@@ -1500,7 +1508,7 @@ async function bracketView(ctx) {
     if (first) bracketUi.half = first.half;
   }
   bracketData = {
-    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, mode, focus: ctx.team, clazz, season, date, currentSeason: ctx.currentSeason,
+    games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, records, mode, focus: ctx.team, clazz, season, date, currentSeason: ctx.currentSeason,
     venue: venues?.[0]?.location ?? null,
     asOf: matchupRes.as_of_date,
     // The images to share are drawn for the newest numbers only (a past season's once, for its end),
@@ -1687,11 +1695,11 @@ function treeRow(game, sideKey, result, gutter) {
     const score = won ? result.winnerScore : result.loserScore;
     // The seed it played as, still worth knowing once the game's played.
     const seed = seedLabel(team);
-    return row(` trow--result${won ? " is-winner" : ""}`, team, team, seed ? esc(seed) : "", score != null ? esc(score) : "");
+    return row(` trow--result${won ? " is-winner" : ""}`, team, team, `${seed ? esc(seed) : ""}${recordTag(team, Boolean(seed))}`, score != null ? esc(score) : "");
   }
   const locked = lockedTeam(side);
   if (locked) {
-    return row(" trow--locked", locked, locked, `${LOCK}<span class="visually-hidden">Locked in: </span>${esc(seedLabel(locked) ?? "Clinched a playoff spot")}`, "");
+    return row(" trow--locked", locked, locked, `${LOCK}<span class="visually-hidden">Locked in: </span>${esc(seedLabel(locked) ?? "Clinched a playoff spot")}${recordTag(locked, true)}`, "");
   }
   if (side.bye) return row(" trow--bye", null, "BYE", "", "");
   const list = occupants(side, mode);
@@ -1707,9 +1715,51 @@ function treeRow(game, sideKey, result, gutter) {
 /** Words for screen readers only. */
 const spoken = (text) => `<span class="visually-hidden">${esc(text)}</span>`;
 
+/** A team's record as of the bracket's snapshot, "10–1 (4–0)" (overall, then region), or null. */
+function recordLabel(team) {
+  const r = bracketData.records?.[team];
+  return r ? `${recordText(r.wins, r.losses, r.ties)} (${recordText(r.region_wins, r.region_losses, r.region_ties)})` : null;
+}
+
+/** A card row's record after its seed (" · 10–1 (4–0)"), hidden when the cards are too narrow for every one (fitRecords). */
+function recordTag(team, after) {
+  const label = recordLabel(team);
+  return label ? `<span class="trow__rec">${after ? " · " : ""}${spoken("Record ")}${esc(label)}</span>` : "";
+}
+
+/**
+ * The cards' records, shown only when every one fits on its line: when any would be cut off, none is
+ * (a half-shown record reads worse than none; the game's sheet always has them).
+ */
+function fitRecords() {
+  if (!tree?.strip.isConnected) return;
+  tree.strip.classList.remove("no-records");
+  const cut = [...tree.strip.querySelectorAll(".trow__sub")].some((el) => el.querySelector(".trow__rec") && el.scrollWidth > el.clientWidth + 1);
+  tree.strip.classList.toggle("no-records", cut);
+}
+
 // ---------------------------------------------------- tree layout + lines
 
 let tree = null; // the rendered tree: elements and measurements
+let bracketOpened = null; // which bracket (season:class:date:team) was last opened, for openingColumn
+
+/**
+ * The round a phone's bracket opens at (its column): a picked team's next game, or its last if it's out;
+ * else the earliest round with a game not yet played (its scores not in yet, as of the snapshot). Before
+ * the playoffs, and once the championship is played, the first round.
+ */
+function openingColumn() {
+  const { cols, results, focus, mode } = bracketData;
+  const games = cols.flatMap((col, r) => col.games.map(({ game }) => ({ r, game, result: results[game.id] ?? null })));
+  if (focus) {
+    const next = games.find(({ game, result }) => !result && !byeSide(game) && (teamInGame(game, focus, mode)?.p ?? 0) > 0);
+    const played = games.filter(({ result }) => result && (result.winner === focus || result.loser === focus));
+    if (next) return next.r;
+    if (played.length) return played[played.length - 1].r;
+  }
+  if (!games.some(({ result }) => result)) return 0;
+  return games.find(({ game, result }) => !result && !byeSide(game))?.r ?? 0;
+}
 let treeFrame = 0;
 
 /** Hook up the tree after it's in the page (and the open game sheet, if any). */
@@ -1731,6 +1781,8 @@ function wireBracket() {
   };
   measureTree();
   layoutTree();
+  fitRecords();
+  document.fonts?.ready.then(fitRecords); // (measured again once the fonts are in: they set the widths)
   strip.addEventListener("scroll", scheduleTree, { passive: true });
   refreshSheet();
 }
@@ -1743,6 +1795,7 @@ window.addEventListener("resize", () => {
   if (!tree?.strip.isConnected) return;
   measureTree();
   layoutTree();
+  fitRecords();
 });
 
 /** Column positions, and on phones room after the final so it can scroll to the front. */
@@ -2313,6 +2366,12 @@ function pickTeam(team) {
 }
 
 /** One side of a game card: a result row, a locked team, or the list of who might fill it. */
+/** A team's record in the game's sheet, on a line of its own. */
+function sheetRecord(team) {
+  const label = recordLabel(team);
+  return label ? `<span class="bteam__fact bteam__record">${spoken("Record ")}${esc(label)}</span>` : "";
+}
+
 function bracketSide(game, sideKey, result, host) {
   const { mode } = bracketData;
   const side = sideKey === "a" ? game.side_a : game.side_b;
@@ -2322,12 +2381,12 @@ function bracketSide(game, sideKey, result, host) {
     const won = team === result.winner;
     const score = won ? result.winnerScore : result.loserScore;
     const seed = seedLabel(team);
-    return `<div class="bteam bteam--result${won ? " is-winner" : ""}">${pickTeam(team)}${score != null ? `<span class="bteam__score">${esc(score)}</span>` : ""}${seed ? `<span class="bteam__fact">${esc(seed)}</span>` : ""}</div>`;
+    return `<div class="bteam bteam--result${won ? " is-winner" : ""}">${pickTeam(team)}${score != null ? `<span class="bteam__score">${esc(score)}</span>` : ""}${seed ? `<span class="bteam__fact">${esc(seed)}</span>` : ""}${sheetRecord(team)}</div>`;
   }
   const locked = lockedTeam(side);
   if (locked) {
     const label = seedLabel(locked);
-    return `<div class="bteam bteam--locked">${pickTeam(locked)}<span class="bteam__fact">${LOCK}<span class="visually-hidden">Locked in: </span>${label ? esc(label) : "Clinched a playoff spot"}</span>${homeTag}</div>`;
+    return `<div class="bteam bteam--locked">${pickTeam(locked)}<span class="bteam__fact">${LOCK}<span class="visually-hidden">Locked in: </span>${label ? esc(label) : "Clinched a playoff spot"}</span>${homeTag}${sheetRecord(locked)}</div>`;
   }
   const list = occupants(side, mode);
   const allKey = `${game.id}:${sideKey}`;

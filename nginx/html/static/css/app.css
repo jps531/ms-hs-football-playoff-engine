@@ -933,10 +933,12 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
   content: ""; position: absolute; top: 0; bottom: 0; left: 50%;
   width: 1px; background: var(--connector);
 }
+/* The labels on the lines ("AND", "AND ONE OF") hide the line behind them in the color of what they sit
+   on: a card's, or (--behind) a sheet's, which is the page's. */
 .and span {
   position: relative; align-self: center;
   padding: 0 4px;
-  background: var(--surface-card);
+  background: var(--behind, var(--surface-card));
   color: var(--text-secondary);
   font-size: 10px; line-height: 12px; font-weight: 600;
 }
@@ -972,7 +974,7 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .oneof__label {
   position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%);
   padding: 1px 10px; border: 1px solid var(--connector); border-radius: 6px;
-  background: var(--surface-card);
+  background: var(--behind, var(--surface-card));
   color: var(--text-secondary);
   font-size: 11px; line-height: 16px; font-weight: 600; white-space: nowrap;
 }
@@ -1108,6 +1110,7 @@ body:has(.bracket-head) :is(.site-header, .scrubber-bar__inner, .context-bar__in
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .trow__sub .lock { width: 11px; height: 11px; margin-right: 3px; vertical-align: -1px; }
+.tree.no-records .trow__rec { display: none; } /* app.js fitRecords: none at all when any would be cut off */
 .trow__value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .trow .odds { min-width: 3.2em; padding: 1px 5px; font-size: 13px; line-height: 18px; }
 .trow--result:not(.is-winner) .trow__name, .trow--result:not(.is-winner) .trow__value { color: var(--text-secondary); font-weight: 500; }
@@ -1164,6 +1167,7 @@ body:has(.bracket-head) :is(.site-header, .scrubber-bar__inner, .context-bar__in
   background: var(--surface-page); color: var(--text-primary);
   border: 1px solid var(--border); border-radius: 14px;
   overflow: hidden;
+  --behind: var(--surface-page);
 }
 .game-sheet[open] { display: flex; flex-direction: column; }
 .game-sheet::backdrop { background: rgb(0 0 0 / 0.45); }
