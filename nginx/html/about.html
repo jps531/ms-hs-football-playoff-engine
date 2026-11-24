@@ -61,8 +61,13 @@
   <main id="content" class="page article">
     <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li aria-current="page">About</li></ol></nav>
     <h1 class="title">About</h1>
+    <div class="article__body">
+    <!-- On this page: beside the text on a wide screen, following along; on a phone, a bar under the
+         header saying which section you're in, opening to the list (about.js). Without JavaScript, the
+         whole list, here. -->
     <nav class="toc" aria-labelledby="toc-title">
-      <h2 class="toc__title" id="toc-title">On this page</h2>
+      <details class="toc__details" open>
+      <summary class="toc__summary"><span class="toc__title" id="toc-title">On this page</span><span class="toc__current" aria-hidden="true"></span><svg class="toc__chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
       <ol class="toc__list">
         <li><a href="#about-the-site">About the site</a></li>
         <li><a href="#how-it-works">How it works</a>
@@ -89,6 +94,8 @@
         <li><a href="#future">What’s next</a></li>
         <li><a href="#author">About the author</a></li>
       </ol>
+      <p class="toc__top"><a href="#content">Back to top</a></p>
+      </details>
     </nav>
 
     <div class="prose">
@@ -558,6 +565,7 @@
           work at <a href="https://mississippigridiron.com">mississippigridiron.com</a>!</li>
       </ul>
     </div>
+    </div>
   </main>
 
   <footer class="site-footer">
@@ -565,7 +573,7 @@
     <p>Seeds aren’t official until the MHSAA announces them. Odds are estimates and are not for wagering.</p>
     <p>Scores from <a href="https://www.ahsfhs.org/mississippi/index.asp">AHSFHS</a>. Updated each morning at 9:00 Central.</p>
     <p>This website is not associated with the MHSAA or any of its member schools.</p>
-    <p>© 2025–2026 Paul Sullivan. All rights reserved. · <a href="https://github.com/jps531/ms-hs-football-playoff-engine/blob/main/CHANGELOG.md">Version 1.35.0</a></p>
+    <p>© 2025–2026 Paul Sullivan. All rights reserved. · <a href="https://github.com/jps531/ms-hs-football-playoff-engine/blob/main/CHANGELOG.md">Version 1.36.0</a></p>
   </footer>
 
   <!-- Phones: Home plus the same four destinations, as a tab bar along the bottom. -->
@@ -579,5 +587,6 @@
 
   <script src="/static/js/theme.js" defer></script>
   <script src="/static/js/nav.js" defer></script>
+  <script src="/static/js/about.js" defer></script>
 </body>
 </html>
