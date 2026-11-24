@@ -1909,7 +1909,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .regions-map.is-full .regions-map__picked { flex: none; max-height: 35vh; overflow-y: auto; }
 /* A dot's tooltip (regions.js hoverHtml): helmet, name and mascot over the region and town, edged in
    the team's color. */
-.regions-map__hover { position: absolute; z-index: 2; pointer-events: none; white-space: nowrap; }
+/* As wide as its words, up to the map's own width (a narrow map, on Compare or the Timeline): then its
+   lines wrap rather than run past the map's edge, where they'd be cut off. */
+.regions-map__hover { position: absolute; z-index: 2; pointer-events: none; width: max-content; max-width: calc(100% - 16px); }
+.regions-map__hover .map-tip__place { flex-wrap: wrap; }
 .map-tip {
   display: grid; gap: 4px; padding: 8px 12px 8px 10px; border-radius: 8px;
   background: var(--surface-card); color: var(--text-primary); border: 1px solid var(--border);
