@@ -5,6 +5,28 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.34.0
+
+Simpler Maps pages:
+
+- **A county's page says what its colors mean:** "in its class's color", followed by each of the
+  county's classes in its color, lighter or darker by region. On a phone, its season picker and its
+  search share a line, so the map starts higher.
+- On a county's page, its search reads "Go to a county" (it opens another county); the statewide
+  map's still reads "Find a county on the map".
+- The Regions page on a phone says once how to pick a team, not twice.
+- With a team picked on a class's map, only its region's schools are named, as on a county's map
+  (the other regions' names were dimmed, and could crowd each other).
+- A county's map names every one of its schools as it opens, on a phone or a computer (two in Hinds
+  and two in Forrest weren't); in a crowd (Jackson), a name can go farther out, with a line, rather
+  than be left off. A name's line no longer crosses another's when
+  there's another place for it.
+- The nearby counties show their counts of schools.
+- A county's season-by-season table marks a school whose class or region changed from the season
+  before.
+- A county with no MHSAA school in any season shown says so on its Compare and Timeline, rather
+  than asking to pick a school.
+
 ## 1.33.0
 
 Accessibility on the Maps pages:

@@ -2855,7 +2855,7 @@ async function renderCounties(token) {
     route.countyName = county;
     const counts = countyCounts(base, payload);
     const findable = counties.map((name) => ({ school: countyTitle(name), county: name, count: counts[name] ?? 0 }));
-    const finder = countyFinder();
+    const finder = countyFinder(county ? "Go to a county" : undefined);
     // A county in the results: its shape, shaded as on the map by its count of schools, as a team's helmet.
     const countySearch = {
       one: "county", many: "counties", meta: (item) => schoolsCount(item.count),
@@ -2906,7 +2906,7 @@ async function renderCounties(token) {
           // Full screen hides the page's search, so the header's finds the counties instead.
           onFull: (on) => {
             setScrolled(on);
-            headerMapSearch(on ? { teams: () => findable, pick: (item) => goTo(item.county, "search"), words: "Find a county", options: countySearch } : null);
+            headerMapSearch(on ? { teams: () => findable, pick: (item) => goTo(item.county, "search"), words: "Go to a county", options: countySearch } : null);
           },
         });
       }
@@ -3158,9 +3158,12 @@ function whereOnMaps(name, sides) {
 // A pick that draws the page again (a Timeline follow, a Compare pick in another class): said once it's drawn.
 let pickAnnounce = false;
 
-/** The Counties page's search box: the team search's field and list, for a county. */
-function countyFinder() {
-  return regionsFinder("Find a county on the map").replace('aria-label="Teams"', 'aria-label="Counties"');
+/**
+ * The Counties pages' search box: the team search's field and list, for a county. On the statewide map
+ * it finds one there; on a county's page it goes to another.
+ */
+function countyFinder(words = "Find a county on the map") {
+  return regionsFinder(words).replace('aria-label="Teams"', 'aria-label="Counties"');
 }
 
 /** The statewide map: a county's name and count on hover, and a click (or its list link) opens it. */
