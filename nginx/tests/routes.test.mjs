@@ -90,7 +90,8 @@ test("regions pages: /maps/regions/{class}, its season left out when it's the pa
   // Timeline: every season, so no ?season= (nor Compare's fields) in its address; a team followed.
   const t = parseLocation("/maps/regions/5a/timeline", "?team=greenwood");
   assert.deepEqual([t.page, t.clazz, t.view, t.team], ["regions", 5, "timeline", "greenwood"]);
-  assert.equal(buildPath({ ...t, season: 2025, vs: 2026, vsClass: 4 }, opts), "/maps/regions/5a/timeline?team=greenwood");
+  // (The season chosen on the Season view stays, for going back to it; Compare's choices don't.)
+  assert.equal(buildPath({ ...t, season: 2025, vs: 2026, vsClass: 4 }, opts), "/maps/regions/5a/timeline?season=2025&team=greenwood");
   assert.equal(parseLocation("/maps/regions/5a/history", "").page, "notfound");
   // Compare's fields stay off other pages' addresses.
   assert.equal(buildPath({ ...c, page: "class", region: null, team: null }, opts), "/standings/5a");
@@ -117,7 +118,7 @@ test("a county's Compare and Timeline: the second map's season on Compare, no se
   assert.equal(buildPath({ ...c, vsClass: 4 }, opts), "/maps/counties/hinds/compare?vs=2025&team=raymond");
   const t = parseLocation("/maps/counties/hinds/timeline", "?season=2025");
   assert.deepEqual([t.view, t.season], ["timeline", 2025]);
-  assert.equal(buildPath({ ...t, vs: 2026 }, opts), "/maps/counties/hinds/timeline");
+  assert.equal(buildPath({ ...t, vs: 2026 }, opts), "/maps/counties/hinds/timeline?season=2025");
   // The statewide map has no views.
   assert.equal(parseLocation("/maps/counties/compare", "").county, "compare");
   assert.equal(buildPath({ ...parseLocation("/maps/counties", ""), view: "compare" }, opts), "/maps/counties");

@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, nameIn, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -338,6 +338,9 @@ function setNoindex(on) {
 }
 
 let renderToken = 0;
+// The Standings page last shown (its class, region, season and week), for the Maps pages' Standings link
+// to go back to.
+let lastStandings = null;
 // Set when the team search jumps to a team, so the page scrolls to its row;
 // picking a row in place leaves the scroll position alone.
 let scrollToFocus = false;
@@ -348,7 +351,8 @@ async function render() {
   nextComputedAt = null;
   showComputedAt(null);
   route = readRoute();
-  if (route.page !== "regions" || route.view !== "map") mapsFullScreen = false; // only the Season map has it
+  // Full screen stays on from one Season map to another of the same kind (a class's, a county's).
+  if (route.view !== "map" || route.page !== mapsFullScreen || (route.page === "counties" && !route.county)) mapsFullScreen = false;
   setNoindex(route.page === "notfound");
   if (route.page === "notfound") {
     renderScrubber(null);
@@ -387,6 +391,8 @@ async function render() {
     route.season = season === currentSeason ? null : season;
     const index = await teamsBySchool(season);
     route.teamName = resolveTeam(route.team, index);
+    // A team in another class this season (picked in another season, or on the Maps) isn't this page's.
+    if (route.page !== "landing" && route.teamName && index[route.teamName] && index[route.teamName].class_ !== route.clazz) route.teamName = null;
     if (route.page !== "landing" && route.teamName && index[route.teamName]?.class_ === route.clazz) {
       setPick(route.clazz, route.teamName);
     }
@@ -556,7 +562,8 @@ function mapsKinds(classes) {
   if (route.page !== "regions" && !onCounties) return classes;
   const current = (on) => (on ? ' aria-current="page"' : "");
   const counties = esc(hrefWith({ page: "counties", county: null, team: null, view: "map", vs: null, vsClass: null })); // every county, to pick one
-  const regions = esc(onCounties ? hrefWith({ page: "regions", clazz: route.clazz, county: null, team: null, view: "map" }) : hrefWith({}));
+  // (From a county, Regions keeps a picked school: its class's map opens with it.)
+  const regions = esc(onCounties ? hrefWith({ page: "regions", clazz: route.clazz, county: null, team: route.teamName, view: "map", vs: null, vsClass: null }) : hrefWith({}));
   const item = `<span class="scrubber__sep" aria-hidden="true"></span><a class="scrubber__item scrubber__kind" href="${counties}" data-kind="counties"${current(onCounties)}>Counties</a>`;
   const toggle = `<nav class="maps-kinds" aria-label="Kind of map"><a class="maps-kinds__item" href="${regions}" data-kind="regions"${current(!onCounties)}>Regions</a>`
     + `<a class="maps-kinds__item" href="${counties}" data-kind="counties"${current(onCounties)}>Counties</a></nav>`;
@@ -573,13 +580,25 @@ function syncNav() {
   const onStandings = ["class", "region"].includes(route.page); // not the front page: it's neither
   const onRegions = route.page === "regions" || route.page === "counties";
   const known = route.page !== "notfound";
-  // The Regions page's season is a regions season (2027 before it's played), so it isn't carried to
-  // Standings or the Bracket, nor theirs to it: each opens on its own newest.
-  const away = onRegions ? { season: null, week: null } : {};
-  const team = route.teamName ?? pickedTeam(route.clazz);
+  if (onStandings) lastStandings = { clazz: route.clazz, region: route.region, season: route.season, week: route.week };
+  const team = route.teamName ?? pickedTeam(route.clazz, onRegions ? currentSeason : undefined);
+  let standings = { page: route.region ? "region" : "class", team };
+  let bracket = { page: "bracket", region: null, team };
+  if (onRegions) {
+    // From the Maps: a picked team's standings (its class and region this season, which can differ from
+    // the map's season); else the region last open in Standings in this class, as it was left; else the
+    // class. The Maps season (2027 before it's played) isn't carried to Standings or the Bracket.
+    const now = route.teamName && teamSearchSeason === (currentSeason ?? teamSearchSeason) ? teamIndex[route.teamName] : null;
+    const last = lastStandings?.clazz === route.clazz ? lastStandings : null;
+    const away = { season: null, week: null };
+    standings = now ? { ...away, page: "region", clazz: now.class_, region: now.region, team: route.teamName }
+      : last ? { ...away, page: last.region ? "region" : "class", region: last.region, season: last.season, week: last.week, team: route.teamName ? null : team }
+        : { ...away, page: "class", team: route.teamName ? null : team };
+    bracket = { ...away, page: "bracket", region: null, ...(now ? { clazz: now.class_, team: route.teamName } : { team: route.teamName ? null : team }) };
+  }
   const targets = {
-    standings: known ? hrefWith({ page: route.region ? "region" : "class", team, ...away }) : "/standings/1a",
-    bracket: known ? hrefWith({ page: "bracket", region: null, team, ...away }) : "/brackets/1a",
+    standings: known ? hrefWith(standings) : "/standings/1a",
+    bracket: known ? hrefWith(bracket) : "/brackets/1a",
     // In the Maps section already, Maps keeps the kind of map (a Counties page stays one).
     maps: !known ? "/maps/regions/1a" : route.page === "counties" ? hrefWith({ team: null })
       : hrefWith({ page: "regions", region: null, season: null, week: null, odds: null, team }),
@@ -596,7 +615,7 @@ function syncNav() {
 
 // Standings, Bracket and Maps links render in place, like any in-app link.
 document.addEventListener("click", (e) => {
-  const link = e.target.closest('[data-nav="standings"], [data-nav="bracket"], [data-nav="regions"]');
+  const link = e.target.closest('[data-nav="standings"], [data-nav="bracket"], [data-nav="maps"]');
   if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
   navigate(link.getAttribute("href"), { scroll: true });
@@ -754,7 +773,9 @@ const headerSearch = teamCombobox(teamSearch?.closest("form"), () => (mapSearch 
   }
   scrollToFocus = true;
   track("team_search_used", { team: team.school });
-  navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school }), { scroll: true });
+  // (From the Maps, not their season: the team's standings are this season's.)
+  const away = route.page === "regions" || route.page === "counties" ? { season: null, week: null } : {};
+  navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school, ...away }), { scroll: true });
 }, () => mapSearch?.options ?? {});
 
 /**
@@ -773,7 +794,10 @@ function headerMapSearch(search) {
 async function loadTeamSearch(season) {
   if (!teamSearch || teamSearchSeason === season) return;
   teamSearchSeason = season;
-  teamIndex = await teamsBySchool(season);
+  const index = await teamsBySchool(season);
+  if (teamSearchSeason !== season) return; // another season asked for since: its list wins
+  teamIndex = index;
+  syncNav(); // the Maps pages' Standings and Bracket links go to the team's class and region
   if (document.activeElement === teamSearch && teamSearch.value.trim()) headerSearch?.update();
 }
 
@@ -870,7 +894,9 @@ app.addEventListener("change", (e) => {
   const value = control.value;
   track(`${control.dataset.control}_changed`, { value });
   if (control.dataset.control === "season") {
-    navigate(hrefWith({ season: Number(value), week: null, team: pickedTeam(route.clazz, Number(value)) }), { replace: true });
+    // The team stays picked (it's dropped if it isn't in the class that season), or the one picked
+    // before in that season.
+    navigate(hrefWith({ season: Number(value), week: null, team: pickedTeam(route.clazz, Number(value)) ?? route.teamName }), { replace: true });
   } else if (control.dataset.control === "week") {
     const latest = control.options[0].value; // options run newest first
     navigate(hrefWith({ week: value === latest ? null : Number(value) }), { replace: true });
@@ -1221,7 +1247,7 @@ app.addEventListener("click", (e) => {
     // only changes how this page is shown (data-replace) doesn't. A click a
     // handler closer to the link already took (the Regions page's lists pick
     // the team in place) is left to it.
-    const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/maps/regions/'], a[href^='/?'], a[href='/']");
+    const link = e.target.closest("a[href^='/standings/'], a[href^='/brackets/'], a[href^='/maps/regions/'], a[href^='/maps/counties'], a[href^='/?'], a[href='/']");
     if (link && !e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
       e.preventDefault();
       if (link.hasAttribute("data-unpick")) setPick(route.clazz, null);
@@ -2746,13 +2772,13 @@ async function renderRegions(token) {
       regionsFile("map.json"),
       regionsFile(`${option.season}.json`),
       teamsBySchool(option.season).catch(() => ({})), // helmets; the page draws without them
-      followedTeam(index, route.team),
+      followedTeam(index, route.team, option.season),
     ]);
     if (token !== renderToken) return;
     route.season = option.season === index.default ? null : option.season;
     // A followed team: the map is of its class this season (or, not in a region this season, the
     // page's class, saying so).
-    const row = follow && payload.schools.find((r) => r.school === nameIn(follow.name, follow.season, option.season));
+    const row = follow && rowAs(payload.schools, follow.name, follow.season, option.season);
     if (row) route.clazz = row.class;
     const mine = payload.schools.filter((s) => s.class === route.clazz);
     const picked = row ?? null;
@@ -2784,7 +2810,7 @@ async function renderRegions(token) {
         regionsState.teamClasses = new Set(school ? [school.class] : []);
         route.teamName = school?.school ?? null;
         if (school) track("team_picked", { from: "regions", via, team: school.school });
-        history.replaceState(null, "", hrefWith({ team: route.teamName }));
+        mapsAddress({ team: route.teamName });
         renderScrubber(route.clazz); // the class picker's links keep the team only for its class
       },
       onMove: (how) => track("regions_map_moved", { class: route.clazz, how }),
@@ -2792,7 +2818,7 @@ async function renderRegions(token) {
       // on when the class or season changes (mapsFullScreen); the header's search finds teams on the map.
       onFull: (on) => {
         if (on && !mapsFullScreen) mapsScrolledBeforeFull = scrubberBar?.classList.contains("is-scrolled") ?? false;
-        mapsFullScreen = on;
+        mapsFullScreen = on ? "regions" : false;
         setScrolled(on || mapsScrolledBeforeFull);
         headerMapSearch(on ? { teams: () => findable, pick: (team) => findRegionsTeam(team.school) } : null);
       },
@@ -2864,8 +2890,10 @@ async function renderCounties(token) {
     const views = county ? mapsViews(route.view, mapsViewHrefs()) : "";
     if (county && route.view === "compare") {
       await renderCountyCompare(token, index, base, county, { finder, views });
+      if (token !== renderToken) return; // another page since: it's on screen, not this one
     } else if (county && route.view === "timeline") {
       await renderCountyTimeline(token, index, base, county, { finder, views });
+      if (token !== renderToken) return;
     } else if (!county) {
       countyShare = {
         title: "Share the counties map", when: seasonsLabel(option.seasons), view: "counties", season: option.season,
@@ -2881,31 +2909,40 @@ async function renderCounties(token) {
       } : null;
       app.innerHTML = countyPage(county, base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, teams, views, share: has ? shareButton("map") : "" });
       const layer = countyLayer(payload, county);
-      const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+      const wanted = teamSlug(route.team, payload.schools);
       const picked = wanted ? layer.schools.find((s) => s.slug === wanted) ?? null : null;
-      route.teamName = picked?.school ?? null;
+      // A school elsewhere, in none of the county's regions: kept, and said where it is.
+      const away = !picked && wanted ? payload.schools.find((s) => s.slug === wanted) ?? null : null;
+      route.teamName = (picked ?? away)?.school ?? null;
       if (layer.schools.length) {
-        wireRegionsMap(app, base, payload, null, {
+        const map = wireRegionsMap(app, base, payload, null, {
           layer,
           home: countyHome(base, county),
           href: countiesPath(county),
-          picked: picked?.slug ?? null,
+          picked: picked?.slug ?? (away ? "-" : null),
+          // (A school elsewhere: where it is instead, with a link to its county.)
+          elsewhere: () => (away ? `<p class="picked__facts"><strong>${esc(away.school)}</strong> isn’t in ${esc(countyTitle(county))}: `
+            + (away.county ? `it’s in <a href="${esc(countiesPath(away.county))}">${esc(countyTitle(away.county))}</a>, ` : "it’s in ")
+            + `${esc(regionPlace(away))}.</p>` : ""),
           teams,
           onPick: (slug, via) => {
             const school = layer.schools.find((s) => s.slug === slug) ?? null;
             route.teamName = school?.school ?? null;
             if (school) track("team_picked", { from: "county", via, team: school.school });
-            history.replaceState(null, "", hrefWith({ team: route.teamName }));
+            mapsAddress({ team: route.teamName });
           },
           onMove: (how) => track("regions_map_moved", { class: null, how, view: "county" }),
           otherCounty: (name) => countyJumpHtml(base, name, county, counts[name] ?? 0),
           // Full screen hides the page's search, so the header's finds the counties instead.
           onFull: (on) => {
-            setScrolled(on);
+            if (on && !mapsFullScreen) mapsScrolledBeforeFull = scrubberBar?.classList.contains("is-scrolled") ?? false;
+            mapsFullScreen = on ? "counties" : false;
+            setScrolled(on || mapsScrolledBeforeFull);
             headerMapSearch(on ? { teams: () => findable, pick: (item) => goTo(item.county, "search"), words: "Find a county", options: countySearch } : null);
           },
         });
-      }
+        if (mapsFullScreen) map.full(true); // left on from the county before
+      } else mapsFullScreen = false;
     }
     // Another county from this one's page: its link under the map (one tapped on the map), or a nearby
     // county's.
@@ -3018,7 +3055,7 @@ async function renderCountyCompare(token, index, base, county, { finder, views }
     }
     route.teamName = p?.name ?? null;
     if (p && via) track("team_picked", { from: "county-compare", via, team: p.name });
-    history.replaceState(null, "", hrefWith({ team: route.teamName, vs: countyCompareVs }));
+    mapsAddress({ team: route.teamName });
   };
   for (const side of sides) {
     if (!side.payload.schools.some((r) => r.county === county)) continue;
@@ -3044,7 +3081,7 @@ async function renderCountyCompare(token, index, base, county, { finder, views }
     app.querySelector(".compare")?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   });
   // ?team=: a school by its slug in either season.
-  const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+  const wanted = teamSlug(route.team, ...sides.map((side) => side.payload.schools));
   for (const side of sides) {
     const row = wanted && side.payload.schools.find((r) => r.slug === wanted);
     if (row) {
@@ -3062,7 +3099,7 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
     Promise.all(options.map((o) => teamsBySchool(o.season).catch(() => ({})))),
   ]);
   if (token !== renderToken) return;
-  route.season = null;
+  // (Every season is on the Timeline; the one in the address stays, for the Season view's link.)
   const teams = Object.assign({}, ...helmets); // the newest season's helmet wins
   const seasons = options.map((option, i) => ({ option, payload: payloads[i] }));
   countyTimelineLine = timelineSpan(seasons);
@@ -3087,7 +3124,7 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
     }
     route.teamName = p?.name ?? null;
     if (p && via) track("team_picked", { from: "county-timeline", via, team: p.name });
-    history.replaceState(null, "", hrefWith({ team: route.teamName }));
+    mapsAddress({ team: route.teamName });
   };
   for (const [i, side] of seasons.entries()) {
     if (!side.payload.schools.some((r) => r.county === county)) continue;
@@ -3106,7 +3143,7 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
     });
   }
   // ?team=: a school by its slug in any season, the newest first.
-  const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+  const wanted = teamSlug(route.team, ...seasons.map((side) => side.payload.schools));
   const found = wanted && [...seasons].reverse().map((side) => [side, side.payload.schools.find((r) => r.slug === wanted)]).find(([, r]) => r);
   if (found) pickAll({ name: found[1].school, season: found[0].option.season }, null);
   wireTimelineSteps(app);
@@ -3116,6 +3153,7 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
  * The Timeline's row of seasons: opened at the newest, and when they don't all fit, its Older and Newer
  * buttons step a season at a time (one at the end the row has reached is dimmed and does nothing).
  */
+let timelineObserver = null;
 function wireTimelineSteps(root) {
   const row = root.querySelector(".timeline");
   const group = root.querySelector(".timeline-steps");
@@ -3138,7 +3176,9 @@ function wireTimelineSteps(root) {
     row.scrollBy({ left: Number(b.dataset.step) * by, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   });
   row.addEventListener("scroll", update, { passive: true });
-  new ResizeObserver(update).observe(row);
+  timelineObserver?.disconnect(); // the row before this one's
+  timelineObserver = new ResizeObserver(update);
+  timelineObserver.observe(row);
   update();
 }
 
@@ -3184,21 +3224,40 @@ function wireCountiesMap(root, counts, goTo) {
 
 // Maps follow one team at a time (?team=), across their views and classes: each map shows the class
 // the team was in that season. These are the Maps' state beyond the address.
-let mapsFullScreen = false; // the Season view's map in full screen: kept as its class or season changes
+let mapsFullScreen = false; // a Season map in full screen ("regions" or "counties"): kept as its class, county or season changes
 let mapsScrolledBeforeFull = false;
 
 /**
  * The team ?team= names (a slug, an old one included), as { name, season }: its name in the newest
  * season of regions that has it. Null for none, or a slug no season has.
  */
-async function followedTeam(index, slug) {
+async function followedTeam(index, slug, prefer = null) {
   if (!slug) return null;
-  const wanted = FORMER_SLUGS[slug] ? slugify(FORMER_SLUGS[slug]) : slug;
-  for (const o of index.options) { // newest first
-    const row = (await regionsFile(`${o.season}.json`)).schools.find((r) => r.slug === wanted);
+  // The season shown first, then the newest first.
+  const options = [...index.options].sort((a, b) => (b.season === prefer) - (a.season === prefer));
+  const payloads = await Promise.all(options.map((o) => regionsFile(`${o.season}.json`)));
+  const wanted = teamSlug(slug, ...payloads.map((p) => p.schools));
+  for (const [i, o] of options.entries()) {
+    const row = payloads[i].schools.find((r) => r.slug === wanted);
     if (row) return { name: row.school, season: o.season };
   }
   return null;
+}
+
+/**
+ * The school a ?team= slug means among *rowLists* (seasons' schools): itself, when a season has it
+ * (Walnut in 2026), else, for a school since renamed or merged, the one it became (FORMER_SLUGS).
+ */
+function teamSlug(value, ...rowLists) {
+  if (!value) return null;
+  if (rowLists.some((rows) => rows.some((r) => r.slug === value))) return value;
+  return FORMER_SLUGS[value] ? slugify(FORMER_SLUGS[value]) : value;
+}
+
+/** A school (*name*, as *season* knows it) as another season's row: under the name it had then, or, for
+ * schools merged since, the first of those it was made from that's there. */
+function rowAs(rows, name, season, other) {
+  return namesIn(name, season, other).map((n) => rows.find((r) => r.school === n)).find(Boolean) ?? null;
 }
 
 /** The header's search box, here for the map (or maps): the same field, list and keys. */
@@ -3209,6 +3268,17 @@ function regionsFinder(placeholder) {
     + ` placeholder="${esc(placeholder)}" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="search">`
     + `<div class="team-results" hidden><ul id="regions-team-results" role="listbox" aria-label="Teams"></ul><p class="team-results__empty" hidden></p></div>`
     + `<p class="visually-hidden" role="status"></p></form>`;
+}
+
+/**
+ * A Maps page's address after a change made in place (a team picked): written over the current one,
+ * and the links that carry it (the views', the menu's) brought up to date.
+ */
+function mapsAddress(changes) {
+  history.replaceState(null, "", hrefWith(changes));
+  const hrefs = mapsViewHrefs();
+  for (const a of app.querySelectorAll(".maps-views__item[data-view]")) a.setAttribute("href", hrefs[a.dataset.view]);
+  syncNav();
 }
 
 /** Each view's address (Season, Compare, Timeline), keeping the class, the season and the picked team. */
@@ -3233,7 +3303,7 @@ async function renderTimeline(token, index) {
   if (token !== renderToken) return;
   const teams = Object.assign({}, ...[...helmets].reverse()); // the newest season's helmet wins
   // The team asked for (?team=, a slug): its name in the newest season that has it.
-  const wanted = route.team ? (FORMER_SLUGS[route.team] ? slugify(FORMER_SLUGS[route.team]) : route.team) : null;
+  const wanted = teamSlug(route.team, ...payloads.map((p) => p.schools));
   let follow = null;
   for (const [i, o] of options.entries()) { // index.options run newest first
     const row = wanted && payloads[i].schools.find((r) => r.slug === wanted);
@@ -3243,7 +3313,7 @@ async function renderTimeline(token, index) {
     }
   }
   const seasons = timelineSeasons(options, payloads, route.clazz, follow);
-  route.season = null;
+  // (Every season is on the Timeline; the one in the address stays, for the Season view's link.)
   route.teamName = follow?.name ?? null;
   const newest = seasons[seasons.length - 1];
   regionsState = {
@@ -3313,12 +3383,12 @@ async function renderCompare(token, index) {
     regionsFile(`${second.season}.json`),
     teamsBySchool(first.season).catch(() => ({})),
     teamsBySchool(second.season).catch(() => ({})),
-    followedTeam(index, route.team),
+    followedTeam(index, route.team, first.season),
   ]);
   if (token !== renderToken) return;
   // A followed team: each map is of its class that season (a map of a season it wasn't in a region
   // keeps its own class, saying so).
-  const followRow = (option, payload) => follow && payload.schools.find((r) => r.school === nameIn(follow.name, follow.season, option.season));
+  const followRow = (option, payload) => follow && rowAs(payload.schools, follow.name, follow.season, option.season);
   const rowA = followRow(first, pa);
   const rowB = followRow(second, pb);
   const askedSecond = route.vsClass ?? route.clazz;
@@ -3346,7 +3416,7 @@ async function renderCompare(token, index) {
   // The followed team, by its name in a season: shown on each map it's on, and where it is on the other.
   // Following one whose class differs from a map's draws the page again, each map in its class.
   let picked = null; // { name, season }
-  const rowIn = (side, p) => side.payload.schools.find((r) => r.school === nameIn(p.name, p.season, side.option.season)) ?? null;
+  const rowIn = (side, p) => rowAs(side.payload.schools, p.name, p.season, side.option.season);
   const pickBoth = (p, via) => {
     if (p && sides.some((side) => {
       const row = rowIn(side, p);
@@ -3362,7 +3432,7 @@ async function renderCompare(token, index) {
       side.map?.pick(row && row.class === side.clazz ? row.slug : p ? "-" : null, { reveal: false });
     }
     for (const a of app.querySelectorAll(".compare-changes [data-school]")) {
-      if (p && nameIn(a.dataset.school, Number(a.dataset.season), p.season) === p.name) a.setAttribute("aria-current", "true");
+      if (p && namesIn(a.dataset.school, Number(a.dataset.season), p.season).includes(p.name)) a.setAttribute("aria-current", "true");
       else a.removeAttribute("aria-current");
     }
     route.teamName = p?.name ?? null;
@@ -3370,7 +3440,7 @@ async function renderCompare(token, index) {
     regionsState.teamClasses = new Set(p ? sides.map((side) => rowIn(side, p)?.class).filter(Boolean) : []);
     regionsState.compare.rows = sides.map((side) => (p ? rowIn(side, p) : null));
     // Unfollowed, each map keeps the class it shows (written out, so it doesn't follow the other's).
-    history.replaceState(null, "", hrefWith({ team: route.teamName, vs: second.season, vsClass: sides[1].clazz }));
+    mapsAddress({ team: route.teamName, vsClass: sides[1].clazz });
     renderScrubber(route.clazz);
   };
   for (const side of sides) {
@@ -3424,7 +3494,7 @@ function findRegionsTeam(name) {
     route.teamName = school.school;
     regionsState.picked = school;
     regionsState.teamClasses = new Set([school.class]);
-    history.replaceState(null, "", hrefWith({ team: school.school }));
+    mapsAddress({ team: school.school });
     renderScrubber(route.clazz);
   } else {
     navigate(hrefWith({ clazz: school.class, team: school.school }), { scroll: false });
