@@ -46,6 +46,28 @@ Accessibility on the Maps pages:
 - Dots, pills and the small region links are at least 24 pixels to tap, without looking any bigger.
 - The Timeline's note says a team can also be found with its search.
 
+## 1.32.0
+
+- **A team picked on a Maps page stays picked from view to view.** The Season, Compare and Timeline
+  links now carry a team picked on the page (before, only a team in the address when the page opened
+  was carried).
+- **Going from the Maps to Standings or the Bracket** opens a picked team's class and region this
+  season (its class on the map can differ, when it moved); with no team picked, the region last open in
+  Standings in that class, as it was left (its week and season); otherwise the class.
+- A link naming a school by an old name opens that school in the seasons it went by it (Walnut in
+  2026), rather than the school it merged into. On a Season or Compare map, a school picked in another
+  season is shown as the school or schools it was then, as the Timeline and county maps already did.
+- A county's link naming a school in another county, in none of its regions, says where it is
+  instead of dropping it.
+- The Timeline keeps the season chosen on the Season view, so going back to it returns to that
+  season.
+- Full screen on a county's map stays on when going to another county.
+- From a county, the Regions link keeps a picked school. The header's search on a Maps page opens a
+  team's standings for this season, not the Maps season.
+- Changing the season on Standings keeps the picked team when it's in the class that season.
+- The Maps link in the menu, and the county pages' Season, Compare and Timeline links, now switch
+  pages in place rather than reloading the site.
+
 ## 1.31.0
 
 - **A county's map shows its regions' other schools**, those outside the county, as small dots in their

@@ -131,8 +131,8 @@ export function buildPath(route, { currentSeason = null, regionsSeason = null } 
   const q = new URLSearchParams();
   const maps = route.page === "regions" || route.page === "counties";
   const defaultSeason = maps ? regionsSeason : currentSeason;
-  const everySeason = maps && route.view === "timeline"; // the timeline shows them all
-  if (route.season && route.season !== defaultSeason && !everySeason) q.set("season", route.season);
+  // (The Timeline shows every season, but keeps the one chosen on the Season view, for going back to it.)
+  if (route.season && route.season !== defaultSeason) q.set("season", route.season);
   if (route.week) q.set("week", route.week);
   if (route.odds && route.odds !== "projected") q.set("odds", route.odds);
   if (maps && route.view === "compare") {
