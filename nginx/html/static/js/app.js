@@ -117,6 +117,10 @@ async function playedWeeks(season, clazz) {
     return [];
   }
   const now = today();
+  // Each playoff round's day (the one with the most games), for a score report's date.
+  const rounds = {};
+  for (const d of dates) if (d.round && (!rounds[d.round] || d.num_games > rounds[d.round].num_games)) rounds[d.round] = d;
+  roundDays.set(`${season}:${clazz}`, Object.fromEntries(Object.entries(rounds).map(([k, d]) => [k, d.date])));
   const weeks = new Map();
   for (const d of dates) {
     if (d.kind !== "games" || d.date >= now) continue;
@@ -127,6 +131,9 @@ async function playedWeeks(season, clazz) {
   }
   return [...weeks.values()].sort((a, b) => a.week - b.week);
 }
+
+// Each playoff round's scheduled day ("first_round" -> "2026-11-06"), per season and class (playedWeeks).
+const roundDays = new Map();
 
 // The newest snapshot seen per season and class. A week whose games haven't
 // reached an update yet would only reload the same numbers, so the week list
@@ -2281,6 +2288,9 @@ function sheetHtml(id) {
   const sideOf = (k) => (k === "a" ? game.side_a : game.side_b);
   const known = order.map((k) => lockedTeam(sideOf(k)) ?? (result ? (k === "a" ? result.winner : result.loser) : null));
   const title = bye ? "Bye" : known[0] && known[1] ? `${known[0]} ${joiner} ${known[1]}` : "Who might play here";
+  // Both teams known and not yet played: shown as a played game is (who hosts and why, under the two
+  // teams), not as a list of one possible matchup.
+  const set = !result && !bye && Boolean(lockedTeam(game.side_a) && lockedTeam(game.side_b));
   // A bye's title already says so.
   const kicker = [game.round, game.id !== "final" ? HALF_NAMES[game.half] : null, bye ? null : STATE_LABEL[state] || null].filter(Boolean).join(" · ");
   return `<div class="game-sheet__head">
@@ -2297,10 +2307,10 @@ function sheetHtml(id) {
         ${bye ? "" : `<div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
         ${bracketSide(game, order[1], result, host)}`}
         ${host === "neutral" && !bye ? `<p class="bgame__site muted">${esc(siteName())}</p>` : ""}
-        ${playedReason(game, result)}
+        ${playedReason(game, result, set)}
         ${shownChampion(game) ? championLine(shownChampion(game)) : ""}
       </div>
-      ${result ? "" : `<div class="bgame__detail">${gameDetail(game)}</div>`}
+      ${result ? "" : set ? (titleOdds(game) ? `<div class="bgame__detail">${titleOdds(game)}</div>` : "") : `<div class="bgame__detail">${gameDetail(game)}</div>`}
       <p class="game-sheet__hint muted">Pick a team to follow its path through the bracket.</p>
       ${!result && lockedTeam(game.side_a) && lockedTeam(game.side_b) ? `<p class="report-line"><button type="button" class="link-button" data-playoff-report="${esc(game.id)}">Already played? Report the final score.</button></p>` : ""}
       <p class="report-line"><button type="button" class="link-button" data-feedback="odds" data-about="${esc(game.round)}">Does something look wrong in this game? Let us know.</button></p>
@@ -2343,7 +2353,7 @@ function onSheetClick(e) {
     openFeedback({
       playoffGame: {
         season: bracketData.season, clazz: bracketData.clazz, id: game.id, round: game.round, joiner,
-        teamA: sideTeam("a"), teamB: sideTeam("b"), order,
+        teamA: sideTeam("a"), teamB: sideTeam("b"), order, scheduled: scheduledDay(game),
       },
     });
     return;
@@ -2356,6 +2366,16 @@ function onSheetClick(e) {
     sheetFocus = `[data-pick-team="${CSS.escape(team)}"]`;
     navigate(hrefWith({ team: bracketData?.focus === team ? null : team }), { replace: true });
   }
+}
+
+/**
+ * The day a playoff game was scheduled, when that's already past (the score report's date starts on it):
+ * its round's day in the season's dates ("Second Round" -> "second_round"), or null.
+ */
+function scheduledDay(game) {
+  const key = game.round.toLowerCase().replace(/ /g, "_");
+  const day = roundDays.get(`${bracketData.season}:${bracketData.clazz}`)?.[key] ?? null;
+  return day && day <= today() ? day : null;
 }
 
 /** A team name that picks the team when tapped (shared with the standings via ?team=). */
@@ -2425,9 +2445,9 @@ function wayReason(game, w, a, b) {
   return hostReason(w.why, w.a.feeder, w.b.feeder, a, b, bracketData.season, tense);
 }
 
-/** A played game's line saying why its host hosted ("Okolona hosted; …"), or "". */
-function playedReason(game, result) {
-  if (!result) return "";
+/** A played (or *set*: both teams known) game's line saying why its host hosts ("Okolona hosted; …"), or "". */
+function playedReason(game, result, set = false) {
+  if (!result && !set) return "";
   const team = (side) => lockedTeam(side) ?? null;
   const [a, b] = [team(game.side_a), team(game.side_b)];
   const reason = a && b ? matchupReason(game, a, b) : "";
@@ -2605,9 +2625,9 @@ function alternatives(ways) {
 }
 
 /** A matchup's "How?" (`a` from side A, `b` from side B): both teams' paths at once, when both are known. */
-function matchupHow(game, a, b) {
+function matchupHow(game, a, b, note = "") {
   if (bracketData.results[game.id]) return null;
-  if (!hasHow(game)) return laterMatchupHow(game, a, b);
+  if (!hasHow(game)) return laterMatchupHow(game, a, b, note);
   const parts = [[game.side_a, a], [game.side_b, b]].filter(([side]) => !lockedTeam(side));
   if (!parts.length) return null;
   const key = `${game.id}:${a}|${b}`;
@@ -2636,7 +2656,7 @@ function matchupHow(game, a, b) {
  * Pairings of two teams of one region that its scenarios never have
  * together are left out. Without exact scenarios, each team's own way.
  */
-function laterMatchupHow(game, a, b) {
+function laterMatchupHow(game, a, b, note = "") {
   const { games, results, mode, season, teams } = bracketData;
   const all = matchupWays(games, results, game, a, b, mode, season);
   if (!all.length) return null;
@@ -2664,8 +2684,9 @@ function laterMatchupHow(game, a, b) {
       const label = seeds.length ? `<p class="how__as">${seeds.join(" · ")}</p>` : "";
       const wins = [...w.a.wins.map((x) => ({ type: "playoff_win", school: a, ...x })), ...w.b.wins.map((x) => ({ type: "playoff_win", school: b, ...x }))]
         .sort((x, y) => x.depth - y.depth);
+      // (Not the line under the matchup again: a reason of its own only when the ways differ.)
       const why = wayReason(game, w, a, b);
-      return `${label}<div>${conditionsThen(allOf([parts[i][0].groups, parts[i][1].groups]), wins, teams)}</div>${why ? `<p class="how__why">${esc(why)}</p>` : ""}`;
+      return `${label}<div>${conditionsThen(allOf([parts[i][0].groups, parts[i][1].groups]), wins, teams)}</div>${why && why !== note ? `<p class="how__why">${esc(why)}</p>` : ""}`;
     };
     const block = (list) => (list.length === 1 ? `<div>${drawn(list[0])}</div>` : alternatives(list.map(drawn)));
     const hosts = [...new Set(possible.map(({ w }) => w.host))];
@@ -2705,7 +2726,7 @@ function gameDetail(game) {
         const reason = settled ? (aFirst ? matchupReason(game, focus, o.opponent) : matchupReason(game, o.opponent, focus)) : "";
         const note = hostText(focus, o.opponent, o.hosts, o.pTeamHosts) || reason;
         const how = aFirst || (here.sides[0] === "a" && !(game.matchups ?? []).some((m) => m.team_a === o.opponent && m.team_b === focus))
-          ? matchupHow(game, focus, o.opponent) : matchupHow(game, o.opponent, focus);
+          ? matchupHow(game, focus, o.opponent, note) : matchupHow(game, o.opponent, focus, note);
         return `<li><span class="mu__teams"><span class="mu__line"><span class="vs">${oppJoiner(o.hosts)}</span>${teamLabel(o.opponent, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(o.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
       }).join("")}</ol>${titleOdds(game)}`;
   }
@@ -2718,7 +2739,7 @@ function gameDetail(game) {
     const joiner = h.host === "a" || h.host === "b" ? "at" : "vs";
     const note = hostText(m.a, m.b, h.host === "a" ? "team" : h.host === "b" ? "opponent" : h.host, h.p)
       || (h.host === "a" || h.host === "b" ? matchupReason(game, m.a, m.b) : "");
-    const how = matchupHow(game, m.a, m.b);
+    const how = matchupHow(game, m.a, m.b, note);
     return `<li><span class="mu__teams"><span class="mu__line"><span class="vs"></span>${teamLabel(away, teams)}</span><span class="mu__line"><span class="vs">${joiner}</span>${teamLabel(home, teams)}${how?.iff ? IF_TAG : ""}</span></span>${oddsCell(m.p)}${how?.button ?? ""}${note ? `<span class="opp-list__host">${esc(note)}</span>` : ""}${how?.panel ?? ""}</li>`;
   });
   if (!ms.length) {
@@ -3808,7 +3829,7 @@ function feedbackForm({ game = null, dateGame = null, playoffGame = null, catego
     return `<form class="fb-form" novalidate data-fb-form data-mode="playoff" data-opened="${opened}" data-page="${esc(page)}" data-game="${esc(JSON.stringify(g))}">
       <p class="fb-about">${esc(team(g.order[0]))} ${esc(g.joiner)} ${esc(team(g.order[1]))} · ${esc(g.round)}</p>
       <label class="fb-field"><span>The date it was played</span>
-        <input type="date" name="date" min="${esc(g.season)}-01-01" max="${esc(today())}" required>
+        <input type="date" name="date" min="${esc(g.season)}-01-01" max="${esc(today())}"${g.scheduled ? ` value="${esc(g.scheduled)}"` : ""} required>
       </label>
       <fieldset class="fb-scores">
         <legend>The final score</legend>

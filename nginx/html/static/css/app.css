@@ -100,7 +100,7 @@
   --text-primary: var(--neutral-50);
   --text-secondary: var(--neutral-400);
   --text-on-inverse: var(--neutral-900);
-  --border: var(--neutral-800);
+  --border: var(--neutral-700); /* a step past --surface-raised (neutral-800), so a raised box keeps its edge */
   --connector: var(--neutral-500);
   --accent-identity: var(--brand-500);
   --state-live: var(--brand-500);
