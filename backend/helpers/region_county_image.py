@@ -408,6 +408,21 @@ def _counties_map(page: _Page, frame: _Frame, counts: dict[str, int]) -> None:
 SHADE_LABELS = ("None", "1", "2", "3–4", "5 or more")
 
 
+def most_counties(counts: dict[str, int], want: int = 12, room: int = 12) -> list[tuple[str, int]]:
+    """The counties with the most schools, most first: *want* of them, and every county tied with the
+    last, so none is left out that has as many as one listed; with no *room* for a whole tie, it's left
+    off, down to the counties with more."""
+    ranked = sorted(((name, n) for name, n in counts.items() if n > 0), key=lambda kv: (-kv[1], kv[0].lower()))
+    if len(ranked) <= want:
+        return ranked[:room]
+    last = ranked[want - 1][1]
+    shown = [kv for kv in ranked if kv[1] >= last]
+    while len(shown) > room and shown:
+        cut = shown[-1][1]
+        shown = [kv for kv in shown if kv[1] > cut]
+    return shown
+
+
 def render_counties(seasons: list[int], counts: dict[str, int], theme: str) -> list[Image.Image]:
     """Every county shaded by how many MHSAA schools it has in *seasons* (*counts*: by county name), with
     the shades' key, and the counties with the most."""
@@ -429,11 +444,11 @@ def render_counties(seasons: list[int], counts: dict[str, int], theme: str) -> l
         d.text((x + 56, y2), label, font=_inter(36, 500), fill=t.text, anchor="ls")
         x += 56 + d.textlength(label, font=_inter(36, 500)) + 48
     # The most schools, on the right.
-    most = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:12]
     lx = MAP_RIGHT + 160
     yy = top + 40
     page.label(lx, yy, "The most")
     yy += 76
+    most = most_counties(counts, room=int((bottom - yy) // 64) + 1)
     for name, n in most:
         d.text((lx, yy), name, font=_inter(40, 600), fill=t.text, anchor="ls")
         d.text((SIZE[0] - PAD, yy), str(n), font=_inter(40, 600), fill=t.text_2, anchor="rs")

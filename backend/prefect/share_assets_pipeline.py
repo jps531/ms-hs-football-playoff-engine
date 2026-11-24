@@ -90,12 +90,15 @@ from backend.helpers.image_jobs import (
 )
 from backend.helpers.region_image import playoff_road, region_playoffs, region_seeds
 from backend.helpers.share_cards import (
+    SITE_CARD_ALT,
     SITE_DESCRIPTION,
     SITE_NAME,
     SITE_TITLE,
+    bracket_card_alt,
     bracket_description,
     bracket_favorites,
     bracket_title,
+    class_card_alt,
     class_description,
     class_title,
     description,
@@ -103,10 +106,13 @@ from backend.helpers.share_cards import (
     odds_mode,
     past_bracket_description,
     provenance,
+    region_card_alt,
     region_title,
     slugify,
+    team_bracket_card_alt,
     team_bracket_description,
     team_bracket_title,
+    team_card_alt,
     team_description,
     team_road,
     team_title,
@@ -223,6 +229,7 @@ def build_share_assets(
             f"{site_url}/static/og/site.png?v={today:%Y%m%d}",
             f"{site_url}/",
             json_ld(website_ld(site_url, SITE_NAME)),
+            image_alt=SITE_CARD_ALT,
         ),
     )
     written = dict.fromkeys(keys, 0)
@@ -259,6 +266,7 @@ def build_share_assets(
                 f"{site_url}/static/og/{clazz}.png?v={version}",
                 f"{site_url}/standings/{clazz}a",
                 json_ld(breadcrumb_ld(site_url, class_trail(clazz))),
+                image_alt=class_card_alt(clazz),
             ),
         )
         class_page = class_body(clazz, standings, f"{season} season · {stamp}", mode, teams)
@@ -304,6 +312,7 @@ def build_share_assets(
                     f"{site_url}/static/og/{name}.png?v={r_as_of:%Y%m%d}",
                     f"{site_url}/standings/{clazz}a/{region}",
                     json_ld(breadcrumb_ld(site_url, region_trail(clazz, region))),
+                    image_alt=region_card_alt(clazz, region),
                 ),
             )
             games = fetch(f"/games?season={season}&class={clazz}&region={region}") or []
@@ -786,11 +795,14 @@ def _write_bracket_assets(
     desc = description(bracket_description(clazz, favorites, mode))
     image_url = f"{site_url}/static/og/{card}.png?v={version}"
     trail = json_ld(breadcrumb_ld(site_url, bracket_trail(clazz)))
-    _write_text(out_dir / "meta" / f"{name}.html", meta_tags(bracket_title(clazz), desc, image_url, page, trail))
+    alt = bracket_card_alt(clazz, season, picture=bool(games))
+    _write_text(
+        out_dir / "meta" / f"{name}.html", meta_tags(bracket_title(clazz), desc, image_url, page, trail, image_alt=alt)
+    )
     # A link that names the season: its own address, so it still leads to this season's bracket later.
     _write_text(
         out_dir / "meta" / f"{card}.html",
-        meta_tags(bracket_title(clazz, season), desc, image_url, f"{page}?season={season}", trail),
+        meta_tags(bracket_title(clazz, season), desc, image_url, f"{page}?season={season}", trail, image_alt=alt),
     )
     image = None
     if games:
@@ -821,7 +833,7 @@ def _write_bracket_assets(
         )
     current: set[str] = set()
     for team in favorites:
-        road = team_road(games, team["school"], mode)
+        road = team_road(games, team["school"], mode, layout_results(layout))
         slug = slugify(team["school"])
         if not road or not slug:
             continue
@@ -849,6 +861,7 @@ def _write_bracket_assets(
                 description(team_bracket_description(team["school"], road, champion, mode)),
                 f"{site_url}/static/og/{name}/{slug}.png?v={version}",
                 f"{page}?team={slug}",
+                image_alt=team_bracket_card_alt(team["school"], clazz),
             ),
         )
     _remove_others(out_dir / "meta" / name, ".html", current)
@@ -1051,6 +1064,7 @@ def _write_past_brackets(fetch: Fetch, out_dir: Path, seasons: list[int], today:
                         f"{site_url}/static/og/{card}.png?v={end:%Y%m%d}",
                         f"{site_url}/brackets/{clazz}a?season={season}",
                         json_ld(breadcrumb_ld(site_url, bracket_trail(clazz))),
+                        image_alt=bracket_card_alt(clazz, season, picture=True),
                     ),
                 )
             written += 1
@@ -1104,6 +1118,7 @@ def _write_team_assets(
                 description(team_description(team, clazz, region, mode)),
                 f"{site_url}/static/og/{name}/{slug}.png?v={as_of:%Y%m%d}",
                 f"{site_url}/standings/{clazz}a/{region}?team={slug}",
+                image_alt=team_card_alt(team, clazz, region, mode),
             ),
         )
     # A team that moved regions (or a renamed one) shouldn't keep a stale card here.

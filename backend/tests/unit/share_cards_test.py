@@ -28,6 +28,7 @@ from backend.helpers.share_cards import (
     slugify,
     standing_positions,
     team_bracket_description,
+    team_card_alt,
     team_description,
     team_road,
     team_status,
@@ -120,9 +121,16 @@ def test_description_keeps_the_headline_and_cuts_long_ones_at_a_word():
 def test_meta_tags_escape_and_carry_every_preview_tag():
     """The title, description and URLs are escaped, and every tag link previews read is there."""
     tags = meta_tags(
-        'Region 6-3A "race" & more', "D'Iberville <wins>", "https://x/og.png?v=1&a=2", "https://x/standings/3a/6"
+        'Region 6-3A "race" & more',
+        "D'Iberville <wins>",
+        "https://x/og.png?v=1&a=2",
+        "https://x/standings/3a/6",
+        image_alt="D'Iberville's \"card\"",
     )
     assert "<title>Region 6-3A &quot;race&quot; &amp; more</title>" in tags
+    # The image's alt text, for both kinds of preview.
+    assert '<meta property="og:image:alt" content="D&#x27;Iberville&#x27;s &quot;card&quot;">' in tags
+    assert '<meta name="twitter:image:alt" content="D&#x27;Iberville&#x27;s &quot;card&quot;">' in tags
     assert 'content="D&#x27;Iberville &lt;wins&gt;"' in tags
     for tag in (
         'property="og:title"',
@@ -133,6 +141,16 @@ def test_meta_tags_escape_and_carry_every_preview_tag():
     ):
         assert tag in tags
     assert "og.png?v=1&amp;a=2" in tags
+
+
+def test_a_team_card_s_alt_names_the_playoff_rounds_only_when_the_card_shows_them():
+    """The alt text says what's on the card: the round chances appear only with a playoff path."""
+    t = _bracket_team("Raleigh", 0.4, 0.2, 0.12)
+    assert team_card_alt(t, 3, 6, "projected") == (
+        "Raleigh, Region 6-3A: its records and its chances of each seed and of making the playoffs, and its"
+        " chance of reaching each playoff round."
+    )
+    assert "playoff round" not in team_card_alt({**t, "bracket_odds": None}, 3, 6, "projected")
 
 
 def test_headline_wraps_to_at_most_three_lines():
@@ -423,6 +441,49 @@ def test_team_bracket_description_names_the_road():
     )
 
 
+# Raleigh won its first-round game (S-0-0) over Tylertown, 28-14; Union and Magee haven't played.
+PLAYED = {"S-0-0": {"winner": "Raleigh", "loser": "Tylertown", "winner_score": 28, "loser_score": 14}}
+
+
+def test_team_road_shows_a_played_round_as_its_result():
+    """A round the team played is its result (opponent and score from its side), not its odds."""
+    first = team_road(GAMES, "Raleigh", "tossup", PLAYED)[0]
+    assert first["played"] == {"won": True, "opponent": "Tylertown", "score_for": 28, "score_against": 14}
+    lost = team_road(GAMES, "Tylertown", "tossup", PLAYED)[0]
+    assert lost["played"] == {"won": False, "opponent": "Raleigh", "score_for": 14, "score_against": 28}
+    assert team_road(GAMES, "Union", "tossup", PLAYED)[0]["played"] is None
+
+
+def test_a_set_game_is_next_not_likeliest():
+    """Both teams in it and not yet played: the game is set."""
+    games = [
+        {
+            **GAMES[0],
+            "side_a": {"occupants": [_occ("Raleigh", 1.0, True)]},
+            "matchups": [_mu("Raleigh", "Tylertown", 1.0, 1.0)],
+        }
+    ]
+    step = team_road(games, "Raleigh", "tossup")[0]
+    assert step["set"] is True
+    assert team_bracket_description("Raleigh", [step], 0.04, "tossup") == (
+        "Raleigh’s next game: First Round vs Tylertown; 4% to win the state championship."
+    )
+    assert team_road(GAMES, "Raleigh", "tossup")[0]["set"] is False
+
+
+def test_team_bracket_description_tells_the_rounds_played_and_not_the_title_odds_once_out():
+    """Results first, then the likeliest opponents; a team that's lost has no title chance to tell."""
+    road = team_road(GAMES, "Raleigh", "tossup", PLAYED)
+    assert team_bracket_description("Raleigh", road, 0.04, "tossup") == (
+        "Raleigh beat Tylertown 28–14 in the First Round; likeliest opponent (Toss-up): Second Round vs Union; 4% to win the state championship."
+    )
+    lost = team_road(GAMES, "Tylertown", "tossup", PLAYED)
+    assert (
+        team_bracket_description("Tylertown", lost, 0.0, "tossup")
+        == "Tylertown lost to Raleigh 14–28 in the First Round."
+    )
+
+
 def _bracket_team(name, semis, final, champ, playoffs=1.0):
     """A team with these semifinal, final and championship odds (both modes)."""
     t = _team(name, playoffs)
@@ -455,6 +516,10 @@ def test_bracket_cards_render():
     assert render_bracket_card(3, teams, regions, "x", "projected").size == (WIDTH, HEIGHT)
     road = team_road(GAMES, "Raleigh", "tossup")
     assert render_team_bracket_card(3, 6, teams[0], road, "x", "tossup").size == (WIDTH, HEIGHT)
+    played = team_road(GAMES, "Raleigh", "tossup", PLAYED)  # a result above the rounds to come
+    assert render_team_bracket_card(3, 6, teams[0], played, "x", "tossup").size == (WIDTH, HEIGHT)
+    out = team_road(GAMES, "Tylertown", "tossup", PLAYED)  # results only
+    assert render_team_bracket_card(3, 6, teams[1], out, "x", "tossup").size == (WIDTH, HEIGHT)
 
 
 def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):

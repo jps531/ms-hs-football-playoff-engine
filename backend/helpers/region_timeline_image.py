@@ -121,7 +121,7 @@ def render_class_timeline(clazz: int, cycles: list[dict], theme: str) -> list[Im
     caption = 24 + probe_big + 12 + probe_line * (2 if stacked else 1)
     _, cell, height = grid(len(cycles), caption)
     page = _Page(theme, {}, (WIDTH, height))
-    _header(page, f"{clazz}A Football Regions", f"Every season’s regions, {span_line(cycles)}")
+    _header(page, f"Class {clazz}A Football Regions", f"Every season’s regions, {span_line(cycles)}")
     big, small, line_h = _sizes(cell)
 
     def draw_cell(cycle: dict, x: float, y: float, width: float, map_h: float) -> None:
