@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.36.0
+
+The About page:
+
+- **"On this page" follows you:** on a wide screen, the list of sections sits beside the text and
+  marks the one you're reading, with a link back to the top. On a phone, a bar under the header names
+  the section you're reading and opens to the list; picking a section closes it.
+- Each heading has a "#" link to itself, to share a section.
+
 ## 1.35.0
 
 The bracket:

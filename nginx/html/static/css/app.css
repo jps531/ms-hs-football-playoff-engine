@@ -997,21 +997,59 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 .article ul.bullets li + li { margin-top: 6px; }
 .article ul.bullets + p { margin-top: 16px; }
 .article h2[id], .article h3[id] { scroll-margin-top: 80px; }
+@media (max-width: 1099px) { .article h2[id], .article h3[id] { scroll-margin-top: 136px; } } /* under the header and the "On this page" bar */
 /* The About page's "On this page": every section, its subsections under it. */
-.toc {
-  margin-top: 20px; padding: 16px 20px;
-  border: 1px solid var(--border); border-radius: 10px;
-  background: var(--surface-raised);
-}
-.article .toc__title {
-  margin: 0; font-size: 13px; line-height: 18px;
+/* About's "On this page" (about.html, about.js). Its list, everywhere: each section a plain link (the
+   page's sections, not text to read), its subsections under it smaller, the one you're reading marked
+   in the site's green on a rule down the left, as the bracket marks a team's path. */
+.toc { margin-top: 20px; }
+.toc__summary { display: flex; align-items: baseline; gap: 6px; list-style: none; cursor: default; }
+.toc__summary::-webkit-details-marker { display: none; }
+.toc__title {
+  font-family: var(--font-display); font-size: 13px; line-height: 18px;
   text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);
 }
+.toc__current, .toc__chevron { display: none; }
 .toc__list, .toc__list ol { list-style: none; margin: 0; padding: 0; }
-.toc__list { margin-top: 8px; display: grid; gap: 6px; font-size: 15px; line-height: 22px; }
-.toc__list ol { margin-top: 4px; padding-left: 16px; display: grid; gap: 4px; font-size: 14px; line-height: 20px; }
-.toc a { color: var(--text-primary); }
-.toc a:hover { color: var(--link); }
+.toc__list { margin-top: 10px; border-left: 2px solid var(--border); font-size: 15px; line-height: 20px; }
+.toc__list ol { font-size: 14px; line-height: 19px; }
+.toc__list a {
+  display: block; margin-left: -2px; padding: 5px 0 5px 14px; border-left: 2px solid transparent;
+  color: var(--text-primary); font-weight: 500; text-decoration: none;
+}
+.toc__list ol a { padding-left: 28px; color: var(--text-secondary); font-weight: 400; }
+.toc__list a:hover { color: var(--link); }
+.toc__list a[aria-current] { border-left-color: var(--accent-identity); color: var(--link); font-weight: 600; }
+.toc__top { margin: 12px 0 0; font-size: 14px; }
+.toc__top a { color: var(--text-secondary); }
+/* Wide: the text and, beside it, the list, which stays in view as the page scrolls. */
+@media (min-width: 1100px) {
+  .article__body { display: grid; grid-template-columns: minmax(0, 38rem) 17rem; justify-content: space-between; column-gap: 48px; align-items: start; }
+  .article__body > .prose { grid-column: 1; grid-row: 1; }
+  .article__body > .toc {
+    grid-column: 2; grid-row: 1; position: sticky; top: calc(var(--header-h) + 24px);
+    max-height: calc(100vh - var(--header-h) - 48px); overflow-y: auto; margin-top: 26px;
+  }
+}
+/* Narrow, with about.js: a bar under the header, "On this page · Projected and toss-up odds ⌄", opening
+   to the list over the text. */
+.toc.is-bar {
+  position: sticky; top: var(--header-h); z-index: 9;
+  margin: 16px -16px 0; padding: 0 16px;
+  background: var(--surface-page); border-bottom: 1px solid var(--border);
+}
+.toc.is-bar .toc__summary { min-height: 48px; align-items: center; cursor: pointer; }
+.toc.is-bar .toc__current { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 15px; color: var(--text-primary); }
+.toc.is-bar .toc__current:not(:empty)::before { content: "· "; color: var(--text-secondary); font-weight: 400; }
+.toc.is-bar .toc__chevron { display: block; flex: none; width: 18px; height: 18px; margin-left: auto; color: var(--text-secondary); transition: transform 0.15s; }
+.toc.is-bar details[open] .toc__chevron { transform: rotate(180deg); }
+.toc.is-bar details[open] > .toc__list { max-height: min(60vh, 28rem); overflow-y: auto; margin-top: 0; }
+.toc.is-bar details[open] { padding-bottom: 12px; }
+@media (prefers-reduced-motion: reduce) { .toc.is-bar .toc__chevron { transition: none; } }
+/* A heading's link to itself, to share a section: on hover or focus, and always on a touch screen. */
+.heading-link { margin-left: 8px; color: var(--text-secondary); font-weight: 400; text-decoration: none; opacity: 0; }
+.heading-link:focus-visible, :is(h2, h3):hover > .heading-link { opacity: 1; }
+@media (hover: none) { .heading-link { opacity: 0.6; } }
 .author { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
 .author > p { margin: 0; }
 .author + p { margin-top: 16px; }
