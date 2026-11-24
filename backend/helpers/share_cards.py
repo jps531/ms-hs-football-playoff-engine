@@ -52,7 +52,7 @@ PAD = 64
 BG = "#161616"  # --surface-page (neutral-950)
 TEXT = "#F7F7F7"  # --text-primary (neutral-50)
 TEXT_2 = "#A4A3A4"  # --text-secondary (neutral-400)
-RULE = "#393939"  # --border (neutral-800)
+RULE = "#393939"  # a rule (neutral-800; the site's dark --border is a step lighter, neutral-700)
 ODDS_BG = {1: "#393939", 2: "#07291D", 3: "#0D4632", 4: "#0F5B41", 5: "#137252"}  # --odds-1..5
 ODDS_TEXT = "#F2FBF8"  # --odds-text (brand-50)
 

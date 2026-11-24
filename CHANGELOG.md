@@ -5,6 +5,20 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.34.2
+
+Bracket fixes:
+
+- A game whose two teams are set, not yet played, is shown as a played game is: who hosts and why,
+  under the two teams, rather than a list of "Possible matchups" with one matchup in it.
+- Opening a possible matchup's "How?" no longer says who hosts and why a second time, under the
+  conditions; it still does when the reason differs from one way to the next.
+- In dark mode, the outline of a game and the line between its teams show on a dimmed game too (as
+  when a team is picked): the site's borders are a step lighter, so they show on raised backgrounds
+  everywhere.
+- Reporting a playoff score starts its date on the day the game was scheduled, once that day has
+  passed.
+
 ## 1.34.1
 
 - On a county's maps (its page, Compare and Timeline), the button that resets the map goes back to the
