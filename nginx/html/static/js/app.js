@@ -344,6 +344,7 @@ let scrollToFocus = false;
 async function render() {
   const token = ++renderToken;
   document.documentElement.classList.remove("is-map-full"); // a Regions map left in full screen
+  for (const el of document.querySelectorAll("[inert]")) el.inert = false; // what it covered (regions.js)
   headerMapSearch(null);
   nextComputedAt = null;
   showComputedAt(null);
@@ -701,7 +702,10 @@ function teamCombobox(form, teams, onPick, options = {}) {
   const pick = (team) => {
     matches = [];
     open(false);
-    input.blur();
+    // A map's search picks on the map, in place: from the keyboard, focus stays in the field (the pick
+    // is announced); a tap lets go of it, closing a phone's keyboard over the map.
+    const inPlace = form.hasAttribute("data-regions-find") || (form === teamSearch?.closest("form") && mapSearch);
+    if (byPointer || !inPlace) input.blur();
     onPick(team, input);
   };
 
@@ -3018,6 +3022,7 @@ async function renderCountyCompare(token, index, base, county, { finder, views }
     }
     route.teamName = p?.name ?? null;
     if (p && via) track("team_picked", { from: "county-compare", via, team: p.name });
+    if (p && via) announce(whereOnMaps(p.name, sides.map((side) => [rowIn(side, p), side.option.label])));
     history.replaceState(null, "", hrefWith({ team: route.teamName, vs: countyCompareVs }));
   };
   for (const side of sides) {
@@ -3087,6 +3092,7 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
     }
     route.teamName = p?.name ?? null;
     if (p && via) track("team_picked", { from: "county-timeline", via, team: p.name });
+    if (p && via) announce(whereOnMaps(p.name, seasons.map((side) => [rowIn(side, p), side.option.label])));
     history.replaceState(null, "", hrefWith({ team: route.teamName }));
   };
   for (const [i, side] of seasons.entries()) {
@@ -3142,6 +3148,16 @@ function wireTimelineSteps(root) {
   update();
 }
 
+/**
+ * A school picked on a page of several maps, in one sentence for the page's status line: where it is
+ * on each (*sides*: [its row there or null, the map's seasons]).
+ */
+function whereOnMaps(name, sides) {
+  return `${name}: ${sides.map(([row, label]) => (row ? `${regionPlace(row)} in ${label}` : `not in a region in ${label}`)).join("; ")}.`;
+}
+// A pick that draws the page again (a Timeline follow, a Compare pick in another class): said once it's drawn.
+let pickAnnounce = false;
+
 /** The Counties page's search box: the team search's field and list, for a county. */
 function countyFinder() {
   return regionsFinder("Find a county on the map").replace('aria-label="Teams"', 'aria-label="Counties"');
@@ -3158,14 +3174,25 @@ function wireCountiesMap(root, counts, goTo) {
       hover.hidden = true;
       return;
     }
+    tip(a, e.clientX, e.clientY);
+  });
+  // A county's name and count by the pointer, or (focused) by the county's middle.
+  const tip = (a, x, y) => {
     const name = a.dataset.county;
     hover.innerHTML = `<span class="map-tip"><strong class="map-tip__name">${esc(countyTitle(name))}</strong><span>${esc(schoolsCount(counts[name] ?? 0))}</span></span>`;
     hover.hidden = false;
     const box = frame.getBoundingClientRect();
-    const spot = hoverSpot(e.clientX - box.left, e.clientY - box.top, 8, { w: hover.offsetWidth, h: hover.offsetHeight }, { w: box.width, h: box.height });
+    const spot = hoverSpot(x - box.left, y - box.top, 8, { w: hover.offsetWidth, h: hover.offsetHeight }, { w: box.width, h: box.height });
     hover.style.left = `${spot.left}px`;
     hover.style.top = `${spot.top}px`;
+  };
+  frame.addEventListener("focusin", (e) => {
+    const a = e.target.closest?.("[data-county]");
+    if (!a) return;
+    const r = a.getBoundingClientRect();
+    tip(a, r.left + r.width / 2, r.top + r.height / 2);
   });
+  frame.addEventListener("focusout", () => { hover.hidden = true; });
   frame.addEventListener("pointerleave", () => { hover.hidden = true; });
   // The county pointed at or focused, outlined on top of its neighbors.
   const ring = frame.querySelector(".county-pick__ring");
@@ -3261,6 +3288,7 @@ async function renderTimeline(token, index) {
   });
   const followTeam = (name, via) => {
     if (name && via) track("team_picked", { from: "timeline", via, team: name });
+    pickAnnounce = Boolean(name && via); // said once the Timeline is drawn for it
     navigate(hrefWith({ team: name }), { replace: true, scroll: false });
   };
   for (const [i, side] of seasons.entries()) {
@@ -3291,6 +3319,8 @@ async function renderTimeline(token, index) {
     followTeam(team.school, "search");
   });
   wireTimelineSteps(app); // more seasons than fit: the row opens at the newest
+  if (pickAnnounce && follow) announce(whereOnMaps(follow.name, seasons.map((s) => [s.rows?.[0] ?? null, s.option.label])));
+  pickAnnounce = false;
   renderScrubber(route.clazz);
   showContext(contextHtml(regionsTitle(route.clazz), { week: timelineSpan(seasons) }, null, { bar: true }));
   history.replaceState(null, "", hrefWith({}));
@@ -3353,6 +3383,7 @@ async function renderCompare(token, index) {
       return row && row.class !== side.clazz;
     })) {
       if (via) track("team_picked", { from: "compare", via, team: p.name });
+      pickAnnounce = Boolean(via); // said once the page is drawn for it
       navigate(hrefWith({ team: p.name, vs: second.season }), { replace: true });
       return;
     }
@@ -3367,6 +3398,7 @@ async function renderCompare(token, index) {
     }
     route.teamName = p?.name ?? null;
     if (p && via) track("team_picked", { from: "compare", via, team: p.name });
+    if (p && via) announce(whereOnMaps(p.name, sides.map((side) => [rowIn(side, p), side.option.label])));
     regionsState.teamClasses = new Set(p ? sides.map((side) => rowIn(side, p)?.class).filter(Boolean) : []);
     regionsState.compare.rows = sides.map((side) => (p ? rowIn(side, p) : null));
     // Unfollowed, each map keeps the class it shows (written out, so it doesn't follow the other's).
@@ -3408,6 +3440,8 @@ async function renderCompare(token, index) {
   });
   regionsState.compare = { vs: second.season, vsClass: secondClass, sides: sides.map((x) => ({ season: x.option.season, option: x.option, clazz: x.clazz })), rows: [rowA ?? null, rowB ?? null] };
   if (follow) pickBoth(follow, null);
+  if (pickAnnounce && follow) announce(whereOnMaps(follow.name, sides.map((side) => [rowIn(side, follow), side.option.label])));
+  pickAnnounce = false;
   renderScrubber(route.clazz);
   const [older, newer] = second.season < first.season ? [sides[1], sides[0]] : sides;
   showContext(contextHtml(regionsTitle(route.clazz), { week: `${older.option.label} ${older.clazz}A vs. ${newer.option.label} ${newer.clazz}A` }, null, { bar: true }));

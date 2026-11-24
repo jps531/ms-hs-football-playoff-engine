@@ -2054,7 +2054,8 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
    color. */
 .regions-list__head { display: flex; align-items: center; justify-content: space-between; gap: 4px 12px; margin: 0 0 6px; }
 .regions-list__name { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; }
-.regions-list__standings { flex: none; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.regions-list__standings { flex: none; display: inline-block; padding-block: 3px; font-size: 14px; font-weight: 600; white-space: nowrap; } /* a 24px tap target */
+.notice a { display: inline-block; padding-block: 2px; }
 .regions-list ul { margin: 0; padding: 0; list-style: none; }
 .regions-list__row {
   display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; column-gap: 10px;
@@ -2130,6 +2131,8 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 /* A county's regions' schools elsewhere (regions.js countyLayer's mates): small dots in their region's
    shade, unnamed, under the county's own marks. */
 .map-dot--mate circle { stroke: var(--surface-page); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+/* A dot's or a pill's tap target (regions.js HIT): invisible, a little bigger than what's drawn. */
+.regions-map__svg .map-dot .map-hit { fill: transparent; stroke: none; pointer-events: all; }
 .map-pin-line { stroke: var(--text-secondary); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .map-pin { fill: var(--text-primary); }
 .map-pins > g.is-dim { opacity: 0.25; }

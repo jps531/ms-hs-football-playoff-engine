@@ -5,6 +5,25 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.33.0
+
+Accessibility on the Maps pages:
+
+- **The county pills' text reads at WCAG AA (4.5:1) in both themes.** Each pill's text is dark or
+  white, whichever reads better on its color, and the color is taken a little darker or lighter where
+  neither would; the share images use the same colors.
+- Picking a team from a map's search box with the keyboard keeps focus in the box (it used to drop to
+  the top of the page); with a tap, the phone's keyboard still closes.
+- In full screen, Tab and screen readers stay on the map and the site's bars; the page behind it can't
+  be reached until full screen ends.
+- The statewide county map is no longer 82 stops of the Tab key before the list (the list has every
+  county); a county focused there shows its name and count.
+- Compare and Timeline say a pick once, for every map ("Neshoba Central: Region 2-5A in 2027 and
+  2028; Region 2-6A in 2026"), instead of once per map; each map's zoom buttons are named for it ("Zoom, first
+  map, 2026"); Compare's pickers are the "First map" and "Second map".
+- Dots, pills and the small region links are at least 24 pixels to tap, without looking any bigger.
+- The Timeline's note says a team can also be found with its search.
+
 ## 1.31.0
 
 - **A county's map shows its regions' other schools**, those outside the county, as small dots in their

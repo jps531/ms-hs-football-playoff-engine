@@ -6,6 +6,7 @@ import pytest
 from backend.helpers import region_county_image as rc
 from backend.helpers import region_map as rm
 from backend.helpers import region_map_image as rmi
+from backend.helpers import region_pages as rp
 
 
 def _row(school, clazz, region, lat, lon):
@@ -89,3 +90,16 @@ def test_the_shades_are_the_pages():
     """None is the land's own color; then more of the site's green, all of it at 5 or more."""
     assert rc.shade_color("light", 4) == rc.BRAND["light"] and rc.shade_color("dark", 4) == rc.BRAND["dark"]
     assert len({rc.shade_color("light", s) for s in range(5)}) == 5
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_every_pill_reads_at_wcag_aa(theme):
+    """Each class's pill, at any tone, in either theme: its ink on its color at 4.5:1 or more, and the
+    images draw the same colors the page does."""
+    for clazz in range(1, 8):
+        for tone in (0, 0.25, 1 / 3, 0.5, 2 / 3, 0.75, 1):
+            shade = rp.shade_in(theme, clazz, tone)
+            assert rp.contrast(shade["fill"], shade["ink"]) >= 4.5, (clazz, tone, shade)
+    mine = [{"school": "A", "class": 7, "region": 3}, {"school": "B", "class": 7, "region": 4}]
+    page = rp.county_shades(mine)
+    assert rc.place_shades(theme, mine) == {k: (v[theme]["fill"], v[theme]["ink"]) for k, v in page.items()}

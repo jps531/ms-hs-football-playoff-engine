@@ -149,7 +149,7 @@ export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz))
   const counties = base.counties.map((c) => `<path class="map-county" data-county="${esc(c.name)}" d="${c.d}"/>`).join("");
   const names = base.counties.map((c) => `<text class="map-county-name" x="${c.label[0]}" y="${c.label[1]}">${esc(c.name)}</text>`).join("");
   const shapes = layer.shapes
-    .map((r) => `<path class="map-region map-region--${r.color}" data-group="${esc(r.group)}"${r.fill ? ` style="fill:${r.fill};stroke:${r.fill}"` : ""} d="${r.d}"/>`).join("");
+    .map((r) => `<path class="map-region map-region--${r.color}" data-group="${esc(r.group)}"${r.shade ? ` style="${paint("fill", r.shade, "fill")};${paint("stroke", r.shade, "fill")}"` : ""} d="${r.d}"/>`).join("");
   const placed = layer.schools.filter((s) => s.x != null);
   // On a county's map, its schools are pills ("3-6A"), each with a line back to its spot for when it's
   // moved off it; their regions' schools elsewhere, small dots under them, with no name or line.
@@ -158,12 +158,12 @@ export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz))
   const dots = [...placed.filter(mate), ...pilled]
     .map((s) => (mate(s)
       ? `<g class="map-dot map-dot--mate" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" tabindex="-1">`
-        + `<circle cx="${s.x}" cy="${s.y}" r="10" style="fill:${layer.shade(s).fill}"/></g>`
+        + `<circle cx="${s.x}" cy="${s.y}" r="10" style="${paint("fill", layer.shade(s), "fill")}"/><circle class="map-hit" cx="${s.x}" cy="${s.y}" r="10"/></g>`
       : layer.pill
       ? `<g class="map-dot map-dot--pill" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" data-x="${s.x}" data-y="${s.y}" tabindex="-1">`
-        + `<rect style="fill:${layer.shade(s).fill}"/><text x="${s.x}" y="${s.y}" style="fill:${layer.shade(s).ink}">${esc(layer.mark(s))}</text></g>`
+        + `<rect style="${paint("fill", layer.shade(s), "fill")}"/><text x="${s.x}" y="${s.y}" style="${paint("fill", layer.shade(s), "ink")}">${esc(layer.mark(s))}</text><rect class="map-hit"/></g>`
       : `<g class="map-dot map-dot--${layer.color(s)}${layer.away(s) ? " is-away" : ""}" data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" tabindex="-1">`
-        + `<circle cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${esc(layer.mark(s))}</text></g>`)).join("");
+        + `<circle cx="${s.x}" cy="${s.y}" r="34"/><circle class="map-hit" cx="${s.x}" cy="${s.y}" r="34"/><text x="${s.x}" y="${s.y}">${esc(layer.mark(s))}</text></g>`)).join("");
   // A pill moved off its school's spot has a line back to it, under every pill.
   const pins = layer.pill
     ? `<g class="map-pins" aria-hidden="true">${pilled.map((s) => `<g data-team="${esc(s.slug)}" data-group="${esc(layer.group(s))}" style="display:none">`
@@ -187,17 +187,18 @@ export function mapSvg(base, payload, clazz, layer = classLayer(payload, clazz))
  * One map with its buttons, under it, and the picked team's details: the map (with its zoom buttons,
  * tooltip and, with *full*, full screen) for the Map view and each side of Compare.
  */
-export function mapFigure(base, payload, clazz, { full = true, layer = classLayer(payload, clazz), after = "" } = {}) {
+export function mapFigure(base, payload, clazz, { full = true, layer = classLayer(payload, clazz), after = "", name = "", status = full } = {}) {
   const button = (attr, label, icon) => `<button type="button" ${attr} aria-label="${label}" title="${label}">${icon}</button>`;
   return `<figure class="regions-map">`
     + `<div class="regions-map__frame" data-map>${mapSvg(base, payload, clazz, layer)}`
     + `<div class="regions-map__hover" aria-hidden="true" hidden></div></div>`
-    + `<div class="regions-map__tools"><div class="regions-map__zoom" role="group" aria-label="Zoom">`
+    + `<div class="regions-map__tools"><div class="regions-map__zoom" role="group" aria-label="${esc(name ? `Zoom, ${name}` : "Zoom")}">`
     + `${button('data-zoom="in"', "Zoom in", MAP_ICONS.in)}${button('data-zoom="out"', "Zoom out", MAP_ICONS.out)}`
     + `${button('data-zoom="reset"', "Show the whole state", MAP_ICONS.reset)}</div>`
     + (full ? `<button type="button" class="regions-map__full" data-full aria-pressed="false">${MAP_ICONS.full}<span>Full screen</span></button>` : "")
-    + `</div><p class="visually-hidden" aria-live="polite" data-picked-status></p>`
-    + `<figcaption class="regions-map__picked" hidden></figcaption>${after}</figure>`;
+    // (A page of several maps says a pick once, for all of them: the app's status line.)
+    + `</div>${status ? `<p class="visually-hidden" aria-live="polite" data-picked-status></p>` : ""}`
+    + `<div class="regions-map__picked" hidden></div>${after}</figure>`;
 }
 
 /**
@@ -423,21 +424,21 @@ export function timelinePage(clazz, base, seasons, { controls = "", share = "", 
   const span = timelineSpan(seasons);
   const note = follow
     ? `Each map shows ${esc(follow)}’s class that season. Pick another team to follow it, or an empty spot on a map to stop.`
-    : "Pick a team on any map to follow it through every season: each map shows its class and region that season.";
+    : "Pick a team on any map, or find one with the search, to follow it through every season: each map shows its class and region that season.";
   return `<div class="page regions-page regions-page--timeline"><header class="entry-head">`
     + `${breadcrumbs(regionsTrail(clazz))}<div class="title-row"><h1 class="title">${esc(regionsTitle(clazz))}</h1>${share}</div>`
     + `<p class="regions-sub">${esc(span)}</p>`
     + `${views}${controls}<p class="focus-note muted regions-note">${note}</p></header>`
     + `<div class="timeline">${seasons.map((s, i) => `<section class="timeline__season" data-season="${s.option.season}" data-index="${i}">`
       + `<h2 class="timeline__label">${esc(s.option.label)} <span class="timeline__class">${s.clazz}A</span></h2>`
-      + `${mapFigure(base, s.payload, s.clazz, { full: false })}</section>`).join("")}</div>`
+      + `${mapFigure(base, s.payload, s.clazz, { full: false, name: `${s.option.label} map` })}</section>`).join("")}</div>`
     + (follow ? `<h2 class="timeline-table__title">${esc(follow)}, season by season</h2>${timelineTable(follow, seasons, teams)}` : "")
     + "</div>";
 }
 
 /**
  * One side of Compare: its season and class pickers over its map. *side* is "a" (the page's class and
- * season) or "b" (?vs=, ?vsclass=); *name* says which it is on screen ("Map 1").
+ * season) or "b" (?vs=, ?vsclass=); *name* says which it is on screen ("First map").
  */
 export function compareSide(side, base, option, payload, clazz, index, name) {
   const seasons = index.options.map((o) => `<option value="${esc(o.season)}"${o.season === option.season ? " selected" : ""}>${esc(o.label)}</option>`).join("");
@@ -446,7 +447,7 @@ export function compareSide(side, base, option, payload, clazz, index, name) {
     + `<div class="compare__pickers">`
     + `<label><span class="visually-hidden">${name}: seasons</span><select class="select-box" data-control="compare-season" data-side="${side}">${seasons}</select></label>`
     + `<label><span class="visually-hidden">${name}: class</span><select class="select-box" data-control="compare-class" data-side="${side}">${classes}</select></label>`
-    + `</div>${mapFigure(base, payload, clazz, { full: false })}</section>`;
+    + `</div>${mapFigure(base, payload, clazz, { full: false, name: `${name.toLowerCase()}, ${option.label}` })}</section>`;
 }
 
 /**
@@ -464,7 +465,7 @@ export function comparePage(clazz, base, a, b, index, { controls = "", share = "
     + `${breadcrumbs(regionsTrail(clazz))}<div class="title-row"><h1 class="title">${esc(regionsTitle(clazz))}</h1>${share}</div>`
     + `<p class="regions-sub">${esc(`${first.option.label} ${first.clazz}A vs. ${second.option.label} ${second.clazz}A`)}</p>`
     + `${views}${controls}<p class="focus-note muted regions-note">Pick a team on either map, or in the list under them, to see where it is on both.</p></header>`
-    + `<div class="compare">${[first, second].map((x, i) => compareSide(x.key, base, x.option, x.payload, x.clazz, index, `Map ${i + 1}`)).join("")}</div>`
+    + `<div class="compare">${[first, second].map((x, i) => compareSide(x.key, base, x.option, x.payload, x.clazz, index, i ? "Second map" : "First map")).join("")}</div>`
     + `<section class="compare-changes" aria-label="What changed">${compareChangesHtml(changes, teams)}</section></div>`;
 }
 
@@ -542,6 +543,8 @@ export function keepInView(view, base) {
  * with a team picked (its region's names come first). Names with no room are left out either way.
  */
 export const LABEL_ZOOM = 1.5;
+// A dot's or a pill's tap target at least this far from its middle, on screen (a 24px target, WCAG 2.5.8).
+const HIT = 12;
 export const LABEL_ZOOM_PICKED = 1.1;
 
 /**
@@ -689,9 +692,11 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
       placePills(r, px);
       mateR = r * 0.5;
       for (const g of svg.querySelectorAll(".map-dot--mate")) g.firstChild.setAttribute("r", mateR);
+      for (const hit of svg.querySelectorAll(".map-dot--mate .map-hit")) hit.setAttribute("r", HIT * px);
     } else {
       for (const g of svg.querySelectorAll(".map-dot")) {
         g.firstChild.setAttribute("r", g.classList.contains("is-away") ? r * 0.6 : r); // region-mates elsewhere: smaller
+        g.querySelector(".map-hit")?.setAttribute("r", Math.max(r, HIT * px)); // a finger's room, at least
         g.lastChild.setAttribute("font-size", r * 1.2);
       }
     }
@@ -711,7 +716,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const fs = r * 0.95;
     const h = r * 1.9;
     const pills = [...svg.querySelectorAll(".map-dot--pill")].map((g) => {
-      const w = fs * (0.62 * g.lastChild.textContent.length + 0.9);
+      const w = fs * (0.62 * g.querySelector("text").textContent.length + 0.9);
       const x = Number(g.dataset.x);
       const y = Number(g.dataset.y);
       return { g, w, x, y, at: [x, y], fixed: g.dataset.team === current?.slug }; // the picked one stays put
@@ -764,6 +769,8 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
       const pinG = pinsBy.get(p.g.dataset.team);
       const [line, pin] = pinG.children;
       Object.entries({ x: cx - p.w / 2, y: cy - h / 2, width: p.w, height: h, rx: h / 2 }).forEach(([k, v]) => rect.setAttribute(k, v));
+      const hitH = Math.max(h, 2 * HIT * px);
+      Object.entries({ x: cx - p.w / 2 - 2 * px, y: cy - hitH / 2, width: p.w + 4 * px, height: hitH }).forEach(([k, v]) => p.g.children[2].setAttribute(k, v));
       text.setAttribute("x", cx);
       text.setAttribute("y", cy);
       text.setAttribute("font-size", fs);
@@ -993,6 +1000,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     onFull(on);
     figure.classList.toggle("is-full", on);
     document.documentElement.classList.toggle("is-map-full", on);
+    behind(on);
     if (on) fitUnderBars();
     fullButton.setAttribute("aria-pressed", String(on));
     fullButton.innerHTML = `${on ? MAP_ICONS.leave : MAP_ICONS.full}<span>${on ? "Exit full screen" : "Full screen"}</span>`;
@@ -1002,6 +1010,25 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     apply();
   };
   let movesAtFull = null;
+  // In full screen, what the map covers (the rest of the page, the footer) can't be reached by Tab or a
+  // screen reader; the site's header and bars over it still can. Leaving, focus goes back to the button
+  // if it was lost.
+  let covered = [];
+  const behind = (on) => {
+    for (const el of covered) el.inert = false;
+    covered = [];
+    if (!on) {
+      if (document.activeElement === document.body) fullButton?.focus({ preventScroll: true });
+      return;
+    }
+    const top = figure.closest("main") ?? document.body;
+    for (let el = figure; el && el !== top; el = el.parentElement) {
+      for (const sib of el.parentElement?.children ?? []) if (sib !== el && !sib.inert) covered.push(sib);
+    }
+    const footer = document.querySelector(".site-footer");
+    if (footer && !footer.inert) covered.push(footer);
+    for (const el of covered) el.inert = true;
+  };
   fullButton?.addEventListener("click", () => full(!figure.classList.contains("is-full")));
   const onKey = (e) => {
     if (!figure.isConnected) return removeEventListener("keydown", onKey);
@@ -1114,13 +1141,64 @@ export function countyShades(schools) {
     const list = places.filter((p) => p.clazz === c).sort((a, b) => a.region - b.region);
     list.forEach((p, i) => {
       const tone = list.length === 1 ? 0.5 : i / (list.length - 1);
-      const hue = `var(--region-${CLASS_HUE[c]})`;
-      const fill = tone < 0.5 ? `color-mix(in srgb, ${hue} ${Math.round(55 + 90 * tone)}%, #fff)`
-        : tone > 0.5 ? `color-mix(in srgb, ${hue} ${Math.round(100 - 60 * (tone - 0.5))}%, #000)` : hue;
-      out.set(p.key, { tone, fill, ink: tone < 0.34 ? "#1B1B1B" : "#FFFFFF" });
+      const light = shadeIn("light", c, tone);
+      const dark = shadeIn("dark", c, tone);
+      out.set(p.key, { tone, light, dark, fill: `light-dark(${light.fill}, ${dark.fill})`, ink: `light-dark(${light.ink}, ${dark.ink})` });
     });
   }
   return out;
+}
+
+// The region colors, each theme's (app.css --region-1..8, region_map_image.REGION_COLORS).
+export const REGION_COLORS = {
+  light: ["#2A78D6", "#EB6834", "#1BAF7A", "#EDA100", "#E87BA4", "#008300", "#6250D6", "#E34948"],
+  dark: ["#3987E5", "#D95926", "#199E70", "#C98500", "#D55181", "#008300", "#9085E9", "#E66767"],
+};
+// A pill's text: dark or white, whichever reads better on its color; the color is taken darker (or
+// lighter) until it reads at INK_CONTRAST (WCAG AA for its small type). As region_pages.shade_in.
+const INK_DARK = "#1B1B1B";
+const INK_LIGHT = "#FFFFFF";
+const INK_CONTRAST = 4.5;
+
+/** Color *a* mixed toward *b* by *t* (0..1), in sRGB as CSS color-mix does, rounded half up. */
+function mix(a, b, t) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  return `#${pa.map((x, k) => Math.floor(x + (pb[k] - x) * t + 0.5).toString(16).padStart(2, "0").toUpperCase()).join("")}`;
+}
+
+/** Two colors' contrast ratio (WCAG), 1 to 21. */
+export function contrast(a, b) {
+  const lum = (c) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => {
+      const v = parseInt(c.slice(i, i + 2), 16) / 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * A place's pill in *theme*: { fill, ink }. Its class's hue (the theme's), mixed with white (lower tones)
+ * or black (higher), then darkened or lightened in steps until its ink reads at INK_CONTRAST.
+ */
+export function shadeIn(theme, clazz, tone) {
+  const hue = REGION_COLORS[theme][CLASS_HUE[clazz] - 1];
+  const base = tone < 0.5 ? mix("#FFFFFF", hue, Math.floor(55 + 90 * tone + 0.5) / 100)
+    : tone > 0.5 ? mix("#000000", hue, Math.floor(100 - 60 * (tone - 0.5) + 0.5) / 100) : hue;
+  const ink = contrast(base, INK_DARK) >= contrast(base, INK_LIGHT) ? INK_DARK : INK_LIGHT;
+  const toward = ink === INK_DARK ? "#FFFFFF" : "#000000";
+  let fill = base;
+  for (let step = 1; step < 26 && contrast(fill, ink) < INK_CONTRAST; step += 1) fill = mix(base, toward, step * 0.04);
+  return { fill, ink };
+}
+
+/** CSS for *prop* in a shade's *key* ("fill" or "ink"): the light theme's, then the theme-following one
+ * (a browser without light-dark() keeps the first). As region_pages.paint. */
+export function paint(prop, shade, key) {
+  return `${prop}:${shade.light[key]};${prop}:${shade[key]}`;
 }
 
 /** countyShades as a plain object (for the parity test against region_pages.county_shades). */
@@ -1130,7 +1208,7 @@ export function countyShadesObject(schools) {
 
 /** A school's place as a pill in its shade: "3-6A". */
 export function countyPill(school, shade) {
-  return `<span class="county-pill" style="background:${shade.fill};color:${shade.ink}" aria-hidden="true">${school.region}-${school.class}A</span>`;
+  return `<span class="county-pill" style="${paint("background", shade, "fill")};${paint("color", shade, "ink")}" aria-hidden="true">${school.region}-${school.class}A</span>`;
 }
 
 /**
@@ -1158,7 +1236,7 @@ export function countyLayer(payload, county) {
     away: (s) => s.county !== county,
     shapes: countyPlaces(mine).map((p) => {
       const r = payload.regions[String(p.clazz)]?.[String(p.region)];
-      return r && { group: p.key, color: 0, fill: shades.get(p.key).fill, d: r.d, box: r.box };
+      return r && { group: p.key, color: 0, shade: shades.get(p.key), d: r.d, box: r.box };
     }).filter(Boolean),
     county,
     label: `Map of Mississippi with ${countyTitle(county)}'s MHSAA schools, each marked with its region and class`,
@@ -1295,12 +1373,15 @@ export function countShade(n) {
 
 const SHADES = [["None", 0], ["1", 1], ["2", 2], ["3–4", 3], ["5 or more", 4]];
 
-/** The statewide map: every county a link, shaded by how many MHSAA schools it has. */
+/**
+ * The statewide map: every county a link, shaded by how many MHSAA schools it has. Out of the Tab order
+ * (the list under it has every county, a stop each), but there for a screen reader and the pointer.
+ */
 export function countiesMapSvg(base, counts) {
   const v = wholeView(base);
   const shapes = base.counties.map((c) => {
     const n = counts[c.name] ?? 0;
-    return `<a class="county-pick" href="${esc(countiesPath(c.name))}" data-county="${esc(c.name)}" aria-label="${esc(countyTitle(c.name))}: ${esc(schoolsCount(n))}">`
+    return `<a class="county-pick" href="${esc(countiesPath(c.name))}" data-county="${esc(c.name)}" tabindex="-1" aria-label="${esc(countyTitle(c.name))}: ${esc(schoolsCount(n))}">`
       + `<path class="county-pick__shape county-shade--${countShade(n)}" d="${c.d}"/></a>`;
   }).join("");
   const names = base.counties.map((c) => `<text class="county-pick__name" x="${c.label[0]}" y="${c.label[1]}">${esc(c.name)}</text>`).join("");
@@ -1420,7 +1501,7 @@ export function countyCompareSide(side, base, option, payload, county, index, na
   const seasons = index.options.map((o) => `<option value="${esc(o.season)}"${o.season === option.season ? " selected" : ""}>${esc(o.label)}</option>`).join("");
   const mine = payload.schools.filter((s) => s.county === county);
   const map = mine.length
-    ? mapFigure(base, payload, null, { full: false, layer: countyLayer(payload, county) })
+    ? mapFigure(base, payload, null, { full: false, layer: countyLayer(payload, county), name: `${name.toLowerCase()}, ${option.label}` })
     : `<p class="notice">No MHSAA school was in ${esc(countyTitle(county))} in ${esc(option.label)}.</p>`;
   return `<section class="compare__side" data-side="${side}" aria-label="${name}">`
     + `<div class="compare__pickers"><label><span class="visually-hidden">${name}: seasons</span>`
@@ -1439,7 +1520,7 @@ export function countyComparePage(county, base, a, b, index, { controls = "", sh
   return `<div class="page regions-page regions-page--compare county-page"><header class="entry-head">`
     + countyViewHeader(county, base, `${first.option.label} vs. ${second.option.label}`, share)
     + `${views}${controls}<p class="focus-note muted regions-note">Pick a school on either map, or in the list under them, to see where it is on both.</p></header>`
-    + `<div class="compare">${[first, second].map((x, i) => countyCompareSide(x.key, base, x.option, x.payload, county, index, `Map ${i + 1}`)).join("")}</div>`
+    + `<div class="compare">${[first, second].map((x, i) => countyCompareSide(x.key, base, x.option, x.payload, county, index, i ? "Second map" : "First map")).join("")}</div>`
     + `<section class="compare-changes" aria-label="What changed">${countyChangesHtml(changes, county, teams)}</section></div>`;
 }
 
@@ -1487,7 +1568,7 @@ export function countyTimelinePage(county, base, seasons, { controls = "", share
     + `${views}${controls}<p class="focus-note muted regions-note">Each map is ${esc(countyTitle(county))} that season: each school marked with its region and class, in its class's color. Pick a school to see its region.</p></header>`
     + `<div class="timeline">${seasons.map((s, i) => {
       const n = s.payload.schools.filter((r) => r.county === county).length;
-      const map = n ? mapFigure(base, s.payload, null, { full: false, layer: countyLayer(s.payload, county) })
+      const map = n ? mapFigure(base, s.payload, null, { full: false, layer: countyLayer(s.payload, county), name: `${s.option.label} map` })
         : `<p class="notice">No MHSAA school in ${esc(s.option.label)}.</p>`;
       return `<section class="timeline__season" data-season="${s.option.season}" data-index="${i}">`
         + `<h2 class="timeline__label">${esc(s.option.label)} <span class="timeline__class">${esc(schoolsCount(n))}</span></h2>${map}</section>`;
