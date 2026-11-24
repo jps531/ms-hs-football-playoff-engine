@@ -230,7 +230,7 @@ export function regionsPage(clazz, base, payload, currentSeason, { controls = ""
   return `<div class="page regions-page"><header class="entry-head">${regionsHeader(clazz, payload, share)}${views}${controls}`
     + `<p class="focus-note muted regions-note">Pick a team on the map or in the lists to see where it is and highlight its region.</p></header>`
     + `<div class="regions-layout">${mapFigure(base, payload, clazz)}`
-    + `<div class="regions-side"><p class="focus-note muted regions-note regions-note--lists">Pick a team to see it on the map.</p>`
+    + `<div class="regions-side">`
     + `<div class="regions-list">${regionsLists(clazz, payload, currentSeason, teams)}</div></div></div></div>`;
 }
 
@@ -554,7 +554,8 @@ export const LABEL_ZOOM_PICKED = 1.1;
  * view: { x0, y0, x1, y1 }). Right beside the dot first (right, left, above, below), where its own dot
  * must be plainly the nearest, so it can't be read as a neighbor's; else a little farther out, with a
  * line from the dot (*line*: [x1, y1, x2, y2]) that passes no other dot. A name with no such spot is
- * left out. A point can have its own radius (*r*), and one with no name is only in the way of others'.
+ * left out, unless it *must* be shown (then, last, a line may pass other dots). A point can have its own
+ * radius (*r*), and one with no name is only in the way of others'.
  * Returns { slug: { x, y, anchor, line } }.
  */
 export function placeLabels(points, r, size, bounds = null) {
@@ -568,7 +569,8 @@ export function placeLabels(points, r, size, bounds = null) {
   // From a dot's middle to the nearest point of a name's box.
   const reach = (q, b) => Math.hypot(Math.max(b.x0 - q.x, 0, q.x - b.x1), Math.max(b.y0 - q.y, 0, q.y - b.y1));
   // Its own dot is the nearest to it, by at least a dot's radius.
-  const owned = (p, b) => points.every((q) => q === p || reach(q, b) > reach(p, b) + r);
+  // (A dot with no name of its own can't be taken for this name's: it only keeps names off itself.)
+  const owned = (p, b) => points.every((q) => q === p || !q.name || reach(q, b) > reach(p, b) + r);
   // A line from (x1, y1) to (x2, y2) keeps clear of every dot but p's.
   const clear = (p, [x1, y1, x2, y2]) => points.every((q) => {
     if (q === p) return true;
@@ -577,6 +579,11 @@ export function placeLabels(points, r, size, bounds = null) {
     return Math.hypot(q.x - (x1 + t * dx), q.y - (y1 + t * dy)) > rOf(q) * 1.2;
   });
   const placed = {};
+  const lines = []; // the lines from dots to names placed so far: a new one mustn't cross them
+  const crosses = ([a, b, c, d], [e, f, g, h]) => {
+    const side = (x1, y1, x2, y2, x, y) => Math.sign((x2 - x1) * (y - y1) - (y2 - y1) * (x - x1));
+    return side(a, b, c, d, e, f) !== side(a, b, c, d, g, h) && side(e, f, g, h, a, b) !== side(e, f, g, h, c, d);
+  };
   for (const p of points) {
     if (!p.name) continue;
     const w = width(p.name);
@@ -600,21 +607,36 @@ export function placeLabels(points, r, size, bounds = null) {
       spot(p.x - diag, p.y + diag, "end", [p.x - diag, p.y + diag]),
       spot(p.x + out, p.y, "start", [p.x + out, p.y]),
       spot(p.x - out, p.y, "end", [p.x - out, p.y]),
+      // Farther out still, for a name with no room nearer (a crowd of marks, as in Jackson).
+      ...[1.8, 2.6].flatMap((k) => [
+        spot(p.x + diag * k, p.y - diag * k, "start", [p.x + diag * k, p.y - diag * k]),
+        spot(p.x + diag * k, p.y + diag * k, "start", [p.x + diag * k, p.y + diag * k]),
+        spot(p.x - diag * k, p.y - diag * k, "end", [p.x - diag * k, p.y - diag * k]),
+        spot(p.x - diag * k, p.y + diag * k, "end", [p.x - diag * k, p.y + diag * k]),
+        spot(p.x + out * k, p.y, "start", [p.x + out * k, p.y]),
+        spot(p.x - out * k, p.y, "end", [p.x - out * k, p.y]),
+      ]),
     ];
-    for (const s of spots) {
-      if (overlaps(s.box)) continue;
-      let line = null;
-      if (s.edge) {
-        // From the dot's edge toward where the name starts, stopping a little short of it.
-        const [ex, ey] = s.edge;
-        const d = Math.hypot(ex - p.x, ey - p.y);
-        const [ux, uy] = [(ex - p.x) / d, (ey - p.y) / d];
-        line = [p.x + ux * r, p.y + uy * r, ex - ux * gap, ey - uy * gap];
-        if (!clear(p, line)) continue;
-      } else if (!owned(p, s.box)) continue;
-      boxes.push(s.box);
-      placed[p.slug] = { x: s.x, y: s.y, anchor: s.anchor, line };
-      break;
+    // A spot whose line crosses no other line first; one that does only when there's no other; and for a
+    // name that must be shown (*must*: a county's own school), last, one whose line passes other marks.
+    for (const [uncrossed, cleared] of [[true, true], [false, true], ...(p.must ? [[false, false]] : [])]) {
+      for (const s of spots) {
+        if (overlaps(s.box)) continue;
+        let line = null;
+        if (s.edge) {
+          // From the dot's edge toward where the name starts, stopping a little short of it.
+          const [ex, ey] = s.edge;
+          const d = Math.hypot(ex - p.x, ey - p.y);
+          const [ux, uy] = [(ex - p.x) / d, (ey - p.y) / d];
+          line = [p.x + ux * r, p.y + uy * r, ex - ux * gap, ey - uy * gap];
+          if ((cleared && !clear(p, line)) || (uncrossed && lines.some((l) => crosses(l, line)))) continue;
+          lines.push(line);
+        } else if (!owned(p, s.box)) continue;
+        boxes.push(s.box);
+        placed[p.slug] = { x: s.x, y: s.y, anchor: s.anchor, line };
+        break;
+      }
+      if (placed[p.slug]) break;
     }
   }
   return placed;
@@ -789,18 +811,18 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   const leaders = new Map([...svg.querySelectorAll(".map-leader")].map((l) => [l.dataset.team, l]));
   const labelDots = (r, size) => {
     const inView = (s) => s.x >= view.x && s.x <= view.x + view.w && s.y >= view.y && s.y <= view.y + view.h;
-    // (On a county's map, its own schools before their region-mates elsewhere, which have no name; with
+    // (On a county's map, its own schools before their region-mates elsewhere, which have no name. With
     // a school picked, only its group is named, around its own marks: the others are dimmed behind.)
     const first = (s) => (s.slug === current?.slug ? 0 : current && groupOf(s) === groupOf(current) ? 1 : layer.away(s) ? 3 : 2);
-    const shown = (s) => !(layer.pill && current && groupOf(s) !== groupOf(current));
+    const shown = (s) => !(current && groupOf(s) !== groupOf(current));
     const points = [...bySlug.values()].filter((s) => s.x != null && inView(s) && shown(s))
       .sort((a, b) => first(a) - first(b) || byName(a.school, b.school))
       .map((s) => ({
         slug: s.slug, x: pillAt.get(s.slug)?.[0] ?? s.x, y: pillAt.get(s.slug)?.[1] ?? s.y,
-        ...(layer.pill && layer.away(s) ? { name: "", r: mateR } : { name: s.school }),
+        ...(layer.pill && layer.away(s) ? { name: "", r: mateR } : { name: s.school, must: Boolean(layer.named) }),
       }));
-    // Picked on a county's map: the names over the dimmed marks.
-    const top = layer.pill && current;
+    // With a school picked: the names over the dimmed marks.
+    const top = Boolean(current);
     const names = svg.querySelector(".map-labels");
     if (names && top !== (names.nextElementSibling == null)) {
       if (top) svg.append(names);
@@ -1326,9 +1348,25 @@ export function countyPage(county, base, payload, { controls = "", share = "", t
   }
   const layer = countyLayer(payload, county);
   return `<div class="page regions-page county-page">${head}`
-    + `<p class="focus-note muted regions-note">Each school is marked with its region and class (3-6A), in its class's color: lighter and darker for its regions. Pick one to see its region.</p></header>`
+    + `<p class="focus-note muted regions-note">${countyKey(mine)} Pick one to see its region.</p></header>`
     + `<div class="regions-layout">${mapFigure(base, payload, null, { layer, after: countyNearby(base, county, payload) })}`
     + `<div class="regions-side"><div class="regions-list county-list">${countyLists(county, payload, teams)}</div></div></div></div>`;
+}
+
+/**
+ * What a county's marks mean, in a sentence with its classes' colors: "Each school is marked with its
+ * region and class (3-6A), in its class's color [7A] [6A] …, lighter or darker by region." (*schools*: the
+ * county's, any seasons.)
+ */
+export function countyKey(schools) {
+  const classes = [...new Set(schools.map((s) => s.class))].sort((x, y) => y - x);
+  const chip = (c) => {
+    const shade = { light: shadeIn("light", c, 0.5), dark: shadeIn("dark", c, 0.5) };
+    shade.fill = `light-dark(${shade.light.fill}, ${shade.dark.fill})`;
+    shade.ink = `light-dark(${shade.light.ink}, ${shade.dark.ink})`;
+    return `<span class="county-pill" style="${paint("background", shade, "fill")};${paint("color", shade, "ink")}">${c}A</span>`;
+  };
+  return `Each school is marked with its region and class (3-6A), in its class’s color${classes.length ? ` <span class="county-key">${classes.map(chip).join(" ")}</span>` : ""}, lighter or darker by region.`;
 }
 
 /**
@@ -1343,7 +1381,7 @@ export function countyNearby(base, county, payload) {
   return `<nav class="county-nearby" aria-labelledby="county-nearby">`
     + `<p class="county-nearby__label" id="county-nearby">Nearby counties</p><ul class="county-nearby__list">`
     + near.map((n) => `<li><a href="${esc(countiesPath(n))}" data-county="${esc(n)}" aria-label="${esc(countyTitle(n))}: ${esc(schoolsCount(counts[n] ?? 0))}">`
-      + `${countyMark(base, n, { size: 24, shade: countShade(counts[n] ?? 0) })}<span>${esc(n)}</span></a></li>`).join("")
+      + `${countyMark(base, n, { size: 24, shade: countShade(counts[n] ?? 0) })}<span>${esc(n)}</span><span class="county-nearby__count" aria-hidden="true">${counts[n] ?? 0}</span></a></li>`).join("")
     + "</ul></nav>";
 }
 
@@ -1519,7 +1557,9 @@ export function countyComparePage(county, base, a, b, index, { controls = "", sh
   const [first, second] = b.option.season < a.option.season ? [{ ...b, key: "b" }, { ...a, key: "a" }] : [{ ...a, key: "a" }, { ...b, key: "b" }];
   return `<div class="page regions-page regions-page--compare county-page"><header class="entry-head">`
     + countyViewHeader(county, base, `${first.option.label} vs. ${second.option.label}`, share)
-    + `${views}${controls}<p class="focus-note muted regions-note">Pick a school on either map, or in the list under them, to see where it is on both.</p></header>`
+    + `${views}${controls}<p class="focus-note muted regions-note">${[a, b].some((x) => x.payload.schools.some((r) => r.county === county))
+      ? "Pick a school on either map, or in the list under them, to see where it is on both."
+      : `No MHSAA school was in ${esc(countyTitle(county))} in either season.`}</p></header>`
     + `<div class="compare">${[first, second].map((x, i) => countyCompareSide(x.key, base, x.option, x.payload, county, index, i ? "Second map" : "First map")).join("")}</div>`
     + `<section class="compare-changes" aria-label="What changed">${countyChangesHtml(changes, county, teams)}</section></div>`;
 }
@@ -1543,10 +1583,15 @@ export function countyTimelineTable(county, seasons, teams = {}) {
   const shades = seasons.map((s) => countyShades(s.payload.schools.filter((r) => r.county === county)));
   const head = `<tr><th scope="col">School</th>${seasons.map((s) => `<th scope="col">${esc(s.option.label)}</th>`).join("")}</tr>`;
   const body = names.map((name) => {
+    const rows = seasons.map((s) => s.payload.schools.find((x) => x.county === county && x.school === nameIn(name, newest, s.option.season)));
     const cells = seasons.map((s, i) => {
-      const r = s.payload.schools.find((x) => x.county === county && x.school === nameIn(name, newest, s.option.season));
+      const r = rows[i];
+      // A school in a different class or region than the season before, marked so.
+      const before = rows[i - 1];
+      const changed = r && before && (before.class !== r.class || before.region !== r.region);
       return r
-        ? `<td><span class="timeline-table__place">${countyPill(r, shades[i].get(`${r.class}-${r.region}`))}<span class="visually-hidden">${esc(place(r))}</span></span></td>`
+        ? `<td><span class="timeline-table__place">${countyPill(r, shades[i].get(`${r.class}-${r.region}`))}<span class="visually-hidden">${esc(place(r))}</span>`
+          + `${changed ? `<span class="timeline-table__changed">changed</span>` : ""}</span></td>`
         : `<td><span class="muted" aria-label="Not on the list">—</span></td>`;
     }).join("");
     // A merger, said where the rows end and begin: "Part of North Tippah from 2027", "From Walnut and Falkner".
@@ -1565,7 +1610,9 @@ export function countyTimelinePage(county, base, seasons, { controls = "", share
   const span = timelineSpan(seasons);
   return `<div class="page regions-page regions-page--timeline county-page"><header class="entry-head">`
     + countyViewHeader(county, base, span, share)
-    + `${views}${controls}<p class="focus-note muted regions-note">Each map is ${esc(countyTitle(county))} that season: each school marked with its region and class, in its class's color. Pick a school to see its region.</p></header>`
+    + `${views}${controls}<p class="focus-note muted regions-note">${seasons.some((s) => s.payload.schools.some((r) => r.county === county))
+      ? `Each map is ${esc(countyTitle(county))} that season. ${countyKey(seasons.flatMap((s) => s.payload.schools.filter((r) => r.county === county)))} Pick one to see its region.`
+      : `No MHSAA school was in ${esc(countyTitle(county))} in any of these seasons.`}</p></header>`
     + `<div class="timeline">${seasons.map((s, i) => {
       const n = s.payload.schools.filter((r) => r.county === county).length;
       const map = n ? mapFigure(base, s.payload, null, { full: false, layer: countyLayer(s.payload, county), name: `${s.option.label} map` })

@@ -1823,6 +1823,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .regions-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 16px; }
 /* The header's search box, in the page (team-search, above): left-aligned, its list under it. */
 .team-search.team-search--page { position: relative; margin-left: 0; flex: 1 1 16rem; max-width: 22rem; justify-content: flex-start; }
+/* On a phone, a county's search ("Go to a county") fits beside the season picker; a class's longer one
+   gets a line of its own. */
+@media (max-width: 600px) { .county-page .team-search.team-search--page { flex-basis: 10rem; } }
 .team-search--page .team-results { left: 0; right: auto; top: calc(100% + 6px); }
 @media (max-width: 40em) {
   .team-search.team-search--page { position: relative; }
@@ -1835,8 +1838,6 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .regions-map { margin: 0; position: sticky; top: calc(var(--header-h) + 67px + 16px); }
 @media (max-width: 760px) { .regions-map { position: static; } }
 .regions-note { margin: 16px 0 0; }
-.regions-note--lists { display: none; margin: 0 0 8px; }
-@media (max-width: 760px) { .regions-note--lists { display: block; } }
 .regions-map__image { display: block; width: 100%; height: auto; }
 /* The whole map in one view: on a computer, as tall as the screen leaves room for once the map is
    pinned under the header, with its buttons and a picked team's details under it (about 220px); on a
@@ -2108,6 +2109,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   border: 1px solid var(--border); border-radius: 8px; background: var(--surface-page);
   color: var(--text-primary); font-size: 14px; font-weight: 600; text-decoration: none;
 }
+.county-nearby__count { color: var(--text-secondary); font-weight: 500; }
+/* A county's key: its classes' colors, in the sentence saying what the marks are. */
+.county-key { display: inline-flex; flex-wrap: wrap; gap: 4px; vertical-align: middle; }
+.timeline-table__changed { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 .county-nearby__list a:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-page)); }
 .regions-map.is-full .county-nearby { display: none; }
 /* A county's schools' region-mates in other counties: smaller, unnumbered, faded. */
