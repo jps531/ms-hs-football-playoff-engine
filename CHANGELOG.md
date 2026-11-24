@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.34.1
+
+- On a county's maps (its page, Compare and Timeline), the button that resets the map goes back to the
+  county, as the map opened, and says so ("Back to Rankin County"); it used to show the whole state.
+- A school's tooltip on a narrow map wraps to fit it, rather than running past its edge and being cut
+  off.
+- A county's page says its "3-6A" is an example: "marked with its region and class (for example,
+  3-6A)".
+
 ## 1.34.0
 
 Simpler Maps pages:

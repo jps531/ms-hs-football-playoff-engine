@@ -194,7 +194,7 @@ export function mapFigure(base, payload, clazz, { full = true, layer = classLaye
     + `<div class="regions-map__hover" aria-hidden="true" hidden></div></div>`
     + `<div class="regions-map__tools"><div class="regions-map__zoom" role="group" aria-label="${esc(name ? `Zoom, ${name}` : "Zoom")}">`
     + `${button('data-zoom="in"', "Zoom in", MAP_ICONS.in)}${button('data-zoom="out"', "Zoom out", MAP_ICONS.out)}`
-    + `${button('data-zoom="reset"', "Show the whole state", MAP_ICONS.reset)}</div>`
+    + `${button('data-zoom="reset"', layer.county ? `Back to ${countyTitle(layer.county)}` : "Show the whole state", MAP_ICONS.reset)}</div>`
     + (full ? `<button type="button" class="regions-map__full" data-full aria-pressed="false">${MAP_ICONS.full}<span>Full screen</span></button>` : "")
     // (A page of several maps says a pick once, for all of them: the app's status line.)
     + `</div>${status ? `<p class="visually-hidden" aria-live="polite" data-picked-status></p>` : ""}`
@@ -682,7 +682,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
   const status = root.querySelector("[data-picked-status]");
   const whole = wholeView(base);
   // Where the map starts, and goes back to when a team is unpicked: the whole state, or *home*, a box
-  // to fit with room around it (a county). The reset button always shows the whole state.
+  // to fit with room around it (a county). The reset button goes back there too.
   const start = () => (home ? regionView(home, base, 0.45) : { ...whole });
   let view = start();
   let current = null;
@@ -993,7 +993,7 @@ export function wireRegionsMap(root, base, payload, clazz, { picked = null, team
     const b = e.target.closest("[data-zoom]");
     if (!b) return;
     if (b.dataset.zoom === "reset") {
-      view = { ...whole };
+      view = start(); // where the map opened: the state, or a county
       moves += 1;
       apply();
     } else zoomAt(b.dataset.zoom === "in" ? 1.6 : 1 / 1.6, ...middle());
@@ -1355,7 +1355,7 @@ export function countyPage(county, base, payload, { controls = "", share = "", t
 
 /**
  * What a county's marks mean, in a sentence with its classes' colors: "Each school is marked with its
- * region and class (3-6A), in its class's color [7A] [6A] …, lighter or darker by region." (*schools*: the
+ * region and class (for example, 3-6A), in its class's color [7A] [6A] …, lighter or darker by region." (*schools*: the
  * county's, any seasons.)
  */
 export function countyKey(schools) {
@@ -1366,7 +1366,7 @@ export function countyKey(schools) {
     shade.ink = `light-dark(${shade.light.ink}, ${shade.dark.ink})`;
     return `<span class="county-pill" style="${paint("background", shade, "fill")};${paint("color", shade, "ink")}">${c}A</span>`;
   };
-  return `Each school is marked with its region and class (3-6A), in its class’s color${classes.length ? ` <span class="county-key">${classes.map(chip).join(" ")}</span>` : ""}, lighter or darker by region.`;
+  return `Each school is marked with its region and class (for example, 3-6A), in its class’s color${classes.length ? ` <span class="county-key">${classes.map(chip).join(" ")}</span>` : ""}, lighter or darker by region.`;
 }
 
 /**
