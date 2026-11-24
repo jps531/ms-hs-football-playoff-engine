@@ -127,9 +127,9 @@ test("the views every map page has, the one shown marked", () => {
   const html = mapsViews("compare", {
     map: "/maps/regions/4a?team=bay", compare: "/maps/regions/4a/compare?team=bay", timeline: "/maps/regions/4a/timeline?team=bay",
   });
-  assert.match(html, /href="\/maps\/regions\/4a\?team=bay">Season<\/a>/);
-  assert.match(html, /href="\/maps\/regions\/4a\/compare\?team=bay" aria-current="page">Compare<\/a>/);
-  assert.match(html, /href="\/maps\/regions\/4a\/timeline\?team=bay">Timeline<\/a>/);
+  assert.match(html, /href="\/maps\/regions\/4a\?team=bay" data-view="map">Season<\/a>/);
+  assert.match(html, /href="\/maps\/regions\/4a\/compare\?team=bay" data-view="compare" aria-current="page">Compare<\/a>/);
+  assert.match(html, /href="\/maps\/regions\/4a\/timeline\?team=bay" data-view="timeline">Timeline<\/a>/);
 });
 
 test("a team picked on one map says where it is when it isn't on the other", () => {
