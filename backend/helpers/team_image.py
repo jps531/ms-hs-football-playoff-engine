@@ -13,6 +13,7 @@ from PIL import Image
 
 from backend.helpers.bracket_image import trophy
 from backend.helpers.region_image import (
+    ALL_COLUMNS,
     CAPPED_PAGES,
     CARD_PAD,
     COL_GAP,
@@ -28,11 +29,13 @@ from backend.helpers.region_image import (
     _Page,
     _records,
     _rule,
+    _standings_column,
     _wrap,
+    all_width,
+    balanced_columns,
+    more_line,
 )
-from backend.helpers.region_image import _strip as _region_strip
 from backend.helpers.share_cards import (
-    SITE_HOST,
     _inter,
     _nippo,
     display_order,
@@ -40,10 +43,9 @@ from backend.helpers.share_cards import (
     format_pct,
     mode_odds,
     position_labels,
-    slugify,
     standing_positions,
 )
-from backend.helpers.static_pages import game_date, insight_cards, outcome_cards, region_path
+from backend.helpers.static_pages import game_date, insight_cards, outcome_cards
 
 ODDS_KEYS = (("p1", "1st"), ("p2", "2nd"), ("p3", "3rd"), ("p4", "4th"), ("p_playoffs", "Playoffs"))
 
@@ -461,15 +463,20 @@ def _rest_ways(boxes: list[tuple[dict, float]], box: dict) -> list:
     return out
 
 
-def _pack(cards: list[tuple[dict, float]], top: float, bottom: float) -> list[list[tuple[dict, float, float, float]]]:
-    """The cards in order onto pages of two columns, each into the shorter column it fits, else a new page.
-    A page is a list of (card, x, y, h)."""
+def _pack(
+    cards: list[tuple[dict, float]], top: float, bottom: float, first_top: float | None = None
+) -> list[list[tuple[dict, float, float, float]]]:
+    """The cards in order onto pages of two columns, each into the shorter column it fits, else a new page
+    (the first page's columns starting at *first_top*, under its standings). A page is a list of
+    (card, x, y, h)."""
     pages: list[list] = [[]]
-    cols = [top, top]
+    start = top if first_top is None else first_top
+    cols = [start, start]
     for card, h in cards:
-        fits = [c for c in (0, 1) if cols[c] == top or cols[c] + h <= bottom]
+        fits = [c for c in (0, 1) if cols[c] + h <= bottom or (cols[c] == start and start == top)]
         if not fits:
             pages.append([])
+            start = top
             cols = [top, top]
             fits = [0, 1]
         c = min(fits, key=lambda c: cols[c])
@@ -502,28 +509,34 @@ def render_team_scenarios(
     sub = f"{season} · Region {region}-{clazz}A · What has to happen"
 
     def frame(page: _Page, n: int, total: int) -> tuple[float, float]:
-        """A page's title, standings and intro; returns where its cards go, top and bottom."""
+        """A page's title (and, on the first, the standings and the intro); returns where its cards go, top
+        and bottom."""
         top = _title(page, school, sub, mode)
         if total > 1:
-            page.label(SIZE[0] - PAD, PAD + 40, f"{n} of {total}", 26, anchor="rs")
+            page.label(page.img.width - PAD, PAD + 40, f"{n} of {total}", 26, anchor="rs")
         bx = PAD + 186
         for kind, label in _badges(team, clazz, False):
             bx += page.badge(bx, top + 44, kind, label, 26) + 12
-        top = _region_strip(page, top + 80, payload, mode, school)
-        for line in _wrap(page.draw, intro, _inter(32, 500), SIZE[0] - 2 * PAD) if intro else []:
-            top += 44
-            page.draw.text((PAD, top + 20), line, font=_inter(32, 500), fill=page.t.text_2, anchor="ls")
-        return top + (76 if intro else 36), _footer(page, stamp) - 20 - LINK_H
+        top += 80
+        if n == 1:
+            top = _standings_column(page, top, payload, mode, school)
+            for line in _wrap(page.draw, intro, _inter(32, 500), page.img.width - 2 * PAD) if intro else []:
+                top += 44
+                page.draw.text((PAD, top + 20), line, font=_inter(32, 500), fill=page.t.text_2, anchor="ls")
+            top += 40 if intro else 0
+        return top + 36, _footer(page, stamp) - 20 - LINK_H
 
     scratch = _Page.new(theme, teams)
-    top, bottom = frame(scratch, 1, 2)
-    room = bottom - top
-    boxes = [box for card in cards for box in _split(scratch, card, room)]
-    pages = _pack(boxes, top, bottom)
+    first_top, bottom = frame(scratch, 1, 2)
+    top, _ = frame(scratch, 2, 2)
+    # Cut to the first page's room, so the first page (under its standings) holds cards too.
+    boxes = [box for card in cards for box in _split(scratch, card, bottom - first_top)]
+    pages = _pack(boxes, top, bottom, first_top)
 
     # Up to *show_all* pages, all of them; more, the first *capped*, the last with room for where the rest is.
     shown = pages if len(pages) <= show_all else [list(p) for p in pages[:capped]]
     cut = len(shown) < len(pages)
+    more = 0
     if cut:
         last = shown[-1]
         while len(last) > 1 and max(y + h for _, _, y, h in last) + 90 > bottom:
@@ -543,17 +556,67 @@ def render_team_scenarios(
         frame(page, n, len(shown))
         for card, x, y, h in items:
             _boxed(page, x, y, h, lambda c=card, x=x, y=y: _outcome_card(page, x, y, c, True))
-        # Where the rest is, once per page rather than in each card: the region page with the team picked.
-        if n == len(shown) and cut:
-            lead = f"+{more} more {'outcome' if more == 1 else 'outcomes'}, and every way" if more else "The rest"
-        else:
-            lead = "Every way, and why"
+        # Where every way is, with why, once per page rather than in each card: the region page with the
+        # team picked.
         page.draw.text(
             (PAD, bottom + LINK_H + 10),
-            f"{lead}: {SITE_HOST}{region_path(clazz, region)}?team={slugify(school)}",
+            more_line(clazz, region, more if n == len(shown) else 0, school),
             font=_inter(32, 600),
             fill=page.t.text,
             anchor="ls",
         )
         images.append(page.img)
     return images
+
+
+def render_team_scenarios_all(
+    clazz: int,
+    region: int,
+    season: int,
+    payload: dict,
+    school: str,
+    stamp: str,
+    mode: str,
+    theme: str = "dark",
+    teams: dict | None = None,
+) -> list[Image.Image]:
+    """What has to happen for the team on one image, for opening whole: its title and the region's
+    standings (its row marked), then every card whole, in reading order down ALL_COLUMNS columns, as tall
+    as they need. [] when nothing is left to decide for it."""
+    cards, intro = team_outcomes(payload, school, mode)
+    if not cards:
+        return []
+    teams = teams or {}
+    team = next(t for t in payload["teams"] if t["school"] == school)
+    sub = f"{season} · Region {region}-{clazz}A · What has to happen"
+
+    def frame(page: _Page) -> float:
+        """The title, badges, standings and intro; returns where the cards go."""
+        top = _title(page, school, sub, mode)
+        bx = PAD + 186
+        for kind, label in _badges(team, clazz, False):
+            bx += page.badge(bx, top + 44, kind, label, 26) + 12
+        top = _standings_column(page, top + 80, payload, mode, school)
+        for line in _wrap(page.draw, intro, _inter(32, 500), page.img.width - 2 * PAD) if intro else []:
+            top += 44
+            page.draw.text((PAD, top + 20), line, font=_inter(32, 500), fill=page.t.text_2, anchor="ls")
+        return top + (76 if intro else 36)
+
+    width = all_width(len(cards))
+    scratch = _Page.new(theme, teams, (width, SIZE[1]))
+    heights = [_outcome_card(scratch, 0, 0, c, False) for c in cards]
+    columns = balanced_columns(heights, min(ALL_COLUMNS, len(cards)), COL_GAP)
+    top = frame(scratch)
+    tallest = max((sum(heights[i] + COL_GAP for i in col) for col in columns), default=0)
+    page = _Page.new(theme, teams, (width, round(top + tallest + LINK_H + 20 + (SIZE[1] - _footer(scratch, stamp)))))
+    frame(page)
+    bottom = _footer(page, stamp)
+    for c, col in enumerate(columns):
+        x, y = PAD + c * (COL_W + COL_GAP), top
+        for i in col:
+            _boxed(page, x, y, heights[i], lambda card=cards[i], x=x, y=y: _outcome_card(page, x, y, card, True))
+            y += heights[i] + COL_GAP
+    page.draw.text(
+        (PAD, bottom - 10), more_line(clazz, region, 0, school), font=_inter(32, 600), fill=page.t.text, anchor="ls"
+    )
+    return [page.img]

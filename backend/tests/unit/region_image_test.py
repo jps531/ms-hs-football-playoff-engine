@@ -3,6 +3,7 @@
 from PIL import Image
 
 from backend.helpers.region_image import (
+    PAD,
     SIZE,
     _games_list,
     _Page,
@@ -260,3 +261,42 @@ def test_before_full_scenarios_the_results_that_settle_a_spot():
     }
     pages = render_region_scenarios(3, 6, 2026, _payload(insights=[insight], left=9), "x", "projected", "dark")
     assert len(pages) == 1 and pages[0].size == SIZE
+
+
+def test_every_scenario_on_one_image_in_reading_order():
+    """The all-in-one image: every card whole, down as many columns as there are cards (up to four), each
+    as wide as a page's; nothing when there's nothing to decide."""
+    from backend.helpers.region_image import ALL_COLUMNS, COL_W, all_width, render_region_scenarios_all
+
+    (one,) = render_region_scenarios_all(3, 6, 2026, _payload(_scenarios(14, explain=True)), "x", "projected")
+    assert one.width == all_width(14) == all_width(ALL_COLUMNS) and one.height > SIZE[1]
+    (two,) = render_region_scenarios_all(3, 6, 2026, _payload(_scenarios(2)), "x", "projected")
+    assert two.width == all_width(2) < one.width and all_width(1) == round(2 * PAD + COL_W)
+    assert render_region_scenarios_all(3, 6, 2026, _payload(_scenarios(3), left=0), "x", "projected") == []
+
+
+def test_cards_go_down_columns_in_order_as_even_as_the_order_allows():
+    from backend.helpers.region_image import balanced_columns
+
+    assert balanced_columns([100, 100, 100, 100], 4, 0) == [[0], [1], [2], [3]]
+    assert balanced_columns([300, 100, 100, 100], 2, 0) == [[0], [1, 2, 3]]
+    assert balanced_columns([100, 100], 4, 0) == [[0], [1], [], []]
+
+
+def test_the_line_over_a_scenarios_footer_says_where_every_scenario_is():
+    from backend.helpers.region_image import more_line
+
+    assert (
+        more_line(3, 6, 0) == "View every scenario along with explanations for each at mshsfootball.com/standings/3a/6"
+    )
+    assert more_line(3, 6, 4, "Raleigh").startswith("+4 more. View every scenario")
+    assert more_line(3, 6, 0, "Raleigh").endswith("/standings/3a/6?team=raleigh")
+
+
+def test_the_first_page_has_the_standings_and_cards_too():
+    """The standings (one column) are on the first page alone, and the first page still holds cards."""
+    pages = render_region_scenarios(3, 6, 2026, _payload(_scenarios(14, explain=True)), "x", "projected")
+    assert len(pages) > 1
+    # The first page's card area (under its standings) isn't empty: something's drawn there.
+    first = pages[0].convert("L").crop((PAD, 900, SIZE[0] - PAD, 1600))
+    assert first.getextrema()[0] < 200

@@ -78,10 +78,12 @@ from backend.helpers.image_jobs import (
     REGION_CARD,
     REGION_OVERVIEW,
     REGION_SCENARIOS,
+    REGION_SCENARIOS_ALL,
     SITE_CARD,
     TEAM_BRACKET_CARD,
     TEAM_CARD,
     TEAM_SCENARIOS,
+    TEAM_SCENARIOS_ALL,
     TEAM_SEASON,
     ImageJob,
     code_fingerprint,
@@ -520,6 +522,17 @@ def region_index_path(season: int, clazz: int, region: int) -> str:
     return f"region/{season}/{clazz}a-{region}.json"
 
 
+# Each region image's name in its region's index (and in its file's name): share.js REGION_IMAGES, TEAM_IMAGES.
+INDEX_KINDS = {
+    REGION_OVERVIEW: "overview",
+    REGION_SCENARIOS: "scenarios",
+    REGION_SCENARIOS_ALL: "scenarios-all",
+    TEAM_SEASON: "season",
+    TEAM_SCENARIOS: "scenarios",
+    TEAM_SCENARIOS_ALL: "scenarios-all",
+}
+
+
 def region_indexes(season: int, jobs: list[ImageJob], files: dict[str, list[str]]) -> dict[str, dict]:
     """Each region's index (by its path) from its image *jobs* and the *files* each job made."""
     indexes: dict[str, dict] = {}
@@ -528,11 +541,11 @@ def region_indexes(season: int, jobs: list[ImageJob], files: dict[str, list[str]
         index = indexes.setdefault(region_index_path(season, k["clazz"], k["region"]), {})
         pages = len(files.get(job.path) or [])
         variant = f"{k['mode']}-{k['theme']}"
-        if job.renderer in (TEAM_SEASON, TEAM_SCENARIOS):
-            kind = "season" if job.renderer == TEAM_SEASON else "scenarios"
+        kind = INDEX_KINDS[job.renderer]
+        if job.renderer in (TEAM_SEASON, TEAM_SCENARIOS, TEAM_SCENARIOS_ALL):
             index.setdefault("teams", {}).setdefault(k["school"], {}).setdefault(kind, {})[variant] = pages
         else:
-            index.setdefault("overview" if job.renderer == REGION_OVERVIEW else "scenarios", {})[variant] = pages
+            index.setdefault(kind, {})[variant] = pages
     return indexes
 
 
@@ -604,6 +617,13 @@ def _region_image_jobs(
             jobs.append(
                 ImageJob(region_image_path(season, clazz, region, "scenarios", mode, theme), REGION_SCENARIOS, common)
             )
+            jobs.append(
+                ImageJob(
+                    region_image_path(season, clazz, region, "scenarios-all", mode, theme),
+                    REGION_SCENARIOS_ALL,
+                    common,
+                )
+            )
             for school, mine, road, marks in team_jobs:
                 jobs.append(
                     ImageJob(
@@ -621,18 +641,18 @@ def _region_image_jobs(
                 )
                 if school in outcomes:
                     names = {*region_teams, *_outcome_teams(outcomes[school])}
-                    jobs.append(
-                        ImageJob(
-                            team_image_path(season, clazz, region, school, "scenarios", mode, theme),
-                            TEAM_SCENARIOS,
-                            {
-                                **common,
-                                "payload": outcomes[school],
-                                "school": school,
-                                "teams": {n: teams.get(n) for n in sorted(names)},
-                            },
+                    kwargs = {
+                        **common,
+                        "payload": outcomes[school],
+                        "school": school,
+                        "teams": {n: teams.get(n) for n in sorted(names)},
+                    }
+                    for kind, renderer in (("scenarios", TEAM_SCENARIOS), ("scenarios-all", TEAM_SCENARIOS_ALL)):
+                        jobs.append(
+                            ImageJob(
+                                team_image_path(season, clazz, region, school, kind, mode, theme), renderer, kwargs
+                            )
                         )
-                    )
     return jobs
 
 
@@ -876,15 +896,22 @@ def _write_bracket_assets(
     }
 
 
-BRACKET_VIEWS = {"north": "N", "south": "S", "all": "all"}
+# The bracket's images to share: the whole bracket (drawn in portrait). Its halves on their own were images
+# too ("north", "south"); OLD_VIEWS are removed where they're found.
+BRACKET_VIEWS = {"all": "all"}
+OLD_VIEWS = ("north", "south")
 BRACKET_THEMES = ("dark", "light")
 
 
 def _drop_unthemed(folder: Path, clazz: int) -> None:
-    """Remove the images named before they came in two themes (``{class}a-{view}-{version}.png``)."""
-    for view in BRACKET_VIEWS:
+    """Remove the images named before they came in two themes (``{class}a-{view}-{version}.png``), and the
+    halves' images, no longer drawn."""
+    for view in (*BRACKET_VIEWS, *OLD_VIEWS):
         for version in ("odds", "blank"):
             (folder / f"{clazz}a-{view}-{version}.png").unlink(missing_ok=True)
+            if view in OLD_VIEWS:
+                for theme in BRACKET_THEMES:
+                    (folder / f"{clazz}a-{view}-{version}-{theme}.png").unlink(missing_ok=True)
 
 
 def _write_bracket_images(

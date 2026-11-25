@@ -3,9 +3,9 @@
 from PIL import Image
 
 from backend.helpers.bracket_image import (
+    PORTRAIT,
     SQUARE,
     TROPHY_H,
-    WIDE,
     helmet,
     is_final,
     picks_for,
@@ -53,9 +53,10 @@ def test_a_bracket_is_final_once_every_game_is_played():
     assert not is_final(games, {"N-0-0": {}}) and is_final(games, {"N-0-0": {}, "final": {}}) and not is_final([], {})
 
 
-def test_a_half_draws_square_and_the_whole_bracket_wide():
-    """Both versions of each view render at their sizes; the two versions differ (one has chances)."""
-    for view, size in (("N", SQUARE), ("all", WIDE)):
+def test_a_half_draws_square_and_the_whole_bracket_upright():
+    """Both versions of each view render at their sizes (the whole bracket 4:5, its halves one over the
+    other); the two versions differ (one has chances)."""
+    for view, size in (("N", SQUARE), ("all", PORTRAIT)):
         odds = render_bracket_image(
             3, 2026, BRACKET, {}, SEEDS, view, False, "2026 season · Through Week 10 · Oct 30 · Projected"
         )

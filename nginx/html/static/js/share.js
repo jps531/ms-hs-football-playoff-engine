@@ -5,10 +5,12 @@ import { slugify } from "./routes.js";
 // share-assets step to /static/bracket/), so this only picks one and hands it
 // to the device's share sheet, a download, or the clipboard.
 
-/** The views an image can show, as the bracket's half control names them. */
+/**
+ * The views the images show: the whole bracket, in portrait (its north half over its south half), so
+ * it reads in a post. (The halves on their own were images too, and their names still are, for the
+ * files a link might still point at.)
+ */
 export const SHARE_VIEWS = [
-  { key: "north", label: "North", half: "N" },
-  { key: "south", label: "South", half: "S" },
   { key: "all", label: "Whole bracket", half: "both" },
 ];
 
@@ -71,6 +73,7 @@ export function bracketImageLabel(clazz, { view, version }) {
 export const REGION_IMAGES = [
   { key: "overview", label: "Overview" },
   { key: "scenarios", label: "Scenarios" },
+  { key: "scenarios-all", label: "Scenarios (one image)" },
 ];
 
 export const REGION_MODES = [
@@ -135,6 +138,7 @@ export function regionImageLabel(clazz, region, { image, mode }) {
 export const TEAM_IMAGES = [
   { key: "season", label: "Season" },
   { key: "scenarios", label: "What has to happen" },
+  { key: "scenarios-all", label: "What has to happen (one image)" },
 ];
 
 /** The team's images with something to show in this odds mode and theme, in TEAM_IMAGES order. */
@@ -163,5 +167,6 @@ export function teamImageName(season, school, { image, mode }, page = 1, pages =
  */
 export function teamImageLabel(season, school, { image = "season", mode }) {
   const odds = `with ${mode === "tossup" ? "Toss-up" : "Projected"} odds`;
+  if (image === "scenarios-all") return `What has to happen for ${school}, on one image, ${odds}`;
   return image === "scenarios" ? `What has to happen for ${school}, ${odds}` : `${school}’s ${season} season, ${odds}`;
 }

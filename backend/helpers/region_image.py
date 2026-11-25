@@ -33,6 +33,7 @@ from backend.helpers.share_cards import (
     odds_bucket,
     position_labels,
     record_text,
+    slugify,
     smooth_draw,
     standing_positions,
     team_status,
@@ -54,6 +55,8 @@ SIZE = (2160, 2700)  # 1080x1350 at 2x
 PAD = 104
 SHOW_ALL_PAGES = 5  # a list that fits in this many pages is shown in full
 LINK_H = 56  # the line over a scenarios page's footer with the region page's address
+STANDINGS_W = 1080  # the scenarios' standings column; the games left beside it
+MAX_GAMES_SHOWN = 10  # the games left listed beside the standings; more than that, "+N more"
 CAPPED_PAGES = 4  # a longer one stops here, and its last page points to the region page for the rest
 CLINCHED_BG = "#137252"  # --state-clinched (brand-700), both themes
 ELIMINATED_BG = "#B91C1C"  # --state-eliminated
@@ -73,10 +76,10 @@ class _Page:
     teams: dict
 
     @classmethod
-    def new(cls, theme: str, teams: dict) -> _Page:
-        """A blank page in *theme*."""
+    def new(cls, theme: str, teams: dict, size: tuple[int, int] = SIZE) -> _Page:
+        """A blank page in *theme*, *size* pixels (a share image's, unless said)."""
         t = THEMES[theme]
-        img = Image.new("RGB", SIZE, t.bg)
+        img = Image.new("RGB", size, t.bg)
         return cls(img, smooth_draw(img), t, teams)
 
     def mark(self, school: str, x: float, mid: float, size: int) -> None:
@@ -684,18 +687,9 @@ def _scenario_card(page: _Page, x: float, y: float, card: dict, mode: str, expla
         else:
             h += _conditions(page, left, y + h, inner, card["groups"], draw)
     if card.get("why"):
+        # Without its explanation, the line over the footer says where it is (``more_line``).
         if explain:
             h += _why(page, left, y + h, inner, card["why"], draw)
-        else:
-            if draw:
-                d.text(
-                    (left, y + h + 34),
-                    "Why this order: at the address below",
-                    font=_inter(26, 500),
-                    fill=t.text_2,
-                    anchor="ls",
-                )
-            h += 46
     if card.get("more_ways"):
         n = card["more_ways"]
         if draw:
@@ -764,20 +758,7 @@ def render_region_scenarios(
         return []
     teams = teams or {}
     name = f"{season} Region {region}-{clazz}A"
-    if payload.get("scenarios"):
-        cards = complete_scenario_cards(payload["scenarios"])
-        kind = "scenarios"
-        subtitle = f"Scenarios · {len(cards)} {'way' if len(cards) == 1 else 'ways'} the region can finish"
-        intro = ""
-    else:
-        cards = insight_cards(payload.get("key_insights"))
-        kind = "insights"
-        left = len(payload["remaining_games"])
-        subtitle = "What has to happen"
-        intro = (
-            f"Full scenarios appear once five or fewer region games remain; {left} are left. "
-            "Until then, these are results that settle a spot no matter what else happens."
-        )
+    cards, kind, subtitle, intro = _scenario_cards(payload)
     if not cards:  # nothing to show (no insight settles a spot yet): no image
         return []
 
@@ -790,30 +771,34 @@ def render_region_scenarios(
             return _scenario_card(scratch, 0, 0, card, mode, explain, False)
         return _insight_card(scratch, 0, 0, card, False)
 
-    content_top = _strip(scratch, _header(scratch, name, subtitle, ["1 of 2"]), payload, mode)
-    if intro:
-        content_top += 40 + 44 * len(_wrap(scratch.draw, intro, _inter(32, 500), SIZE[0] - 2 * PAD))
-    content_top += 36
-    room = _footer(scratch, stamp) - 20 - LINK_H - content_top
+    # The first page has the standings (in one column, beside the games left) and the intro; the
+    # others, the title alone, so their cards have the room.
+    head = _header(scratch, name, subtitle, ["1 of 2"])
+    first_top = _intro(scratch, _standings_column(scratch, head, payload, mode), intro, False) + 36
+    rest_top = head + 36
+    bottom = _footer(scratch, stamp) - 20 - LINK_H
+    rooms = (bottom - first_top, bottom - rest_top)
 
     # Every card at a height that fits a page: a card taller than a page keeps its first ways and says how
     # many more there are (nothing is cut mid-way). Each with its height with and without its explanation.
     items = []
     for card in cards:
         h = measure(card, False)
-        while h > room and len(card["groups"]) > 1:
+        while h > rooms[0] and len(card["groups"]) > 1:  # (cut to the first page's room: it can start there)
             card = {**card, "groups": card["groups"][:-1], "more_ways": card.get("more_ways", 0) + 1}
             h = measure(card, False)
         h_why = measure(card, True) if kind == "scenarios" and card.get("why") else None
-        items.append((card, h, h_why if h_why is not None and h_why <= room else None))
+        items.append((card, h, h_why if h_why is not None and h_why <= rooms[1] else None))
 
     def pack(explain: list[bool]) -> list[list[list[tuple[dict, bool, float]]]]:
-        """Cards in order onto pages of two columns, each into the shorter column it fits, else a new page."""
+        """Cards in order onto pages of two columns, each into the shorter column it fits, else a new page
+        (the first page's columns shorter, under the standings)."""
         pages: list[list[list[tuple[dict, bool, float]]]] = [[[], []]]
         used = [0.0, 0.0]
         for (card, h, h_why), why in zip(items, explain, strict=True):
             height = h_why if why else h
-            fits = [c for c in (0, 1) if not used[c] or used[c] + height <= room]
+            room = rooms[0 if len(pages) == 1 else 1]
+            fits = [c for c in (0, 1) if used[c] + height <= room]
             if not fits:
                 pages.append([[], []])
                 used = [0.0, 0.0]
@@ -840,6 +825,7 @@ def render_region_scenarios(
     more = sum(len(c) for p in pages[limit:] for c in p)
     if more:
         last = shown_pages[-1]
+        room = rooms[0 if len(shown_pages) == 1 else 1]
         while max(sum(h + COL_GAP for _, _, h in col) for col in last) + 90 > room:
             longer = max(last, key=lambda col: sum(h for _, _, h in col))
             longer.pop()
@@ -848,39 +834,219 @@ def render_region_scenarios(
     for n, cols in enumerate(shown_pages, start=1):
         page = _Page.new(theme, teams)
         total = len(shown_pages)
-        right = [f"{n} of {total}"] if total > 1 else []
-        top = _header(page, name, subtitle, right)
-        top = _strip(page, top, payload, mode)
-        if intro:
-            for line in _wrap(page.draw, intro, _inter(32, 500), SIZE[0] - 2 * PAD):
-                top += 44
-                page.draw.text((PAD, top + 20), line, font=_inter(32, 500), fill=page.t.text_2, anchor="ls")
-            top += 40
-        top += 36
+        top = _header(page, name, subtitle, [f"{n} of {total}"] if total > 1 else [])
+        top = (_intro(page, _standings_column(page, top, payload, mode), intro, True) if n == 1 else top) + 36
         bottom = _footer(page, stamp)
         for c, column in enumerate(cols):
             x = PAD + c * (COL_W + COL_GAP)
             y = top
             for card, explain, h in column:
-                if kind == "scenarios":
-                    _boxed(
-                        page, x, y, h, lambda c=card, x=x, y=y, e=explain: _scenario_card(page, x, y, c, mode, e, True)
-                    )
-                else:
-                    _boxed(page, x, y, h, lambda c=card, x=x, y=y: _insight_card(page, x, y, c, True))
+                _draw_card(page, kind, x, y, card, h, mode, explain)
                 y += h + COL_GAP
-        # Where the rest is, once per page rather than in each card: the region page's address.
-        lead = (
-            f"+{more} more, and every scenario with why"
-            if n == len(shown_pages) and more
-            else "Every scenario, and why"
-        )
         page.draw.text(
             (PAD, bottom - 10),
-            f"{lead}: {SITE_HOST}{region_path(clazz, region)}",
+            more_line(clazz, region, more if n == len(shown_pages) else 0),
             font=_inter(32, 600),
             fill=page.t.text,
             anchor="ls",
         )
         images.append(page.img)
     return images
+
+
+ALL_COLUMNS = 4  # the all-in-one image's columns of cards, each as wide as a page's: twice a page wide
+
+
+def all_width(cards: int) -> int:
+    """The all-in-one image's width for *cards* cards: ALL_COLUMNS columns, or one for each card when fewer."""
+    n = max(1, min(ALL_COLUMNS, cards))
+    return round(2 * PAD + n * COL_W + (n - 1) * COL_GAP)
+
+
+def render_region_scenarios_all(
+    clazz: int,
+    region: int,
+    season: int,
+    payload: dict,
+    stamp: str,
+    mode: str,
+    theme: str = "dark",
+    teams: dict | None = None,
+) -> list[Image.Image]:
+    """The region's scenarios on one image, for opening whole rather than paging through: its standings
+    (one column, beside the games left), then every card, in reading order down ALL_COLUMNS columns, as
+    tall as they need (no explanations: the line over the footer says where they are). [] when nothing
+    is left to decide."""
+    if not payload.get("remaining_games"):
+        return []
+    cards, kind, subtitle, intro = _scenario_cards(payload)
+    if not cards:
+        return []
+    teams = teams or {}
+    width = all_width(len(cards))
+    scratch = _Page.new(theme, teams, (width, SIZE[1]))
+    heights = [
+        _scenario_card(scratch, 0, 0, c, mode, False, False)
+        if kind == "scenarios"
+        else _insight_card(scratch, 0, 0, c, False)
+        for c in cards
+    ]
+    columns = balanced_columns(heights, min(ALL_COLUMNS, len(cards)), COL_GAP)
+    name = f"{season} Region {region}-{clazz}A"
+    top = (
+        _intro(scratch, _standings_column(scratch, _header(scratch, name, subtitle, []), payload, mode), intro, False)
+        + 36
+    )
+    tallest = max((sum(heights[i] + COL_GAP for i in col) for col in columns), default=0)
+    page = _Page.new(theme, teams, (width, round(top + tallest + LINK_H + 20 + (SIZE[1] - _footer(scratch, stamp)))))
+    _intro(page, _standings_column(page, _header(page, name, subtitle, []), payload, mode), intro, True)
+    bottom = _footer(page, stamp)
+    for c, col in enumerate(columns):
+        x, y = PAD + c * (COL_W + COL_GAP), top
+        for i in col:
+            _draw_card(page, kind, x, y, cards[i], heights[i], mode, False)
+            y += heights[i] + COL_GAP
+    page.draw.text((PAD, bottom - 10), more_line(clazz, region, 0), font=_inter(32, 600), fill=page.t.text, anchor="ls")
+    return [page.img]
+
+
+def balanced_columns(heights: list[float], n: int, gap: float) -> list[list[int]]:
+    """Items (by *heights*, in order) down *n* columns, each column a run of them in order, as even in height
+    as the order allows: the shortest tallest column (by its search, as the cards are few)."""
+    total = sum(h + gap for h in heights)
+    lo, hi = max((h + gap for h in heights), default=0), total
+    best = None
+    while hi - lo > 1:
+        cap = (lo + hi) / 2
+        cols, used = [[]], 0.0
+        for i, h in enumerate(heights):
+            if cols[-1] and used + h + gap > cap:
+                cols.append([])
+                used = 0.0
+            cols[-1].append(i)
+            used += h + gap
+        if len(cols) <= n:
+            best, hi = cols, cap
+        else:
+            lo = cap
+    best = best or [list(range(len(heights)))]
+    return best + [[] for _ in range(n - len(best))]
+
+
+def more_line(clazz: int, region: int, more: int, team: str | None = None) -> str:
+    """The line over a scenarios image's footer: where every scenario is, with why ("+3 more" first when
+    some didn't fit)."""
+    where = f"{SITE_HOST}{region_path(clazz, region)}" + (f"?team={slugify(team)}" if team else "")
+    lead = f"+{more} more. " if more else ""
+    return f"{lead}View every scenario along with explanations for each at {where}"
+
+
+def _scenario_cards(payload: dict) -> tuple[list[dict], str, str, str]:
+    """The region's cards: every way it can finish (its scenarios), or, before there are full scenarios,
+    the results that settle a spot; with the image's subtitle and intro."""
+    if payload.get("scenarios"):
+        cards = complete_scenario_cards(payload["scenarios"])
+        return (
+            cards,
+            "scenarios",
+            f"Scenarios · {len(cards)} {'way' if len(cards) == 1 else 'ways'} the region can finish",
+            "",
+        )
+    left = len(payload["remaining_games"])
+    intro = (
+        f"Full scenarios appear once five or fewer region games remain; {left} are left. "
+        "Until then, these are results that settle a spot no matter what else happens."
+    )
+    return insight_cards(payload.get("key_insights")), "insights", "What has to happen", intro
+
+
+def _draw_card(page: _Page, kind: str, x: float, y: float, card: dict, h: float, mode: str, explain: bool) -> None:
+    """A card, boxed, at (*x*, *y*), *h* tall."""
+    if kind == "scenarios":
+        _boxed(page, x, y, h, lambda: _scenario_card(page, x, y, card, mode, explain, True))
+    else:
+        _boxed(page, x, y, h, lambda: _insight_card(page, x, y, card, True))
+
+
+def _intro(page: _Page, top: float, intro: str, draw: bool) -> float:
+    """The intro's lines under *top* (none: *top*); returns their bottom."""
+    if not intro:
+        return top
+    for line in _wrap(page.draw, intro, _inter(32, 500), page.img.width - 2 * PAD):
+        top += 44
+        if draw:
+            page.draw.text((PAD, top + 20), line, font=_inter(32, 500), fill=page.t.text_2, anchor="ls")
+    return top + 40
+
+
+def _standings_column(page: _Page, top: float, payload: dict, mode: str, team: str | None = None) -> float:
+    """The standings in one column (place, helmet, team, region record, chance of 1st and of the playoffs;
+    *team*'s row marked), the games left beside them; returns the lower one's bottom."""
+    d, t = page.draw, page.t
+    ordered = display_order(payload["teams"])
+    positions = position_labels(standing_positions(ordered))
+    width = STANDINGS_W
+    right = PAD + width
+    page.label(PAD, top + 30, "Standings", 26)
+    page.label(right - 150, top + 30, "1st", 22, anchor="rs")
+    page.label(right, top + 30, "Playoffs", 22, anchor="rs")
+    y = top + 50
+    row_h = 74
+    for pos, row in zip(positions, ordered, strict=True):
+        if row["school"] == team:
+            fill = t.card if t.edge is None else t.odds[1]  # the light theme's card is the page's own white
+            d.rounded_rectangle((PAD - 12, y + 3, right + 12, y + row_h - 3), radius=10, fill=fill)
+        else:
+            _rule(page, y, PAD, right)
+        mid = y + row_h / 2
+        out = row.get("eliminated")
+        d.text((PAD, mid), pos, font=_inter(30, 600), fill=t.text_2, anchor="lm")
+        page.mark(row["school"], PAD + 62, mid, 46)
+        name_font = _inter(36, 600)
+        d.text(
+            (PAD + 124, mid),
+            fit(d, row["school"], name_font, width - 124 - 400),
+            font=name_font,
+            fill=t.text_2 if out else t.text,
+            anchor="lm",
+        )
+        d.text(
+            (right - 310, mid), _records(row)[0], font=_inter(34, 600), fill=t.text_2 if out else t.text, anchor="rm"
+        )
+        page.pill(right - 160, mid, mode_odds(row, "p1", mode), 120, 50, 28)
+        page.pill(right, mid, mode_odds(row, "p_playoffs", mode), 130, 50, 28)
+        y += row_h
+    _rule(page, y, PAD, right)
+    return max(y, _games_column(page, top, PAD + width + 90, payload.get("remaining_games") or []))
+
+
+def _games_column(page: _Page, top: float, x0: float, games: list[dict]) -> float:
+    """The region games left, one a row ("Byhalia vs Clarksdale"), from *x0* to the page's edge; returns
+    the bottom. More than fit beside the standings: "+N more"."""
+    d, t = page.draw, page.t
+    right = page.img.width - PAD
+    page.label(x0, top + 30, "Remaining games", 26)
+    y = top + 50
+    font = _inter(32, 600)
+    shown = games if len(games) <= MAX_GAMES_SHOWN else games[: MAX_GAMES_SHOWN - 1]
+    for g in shown:
+        mid = y + 37
+        _rule(page, y, x0, right)
+        names = (g["team_a"], g["team_b"])
+        room = (right - x0 - 2 * 50 - 46 - 20) / 2
+        x = x0
+        for j, school in enumerate(names):
+            if j:
+                d.text((x, mid), "vs", font=_inter(28, 500), fill=t.text_2, anchor="lm")
+                x += 46
+            page.mark(school, x, mid, 40)
+            label = fit(d, school, font, room)
+            d.text((x + 50, mid), label, font=font, fill=t.text, anchor="lm")
+            x += 50 + d.textlength(label, font=font) + 20
+        y += 74
+    if len(shown) < len(games):
+        _rule(page, y, x0, right)
+        d.text((x0, y + 46), f"+{len(games) - len(shown)} more", font=_inter(30, 500), fill=t.text_2, anchor="ls")
+        y += 74
+    _rule(page, y, x0, right)
+    return y

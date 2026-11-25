@@ -210,8 +210,9 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
         # the link previews: the site's, the class's, the 2 regions' and the 8 teams'
         "cards": 12,
         "cards_kept": 0,
-        # each region's overview and scenarios, and each of its 4 teams' season, in each odds mode and theme
-        "region_images": 48,
+        # each region's overview, scenarios (in pages, and on one image), and each of its 4 teams' season, in
+        # each odds mode and theme
+        "region_images": 56,
         "region_images_kept": 0,
         # no season's schools in /teams here, so no Regions pages (share_regions_test.py has those)
         "region_maps": 0,
@@ -233,6 +234,7 @@ def test_pipeline_writes_a_card_and_meta_file_for_every_region_and_class(tmp_pat
     assert json.loads((tmp_path / "region" / "2026" / "3a-6.json").read_text()) == {
         "overview": dict.fromkeys(variants, 1),
         "scenarios": dict.fromkeys(variants, 0),
+        "scenarios-all": dict.fromkeys(variants, 0),  # nothing left to decide: neither has an image
         "teams": {s: {"season": dict.fromkeys(variants, 1)} for s in schools},
     }
     for name in ("site.png", "3.png", "3-6.png", "3-7.png"):
@@ -561,10 +563,10 @@ def test_pipeline_writes_bracket_cards_for_teams_with_a_road(tmp_path):
     season_meta = (tmp_path / "meta" / "bracket-2026-3.html").read_text()
     assert card in season_meta and "<title>2026 Class 3A playoff bracket — " in season_meta
     assert '<meta property="og:url" content="https://mshsfootball.com/brackets/3a?season=2026">' in season_meta
-    # The bracket's images to share: every view blank; no Projected ones without Projected odds. The
-    # sitemap lists the whole-bracket image with the bracket page.
+    # The bracket's image to share: the whole bracket, blank; no Projected one without Projected odds. The
+    # sitemap lists it with the bracket page.
     images = sorted(p.name for p in (tmp_path / "bracket" / "2026").iterdir())
-    assert images == [f"3a-{v}-blank-{t}.png" for v in ("all", "north", "south") for t in ("dark", "light")]
+    assert images == [f"3a-all-blank-{t}.png" for t in ("dark", "light")]
     sitemap = (tmp_path / "sitemap.xml").read_text()
     assert (
         "<loc>https://mshsfootball.com/brackets/3a</loc><lastmod>2026-10-09</lastmod><image:image>"
@@ -597,7 +599,7 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path, monkeypatch)
 
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 1
     assert sorted(p.name for p in (tmp_path / "bracket" / "2025").iterdir()) == [
-        f"3a-{v}-blank-{t}.png" for v in ("all", "north", "south") for t in ("dark", "light")
+        f"3a-all-blank-{t}.png" for t in ("dark", "light")
     ]
     # Its link preview, for /brackets/3a?season=2025.
     assert Image.open(tmp_path / "og" / "bracket-2025-3.png").size == (WIDTH, HEIGHT)
@@ -611,7 +613,7 @@ def test_past_seasons_get_their_final_bracket_images_once(tmp_path, monkeypatch)
     # Already drawn: its bracket isn't fetched again (as of a date). The season's region pages still are,
     # for their images (_past_region_jobs), drawn only when they change.
     assert not [c for c in calls if "season=2025" in c and "&date=" in c]
-    assert len(list((tmp_path / "bracket" / "2025").iterdir())) == 6  # not drawn this run, and not swept
+    assert len(list((tmp_path / "bracket" / "2025").iterdir())) == 2  # not drawn this run, and not swept
     # Once the drawing code changes, it's drawn again (and then kept again).
     monkeypatch.setattr(pipeline, "code_fingerprint", lambda module: "new drawing code")
     assert build_share_assets(fetch, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))["past_brackets"] == 1
@@ -629,9 +631,10 @@ def test_a_past_season_gets_its_final_region_and_team_images(tmp_path):
         "/standings/3/6?season=2025": final,
     }
     written = build_share_assets(api.get, tmp_path, "https://mshsfootball.com", date(2026, 10, 14))
-    # The overview and scenarios, and 4 teams' seasons, in light and dark: one odds mode, since a finished
-    # season's two show the same numbers (Projected, as these teams have Projected odds).
-    assert written["past_region_images"] == 12
+    # The overview and scenarios (in pages, and on one image), and 4 teams' seasons, in light and dark: one
+    # odds mode, since a finished season's two show the same numbers (Projected, as these teams have
+    # Projected odds).
+    assert written["past_region_images"] == 14
     folder = tmp_path / "region" / "2025"
     assert (folder / "3a-6-overview-projected-light.png").exists()
     assert (folder / f"3a-6-team-{slugify(TEAMS[0]['school'])}-season-projected-dark.png").exists()

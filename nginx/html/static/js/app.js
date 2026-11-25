@@ -1919,7 +1919,7 @@ function bracketShareSpec() {
       ? `Class ${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`
       : [`Class ${clazz}A`, `${season} season`, results.final?.winner ? "Final" : null].filter(Boolean).join(" · "),
     groups: () => [
-      { label: "Show", key: "view", options: SHARE_VIEWS },
+      ...(SHARE_VIEWS.length > 1 ? [{ label: "Show", key: "view", options: SHARE_VIEWS }] : []),
       ...(share.length > 1 ? [{ label: "Odds", key: "version", options: SHARE_VERSIONS }] : []),
       { label: "Theme", key: "theme", options: SHARE_THEMES },
     ],
@@ -1929,7 +1929,7 @@ function bracketShareSpec() {
     version: asOf,
     name: (c) => bracketImageName(season, clazz, c),
     label: (c) => bracketImageLabel(clazz, c),
-    wide: (c) => c.view === "all",
+    wide: () => false, // the whole bracket is drawn in portrait
     page: `${location.origin}/brackets/${clazz}a${latest ? "" : `?season=${season}`}`,
     latest,
     track: (c, method) => track("bracket_image_shared", { class: clazz, season, view: c.view, version: c.version, theme: c.theme, method }),
