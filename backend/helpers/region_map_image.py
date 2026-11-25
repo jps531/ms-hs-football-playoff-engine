@@ -648,7 +648,31 @@ def render_class_regions_compared(
     wide = SIZE[0] - 2 * PAD - 2 * col_gap - 2 * narrow
     y0 = bottom + 70
 
-    def column(x0: float, width: float, title: str, entries: list[tuple[str, str]], per_col: int = 1) -> None:
+    arrow_w = 26  # "→", drawn: the type has no arrow
+
+    def note_width(note: str | tuple[int, int]) -> float:
+        """How wide a note is: text, or a move (from, to) drawn "2 → 4"."""
+        if isinstance(note, str):
+            return d.textlength(note, font=note_font)
+        return d.textlength(f"{note[0]}{note[1]}", font=note_font) + arrow_w + 16
+
+    def draw_note(right: float, y: float, note: str | tuple[int, int]) -> None:
+        """A note, right-aligned at *right* on baseline *y*; a move as "2 → 4", its arrow drawn."""
+        if isinstance(note, str):
+            d.text((right, y), note, font=note_font, fill=t.text_2, anchor="rs")
+            return
+        to = str(note[1])
+        d.text((right, y), to, font=note_font, fill=t.text_2, anchor="rs")
+        x1 = right - d.textlength(to, font=note_font) - 8
+        x0 = x1 - arrow_w
+        mid = y - 11
+        d.line((x0, mid, x1, mid), fill=t.text_2, width=3)
+        d.line((x1 - 9, mid - 7, x1, mid, x1 - 9, mid + 7), fill=t.text_2, width=3, joint="curve")
+        d.text((x0 - 8, y), str(note[0]), font=note_font, fill=t.text_2, anchor="rs")
+
+    def column(
+        x0: float, width: float, title: str, entries: list[tuple[str, str | tuple[int, int]]], per_col: int = 1
+    ) -> None:
         """A list under the maps: its title, then each school and its note, in *per_col* columns."""
         page.label(x0, y0, title)
         room = max(1, int((list_end - (y0 + 58)) // row_h)) * per_col
@@ -657,9 +681,9 @@ def render_class_regions_compared(
         for i, (name, note) in enumerate(shown):
             x = x0 + (i // math.ceil(len(shown) / per_col)) * (sub + 40) if per_col > 1 else x0
             y = y0 + 58 + (i % math.ceil(len(shown) / per_col) if per_col > 1 else i) * row_h
-            room_for_name = sub - d.textlength(note, font=note_font) - 24
+            room_for_name = sub - note_width(note) - 16
             d.text((x, y), fit(d, name, name_font, room_for_name), font=name_font, fill=t.text, anchor="ls")
-            d.text((x + sub, y), note, font=note_font, fill=t.text_2, anchor="rs")
+            draw_note(x + sub, y, note)
         y = y0 + 58 + (math.ceil(len(shown) / per_col) if shown else 0) * row_h
         if len(shown) < len(entries):
             d.text((x0, y), f"and {len(entries) - len(shown)} more", font=note_font, fill=t.text_2, anchor="ls")
@@ -672,7 +696,7 @@ def render_class_regions_compared(
         PAD + 2 * (narrow + col_gap),
         wide,
         "Changed region",
-        [(n, f"Region {then_by[n]['region']} to {now_by[n]['region']}") for n in changed],
+        [(n, (then_by[n]["region"], now_by[n]["region"])) for n in changed],
         per_col=2,
     )
     page.footer()

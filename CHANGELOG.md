@@ -14,7 +14,7 @@ Maps:
   while its region and the region's members stay the same; a county's, while its schools' classes
   and regions do. The same on the Timeline's images to share.
 - A class's two seasons compared, as an image, also lists the schools that stayed in the class but
-  changed region ("Region 3 to 2"), as the page's Compare does.
+  changed region ("3 → 2"), as the page's Compare does.
 - A county's map images are rounded at the corners, like the site's maps, and zoomed in closer on the
   county.
 
