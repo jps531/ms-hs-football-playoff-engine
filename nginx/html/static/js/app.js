@@ -24,7 +24,7 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn } from "./regions.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn, mergeSameSeasons, countySeasonKey } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -3186,7 +3186,8 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
   if (token !== renderToken) return;
   // (Every season is on the Timeline; the one in the address stays, for the Season view's link.)
   const teams = Object.assign({}, ...helmets); // the newest season's helmet wins
-  const seasons = options.map((option, i) => ({ option, payload: payloads[i] }));
+  // Seasons in a row whose schools, classes and regions in the county are the same are one map.
+  const seasons = mergeSameSeasons(options.map((option, i) => ({ option, payload: payloads[i] })), (s) => countySeasonKey(s.payload, county));
   countyTimelineLine = timelineSpan(seasons);
   const slug = countiesPath(county).split("/").pop();
   const has = seasons.some((x) => x.payload.schools.some((r) => r.county === county));

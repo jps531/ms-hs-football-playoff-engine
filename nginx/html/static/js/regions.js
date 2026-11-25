@@ -371,7 +371,7 @@ export function notOnMapHtml(name, school, label) {
  * clazz, row }: row is the team's line that season (null: not in a region then, or no team followed).
  */
 export function timelineSeasons(options, payloads, clazz, follow = null) {
-  return options.map((option, i) => ({ option, payload: payloads[i] }))
+  const seasons = options.map((option, i) => ({ option, payload: payloads[i] }))
     .sort((a, b) => a.option.season - b.option.season)
     .map(({ option, payload }) => {
       // Every school it was that season: more than one before a consolidation, the campus's first.
@@ -380,11 +380,56 @@ export function timelineSeasons(options, payloads, clazz, follow = null) {
       const row = rows[0] ?? null;
       return { option, payload, clazz: row ? row.class : clazz, row, rows };
     });
+  // Seasons in a row that look the same are one map: the class's regions the same, or the followed
+  // team's region and its members.
+  return mergeSameSeasons(seasons, follow
+    ? (s) => s.rows.map((row) => `${row.class}-${row.region}:${regionKey(s.payload, row.class, row.region)}`).join("|") || "-"
+    : (s) => classKey(s.payload, s.clazz));
+}
+
+/** A season's schools in *clazz*, with their regions, as one string to compare seasons by. */
+function classKey(payload, clazz) {
+  return payload.schools.filter((r) => r.class === clazz).map((r) => `${r.school}:${r.region}`).sort().join("|");
+}
+
+/** A region's members in a season, as one string to compare seasons by. */
+function regionKey(payload, clazz, region) {
+  return payload.schools.filter((r) => r.class === clazz && r.region === region).map((r) => r.school).sort().join("|");
+}
+
+/** "2026", "2025 and 2026", "2025 to 2028": a run of seasons as a Timeline label. */
+export function spanLabel(seasons) {
+  if (seasons.length <= 1) return String(seasons[0] ?? "");
+  return seasons.length === 2 ? `${seasons[0]} and ${seasons[1]}` : `${seasons[0]} to ${seasons[seasons.length - 1]}`;
+}
+
+/**
+ * *seasons* (the Timeline's, oldest first: { option, payload, … }) with each run of seasons in a row that
+ * *key* says are the same made one: the newest of them, its option covering all their seasons and
+ * labeled for them ("2025 and 2026"), so the Timeline shows one map where nothing changed.
+ */
+export function mergeSameSeasons(seasons, key) {
+  const out = [];
+  for (const s of seasons) {
+    const last = out[out.length - 1];
+    if (last && last.key === key(s)) {
+      const all = [...last.option.seasons ?? [last.option.season], ...s.option.seasons ?? [s.option.season]];
+      out[out.length - 1] = { ...s, key: last.key, option: { ...s.option, seasons: all, label: spanLabel(all) } };
+    } else {
+      out.push({ ...s, key: key(s) });
+    }
+  }
+  return out.map(({ key: _key, ...s }) => s);
+}
+
+/** A county's schools in a season, with their classes and regions, as one string to compare seasons by. */
+export function countySeasonKey(payload, county) {
+  return payload.schools.filter((r) => r.county === county).map((r) => `${r.school}:${r.class}-${r.region}`).sort().join("|");
 }
 
 /** The seasons the timeline covers: "2025 to 2028 seasons" (or "2026 season", just one). */
 export function timelineSpan(seasons) {
-  const from = seasons[0]?.option.season;
+  const from = seasons[0]?.option.seasons?.[0] ?? seasons[0]?.option.season;
   const to = seasons[seasons.length - 1]?.option.seasons?.at(-1) ?? seasons[seasons.length - 1]?.option.season;
   if (from == null) return "";
   return from === to ? `${from} season` : `${from} to ${to} seasons`;

@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.38.0
+
+Maps:
+
+- **A Timeline shows one map for seasons in a row that didn't change:** a class whose regions were the
+  same in 2025 and 2026 has one "2025 and 2026" map, not two alike. Following a team, its seasons join
+  while its region and the region's members stay the same; a county's, while its schools' classes
+  and regions do. The same on the Timeline's images to share.
+- A class's two seasons compared, as an image, also lists the schools that stayed in the class but
+  changed region ("Region 3 to 2"), as the page's Compare does.
+- A county's map images are rounded at the corners, like the site's maps, and zoomed in closer on the
+  county.
+
 ## 1.37.0
 
 Every share image and link preview, in one house style:
