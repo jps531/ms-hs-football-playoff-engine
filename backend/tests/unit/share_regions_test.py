@@ -255,3 +255,15 @@ def test_the_front_pages_maps_example(written):
     assert example == {"clazz": 5, "season": 2027, "compare": True, "timeline": (2160, 1670), "county": "Leake"}
     # Only what was drawn: no compare, timeline or county image, no section for it.
     assert sr.maps_example(out, 3, 2027, set()) == {"clazz": 3, "season": 2027}
+
+
+def test_seasons_in_a_row_that_look_the_same_are_one_map_on_a_timeline():
+    """merge_cycles joins a run of cycles its key calls the same, the newest's data covering all their seasons."""
+    a = {"seasons": [2025], "schools": [{"school": "Raleigh", "region": 6}], "v": "old"}
+    b = {"seasons": [2026], "schools": [{"school": "Raleigh", "region": 6}], "v": "new"}
+    c = {"seasons": [2027, 2028], "schools": [{"school": "Raleigh", "region": 5}], "v": "moved"}
+    key = lambda cy: [(r["school"], r["region"]) for r in cy["schools"]]  # noqa: E731
+    merged = sr.merge_cycles([a, b, c], key)
+    assert [(m["seasons"], m["v"]) for m in merged] == [([2025, 2026], "new"), ([2027, 2028], "moved")]
+    # Back to how it was after a change: a map of its own, not merged with the one before the change.
+    assert len(sr.merge_cycles([a, c, b], key)) == 3

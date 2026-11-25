@@ -194,6 +194,22 @@ def image_jobs(
     return jobs
 
 
+def merge_cycles(cycles: list[dict], key) -> list[dict]:
+    """*cycles* (oldest first, each with its ``seasons``) with each run in a row that *key* says are the
+    same made one: the newest of them, covering all their seasons. A Timeline shows one map where
+    nothing changed (regions.js mergeSameSeasons)."""
+    out: list[dict] = []
+    last = None
+    for cycle in cycles:
+        k = key(cycle)
+        if out and k == last:
+            out[-1] = {**cycle, "seasons": [*out[-1]["seasons"], *cycle["seasons"]]}
+        else:
+            out.append(cycle)
+        last = k
+    return out
+
+
 def timeline_jobs(options: list[dict], seasons: dict[int, list[dict]], teams: dict[int, list[dict]]) -> list[ImageJob]:
     """The Timeline view's images: each class's regions over every season (*options*, the page's choices,
     with each choice's rows in *seasons* and its ``/teams`` in *teams*), and each school's, light and
@@ -209,6 +225,8 @@ def timeline_jobs(options: list[dict], seasons: dict[int, list[dict]], teams: di
         ]
         if not any(c["schools"] for c in cycles):
             continue
+        # Seasons in a row with the class's regions the same are one map.
+        cycles = merge_cycles(cycles, lambda c: sorted((r["school"], r["region"]) for r in c["schools"]))
         for theme in THEMES:
             jobs.append(
                 ImageJob(
@@ -238,6 +256,11 @@ def timeline_jobs(options: list[dict], seasons: dict[int, list[dict]], teams: di
                     "schools": [r for r in rows if (r["class"], r["region"]) in places],
                 }
             )
+        # Seasons in a row with the school's region and its members the same are one map.
+        cycles = merge_cycles(
+            cycles,
+            lambda c: (sorted((r["class"], r["region"]) for r in c["rows"]), sorted(r["school"] for r in c["schools"])),
+        )
         kwargs = {"school": name, "cycles": cycles, "teams": _colors(teams.get(season) or [], {name})}
         for theme in THEMES:
             jobs.append(
@@ -308,6 +331,11 @@ def county_jobs(options: list[dict], seasons: dict[int, list[dict]]) -> list[Ima
                     )
     for county in names:
         cycles = [{"seasons": o["seasons"], "schools": _county_rows(seasons[o["season"]], county)} for o in ordered]
+        # Seasons in a row with the county's schools, classes and regions the same are one map.
+        cycles = merge_cycles(
+            cycles,
+            lambda c: sorted((r["school"], r["class"], r["region"]) for r in c["schools"] if r.get("county") == county),
+        )
         if any(c["schools"] for c in cycles):
             for theme in THEMES:
                 jobs.append(

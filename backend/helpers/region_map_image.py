@@ -578,8 +578,9 @@ def render_class_regions_compared(
 ) -> list[Image.Image]:
     """Class *clazz*'s regions the season before the cycle that starts in *seasons[0]* (*prior*) beside
     its regions in it (*schools*), each map with its dots numbered by region, and under them the schools
-    that left the class (and where they went) and those new to it (and where they came from). *schools*
-    and *prior* hold the class's rows plus the other season's rows of the schools that moved."""
+    that left the class (and where they went), those new to it (and where they came from) and those that
+    stayed in it but changed region (from which to which). *schools* and *prior* hold the class's rows
+    plus the other season's rows of the schools that moved."""
     first = seasons[0]
     now = _class_rows(schools, clazz)
     then = _class_rows(prior, clazz)
@@ -596,12 +597,22 @@ def render_class_regions_compared(
     gap = 60
     w = (SIZE[0] - 2 * PAD - gap) / 2
     top = PAD + 260
-    bx0, by0, bx1, by1 = region_map.state().bounds
-    bottom = top + 140 + w * (by1 - by0) / (bx1 - bx0)
     names_now = {s["school"] for s in now}
     names_then = {s["school"] for s in then}
     left = sorted(names_then - names_now, key=str.lower)
     joined = sorted(names_now - names_then, key=str.lower)
+    # In the class both times, in another region: as the page's Compare lists them ("Changed region").
+    changed = sorted((n for n in names_now & names_then if now_by[n]["region"] != then_by[n]["region"]), key=str.lower)
+
+    # The lists along the bottom, in three columns: those that left, those new, and those that changed
+    # region (in two columns of their own). The maps give up height for them, down to MAP_MIN of it.
+    row_h = 48
+    list_end = SIZE[1] - PAD - 150  # clear of the footer
+    rows = max(len(left), len(joined), math.ceil(len(changed) / 2), 1)
+    bx0, by0, bx1, by1 = region_map.state().bounds
+    natural = w * (by1 - by0) / (bx1 - bx0)
+    map_h = max(natural * MAP_MIN, min(natural, list_end - (top + 140) - 70 - 58 - rows * row_h))
+    bottom = top + 140 + map_h
 
     def now_note(name: str) -> str:
         """Where a school that left the class is now."""
@@ -613,45 +624,64 @@ def render_class_regions_compared(
         row = then_by.get(name)
         return f"From {short_place(row)}" if row else _absent(name, first, short=True)
 
-    panels = (
-        (PAD, then, str(first - 1), f"Left {clazz}A", [(n, now_note(n)) for n in left]),
-        (PAD + w + gap, now, seasons_words(seasons), f"New to {clazz}A", [(n, from_note(n)) for n in joined]),
-    )
-    for x0, rows, when, title, moved in panels:
+    for x0, rows_, when in ((PAD, then, str(first - 1)), (PAD + w + gap, now, seasons_words(seasons))):
         d.text((x0, top + 50), when, font=_nippo(60), fill=t.text, anchor="ls")
-        count = len({s["region"] for s in rows})
+        count = len({s["region"] for s in rows_})
         d.text(
-            (x0, top + 100), f"{len(rows)} schools in {count} regions", font=_inter(36, 500), fill=t.text_2, anchor="ls"
+            (x0, top + 100),
+            f"{len(rows_)} schools in {count} regions",
+            font=_inter(36, 500),
+            fill=t.text_2,
+            anchor="ls",
         )
-        on_map = [s for s in rows if s["x"] is not None]
+        on_map = [s for s in rows_ if s["x"] is not None]
         shapes = region_map.region_shapes(on_map)
         page.map(
             _Frame((x0, top + 140, x0 + w, bottom)),
             [(shapes[g], region_color(theme, g)) for g in sorted(shapes)],
             [(s["x"], s["y"], region_color(theme, s["region"]), str(s["region"]), 17) for s in on_map],
         )
-        d = page.d
-        y = bottom + 70
-        page.label(x0, y, title)
-        y += 58
-        room = int((SIZE[1] - PAD - 110 - y) // 50)
-        shown = moved if len(moved) <= room else moved[: room - 1]
-        for name, where in shown:
-            room_for_name = w - d.textlength(where, font=_inter(30, 500)) - 30
-            d.text(
-                (x0, y), fit(d, name, _inter(36, 600), room_for_name), font=_inter(36, 600), fill=t.text, anchor="ls"
-            )
-            d.text((x0 + w, y), where, font=_inter(30, 500), fill=t.text_2, anchor="rs")
-            y += 50
-        if len(shown) < len(moved):
-            d.text((x0, y), f"and {len(moved) - len(shown)} more", font=_inter(32, 500), fill=t.text_2, anchor="ls")
-        elif not moved:
-            d.text((x0, y), "None", font=_inter(32, 500), fill=t.text_2, anchor="ls")
+    d = page.d
+    name_font, note_font = _inter(34, 600), _inter(30, 500)
+    col_gap = 56
+    narrow = (SIZE[0] - 2 * PAD - 2 * col_gap) * 0.29
+    wide = SIZE[0] - 2 * PAD - 2 * col_gap - 2 * narrow
+    y0 = bottom + 70
+
+    def column(x0: float, width: float, title: str, entries: list[tuple[str, str]], per_col: int = 1) -> None:
+        """A list under the maps: its title, then each school and its note, in *per_col* columns."""
+        page.label(x0, y0, title)
+        room = max(1, int((list_end - (y0 + 58)) // row_h)) * per_col
+        shown = entries if len(entries) <= room else entries[: room - 1]
+        sub = (width - (per_col - 1) * 40) / per_col
+        for i, (name, note) in enumerate(shown):
+            x = x0 + (i // math.ceil(len(shown) / per_col)) * (sub + 40) if per_col > 1 else x0
+            y = y0 + 58 + (i % math.ceil(len(shown) / per_col) if per_col > 1 else i) * row_h
+            room_for_name = sub - d.textlength(note, font=note_font) - 16
+            d.text((x, y), fit(d, name, name_font, room_for_name), font=name_font, fill=t.text, anchor="ls")
+            d.text((x + sub, y), note, font=note_font, fill=t.text_2, anchor="rs")
+        y = y0 + 58 + (math.ceil(len(shown) / per_col) if shown else 0) * row_h
+        if len(shown) < len(entries):
+            d.text((x0, y), f"and {len(entries) - len(shown)} more", font=note_font, fill=t.text_2, anchor="ls")
+        elif not entries:
+            d.text((x0, y0 + 58), "None", font=note_font, fill=t.text_2, anchor="ls")
+
+    column(PAD, narrow, f"Left {clazz}A", [(n, now_note(n)) for n in left])
+    column(PAD + narrow + col_gap, narrow, f"New to {clazz}A", [(n, from_note(n)) for n in joined])
+    column(
+        PAD + 2 * (narrow + col_gap),
+        wide,
+        "Changed region",
+        [(n, f"{then_by[n]['region']} to {now_by[n]['region']}") for n in changed],
+        per_col=2,
+    )
     page.footer()
     return [page.img]
 
 
 # ----------------------------------------------------------------- link previews
+
+MAP_MIN = 0.7  # the least of its height a Compare map gives up to the lists under it
 
 CARD = (2400, 1260)  # the site's 1200x630 link preview, drawn at 2x and scaled down
 CARD_PAD = 128

@@ -267,3 +267,27 @@ def test_a_classs_two_seasons_side_by_side():
     assert len(pages) == 1 and pages[0].size == ri.SIZE
     assert {"Greenwood", "From 4-4A", "Greenville", "From 2-6A"} <= set(drawn)  # (labels go letter by letter)
     assert ri.render_class_regions_compared(5, [2027, 2028], S27, [], "light") == []
+
+
+def test_the_class_comparison_lists_the_schools_that_changed_region():
+    """A school in the class both times but in another region is listed with where it went: "2 to 3"."""
+    stayed = next(
+        s for s in S27 if s["class"] == 5 and any(p["school"] == s["school"] and p["class"] == 5 for p in S26)
+    )
+    was = next(p for p in S26 if p["school"] == stayed["school"])
+    moved = [{**s, "region": was["region"] % 8 + 1} if s is stayed else s for s in S27]
+    drawn = []
+    original = ImageDraw.ImageDraw.text
+
+    def text(self, xy, words, *args, **kwargs):
+        """Keep what's written."""
+        drawn.append(words)
+        return original(self, xy, words, *args, **kwargs)
+
+    ImageDraw.ImageDraw.text = text
+    try:
+        ri.render_class_regions_compared(5, [2027, 2028], moved, S26, "light")
+    finally:
+        ImageDraw.ImageDraw.text = original
+    assert stayed["school"] in drawn
+    assert f"{was['region']} to {was['region'] % 8 + 1}" in drawn

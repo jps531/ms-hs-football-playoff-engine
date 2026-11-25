@@ -326,3 +326,30 @@ test("county pills read at WCAG AA in both themes: their colors are app.css's, t
   const pill = regions.countyPill({ region: 3, class: 7 }, regions.countyShades([{ region: 3, class: 7 }]).get("7-3"));
   assert.match(pill, /style="background:#[0-9A-F]{6};background:light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\);color:#[0-9A-F]{6};color:light-dark\(/);
 });
+
+test("seasons in a row that look the same are one map on the Timeline, labeled for all of them", () => {
+  const schools = [{ school: "Raleigh", slug: "raleigh", class: 3, region: 6, county: "Smith" }, { school: "Magee", slug: "magee", class: 3, region: 6, county: "Simpson" }];
+  const moved = [{ ...schools[0], region: 5 }, schools[1]];
+  const options = [
+    { season: 2027, seasons: [2027, 2028], label: "2027 and 2028" },
+    { season: 2026, seasons: [2026], label: "2026" },
+    { season: 2025, seasons: [2025], label: "2025" },
+  ];
+  // 3A the same in 2025 and 2026, then Raleigh moves: two maps, the first the newer season's data.
+  const merged = timelineSeasons(options, [{ schools: moved }, { schools }, { schools }], 3);
+  assert.deepEqual(merged.map((s) => [s.option.season, s.option.label]), [[2026, "2025 and 2026"], [2027, "2027 and 2028"]]);
+  assert.equal(timelineSpan(merged), "2025 to 2028 seasons");
+  // The same three times: one map for them all.
+  const all = timelineSeasons(options, [{ schools }, { schools }, { schools }], 3);
+  assert.deepEqual(all.map((s) => s.option.label), ["2025 to 2028"]);
+  // Following Magee: its region's members change when Raleigh leaves, so that's two maps too.
+  const magee = timelineSeasons(options, [{ schools: moved }, { schools }, { schools }], 3, { name: "Magee", season: 2027 });
+  assert.deepEqual(magee.map((s) => s.option.label), ["2025 and 2026", "2027 and 2028"]);
+  // A county: only its own schools count (Smith's Raleigh moving changes Simpson's nothing).
+  const simpson = regions.mergeSameSeasons(
+    [{ schools: moved }, { schools }, { schools }].map((payload, i) => ({ option: options[2 - i], payload })).reverse(),
+    (s) => regions.countySeasonKey(s.payload, "Simpson"),
+  );
+  assert.equal(simpson.length, 1);
+  assert.equal(regions.spanLabel([2026]), "2026");
+});
