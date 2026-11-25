@@ -18,7 +18,6 @@ from datetime import date
 
 from prefect import flow, get_run_logger, task
 
-from backend.helpers.bracket_helpers import survivors_from_games
 from backend.helpers.data_classes import (
     Game,
     StandingsOdds,
@@ -32,6 +31,7 @@ from backend.prefect.failure_alerts import alert_on_failure
 from backend.prefect.region_scenarios_pipeline import (
     SNAPSHOT_TABLES,
     RegionSeedingData,
+    class_playoff_odds,
     fetch_all_format_slots,
     fetch_all_season_games,
     fetch_all_season_schools,
@@ -213,7 +213,7 @@ def build_playoff_region_data(
 ) -> RegionSeedingData:
     """Construct a RegionSeedingData bundle with deterministic seeding odds.
 
-    Identifies still-alive teams via ``survivors_from_games``, then builds
+    Identifies still-alive teams (every playoff team without a loss), then builds
     the alive odds the bracket math runs on and the seeding odds to store
     (see ``playoff_round_odds``). Completed region games are fetched so
     ``write_region_standings`` can display accurate W/L records.
@@ -234,11 +234,10 @@ def build_playoff_region_data(
     # Teams in this region with a known playoff seed.
     region_seed_map = {school: seed for school, (r, seed) in school_to_seed.items() if r == region}
 
-    # Derive alive teams using bracket_helpers — handles multi-round history.
-    region_school_to_seed = {s: (r, seed) for s, (r, seed) in school_to_seed.items() if r == region}
-    known_survivors, _ = survivors_from_games(playoff_games, region_school_to_seed)
-    # known_survivors is a set of (region, seed) tuples.
-    alive_seeds = {seed for (r, seed) in known_survivors if r == region}
+    # Alive: every playoff team that hasn't lost. A team with a first-round bye, or one whose game
+    # is a day later than the rest of its round, has no win yet and is still in it.
+    lost = {g.school for g in playoff_games if g.result == "L"}
+    alive_seeds = {seed for school, seed in region_seed_map.items() if school not in lost}
 
     odds, standings = playoff_round_odds(teams, region_seed_map, alive_seeds)
 
@@ -440,6 +439,19 @@ def playoff_bracket_update(season: int | None = None) -> None:
 
             all_region_odds = {r: seeding[r].odds for r in regions}
 
+            # The bracket's own reach and hosting odds: every playoff team at its seed, the games
+            # played so far fixed. Its Projected function rates each seed by the team holding it.
+            results = [(g.school, g.opponent) for g in games_to_date if g.result == "W" and g.opponent]
+            standings_weighted = {r: seeding[r].standings_odds_weighted or seeding[r].odds_weighted for r in regions}
+            playoff_odds = class_playoff_odds(
+                clazz,
+                season,
+                seeding,
+                regions,
+                make_matchup_prob_fn(elo_at_date, standings_weighted, elo_cfg),
+                results,
+            )
+
             for region in regions:
                 get_region_finish_scenarios(
                     clazz,
@@ -452,6 +464,7 @@ def playoff_bracket_update(season: int | None = None) -> None:
                     all_region_odds=all_region_odds,
                     round_snapshots=round_snapshots,
                     return_atoms=False,  # not used, and Prefect would keep every one until the run ends
+                    class_odds=playoff_odds,
                 )
 
             round_snapshots[rounds_completed] = all_region_odds

@@ -59,7 +59,7 @@ def flow_env(monkeypatch):
     """Mock every DB/engine call the two flows make, recording region writes and playoff updates."""
     events: list[tuple] = []
 
-    def finish(c, r, season, seeding, matchup_fn, as_of_date=None, reuse=None, return_atoms=True):
+    def finish(c, r, season, seeding, matchup_fn, as_of_date=None, reuse=None, return_atoms=True, class_odds=None):
         """Stand-in for get_region_finish_scenarios: record the region_standings write."""
         events.append(("write", c, r, as_of_date))
 
@@ -78,6 +78,7 @@ def flow_env(monkeypatch):
         "get_region_seeding_odds": MagicMock(return_value=SimpleNamespace(odds_weighted={})),
         "make_matchup_prob_fn": MagicMock(return_value=None),
         "get_region_finish_scenarios": finish,
+        "class_playoff_odds": MagicMock(return_value=None),
         "run_playoff_bracket_update": lambda season: events.append(("playoff_update", season)),
         "clear_off_date_snapshots": lambda season, dates, starts, today: events.append(
             ("clear", season, list(dates), dict(starts), today)
