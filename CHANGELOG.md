@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.41.0
+
+The API's bracket endpoints give the same figures as the site:
+
+- `GET /bracket`'s odds for each (region, seed) slot, and `GET /bracket/slots/{slot}`'s for each
+  team in a game, come from the whole class's bracket, as `/bracket/matchups` and the standings'
+  `bracket_odds` do: byes are known and games already played are fixed. In the playoffs they had
+  differed by up to 64 points (Projected), and a slot facing a bye was shown playing a first-round
+  game.
+- A seed no team can take has no slot in `GET /bracket` before the playoffs either.
+
+The site doesn't show these endpoints, so nothing on it changes.
+
 ## 1.40.0
 
 A team's chances to reach, host and win each playoff round, on its region and team pages and in
