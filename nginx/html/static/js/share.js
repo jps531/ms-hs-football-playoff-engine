@@ -73,8 +73,21 @@ export function bracketImageLabel(clazz, { view, version }) {
 export const REGION_IMAGES = [
   { key: "overview", label: "Overview" },
   { key: "scenarios", label: "Scenarios" },
-  { key: "scenarios-all", label: "Scenarios (one image)" },
 ];
+
+/**
+ * How the scenarios (a region's, or a team's "What has to happen") come: page by page, or all on one
+ * image ("scenarios-all" in the region's index). A choice of its own, shown only for them.
+ */
+export const SHARE_LAYOUTS = [
+  { key: "pages", label: "Pages" },
+  { key: "one", label: "One image" },
+];
+
+/** The image a choice ({ image, layout }) shows: "scenarios-all" for the scenarios on one image. */
+export function shownImage({ image, layout }) {
+  return image === "scenarios" && layout === "one" ? "scenarios-all" : image;
+}
 
 export const REGION_MODES = [
   { key: "projected", label: "Projected odds" },
@@ -126,7 +139,7 @@ export function regionImageName(season, clazz, region, { image, mode }, page = 1
 
 /** What the image shows, for its alt text and the share sheet: "Region 6-3A scenarios, with Projected odds". */
 export function regionImageLabel(clazz, region, { image, mode }) {
-  const what = REGION_IMAGES.find((i) => i.key === image)?.label.toLowerCase() ?? image;
+  const what = image === "scenarios-all" ? "scenarios, on one image" : REGION_IMAGES.find((i) => i.key === image)?.label.toLowerCase() ?? image;
   return `Region ${region}-${clazz}A ${what}, with ${mode === "tossup" ? "Toss-up" : "Projected"} odds`;
 }
 
@@ -138,7 +151,6 @@ export function regionImageLabel(clazz, region, { image, mode }) {
 export const TEAM_IMAGES = [
   { key: "season", label: "Season" },
   { key: "scenarios", label: "What has to happen" },
-  { key: "scenarios-all", label: "What has to happen (one image)" },
 ];
 
 /** The team's images with something to show in this odds mode and theme, in TEAM_IMAGES order. */

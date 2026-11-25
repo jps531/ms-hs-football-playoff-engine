@@ -19,7 +19,7 @@ import {
   SHARE_VIEWS, SHARE_VERSIONS, SHARE_THEMES, shareVersions, shareDefaults, bracketImagePath, bracketImageName,
   REGION_MODES, regionModes, regionShareDefaults, regionImagePath, regionImageName, regionImageLabel,
   regionIndexPath, regionPages, regionImages, teamPages, teamImages, teamImagePath, teamImageName, teamImageLabel,
-  bracketImageLabel,
+  bracketImageLabel, SHARE_LAYOUTS, shownImage,
 } from "./share.js";
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
@@ -1913,7 +1913,7 @@ function bracketShareSpec() {
   const { mode, share, season, clazz, asOf, currentSeason, summary, results } = bracketData;
   const latest = season === currentSeason;
   return {
-    title: "Share this bracket",
+    title: latest ? `Share the Class ${clazz}A bracket` : `Share the ${season} Class ${clazz}A bracket`,
     // "Class 3A · as of Oct 30" (the images' own footer says the same); a past season's, "Class 6A · 2025 season · Final".
     when: latest
       ? `Class ${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`
@@ -1936,6 +1936,9 @@ function bracketShareSpec() {
   };
 }
 
+/** A region or team choice with its image as drawn: the scenarios on one image are "scenarios-all". */
+const shown = (c) => ({ ...c, image: shownImage(c) });
+
 /** What the region page's share sheet can share, for its first control: the region, or one of its teams. */
 function shareSubjects() {
   const { clazz, region, teams } = regionShare;
@@ -1951,30 +1954,36 @@ async function regionShareSpec() {
   const { season, current, clazz, region, asOf, modes, mode, summary } = regionShare;
   const index = await regionIndex();
   return {
-    title: "Share this region",
+    title: `Share Region ${region}-${clazz}A`,
     subjects: shareSubjects(),
     subject: "",
-    when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
+    when: latestDate(summary) ? `As of ${latestDate(summary)}` : "As of the latest update", // (the title names the region)
     groups: (c) => {
       const images = regionImages(index, c);
+      const oneImage = c.image === "scenarios" && regionPages(index, { ...c, image: "scenarios-all" }) > 0;
       return [
         ...(images.length > 1 ? [{ label: "Image", key: "image", options: images }] : []),
+        ...(oneImage ? [{ label: "Layout", key: "layout", options: SHARE_LAYOUTS }] : []),
         ...(modes.length > 1 ? [{ label: "Odds", key: "mode", options: REGION_MODES }] : []),
         { label: "Theme", key: "theme", options: SHARE_THEMES },
       ];
     },
-    defaults: regionShareDefaults({ mode, modes, dark: document.documentElement.classList.contains("dark") }),
-    // An image a mode or theme doesn't have (none to show there) falls back to the overview.
-    fix: (c) => (regionPages(index, c) > 0 ? c : { ...c, image: "overview" }),
-    pages: (c) => Math.max(1, regionPages(index, c)),
-    path: (c, page, pages) => regionImagePath(season, clazz, region, c, page, pages),
+    defaults: { ...regionShareDefaults({ mode, modes, dark: document.documentElement.classList.contains("dark") }), layout: "pages" },
+    // An image a mode or theme doesn't have (none to show there) falls back to the overview; the
+    // scenarios on one image, to their pages.
+    fix: (c) => {
+      const laid = regionPages(index, shown(c)) > 0 ? c : { ...c, layout: "pages" };
+      return regionPages(index, shown(laid)) > 0 ? laid : { ...laid, image: "overview" };
+    },
+    pages: (c) => Math.max(1, regionPages(index, shown(c))),
+    path: (c, page, pages) => regionImagePath(season, clazz, region, shown(c), page, pages),
     version: asOf,
-    name: (c, page, pages) => regionImageName(season, clazz, region, c, page, pages),
-    label: (c) => regionImageLabel(clazz, region, c),
+    name: (c, page, pages) => regionImageName(season, clazz, region, shown(c), page, pages),
+    label: (c) => regionImageLabel(clazz, region, shown(c)),
     wide: () => false,
     page: `${location.origin}/standings/${clazz}a/${region}${current ? "" : `?season=${season}`}`,
     latest: true,
-    track: (c, method) => track("region_image_shared", { class: clazz, region, season, image: c.image, mode: c.mode, theme: c.theme, method }),
+    track: (c, method) => track("region_image_shared", { class: clazz, region, season, image: shownImage(c), mode: c.mode, theme: c.theme, method }),
   };
 }
 
@@ -2004,24 +2013,30 @@ async function teamShareSpec(school) {
     when: `Region ${region}-${clazz}A · ${latestDate(summary) ? `as of ${latestDate(summary)}` : "as of the latest update"}`,
     groups: (c) => {
       const images = teamImages(index, school, c);
+      const oneImage = c.image === "scenarios" && teamPages(index, school, { ...c, image: "scenarios-all" }) > 0;
       return [
         ...(images.length > 1 ? [{ label: "Image", key: "image", options: images }] : []),
+        ...(oneImage ? [{ label: "Layout", key: "layout", options: SHARE_LAYOUTS }] : []),
         ...(modes.length > 1 ? [{ label: "Odds", key: "mode", options: REGION_MODES }] : []),
         { label: "Theme", key: "theme", options: SHARE_THEMES },
       ];
     },
-    defaults: { ...regionShareDefaults({ mode, modes, dark: document.documentElement.classList.contains("dark") }), image: "season" },
-    // An image a mode or theme doesn't have (nothing to show there) falls back to the season.
-    fix: (c) => (teamPages(index, school, c) > 0 ? c : { ...c, image: "season" }),
-    pages: (c) => Math.max(1, teamPages(index, school, c)),
-    path: (c, page, pages) => teamImagePath(season, clazz, region, school, c, page, pages),
+    defaults: { ...regionShareDefaults({ mode, modes, dark: document.documentElement.classList.contains("dark") }), image: "season", layout: "pages" },
+    // An image a mode or theme doesn't have (nothing to show there) falls back to the season; what has
+    // to happen on one image, to its pages.
+    fix: (c) => {
+      const laid = teamPages(index, school, shown(c)) > 0 ? c : { ...c, layout: "pages" };
+      return teamPages(index, school, shown(laid)) > 0 ? laid : { ...laid, image: "season" };
+    },
+    pages: (c) => Math.max(1, teamPages(index, school, shown(c))),
+    path: (c, page, pages) => teamImagePath(season, clazz, region, school, shown(c), page, pages),
     version: asOf,
-    name: (c, page, pages) => teamImageName(season, school, c, page, pages),
-    label: (c) => teamImageLabel(season, school, c),
+    name: (c, page, pages) => teamImageName(season, school, shown(c), page, pages),
+    label: (c) => teamImageLabel(season, school, shown(c)),
     wide: () => false,
     page: `${location.origin}/standings/${clazz}a/${region}?${current ? "" : `season=${season}&`}team=${slugify(school)}`,
     latest: true,
-    track: (c, method) => track("team_image_shared", { class: clazz, region, season, team: school, image: c.image, mode: c.mode, theme: c.theme, method }),
+    track: (c, method) => track("team_image_shared", { class: clazz, region, season, team: school, image: shownImage(c), mode: c.mode, theme: c.theme, method }),
   };
 }
 
@@ -3151,7 +3166,7 @@ async function renderCountyCompare(token, index, base, county, { finder, views }
   const own = sides.filter((x) => x.payload.schools.some((r) => r.county === county))
     .map((x) => countyKind(county, x.option, `county-${x.key}`));
   const kinds = [together, ...own].filter(Boolean).filter((k, i, all) => all.findIndex((o) => o.file === k.file) === i);
-  countyShare = kinds.length ? { title: `Share ${countyTitle(county)}`, when: countyCompareLine, view: "county-compare", season: newer.season, kinds } : null;
+  countyShare = kinds.length ? { title: `Share ${countyTitle(county)}, compared`, when: countyCompareLine, view: "county-compare", season: newer.season, kinds } : null;
   app.innerHTML = countyComparePage(county, base, sides[0], sides[1], index, {
     controls: `<div class="regions-controls">${finder}</div>`, teams, views, share: kinds.length ? shareButton("map") : "",
   });
@@ -3786,7 +3801,10 @@ function compareShareSpec() {
   const unique = kinds.filter((k, i) => kinds.findIndex((o) => o.file === k.file) === i);
   const team = route.teamName ? unique.find((k) => ["compare", "team-a", "team-b"].includes(k.key)) : null;
   return mapsShareSpec({
-    title: "Share this comparison",
+    // Named for what's compared: the followed team's regions, or the class's (or the two classes').
+    title: route.teamName ? `Share ${route.teamName}’s regions, compared`
+      : older.clazz === newer.clazz ? `Share Class ${newer.clazz}A’s regions, compared`
+        : `Share Class ${older.clazz}A’s and ${newer.clazz}A’s regions, compared`,
     when: `${older.option.label} vs. ${newer.option.label}`,
     kinds: unique,
     initial: team?.key ?? null,
